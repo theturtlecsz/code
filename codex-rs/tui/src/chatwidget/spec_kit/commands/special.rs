@@ -2,8 +2,8 @@
 //!
 //! FORK-SPECIFIC (just-every/code): Spec-kit multi-agent automation framework
 
-use super::super::command_registry::SpecKitCommand;
 use super::super::super::ChatWidget;
+use super::super::command_registry::SpecKitCommand;
 use super::super::handler;
 
 /// Command: /speckit.auto (and /spec-auto)
@@ -32,7 +32,8 @@ impl SpecKitCommand for SpecKitAutoCommand {
             Err(err) => {
                 let error_msg = match err {
                     crate::slash_command::SpecAutoParseError::MissingSpecId => {
-                        "Missing SPEC ID. Usage: /speckit.auto SPEC-KIT-### [--from stage]".to_string()
+                        "Missing SPEC ID. Usage: /speckit.auto SPEC-KIT-### [--from stage]"
+                            .to_string()
                     }
                     crate::slash_command::SpecAutoParseError::MissingFromStage => {
                         "`--from` flag requires a stage name".to_string()
@@ -44,10 +45,7 @@ impl SpecKitCommand for SpecKitAutoCommand {
                         )
                     }
                     crate::slash_command::SpecAutoParseError::UnknownHalMode(mode) => {
-                        format!(
-                            "Unknown HAL mode '{}'. Expected 'mock' or 'live'",
-                            mode
-                        )
+                        format!("Unknown HAL mode '{}'. Expected 'mock' or 'live'", mode)
                     }
                 };
                 widget.history_push(crate::history_cell::new_error_event(error_msg));
@@ -79,15 +77,39 @@ impl SpecKitCommand for SpecKitNewCommand {
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
+        // SPEC-KIT-070: Generate SPEC-ID natively to eliminate $2.40 consensus cost
+        let spec_id = match super::super::spec_id_generator::generate_next_spec_id(&widget.config.cwd) {
+            Ok(id) => id,
+            Err(e) => {
+                widget.history_push(crate::history_cell::new_error_event(format!(
+                    "Failed to generate SPEC-ID: {}",
+                    e
+                )));
+                widget.request_redraw();
+                return;
+            }
+        };
+
+        let slug = super::super::spec_id_generator::create_slug(&args);
+        let spec_dir_name = format!("{}-{}", spec_id, slug);
+
+        // Inject SPEC-ID into prompt for orchestrator
+        let enhanced_args = format!(
+            "Create SPEC with ID: {}, Directory: {}, Description: {}",
+            spec_id, spec_dir_name, args
+        );
+
         // Routed to subagent orchestrators
         // Use format_subagent_command and submit
         let formatted = codex_core::slash_commands::format_subagent_command(
             "speckit.new",
-            &args,
+            &enhanced_args,
             Some(&widget.config.agents),
             Some(&widget.config.subagent_commands),
         );
-        widget.submit_prompt_with_display(args, formatted.prompt);
+
+        let display = format!("{} ({})", args, spec_id);
+        widget.submit_prompt_with_display(display, formatted.prompt);
     }
 
     fn requires_args(&self) -> bool {

@@ -100,6 +100,10 @@ pub use chatwidget::spec_kit::state::{
 // FORK-SPECIFIC (just-every/code): Re-export consensus for MCP integration testing
 pub use chatwidget::spec_kit::consensus::run_spec_consensus;
 
+// FORK-SPECIFIC (just-every/code): SPEC-KIT-070 - Re-export native SPEC-ID generation
+#[cfg(any(test, feature = "test-utils"))]
+pub use chatwidget::spec_kit::spec_id_generator;
+
 // Re-export supporting types for E2E testing (T87)
 pub use slash_command::{HalMode, SlashCommand};
 pub use spec_prompts::SpecStage;
