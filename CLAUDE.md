@@ -62,6 +62,7 @@ See `MEMORY-POLICY.md` for complete policy. Local-memory is the **only** knowled
 - `/speckit.tasks SPEC-ID` – Task decomposition with consensus (Tier 2: 3 agents - gemini, claude, gpt_pro). ~10-12 min, ~$1.00.
 - `/speckit.implement SPEC-ID` – Code generation + validation (Tier 3: 4 agents - gemini, claude, gpt_codex, gpt_pro). ~15-20 min, ~$2.00.
 - `/speckit.validate SPEC-ID` – Test strategy consensus (Tier 2: 3 agents - gemini, claude, gpt_pro). ~10-12 min, ~$1.00.
+  - **Single-flight guard**: duplicate triggers show `Validate run already active (run_id …)` and do not spawn extra agents; lifecycle telemetry lands under `stage:validate`.
 - `/speckit.audit SPEC-ID` – Compliance checking (Tier 2: 3 agents - gemini, claude, gpt_pro). ~10-12 min, ~$1.00.
 - `/speckit.unlock SPEC-ID` – Final approval (Tier 2: 3 agents - gemini, claude, gpt_pro). ~10-12 min, ~$1.00.
 
@@ -246,11 +247,17 @@ If any slash command or CLI is unavailable, degrade gracefully and record which 
 - Large refactor emerges unexpectedly.
 - Required reference documents (`product-requirements.md`, `PLANNING.md`, relevant spec files) are absent.
 
-## 9. Memory Workflow Checklist
+## 9. Memory Workflow - Curated Knowledge Base
 
-**POLICY**: Use **local-memory MCP exclusively**. See `MEMORY-POLICY.md` for details.
+**POLICY**: Use **local-memory MCP exclusively** for high-value knowledge. See `MEMORY-POLICY.md` for complete details.
 
-### Session Workflow (MANDATORY)
+**Purpose**: Build a curated knowledge base of reusable patterns and living project handbook, NOT a complete history archive.
+
+**Note**: Consensus artifacts (agent outputs, structured data) will migrate to separate database (SPEC-KIT-072). Local-memory is for **human-curated insights only**.
+
+---
+
+### Session Workflow
 
 **1. Session Start** (REQUIRED):
 ```
@@ -259,7 +266,7 @@ Use mcp__local-memory__search:
 - limit: 10
 - search_type: "semantic"
 ```
-This retrieves recent architecture decisions, bug fixes, patterns.
+Retrieves recent architecture decisions, bug fixes, patterns.
 
 **2. Before Major Tasks** (REQUIRED):
 ```
@@ -270,54 +277,211 @@ Use mcp__local-memory__search:
 ```
 Search for relevant prior work to avoid repeating research.
 
-**3. During Work** (Store importance ≥7):
+**3. During Work** (Store importance ≥8 ONLY):
 ```
 Use mcp__local-memory__store_memory:
-- content: "Routing bug fixed: SpecKitCommand wasn't passing config..."
-- domain: "spec-kit"
-- tags: ["bug-fix", "routing", "2025-10-20"]
+- content: "Routing bug fixed: SpecKitCommand wasn't passing config. Root cause: routing.rs line 45 passed None instead of actual config. Solution: Pass widget.config to format_subagent_command(). Pattern: Always verify config propagation in command chains."
+- domain: "debugging"
+- tags: ["type:bug-fix", "spec:SPEC-KIT-066", "component:routing"]
 - importance: 9
 ```
 
-**What to Store**:
-- 🐛 Bug discoveries and fixes
-- 🏗️ Architecture decisions and rationale
-- 📊 Test coverage milestones
-- 🔧 Code patterns and utilities
-- ⚠️ Known limitations and workarounds
-- ✅ Task completion with evidence paths
+**What to Store** (importance ≥8):
+- 🏗️ Architecture decisions with rationale (why, not just what)
+- 🔧 Reusable patterns and code examples
+- 🚨 Critical discoveries (rate limits, cost crisis, system-breaking)
+- 🐛 Non-obvious bug fixes with context
+- ⚠️ Important limitations and workarounds
+- ✅ Major milestones with outcomes
 
-**4. After Milestones** (REQUIRED):
+**What NOT to Store**:
+- ❌ Session summaries (use git commits + SPEC.md instead)
+- ❌ Progress updates (use SPEC.md task tracker)
+- ❌ Information already in documentation (link to it instead)
+- ❌ Routine operations (normal workflow)
+- ❌ Transient status ("in progress", "blocked")
+- ❌ Low-value observations (importance <8)
+- ❌ Consensus artifacts (will use separate DB, SPEC-KIT-072)
+
+**4. After Milestones** (Store importance ≥8):
 ```
 Use mcp__local-memory__store_memory:
-- content: "Phase 3 complete: 60 integration tests, 555 total, 100% pass rate. Files: workflow_integration_tests.rs..."
-- domain: "testing"
-- tags: ["milestone", "phase-3", "2025-10-19"]
+- content: "Test coverage Phase 3 complete: Added 60 integration tests (workflow, error recovery, state persistence, quality gates, concurrent ops). Total: 555 tests, 100% pass rate. Estimated coverage: 38-42% (exceeded 40% target). Pattern: IntegrationTestContext harness enables complex multi-module testing. Files: workflow_integration_tests.rs, error_recovery_integration_tests.rs"
+- domain: "infrastructure"
+- tags: ["type:milestone", "testing", "phase-3"]
 - importance: 8
 ```
 
-**5. Session End** (REQUIRED):
+**5. Session End** (OPTIONAL - only if exceptional):
+
+Store session summary ONLY if:
+- Major breakthrough or discovery (rate limits, architectural insight)
+- Multi-day work requiring detailed handoff context
+- Critical decisions NOT captured in individual memories
+
+Otherwise: Individual memories + git commits + SPEC.md are sufficient.
+
+**If storing** (rare):
 ```
 Use mcp__local-memory__store_memory:
-- content: "Session 2025-10-20: Fixed routing bug (routing.rs), discovered orchestrator doesn't execute tools. Created SPEC-066 for native migration. Next: Update config.toml orchestrator instructions."
-- domain: "session-summary"
-- tags: ["2025-10-20", "routing-fix", "spec-066"]
-- importance: 9
+- content: "Discovered OpenAI rate limit crisis validates SPEC-KIT-070 urgency. Hit limits during testing (1d 1h block). Changed strategy to prioritize provider diversity and aggressive cost reduction. Deployed Claude Haiku (12x cheaper), Gemini Flash (12.5x cheaper), native SPEC-ID ($0). Impact: 40-50% cost reduction ready for validation."
+- domain: "infrastructure"
+- tags: ["type:discovery", "spec:SPEC-KIT-070", "priority:critical"]
+- importance: 10
 ```
+
+---
+
+### Tag Schema (Guided, Flexible)
+
+**Namespaced Format** (use when applicable):
+```
+spec:<SPEC-ID>          Example: spec:SPEC-KIT-071
+type:<category>         Example: type:bug-fix, type:pattern, type:discovery
+project:<name>          Example: project:codex-rs, project:kavedarr
+component:<area>        Example: component:routing, component:consensus
+```
+
+**Domain Structure** (5 primary domains):
+```
+spec-kit        Spec-kit automation, consensus, multi-agent workflows
+infrastructure  Cost, testing, architecture, CI/CD, performance
+rust            Language patterns, borrow checker, cargo, performance
+documentation   Doc strategy, templates, writing, guides
+debugging       Bug fixes, error patterns, workarounds, troubleshooting
+```
+
+**General Tags** (~30-50 approved, can add new if justified):
+```
+Core: testing, mcp, consensus, evidence, telemetry
+Concepts: cost-optimization, quality-gates, rebase-safety
+Tools: borrow-checker, native-tools
+```
+
+**FORBIDDEN Tags** (auto-reject):
+```
+❌ Specific dates: 2025-10-20, 2025-10-14 (use date filters instead)
+❌ Task IDs: t84, T12, t21 (ephemeral, not useful long-term)
+❌ Status values: in-progress, blocked, done, complete (changes over time)
+❌ Overly specific: 52-lines-removed, policy-final-check (not reusable)
+```
+
+**Tag Reuse**: Check existing tags before creating new. Consolidate duplicates quarterly.
+
+---
+
+### Importance Calibration (CRITICAL)
+
+**Use this guide STRICTLY** to prevent inflation:
+
+```
+10: Crisis events, system-breaking discoveries
+    - Rate limit discovery blocking operations
+    - Critical architecture flaws found
+    - Security vulnerabilities discovered
+    - USE SPARINGLY: <5% of stores
+
+9:  Major architectural decisions, critical patterns
+    - Borrow checker workarounds for complex scenarios
+    - Cost optimization strategies ($6,500/year savings)
+    - Significant refactors (handler.rs extraction)
+    - ~10-15% of stores
+
+8:  Important milestones, valuable solutions
+    - Phase completions with evidence
+    - Non-obvious bug fixes with context
+    - Reusable code patterns
+    - ~15-20% of stores
+
+7:  Useful context, good reference
+    - Configuration changes with rationale
+    - Minor optimizations
+    - RARELY STORE (use docs/git instead)
+    - ~10-15% of stores
+
+6 and below:
+    - DON'T STORE to local-memory
+    - Use git commits, SPEC.md, or documentation instead
+```
+
+**Threshold**: Store ONLY importance ≥8 (not ≥7)
+**Target Average**: 8.5-9.0 (quality-focused)
+**Current Average**: 7.88 (too low, indicates over-storage at 7)
+
+---
+
+### Storage Examples
+
+**GOOD Example ✅** (importance: 9):
+```
+content: "Native SPEC-ID generation eliminates $2.40 consensus cost per /speckit.new. Implementation: spec_id_generator.rs scans docs/, finds max ID, increments. Pattern: Use native Rust for deterministic tasks - 10,000x faster, FREE, more reliable than AI consensus. Applies to: file operations, ID generation, formatting, validation."
+
+domain: "infrastructure"
+tags: ["type:pattern", "spec:SPEC-KIT-070", "cost-optimization", "native-tools"]
+importance: 9
+
+Why Good:
+- Captures WHY (pattern: native > AI for deterministic)
+- Includes HOW (implementation detail)
+- Generalizable (applies beyond this case)
+- Proper tags (namespaced, meaningful, no dates)
+- Justified importance (major pattern = 9)
+```
+
+**BAD Example ❌** (DON'T STORE):
+```
+content: "Session 2025-10-24: Did work on SPEC-069 and SPEC-070. Made progress. Tests passing."
+
+domain: "session-summary"
+tags: ["2025-10-24", "session-complete", "done"]
+importance: 9
+
+Why Bad:
+- Redundant (git commits already capture this)
+- Vague (no actionable insights)
+- Date tag (useless for retrieval)
+- Status tags (ephemeral)
+- Wrong importance (routine session ≠ 9)
+- Wrong domain (session-summary will be deprecated)
+- No WHY (doesn't explain decisions)
+```
+
+**BETTER** (if session truly exceptional):
+```
+content: "Discovered CLAUDE.md documentation causing memory bloat through flawed guidance. Root cause: Requires session summaries (redundant), threshold ≥7 too low (inflation), date tags in examples (proliferation). Fixed by updating to ≥8 threshold, optional summaries, tag schema. Pattern: Question the documentation itself when system exhibits emergent problems."
+
+domain: "infrastructure"
+tags: ["type:discovery", "spec:SPEC-KIT-071", "priority:critical", "meta-learning"]
+importance: 10
+
+Why Better:
+- Captures specific insight (docs drive bloat)
+- Includes solution (how we fixed it)
+- Meta-pattern (question documentation)
+- No date tags (timeless insight)
+- Justified importance (critical discovery = 10)
+```
+
+---
 
 ### Why This Matters
 
-**Without local-memory**:
-- ❌ Knowledge lost between sessions
-- ❌ Repeat same research
-- ❌ Forget bug fixes and workarounds
-- ❌ No project handbook
+**Curated Knowledge Base**:
+- ✅ High-value patterns and decisions ONLY
+- ✅ Reusable insights (not one-time info)
+- ✅ Findable (clean tags, proper domains)
+- ✅ Scalable (quality > quantity)
 
-**With local-memory**:
-- ✅ Instant context retrieval
-- ✅ Architecture evolution tracked
-- ✅ Bug patterns recognized
-- ✅ Living documentation
+**Living Project Handbook**:
+- ✅ Current understanding of architecture
+- ✅ Active SPEC knowledge
+- ✅ Critical context for contributors
+- ✅ Evolves with project (outdated info removed)
+
+**Sustainable Growth**:
+- ~40-60 stores/month (≥8 threshold)
+- Quarterly cleanup (stay at 120-150 target)
+- Consensus artifacts separate (SPEC-KIT-072)
 
 **Deprecated**: byterover-mcp is no longer used (migration complete 2025-10-18).
 

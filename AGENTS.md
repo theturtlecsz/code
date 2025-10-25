@@ -29,20 +29,31 @@
 **Policy Effective**: 2025-10-18
 
 **Use**:
-- ✅ **local-memory MCP** - ONLY memory system for knowledge persistence
-- ✅ Query before tasks, store during work (importance ≥7), persist outcomes
+- ✅ **local-memory MCP** - ONLY memory system for curated knowledge
+- ✅ Query before tasks, store selectively (importance ≥8), persist high-value insights
 
 **Do NOT Use**:
 - ❌ byterover-mcp (deprecated, migration complete 2025-10-18)
 - ❌ Any other memory MCP servers
 
+**Storage Discipline** (SPEC-KIT-071):
+- Threshold: importance ≥8 (not ≥7, prevents bloat)
+- Target: 120-150 curated knowledge memories
+- Purpose: Reusable patterns + living project handbook (NOT complete history)
+- Consensus artifacts: Migrating to separate DB (SPEC-KIT-072)
+- Maintenance: Quarterly cleanup (2-3h every 3 months)
+
+**Tag Schema**: Use namespaced format (spec:, type:, project:, component:)
+- See CLAUDE.md Section 9 for complete schema
+- Forbidden: date tags, task IDs, status values
+
 **Rationale**:
 1. Native MCP integration validated (5.3x faster than subprocess, ARCH-002)
 2. Spec-kit consensus framework requires local-memory
 3. Single source of truth eliminates conflicts
-4. 178 passing tests validate reliability (135 unit + 19 integration + 21 E2E + 3 MCP)
+4. Unified across all 3 LLMs (Claude, Gemini, Code)
 
-**Detailed Policy**: See `codex-rs/MEMORY-POLICY.md`
+**Detailed Policy**: See `codex-rs/MEMORY-POLICY.md` and `CLAUDE.md` Section 9
 
 ---
 
