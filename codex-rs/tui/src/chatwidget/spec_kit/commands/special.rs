@@ -327,12 +327,11 @@ impl SpecKitCommand for SpecKitAceStatusCommand {
             crate::history_cell::HistoryCellType::Notice,
         ));
 
-        let db_path = dirs::home_dir()
-            .map(|h| h.join(".code/ace/playbooks_normalized.sqlite3"))
-            .unwrap_or_else(|| std::path::PathBuf::from("~/.code/ace/playbooks_normalized.sqlite3"));
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        let db_path = std::path::PathBuf::from(home).join(".code/ace/playbooks_normalized.sqlite3");
 
         // Check if database exists
-        if !std::path::Path::new(db_path.as_ref()).exists() {
+        if !db_path.exists() {
             widget.history_push(crate::history_cell::new_error_event(
                 "ACE database not found. Run /speckit.constitution to initialize.".to_string(),
             ));

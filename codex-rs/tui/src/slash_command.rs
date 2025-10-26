@@ -147,6 +147,8 @@ pub enum SlashCommand {
     SpecKitStatus,
     #[strum(serialize = "speckit.constitution")]
     SpecKitConstitution,
+    #[strum(serialize = "speckit.ace-status")]
+    SpecKitAceStatus,
     // Guardrail commands (Phase 3 Week 2)
     #[strum(serialize = "guardrail.plan")]
     GuardrailPlan,
@@ -251,6 +253,7 @@ impl SlashCommand {
             SlashCommand::SpecKitAuto => "full 6-stage pipeline with auto-advancement",
             SlashCommand::SpecKitStatus => "show SPEC progress dashboard",
             SlashCommand::SpecKitConstitution => "extract and pin constitution bullets to ACE playbook",
+            SlashCommand::SpecKitAceStatus => "show ACE playbook status and statistics",
             // Legacy (deprecated)
             SlashCommand::NewSpec => "DEPRECATED: use /speckit.new",
             SlashCommand::SpecPlan => "DEPRECATED: use /speckit.plan",

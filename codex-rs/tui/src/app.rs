@@ -950,7 +950,7 @@ impl App<'_> {
             };
             match event {
                 AppEvent::SubmitPreparedPrompt { display, prompt } => {
-                    // ACE-enhanced prompt from async injection (early match)
+                    // ACE-enhanced prompt from async injection
                     if let AppState::Chat { widget } = &mut self.app_state {
                         widget.submit_prompt_with_display(display, prompt);
                     }
@@ -1783,9 +1783,9 @@ impl App<'_> {
                                 widget.handle_spec_status_command(command_args);
                             }
                         }
-                        SlashCommand::SpecKitConstitution => {
+                        SlashCommand::SpecKitConstitution | SlashCommand::SpecKitAceStatus => {
                             // Handled by spec-kit registry at line 1708
-                            // Command executes directly via command_registry
+                            // Commands execute directly via command_registry
                         }
                         // Legacy spec commands (backward compat)
                         SlashCommand::NewSpec => {
