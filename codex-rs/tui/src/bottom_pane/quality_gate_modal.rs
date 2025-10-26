@@ -13,9 +13,7 @@ use std::collections::HashMap;
 
 use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
-use crate::chatwidget::spec_kit::{
-    EscalatedQuestion, Magnitude, QualityCheckpoint,
-};
+use crate::chatwidget::spec_kit::{EscalatedQuestion, Magnitude, QualityCheckpoint};
 
 use super::{BottomPane, BottomPaneView, CancellationEvent};
 
@@ -62,7 +60,8 @@ impl QualityGateModal {
     fn submit_current_answer(&mut self) {
         if let Some(question) = self.current_question() {
             if !self.current_input.trim().is_empty() {
-                self.answers.insert(question.id.clone(), self.current_input.trim().to_string());
+                self.answers
+                    .insert(question.id.clone(), self.current_input.trim().to_string());
 
                 if self.is_last_question() {
                     // All questions answered - send completion event
@@ -78,10 +77,12 @@ impl QualityGateModal {
     }
 
     fn send_completion_event(&self) {
-        let _ = self.app_event_tx.send(AppEvent::QualityGateAnswersSubmitted {
-            checkpoint: self.checkpoint,
-            answers: self.answers.clone(),
-        });
+        let _ = self
+            .app_event_tx
+            .send(AppEvent::QualityGateAnswersSubmitted {
+                checkpoint: self.checkpoint,
+                answers: self.answers.clone(),
+            });
     }
 
     pub fn is_complete(&self) -> bool {
@@ -94,12 +95,14 @@ impl QualityGateModal {
         let base_height = 20;
 
         // Add space for agent answers
-        let agent_answer_lines = self.current_question()
+        let agent_answer_lines = self
+            .current_question()
             .map(|q| q.agent_answers.len())
             .unwrap_or(0);
 
         // Add space for GPT-5 reasoning if present
-        let gpt5_lines = self.current_question()
+        let gpt5_lines = self
+            .current_question()
             .and_then(|q| q.gpt5_reasoning.as_ref())
             .map(|_| 3)
             .unwrap_or(0);
@@ -143,10 +146,9 @@ impl QualityGateModal {
                 " IMPORTANT ",
                 Style::default().fg(Color::Black).bg(Color::Yellow).bold(),
             ),
-            Magnitude::Minor => Span::styled(
-                " MINOR ",
-                Style::default().fg(Color::White).bg(Color::Blue),
-            ),
+            Magnitude::Minor => {
+                Span::styled(" MINOR ", Style::default().fg(Color::White).bg(Color::Blue))
+            }
         }
     }
 }
@@ -210,7 +212,11 @@ impl BottomPaneView<'_> for QualityGateModal {
         // Progress indicator
         lines.push(Line::from(vec![
             Span::styled(
-                format!("Question {} of {} ", self.current_index + 1, self.total_questions()),
+                format!(
+                    "Question {} of {} ",
+                    self.current_index + 1,
+                    self.total_questions()
+                ),
                 Style::default().bold(),
             ),
             self.magnitude_badge(question.magnitude),
@@ -268,7 +274,10 @@ impl BottomPaneView<'_> for QualityGateModal {
             )));
             for (idx, option) in question.suggested_options.iter().enumerate() {
                 lines.push(Line::from(vec![
-                    Span::styled(format!("  [{}] ", idx + 1), Style::default().fg(Color::Cyan)),
+                    Span::styled(
+                        format!("  [{}] ", idx + 1),
+                        Style::default().fg(Color::Cyan),
+                    ),
                     Span::raw(option),
                 ]));
             }

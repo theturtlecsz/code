@@ -7,6 +7,8 @@ use crate::spec_prompts::SpecStage;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use uuid::Uuid;
 
 /// Phase tracking for /speckit.auto pipeline
 #[derive(Debug, Clone)]
@@ -28,7 +30,7 @@ pub enum SpecAutoPhase {
         active_gates: HashSet<QualityGateType>,
         expected_agents: Vec<String>,
         completed_agents: HashSet<String>,
-        results: HashMap<String, Value>,  // agent_id -> JSON result
+        results: HashMap<String, Value>, // agent_id -> JSON result
     },
 
     /// Processing quality gate results (classification)
@@ -41,17 +43,17 @@ pub enum SpecAutoPhase {
     /// Validating 2/3 majority answers with GPT-5 (async via agent system)
     QualityGateValidating {
         checkpoint: QualityCheckpoint,
-        auto_resolved: Vec<QualityIssue>,  // Unanimous issues already resolved
-        pending_validations: Vec<(QualityIssue, String)>,  // (issue, majority_answer)
-        completed_validations: HashMap<usize, GPT5ValidationResult>,  // index -> validation result
+        auto_resolved: Vec<QualityIssue>, // Unanimous issues already resolved
+        pending_validations: Vec<(QualityIssue, String)>, // (issue, majority_answer)
+        completed_validations: HashMap<usize, GPT5ValidationResult>, // index -> validation result
     },
 
     /// Awaiting human answers for escalated questions
     QualityGateAwaitingHuman {
         checkpoint: QualityCheckpoint,
-        escalated_issues: Vec<QualityIssue>,  // Store original issues
-        escalated_questions: Vec<EscalatedQuestion>,  // For UI display
-        answers: HashMap<String, String>,  // question_id -> human_answer
+        escalated_issues: Vec<QualityIssue>, // Store original issues
+        escalated_questions: Vec<EscalatedQuestion>, // For UI display
+        answers: HashMap<String, String>,    // question_id -> human_answer
     },
 }
 
@@ -62,6 +64,367 @@ pub struct GuardrailWait {
     pub stage: SpecStage,
     pub command: SlashCommand,
     pub task_id: Option<String>,
+}
+
+/// Execution mode for validate lifecycle tracking.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ValidateMode {
+    Auto,
+    Manual,
+}
+
+impl ValidateMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Manual => "manual",
+        }
+    }
+}
+
+/// Active stage within a validate run lifecycle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ValidateStageStatus {
+    Queued,
+    Dispatched,
+    CheckingConsensus,
+}
+
+/// Lifecycle telemetry events for validate runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ValidateLifecycleEvent {
+    Queued,
+    Dispatched,
+    CheckingConsensus,
+    Completed,
+    Cancelled,
+    Failed,
+    Reset,
+    Deduped,
+}
+
+impl ValidateLifecycleEvent {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Queued => "queued",
+            Self::Dispatched => "dispatched",
+            Self::CheckingConsensus => "checking_consensus",
+            Self::Completed => "completed",
+            Self::Cancelled => "cancelled",
+            Self::Failed => "failed",
+            Self::Reset => "reset",
+            Self::Deduped => "deduped",
+        }
+    }
+}
+
+/// Terminal outcome for a validate run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ValidateCompletionReason {
+    Completed,
+    Cancelled,
+    Failed,
+    Reset,
+}
+
+impl ValidateCompletionReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Completed => "completed",
+            Self::Cancelled => "cancelled",
+            Self::Failed => "failed",
+            Self::Reset => "reset",
+        }
+    }
+}
+
+/// Information about an active validate run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValidateRunInfo {
+    pub run_id: String,
+    pub attempt: u32,
+    pub dedupe_count: u32,
+    pub mode: ValidateMode,
+    pub status: ValidateStageStatus,
+    pub payload_hash: String,
+}
+
+/// Details about a completed validate run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValidateRunCompletion {
+    pub run_id: String,
+    pub attempt: u32,
+    pub dedupe_count: u32,
+    pub mode: ValidateMode,
+    pub reason: ValidateCompletionReason,
+    pub payload_hash: String,
+}
+
+/// Result when attempting to begin a validate run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ValidateBeginOutcome {
+    Started(ValidateRunInfo),
+    Duplicate(ValidateRunInfo),
+    Conflict(ValidateRunInfo),
+}
+
+#[derive(Debug)]
+struct ActiveValidateRun {
+    run_id: String,
+    payload_hash: String,
+    mode: ValidateMode,
+    status: ValidateStageStatus,
+    dedupe_count: u32,
+}
+
+impl ActiveValidateRun {
+    fn to_info(&self, attempt: u32) -> ValidateRunInfo {
+        ValidateRunInfo {
+            run_id: self.run_id.clone(),
+            attempt,
+            dedupe_count: self.dedupe_count,
+            mode: self.mode,
+            status: self.status,
+            payload_hash: self.payload_hash.clone(),
+        }
+    }
+
+    fn to_completion(
+        &self,
+        attempt: u32,
+        reason: ValidateCompletionReason,
+    ) -> ValidateRunCompletion {
+        ValidateRunCompletion {
+            run_id: self.run_id.clone(),
+            attempt,
+            dedupe_count: self.dedupe_count,
+            mode: self.mode,
+            reason,
+            payload_hash: self.payload_hash.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct ValidateLifecycleInner {
+    attempt: u32,
+    active: Option<ActiveValidateRun>,
+    last_completion: Option<ValidateRunCompletion>,
+}
+
+/// Thread-safe validate lifecycle guard shared across manual and automated runs.
+#[derive(Debug, Clone)]
+pub struct ValidateLifecycle {
+    spec_id: Arc<String>,
+    inner: Arc<Mutex<ValidateLifecycleInner>>,
+}
+
+impl ValidateLifecycle {
+    pub fn new<S: Into<String>>(spec_id: S) -> Self {
+        Self {
+            spec_id: Arc::new(spec_id.into()),
+            inner: Arc::new(Mutex::new(ValidateLifecycleInner::default())),
+        }
+    }
+
+    pub fn begin(&self, mode: ValidateMode, payload_hash: &str) -> ValidateBeginOutcome {
+        let mut inner = self
+            .inner
+            .lock()
+            .expect("validate lifecycle mutex poisoned");
+        let current_attempt = inner.attempt;
+
+        match inner.active.as_mut() {
+            Some(active) => {
+                active.dedupe_count = active.dedupe_count.saturating_add(1);
+                let attempt = current_attempt;
+                if active.payload_hash == payload_hash && active.mode == mode {
+                    let info = active.to_info(attempt);
+                    ValidateBeginOutcome::Duplicate(info)
+                } else {
+                    let info = active.to_info(attempt);
+                    ValidateBeginOutcome::Conflict(info)
+                }
+            }
+            None => {
+                let next_attempt = current_attempt.saturating_add(1);
+                inner.attempt = next_attempt;
+                let run_id = format!(
+                    "validate-{}-{}-attempt-{}-{}",
+                    self.spec_id,
+                    mode.as_str(),
+                    next_attempt,
+                    Uuid::new_v4().simple()
+                );
+
+                let run = ActiveValidateRun {
+                    run_id,
+                    payload_hash: payload_hash.to_string(),
+                    mode,
+                    status: ValidateStageStatus::Queued,
+                    dedupe_count: 0,
+                };
+                let info = run.to_info(next_attempt);
+                inner.active = Some(run);
+                ValidateBeginOutcome::Started(info)
+            }
+        }
+    }
+
+    pub fn mark_dispatched(&self, run_id: &str) -> Option<ValidateRunInfo> {
+        let mut inner = self
+            .inner
+            .lock()
+            .expect("validate lifecycle mutex poisoned");
+        let attempt = inner.attempt;
+        let active = inner.active.as_mut()?;
+        if active.run_id != run_id {
+            return None;
+        }
+        active.status = ValidateStageStatus::Dispatched;
+        Some(active.to_info(attempt))
+    }
+
+    pub fn mark_checking_consensus(&self, run_id: &str) -> Option<ValidateRunInfo> {
+        let mut inner = self
+            .inner
+            .lock()
+            .expect("validate lifecycle mutex poisoned");
+        let attempt = inner.attempt;
+        let active = inner.active.as_mut()?;
+        if active.run_id != run_id {
+            return None;
+        }
+        active.status = ValidateStageStatus::CheckingConsensus;
+        Some(active.to_info(attempt))
+    }
+
+    pub fn complete(
+        &self,
+        run_id: &str,
+        reason: ValidateCompletionReason,
+    ) -> Option<ValidateRunCompletion> {
+        let mut inner = self
+            .inner
+            .lock()
+            .expect("validate lifecycle mutex poisoned");
+        let active = inner.active.take()?;
+        if active.run_id != run_id {
+            inner.active = Some(active);
+            return None;
+        }
+        let completion = active.to_completion(inner.attempt, reason);
+        inner.last_completion = Some(completion.clone());
+        Some(completion)
+    }
+
+    pub fn reset_active(&self, reason: ValidateCompletionReason) -> Option<ValidateRunCompletion> {
+        let mut inner = self
+            .inner
+            .lock()
+            .expect("validate lifecycle mutex poisoned");
+        let active = inner.active.take()?;
+        let completion = active.to_completion(inner.attempt, reason);
+        inner.last_completion = Some(completion.clone());
+        Some(completion)
+    }
+
+    pub fn active(&self) -> Option<ValidateRunInfo> {
+        let inner = self
+            .inner
+            .lock()
+            .expect("validate lifecycle mutex poisoned");
+        let attempt = inner.attempt;
+        inner.active.as_ref().map(|run| run.to_info(attempt))
+    }
+
+    pub fn active_payload_hash(&self) -> Option<String> {
+        let inner = self
+            .inner
+            .lock()
+            .expect("validate lifecycle mutex poisoned");
+        inner.active.as_ref().map(|run| run.payload_hash.clone())
+    }
+
+    pub fn last_completion(&self) -> Option<ValidateRunCompletion> {
+        let inner = self
+            .inner
+            .lock()
+            .expect("validate lifecycle mutex poisoned");
+        inner.last_completion.clone()
+    }
+
+    pub fn attempt(&self) -> u32 {
+        let inner = self
+            .inner
+            .lock()
+            .expect("validate lifecycle mutex poisoned");
+        inner.attempt
+    }
+
+    pub fn spec_id(&self) -> &str {
+        &self.spec_id
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_lifecycle_transitions() {
+        let lifecycle = ValidateLifecycle::new("SPEC-TEST-069");
+
+        let first = lifecycle.begin(ValidateMode::Auto, "hash-1");
+        let info = match first {
+            ValidateBeginOutcome::Started(info) => info,
+            _ => panic!("expected Started"),
+        };
+        assert_eq!(info.attempt, 1);
+        assert_eq!(info.dedupe_count, 0);
+        assert_eq!(info.status, ValidateStageStatus::Queued);
+
+        let duplicate = lifecycle.begin(ValidateMode::Auto, "hash-1");
+        match duplicate {
+            ValidateBeginOutcome::Duplicate(info) => {
+                assert_eq!(info.dedupe_count, 1);
+                assert_eq!(info.attempt, 1);
+            }
+            _ => panic!("expected Duplicate"),
+        }
+
+        let dispatched = lifecycle
+            .mark_dispatched(&info.run_id)
+            .expect("dispatch transition");
+        assert_eq!(dispatched.status, ValidateStageStatus::Dispatched);
+
+        let checking = lifecycle
+            .mark_checking_consensus(&info.run_id)
+            .expect("checking transition");
+        assert_eq!(checking.status, ValidateStageStatus::CheckingConsensus);
+
+        let completion = lifecycle
+            .complete(&info.run_id, ValidateCompletionReason::Completed)
+            .expect("completion");
+        assert_eq!(completion.reason, ValidateCompletionReason::Completed);
+        assert_eq!(completion.attempt, 1);
+
+        let second = lifecycle.begin(ValidateMode::Auto, "hash-2");
+        let info2 = match second {
+            ValidateBeginOutcome::Started(info) => info,
+            _ => panic!("expected Started"),
+        };
+        assert_eq!(info2.attempt, 2);
+        assert_eq!(info2.dedupe_count, 0);
+
+        let reset = lifecycle
+            .reset_active(ValidateCompletionReason::Reset)
+            .expect("reset active run");
+        assert_eq!(reset.reason, ValidateCompletionReason::Reset);
+        assert_eq!(reset.attempt, 2);
+
+        assert!(lifecycle.active().is_none());
+    }
 }
 
 /// State for /speckit.auto pipeline automation
@@ -80,16 +443,23 @@ pub struct SpecAutoState {
     // === Quality Gate State (T85) ===
     pub quality_gates_enabled: bool,
     pub completed_checkpoints: HashSet<QualityCheckpoint>,
-    pub quality_gate_processing: Option<QualityCheckpoint>,  // Currently processing (prevents recursion)
-    pub quality_modifications: Vec<String>,  // Track files modified by quality gates
-    pub quality_auto_resolved: Vec<(QualityIssue, String)>,  // All auto-resolutions
-    pub quality_escalated: Vec<(QualityIssue, String)>,  // All human-answered questions
-    pub quality_checkpoint_outcomes: Vec<(QualityCheckpoint, usize, usize)>,  // (checkpoint, auto, escalated)
+    pub quality_gate_processing: Option<QualityCheckpoint>, // Currently processing (prevents recursion)
+    pub quality_modifications: Vec<String>,                 // Track files modified by quality gates
+    pub quality_auto_resolved: Vec<(QualityIssue, String)>, // All auto-resolutions
+    pub quality_escalated: Vec<(QualityIssue, String)>,     // All human-answered questions
+    pub quality_checkpoint_outcomes: Vec<(QualityCheckpoint, usize, usize)>, // (checkpoint, auto, escalated)
+    pub quality_checkpoint_degradations: HashMap<QualityCheckpoint, Vec<String>>, // missing agents per checkpoint
 
     // FORK-SPECIFIC: Agent retry state (just-every/code)
     // Tracks retry attempts when agents fail, timeout, or return invalid results
     pub agent_retry_count: u32,
-    pub agent_retry_context: Option<String>,  // Additional context for retry attempts
+    pub agent_retry_context: Option<String>, // Additional context for retry attempts
+
+    // Tracks which stages have already scheduled degraded follow-up checklists
+    pub degraded_followups: std::collections::HashSet<SpecStage>,
+
+    // SPEC-KIT-069: Validate lifecycle guard (shared across manual/auto paths)
+    pub validate_lifecycle: ValidateLifecycle,
 }
 
 impl SpecAutoState {
@@ -127,6 +497,8 @@ impl SpecAutoState {
         // Quality checkpoints will be triggered by advance_spec_auto when needed
         let initial_phase = SpecAutoPhase::Guardrail;
 
+        let lifecycle = ValidateLifecycle::new(spec_id.clone());
+
         Self {
             spec_id,
             goal,
@@ -144,9 +516,12 @@ impl SpecAutoState {
             quality_auto_resolved: Vec::new(),
             quality_escalated: Vec::new(),
             quality_checkpoint_outcomes: Vec::new(),
+            quality_checkpoint_degradations: HashMap::new(),
             // FORK-SPECIFIC: Agent retry tracking
             agent_retry_count: 0,
             agent_retry_context: None,
+            degraded_followups: std::collections::HashSet::new(),
+            validate_lifecycle: lifecycle,
         }
     }
 
@@ -157,6 +532,50 @@ impl SpecAutoState {
     #[allow(dead_code)]
     pub fn is_executing_agents(&self) -> bool {
         matches!(self.phase, SpecAutoPhase::ExecutingAgents { .. })
+    }
+
+    pub fn set_validate_lifecycle(&mut self, lifecycle: ValidateLifecycle) {
+        self.validate_lifecycle = lifecycle;
+    }
+
+    pub fn begin_validate_run(&self, payload_hash: &str) -> ValidateBeginOutcome {
+        self.validate_lifecycle
+            .begin(ValidateMode::Auto, payload_hash)
+    }
+
+    pub fn mark_validate_dispatched(&self, run_id: &str) -> Option<ValidateRunInfo> {
+        self.validate_lifecycle.mark_dispatched(run_id)
+    }
+
+    pub fn mark_validate_checking(&self, run_id: &str) -> Option<ValidateRunInfo> {
+        self.validate_lifecycle.mark_checking_consensus(run_id)
+    }
+
+    pub fn complete_validate_run(
+        &self,
+        run_id: &str,
+        reason: ValidateCompletionReason,
+    ) -> Option<ValidateRunCompletion> {
+        self.validate_lifecycle.complete(run_id, reason)
+    }
+
+    pub fn reset_validate_run(
+        &self,
+        reason: ValidateCompletionReason,
+    ) -> Option<ValidateRunCompletion> {
+        self.validate_lifecycle.reset_active(reason)
+    }
+
+    pub fn active_validate_run(&self) -> Option<ValidateRunInfo> {
+        self.validate_lifecycle.active()
+    }
+
+    pub fn validate_attempt(&self) -> u32 {
+        self.validate_lifecycle.attempt()
+    }
+
+    pub fn current_validate_payload_hash(&self) -> Option<String> {
+        self.validate_lifecycle.active_payload_hash()
     }
 }
 
@@ -327,7 +746,7 @@ pub struct QualityCheckpointOutcome {
     pub auto_resolved: usize,
     pub escalated: usize,
     pub escalated_questions: Vec<EscalatedQuestion>,
-    pub auto_resolutions: Vec<(QualityIssue, String)>,  // (issue, applied_answer)
+    pub auto_resolutions: Vec<(QualityIssue, String)>, // (issue, applied_answer)
     pub telemetry_path: Option<PathBuf>,
 }
 
