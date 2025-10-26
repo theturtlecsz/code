@@ -196,8 +196,12 @@ impl SpecKitCommand for SpecKitConstitutionCommand {
     }
 
     fn execute(&self, widget: &mut ChatWidget, _args: String) {
+        tracing::info!("SpecKitConstitution: execute() called");
+
         // Find constitution.md in the repository
         let constitution_path = widget.config.cwd.join("memory").join("constitution.md");
+
+        tracing::info!("SpecKitConstitution: Looking for constitution at: {:?}", constitution_path);
 
         if !constitution_path.exists() {
             widget.history_push(crate::history_cell::new_error_event(
