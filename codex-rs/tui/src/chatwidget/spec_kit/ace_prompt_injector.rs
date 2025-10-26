@@ -69,7 +69,7 @@ fn dedupe_bullets(bullets: Vec<PlaybookBullet>) -> Vec<PlaybookBullet> {
 }
 
 /// Select and cap bullets according to rules
-fn select_bullets(mut bullets: Vec<PlaybookBullet>, slice_size: usize) -> Vec<PlaybookBullet> {
+pub fn select_bullets(mut bullets: Vec<PlaybookBullet>, slice_size: usize) -> Vec<PlaybookBullet> {
     // Deduplicate first
     bullets = dedupe_bullets(bullets);
 
@@ -106,7 +106,7 @@ fn select_bullets(mut bullets: Vec<PlaybookBullet>, slice_size: usize) -> Vec<Pl
 /// Format bullets into a text section
 ///
 /// Returns (section_text, bullet_ids) tuple for tracking which bullets were used
-fn format_ace_section(bullets: &[PlaybookBullet]) -> (String, Vec<i32>) {
+pub fn format_ace_section(bullets: &[PlaybookBullet]) -> (String, Vec<i32>) {
     if bullets.is_empty() {
         return (String::new(), Vec::new());
     }

@@ -86,9 +86,10 @@ pub use quality::{
     resolve_quality_issue, should_auto_resolve,
 };
 
-// Re-export ACE functions for integration testing
+// Re-export ACE functions for integration testing and widget usage
 #[cfg(any(test, feature = "test-utils"))]
 pub use ace_prompt_injector::should_use_ace;
+pub use ace_prompt_injector::{select_bullets, format_ace_section};
 #[cfg(any(test, feature = "test-utils"))]
 pub use ace_route_selector::{select_route, DiffStat, RouteDecision};
 

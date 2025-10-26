@@ -111,19 +111,12 @@ pub fn try_dispatch_spec_kit_command(
             Some(&widget.config.subagent_commands),
         );
 
-        // Inject ACE playbook section if enabled
-        let repo_root = get_repo_root(&widget.config.cwd);
-        let branch = get_current_branch(&widget.config.cwd);
-        let final_prompt = ace_prompt_injector::inject_ace_section(
-            &widget.config.ace,
-            config_name,
-            repo_root,
-            branch,
+        // Submit with ACE injection (async, event-based)
+        widget.submit_prompt_with_ace(
+            command_text.to_string(),
             formatted.prompt,
+            config_name,
         );
-
-        // Submit with proper config-based prompt (possibly augmented with ACE)
-        widget.submit_prompt_with_display(command_text.to_string(), final_prompt);
     } else {
         // Direct execution: persist to history then execute
         let _ = app_event_tx.send(AppEvent::CodexOp(Op::AddToHistory {

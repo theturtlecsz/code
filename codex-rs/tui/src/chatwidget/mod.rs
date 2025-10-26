@@ -13507,6 +13507,87 @@ impl ChatWidget<'_> {
         }
     }
 
+    /// Submit prompt with ACE bullet injection (async)
+    ///
+    /// Fetches bullets from ACE playbook asynchronously and injects before submission.
+    /// Shows "preparing" message while fetching bullets.
+    pub(crate) fn submit_prompt_with_ace(
+        &mut self,
+        display: String,
+        prompt: String,
+        command_name: &str,
+    ) {
+        // If ACE disabled or not applicable, submit immediately
+        if !spec_kit::ace_prompt_injector::should_use_ace(&self.config.ace, command_name) {
+            self.submit_prompt_with_display(display, prompt);
+            return;
+        }
+
+        // Show preparing message
+        self.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![ratatui::text::Line::from("⏳ Preparing prompt with ACE context...")],
+            crate::history_cell::HistoryCellType::Notice,
+        ));
+
+        // Clone data for async task
+        let config = self.config.ace.clone();
+        let repo_root = spec_kit::routing::get_repo_root(&self.config.cwd)
+            .unwrap_or_else(|| ".".to_string());
+        let branch = spec_kit::routing::get_current_branch(&self.config.cwd)
+            .unwrap_or_else(|| "main".to_string());
+        let cmd_name = command_name.to_string();
+        let tx = self.app_event_tx.clone();
+
+        // Spawn async injection task
+        tokio::spawn(async move {
+            let scope = spec_kit::ace_prompt_injector::command_to_scope(&cmd_name);
+
+            let enhanced_prompt = if let Some(scope) = scope {
+                match spec_kit::ace_client::playbook_slice(
+                    repo_root,
+                    branch,
+                    scope.to_string(),
+                    config.slice_size,
+                    false,
+                )
+                .await
+                {
+                    spec_kit::ace_client::AceResult::Ok(response) => {
+                        // Format and inject bullets
+                        let selected = spec_kit::ace_prompt_injector::select_bullets(
+                            response.bullets,
+                            config.slice_size,
+                        );
+                        let (ace_section, _ids) =
+                            spec_kit::ace_prompt_injector::format_ace_section(&selected);
+
+                        if !ace_section.is_empty() {
+                            // Inject before <task>
+                            if let Some(pos) = prompt.find("<task>") {
+                                let mut enhanced = prompt.clone();
+                                enhanced.insert_str(pos, &ace_section);
+                                enhanced
+                            } else {
+                                format!("{}\n\n{}", ace_section, prompt)
+                            }
+                        } else {
+                            prompt
+                        }
+                    }
+                    _ => prompt,
+                }
+            } else {
+                prompt
+            };
+
+            // Submit via event
+            let _ = tx.send(crate::app_event::AppEvent::SubmitPreparedPrompt {
+                display,
+                prompt: enhanced_prompt,
+            });
+        });
+    }
+
     /// Submit a visible text message, but prepend a hidden instruction that is
     /// sent to the agent in the same turn. The hidden text is not added to the
     /// chat history; only `visible` appears to the user.

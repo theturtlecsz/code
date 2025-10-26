@@ -949,6 +949,12 @@ impl App<'_> {
                 None => break 'main,
             };
             match event {
+                AppEvent::SubmitPreparedPrompt { display, prompt } => {
+                    // ACE-enhanced prompt from async injection (early match)
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.submit_prompt_with_display(display, prompt);
+                    }
+                }
                 AppEvent::SpecKitQualityGateResults { broker_result } => {
                     if let AppState::Chat { widget } = &mut self.app_state {
                         spec_kit::handler::on_quality_gate_broker_result(widget, broker_result);
@@ -2067,6 +2073,12 @@ impl App<'_> {
                                 order: None,
                             }));
                         }
+                    }
+                }
+                AppEvent::SubmitPreparedPrompt { display, prompt } => {
+                    // ACE-enhanced prompt ready for submission
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.submit_prompt_with_display(display, prompt);
                     }
                 }
                 AppEvent::SwitchCwd(new_cwd, initial_prompt) => {
