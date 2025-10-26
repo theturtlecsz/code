@@ -155,6 +155,7 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
     registry.register(Box::new(SpecKitStatusCommand));
     registry.register(Box::new(SpecConsensusCommand));
     registry.register(Box::new(SpecKitConstitutionCommand));
+    registry.register(Box::new(SpecKitAceStatusCommand));
 
     // Stage commands (plan → unlock)
     registry.register(Box::new(SpecKitPlanCommand));

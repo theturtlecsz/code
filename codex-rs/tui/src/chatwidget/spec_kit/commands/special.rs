@@ -235,11 +235,30 @@ impl SpecKitCommand for SpecKitConstitutionCommand {
             return;
         }
 
+        // Show detailed extraction info
+        let scope_counts: std::collections::HashMap<String, usize> = bullets
+            .iter()
+            .flat_map(|b| b.scopes.iter())
+            .fold(std::collections::HashMap::new(), |mut acc, scope| {
+                *acc.entry(scope.clone()).or_insert(0) += 1;
+                acc
+            });
+
+        let scope_summary = scope_counts
+            .iter()
+            .map(|(scope, count)| format!("{}: {}", scope, count))
+            .collect::<Vec<_>>()
+            .join(", ");
+
         widget.history_push(crate::history_cell::PlainHistoryCell::new(
-            vec![ratatui::text::Line::from(format!(
-                "Extracted {} bullets from constitution, pinning to ACE...",
-                bullets.len()
-            ))],
+            vec![
+                ratatui::text::Line::from(format!(
+                    "📋 Extracted {} bullets from constitution",
+                    bullets.len()
+                )),
+                ratatui::text::Line::from(format!("   Scopes: {}", scope_summary)),
+                ratatui::text::Line::from("   Pinning to ACE playbook..."),
+            ],
             crate::history_cell::HistoryCellType::Notice,
         ));
 
@@ -256,18 +275,113 @@ impl SpecKitCommand for SpecKitConstitutionCommand {
         ) {
             Ok(pinned_count) => {
                 widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                    vec![ratatui::text::Line::from(format!(
-                        "Successfully pinned {} bullets to ACE playbook (global + phase scopes)",
-                        pinned_count
-                    ))],
+                    vec![
+                        ratatui::text::Line::from(format!(
+                            "✅ Successfully pinned {} bullets to ACE playbook",
+                            pinned_count
+                        )),
+                        ratatui::text::Line::from("   Database: ~/.code/ace/playbooks_normalized.sqlite3"),
+                        ratatui::text::Line::from("   Use /speckit.ace-status to view playbook"),
+                    ],
                     crate::history_cell::HistoryCellType::Notice,
                 ));
             }
             Err(e) => {
                 widget.history_push(crate::history_cell::new_error_event(format!(
-                    "Failed to pin bullets to ACE: {}",
+                    "❌ Failed to pin bullets to ACE: {}",
                     e
                 )));
+            }
+        }
+
+        widget.request_redraw();
+    }
+
+    fn requires_args(&self) -> bool {
+        false
+    }
+}
+
+/// Command: /speckit.ace-status
+/// Show ACE playbook status and statistics
+pub struct SpecKitAceStatusCommand;
+
+impl SpecKitCommand for SpecKitAceStatusCommand {
+    fn name(&self) -> &'static str {
+        "speckit.ace-status"
+    }
+
+    fn aliases(&self) -> &[&'static str] {
+        &["ace-status"]
+    }
+
+    fn description(&self) -> &'static str {
+        "show ACE playbook status and bullet statistics"
+    }
+
+    fn execute(&self, widget: &mut ChatWidget, _args: String) {
+        use std::process::Command;
+
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![ratatui::text::Line::from("📊 ACE Playbook Status")],
+            crate::history_cell::HistoryCellType::Notice,
+        ));
+
+        let db_path = dirs::home_dir()
+            .map(|h| h.join(".code/ace/playbooks_normalized.sqlite3"))
+            .unwrap_or_else(|| std::path::PathBuf::from("~/.code/ace/playbooks_normalized.sqlite3"));
+
+        // Check if database exists
+        if !std::path::Path::new(db_path.as_ref()).exists() {
+            widget.history_push(crate::history_cell::new_error_event(
+                "ACE database not found. Run /speckit.constitution to initialize.".to_string(),
+            ));
+            widget.request_redraw();
+            return;
+        }
+
+        // Get statistics
+        let query = "SELECT scope, COUNT(*), SUM(pinned), AVG(score), MAX(score) FROM playbook_bullet GROUP BY scope ORDER BY scope;";
+
+        match Command::new("sqlite3").arg(&db_path).arg(query).output() {
+            Ok(result) if result.status.success() => {
+                let stats = String::from_utf8_lossy(&result.stdout);
+
+                let mut lines = vec![
+                    ratatui::text::Line::from(""),
+                    ratatui::text::Line::from("Scope      | Total | Pinned | Avg Score | Max Score"),
+                    ratatui::text::Line::from("-----------|-------|--------|-----------|----------"),
+                ];
+
+                for line in stats.lines() {
+                    let parts: Vec<&str> = line.split('|').collect();
+                    if parts.len() >= 5 {
+                        lines.push(ratatui::text::Line::from(format!(
+                            "{:<10} | {:<5} | {:<6} | {:<9.2} | {:.2}",
+                            parts[0],
+                            parts[1],
+                            parts[2],
+                            parts[3].parse::<f64>().unwrap_or(0.0),
+                            parts[4].parse::<f64>().unwrap_or(0.0)
+                        )));
+                    }
+                }
+
+                lines.push(ratatui::text::Line::from(""));
+                lines.push(ratatui::text::Line::from(format!(
+                    "Database: {}",
+                    db_path.display()
+                )));
+
+                widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                    lines,
+                    crate::history_cell::HistoryCellType::Notice,
+                ));
+            }
+            _ => {
+                widget.history_push(crate::history_cell::new_error_event(
+                    "Failed to query ACE database. Is sqlite3 installed?".to_string(),
+                ));
             }
         }
 
