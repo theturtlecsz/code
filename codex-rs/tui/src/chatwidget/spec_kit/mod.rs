@@ -6,6 +6,14 @@
 //! Uses free functions instead of methods to avoid Rust borrow checker issues
 //! when accessing ChatWidget fields.
 
+pub mod ace_client; // ACE (Agentic Context Engine) MCP client
+pub mod ace_constitution; // ACE constitution pinning
+pub mod ace_curator; // ACE Curator - Strategic playbook management
+pub mod ace_learning; // ACE learning from execution outcomes
+pub mod ace_orchestrator; // ACE Orchestrator - Full reflection-curation cycle
+pub mod ace_prompt_injector; // ACE prompt injection logic
+pub mod ace_reflector; // ACE Reflector - Deep outcome analysis
+pub mod ace_route_selector; // ACE route selection for complex tasks
 pub mod command_registry;
 pub mod commands;
 pub mod config_validator;
@@ -77,6 +85,12 @@ pub use quality::{
     classify_issue_agreement, merge_agent_issues, parse_quality_issue_from_agent,
     resolve_quality_issue, should_auto_resolve,
 };
+
+// Re-export ACE functions for integration testing
+#[cfg(any(test, feature = "test-utils"))]
+pub use ace_prompt_injector::should_use_ace;
+#[cfg(any(test, feature = "test-utils"))]
+pub use ace_route_selector::{select_route, DiffStat, RouteDecision};
 
 // Re-export broker handle for UI integration
 pub(crate) use quality_gate_broker::{

@@ -1051,6 +1051,101 @@ pub struct ProjectCommandConfig {
     pub timeout_ms: Option<u64>,
 }
 
+/// ACE (Agentic Context Engine) configuration mode
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum AceMode {
+    /// Use ACE when heuristics suggest benefit (default)
+    Auto,
+    /// Always use ACE for configured commands
+    Always,
+    /// Never use ACE
+    Never,
+}
+
+impl Default for AceMode {
+    fn default() -> Self {
+        Self::Auto
+    }
+}
+
+/// Configuration for ACE (Agentic Context Engine) integration
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub struct AceConfig {
+    /// Whether ACE integration is enabled
+    #[serde(default = "default_ace_enabled")]
+    pub enabled: bool,
+
+    /// When to use ACE for route selection
+    #[serde(default)]
+    pub mode: AceMode,
+
+    /// Number of playbook bullets to retrieve (max 8 recommended)
+    #[serde(default = "default_ace_slice_size")]
+    pub slice_size: usize,
+
+    /// Path to ACE SQLite database
+    #[serde(default = "default_ace_db_path")]
+    pub db_path: String,
+
+    /// Commands that should use ACE playbook injection
+    #[serde(default = "default_ace_use_for")]
+    pub use_for: Vec<String>,
+
+    /// File count threshold for considering a task "complex"
+    #[serde(default = "default_ace_complex_threshold")]
+    pub complex_task_files_threshold: usize,
+
+    /// Window in minutes for detecting command reruns
+    #[serde(default = "default_ace_rerun_window")]
+    pub rerun_window_minutes: u64,
+}
+
+fn default_ace_enabled() -> bool {
+    true
+}
+
+fn default_ace_slice_size() -> usize {
+    8
+}
+
+fn default_ace_db_path() -> String {
+    "~/.code/ace/playbooks_v1.sqlite3".to_string()
+}
+
+fn default_ace_use_for() -> Vec<String> {
+    vec![
+        "speckit.constitution".to_string(),
+        "speckit.specify".to_string(),
+        "speckit.tasks".to_string(),
+        "speckit.implement".to_string(),
+        "speckit.test".to_string(),
+    ]
+}
+
+fn default_ace_complex_threshold() -> usize {
+    4
+}
+
+fn default_ace_rerun_window() -> u64 {
+    30
+}
+
+impl Default for AceConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_ace_enabled(),
+            mode: AceMode::default(),
+            slice_size: default_ace_slice_size(),
+            db_path: default_ace_db_path(),
+            use_for: default_ace_use_for(),
+            complex_task_files_threshold: default_ace_complex_threshold(),
+            rerun_window_minutes: default_ace_rerun_window(),
+        }
+    }
+}
+
 impl From<codex_protocol::config_types::ReasoningEffort> for ReasoningEffort {
     fn from(v: codex_protocol::config_types::ReasoningEffort) -> Self {
         match v {

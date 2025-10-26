@@ -1,10 +1,12 @@
-//! Special command implementations (auto, new, specify, consensus)
+//! Special command implementations (auto, new, specify, consensus, constitution)
 //!
 //! FORK-SPECIFIC (just-every/code): Spec-kit multi-agent automation framework
 
 use super::super::super::ChatWidget;
+use super::super::ace_constitution;
 use super::super::command_registry::SpecKitCommand;
 use super::super::handler;
+use super::super::routing::{get_current_branch, get_repo_root};
 
 /// Command: /speckit.auto (and /spec-auto)
 /// Full 6-stage pipeline with auto-advancement
@@ -173,5 +175,102 @@ impl SpecKitCommand for SpecConsensusCommand {
 
     fn requires_args(&self) -> bool {
         true
+    }
+}
+
+/// Command: /speckit.constitution
+/// Extract and pin constitution bullets to ACE
+pub struct SpecKitConstitutionCommand;
+
+impl SpecKitCommand for SpecKitConstitutionCommand {
+    fn name(&self) -> &'static str {
+        "speckit.constitution"
+    }
+
+    fn aliases(&self) -> &[&'static str] {
+        &[]
+    }
+
+    fn description(&self) -> &'static str {
+        "extract and pin constitution bullets to ACE playbook"
+    }
+
+    fn execute(&self, widget: &mut ChatWidget, _args: String) {
+        // Find constitution.md in the repository
+        let constitution_path = widget.config.cwd.join("memory").join("constitution.md");
+
+        if !constitution_path.exists() {
+            widget.history_push(crate::history_cell::new_error_event(
+                "Constitution not found at memory/constitution.md".to_string(),
+            ));
+            widget.request_redraw();
+            return;
+        }
+
+        // Read constitution
+        let markdown = match std::fs::read_to_string(&constitution_path) {
+            Ok(content) => content,
+            Err(e) => {
+                widget.history_push(crate::history_cell::new_error_event(format!(
+                    "Failed to read constitution: {}",
+                    e
+                )));
+                widget.request_redraw();
+                return;
+            }
+        };
+
+        // Extract bullets
+        let bullets = ace_constitution::extract_bullets(&markdown);
+
+        if bullets.is_empty() {
+            widget.history_push(crate::history_cell::new_error_event(
+                "No valid bullets extracted from constitution".to_string(),
+            ));
+            widget.request_redraw();
+            return;
+        }
+
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![ratatui::text::Line::from(format!(
+                "Extracted {} bullets from constitution, pinning to ACE...",
+                bullets.len()
+            ))],
+            crate::history_cell::HistoryCellType::Notice,
+        ));
+
+        // Get git context
+        let repo_root = get_repo_root(&widget.config.cwd).unwrap_or_else(|| ".".to_string());
+        let branch = get_current_branch(&widget.config.cwd).unwrap_or_else(|| "main".to_string());
+
+        // Pin to ACE
+        match ace_constitution::pin_constitution_to_ace_sync(
+            &widget.config.ace,
+            repo_root,
+            branch,
+            bullets,
+        ) {
+            Ok(pinned_count) => {
+                widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                    vec![ratatui::text::Line::from(format!(
+                        "Successfully pinned {} bullets to ACE playbook (global + phase scopes)",
+                        pinned_count
+                    ))],
+                    crate::history_cell::HistoryCellType::Notice,
+                ));
+            }
+            Err(e) => {
+                widget.history_push(crate::history_cell::new_error_event(format!(
+                    "Failed to pin bullets to ACE: {}",
+                    e
+                )));
+            }
+        }
+
+        widget.request_redraw();
+    }
+
+    fn requires_args(&self) -> bool {
+        false
     }
 }

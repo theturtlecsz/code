@@ -6,249 +6,352 @@
 //! MAINT-2: Extracted from handler.rs (925 LOC) for maintainability
 
 use super::super::ChatWidget;
+use super::ace_learning::{ExecutionFeedback, send_learning_feedback_sync};
+use super::ace_orchestrator;
+use super::ace_reflector;
+use super::ace_route_selector::DiffStat;
 use super::evidence::{EvidenceRepository, FilesystemEvidence};
+use super::quality_gate_broker::{
+    QualityGateAgentPayload, QualityGateBrokerResult, QualityGateValidationResult,
+};
+use super::routing::{get_current_branch, get_repo_root};
 use super::state::SpecAutoPhase;
 use crate::history_cell::HistoryCellType;
 use crate::spec_prompts::SpecStage;
+use tracing::{debug, info, warn};
 
 /// Handle quality gate agents completing
 pub fn on_quality_gate_agents_complete(widget: &mut ChatWidget) {
-    // RECURSION GUARD: Check processing flag FIRST, before any history_push
-    let (checkpoint, should_process) = {
+    let (spec_id, checkpoint, expected_agents, gate_names) = {
         let Some(state) = widget.spec_auto_state.as_ref() else {
-            return; // No state - silent return
+            return;
         };
 
         match &state.phase {
-            SpecAutoPhase::QualityGateExecuting { checkpoint, .. } => {
-                // Check all guard conditions WITHOUT any history_push calls
-                let already_completed = state.completed_checkpoints.contains(checkpoint);
-                let already_processing = state.quality_gate_processing == Some(*checkpoint);
-
-                if already_completed || already_processing {
-                    return; // Silent return - no recursion
+            SpecAutoPhase::QualityGateExecuting {
+                checkpoint,
+                expected_agents,
+                gates,
+                ..
+            } => {
+                if state.completed_checkpoints.contains(checkpoint)
+                    || state.quality_gate_processing == Some(*checkpoint)
+                {
+                    return;
                 }
-
-                (*checkpoint, true)
+                (
+                    state.spec_id.clone(),
+                    *checkpoint,
+                    expected_agents.clone(),
+                    gates
+                        .iter()
+                        .map(|gate| gate.command_name().to_string())
+                        .collect::<Vec<_>>(),
+                )
             }
-            _ => return, // Wrong phase - silent return
+            _ => return,
         }
     };
 
-    // Set processing flag IMMEDIATELY (before ANY output)
+    let gate_count = gate_names.len();
+
+    // Mark processing active and clear any stale results before kicking off async work.
     if let Some(state) = widget.spec_auto_state.as_mut() {
         state.quality_gate_processing = Some(checkpoint);
+        if let SpecAutoPhase::QualityGateExecuting { results, .. } = &mut state.phase {
+            results.clear();
+        }
     }
 
-    // NOW safe to do history_push - flag is set, won't re-trigger
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
-        vec![
-            ratatui::text::Line::from("DEBUG: on_quality_gate_agents_complete() PROCESSING"),
-        ],
+        vec![ratatui::text::Line::from(format!(
+            "Quality Gate: {} - retrieving agent responses asynchronously ({} gates)...",
+            checkpoint.name(),
+            gate_count
+        ))],
         crate::history_cell::HistoryCellType::Notice,
     ));
 
-    // Extract data after flag is set
-    let (spec_id, cwd, gates) = {
-        let state = widget.spec_auto_state.as_ref().unwrap();
-        let gates = match &state.phase {
-            SpecAutoPhase::QualityGateExecuting { gates, .. } => gates.clone(),
-            _ => return,
-        };
-        (state.spec_id.clone(), widget.config.cwd.clone(), gates)
+    widget.quality_gate_broker.fetch_agent_payloads(
+        spec_id,
+        checkpoint,
+        expected_agents,
+        gate_names,
+    );
+}
+
+/// Handle asynchronous broker callbacks delivering agent payloads.
+pub fn on_quality_gate_broker_result(
+    widget: &mut ChatWidget,
+    broker_result: QualityGateBrokerResult,
+) {
+    let QualityGateBrokerResult {
+        spec_id,
+        checkpoint,
+        attempts,
+        info_lines,
+        missing_agents,
+        found_agents,
+        payload,
+    } = broker_result;
+
+    let Some(state) = widget.spec_auto_state.as_ref() else {
+        tracing::warn!("quality gate broker result received with no spec auto state");
+        return;
     };
 
-    widget.history_push(crate::history_cell::PlainHistoryCell::new(
-        vec![
-            ratatui::text::Line::from(format!("Quality Gate: {} - retrieving agent responses from local-memory...", checkpoint.name())),
-        ],
-        crate::history_cell::HistoryCellType::Notice,
-    ));
+    if state.spec_id != spec_id {
+        tracing::warn!(
+            "quality gate broker result spec mismatch: expected {}, got {}",
+            state.spec_id,
+            spec_id
+        );
+        return;
+    }
 
-    // Step 1: Retrieve agent results from local-memory
-    let agent_results: Vec<(String, serde_json::Value)> = {
-        use serde_json::json;
-
-        match tokio::runtime::Handle::try_current() {
-            Ok(handle) => {
-                let manager_arc = handle.block_on(async {
-                    widget.mcp_manager.lock().await.as_ref().cloned()
-                });
-
-                match manager_arc {
-                    Some(manager) => {
-                        let args = json!({
-                            "query": format!("{} quality-gate", spec_id),
-                            "limit": 10,
-                            "tags": [format!("quality-gate"), spec_id.clone()],
-                            "search_type": "hybrid"
-                        });
-
-                        let mcp_result = handle.block_on(async {
-                            manager.call_tool(
-                                "local-memory",
-                                "search",
-                                Some(args),
-                                Some(std::time::Duration::from_secs(10))
-                            ).await
-                        });
-
-                        match mcp_result.ok().and_then(|r| crate::spec_prompts::parse_mcp_results_to_local_memory(&r).ok()) {
-                            Some(results) if !results.is_empty() => {
-                                results.into_iter().filter_map(|mem| {
-                                    // Parse JSON content
-                                    let json_value: serde_json::Value = serde_json::from_str(&mem.memory.content).ok()?;
-
-                                    // Extract agent name from JSON (all quality gate responses have "agent" field)
-                                    let agent = json_value.get("agent")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("unknown")
-                                        .to_string();
-
-                                    Some((agent, json_value))
-                                }).collect()
-                            }
-                            _ => {
-                                widget.history_push(crate::history_cell::new_error_event(
-                                    "No quality gate results found in local-memory".to_string()
-                                ));
-                                // Clear processing flag on error
-                                if let Some(state) = widget.spec_auto_state.as_mut() {
-                                    state.quality_gate_processing = None;
-                                }
-                                return;
-                            }
-                        }
-                    }
-                    None => {
-                        widget.history_push(crate::history_cell::new_error_event(
-                            "MCP manager not available".to_string()
-                        ));
-                        // Clear processing flag on error
-                        if let Some(state) = widget.spec_auto_state.as_mut() {
-                            state.quality_gate_processing = None;
-                        }
-                        return;
-                    }
-                }
-            }
-            Err(_) => {
-                widget.history_push(crate::history_cell::new_error_event(
-                    "No tokio runtime available".to_string()
-                ));
-                // Clear processing flag on error
-                if let Some(state) = widget.spec_auto_state.as_mut() {
-                    state.quality_gate_processing = None;
-                }
-                return;
-            }
+    let (expected_agents, current_stage) = match &state.phase {
+        SpecAutoPhase::QualityGateExecuting {
+            checkpoint: phase_ckpt,
+            expected_agents,
+            ..
+        } if *phase_ckpt == checkpoint => (expected_agents.clone(), state.current_stage()),
+        _ => {
+            tracing::warn!("quality gate broker result received outside executing phase");
+            return;
         }
     };
 
-    if agent_results.is_empty() {
-        widget.history_push(crate::history_cell::new_error_event(
-            "Failed to retrieve quality gate results from local-memory".to_string()
+    if !info_lines.is_empty() {
+        let mut lines = Vec::with_capacity(info_lines.len() + 1);
+        lines.push(ratatui::text::Line::from(format!(
+            "Quality Gate: {} broker attempts ({} total)",
+            checkpoint.name(),
+            attempts
+        )));
+        for entry in &info_lines {
+            lines.push(ratatui::text::Line::from(entry.clone()));
+        }
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            lines,
+            crate::history_cell::HistoryCellType::Notice,
         ));
-        // Clear processing flag on error
+    }
+
+    match payload {
+        Err(message) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Quality Gate: {} broker error — {}",
+                checkpoint.name(),
+                message
+            )));
+
+            if let Some(state) = widget.spec_auto_state.as_mut() {
+                state.quality_gate_processing = None;
+            }
+
+            super::handler::halt_spec_auto_with_error(
+                widget,
+                format!(
+                    "Quality gate {} failed – missing artefacts after {} attempts",
+                    checkpoint.name(),
+                    attempts
+                ),
+            );
+        }
+        Ok(agent_payloads) => {
+            let payload_clone = agent_payloads.clone();
+
+            if let Some(state) = widget.spec_auto_state.as_mut() {
+                if let SpecAutoPhase::QualityGateExecuting {
+                    completed_agents,
+                    results,
+                    ..
+                } = &mut state.phase
+                {
+                    completed_agents.clear();
+                    completed_agents.extend(found_agents.iter().cloned());
+                    results.clear();
+                    for payload in &payload_clone {
+                        results.insert(payload.agent.clone(), payload.content.clone());
+                    }
+                }
+
+                if missing_agents.is_empty() {
+                    state.quality_checkpoint_degradations.remove(&checkpoint);
+                } else {
+                    state
+                        .quality_checkpoint_degradations
+                        .insert(checkpoint, missing_agents.clone());
+                }
+            }
+
+            if !missing_agents.is_empty() {
+                widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                    vec![ratatui::text::Line::from(format!(
+                        "Quality Gate: {} degraded consensus – missing agents: {} (expected {})",
+                        checkpoint.name(),
+                        missing_agents.join(", "),
+                        expected_agents.join(", ")
+                    ))],
+                    crate::history_cell::HistoryCellType::Notice,
+                ));
+
+                if let Some(stage) = current_stage {
+                    super::handler::schedule_degraded_follow_up(widget, stage, &spec_id);
+                }
+            }
+
+            process_quality_gate_agent_results(widget, checkpoint, &agent_payloads);
+        }
+    }
+}
+
+fn process_quality_gate_agent_results(
+    widget: &mut ChatWidget,
+    checkpoint: super::state::QualityCheckpoint,
+    agent_payloads: &[QualityGateAgentPayload],
+) {
+    let Some(state) = widget.spec_auto_state.as_ref() else {
+        return;
+    };
+
+    let spec_id = state.spec_id.clone();
+    let cwd = widget.config.cwd.clone();
+    let gates = match &state.phase {
+        SpecAutoPhase::QualityGateExecuting { gates, .. } => gates.clone(),
+        _ => return,
+    };
+
+    if agent_payloads.is_empty() {
+        widget.history_push(crate::history_cell::new_error_event(
+            "Quality gate broker returned no agent payloads".to_string(),
+        ));
         if let Some(state) = widget.spec_auto_state.as_mut() {
             state.quality_gate_processing = None;
         }
         return;
     }
-
-    // Step 2: Parse agent results into QualityIssue objects
     let mut all_agent_issues = Vec::new();
 
-    for (agent_id, agent_result) in &agent_results {
-        for gate in &gates {
-            match super::quality::parse_quality_issue_from_agent(agent_id, agent_result, *gate) {
+    for gate in &gates {
+        let gate_name = gate.command_name();
+
+        let mut entries: Vec<&QualityGateAgentPayload> = agent_payloads
+            .iter()
+            .filter(|payload| payload.gate.as_deref() == Some(gate_name))
+            .collect();
+
+        if entries.is_empty() {
+            // Fallback: include payloads without explicit gate tagging.
+            entries = agent_payloads
+                .iter()
+                .filter(|payload| payload.gate.is_none())
+                .collect();
+        }
+
+        if entries.is_empty() {
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![ratatui::text::Line::from(format!(
+                    "Quality Gate: {} - no artefacts found for gate {}",
+                    checkpoint.name(),
+                    gate_name
+                ))],
+                crate::history_cell::HistoryCellType::Notice,
+            ));
+            continue;
+        }
+
+        for payload in entries {
+            match super::quality::parse_quality_issue_from_agent(
+                &payload.agent,
+                &payload.content,
+                *gate,
+            ) {
                 Ok(issues) => all_agent_issues.push(issues),
                 Err(err) => {
                     widget.history_push(crate::history_cell::new_error_event(format!(
                         "Failed to parse {} results from {}: {}",
-                        gate.command_name(),
-                        agent_id,
-                        err
+                        gate_name, payload.agent, err
                     )));
                 }
             }
         }
     }
 
-    // Step 2: Merge issues from multiple agents by ID
     let merged_issues = super::quality::merge_agent_issues(all_agent_issues);
 
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
-        vec![
-            ratatui::text::Line::from(format!("Quality Gate: {} - found {} issues from {} gates", checkpoint.name(), merged_issues.len(), gates.len())),
-        ],
+        vec![ratatui::text::Line::from(format!(
+            "Quality Gate: {} - found {} issues from {} gates",
+            checkpoint.name(),
+            merged_issues.len(),
+            gates.len()
+        ))],
         crate::history_cell::HistoryCellType::Notice,
     ));
 
     if merged_issues.is_empty() {
-        // No issues found - continue to next stage
+        // FORK-SPECIFIC: Send ACE learning feedback on successful validation
+        send_ace_learning_on_checkpoint_pass(widget, checkpoint);
+
         if let Some(state) = widget.spec_auto_state.as_mut() {
             state.completed_checkpoints.insert(checkpoint);
-            state.quality_gate_processing = None; // Clear processing flag
+            state.quality_gate_processing = None;
             state.phase = SpecAutoPhase::Guardrail;
         }
         super::handler::advance_spec_auto(widget);
         return;
     }
 
-    // Step 3: Classify issues using should_auto_resolve() decision matrix
-    // Checks confidence + magnitude + resolvability (quality.rs:75-92)
-    let mut auto_resolvable = Vec::new();      // should_auto_resolve() = true
-    let mut needs_validation = Vec::new();      // Medium confidence, not auto-resolvable
-    let mut escalate_to_human = Vec::new();    // Low confidence or manual-only
+    let mut auto_resolvable = Vec::new();
+    let mut needs_validation = Vec::new();
+    let mut escalate_to_human = Vec::new();
 
     for issue in merged_issues {
         if super::quality::should_auto_resolve(&issue) {
             auto_resolvable.push(issue);
         } else if matches!(issue.confidence, super::state::Confidence::Medium) {
-            // Medium confidence but didn't pass auto-resolve → needs GPT-5
             needs_validation.push(issue);
         } else {
-            // Low confidence or requires human judgment
             escalate_to_human.push(issue);
         }
     }
 
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
-        vec![
-            ratatui::text::Line::from(format!(
-                "Quality Gate: {} - {} auto-resolvable, {} need GPT-5 validation, {} escalated",
-                checkpoint.name(),
-                auto_resolvable.len(),
-                needs_validation.len(),
-                escalate_to_human.len()
-            )),
-        ],
+        vec![ratatui::text::Line::from(format!(
+            "Quality Gate: {} - {} auto-resolvable, {} need GPT-5 validation, {} escalated",
+            checkpoint.name(),
+            auto_resolvable.len(),
+            needs_validation.len(),
+            escalate_to_human.len()
+        ))],
         crate::history_cell::HistoryCellType::Notice,
     ));
 
-    // Step 4: Auto-resolve auto-resolvable issues
     let mut auto_resolved_list = Vec::new();
 
     for issue in auto_resolvable {
-        let (_, majority_answer, _) = super::quality::classify_issue_agreement(&issue.agent_answers);
+        let (_, majority_answer, _) =
+            super::quality::classify_issue_agreement(&issue.agent_answers);
         let answer = majority_answer.unwrap_or_else(|| "unknown".to_string());
 
         let spec_dir = cwd.join(format!("docs/{}", spec_id));
         match super::quality::apply_auto_resolution(&issue, &answer, &spec_dir) {
             Ok(outcome) => {
                 widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                    vec![
-                        ratatui::text::Line::from(format!("✅ Auto-resolved: {} → {}", issue.description, answer)),
-                    ],
+                    vec![ratatui::text::Line::from(format!(
+                        "✅ Auto-resolved: {} → {}",
+                        issue.description, answer
+                    ))],
                     crate::history_cell::HistoryCellType::Notice,
                 ));
 
                 auto_resolved_list.push((issue.clone(), answer.clone()));
 
-                // Track modified file
                 if let Some(state) = widget.spec_auto_state.as_mut() {
-                    let file_name = outcome.file_path.file_name()
+                    let file_name = outcome
+                        .file_path
+                        .file_name()
                         .and_then(|n| n.to_str())
                         .unwrap_or("unknown")
                         .to_string();
@@ -266,50 +369,54 @@ pub fn on_quality_gate_agents_complete(widget: &mut ChatWidget) {
         }
     }
 
-    // Track auto-resolved in state
     if let Some(state) = widget.spec_auto_state.as_mut() {
-        state.quality_auto_resolved.extend(auto_resolved_list.clone());
+        state
+            .quality_auto_resolved
+            .extend(auto_resolved_list.clone());
     }
 
-    // Step 5: Handle medium-confidence issues - submit to GPT-5 for validation
     if !needs_validation.is_empty() {
         widget.history_push(crate::history_cell::PlainHistoryCell::new(
-            vec![
-                ratatui::text::Line::from(format!("Submitting {} medium-confidence issues to GPT-5 for validation...", needs_validation.len())),
-            ],
+            vec![ratatui::text::Line::from(format!(
+                "Submitting {} medium-confidence issues to GPT-5 for validation...",
+                needs_validation.len()
+            ))],
             crate::history_cell::HistoryCellType::Notice,
         ));
 
-        // Submit GPT-5 validation prompts via agent system
-        submit_gpt5_validations(widget, &needs_validation, &spec_id, &cwd);
+        submit_gpt5_validations(widget, &needs_validation, &spec_id, &cwd, checkpoint);
 
-        // Transition to validating phase - wait for GPT-5 responses
         if let Some(state) = widget.spec_auto_state.as_mut() {
-            let auto_resolved_issues: Vec<_> = auto_resolved_list.iter().map(|(issue, _)| issue.clone()).collect();
+            let auto_resolved_issues: Vec<_> = auto_resolved_list
+                .iter()
+                .map(|(issue, _)| issue.clone())
+                .collect();
 
-            state.quality_gate_processing = None; // Clear processing flag when transitioning
+            state.quality_gate_processing = None;
             state.phase = SpecAutoPhase::QualityGateValidating {
                 checkpoint,
                 auto_resolved: auto_resolved_issues,
-                pending_validations: needs_validation.into_iter().map(|issue| {
-                    let (_, majority, _) = super::quality::classify_issue_agreement(&issue.agent_answers);
-                    (issue, majority.unwrap_or_default())
-                }).collect(),
+                pending_validations: needs_validation
+                    .into_iter()
+                    .map(|issue| {
+                        let (_, majority, _) =
+                            super::quality::classify_issue_agreement(&issue.agent_answers);
+                        (issue, majority.unwrap_or_default())
+                    })
+                    .collect(),
                 completed_validations: std::collections::HashMap::new(),
             };
         }
 
-        return; // Wait for GPT-5 responses
+        return;
     }
 
-    // No validation issues - handle low-confidence/manual escalations
     let mut all_escalations = Vec::new();
     for issue in escalate_to_human {
         all_escalations.push((issue, None));
     }
 
     if !all_escalations.is_empty() {
-        // Build escalated questions from all sources
         let (escalated_issues, escalated_questions): (Vec<_>, Vec<_>) = all_escalations
             .into_iter()
             .map(|(issue, validation_opt)| {
@@ -319,7 +426,9 @@ pub fn on_quality_gate_agents_complete(widget: &mut ChatWidget) {
                     question: issue.description.clone(),
                     context: issue.context.clone(),
                     agent_answers: issue.agent_answers.clone(),
-                    gpt5_reasoning: validation_opt.as_ref().map(|v: &super::state::GPT5ValidationResult| v.reasoning.clone()),
+                    gpt5_reasoning: validation_opt
+                        .as_ref()
+                        .map(|v: &super::state::GPT5ValidationResult| v.reasoning.clone()),
                     magnitude: issue.magnitude,
                     suggested_options: validation_opt
                         .and_then(|v: super::state::GPT5ValidationResult| v.recommended_answer)
@@ -331,21 +440,21 @@ pub fn on_quality_gate_agents_complete(widget: &mut ChatWidget) {
             .unzip();
 
         widget.history_push(crate::history_cell::PlainHistoryCell::new(
-            vec![
-                ratatui::text::Line::from(format!(
-                    "Quality Gate: {} - {} auto-resolved, {} need your input",
-                    checkpoint.name(),
-                    auto_resolved_list.len(),
-                    escalated_questions.len()
-                )),
-            ],
+            vec![ratatui::text::Line::from(format!(
+                "Quality Gate: {} - {} auto-resolved, {} need your input",
+                checkpoint.name(),
+                auto_resolved_list.len(),
+                escalated_questions.len()
+            ))],
             crate::history_cell::HistoryCellType::Notice,
         ));
 
-        widget.bottom_pane.show_quality_gate_modal(checkpoint, escalated_questions.clone());
+        widget
+            .bottom_pane
+            .show_quality_gate_modal(checkpoint, escalated_questions.clone());
 
         if let Some(state) = widget.spec_auto_state.as_mut() {
-            state.quality_gate_processing = None; // Clear processing flag when transitioning to modal
+            state.quality_gate_processing = None;
             state.phase = SpecAutoPhase::QualityGateAwaitingHuman {
                 checkpoint,
                 escalated_issues,
@@ -354,70 +463,25 @@ pub fn on_quality_gate_agents_complete(widget: &mut ChatWidget) {
             };
         }
     } else {
-        // All issues auto-resolved - continue pipeline
         widget.history_push(crate::history_cell::PlainHistoryCell::new(
-            vec![
-                ratatui::text::Line::from(format!("Quality Gate: {} complete - all issues auto-resolved", checkpoint.name())),
-            ],
+            vec![ratatui::text::Line::from(format!(
+                "Quality Gate: {} complete - all issues auto-resolved",
+                checkpoint.name()
+            ))],
             crate::history_cell::HistoryCellType::Notice,
         ));
 
         if let Some(state) = widget.spec_auto_state.as_mut() {
             state.completed_checkpoints.insert(checkpoint);
-            state.quality_gate_processing = None; // Clear processing flag
-            state.quality_checkpoint_outcomes.push((checkpoint, auto_resolved_list.len(), 0));
+            state.quality_gate_processing = None;
+            state
+                .quality_checkpoint_outcomes
+                .push((checkpoint, auto_resolved_list.len(), 0));
             state.phase = SpecAutoPhase::Guardrail;
         }
 
         super::handler::advance_spec_auto(widget);
     }
-}
-
-/// Submit GPT-5 validation prompts via existing agent system
-fn submit_gpt5_validations(
-    widget: &mut ChatWidget,
-    majority_issues: &[super::state::QualityIssue],
-    spec_id: &str,
-    cwd: &std::path::Path,
-) {
-    // Read SPEC content for validation context
-    let spec_path = cwd.join(format!("docs/{}/spec.md", spec_id));
-    let spec_content = std::fs::read_to_string(&spec_path).unwrap_or_default();
-
-    let prd_path = cwd.join(format!("docs/{}/PRD.md", spec_id));
-    let prd_content = std::fs::read_to_string(&prd_path).ok();
-
-    // Submit ONE combined validation prompt (not separate per issue)
-    // This way we get one agent response with all validations
-    let mut validation_prompts = Vec::new();
-
-    for (idx, issue) in majority_issues.iter().enumerate() {
-        let (_, majority_answer, dissent) = super::quality::classify_issue_agreement(&issue.agent_answers);
-
-        validation_prompts.push(format!(
-            "Issue {}: {}\nMajority answer: {}\nDissent: {}\n",
-            idx + 1,
-            issue.description,
-            majority_answer.as_deref().unwrap_or("unknown"),
-            dissent.as_deref().unwrap_or("N/A")
-        ));
-    }
-
-    let combined_prompt = format!(
-        "You are validating {} quality gate issues for SPEC {}.\n\nSPEC Content:\n{}\n\n{}\n\nValidate each issue and output JSON array:\n[\n  {{\n    \"issue_index\": 1,\n    \"agrees_with_majority\": boolean,\n    \"reasoning\": string,\n    \"recommended_answer\": string|null,\n    \"confidence\": \"high\"|\"medium\"|\"low\"\n  }}\n]\n\nIssues:\n{}",
-        majority_issues.len(),
-        spec_id,
-        spec_content,
-        prd_content.as_deref().unwrap_or(""),
-        validation_prompts.join("\n")
-    );
-
-    // Submit via existing agent system
-    // Agent will store result in local-memory with stage="gpt5-validation"
-    widget.submit_prompt_with_display(
-        format!("[GPT-5 Validation] {}", spec_id),
-        combined_prompt,
-    );
 }
 
 /// Handle quality gate answers submitted by user
@@ -435,7 +499,9 @@ pub fn on_quality_gate_answers(
 
     // Get escalated issues from state
     let escalated_issues = match &state.phase {
-        SpecAutoPhase::QualityGateAwaitingHuman { escalated_issues, .. } => escalated_issues.clone(),
+        SpecAutoPhase::QualityGateAwaitingHuman {
+            escalated_issues, ..
+        } => escalated_issues.clone(),
         _ => {
             widget.history_push(crate::history_cell::new_error_event(
                 "Not in QualityGateAwaitingHuman phase".to_string(),
@@ -445,13 +511,11 @@ pub fn on_quality_gate_answers(
     };
 
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
-        vec![
-            ratatui::text::Line::from(format!(
-                "Quality Gate: {} - applying {} human answers",
-                checkpoint.name(),
-                answers.len()
-            )),
-        ],
+        vec![ratatui::text::Line::from(format!(
+            "Quality Gate: {} - applying {} human answers",
+            checkpoint.name(),
+            answers.len()
+        ))],
         crate::history_cell::HistoryCellType::Notice,
     ));
 
@@ -465,9 +529,10 @@ pub fn on_quality_gate_answers(
             match super::quality::apply_auto_resolution(issue, answer, &spec_dir) {
                 Ok(outcome) => {
                     widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                        vec![
-                            ratatui::text::Line::from(format!("✅ Applied: {} → {}", issue.description, answer)),
-                        ],
+                        vec![ratatui::text::Line::from(format!(
+                            "✅ Applied: {} → {}",
+                            issue.description, answer
+                        ))],
                         crate::history_cell::HistoryCellType::Notice,
                     ));
 
@@ -475,7 +540,9 @@ pub fn on_quality_gate_answers(
 
                     // Track modified file
                     if let Some(state) = widget.spec_auto_state.as_mut() {
-                        let file_name = outcome.file_path.file_name()
+                        let file_name = outcome
+                            .file_path
+                            .file_name()
                             .and_then(|n| n.to_str())
                             .unwrap_or("unknown")
                             .to_string();
@@ -509,85 +576,102 @@ pub fn on_quality_gate_answers(
     super::handler::advance_spec_auto(widget);
 }
 
-/// Handle GPT-5 validations completing
-pub fn on_gpt5_validations_complete(widget: &mut ChatWidget) {
+/// Handle GPT-5 validation artefacts delivered by the broker.
+pub fn on_quality_gate_validation_result(
+    widget: &mut ChatWidget,
+    broker_result: QualityGateValidationResult,
+) {
+    let QualityGateValidationResult {
+        spec_id,
+        checkpoint,
+        attempts,
+        info_lines,
+        payload,
+    } = broker_result;
+
     let Some(state) = widget.spec_auto_state.as_ref() else {
+        tracing::warn!("quality gate validation result received with no spec auto state");
         return;
     };
 
-    let (checkpoint, auto_resolved, pending_validations) = match &state.phase {
+    if state.spec_id != spec_id {
+        tracing::warn!(
+            "quality gate validation result spec mismatch: expected {}, got {}",
+            state.spec_id,
+            spec_id
+        );
+        return;
+    }
+
+    let (auto_resolved, pending_validations) = match &state.phase {
         SpecAutoPhase::QualityGateValidating {
-            checkpoint,
+            checkpoint: phase_ckpt,
             auto_resolved,
             pending_validations,
             ..
-        } => (
-            *checkpoint,
-            auto_resolved.clone(),
-            pending_validations.clone(),
-        ),
-        _ => return,
+        } if *phase_ckpt == checkpoint => (auto_resolved.clone(), pending_validations.clone()),
+        _ => {
+            tracing::warn!("quality gate validation result received outside validating phase");
+            return;
+        }
+    };
+
+    if !info_lines.is_empty() {
+        let mut lines = Vec::with_capacity(info_lines.len() + 1);
+        lines.push(ratatui::text::Line::from(format!(
+            "GPT-5 validation broker attempts: {}",
+            attempts
+        )));
+        for entry in info_lines {
+            lines.push(ratatui::text::Line::from(entry));
+        }
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            lines,
+            crate::history_cell::HistoryCellType::Notice,
+        ));
+    }
+
+    let validation_json = match payload {
+        Ok(value) => value,
+        Err(err) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "GPT-5 validation broker error: {}",
+                err
+            )));
+            super::handler::halt_spec_auto_with_error(
+                widget,
+                format!(
+                    "Quality gate {} failed to retrieve GPT-5 validation artefact",
+                    checkpoint.name()
+                ),
+            );
+            return;
+        }
+    };
+
+    process_validation_response(
+        widget,
+        checkpoint,
+        &validation_json,
+        auto_resolved,
+        pending_validations,
+    );
+}
+
+fn process_validation_response(
+    widget: &mut ChatWidget,
+    checkpoint: super::state::QualityCheckpoint,
+    validation_json: &serde_json::Value,
+    auto_resolved: Vec<super::state::QualityIssue>,
+    pending_validations: Vec<(super::state::QualityIssue, String)>,
+) {
+    let Some(state) = widget.spec_auto_state.as_ref() else {
+        return;
     };
 
     let spec_id = state.spec_id.clone();
     let cwd = widget.config.cwd.clone();
 
-    // FORK-SPECIFIC (just-every/code): Query local-memory for GPT-5 validation (native MCP, ARCH-004)
-    // Agent stores result with stage="gpt5-validation"
-    let validation_results: Vec<crate::local_memory_util::LocalMemorySearchResult> = {
-        use serde_json::json;
-
-        match tokio::runtime::Handle::try_current() {
-            Ok(handle) => {
-                // Await async lock, then clone Arc
-                let manager_arc = handle.block_on(async {
-                    widget.mcp_manager.lock().await.as_ref().cloned()
-                });
-
-                match manager_arc {
-                    Some(manager) => {
-                        let args = json!({
-                            "query": format!("{} gpt5-validation", spec_id),
-                            "limit": 10,
-                            "tags": [format!("spec:{}", spec_id), "stage:gpt5-validation"],
-                            "search_type": "hybrid"
-                        });
-
-                        let mcp_result = handle.block_on(async {
-                            manager.call_tool(
-                                "local-memory",
-                                "search",
-                                Some(args),
-                                Some(std::time::Duration::from_secs(10))
-                            ).await
-                        });
-
-                        // Parse MCP results or return early
-                        match mcp_result.ok().and_then(|r| crate::spec_prompts::parse_mcp_results_to_local_memory(&r).ok()) {
-                            Some(results) if !results.is_empty() => results,
-                            _ => return,  // GPT-5 not complete or parse failed
-                        }
-                    }
-                    None => return,  // MCP not initialized
-                }
-            }
-            Err(_) => return,  // No tokio runtime
-        }
-    };
-
-    // Parse the first result (should be the GPT-5 validation array)
-    let validation_json: serde_json::Value = match serde_json::from_str(&validation_results[0].memory.content) {
-        Ok(json) => json,
-        Err(err) => {
-            widget.history_push(crate::history_cell::new_error_event(format!(
-                "Failed to parse GPT-5 validation JSON: {}",
-                err
-            )));
-            return;
-        }
-    };
-
-    // Expect array of validations
     let validation_array = match validation_json.as_array() {
         Some(arr) => arr,
         None => {
@@ -598,27 +682,19 @@ pub fn on_gpt5_validations_complete(widget: &mut ChatWidget) {
         }
     };
 
-    widget.history_push(crate::history_cell::PlainHistoryCell::new(
-        vec![
-            ratatui::text::Line::from(format!("GPT-5 validation complete: {} results processed", validation_array.len())),
-        ],
-        crate::history_cell::HistoryCellType::Notice,
-    ));
-
-    // Process validation results
     let mut validated_auto_resolved = Vec::new();
     let mut validation_rejected = Vec::new();
 
     for validation_item in validation_array {
         let issue_index = validation_item["issue_index"].as_u64().unwrap_or(0) as usize;
-
-        // Match to pending validation (issue_index is 1-based in prompt)
         if issue_index == 0 || issue_index > pending_validations.len() {
             continue;
         }
 
         let (issue, majority_answer) = &pending_validations[issue_index - 1];
-        let agrees = validation_item["agrees_with_majority"].as_bool().unwrap_or(false);
+        let agrees = validation_item["agrees_with_majority"]
+            .as_bool()
+            .unwrap_or(false);
 
         let validation = super::state::GPT5ValidationResult {
             agrees_with_majority: agrees,
@@ -637,21 +713,23 @@ pub fn on_gpt5_validations_complete(widget: &mut ChatWidget) {
         };
 
         if agrees {
-            // GPT-5 validated - auto-apply
             let spec_dir = cwd.join(format!("docs/{}", spec_id));
             match super::quality::apply_auto_resolution(issue, majority_answer, &spec_dir) {
                 Ok(outcome) => {
                     widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                        vec![
-                            ratatui::text::Line::from(format!("✅ GPT-5 validated: {} → {}", issue.description, majority_answer)),
-                        ],
+                        vec![ratatui::text::Line::from(format!(
+                            "✅ GPT-5 validated: {} → {}",
+                            issue.description, majority_answer
+                        ))],
                         crate::history_cell::HistoryCellType::Notice,
                     ));
 
                     validated_auto_resolved.push((issue.clone(), majority_answer.clone()));
 
                     if let Some(state) = widget.spec_auto_state.as_mut() {
-                        let file_name = outcome.file_path.file_name()
+                        let file_name = outcome
+                            .file_path
+                            .file_name()
                             .and_then(|n| n.to_str())
                             .unwrap_or("unknown")
                             .to_string();
@@ -662,33 +740,34 @@ pub fn on_gpt5_validations_complete(widget: &mut ChatWidget) {
                 }
                 Err(err) => {
                     widget.history_push(crate::history_cell::new_error_event(format!(
-                        "Failed to apply GPT-5 validated resolution: {}", err
+                        "Failed to apply GPT-5 validated resolution: {}",
+                        err
                     )));
                 }
             }
         } else {
-            // GPT-5 rejected - escalate
             validation_rejected.push((issue.clone(), validation));
         }
     }
 
-    // Track validated resolutions
     if let Some(state) = widget.spec_auto_state.as_mut() {
-        state.quality_auto_resolved.extend(validated_auto_resolved.clone());
+        state
+            .quality_auto_resolved
+            .extend(validated_auto_resolved.clone());
     }
 
     if validation_rejected.is_empty() {
-        // All validations accepted - continue pipeline
         widget.history_push(crate::history_cell::PlainHistoryCell::new(
-            vec![
-                ratatui::text::Line::from(format!("Quality Gate: {} complete - all validations accepted", checkpoint.name())),
-            ],
+            vec![ratatui::text::Line::from(format!(
+                "Quality Gate: {} complete - all validations accepted",
+                checkpoint.name()
+            ))],
             crate::history_cell::HistoryCellType::Notice,
         ));
 
         if let Some(state) = widget.spec_auto_state.as_mut() {
             state.completed_checkpoints.insert(checkpoint);
-            state.quality_gate_processing = None; // Clear processing flag
+            state.quality_gate_processing = None;
             state.quality_checkpoint_outcomes.push((
                 checkpoint,
                 auto_resolved.len() + validated_auto_resolved.len(),
@@ -699,9 +778,9 @@ pub fn on_gpt5_validations_complete(widget: &mut ChatWidget) {
 
         super::handler::advance_spec_auto(widget);
     } else {
-        // Some validations rejected - escalate those issues
-        let escalated_questions: Vec<_> = validation_rejected.iter().map(|(issue, validation)| {
-            super::state::EscalatedQuestion {
+        let escalated_questions: Vec<_> = validation_rejected
+            .iter()
+            .map(|(issue, validation)| super::state::EscalatedQuestion {
                 id: issue.id.clone(),
                 gate_type: issue.gate_type,
                 question: issue.description.clone(),
@@ -710,33 +789,84 @@ pub fn on_gpt5_validations_complete(widget: &mut ChatWidget) {
                 gpt5_reasoning: Some(validation.reasoning.clone()),
                 magnitude: issue.magnitude,
                 suggested_options: validation.recommended_answer.clone().into_iter().collect(),
-            }
-        }).collect();
+            })
+            .collect();
 
         widget.history_push(crate::history_cell::PlainHistoryCell::new(
-            vec![
-                ratatui::text::Line::from(format!(
-                    "Quality Gate: {} - {} GPT-5 validated, {} rejected (escalating)",
-                    checkpoint.name(),
-                    validated_auto_resolved.len(),
-                    validation_rejected.len()
-                )),
-            ],
+            vec![ratatui::text::Line::from(format!(
+                "Quality Gate: {} - {} auto-resolved, {} require review",
+                checkpoint.name(),
+                auto_resolved.len() + validated_auto_resolved.len(),
+                escalated_questions.len()
+            ))],
             crate::history_cell::HistoryCellType::Notice,
         ));
 
-        widget.bottom_pane.show_quality_gate_modal(checkpoint, escalated_questions.clone());
+        widget
+            .bottom_pane
+            .show_quality_gate_modal(checkpoint, escalated_questions.clone());
 
         if let Some(state) = widget.spec_auto_state.as_mut() {
-            state.quality_gate_processing = None; // Clear processing flag when transitioning to modal
+            state.quality_gate_processing = None;
             state.phase = SpecAutoPhase::QualityGateAwaitingHuman {
                 checkpoint,
-                escalated_issues: validation_rejected.into_iter().map(|(issue, _)| issue).collect(),
+                escalated_issues: validation_rejected
+                    .into_iter()
+                    .map(|(issue, _)| issue)
+                    .collect(),
                 escalated_questions,
                 answers: std::collections::HashMap::new(),
             };
         }
     }
+}
+
+fn submit_gpt5_validations(
+    widget: &mut ChatWidget,
+    majority_issues: &[super::state::QualityIssue],
+    spec_id: &str,
+    cwd: &std::path::Path,
+    checkpoint: super::state::QualityCheckpoint,
+) {
+    let spec_path = cwd.join(format!("docs/{}/spec.md", spec_id));
+    let spec_content = std::fs::read_to_string(&spec_path).unwrap_or_default();
+
+    let prd_path = cwd.join(format!("docs/{}/PRD.md", spec_id));
+    let prd_content = std::fs::read_to_string(&prd_path).unwrap_or_default();
+
+    let mut validation_prompts = Vec::new();
+    for (idx, issue) in majority_issues.iter().enumerate() {
+        let (_, majority_answer, dissent) =
+            super::quality::classify_issue_agreement(&issue.agent_answers);
+        validation_prompts.push(format!(
+            "Issue {}: {}\nMajority answer: {}\nDissent: {}\n",
+            idx + 1,
+            issue.description,
+            majority_answer.as_deref().unwrap_or("unknown"),
+            dissent.as_deref().unwrap_or("N/A")
+        ));
+    }
+
+    let storage_tags = format!(
+        "[\\\"quality-gate\\\", \\\"spec:{}\\\", \\\"checkpoint:{}\\\", \\\"stage:gpt5-validation\\\", \\\"agent:gpt_pro\\\"]",
+        spec_id,
+        checkpoint.name()
+    );
+
+    let combined_prompt = format!(
+        "You are validating {} quality gate issues for SPEC {}.\n\nSPEC Content:\n{}\n\n{}\n\nFor each issue respond in JSON array format:\n[\n  {{\n    \\\"issue_index\\\": 1,\n    \\\"agrees_with_majority\\\": boolean,\n    \\\"reasoning\\\": string,\n    \\\"recommended_answer\\\": string|null,\n    \\\"confidence\\\": \\\"high\\\"|\\\"medium\\\"|\\\"low\\\"\n  }}\n]\n\nIssues:\n{}\n\nAfter producing the JSON array, store it to local-memory using remember with:\n- domain: spec-kit\n- importance: 8\n- tags: {}\n- content: JSON array only\n\nIf the JSON is empty, return an empty array.",
+        majority_issues.len(),
+        spec_id,
+        spec_content,
+        prd_content,
+        validation_prompts.join("\n"),
+        storage_tags
+    );
+
+    widget.submit_prompt_with_display(format!("[GPT-5 Validation] {}", spec_id), combined_prompt);
+    widget
+        .quality_gate_broker
+        .fetch_validation_payload(spec_id.to_string(), checkpoint);
 }
 
 /// Handle quality gate cancelled by user
@@ -752,13 +882,21 @@ pub fn on_quality_gate_cancelled(
 
 /// Determine which quality checkpoint should run before the given stage
 pub(super) fn determine_quality_checkpoint(
-    _stage: SpecStage,
-    _completed: &std::collections::HashSet<super::state::QualityCheckpoint>,
+    stage: SpecStage,
+    completed: &std::collections::HashSet<super::state::QualityCheckpoint>,
 ) -> Option<super::state::QualityCheckpoint> {
-    // DISABLED: Quality gates cause async runtime panics
-    // TODO: Fix async retrieval, then re-enable
-    // See commit 1cd029605 for last working version (before async issues)
-    None
+    let checkpoint = match stage {
+        SpecStage::Plan => super::state::QualityCheckpoint::PrePlanning,
+        SpecStage::Tasks => super::state::QualityCheckpoint::PostPlan,
+        SpecStage::Implement => super::state::QualityCheckpoint::PostTasks,
+        _ => return None,
+    };
+
+    if completed.contains(&checkpoint) {
+        None
+    } else {
+        Some(checkpoint)
+    }
 }
 
 /// Execute quality checkpoint by starting quality gate agents
@@ -774,9 +912,10 @@ pub(super) fn execute_quality_checkpoint(
     let cwd = widget.config.cwd.clone();
 
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
-        vec![
-            ratatui::text::Line::from(format!("Starting Quality Checkpoint: {}", checkpoint.name())),
-        ],
+        vec![ratatui::text::Line::from(format!(
+            "Starting Quality Checkpoint: {}",
+            checkpoint.name()
+        ))],
         crate::history_cell::HistoryCellType::Notice,
     ));
 
@@ -787,64 +926,45 @@ pub(super) fn execute_quality_checkpoint(
     let gate_names: Vec<String> = gates.iter().map(|g| g.command_name().to_string()).collect();
 
     let orchestrator_prompt = format!(
-        r#"Execute Quality Checkpoint: {} for SPEC {}
+        r#"Execute Quality Checkpoint: {checkpoint} for SPEC {spec_id}
 
-CRITICAL: Spawn 3 SEPARATE agent_run calls (one per agent with role-specific prompt).
+CRITICAL: Spawn 3 SEPARATE agent_run calls (Gemini, Claude, Code) with gate-specific prompts from docs/spec-kit/prompts.json.
 
-STEP 1: Read docs/spec-kit/prompts.json
-Extract prompts for gates: {}
+STEP 1: For each gate in [{gates}], read the matching prompt in prompts.json.
 
-STEP 2: For EACH gate, spawn 3 SEPARATE agents:
-
-For Gemini:
+STEP 2: For each gate and agent run:
   agent_run(
-    models: ["gemini"],
+    models: ["{{agent}}"],
     read_only: true,
-    task: <gemini's role-specific prompt from prompts.json>
+    task: <role-specific prompt>
   )
 
-For Claude:
-  agent_run(
-    models: ["claude"],
-    read_only: true,
-    task: <claude's role-specific prompt from prompts.json>
-  )
+STEP 3: After agent_wait completes, read .code/agents/{{agent_id}}/result.txt
+        and store via mcp__local-memory__store_memory with:
+          domain: "spec-kit"
+          importance: 8
+          tags: ["quality-gate", "spec:{spec_id}", "checkpoint:{checkpoint}", "stage:<gate>", "agent:<gemini|claude|code>"]
 
-For Code:
-  agent_run(
-    models: ["code"],
-    read_only: true,
-    task: <code's role-specific prompt from prompts.json>
-  )
+STEP 4: Once all three agent artefacts are stored, run a GPT_PRO synthesis (models: ["gpt_pro"], read_only: true)
+        that reviews the JSON outputs and stores its verdict using tags
+        ["quality-gate", "spec:{spec_id}", "checkpoint:{checkpoint}", "stage:gpt5-validation", "agent:gpt_pro"].
 
-STEP 3: Collect all 3 agent_ids, use agent_wait for each
+STEP 5: Output "Quality gate complete - artefacts stored to local-memory" when finished.
 
-STEP 4: For each completed agent:
-  - Read .code/agents/{{agent_id}}/result.txt
-  - Store using mcp__local-memory__store_memory:
-    content: <JSON from result.txt>,
-    tags: ["quality-gate", "{}", "agent:<gemini|claude|code>"],
-    domain: "spec-kit",
-    importance: 8
+CRITICAL: Do not batch agents. Each agent_run is separate so the broker can collect results.
 
-STEP 5: Report "Quality gate complete - 3/3 agents stored in local-memory"
-
-CRITICAL: 3 SEPARATE agent_run calls, NOT one batch. Each agent gets its own prompt.
-
-Gates: {}
+Gates: {gates}
 "#,
-        checkpoint.name(),
-        spec_id,
-        gate_names.join(", "),
-        spec_id,
-        gate_names.join(", ")
+        checkpoint = checkpoint.name(),
+        spec_id = spec_id,
+        gates = gate_names.join(", "),
     );
 
     // Submit orchestrator prompt (like regular stages do)
     let user_msg = super::super::message::UserMessage {
         display_text: format!("Quality Checkpoint: {}", checkpoint.name()),
         ordered_items: vec![codex_core::protocol::InputItem::Text {
-            text: orchestrator_prompt
+            text: orchestrator_prompt,
         }],
     };
 
@@ -856,12 +976,15 @@ Gates: {}
             checkpoint,
             gates: gates.to_vec(),
             active_gates: gates.iter().copied().collect(),
-            expected_agents: vec!["gemini".to_string(), "claude".to_string(), "code".to_string()],
+            expected_agents: vec![
+                "gemini".to_string(),
+                "claude".to_string(),
+                "code".to_string(),
+            ],
             completed_agents: std::collections::HashSet::new(),
             results: std::collections::HashMap::new(),
         };
     }
-
 }
 
 /// Build quality gate prompt for a specific gate
@@ -880,8 +1003,8 @@ fn build_quality_gate_prompt(
 
     // Add schema and examples
     let schema_json = super::schemas::quality_gate_response_schema();
-    let schema_str = serde_json::to_string_pretty(&schema_json["schema"])
-        .unwrap_or_else(|_| "{}".to_string());
+    let schema_str =
+        serde_json::to_string_pretty(&schema_json["schema"]).unwrap_or_else(|_| "{}".to_string());
 
     // Few-shot example
     let example = r#"{
@@ -942,25 +1065,29 @@ pub(super) fn finalize_quality_gates(widget: &mut ChatWidget) {
     let escalated = state.quality_escalated.clone();
     let modified_files = state.quality_modifications.clone();
     let checkpoint_outcomes = state.quality_checkpoint_outcomes.clone();
+    let degradations = state.quality_checkpoint_degradations.clone();
 
     // Step 1: Persist telemetry for each checkpoint
-    let repo = super::evidence::FilesystemEvidence::new(cwd.clone(), None);
+    let repo = FilesystemEvidence::new(cwd.clone(), None);
 
     for (checkpoint, _auto_count, _esc_count) in &checkpoint_outcomes {
         // Build telemetry JSON
+        let degraded_agents = degradations.get(checkpoint).map(|agents| agents.as_slice());
         let telemetry = super::quality::build_quality_checkpoint_telemetry(
             &spec_id,
             *checkpoint,
             &auto_resolved,
             &escalated,
+            degraded_agents,
         );
 
         match repo.write_quality_checkpoint_telemetry(&spec_id, *checkpoint, &telemetry) {
             Ok(path) => {
                 widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                    vec![
-                        ratatui::text::Line::from(format!("📊 Telemetry: {}", path.display())),
-                    ],
+                    vec![ratatui::text::Line::from(format!(
+                        "📊 Telemetry: {}",
+                        path.display()
+                    ))],
                     HistoryCellType::Notice,
                 ));
             }
@@ -970,6 +1097,19 @@ pub(super) fn finalize_quality_gates(widget: &mut ChatWidget) {
                     checkpoint.name(),
                     err
                 )));
+            }
+        }
+
+        if let Some(missing) = degradations.get(checkpoint) {
+            if !missing.is_empty() {
+                widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                    vec![ratatui::text::Line::from(format!(
+                        "Quality Gate: {} ran in degraded mode (missing agents: {})",
+                        checkpoint.name(),
+                        missing.join(", ")
+                    ))],
+                    HistoryCellType::Notice,
+                ));
             }
         }
     }
@@ -998,9 +1138,9 @@ pub(super) fn finalize_quality_gates(widget: &mut ChatWidget) {
                 match commit_result {
                     Ok(output) if output.status.success() => {
                         widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                            vec![
-                                ratatui::text::Line::from("✅ Quality gate changes committed"),
-                            ],
+                            vec![ratatui::text::Line::from(
+                                "✅ Quality gate changes committed",
+                            )],
                             HistoryCellType::Notice,
                         ));
                     }
@@ -1023,14 +1163,93 @@ pub(super) fn finalize_quality_gates(widget: &mut ChatWidget) {
     }
 
     // Step 3: Show review summary
-    let summary_lines = super::quality::build_quality_gate_summary(
-        &auto_resolved,
-        &escalated,
-        &modified_files,
-    );
+    let summary_lines =
+        super::quality::build_quality_gate_summary(&auto_resolved, &escalated, &modified_files);
 
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
         summary_lines,
         HistoryCellType::Notice,
     ));
+}
+
+/// FORK-SPECIFIC: Send ACE learning feedback when checkpoint passes
+///
+/// Uses full Reflector/Curator cycle if enabled, otherwise simple scoring
+fn send_ace_learning_on_checkpoint_pass(
+    widget: &ChatWidget,
+    checkpoint: super::state::QualityCheckpoint,
+) {
+    let Some(state) = widget.spec_auto_state.as_ref() else {
+        return;
+    };
+
+    // Map checkpoint to scope based on current stage
+    let scope = match state.current_stage() {
+        Some(SpecStage::Implement) => "implement",
+        Some(SpecStage::Validate) | Some(SpecStage::Audit) => "test",
+        _ => "implement", // Default fallback
+    };
+
+    // Build success feedback (checkpoint passed)
+    let feedback = ExecutionFeedback::new()
+        .with_compile_ok(true)
+        .with_tests_passed(true)
+        .with_lint_issues(0);
+
+    // Get git context
+    let repo_root = get_repo_root(&widget.config.cwd).unwrap_or_else(|| ".".to_string());
+    let branch = get_current_branch(&widget.config.cwd).unwrap_or_else(|| "main".to_string());
+
+    // Use spec_id as task title
+    let task_title = &state.spec_id;
+
+    // Check if we should use full reflection-curation cycle
+    if ace_reflector::should_reflect(&feedback) {
+        // FULL ACE CYCLE: Reflector → Curator → Apply
+        info!("ACE: Starting full reflection-curation cycle");
+
+        match ace_orchestrator::run_ace_cycle_sync(
+            &widget.config.ace,
+            repo_root,
+            branch,
+            scope,
+            task_title,
+            feedback,
+            Vec::new(), // TODO: Track bullet IDs from injection
+        ) {
+            Ok(result) => {
+                info!(
+                    "ACE cycle complete: {}ms, {} patterns, +{} bullets",
+                    result.elapsed_ms,
+                    result.reflection.patterns.len(),
+                    result.bullets_added
+                );
+            }
+            Err(e) => {
+                warn!("ACE cycle failed: {}", e);
+                // Fall back to simple learning if reflection fails
+                send_learning_feedback_sync(
+                    &widget.config.ace,
+                    get_repo_root(&widget.config.cwd).unwrap_or_else(|| ".".to_string()),
+                    get_current_branch(&widget.config.cwd).unwrap_or_else(|| "main".to_string()),
+                    scope,
+                    task_title,
+                    ExecutionFeedback::new().with_compile_ok(true).with_tests_passed(true),
+                    None,
+                );
+            }
+        }
+    } else {
+        // SIMPLE LEARNING: Just update scores (routine success)
+        debug!("ACE: Using simple learning (routine success)");
+        send_learning_feedback_sync(
+            &widget.config.ace,
+            repo_root,
+            branch,
+            scope,
+            task_title,
+            feedback,
+            None,
+        );
+    }
 }

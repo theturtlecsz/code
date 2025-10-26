@@ -154,6 +154,7 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
     registry.register(Box::new(SpecKitAutoCommand));
     registry.register(Box::new(SpecKitStatusCommand));
     registry.register(Box::new(SpecConsensusCommand));
+    registry.register(Box::new(SpecKitConstitutionCommand));
 
     // Stage commands (plan → unlock)
     registry.register(Box::new(SpecKitPlanCommand));
@@ -290,14 +291,15 @@ mod tests {
         // Test that the global registry has all expected commands
         let registry = SPEC_KIT_REGISTRY.lock().unwrap();
 
-        // Should have all 22 commands
-        assert_eq!(registry.len(), 22, "Registry should have 22 commands");
+        // Should have all 23 commands (added speckit.constitution)
+        assert_eq!(registry.len(), 23, "Registry should have 23 commands");
 
         // Verify key commands are registered
         assert!(registry.find("speckit.status").is_some());
         assert!(registry.find("speckit.new").is_some());
         assert!(registry.find("speckit.plan").is_some());
         assert!(registry.find("speckit.auto").is_some());
+        assert!(registry.find("speckit.constitution").is_some());
         assert!(registry.find("guardrail.plan").is_some());
     }
 
@@ -368,7 +370,10 @@ mod tests {
             if guardrail == "guardrail.auto" {
                 let cmd = registry.find(guardrail);
                 assert!(cmd.is_some(), "guardrail.auto should still be registered");
-                assert!(!cmd.unwrap().is_guardrail(), "guardrail.auto should NOT be guardrail (redirects to /speckit.auto)");
+                assert!(
+                    !cmd.unwrap().is_guardrail(),
+                    "guardrail.auto should NOT be guardrail (redirects to /speckit.auto)"
+                );
                 continue;
             }
 
@@ -410,6 +415,7 @@ mod tests {
         assert!(registry.find("speckit.auto").is_some());
         assert!(registry.find("speckit.status").is_some());
         assert!(registry.find("spec-consensus").is_some());
+        assert!(registry.find("speckit.constitution").is_some());
         assert!(registry.find("spec-evidence-stats").is_some());
     }
 
@@ -444,11 +450,7 @@ mod tests {
         for cmd_name in expanding {
             let cmd = registry.find(cmd_name).unwrap();
             let expanded = cmd.expand_prompt("SPEC-TEST-001");
-            assert!(
-                expanded.is_some(),
-                "{} should expand prompts",
-                cmd_name
-            );
+            assert!(expanded.is_some(), "{} should expand prompts", cmd_name);
             assert!(
                 !expanded.unwrap().is_empty(),
                 "{} expanded prompt should not be empty",
@@ -486,7 +488,10 @@ mod tests {
         // Guardrail commands should have script metadata
         let cmd = registry.find("guardrail.plan").unwrap();
         let script = cmd.guardrail_script();
-        assert!(script.is_some(), "guardrail.plan should have script metadata");
+        assert!(
+            script.is_some(),
+            "guardrail.plan should have script metadata"
+        );
         let (display, script_path) = script.unwrap();
         assert_eq!(display, "plan");
         assert_eq!(script_path, "spec_ops_plan.sh");
@@ -503,12 +508,12 @@ mod tests {
     fn test_all_names_count() {
         let registry = SPEC_KIT_REGISTRY.lock().unwrap();
 
-        // 22 primary names + 16 aliases = 38 total names
+        // 23 primary names + 16 aliases = 39 total names
         let all_names = registry.all_names();
         assert_eq!(
             all_names.len(),
-            38,
-            "Should have 38 total command names (22 primary + 16 aliases)"
+            39,
+            "Should have 39 total command names (23 primary + 16 aliases)"
         );
     }
 
@@ -517,7 +522,10 @@ mod tests {
         let registry = SPEC_KIT_REGISTRY.lock().unwrap();
 
         let all_names = registry.all_names();
-        let unique_count = all_names.iter().collect::<std::collections::HashSet<_>>().len();
+        let unique_count = all_names
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len();
 
         assert_eq!(
             all_names.len(),

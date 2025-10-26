@@ -37,9 +37,60 @@ For the upstream `just-every/code` project, see their repository for installatio
 
 This fork extends the Rust CLI with a **spec-kit automation framework** for multi-agent product requirements workflows. See `CLAUDE.md` and `REVIEW.md` for architecture details.
 
+### Enabling ACE (Local Strategy Memory)
+
+**ACE (Agentic Context Engine)** provides compounding strategy memory for spec-kit workflows. It learns from execution outcomes and injects relevant heuristics into prompts.
+
+**Quick Start**:
+1. Install ACE MCP server: `pip install ace-mcp-server` (or your ACE installation method)
+2. Enable in `~/.code/config.toml`:
+
+```toml
+[ace]
+enabled = true
+mode = "auto"  # auto|always|never
+slice_size = 8
+
+[mcp_servers.ace]
+command = "python"
+args = ["-m", "ace_mcp_server"]
+```
+
+3. Pin constitution bullets: `/speckit.constitution`
+4. Run spec-kit commands - ACE automatically injects learned heuristics
+
+**How It Works** (ACE is data-only, does NOT call LLMs):
+- **Playbook Injection**: Adds ≤8 relevant bullets to prompts (e.g., "[helpful] Use X pattern")
+- **Enhanced Context**: For complex tasks (reruns, failures, high file count), uses more bullets/heuristics
+- **Learning**: Stores outcomes in SQLite after execution for continuous improvement
+- **Constitution**: `/speckit.constitution` pins imperative bullets from `memory/constitution.md`
+
+**Important**: ACE is a data-only SQLite store accessed via MCP. It retrieves/stores playbook heuristics but does NOT call LLMs. The CODE orchestrator calls LLMs using your configured API keys.
+
+**Configuration Options**:
+```toml
+[ace]
+enabled = true                    # Enable/disable ACE integration
+mode = "auto"                     # auto|always|never
+slice_size = 8                    # Max bullets per injection (≤8 recommended)
+db_path = "~/.code/ace/playbooks_v1.sqlite3"  # SQLite database path
+use_for = ["speckit.specify", "speckit.tasks", "speckit.implement"]  # Commands to augment
+complex_task_files_threshold = 4  # File count threshold for enhanced context
+rerun_window_minutes = 30         # Rerun detection window
+```
+
+**Modes**:
+- `auto` (default): Uses ACE for commands in `use_for` list
+- `always`: Uses ACE for all spec-kit commands
+- `never`: Disables ACE (behavior identical to `enabled = false`)
+
+**Graceful Fallback**: If ACE is unavailable or disabled, all commands work normally without augmentation. One log message is emitted: `INFO ACE: disabled`.
+
+See `ACE_LEARNING_USAGE.md` for integration details.
+
 ### Config
 
-Codex supports a rich set of configuration options. Note that the Rust CLI uses `config.toml` instead of `config.json`. See [`docs/config.md`](../docs/config.md) for details.
+Codex supports a rich set of configuration options. Note that the Rust CLI uses `config.toml` instead of `config.json`. Configuration is loaded from `~/.code/config.toml` (or legacy `~/.codex/config.toml`).
 
 ### Model Context Protocol Support
 

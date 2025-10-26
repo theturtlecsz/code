@@ -6,10 +6,52 @@
 //! isolating all routing logic from app.rs to minimize rebase conflicts.
 
 use super::super::ChatWidget;
+use super::ace_prompt_injector;
 use super::command_registry::SPEC_KIT_REGISTRY;
 use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
 use codex_core::protocol::Op;
+use std::path::Path;
+use std::process::Command;
+
+/// Get the git repository root, if available
+pub fn get_repo_root(cwd: &Path) -> Option<String> {
+    Command::new("git")
+        .arg("rev-parse")
+        .arg("--show-toplevel")
+        .current_dir(cwd)
+        .output()
+        .ok()
+        .and_then(|output| {
+            if output.status.success() {
+                String::from_utf8(output.stdout)
+                    .ok()
+                    .map(|s| s.trim().to_string())
+            } else {
+                None
+            }
+        })
+}
+
+/// Get the current git branch, if available
+pub fn get_current_branch(cwd: &Path) -> Option<String> {
+    Command::new("git")
+        .arg("rev-parse")
+        .arg("--abbrev-ref")
+        .arg("HEAD")
+        .current_dir(cwd)
+        .output()
+        .ok()
+        .and_then(|output| {
+            if output.status.success() {
+                String::from_utf8(output.stdout)
+                    .ok()
+                    .map(|s| s.trim().to_string())
+            } else {
+                None
+            }
+        })
+}
 
 /// Try to dispatch a command through the spec-kit command registry
 ///
@@ -69,8 +111,19 @@ pub fn try_dispatch_spec_kit_command(
             Some(&widget.config.subagent_commands),
         );
 
-        // Submit with proper config-based prompt
-        widget.submit_prompt_with_display(command_text.to_string(), formatted.prompt);
+        // Inject ACE playbook section if enabled
+        let repo_root = get_repo_root(&widget.config.cwd);
+        let branch = get_current_branch(&widget.config.cwd);
+        let final_prompt = ace_prompt_injector::inject_ace_section(
+            &widget.config.ace,
+            config_name,
+            repo_root,
+            branch,
+            formatted.prompt,
+        );
+
+        // Submit with proper config-based prompt (possibly augmented with ACE)
+        widget.submit_prompt_with_display(command_text.to_string(), final_prompt);
     } else {
         // Direct execution: persist to history then execute
         let _ = app_event_tx.send(AppEvent::CodexOp(Op::AddToHistory {

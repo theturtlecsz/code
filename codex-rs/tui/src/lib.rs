@@ -104,6 +104,10 @@ pub use chatwidget::spec_kit::consensus::run_spec_consensus;
 #[cfg(any(test, feature = "test-utils"))]
 pub use chatwidget::spec_kit::spec_id_generator;
 
+// FORK-SPECIFIC: ACE integration - Re-export for testing
+#[cfg(any(test, feature = "test-utils"))]
+pub use chatwidget::spec_kit::{should_use_ace, select_route, DiffStat, RouteDecision};
+
 // Re-export supporting types for E2E testing (T87)
 pub use slash_command::{HalMode, SlashCommand};
 pub use spec_prompts::SpecStage;
@@ -326,6 +330,24 @@ pub async fn run_main(
     } else {
         None
     };
+
+    // FORK-SPECIFIC: Initialize ACE MCP client if configured
+    if config.ace.enabled {
+        if let Some(ace_server) = config.mcp_servers.get("ace") {
+            if let Err(e) = chatwidget::spec_kit::ace_client::init_ace_client(
+                ace_server.command.clone(),
+                ace_server.args.clone(),
+                ace_server.env.clone(),
+            )
+            .await
+            {
+                tracing::warn!("Failed to initialize ACE client: {}", e);
+                // Continue anyway - ACE will gracefully degrade
+            }
+        } else {
+            tracing::info!("ACE enabled but no [mcp_servers.ace] configured");
+        }
+    }
 
     run_ratatui_app(
         cli,
