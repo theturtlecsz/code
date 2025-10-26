@@ -122,7 +122,7 @@ pub async fn init_ace_client(
             )
             .await
             {
-                Ok(mut client) => {
+                Ok(client) => {
                     // Initialize the client with standard MCP handshake
                     match client
                         .initialize(

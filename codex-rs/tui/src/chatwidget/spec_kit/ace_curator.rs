@@ -4,9 +4,8 @@
 //! Handles bullet creation, deprecation, merging, and score adjustments.
 
 use super::ace_client::PlaybookBullet;
-use super::ace_reflector::{ReflectedPattern, PatternKind, ReflectionResult};
+use super::ace_reflector::{PatternKind, ReflectionResult};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
 
 /// Curation decision about playbook updates
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -9,7 +9,6 @@ use super::super::ChatWidget;
 use super::ace_learning::{ExecutionFeedback, send_learning_feedback_sync};
 use super::ace_orchestrator;
 use super::ace_reflector;
-use super::ace_route_selector::DiffStat;
 use super::evidence::{EvidenceRepository, FilesystemEvidence};
 use super::quality_gate_broker::{
     QualityGateAgentPayload, QualityGateBrokerResult, QualityGateValidationResult,

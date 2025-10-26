@@ -740,6 +740,7 @@ pub struct EscalatedQuestion {
 
 /// Outcome of a quality checkpoint (one or more gates)
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct QualityCheckpointOutcome {
     pub checkpoint: QualityCheckpoint,
     pub total_issues: usize,

@@ -7,15 +7,11 @@
 //!
 //! This is the intelligence layer that makes ACE more than simple scoring.
 
-use super::ace_client::{self, AceResult, PlaybookBullet};
+use super::ace_client::{self, AceResult};
 use super::ace_curator::{self, CurationDecision, CurationPromptBuilder};
 use super::ace_learning::ExecutionFeedback;
 use super::ace_reflector::{self, ReflectionPromptBuilder, ReflectionResult};
-use super::routing::{get_current_branch, get_repo_root};
 use codex_core::config_types::AceConfig;
-use serde_json::Value;
-use std::path::Path;
-use std::process::Command;
 use std::time::Instant;
 use tracing::{debug, info, warn};
 
