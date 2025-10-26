@@ -98,7 +98,7 @@ pub struct UpdatedBullets {
 pub struct PinResponse {
     pub status: String,
     #[serde(default)]
-    pub pinned_added: usize,
+    pub pinned_count: usize,
 }
 
 /// Global ACE client singleton
@@ -325,26 +325,39 @@ pub async fn learn(
 /// # Arguments
 /// * `repo_root` - Repository root path
 /// * `branch` - Git branch name
-/// * `bullets` - Bullets to pin
+/// * `scope` - Scope to pin to (global, specify, tasks, implement, test)
+/// * `bullets` - Bullets to pin (text and kind)
 pub async fn pin(
     repo_root: String,
     branch: String,
-    bullets: Vec<String>,
+    scope: String,
+    bullets: Vec<(String, String)>, // (text, kind)
 ) -> AceResult<PinResponse> {
-    debug!("ACE pin: {} bullets", bullets.len());
+    debug!("ACE pin: {} bullets to scope {}", bullets.len(), scope);
 
     let mut args = HashMap::new();
     args.insert("repo_root".to_string(), Value::String(repo_root));
     args.insert("branch".to_string(), Value::String(branch));
+    args.insert("scope".to_string(), Value::String(scope));
     args.insert(
         "bullets".to_string(),
-        Value::Array(bullets.into_iter().map(Value::String).collect()),
+        Value::Array(
+            bullets
+                .into_iter()
+                .map(|(text, kind)| {
+                    serde_json::json!({
+                        "text": text,
+                        "kind": kind
+                    })
+                })
+                .collect(),
+        ),
     );
 
     match call_ace_tool("playbook_pin", args).await {
         AceResult::Ok(result) => match parse_tool_result::<PinResponse>(&result) {
             Ok(response) => {
-                info!("ACE pinned {} bullets", response.pinned_added);
+                info!("ACE pinned {} bullets", response.pinned_count);
                 AceResult::Ok(response)
             }
             Err(e) => AceResult::Error(format!("Failed to parse pin response: {}", e)),

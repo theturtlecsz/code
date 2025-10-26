@@ -179,32 +179,59 @@ pub async fn pin_constitution_to_ace(
 
     let start = Instant::now();
 
-    // Convert bullets to simple strings for pinning
-    let bullet_texts: Vec<String> = bullets.iter().map(|b| b.text.clone()).collect();
+    // Group bullets by scope and convert to (text, kind) tuples
+    let mut scope_bullets: std::collections::HashMap<String, Vec<(String, String)>> =
+        std::collections::HashMap::new();
 
-    // Pin to ACE
-    let result = ace_client::pin(repo_root, branch, bullet_texts).await;
+    for bullet in bullets {
+        // Determine kind based on bullet characteristics
+        let kind = if bullet.text.contains("avoid") || bullet.text.contains("never") {
+            "harmful"
+        } else {
+            "helpful"
+        };
 
-    let elapsed = start.elapsed();
-
-    match result {
-        AceResult::Ok(response) => {
-            info!(
-                "ACE pin {}ms pinned={} bullets",
-                elapsed.as_millis(),
-                response.pinned_added
-            );
-            Ok(response.pinned_added)
-        }
-        AceResult::Disabled => {
-            debug!("ACE pinning skipped: ACE disabled");
-            Ok(0)
-        }
-        AceResult::Error(e) => {
-            warn!("ACE pinning failed ({}ms): {}", elapsed.as_millis(), e);
-            Err(e)
+        // Add to each scope
+        for scope in &bullet.scopes {
+            scope_bullets
+                .entry(scope.clone())
+                .or_insert_with(Vec::new)
+                .push((bullet.text.clone(), kind.to_string()));
         }
     }
+
+    let mut total_pinned = 0;
+
+    // Pin to each scope
+    for (scope, scope_bullet_list) in scope_bullets {
+        let result = ace_client::pin(
+            repo_root.clone(),
+            branch.clone(),
+            scope.clone(),
+            scope_bullet_list,
+        )
+        .await;
+
+        match result {
+            AceResult::Ok(response) => {
+                total_pinned += response.pinned_added;
+                debug!("Pinned {} bullets to scope {}", response.pinned_added, scope);
+            }
+            AceResult::Error(e) => {
+                warn!("Failed to pin to scope {}: {}", scope, e);
+            }
+            AceResult::Disabled => {}
+        }
+    }
+
+    let elapsed = start.elapsed();
+    info!(
+        "ACE pin {}ms pinned={} bullets total",
+        elapsed.as_millis(),
+        total_pinned
+    );
+
+    Ok(total_pinned)
 }
 
 /// Synchronous wrapper for pin_constitution_to_ace
