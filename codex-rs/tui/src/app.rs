@@ -1777,6 +1777,10 @@ impl App<'_> {
                                 widget.handle_spec_status_command(command_args);
                             }
                         }
+                        SlashCommand::SpecKitConstitution => {
+                            // Handled by spec-kit registry at line 1708
+                            // Command executes directly via command_registry
+                        }
                         // Legacy spec commands (backward compat)
                         SlashCommand::NewSpec => {
                             // Redirect to SpecKitNew
