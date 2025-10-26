@@ -374,8 +374,13 @@ fn parse_tool_result<T: for<'de> Deserialize<'de>>(result: &CallToolResult) -> R
         }
     };
 
+    // Log the actual response for debugging
+    debug!("ACE MCP response text: {}", text);
+
     // Parse JSON response
-    serde_json::from_str(text).context("Failed to parse ACE tool response as JSON")
+    serde_json::from_str(text).with_context(|| {
+        format!("Failed to parse ACE tool response as JSON. Response was: {}", text)
+    })
 }
 
 #[cfg(test)]
