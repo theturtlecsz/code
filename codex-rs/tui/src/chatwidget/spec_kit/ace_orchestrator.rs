@@ -174,9 +174,23 @@ pub async fn run_ace_cycle(
                 .map(|b| b.text.clone())
                 .collect();
 
-            match ace_client::pin(repo_root.clone(), branch.clone(), bullet_texts).await {
+            // Convert to (text, kind) tuples
+            let bullet_tuples: Vec<(String, String)> = curation
+                .bullets_to_add
+                .iter()
+                .map(|b| (b.text.clone(), b.kind.clone()))
+                .collect();
+
+            match ace_client::pin(
+                repo_root.clone(),
+                branch.clone(),
+                "global".to_string(), // Pin curator bullets to global scope
+                bullet_tuples,
+            )
+            .await
+            {
                 AceResult::Ok(response) => {
-                    bullets_added = response.pinned_added;
+                    bullets_added = response.pinned_count;
                     info!("ACE: Pinned {} new bullets to playbook", bullets_added);
                 }
                 AceResult::Error(e) => {

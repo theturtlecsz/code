@@ -214,8 +214,8 @@ pub async fn pin_constitution_to_ace(
 
         match result {
             AceResult::Ok(response) => {
-                total_pinned += response.pinned_added;
-                debug!("Pinned {} bullets to scope {}", response.pinned_added, scope);
+                total_pinned += response.pinned_count;
+                debug!("Pinned {} bullets to scope {}", response.pinned_count, scope);
             }
             AceResult::Error(e) => {
                 warn!("Failed to pin to scope {}: {}", scope, e);
