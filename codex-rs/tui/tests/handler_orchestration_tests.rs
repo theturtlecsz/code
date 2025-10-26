@@ -10,8 +10,8 @@
 mod common;
 
 use codex_tui::{
-    halt_spec_auto_with_error, MockSpecKitContext, SpecAutoPhase, SpecAutoState, SpecKitContext,
-    SpecStage,
+    MockSpecKitContext, SpecAutoPhase, SpecAutoState, SpecKitContext, SpecStage,
+    halt_spec_auto_with_error,
 };
 
 // ============================================================================
@@ -477,10 +477,7 @@ fn test_retry_context_captures_failure_reason() {
     state.agent_retry_context = Some("Gemini returned empty output".to_string());
 
     assert!(state.agent_retry_context.is_some());
-    assert!(state
-        .agent_retry_context
-        .unwrap()
-        .contains("empty output"));
+    assert!(state.agent_retry_context.unwrap().contains("empty output"));
 }
 
 #[test]
@@ -559,13 +556,15 @@ fn test_quality_modifications_tracking() {
         None,
     );
 
-    state
-        .quality_modifications
-        .push("src/main.rs".to_string());
+    state.quality_modifications.push("src/main.rs".to_string());
     state.quality_modifications.push("src/lib.rs".to_string());
 
     assert_eq!(state.quality_modifications.len(), 2);
-    assert!(state.quality_modifications.contains(&"src/main.rs".to_string()));
+    assert!(
+        state
+            .quality_modifications
+            .contains(&"src/main.rs".to_string())
+    );
 }
 
 #[test]
@@ -580,7 +579,7 @@ fn test_quality_auto_resolved_collection() {
     // Quality auto_resolved is Vec<(QualityIssue, String)>
     // We can test it exists and is empty
     assert_eq!(state.quality_auto_resolved.len(), 0);
-    
+
     // Test it can grow (would need actual QualityIssue in real usage)
     assert!(state.quality_auto_resolved.capacity() >= 0);
 }
@@ -682,12 +681,7 @@ fn test_multi_stage_progression_indexes() {
     ];
 
     for (stage, expected_index) in test_cases {
-        let state = SpecAutoState::new(
-            format!("SPEC-{:?}", stage),
-            "".to_string(),
-            stage,
-            None,
-        );
+        let state = SpecAutoState::new(format!("SPEC-{:?}", stage), "".to_string(), stage, None);
         assert_eq!(state.current_index, expected_index);
     }
 }
@@ -719,7 +713,7 @@ fn test_json_empty_object_detection() {
     let json_str = "{}";
     let parsed: serde_json::Result<serde_json::Value> = serde_json::from_str(json_str);
     assert!(parsed.is_ok());
-    
+
     if let Ok(value) = parsed {
         if let Some(obj) = value.as_object() {
             assert!(obj.is_empty());
@@ -732,7 +726,7 @@ fn test_json_empty_array_detection() {
     let json_str = "[]";
     let parsed: serde_json::Result<serde_json::Value> = serde_json::from_str(json_str);
     assert!(parsed.is_ok());
-    
+
     if let Ok(value) = parsed {
         if let Some(arr) = value.as_array() {
             assert!(arr.is_empty());
@@ -756,7 +750,7 @@ fn test_advance_from_final_stage() {
     // At final stage (index 5), advancing would go beyond bounds
     assert_eq!(state.current_index, 5);
     assert_eq!(state.stages.len(), 6);
-    
+
     // Next index would be 6, which is >= stages.len()
     let next_index = state.current_index + 1;
     assert!(next_index >= state.stages.len());
@@ -772,7 +766,7 @@ fn test_advance_from_middle_stage() {
     );
 
     assert_eq!(state.current_index, 2); // Implement is index 2
-    
+
     // Simulate advancement
     state.current_index += 1;
     assert_eq!(state.current_index, 3); // Now at Validate
@@ -802,7 +796,7 @@ fn test_backward_stage_movement() {
     );
 
     assert_eq!(state.current_index, 3);
-    
+
     // Simulate backward movement (e.g., restart from earlier stage)
     state.current_index = 1;
     assert_eq!(state.current_stage(), Some(SpecStage::Tasks));
@@ -855,7 +849,11 @@ fn test_tier3_agent_configuration() {
 #[test]
 fn test_degraded_agent_set_2_of_3() {
     // One agent failed/missing
-    let mut expected = vec!["gemini".to_string(), "claude".to_string(), "code".to_string()];
+    let mut expected = vec![
+        "gemini".to_string(),
+        "claude".to_string(),
+        "code".to_string(),
+    ];
     let mut completed = std::collections::HashSet::new();
     completed.insert("gemini".to_string());
     completed.insert("claude".to_string());
@@ -878,7 +876,13 @@ fn test_agent_timeout_scenario() {
     state.agent_retry_count = 1;
     state.agent_retry_context = Some("Agent timeout after 30s".to_string());
 
-    assert!(state.agent_retry_context.as_ref().unwrap().contains("timeout"));
+    assert!(
+        state
+            .agent_retry_context
+            .as_ref()
+            .unwrap()
+            .contains("timeout")
+    );
 }
 
 #[test]

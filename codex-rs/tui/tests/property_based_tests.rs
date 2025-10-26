@@ -7,8 +7,8 @@
 
 mod common;
 
+use codex_tui::{SpecAutoState, SpecStage};
 use common::{IntegrationTestContext, StateBuilder};
-use codex_tui::{SpecStage, SpecAutoState};
 use proptest::prelude::*;
 use serde_json::json;
 

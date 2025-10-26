@@ -36,7 +36,10 @@ async fn test_mcp_search_returns_consensus_artifacts() {
         "search_type": "hybrid"
     });
 
-    let result = mock.call_tool("local-memory", "search", Some(args), None).await.unwrap();
+    let result = mock
+        .call_tool("local-memory", "search", Some(args), None)
+        .await
+        .unwrap();
 
     // Should return 2 artifacts
     assert!(result.content.len() > 0);
@@ -49,7 +52,9 @@ async fn test_mcp_search_handles_empty_results() {
     // No fixtures added
 
     let args = json!({"query": "SPEC-MISSING plan"});
-    let result = mock.call_tool("local-memory", "search", Some(args), None).await;
+    let result = mock
+        .call_tool("local-memory", "search", Some(args), None)
+        .await;
 
     // Should error when no fixture found
     assert!(result.is_err());
@@ -61,10 +66,19 @@ async fn test_mock_mcp_with_fixture_file() {
 
     // Load real fixture from library
     let fixture_path = "tests/fixtures/consensus/demo-plan-gemini.json";
-    mock.load_fixture_file("local-memory", "search", Some("SPEC-DEMO plan"), fixture_path).unwrap();
+    mock.load_fixture_file(
+        "local-memory",
+        "search",
+        Some("SPEC-DEMO plan"),
+        fixture_path,
+    )
+    .unwrap();
 
     let args = json!({"query": "SPEC-DEMO plan"});
-    let result = mock.call_tool("local-memory", "search", Some(args), None).await.unwrap();
+    let result = mock
+        .call_tool("local-memory", "search", Some(args), None)
+        .await
+        .unwrap();
 
     assert_eq!(result.is_error, Some(false));
     // Fixture should contain actual gemini output
@@ -87,7 +101,10 @@ fn test_spec_agent_parsing() {
 
     assert_eq!(SpecAgent::from_string("gemini"), Some(SpecAgent::Gemini));
     assert_eq!(SpecAgent::from_string("CLAUDE"), Some(SpecAgent::Claude));
-    assert_eq!(SpecAgent::from_string("gpt-5-codex"), Some(SpecAgent::GptCodex));
+    assert_eq!(
+        SpecAgent::from_string("gpt-5-codex"),
+        Some(SpecAgent::GptCodex)
+    );
     assert_eq!(SpecAgent::from_string("unknown"), None);
 }
 // ============================================================================
@@ -109,8 +126,14 @@ fn test_spec_agent_variant_aliases() {
 
     // Test known aliases
     assert_eq!(SpecAgent::from_string("code"), Some(SpecAgent::Code));
-    assert_eq!(SpecAgent::from_string("gpt_codex"), Some(SpecAgent::GptCodex));
-    assert_eq!(SpecAgent::from_string("gpt-5-codex"), Some(SpecAgent::GptCodex));
+    assert_eq!(
+        SpecAgent::from_string("gpt_codex"),
+        Some(SpecAgent::GptCodex)
+    );
+    assert_eq!(
+        SpecAgent::from_string("gpt-5-codex"),
+        Some(SpecAgent::GptCodex)
+    );
     assert_eq!(SpecAgent::from_string("gpt_pro"), Some(SpecAgent::GptPro));
 }
 
@@ -214,7 +237,12 @@ async fn test_mcp_call_log_can_be_cleared() {
     mock.add_fixture("local-memory", "search", None, json!({}));
 
     let _ = mock
-        .call_tool("local-memory", "search", Some(json!({"query": "test"})), None)
+        .call_tool(
+            "local-memory",
+            "search",
+            Some(json!({"query": "test"})),
+            None,
+        )
         .await;
     assert_eq!(mock.call_log().len(), 1);
 
@@ -601,7 +629,12 @@ async fn test_mcp_error_triggers_fallback() {
     // No fixtures added - simulates MCP failure
 
     let result = mock
-        .call_tool("local-memory", "search", Some(json!({"query": "test"})), None)
+        .call_tool(
+            "local-memory",
+            "search",
+            Some(json!({"query": "test"})),
+            None,
+        )
         .await;
 
     // MCP fails, would trigger file fallback in real code

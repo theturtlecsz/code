@@ -3,11 +3,11 @@
 //! FORK-SPECIFIC (just-every/code): Validates end-to-end MCP consensus path
 //! Tests the migration from subprocess to native MCP protocol
 
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 use codex_core::config_types::McpServerConfig;
 use codex_core::mcp_connection_manager::McpConnectionManager;
 use codex_tui::{SpecStage, run_spec_consensus};
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 /// Helper to check if local-memory MCP server is available
 async fn is_local_memory_available() -> bool {
@@ -18,7 +18,7 @@ async fn is_local_memory_available() -> bool {
             args: vec![],
             env: None,
             startup_timeout_ms: Some(2000),
-        }
+        },
     )]);
 
     match McpConnectionManager::new(config, HashSet::new()).await {
@@ -37,7 +37,7 @@ async fn test_mcp_connection_initialization() {
             args: vec![],
             env: None,
             startup_timeout_ms: Some(5000),
-        }
+        },
     )]);
 
     match McpConnectionManager::new(config, HashSet::new()).await {
@@ -52,7 +52,9 @@ async fn test_mcp_connection_initialization() {
             // Verify local-memory tools are available
             let tools = manager.list_all_tools();
             let has_search = tools.keys().any(|k| k.contains("search"));
-            let has_store = tools.keys().any(|k| k.contains("store") || k.contains("remember"));
+            let has_store = tools
+                .keys()
+                .any(|k| k.contains("store") || k.contains("remember"));
 
             if !has_search || !has_store {
                 eprintln!("⚠ Expected local-memory tools not found");
@@ -91,7 +93,7 @@ async fn test_mcp_retry_logic_handles_delayed_initialization() {
                 args: vec![],
                 env: None,
                 startup_timeout_ms: Some(5000),
-            }
+            },
         )]);
 
         if let Ok((manager, _)) = McpConnectionManager::new(config, HashSet::new()).await {
@@ -143,7 +145,7 @@ async fn test_mcp_tool_call_format() {
             args: vec![],
             env: None,
             startup_timeout_ms: Some(5000),
-        }
+        },
     )]);
 
     let (manager, errors) = McpConnectionManager::new(config, HashSet::new())
@@ -164,12 +166,15 @@ async fn test_mcp_tool_call_format() {
 
     // Attempt to call search tool
     // Note: This may fail if no data exists, but validates the call path
-    match manager.call_tool(
-        "local-memory",
-        "search",
-        Some(search_args),
-        Some(std::time::Duration::from_secs(10))
-    ).await {
+    match manager
+        .call_tool(
+            "local-memory",
+            "search",
+            Some(search_args),
+            Some(std::time::Duration::from_secs(10)),
+        )
+        .await
+    {
         Ok(result) => {
             println!("✓ MCP tool call succeeded");
             println!("  Result content blocks: {}", result.content.len());
@@ -205,24 +210,21 @@ async fn test_full_consensus_workflow_with_mcp() {
             args: vec![],
             env: None,
             startup_timeout_ms: Some(5000),
-        }
+        },
     )]);
 
     let (manager, errors) = McpConnectionManager::new(config, HashSet::new())
         .await
         .expect("MCP manager creation failed");
 
-    assert!(errors.is_empty(), "MCP initialization should have no errors");
+    assert!(
+        errors.is_empty(),
+        "MCP initialization should have no errors"
+    );
 
     // Call consensus check through the actual async function
     // This validates the entire path from handler -> consensus -> MCP
-    let result = run_spec_consensus(
-        cwd,
-        "SPEC-TEST-001",
-        SpecStage::Plan,
-        true,
-        &manager,
-    ).await;
+    let result = run_spec_consensus(cwd, "SPEC-TEST-001", SpecStage::Plan, true, &manager).await;
 
     match result {
         Ok((lines, consensus_ok)) => {
@@ -235,7 +237,10 @@ async fn test_full_consensus_workflow_with_mcp() {
         }
         Err(e) => {
             // Error is expected if no test data exists in local-memory
-            eprintln!("⚠ Consensus check failed (expected without test data): {}", e);
+            eprintln!(
+                "⚠ Consensus check failed (expected without test data): {}",
+                e
+            );
             eprintln!("  Error validates proper error handling path");
         }
     }

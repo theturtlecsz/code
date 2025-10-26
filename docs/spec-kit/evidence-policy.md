@@ -20,6 +20,8 @@ evidence/
 └── .locks/<SPEC-ID>.lock   # File locks (ARCH-007)
 ```
 
+- SPEC-KIT-069 adds validate lifecycle telemetry bundles to `commands/<SPEC-ID>/` with fields `stage_run_id`, `attempt`, `dedupe_count`, `mode`, and `event` (tags: `spec:<ID>`, `stage:validate`, `artifact:agent_lifecycle`).
+
 ---
 
 ## 2. Current State

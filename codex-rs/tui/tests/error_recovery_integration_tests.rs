@@ -11,8 +11,8 @@
 
 mod common;
 
-use common::{IntegrationTestContext, StateBuilder};
 use codex_tui::SpecStage;
+use common::{IntegrationTestContext, StateBuilder};
 use serde_json::json;
 
 // ============================================================================
@@ -31,7 +31,9 @@ fn e01_consensus_failure_handler_retry_evidence_cleanup_state_reset() {
         .build();
 
     // Attempt 1: Write failed consensus (empty result)
-    let failed_consensus = ctx.consensus_dir().join("spec-plan_2025-10-19T10_00_00Z_gemini_attempt1.json");
+    let failed_consensus = ctx
+        .consensus_dir()
+        .join("spec-plan_2025-10-19T10_00_00Z_gemini_attempt1.json");
     std::fs::write(
         &failed_consensus,
         json!({
@@ -41,8 +43,10 @@ fn e01_consensus_failure_handler_retry_evidence_cleanup_state_reset() {
             "error": "Empty consensus result",
             "attempt": 1,
             "timestamp": "2025-10-19T10:00:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify failed attempt recorded
     assert!(failed_consensus.exists());
@@ -52,7 +56,9 @@ fn e01_consensus_failure_handler_retry_evidence_cleanup_state_reset() {
     assert!(!failed_consensus.exists());
 
     // Attempt 2: Success with enhanced prompt
-    let success_consensus = ctx.consensus_dir().join("spec-plan_2025-10-19T10_05_00Z_gemini_attempt2.json");
+    let success_consensus = ctx
+        .consensus_dir()
+        .join("spec-plan_2025-10-19T10_05_00Z_gemini_attempt2.json");
     std::fs::write(
         &success_consensus,
         json!({
@@ -63,8 +69,10 @@ fn e01_consensus_failure_handler_retry_evidence_cleanup_state_reset() {
             "attempt": 2,
             "retry_reason": "empty_result",
             "timestamp": "2025-10-19T10:05:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify retry succeeded
     assert!(success_consensus.exists());
@@ -88,7 +96,9 @@ fn e02_mcp_failure_fallback_to_file_evidence_records_fallback() {
     let ctx = IntegrationTestContext::new("SPEC-E02-001").unwrap();
 
     // Write fallback marker evidence (MCP failed, using file fallback)
-    let fallback_evidence = ctx.consensus_dir().join("spec-plan_2025-10-19T11_00_00Z_fallback.json");
+    let fallback_evidence = ctx
+        .consensus_dir()
+        .join("spec-plan_2025-10-19T11_00_00Z_fallback.json");
     std::fs::write(
         &fallback_evidence,
         json!({
@@ -97,11 +107,15 @@ fn e02_mcp_failure_fallback_to_file_evidence_records_fallback() {
             "original_server": "local-memory",
             "fallback_path": "/tmp/consensus_fallback.json",
             "timestamp": "2025-10-19T11:00:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Write actual consensus from file fallback
-    let consensus_file = ctx.consensus_dir().join("spec-plan_2025-10-19T11_00_05Z_gemini.json");
+    let consensus_file = ctx
+        .consensus_dir()
+        .join("spec-plan_2025-10-19T11_00_05Z_gemini.json");
     std::fs::write(
         &consensus_file,
         json!({
@@ -110,8 +124,10 @@ fn e02_mcp_failure_fallback_to_file_evidence_records_fallback() {
             "source": "file_fallback",
             "content": "Consensus from fallback mechanism",
             "timestamp": "2025-10-19T11:00:05Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify fallback recorded
     assert!(fallback_evidence.exists());
@@ -143,15 +159,19 @@ fn e03_guardrail_schema_violation_handler_error_state_rollback() {
     let initial_index = state.current_index;
 
     // Write invalid guardrail telemetry (missing required fields)
-    let invalid_telemetry = ctx.commands_dir().join("spec-tasks_2025-10-19T12_00_00Z.json");
+    let invalid_telemetry = ctx
+        .commands_dir()
+        .join("spec-tasks_2025-10-19T12_00_00Z.json");
     std::fs::write(
         &invalid_telemetry,
         json!({
             // Missing schemaVersion, timestamp, baseline, etc.
             "invalid": true,
             "partial_data": "incomplete"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify invalid telemetry exists
     assert!(invalid_telemetry.exists());
@@ -170,7 +190,9 @@ fn e03_guardrail_schema_violation_handler_error_state_rollback() {
     assert_eq!(state.current_stage(), Some(SpecStage::Tasks));
 
     // Write error notification marker
-    let error_marker = ctx.commands_dir().join("spec-tasks_2025-10-19T12_00_01Z_schema_error.json");
+    let error_marker = ctx
+        .commands_dir()
+        .join("spec-tasks_2025-10-19T12_00_01Z_schema_error.json");
     std::fs::write(
         &error_marker,
         json!({
@@ -179,8 +201,10 @@ fn e03_guardrail_schema_violation_handler_error_state_rollback() {
             "missing_fields": ["schemaVersion", "timestamp", "baseline"],
             "user_notified": true,
             "timestamp": "2025-10-19T12:00:01Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify error recorded and user notified
     assert!(error_marker.exists());
@@ -204,14 +228,18 @@ fn e04_evidence_write_failure_handler_retry_lock_cleanup() {
             "locked_by": "attempt_1",
             "timestamp": "2025-10-19T13:00:00Z",
             "reason": "write_in_progress"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify lock exists
     assert!(lock_file.exists());
 
     // Write failure marker
-    let failure_marker = ctx.consensus_dir().join("spec-plan_2025-10-19T13_00_00Z_write_failed.json");
+    let failure_marker = ctx
+        .consensus_dir()
+        .join("spec-plan_2025-10-19T13_00_00Z_write_failed.json");
     std::fs::write(
         &failure_marker,
         json!({
@@ -219,8 +247,10 @@ fn e04_evidence_write_failure_handler_retry_lock_cleanup() {
             "reason": "disk_full",
             "attempt": 1,
             "timestamp": "2025-10-19T13:00:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Cleanup: Remove stale lock and failure marker
     std::fs::remove_file(&lock_file).unwrap();
@@ -230,7 +260,9 @@ fn e04_evidence_write_failure_handler_retry_lock_cleanup() {
     assert!(!failure_marker.exists());
 
     // Retry: Write succeeds
-    let success_file = ctx.consensus_dir().join("spec-plan_2025-10-19T13_00_05Z_gemini.json");
+    let success_file = ctx
+        .consensus_dir()
+        .join("spec-plan_2025-10-19T13_00_05Z_gemini.json");
     std::fs::write(
         &success_file,
         json!({
@@ -239,8 +271,10 @@ fn e04_evidence_write_failure_handler_retry_lock_cleanup() {
             "content": "Write successful after cleanup",
             "retry": true,
             "timestamp": "2025-10-19T13:00:05Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify retry succeeded
     assert!(success_file.exists());
@@ -258,7 +292,9 @@ fn e05_agent_timeout_handler_detects_consensus_retry_evidence_updated() {
     let ctx = IntegrationTestContext::new("SPEC-E05-001").unwrap();
 
     // Write timeout evidence
-    let timeout_marker = ctx.consensus_dir().join("spec-implement_2025-10-19T14_00_00Z_timeout.json");
+    let timeout_marker = ctx
+        .consensus_dir()
+        .join("spec-implement_2025-10-19T14_00_00Z_timeout.json");
     std::fs::write(
         &timeout_marker,
         json!({
@@ -268,8 +304,10 @@ fn e05_agent_timeout_handler_detects_consensus_retry_evidence_updated() {
             "timeout_ms": 1800000, // 30 minutes
             "started_at": "2025-10-19T13:30:00Z",
             "timed_out_at": "2025-10-19T14:00:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify timeout detected
     assert!(timeout_marker.exists());
@@ -278,7 +316,9 @@ fn e05_agent_timeout_handler_detects_consensus_retry_evidence_updated() {
     assert!(timeout_content.contains("gpt_codex"));
 
     // Write retry attempt with different agent
-    let retry_consensus = ctx.consensus_dir().join("spec-implement_2025-10-19T14_05_00Z_gemini.json");
+    let retry_consensus = ctx
+        .consensus_dir()
+        .join("spec-implement_2025-10-19T14_05_00Z_gemini.json");
     std::fs::write(
         &retry_consensus,
         json!({
@@ -287,8 +327,10 @@ fn e05_agent_timeout_handler_detects_consensus_retry_evidence_updated() {
             "content": "Retry with fallback agent",
             "retry_reason": "agent_timeout:gpt_codex",
             "timestamp": "2025-10-19T14:05:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify retry evidence updated
     assert!(retry_consensus.exists());
@@ -311,7 +353,9 @@ fn e06_empty_consensus_handler_retry_enhanced_prompt() {
     let ctx = IntegrationTestContext::new("SPEC-E06-001").unwrap();
 
     // Attempt 1: Empty consensus
-    let empty_attempt = ctx.consensus_dir().join("spec-plan_2025-10-19T15_00_00Z_attempt1.json");
+    let empty_attempt = ctx
+        .consensus_dir()
+        .join("spec-plan_2025-10-19T15_00_00Z_attempt1.json");
     std::fs::write(
         &empty_attempt,
         json!({
@@ -321,8 +365,10 @@ fn e06_empty_consensus_handler_retry_enhanced_prompt() {
             "status": "empty",
             "attempt": 1,
             "timestamp": "2025-10-19T15:00:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify empty result detected
     let content = std::fs::read_to_string(&empty_attempt).unwrap();
@@ -334,7 +380,9 @@ fn e06_empty_consensus_handler_retry_enhanced_prompt() {
     std::fs::remove_file(&empty_attempt).unwrap();
 
     // Attempt 2: Enhanced prompt with storage guidance
-    let enhanced_attempt = ctx.consensus_dir().join("spec-plan_2025-10-19T15_05_00Z_attempt2.json");
+    let enhanced_attempt = ctx
+        .consensus_dir()
+        .join("spec-plan_2025-10-19T15_05_00Z_attempt2.json");
     std::fs::write(
         &enhanced_attempt,
         json!({
@@ -346,8 +394,10 @@ fn e06_empty_consensus_handler_retry_enhanced_prompt() {
             "retry_reason": "empty_result",
             "prompt_enhanced": true,
             "timestamp": "2025-10-19T15:05:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify enhancement succeeded
     let enhanced_content = std::fs::read_to_string(&enhanced_attempt).unwrap();
@@ -364,11 +414,14 @@ fn e07_invalid_json_parser_error_handler_retry_with_schema() {
     let ctx = IntegrationTestContext::new("SPEC-E07-001").unwrap();
 
     // Attempt 1: Invalid JSON (parse error)
-    let invalid_json_file = ctx.consensus_dir().join("spec-tasks_2025-10-19T16_00_00Z_invalid.json");
+    let invalid_json_file = ctx
+        .consensus_dir()
+        .join("spec-tasks_2025-10-19T16_00_00Z_invalid.json");
     std::fs::write(
         &invalid_json_file,
-        "{invalid json: missing quotes, trailing comma,}"
-    ).unwrap();
+        "{invalid json: missing quotes, trailing comma,}",
+    )
+    .unwrap();
 
     // Verify parse error occurs
     let content = std::fs::read_to_string(&invalid_json_file).unwrap();
@@ -378,7 +431,9 @@ fn e07_invalid_json_parser_error_handler_retry_with_schema() {
     std::fs::remove_file(&invalid_json_file).unwrap();
 
     // Attempt 2: Schema-guided retry
-    let schema_attempt = ctx.consensus_dir().join("spec-tasks_2025-10-19T16_05_00Z_valid.json");
+    let schema_attempt = ctx
+        .consensus_dir()
+        .join("spec-tasks_2025-10-19T16_05_00Z_valid.json");
     std::fs::write(
         &schema_attempt,
         json!({
@@ -388,8 +443,10 @@ fn e07_invalid_json_parser_error_handler_retry_with_schema() {
             "schema_validated": true,
             "retry_reason": "parse_error",
             "timestamp": "2025-10-19T16:05:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify schema-guided retry succeeded
     let valid_content = std::fs::read_to_string(&schema_attempt).unwrap();
@@ -409,8 +466,9 @@ fn e08_state_corruption_evidence_read_fails_fallback_to_default() {
     let corrupted_state = ctx.commands_dir().join("spec_auto_state.json");
     std::fs::write(
         &corrupted_state,
-        "{corrupted: invalid json with trailing comma,}"
-    ).unwrap();
+        "{corrupted: invalid json with trailing comma,}",
+    )
+    .unwrap();
 
     // Attempt to read corrupted state
     let content = std::fs::read_to_string(&corrupted_state).unwrap();
@@ -434,8 +492,10 @@ fn e08_state_corruption_evidence_read_fails_fallback_to_default() {
             "recovery_mode": "default_initialization",
             "reason": "state_corruption",
             "timestamp": "2025-10-19T17:00:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify recovery successful
     assert!(recovered_state.exists());
@@ -453,8 +513,11 @@ fn e09_multiple_retries_exhausted_handler_halts_evidence_logs_failure() {
 
     // Simulate 3 failed retry attempts
     for attempt in 1..=3 {
-        let retry_file = ctx.consensus_dir()
-            .join(format!("spec-validate_2025-10-19T18_{:02}_00Z_attempt{}.json", attempt * 5, attempt));
+        let retry_file = ctx.consensus_dir().join(format!(
+            "spec-validate_2025-10-19T18_{:02}_00Z_attempt{}.json",
+            attempt * 5,
+            attempt
+        ));
         std::fs::write(
             &retry_file,
             json!({
@@ -464,15 +527,19 @@ fn e09_multiple_retries_exhausted_handler_halts_evidence_logs_failure() {
                 "attempt": attempt,
                 "error": format!("Validation failed - attempt {}", attempt),
                 "timestamp": format!("2025-10-19T18:{:02}:00Z", attempt * 5)
-            }).to_string()
-        ).unwrap();
+            })
+            .to_string(),
+        )
+        .unwrap();
     }
 
     // Verify all retry attempts recorded
     assert_eq!(ctx.count_consensus_files(), 3);
 
     // Write final failure evidence (retries exhausted)
-    let final_failure = ctx.commands_dir().join("spec-validate_2025-10-19T18_20_00Z_retries_exhausted.json");
+    let final_failure = ctx
+        .commands_dir()
+        .join("spec-validate_2025-10-19T18_20_00Z_retries_exhausted.json");
     std::fs::write(
         &final_failure,
         json!({
@@ -483,8 +550,10 @@ fn e09_multiple_retries_exhausted_handler_halts_evidence_logs_failure() {
             "user_escalation_required": true,
             "halt_reason": "retry_limit_reached",
             "timestamp": "2025-10-19T18:20:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify graceful halt evidence
     assert!(final_failure.exists());
@@ -505,7 +574,9 @@ fn e10_quality_gate_failure_state_preserved_manual_intervention() {
         .build();
 
     // Write quality gate failure evidence
-    let quality_failure = ctx.commands_dir().join("spec-implement_2025-10-19T19_00_00Z_quality_gate.json");
+    let quality_failure = ctx
+        .commands_dir()
+        .join("spec-implement_2025-10-19T19_00_00Z_quality_gate.json");
     std::fs::write(
         &quality_failure,
         json!({
@@ -533,8 +604,10 @@ fn e10_quality_gate_failure_state_preserved_manual_intervention() {
             "preservation_reason": "quality_gate_failure",
             "resumable": true,
             "timestamp": "2025-10-19T19:00:01Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify state preserved for resumption
     assert!(quality_failure.exists());
@@ -564,11 +637,15 @@ fn e11_concurrent_write_conflict_lock_timeout_retry_with_backoff() {
             "held_by": "process_123",
             "acquired_at": "2025-10-19T20:00:00Z",
             "timeout_ms": 5000
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Attempt 1: Lock timeout
-    let timeout_marker = ctx.consensus_dir().join("spec-plan_2025-10-19T20_00_05Z_lock_timeout.json");
+    let timeout_marker = ctx
+        .consensus_dir()
+        .join("spec-plan_2025-10-19T20_00_05Z_lock_timeout.json");
     std::fs::write(
         &timeout_marker,
         json!({
@@ -577,14 +654,18 @@ fn e11_concurrent_write_conflict_lock_timeout_retry_with_backoff() {
             "attempt": 1,
             "backoff_ms": 1000,
             "timestamp": "2025-10-19T20:00:05Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Release lock
     std::fs::remove_file(&lock_file).unwrap();
 
     // Attempt 2: Success with backoff
-    let success_file = ctx.consensus_dir().join("spec-plan_2025-10-19T20_00_07Z_gemini.json");
+    let success_file = ctx
+        .consensus_dir()
+        .join("spec-plan_2025-10-19T20_00_07Z_gemini.json");
     std::fs::write(
         &success_file,
         json!({
@@ -594,8 +675,10 @@ fn e11_concurrent_write_conflict_lock_timeout_retry_with_backoff() {
             "retry": true,
             "backoff_applied": true,
             "timestamp": "2025-10-19T20:00:07Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify retry with backoff succeeded
     assert!(!lock_file.exists());
@@ -617,7 +700,9 @@ fn e12_guardrail_timeout_handler_continues_warning_logged() {
         .build();
 
     // Write guardrail timeout evidence
-    let timeout_telemetry = ctx.commands_dir().join("spec-audit_2025-10-19T21_00_00Z.json");
+    let timeout_telemetry = ctx
+        .commands_dir()
+        .join("spec-audit_2025-10-19T21_00_00Z.json");
     std::fs::write(
         &timeout_telemetry,
         json!({
@@ -628,8 +713,10 @@ fn e12_guardrail_timeout_handler_continues_warning_logged() {
             "incomplete": true,
             "warning": "Guardrail validation timed out - continuing with incomplete validation",
             "timestamp": "2025-10-19T21:00:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify timeout logged but pipeline continues
     assert!(timeout_telemetry.exists());
@@ -651,7 +738,9 @@ fn e13_mcp_server_crash_reconnect_replay() {
     let ctx = IntegrationTestContext::new("SPEC-E13-001").unwrap();
 
     // Write crash evidence
-    let crash_marker = ctx.consensus_dir().join("spec-tasks_2025-10-19T22_00_00Z_mcp_crash.json");
+    let crash_marker = ctx
+        .consensus_dir()
+        .join("spec-tasks_2025-10-19T22_00_00Z_mcp_crash.json");
     std::fs::write(
         &crash_marker,
         json!({
@@ -659,11 +748,15 @@ fn e13_mcp_server_crash_reconnect_replay() {
             "server": "local-memory",
             "last_request": "search",
             "crash_detected_at": "2025-10-19T22:00:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Write reconnection evidence
-    let reconnect_marker = ctx.consensus_dir().join("spec-tasks_2025-10-19T22_00_02Z_mcp_reconnect.json");
+    let reconnect_marker = ctx
+        .consensus_dir()
+        .join("spec-tasks_2025-10-19T22_00_02Z_mcp_reconnect.json");
     std::fs::write(
         &reconnect_marker,
         json!({
@@ -671,11 +764,15 @@ fn e13_mcp_server_crash_reconnect_replay() {
             "server": "local-memory",
             "status": "connected",
             "reconnected_at": "2025-10-19T22:00:02Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Write replayed request success
-    let replay_success = ctx.consensus_dir().join("spec-tasks_2025-10-19T22_00_03Z_claude.json");
+    let replay_success = ctx
+        .consensus_dir()
+        .join("spec-tasks_2025-10-19T22_00_03Z_claude.json");
     std::fs::write(
         &replay_success,
         json!({
@@ -684,8 +781,10 @@ fn e13_mcp_server_crash_reconnect_replay() {
             "content": "Request replayed successfully after reconnection",
             "replayed": true,
             "timestamp": "2025-10-19T22:00:03Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify crash → reconnect → replay flow
     assert!(crash_marker.exists());
@@ -704,7 +803,9 @@ fn e14_evidence_disk_full_handler_error_cleanup_old_files() {
     let ctx = IntegrationTestContext::new("SPEC-E14-001").unwrap();
 
     // Write disk full error
-    let disk_full_error = ctx.commands_dir().join("spec-implement_2025-10-19T23_00_00Z_disk_full.json");
+    let disk_full_error = ctx
+        .commands_dir()
+        .join("spec-implement_2025-10-19T23_00_00Z_disk_full.json");
     std::fs::write(
         &disk_full_error,
         json!({
@@ -712,12 +813,15 @@ fn e14_evidence_disk_full_handler_error_cleanup_old_files() {
             "attempted_write": "spec-implement_gemini.json",
             "disk_usage_percent": 99.8,
             "timestamp": "2025-10-19T23:00:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Create old evidence files to cleanup
     for i in 1..=5 {
-        let old_file = ctx.consensus_dir()
+        let old_file = ctx
+            .consensus_dir()
             .join(format!("spec-plan_2025-10-0{}_00_00_00Z_old.json", i));
         std::fs::write(&old_file, "old evidence data").unwrap();
     }
@@ -737,7 +841,9 @@ fn e14_evidence_disk_full_handler_error_cleanup_old_files() {
     assert_eq!(ctx.count_consensus_files(), 0);
 
     // Retry write after cleanup
-    let retry_write = ctx.consensus_dir().join("spec-implement_2025-10-19T23_00_05Z_gemini.json");
+    let retry_write = ctx
+        .consensus_dir()
+        .join("spec-implement_2025-10-19T23_00_05Z_gemini.json");
     std::fs::write(
         &retry_write,
         json!({
@@ -747,8 +853,10 @@ fn e14_evidence_disk_full_handler_error_cleanup_old_files() {
             "retry": true,
             "cleanup_performed": true,
             "timestamp": "2025-10-19T23:00:05Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify retry succeeded
     assert!(retry_write.exists());
@@ -764,7 +872,9 @@ fn e15_network_partition_mcp_unreachable_graceful_degradation() {
     let ctx = IntegrationTestContext::new("SPEC-E15-001").unwrap();
 
     // Write network partition error
-    let partition_error = ctx.consensus_dir().join("spec-unlock_2025-10-19T23_30_00Z_network_partition.json");
+    let partition_error = ctx
+        .consensus_dir()
+        .join("spec-unlock_2025-10-19T23_30_00Z_network_partition.json");
     std::fs::write(
         &partition_error,
         json!({
@@ -772,11 +882,15 @@ fn e15_network_partition_mcp_unreachable_graceful_degradation() {
             "mcp_servers_unreachable": ["local-memory", "byterover-mcp"],
             "degraded_mode": true,
             "timestamp": "2025-10-19T23:30:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Write degraded mode consensus (using cached/local data)
-    let degraded_consensus = ctx.consensus_dir().join("spec-unlock_2025-10-19T23_30_02Z_degraded.json");
+    let degraded_consensus = ctx
+        .consensus_dir()
+        .join("spec-unlock_2025-10-19T23_30_02Z_degraded.json");
     std::fs::write(
         &degraded_consensus,
         json!({
@@ -786,11 +900,15 @@ fn e15_network_partition_mcp_unreachable_graceful_degradation() {
             "stage": "unlock",
             "content": "Operating in degraded mode with cached data",
             "timestamp": "2025-10-19T23:30:02Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Write recovery evidence (network restored)
-    let recovery_marker = ctx.consensus_dir().join("spec-unlock_2025-10-19T23_35_00Z_recovery.json");
+    let recovery_marker = ctx
+        .consensus_dir()
+        .join("spec-unlock_2025-10-19T23_35_00Z_recovery.json");
     std::fs::write(
         &recovery_marker,
         json!({
@@ -798,8 +916,10 @@ fn e15_network_partition_mcp_unreachable_graceful_degradation() {
             "mcp_connectivity": "full",
             "degraded_mode_duration_seconds": 300,
             "timestamp": "2025-10-19T23:35:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify graceful degradation and recovery
     assert!(partition_error.exists());

@@ -155,7 +155,10 @@ fn test_consensus_parse_error() {
         reason: "Invalid JSON structure".to_string(),
     };
 
-    assert!(err.to_string().contains("Failed to parse consensus synthesis"));
+    assert!(
+        err.to_string()
+            .contains("Failed to parse consensus synthesis")
+    );
     assert!(err.to_string().contains("Invalid JSON"));
 }
 
@@ -228,7 +231,11 @@ fn test_unknown_stage_error() {
 #[test]
 fn test_missing_agents_helper() {
     let err = SpecKitError::missing_agents(
-        vec!["gemini".to_string(), "claude".to_string(), "code".to_string()],
+        vec![
+            "gemini".to_string(),
+            "claude".to_string(),
+            "code".to_string(),
+        ],
         vec!["gemini".to_string()],
     );
 

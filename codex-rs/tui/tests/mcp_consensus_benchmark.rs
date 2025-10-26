@@ -4,11 +4,11 @@
 //!
 //! Run with: cargo test --test mcp_consensus_benchmark --release -- --ignored --nocapture
 
-use std::collections::{HashMap, HashSet};
-use std::time::Instant;
 use codex_core::config_types::McpServerConfig;
 use codex_core::mcp_connection_manager::McpConnectionManager;
 use codex_tui::SpecStage;
+use std::collections::{HashMap, HashSet};
+use std::time::Instant;
 
 /// Benchmark MCP connection initialization
 #[tokio::test]
@@ -27,7 +27,7 @@ async fn bench_mcp_initialization() {
                 args: vec![],
                 env: None,
                 startup_timeout_ms: Some(5000),
-            }
+            },
         )]);
 
         match McpConnectionManager::new(config, HashSet::new()).await {
@@ -77,7 +77,7 @@ async fn bench_mcp_search_calls() {
             args: vec![],
             env: None,
             startup_timeout_ms: Some(5000),
-        }
+        },
     )]);
 
     let (manager, errors) = match McpConnectionManager::new(config, HashSet::new()).await {
@@ -104,12 +104,15 @@ async fn bench_mcp_search_calls() {
         });
 
         let start = Instant::now();
-        match manager.call_tool(
-            "local-memory",
-            "search",
-            Some(args),
-            Some(std::time::Duration::from_secs(10))
-        ).await {
+        match manager
+            .call_tool(
+                "local-memory",
+                "search",
+                Some(args),
+                Some(std::time::Duration::from_secs(10)),
+            )
+            .await
+        {
             Ok(_) => {
                 let elapsed = start.elapsed();
                 timings.push(elapsed);
@@ -136,7 +139,10 @@ async fn bench_mcp_search_calls() {
     println!("  Min: {:?}", min);
     println!("  Max: {:?}", max);
     println!("  Total: {:?}", total);
-    println!("  Calls/sec: {:.2}", timings.len() as f64 / total.as_secs_f64());
+    println!(
+        "  Calls/sec: {:.2}",
+        timings.len() as f64 / total.as_secs_f64()
+    );
 }
 
 /// Compare MCP vs subprocess latency (requires both available)
@@ -151,7 +157,10 @@ async fn bench_mcp_vs_subprocess() {
     const SUBPROCESS_ITERATIONS: usize = 10;
     let mut subprocess_timings = Vec::new();
 
-    println!("Benchmarking subprocess calls ({} iterations)...", SUBPROCESS_ITERATIONS);
+    println!(
+        "Benchmarking subprocess calls ({} iterations)...",
+        SUBPROCESS_ITERATIONS
+    );
     for _ in 0..SUBPROCESS_ITERATIONS {
         let start = Instant::now();
         let output = Command::new("local-memory")
@@ -163,7 +172,10 @@ async fn bench_mcp_vs_subprocess() {
                 subprocess_timings.push(start.elapsed());
             }
             Ok(result) => {
-                println!("  Subprocess call failed: {:?}", String::from_utf8_lossy(&result.stderr));
+                println!(
+                    "  Subprocess call failed: {:?}",
+                    String::from_utf8_lossy(&result.stderr)
+                );
             }
             Err(e) => {
                 println!("  Subprocess spawn failed: {}", e);
@@ -186,7 +198,7 @@ async fn bench_mcp_vs_subprocess() {
             args: vec![],
             env: None,
             startup_timeout_ms: Some(5000),
-        }
+        },
     )]);
 
     let (manager, _) = match McpConnectionManager::new(config, HashSet::new()).await {
@@ -206,12 +218,15 @@ async fn bench_mcp_vs_subprocess() {
         });
 
         let start = Instant::now();
-        match manager.call_tool(
-            "local-memory",
-            "search",
-            Some(args),
-            Some(std::time::Duration::from_secs(10))
-        ).await {
+        match manager
+            .call_tool(
+                "local-memory",
+                "search",
+                Some(args),
+                Some(std::time::Duration::from_secs(10)),
+            )
+            .await
+        {
             Ok(_) => {
                 mcp_timings.push(start.elapsed());
             }
@@ -223,14 +238,16 @@ async fn bench_mcp_vs_subprocess() {
 
     // Analysis
     if !subprocess_timings.is_empty() {
-        let subprocess_avg = subprocess_timings.iter().sum::<std::time::Duration>() / subprocess_timings.len() as u32;
+        let subprocess_avg = subprocess_timings.iter().sum::<std::time::Duration>()
+            / subprocess_timings.len() as u32;
         println!("\nSubprocess Results:");
         println!("  Average: {:?}", subprocess_avg);
         println!("  Min: {:?}", subprocess_timings.iter().min().unwrap());
         println!("  Max: {:?}", subprocess_timings.iter().max().unwrap());
 
         if !mcp_timings.is_empty() {
-            let mcp_avg = mcp_timings.iter().sum::<std::time::Duration>() / mcp_timings.len() as u32;
+            let mcp_avg =
+                mcp_timings.iter().sum::<std::time::Duration>() / mcp_timings.len() as u32;
             println!("\nMCP Results:");
             println!("  Average: {:?}", mcp_avg);
             println!("  Min: {:?}", mcp_timings.iter().min().unwrap());

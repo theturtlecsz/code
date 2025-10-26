@@ -128,7 +128,11 @@ fn test_auto_resolve_high_confidence_important_autofix() {
 fn test_no_auto_resolve_critical_need_human() {
     // Critical + NeedHuman = Never auto-resolve
     let should_escalate = matches!(
-        (Confidence::High, Magnitude::Critical, Resolvability::NeedHuman),
+        (
+            Confidence::High,
+            Magnitude::Critical,
+            Resolvability::NeedHuman
+        ),
         (_, Magnitude::Critical, Resolvability::NeedHuman)
     );
     assert!(should_escalate);
@@ -272,10 +276,7 @@ fn test_escalate_on_critical_magnitude() {
 #[test]
 fn test_no_escalate_high_confidence_autofix() {
     let (conf, res) = (Confidence::High, Resolvability::AutoFix);
-    let can_auto_resolve = matches!(
-        (conf, res),
-        (Confidence::High, Resolvability::AutoFix)
-    );
+    let can_auto_resolve = matches!((conf, res), (Confidence::High, Resolvability::AutoFix));
     assert!(can_auto_resolve);
 }
 

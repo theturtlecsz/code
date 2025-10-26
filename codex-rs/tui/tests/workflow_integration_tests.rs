@@ -9,8 +9,8 @@
 
 mod common;
 
-use common::{IntegrationTestContext, StateBuilder, EvidenceVerifier, MockMcpManager};
-use codex_tui::{SpecStage, SpecAutoState};
+use codex_tui::{SpecAutoState, SpecStage};
+use common::{EvidenceVerifier, IntegrationTestContext, MockMcpManager, StateBuilder};
 use serde_json::json;
 use std::path::Path;
 
@@ -26,8 +26,10 @@ fn w01_plan_stage_complete_workflow() {
     let ctx = IntegrationTestContext::new("SPEC-W01-001").unwrap();
 
     // Setup: Create SPEC directory and PRD
-    ctx.write_prd("test-feature", "# Test Feature\nBuild a test feature").unwrap();
-    ctx.write_spec("test-feature", "# Specification\nDetailed spec").unwrap();
+    ctx.write_prd("test-feature", "# Test Feature\nBuild a test feature")
+        .unwrap();
+    ctx.write_spec("test-feature", "# Specification\nDetailed spec")
+        .unwrap();
 
     // Setup: Create mock MCP manager with consensus response
     let mut mock_mcp = MockMcpManager::new();
@@ -64,19 +66,25 @@ fn w01_plan_stage_complete_workflow() {
     std::fs::create_dir_all(ctx.consensus_dir()).unwrap();
 
     // Write mock consensus artifacts (simulating consensus module output)
-    let consensus_file = ctx.consensus_dir().join("spec-plan_2025-10-19T12_00_00Z_gemini.json");
+    let consensus_file = ctx
+        .consensus_dir()
+        .join("spec-plan_2025-10-19T12_00_00Z_gemini.json");
     std::fs::write(
         &consensus_file,
         json!({
             "agent": "gemini",
             "content": "Plan consensus output",
             "timestamp": "2025-10-19T12:00:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Write mock guardrail telemetry (simulating guardrail module output)
     std::fs::create_dir_all(ctx.commands_dir()).unwrap();
-    let guardrail_file = ctx.commands_dir().join("spec-plan_2025-10-19T12_00_00Z.json");
+    let guardrail_file = ctx
+        .commands_dir()
+        .join("spec-plan_2025-10-19T12_00_00Z.json");
     std::fs::write(
         &guardrail_file,
         json!({
@@ -86,8 +94,10 @@ fn w01_plan_stage_complete_workflow() {
             "tool": {"status": "passed"},
             "policy": {"final": {"status": "passed"}},
             "scenarios": []
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify evidence written correctly
     let verifier = EvidenceVerifier::new(&ctx);
@@ -112,8 +122,10 @@ fn w02_tasks_stage_complete_workflow() {
     let ctx = IntegrationTestContext::new("SPEC-W02-001").unwrap();
 
     // Setup: Create SPEC directory
-    ctx.write_prd("task-breakdown", "# Task Breakdown\nBreak into tasks").unwrap();
-    ctx.write_spec("task-breakdown", "# Specification\nTask spec").unwrap();
+    ctx.write_prd("task-breakdown", "# Task Breakdown\nBreak into tasks")
+        .unwrap();
+    ctx.write_spec("task-breakdown", "# Specification\nTask spec")
+        .unwrap();
 
     // Build state starting at tasks stage (plan already complete)
     let mut state = StateBuilder::new("SPEC-W02-001")
@@ -126,18 +138,24 @@ fn w02_tasks_stage_complete_workflow() {
 
     // Simulate tasks stage execution
     // Write mock consensus artifacts for tasks stage
-    let consensus_file = ctx.consensus_dir().join("spec-tasks_2025-10-19T12_00_00Z_claude.json");
+    let consensus_file = ctx
+        .consensus_dir()
+        .join("spec-tasks_2025-10-19T12_00_00Z_claude.json");
     std::fs::write(
         &consensus_file,
         json!({
             "agent": "claude",
             "content": "Tasks consensus output - task list generated",
             "timestamp": "2025-10-19T12:00:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Write guardrail telemetry for tasks stage
-    let guardrail_file = ctx.commands_dir().join("spec-tasks_2025-10-19T12_00_00Z.json");
+    let guardrail_file = ctx
+        .commands_dir()
+        .join("spec-tasks_2025-10-19T12_00_00Z.json");
     std::fs::write(
         &guardrail_file,
         json!({
@@ -146,8 +164,10 @@ fn w02_tasks_stage_complete_workflow() {
             "baseline": {"status": "passed"},
             "tool": {"status": "passed"},
             "scenarios": []
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify evidence
     let verifier = EvidenceVerifier::new(&ctx);
@@ -172,8 +192,10 @@ fn w03_implement_stage_complete_workflow() {
     let ctx = IntegrationTestContext::new("SPEC-W03-001").unwrap();
 
     // Setup
-    ctx.write_prd("code-impl", "# Implementation\nGenerate code").unwrap();
-    ctx.write_spec("code-impl", "# Code Spec\nImplementation details").unwrap();
+    ctx.write_prd("code-impl", "# Implementation\nGenerate code")
+        .unwrap();
+    ctx.write_spec("code-impl", "# Code Spec\nImplementation details")
+        .unwrap();
 
     // Build state at implement stage
     let mut state = StateBuilder::new("SPEC-W03-001")
@@ -187,20 +209,26 @@ fn w03_implement_stage_complete_workflow() {
     // Simulate implement stage with multiple agents (gemini, claude, gpt_codex)
     let agents = vec!["gemini", "claude", "gpt_codex"];
     for agent in &agents {
-        let consensus_file = ctx.consensus_dir()
-            .join(format!("spec-implement_2025-10-19T12_00_00Z_{}.json", agent));
+        let consensus_file = ctx.consensus_dir().join(format!(
+            "spec-implement_2025-10-19T12_00_00Z_{}.json",
+            agent
+        ));
         std::fs::write(
             &consensus_file,
             json!({
                 "agent": agent,
                 "content": format!("Implementation from {}", agent),
                 "timestamp": "2025-10-19T12:00:00Z"
-            }).to_string()
-        ).unwrap();
+            })
+            .to_string(),
+        )
+        .unwrap();
     }
 
     // Write guardrail telemetry with code validation
-    let guardrail_file = ctx.commands_dir().join("spec-implement_2025-10-19T12_00_00Z.json");
+    let guardrail_file = ctx
+        .commands_dir()
+        .join("spec-implement_2025-10-19T12_00_00Z.json");
     std::fs::write(
         &guardrail_file,
         json!({
@@ -214,8 +242,10 @@ fn w03_implement_stage_complete_workflow() {
                 {"name": "cargo_clippy", "status": "passed"},
                 {"name": "cargo_build", "status": "passed"}
             ]
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify all agents contributed
     let verifier = EvidenceVerifier::new(&ctx);
@@ -253,18 +283,24 @@ fn w04_validate_stage_complete_workflow() {
     assert_eq!(state.current_index, 3); // Validate is index 3
 
     // Simulate validate stage consensus
-    let consensus_file = ctx.consensus_dir().join("spec-validate_2025-10-19T12_00_00Z_gpt_pro.json");
+    let consensus_file = ctx
+        .consensus_dir()
+        .join("spec-validate_2025-10-19T12_00_00Z_gpt_pro.json");
     std::fs::write(
         &consensus_file,
         json!({
             "agent": "gpt_pro",
             "content": "Test validation strategy",
             "timestamp": "2025-10-19T12:00:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Write guardrail telemetry with test execution results
-    let guardrail_file = ctx.commands_dir().join("spec-validate_2025-10-19T12_00_00Z.json");
+    let guardrail_file = ctx
+        .commands_dir()
+        .join("spec-validate_2025-10-19T12_00_00Z.json");
     std::fs::write(
         &guardrail_file,
         json!({
@@ -277,8 +313,10 @@ fn w04_validate_stage_complete_workflow() {
                 {"name": "integration_tests", "status": "passed"},
                 {"name": "e2e_tests", "status": "passed"}
             ]
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify evidence
     assert!(ctx.assert_consensus_exists(SpecStage::Validate, "gpt_pro"));
@@ -316,18 +354,24 @@ fn w05_audit_stage_complete_workflow() {
     assert_eq!(state.current_index, 4); // Audit is index 4
 
     // Simulate audit stage consensus
-    let consensus_file = ctx.consensus_dir().join("spec-audit_2025-10-19T12_00_00Z_claude.json");
+    let consensus_file = ctx
+        .consensus_dir()
+        .join("spec-audit_2025-10-19T12_00_00Z_claude.json");
     std::fs::write(
         &consensus_file,
         json!({
             "agent": "claude",
             "content": "Compliance audit results",
             "timestamp": "2025-10-19T12:00:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Write guardrail telemetry with compliance checks
-    let guardrail_file = ctx.commands_dir().join("spec-audit_2025-10-19T12_00_00Z.json");
+    let guardrail_file = ctx
+        .commands_dir()
+        .join("spec-audit_2025-10-19T12_00_00Z.json");
     std::fs::write(
         &guardrail_file,
         json!({
@@ -340,8 +384,10 @@ fn w05_audit_stage_complete_workflow() {
                 {"name": "license_compliance", "status": "passed"},
                 {"name": "code_quality", "status": "passed"}
             ]
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify evidence
     assert!(ctx.assert_consensus_exists(SpecStage::Audit, "claude"));
@@ -383,18 +429,24 @@ fn w06_unlock_stage_complete_workflow() {
     assert_eq!(state.current_index, 5); // Unlock is index 5 (last stage)
 
     // Simulate unlock stage consensus
-    let consensus_file = ctx.consensus_dir().join("spec-unlock_2025-10-19T12_00_00Z_gpt_pro.json");
+    let consensus_file = ctx
+        .consensus_dir()
+        .join("spec-unlock_2025-10-19T12_00_00Z_gpt_pro.json");
     std::fs::write(
         &consensus_file,
         json!({
             "agent": "gpt_pro",
             "content": "Final unlock approval - all stages complete",
             "timestamp": "2025-10-19T12:00:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Write guardrail telemetry with final unlock status
-    let guardrail_file = ctx.commands_dir().join("spec-unlock_2025-10-19T12_00_00Z.json");
+    let guardrail_file = ctx
+        .commands_dir()
+        .join("spec-unlock_2025-10-19T12_00_00Z.json");
     std::fs::write(
         &guardrail_file,
         json!({
@@ -404,8 +456,10 @@ fn w06_unlock_stage_complete_workflow() {
             "baseline": {"status": "passed"},
             "tool": {"status": "passed"},
             "scenarios": []
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify final stage evidence
     assert!(ctx.assert_consensus_exists(SpecStage::Unlock, "gpt_pro"));
@@ -438,28 +492,37 @@ fn w07_stage_transition_with_evidence_carryover() {
         .build();
 
     // Create plan stage evidence
-    let plan_consensus = ctx.consensus_dir().join("spec-plan_2025-10-19T11_00_00Z_gemini.json");
+    let plan_consensus = ctx
+        .consensus_dir()
+        .join("spec-plan_2025-10-19T11_00_00Z_gemini.json");
     std::fs::write(
         &plan_consensus,
-        json!({"agent": "gemini", "stage": "plan"}).to_string()
-    ).unwrap();
+        json!({"agent": "gemini", "stage": "plan"}).to_string(),
+    )
+    .unwrap();
 
-    let plan_guardrail = ctx.commands_dir().join("spec-plan_2025-10-19T11_00_00Z.json");
+    let plan_guardrail = ctx
+        .commands_dir()
+        .join("spec-plan_2025-10-19T11_00_00Z.json");
     std::fs::write(
         &plan_guardrail,
-        json!({"stage": "plan", "status": "passed"}).to_string()
-    ).unwrap();
+        json!({"stage": "plan", "status": "passed"}).to_string(),
+    )
+    .unwrap();
 
     // Advance to tasks stage
     state.current_index += 1;
     assert_eq!(state.current_stage(), Some(SpecStage::Tasks));
 
     // Create tasks stage evidence
-    let tasks_consensus = ctx.consensus_dir().join("spec-tasks_2025-10-19T12_00_00Z_claude.json");
+    let tasks_consensus = ctx
+        .consensus_dir()
+        .join("spec-tasks_2025-10-19T12_00_00Z_claude.json");
     std::fs::write(
         &tasks_consensus,
-        json!({"agent": "claude", "stage": "tasks"}).to_string()
-    ).unwrap();
+        json!({"agent": "claude", "stage": "tasks"}).to_string(),
+    )
+    .unwrap();
 
     // Verify both plan and tasks evidence exist (carryover)
     assert!(plan_consensus.exists());
@@ -500,16 +563,18 @@ fn w08_consensus_artifacts_persisted_correctly() {
                 "agent": agent,
                 "content": content,
                 "timestamp": "2025-10-19T12:00:00Z"
-            }).to_string()
-        ).unwrap();
+            })
+            .to_string(),
+        )
+        .unwrap();
     }
 
     // Verify all agents persisted
     let verifier = EvidenceVerifier::new(&ctx);
-    assert!(verifier.assert_consensus_complete(
-        SpecStage::Plan,
-        &["gemini", "claude", "gpt_pro", "code"]
-    ));
+    assert!(
+        verifier
+            .assert_consensus_complete(SpecStage::Plan, &["gemini", "claude", "gpt_pro", "code"])
+    );
 
     // Verify count matches
     assert_eq!(ctx.count_consensus_files(), 4);
@@ -536,7 +601,9 @@ fn w09_guardrail_telemetry_recorded() {
     let ctx = IntegrationTestContext::new("SPEC-W09-001").unwrap();
 
     // Write guardrail telemetry with all required fields
-    let guardrail_file = ctx.commands_dir().join("spec-plan_2025-10-19T13_30_45Z.json");
+    let guardrail_file = ctx
+        .commands_dir()
+        .join("spec-plan_2025-10-19T13_30_45Z.json");
     let timestamp = "2025-10-19T13:30:45Z";
     std::fs::write(
         &guardrail_file,
@@ -565,8 +632,10 @@ fn w09_guardrail_telemetry_recorded() {
             "scenarios": [
                 {"name": "baseline_check", "status": "passed"}
             ]
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify telemetry exists
     assert!(ctx.assert_guardrail_telemetry_exists(SpecStage::Plan));
@@ -604,17 +673,16 @@ fn w10_state_updates_reflected_in_evidence() {
         .build();
 
     // Simulate state progression through stages
-    let stages = vec![
-        SpecStage::Plan,
-        SpecStage::Tasks,
-        SpecStage::Implement,
-    ];
+    let stages = vec![SpecStage::Plan, SpecStage::Tasks, SpecStage::Implement];
 
     for (index, stage) in stages.iter().enumerate() {
         // Write evidence for each stage transition
         let stage_name = format!("{:?}", stage).to_lowercase();
-        let consensus_file = ctx.consensus_dir()
-            .join(format!("spec-{}_2025-10-19T{:02}_00_00Z_gemini.json", stage_name, 12 + index));
+        let consensus_file = ctx.consensus_dir().join(format!(
+            "spec-{}_2025-10-19T{:02}_00_00Z_gemini.json",
+            stage_name,
+            12 + index
+        ));
 
         std::fs::write(
             &consensus_file,
@@ -623,8 +691,10 @@ fn w10_state_updates_reflected_in_evidence() {
                 "stage": stage_name,
                 "state_index": index,
                 "timestamp": format!("2025-10-19T{:02}:00:00Z", 12 + index)
-            }).to_string()
-        ).unwrap();
+            })
+            .to_string(),
+        )
+        .unwrap();
 
         // Verify state matches evidence
         assert_eq!(state.current_stage(), Some(*stage));
@@ -642,8 +712,11 @@ fn w10_state_updates_reflected_in_evidence() {
     // Verify evidence reflects state progression
     for (index, stage) in stages.iter().enumerate() {
         let stage_name = format!("{:?}", stage).to_lowercase();
-        let consensus_file = ctx.consensus_dir()
-            .join(format!("spec-{}_2025-10-19T{:02}_00_00Z_gemini.json", stage_name, 12 + index));
+        let consensus_file = ctx.consensus_dir().join(format!(
+            "spec-{}_2025-10-19T{:02}_00_00Z_gemini.json",
+            stage_name,
+            12 + index
+        ));
 
         let content = std::fs::read_to_string(&consensus_file).unwrap();
         let data: serde_json::Value = serde_json::from_str(&content).unwrap();
@@ -678,20 +751,28 @@ fn w11_multi_stage_progression() {
 
         // Write consensus evidence for this stage
         let stage_name = format!("{:?}", stage).to_lowercase();
-        let consensus_file = ctx.consensus_dir()
-            .join(format!("spec-{}_2025-10-19T{:02}_00_00Z_gemini.json", stage_name, 14 + index));
+        let consensus_file = ctx.consensus_dir().join(format!(
+            "spec-{}_2025-10-19T{:02}_00_00Z_gemini.json",
+            stage_name,
+            14 + index
+        ));
         std::fs::write(
             &consensus_file,
             json!({
                 "agent": "gemini",
                 "stage": stage_name,
                 "timestamp": format!("2025-10-19T{:02}:00:00Z", 14 + index)
-            }).to_string()
-        ).unwrap();
+            })
+            .to_string(),
+        )
+        .unwrap();
 
         // Write guardrail evidence
-        let guardrail_file = ctx.commands_dir()
-            .join(format!("spec-{}_2025-10-19T{:02}_00_00Z.json", stage_name, 14 + index));
+        let guardrail_file = ctx.commands_dir().join(format!(
+            "spec-{}_2025-10-19T{:02}_00_00Z.json",
+            stage_name,
+            14 + index
+        ));
         std::fs::write(
             &guardrail_file,
             json!({
@@ -699,8 +780,10 @@ fn w11_multi_stage_progression() {
                 "stage": stage_name,
                 "status": "passed",
                 "timestamp": format!("2025-10-19T{:02}:00:00Z", 14 + index)
-            }).to_string()
-        ).unwrap();
+            })
+            .to_string(),
+        )
+        .unwrap();
 
         // Advance to next stage (except on last iteration)
         if index < stages.len() - 1 {
@@ -741,7 +824,9 @@ fn w12_stage_rollback_on_failure() {
     let initial_index = state.current_index;
 
     // Write failed consensus evidence
-    let consensus_file = ctx.consensus_dir().join("spec-tasks_2025-10-19T15_00_00Z_claude.json");
+    let consensus_file = ctx
+        .consensus_dir()
+        .join("spec-tasks_2025-10-19T15_00_00Z_claude.json");
     std::fs::write(
         &consensus_file,
         json!({
@@ -750,11 +835,15 @@ fn w12_stage_rollback_on_failure() {
             "status": "failed",
             "error": "Consensus failed - insufficient agreement",
             "timestamp": "2025-10-19T15:00:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Write failed guardrail evidence
-    let guardrail_file = ctx.commands_dir().join("spec-tasks_2025-10-19T15_00_00Z.json");
+    let guardrail_file = ctx
+        .commands_dir()
+        .join("spec-tasks_2025-10-19T15_00_00Z.json");
     std::fs::write(
         &guardrail_file,
         json!({
@@ -763,8 +852,10 @@ fn w12_stage_rollback_on_failure() {
             "status": "failed",
             "baseline": {"status": "failed"},
             "timestamp": "2025-10-19T15:00:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Simulate rollback - state stays at same stage, doesn't advance
     // In real implementation, handler would detect failure and not advance
@@ -792,7 +883,9 @@ fn w13_evidence_cleanup_on_abort() {
     let ctx = IntegrationTestContext::new("SPEC-W13-001").unwrap();
 
     // Create partial evidence (simulate interrupted stage)
-    let consensus_file = ctx.consensus_dir().join("spec-plan_2025-10-19T16_00_00Z_gemini.json");
+    let consensus_file = ctx
+        .consensus_dir()
+        .join("spec-plan_2025-10-19T16_00_00Z_gemini.json");
     std::fs::write(
         &consensus_file,
         json!({
@@ -800,8 +893,10 @@ fn w13_evidence_cleanup_on_abort() {
             "stage": "plan",
             "status": "partial",
             "timestamp": "2025-10-19T16:00:00Z"
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Verify partial evidence exists
     assert_eq!(ctx.count_consensus_files(), 1);
@@ -814,9 +909,7 @@ fn w13_evidence_cleanup_on_abort() {
     assert!(!consensus_file.exists());
 
     // Verify clean state - no partial artifacts remain
-    let consensus_dir_empty = std::fs::read_dir(ctx.consensus_dir())
-        .unwrap()
-        .count() == 0;
+    let consensus_dir_empty = std::fs::read_dir(ctx.consensus_dir()).unwrap().count() == 0;
     assert!(consensus_dir_empty);
 }
 
@@ -832,8 +925,11 @@ fn w14_state_recovery_after_crash() {
 
     for (index, stage) in stages_completed.iter().enumerate() {
         let stage_name = format!("{:?}", stage).to_lowercase();
-        let consensus_file = ctx.consensus_dir()
-            .join(format!("spec-{}_2025-10-19T{:02}_00_00Z_gemini.json", stage_name, 17 + index));
+        let consensus_file = ctx.consensus_dir().join(format!(
+            "spec-{}_2025-10-19T{:02}_00_00Z_gemini.json",
+            stage_name,
+            17 + index
+        ));
 
         std::fs::write(
             &consensus_file,
@@ -842,8 +938,10 @@ fn w14_state_recovery_after_crash() {
                 "stage": stage_name,
                 "state_index": index,
                 "timestamp": format!("2025-10-19T{:02}:00:00Z", 17 + index)
-            }).to_string()
-        ).unwrap();
+            })
+            .to_string(),
+        )
+        .unwrap();
     }
 
     // Simulate crash - no in-memory state exists
@@ -867,7 +965,8 @@ fn w14_state_recovery_after_crash() {
     assert_eq!(recovered_state.current_index, 2);
 
     // Verify can continue from recovered state
-    let implement_file = ctx.consensus_dir()
+    let implement_file = ctx
+        .consensus_dir()
         .join("spec-implement_2025-10-19T19_00_00Z_gemini.json");
     std::fs::write(
         &implement_file,
@@ -875,8 +974,10 @@ fn w14_state_recovery_after_crash() {
             "agent": "gemini",
             "stage": "implement",
             "recovered": true
-        }).to_string()
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     // Pipeline continues successfully after recovery
     assert_eq!(ctx.count_consensus_files(), 3); // Plan + Tasks + Implement
@@ -910,8 +1011,11 @@ fn w15_full_pipeline_completion() {
         let stage_name = format!("{:?}", stage).to_lowercase();
 
         // Write consensus evidence
-        let consensus_file = ctx.consensus_dir()
-            .join(format!("spec-{}_2025-10-19T{:02}_00_00Z_gemini.json", stage_name, 20 + index));
+        let consensus_file = ctx.consensus_dir().join(format!(
+            "spec-{}_2025-10-19T{:02}_00_00Z_gemini.json",
+            stage_name,
+            20 + index
+        ));
         std::fs::write(
             &consensus_file,
             json!({
@@ -919,12 +1023,17 @@ fn w15_full_pipeline_completion() {
                 "stage": stage_name,
                 "stage_index": index,
                 "timestamp": format!("2025-10-19T{:02}:00:00Z", 20 + index)
-            }).to_string()
-        ).unwrap();
+            })
+            .to_string(),
+        )
+        .unwrap();
 
         // Write guardrail evidence
-        let guardrail_file = ctx.commands_dir()
-            .join(format!("spec-{}_2025-10-19T{:02}_00_00Z.json", stage_name, 20 + index));
+        let guardrail_file = ctx.commands_dir().join(format!(
+            "spec-{}_2025-10-19T{:02}_00_00Z.json",
+            stage_name,
+            20 + index
+        ));
         std::fs::write(
             &guardrail_file,
             json!({
@@ -932,8 +1041,10 @@ fn w15_full_pipeline_completion() {
                 "stage": stage_name,
                 "status": "passed",
                 "timestamp": format!("2025-10-19T{:02}:00:00Z", 20 + index)
-            }).to_string()
-        ).unwrap();
+            })
+            .to_string(),
+        )
+        .unwrap();
 
         // Advance (except at last stage)
         if index < all_stages.len() - 1 {
@@ -956,8 +1067,11 @@ fn w15_full_pipeline_completion() {
 
         // Verify evidence content
         let stage_name = format!("{:?}", stage).to_lowercase();
-        let consensus_file = ctx.consensus_dir()
-            .join(format!("spec-{}_2025-10-19T{:02}_00_00Z_gemini.json", stage_name, 20 + index));
+        let consensus_file = ctx.consensus_dir().join(format!(
+            "spec-{}_2025-10-19T{:02}_00_00Z_gemini.json",
+            stage_name,
+            20 + index
+        ));
         let content = std::fs::read_to_string(&consensus_file).unwrap();
         let data: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(data["stage_index"], index);
