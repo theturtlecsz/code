@@ -208,19 +208,37 @@ pub async fn pin_constitution_to_ace(
 }
 
 /// Synchronous wrapper for pin_constitution_to_ace
+///
+/// Spawns async task and returns immediately (fire-and-forget).
+/// Result is logged but not returned to caller.
 pub fn pin_constitution_to_ace_sync(
     config: &AceConfig,
     repo_root: String,
     branch: String,
     bullets: Vec<ConstitutionBullet>,
 ) -> Result<usize, String> {
+    let bullet_count = bullets.len();
+
+    // Clone config for move into async task
+    let config = config.clone();
+
     // Check if we're on a tokio runtime
     match tokio::runtime::Handle::try_current() {
         Ok(handle) => {
-            // Block on async call
-            handle.block_on(async {
-                pin_constitution_to_ace(config, repo_root, branch, bullets).await
-            })
+            // Spawn async task (don't block - we're already on runtime)
+            handle.spawn(async move {
+                match pin_constitution_to_ace(&config, repo_root, branch, bullets).await {
+                    Ok(pinned) => {
+                        info!("ACE: Pinned {} bullets to playbook", pinned);
+                    }
+                    Err(e) => {
+                        warn!("ACE pinning failed: {}", e);
+                    }
+                }
+            });
+
+            // Return estimated count immediately
+            Ok(bullet_count)
         }
         Err(_) => {
             debug!("ACE pinning skipped: not on tokio runtime");
