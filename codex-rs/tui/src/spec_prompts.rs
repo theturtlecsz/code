@@ -236,7 +236,7 @@ fn model_metadata(stage: SpecStage, agent: SpecAgent) -> Vec<(String, String)> {
     ]
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SpecStage {
     Plan,
     Tasks,

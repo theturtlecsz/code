@@ -13,22 +13,22 @@ use std::path::{Path, PathBuf};
 pub enum SpecModification {
     /// Add a new requirement to spec.md
     AddRequirement {
-        section: String,           // "Objectives", "Acceptance Criteria", etc.
+        section: String, // "Objectives", "Acceptance Criteria", etc.
         requirement_text: String,
         position: InsertPosition,
     },
 
     /// Update an existing requirement
     UpdateRequirement {
-        search_text: String,       // Text to find
-        replacement_text: String,  // New text
+        search_text: String,      // Text to find
+        replacement_text: String, // New text
     },
 
     /// Add a new section to the document
     AddSection {
         section_title: String,
         content: String,
-        after_section: Option<String>,  // Insert after this section
+        after_section: Option<String>, // Insert after this section
     },
 
     /// Replace all occurrences of a term (for terminology fixes)
@@ -39,10 +39,7 @@ pub enum SpecModification {
     },
 
     /// Append text to existing section
-    AppendToSection {
-        section: String,
-        text: String,
-    },
+    AppendToSection { section: String, text: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -85,18 +82,17 @@ pub fn apply_modification(
     modification: &SpecModification,
 ) -> Result<ModificationOutcome> {
     // 1. Read original file
-    let original_content = fs::read_to_string(file_path).map_err(|e| {
-        SpecKitError::FileRead {
-            path: file_path.to_path_buf(),
-            source: e,
-        }
+    let original_content = fs::read_to_string(file_path).map_err(|e| SpecKitError::FileRead {
+        path: file_path.to_path_buf(),
+        source: e,
     })?;
 
     // 2. Create backup
     let backup_path = create_backup(file_path, &original_content)?;
 
     // 3. Apply modification
-    let (modified_content, changes) = apply_modification_to_content(&original_content, modification)?;
+    let (modified_content, changes) =
+        apply_modification_to_content(&original_content, modification)?;
 
     // 4. Write modified content
     fs::write(file_path, &modified_content).map_err(|e| SpecKitError::FileWrite {
@@ -149,7 +145,12 @@ fn apply_modification_to_content(
             section_title,
             content: section_content,
             after_section,
-        } => add_section_to_content(content, section_title, section_content, after_section.as_deref()),
+        } => add_section_to_content(
+            content,
+            section_title,
+            section_content,
+            after_section.as_deref(),
+        ),
 
         SpecModification::ReplaceTerminology {
             old_term,
@@ -197,7 +198,9 @@ fn add_requirement_to_content(
             // Find first line after section header
             lines
                 .iter()
-                .position(|l| l.starts_with("##") && l.to_lowercase().contains(&section.to_lowercase()))
+                .position(|l| {
+                    l.starts_with("##") && l.to_lowercase().contains(&section.to_lowercase())
+                })
                 .map(|idx| idx + 1)
                 .unwrap_or(0)
         }
@@ -288,7 +291,7 @@ fn add_section_to_content(
     for (idx, line) in lines.iter().enumerate() {
         new_lines.push(line.to_string());
         if idx + 1 == insert_at {
-            new_lines.push(String::new());  // Blank line
+            new_lines.push(String::new()); // Blank line
             new_lines.push(format!("## {}", section_title));
             new_lines.push(String::new());
             new_lines.push(section_content.to_string());
@@ -387,9 +390,8 @@ fn append_to_section_in_content(
         section_end_line = Some(lines.len());
     }
 
-    let insert_at = section_end_line.ok_or_else(|| {
-        SpecKitError::from_string(format!("Section '{}' not found", section))
-    })?;
+    let insert_at = section_end_line
+        .ok_or_else(|| SpecKitError::from_string(format!("Section '{}' not found", section)))?;
 
     for (idx, line) in lines.iter().enumerate() {
         new_lines.push(line.to_string());

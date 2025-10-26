@@ -15,6 +15,7 @@ use std::time::Duration;
 
 use crate::app::ChatWidgetArgs;
 use crate::bottom_pane::chrome_selection_view::ChromeLaunchOption;
+use crate::chatwidget::spec_kit::{QualityGateBrokerResult, QualityGateValidationResult};
 use crate::slash_command::SlashCommand;
 use codex_protocol::models::ResponseItem;
 use std::fmt;
@@ -114,6 +115,17 @@ pub(crate) enum AppEvent {
     /// Forward an `Op` to the Agent. Using an `AppEvent` for this avoids
     /// bubbling channels through layers of widgets.
     CodexOp(codex_core::protocol::Op),
+
+    /// Async completion from the quality gate broker, delivering agent payloads
+    /// retrieved via local-memory without blocking the TUI thread.
+    SpecKitQualityGateResults {
+        broker_result: QualityGateBrokerResult,
+    },
+
+    /// Async completion from the GPT-5 validation broker fetch.
+    SpecKitQualityGateValidationResults {
+        broker_result: QualityGateValidationResult,
+    },
 
     /// Dispatch a recognized slash command from the UI (composer) to the app
     /// layer so it can be handled centrally. Includes the full command text.

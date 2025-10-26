@@ -15,7 +15,7 @@ pub mod types;
 
 // Phase 1: Core types and error handling
 pub use error::{Result, SpecKitError};
-pub use types::{SpecStage, SpecAgent};
+pub use types::{SpecAgent, SpecStage};
 
 /// Spec-Kit version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

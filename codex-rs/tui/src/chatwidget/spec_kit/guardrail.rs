@@ -394,8 +394,10 @@ pub fn read_latest_spec_ops_telemetry(
         path: path.clone(),
         source: e,
     })?;
-    let value: Value =
-        serde_json::from_str(&buf).map_err(|e| SpecKitError::JsonParse { path: path.clone(), source: e })?;
+    let value: Value = serde_json::from_str(&buf).map_err(|e| SpecKitError::JsonParse {
+        path: path.clone(),
+        source: e,
+    })?;
     Ok((path, value))
 }
 

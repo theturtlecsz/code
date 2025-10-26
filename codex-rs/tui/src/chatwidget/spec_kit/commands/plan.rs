@@ -2,8 +2,8 @@
 //!
 //! FORK-SPECIFIC (just-every/code): Spec-kit multi-agent automation framework
 
-use super::super::command_registry::SpecKitCommand;
 use super::super::super::ChatWidget;
+use super::super::command_registry::SpecKitCommand;
 
 /// Command: /speckit.plan
 /// Creates work breakdown with multi-agent consensus
@@ -28,9 +28,7 @@ impl SpecKitCommand for SpecKitPlanCommand {
     }
 
     fn expand_prompt(&self, args: &str) -> Option<String> {
-        Some(
-            codex_core::slash_commands::format_subagent_command("plan", args, None, None).prompt,
-        )
+        Some(codex_core::slash_commands::format_subagent_command("plan", args, None, None).prompt)
     }
 
     fn requires_args(&self) -> bool {
@@ -60,9 +58,7 @@ impl SpecKitCommand for SpecKitTasksCommand {
     }
 
     fn expand_prompt(&self, args: &str) -> Option<String> {
-        Some(
-            codex_core::slash_commands::format_subagent_command("tasks", args, None, None).prompt,
-        )
+        Some(codex_core::slash_commands::format_subagent_command("tasks", args, None, None).prompt)
     }
 
     fn requires_args(&self) -> bool {
@@ -158,9 +154,7 @@ impl SpecKitCommand for SpecKitAuditCommand {
     }
 
     fn expand_prompt(&self, args: &str) -> Option<String> {
-        Some(
-            codex_core::slash_commands::format_subagent_command("audit", args, None, None).prompt,
-        )
+        Some(codex_core::slash_commands::format_subagent_command("audit", args, None, None).prompt)
     }
 
     fn requires_args(&self) -> bool {
@@ -190,9 +184,7 @@ impl SpecKitCommand for SpecKitUnlockCommand {
     }
 
     fn expand_prompt(&self, args: &str) -> Option<String> {
-        Some(
-            codex_core::slash_commands::format_subagent_command("unlock", args, None, None).prompt,
-        )
+        Some(codex_core::slash_commands::format_subagent_command("unlock", args, None, None).prompt)
     }
 
     fn requires_args(&self) -> bool {

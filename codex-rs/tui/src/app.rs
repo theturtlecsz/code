@@ -1,7 +1,7 @@
 use crate::app_event::{AppEvent, TerminalRunController, TerminalRunEvent};
 use crate::app_event_sender::AppEventSender;
-use crate::chatwidget::{ChatWidget, GhostState};
 use crate::chatwidget::spec_kit;
+use crate::chatwidget::{ChatWidget, GhostState};
 use crate::exec_command::strip_bash_lc_and_escape;
 use crate::file_search::FileSearchManager;
 use crate::get_git_diff::get_git_diff;
@@ -101,7 +101,9 @@ pub(crate) struct App<'a> {
 
     /// FORK-SPECIFIC (just-every/code): Shared MCP manager for local-memory
     /// All ChatWidgets share this single instance to prevent process multiplication
-    mcp_manager: Arc<tokio::sync::Mutex<Option<Arc<codex_core::mcp_connection_manager::McpConnectionManager>>>>,
+    mcp_manager: Arc<
+        tokio::sync::Mutex<Option<Arc<codex_core::mcp_connection_manager::McpConnectionManager>>>,
+    >,
 
     file_search: FileSearchManager,
 
@@ -188,7 +190,9 @@ pub(crate) struct ChatWidgetArgs {
     enable_perf: bool,
     resume_picker: bool,
     latest_upgrade_version: Option<String>,
-    mcp_manager: Arc<tokio::sync::Mutex<Option<Arc<codex_core::mcp_connection_manager::McpConnectionManager>>>>,
+    mcp_manager: Arc<
+        tokio::sync::Mutex<Option<Arc<codex_core::mcp_connection_manager::McpConnectionManager>>>,
+    >,
 }
 
 // Custom Debug impl that skips non-debuggable MCP manager
@@ -336,9 +340,9 @@ impl App<'_> {
             let app_event_tx_for_mcp = app_event_tx.clone();
 
             tokio::spawn(async move {
-                use std::collections::{HashMap, HashSet};
                 use codex_core::config_types::McpServerConfig;
                 use codex_core::mcp_connection_manager::McpConnectionManager;
+                use std::collections::{HashMap, HashSet};
 
                 let mcp_config = HashMap::from([(
                     "local-memory".to_string(),
@@ -347,7 +351,7 @@ impl App<'_> {
                         args: vec![],
                         env: None,
                         startup_timeout_ms: Some(5000), // 5 second timeout
-                    }
+                    },
                 )]);
 
                 match McpConnectionManager::new(mcp_config, HashSet::new()).await {
@@ -945,6 +949,16 @@ impl App<'_> {
                 None => break 'main,
             };
             match event {
+                AppEvent::SpecKitQualityGateResults { broker_result } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        spec_kit::handler::on_quality_gate_broker_result(widget, broker_result);
+                    }
+                }
+                AppEvent::SpecKitQualityGateValidationResults { broker_result } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        spec_kit::handler::on_quality_gate_validation_result(widget, broker_result);
+                    }
+                }
                 AppEvent::InsertHistory(mut lines) => match &mut self.app_state {
                     AppState::Chat { widget } => {
                         // Coalesce consecutive InsertHistory events to reduce redraw churn.
@@ -1691,7 +1705,11 @@ impl App<'_> {
                 AppEvent::DispatchCommand(command, command_text) => {
                     // === FORK-SPECIFIC: Try spec-kit registry first ===
                     if let AppState::Chat { widget } = &mut self.app_state {
-                        if spec_kit::try_dispatch_spec_kit_command(widget, &command_text, &self.app_event_tx) {
+                        if spec_kit::try_dispatch_spec_kit_command(
+                            widget,
+                            &command_text,
+                            &self.app_event_tx,
+                        ) {
                             continue; // Command handled by spec-kit registry
                         }
                     }
@@ -2656,7 +2674,10 @@ impl App<'_> {
                 }
 
                 // === FORK-SPECIFIC: Quality gate events (T85) ===
-                AppEvent::QualityGateAnswersSubmitted { checkpoint, answers } => {
+                AppEvent::QualityGateAnswersSubmitted {
+                    checkpoint,
+                    answers,
+                } => {
                     if let AppState::Chat { widget } = &mut self.app_state {
                         // Delegate to quality gate handler in spec_kit
                         spec_kit::on_quality_gate_answers(widget, checkpoint, answers);
@@ -2667,8 +2688,7 @@ impl App<'_> {
                         // Delegate to quality gate handler
                         spec_kit::on_quality_gate_cancelled(widget, checkpoint);
                     }
-                }
-                // === END FORK-SPECIFIC ===
+                } // === END FORK-SPECIFIC ===
             }
         }
         if self.alt_screen_active {

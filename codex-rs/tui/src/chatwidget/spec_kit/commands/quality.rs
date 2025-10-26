@@ -2,8 +2,8 @@
 //!
 //! FORK-SPECIFIC (just-every/code): Spec-kit multi-agent automation framework
 
-use super::super::command_registry::SpecKitCommand;
 use super::super::super::ChatWidget;
+use super::super::command_registry::SpecKitCommand;
 
 /// Command: /speckit.clarify
 /// Structured ambiguity resolution
@@ -28,8 +28,7 @@ impl SpecKitCommand for SpecKitClarifyCommand {
 
     fn expand_prompt(&self, args: &str) -> Option<String> {
         Some(
-            codex_core::slash_commands::format_subagent_command("clarify", args, None, None)
-                .prompt,
+            codex_core::slash_commands::format_subagent_command("clarify", args, None, None).prompt,
         )
     }
 
@@ -61,8 +60,7 @@ impl SpecKitCommand for SpecKitAnalyzeCommand {
 
     fn expand_prompt(&self, args: &str) -> Option<String> {
         Some(
-            codex_core::slash_commands::format_subagent_command("analyze", args, None, None)
-                .prompt,
+            codex_core::slash_commands::format_subagent_command("analyze", args, None, None).prompt,
         )
     }
 
