@@ -9,7 +9,7 @@ Your `~/.code/config.toml` now has:
 enabled = true
 mode = "auto"
 slice_size = 8
-db_path = "~/.code/ace/playbooks_v1.sqlite3"
+db_path = "~/.code/ace/playbooks_normalized.sqlite3"
 use_for = ["speckit.constitution", "speckit.specify", "speckit.tasks", "speckit.implement", "speckit.test"]
 complex_task_files_threshold = 4
 rerun_window_minutes = 30
@@ -89,7 +89,7 @@ INFO ACE pin 145ms pinned=8 bullets
 
 ### Check Database Created
 ```bash
-ls -lh ~/.code/ace/playbooks_v1.sqlite3
+ls -lh ~/.code/ace/playbooks_normalized.sqlite3
 # Should exist after first use
 ```
 

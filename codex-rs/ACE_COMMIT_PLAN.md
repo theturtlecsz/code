@@ -165,7 +165,7 @@ tail -f ~/.code/logs/codex-tui.log | grep ACE
 /speckit.implement SPEC-KIT-069
 
 # 4. Monitor learning
-sqlite3 ~/.code/ace/playbooks_v1.sqlite3 "SELECT COUNT(*) FROM bullets;"
+sqlite3 ~/.code/ace/playbooks_normalized.sqlite3 "SELECT COUNT(*) FROM bullets;"
 ```
 
 ### Phase 3: Continue SPEC-KIT-070/071 (Parallel)

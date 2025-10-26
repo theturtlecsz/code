@@ -3,7 +3,7 @@
 ## 🎯 What ACE Is
 
 **ACE (Agentic Context Engine)** is a **data-only** local strategy memory system:
-- SQLite database at `~/.code/ace/playbooks_v1.sqlite3`
+- SQLite database at `~/.code/ace/playbooks_normalized.sqlite3`
 - MCP server for data access (does NOT call LLMs)
 - Stores learned heuristics from spec-kit execution outcomes
 - CODE orchestrator calls LLMs using YOUR API keys
@@ -167,7 +167,7 @@ INFO ACE learn 143ms scope=implement added=1 demoted=0 promoted=2
 
 ```bash
 # Verify SQLite database created
-ls -lh ~/.code/ace/playbooks_v1.sqlite3
+ls -lh ~/.code/ace/playbooks_normalized.sqlite3
 
 # Should exist with 0600 permissions
 # Size grows as ACE learns
@@ -252,7 +252,7 @@ python -m ace_mcp_server --help
 ### No bullets appearing in prompts
 ```bash
 # Check if ACE has any bullets
-sqlite3 ~/.code/ace/playbooks_v1.sqlite3 "SELECT COUNT(*) FROM bullets;"
+sqlite3 ~/.code/ace/playbooks_normalized.sqlite3 "SELECT COUNT(*) FROM bullets;"
 
 # Pin constitution first
 /speckit.constitution
@@ -334,7 +334,7 @@ args = ["-m", "ace_mcp_server"]
 enabled = true
 mode = "auto"  # auto|always|never
 slice_size = 8
-db_path = "~/.code/ace/playbooks_v1.sqlite3"
+db_path = "~/.code/ace/playbooks_normalized.sqlite3"
 use_for = ["speckit.specify", "speckit.tasks", "speckit.implement"]
 complex_task_files_threshold = 4
 rerun_window_minutes = 30

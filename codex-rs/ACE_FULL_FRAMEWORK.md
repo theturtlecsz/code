@@ -317,7 +317,7 @@ INFO ACE cycle complete: 1850ms, 3 patterns, +2 bullets
 
 ```bash
 # Check initial playbook
-sqlite3 ~/.code/ace/playbooks_v1.sqlite3 "SELECT COUNT(*) FROM bullets;"
+sqlite3 ~/.code/ace/playbooks_normalized.sqlite3 "SELECT COUNT(*) FROM bullets;"
 # → 8 (from constitution)
 ```
 
@@ -325,7 +325,7 @@ sqlite3 ~/.code/ace/playbooks_v1.sqlite3 "SELECT COUNT(*) FROM bullets;"
 
 ```bash
 # Check growth
-sqlite3 ~/.code/ace/playbooks_v1.sqlite3 "
+sqlite3 ~/.code/ace/playbooks_normalized.sqlite3 "
 SELECT scope, COUNT(*), AVG(score)
 FROM bullets
 GROUP BY scope;"
@@ -339,7 +339,7 @@ GROUP BY scope;"
 
 ```bash
 # Check high-value bullets
-sqlite3 ~/.code/ace/playbooks_v1.sqlite3 "
+sqlite3 ~/.code/ace/playbooks_normalized.sqlite3 "
 SELECT text, score, pinned
 FROM bullets
 WHERE scope='implement'
@@ -528,7 +528,7 @@ INFO ACE cycle complete: 1850ms, 3 patterns, +2 bullets
 
 ```bash
 # Weekly playbook snapshot
-sqlite3 ~/.code/ace/playbooks_v1.sqlite3 "
+sqlite3 ~/.code/ace/playbooks_normalized.sqlite3 "
 SELECT
   scope,
   COUNT(*) as total_bullets,
@@ -547,7 +547,7 @@ GROUP BY scope;"
 
 ```bash
 # Show most valuable bullets
-sqlite3 ~/.code/ace/playbooks_v1.sqlite3 "
+sqlite3 ~/.code/ace/playbooks_normalized.sqlite3 "
 SELECT text, score, kind
 FROM bullets
 WHERE scope='implement'

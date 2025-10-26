@@ -241,7 +241,7 @@ The ACE MCP server is:
 1. Use as configured
 2. Run `/speckit.constitution`
 3. Do 10 spec-kit runs
-4. Check `~/.code/ace/playbooks_v1.sqlite3` - are bullets actually improving?
+4. Check `~/.code/ace/playbooks_normalized.sqlite3` - are bullets actually improving?
 5. Compare prompts with/without ACE
 
 **Then decide**: Keep the complexity or simplify?

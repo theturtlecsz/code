@@ -1111,7 +1111,7 @@ fn default_ace_slice_size() -> usize {
 }
 
 fn default_ace_db_path() -> String {
-    "~/.code/ace/playbooks_v1.sqlite3".to_string()
+    "~/.code/ace/playbooks_normalized.sqlite3".to_string()
 }
 
 fn default_ace_use_for() -> Vec<String> {
