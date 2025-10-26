@@ -195,14 +195,19 @@ async fn call_ace_tool(
         return AceResult::Disabled;
     };
 
-    let params = CallToolRequestParams {
-        name: tool_name.to_string(),
-        arguments: Some(Value::Object(
+    // ACE FastMCP expects arguments wrapped in "input" field
+    let wrapped_args = serde_json::json!({
+        "input": Value::Object(
             arguments
                 .into_iter()
                 .map(|(k, v)| (k, v))
                 .collect(),
-        )),
+        )
+    });
+
+    let params = CallToolRequestParams {
+        name: tool_name.to_string(),
+        arguments: Some(wrapped_args),
     };
 
     match client
