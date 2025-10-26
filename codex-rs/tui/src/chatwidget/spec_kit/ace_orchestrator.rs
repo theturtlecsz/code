@@ -66,12 +66,11 @@ async fn call_llm_for_ace(prompt: String) -> Result<String, String> {
     }
 }
 
-/// Synchronous wrapper for call_llm_for_ace
+/// Synchronous wrapper for call_llm_for_ace (NOT USED - would panic)
+#[allow(dead_code)]
 fn call_llm_for_ace_sync(prompt: String) -> Result<String, String> {
-    match tokio::runtime::Handle::try_current() {
-        Ok(handle) => handle.block_on(call_llm_for_ace(prompt)),
-        Err(_) => Err("Not on tokio runtime".to_string()),
-    }
+    // Cannot use block_on when already on tokio runtime
+    Err("Cannot block_on from within tokio runtime".to_string())
 }
 
 /// Run full ACE reflection-curation cycle
@@ -200,6 +199,9 @@ pub async fn run_ace_cycle(
 }
 
 /// Synchronous wrapper for run_ace_cycle
+///
+/// Spawns async task and returns immediately (fire-and-forget).
+/// Logs results but doesn't wait for completion.
 pub fn run_ace_cycle_sync(
     config: &AceConfig,
     repo_root: String,
@@ -215,15 +217,49 @@ pub fn run_ace_cycle_sync(
     let task_title = task_title.to_string();
 
     match tokio::runtime::Handle::try_current() {
-        Ok(handle) => handle.block_on(run_ace_cycle(
-            &config,
-            repo_root,
-            branch,
-            &scope,
-            &task_title,
-            feedback,
-            bullets_used_ids,
-        )),
+        Ok(handle) => {
+            // Spawn async task (don't block - already on runtime)
+            handle.spawn(async move {
+                match run_ace_cycle(
+                    &config,
+                    repo_root,
+                    branch,
+                    &scope,
+                    &task_title,
+                    feedback,
+                    bullets_used_ids,
+                )
+                .await
+                {
+                    Ok(result) => {
+                        info!(
+                            "ACE cycle complete: {}ms, {} patterns, +{} bullets",
+                            result.elapsed_ms,
+                            result.reflection.patterns.len(),
+                            result.bullets_added
+                        );
+                    }
+                    Err(e) => {
+                        warn!("ACE cycle failed: {}", e);
+                    }
+                }
+            });
+
+            // Return dummy result (actual work happens async)
+            Ok(AceCycleResult {
+                reflection: super::ace_reflector::ReflectionResult {
+                    patterns: vec![],
+                    successes: vec![],
+                    failures: vec![],
+                    recommendations: vec![],
+                    summary: "Processing async...".to_string(),
+                },
+                curation: None,
+                bullets_added: 0,
+                bullets_deprecated: 0,
+                elapsed_ms: 0,
+            })
+        }
         Err(_) => Err("Not on tokio runtime".to_string()),
     }
 }

@@ -168,69 +168,11 @@ pub fn inject_ace_section(
 
     let branch = branch.unwrap_or_else(|| "main".to_string());
 
-    // Fetch playbook slice (blocking on async call)
-    let bullets = match tokio::runtime::Handle::try_current() {
-        Ok(handle) => {
-            handle.block_on(async {
-                ace_client::playbook_slice(
-                    repo_root.clone(),
-                    branch.clone(),
-                    scope.to_string(),
-                    config.slice_size,
-                    false, // don't include neutral by default
-                )
-                .await
-            })
-        }
-        Err(_) => {
-            warn!("ACE injection failed: not on tokio runtime");
-            return prompt;
-        }
-    };
-
-    // Handle result
-    let response = match bullets {
-        AceResult::Ok(resp) => resp,
-        AceResult::Disabled => {
-            debug!("ACE disabled, skipping injection");
-            return prompt;
-        }
-        AceResult::Error(e) => {
-            warn!("ACE playbook slice failed: {}", e);
-            return prompt;
-        }
-    };
-
-    // Select and format bullets
-    let selected = select_bullets(response.bullets, config.slice_size);
-    let (ace_section, _bullet_ids) = format_ace_section(&selected);
-
-    // TODO: Store bullet_ids in context for later use in learning
-    // For now, learning will receive empty bullet_ids_used array
-
-    if ace_section.is_empty() {
-        debug!("No ACE bullets to inject for scope: {}", scope);
-        return prompt;
-    }
-
-    // Inject section before <task> section
-    if let Some(task_pos) = prompt.find("<task>") {
-        prompt.insert_str(task_pos, &ace_section);
-        debug!(
-            "Injected {} ACE bullets for scope: {}",
-            selected.len(),
-            scope
-        );
-    } else {
-        // Fallback: append at the end
-        prompt.push_str("\n\n");
-        prompt.push_str(&ace_section);
-        debug!(
-            "Appended {} ACE bullets (no <task> marker found)",
-            selected.len()
-        );
-    }
-
+    // Note: Cannot use block_on when already on tokio runtime (TUI context)
+    // For now, skip ACE injection in sync contexts
+    // TODO: Make prompt assembly async or use channels
+    warn!("ACE injection skipped: cannot block_on from within tokio runtime");
+    warn!("This is a known limitation - ACE injection needs async prompt assembly");
     prompt
 }
 
