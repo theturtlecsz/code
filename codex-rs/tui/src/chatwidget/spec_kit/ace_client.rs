@@ -244,7 +244,7 @@ pub async fn playbook_slice(
     args.insert("k".to_string(), Value::Number(k.into()));
     args.insert("include_neutral".to_string(), Value::Bool(include_neutral));
 
-    match call_ace_tool("ace.playbook.slice", args).await {
+    match call_ace_tool("playbook_slice", args).await {
         AceResult::Ok(result) => {
             // Parse the result content
             match parse_tool_result::<PlaybookSliceResponse>(&result) {
@@ -296,7 +296,7 @@ pub async fn learn(
         ),
     );
 
-    match call_ace_tool("ace.learn", args).await {
+    match call_ace_tool("learn", args).await {
         AceResult::Ok(result) => match parse_tool_result::<LearnResponse>(&result) {
             Ok(response) => {
                 info!(
@@ -336,7 +336,7 @@ pub async fn pin(
         Value::Array(bullets.into_iter().map(Value::String).collect()),
     );
 
-    match call_ace_tool("ace.playbook.pin", args).await {
+    match call_ace_tool("playbook_pin", args).await {
         AceResult::Ok(result) => match parse_tool_result::<PinResponse>(&result) {
             Ok(response) => {
                 info!("ACE pinned {} bullets", response.pinned_added);
