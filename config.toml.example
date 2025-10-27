@@ -33,6 +33,8 @@ command = "gemini"
 enabled = true
 read-only = false
 description = "Google Gemini AI assistant"
+# Primary experimental model + fallback for CLI coverage
+env = { GEMINI_PRIMARY_MODEL = "gemini-2.0-flash-thinking-exp-01-21", GEMINI_FALLBACK_MODEL = "gemini-2.5-flash" }
 args = ["-y"]
 
 [[agents]]
