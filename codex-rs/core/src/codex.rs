@@ -5360,6 +5360,23 @@ fn write_agent_file(dir: &Path, filename: &str, content: &str) -> Result<PathBuf
     Ok(path)
 }
 
+/// Write meta.json alongside agent outputs to help "collector" jobs discover
+/// batch membership and model without querying in-memory state.
+fn write_agent_meta(dir: &Path, agent: &crate::agent_tool::Agent) -> Result<PathBuf, String> {
+    let meta_path = dir.join("meta.json");
+    let meta = serde_json::json!({
+        "agent_id": agent.id,
+        "batch_id": agent.batch_id,
+        "model": agent.model,
+        "created_at": agent.created_at.to_rfc3339(),
+        "read_only": agent.read_only,
+        "worktree_path": agent.worktree_path,
+    });
+    std::fs::write(&meta_path, serde_json::to_string_pretty(&meta).unwrap_or_default())
+        .map_err(|e| format!("Failed to write {}: {}", meta_path.display(), e))?;
+    Ok(meta_path)
+}
+
 const AGENT_PREVIEW_MAX_BYTES: usize = 32 * 1024; // 32 KiB
 
 fn preview_first_n_lines(s: &str, n: usize) -> (String, usize) {
@@ -7284,6 +7301,11 @@ async fn handle_check_agent_status(
                                     };
                                 }
                             };
+                            // Best-effort: write/update meta.json for discovery
+                            if let Some(agent) = AGENT_MANAGER.read().await.get_agent(&params.agent_id)
+                            {
+                                let _ = write_agent_meta(&dir, &agent);
+                            }
                             // Re-acquire manager to get fresh progress after potential delay
                             let manager = AGENT_MANAGER.read().await;
                             if let Some(agent) = manager.get_agent(&params.agent_id) {
@@ -7389,6 +7411,8 @@ async fn handle_get_agent_result(
                             }
                         };
 
+                        // Best-effort: write/update meta.json for discovery
+                        let _ = write_agent_meta(&dir, &agent);
                         match agent.status {
                             AgentStatus::Completed => {
                                 let output_text = agent.result.unwrap_or_default();
@@ -7691,6 +7715,8 @@ async fn handle_wait_for_agent(
                             // Include output/error preview for the unseen completed agent
                             let cwd = sess.get_cwd().to_path_buf();
                             let dir = ensure_agent_dir(&cwd, &unseen.id).unwrap_or_else(|_| cwd.clone());
+                            // Best-effort: write/update meta.json for discovery
+                            let _ = write_agent_meta(&dir, &unseen);
                             let (preview_key, file_key, preview, file_path, total_lines) = match unseen.status {
                                 AgentStatus::Completed => {
                                     let text = unseen.result.clone().unwrap_or_default();

@@ -5,6 +5,7 @@
 
 use super::super::ChatWidget; // Parent module (friend access to private fields)
 use super::context::SpecKitContext; // MAINT-3 Phase 2: Trait for testable functions
+use super::consensus::{expected_agents_for_stage, parse_consensus_stage};
 use super::evidence::{EvidenceRepository, FilesystemEvidence};
 use super::state::{
     GuardrailWait, SpecAutoPhase, ValidateBeginOutcome, ValidateCompletionReason,
@@ -16,7 +17,7 @@ use crate::slash_command::{HalMode, SlashCommand};
 use crate::spec_prompts::SpecStage;
 use crate::spec_status::{SpecStatusArgs, collect_report, degraded_warning, render_dashboard};
 use chrono::Utc;
-use codex_core::protocol::InputItem;
+use codex_core::protocol::{AgentInfo, InputItem};
 use codex_core::slash_commands::format_subagent_command;
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -698,6 +699,34 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
 
     match prompt_result {
         Ok(prompt) => {
+            // SPEC-KIT-070: ACE-aligned routing — set aggregator effort per stage
+            // Estimate tokens ~ chars/4, escalate on conflict retry
+            let prior_conflict_retry = widget
+                .spec_auto_state
+                .as_ref()
+                .map(|s| s.agent_retry_count > 0)
+                .unwrap_or(false);
+
+            let routing = super::ace_route_selector::decide_stage_routing(
+                stage,
+                prompt.len(),
+                prior_conflict_retry,
+            );
+
+            // Apply aggregator effort by updating gpt_pro args in-session
+            apply_aggregator_effort(widget, routing.aggregator_effort);
+
+            // Persist notes in state for cost summary sidecar
+            if let Some(state) = widget.spec_auto_state.as_mut() {
+                state
+                    .aggregator_effort_notes
+                    .insert(stage, routing.aggregator_effort.as_str().to_string());
+                if let Some(reason) = routing.escalation_reason.as_ref() {
+                    state
+                        .escalation_reason_notes
+                        .insert(stage, reason.clone());
+                }
+            }
             let mut validate_context: Option<(ValidateRunInfo, String)> = None;
 
             if stage == SpecStage::Validate {
@@ -826,6 +855,66 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
             );
         }
     }
+}
+
+/// SPEC-KIT-070: Update aggregator (gpt_pro) reasoning effort dynamically
+fn apply_aggregator_effort(widget: &mut ChatWidget, effort: super::ace_route_selector::AggregatorEffort) {
+    let effort_str = effort.as_str();
+    // Find existing config for gpt_pro
+    let ro_default = vec![
+        "exec".into(),
+        "--sandbox".into(),
+        "read-only".into(),
+        "--skip-git-repo-check".into(),
+        "--model".into(),
+        "gpt-5-codex".into(),
+    ];
+    let wr_default = vec![
+        "exec".into(),
+        "--sandbox".into(),
+        "workspace-write".into(),
+        "--skip-git-repo-check".into(),
+        "--model".into(),
+        "gpt-5-codex".into(),
+    ];
+
+    // Build new args by taking current args and replacing/adding the effort flag
+    let (args_ro, args_wr) = {
+        let cfg = widget
+            .config
+            .agents
+            .iter()
+            .find(|a| a.name.eq_ignore_ascii_case("gpt_pro"))
+            .cloned();
+
+        fn upsert_effort(mut v: Vec<String>, effort: &str) -> Vec<String> {
+            // Remove existing effort flag if present
+            let mut i = 0;
+            while i + 1 < v.len() {
+                if v[i] == "-c" && v[i + 1].starts_with("model_reasoning_effort=") {
+                    v.remove(i + 1);
+                    v.remove(i);
+                    continue;
+                }
+                i += 1;
+            }
+            v.push("-c".into());
+            v.push(format!("model_reasoning_effort=\"{}\"", effort));
+            v
+        }
+
+        let ro = cfg
+            .as_ref()
+            .and_then(|c| c.args_read_only.clone())
+            .unwrap_or(ro_default.clone());
+        let wr = cfg
+            .as_ref()
+            .and_then(|c| c.args_write.clone())
+            .unwrap_or(wr_default.clone());
+        (upsert_effort(ro, effort_str), upsert_effort(wr, effort_str))
+    };
+
+    widget.apply_agent_update("gpt_pro", true, Some(args_ro), Some(args_wr), None);
 }
 
 pub(crate) fn schedule_degraded_follow_up(
@@ -981,6 +1070,7 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
                         retry_count + 1,
                         SPEC_AUTO_AGENT_RETRY_ATTEMPTS
                     ));
+                    state.reset_cost_tracking(current_stage);
                 }
 
                 // Re-execute the stage with retry context
@@ -1138,6 +1228,7 @@ fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                     ));
                     // Reset to Guardrail phase to re-run the stage
                     state.phase = SpecAutoPhase::Guardrail;
+                    state.reset_cost_tracking(current_stage);
                 }
 
                 // Re-trigger guardrail → agents for this stage
@@ -1186,10 +1277,13 @@ fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                     }
                 }
 
+                persist_cost_summary(widget, &spec_id);
+
                 // FORK-SPECIFIC: Reset retry counter on success
                 if let Some(state) = widget.spec_auto_state.as_mut() {
                     state.agent_retry_count = 0;
                     state.agent_retry_context = None;
+                    state.reset_cost_tracking(current_stage);
                     state.phase = SpecAutoPhase::Guardrail;
                     state.current_index += 1;
                 }
@@ -1266,6 +1360,7 @@ fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                         SPEC_AUTO_AGENT_RETRY_ATTEMPTS
                     ));
                     state.phase = SpecAutoPhase::Guardrail;
+                    state.reset_cost_tracking(current_stage);
                 }
 
                 advance_spec_auto(widget);
@@ -1304,9 +1399,93 @@ fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
     }
 }
 
-// Additional handler functions will be added here in subsequent commits
+fn persist_cost_summary(widget: &mut ChatWidget, spec_id: &str) {
+    let dir = widget.cost_summary_dir();
+    // Attach routing notes for the just-finished stage (if available)
+    if let Some(state) = widget.spec_auto_state.as_ref() {
+        if let Some(stage) = state.current_stage() {
+            let effort = state.aggregator_effort_notes.get(&stage).cloned();
+            let reason = state.escalation_reason_notes.get(&stage).cloned();
+            widget
+                .spec_cost_tracker()
+                .set_stage_routing_note(spec_id, stage, effort.as_deref(), reason.as_deref());
+        }
+    }
+    if let Err(err) = widget
+        .spec_cost_tracker()
+        .write_summary(spec_id, &dir)
+    {
+        widget.history_push(crate::history_cell::new_warning_event(format!(
+            "Failed to write cost summary for {}: {}",
+            spec_id, err
+        )));
+    }
+}
 
-use super::consensus::{expected_agents_for_stage, parse_consensus_stage};
+pub fn record_agent_costs(widget: &mut ChatWidget, agents: &[AgentInfo]) {
+    let tracker = widget.spec_cost_tracker();
+    let mut spec_id: Option<String> = None;
+    let mut stage_slot: Option<SpecStage> = None;
+    let mut to_record: Vec<&AgentInfo> = Vec::new();
+
+    {
+        let Some(state) = widget.spec_auto_state.as_mut() else {
+            return;
+        };
+        let Some(stage) = state.current_stage() else {
+            return;
+        };
+
+        let tracking_active = matches!(
+            state.phase,
+            SpecAutoPhase::ExecutingAgents { .. } | SpecAutoPhase::QualityGateExecuting { .. }
+        );
+        if !tracking_active {
+            return;
+        }
+
+        spec_id = Some(state.spec_id.clone());
+        stage_slot = Some(stage);
+
+        for info in agents {
+            let status = info.status.to_lowercase();
+            if status != "completed" && status != "failed" {
+                continue;
+            }
+
+            if state.mark_agent_cost_recorded(stage, &info.id) {
+                to_record.push(info);
+            }
+        }
+    }
+
+    let Some(spec_id) = spec_id else {
+        return;
+    };
+    let Some(stage) = stage_slot else {
+        return;
+    };
+
+    for info in to_record {
+        let model = info.model.as_deref().unwrap_or("unknown");
+        let usage = widget.last_token_usage.clone();
+        let (_cost, alert) = tracker.record_agent_call(
+            &spec_id,
+            stage,
+            model,
+            usage.input_tokens,
+            usage.output_tokens,
+        );
+
+        if let Some(alert) = alert {
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![ratatui::text::Line::from(alert.to_user_message())],
+                HistoryCellType::Notice,
+            ));
+        }
+    }
+}
+
 
 /// Handle /spec-consensus command implementation
 pub fn handle_spec_consensus_impl(widget: &mut ChatWidget, raw_args: String) {

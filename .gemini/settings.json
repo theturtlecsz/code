@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "local-memory": {
+      "command": "local-memory",
+      "args": []
+    }
+  }
+}

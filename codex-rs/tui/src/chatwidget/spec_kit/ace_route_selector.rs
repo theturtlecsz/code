@@ -247,6 +247,79 @@ impl RouteDecision {
     }
 }
 
+/// Aggregator effort levels understood by the Codex CLI
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AggregatorEffort {
+    Minimal,
+    Low,
+    Medium,
+    High,
+}
+
+impl AggregatorEffort {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AggregatorEffort::Minimal => "minimal",
+            AggregatorEffort::Low => "low",
+            AggregatorEffort::Medium => "medium",
+            AggregatorEffort::High => "high",
+        }
+    }
+}
+
+/// Routing decision for a spec stage (model/effort policy)
+#[derive(Debug, Clone)]
+pub struct StageRoutingDecision {
+    /// Aggregator effort to apply (Codex flag `-c model_reasoning_effort=…`)
+    pub aggregator_effort: AggregatorEffort,
+    /// Optional reason for escalation (stored in evidence)
+    pub escalation_reason: Option<String>,
+}
+
+/// Compute stage routing defaults and escalation based on simple signals.
+///
+/// Signals:
+/// - `stage`: current stage in the pipeline
+/// - `prompt_char_len`: approximate prompt size (proxy for input tokens)
+/// - `prior_conflict_retry`: true when we are retrying due to prior conflict
+pub fn decide_stage_routing(
+    stage: crate::spec_prompts::SpecStage,
+    prompt_char_len: usize,
+    prior_conflict_retry: bool,
+) -> StageRoutingDecision {
+    // Baseline per stage
+    let mut effort = match stage {
+        crate::spec_prompts::SpecStage::Validate
+        | crate::spec_prompts::SpecStage::Unlock => AggregatorEffort::Minimal,
+        crate::spec_prompts::SpecStage::Plan
+        | crate::spec_prompts::SpecStage::Tasks
+        | crate::spec_prompts::SpecStage::Audit
+        | crate::spec_prompts::SpecStage::Implement => AggregatorEffort::Medium,
+    };
+
+    let mut reason: Option<String> = None;
+
+    // Escalate on conflict retry
+    if prior_conflict_retry {
+        effort = AggregatorEffort::High;
+        reason = Some("retry_after_conflict".to_string());
+    }
+
+    // Size-aware hint (we still keep cheap contributors; aggregator can stay baseline)
+    // Rough 4 chars/token heuristic; ~6k tokens ≈ 24k chars.
+    if prompt_char_len >= 24_000 {
+        // Only annotate reason if we didn't already escalate for conflicts.
+        if reason.is_none() {
+            reason = Some("large_input_context".to_string());
+        }
+    }
+
+    StageRoutingDecision {
+        aggregator_effort: effort,
+        escalation_reason: reason,
+    }
+}
+
 /// Decide whether to use enhanced ACE context based on complexity heuristics
 ///
 /// NOTE: This does NOT route to an ACE LLM endpoint. ACE is data-only storage.

@@ -460,6 +460,13 @@ pub struct SpecAutoState {
 
     // SPEC-KIT-069: Validate lifecycle guard (shared across manual/auto paths)
     pub validate_lifecycle: ValidateLifecycle,
+
+    // SPEC-KIT-070: Track which agents already emitted cost entries per stage
+    pub cost_recorded_agents: HashMap<SpecStage, HashSet<String>>,
+
+    // SPEC-KIT-070: Record routing notes per stage
+    pub aggregator_effort_notes: HashMap<SpecStage, String>,
+    pub escalation_reason_notes: HashMap<SpecStage, String>,
 }
 
 impl SpecAutoState {
@@ -522,11 +529,25 @@ impl SpecAutoState {
             agent_retry_context: None,
             degraded_followups: std::collections::HashSet::new(),
             validate_lifecycle: lifecycle,
+            cost_recorded_agents: HashMap::new(),
+            aggregator_effort_notes: HashMap::new(),
+            escalation_reason_notes: HashMap::new(),
         }
     }
 
     pub fn current_stage(&self) -> Option<SpecStage> {
         self.stages.get(self.current_index).copied()
+    }
+
+    pub fn mark_agent_cost_recorded(&mut self, stage: SpecStage, agent_id: &str) -> bool {
+        self.cost_recorded_agents
+            .entry(stage)
+            .or_insert_with(HashSet::new)
+            .insert(agent_id.to_string())
+    }
+
+    pub fn reset_cost_tracking(&mut self, stage: SpecStage) {
+        self.cost_recorded_agents.remove(&stage);
     }
 
     #[allow(dead_code)]

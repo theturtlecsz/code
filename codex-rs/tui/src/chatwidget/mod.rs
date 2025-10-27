@@ -2,6 +2,8 @@
 // Made public for integration testing (T78)
 pub mod spec_kit;
 
+const SPEC_KIT_DEFAULT_BUDGET_USD: f64 = 2.0;
+
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -383,6 +385,7 @@ pub(crate) struct ChatWidget<'a> {
     initial_user_message: Option<UserMessage>,
     total_token_usage: TokenUsage,
     last_token_usage: TokenUsage,
+    pub cost_tracker: Arc<spec_kit::cost_tracker::CostTracker>,
     rate_limit_snapshot: Option<RateLimitSnapshotEvent>,
     rate_limit_warnings: RateLimitWarningState,
     rate_limit_fetch_inflight: bool,
@@ -2664,6 +2667,9 @@ impl ChatWidget<'_> {
             ),
             total_token_usage: TokenUsage::default(),
             last_token_usage: TokenUsage::default(),
+            cost_tracker: Arc::new(spec_kit::cost_tracker::CostTracker::new(
+                SPEC_KIT_DEFAULT_BUDGET_USD,
+            )),
             rate_limit_snapshot: None,
             rate_limit_warnings: RateLimitWarningState::default(),
             rate_limit_fetch_inflight: false,
@@ -2912,6 +2918,9 @@ impl ChatWidget<'_> {
             initial_user_message: None,
             total_token_usage: TokenUsage::default(),
             last_token_usage: TokenUsage::default(),
+            cost_tracker: Arc::new(spec_kit::cost_tracker::CostTracker::new(
+                SPEC_KIT_DEFAULT_BUDGET_USD,
+            )),
             rate_limit_snapshot: None,
             rate_limit_warnings: RateLimitWarningState::default(),
             rate_limit_fetch_inflight: false,
@@ -6844,6 +6853,8 @@ impl ChatWidget<'_> {
                     });
                 }
 
+                spec_kit::handler::record_agent_costs(self, &agents);
+
                 self.update_agents_terminal_state(&agents, context.clone(), task.clone());
 
                 // Store shared context and task
@@ -7030,6 +7041,18 @@ impl ChatWidget<'_> {
 
     fn request_redraw(&mut self) {
         self.app_event_tx.send(AppEvent::RequestRedraw);
+    }
+
+    pub(crate) fn spec_cost_tracker(&self) -> Arc<spec_kit::cost_tracker::CostTracker> {
+        self.cost_tracker.clone()
+    }
+
+    pub(crate) fn cost_summary_dir(&self) -> PathBuf {
+        self
+            .config
+            .cwd
+            .join(spec_kit::evidence::DEFAULT_EVIDENCE_BASE)
+            .join("costs")
     }
 
     pub(crate) fn handle_perf_command(&mut self, args: String) {

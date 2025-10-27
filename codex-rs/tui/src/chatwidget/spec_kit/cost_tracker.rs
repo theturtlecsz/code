@@ -246,6 +246,8 @@ where
 pub struct CostTracker {
     specs: Arc<Mutex<HashMap<String, SpecCostTracker>>>,
     default_budget: f64,
+    // SPEC-KIT-070: Optional stage routing metadata per SPEC
+    stage_notes: Arc<Mutex<HashMap<String, Vec<StageRoutingNote>>>>,
 }
 
 impl CostTracker {
@@ -253,6 +255,7 @@ impl CostTracker {
         Self {
             specs: Arc::new(Mutex::new(HashMap::new())),
             default_budget,
+            stage_notes: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -296,8 +299,22 @@ impl CostTracker {
             Some(s) => s,
             None => return Ok(()), // No costs tracked yet
         };
+        // Merge stage notes when present
+        let notes = {
+            let guard = self.stage_notes.lock().unwrap();
+            guard.get(spec_id).cloned().unwrap_or_default()
+        };
 
-        let json = serde_json::to_string_pretty(&summary)?;
+        #[derive(Serialize)]
+        struct ExtendedSummary<'a> {
+            #[serde(flatten)]
+            base: &'a CostSummary,
+            #[serde(skip_serializing_if = "Vec::is_empty")]
+            stage_notes: Vec<StageRoutingNote>,
+        }
+
+        let ext = ExtendedSummary { base: &summary, stage_notes: notes };
+        let json = serde_json::to_string_pretty(&ext)?;
         let path = evidence_dir.join(format!("{}_cost_summary.json", spec_id));
 
         std::fs::create_dir_all(evidence_dir)?;
@@ -305,6 +322,39 @@ impl CostTracker {
 
         Ok(())
     }
+
+    /// SPEC-KIT-070: Record aggregator effort/escalation reason for a stage
+    pub fn set_stage_routing_note(
+        &self,
+        spec_id: &str,
+        stage: SpecStage,
+        aggregator_effort: Option<&str>,
+        escalation_reason: Option<&str>,
+    ) {
+        let mut guard = self.stage_notes.lock().unwrap();
+        let entry = guard.entry(spec_id.to_string()).or_insert_with(Vec::new);
+        let mut note = StageRoutingNote {
+            stage: stage.command_name().to_string(),
+            aggregator_effort: aggregator_effort.map(|s| s.to_string()),
+            escalation_reason: escalation_reason.map(|s| s.to_string()),
+        };
+        // Replace existing note for this stage if any
+        if let Some(existing) = entry.iter_mut().find(|n| n.stage == note.stage) {
+            *existing = note;
+        } else {
+            entry.push(note);
+        }
+    }
+}
+
+/// SPEC-KIT-070: Routing annotation per stage
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StageRoutingNote {
+    pub stage: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aggregator_effort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub escalation_reason: Option<String>,
 }
 
 /// Task complexity classification for model selection

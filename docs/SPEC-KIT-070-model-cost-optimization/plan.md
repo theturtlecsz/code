@@ -1,8 +1,8 @@
 # Plan: Radical Model Cost Optimization
 
 **SPEC-ID**: SPEC-KIT-070
-**Plan Version**: 20251026-plan-a
-**Created**: 2025-10-26
+**Plan Version**: 20251027-plan-b
+**Created**: 2025-10-27
 
 ---
 
@@ -152,17 +152,22 @@
 
 ## Multi-Agent Consensus
 
-### Agreements
-- Gemini + Claude both emphasized phased rollout (validate → instrument → route → optimize) and keeping `/speckit.implement` refactor as the largest savings lever.
-- Both agents agree quality gates (≥90% consensus, ±15% cost accuracy) must guard every phase before promotion.
-- Evidence-first workflow (cost summaries + telemetry) is non-negotiable so later stages stay data-driven.
+### Agreements (2025-10-27 refresh)
+- Phasing stands: validate → instrument → route → optimize; do not advance without evidence.
+- Largest lever is `/speckit.implement` refactor to single premium coder (Sonnet) + cheap validator (Haiku) with fallback.
+- Quality gates remain strict: ≥90% consensus agreement and ±15% cost accuracy before promotion; maintain 100% test pass rate.
+- `cost_tracker.rs` is canonical for pricing, routing notes, budgets, and evidence persistence.
 
-### Conflicts Resolved
-- **Issue**: Level of detail in work breakdown (3 macro steps vs 15 granular tasks).
-  - Gemini favored three macro phases; Claude argued for 15 explicit tasks across four phases.
-  - **Resolution**: This plan adopts four phases with explicit deliverables per phase while keeping macro framing for clarity.
-- **Issue**: Aggregator (gpt_pro) unavailable—model not supported in current account, so no synthesized consensus.
-  - **Resolution**: Document degraded consensus state, rely on Gemini + Claude overlap for agreements, and log gpt_pro failure in evidence for follow-up before `/speckit.tasks`.
+### Conflicts and Resolutions
+- Issue: Routing composition for Complex stages (keep 2 premium vs 1 premium + validator).
+  - Positions: Gemini suggested 2 cheap + 1 premium for diversity; Claude and GPT-Pro prefer 1 premium + validator for cost-to-value.
+  - Resolution: Adopt 1 premium (Sonnet) + validator (Haiku) with validator‑driven escalation; validate via A/B (≥95% match for implement).
+- Issue: Telemetry soak duration before enabling full routing.
+  - Positions: Require two‑week soak (Gemini) vs single successful validation window (Claude/GPT-Pro).
+  - Resolution: Compromise to minimum 1 week of telemetry with no P0 incidents; maintain rollback toggle.
+
+### Consensus Status
+- All three agents (Gemini, Claude, GPT‑Pro) participated in this run; aggregator present. Consensus OK (not degraded).
 
 ---
 
@@ -190,4 +195,3 @@
 - [ ] Multi-agent aggregator (gpt_pro) repaired or alternate model approved
 - [ ] Plan reviewed with maintainer and consensus recorded in local-memory (importance ≥8)
 - [ ] SPEC auto-pipeline unblocked once plan sign-off recorded
-
