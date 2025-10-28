@@ -68,6 +68,14 @@
 
 **STATUS**: ✅ **ALL TASKS COMPLETE** (9/9 done, ~4.5 hours total)
 
+### Utility / Test SPECs
+
+- **SPEC-KIT-900-generic-smoke**: Neutral multi-stage workload for cost and consensus benchmarking (plan → tasks → validate). Prompts and acceptance criteria live in `docs/SPEC-KIT-900-generic-smoke/`. Recommended for SPEC-KIT-070 Phase 1 runs instead of reusing the active optimisation SPEC.
+
+| Stage | Status | Branch | PR | Last Run | Notes |
+|-------|--------|--------|----|----------|-------|
+| `/speckit.tasks` | **Degraded** (gemini/claude inaccessible, gpt_pro synthesis) | feature/spec-kit-069-complete | TBD | 2025-10-28 | 10-task matrix merged into `docs/SPEC-KIT-900-generic-smoke/spec.md`; security reviews pending (T2/T4/T5/T7); rerun once docs committed for full consensus. |
+
 ### Maintenance & Refactoring (2025-10-18 Post-Documentation)
 
 **Context**: Architecture review backlog generation identified 10 maintenance tasks for code quality, test coverage, and operational sustainability. Prioritized by SPEC alignment and upstream sync readiness.
