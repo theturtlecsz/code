@@ -12,8 +12,17 @@
     "fix": "cargo fmt && cargo fix --allow-dirty && cargo clippy --fix --allow-dirty"
   },
   "devDependencies": {
+    "fast-glob": "^3.3.3",
+    "gray-matter": "^4.0.3",
     "prettier": "^3.6.2",
-    "typescript": "^5.9.2"
+    "remark": "^15.0.1",
+    "remark-frontmatter": "^5.0.0",
+    "remark-gfm": "^4.0.1",
+    "remark-toc": "^9.0.0",
+    "remark-validate-links": "^13.1.0",
+    "simhash-js": "^1.0.0",
+    "typescript": "^5.9.2",
+    "unified": "^11.0.5"
   },
   "resolutions": {
     "braces": "^3.0.3",

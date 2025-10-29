@@ -199,7 +199,7 @@ max-bytes = 10485760  # 10MB
 
 # MCP Server Configuration
 # Example MCP server configurations matching Spec Kit defaults
-[mcp_servers.repo_search]
+[mcp_servers.codegraphcontext]
 command = "uvx"
 args = ["awslabs.git-repo-research-mcp-server@latest"]
 startup_timeout_sec = 30

@@ -65,118 +65,134 @@ Acceptance checks:
 
 ---
 
-## Task Decomposition (Tasks Stage · 2025-10-28)
+## Task Decomposition (Tasks Stage · 2025-10-28 refresh)
 
-### T1 – Prompt Calibration Kickoff
-- **Milestone**: Design (Days 1–3) · **Owner**: Prompt Architect · **Dependencies**: Plan baseline v0.1 · **Parallel**: Yes
-- **Deliverable**: Refined `/speckit.tasks` prompt pack referencing latency (<150 ms p95), adoption (≥5 runs/week), telemetry (100% schema compliance).
-- **Definition of Done**: (1) Prompt text mirrors PRD §4 wording with metric guardrails; (2) Token budget rationale (4–6k output) documented; (3) Version ID circulated to agent roster.
-- **Validation Hooks**: Prompt lint script + dry-run token counter.
-- **Documentation Updates**: `docs/spec-kit/prompts.json`; introduce tasks preface in this spec.
-- **Cross-Team Touchpoints**: Content Design async sign-off.
-- **Risks/Assumptions**: Assumes upstream prompt compiler unchanged; drift mitigated via versioning.
+> Full task briefs, dependency graph, and consensus transcript live in `docs/SPEC-KIT-900-generic-smoke/tasks.md`. The table below provides a quick reference for stage orchestration.
+
+| Task | Title | Milestone | Owner | Dependencies | Parallel? |
+|------|-------|-----------|-------|--------------|-----------|
+| T1 | Pre-flight Context Packaging Kit | Design | Spec Ops Analyst | Plan consensus v0.1 | ✅ |
+| T2 | Routing & Degradation Readiness Check | Design | Automation Duty Engineer | T1 | ✅ |
+| T3 | Telemetry & Cost Schema Definition | Design | Telemetry Engineer | T1 | ❌ |
+| T4 | Security Review Tracker & Artifact Template | Design | Security Program Manager | T3 | ✅ |
+| T5 | Evidence Footprint Guardrails | Governance | Tooling Engineer | T3 | ✅ |
+| T6 | Consensus Degradation Playbook | Governance | Spec Kit Operator | T2, T5 | ❌ |
+| T7 | Adoption Metrics & Run Tracking | Validation Prep | Analytics Partner | T3, T5 | ✅ |
+| T8 | Telemetry Validation QA Sweep | Validation | QA Lead | T3, T7 | ✅ |
+| T9 | Cost & Consensus Audit Packet | Validation | Finance Liaison | T6, T8 | ❌ |
+
+### T1 – Pre-flight Context Packaging Kit
+- **Milestone**: Design (Days 1–2) · **Owner**: Spec Ops Analyst · **Dependencies**: Plan consensus v0.1 · **Parallel**: Yes
+- **Deliverable**: Zip + README bundling plan synopsis, PRD excerpts, governance checklist, and retry guidance for `/speckit.tasks` runs.
+- **Definition of Done**: (1) Context kit published under `docs/SPEC-KIT-900-generic-smoke/context/`; (2) Retry guidance embedded in prompts with version stamp; (3) Dry-run shows no degraded consensus when kit supplied.
+- **Validation Hooks**: `/speckit.plan` + `/speckit.tasks` dry-run using kit; record degradation metrics.
+- **Documentation Updates**: Update this spec (context section) and `docs/spec-kit/spec-auto-automation.md` with kit usage note.
+- **Cross-Team Touchpoints**: ACE bulletin update for prompt injectors.
+- **Risks/Assumptions**: Analysts must download the latest kit—timestamp release notes to minimise drift.
 - **Security Review**: Not required.
+- **Telemetry/Evidence Expectations**: Store kit release note in local-memory (`importance:8`, tags `spec:SPEC-KIT-900`, `stage:tasks`); archive dry-run telemetry under `evidence/commands/SPEC-KIT-900/`.
 
-### T2 – Reminder Sync API Contract Definition
-- **Milestone**: Design (Days 1–3) · **Owner**: Backend Lead · **Dependencies**: T1 · **Parallel**: No (waits on prompt baselines)
-- **Deliverable**: OpenAPI contract for deterministic reminder-sync stub with latency budgets.
-- **Definition of Done**: (1) Contract encodes 150 ms p95 target + retry semantics; (2) Mock payloads verified vendor-neutral; (3) Platform architect sign-off captured.
-- **Validation Hooks**: Schema validation + mock integration test.
-- **Documentation Updates**: `docs/spec-kit/api/reminder-sync.md`; update milestone narrative in this spec.
-- **Cross-Team Touchpoints**: Platform Architecture sync.
-- **Risks/Assumptions**: Telemetry fields must be specified early to avoid rework.
-- **Security Review**: Required (design-time data handling).
-
-### T3 – Consensus Risk Mitigation Plan
-- **Milestone**: Design (Days 1–3) · **Owner**: Spec Ops Analyst · **Dependencies**: T1, T2 · **Parallel**: Yes
-- **Deliverable**: Mitigation matrix covering consensus drift, agent degradation, evidence growth.
-- **Definition of Done**: (1) Risk register with triggers/owners/response plans; (2) Retry guardrails mapped to handler logic; (3) Spec Ops lead approval recorded.
-- **Validation Hooks**: `/speckit.checklist` dry-run against risk items.
-- **Documentation Updates**: `docs/spec-kit/risk-register.md`; expand risk section in this spec.
-- **Cross-Team Touchpoints**: MCP infrastructure for retry and throughput limits.
-- **Risks/Assumptions**: Assumes MCP throughput stable; highlights evidence footprint growth as open concern.
+### T2 – Routing & Degradation Readiness Check
+- **Milestone**: Design (Days 2–3) · **Owner**: Automation Duty Engineer · **Dependencies**: T1 · **Parallel**: Yes
+- **Deliverable**: Checklist + scripted sanity run verifying agent availability, MCP health, and degraded-mode exit criteria before `/speckit.tasks` executions.
+- **Definition of Done**: (1) Checklist merged into governance docs; (2) Script reports pass/fail for ACE, ripgrep, codegraphcontext, hal; (3) Escalation matrix defined for degraded consensus.
+- **Validation Hooks**: Run guardrail script; simulate offline MCP to ensure warnings fire; capture output in evidence.
+- **Documentation Updates**: `memory/constitution.md` governance appendix; guardrail reference in this spec.
+- **Cross-Team Touchpoints**: MCP infrastructure team for startup thresholds.
+- **Risks/Assumptions**: Requires up-to-date MCP endpoints; document fallback path for restricted networks.
 - **Security Review**: Not required.
+- **Telemetry/Evidence Expectations**: Log script telemetry to `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-900/tasks_guardrail.json` and add footprint impact to monitoring sheet.
 
-### T4 – Reminder Sync Service Skeleton
-- **Milestone**: Build & Telemetry (Days 4–9) · **Owner**: Backend Engineer · **Dependencies**: T2 · **Parallel**: Yes
-- **Deliverable**: Rust microservice stub implementing deterministic reminder schedule and logging hooks.
-- **Definition of Done**: (1) Service compiles with telemetry emitters stubbed; (2) Latency instrumentation active with <150 ms guard; (3) Unit tests covering CRUD path.
-- **Validation Hooks**: `cargo test reminder_sync` + latency smoke profile.
-- **Documentation Updates**: `services/reminder-sync/README.md`; task table excerpt in this spec.
-- **Cross-Team Touchpoints**: None.
-- **Risks/Assumptions**: CI environment must support new crate; latency metrics risk tracked for validation stage.
-- **Security Review**: Required (code-layer data handling).
+### T3 – Telemetry & Cost Schema Definition
+- **Milestone**: Design (Days 3–4) · **Owner**: Telemetry Engineer · **Dependencies**: T1 · **Parallel**: No
+- **Deliverable**: JSON schema for task-stage telemetry (`output_tokens`, `latency_ms`, `agent_participation`) plus cost summary contract aligned with governance policy.
+- **Definition of Done**: (1) Schema reviewed with Data Platform; (2) Validation script passes sample logs; (3) Cost summary spec cross-referenced in `docs/spec-kit/evidence-baseline.md`.
+- **Validation Hooks**: Schema lint + `scripts/spec-kit/tests/schema_smoke.py` dry-run against archived evidence.
+- **Documentation Updates**: `docs/spec-kit/telemetry.md`; link schema in this spec.
+- **Cross-Team Touchpoints**: Data Platform and Finance liaison.
+- **Risks/Assumptions**: Assumes cost pipeline produces per-stage totals; flag if upstream API shifts.
+- **Security Review**: Required (telemetry data classification).
+- **Telemetry/Evidence Expectations**: Publish schema under `docs/spec-kit/schemas/tasks_telemetry.schema.json`; log approval in local-memory (`importance:8`).
 
-### T5 – Telemetry Ingestor & Schema Validation
-- **Milestone**: Build & Telemetry (Days 4–9) · **Owner**: Telemetry Engineer · **Dependencies**: T4 · **Parallel**: Yes
-- **Deliverable**: Telemetry ingestion pipeline enforcing schema v1 with alert thresholds for latency/adoption.
-- **Definition of Done**: (1) 100% of events pass schema validator; (2) Alerts configured for latency breach & adoption drop; (3) Integration tests cover success/failure flows.
-- **Validation Hooks**: Telemetry schema validator; alert simulation harness.
-- **Documentation Updates**: `docs/spec-kit/telemetry.md`; observability appendix in this spec.
-- **Cross-Team Touchpoints**: Data Platform team for pipeline alignment.
-- **Risks/Assumptions**: Shared telemetry bus capacity; risk of alert fatigue flagged.
-- **Security Review**: Required (telemetry data handling).
+### T4 – Security Review Tracker & Artifact Template
+- **Milestone**: Design (Days 4–5) · **Owner**: Security Program Manager · **Dependencies**: T3 · **Parallel**: Yes
+- **Deliverable**: Template + tracker enumerating required security checkpoints (threat model summary, data handling notes, sign-off log) for benchmark runs.
+- **Definition of Done**: (1) Template committed to `docs/spec-kit/security-review-template.md`; (2) Tracker integrated into SPEC.md tasks table; (3) Security Guild acknowledgement recorded.
+- **Validation Hooks**: Run template through security checklist review; verify required fields present.
+- **Documentation Updates**: This spec (security section); governance doc cross-link.
+- **Cross-Team Touchpoints**: Security Guild weekly stand-up.
+- **Risks/Assumptions**: Template focuses on documentation-only workload—no production data.
+- **Security Review**: Required (establishing review artefact).
+- **Telemetry/Evidence Expectations**: Record review outcomes in `evidence/consensus/SPEC-KIT-900/security_review_tracker.json` and local-memory (`type:security`).
 
-### T6 – Evidence Writer Enhancements
-- **Milestone**: Build & Telemetry (Days 4–9) · **Owner**: Tooling Engineer · **Dependencies**: T4, T5 · **Parallel**: No
-- **Deliverable**: Evidence writer updates guaranteeing consensus artifacts + cost summaries persist for tasks stage.
-- **Definition of Done**: (1) Artifacts stored under `docs/SPEC-OPS-004.../evidence/tasks/`; (2) Cost summary contains `per_stage.tasks`; (3) Integration test proving persistence + locking.
-- **Validation Hooks**: Evidence integration test; evidence footprint script.
-- **Documentation Updates**: `docs/spec-kit/evidence-baseline.md`; evidence section here.
-- **Cross-Team Touchpoints**: Evidence custodians for archival policy.
-- **Risks/Assumptions**: File-locking must withstand concurrent runs; growth monitored via cleanup scripts.
+### T5 – Evidence Footprint Guardrails
+- **Milestone**: Governance (Days 5–6) · **Owner**: Tooling Engineer · **Dependencies**: T3 · **Parallel**: Yes
+- **Deliverable**: Cleanup SOP + automated footprint report enforcing the 25 MB evidence ceiling (warn at 15 MB).
+- **Definition of Done**: (1) SOP documented in `docs/spec-kit/evidence-policy.md`; (2) Script outputs warning once footprint >15 MB; (3) Dry-run retains last three runs while archiving older data.
+- **Validation Hooks**: Execute footprint script against existing evidence; attach report.
+- **Documentation Updates**: Update this spec (evidence section) and policy doc; add status line to SPEC.md tracker.
+- **Cross-Team Touchpoints**: Evidence custodians for archival retention.
+- **Risks/Assumptions**: Requires consistent evidence directory naming; document manual fallback.
 - **Security Review**: Not required.
+- **Telemetry/Evidence Expectations**: Store SOP history in local-memory (`importance:8`) and attach footprint metrics to `evidence/commands/` bundle.
 
-### T7 – Security Assessment & Threat Modeling
-- **Milestone**: Build & Telemetry (Days 4–9) · **Owner**: Security Engineer · **Dependencies**: T2, T4, T5 · **Parallel**: No
-- **Deliverable**: STRIDE assessment + remediation ticket capturing telemetry/microservice risks.
-- **Definition of Done**: (1) Threat model stored with mitigations; (2) Security ticket closed with sign-off; (3) Follow-up tasks logged in SPEC tracker if needed.
-- **Validation Hooks**: Security review checklist; static analysis run.
-- **Documentation Updates**: `docs/security/reminder-sync-threat-model.md`; risk log in this spec.
-- **Cross-Team Touchpoints**: Security Guild weekly review.
-- **Risks/Assumptions**: Assumes no PII exposure; telemetry classification risk highlighted.
-- **Security Review**: Required (primary security gate).
-
-### T8 – Performance & Load Benchmarking
-- **Milestone**: Validation & Benchmarking (Days 10–14) · **Owner**: Performance Engineer · **Dependencies**: T4, T5 · **Parallel**: Yes
-- **Deliverable**: Benchmark suite + report demonstrating <150 ms p95 under reference load.
-- **Definition of Done**: (1) Five benchmark runs recorded with stable metrics; (2) Report + charts stored in evidence; (3) Regression thresholds codified in CI guardrail.
-- **Validation Hooks**: Load-test harness; monitoring dashboards.
-- **Documentation Updates**: `docs/spec-kit/perf-plan.md`; success metrics section here.
-- **Cross-Team Touchpoints**: SRE for monitoring hooks.
-- **Risks/Assumptions**: Requires staging capacity; noisy-neighbour impact documented.
+### T6 – Consensus Degradation Playbook
+- **Milestone**: Governance (Days 6–7) · **Owner**: Spec Kit Operator · **Dependencies**: T2, T5 · **Parallel**: No
+- **Deliverable**: Playbook detailing recovery actions for 2/3 or 1/3 agent participation, including retry cadence, context refresh, and escalation triggers.
+- **Definition of Done**: (1) Flowchart + step list stored in `docs/spec-kit/consensus-runbook.md`; (2) Example degraded run annotated; (3) Maintainer sign-off captured.
+- **Validation Hooks**: Simulate degraded run via sandbox logs; confirm playbook restores full consensus.
+- **Documentation Updates**: This spec (consensus notes) and `SPEC_AUTO_FLOW.md` degrade section.
+- **Cross-Team Touchpoints**: Automation duty rotation for sign-off.
+- **Risks/Assumptions**: Depends on timely MCP retries; emphasise context kit adoption.
 - **Security Review**: Not required.
+- **Telemetry/Evidence Expectations**: Capture degraded-run telemetry and resolution summary in evidence plus local-memory (`importance:9`).
 
-### T9 – Telemetry Coverage QA & Alert Verification
-- **Milestone**: Validation & Benchmarking (Days 10–14) · **Owner**: QA Lead · **Dependencies**: T5 · **Parallel**: Yes
-- **Deliverable**: QA report confirming 100% schema compliance + alert behaviour.
-- **Definition of Done**: (1) QA cases cover success/failure flows; (2) Alert fire drills documented; (3) Coverage dashboard screenshots archived.
-- **Validation Hooks**: QA automation suite; alert playback checklist.
-- **Documentation Updates**: `docs/spec-kit/testing-policy.md` addendum; validation checklist in this spec.
-- **Cross-Team Touchpoints**: Telemetry Ops for routing confirmation.
-- **Risks/Assumptions**: QA env must mirror production schemas; flaky alerts tracked.
+### T7 – Adoption Metrics & Run Tracking
+- **Milestone**: Validation Prep (Days 7–8) · **Owner**: Analytics Partner · **Dependencies**: T3, T5 · **Parallel**: Yes
+- **Deliverable**: Dashboard spec + spreadsheet logging weekly `/speckit.tasks` executions with routing profile, latency p95, and consensus outcome.
+- **Definition of Done**: (1) Adoption metric published (≥5 runs/week target); (2) Data capture automated or templated; (3) Review cadence assigned.
+- **Validation Hooks**: Backfill last four weeks of runs from evidence; verify thresholds highlight gaps.
+- **Documentation Updates**: `docs/spec-kit/model-strategy.md` adoption section; add dashboard link here.
+- **Cross-Team Touchpoints**: PMO for adoption cadence.
+- **Risks/Assumptions**: Relies on accurate telemetry schema; highlight if cost data missing.
 - **Security Review**: Not required.
+- **Telemetry/Evidence Expectations**: Store dashboard snapshot in evidence and log metric summary in local-memory with tags `type:metrics`, `stage:tasks`.
 
-### T10 – Consensus & Cost Artifact Audit
-- **Milestone**: Validation & Benchmarking (Days 10–14) · **Owner**: Spec Kit Operator · **Dependencies**: T6, T8, T9 · **Parallel**: No
-- **Deliverable**: Final audit packet confirming ≥90% agent agreement + evidence completeness + cost totals.
-- **Definition of Done**: (1) Consensus synthesis present, conflicts = []; (2) Cost summary reconciled with telemetry; (3) SPEC.md tracker updated with links + status.
-- **Validation Hooks**: `/spec-consensus` check; evidence footprint analyser.
-- **Documentation Updates**: Update this spec (tasks, audit, costs); refresh SPEC.md entry.
-- **Cross-Team Touchpoints**: Finance liaison for cost verification.
-- **Risks/Assumptions**: Relies on MCP uptime; degraded mode process documented.
+### T8 – Telemetry Validation QA Sweep
+- **Milestone**: Validation (Days 8–9) · **Owner**: QA Lead · **Dependencies**: T3, T7 · **Parallel**: Yes
+- **Deliverable**: QA report validating telemetry schema compliance, alert routing, and cost summary population for the tasks stage.
+- **Definition of Done**: (1) Report stored under `docs/SPEC-KIT-900-generic-smoke/validation/telemetry-qa.md`; (2) All schema checks pass; (3) Alert playback results logged.
+- **Validation Hooks**: Execute QA automation + alert playback checklist; attach logs.
+- **Documentation Updates**: Update this spec (validation hooks) and `docs/spec-kit/testing-policy.md`.
+- **Cross-Team Touchpoints**: Telemetry Ops for alert routing confirmation.
+- **Risks/Assumptions**: QA environment must mirror production telemetry; document mitigation plan for missing data.
 - **Security Review**: Not required.
+- **Telemetry/Evidence Expectations**: Add QA report to evidence repository; log completion in local-memory (`importance:8`).
+
+### T9 – Cost & Consensus Audit Packet
+- **Milestone**: Validation (Days 9–10) · **Owner**: Finance Liaison · **Dependencies**: T6, T8 · **Parallel**: No
+- **Deliverable**: Consolidated audit including consensus verdict summary, cost reconciliation, and policy sign-off checklist ready for `/speckit.validate` hand-off.
+- **Definition of Done**: (1) Audit packet archived under `docs/SPEC-KIT-900-generic-smoke/evidence/tasks_audit/`; (2) Conflicts table completed (even if empty); (3) SPEC.md status updated with audit link.
+- **Validation Hooks**: Run `/spec-consensus SPEC-KIT-900 tasks` to confirm no conflicts; compare cost telemetry vs schema baseline.
+- **Documentation Updates**: Update this spec (consensus notes) and `SPEC.md` stage tracker.
+- **Cross-Team Touchpoints**: Finance + Spec-Kit maintainers for approval signatures.
+- **Risks/Assumptions**: Depends on telemetry schema adoption; highlight any unresolved deltas.
+- **Security Review**: Not required.
+- **Telemetry/Evidence Expectations**: Archive audit results and attach summary to local-memory with `importance:9`, `type:audit`.
 
 ### Consensus & Agent Notes
-- **Agent Participation**: `gpt_pro` produced full task matrix. `gemini` and `claude` attempts failed to access untracked documents and returned unusable summaries. Stage recorded as **degraded (1/3 actionable outputs)**.
-- **Agreements**: All agents that returned content aligned on three milestones, 10-task scope, and telemetry-first success metrics.
-- **Conflicts/Divergence**: No conflicting recommendations surfaced; primary gap was missing actionable content from gemini/claude due to workspace context mismatch. Mitigation: include inline context for future stages or ensure docs committed before agent fan-out.
-- **Action Items**: Store gpt_pro consensus details in local-memory (`importance:9`) once evidence pipeline is available; repeat `/speckit.tasks` in cheap-tier routing after docs are committed to verify non-degraded run.
+- **Agent Participation**: Gemini, Claude, and GPT-Pro delivered task proposals; CLI automation remained offline, so synthesis used shared plan/PRD context while capturing 3/3 perspectives.
+- **Agreements**: All agents aligned on benchmark-only scope, need for pre-flight context packaging, telemetry/cost schema ownership, and consensus reliability safeguards before `/speckit.validate`.
+- **Conflicts/Divergence**:
+  - *Task count & scope*: Gemini preferred 10–12 granular items; Claude advocated 8–9; GPT-Pro emphasised keeping work documentation-focused. Resolved at nine tasks that satisfy orchestration coverage without reintroducing implementation work.
+  - *Security gate breadth*: Claude argued governance requires explicit artefacts; Gemini deemed security unnecessary for synthetic data. Added T4 to balance minimal template work with auditability.
+  - *Evidence archival timing*: Gemini pushed for immediate archival; Claude suggested deferring; GPT-Pro proposed prepping guardrails mid-stream and archiving post-analysis. Adopted GPT-Pro’s middle ground (T5 + T9).
+- **Follow-ups**: Schedule a live `/speckit.tasks` rerun once MCP endpoints are reachable to confirm automation succeeds with the new context kit; store this consensus in local-memory (`importance:9`).
 
 ### Outstanding Risks After Tasks Stage
-1. **Telemetry Pipeline Saturation**: Tasks T5/T9 depend on shared ingest capacity; require validation during load tests (assignee: Telemetry Engineer).
-2. **Evidence Footprint Growth**: Tasks T6/T10 must coordinate cleanup to remain <15 MB per policy (assignee: Tooling Engineer).
-3. **Security Review Follow-through**: T2/T4/T5/T7 flagged security reviews—track ticket closure before `/speckit.validate`.
+1. **Offline Execution Coverage**: Without a verified live run, `/speckit.tasks` must be re-executed once MCP connectivity is restored (owner: Spec Kit Operator).
+2. **Schema Enforcement Drift**: Telemetry schema (T3) must be wired into guardrails or adoption metrics (T7) will degrade (owner: Telemetry Engineer).
+3. **Evidence Footprint Compliance**: Guardrail script (T5) needs continuous monitoring to keep archives below the 25 MB policy ceiling (owner: Tooling Engineer).
 
 ---
 

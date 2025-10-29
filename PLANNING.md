@@ -325,3 +325,15 @@ python3 scripts/spec-kit/lint_tasks.py
 **Next review trigger:** After Phase 3 Week 2 completion or architectural changes
 
 Document owner: @just-every/automation
+
+---
+
+## 📚 Related Documentation
+
+- **[Documentation Index](docs/SUMMARY.md)** - Complete documentation navigation
+- **[Product Requirements](product-requirements.md)** - Canonical product scope
+- **[Project Status](docs/PROJECT_STATUS.md)** - Current state and metrics
+- **[SPEC.md](SPEC.md)** - Task tracker
+- **[CLAUDE.md](CLAUDE.md)** - Operational guidelines for Claude Code
+- **[Spec-Kit README](docs/spec-kit/README.md)** - Framework user guide
+- **[Architecture Analysis](ANALYSIS_SUMMARY.md)** - Technical deep dive

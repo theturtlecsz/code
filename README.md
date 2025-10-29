@@ -269,6 +269,22 @@ npm install
 
 
 &ensp;
+## 📚 Documentation
+
+### Quick Links
+- **[Documentation Index](docs/SUMMARY.md)** - Complete navigation hub for all project documentation
+- **[Getting Started](docs/getting-started.md)** - Installation and basic usage
+- **[Configuration Guide](docs/config.md)** - Detailed configuration options
+- **[Project Status](docs/PROJECT_STATUS.md)** - Current state and roadmap
+
+### For Contributors
+- **[CLAUDE.md](CLAUDE.md)** - How Claude Code works in this repo (fork-specific)
+- **[SPEC.md](SPEC.md)** - Task tracker and work-in-progress
+- **[Spec-Kit Framework](docs/spec-kit/README.md)** - Multi-agent automation (fork feature)
+- **[Architecture Analysis](ANALYSIS_SUMMARY.md)** - Technical deep dive
+
+---
+
 ## Legal & Use
 
 ### License & attribution

@@ -2,12 +2,24 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: scripts/spec-kit/cost-run.sh [--spec SPEC-ID] [--log PATH] [--no-memory]"
+  cat <<'USAGE'
+Usage: scripts/spec-kit/cost-run.sh [options]
+
+Options:
+  --spec SPEC-ID        Target SPEC (default: SPEC-KIT-070)
+  --log PATH            TUI log path (default: ~/.code/log/codex-tui.log)
+  --preset PRESET       Command preset (minimal|full, default minimal)
+  --commands LIST       Comma-separated command list (overrides preset)
+  --no-memory           Skip local-memory snapshots
+  -h, --help            Show this help text
+USAGE
 }
 
 SPEC="SPEC-KIT-070"
 LOG_FILE="${HOME}/.code/log/codex-tui.log"
 RUN_MEMORY=true
+PRESET="minimal"
+CUSTOM_COMMANDS=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -20,10 +32,12 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --preset)
+      [[ $# -ge 2 ]] || { echo "--preset requires an argument" >&2; exit 1; }
       PRESET="$2"
       shift 2
       ;;
     --commands)
+      [[ $# -ge 2 ]] || { echo "--commands requires an argument" >&2; exit 1; }
       CUSTOM_COMMANDS="$2"
       shift 2
       ;;
@@ -71,6 +85,40 @@ esac
 
 if [[ -n "$CUSTOM_COMMANDS" ]]; then
   IFS="," read -r -a COMMAND_LIST <<< "$CUSTOM_COMMANDS"
+fi
+
+declare -a STAGE_LIST=()
+declare -A STAGE_SEEN=()
+for entry in "${COMMAND_LIST[@]}"; do
+  cmd=${entry%% *}
+  case "$cmd" in
+    /speckit.clarify)
+      STAGE_SEEN[clarify]=1 ;;
+    /speckit.analyze)
+      STAGE_SEEN[analyze]=1 ;;
+    /speckit.checklist)
+      STAGE_SEEN[checklist]=1 ;;
+    /speckit.plan)
+      STAGE_SEEN[plan]=1 ;;
+    /speckit.tasks)
+      STAGE_SEEN[tasks]=1 ;;
+    /speckit.implement)
+      STAGE_SEEN[implement]=1 ;;
+    /speckit.validate)
+      STAGE_SEEN[validate]=1 ;;
+    /speckit.audit)
+      STAGE_SEEN[audit]=1 ;;
+    /speckit.unlock)
+      STAGE_SEEN[unlock]=1 ;;
+  esac
+done
+
+if [[ ${#STAGE_SEEN[@]} -gt 0 ]]; then
+  for stage in "clarify" "analyze" "checklist" "plan" "tasks" "implement" "validate" "audit" "unlock"; do
+    if [[ -n "${STAGE_SEEN[$stage]:-}" ]]; then
+      STAGE_LIST+=("$stage")
+    fi
+  done
 fi
 
 if [[ ! -f "$LOG_FILE" ]]; then
@@ -173,7 +221,7 @@ if $RUN_MEMORY; then
   if ! command -v local-memory >/dev/null 2>&1; then
     echo "local-memory CLI not found; skipping snapshots." >&2
   else
-    for stage in plan tasks validate; do
+    for stage in "${STAGE_LIST[@]}"; do
       OUT_FILE="$ART_DIR/local-memory-${stage}.txt"
       echo "# local-memory search \"spec:$SPEC stage:$stage\" --limit 5" > "$OUT_FILE"
       if local-memory search "spec:$SPEC stage:$stage" --limit 5 >> "$OUT_FILE" 2>&1; then

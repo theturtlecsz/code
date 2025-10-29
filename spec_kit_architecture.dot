@@ -1,0 +1,253 @@
+digraph SpecKitArchitecture {
+  // Fork-Specific Architecture Visualization
+  // Focus: ONLY the Spec-Kit multi-agent automation framework
+  // Repository: theturtlecsz/code (fork additions only)
+
+  rankdir=TB;
+  compound=true;
+  splines=ortho;
+  node [shape=box, style=filled, fillcolor=lightblue];
+
+  // Color scheme for FORK code only:
+  // Red = needs splitting (>1000 LOC)
+  // Orange = large (700-1000 LOC)
+  // Yellow = medium (400-700 LOC)
+  // Green = well-sized (<400 LOC)
+  // Pink = potential dead code
+
+  // ========================================
+  // LAYER 1: Upstream Integration Points
+  // ========================================
+  subgraph cluster_upstream {
+    label="Upstream Integration (Minimal Touch)";
+    style=filled;
+    fillcolor=lightyellow;
+
+    ChatWidget [label="ChatWidget\n(upstream)\nspec_kit submodule", shape=ellipse, fillcolor=white];
+    AppState [label="App State\n(upstream)\nslash command routing", shape=ellipse, fillcolor=white];
+    SlashCommand [label="SlashCommand enum\n(upstream)\n+26 SpecKit variants", shape=ellipse, fillcolor=white];
+  }
+
+  // ========================================
+  // LAYER 2: Command Entry & Routing
+  // ========================================
+  subgraph cluster_routing {
+    label="Command Routing Layer (1,100 LOC)";
+    style=filled;
+    fillcolor=lightcyan;
+
+    Handler [label="handler.rs\n1,561 LOC\n⚠️ NEEDS SPLIT", fillcolor=red, fontcolor=white];
+    CommandRegistry [label="command_registry.rs\n537 LOC", fillcolor=yellow];
+    Routing [label="routing.rs\n205 LOC", fillcolor=lightgreen];
+
+    subgraph cluster_commands {
+      label="Command Implementations";
+      style=dashed;
+      fillcolor=lightblue;
+
+      CmdSpecial [label="commands/special.rs\n393 LOC", fillcolor=lightgreen];
+      CmdGuardrail [label="commands/guardrail.rs\n308 LOC", fillcolor=lightgreen];
+      CmdPlan [label="commands/plan.rs\n193 LOC", fillcolor=lightgreen];
+      CmdQuality [label="commands/quality.rs\n103 LOC", fillcolor=lightgreen];
+      CmdStatus [label="commands/status.rs\n37 LOC", fillcolor=lightgreen];
+    }
+
+    Handler -> CommandRegistry [label="dispatch"];
+    CommandRegistry -> Routing;
+    Routing -> CmdSpecial;
+    Routing -> CmdGuardrail;
+    Routing -> CmdPlan;
+    Routing -> CmdQuality;
+    Routing -> CmdStatus;
+  }
+
+  // ========================================
+  // LAYER 3: Core Orchestration
+  // ========================================
+  subgraph cluster_orchestration {
+    label="Core Orchestration Layer (2,800 LOC)";
+    style=filled;
+    fillcolor=lightgreen;
+
+    StateMachine [label="state.rs\n932 LOC\n⚠️ SPLIT RECOMMENDED", fillcolor=orange];
+    QualityGateHandler [label="quality_gate_handler.rs\n1,254 LOC\n⚠️ NEEDS SPLIT", fillcolor=red, fontcolor=white];
+    QualityGateBroker [label="quality_gate_broker.rs\n433 LOC", fillcolor=yellow];
+    Context [label="context.rs\n349 LOC\nSpecKitContext trait", fillcolor=lightgreen];
+
+    Handler -> StateMachine [label="state mgmt"];
+    Handler -> QualityGateHandler [label="quality gates"];
+    QualityGateHandler -> QualityGateBroker [label="async coord"];
+    QualityGateHandler -> Context [label="uses trait"];
+  }
+
+  // ========================================
+  // LAYER 4: ACE Subsystem (Agentic Context Engine)
+  // ========================================
+  subgraph cluster_ace {
+    label="ACE Subsystem (3,700 LOC)\nComplex Task Routing & Learning";
+    style=filled;
+    fillcolor=mistyrose;
+
+    ACERouter [label="ace_route_selector.rs\n766 LOC\nComplexity routing", fillcolor=orange];
+    ACEOrchestrator [label="ace_orchestrator.rs\n318 LOC", fillcolor=lightgreen];
+    ACEReflector [label="ace_reflector.rs\n317 LOC", fillcolor=lightgreen];
+    ACECurator [label="ace_curator.rs\n333 LOC", fillcolor=lightgreen];
+    ACEPromptInjector [label="ace_prompt_injector.rs\n417 LOC", fillcolor=yellow];
+    ACEClient [label="ace_client.rs\n460 LOC\nMCP interface", fillcolor=yellow];
+    ACELearning [label="ace_learning.rs\n357 LOC\n❓ Low usage", fillcolor=lightpink];
+    ACEConstitution [label="ace_constitution.rs\n357 LOC\n❓ Low usage", fillcolor=lightpink];
+
+    Handler -> ACERouter [label="route decision", style=dashed];
+    ACERouter -> ACEOrchestrator [label="complex path"];
+    ACEOrchestrator -> ACEReflector;
+    ACEReflector -> ACECurator;
+    ACEReflector -> ACELearning;
+    ACECurator -> ACEClient;
+    ACEPromptInjector -> ACEClient;
+    CmdSpecial -> ACEConstitution;
+    ACEConstitution -> ACEClient;
+  }
+
+  // ========================================
+  // LAYER 5: Consensus & Quality
+  // ========================================
+  subgraph cluster_consensus {
+    label="Consensus & Quality Layer (2,800 LOC)";
+    style=filled;
+    fillcolor=lightsteelblue;
+
+    Consensus [label="consensus.rs\n1,052 LOC\n⚠️ SPLIT RECOMMENDED", fillcolor=red, fontcolor=white];
+    Quality [label="quality.rs\n851 LOC\nIssue classification", fillcolor=orange];
+    Schemas [label="schemas.rs\n197 LOC\nJSON validation", fillcolor=lightgreen];
+
+    Handler -> Consensus [label="multi-agent"];
+    Consensus -> Quality [label="issue types"];
+    Quality -> StateMachine [label="checkpoints"];
+    Consensus -> Schemas [label="validate"];
+  }
+
+  // ========================================
+  // LAYER 6: Supporting Infrastructure
+  // ========================================
+  subgraph cluster_infra {
+    label="Supporting Infrastructure (2,800 LOC)";
+    style=filled;
+    fillcolor=lavender;
+
+    Evidence [label="evidence.rs\n691 LOC\nStorage/collection", fillcolor=orange];
+    Guardrail [label="guardrail.rs\n672 LOC\nShell integration", fillcolor=orange];
+    FileModifier [label="file_modifier.rs\n554 LOC\nFile operations", fillcolor=yellow];
+    CostTracker [label="cost_tracker.rs\n537 LOC\nBudget tracking", fillcolor=yellow];
+    SpecIDGen [label="spec_id_generator.rs\n189 LOC\nNative SPEC-ID", fillcolor=lightgreen];
+    ConfigValidator [label="config_validator.rs\n327 LOC\n❓ Low usage", fillcolor=lightpink];
+    SubagentDefaults [label="subagent_defaults.rs\n134 LOC\n❓ Low usage", fillcolor=lightpink];
+
+    Handler -> Evidence [label="collect"];
+    Handler -> Guardrail [label="shell exec"];
+    Handler -> FileModifier [label="update files"];
+    Handler -> CostTracker [label="track spend"];
+    Handler -> SpecIDGen [label="generate IDs"];
+    Handler -> ConfigValidator [label="validate", style=dotted];
+    Handler -> SubagentDefaults [style=dotted, color=gray];
+  }
+
+  // ========================================
+  // LAYER 7: Foundation Types
+  // ========================================
+  subgraph cluster_types {
+    label="Foundation Types (650 LOC)";
+    style=filled;
+    fillcolor=lightgoldenrodyellow;
+
+    ErrorTypes [label="error.rs\n279 LOC\nSpecKitError", fillcolor=lightgreen];
+    ModExports [label="mod.rs\n102 LOC\nPublic API", fillcolor=lightgreen];
+
+    // Everything depends on error types
+    Handler -> ErrorTypes;
+    StateMachine -> ErrorTypes;
+    Consensus -> ErrorTypes;
+    Evidence -> ErrorTypes;
+    Guardrail -> ErrorTypes;
+  }
+
+  // ========================================
+  // LAYER 8: External Integration (MCP)
+  // ========================================
+  subgraph cluster_external {
+    label="External MCP Servers";
+    style=filled;
+    fillcolor=white;
+
+    LocalMemory [label="local-memory\n(consensus storage)", shape=ellipse, fillcolor=white];
+    ACEPlaybook [label="ACE Playbook\n(learning)", shape=ellipse, fillcolor=white];
+    HAL [label="HAL API\n(validation)", shape=ellipse, fillcolor=white];
+
+    Consensus -> LocalMemory [label="native MCP\n5.3x faster", color=green, penwidth=3];
+    ACEClient -> ACEPlaybook [label="playbook\nqueries", style=dashed];
+    Guardrail -> HAL [label="API\nvalidation", style=dashed];
+  }
+
+  // ========================================
+  // LAYER 9: Separate Crate (Foundation)
+  // ========================================
+  subgraph cluster_separate {
+    label="Separate spec-kit Crate (422 LOC)\nFoundation for MAINT-10";
+    style=dashed;
+    fillcolor=lightyellow;
+
+    SpecKitTypes [label="types.rs\n166 LOC\nStage/Agent enums", fillcolor=lightgreen];
+    SpecKitAPI [label="api.rs\n134 LOC\nFuture async API", fillcolor=lightgreen];
+    SpecKitError [label="error.rs\n88 LOC\nCrate errors", fillcolor=lightgreen];
+
+    SpecKitTypes -> ErrorTypes [label="sync types", style=dotted];
+  }
+
+  // ========================================
+  // Entry Points
+  // ========================================
+  ChatWidget -> Handler [label="invoke /speckit.*", color=blue, penwidth=2];
+  AppState -> Handler [label="slash routing", color=blue, penwidth=2];
+  SlashCommand -> Routing [label="command enum"];
+
+  // ========================================
+  // Legend
+  // ========================================
+  subgraph cluster_legend {
+    label="Legend (Fork-Specific Code Only)";
+    style=filled;
+    fillcolor=white;
+
+    node [shape=plaintext];
+    Legend [label=<
+      <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+        <TR><TD BGCOLOR="red" WIDTH="30"> </TD><TD ALIGN="LEFT">Critical split (&gt;1000 LOC)</TD></TR>
+        <TR><TD BGCOLOR="orange" WIDTH="30"> </TD><TD ALIGN="LEFT">Large module (700-1000 LOC)</TD></TR>
+        <TR><TD BGCOLOR="yellow" WIDTH="30"> </TD><TD ALIGN="LEFT">Medium module (400-700 LOC)</TD></TR>
+        <TR><TD BGCOLOR="lightgreen" WIDTH="30"> </TD><TD ALIGN="LEFT">Well-sized (&lt;400 LOC)</TD></TR>
+        <TR><TD BGCOLOR="lightpink" WIDTH="30"> </TD><TD ALIGN="LEFT">Potential dead code</TD></TR>
+        <TR><TD BGCOLOR="white" WIDTH="30"> </TD><TD ALIGN="LEFT">Upstream code (not ours)</TD></TR>
+      </TABLE>
+    >];
+  }
+
+  // ========================================
+  // Annotations
+  // ========================================
+  node [shape=note, fillcolor=lightyellow];
+
+  Note1 [label="CRITICAL:\nhandler.rs (1,561 LOC)\nSplit into:\n- handler_core.rs\n- handler_telemetry.rs\n- handler_mcp.rs"];
+
+  Note2 [label="HIGH PRIORITY:\nquality_gate_handler.rs\n(1,254 LOC)\nExtract broker\ncoordination"];
+
+  Note3 [label="SPLIT:\nconsensus.rs (1,052 LOC)\nstate.rs (932 LOC)\nInto submodules"];
+
+  Note4 [label="DEAD CODE?\nACE learning/constitution\nconfig_validator\nsubagent_defaults\nRun cargo-udeps"];
+
+  Note1 -> Handler [style=dashed, color=red];
+  Note2 -> QualityGateHandler [style=dashed, color=orange];
+  Note3 -> Consensus [style=dashed, color=orange];
+  Note4 -> ACELearning [style=dashed, color=gray];
+
+  // Stats annotation
+  Stats [label="Total Fork Code:\n25,164 LOC\n\n15,234 LOC implementation\n9,508 LOC tests\n422 LOC separate crate\n\nUpstream touch: 5 files\n~58 references\nRebase risk: <5%", shape=note, fillcolor=lightcyan];
+}

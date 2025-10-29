@@ -824,7 +824,7 @@ digraph CodexArchitecture {
   OpenAI -> ModelClient [label="EventMsg", style=dashed];
 
   Codex -> ToolOrch [label="ToolCall"];
-  ToolOrch -> McpMgrCore [label="MCP Tools (git, serena)"];
+  ToolOrch -> McpMgrCore [label="MCP Tools (git, codegraphcontext)"];
   ToolOrch -> Sandbox [label="Bash/Write"];
   Codex -> ChatWidget [label="Event Stream"];
   ChatWidget -> HistoryRender [label="Render"];

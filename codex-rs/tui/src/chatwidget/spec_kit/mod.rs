@@ -34,6 +34,8 @@ pub mod routing;
 pub mod schemas;
 pub mod spec_id_generator; // SPEC-KIT-070: Native SPEC-ID generation (cost optimization)
 pub mod state;
+pub mod subagent_defaults;
+pub mod validation_lifecycle; // Validation lifecycle tracking and telemetry
 
 // Re-export context types
 pub use context::SpecKitContext;
@@ -80,6 +82,12 @@ pub use handler::{
     on_spec_auto_task_started,
 };
 
+// Re-export validation lifecycle functions
+pub use validation_lifecycle::{
+    cleanup_spec_auto_with_cancel, compute_validate_payload_hash,
+    record_validate_lifecycle_event, ValidateLifecycleEvent, ValidateMode,
+};
+
 // Re-export quality gate functions
 pub use quality::{
     classify_issue_agreement, merge_agent_issues, parse_quality_issue_from_agent,
@@ -89,7 +97,6 @@ pub use quality::{
 // Re-export ACE functions for integration testing and widget usage
 #[cfg(any(test, feature = "test-utils"))]
 pub use ace_prompt_injector::should_use_ace;
-pub use ace_prompt_injector::{select_bullets, format_ace_section};
 #[cfg(any(test, feature = "test-utils"))]
 pub use ace_route_selector::{select_route, DiffStat, RouteDecision};
 

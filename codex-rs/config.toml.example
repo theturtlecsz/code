@@ -26,6 +26,9 @@ db_path = "~/.code/ace/playbooks_v1.sqlite3"
 # Commands that should receive ACE playbook injection
 use_for = [
     "speckit.constitution",
+    "speckit.clarify",
+    "speckit.analyze",
+    "speckit.checklist",
     "speckit.specify",
     "speckit.tasks",
     "speckit.implement",

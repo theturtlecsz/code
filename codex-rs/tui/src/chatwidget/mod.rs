@@ -1058,7 +1058,7 @@ impl ChatWidget<'_> {
         }
 
         for (spec_id, completion) in completions {
-            spec_kit::handler::record_validate_lifecycle_event(
+            spec_kit::record_validate_lifecycle_event(
                 self,
                 &spec_id,
                 &completion.run_id,
@@ -13451,7 +13451,7 @@ impl ChatWidget<'_> {
 
         if let Some((spec_id, _args)) = parse_validate_command(display.trim()) {
             let lifecycle = self.ensure_validate_lifecycle(&spec_id);
-            let payload_hash = spec_kit::handler::compute_validate_payload_hash(
+            let payload_hash = spec_kit::compute_validate_payload_hash(
                 ValidateMode::Manual,
                 SpecStage::Validate,
                 &spec_id,
@@ -13460,7 +13460,7 @@ impl ChatWidget<'_> {
 
             match lifecycle.begin(ValidateMode::Manual, &payload_hash) {
                 ValidateBeginOutcome::Started(info) => {
-                    spec_kit::handler::record_validate_lifecycle_event(
+                    spec_kit::record_validate_lifecycle_event(
                         self,
                         &spec_id,
                         &info.run_id,
@@ -13474,7 +13474,7 @@ impl ChatWidget<'_> {
                         Some((spec_id.clone(), lifecycle.clone(), info, payload_hash));
                 }
                 ValidateBeginOutcome::Duplicate(info) | ValidateBeginOutcome::Conflict(info) => {
-                    spec_kit::handler::record_validate_lifecycle_event(
+                    spec_kit::record_validate_lifecycle_event(
                         self,
                         &spec_id,
                         &info.run_id,
@@ -13516,7 +13516,7 @@ impl ChatWidget<'_> {
 
         if let Some((spec_id, lifecycle, info, payload_hash)) = manual_validate_context {
             if let Some(updated) = lifecycle.mark_dispatched(&info.run_id) {
-                spec_kit::handler::record_validate_lifecycle_event(
+                spec_kit::record_validate_lifecycle_event(
                     self,
                     &spec_id,
                     &updated.run_id,

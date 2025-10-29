@@ -114,13 +114,13 @@ local-memory search "consensus" --tags spec:SPEC-123
 
 **Exception**: MCP servers for **tools** (not memory) are allowed:
 - ✅ `git` (version control operations)
-- ✅ `serena` (code search)
+- ✅ `codegraphcontext` (code search)
 - ✅ `ide` (editor integrations)
 - ✅ etc.
 
 **Distinction**:
 - **Memory MCP**: Stores/retrieves knowledge (local-memory ONLY)
-- **Tool MCP**: Provides functionality (git, serena, etc. - allowed)
+- **Tool MCP**: Provides functionality (git, codegraphcontext, etc. - allowed)
 
 ---
 

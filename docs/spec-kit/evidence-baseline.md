@@ -17,4 +17,14 @@
 
 - Re-run `scripts/spec_ops_004/evidence_stats.sh [--spec <SPEC-ID>]` after large implementations to monitor repository footprint.
 - Threshold proposal: revisit external storage when any single SPEC exceeds **25 MB** of committed telemetry or consensus evidence, or when cloning time becomes problematic.
-- Evidence remains git-backed; no immediate change required.
+- Evidence remains git-backed; no immediate change required. Use
+  `scripts/spec_ops_004/evidence_stats.sh --spec <SPEC-ID>` to monitor size. The
+  script now surfaces a **20 MB warning** and a **25 MB failure threshold** per
+  the SPEC-KIT-900 guardrail requirements.
+
+## Guardrail Reference
+- Warning: investigate cleanup once total footprint (commands + consensus)
+  exceeds **20 MB**.
+- Hard limit: archive or prune artifacts if the footprint reaches **25 MB**.
+- Recommended remediation: `scripts/spec_ops_004/evidence_archive.sh --spec <SPEC-ID>`
+  followed by documentation updates in `consensus-cost-audit-packet.md`.

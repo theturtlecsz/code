@@ -3,7 +3,7 @@
 //! Fetches playbook heuristics from ACE and injects them into prompts
 //! before submission to the orchestrator.
 
-use super::ace_client::{self, AceResult, PlaybookBullet};
+use super::ace_client::PlaybookBullet;
 use codex_core::config_types::{AceConfig, AceMode};
 use std::collections::HashSet;
 use tracing::{debug, warn};
@@ -34,6 +34,9 @@ pub fn command_to_scope(command_name: &str) -> Option<&str> {
 
     match name {
         "constitution" => Some("global"),
+        "clarify" => Some("clarify"),
+        "analyze" => Some("analyze"),
+        "checklist" => Some("checklist"),
         "specify" => Some("specify"),
         "tasks" => Some("tasks"),
         "implement" => Some("implement"),
@@ -144,7 +147,7 @@ pub fn inject_ace_section(
     command_name: &str,
     repo_root: Option<String>,
     branch: Option<String>,
-    mut prompt: String,
+    prompt: String,
 ) -> String {
     // Check if we should use ACE
     if !should_use_ace(config, command_name) {

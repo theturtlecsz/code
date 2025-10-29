@@ -1,0 +1,3897 @@
+{
+  "generatedAt": "2025-10-29T00:55:56.681Z",
+  "docs": [
+    {
+      "path": "AGENTS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761355542000
+    },
+    {
+      "path": "CHANGELOG.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758802857000
+    },
+    {
+      "path": "CLAUDE.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761355542000
+    },
+    {
+      "path": "PLANNING.md",
+      "score": 95,
+      "orphan": false,
+      "broken": [
+        "ANALYSIS_SUMMARY.md"
+      ],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760806439000
+    },
+    {
+      "path": "README.md",
+      "score": 85,
+      "orphan": false,
+      "broken": [
+        "docs/spec-kit/REFACTORING_COMPLETE_SUMMARY.md",
+        "ANALYSIS_SUMMARY.md",
+        "LICENSE"
+      ],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760579198000
+    },
+    {
+      "path": "SPEC-KIT.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759443682000
+    },
+    {
+      "path": "SPEC.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761660035000
+    },
+    {
+      "path": "TUI.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759717928000
+    },
+    {
+      "path": "codex-cli/scripts/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758693633000
+    },
+    {
+      "path": "codex-rs/ACE_ACTIVATION_GUIDE.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761512817000
+    },
+    {
+      "path": "codex-rs/ACE_TROUBLESHOOTING.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761512817000
+    },
+    {
+      "path": "codex-rs/MEMORY-POLICY.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761355542000
+    },
+    {
+      "path": "codex-rs/README.md",
+      "score": 65,
+      "orphan": true,
+      "broken": [
+        "codex-rs/core",
+        "codex-rs/exec",
+        "codex-rs/tui",
+        "codex-rs/cli"
+      ],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761512817000
+    },
+    {
+      "path": "codex-rs/REVIEW.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760802616000
+    },
+    {
+      "path": "codex-rs/ansi-escape/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1745526700000
+    },
+    {
+      "path": "codex-rs/apply-patch/apply_patch_tool_instructions.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1755832061000
+    },
+    {
+      "path": "codex-rs/chatgpt/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1752255011000
+    },
+    {
+      "path": "codex-rs/common/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1746578336000
+    },
+    {
+      "path": "codex-rs/config.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760759796000
+    },
+    {
+      "path": "codex-rs/core/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1757289363000
+    },
+    {
+      "path": "codex-rs/core/gpt_5_codex_prompt.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758152900000
+    },
+    {
+      "path": "codex-rs/core/prompt.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758005136000
+    },
+    {
+      "path": "codex-rs/core/prompt_coder.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760759796000
+    },
+    {
+      "path": "codex-rs/core/review_prompt.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1757719510000
+    },
+    {
+      "path": "codex-rs/core/src/prompt_for_pro_observer.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758576178000
+    },
+    {
+      "path": "codex-rs/core/templates/compact/history_bridge.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1757707630000
+    },
+    {
+      "path": "codex-rs/core/templates/compact/prompt.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1757707630000
+    },
+    {
+      "path": "codex-rs/docs/SPEC-KIT-DEMO/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759709593000
+    },
+    {
+      "path": "codex-rs/docs/architecture/phase0-baseline.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758411212000
+    },
+    {
+      "path": "codex-rs/docs/codex_mcp_interface.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758598847000
+    },
+    {
+      "path": "codex-rs/docs/protocol_v1.md",
+      "score": 85,
+      "orphan": false,
+      "broken": [
+        "codex-rs/core/src/protocol.rs",
+        "codex-rs/core/src/agent.rs",
+        "codex-rs/core/src/protocol.rs"
+      ],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1745526700000
+    },
+    {
+      "path": "codex-rs/execpolicy/README.md",
+      "score": 75,
+      "orphan": true,
+      "broken": [
+        "codex-rs/execpolicy/src/default.policy",
+        "codex-rs/execpolicy/tests"
+      ],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1745540087000
+    },
+    {
+      "path": "codex-rs/file-search/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1750883343000
+    },
+    {
+      "path": "codex-rs/git-tooling/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758671227000
+    },
+    {
+      "path": "codex-rs/linux-sandbox/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1748025427000
+    },
+    {
+      "path": "codex-rs/mcp-types/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1752898174000
+    },
+    {
+      "path": "codex-rs/protocol/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1755422854000
+    },
+    {
+      "path": "codex-rs/tui/ACE_LEARNING_USAGE.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761445034000
+    },
+    {
+      "path": "codex-rs/tui/HISTORY_CELLS_PLAN.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758798760000
+    },
+    {
+      "path": "codex-rs/tui/prompt_for_init_command.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1754506737000
+    },
+    {
+      "path": "codex-rs/tui/styles.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1755532945000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/conflict/SPEC.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/hal-skipped/SPEC.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/healthy/SPEC.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/missing-doc/SPEC.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/missing-doc/docs/SPEC-FIX-MISS/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/missing-doc/docs/SPEC-FIX-MISS/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/missing-doc/docs/SPEC-FIX-MISS/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/oversized/SPEC.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/stale/SPEC.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/CLA.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1744842271000
+    },
+    {
+      "path": "docs/DOCUMENTATION_CLEANUP_PLAN.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760884870000
+    },
+    {
+      "path": "docs/DOCUMENTATION_CONSOLIDATION_COMPLETE.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/HOMEBREW.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1756899869000
+    },
+    {
+      "path": "docs/INDEX.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760884870000
+    },
+    {
+      "path": "docs/PROJECT_STATUS.md",
+      "score": 80,
+      "orphan": false,
+      "broken": [
+        "ANALYSIS_SUMMARY.md",
+        "PROJECT_STATUS_ULTRATHINK.md",
+        "docs/SPEC-KIT-070-model-cost-optimization/",
+        "docs/SPEC-KIT-071-memory-system-optimization/",
+        "docs/SPEC-KIT-066-native-tool-migration/",
+        "docs/spec-kit/MAINT-10-EXTRACTION-PLAN.md",
+        "ACE_INTEGRATION.md",
+        "ANALYSIS_SUMMARY.md",
+        "PROJECT_STATUS_ULTRATHINK.md",
+        "FORK_SPEC_KIT_ANALYSIS.md",
+        "OPTIMIZATION_PLAN.md"
+      ],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/SPEC-KIT-010-local-memory-migration/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759011622000
+    },
+    {
+      "path": "docs/SPEC-KIT-010-local-memory-migration/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759015157000
+    },
+    {
+      "path": "docs/SPEC-KIT-010-local-memory-migration/runbook.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759024835000
+    },
+    {
+      "path": "docs/SPEC-KIT-010-local-memory-migration/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759011622000
+    },
+    {
+      "path": "docs/SPEC-KIT-010-local-memory-migration/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759024835000
+    },
+    {
+      "path": "docs/SPEC-KIT-013-telemetry-schema-guard/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759004007000
+    },
+    {
+      "path": "docs/SPEC-KIT-013-telemetry-schema-guard/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759004007000
+    },
+    {
+      "path": "docs/SPEC-KIT-013-telemetry-schema-guard/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759004007000
+    },
+    {
+      "path": "docs/SPEC-KIT-013-telemetry-schema-guard/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759004007000
+    },
+    {
+      "path": "docs/SPEC-KIT-014-docs-refresh/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759003716000
+    },
+    {
+      "path": "docs/SPEC-KIT-014-docs-refresh/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759146819000
+    },
+    {
+      "path": "docs/SPEC-KIT-014-docs-refresh/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759146819000
+    },
+    {
+      "path": "docs/SPEC-KIT-014-docs-refresh/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759159334000
+    },
+    {
+      "path": "docs/SPEC-KIT-015-nightly-sync/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759007466000
+    },
+    {
+      "path": "docs/SPEC-KIT-015-nightly-sync/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759010514000
+    },
+    {
+      "path": "docs/SPEC-KIT-015-nightly-sync/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759007466000
+    },
+    {
+      "path": "docs/SPEC-KIT-015-nightly-sync/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759010514000
+    },
+    {
+      "path": "docs/SPEC-KIT-018-hal-http-mcp/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759087355000
+    },
+    {
+      "path": "docs/SPEC-KIT-018-hal-http-mcp/hal_config.template.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759087355000
+    },
+    {
+      "path": "docs/SPEC-KIT-018-hal-http-mcp/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759146819000
+    },
+    {
+      "path": "docs/SPEC-KIT-018-hal-http-mcp/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759146819000
+    },
+    {
+      "path": "docs/SPEC-KIT-018-hal-http-mcp/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759176025000
+    },
+    {
+      "path": "docs/SPEC-KIT-025-add-automated-conflict-resolution-with/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759709593000
+    },
+    {
+      "path": "docs/SPEC-KIT-025-add-automated-conflict-resolution-with/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759709593000
+    },
+    {
+      "path": "docs/SPEC-KIT-025-add-automated-conflict-resolution-with/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759709593000
+    },
+    {
+      "path": "docs/SPEC-KIT-025-add-automated-conflict-resolution-with/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759709593000
+    },
+    {
+      "path": "docs/SPEC-KIT-030-add-documentation-for-rebasing-from/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-KIT-030-add-documentation-for-rebasing-from/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-KIT-030-add-documentation-for-rebasing-from/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-KIT-030-add-documentation-for-rebasing-from/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-KIT-035-spec-status-diagnostics/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-KIT-035-spec-status-diagnostics/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-KIT-035-spec-status-diagnostics/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-KIT-035-spec-status-diagnostics/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-KIT-040-add-simple-config-validation-utility/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760145077000
+    },
+    {
+      "path": "docs/SPEC-KIT-040-add-simple-config-validation-utility/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760554622000
+    },
+    {
+      "path": "docs/SPEC-KIT-040-add-simple-config-validation-utility/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760145077000
+    },
+    {
+      "path": "docs/SPEC-KIT-040-add-simple-config-validation-utility/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760554622000
+    },
+    {
+      "path": "docs/SPEC-KIT-045-design-systematic-testing-framework-for/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760304265000
+    },
+    {
+      "path": "docs/SPEC-KIT-045-design-systematic-testing-framework-for/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760314324000
+    },
+    {
+      "path": "docs/SPEC-KIT-045-design-systematic-testing-framework-for/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760304265000
+    },
+    {
+      "path": "docs/SPEC-KIT-045-design-systematic-testing-framework-for/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760314324000
+    },
+    {
+      "path": "docs/SPEC-KIT-045-mini/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760636508000
+    },
+    {
+      "path": "docs/SPEC-KIT-045-mini/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760636508000
+    },
+    {
+      "path": "docs/SPEC-KIT-045-mini/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760636508000
+    },
+    {
+      "path": "docs/SPEC-KIT-045-mini/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760477702000
+    },
+    {
+      "path": "docs/SPEC-KIT-045-mini/telemetry/anchors_2025-10-13T19-22-33Z.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760477702000
+    },
+    {
+      "path": "docs/SPEC-KIT-045-mini/telemetry/anchors_2025-10-14T16-19-16Z.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760477702000
+    },
+    {
+      "path": "docs/SPEC-KIT-045-mini/unlock-notes.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760636508000
+    },
+    {
+      "path": "docs/SPEC-KIT-060-template-validation-test/baseline-results.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760488547000
+    },
+    {
+      "path": "docs/SPEC-KIT-060-template-validation-test/final-comparison.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760627423000
+    },
+    {
+      "path": "docs/SPEC-KIT-060-template-validation-test/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761606496000
+    },
+    {
+      "path": "docs/SPEC-KIT-060-template-validation-test/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760478476000
+    },
+    {
+      "path": "docs/SPEC-KIT-060-template-validation-test/test-execution-plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760478476000
+    },
+    {
+      "path": "docs/SPEC-KIT-066-native-tool-migration/CODEX-HANDOFF.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761065731000
+    },
+    {
+      "path": "docs/SPEC-KIT-066-native-tool-migration/CRITICAL-FIX.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761001556000
+    },
+    {
+      "path": "docs/SPEC-KIT-066-native-tool-migration/IMPLEMENTATION-SUMMARY.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761001556000
+    },
+    {
+      "path": "docs/SPEC-KIT-066-native-tool-migration/PRD.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760970876000
+    },
+    {
+      "path": "docs/SPEC-KIT-066-native-tool-migration/REVIEW.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761065678000
+    },
+    {
+      "path": "docs/SPEC-KIT-066-native-tool-migration/SESSION-RESTART-PROMPT.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760972360000
+    },
+    {
+      "path": "docs/SPEC-KIT-066-native-tool-migration/phase1-inventory.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761001556000
+    },
+    {
+      "path": "docs/SPEC-KIT-066-native-tool-migration/phase3-verification.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761001556000
+    },
+    {
+      "path": "docs/SPEC-KIT-066-native-tool-migration/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760970876000
+    },
+    {
+      "path": "docs/SPEC-KIT-067-add-search-command-to-find-text-in-conversation-history/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760996845000
+    },
+    {
+      "path": "docs/SPEC-KIT-067-add-search-command-to-find-text-in-conversation-history/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760996845000
+    },
+    {
+      "path": "docs/SPEC-KIT-068-analyze-and-fix-quality-gates/PRD.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761153567000
+    },
+    {
+      "path": "docs/SPEC-KIT-068-analyze-and-fix-quality-gates/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761153567000
+    },
+    {
+      "path": "docs/SPEC-KIT-069-address-speckit-validate-multiple-agent-calls-and-incorrect-spawning/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761225866000
+    },
+    {
+      "path": "docs/SPEC-KIT-069-address-speckit-validate-multiple-agent-calls-and-incorrect-spawning/VALIDATION_COMPLETE.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761342056000
+    },
+    {
+      "path": "docs/SPEC-KIT-069-address-speckit-validate-multiple-agent-calls-and-incorrect-spawning/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761226627000
+    },
+    {
+      "path": "docs/SPEC-KIT-069-address-speckit-validate-multiple-agent-calls-and-incorrect-spawning/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761446378000
+    },
+    {
+      "path": "docs/SPEC-KIT-070-model-cost-optimization/MODEL-AVAILABILITY.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761606496000
+    },
+    {
+      "path": "docs/SPEC-KIT-070-model-cost-optimization/NATIVE_SPEC_ID_IMPLEMENTATION.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761346385000
+    },
+    {
+      "path": "docs/SPEC-KIT-070-model-cost-optimization/PHASE1A_RESULTS.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761345355000
+    },
+    {
+      "path": "docs/SPEC-KIT-070-model-cost-optimization/PHASE1_COMPLETE.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761347227000
+    },
+    {
+      "path": "docs/SPEC-KIT-070-model-cost-optimization/PHASE1_QUICK_WINS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761343762000
+    },
+    {
+      "path": "docs/SPEC-KIT-070-model-cost-optimization/PHASE2_COMPLEXITY_ROUTING.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761347464000
+    },
+    {
+      "path": "docs/SPEC-KIT-070-model-cost-optimization/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761343762000
+    },
+    {
+      "path": "docs/SPEC-KIT-070-model-cost-optimization/RESUME_IN_24_HOURS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761348553000
+    },
+    {
+      "path": "docs/SPEC-KIT-070-model-cost-optimization/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761606496000
+    },
+    {
+      "path": "docs/SPEC-KIT-070-model-cost-optimization/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761348553000
+    },
+    {
+      "path": "docs/SPEC-KIT-071-memory-system-optimization/ARCHITECTURE_REVIEW.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761353158000
+    },
+    {
+      "path": "docs/SPEC-KIT-071-memory-system-optimization/CLEANUP_PROGRESS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761356855000
+    },
+    {
+      "path": "docs/SPEC-KIT-071-memory-system-optimization/CLEANUP_QUICK_START.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761349739000
+    },
+    {
+      "path": "docs/SPEC-KIT-071-memory-system-optimization/GEMINI_INTEGRATION_RESOLVED.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761352856000
+    },
+    {
+      "path": "docs/SPEC-KIT-071-memory-system-optimization/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761349739000
+    },
+    {
+      "path": "docs/SPEC-KIT-071-memory-system-optimization/ROOT_CAUSE_ANALYSIS.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761350580000
+    },
+    {
+      "path": "docs/SPEC-KIT-071-memory-system-optimization/ULTRATHINK_RESEARCH_SYNTHESIS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761351880000
+    },
+    {
+      "path": "docs/SPEC-KIT-072-consensus-storage-separation/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761356855000
+    },
+    {
+      "path": "docs/SPEC-KIT-900-generic-smoke/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761660035000
+    },
+    {
+      "path": "docs/SPEC-KIT-900-generic-smoke/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761660035000
+    },
+    {
+      "path": "docs/SPEC-KIT-900-generic-smoke/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761660035000
+    },
+    {
+      "path": "docs/SPEC-KIT-900-generic-smoke/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/SPEC-KIT-900-generic-smoke/telemetry-cost-schema.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/SPEC-KIT-DEMO/audit.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760554622000
+    },
+    {
+      "path": "docs/SPEC-KIT-DEMO/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760314324000
+    },
+    {
+      "path": "docs/SPEC-KIT-DEMO/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759637147000
+    },
+    {
+      "path": "docs/SPEC-KIT-DEMO/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760314324000
+    },
+    {
+      "path": "docs/SPEC-KIT-DEMO/unlock.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760554622000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/EVIDENCE_CLEANUP_NOTES.md",
+      "score": 65,
+      "orphan": true,
+      "broken": [
+        "spec-kit/evidence-policy.md",
+        "spec-kit/evidence-policy.md",
+        "../scripts/spec_ops_004/evidence_stats.sh",
+        "../CLAUDE.md"
+      ],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-12T20:50:45Z-301386052.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-12T20:56:37Z-168709888.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-12T21:06:47Z-975517254.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-12T21:11:24Z-222161205.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-12T21:19:19Z-1871230763.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T00:25:58Z-971518482.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T00:58:25Z-1588216078.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T02:47:17Z-218242802.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T03:17:09Z-85944173.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T03:39:12Z-92930885.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T14:31:04Z-2052213612.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T15:16:57Z-293799580.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T17:06:06Z-147197217.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T18:50:20Z-1721217636.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T20:45:45Z-652528800.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-14T15:58:30Z-79323873.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-010/baseline_local_memory_20250927T231710Z.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759015157000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-013/baseline_2025-09-27T18:35:18Z-748128599.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759637147000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-018/baseline_2025-09-29T14:54:20Z-20962766.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759159334000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-018/baseline_2025-09-29T16:23:09Z-1240129600.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759165549000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-018/baseline_2025-09-29T16:23:24Z-2625014190.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759165549000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-wit/baseline_2025-10-06T01:08:33Z-88444394.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-wit/baseline_2025-10-06T02:04:48Z-154024238.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-with/baseline_2025-10-06T00:13:38Z-208265660.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-with/baseline_2025-10-06T00:49:51Z-109239950.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-with/baseline_2025-10-06T00:50:26Z-89521060.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-with/baseline_2025-10-06T01:24:43Z-143318960.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-with/baseline_2025-10-06T01:41:33Z-2853822581.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-with/baseline_2025-10-06T01:47:48Z-590123616.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-with/baseline_2025-10-06T02:21:30Z-1683420097.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-with/baseline_2025-10-06T03:19:24Z-2755027084.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-with/baseline_2025-10-06T12:55:44Z-2494211437.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-030-add-documentation-for-rebasing-from/baseline_2025-10-06T18:18:30Z-1934919542.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-030-add-documentation-for-rebasing-from/baseline_2025-10-06T20:16:34Z-3269921348.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-030-add-documentation-for-rebasing-from/baseline_2025-10-07T00:25:15Z-526413254.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-030-add-documentation-for-rebasing-from/baseline_2025-10-07T01:45:15Z-2890123015.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-045-mini/baseline_2025-10-12T20:37:00Z-286336050.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760554622000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-045-mini/baseline_2025-10-12T20:45:18Z-951128332.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760554622000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-067/baseline_2025-10-21T15:39:10Z-153168300.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761065031000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-067/baseline_2025-10-21T15:48:11Z-2703920966.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761065031000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-067/baseline_2025-10-21T16:36:01Z-311877671.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761065678000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-03T17:38:33Z-449014235.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759637147000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-03T19:50:48Z-206618953.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759637147000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-04T13:47:51Z-382218507.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759637147000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-04T19:17:35Z-141096409.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759637147000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-04T23:53:42Z-178924721.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759637147000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-05T00:22:04Z-26505108.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759637147000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-11T21:14:04Z-951428662.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760554622000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-12T14:26:32Z-1976726666.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760554622000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/notes/guardrail-hardening-schedule.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759146819000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/notes/guardrail-hardening.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759165549000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759146819000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759146819000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759165549000
+    },
+    {
+      "path": "docs/SPEC-SEARCH-COMMAND.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761001571000
+    },
+    {
+      "path": "docs/SUMMARY.md",
+      "score": 80,
+      "orphan": false,
+      "broken": [
+        "docs/spec-kit/",
+        "docs/spec-kit/prompts.json",
+        "mcp.json",
+        "config.toml.example",
+        "docs/SPEC-KIT-070-model-cost-optimization/",
+        "docs/SPEC-KIT-071-memory-system-optimization/",
+        "docs/SPEC-KIT-072-consensus-storage-separation/",
+        "docs/SPEC-KIT-068-analyze-and-fix-quality-gates/",
+        "docs/SPEC-KIT-069-address-speckit-validate-multiple-agent-calls-and-incorrect-spawning/",
+        "docs/SPEC-KIT-045-design-systematic-testing-framework-for/",
+        "docs/SPEC-KIT-060-template-validation-test/",
+        "docs/SPEC-KIT-067-add-search-command-to-find-text-in-conversation-history/",
+        "docs/SPEC-KIT-066-native-tool-migration/",
+        "docs/SPEC-KIT-035-spec-status-diagnostics/",
+        "docs/SPEC-KIT-040-add-simple-config-validation-utility/",
+        "docs/SPEC-KIT-030-add-documentation-for-rebasing-from/",
+        "docs/SPEC-KIT-025-add-automated-conflict-resolution-with/",
+        "docs/SPEC-KIT-018-hal-http-mcp/",
+        "docs/SPEC-KIT-014-docs-refresh/",
+        "docs/SPEC-KIT-013-telemetry-schema-guard/",
+        "docs/SPEC-KIT-010-local-memory-migration/",
+        "docs/SPEC-KIT-900-generic-smoke/",
+        "docs/SPEC-KIT-DEMO/",
+        "ACE_INTEGRATION.md",
+        "ACE_TEST_PLAN.md",
+        "ACE_TESTING_GUIDE.md",
+        "ACE_LEARNING_USAGE.md",
+        "PROJECT_STATUS_ULTRATHINK.md",
+        "ANALYSIS_SUMMARY.md",
+        "FORK_SPEC_KIT_ANALYSIS.md",
+        "OPTIMIZATION_PLAN.md",
+        "docs/archive/design-docs/",
+        "docs/spec-kit/MAINT-10-EXTRACTION-PLAN.md",
+        "docs/spec-kit/MAINT-10-EXECUTION-PLAN.md",
+        "docs/spec-kit/SERVICE_TRAITS_DEEP_ANALYSIS.md",
+        "docs/spec-kit/REFACTORING_FINAL_STATUS.md",
+        "docs/spec-kit/PHASE_3_DAY_4_TESTING_PLAN.md",
+        "docs/spec-kit/PHASE4_TEST_PLAN.md",
+        "docs/SPEC-OPS-004-integrated-coder-hooks/",
+        "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/",
+        "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/",
+        "docs/archive/completed-specs/",
+        "docs/SPEC-KIT-045-mini/",
+        "docs/archive/2025-sessions/",
+        "docs/SPEC-KIT-070-model-cost-optimization/",
+        "docs/SPEC-KIT-071-memory-system-optimization/",
+        "docs/SPEC-KIT-010-local-memory-migration/",
+        "docs/SPEC-KIT-045-design-systematic-testing-framework-for/",
+        "docs/SPEC-KIT-068-analyze-and-fix-quality-gates/",
+        "docs/SPEC-KIT-060-template-validation-test/",
+        "ACE_INTEGRATION.md",
+        "ACE_LEARNING_USAGE.md",
+        "ACE_TEST_PLAN.md",
+        "ACE_TESTING_GUIDE.md",
+        "codex-rs/ACE_INJECTION_FIX_REPORT.md",
+        "docs/SPEC-KIT-030-add-documentation-for-rebasing-from/",
+        "docs/SPEC-KIT-015-nightly-sync/",
+        "docs/report/docs-index.json"
+      ],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/THEME_CONFIG.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1757383269000
+    },
+    {
+      "path": "docs/UPSTREAM-SYNC.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760811756000
+    },
+    {
+      "path": "docs/advanced.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758180072000
+    },
+    {
+      "path": "docs/architecture/async-sync-boundaries.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760806439000
+    },
+    {
+      "path": "docs/archive/2025-sessions/ACE_BOTH_FIXES_APPLIED.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/ACE_FINAL_FIX_SUMMARY.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/ACE_FIX_APPLIED.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/ACE_INTEGRATION.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/ACE_READY_TO_TEST.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/ACE_RESTART_GUIDE.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/ACE_TESTING_GUIDE.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/ACE_TEST_PLAN.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/ACE_VALIDATION_SUMMARY.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/AGENT_ANALYSIS_GUIDE.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/AGENT_FIX_ANALYSIS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/CONFIG_FIX_SUMMARY.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760884870000
+    },
+    {
+      "path": "docs/archive/2025-sessions/CONFLICT_RESOLUTION.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/EPIC_SESSION_SUMMARY_2025-10-16.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/FINAL_STATUS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/IMPLEMENTATION_CONSENSUS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/NEXT_STEPS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/PHASE1_DAY1-2_COMPLETE.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/PHASE1_DAY3-4_COMPLETE.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/PHASE1_FINAL_REPORT.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/PHASE1_PROGRESS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/PHASE1_STATUS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/PHASE_1_COMPLETE.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/READY_TO_TEST.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/REFACTORING_COMPLETE_SUMMARY.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/REFACTORING_SESSION_NOTES.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/RESTART.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760884870000
+    },
+    {
+      "path": "docs/archive/2025-sessions/SESSION-HANDOFF-2025-10-18.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760884870000
+    },
+    {
+      "path": "docs/archive/2025-sessions/SESSION_RESTART_PROMPT.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/SESSION_RESUME_T78.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/SESSION_SUMMARY.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/SESSION_SUMMARY_2025-10-16.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760884870000
+    },
+    {
+      "path": "docs/archive/2025-sessions/SPEC_AUTO_FLOW.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/SPEC_OPS_TUI_IMPLEMENTATION.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/ace-analysis/ACE_COMMIT_PLAN.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/ace-analysis/ACE_FULL_FRAMEWORK.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/ace-analysis/ACE_INJECTION_ARCHITECTURE_RETHINK.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/ace-analysis/ACE_INJECTION_FIX_REPORT.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/ace-analysis/ACE_QUICKSTART.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/ace-analysis/ACE_SPEC_INTEGRATION_ANALYSIS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/ace-analysis/ACE_ULTRATHINK_ANALYSIS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/analysis/ANALYSIS_COMPLETE.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/analysis/ANALYSIS_INDEX.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/analysis/ANALYSIS_SUMMARY.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/analysis/FORK_ANALYSIS_SUMMARY.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/analysis/FORK_DEVIATIONS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/analysis/FORK_OPTIMIZATION_PLAN.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/analysis/FORK_SPEC_KIT_ANALYSIS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/analysis/OPTIMIZATION_PLAN.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/analysis/PROJECT_STATUS_FINAL.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/analysis/PROJECT_STATUS_ULTRATHINK.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/analysis/README_ANALYSIS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/analysis/SPEC_KIT_ALIGNMENT_ANALYSIS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/historical/ARCH-INSPECTION-FINDINGS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/historical/ARCHITECTURE-TASKS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/historical/DEBUGGING_STEPS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/historical/FORK-ANALYSIS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/historical/HONEST_ASSESSMENT.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/historical/HONEST_SITUATION.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/historical/SESSION-HANDOFF.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/output.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760884870000
+    },
+    {
+      "path": "docs/archive/2025-sessions/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760884870000
+    },
+    {
+      "path": "docs/archive/2025-sessions/spec-kit-planning/ARCHITECTURE_COMPLETE_2025-10-16.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/spec-kit-planning/FORK_ISOLATION_AUDIT.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/spec-kit-planning/MAINT-10-EXECUTION-PLAN.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/spec-kit-planning/MAINT-10-EXTRACTION-PLAN.md",
+      "score": 65,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [
+        "src/lib.rs",
+        "src/error.rs",
+        "src/types.rs",
+        "src/api.rs"
+      ],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/spec-kit-planning/PHASE3_TEST_PLAN.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/spec-kit-planning/PHASE4_TEST_PLAN.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/spec-kit-planning/PHASE_1_FINAL_STEPS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/spec-kit-planning/PHASE_2_EXTRACTION_PLAN.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/spec-kit-planning/PHASE_3_DAY_4_TESTING_PLAN.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/spec-kit-planning/PHASE_COMPLETION_TIMELINE.md",
+      "score": 65,
+      "orphan": true,
+      "broken": [
+        "docs/archive/2025-sessions/archive/2025-sessions/",
+        "docs/archive/PHASE1_FINAL_REPORT.md",
+        "docs/archive/PHASE1_DAY1-2_COMPLETE.md",
+        "docs/archive/PHASE1_DAY3-4_COMPLETE.md",
+        "docs/archive/PHASE1_FINAL_REPORT.md",
+        "docs/archive/PHASE1_PROGRESS.md",
+        "docs/archive/PHASE1_STATUS.md",
+        "docs/archive/2025-sessions/spec-kit-planning/REFACTORING_COMPLETE_SUMMARY.md",
+        "docs/archive/2025-sessions/spec-kit-planning/PHASE_1_COMPLETE.md",
+        "docs/archive/2025-sessions/spec-kit-planning/testing-policy.md"
+      ],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/spec-kit-planning/REFACTORING_BLOCKER.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/spec-kit-planning/REFACTORING_BLOCKER_RESOLUTION.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/spec-kit-planning/REFACTORING_CONTINUATION.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/spec-kit-planning/REFACTORING_FINAL_STATUS.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/spec-kit-planning/REFACTORING_PLAN.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/spec-kit-planning/REMAINING_OPPORTUNITIES.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/spec-kit-planning/REVIEW_COMPLETION_ANALYSIS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/spec-kit-planning/SERVICE_TRAITS_DEEP_ANALYSIS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/spec-kit-planning/STEP_1.4_HANDLER_EXTRACTION.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/spec-kit-planning/TEMPLATE_INTEGRATION.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/spec-kit-planning/TEMPLATE_VALIDATION_EVIDENCE.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/archive/2025-sessions/telemetry-tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760884870000
+    },
+    {
+      "path": "docs/archive/README.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760884870000
+    },
+    {
+      "path": "docs/archive/design-docs/COMMAND_NAMING_AND_MODEL_STRATEGY.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760884870000
+    },
+    {
+      "path": "docs/archive/design-docs/OPTIMIZATION_ANALYSIS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760884870000
+    },
+    {
+      "path": "docs/archive/design-docs/PHASE_3_STANDARDIZATION_PLAN.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760884870000
+    },
+    {
+      "path": "docs/archive/design-docs/SPEC_AUTO_ORCHESTRATOR_DESIGN.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760884870000
+    },
+    {
+      "path": "docs/archive/design-docs/model.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760884870000
+    },
+    {
+      "path": "docs/authentication.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758180072000
+    },
+    {
+      "path": "docs/config.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758778119000
+    },
+    {
+      "path": "docs/contributing.md",
+      "score": 80,
+      "orphan": true,
+      "broken": [
+        ".github/workflows/rust-release.yml"
+      ],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1756315839000
+    },
+    {
+      "path": "docs/experimental.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1756315839000
+    },
+    {
+      "path": "docs/faq.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1756315839000
+    },
+    {
+      "path": "docs/fork-enhancements.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1757585537000
+    },
+    {
+      "path": "docs/getting-started.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759180725000
+    },
+    {
+      "path": "docs/hal/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759176025000
+    },
+    {
+      "path": "docs/install.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1756315839000
+    },
+    {
+      "path": "docs/integration-zed.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758532620000
+    },
+    {
+      "path": "docs/interrupt-resume-postmortem.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1757052811000
+    },
+    {
+      "path": "docs/license.md",
+      "score": 80,
+      "orphan": true,
+      "broken": [
+        "LICENSE"
+      ],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1756315839000
+    },
+    {
+      "path": "docs/markdown_showcase.md",
+      "score": 80,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [
+        "src/main.rs"
+      ],
+      "staleDays": 0,
+      "updated": 1756364274000
+    },
+    {
+      "path": "docs/open-source-fund.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1756315839000
+    },
+    {
+      "path": "docs/platform-sandboxing.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1756315839000
+    },
+    {
+      "path": "docs/prompts.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758180072000
+    },
+    {
+      "path": "docs/release_management.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758081474000
+    },
+    {
+      "path": "docs/report/docs-report.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/report/verification.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/sandbox.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1756315839000
+    },
+    {
+      "path": "docs/slash-commands.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760314324000
+    },
+    {
+      "path": "docs/spec-kit/ARCHITECTURE.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760579198000
+    },
+    {
+      "path": "docs/spec-kit/COMMAND_INVENTORY.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760667598000
+    },
+    {
+      "path": "docs/spec-kit/COMMAND_REGISTRY_DESIGN.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760661236000
+    },
+    {
+      "path": "docs/spec-kit/COMMAND_REGISTRY_TESTS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760661236000
+    },
+    {
+      "path": "docs/spec-kit/MIGRATION_GUIDE.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760550875000
+    },
+    {
+      "path": "docs/spec-kit/QUALITY_GATES_CONFIGURATION.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760674077000
+    },
+    {
+      "path": "docs/spec-kit/QUALITY_GATES_DESIGN.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760667598000
+    },
+    {
+      "path": "docs/spec-kit/QUALITY_GATES_SPECIFICATION.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760667598000
+    },
+    {
+      "path": "docs/spec-kit/QUALITY_GATE_EXPERIMENT.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760667598000
+    },
+    {
+      "path": "docs/spec-kit/README.md",
+      "score": 80,
+      "orphan": false,
+      "broken": [
+        "docs/spec-kit/SERVICE_TRAITS_DEEP_ANALYSIS.md",
+        "docs/spec-kit/MAINT-10-EXTRACTION-PLAN.md",
+        "docs/spec-kit/MAINT-10-EXECUTION-PLAN.md",
+        "docs/spec-kit/REFACTORING_FINAL_STATUS.md",
+        "docs/spec-kit/PHASE_3_DAY_4_TESTING_PLAN.md",
+        "docs/spec-kit/PHASE4_TEST_PLAN.md"
+      ],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/spec-kit/REBASE_SAFETY_MATRIX_T80-T90.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760720104000
+    },
+    {
+      "path": "docs/spec-kit/TESTING_INFRASTRUCTURE.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760813361000
+    },
+    {
+      "path": "docs/spec-kit/adoption-dashboard.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/spec-kit/consensus-cost-audit-packet.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/spec-kit/consensus-degradation-playbook.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/spec-kit/consensus-runner-design.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760550875000
+    },
+    {
+      "path": "docs/spec-kit/ensemble-run-checklist.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760549825000
+    },
+    {
+      "path": "docs/spec-kit/evidence-baseline.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759512896000
+    },
+    {
+      "path": "docs/spec-kit/evidence-policy.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761446378000
+    },
+    {
+      "path": "docs/spec-kit/model-strategy.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760550875000
+    },
+    {
+      "path": "docs/spec-kit/new-spec-command.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760549825000
+    },
+    {
+      "path": "docs/spec-kit/qa-sweep-checklist.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/spec-kit/security-review-template.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/spec-kit/spec-auto-automation.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761446378000
+    },
+    {
+      "path": "docs/spec-kit/spec-auto-full-automation-plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759709593000
+    },
+    {
+      "path": "docs/spec-kit/telemetry-schema-v2.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759638803000
+    },
+    {
+      "path": "docs/spec-kit/testing-policy.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760882211000
+    },
+    {
+      "path": "docs/spec-ops-tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759159334000
+    },
+    {
+      "path": "docs/tui-chatwidget-refactor.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1756811674000
+    },
+    {
+      "path": "docs/upstream-acp-merge.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758530296000
+    },
+    {
+      "path": "docs/zdr.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758180072000
+    },
+    {
+      "path": "homebrew-tap/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1757091899000
+    },
+    {
+      "path": "memory/constitution.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761448338000
+    },
+    {
+      "path": "memory/local-notes.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760554622000
+    },
+    {
+      "path": "product-requirements.md",
+      "score": 100,
+      "orphan": false,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760806439000
+    },
+    {
+      "path": "release-notes/RELEASE_NOTES.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758802857000
+    },
+    {
+      "path": "templates/PRD-template.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760477122000
+    },
+    {
+      "path": "templates/analyze-template.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760631723000
+    },
+    {
+      "path": "templates/audit-template.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760631723000
+    },
+    {
+      "path": "templates/checklist-template.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760631723000
+    },
+    {
+      "path": "templates/clarify-template.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760631723000
+    },
+    {
+      "path": "templates/implement-template.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760631723000
+    },
+    {
+      "path": "templates/plan-template.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760477122000
+    },
+    {
+      "path": "templates/spec-template.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760477122000
+    },
+    {
+      "path": "templates/tasks-template.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760477122000
+    },
+    {
+      "path": "templates/unlock-template.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760631723000
+    },
+    {
+      "path": "templates/validate-template.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760631723000
+    }
+  ],
+  "dupClusters": [
+    [
+      "CHANGELOG.md",
+      "docs/INDEX.md",
+      "docs/archive/2025-sessions/ACE_TESTING_GUIDE.md"
+    ],
+    [
+      "PLANNING.md",
+      "docs/SPEC-KIT-900-generic-smoke/tasks.md",
+      "docs/archive/2025-sessions/CONFLICT_RESOLUTION.md",
+      "docs/archive/2025-sessions/RESTART.md"
+    ],
+    [
+      "README.md",
+      "docs/SPEC-KIT-025-add-automated-conflict-resolution-with/plan.md"
+    ],
+    [
+      "SPEC-KIT.md",
+      "docs/archive/2025-sessions/SESSION-HANDOFF-2025-10-18.md",
+      "docs/spec-kit/consensus-runner-design.md"
+    ],
+    [
+      "codex-rs/MEMORY-POLICY.md",
+      "docs/DOCUMENTATION_CONSOLIDATION_COMPLETE.md"
+    ],
+    [
+      "codex-rs/REVIEW.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/spec.md"
+    ],
+    [
+      "codex-rs/docs/protocol_v1.md",
+      "docs/SPEC-KIT-035-spec-status-diagnostics/PRD.md"
+    ],
+    [
+      "codex-rs/tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/PRD.md",
+      "codex-rs/tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/plan.md",
+      "codex-rs/tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/spec.md",
+      "codex-rs/tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/tasks.md",
+      "codex-rs/tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/PRD.md",
+      "codex-rs/tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/plan.md",
+      "codex-rs/tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/spec.md",
+      "codex-rs/tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/tasks.md",
+      "codex-rs/tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/PRD.md",
+      "codex-rs/tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/plan.md",
+      "codex-rs/tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/spec.md",
+      "codex-rs/tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/tasks.md",
+      "codex-rs/tui/tests/fixtures/spec_status/missing-doc/docs/SPEC-FIX-MISS/PRD.md",
+      "codex-rs/tui/tests/fixtures/spec_status/missing-doc/docs/SPEC-FIX-MISS/plan.md",
+      "codex-rs/tui/tests/fixtures/spec_status/missing-doc/docs/SPEC-FIX-MISS/spec.md",
+      "codex-rs/tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/PRD.md",
+      "codex-rs/tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/plan.md",
+      "codex-rs/tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/spec.md",
+      "codex-rs/tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/tasks.md",
+      "codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/PRD.md",
+      "codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/plan.md",
+      "codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/spec.md",
+      "codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/tasks.md"
+    ],
+    [
+      "docs/DOCUMENTATION_CLEANUP_PLAN.md",
+      "docs/archive/2025-sessions/spec-kit-planning/REMAINING_OPPORTUNITIES.md",
+      "docs/archive/2025-sessions/spec-kit-planning/SERVICE_TRAITS_DEEP_ANALYSIS.md"
+    ],
+    [
+      "docs/SPEC-KIT-060-template-validation-test/final-comparison.md",
+      "docs/archive/2025-sessions/analysis/FORK_SPEC_KIT_ANALYSIS.md"
+    ],
+    [
+      "docs/SPEC-KIT-060-template-validation-test/plan.md",
+      "docs/spec-kit/spec-auto-automation.md"
+    ],
+    [
+      "docs/SPEC-KIT-066-native-tool-migration/phase1-inventory.md",
+      "docs/SPEC-KIT-067-add-search-command-to-find-text-in-conversation-history/PRD.md",
+      "docs/spec-kit/testing-policy.md"
+    ],
+    [
+      "docs/SPEC-KIT-070-model-cost-optimization/PHASE1A_RESULTS.md",
+      "docs/archive/2025-sessions/analysis/FORK_OPTIMIZATION_PLAN.md"
+    ],
+    [
+      "docs/SPEC-KIT-070-model-cost-optimization/PHASE1_COMPLETE.md",
+      "docs/SPEC-KIT-070-model-cost-optimization/PHASE2_COMPLEXITY_ROUTING.md"
+    ],
+    [
+      "docs/SPEC-KIT-900-generic-smoke/plan.md",
+      "docs/SPEC-KIT-900-generic-smoke/telemetry-cost-schema.md"
+    ],
+    [
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-12T20:50:45Z-301386052.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-12T21:11:24Z-222161205.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-12T21:19:19Z-1871230763.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-045-mini/baseline_2025-10-12T20:37:00Z-286336050.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-045-mini/baseline_2025-10-12T20:45:18Z-951128332.md"
+    ],
+    [
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-12T20:56:37Z-168709888.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-12T21:06:47Z-975517254.md"
+    ],
+    [
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T00:25:58Z-971518482.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T02:47:17Z-218242802.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T03:17:09Z-85944173.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T14:31:04Z-2052213612.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T15:16:57Z-293799580.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T17:06:06Z-147197217.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T18:50:20Z-1721217636.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T20:45:45Z-652528800.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-14T15:58:30Z-79323873.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-04T19:17:35Z-141096409.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-11T21:14:04Z-951428662.md"
+    ],
+    [
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T00:58:25Z-1588216078.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T02:47:17Z-218242802.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T03:17:09Z-85944173.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T14:31:04Z-2052213612.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T15:16:57Z-293799580.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T17:06:06Z-147197217.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T18:50:20Z-1721217636.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T20:45:45Z-652528800.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-14T15:58:30Z-79323873.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-03T19:50:48Z-206618953.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-04T19:17:35Z-141096409.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-04T23:53:42Z-178924721.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-11T21:14:04Z-951428662.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-12T14:26:32Z-1976726666.md"
+    ],
+    [
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T03:39:12Z-92930885.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T14:31:04Z-2052213612.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T15:16:57Z-293799580.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T17:06:06Z-147197217.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T18:50:20Z-1721217636.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T20:45:45Z-652528800.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-14T15:58:30Z-79323873.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-04T19:17:35Z-141096409.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-11T21:14:04Z-951428662.md"
+    ],
+    [
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-018/baseline_2025-09-29T14:54:20Z-20962766.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-018/baseline_2025-09-29T16:23:09Z-1240129600.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-067/baseline_2025-10-21T15:39:10Z-153168300.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-067/baseline_2025-10-21T15:48:11Z-2703920966.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-067/baseline_2025-10-21T16:36:01Z-311877671.md"
+    ],
+    [
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-018/baseline_2025-09-29T16:23:24Z-2625014190.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-067/baseline_2025-10-21T15:39:10Z-153168300.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-067/baseline_2025-10-21T15:48:11Z-2703920966.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-067/baseline_2025-10-21T16:36:01Z-311877671.md"
+    ],
+    [
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-wit/baseline_2025-10-06T01:08:33Z-88444394.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-wit/baseline_2025-10-06T02:04:48Z-154024238.md"
+    ],
+    [
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-with/baseline_2025-10-06T00:13:38Z-208265660.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-with/baseline_2025-10-06T00:49:51Z-109239950.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-with/baseline_2025-10-06T00:50:26Z-89521060.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-with/baseline_2025-10-06T01:24:43Z-143318960.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-with/baseline_2025-10-06T01:41:33Z-2853822581.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-with/baseline_2025-10-06T01:47:48Z-590123616.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-with/baseline_2025-10-06T02:21:30Z-1683420097.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-with/baseline_2025-10-06T03:19:24Z-2755027084.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-025-add-automated-conflict-resolution-with/baseline_2025-10-06T12:55:44Z-2494211437.md"
+    ],
+    [
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-030-add-documentation-for-rebasing-from/baseline_2025-10-06T20:16:34Z-3269921348.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-030-add-documentation-for-rebasing-from/baseline_2025-10-07T00:25:15Z-526413254.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-030-add-documentation-for-rebasing-from/baseline_2025-10-07T01:45:15Z-2890123015.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-067/baseline_2025-10-21T15:39:10Z-153168300.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-067/baseline_2025-10-21T15:48:11Z-2703920966.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-067/baseline_2025-10-21T16:36:01Z-311877671.md"
+    ],
+    [
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-03T17:38:33Z-449014235.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-03T19:50:48Z-206618953.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-04T23:53:42Z-178924721.md",
+      "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-05T00:22:04Z-26505108.md"
+    ],
+    [
+      "docs/archive/2025-sessions/ACE_INTEGRATION.md",
+      "docs/archive/2025-sessions/ACE_TEST_PLAN.md"
+    ],
+    [
+      "docs/archive/2025-sessions/EPIC_SESSION_SUMMARY_2025-10-16.md",
+      "docs/archive/2025-sessions/spec-kit-planning/SERVICE_TRAITS_DEEP_ANALYSIS.md"
+    ],
+    [
+      "docs/archive/2025-sessions/PHASE_1_COMPLETE.md",
+      "docs/archive/2025-sessions/SESSION-HANDOFF-2025-10-18.md",
+      "docs/archive/2025-sessions/spec-kit-planning/REFACTORING_FINAL_STATUS.md"
+    ],
+    [
+      "docs/archive/2025-sessions/REFACTORING_COMPLETE_SUMMARY.md",
+      "docs/archive/2025-sessions/spec-kit-planning/MAINT-10-EXECUTION-PLAN.md"
+    ],
+    [
+      "docs/archive/2025-sessions/SPEC_OPS_TUI_IMPLEMENTATION.md",
+      "docs/spec-kit/COMMAND_REGISTRY_DESIGN.md"
+    ],
+    [
+      "docs/archive/2025-sessions/ace-analysis/ACE_INJECTION_FIX_REPORT.md",
+      "docs/archive/2025-sessions/spec-kit-planning/FORK_ISOLATION_AUDIT.md"
+    ],
+    [
+      "docs/archive/2025-sessions/analysis/ANALYSIS_SUMMARY.md",
+      "docs/archive/2025-sessions/analysis/PROJECT_STATUS_ULTRATHINK.md"
+    ],
+    [
+      "docs/archive/2025-sessions/spec-kit-planning/PHASE4_TEST_PLAN.md",
+      "docs/getting-started.md"
+    ],
+    [
+      "docs/archive/2025-sessions/spec-kit-planning/PHASE_3_DAY_4_TESTING_PLAN.md",
+      "docs/spec-kit/REBASE_SAFETY_MATRIX_T80-T90.md"
+    ],
+    [
+      "docs/archive/design-docs/model.md",
+      "docs/interrupt-resume-postmortem.md"
+    ]
+  ]
+}

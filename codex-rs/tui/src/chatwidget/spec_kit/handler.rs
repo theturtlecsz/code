@@ -4,23 +4,25 @@
 //! Using free functions instead of methods to avoid Rust borrow checker issues.
 
 use super::super::ChatWidget; // Parent module (friend access to private fields)
-use super::context::SpecKitContext; // MAINT-3 Phase 2: Trait for testable functions
 use super::consensus::{expected_agents_for_stage, parse_consensus_stage};
-use super::evidence::{EvidenceRepository, FilesystemEvidence};
+use super::context::SpecKitContext; // MAINT-3 Phase 2: Trait for testable functions
+use super::evidence::FilesystemEvidence;
 use super::state::{
     GuardrailWait, SpecAutoPhase, ValidateBeginOutcome, ValidateCompletionReason,
-    ValidateLifecycleEvent, ValidateMode, ValidateRunInfo,
+    ValidateRunInfo,
+};
+use super::validation_lifecycle::{
+    cleanup_spec_auto_with_cancel, compute_validate_payload_hash,
+    record_validate_lifecycle_event, ValidateLifecycleEvent, ValidateMode,
 };
 use crate::app_event::BackgroundPlacement;
 use crate::history_cell::HistoryCellType;
 use crate::slash_command::{HalMode, SlashCommand};
 use crate::spec_prompts::SpecStage;
 use crate::spec_status::{SpecStatusArgs, collect_report, degraded_warning, render_dashboard};
-use chrono::Utc;
 use codex_core::protocol::{AgentInfo, InputItem};
 use codex_core::slash_commands::format_subagent_command;
 use serde_json::json;
-use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
 // FORK-SPECIFIC (just-every/code): MCP retry configuration
@@ -29,133 +31,6 @@ const MCP_RETRY_DELAY_MS: u64 = 100;
 
 // FORK-SPECIFIC (just-every/code): Spec-auto agent retry configuration
 const SPEC_AUTO_AGENT_RETRY_ATTEMPTS: u32 = 3;
-
-pub(crate) fn compute_validate_payload_hash(
-    mode: ValidateMode,
-    stage: SpecStage,
-    spec_id: &str,
-    payload: &str,
-) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(mode.as_str().as_bytes());
-    hasher.update(b"|");
-    hasher.update(stage.command_name().as_bytes());
-    hasher.update(b"|");
-    hasher.update(spec_id.as_bytes());
-    hasher.update(b"|");
-    hasher.update(payload.trim().as_bytes());
-    format!("{:x}", hasher.finalize())
-}
-
-pub(crate) fn record_validate_lifecycle_event(
-    widget: &mut ChatWidget,
-    spec_id: &str,
-    run_id: &str,
-    attempt: u32,
-    dedupe_count: u32,
-    payload_hash: &str,
-    mode: ValidateMode,
-    event: ValidateLifecycleEvent,
-) {
-    if !widget.spec_kit_telemetry_enabled() {
-        return;
-    }
-
-    let telemetry = json!({
-        "spec_id": spec_id,
-        "stage": "validate",
-        "event": event.as_str(),
-        "mode": mode.as_str(),
-        "stage_run_id": run_id,
-        "attempt": attempt,
-        "dedupe_count": dedupe_count,
-        "payload_hash": payload_hash,
-        "timestamp": Utc::now().to_rfc3339(),
-    });
-
-    let repo = FilesystemEvidence::new(widget.config.cwd.clone(), None);
-    let _ = repo.write_telemetry_bundle(spec_id, SpecStage::Validate, &telemetry);
-
-    if let Ok(handle) = tokio::runtime::Handle::try_current() {
-        let manager = widget.mcp_manager.clone();
-        let content = match serde_json::to_string(&telemetry) {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-        let spec_id_owned = spec_id.to_string();
-        handle.spawn(async move {
-            let guard = manager.lock().await;
-            if let Some(mgr) = guard.as_ref() {
-                let args = json!({
-                    "content": content,
-                    "domain": "spec-kit",
-                    "importance": 8,
-                    "tags": [
-                        format!("spec:{}", spec_id_owned),
-                        "stage:validate",
-                        "artifact:agent_lifecycle"
-                    ]
-                });
-                let _ = mgr
-                    .call_tool(
-                        "local-memory",
-                        "store_memory",
-                        Some(args),
-                        Some(std::time::Duration::from_secs(10)),
-                    )
-                    .await;
-            }
-        });
-    }
-}
-
-/// Clean up spec_auto_state and emit Cancelled lifecycle event if validate is active
-/// FORK-SPECIFIC (just-every/code): FR3 cancellation cleanup for SPEC-KIT-069
-pub(crate) fn cleanup_spec_auto_with_cancel(widget: &mut ChatWidget, reason: &str) {
-    // Extract lifecycle info before borrowing mutably
-    let lifecycle_info = widget.spec_auto_state.as_ref().and_then(|state| {
-        state.validate_lifecycle.active().map(|info| {
-            (
-                state.spec_id.clone(),
-                info.run_id,
-                info.attempt,
-                info.dedupe_count,
-                info.mode,
-            )
-        })
-    });
-
-    // Emit Cancelled lifecycle event if there was an active run
-    if let Some((spec_id, run_id, attempt, dedupe_count, mode)) = lifecycle_info {
-        record_validate_lifecycle_event(
-            widget,
-            &spec_id,
-            &run_id,
-            attempt,
-            dedupe_count,
-            "", // Empty payload hash for cancelled runs
-            mode,
-            ValidateLifecycleEvent::Cancelled,
-        );
-
-        // Clean up the validate lifecycle state
-        if let Some(state) = widget.spec_auto_state.as_ref() {
-            let _ = state.validate_lifecycle.reset_active(ValidateCompletionReason::Cancelled);
-        }
-    }
-
-    // Clear the spec_auto_state
-    widget.spec_auto_state = None;
-
-    // Log cancellation reason for debugging
-    widget.history_push(crate::history_cell::PlainHistoryCell::new(
-        vec![ratatui::text::Line::from(format!(
-            "Spec-auto pipeline cancelled: {}",
-            reason
-        ))],
-        HistoryCellType::Error,
-    ));
-}
 
 fn block_on_sync<F, Fut, T>(factory: F) -> T
 where

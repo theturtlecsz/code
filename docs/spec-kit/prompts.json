@@ -88,6 +88,51 @@
       "On failure: emit resume token {stage, reason, suggested fix}."
     ]
   },
+  "spec-clarify": {
+    "version": "20251028-clarify-a",
+    "gemini": {
+      "role": "Ambiguity Scout",
+      "prompt": "Context surfaces:\n- SPEC packet excerpts\n- PRD sections for ${SPEC_ID}\n- Prior consensus artifacts (plan/tasks if available)\n${CONTEXT}\n\nTask:\nIdentify up to five unresolved ambiguities that would block implementation. For each, attempt an authoritative answer based on industry norms or existing requirements.\n\nOutput JSON:\n{\n  \"stage\": \"spec-clarify\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"gemini\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"issues\": [ {\n      \"id\": string,\n      \"question\": string,\n      \"proposed_answer\": string|null,\n      \"confidence\": \"high\"|\"medium\"|\"low\",\n      \"magnitude\": \"critical\"|\"important\"|\"minor\",\n      \"resolvability\": \"auto-fix\"|\"suggest-fix\"|\"need-human\",\n      \"reasoning\": string,\n      \"evidence\": [string]\n  } ]\n}\nPersist JSON via local-memory store (tags: spec:${SPEC_ID}, stage:clarify, consensus-artifact, importance>=8)."
+    },
+    "claude": {
+      "role": "Consensus Resolver",
+      "prompt": "Inputs:\n- SPEC + PRD extracts\n- Gemini findings (${PREVIOUS_OUTPUTS.gemini})\n- Any prior stage syntheses\n\nTask:\nValidate or refine ambiguity answers, escalating anything that must go back to product/architecture.\n\nOutput JSON:\n{\n  \"stage\": \"spec-clarify\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"claude\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"issues\": [ {\n      \"id\": string,\n      \"question\": string,\n      \"answer\": string|null,\n      \"confidence\": \"high\"|\"medium\"|\"low\",\n      \"magnitude\": \"critical\"|\"important\"|\"minor\",\n      \"resolvability\": \"auto-fix\"|\"suggest-fix\"|\"need-human\",\n      \"reasoning\": string,\n      \"followup_action\": string|null\n  } ],\n  \"open_questions\": [ string ]\n}\nStore JSON to local-memory with tags spec:${SPEC_ID}, stage:clarify, consensus-artifact."
+    },
+    "code": {
+      "role": "Implementation Lens",
+      "prompt": "Focus on technical blockers for SPEC ${SPEC_ID}. Combine SPEC/PRD context with plan/tasks (if any) to answer: what do engineers still need to know?\n\nOutput JSON:\n{\n  \"stage\": \"spec-clarify\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"code\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"issues\": [ {\n      \"id\": string,\n      \"question\": string,\n      \"answer\": string|null,\n      \"confidence\": \"high\"|\"medium\"|\"low\",\n      \"magnitude\": \"critical\"|\"important\"|\"minor\",\n      \"resolvability\": \"auto-fix\"|\"suggest-fix\"|\"need-human\",\n      \"reasoning\": string,\n      \"related_files\": [string]\n  } ],\n  \"implementation_notes\": [ string ]\n}\nPersist to local-memory (tags spec:${SPEC_ID}, stage:clarify, consensus-artifact, importance>=8)."
+    }
+  },
+  "spec-analyze": {
+    "version": "20251028-analyze-a",
+    "gemini": {
+      "role": "Consistency Auditor",
+      "prompt": "Artifacts provided:\n${ARTIFACTS}\n\nGoal: Cross-check SPEC ${SPEC_ID} against downstream documents (plan/tasks/PRD). Flag gaps, contradictions, and terminology drift.\n\nOutput JSON mirrors quality-gate analyze schema but adds traceability:\n{\n  \"stage\": \"spec-analyze\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"gemini\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"issues\": [ {\n      \"id\": string,\n      \"type\": \"missing_requirement\"|\"terminology\"|\"contradiction\"|\"coverage_gap\",\n      \"description\": string,\n      \"severity\": \"critical\"|\"important\"|\"minor\",\n      \"affected_artifacts\": [string],\n      \"suggested_fix\": string|null,\n      \"confidence\": \"high\"|\"medium\"|\"low\",\n      \"resolvability\": \"auto-fix\"|\"suggest-fix\"|\"need-human\"\n  } ]\n}\nStore via local-memory (tags spec:${SPEC_ID}, stage:analyze, consensus-artifact)."
+    },
+    "claude": {
+      "role": "Validator",
+      "prompt": "Use SPEC, PRD, plan, tasks (if present) plus Gemini’s findings (${PREVIOUS_OUTPUTS.gemini}) to validate coverage. Escalate anything that threatens acceptance criteria.\n\nOutput JSON identical to spec-analyze schema but may collapse/merge issues. Include \"proposed_action\" when fix is obvious. Persist to local-memory with tags spec:${SPEC_ID}, stage:analyze, consensus-artifact."
+    },
+    "code": {
+      "role": "Implementation Checker",
+      "prompt": "From an engineering perspective, inspect references (files/tests) suggested by plan/tasks. Surface contradictions or missing detail that would break implementation.\n\nEmit the same spec-analyze JSON, adding \"implementation_hint\" inside each issue when a remediation command or file path is known. Store via local-memory (tags spec:${SPEC_ID}, stage:analyze, consensus-artifact)."
+    }
+  },
+  "spec-checklist": {
+    "version": "20251028-checklist-a",
+    "claude": {
+      "role": "Quality Assessor",
+      "prompt": "Evaluate requirement quality in SPEC ${SPEC_ID} (or PRD if SPEC delegates). Score using 0-10 rubric and note improvements.\n\nOutput JSON:\n{\n  \"stage\": \"spec-checklist\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"claude\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"requirements\": [ {\n      \"id\": string,\n      \"text\": string,\n      \"scores\": {\n        \"specificity\": number,\n        \"testability\": number,\n        \"completeness\": number,\n        \"clarity\": number\n      },\n      \"overall\": number,\n      \"needs_improvement\": boolean,\n      \"suggested_improvement\": string|null,\n      \"confidence\": \"high\"|\"medium\"|\"low\",\n      \"resolvability\": \"auto-fix\"|\"suggest-fix\"|\"need-human\"\n  } ],\n  \"summary\": string\n}\nPersist to local-memory (tags spec:${SPEC_ID}, stage:checklist, consensus-artifact)."
+    },
+    "code": {
+      "role": "Implementation Assessor",
+      "prompt": "Score requirements from implementability standpoint—focus on missing technical detail, test hooks, and integration clarity. Reuse spec-checklist JSON schema and ensure \"suggested_improvement\" points to specific files/tests when possible. Store via local-memory with tags spec:${SPEC_ID}, stage:checklist, consensus-artifact."
+    },
+    "gemini": {
+      "role": "Requirement Scorer",
+      "prompt": "Provide a quick first pass scoring (same schema) emphasising completeness and ambiguities. Keep feedback concise (<40 words per requirement). Persist with tags spec:${SPEC_ID}, stage:checklist, consensus-artifact."
+    }
+  },
   "quality-gate-clarify": {
     "version": "20251016-clarify-gate-a",
     "gemini": {

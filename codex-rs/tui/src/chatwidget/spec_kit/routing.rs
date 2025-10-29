@@ -6,8 +6,8 @@
 //! isolating all routing logic from app.rs to minimize rebase conflicts.
 
 use super::super::ChatWidget;
-use super::ace_prompt_injector;
 use super::command_registry::SPEC_KIT_REGISTRY;
+use super::subagent_defaults;
 use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
 use codex_core::protocol::Op;
@@ -103,12 +103,23 @@ pub fn try_dispatch_spec_kit_command(
         // Use command_name directly - config.toml entries match (e.g., "speckit.new")
         let config_name = command_name;
 
-        // Format with actual config to get orchestrator instructions
+        // Combine user-provided subagent command config with Spec-Kit defaults
+        let mut merged_commands = widget.config.subagent_commands.clone();
+        if !merged_commands
+            .iter()
+            .any(|cfg| cfg.name.eq_ignore_ascii_case(config_name))
+        {
+            if let Some(default_cfg) = subagent_defaults::default_for(config_name) {
+                merged_commands.push(default_cfg);
+            }
+        }
+
+        // Format with the resolved configuration to get orchestrator instructions
         let formatted = codex_core::slash_commands::format_subagent_command(
             config_name,
             &args,
             Some(&widget.config.agents),
-            Some(&widget.config.subagent_commands),
+            Some(merged_commands.as_slice()),
         );
 
         // Submit with ACE injection (async, event-based)
