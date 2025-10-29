@@ -3,7 +3,7 @@
 //! This module handles multi-agent execution coordination:
 //! - Auto-submitting prompts to agents with ACE routing
 //! - Aggregator effort configuration (SPEC-KIT-070)
-//! - Agent completion tracking and retry logic
+//! - Agent completion tracking with degraded mode continuation
 //! - Cost tracking per agent
 //! - Degraded follow-up scheduling
 
@@ -22,9 +22,6 @@ use super::validation_lifecycle::{
     compute_validate_payload_hash, record_validate_lifecycle_event,
     ValidateLifecycleEvent, ValidateMode,
 };
-
-// FORK-SPECIFIC (just-every/code): Spec-auto agent retry configuration
-pub(crate) const SPEC_AUTO_AGENT_RETRY_ATTEMPTS: u32 = 3;
 
 pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, spec_id: &str) {
     let goal = widget
@@ -147,17 +144,12 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
             }
 
             // SPEC-KIT-070: ACE-aligned routing — set aggregator effort per stage
-            // Estimate tokens ~ chars/4, escalate on conflict retry
-            let prior_conflict_retry = widget
-                .spec_auto_state
-                .as_ref()
-                .map(|s| s.agent_retry_count > 0)
-                .unwrap_or(false);
-
+            // Estimate tokens ~ chars/4
+            // Always use standard routing (no retry logic)
             let routing = super::ace_route_selector::decide_stage_routing(
                 stage,
                 prompt.len(),
-                prior_conflict_retry,
+                false,
             );
 
             // Apply aggregator effort by updating gpt_pro args in-session
@@ -487,61 +479,35 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
             .any(|a| matches!(a.status, super::super::AgentStatus::Failed));
 
         if has_failures {
-            // FORK-SPECIFIC: Retry logic for failed agents (just-every/code)
-            let (retry_count, current_stage) = {
-                let Some(state) = widget.spec_auto_state.as_ref() else {
-                    return;
-                };
-                let Some(stage) = state.current_stage() else {
-                    return;
-                };
-                (state.agent_retry_count, stage)
-            };
+            // NEW: Continue in degraded mode (no retries)
+            // Consensus will handle 2/3 majority if enough agents succeeded
+            let missing: Vec<_> = expected_agents
+                .iter()
+                .filter(|exp| !completed_names.contains(&exp.to_lowercase()))
+                .map(|s| s.as_str())
+                .collect();
 
-            if retry_count < SPEC_AUTO_AGENT_RETRY_ATTEMPTS {
-                // Retry the stage
-                widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                    vec![ratatui::text::Line::from(format!(
-                        "⚠ Agent failures detected. Retrying {}/{} ...",
-                        retry_count + 1,
-                        SPEC_AUTO_AGENT_RETRY_ATTEMPTS
-                    ))],
-                    crate::history_cell::HistoryCellType::Notice,
-                ));
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![ratatui::text::Line::from(format!(
+                    "⚠ Agent failures detected. Missing/failed: {:?}",
+                    missing
+                ))],
+                crate::history_cell::HistoryCellType::Notice,
+            ));
 
-                // Increment retry count
-                if let Some(state) = widget.spec_auto_state.as_mut() {
-                    state.agent_retry_count += 1;
-                    state.agent_retry_context = Some(format!(
-                        "Previous attempt failed (retry {}/{}). Be more thorough and check for edge cases.",
-                        retry_count + 1,
-                        SPEC_AUTO_AGENT_RETRY_ATTEMPTS
-                    ));
-                    state.reset_cost_tracking(current_stage);
-                }
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![ratatui::text::Line::from(
+                    "Continuing in degraded mode (2/3 consensus). Scheduling follow-up checklist.",
+                )],
+                crate::history_cell::HistoryCellType::Notice,
+            ));
 
-                // Re-execute the stage with retry context
-                let Some(state) = widget.spec_auto_state.as_ref() else {
-                    return;
-                };
-                let spec_id = state.spec_id.clone();
-                auto_submit_spec_stage_prompt(widget, current_stage, &spec_id);
-                return;
-            } else {
-                // Max retries exhausted
-                let missing: Vec<_> = expected_agents
-                    .iter()
-                    .filter(|exp| !completed_names.contains(&exp.to_lowercase()))
-                    .map(|s| s.as_str())
-                    .collect();
-
-                halt_spec_auto_with_error(
-                    widget,
-                    format!(
-                        "Agent execution failed after {} retries. Missing/failed: {:?}",
-                        SPEC_AUTO_AGENT_RETRY_ATTEMPTS, missing
-                    ),
-                );
+            // Mark for degraded follow-up
+            let followup_data = widget.spec_auto_state.as_ref().and_then(|state| {
+                state.current_stage().map(|stage| (state.spec_id.clone(), stage))
+            });
+            if let Some((spec_id, stage)) = followup_data {
+                schedule_degraded_follow_up(widget, stage, &spec_id);
             }
         }
     }

@@ -1,6 +1,15 @@
 {
-  "generatedAt": "2025-10-29T18:20:48.721Z",
+  "generatedAt": "2025-10-29T18:40:43.737Z",
   "docs": [
+    {
+      "path": "ACE_PREFETCH_IMPLEMENTATION.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761763223000
+    },
     {
       "path": "AGENTS.md",
       "score": 85,
@@ -3265,7 +3274,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761760433000
+      "updated": 1761762450000
     },
     {
       "path": "docs/report/verification.md",

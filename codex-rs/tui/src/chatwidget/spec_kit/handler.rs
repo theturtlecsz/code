@@ -15,9 +15,7 @@ pub(crate) use super::consensus_coordinator::handle_spec_consensus_impl;
 pub use super::agent_orchestrator::{
     auto_submit_spec_stage_prompt, on_spec_auto_agents_complete, record_agent_costs,
 };
-pub(crate) use super::agent_orchestrator::{
-    schedule_degraded_follow_up, SPEC_AUTO_AGENT_RETRY_ATTEMPTS,
-};
+pub(crate) use super::agent_orchestrator::schedule_degraded_follow_up;
 
 // Re-export pipeline coordination functions (MAINT-3 Phase 5: Extracted to pipeline_coordinator.rs)
 pub use super::pipeline_coordinator::{

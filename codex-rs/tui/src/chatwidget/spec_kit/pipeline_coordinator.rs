@@ -8,9 +8,7 @@
 //! - Quality gate checkpoint integration
 
 use super::super::ChatWidget;
-use super::agent_orchestrator::{
-    auto_submit_spec_stage_prompt, SPEC_AUTO_AGENT_RETRY_ATTEMPTS,
-};
+use super::agent_orchestrator::auto_submit_spec_stage_prompt;
 use super::command_handlers::halt_spec_auto_with_error;
 use super::consensus_coordinator::{block_on_sync, persist_cost_summary, run_consensus_with_retry};
 use super::quality_gate_handler::{
@@ -253,37 +251,12 @@ pub fn on_spec_auto_task_complete(widget: &mut ChatWidget, task_id: &str) {
 
             if !outcome.success {
                 if stage == SpecStage::Validate {
-                    let (exhausted, retry_message, completion) = {
+                    // Record failure and halt (no retries)
+                    let completion = {
                         let Some(state) = widget.spec_auto_state.as_mut() else {
                             return;
                         };
-                        const SPEC_AUTO_MAX_VALIDATE_RETRIES: u32 = 2;
-
-                        let completion = state.reset_validate_run(ValidateCompletionReason::Failed);
-
-                        let exhausted = if state.validate_retries >= SPEC_AUTO_MAX_VALIDATE_RETRIES
-                        {
-                            true
-                        } else {
-                            state.validate_retries += 1;
-                            let insert_at = state.current_index + 1;
-                            state.stages.splice(
-                                insert_at..insert_at,
-                                vec![SpecStage::Implement, SpecStage::Validate],
-                            );
-                            false
-                        };
-
-                        let retry_message = if exhausted {
-                            None
-                        } else {
-                            Some(format!(
-                                "Retrying implementation/validation cycle (attempt {}).",
-                                state.validate_retries + 1
-                            ))
-                        };
-
-                        (exhausted, retry_message, completion)
+                        state.reset_validate_run(ValidateCompletionReason::Failed)
                     };
 
                     if let Some(completion) = completion {
@@ -299,20 +272,15 @@ pub fn on_spec_auto_task_complete(widget: &mut ChatWidget, task_id: &str) {
                         );
                     }
 
-                    if exhausted {
-                        cleanup_spec_auto_with_cancel(
-                            widget,
-                            "Validation failed repeatedly after maximum retry attempts"
-                        );
-                        return;
-                    }
+                    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                        vec![ratatui::text::Line::from(
+                            "⚠ Validation failed. Manual review required."
+                        )],
+                        HistoryCellType::Notice,
+                    ));
 
-                    if let Some(message) = retry_message {
-                        widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                            vec![ratatui::text::Line::from(message)],
-                            HistoryCellType::Notice,
-                        ));
-                    }
+                    halt_spec_auto_with_error(widget, "Validation failed".to_string());
+                    return;
                 } else {
                     cleanup_spec_auto_with_cancel(
                         widget,
@@ -390,7 +358,6 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
     };
 
     let spec_id = state.spec_id.clone();
-    let retry_count = state.agent_retry_count; // FORK-SPECIFIC: Track retries
 
     let mut active_validate_info: Option<ValidateRunInfo> = None;
     if current_stage == SpecStage::Validate {
@@ -439,7 +406,7 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
         HistoryCellType::Notice,
     ));
 
-    // FORK-SPECIFIC (just-every/code): Run consensus check via async MCP with retry logic
+    // Run consensus check via async MCP (no retries)
     let consensus_result = block_on_sync(|| {
         let mcp = widget.mcp_manager.clone();
         let cwd = widget.config.cwd.clone();
@@ -450,7 +417,7 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
 
     match consensus_result {
         Ok((consensus_lines, consensus_ok)) => {
-            // FORK-SPECIFIC: Detect empty/invalid results and retry (just-every/code)
+            // Detect empty/invalid results and continue in degraded mode
             let results_empty_or_invalid = consensus_lines.iter().any(|line| {
                 let text = line.to_string();
                 text.contains("No structured local-memory entries")
@@ -459,58 +426,25 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                     || text.contains("No local-memory entries found")
             });
 
-            if (results_empty_or_invalid || !consensus_ok)
-                && retry_count < SPEC_AUTO_AGENT_RETRY_ATTEMPTS
-            {
+            if results_empty_or_invalid || !consensus_ok {
                 widget.history_push(crate::history_cell::PlainHistoryCell::new(
                     consensus_lines.clone(),
                     HistoryCellType::Notice,
                 ));
 
                 widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                    vec![ratatui::text::Line::from(format!(
-                        "⚠ Empty/invalid agent results. Retrying {}/{} ...",
-                        retry_count + 1,
-                        SPEC_AUTO_AGENT_RETRY_ATTEMPTS
-                    ))],
+                    vec![ratatui::text::Line::from(
+                        "⚠ Degraded consensus. Scheduling follow-up checklist."
+                    )],
                     crate::history_cell::HistoryCellType::Notice,
                 ));
 
-                if current_stage == SpecStage::Validate {
-                    if let Some(state_ref) = widget.spec_auto_state.as_ref() {
-                        if let Some(completion) =
-                            state_ref.reset_validate_run(ValidateCompletionReason::Reset)
-                        {
-                            record_validate_lifecycle_event(
-                                widget,
-                                &spec_id,
-                                &completion.run_id,
-                                completion.attempt,
-                                completion.dedupe_count,
-                                completion.payload_hash.as_str(),
-                                completion.mode,
-                                ValidateLifecycleEvent::Reset,
-                            );
-                        }
+                // Schedule checklist for degraded follow-up
+                if let Some(state) = widget.spec_auto_state.as_ref() {
+                    if let Some(stage) = state.current_stage() {
+                        super::agent_orchestrator::schedule_degraded_follow_up(widget, stage, &spec_id);
                     }
                 }
-
-                // Increment retry and re-execute
-                if let Some(state) = widget.spec_auto_state.as_mut() {
-                    state.agent_retry_count += 1;
-                    state.agent_retry_context = Some(format!(
-                        "Previous attempt returned invalid/empty results (retry {}/{}). Store ALL analysis in local-memory with remember command.",
-                        retry_count + 1,
-                        SPEC_AUTO_AGENT_RETRY_ATTEMPTS
-                    ));
-                    // Reset to Guardrail phase to re-run the stage
-                    state.phase = SpecAutoPhase::Guardrail;
-                    state.reset_cost_tracking(current_stage);
-                }
-
-                // Re-trigger guardrail → agents for this stage
-                advance_spec_auto(widget);
-                return;
             }
 
             // Show consensus result
@@ -595,10 +529,8 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                     }
                 }
 
-                // FORK-SPECIFIC: Reset retry counter on success
+                // Advance to next stage
                 if let Some(state) = widget.spec_auto_state.as_mut() {
-                    state.agent_retry_count = 0;
-                    state.agent_retry_context = None;
                     state.reset_cost_tracking(current_stage);
                     state.phase = SpecAutoPhase::Guardrail;
                     state.current_index += 1;
@@ -628,64 +560,18 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                         }
                     }
                 }
-                // Consensus failed after retries
+                // Consensus failed - halt (no retries)
                 halt_spec_auto_with_error(
                     widget,
                     format!(
-                        "Consensus failed for {} after {} retries",
-                        current_stage.display_name(),
-                        retry_count
+                        "Consensus failed for {}",
+                        current_stage.display_name()
                     ),
                 );
             }
         }
         Err(err) => {
-            // FORK-SPECIFIC: Retry on consensus errors (just-every/code)
-            if retry_count < SPEC_AUTO_AGENT_RETRY_ATTEMPTS {
-                widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                    vec![ratatui::text::Line::from(format!(
-                        "⚠ Consensus error: {}. Retrying {}/{} ...",
-                        err,
-                        retry_count + 1,
-                        SPEC_AUTO_AGENT_RETRY_ATTEMPTS
-                    ))],
-                    crate::history_cell::HistoryCellType::Notice,
-                ));
-
-                if current_stage == SpecStage::Validate {
-                    if let Some(state_ref) = widget.spec_auto_state.as_ref() {
-                        if let Some(completion) =
-                            state_ref.reset_validate_run(ValidateCompletionReason::Reset)
-                        {
-                            record_validate_lifecycle_event(
-                                widget,
-                                &spec_id,
-                                &completion.run_id,
-                                completion.attempt,
-                                completion.dedupe_count,
-                                completion.payload_hash.as_str(),
-                                completion.mode,
-                                ValidateLifecycleEvent::Reset,
-                            );
-                        }
-                    }
-                }
-
-                if let Some(state) = widget.spec_auto_state.as_mut() {
-                    state.agent_retry_count += 1;
-                    state.agent_retry_context = Some(format!(
-                        "Previous attempt had consensus error (retry {}/{}). Ensure proper local-memory storage.",
-                        retry_count + 1,
-                        SPEC_AUTO_AGENT_RETRY_ATTEMPTS
-                    ));
-                    state.phase = SpecAutoPhase::Guardrail;
-                    state.reset_cost_tracking(current_stage);
-                }
-
-                advance_spec_auto(widget);
-                return;
-            }
-
+            // Consensus error - halt (no retries)
             if current_stage == SpecStage::Validate {
                 if let Some(state_ref) = widget.spec_auto_state.as_ref() {
                     if let Some(completion) =
@@ -708,9 +594,8 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
             halt_spec_auto_with_error(
                 widget,
                 format!(
-                    "Consensus check failed for {} after {} retries: {}",
+                    "Consensus check failed for {}: {}",
                     current_stage.display_name(),
-                    retry_count,
                     err
                 ),
             );

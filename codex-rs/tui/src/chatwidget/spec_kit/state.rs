@@ -436,7 +436,6 @@ pub struct SpecAutoState {
     pub current_index: usize,
     pub phase: SpecAutoPhase,
     pub waiting_guardrail: Option<GuardrailWait>,
-    pub validate_retries: u32,
     pub pending_prompt_summary: Option<String>,
     pub hal_mode: Option<HalMode>,
 
@@ -449,11 +448,6 @@ pub struct SpecAutoState {
     pub quality_escalated: Vec<(QualityIssue, String)>,     // All human-answered questions
     pub quality_checkpoint_outcomes: Vec<(QualityCheckpoint, usize, usize)>, // (checkpoint, auto, escalated)
     pub quality_checkpoint_degradations: HashMap<QualityCheckpoint, Vec<String>>, // missing agents per checkpoint
-
-    // FORK-SPECIFIC: Agent retry state (just-every/code)
-    // Tracks retry attempts when agents fail, timeout, or return invalid results
-    pub agent_retry_count: u32,
-    pub agent_retry_context: Option<String>, // Additional context for retry attempts
 
     // Tracks which stages have already scheduled degraded follow-up checklists
     pub degraded_followups: std::collections::HashSet<SpecStage>,
@@ -519,7 +513,6 @@ impl SpecAutoState {
             current_index: start_index,
             phase: initial_phase,
             waiting_guardrail: None,
-            validate_retries: 0,
             pending_prompt_summary: None,
             hal_mode,
             quality_gates_enabled,
@@ -530,9 +523,6 @@ impl SpecAutoState {
             quality_escalated: Vec::new(),
             quality_checkpoint_outcomes: Vec::new(),
             quality_checkpoint_degradations: HashMap::new(),
-            // FORK-SPECIFIC: Agent retry tracking
-            agent_retry_count: 0,
-            agent_retry_context: None,
             degraded_followups: std::collections::HashSet::new(),
             validate_lifecycle: lifecycle,
             cost_recorded_agents: HashMap::new(),
