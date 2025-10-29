@@ -1,0 +1,142 @@
+digraph spec_kit_pipeline_state_machine {
+    rankdir=TB;
+    node [shape=box, style=rounded, fontname="Arial"];
+    edge [fontname="Arial", fontsize=10];
+
+    graph [fontname="Arial", fontsize=14, label="Spec-Kit Pipeline State Machine\nDetailed /speckit.auto Workflow", labelloc=t];
+
+    // Entry
+    init [label="/speckit.auto SPEC-ID\n• Validate config\n• Initialize SpecAutoState\n• Set resume_from stage", shape=oval, fillcolor="#E3F2FD", style="filled,rounded"];
+
+    // Stage loop
+    stage_check [label="Current Stage\n< stages.len()?", shape=diamond, fillcolor="#FFF9C4", style=filled];
+    complete [label="Pipeline Complete\n• Finalize quality gates\n• Clear state\n• Success message", shape=oval, fillcolor="#C8E6C9", style="filled,rounded"];
+
+    // Quality gate checkpoint
+    qg_check [label="Quality Gate\nCheckpoint?", shape=diamond, fillcolor="#FFE082", style=filled];
+    qg_execute [label="Execute Quality Gate\n• Spawn 3 agents\n• Check issues\n• Auto-resolve or escalate", fillcolor="#FFCCBC", style=filled];
+    qg_human [label="Human\nIntervention", shape=parallelogram, fillcolor="#FFAB91", style=filled];
+
+    // Phase: Guardrail
+    guardrail_phase [label="Phase: Guardrail\n• Determine guardrail command\n• Execute shell script\n• Wait for task completion", fillcolor="#B3E5FC", style=filled];
+
+    guardrail_exec [label="Execute Guardrail\n• /guardrail.plan\n• /guardrail.tasks\n• /guardrail.implement\n• /guardrail.validate\n• /guardrail.audit\n• /guardrail.unlock", fillcolor="#81D4FA", style=filled];
+
+    task_wait [label="Wait for Task\nCompletion", shape=parallelogram, fillcolor="#4FC3F7", style=filled];
+
+    guardrail_check [label="Guardrail\nSuccess?", shape=diamond, fillcolor="#FFE082", style=filled];
+    guardrail_fail [label="Halt Pipeline\n• Show error\n• Provide resume hint", shape=oval, fillcolor="#FFCDD2", style="filled,rounded"];
+
+    // Phase: Executing Agents
+    agents_phase [label="Phase: ExecutingAgents\n• Build stage prompt\n• Apply ACE routing\n• Set aggregator effort\n• Spawn agents", fillcolor="#C5CAE9", style=filled];
+
+    prompt_build [label="Build Stage Prompt\n• Load spec artifacts\n• Add retry context\n• Apply ACE injection", fillcolor="#9FA8DA", style=filled];
+
+    ace_routing [label="ACE Route Selection\n• Analyze prompt size\n• Check conflict retry\n• Set aggregator effort\n  - low (standard)\n  - medium (complex)\n  - high (conflict)", fillcolor="#7986CB", style=filled];
+
+    spawn_agents [label="Spawn Agents\n• Gemini (gemini-1.5-pro)\n• Claude (claude-sonnet-4)\n• GPT Pro (gpt-5-codex)\n• [+GPT Codex if Tier 3]", fillcolor="#5C6BC0", style=filled];
+
+    agents_wait [label="Wait for All\nAgents", shape=parallelogram, fillcolor="#3F51B5", style=filled];
+
+    agent_retry_check [label="Agents\nCompleted?", shape=diamond, fillcolor="#FFE082", style=filled];
+    agent_retry [label="Retry Agent\nExecution\n• Max 3 attempts\n• Add retry context\n• Re-spawn agents", fillcolor="#FFCCBC", style=filled];
+    agent_fail [label="Max Retries\nExhausted", shape=oval, fillcolor="#FFCDD2", style="filled,rounded"];
+
+    // Phase: Checking Consensus
+    consensus_phase [label="Phase: CheckingConsensus\n• Query local-memory\n• Synthesize results\n• Validate agreement", fillcolor="#A5D6A7", style=filled];
+
+    query_memory [label="Query Local-Memory\n• Search by spec_id + stage\n• Collect agent artifacts\n• Extract verdicts", fillcolor="#81C784", style=filled];
+
+    synthesize [label="Synthesize Consensus\n• Compare agent outputs\n• Check agreement\n• Detect conflicts", fillcolor="#66BB6A", style=filled];
+
+    consensus_check [label="Consensus\nOK?", shape=diamond, fillcolor="#FFE082", style=filled];
+
+    consensus_retry_check [label="Retry\nCount < 3?", shape=diamond, fillcolor="#FFE082", style=filled];
+    consensus_retry [label="Retry Stage\n• Increment retry count\n• Add retry context\n• Reset to Guardrail", fillcolor="#FFCCBC", style=filled];
+    consensus_fail [label="Consensus Failed\n• Show disagreements\n• Manual resolution", shape=oval, fillcolor="#FFCDD2", style="filled,rounded"];
+
+    // Stage advancement
+    advance [label="Advance Pipeline\n• Persist cost summary\n• Reset retry count\n• Increment stage index\n• Reset to Guardrail phase", fillcolor="#B2DFDB", style=filled];
+
+    // Cost tracking
+    cost_persist [label="Persist Cost Summary\n• Attach routing notes\n• Write JSON summary\n• Record per-agent costs", fillcolor="#80DEEA", style=filled];
+
+    // Special: Validate retry
+    validate_check [label="Stage ==\nValidate?", shape=diamond, fillcolor="#FFE082", style=filled];
+    validate_fail_check [label="Failed\nValidate?", shape=diamond, fillcolor="#FFE082", style=filled];
+    validate_retry_check [label="Validate\nRetry < 2?", shape=diamond, fillcolor="#FFE082", style=filled];
+    validate_retry [label="Retry Impl+Validate\n• Insert stages\n• Increment counter\n• Re-execute", fillcolor="#FFCCBC", style=filled];
+    validate_fail [label="Validation Failed\n• Max retries exceeded\n• Manual fix required", shape=oval, fillcolor="#FFCDD2", style="filled,rounded"];
+
+    // Main flow
+    init -> stage_check;
+
+    stage_check -> complete [label="All stages\ncomplete"];
+    stage_check -> qg_check [label="More stages"];
+
+    qg_check -> qg_execute [label="Checkpoint\nrequired"];
+    qg_check -> guardrail_phase [label="No checkpoint"];
+    qg_execute -> qg_human [label="Escalated"];
+    qg_execute -> guardrail_phase [label="Auto-resolved"];
+    qg_human -> guardrail_phase [label="Human OK"];
+    qg_human -> guardrail_fail [label="Human blocks"];
+
+    guardrail_phase -> guardrail_exec;
+    guardrail_exec -> task_wait;
+    task_wait -> guardrail_check;
+
+    guardrail_check -> agents_phase [label="Success"];
+    guardrail_check -> guardrail_fail [label="Failed"];
+
+    agents_phase -> prompt_build;
+    prompt_build -> ace_routing;
+    ace_routing -> spawn_agents;
+    spawn_agents -> agents_wait;
+    agents_wait -> agent_retry_check;
+
+    agent_retry_check -> consensus_phase [label="All complete"];
+    agent_retry_check -> agent_retry [label="Failures\nretry < 3"];
+    agent_retry_check -> agent_fail [label="Failures\nretry >= 3"];
+    agent_retry -> prompt_build;
+
+    consensus_phase -> query_memory;
+    query_memory -> synthesize;
+    synthesize -> consensus_check;
+
+    consensus_check -> validate_check [label="Consensus OK"];
+    consensus_check -> consensus_retry_check [label="Consensus\nfailed"];
+
+    consensus_retry_check -> consensus_retry [label="Yes"];
+    consensus_retry_check -> consensus_fail [label="No"];
+    consensus_retry -> guardrail_phase;
+
+    validate_check -> cost_persist [label="Not validate"];
+    validate_check -> validate_fail_check [label="Is validate"];
+
+    validate_fail_check -> validate_retry_check [label="Failed"];
+    validate_fail_check -> cost_persist [label="Passed"];
+
+    validate_retry_check -> validate_retry [label="Yes"];
+    validate_retry_check -> validate_fail [label="No"];
+    validate_retry -> guardrail_phase;
+
+    cost_persist -> advance;
+    advance -> stage_check;
+
+    // Legend
+    subgraph cluster_legend {
+        label="State Machine Phases";
+        style=filled;
+        fillcolor="#F5F5F5";
+        rank=same;
+
+        leg_guardrail [label="Guardrail Phase", fillcolor="#B3E5FC", style=filled];
+        leg_agents [label="Executing Agents", fillcolor="#C5CAE9", style=filled];
+        leg_consensus [label="Checking Consensus", fillcolor="#A5D6A7", style=filled];
+        leg_qg [label="Quality Gate", fillcolor="#FFCCBC", style=filled];
+
+        leg_guardrail -> leg_agents [style=invis];
+        leg_agents -> leg_consensus [style=invis];
+        leg_consensus -> leg_qg [style=invis];
+    }
+}

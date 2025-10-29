@@ -1,0 +1,169 @@
+digraph spec_kit_module_architecture {
+    rankdir=TB;
+    node [shape=box, style=rounded, fontname="Arial"];
+    edge [fontname="Arial", fontsize=10];
+
+    graph [fontname="Arial", fontsize=14, label="Spec-Kit Module Architecture\nRefactored Handler Structure (2025-10-29)", labelloc=t, compound=true];
+
+    // ChatWidget (parent)
+    chatwidget [label="ChatWidget\n(Parent Module)\n• spec_auto_state\n• mcp_manager\n• config\n• history", shape=box3d, fillcolor="#E1BEE7", style=filled];
+
+    // Layer 1: Entry Points
+    subgraph cluster_entry {
+        label="Layer 1: Entry Points (Routing)";
+        style=filled;
+        fillcolor="#E8EAF6";
+
+        routing [label="routing.rs\ntry_dispatch_spec_kit_command\n• Parse /speckit.* commands\n• Validate args\n• Delegate to handlers", fillcolor="#C5CAE9", style=filled];
+
+        command_reg [label="command_registry.rs\nDynamic Trait Registry\n• Register slash commands\n• Hook system integration", fillcolor="#C5CAE9", style=filled];
+    }
+
+    // Layer 2: Command Handlers (NEW - Phase 2)
+    subgraph cluster_commands {
+        label="Layer 2: Command Handlers (132 lines)";
+        style=filled;
+        fillcolor="#C5E1A5";
+
+        cmd_handlers [label="command_handlers.rs\n• handle_spec_status\n• handle_spec_consensus\n• handle_guardrail\n• halt_spec_auto_with_error", fillcolor="#AED581", style=filled];
+    }
+
+    // Layer 3: Coordinators (NEW - Phases 3, 5)
+    subgraph cluster_coordinators {
+        label="Layer 3: Workflow Coordinators";
+        style=filled;
+        fillcolor="#B2DFDB";
+
+        pipeline [label="pipeline_coordinator.rs\n(677 lines)\n• handle_spec_auto\n• advance_spec_auto\n• on_spec_auto_task_*\n• State machine logic", fillcolor="#80CBC4", style=filled];
+
+        consensus_coord [label="consensus_coordinator.rs\n(190 lines)\n• block_on_sync\n• run_consensus_with_retry\n• persist_cost_summary\n• MCP retry logic", fillcolor="#4DB6AC", style=filled];
+    }
+
+    // Layer 4: Orchestrators (NEW - Phase 4)
+    subgraph cluster_orchestrators {
+        label="Layer 4: Agent & Lifecycle Orchestration";
+        style=filled;
+        fillcolor="#FFCCBC";
+
+        agent_orch [label="agent_orchestrator.rs\n(519 lines)\n• auto_submit_spec_stage_prompt\n• apply_aggregator_effort\n• on_spec_auto_agents_complete\n• record_agent_costs\n• schedule_degraded_follow_up", fillcolor="#FFAB91", style=filled];
+
+        validation_life [label="validation_lifecycle.rs\n(170 lines)\n• compute_validate_payload_hash\n• record_validate_lifecycle_event\n• cleanup_spec_auto_with_cancel\n• Telemetry emission", fillcolor="#FF8A65", style=filled];
+    }
+
+    // Layer 5: Core Infrastructure
+    subgraph cluster_core {
+        label="Layer 5: Core Infrastructure";
+        style=filled;
+        fillcolor="#FFF9C4";
+
+        consensus [label="consensus.rs\n(35KB)\n• run_spec_consensus\n• collect_consensus_artifacts\n• load_latest_consensus_synthesis\n• ConsensusVerdict types", fillcolor="#FFF59D", style=filled];
+
+        state [label="state.rs\n(28KB)\n• SpecAutoState\n• SpecAutoPhase enum\n• ValidateLifecycle\n• QualityCheckpoint types", fillcolor="#FFF59D", style=filled];
+
+        evidence [label="evidence.rs\n(22KB)\n• FilesystemEvidence\n• write_telemetry_bundle\n• Evidence validation", fillcolor="#FFF59D", style=filled];
+
+        guardrail [label="guardrail.rs\n(26KB)\n• handle_guardrail_impl\n• validate_guardrail_schema\n• collect_guardrail_outcome", fillcolor="#FFF59D", style=filled];
+    }
+
+    // Layer 6: Quality Gates
+    subgraph cluster_quality {
+        label="Layer 6: Quality Gates & ACE";
+        style=filled;
+        fillcolor="#F8BBD0";
+
+        qg_handler [label="quality_gate_handler.rs\n(925 lines)\n• determine_quality_checkpoint\n• execute_quality_checkpoint\n• on_quality_gate_*", fillcolor="#F48FB1", style=filled];
+
+        qg_broker [label="quality_gate_broker.rs\n• GPT-5 validation\n• Human escalation\n• Result processing", fillcolor="#F48FB1", style=filled];
+
+        quality [label="quality.rs\n• Issue classification\n• Auto-resolution logic\n• merge_agent_issues", fillcolor="#F48FB1", style=filled];
+
+        ace_modules [label="ACE Modules\n• ace_curator.rs\n• ace_reflector.rs\n• ace_orchestrator.rs\n• ace_route_selector.rs\n• ace_prompt_injector.rs", fillcolor="#F48FB1", style=filled];
+    }
+
+    // Layer 7: External Services
+    subgraph cluster_external {
+        label="External Services";
+        style=filled;
+        fillcolor="#CFD8DC";
+
+        mcp [label="MCP Manager\nlocal-memory server\n• store_memory\n• search\n• Consensus artifacts", shape=cylinder, fillcolor="#B0BEC5", style=filled];
+
+        filesystem [label="Filesystem\n• docs/SPEC-*/\n• Evidence repository\n• Cost summaries\n• Telemetry JSON", shape=folder, fillcolor="#B0BEC5", style=filled];
+
+        agents_external [label="External AI Agents\n• Gemini API\n• Claude API\n• GPT API", shape=component, fillcolor="#B0BEC5", style=filled];
+    }
+
+    // Re-export facade (NEW - handler.rs after refactoring)
+    handler_facade [label="handler.rs\n(35 lines)\nRe-export Facade\n• Backward compatibility\n• Clean public API", fillcolor="#E1BEE7", style="filled,bold", penwidth=2];
+
+    // Main flow connections
+    chatwidget -> routing [label="User input"];
+    routing -> cmd_handlers;
+
+    cmd_handlers -> pipeline [label="handle_spec_auto"];
+    cmd_handlers -> consensus_coord [label="handle_consensus"];
+    cmd_handlers -> guardrail [label="handle_guardrail"];
+
+    pipeline -> guardrail [label="Execute\nguardrail"];
+    pipeline -> agent_orch [label="Spawn\nagents"];
+    pipeline -> consensus_coord [label="Check\nconsensus"];
+    pipeline -> qg_handler [label="Quality\ncheckpoints"];
+
+    agent_orch -> agents_external [label="Spawn"];
+    agent_orch -> validation_life [label="Lifecycle\nevents"];
+    agent_orch -> mcp [label="Store\ncosts"];
+
+    validation_life -> filesystem [label="Write\ntelemetry"];
+    validation_life -> mcp [label="Store\nevents"];
+
+    consensus_coord -> consensus [label="run_spec_consensus"];
+    consensus -> mcp [label="Query\nartifacts"];
+    consensus -> evidence [label="Validate"];
+
+    guardrail -> filesystem [label="Read/write\ntelemetry"];
+    guardrail -> state [label="Update\npipeline state"];
+
+    qg_handler -> qg_broker [label="Escalate"];
+    qg_handler -> quality [label="Classify\nissues"];
+    qg_broker -> agents_external [label="GPT-5\nvalidation"];
+
+    ace_modules -> pipeline [label="Route\nselection"];
+    ace_modules -> agent_orch [label="Prompt\ninjection"];
+
+    agents_external -> mcp [label="Store\nverdicts"];
+    mcp -> consensus [label="Query\nfor synthesis"];
+
+    // Re-export facade connections
+    handler_facade -> cmd_handlers [label="Re-export", style=dashed, color="#9C27B0"];
+    handler_facade -> pipeline [label="Re-export", style=dashed, color="#9C27B0"];
+    handler_facade -> agent_orch [label="Re-export", style=dashed, color="#9C27B0"];
+    handler_facade -> consensus_coord [label="Re-export", style=dashed, color="#9C27B0"];
+    handler_facade -> validation_life [label="Re-export", style=dashed, color="#9C27B0"];
+
+    chatwidget -> handler_facade [label="Legacy API", style=dashed];
+
+    // Data flow legend
+    subgraph cluster_legend {
+        label="Module Relationships";
+        style=filled;
+        fillcolor="#FAFAFA";
+        rank=sink;
+
+        leg_call [label="Function Call", color=black];
+        leg_reexport [label="Re-export", color="#9C27B0", style=dashed];
+        leg_data [label="Data Flow", color=blue, style=dotted];
+
+        leg_call -> leg_reexport [style=invis];
+        leg_reexport -> leg_data [style=invis];
+    }
+
+    // Size annotations
+    subgraph cluster_sizes {
+        label="Module Sizes (Post-Refactoring)";
+        style=filled;
+        fillcolor="#F5F5F5";
+        rank=sink;
+
+        size_table [label="validation_lifecycle: 170 lines\ncommand_handlers: 132 lines\nconsensus_coordinator: 190 lines\nagent_orchestrator: 519 lines\npipeline_coordinator: 677 lines\nhandler (facade): 35 lines\n\nTotal: 1,723 lines (was 1,561)\nReduction: 98% in handler.rs", shape=note, fillcolor="#FFFDE7", style=filled];
+    }
+}
