@@ -621,28 +621,29 @@ pub struct GuardrailOutcome {
 /// Quality checkpoint in the pipeline
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum QualityCheckpoint {
-    /// Before planning (runs clarify + checklist)
-    PrePlanning,
-    /// After plan created (runs analyze)
-    PostPlan,
-    /// After tasks created (runs analyze)
-    PostTasks,
+    /// Before plan stage (runs clarify to resolve PRD ambiguities early)
+    /// Assumes PRD exists from /speckit.specify
+    BeforeSpecify,
+    /// After plan stage, before tasks (runs checklist to validate PRD+plan quality)
+    AfterSpecify,
+    /// After tasks stage, before implement (runs analyze for full consistency check)
+    AfterTasks,
 }
 
 impl QualityCheckpoint {
     pub fn name(&self) -> &'static str {
         match self {
-            Self::PrePlanning => "pre-planning",
-            Self::PostPlan => "post-plan",
-            Self::PostTasks => "post-tasks",
+            Self::BeforeSpecify => "before-specify",
+            Self::AfterSpecify => "after-specify",
+            Self::AfterTasks => "after-tasks",
         }
     }
 
     pub fn gates(&self) -> &[QualityGateType] {
         match self {
-            Self::PrePlanning => &[QualityGateType::Clarify, QualityGateType::Checklist],
-            Self::PostPlan => &[QualityGateType::Analyze],
-            Self::PostTasks => &[QualityGateType::Analyze],
+            Self::BeforeSpecify => &[QualityGateType::Clarify],
+            Self::AfterSpecify => &[QualityGateType::Checklist],
+            Self::AfterTasks => &[QualityGateType::Analyze],
         }
     }
 }

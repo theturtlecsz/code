@@ -192,9 +192,9 @@ impl BottomPaneView<'_> for QualityGateModal {
             .title(format!(
                 " Quality Gate: {} ",
                 match self.checkpoint {
-                    QualityCheckpoint::PrePlanning => "Pre-Planning",
-                    QualityCheckpoint::PostPlan => "Post-Plan",
-                    QualityCheckpoint::PostTasks => "Post-Tasks",
+                    QualityCheckpoint::BeforeSpecify => "Before Specify (Clarify)",
+                    QualityCheckpoint::AfterSpecify => "After Specify (Checklist)",
+                    QualityCheckpoint::AfterTasks => "After Tasks (Analyze)",
                 }
             ));
 

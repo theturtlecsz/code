@@ -884,10 +884,14 @@ pub(super) fn determine_quality_checkpoint(
     stage: SpecStage,
     completed: &std::collections::HashSet<super::state::QualityCheckpoint>,
 ) -> Option<super::state::QualityCheckpoint> {
+    // Option A: Strategic placement - one gate per stage type
+    // BeforeSpecify: Clarify (BEFORE plan - assumes PRD exists from /speckit.specify)
+    // AfterSpecify: Checklist (BEFORE tasks - validate PRD+plan quality)
+    // AfterTasks: Analyze (BEFORE implement - full consistency check)
     let checkpoint = match stage {
-        SpecStage::Plan => super::state::QualityCheckpoint::PrePlanning,
-        SpecStage::Tasks => super::state::QualityCheckpoint::PostPlan,
-        SpecStage::Implement => super::state::QualityCheckpoint::PostTasks,
+        SpecStage::Plan => super::state::QualityCheckpoint::BeforeSpecify,      // Clarify before planning
+        SpecStage::Tasks => super::state::QualityCheckpoint::AfterSpecify,      // Checklist after plan
+        SpecStage::Implement => super::state::QualityCheckpoint::AfterTasks,   // Analyze after tasks
         _ => return None,
     };
 

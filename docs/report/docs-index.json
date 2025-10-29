@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-10-29T02:28:26.306Z",
+  "generatedAt": "2025-10-29T18:20:48.721Z",
   "docs": [
     {
       "path": "AGENTS.md",
@@ -650,6 +650,15 @@
       "updated": 1759928771000
     },
     {
+      "path": "diagrams/spec-kit/CRITICAL_FINDINGS.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761760433000
+    },
+    {
       "path": "diagrams/spec-kit/GAPS_AND_ISSUES.md",
       "score": 85,
       "orphan": true,
@@ -657,6 +666,15 @@
       "missingRefs": [],
       "staleDays": 0,
       "updated": 1761704841000
+    },
+    {
+      "path": "diagrams/spec-kit/OPTION_A_DESIGN.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761762014000
     },
     {
       "path": "diagrams/spec-kit/README.md",
@@ -674,7 +692,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761760433000
     },
     {
       "path": "diagrams/spec-kit/SPEC_KIT_RESEARCH_INDEX.md",
@@ -683,7 +701,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761760433000
     },
     {
       "path": "docs/CLA.md",
@@ -3247,7 +3265,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761702417000
+      "updated": 1761760433000
     },
     {
       "path": "docs/report/verification.md",
@@ -3764,6 +3782,10 @@
       "codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/plan.md",
       "codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/spec.md",
       "codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/tasks.md"
+    ],
+    [
+      "diagrams/spec-kit/CRITICAL_FINDINGS.md",
+      "docs/spec-kit/spec-auto-automation.md"
     ],
     [
       "diagrams/spec-kit/README.md",
