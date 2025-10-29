@@ -14,6 +14,7 @@ pub mod ace_orchestrator; // ACE Orchestrator - Full reflection-curation cycle
 pub mod ace_prompt_injector; // ACE prompt injection logic
 pub mod ace_reflector; // ACE Reflector - Deep outcome analysis
 pub mod ace_route_selector; // ACE route selection for complex tasks
+pub mod command_handlers; // Command entry points (status, consensus, guardrail)
 pub mod command_registry;
 pub mod commands;
 pub mod config_validator;

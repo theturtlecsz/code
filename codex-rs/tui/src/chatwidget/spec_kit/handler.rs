@@ -5,25 +5,25 @@
 
 use super::super::ChatWidget; // Parent module (friend access to private fields)
 use super::consensus::{expected_agents_for_stage, parse_consensus_stage};
-use super::context::SpecKitContext; // MAINT-3 Phase 2: Trait for testable functions
 use super::evidence::FilesystemEvidence;
-use super::state::{
-    GuardrailWait, SpecAutoPhase, ValidateBeginOutcome, ValidateCompletionReason,
-    ValidateRunInfo,
-};
+use super::state::{GuardrailWait, SpecAutoPhase, ValidateBeginOutcome, ValidateRunInfo};
 use super::validation_lifecycle::{
     cleanup_spec_auto_with_cancel, compute_validate_payload_hash,
-    record_validate_lifecycle_event, ValidateLifecycleEvent, ValidateMode,
+    record_validate_lifecycle_event, ValidateCompletionReason, ValidateLifecycleEvent,
+    ValidateMode,
 };
-use crate::app_event::BackgroundPlacement;
 use crate::history_cell::HistoryCellType;
 use crate::slash_command::{HalMode, SlashCommand};
 use crate::spec_prompts::SpecStage;
-use crate::spec_status::{SpecStatusArgs, collect_report, degraded_warning, render_dashboard};
 use codex_core::protocol::{AgentInfo, InputItem};
 use codex_core::slash_commands::format_subagent_command;
 use serde_json::json;
 use std::sync::Arc;
+
+// Re-export command handlers for backward compatibility
+pub use super::command_handlers::{
+    halt_spec_auto_with_error, handle_guardrail, handle_spec_consensus, handle_spec_status,
+};
 
 // FORK-SPECIFIC (just-every/code): MCP retry configuration
 const MCP_RETRY_ATTEMPTS: u32 = 3;
@@ -102,95 +102,6 @@ async fn run_consensus_with_retry(
     Err(super::error::SpecKitError::from_string(
         last_error.unwrap_or_else(|| "MCP consensus check failed after retries".to_string()),
     ))
-}
-
-/// Handle /speckit.status command (native dashboard)
-pub fn handle_spec_status(widget: &mut ChatWidget, raw_args: String) {
-    let trimmed = raw_args.trim();
-    let args = match SpecStatusArgs::from_input(trimmed) {
-        Ok(args) => args,
-        Err(err) => {
-            widget.history_push(crate::history_cell::new_error_event(err.to_string()));
-            widget.request_redraw();
-            return;
-        }
-    };
-
-    match collect_report(&widget.config.cwd, args) {
-        Ok(report) => {
-            let mut lines = render_dashboard(&report);
-            if let Some(warning) = degraded_warning(&report) {
-                lines.insert(1, warning);
-            }
-            let message = lines.join("\n");
-            widget.insert_background_event_with_placement(message, BackgroundPlacement::Tail);
-            widget.request_redraw();
-        }
-        Err(err) => {
-            widget.history_push(crate::history_cell::new_error_event(format!(
-                "spec-status failed: {err}"
-            )));
-            widget.request_redraw();
-        }
-    }
-}
-
-/// Halt /speckit.auto pipeline with error message
-pub fn halt_spec_auto_with_error(widget: &mut impl SpecKitContext, reason: String) {
-    // FORK-SPECIFIC (just-every/code): FR3 cancellation cleanup for SPEC-KIT-069
-    // Clean up active validate lifecycle state if present
-    if let Some(state) = widget.spec_auto_state().as_ref() {
-        if state.validate_lifecycle.active().is_some() {
-            // Clean up the validate lifecycle state (mark as cancelled)
-            let _ = state.validate_lifecycle.reset_active(ValidateCompletionReason::Cancelled);
-            // Note: Telemetry emission is handled separately by cleanup_spec_auto_with_cancel
-            // when called directly with ChatWidget. When called through trait, telemetry
-            // is skipped since trait doesn't expose MCP manager access.
-        }
-    }
-
-    let resume_hint = widget
-        .spec_auto_state()
-        .as_ref()
-        .and_then(|state| {
-            state.current_stage().map(|stage| {
-                format!(
-                    "/spec-auto {} --from {}",
-                    state.spec_id,
-                    stage.command_name()
-                )
-            })
-        })
-        .unwrap_or_default();
-
-    widget.history_push(crate::history_cell::PlainHistoryCell::new(
-        vec![
-            ratatui::text::Line::from("⚠ /spec-auto halted"),
-            ratatui::text::Line::from(reason),
-            ratatui::text::Line::from(""),
-            ratatui::text::Line::from("Resume with:"),
-            ratatui::text::Line::from(resume_hint),
-        ],
-        HistoryCellType::Error,
-    ));
-
-    *widget.spec_auto_state_mut() = None;
-}
-
-/// Handle /spec-consensus command (inspect consensus artifacts)
-pub fn handle_spec_consensus(widget: &mut ChatWidget, raw_args: String) {
-    handle_spec_consensus_impl(widget, raw_args);
-}
-
-/// Handle /guardrail.* and /spec-ops-* commands (guardrail validation)
-pub fn handle_guardrail(
-    widget: &mut ChatWidget,
-    command: crate::slash_command::SlashCommand,
-    raw_args: String,
-    hal_override: Option<crate::slash_command::HalMode>,
-) {
-    // Delegate to guardrail module implementation
-    super::guardrail::handle_guardrail_impl(widget, command, raw_args, hal_override);
 }
 
 // === Spec Auto Pipeline Methods ===
@@ -1363,7 +1274,9 @@ pub fn record_agent_costs(widget: &mut ChatWidget, agents: &[AgentInfo]) {
 
 
 /// Handle /spec-consensus command implementation
-pub fn handle_spec_consensus_impl(widget: &mut ChatWidget, raw_args: String) {
+///
+/// Made pub(crate) so command_handlers module can delegate to it.
+pub(crate) fn handle_spec_consensus_impl(widget: &mut ChatWidget, raw_args: String) {
     let trimmed = raw_args.trim();
     if trimmed.is_empty() {
         widget.history_push(crate::history_cell::new_error_event(

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-10-29T00:55:56.681Z",
+  "generatedAt": "2025-10-29T01:10:39.702Z",
   "docs": [
     {
       "path": "AGENTS.md",
@@ -37,7 +37,7 @@
       ],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1760806439000
+      "updated": 1761700210000
     },
     {
       "path": "README.md",
@@ -50,7 +50,7 @@
       ],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1760579198000
+      "updated": 1761700210000
     },
     {
       "path": "SPEC-KIT.md",
@@ -68,7 +68,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761660035000
+      "updated": 1761700210000
     },
     {
       "path": "TUI.md",
@@ -113,7 +113,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761355542000
+      "updated": 1761700210000
     },
     {
       "path": "codex-rs/README.md",
@@ -136,7 +136,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1760802616000
+      "updated": 1761700210000
     },
     {
       "path": "codex-rs/ansi-escape/README.md",
@@ -674,7 +674,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/HOMEBREW.md",
@@ -713,7 +713,7 @@
       ],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/SPEC-KIT-010-local-memory-migration/PRD.md",
@@ -1541,7 +1541,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761660035000
+      "updated": 1761700210000
     },
     {
       "path": "docs/SPEC-KIT-900-generic-smoke/tasks.md",
@@ -1550,7 +1550,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/SPEC-KIT-900-generic-smoke/telemetry-cost-schema.md",
@@ -1559,7 +1559,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/SPEC-KIT-DEMO/audit.md",
@@ -1618,7 +1618,7 @@
       ],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-12T20:50:45Z-301386052.md",
@@ -1627,7 +1627,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-12T20:56:37Z-168709888.md",
@@ -1636,7 +1636,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-12T21:06:47Z-975517254.md",
@@ -1645,7 +1645,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-12T21:11:24Z-222161205.md",
@@ -1654,7 +1654,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-12T21:19:19Z-1871230763.md",
@@ -1663,7 +1663,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T00:25:58Z-971518482.md",
@@ -1672,7 +1672,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T00:58:25Z-1588216078.md",
@@ -1681,7 +1681,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T02:47:17Z-218242802.md",
@@ -1690,7 +1690,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T03:17:09Z-85944173.md",
@@ -1699,7 +1699,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T03:39:12Z-92930885.md",
@@ -1708,7 +1708,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T14:31:04Z-2052213612.md",
@@ -1717,7 +1717,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T15:16:57Z-293799580.md",
@@ -1726,7 +1726,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T17:06:06Z-147197217.md",
@@ -1735,7 +1735,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T18:50:20Z-1721217636.md",
@@ -1744,7 +1744,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-13T20:45:45Z-652528800.md",
@@ -1753,7 +1753,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-14T15:58:30Z-79323873.md",
@@ -1762,7 +1762,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-010/baseline_local_memory_20250927T231710Z.md",
@@ -2181,7 +2181,7 @@
       ],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/THEME_CONFIG.md",
@@ -2226,7 +2226,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/ACE_FINAL_FIX_SUMMARY.md",
@@ -2235,7 +2235,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/ACE_FIX_APPLIED.md",
@@ -2244,7 +2244,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/ACE_INTEGRATION.md",
@@ -2253,7 +2253,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/ACE_READY_TO_TEST.md",
@@ -2262,7 +2262,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/ACE_RESTART_GUIDE.md",
@@ -2271,7 +2271,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/ACE_TESTING_GUIDE.md",
@@ -2280,7 +2280,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/ACE_TEST_PLAN.md",
@@ -2289,7 +2289,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/ACE_VALIDATION_SUMMARY.md",
@@ -2298,7 +2298,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/AGENT_ANALYSIS_GUIDE.md",
@@ -2307,7 +2307,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/AGENT_FIX_ANALYSIS.md",
@@ -2316,7 +2316,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/CONFIG_FIX_SUMMARY.md",
@@ -2334,7 +2334,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/EPIC_SESSION_SUMMARY_2025-10-16.md",
@@ -2343,7 +2343,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/FINAL_STATUS.md",
@@ -2352,7 +2352,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/IMPLEMENTATION_CONSENSUS.md",
@@ -2361,7 +2361,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/NEXT_STEPS.md",
@@ -2370,7 +2370,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/PHASE1_DAY1-2_COMPLETE.md",
@@ -2379,7 +2379,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/PHASE1_DAY3-4_COMPLETE.md",
@@ -2388,7 +2388,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/PHASE1_FINAL_REPORT.md",
@@ -2397,7 +2397,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/PHASE1_PROGRESS.md",
@@ -2406,7 +2406,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/PHASE1_STATUS.md",
@@ -2415,7 +2415,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/PHASE_1_COMPLETE.md",
@@ -2424,7 +2424,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/READY_TO_TEST.md",
@@ -2433,7 +2433,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/REFACTORING_COMPLETE_SUMMARY.md",
@@ -2442,7 +2442,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/REFACTORING_SESSION_NOTES.md",
@@ -2451,7 +2451,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/RESTART.md",
@@ -2478,7 +2478,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/SESSION_RESUME_T78.md",
@@ -2487,7 +2487,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/SESSION_SUMMARY.md",
@@ -2496,7 +2496,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/SESSION_SUMMARY_2025-10-16.md",
@@ -2514,7 +2514,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/SPEC_OPS_TUI_IMPLEMENTATION.md",
@@ -2523,7 +2523,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/ace-analysis/ACE_COMMIT_PLAN.md",
@@ -2532,7 +2532,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/ace-analysis/ACE_FULL_FRAMEWORK.md",
@@ -2541,7 +2541,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/ace-analysis/ACE_INJECTION_ARCHITECTURE_RETHINK.md",
@@ -2550,7 +2550,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/ace-analysis/ACE_INJECTION_FIX_REPORT.md",
@@ -2559,7 +2559,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/ace-analysis/ACE_QUICKSTART.md",
@@ -2568,7 +2568,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/ace-analysis/ACE_SPEC_INTEGRATION_ANALYSIS.md",
@@ -2577,7 +2577,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/ace-analysis/ACE_ULTRATHINK_ANALYSIS.md",
@@ -2586,7 +2586,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/analysis/ANALYSIS_COMPLETE.md",
@@ -2595,7 +2595,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/analysis/ANALYSIS_INDEX.md",
@@ -2604,7 +2604,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/analysis/ANALYSIS_SUMMARY.md",
@@ -2613,7 +2613,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/analysis/FORK_ANALYSIS_SUMMARY.md",
@@ -2622,7 +2622,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/analysis/FORK_DEVIATIONS.md",
@@ -2631,7 +2631,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/analysis/FORK_OPTIMIZATION_PLAN.md",
@@ -2640,7 +2640,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/analysis/FORK_SPEC_KIT_ANALYSIS.md",
@@ -2649,7 +2649,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/analysis/OPTIMIZATION_PLAN.md",
@@ -2658,7 +2658,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/analysis/PROJECT_STATUS_FINAL.md",
@@ -2667,7 +2667,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/analysis/PROJECT_STATUS_ULTRATHINK.md",
@@ -2676,7 +2676,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/analysis/README_ANALYSIS.md",
@@ -2685,7 +2685,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/analysis/SPEC_KIT_ALIGNMENT_ANALYSIS.md",
@@ -2694,7 +2694,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/historical/ARCH-INSPECTION-FINDINGS.md",
@@ -2703,7 +2703,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/historical/ARCHITECTURE-TASKS.md",
@@ -2712,7 +2712,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/historical/DEBUGGING_STEPS.md",
@@ -2721,7 +2721,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/historical/FORK-ANALYSIS.md",
@@ -2730,7 +2730,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/historical/HONEST_ASSESSMENT.md",
@@ -2739,7 +2739,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/historical/HONEST_SITUATION.md",
@@ -2748,7 +2748,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/historical/SESSION-HANDOFF.md",
@@ -2757,7 +2757,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/output.md",
@@ -2784,7 +2784,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/spec-kit-planning/FORK_ISOLATION_AUDIT.md",
@@ -2793,7 +2793,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/spec-kit-planning/MAINT-10-EXECUTION-PLAN.md",
@@ -2802,7 +2802,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/spec-kit-planning/MAINT-10-EXTRACTION-PLAN.md",
@@ -2816,7 +2816,7 @@
         "src/api.rs"
       ],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/spec-kit-planning/PHASE3_TEST_PLAN.md",
@@ -2825,7 +2825,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/spec-kit-planning/PHASE4_TEST_PLAN.md",
@@ -2834,7 +2834,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/spec-kit-planning/PHASE_1_FINAL_STEPS.md",
@@ -2843,7 +2843,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/spec-kit-planning/PHASE_2_EXTRACTION_PLAN.md",
@@ -2852,7 +2852,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/spec-kit-planning/PHASE_3_DAY_4_TESTING_PLAN.md",
@@ -2861,7 +2861,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/spec-kit-planning/PHASE_COMPLETION_TIMELINE.md",
@@ -2881,7 +2881,7 @@
       ],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/spec-kit-planning/REFACTORING_BLOCKER.md",
@@ -2890,7 +2890,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/spec-kit-planning/REFACTORING_BLOCKER_RESOLUTION.md",
@@ -2899,7 +2899,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/spec-kit-planning/REFACTORING_CONTINUATION.md",
@@ -2908,7 +2908,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/spec-kit-planning/REFACTORING_FINAL_STATUS.md",
@@ -2917,7 +2917,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/spec-kit-planning/REFACTORING_PLAN.md",
@@ -2926,7 +2926,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/spec-kit-planning/REMAINING_OPPORTUNITIES.md",
@@ -2935,7 +2935,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/spec-kit-planning/REVIEW_COMPLETION_ANALYSIS.md",
@@ -2944,7 +2944,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/spec-kit-planning/SERVICE_TRAITS_DEEP_ANALYSIS.md",
@@ -2953,7 +2953,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/spec-kit-planning/STEP_1.4_HANDLER_EXTRACTION.md",
@@ -2962,7 +2962,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/spec-kit-planning/TEMPLATE_INTEGRATION.md",
@@ -2971,7 +2971,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/spec-kit-planning/TEMPLATE_VALIDATION_EVIDENCE.md",
@@ -2980,7 +2980,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/2025-sessions/telemetry-tasks.md",
@@ -2998,7 +2998,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1760884870000
+      "updated": 1761700210000
     },
     {
       "path": "docs/archive/design-docs/COMMAND_NAMING_AND_MODEL_STRATEGY.md",
@@ -3211,7 +3211,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/report/verification.md",
@@ -3220,7 +3220,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/sandbox.md",
@@ -3335,7 +3335,7 @@
       ],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/spec-kit/REBASE_SAFETY_MATRIX_T80-T90.md",
@@ -3362,7 +3362,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/spec-kit/consensus-cost-audit-packet.md",
@@ -3371,7 +3371,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/spec-kit/consensus-degradation-playbook.md",
@@ -3380,7 +3380,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/spec-kit/consensus-runner-design.md",
@@ -3407,7 +3407,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1759512896000
+      "updated": 1761700210000
     },
     {
       "path": "docs/spec-kit/evidence-policy.md",
@@ -3443,7 +3443,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/spec-kit/security-review-template.md",
@@ -3452,7 +3452,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761700210000
     },
     {
       "path": "docs/spec-kit/spec-auto-automation.md",
@@ -3560,7 +3560,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1760806439000
+      "updated": 1761700210000
     },
     {
       "path": "release-notes/RELEASE_NOTES.md",
