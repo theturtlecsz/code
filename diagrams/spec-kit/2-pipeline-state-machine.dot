@@ -1,142 +1,109 @@
-digraph spec_kit_pipeline_state_machine {
+digraph spec_kit_pipeline_v2 {
     rankdir=TB;
     node [shape=box, style=rounded, fontname="Arial"];
     edge [fontname="Arial", fontsize=10];
 
-    graph [fontname="Arial", fontsize=14, label="Spec-Kit Pipeline State Machine\nDetailed /speckit.auto Workflow", labelloc=t];
+    graph [fontname="Arial", fontsize=14, label="Spec-Kit Pipeline State Machine v2\nACE-Enhanced, No Retries, Strategic Quality Gates", labelloc=t];
 
     // Entry
-    init [label="/speckit.auto SPEC-ID\n• Validate config\n• Initialize SpecAutoState\n• Set resume_from stage", shape=oval, fillcolor="#E3F2FD", style="filled,rounded"];
+    init [label="/speckit.auto SPEC-ID\n• Validate config\n• Initialize state\n• Enable ACE + quality gates", shape=oval, fillcolor="#E3F2FD", style="filled,rounded"];
 
-    // Stage loop
-    stage_check [label="Current Stage\n< stages.len()?", shape=diamond, fillcolor="#FFF9C4", style=filled];
-    complete [label="Pipeline Complete\n• Finalize quality gates\n• Clear state\n• Success message", shape=oval, fillcolor="#C8E6C9", style="filled,rounded"];
+    stage_check [label="More\nstages?", shape=diamond, fillcolor="#FFF9C4", style=filled];
+    complete [label="Pipeline Complete\n• Finalize quality gates\n• Success message", shape=oval, fillcolor="#C8E6C9", style="filled,rounded"];
 
-    // Quality gate checkpoint
+    // NEW: ACE Pre-fetch
+    ace_prefetch [label="ACE Pre-fetch\n• Get playbook bullets\n• Cache in state\n• Scope: speckit.<stage>", fillcolor="#E1BEE7", style="filled,bold"];
+
+    // Quality gate (strategic placement)
     qg_check [label="Quality Gate\nCheckpoint?", shape=diamond, fillcolor="#FFE082", style=filled];
-    qg_execute [label="Execute Quality Gate\n• Spawn 3 agents\n• Check issues\n• Auto-resolve or escalate", fillcolor="#FFCCBC", style=filled];
-    qg_human [label="Human\nIntervention", shape=parallelogram, fillcolor="#FFAB91", style=filled];
+    qg_execute [label="Execute Quality Gate\n• BeforeSpecify: Clarify\n• AfterSpecify: Checklist\n• AfterTasks: Analyze\n• Spawn 3 agents\n• ACE-enhanced resolution", fillcolor="#FFCCBC", style=filled];
+    qg_process [label="Process Issues\n• Auto-resolve (55%→70% with ACE)\n• GPT-5 validate (35%)\n• Escalate (5-10%)", fillcolor="#FFAB91", style=filled];
+    qg_human [label="Human\nDecision", shape=parallelogram, fillcolor="#FF8A65", style=filled];
+    qg_done [label="Quality Gate\nComplete", fillcolor="#C5E1A5", style=filled];
 
-    // Phase: Guardrail
-    guardrail_phase [label="Phase: Guardrail\n• Determine guardrail command\n• Execute shell script\n• Wait for task completion", fillcolor="#B3E5FC", style=filled];
+    // Guardrail phase
+    guardrail [label="Phase: Guardrail\n• Execute shell script\n• Validate policy\n• Write telemetry", fillcolor="#B3E5FC", style=filled];
+    guardrail_check [label="Guardrail\nPassed?", shape=diamond, fillcolor="#FFE082", style=filled];
+    guardrail_fail [label="Halt: Guardrail Failed\n• Show error\n• Manual fix required", shape=oval, fillcolor="#FFCDD2", style="filled,rounded"];
 
-    guardrail_exec [label="Execute Guardrail\n• /guardrail.plan\n• /guardrail.tasks\n• /guardrail.implement\n• /guardrail.validate\n• /guardrail.audit\n• /guardrail.unlock", fillcolor="#81D4FA", style=filled];
+    // Agent execution phase
+    agents_phase [label="Phase: ExecutingAgents\n• Build prompt with ACE bullets\n• Apply ACE routing\n• Spawn agents", fillcolor="#C5CAE9", style=filled];
+    prompt_build [label="Build Prompt\n• Load artifacts\n• Inject ACE bullets\n• Add agent instructions", fillcolor="#9FA8DA", style=filled];
+    spawn_agents [label="Spawn Agents\n• Gemini, Claude, GPT-Pro\n• [+GPT-Codex if Tier 3]\n• Parallel execution", fillcolor="#7986CB", style=filled];
+    agents_wait [label="Wait for\nCompletion", shape=parallelogram, fillcolor="#5C6BC0", style=filled];
+    agents_check [label="All agents\ncompleted?", shape=diamond, fillcolor="#FFE082", style=filled];
+    agents_degrade [label="Degraded Mode\n• 2/3 consensus acceptable\n• Schedule follow-up checklist\n• Continue pipeline", fillcolor="#FFF9C4", style=filled];
 
-    task_wait [label="Wait for Task\nCompletion", shape=parallelogram, fillcolor="#4FC3F7", style=filled];
-
-    guardrail_check [label="Guardrail\nSuccess?", shape=diamond, fillcolor="#FFE082", style=filled];
-    guardrail_fail [label="Halt Pipeline\n• Show error\n• Provide resume hint", shape=oval, fillcolor="#FFCDD2", style="filled,rounded"];
-
-    // Phase: Executing Agents
-    agents_phase [label="Phase: ExecutingAgents\n• Build stage prompt\n• Apply ACE routing\n• Set aggregator effort\n• Spawn agents", fillcolor="#C5CAE9", style=filled];
-
-    prompt_build [label="Build Stage Prompt\n• Load spec artifacts\n• Add retry context\n• Apply ACE injection", fillcolor="#9FA8DA", style=filled];
-
-    ace_routing [label="ACE Route Selection\n• Analyze prompt size\n• Check conflict retry\n• Set aggregator effort\n  - low (standard)\n  - medium (complex)\n  - high (conflict)", fillcolor="#7986CB", style=filled];
-
-    spawn_agents [label="Spawn Agents\n• Gemini (gemini-1.5-pro)\n• Claude (claude-sonnet-4)\n• GPT Pro (gpt-5-codex)\n• [+GPT Codex if Tier 3]", fillcolor="#5C6BC0", style=filled];
-
-    agents_wait [label="Wait for All\nAgents", shape=parallelogram, fillcolor="#3F51B5", style=filled];
-
-    agent_retry_check [label="Agents\nCompleted?", shape=diamond, fillcolor="#FFE082", style=filled];
-    agent_retry [label="Retry Agent\nExecution\n• Max 3 attempts\n• Add retry context\n• Re-spawn agents", fillcolor="#FFCCBC", style=filled];
-    agent_fail [label="Max Retries\nExhausted", shape=oval, fillcolor="#FFCDD2", style="filled,rounded"];
-
-    // Phase: Checking Consensus
+    // Consensus phase
     consensus_phase [label="Phase: CheckingConsensus\n• Query local-memory\n• Synthesize results\n• Validate agreement", fillcolor="#A5D6A7", style=filled];
-
-    query_memory [label="Query Local-Memory\n• Search by spec_id + stage\n• Collect agent artifacts\n• Extract verdicts", fillcolor="#81C784", style=filled];
-
-    synthesize [label="Synthesize Consensus\n• Compare agent outputs\n• Check agreement\n• Detect conflicts", fillcolor="#66BB6A", style=filled];
-
     consensus_check [label="Consensus\nOK?", shape=diamond, fillcolor="#FFE082", style=filled];
+    consensus_degrade [label="Degraded Consensus\n• 2/3 majority\n• Schedule checklist\n• Continue", fillcolor="#FFF9C4", style=filled];
+    consensus_fail [label="Halt: Consensus Failed\n• Show conflicts\n• Manual resolution", shape=oval, fillcolor="#FFCDD2", style="filled,rounded"];
 
-    consensus_retry_check [label="Retry\nCount < 3?", shape=diamond, fillcolor="#FFE082", style=filled];
-    consensus_retry [label="Retry Stage\n• Increment retry count\n• Add retry context\n• Reset to Guardrail", fillcolor="#FFCCBC", style=filled];
-    consensus_fail [label="Consensus Failed\n• Show disagreements\n• Manual resolution", shape=oval, fillcolor="#FFCDD2", style="filled,rounded"];
+    // ACE Learning
+    ace_feedback [label="ACE Learning\n• Send feedback\n• Update playbook\n• Improve for next run", fillcolor="#E1BEE7", style="filled,bold"];
 
     // Stage advancement
-    advance [label="Advance Pipeline\n• Persist cost summary\n• Reset retry count\n• Increment stage index\n• Reset to Guardrail phase", fillcolor="#B2DFDB", style=filled];
+    advance [label="Advance Stage\n• Clear ACE cache\n• Persist costs\n• Next stage index", fillcolor="#B2DFDB", style=filled];
 
-    // Cost tracking
-    cost_persist [label="Persist Cost Summary\n• Attach routing notes\n• Write JSON summary\n• Record per-agent costs", fillcolor="#80DEEA", style=filled];
-
-    // Special: Validate retry
+    // Special: Validate halt
     validate_check [label="Stage ==\nValidate?", shape=diamond, fillcolor="#FFE082", style=filled];
-    validate_fail_check [label="Failed\nValidate?", shape=diamond, fillcolor="#FFE082", style=filled];
-    validate_retry_check [label="Validate\nRetry < 2?", shape=diamond, fillcolor="#FFE082", style=filled];
-    validate_retry [label="Retry Impl+Validate\n• Insert stages\n• Increment counter\n• Re-execute", fillcolor="#FFCCBC", style=filled];
-    validate_fail [label="Validation Failed\n• Max retries exceeded\n• Manual fix required", shape=oval, fillcolor="#FFCDD2", style="filled,rounded"];
+    validate_fail [label="Halt: Validation Failed\n• Manual review required\n• Fix tests/implementation", shape=oval, fillcolor="#FFCDD2", style="filled,rounded"];
 
     // Main flow
     init -> stage_check;
+    stage_check -> complete [label="No"];
+    stage_check -> ace_prefetch [label="Yes"];
 
-    stage_check -> complete [label="All stages\ncomplete"];
-    stage_check -> qg_check [label="More stages"];
+    ace_prefetch -> qg_check;
+    qg_check -> qg_execute [label="Yes"];
+    qg_check -> guardrail [label="No"];
 
-    qg_check -> qg_execute [label="Checkpoint\nrequired"];
-    qg_check -> guardrail_phase [label="No checkpoint"];
-    qg_execute -> qg_human [label="Escalated"];
-    qg_execute -> guardrail_phase [label="Auto-resolved"];
-    qg_human -> guardrail_phase [label="Human OK"];
-    qg_human -> guardrail_fail [label="Human blocks"];
+    qg_execute -> qg_process;
+    qg_process -> qg_done [label="Auto-resolved\n(55-70%)"];
+    qg_process -> qg_human [label="Escalated\n(5-10%)"];
+    qg_human -> qg_done;
+    qg_done -> guardrail;
 
-    guardrail_phase -> guardrail_exec;
-    guardrail_exec -> task_wait;
-    task_wait -> guardrail_check;
-
-    guardrail_check -> agents_phase [label="Success"];
+    guardrail -> guardrail_check;
+    guardrail_check -> agents_phase [label="Passed"];
     guardrail_check -> guardrail_fail [label="Failed"];
 
     agents_phase -> prompt_build;
-    prompt_build -> ace_routing;
-    ace_routing -> spawn_agents;
+    prompt_build -> spawn_agents;
     spawn_agents -> agents_wait;
-    agents_wait -> agent_retry_check;
+    agents_wait -> agents_check;
 
-    agent_retry_check -> consensus_phase [label="All complete"];
-    agent_retry_check -> agent_retry [label="Failures\nretry < 3"];
-    agent_retry_check -> agent_fail [label="Failures\nretry >= 3"];
-    agent_retry -> prompt_build;
+    agents_check -> consensus_phase [label="All OK"];
+    agents_check -> agents_degrade [label="Failures"];
+    agents_degrade -> consensus_phase;
 
-    consensus_phase -> query_memory;
-    query_memory -> synthesize;
-    synthesize -> consensus_check;
-
+    consensus_phase -> consensus_check;
     consensus_check -> validate_check [label="Consensus OK"];
-    consensus_check -> consensus_retry_check [label="Consensus\nfailed"];
+    consensus_check -> consensus_degrade [label="Degraded\n(2/3)"];
+    consensus_check -> consensus_fail [label="Failed\n(<2/3)"];
 
-    consensus_retry_check -> consensus_retry [label="Yes"];
-    consensus_retry_check -> consensus_fail [label="No"];
-    consensus_retry -> guardrail_phase;
+    consensus_degrade -> validate_check;
 
-    validate_check -> cost_persist [label="Not validate"];
-    validate_check -> validate_fail_check [label="Is validate"];
+    validate_check -> ace_feedback [label="Other stages"];
+    validate_check -> validate_fail [label="Validate\n+ failed"];
 
-    validate_fail_check -> validate_retry_check [label="Failed"];
-    validate_fail_check -> cost_persist [label="Passed"];
-
-    validate_retry_check -> validate_retry [label="Yes"];
-    validate_retry_check -> validate_fail [label="No"];
-    validate_retry -> guardrail_phase;
-
-    cost_persist -> advance;
+    ace_feedback -> advance;
     advance -> stage_check;
 
     // Legend
     subgraph cluster_legend {
-        label="State Machine Phases";
+        label="Pipeline v2 Changes";
         style=filled;
         fillcolor="#F5F5F5";
-        rank=same;
 
-        leg_guardrail [label="Guardrail Phase", fillcolor="#B3E5FC", style=filled];
-        leg_agents [label="Executing Agents", fillcolor="#C5CAE9", style=filled];
-        leg_consensus [label="Checking Consensus", fillcolor="#A5D6A7", style=filled];
-        leg_qg [label="Quality Gate", fillcolor="#FFCCBC", style=filled];
+        leg_ace [label="NEW: ACE Integration", fillcolor="#E1BEE7", style="filled,bold"];
+        leg_quality [label="Strategic Quality Gates", fillcolor="#FFCCBC", style=filled];
+        leg_degrade [label="Degraded Mode (no retries)", fillcolor="#FFF9C4", style=filled];
+        leg_halt [label="Halt Points", fillcolor="#FFCDD2", style="filled,rounded"];
 
-        leg_guardrail -> leg_agents [style=invis];
-        leg_agents -> leg_consensus [style=invis];
-        leg_consensus -> leg_qg [style=invis];
+        leg_ace -> leg_quality [style=invis];
+        leg_quality -> leg_degrade [style=invis];
+        leg_degrade -> leg_halt [style=invis];
     }
 }

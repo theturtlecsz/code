@@ -19,12 +19,12 @@ digraph spec_kit_user_journey {
     checklist [label="/speckit.checklist\n• Requirement scoring\n• Quality metrics", fillcolor="#C5E1A5", style=filled];
 
     // Main automation
-    auto [label="/speckit.auto\n• Full 6-stage pipeline\n• ~60 min, ~$11", fillcolor="#FF8A65", style=filled];
+    auto [label="/speckit.auto\n• Full 6-stage pipeline\n• ACE-enhanced\n• ~75 min, ~$11.50", fillcolor="#FF8A65", style=filled];
 
     // Stage progression
-    plan [label="Stage 1: Plan\n• Guardrail validation\n• Multi-agent planning\n• Consensus check\n~10 min, ~$1", fillcolor="#90CAF9", style=filled];
-    tasks [label="Stage 2: Tasks\n• Task decomposition\n• Work breakdown\n• Consensus check\n~10 min, ~$1", fillcolor="#90CAF9", style=filled];
-    implement [label="Stage 3: Implement\n• Code generation\n• Quality validation\n• Consensus check\n~15 min, ~$2", fillcolor="#90CAF9", style=filled];
+    plan [label="Stage 1: Plan\n• Quality: Clarify (ambiguities)\n• Guardrail validation\n• ACE + Multi-agent planning\n• Consensus check\n~18 min, ~$1.30", fillcolor="#90CAF9", style=filled];
+    tasks [label="Stage 2: Tasks\n• Quality: Checklist (PRD quality)\n• Guardrail validation\n• ACE + Multi-agent tasks\n• Consensus check\n~18 min, ~$1.30", fillcolor="#90CAF9", style=filled];
+    implement [label="Stage 3: Implement\n• Quality: Analyze (consistency)\n• Guardrail validation\n• ACE + Multi-agent code gen\n• Consensus check\n~23 min, ~$2.30", fillcolor="#90CAF9", style=filled];
     validate [label="Stage 4: Validate\n• Test strategy\n• Validation plan\n• Consensus check\n~10 min, ~$1", fillcolor="#90CAF9", style=filled];
     audit [label="Stage 5: Audit\n• Compliance checks\n• Security review\n• Consensus check\n~10 min, ~$1", fillcolor="#90CAF9", style=filled];
     unlock [label="Stage 6: Unlock\n• Final approval\n• Ready for merge\n• Consensus check\n~10 min, ~$1", fillcolor="#90CAF9", style=filled];
@@ -63,11 +63,10 @@ digraph spec_kit_user_journey {
     audit -> status [style=dotted];
     unlock -> status [style=dotted];
 
-    // Retry paths
-    plan -> plan [label="Retry on\nfailure", style=dashed, color=red];
-    tasks -> tasks [label="Retry", style=dashed, color=red];
-    implement -> validate [label="Failed", style=dashed, color=red];
-    validate -> implement [label="Max 2\nretries", style=dashed, color=red];
+    // Degraded mode paths
+    plan -> tasks [label="Degraded\n(2/3 consensus)", style=dashed, color=orange];
+    tasks -> implement [label="Degraded", style=dashed, color=orange];
+    validate -> artifacts [label="Failed:\nManual review", style=dashed, color=red];
 
     // Legend
     subgraph cluster_legend {
