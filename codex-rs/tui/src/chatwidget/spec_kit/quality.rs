@@ -67,11 +67,43 @@ pub fn classify_issue_agreement(
 /// - Medium confidence + Minor + has fix → Auto-resolve
 /// - Everything else → Escalate
 pub fn should_auto_resolve(issue: &QualityIssue) -> bool {
+    should_auto_resolve_with_ace(issue, &[])
+}
+
+/// Enhanced auto-resolution with ACE playbook context
+///
+/// ACE Framework Integration (2025-10-29):
+/// Uses learned patterns from ACE playbook to boost auto-resolution confidence.
+/// If ACE has seen similar issues before and has helpful patterns, we can
+/// auto-resolve with higher confidence.
+pub fn should_auto_resolve_with_ace(
+    issue: &QualityIssue,
+    ace_bullets: &[super::ace_client::PlaybookBullet],
+) -> bool {
     use Confidence::*;
     use Magnitude::*;
     use Resolvability::*;
 
-    match (issue.confidence, issue.magnitude, issue.resolvability) {
+    // Check if ACE has helpful patterns for this issue type
+    let ace_boost = ace_bullets.iter().any(|bullet| {
+        if !bullet.helpful || bullet.confidence < 0.7 {
+            return false;
+        }
+
+        // Simple pattern matching - check if bullet text relates to issue
+        let bullet_lower = bullet.text.to_lowercase();
+        let issue_lower = issue.description.to_lowercase();
+        let issue_type_lower = issue.issue_type.to_lowercase();
+
+        // Check for keyword overlap
+        bullet_lower.contains(&issue_type_lower)
+            || issue_lower.contains(&bullet_lower.split_whitespace().next().unwrap_or(""))
+            || bullet.text.len() > 20 && issue.description.len() > 20
+                && similar_topics(&bullet_lower, &issue_lower)
+    });
+
+    // Base resolution rules
+    let base_auto = match (issue.confidence, issue.magnitude, issue.resolvability) {
         // High confidence cases
         (High, Minor, AutoFix) => true,
         (High, Minor, SuggestFix) => true,
@@ -82,7 +114,26 @@ pub fn should_auto_resolve(issue: &QualityIssue) -> bool {
 
         // Everything else escalates
         _ => false,
+    };
+
+    // ACE boost: if ACE has seen this before, trust Medium confidence more
+    if ace_boost && matches!(issue.confidence, Medium) && matches!(issue.resolvability, SuggestFix) {
+        tracing::info!("ACE boost: Auto-resolving Medium confidence issue due to playbook pattern match");
+        return true;
     }
+
+    base_auto
+}
+
+/// Simple topic similarity check (heuristic)
+fn similar_topics(text1: &str, text2: &str) -> bool {
+    let words1: std::collections::HashSet<_> = text1.split_whitespace().collect();
+    let words2: std::collections::HashSet<_> = text2.split_whitespace().collect();
+    let intersection = words1.intersection(&words2).count();
+    let union = words1.union(&words2).count();
+
+    // Jaccard similarity > 0.3
+    union > 0 && (intersection as f64 / union as f64) > 0.3
 }
 
 /// Find majority answer from agent responses

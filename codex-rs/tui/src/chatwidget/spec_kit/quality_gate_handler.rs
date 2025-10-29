@@ -306,8 +306,16 @@ fn process_quality_gate_agent_results(
     let mut needs_validation = Vec::new();
     let mut escalate_to_human = Vec::new();
 
+    // ACE Framework Integration: Get cached bullets for ACE-enhanced resolution
+    let ace_bullets = widget
+        .spec_auto_state
+        .as_ref()
+        .and_then(|s| s.ace_bullets_cache.as_ref())
+        .map(|b| b.as_slice())
+        .unwrap_or(&[]);
+
     for issue in merged_issues {
-        if super::quality::should_auto_resolve(&issue) {
+        if super::quality::should_auto_resolve_with_ace(&issue, ace_bullets) {
             auto_resolvable.push(issue);
         } else if matches!(issue.confidence, super::state::Confidence::Medium) {
             needs_validation.push(issue);
