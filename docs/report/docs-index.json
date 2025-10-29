@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-10-29T18:40:43.737Z",
+  "generatedAt": "2025-10-29T20:04:10.435Z",
   "docs": [
     {
       "path": "ACE_PREFETCH_IMPLEMENTATION.md",
@@ -675,6 +675,15 @@
       "missingRefs": [],
       "staleDays": 0,
       "updated": 1761704841000
+    },
+    {
+      "path": "diagrams/spec-kit/IMPLEMENTATION_COMPLETE.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761764465000
     },
     {
       "path": "diagrams/spec-kit/OPTION_A_DESIGN.md",
@@ -3274,7 +3283,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761762450000
+      "updated": 1761764029000
     },
     {
       "path": "docs/report/verification.md",
@@ -3754,6 +3763,10 @@
       "SPEC-KIT.md",
       "docs/archive/2025-sessions/SESSION-HANDOFF-2025-10-18.md",
       "docs/spec-kit/consensus-runner-design.md"
+    ],
+    [
+      "SPEC.md",
+      "diagrams/spec-kit/IMPLEMENTATION_COMPLETE.md"
     ],
     [
       "codex-rs/MEMORY-POLICY.md",

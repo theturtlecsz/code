@@ -29,7 +29,7 @@ digraph spec_kit_pipeline_v2 {
     // Agent execution phase
     agents_phase [label="Phase: ExecutingAgents\n• Build prompt with ACE bullets\n• Apply ACE routing\n• Spawn agents", fillcolor="#C5CAE9", style=filled];
     prompt_build [label="Build Prompt\n• Load artifacts\n• Inject ACE bullets\n• Add agent instructions", fillcolor="#9FA8DA", style=filled];
-    spawn_agents [label="Spawn Agents\n• Gemini, Claude, GPT-Pro\n• [+GPT-Codex if Tier 3]\n• Parallel execution", fillcolor="#7986CB", style=filled];
+    spawn_agents [label="Spawn Agents (Cost-Optimized)\n• Standard: Flash-Lite + Haiku + GPT-Pro\n• Implement: 2.5 Pro + Opus + GPT-Codex\n• Parallel execution", fillcolor="#7986CB", style=filled];
     agents_wait [label="Wait for\nCompletion", shape=parallelogram, fillcolor="#5C6BC0", style=filled];
     agents_check [label="All agents\ncompleted?", shape=diamond, fillcolor="#FFE082", style=filled];
     agents_degrade [label="Degraded Mode\n• 2/3 consensus acceptable\n• Schedule follow-up checklist\n• Continue pipeline", fillcolor="#FFF9C4", style=filled];

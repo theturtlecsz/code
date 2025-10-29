@@ -16,15 +16,15 @@ digraph spec_kit_multi_agent_consensus {
 
     // Parallel agent execution
     subgraph cluster_agents {
-        label="Parallel Agent Execution";
+        label="Parallel Agent Execution (Actual Models)";
         style=filled;
         fillcolor="#E8EAF6";
 
-        gemini [label="Agent: Gemini\ngemini-1.5-pro-002\n• Process prompt\n• Generate output\n• Cost: ~$0.15", fillcolor="#CE93D8", style=filled];
-        claude [label="Agent: Claude\nclaude-sonnet-4\n• Process prompt\n• Generate output\n• Cost: ~$0.30", fillcolor="#90CAF9", style=filled];
-        code [label="Agent: Code\nNative (Rust)\n• Process prompt\n• Generate output\n• Cost: $0.00", fillcolor="#A5D6A7", style=filled];
-        gpt_codex [label="Agent: GPT-Codex\n(Tier 3 only)\ngpt-5-codex\n• Code generation\n• Cost: ~$0.50", fillcolor="#FFAB91", style=filled, style="filled,dashed"];
-        gpt_pro [label="Agent: GPT-Pro\ngpt-5-codex\n• Aggregator role\n• Effort: low/med/high\n• Cost: ~$0.40", fillcolor="#FFCC80", style=filled];
+        gemini [label="Agent: Gemini\nDefault: Flash Thinking\nImplement: 2.5 Pro\nAuto: Flash-Lite\n• Cost: $0.05-0.15", fillcolor="#CE93D8", style=filled];
+        claude [label="Agent: Claude\nDefault: Haiku 3.5\nImplement: Opus 4.1\nAuto: Haiku 4.5\n• Cost: $0.02-0.25", fillcolor="#90CAF9", style=filled];
+        code [label="Agent: Code\ngpt-5-codex via CLI\n• Native execution\n• Cost: $0.08", fillcolor="#A5D6A7", style=filled];
+        gpt_codex [label="Agent: GPT-Codex\n(Implement only)\ngpt-5-codex high effort\n• Code generation\n• Cost: ~$0.50", fillcolor="#FFAB91", style=filled, style="filled,dashed"];
+        gpt_pro [label="Agent: GPT-Pro\ngpt-5-codex medium effort\n• Aggregator role\n• Synthesizes consensus\n• Cost: ~$0.30", fillcolor="#FFCC80", style=filled];
     }
 
     // Local memory storage
@@ -111,16 +111,18 @@ digraph spec_kit_multi_agent_consensus {
 
     // Legend
     subgraph cluster_legend {
-        label="Agent Tiers";
+        label="Agent Tiers (Actual Config)";
         style=filled;
         fillcolor="#FAFAFA";
         rank=sink;
 
-        leg_tier2 [label="Tier 2: Gemini + Claude + Code\n$0.80-1.00, 8-12 min", fillcolor="#E3F2FD", style=filled];
-        leg_tier3 [label="Tier 3: + GPT-Codex\n$2.00, 15-20 min", fillcolor="#FFE0B2", style=filled];
-        leg_tier4 [label="Tier 4: + Arbiter (dynamic)\n$11.00, 60 min", fillcolor="#FFCCBC", style=filled];
+        leg_tier2 [label="Tier 2-lite: claude + code\n$0.10-0.35, 5-8 min\n(checklist)", fillcolor="#E3F2FD", style=filled];
+        leg_tier2std [label="Tier 2: gemini + claude + code/gpt_pro\n$0.40-1.00, 8-12 min\n(new, specify, plan, tasks, validate, audit, unlock)", fillcolor="#FFF9C4", style=filled];
+        leg_tier3 [label="Tier 3: gemini-25-pro + opus + gpt_codex + gpt_pro\n$2.50, 15-20 min\n(implement only)", fillcolor="#FFE0B2", style=filled];
+        leg_tier4 [label="Tier 4: flashlite + haiku + gpt_pro + gpt_codex + code\n$5.50-6.60, 75 min\n(auto - full pipeline)", fillcolor="#FFCCBC", style=filled];
 
-        leg_tier2 -> leg_tier3 [style=invis];
+        leg_tier2 -> leg_tier2std [style=invis];
+        leg_tier2std -> leg_tier3 [style=invis];
         leg_tier3 -> leg_tier4 [style=invis];
     }
 }
