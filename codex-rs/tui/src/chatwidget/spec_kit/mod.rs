@@ -28,6 +28,7 @@ pub mod evidence;
 pub mod file_modifier;
 pub mod guardrail;
 pub mod handler;
+pub mod pipeline_coordinator; // MAINT-3 Phase 5: Pipeline state machine (extracted from handler.rs)
 // FORK-SPECIFIC (just-every/code): local_memory_client.rs deleted 2025-10-18
 // Replaced by native MCP integration in consensus.rs
 pub mod quality;
