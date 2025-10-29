@@ -111,10 +111,10 @@ pub fn halt_spec_auto_with_error(widget: &mut impl SpecKitContext, reason: Strin
 
 /// Handle /spec-consensus command (inspect consensus artifacts)
 ///
-/// Thin wrapper that delegates to handle_spec_consensus_impl.
+/// Thin wrapper that delegates to consensus_coordinator for implementation.
 /// Kept separate for potential future middleware/hooks.
 pub fn handle_spec_consensus(widget: &mut ChatWidget, raw_args: String) {
-    super::handler::handle_spec_consensus_impl(widget, raw_args);
+    super::consensus_coordinator::handle_spec_consensus_impl(widget, raw_args);
 }
 
 /// Handle /guardrail.* and /spec-ops-* commands (guardrail validation)

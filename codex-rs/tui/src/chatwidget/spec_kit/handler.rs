@@ -4,7 +4,10 @@
 //! Using free functions instead of methods to avoid Rust borrow checker issues.
 
 use super::super::ChatWidget; // Parent module (friend access to private fields)
-use super::consensus::{expected_agents_for_stage, parse_consensus_stage};
+use super::consensus::expected_agents_for_stage;
+use super::consensus_coordinator::{
+    block_on_sync, persist_cost_summary, run_consensus_with_retry,
+};
 use super::evidence::FilesystemEvidence;
 use super::state::{GuardrailWait, SpecAutoPhase, ValidateBeginOutcome, ValidateRunInfo};
 use super::validation_lifecycle::{
@@ -25,84 +28,11 @@ pub use super::command_handlers::{
     halt_spec_auto_with_error, handle_guardrail, handle_spec_consensus, handle_spec_status,
 };
 
-// FORK-SPECIFIC (just-every/code): MCP retry configuration
-const MCP_RETRY_ATTEMPTS: u32 = 3;
-const MCP_RETRY_DELAY_MS: u64 = 100;
+// Re-export consensus coordination for use by command_handlers
+pub(crate) use super::consensus_coordinator::handle_spec_consensus_impl;
 
 // FORK-SPECIFIC (just-every/code): Spec-auto agent retry configuration
 const SPEC_AUTO_AGENT_RETRY_ATTEMPTS: u32 = 3;
-
-fn block_on_sync<F, Fut, T>(factory: F) -> T
-where
-    F: FnOnce() -> Fut,
-    Fut: std::future::Future<Output = T> + Send + 'static,
-    T: Send + 'static,
-{
-    if let Ok(handle) = tokio::runtime::Handle::try_current() {
-        let handle_clone = handle.clone();
-        tokio::task::block_in_place(move || handle_clone.block_on(factory()))
-    } else {
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("failed to build runtime")
-            .block_on(factory())
-    }
-}
-
-/// Helper to run consensus check with retry logic for MCP initialization
-/// FORK-SPECIFIC (just-every/code): Handles MCP connection timing and transient failures
-async fn run_consensus_with_retry(
-    mcp_manager: Arc<
-        tokio::sync::Mutex<Option<Arc<codex_core::mcp_connection_manager::McpConnectionManager>>>,
-    >,
-    cwd: std::path::PathBuf,
-    spec_id: String,
-    stage: SpecStage,
-    telemetry_enabled: bool,
-) -> super::error::Result<(Vec<ratatui::text::Line<'static>>, bool)> {
-    let mut last_error = None;
-
-    for attempt in 0..MCP_RETRY_ATTEMPTS {
-        let manager_guard = mcp_manager.lock().await;
-        let Some(manager) = manager_guard.as_ref() else {
-            last_error = Some("MCP manager not initialized yet".to_string());
-            drop(manager_guard);
-
-            if attempt < MCP_RETRY_ATTEMPTS - 1 {
-                let delay = MCP_RETRY_DELAY_MS * (2_u64.pow(attempt));
-                tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
-                continue;
-            }
-            break;
-        };
-
-        match super::consensus::run_spec_consensus(
-            &cwd,
-            &spec_id,
-            stage,
-            telemetry_enabled,
-            manager,
-        )
-        .await
-        {
-            Ok(result) => return Ok(result),
-            Err(e) => {
-                last_error = Some(e.to_string());
-                drop(manager_guard);
-
-                if attempt < MCP_RETRY_ATTEMPTS - 1 {
-                    let delay = MCP_RETRY_DELAY_MS * (2_u64.pow(attempt));
-                    tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
-                }
-            }
-        }
-    }
-
-    Err(super::error::SpecKitError::from_string(
-        last_error.unwrap_or_else(|| "MCP consensus check failed after retries".to_string()),
-    ))
-}
 
 // === Spec Auto Pipeline Methods ===
 
@@ -1185,29 +1115,6 @@ fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
     }
 }
 
-fn persist_cost_summary(widget: &mut ChatWidget, spec_id: &str) {
-    let dir = widget.cost_summary_dir();
-    // Attach routing notes for the just-finished stage (if available)
-    if let Some(state) = widget.spec_auto_state.as_ref() {
-        if let Some(stage) = state.current_stage() {
-            let effort = state.aggregator_effort_notes.get(&stage).cloned();
-            let reason = state.escalation_reason_notes.get(&stage).cloned();
-            widget
-                .spec_cost_tracker()
-                .set_stage_routing_note(spec_id, stage, effort.as_deref(), reason.as_deref());
-        }
-    }
-    if let Err(err) = widget
-        .spec_cost_tracker()
-        .write_summary(spec_id, &dir)
-    {
-        widget.history_push(crate::history_cell::new_warning_event(format!(
-            "Failed to write cost summary for {}: {}",
-            spec_id, err
-        )));
-    }
-}
-
 pub fn record_agent_costs(widget: &mut ChatWidget, agents: &[AgentInfo]) {
     let tracker = widget.spec_cost_tracker();
     let mut spec_id: Option<String> = None;
@@ -1268,68 +1175,6 @@ pub fn record_agent_costs(widget: &mut ChatWidget, agents: &[AgentInfo]) {
                 vec![ratatui::text::Line::from(alert.to_user_message())],
                 HistoryCellType::Notice,
             ));
-        }
-    }
-}
-
-
-/// Handle /spec-consensus command implementation
-///
-/// Made pub(crate) so command_handlers module can delegate to it.
-pub(crate) fn handle_spec_consensus_impl(widget: &mut ChatWidget, raw_args: String) {
-    let trimmed = raw_args.trim();
-    if trimmed.is_empty() {
-        widget.history_push(crate::history_cell::new_error_event(
-            "Usage: /spec-consensus <SPEC-ID> <stage>".to_string(),
-        ));
-        return;
-    }
-
-    let mut parts = trimmed.split_whitespace();
-    let Some(spec_id) = parts.next() else {
-        widget.history_push(crate::history_cell::new_error_event(
-            "Usage: /spec-consensus <SPEC-ID> <stage>".to_string(),
-        ));
-        return;
-    };
-
-    let Some(stage_str) = parts.next() else {
-        widget.history_push(crate::history_cell::new_error_event(
-            "Usage: /spec-consensus <SPEC-ID> <stage>".to_string(),
-        ));
-        return;
-    };
-
-    let Some(stage) = parse_consensus_stage(stage_str) else {
-        widget.history_push(crate::history_cell::new_error_event(format!(
-            "Unknown stage '{stage_str}'. Expected plan, tasks, implement, validate, audit, or unlock.",
-        )));
-        return;
-    };
-
-    // FORK-SPECIFIC (just-every/code): Use async MCP consensus with retry
-    let consensus_result = block_on_sync(|| {
-        let mcp = widget.mcp_manager.clone();
-        let cwd = widget.config.cwd.clone();
-        let spec = spec_id.to_string();
-        let telemetry_enabled = widget.spec_kit_telemetry_enabled();
-        async move { run_consensus_with_retry(mcp, cwd, spec, stage, telemetry_enabled).await }
-    });
-
-    match consensus_result {
-        Ok((lines, ok)) => {
-            let cell = crate::history_cell::PlainHistoryCell::new(
-                lines,
-                if ok {
-                    HistoryCellType::Notice
-                } else {
-                    HistoryCellType::Error
-                },
-            );
-            widget.history_push(cell);
-        }
-        Err(err) => {
-            widget.history_push(crate::history_cell::new_error_event(err.to_string()));
         }
     }
 }

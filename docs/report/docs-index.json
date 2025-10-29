@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-10-29T01:10:39.702Z",
+  "generatedAt": "2025-10-29T01:35:34.387Z",
   "docs": [
     {
       "path": "AGENTS.md",
@@ -3211,7 +3211,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761700210000
+      "updated": 1761701707000
     },
     {
       "path": "docs/report/verification.md",

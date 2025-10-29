@@ -1,6 +1,6 @@
 # Docs Health Report
 
-Generated: 2025-10-29T01:10:39.718Z
+Generated: 2025-10-29T01:35:34.404Z
 
 ## Top risky docs (score < 70)
 - **codex-rs/README.md** — score 65, staleDays 0, orphan yes, broken links: codex-rs/core, codex-rs/exec, codex-rs/tui…

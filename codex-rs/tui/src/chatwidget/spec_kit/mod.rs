@@ -19,6 +19,7 @@ pub mod command_registry;
 pub mod commands;
 pub mod config_validator;
 pub mod consensus;
+pub mod consensus_coordinator; // Consensus checking with MCP retry logic
 pub mod context;
 pub mod cost_tracker; // SPEC-KIT-070: Cost tracking and budget management
 pub mod error;
