@@ -556,6 +556,45 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
 
                 persist_cost_summary(widget, &spec_id);
 
+                // ACE Framework Integration (2025-10-29): Send learning feedback on success
+                if let Some(state) = widget.spec_auto_state.as_ref() {
+                    if let Some(bullet_ids) = &state.ace_bullet_ids_used {
+                        if !bullet_ids.is_empty() {
+                            use super::ace_learning::send_learning_feedback_sync;
+                            use super::routing::{get_repo_root, get_current_branch};
+
+                            let feedback = super::ace_learning::ExecutionFeedback {
+                                compile_ok: true,
+                                tests_passed: true, // Consensus = success
+                                failing_tests: Vec::new(),
+                                lint_issues: 0,
+                                stack_traces: Vec::new(),
+                                diff_stat: None, // Consensus doesn't produce diffs
+                            };
+
+                            let ace_config = &widget.config.ace;
+                            if ace_config.enabled {
+                                let repo_root = get_repo_root(&widget.config.cwd).unwrap_or_else(|| widget.config.cwd.display().to_string());
+                                let branch = get_current_branch(&widget.config.cwd).unwrap_or_else(|| "main".to_string());
+                                let scope = format!("speckit.{}", current_stage.command_name());
+                                let task_title = format!("{} stage for {}", current_stage.display_name(), spec_id);
+
+                                send_learning_feedback_sync(
+                                    ace_config,
+                                    repo_root,
+                                    branch,
+                                    &scope,
+                                    &task_title,
+                                    feedback,
+                                    None, // No diff_stat for consensus stages
+                                );
+
+                                tracing::info!("ACE: Sent learning feedback for {} ({} bullets)", current_stage.display_name(), bullet_ids.len());
+                            }
+                        }
+                    }
+                }
+
                 // FORK-SPECIFIC: Reset retry counter on success
                 if let Some(state) = widget.spec_auto_state.as_mut() {
                     state.agent_retry_count = 0;
@@ -563,6 +602,9 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                     state.reset_cost_tracking(current_stage);
                     state.phase = SpecAutoPhase::Guardrail;
                     state.current_index += 1;
+                    // Clear ACE cache for next stage
+                    state.ace_bullets_cache = None;
+                    state.ace_bullet_ids_used = None;
                 }
 
                 // Trigger next stage

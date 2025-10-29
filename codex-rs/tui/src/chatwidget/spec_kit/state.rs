@@ -467,6 +467,12 @@ pub struct SpecAutoState {
     // SPEC-KIT-070: Record routing notes per stage
     pub aggregator_effort_notes: HashMap<SpecStage, String>,
     pub escalation_reason_notes: HashMap<SpecStage, String>,
+
+    // ACE Framework Integration (2025-10-29)
+    // Cache ACE playbook bullets for current stage to avoid async boundary issues
+    pub ace_bullets_cache: Option<Vec<super::ace_client::PlaybookBullet>>,
+    // Track which bullet IDs were used (for learning feedback)
+    pub ace_bullet_ids_used: Option<Vec<i32>>,
 }
 
 impl SpecAutoState {
@@ -532,6 +538,9 @@ impl SpecAutoState {
             cost_recorded_agents: HashMap::new(),
             aggregator_effort_notes: HashMap::new(),
             escalation_reason_notes: HashMap::new(),
+            // ACE Framework Integration
+            ace_bullets_cache: None,
+            ace_bullet_ids_used: None,
         }
     }
 

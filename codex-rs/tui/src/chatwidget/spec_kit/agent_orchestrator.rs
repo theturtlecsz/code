@@ -33,6 +33,85 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
         .map(|s| s.goal.clone())
         .unwrap_or_default();
 
+    // ACE Framework Integration: Pre-fetch playbook bullets for this stage
+    // This solves the async/sync boundary issue by fetching BEFORE prompt assembly
+    let ace_bullets = {
+        let ace_config = &widget.config.ace;
+        if ace_config.enabled {
+            use super::ace_prompt_injector::{should_use_ace, command_to_scope};
+            use super::routing::{get_repo_root, get_current_branch};
+
+            let command_name = format!("speckit.{}", stage.command_name());
+
+            if should_use_ace(ace_config, &command_name) {
+                if let Some(scope) = command_to_scope(&command_name) {
+                    // Convert scope to owned String for use across async boundary
+                    let scope_string = scope.to_string();
+
+                    // Use block_on_sync for sync/async bridge
+                    let repo_root_opt = get_repo_root(&widget.config.cwd);
+                    let branch_opt = get_current_branch(&widget.config.cwd);
+
+                    // Fallback to defaults if git commands fail
+                    let repo_root = repo_root_opt.unwrap_or_else(|| {
+                        widget.config.cwd.to_string_lossy().to_string()
+                    });
+                    let branch = branch_opt.unwrap_or_else(|| "main".to_string());
+                    let slice_size = ace_config.slice_size;
+                    let stage_name = stage.display_name().to_string();
+
+                    let result = block_on_sync(|| {
+                        let scope_clone = scope_string.clone();
+                        async move {
+                            super::ace_client::playbook_slice(
+                                repo_root,
+                                branch,
+                                scope_clone,
+                                slice_size,
+                                false, // exclude_neutral
+                            )
+                            .await
+                        }
+                    });
+
+                    match result {
+                        super::ace_client::AceResult::Ok(response) => {
+                            tracing::info!(
+                                "ACE pre-fetch successful: {} bullets for {} ({})",
+                                response.bullets.len(),
+                                stage_name,
+                                scope_string
+                            );
+                            Some(response.bullets)
+                        }
+                        super::ace_client::AceResult::Disabled => {
+                            tracing::debug!("ACE disabled");
+                            None
+                        }
+                        super::ace_client::AceResult::Error(e) => {
+                            tracing::warn!("ACE pre-fetch failed for {}: {}", stage_name, e);
+                            None
+                        }
+                    }
+                } else {
+                    tracing::debug!("No ACE scope mapping for {}", command_name);
+                    None
+                }
+            } else {
+                tracing::debug!("ACE not enabled for {}", command_name);
+                None
+            }
+        } else {
+            None
+        }
+    };
+
+    // Cache bullets in state for synchronous injection later
+    if let Some(state) = widget.spec_auto_state.as_mut() {
+        state.ace_bullets_cache = ace_bullets;
+        state.ace_bullet_ids_used = None; // Reset for new stage
+    }
+
     let mut arg = spec_id.to_string();
     if !goal.trim().is_empty() {
         arg.push(' ');
@@ -52,7 +131,21 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
     };
 
     match prompt_result {
-        Ok(prompt) => {
+        Ok(mut prompt) => {
+            // ACE Framework Integration (2025-10-29): Inject cached bullets
+            if let Some(state) = widget.spec_auto_state.as_mut() {
+                if let Some(bullets) = &state.ace_bullets_cache {
+                    use super::ace_prompt_injector::format_ace_section;
+                    let (ace_section, bullet_ids) = format_ace_section(bullets);
+                    if !ace_section.is_empty() {
+                        prompt.push_str("\n\n");
+                        prompt.push_str(&ace_section);
+                        state.ace_bullet_ids_used = Some(bullet_ids);
+                        tracing::info!("ACE: Injected {} bullets into {} prompt", bullets.len(), stage.display_name());
+                    }
+                }
+            }
+
             // SPEC-KIT-070: ACE-aligned routing — set aggregator effort per stage
             // Estimate tokens ~ chars/4, escalate on conflict retry
             let prior_conflict_retry = widget
