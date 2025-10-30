@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-10-29T20:04:10.435Z",
+  "generatedAt": "2025-10-30T00:49:32.509Z",
   "docs": [
     {
       "path": "ACE_PREFETCH_IMPLEMENTATION.md",
@@ -657,6 +657,33 @@
       "missingRefs": [],
       "staleDays": 0,
       "updated": 1759928771000
+    },
+    {
+      "path": "diagrams/spec-kit/AGENT_TIER_SYSTEM.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761768708000
+    },
+    {
+      "path": "diagrams/spec-kit/ARCHITECTURE_REVIEW.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761783937000
+    },
+    {
+      "path": "diagrams/spec-kit/CODEX_RS_ARCHITECTURE.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
     },
     {
       "path": "diagrams/spec-kit/CRITICAL_FINDINGS.md",
@@ -3283,7 +3310,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761764029000
+      "updated": 1761768708000
     },
     {
       "path": "docs/report/verification.md",
@@ -3804,6 +3831,11 @@
       "codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/plan.md",
       "codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/spec.md",
       "codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/tasks.md"
+    ],
+    [
+      "diagrams/spec-kit/ARCHITECTURE_REVIEW.md",
+      "docs/SPEC-KIT-070-model-cost-optimization/PHASE2_COMPLEXITY_ROUTING.md",
+      "docs/spec-kit/testing-policy.md"
     ],
     [
       "diagrams/spec-kit/CRITICAL_FINDINGS.md",
