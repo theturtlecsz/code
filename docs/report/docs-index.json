@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-10-30T00:49:32.509Z",
+  "generatedAt": "2025-10-31T00:13:24.243Z",
   "docs": [
     {
       "path": "ACE_PREFETCH_IMPLEMENTATION.md",
@@ -77,7 +77,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761700210000
+      "updated": 1761786293000
     },
     {
       "path": "TUI.md",
@@ -683,7 +683,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761786293000
     },
     {
       "path": "diagrams/spec-kit/CRITICAL_FINDINGS.md",
@@ -747,6 +747,96 @@
       "missingRefs": [],
       "staleDays": 0,
       "updated": 1761760433000
+    },
+    {
+      "path": "diagrams/spec-kit/docs/SPEC-KIT-901-mcp-native-interface-docs/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761786293000
+    },
+    {
+      "path": "diagrams/spec-kit/docs/SPEC-KIT-902-nativize-guardrails/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761786293000
+    },
+    {
+      "path": "diagrams/spec-kit/docs/SPEC-KIT-903-template-versioning/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761786293000
+    },
+    {
+      "path": "diagrams/spec-kit/docs/SPEC-KIT-904-deprecate-manual-quality/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761786293000
+    },
+    {
+      "path": "diagrams/spec-kit/docs/SPEC-KIT-905-integration-test-freeze/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761786293000
+    },
+    {
+      "path": "diagrams/spec-kit/docs/SPEC-KIT-906-config-migration-warning/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761786293000
+    },
+    {
+      "path": "diagrams/spec-kit/docs/SPEC-KIT-907-fork-isolation-audit/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761786293000
+    },
+    {
+      "path": "diagrams/spec-kit/docs/SPEC-KIT-908-api-surface-documentation/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761786293000
+    },
+    {
+      "path": "diagrams/spec-kit/docs/SPEC-KIT-909-evidence-cleanup-automation/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761786293000
+    },
+    {
+      "path": "diagrams/spec-kit/docs/SPEC-KIT-910-consensus-db-separation/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761786293000
     },
     {
       "path": "docs/CLA.md",
@@ -1544,15 +1634,6 @@
       "updated": 1761348553000
     },
     {
-      "path": "docs/SPEC-KIT-071-memory-system-optimization/ARCHITECTURE_REVIEW.md",
-      "score": 85,
-      "orphan": true,
-      "broken": [],
-      "missingRefs": [],
-      "staleDays": 0,
-      "updated": 1761353158000
-    },
-    {
       "path": "docs/SPEC-KIT-071-memory-system-optimization/CLEANUP_PROGRESS.md",
       "score": 85,
       "orphan": true,
@@ -1659,6 +1740,96 @@
       "missingRefs": [],
       "staleDays": 0,
       "updated": 1761700210000
+    },
+    {
+      "path": "docs/SPEC-KIT-901-mcp-native-interface-docs/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761786293000
+    },
+    {
+      "path": "docs/SPEC-KIT-902-nativize-guardrails/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761786293000
+    },
+    {
+      "path": "docs/SPEC-KIT-903-template-versioning/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761786293000
+    },
+    {
+      "path": "docs/SPEC-KIT-904-deprecate-manual-quality/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761786293000
+    },
+    {
+      "path": "docs/SPEC-KIT-905-integration-test-freeze/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761786293000
+    },
+    {
+      "path": "docs/SPEC-KIT-906-config-migration-warning/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761786293000
+    },
+    {
+      "path": "docs/SPEC-KIT-907-fork-isolation-audit/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761786293000
+    },
+    {
+      "path": "docs/SPEC-KIT-908-api-surface-documentation/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761786293000
+    },
+    {
+      "path": "docs/SPEC-KIT-909-evidence-cleanup-automation/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761786293000
+    },
+    {
+      "path": "docs/SPEC-KIT-910-consensus-db-separation/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761786293000
     },
     {
       "path": "docs/SPEC-KIT-DEMO/audit.md",
@@ -3310,7 +3481,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761768708000
+      "updated": 1761786293000
     },
     {
       "path": "docs/report/verification.md",
@@ -3792,10 +3963,6 @@
       "docs/spec-kit/consensus-runner-design.md"
     ],
     [
-      "SPEC.md",
-      "diagrams/spec-kit/IMPLEMENTATION_COMPLETE.md"
-    ],
-    [
       "codex-rs/MEMORY-POLICY.md",
       "docs/DOCUMENTATION_CONSOLIDATION_COMPLETE.md"
     ],
@@ -3842,6 +4009,11 @@
       "docs/spec-kit/spec-auto-automation.md"
     ],
     [
+      "diagrams/spec-kit/IMPLEMENTATION_COMPLETE.md",
+      "docs/DOCUMENTATION_CLEANUP_PLAN.md",
+      "docs/archive/2025-sessions/spec-kit-planning/SERVICE_TRAITS_DEEP_ANALYSIS.md"
+    ],
+    [
       "diagrams/spec-kit/README.md",
       "docs/archive/2025-sessions/ace-analysis/ACE_FULL_FRAMEWORK.md",
       "docs/archive/2025-sessions/analysis/ANALYSIS_COMPLETE.md",
@@ -3852,9 +4024,22 @@
       "docs/archive/2025-sessions/spec-kit-planning/MAINT-10-EXTRACTION-PLAN.md"
     ],
     [
-      "docs/DOCUMENTATION_CLEANUP_PLAN.md",
-      "docs/archive/2025-sessions/spec-kit-planning/REMAINING_OPPORTUNITIES.md",
-      "docs/archive/2025-sessions/spec-kit-planning/SERVICE_TRAITS_DEEP_ANALYSIS.md"
+      "diagrams/spec-kit/docs/SPEC-KIT-906-config-migration-warning/PRD.md",
+      "docs/archive/2025-sessions/SESSION_RESTART_PROMPT.md"
+    ],
+    [
+      "diagrams/spec-kit/docs/SPEC-KIT-907-fork-isolation-audit/PRD.md",
+      "docs/interrupt-resume-postmortem.md"
+    ],
+    [
+      "diagrams/spec-kit/docs/SPEC-KIT-908-api-surface-documentation/PRD.md",
+      "docs/DOCUMENTATION_CONSOLIDATION_COMPLETE.md",
+      "docs/SPEC-KIT-900-generic-smoke/tasks.md",
+      "docs/spec-kit/testing-policy.md"
+    ],
+    [
+      "diagrams/spec-kit/docs/SPEC-KIT-910-consensus-db-separation/PRD.md",
+      "docs/SPEC-KIT-070-model-cost-optimization/PHASE1A_RESULTS.md"
     ],
     [
       "docs/SPEC-KIT-060-template-validation-test/final-comparison.md",
@@ -3870,16 +4055,22 @@
       "docs/spec-kit/testing-policy.md"
     ],
     [
-      "docs/SPEC-KIT-070-model-cost-optimization/PHASE1A_RESULTS.md",
-      "docs/archive/2025-sessions/analysis/FORK_OPTIMIZATION_PLAN.md"
-    ],
-    [
       "docs/SPEC-KIT-070-model-cost-optimization/PHASE1_COMPLETE.md",
       "docs/SPEC-KIT-070-model-cost-optimization/PHASE2_COMPLEXITY_ROUTING.md"
     ],
     [
       "docs/SPEC-KIT-900-generic-smoke/plan.md",
       "docs/SPEC-KIT-900-generic-smoke/telemetry-cost-schema.md"
+    ],
+    [
+      "docs/SPEC-KIT-901-mcp-native-interface-docs/spec.md",
+      "docs/SPEC-KIT-902-nativize-guardrails/spec.md"
+    ],
+    [
+      "docs/SPEC-KIT-903-template-versioning/spec.md",
+      "docs/SPEC-KIT-905-integration-test-freeze/spec.md",
+      "docs/SPEC-KIT-906-config-migration-warning/spec.md",
+      "docs/SPEC-KIT-910-consensus-db-separation/spec.md"
     ],
     [
       "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/archive/baselines/baseline_2025-10-12T20:50:45Z-301386052.md",

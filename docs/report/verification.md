@@ -1,7 +1,7 @@
 # Architecture Verification Report
 
-Generated: 2025-10-29T00:28:11.792Z
-Mode: full
+Generated: 2025-10-31T00:13:10.342Z
+Mode: quick
 
 Docs scanned: 1795
 
