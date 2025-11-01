@@ -1008,11 +1008,12 @@ pub(super) fn execute_quality_checkpoint(
         }
     }
 
-    // Get execution logger for event logging
+    // Get execution logger and agent configs for spawning
     let logger = widget.spec_auto_state.as_ref()
         .map(|s| s.execution_logger.clone());
     let run_id = widget.spec_auto_state.as_ref()
         .and_then(|s| s.run_id.clone());
+    let agent_configs = widget.config.agents.clone();
 
     // Spawn agents in background task
     let spawn_handle = tokio::spawn(async move {
@@ -1020,6 +1021,7 @@ pub(super) fn execute_quality_checkpoint(
             &cwd_clone,
             &spec_id_clone,
             checkpoint_clone,
+            &agent_configs,
         ).await {
             Ok(spawn_infos) => {
                 info!("Spawned {} quality gate agents", spawn_infos.len());

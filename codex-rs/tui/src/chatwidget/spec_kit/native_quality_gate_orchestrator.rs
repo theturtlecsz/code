@@ -12,6 +12,7 @@
 use super::state::{QualityCheckpoint, QualityGateType};
 use crate::spec_prompts::SpecStage;
 use codex_core::agent_tool::AGENT_MANAGER;
+use codex_core::config_types::AgentConfig;
 use serde_json::Value;
 use std::path::Path;
 
@@ -28,6 +29,7 @@ pub async fn spawn_quality_gate_agents_native(
     cwd: &Path,
     spec_id: &str,
     checkpoint: QualityCheckpoint,
+    agent_configs: &[AgentConfig],
 ) -> Result<Vec<AgentSpawnInfo>, String> {
     let gates = checkpoint.gates();
 
@@ -61,7 +63,7 @@ pub async fn spawn_quality_gate_agents_native(
         .ok_or_else(|| format!("No prompts found for {}", gate_key))?;
 
     // Define the 3 agents to spawn (SPEC-KIT-070 Tier 2: cheap models for quality gates)
-    let agent_configs = vec![
+    let agent_spawn_configs = vec![
         ("gemini", "gemini_flash"),  // gemini-2.5-flash (cheap)
         ("claude", "claude_haiku"),  // claude-haiku (cheap)
         ("code", "gpt_medium"),      // gpt-5 medium reasoning (cheaper than high)
@@ -71,7 +73,7 @@ pub async fn spawn_quality_gate_agents_native(
     let batch_id = uuid::Uuid::new_v4().to_string();
 
     // Spawn each agent
-    for (agent_name, model_name) in agent_configs {
+    for (agent_name, config_name) in agent_spawn_configs {
         let prompt_template = gate_prompts.get(agent_name)
             .and_then(|v| v.get("prompt"))
             .and_then(|v| v.as_str())
@@ -92,22 +94,20 @@ pub async fn spawn_quality_gate_agents_native(
             prompt.clone()
         };
 
-        // Spawn agent via AgentManager
+        // Spawn agent via AgentManager using config lookup
         let mut manager = AGENT_MANAGER.write().await;
-        let agent_id = manager.create_agent(
-            model_name.to_string(),
+        let agent_id = manager.create_agent_from_config_name(
+            config_name, // Config name (e.g., "gemini_flash", "claude_haiku")
+            agent_configs,
             prompt,
-            None, // context
-            None, // output_goal
-            vec![], // files
             true, // read_only
             Some(batch_id.clone()),
-        ).await;
+        ).await.map_err(|e| format!("Failed to spawn {}: {}", config_name, e))?;
 
         spawn_infos.push(AgentSpawnInfo {
             agent_id,
             agent_name: agent_name.to_string(),
-            model_name: model_name.to_string(),
+            model_name: config_name.to_string(),
             prompt_preview,
         });
     }
