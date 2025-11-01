@@ -119,11 +119,16 @@ pub enum SlashCommand {
     // Upstream: Does not have spec-kit automation
     // Preserve: All spec-kit commands during rebases
     // Phase 3: Standardized /speckit.* namespace
-    // REMOVED: SpecKitNew, SpecKitClarify, SpecKitAnalyze, SpecKitChecklist
-    // Native commands now ONLY in SPEC_KIT_REGISTRY (eliminates duplicates)
-
+    #[strum(serialize = "speckit.new")]
+    SpecKitNew,
     #[strum(serialize = "speckit.specify")]
     SpecKitSpecify,
+    #[strum(serialize = "speckit.clarify")]
+    SpecKitClarify,
+    #[strum(serialize = "speckit.analyze")]
+    SpecKitAnalyze,
+    #[strum(serialize = "speckit.checklist")]
+    SpecKitChecklist,
     #[strum(serialize = "speckit.plan")]
     SpecKitPlan,
     #[strum(serialize = "speckit.tasks")]
@@ -136,9 +141,14 @@ pub enum SlashCommand {
     SpecKitAudit,
     #[strum(serialize = "speckit.unlock")]
     SpecKitUnlock,
-    // REMOVED: SpecKitAuto, SpecKitStatus, SpecKitConstitution, SpecKitAceStatus
-    // These are now ONLY in SPEC_KIT_REGISTRY (native execution)
-    // Removing from enum eliminates duplicate autocomplete entries
+    #[strum(serialize = "speckit.auto")]
+    SpecKitAuto,
+    #[strum(serialize = "speckit.status")]
+    SpecKitStatus,
+    #[strum(serialize = "speckit.constitution")]
+    SpecKitConstitution,
+    #[strum(serialize = "speckit.ace-status")]
+    SpecKitAceStatus,
     // Guardrail commands (Phase 3 Week 2)
     #[strum(serialize = "guardrail.plan")]
     GuardrailPlan,
@@ -227,16 +237,21 @@ impl SlashCommand {
             SlashCommand::Model => "choose model & reasoning effort",
             SlashCommand::Agents => "create and configure agents",
             // SpecKit standardized commands
-            // REMOVED: SpecKitNew, SpecKitClarify, SpecKitAnalyze, SpecKitChecklist (registry-only)
+            SlashCommand::SpecKitNew => "create new SPEC (native, instant, $0)",
             SlashCommand::SpecKitSpecify => "generate PRD with multi-agent consensus",
+            SlashCommand::SpecKitClarify => "detect ambiguities (native, <1s, $0)",
+            SlashCommand::SpecKitAnalyze => "check consistency (native, <1s, $0)",
+            SlashCommand::SpecKitChecklist => "score requirements (native, <1s, $0)",
             SlashCommand::SpecKitPlan => "create work breakdown with multi-agent consensus",
             SlashCommand::SpecKitTasks => "generate task list with validation mapping",
             SlashCommand::SpecKitImplement => "write code with multi-agent consensus",
             SlashCommand::SpecKitValidate => "run test strategy with validation",
             SlashCommand::SpecKitAudit => "compliance review with multi-agent",
             SlashCommand::SpecKitUnlock => "final approval for merge",
-            // REMOVED: SpecKitAuto, SpecKitStatus, SpecKitConstitution, SpecKitAceStatus
-            // Now handled exclusively by SPEC_KIT_REGISTRY
+            SlashCommand::SpecKitAuto => "full pipeline (native coordinator)",
+            SlashCommand::SpecKitStatus => "show progress dashboard (native)",
+            SlashCommand::SpecKitConstitution => "extract ACE bullets (native)",
+            SlashCommand::SpecKitAceStatus => "show ACE stats (native)",
             // Legacy (deprecated)
             SlashCommand::NewSpec => "DEPRECATED: use /speckit.new",
             SlashCommand::SpecPlan => "DEPRECATED: use /speckit.plan",
@@ -326,7 +341,8 @@ impl SlashCommand {
                 | SlashCommand::SpecKitValidate
                 | SlashCommand::SpecKitAudit
                 | SlashCommand::SpecKitUnlock
-                // REMOVED: SpecKitAuto, SpecKitStatus (now registry-only)
+                | SlashCommand::SpecKitAuto
+                | SlashCommand::SpecKitStatus
         )
     }
 
