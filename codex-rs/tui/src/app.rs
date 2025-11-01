@@ -1770,23 +1770,10 @@ impl App<'_> {
                         | SlashCommand::SpecKitUnlock => {
                             // Prompt-expanded in the chat widget
                         }
-                        // SPEC-KIT-070 Phase 2+3: Native quality commands (execute via registry)
-                        SlashCommand::SpecKitClarify
-                        | SlashCommand::SpecKitAnalyze
-                        | SlashCommand::SpecKitChecklist
-                        | SlashCommand::SpecKitNew => {
-                            // Redirect to spec-kit registry for direct execution
-                            // Fixes cursor position issue: autocomplete uses enum, must redirect to registry
-                            if let AppState::Chat { widget } = &mut self.app_state {
-                                spec_kit::try_dispatch_spec_kit_command(
-                                    widget,
-                                    &command_text,
-                                    &self.app_event_tx,
-                                );
-                            }
-                        }
-                        // NOTE: SpecKitAuto, SpecKitStatus, SpecKitConstitution, SpecKitAceStatus
-                        // removed from enum - now registry-only (eliminates duplicates)
+                        // NOTE: All native commands removed from enum (registry-only):
+                        // SpecKitNew, SpecKitClarify, SpecKitAnalyze, SpecKitChecklist
+                        // SpecKitAuto, SpecKitStatus, SpecKitConstitution, SpecKitAceStatus
+                        // This eliminates duplicate autocomplete entries and cursor position bugs
                         // SpecKit agent commands
                         SlashCommand::SpecKitSpecify => {
                             // Single-agent orchestrator (gpt5-low)

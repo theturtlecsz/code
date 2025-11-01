@@ -119,16 +119,11 @@ pub enum SlashCommand {
     // Upstream: Does not have spec-kit automation
     // Preserve: All spec-kit commands during rebases
     // Phase 3: Standardized /speckit.* namespace
-    #[strum(serialize = "speckit.new")]
-    SpecKitNew,
+    // REMOVED: SpecKitNew, SpecKitClarify, SpecKitAnalyze, SpecKitChecklist
+    // Native commands now ONLY in SPEC_KIT_REGISTRY (eliminates duplicates)
+
     #[strum(serialize = "speckit.specify")]
     SpecKitSpecify,
-    #[strum(serialize = "speckit.clarify")]
-    SpecKitClarify,
-    #[strum(serialize = "speckit.analyze")]
-    SpecKitAnalyze,
-    #[strum(serialize = "speckit.checklist")]
-    SpecKitChecklist,
     #[strum(serialize = "speckit.plan")]
     SpecKitPlan,
     #[strum(serialize = "speckit.tasks")]
@@ -232,13 +227,8 @@ impl SlashCommand {
             SlashCommand::Model => "choose model & reasoning effort",
             SlashCommand::Agents => "create and configure agents",
             // SpecKit standardized commands
-            SlashCommand::SpecKitNew => {
-                "create new SPEC from description with templates (55% faster)"
-            }
+            // REMOVED: SpecKitNew, SpecKitClarify, SpecKitAnalyze, SpecKitChecklist (registry-only)
             SlashCommand::SpecKitSpecify => "generate PRD with multi-agent consensus",
-            SlashCommand::SpecKitClarify => "resolve spec ambiguities (max 5 questions)",
-            SlashCommand::SpecKitAnalyze => "check cross-artifact consistency",
-            SlashCommand::SpecKitChecklist => "evaluate requirement quality (generates scores)",
             SlashCommand::SpecKitPlan => "create work breakdown with multi-agent consensus",
             SlashCommand::SpecKitTasks => "generate task list with validation mapping",
             SlashCommand::SpecKitImplement => "write code with multi-agent consensus",
@@ -328,11 +318,8 @@ impl SlashCommand {
             SlashCommand::Plan
                 | SlashCommand::Solve
                 | SlashCommand::Code
-                | SlashCommand::SpecKitNew
+                // REMOVED: SpecKitNew, SpecKitClarify, SpecKitAnalyze, SpecKitChecklist (registry-only)
                 | SlashCommand::SpecKitSpecify
-                | SlashCommand::SpecKitClarify
-                | SlashCommand::SpecKitAnalyze
-                | SlashCommand::SpecKitChecklist
                 | SlashCommand::SpecKitPlan
                 | SlashCommand::SpecKitTasks
                 | SlashCommand::SpecKitImplement
