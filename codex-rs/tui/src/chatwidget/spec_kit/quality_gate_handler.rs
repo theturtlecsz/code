@@ -60,9 +60,8 @@ pub fn on_quality_gate_agents_complete(widget: &mut ChatWidget) {
 
     let gate_count = gate_names.len();
 
-    // Mark processing active and clear any stale results before kicking off async work.
+    // Clear any stale results before attempting storage
     if let Some(state) = widget.spec_auto_state.as_mut() {
-        state.quality_gate_processing = Some(checkpoint);
         if let SpecAutoPhase::QualityGateExecuting { results, .. } = &mut state.phase {
             results.clear();
         }
@@ -103,6 +102,11 @@ pub fn on_quality_gate_agents_complete(widget: &mut ChatWidget) {
         widget.history_push(crate::history_cell::new_error_event(
             "Warning: No agent artifacts stored - agents may not have completed yet".to_string()
         ));
+    }
+
+    // Mark processing active AFTER storage succeeds to allow retry on failure
+    if let Some(state) = widget.spec_auto_state.as_mut() {
+        state.quality_gate_processing = Some(checkpoint);
     }
 
     // Add small delay to ensure async storage tasks complete
