@@ -52,10 +52,10 @@ pub async fn spawn_quality_gate_agents_native(
     let gate_prompts = prompts.get(gate_key)
         .ok_or_else(|| format!("No prompts found for {}", gate_key))?;
 
-    // Define the 3 agents to spawn
+    // Define the 3 agents to spawn (use agent names from config, not model names)
     let agent_configs = vec![
-        ("gemini", "gemini-25-flash"),
-        ("claude", "claude-haiku-45"),
+        ("gemini", "gemini"),
+        ("claude", "claude"),
         ("code", "code"),
     ];
 
