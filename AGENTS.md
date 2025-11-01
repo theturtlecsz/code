@@ -1,8 +1,8 @@
 # Spec-Kit Automation Agents - codex-rs
 
 **Project**: codex-rs (theturtlecsz/code)
-**Last Updated**: 2025-10-18 (Post-ARCH improvements)
-**Architecture Status**: Production Ready (Phase 3 Complete)
+**Last Updated**: 2025-11-01 (SPEC-KIT-070 Phase 2+3 Complete)
+**Architecture Status**: Production Ready - 75% Cost Optimized
 
 ---
 
@@ -65,58 +65,71 @@ These are **AI models**, not agent tools. They work in parallel to provide multi
 
 | Agent | Model | Role | Used In | Type-Safe |
 |-------|-------|------|---------|-----------|
-| **gemini** | gemini-2.0-flash-thinking-exp | Research, broad analysis, exploratory implementation | All stages | `SpecAgent::Gemini` |
-| **claude** | claude-sonnet-4-5 | Detailed reasoning, edge cases, implementation | All stages | `SpecAgent::Claude` |
-| **code** | claude-sonnet-4-5 (Claude Code CLI) | General-purpose, orchestration | All stages | `SpecAgent::Code` |
-| **gpt_codex** | gpt-5-codex | Code generation specialist | Implement stage only | `SpecAgent::GptCodex` |
-| **gpt_pro** | gpt-5 | **Synthesis & aggregation** (authoritative consensus) | Dev stages | `SpecAgent::GptPro` |
+| **gemini-25-flash** | gemini-2.5-flash | Cheap research, broad analysis | plan, validate, quality gates | `SpecAgent::Gemini` |
+| **claude-haiku-45** | claude-3.5-haiku | Cheap validation, edge cases | plan, validate, implement | `SpecAgent::Claude` |
+| **gpt5-low** | gpt-5 (low effort) | Simple analysis, task decomposition | specify, tasks | `SpecAgent::GptPro` |
+| **gpt5-medium** | gpt-5 (medium effort) | Planning, aggregation | plan, validate | `SpecAgent::GptPro` |
+| **gpt5-high** | gpt-5 (high effort) | Critical decisions | audit, unlock | `SpecAgent::GptPro` |
+| **gpt_codex** | gpt-5-codex (HIGH effort) | Code generation specialist | implement only | `SpecAgent::GptCodex` |
+| **gemini-25-pro** | gemini-2.5-pro | Premium reasoning | audit, unlock | `SpecAgent::Gemini` |
+| **claude-sonnet-45** | claude-4.5-sonnet | Premium analysis | audit, unlock | `SpecAgent::Claude` |
+| **code** | Native Rust | Native heuristics (zero cost) | Quality commands (Tier 0) | `SpecAgent::Code` |
 
-**Key Distinctions**:
-- `gpt_pro` is the **aggregator**—synthesizes other agents' outputs with `agreements[]` and `conflicts[]`
-- `code` agent added in ARCH-009 (type-safe enum migration)
-- All agents normalized via `SpecAgent::from_string()` (ARCH-006)
+**Key Distinctions (SPEC-KIT-070)**:
+- **gpt-5** (gpt5-*): General reasoning with effort levels (minimal/low/medium/high)
+- **gpt-5-codex** (gpt_codex): Code generation specialist, separate from general reasoning
+- **Cheap models** (gemini-flash, claude-haiku): 10-40x cheaper for routine analysis
+- **Premium models** (gemini-pro, claude-sonnet): Quality over cost for critical decisions
+- **Native commands**: Zero agents, instant, FREE (pattern matching only)
 
 ---
 
-## 🎚️ MULTI-AGENT TIERS
+## 🎚️ MULTI-AGENT TIERS (Updated 2025-11-01, SPEC-KIT-070)
 
-### Tier 0: Native TUI (0 agents, $0, <1s)
-**Command**: `/speckit.status SPEC-ID`
-**Purpose**: Pure Rust dashboard, no AI needed
-**Implementation**: `codex-rs/tui/src/spec_status.rs`
+### Tier 0: Native Rust (0 agents, $0, <1s) **EXPANDED**
+**Commands**: `/speckit.new`, `/speckit.clarify`, `/speckit.analyze`, `/speckit.checklist`, `/speckit.status`
+**Purpose**: Pattern matching, heuristics, deterministic operations (NO AI needed)
+**Implementation**:
+- `new_native.rs` - Template-based SPEC creation
+- `clarify_native.rs` - Ambiguity pattern matching (vague language, missing sections)
+- `analyze_native.rs` - Structural consistency diff checking
+- `checklist_native.rs` - Rubric-based quality scoring
+- `spec_status.rs` - Status dashboard
+**Principle**: "Agents for reasoning, NOT transactions"
 
-### Tier 2-lite: Dual Agent (2 agents, ~$0.35, 5-8 min)
-**Agents**: claude + code
-**Command**: `/speckit.checklist SPEC-ID`
-**Purpose**: Quality evaluation without research overhead
-
-### Tier 2: Triple Agent (3 agents, ~$0.80-1.00, 8-12 min)
-**Agents**: gemini + claude + gpt_pro (or code for simpler stages)
+### Tier 1: Single Agent (1 agent: gpt5-low, ~$0.10, 3-5 min) **NEW**
+**Agents**: gpt-5 with LOW reasoning effort
 **Commands**:
-- `/speckit.new`: Create SPEC
-- `/speckit.specify`: Draft/update PRD
-- `/speckit.clarify`: Ambiguity resolution
-- `/speckit.analyze`: Consistency checking
-- `/speckit.plan`: Work breakdown
-- `/speckit.tasks`: Task decomposition
-- `/speckit.validate`: Test strategy
-- `/speckit.audit`: Compliance checking
-- `/speckit.unlock`: Final approval
+- `/speckit.specify`: PRD drafting (strategic refinement)
+- `/speckit.tasks`: Task decomposition (structured breakdown)
+**Purpose**: Lightweight reasoning where single perspective sufficient
 
-**Use For**: Analysis, planning, consensus (no code generation)
+### Tier 2: Multi-Agent (2-3 agents, ~$0.11-0.35, 8-12 min) **UPDATED**
+**Agents**: Cheap models (gemini-flash, claude-haiku) + strategic model (gpt5-medium or gpt_codex)
+**Commands**:
+- `/speckit.plan`: 3 agents (gemini-flash, claude-haiku, gpt5-medium) - Architectural planning
+- `/speckit.validate`: 3 agents (gemini-flash, claude-haiku, gpt5-medium) - Test strategy
+- `/speckit.implement`: 2 agents (gpt_codex HIGH, claude-haiku) - Code generation specialist + validator
+**Purpose**: Multi-perspective analysis, strategic decisions, code generation
+**Cost**: $0.11-0.35 (was $0.80-2.00, 60-85% reduction)
 
-### Tier 3: Quad Agent (4 agents, ~$2.00, 15-20 min)
-**Agents**: gemini + claude + gpt_codex + gpt_pro
-**Command**: `/speckit.implement SPEC-ID`
-**Purpose**: Code generation with multiple implementation approaches + synthesis
+### Tier 3: Premium (3 premium agents, ~$0.80, 10-12 min)
+**Agents**: gemini-pro + claude-sonnet + gpt5-high (HIGH reasoning effort)
+**Commands**:
+- `/speckit.audit`: Compliance and security validation
+- `/speckit.unlock`: Ship/no-ship decision
+**Purpose**: Critical decisions where quality > cost
 
-### Tier 4: Dynamic (3-5 agents adaptively, ~$11, 60 min)
+### Tier 4: Full Pipeline (strategic routing, **~$2.70**, 45-50 min) **75% REDUCTION**
 **Command**: `/speckit.auto SPEC-ID`
 **Behavior**:
-- Uses Tier 2 for most stages (plan, tasks, validate, audit, unlock)
-- Uses Tier 3 for implement stage
-- Adds arbiter agent if conflicts detected
-- Handles degradation (continues with 2/3 agents if one fails)
+- Native quality checks: clarify, analyze, checklist (FREE)
+- Single-agent simple: specify, tasks ($0.10 each)
+- Multi-agent complex: plan, validate ($0.35 each)
+- Code specialist: implement ($0.11)
+- Premium critical: audit, unlock ($0.80 each)
+- Quality gate checkpoints (automatic, multi-agent)
+**Cost**: $11 → $2.70 (75% reduction via SPEC-KIT-070)
 
 ---
 
