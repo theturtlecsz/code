@@ -1770,7 +1770,7 @@ impl App<'_> {
                         | SlashCommand::SpecKitUnlock => {
                             // Prompt-expanded in the chat widget
                         }
-                        // SPEC-KIT-070 Phase 2+3: Native commands (handled by registry at line 1714)
+                        // SPEC-KIT-070 Phase 2+3: Native commands (execute via registry)
                         SlashCommand::SpecKitClarify
                         | SlashCommand::SpecKitAnalyze
                         | SlashCommand::SpecKitChecklist
@@ -1780,7 +1780,15 @@ impl App<'_> {
                         | SlashCommand::SpecKitConstitution // Native ACE extraction
                         | SlashCommand::SpecKitAceStatus   // Native ACE status
                          => {
-                            // Handled by spec-kit registry (native execution, no agents)
+                            // Redirect to spec-kit registry for direct execution
+                            // Fixes cursor position issue: autocomplete uses enum, must redirect to registry
+                            if let AppState::Chat { widget } = &mut self.app_state {
+                                spec_kit::try_dispatch_spec_kit_command(
+                                    widget,
+                                    &command_text,
+                                    &self.app_event_tx,
+                                );
+                            }
                         }
                         // SpecKit agent commands
                         SlashCommand::SpecKitSpecify => {
