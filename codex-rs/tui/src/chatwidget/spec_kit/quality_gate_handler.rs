@@ -1385,16 +1385,85 @@ fn store_quality_gate_artifacts(
     stored_count
 }
 
-/// Get completed quality gate agents from widget.active_agents
+/// Get completed quality gate agents by scanning .code/agents/ directory
 ///
-/// Returns Vec<(agent_name, agent_id)> for completed agents.
-fn get_completed_quality_gate_agents(widget: &ChatWidget) -> Vec<(String, String)> {
-    widget
-        .active_agents
-        .iter()
-        .filter(|agent| matches!(agent.status, AgentStatus::Completed))
-        .map(|agent| (agent.name.to_lowercase(), agent.id.clone()))
-        .collect()
+/// Returns Vec<(agent_name, agent_id)> for quality gate agents found in filesystem.
+///
+/// This approach scans the filesystem instead of widget.active_agents because
+/// quality gate agents are spawned as sub-agents by the orchestrator via agent_run,
+/// and are not tracked in widget.active_agents (only the orchestrator itself is).
+fn get_completed_quality_gate_agents(_widget: &ChatWidget) -> Vec<(String, String)> {
+    let agents_dir = std::path::Path::new(".code/agents");
+
+    let mut quality_gate_agents = Vec::new();
+
+    // Scan all agent directories
+    let entries = match std::fs::read_dir(agents_dir) {
+        Ok(e) => e,
+        Err(e) => {
+            warn!("Failed to read .code/agents directory: {}", e);
+            return quality_gate_agents;
+        }
+    };
+
+    for entry in entries.flatten() {
+        if !entry.path().is_dir() {
+            continue;
+        }
+
+        let agent_id = entry.file_name().to_string_lossy().to_string();
+        let result_path = entry.path().join("result.txt");
+
+        // Try to read result file
+        let content = match std::fs::read_to_string(&result_path) {
+            Ok(c) => c,
+            Err(_) => continue, // No result file yet
+        };
+
+        // Extract JSON to check if this is a quality gate agent
+        let json_str = match extract_json_from_markdown(&content) {
+            Some(j) => j,
+            None => continue, // No JSON found
+        };
+
+        // Parse JSON to verify it's a quality gate artifact
+        let json_val: serde_json::Value = match serde_json::from_str(&json_str) {
+            Ok(v) => v,
+            Err(_) => continue, // Invalid JSON
+        };
+
+        // Check if this is a quality gate stage
+        let stage = match json_val.get("stage").and_then(|v| v.as_str()) {
+            Some(s) => s,
+            None => continue,
+        };
+
+        if stage == "quality-gate-clarify" || stage.starts_with("quality-gate-") {
+            // Extract agent name
+            if let Some(agent) = json_val.get("agent").and_then(|v| v.as_str()) {
+                quality_gate_agents.push((agent.to_lowercase().to_string(), agent_id.clone()));
+                debug!(
+                    "Found quality gate agent: {} (id: {}, stage: {})",
+                    agent, agent_id, stage
+                );
+            }
+        }
+    }
+
+    if quality_gate_agents.is_empty() {
+        debug!("No quality gate agents found in .code/agents directory");
+    } else {
+        info!(
+            "Found {} quality gate agents: {:?}",
+            quality_gate_agents.len(),
+            quality_gate_agents
+                .iter()
+                .map(|(name, _)| name.as_str())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    quality_gate_agents
 }
 
 /// Extract JSON from markdown code fence (```json...```)
