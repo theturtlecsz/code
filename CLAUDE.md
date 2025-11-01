@@ -49,25 +49,25 @@ See `MEMORY-POLICY.md` for complete policy. Local-memory is the **only** knowled
 ### Core Spec-Kit Commands (/speckit.* namespace)
 
 **Intake & Creation:**
-- `/speckit.new <description>` – Create new SPEC with multi-agent PRD consensus (Tier 2: 3 agents - gemini, claude, code). Uses templates for consistent structure. ~13 min, ~$0.60.
-- `/speckit.specify SPEC-ID [description]` – Draft/update PRD with multi-agent analysis (Tier 2: 3 agents - gemini, claude, code). ~10-12 min, ~$0.80.
+- `/speckit.new <description>` – **Native SPEC creation** (Tier 0: zero agents, instant, FREE). Template-based PRD generation, directory creation, SPEC.md updates. <1s, $0.
+- `/speckit.specify SPEC-ID [description]` – Draft/update PRD with single-agent analysis (Tier 1: 1 agent - gpt5-low). Strategic PRD refinement. ~3-5 min, ~$0.10.
 
-**Quality Commands:**
-- `/speckit.clarify SPEC-ID` – Structured ambiguity resolution (Tier 2: 3 agents - gemini, claude, code). Identifies unclear requirements. ~8-10 min, ~$0.80.
-- `/speckit.analyze SPEC-ID` – Cross-artifact consistency checking with auto-fix (Tier 2: 3 agents - gemini, claude, code). ~8-10 min, ~$0.80.
-- `/speckit.checklist SPEC-ID` – Requirement quality scoring (Tier 2-lite: 2 agents - claude, code). ~5-8 min, ~$0.35.
+**Quality Commands (Native Heuristics):**
+- `/speckit.clarify SPEC-ID` – **Native ambiguity detection** (Tier 0: zero agents, instant, FREE). Pattern matching for vague language, missing sections, undefined terms. <1s, $0.
+- `/speckit.analyze SPEC-ID` – **Native consistency checking** (Tier 0: zero agents, instant, FREE). Structural diff for ID mismatches, coverage gaps, contradictions. <1s, $0.
+- `/speckit.checklist SPEC-ID` – **Native quality scoring** (Tier 0: zero agents, instant, FREE). Rubric-based evaluation (completeness, clarity, testability, consistency). <1s, $0.
 
 **Development Stages:**
-- `/speckit.plan SPEC-ID [context]` – Multi-agent work breakdown (Tier 2: 3 agents - gemini, claude, gpt_pro). ~10-12 min, ~$1.00.
-- `/speckit.tasks SPEC-ID` – Task decomposition with consensus (Tier 2: 3 agents - gemini, claude, gpt_pro). ~10-12 min, ~$1.00.
-- `/speckit.implement SPEC-ID` – Code generation + validation (Tier 3: 4 agents - gemini, claude, gpt_codex, gpt_pro). ~15-20 min, ~$2.00.
-- `/speckit.validate SPEC-ID` – Test strategy consensus (Tier 2: 3 agents - gemini, claude, gpt_pro). ~10-12 min, ~$1.00.
+- `/speckit.plan SPEC-ID [context]` – Multi-agent work breakdown (Tier 2: 3 agents - gemini-flash, claude-haiku, gpt5-medium). Strategic planning with diverse perspectives. ~10-12 min, ~$0.35.
+- `/speckit.tasks SPEC-ID` – Single-agent task decomposition (Tier 1: 1 agent - gpt5-low). Structured task breakdown from plan. ~3-5 min, ~$0.10.
+- `/speckit.implement SPEC-ID` – Code generation with specialist (Tier 2: 2 agents - gpt_codex HIGH, claude-haiku validator). gpt-5-codex for code, cheap validator. ~8-12 min, ~$0.11.
+- `/speckit.validate SPEC-ID` – Test strategy consensus (Tier 2: 3 agents - gemini-flash, claude-haiku, gpt5-medium). Coverage analysis and test planning. ~10-12 min, ~$0.35.
   - **Single-flight guard**: duplicate triggers show `Validate run already active (run_id …)` and do not spawn extra agents; lifecycle telemetry lands under `stage:validate`.
-- `/speckit.audit SPEC-ID` – Compliance checking (Tier 2: 3 agents - gemini, claude, gpt_pro). ~10-12 min, ~$1.00.
-- `/speckit.unlock SPEC-ID` – Final approval (Tier 2: 3 agents - gemini, claude, gpt_pro). ~10-12 min, ~$1.00.
+- `/speckit.audit SPEC-ID` – Compliance checking (Tier 3: 3 premium - gemini-pro, claude-sonnet, gpt5-high). Security and compliance validation. ~10-12 min, ~$0.80.
+- `/speckit.unlock SPEC-ID` – Final approval (Tier 3: 3 premium - gemini-pro, claude-sonnet, gpt5-high). Ship/no-ship decision. ~10-12 min, ~$0.80.
 
 **Automation:**
-- `/speckit.auto SPEC-ID` – Full 6-stage pipeline with auto-advancement (Tier 4: dynamic 3-5 agents, uses Tier 2 for most stages, Tier 3 for implement, adds arbiter if conflicts). ~60 min, ~$11.
+- `/speckit.auto SPEC-ID` – Full 6-stage pipeline with auto-advancement and quality gate checkpoints. Uses strategic agent routing: native for quality, single-agent for simple stages, multi-agent for complex decisions, premium for critical stages. ~45-50 min, **~$2.70** (was $11, 75% reduction via SPEC-KIT-070).
 
 **Diagnostic:**
 - `/speckit.status SPEC-ID` – Native TUI dashboard (Tier 0: instant, no agents). Shows stage completion, artifacts, evidence paths. <1s, $0.
@@ -140,27 +140,35 @@ See `MEMORY-POLICY.md` for complete policy. Local-memory is the **only** knowled
 /spec-evidence-stats --spec SPEC-KIT-065
 ```
 
-### Tiered Model Strategy
+### Tiered Model Strategy (Updated 2025-11-01, SPEC-KIT-070 Phase 2+3)
 
-**Tier 0: Native TUI** (0 agents, $0, <1s)
-- `/speckit.status` - Pure Rust implementation
+**Tier 0: Native Rust** (0 agents, $0, <1s) **EXPANDED**
+- `/speckit.new` - Template-based SPEC creation (native)
+- `/speckit.clarify` - Ambiguity pattern matching (native heuristics)
+- `/speckit.analyze` - Consistency structural diff (native)
+- `/speckit.checklist` - Rubric-based scoring (native)
+- `/speckit.status` - Status dashboard (native)
 
-**Tier 1: Single Agent** (1 agent: code, ~$0.10, 1-3 min)
-- Future optimization for deterministic scaffolding
+**Tier 1: Single Agent** (1 agent: gpt5-low, ~$0.10, 3-5 min) **NEW**
+- `/speckit.specify` - PRD drafting (strategic refinement)
+- `/speckit.tasks` - Task decomposition (structured breakdown)
 
-**Tier 2-lite: Dual Agent** (2 agents: claude, code, ~$0.35, 5-8 min)
-- `/speckit.checklist` - Quality evaluation without research
+**Tier 2: Multi-Agent** (2-3 agents: cheap + gpt5-medium, ~$0.35, 8-12 min) **UPDATED**
+- `/speckit.plan` - Architectural planning (3 agents: gemini-flash, claude-haiku, gpt5-medium)
+- `/speckit.validate` - Test strategy (3 agents: gemini-flash, claude-haiku, gpt5-medium)
+- `/speckit.implement` - Code generation (2 agents: gpt_codex HIGH, claude-haiku validator)
 
-**Tier 2: Triple Agent** (3 agents: gemini, claude, code/gpt_pro, ~$0.80-1.00, 8-12 min)
-- `/speckit.new`, `/speckit.specify`, `/speckit.clarify`, `/speckit.analyze`
-- `/speckit.plan`, `/speckit.tasks`, `/speckit.validate`, `/speckit.audit`, `/speckit.unlock`
-- Use for analysis, planning, consensus (no code generation)
+**Tier 3: Premium** (3 premium agents: pro/sonnet/gpt5-high, ~$0.80, 10-12 min)
+- `/speckit.audit` - Compliance/security (critical decisions, high reasoning)
+- `/speckit.unlock` - Ship decision (quality over cost)
 
-**Tier 3: Quad Agent** (4 agents: gemini, claude, gpt_codex, gpt_pro, ~$2.00, 15-20 min)
-- `/speckit.implement` only - Code generation + validation
+**Tier 4: Full Pipeline** (strategic routing, **~$2.70**, 45-50 min) **75% REDUCTION**
+- `/speckit.auto` - Combines all tiers: native quality checks (FREE), single-agent simple stages ($0.10), multi-agent complex ($0.35), premium critical ($0.80)
 
-**Tier 4: Dynamic** (3-5 agents adaptively, ~$11, 60 min)
-- `/speckit.auto` - Uses Tier 2 for most stages, Tier 3 for implement, adds arbiter if conflicts
+**Principle**: "Agents for reasoning, NOT transactions" (SPEC-KIT-070)
+- Pattern matching → Native Rust (FREE, instant)
+- Strategic decisions → Multi-agent consensus (justified cost)
+- Code generation → Specialist model (gpt-5-codex)
 
 ### Degradation & Fallbacks
 
