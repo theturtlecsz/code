@@ -52,11 +52,11 @@ pub async fn spawn_quality_gate_agents_native(
     let gate_prompts = prompts.get(gate_key)
         .ok_or_else(|| format!("No prompts found for {}", gate_key))?;
 
-    // Define the 3 agents to spawn (use agent names from config, not model names)
+    // Define the 3 agents to spawn (SPEC-KIT-070 Tier 2: cheap models for quality gates)
     let agent_configs = vec![
-        ("gemini", "gemini"),
-        ("claude", "claude"),
-        ("code", "code"),
+        ("gemini", "gemini_flash"),  // gemini-2.5-flash (cheap)
+        ("claude", "claude_haiku"),  // claude-haiku (cheap)
+        ("code", "gpt_medium"),      // gpt-5 medium reasoning (cheaper than high)
     ];
 
     let mut agent_ids = Vec::new();
