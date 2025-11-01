@@ -1466,10 +1466,15 @@ fn get_completed_quality_gate_agents(_widget: &ChatWidget) -> Vec<(String, Strin
     quality_gate_agents
 }
 
-/// Extract JSON from markdown code fence (```json...```)
+/// Extract JSON from markdown code fence or raw JSON
 ///
-/// Returns the JSON string without fence markers, or None if not found.
+/// Handles two formats:
+/// 1. Markdown code fence: ```json...```
+/// 2. Raw JSON: Content starting with { or [
+///
+/// Returns the JSON string, or None if not found.
 fn extract_json_from_markdown(content: &str) -> Option<String> {
+    // First try to extract from markdown code fence
     let lines: Vec<&str> = content.lines().collect();
     let mut in_fence = false;
     let mut json_lines = Vec::new();
@@ -1487,11 +1492,44 @@ fn extract_json_from_markdown(content: &str) -> Option<String> {
         }
     }
 
-    if json_lines.is_empty() {
-        None
-    } else {
-        Some(json_lines.join("\n"))
+    if !json_lines.is_empty() {
+        return Some(json_lines.join("\n"));
     }
+
+    // If no code fence found, try to find raw JSON (starts with { or [)
+    // Look for lines starting with { or [ after skipping agent metadata
+    let mut found_json_start = false;
+    let mut raw_json_lines = Vec::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        // Start collecting when we find { or [
+        if !found_json_start && (trimmed.starts_with('{') || trimmed.starts_with('[')) {
+            found_json_start = true;
+            raw_json_lines.push(line);
+            continue;
+        }
+
+        // If we're collecting JSON, continue until we hit something that's clearly not JSON
+        if found_json_start {
+            // Stop if we hit a line that starts with [ and looks like a log timestamp
+            if trimmed.starts_with('[') && trimmed.contains(']') && trimmed.contains("tokens used") {
+                break;
+            }
+            raw_json_lines.push(line);
+        }
+    }
+
+    if !raw_json_lines.is_empty() {
+        let json_str = raw_json_lines.join("\n");
+        // Validate it looks like JSON by checking it parses
+        if serde_json::from_str::<serde_json::Value>(&json_str).is_ok() {
+            return Some(json_str);
+        }
+    }
+
+    None
 }
 
 /// Store quality gate artifact to local-memory via MCP
