@@ -34,6 +34,7 @@ pub mod file_modifier;
 pub mod guardrail;
 pub mod handler;
 pub mod native_consensus_executor; // Native consensus orchestration (eliminates orchestrator agent)
+pub mod native_guardrail; // SPEC-KIT-066, SPEC-KIT-902: Native guardrail validation (replaces bash scripts)
 pub mod pipeline_coordinator; // MAINT-3 Phase 5: Pipeline state machine (extracted from handler.rs)
 // FORK-SPECIFIC (just-every/code): local_memory_client.rs deleted 2025-10-18
 // Replaced by native MCP integration in consensus.rs
