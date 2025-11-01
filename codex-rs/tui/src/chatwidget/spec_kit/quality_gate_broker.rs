@@ -225,35 +225,65 @@ async fn fetch_agent_payloads_from_memory(
 
     for agent_id in agent_ids {
         if let Some(agent) = manager.get_agent(agent_id) {
-            info_lines.push(format!("Agent {}: {:?}", agent_id, agent.status));
+            info_lines.push(format!("Agent {} ({}): {:?}", agent_id, agent.model, agent.status));
 
             if let Some(result_text) = &agent.result {
-                // Extract JSON from result
-                if let Some(json_str) = extract_json_from_content(result_text) {
-                    if let Ok(json_val) = serde_json::from_str::<Value>(&json_str) {
-                        // Check if this is a quality gate artifact
-                        if let Some(stage) = json_val.get("stage").and_then(|v| v.as_str()) {
-                            if stage.starts_with("quality-gate-") {
-                                if let Some(agent_name) = json_val.get("agent").and_then(|v| v.as_str()) {
-                                    // Match against expected_agents
-                                    if expected_agents.iter().any(|a| a.to_lowercase() == agent_name.to_lowercase()) {
-                                        info_lines.push(format!("Found {} from memory", agent_name));
+                info_lines.push(format!("  Result length: {} chars", result_text.len()));
 
-                                        results_map.insert(
-                                            agent_name.to_lowercase(),
-                                            QualityGateAgentPayload {
-                                                agent: agent_name.to_string(),
-                                                gate: Some(stage.to_string()),
-                                                content: json_val,
-                                            },
-                                        );
+                // Extract JSON from result
+                match extract_json_from_content(result_text) {
+                    Some(json_str) => {
+                        info_lines.push(format!("  Extracted JSON ({} chars)", json_str.len()));
+
+                        match serde_json::from_str::<Value>(&json_str) {
+                            Ok(json_val) => {
+                                let stage = json_val.get("stage").and_then(|v| v.as_str());
+                                let agent_name = json_val.get("agent").and_then(|v| v.as_str());
+                                info_lines.push(format!("  JSON stage: {:?}, agent: {:?}", stage, agent_name));
+
+                                // Check if this is a quality gate artifact
+                                if let Some(stage) = stage {
+                                    if stage.starts_with("quality-gate-") {
+                                        if let Some(agent_name) = agent_name {
+                                            // Match against expected_agents
+                                            if expected_agents.iter().any(|a| a.to_lowercase() == agent_name.to_lowercase()) {
+                                                info_lines.push(format!("Found {} from memory", agent_name));
+
+                                                results_map.insert(
+                                                    agent_name.to_lowercase(),
+                                                    QualityGateAgentPayload {
+                                                        agent: agent_name.to_string(),
+                                                        gate: Some(stage.to_string()),
+                                                        content: json_val,
+                                                    },
+                                                );
+                                            } else {
+                                                info_lines.push(format!("  Agent '{}' not in expected list", agent_name));
+                                            }
+                                        } else {
+                                            info_lines.push("  Missing 'agent' field in JSON".to_string());
+                                        }
+                                    } else {
+                                        info_lines.push(format!("  Stage '{}' doesn't start with 'quality-gate-'", stage));
                                     }
                                 }
                             }
+                            Err(e) => {
+                                info_lines.push(format!("  JSON parse error: {}", e));
+                                info_lines.push(format!("  First 200 chars: {}", &json_str.chars().take(200).collect::<String>()));
+                            }
                         }
                     }
+                    None => {
+                        info_lines.push("  No JSON found in result".to_string());
+                        info_lines.push(format!("  First 500 chars: {}", &result_text.chars().take(500).collect::<String>()));
+                    }
                 }
+            } else {
+                info_lines.push("  No result available".to_string());
             }
+        } else {
+            info_lines.push(format!("Agent {} not found in AGENT_MANAGER", agent_id));
         }
     }
 
