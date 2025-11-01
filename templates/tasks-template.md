@@ -2,6 +2,7 @@
 
 **SPEC-ID**: [SPEC_ID]
 **Plan Reference**: docs/[SPEC_ID]/plan.md
+**Template Version**: tasks-v1.0
 **Prompt Version**: [PROMPT_VERSION]
 **Created**: [DATE]
 

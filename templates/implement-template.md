@@ -2,6 +2,7 @@
 
 **SPEC-ID**: [SPEC_ID]
 **Implementation Version**: [VERSION]
+**Template Version**: implement-v1.0
 **Created**: [DATE]
 
 ---

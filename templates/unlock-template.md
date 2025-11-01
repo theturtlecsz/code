@@ -2,6 +2,7 @@
 
 **SPEC-ID**: [SPEC_ID]
 **Unlock Version**: [VERSION]
+**Template Version**: unlock-v1.0
 **Created**: [DATE]
 
 ---
