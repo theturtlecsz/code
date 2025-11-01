@@ -790,16 +790,18 @@ pub struct QualityCheckpointOutcome {
 // === Helper Functions ===
 
 pub fn guardrail_for_stage(stage: SpecStage) -> SlashCommand {
+    // SPEC-KIT-066: Use native /guardrail.* commands instead of bash scripts
+    // Quality gates (SPEC-KIT-068) provide validation; guardrails add lightweight checks
     match stage {
-        SpecStage::Plan => SlashCommand::SpecOpsPlan,
-        SpecStage::Tasks => SlashCommand::SpecOpsTasks,
-        SpecStage::Implement => SlashCommand::SpecOpsImplement,
-        SpecStage::Validate => SlashCommand::SpecOpsValidate,
-        SpecStage::Audit => SlashCommand::SpecOpsAudit,
-        SpecStage::Unlock => SlashCommand::SpecOpsUnlock,
+        SpecStage::Plan => SlashCommand::GuardrailPlan,
+        SpecStage::Tasks => SlashCommand::GuardrailTasks,
+        SpecStage::Implement => SlashCommand::GuardrailImplement,
+        SpecStage::Validate => SlashCommand::GuardrailValidate,
+        SpecStage::Audit => SlashCommand::GuardrailAudit,
+        SpecStage::Unlock => SlashCommand::GuardrailUnlock,
         SpecStage::Clarify | SpecStage::Analyze | SpecStage::Checklist => {
             // Quality commands don't have guardrails (they are quality checks themselves)
-            SlashCommand::SpecOpsPlan // Fallback (unused)
+            SlashCommand::GuardrailPlan // Fallback (unused)
         }
     }
 }
