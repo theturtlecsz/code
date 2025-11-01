@@ -983,34 +983,44 @@ pub(super) fn execute_quality_checkpoint(
     let gate_names: Vec<String> = gates.iter().map(|g| g.command_name().to_string()).collect();
 
     let orchestrator_prompt = format!(
-        r#"Execute Quality Checkpoint: {checkpoint} for SPEC {spec_id}
+        r#"Quality Checkpoint: {checkpoint} for SPEC {spec_id}
 
-CRITICAL: Spawn 3 SEPARATE agent_run calls (Gemini, Claude, Code) with gate-specific prompts from docs/spec-kit/prompts.json.
+YOUR ONLY JOB: Spawn 3 agents and wait for them. Native code handles all result collection.
 
-STEP 1: For each gate in [{gates}], read the matching prompt in prompts.json.
+STEP 1: Read prompts from docs/spec-kit/prompts.json for gates: [{gates}]
 
-STEP 2: For each gate and agent run:
-  agent_run(
-    models: ["{{agent}}"],
-    read_only: true,
-    task: <role-specific prompt>
-  )
+STEP 2: Spawn EXACTLY 3 agents with gate-specific prompts:
 
-STEP 3: After agent_wait completes, read .code/agents/{{agent_id}}/result.txt
-        and store via mcp__local-memory__store_memory with:
-          domain: "spec-kit"
-          importance: 8
-          tags: ["quality-gate", "spec:{spec_id}", "checkpoint:{checkpoint}", "stage:<gate>", "agent:<gemini|claude|code>"]
+agent_run(
+  models: ["gemini-25-flash"],
+  read_only: true,
+  task: "<gate prompt for Gemini with SPEC context>"
+)
 
-STEP 4: Once all three agent artefacts are stored, run a GPT_PRO synthesis (models: ["gpt_pro"], read_only: true)
-        that reviews the JSON outputs and stores its verdict using tags
-        ["quality-gate", "spec:{spec_id}", "checkpoint:{checkpoint}", "stage:gpt5-validation", "agent:gpt_pro"].
+agent_run(
+  models: ["claude-haiku-45"],
+  read_only: true,
+  task: "<gate prompt for Claude with SPEC context>"
+)
 
-STEP 5: Output "Quality gate complete - artefacts stored to local-memory" when finished.
+agent_run(
+  models: ["code"],
+  read_only: true,
+  task: "<gate prompt for GPT with SPEC context>"
+)
 
-CRITICAL: Do not batch agents. Each agent_run is separate so the broker can collect results.
+STEP 3: Wait for agents to complete using agent_wait.
 
-Gates: {gates}
+STEP 4: Output "Quality checkpoint agents launched" and STOP.
+
+DO NOT:
+- Read agent result files (native broker handles this)
+- Parse JSON (native broker handles this)
+- Store to memory (native broker handles this)
+- Spawn extra agents
+- Use Python scripts for anything
+
+Your job is ONLY to spawn the 3 agents and wait. That's it.
 "#,
         checkpoint = checkpoint.name(),
         spec_id = spec_id,
