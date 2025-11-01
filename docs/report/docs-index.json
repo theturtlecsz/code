@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-11-01T04:28:39.717Z",
+  "generatedAt": "2025-11-01T04:36:40.481Z",
   "docs": [
     {
       "path": "ACE_PREFETCH_IMPLEMENTATION.md",
@@ -86,7 +86,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761970904000
+      "updated": 1761971427000
     },
     {
       "path": "TUI.md",
@@ -3481,7 +3481,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761970230000
+      "updated": 1761971427000
     },
     {
       "path": "docs/report/verification.md",
@@ -3490,7 +3490,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761970230000
+      "updated": 1761971427000
     },
     {
       "path": "docs/sandbox.md",
