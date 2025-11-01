@@ -31,6 +31,7 @@ pub enum SpecAutoPhase {
         expected_agents: Vec<String>,
         completed_agents: HashSet<String>,
         results: HashMap<String, Value>, // agent_id -> JSON result
+        native_agent_ids: Option<Vec<String>>, // SPEC-KIT-900: Track native orchestrator agent IDs
     },
 
     /// Processing quality gate results (classification)

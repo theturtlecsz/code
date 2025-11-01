@@ -2718,7 +2718,10 @@ impl App<'_> {
                 AppEvent::QualityGateNativeAgentsComplete { checkpoint, agent_ids } => {
                     // Native orchestrator agents completed - trigger broker collection
                     if let AppState::Chat { widget } = &mut self.app_state {
-                        info!("Handling native quality gate completion for {:?}", checkpoint);
+                        info!("Handling native quality gate completion for {:?} with {} agents", checkpoint, agent_ids.len());
+                        // Store agent IDs in phase for memory-based collection
+                        spec_kit::set_native_agent_ids(widget, agent_ids);
+                        // Trigger broker (will use memory-based collection)
                         spec_kit::on_quality_gate_agents_complete(widget);
                     }
                 } // === END FORK-SPECIFIC ===

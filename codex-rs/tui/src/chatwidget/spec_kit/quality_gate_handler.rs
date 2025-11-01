@@ -27,7 +27,7 @@ use tracing::{debug, info, warn};
 
 /// Handle quality gate agents completing
 pub fn on_quality_gate_agents_complete(widget: &mut ChatWidget) {
-    let (spec_id, checkpoint, expected_agents, gate_names) = {
+    let (spec_id, checkpoint, expected_agents, gate_names, native_agent_ids) = {
         let Some(state) = widget.spec_auto_state.as_ref() else {
             return;
         };
@@ -37,6 +37,7 @@ pub fn on_quality_gate_agents_complete(widget: &mut ChatWidget) {
                 checkpoint,
                 expected_agents,
                 gates,
+                native_agent_ids,
                 ..
             } => {
                 if state.completed_checkpoints.contains(checkpoint)
@@ -52,6 +53,7 @@ pub fn on_quality_gate_agents_complete(widget: &mut ChatWidget) {
                         .iter()
                         .map(|gate| gate.command_name().to_string())
                         .collect::<Vec<_>>(),
+                    native_agent_ids.clone(),
                 )
             }
             _ => return,
@@ -111,18 +113,29 @@ pub fn on_quality_gate_agents_complete(widget: &mut ChatWidget) {
 
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
         vec![ratatui::text::Line::from(format!(
-            "Quality Gate: {} - retrieving agent responses asynchronously...",
-            checkpoint.name()
+            "Quality Gate: {} - retrieving agent responses{}...",
+            checkpoint.name(),
+            if native_agent_ids.is_some() { " from memory (native)" } else { " from filesystem" }
         ))],
         crate::history_cell::HistoryCellType::Notice,
     ));
 
-    widget.quality_gate_broker.fetch_agent_payloads(
-        spec_id,
-        checkpoint,
-        expected_agents,
-        gate_names,
-    );
+    // Use memory-based collection for native orchestrator, filesystem for legacy
+    if let Some(agent_ids) = native_agent_ids {
+        widget.quality_gate_broker.fetch_agent_payloads_from_memory(
+            spec_id,
+            checkpoint,
+            expected_agents,
+            agent_ids,
+        );
+    } else {
+        widget.quality_gate_broker.fetch_agent_payloads(
+            spec_id,
+            checkpoint,
+            expected_agents,
+            gate_names,
+        );
+    }
 }
 
 /// Handle asynchronous broker callbacks delivering agent payloads.
@@ -1087,7 +1100,17 @@ pub(super) fn execute_quality_checkpoint(
             ],
             completed_agents: std::collections::HashSet::new(),
             results: std::collections::HashMap::new(),
+            native_agent_ids: None, // Will be set by completion event
         };
+    }
+}
+
+/// Update phase with native agent IDs when event arrives
+pub fn set_native_agent_ids(widget: &mut ChatWidget, agent_ids: Vec<String>) {
+    if let Some(state) = widget.spec_auto_state.as_mut() {
+        if let SpecAutoPhase::QualityGateExecuting { native_agent_ids, .. } = &mut state.phase {
+            *native_agent_ids = Some(agent_ids);
+        }
     }
 }
 

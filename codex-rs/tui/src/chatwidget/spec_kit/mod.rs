@@ -93,6 +93,7 @@ pub use handler::{
     on_quality_gate_answers, on_quality_gate_cancelled, on_spec_auto_agents_complete,
     on_spec_auto_task_complete, on_spec_auto_task_started,
 };
+pub use quality_gate_handler::set_native_agent_ids;
 
 // Re-export validation lifecycle functions
 pub use validation_lifecycle::{

@@ -59,6 +59,12 @@ enum QualityGateCommand {
         expected_agents: Vec<String>,
         gate_stages: Vec<String>,
     },
+    FetchAgentPayloadsFromMemory {
+        spec_id: String,
+        checkpoint: QualityCheckpoint,
+        expected_agents: Vec<String>,
+        agent_ids: Vec<String>,
+    },
     FetchValidationPayload {
         spec_id: String,
         checkpoint: QualityCheckpoint,
@@ -102,6 +108,24 @@ impl QualityGateBroker {
                             broker_result: result,
                         });
                     }
+                    QualityGateCommand::FetchAgentPayloadsFromMemory {
+                        spec_id,
+                        checkpoint,
+                        expected_agents,
+                        agent_ids,
+                    } => {
+                        let result = fetch_agent_payloads_from_memory(
+                            &spec_id,
+                            checkpoint,
+                            &expected_agents,
+                            &agent_ids,
+                        )
+                        .await;
+
+                        tx_results.send(AppEvent::SpecKitQualityGateResults {
+                            broker_result: result,
+                        });
+                    }
                     QualityGateCommand::FetchValidationPayload {
                         spec_id,
                         checkpoint,
@@ -138,6 +162,24 @@ impl QualityGateBroker {
         }
     }
 
+    /// Request asynchronous retrieval from AGENT_MANAGER memory (native orchestrator)
+    pub(crate) fn fetch_agent_payloads_from_memory(
+        &self,
+        spec_id: impl Into<String>,
+        checkpoint: QualityCheckpoint,
+        expected_agents: Vec<String>,
+        agent_ids: Vec<String>,
+    ) {
+        if let Err(err) = self.sender.send(QualityGateCommand::FetchAgentPayloadsFromMemory {
+            spec_id: spec_id.into(),
+            checkpoint,
+            expected_agents,
+            agent_ids,
+        }) {
+            tracing::error!("quality gate broker channel closed: {err}");
+        }
+    }
+
     /// Request asynchronous retrieval of GPT-5 validation artefacts.
     pub(crate) fn fetch_validation_payload(
         &self,
@@ -162,6 +204,88 @@ async fn fetch_agent_payloads(
     checkpoint: QualityCheckpoint,
     expected_agents: &[String],
     _gate_stages: &[String],
+) -> QualityGateBrokerResult {
+    fetch_agent_payloads_from_filesystem(spec_id, checkpoint, expected_agents).await
+}
+
+/// Collect agent payloads from AGENT_MANAGER (native orchestrator)
+async fn fetch_agent_payloads_from_memory(
+    spec_id: &str,
+    checkpoint: QualityCheckpoint,
+    expected_agents: &[String],
+    agent_ids: &[String],
+) -> QualityGateBrokerResult {
+    let mut info_lines = Vec::new();
+    let mut results_map: HashMap<String, QualityGateAgentPayload> = HashMap::new();
+
+    info_lines.push(format!("Collecting from AGENT_MANAGER: {} agents", agent_ids.len()));
+
+    // Read from AGENT_MANAGER memory (native orchestrator path)
+    let manager = codex_core::agent_tool::AGENT_MANAGER.read().await;
+
+    for agent_id in agent_ids {
+        if let Some(agent) = manager.get_agent(agent_id) {
+            info_lines.push(format!("Agent {}: {:?}", agent_id, agent.status));
+
+            if let Some(result_text) = &agent.result {
+                // Extract JSON from result
+                if let Some(json_str) = extract_json_from_content(result_text) {
+                    if let Ok(json_val) = serde_json::from_str::<Value>(&json_str) {
+                        // Check if this is a quality gate artifact
+                        if let Some(stage) = json_val.get("stage").and_then(|v| v.as_str()) {
+                            if stage.starts_with("quality-gate-") {
+                                if let Some(agent_name) = json_val.get("agent").and_then(|v| v.as_str()) {
+                                    // Match against expected_agents
+                                    if expected_agents.iter().any(|a| a.to_lowercase() == agent_name.to_lowercase()) {
+                                        info_lines.push(format!("Found {} from memory", agent_name));
+
+                                        results_map.insert(
+                                            agent_name.to_lowercase(),
+                                            QualityGateAgentPayload {
+                                                agent: agent_name.to_string(),
+                                                gate: Some(stage.to_string()),
+                                                content: json_val,
+                                            },
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let found_agents: Vec<String> = results_map.keys().cloned().collect();
+    let missing_agents: Vec<String> = expected_agents
+        .iter()
+        .filter(|a| !found_agents.contains(&a.to_lowercase()))
+        .cloned()
+        .collect();
+
+    info_lines.push(format!("Found {}/{} agents via memory", found_agents.len(), expected_agents.len()));
+
+    QualityGateBrokerResult {
+        spec_id: spec_id.to_string(),
+        checkpoint,
+        attempts: 1,
+        info_lines,
+        missing_agents,
+        found_agents,
+        payload: if results_map.len() == expected_agents.len() {
+            Ok(results_map.values().cloned().collect())
+        } else {
+            Err(format!("Only found {}/{} agents", results_map.len(), expected_agents.len()))
+        },
+    }
+}
+
+/// Collect agent payloads from filesystem (legacy LLM orchestrator path)
+async fn fetch_agent_payloads_from_filesystem(
+    spec_id: &str,
+    checkpoint: QualityCheckpoint,
+    expected_agents: &[String],
 ) -> QualityGateBrokerResult {
     let mut info_lines = Vec::new();
     let mut results_map: HashMap<String, QualityGateAgentPayload> = HashMap::new();
