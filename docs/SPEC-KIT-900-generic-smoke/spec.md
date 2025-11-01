@@ -201,14 +201,14 @@ Acceptance checks:
 - [ ] All three stages complete without manual editing of prompts.
 - [ ] `local-memory search "spec:SPEC-KIT-900 stage:plan"` returns ≥1 artifact per agent.
 - [ ] Cost summary JSON exists and contains `per_stage.plan`, `per_stage.tasks`, `per_stage.validate` entries.
-- [ ] Consensus verdicts show ≥90% agreement (no conflicts) for plan/tasks/validate when using the reference cheap routing.
-- [ ] Manual review rates outputs "adequate" or better for clarity and structure.
+- [ ] Consensus verdicts show ≥90% substantive agreement on conclusions (degraded mode with 2/3 agents acceptable; see PRD §5 for consensus definition).
+- [ ] Manual review (by analyst using rubric: coherence, completeness, formatting, factual alignment) rates outputs "adequate" or better for clarity and structure.
 
 ---
 
 ## Usage Notes
 
-- **Environment**: Run from `/home/thetu/code/codex-rs` with the current routing configuration under test (e.g., SPEC-KIT-070 cheap-tier routing).
+- **Environment**: Run from `/home/thetu/code` (project root) with the current routing configuration under test (e.g., SPEC-KIT-070 cheap-tier routing). For Rust operations (cargo test, fmt, clippy), use `/home/thetu/code/codex-rs/` subdirectory.
 - **Command Sequence** (typical):
   1. `/speckit.plan SPEC-KIT-900`
   2. `/speckit.tasks SPEC-KIT-900`

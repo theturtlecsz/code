@@ -51,6 +51,14 @@
 
 ```
 You are drafting a lightweight product plan for a cross-device reminder sync microservice.
+
+Tech Stack (Baseline):
+- Language/Runtime: Rust with Tokio async runtime
+- API Framework: Axum (HTTP REST JSON API)
+- Storage: SQLite (local persistence, no external DB)
+- Scheduler: In-process deterministic scheduler (no external queue)
+- Endpoints: /reminders (CRUD), /sync (POST), /healthz (GET)
+
 Produce:
 - A three-milestone timeline (Design, Build, Validation) with owners and durations.
 - A risk register listing at least three risks (technical / process / operational) and mitigations.
@@ -58,49 +66,146 @@ Produce:
 - Assumptions and explicit non-goals.
 
 Constraints: two-week delivery window, no external vendor dependencies, must include telemetry + rollback.
+
+Confidentiality: This is a synthetic benchmark workload. Do not include production identifiers, PII, secrets, or team-specific jargon.
 ```
 
 ### Tasks Stage Prompt
 
 ```
-Decompose the reminder-sync microservice project into 8–12 implementation tasks.
+Decompose the reminder-sync microservice project (Rust + Axum + SQLite stack) into 8–12 implementation tasks.
+
 For each task include:
-- Title and owner role.
-- Deliverable description.
-- Definition of done bullets.
-- Whether it can run in parallel.
+- Task ID (T1, T2, etc.)
+- Title and owner role
+- Deliverable description
+- Definition of done bullets
+- Parallelizable: yes/no
+- Dependencies: list task IDs
+- Cross-team touchpoints: specify roles (UX, QA, Security, etc.)
 
 Highlight dependencies, surface at least two cross-team touchpoints (e.g., UX review, QA), and flag any tasks requiring security review.
+
+Task Metadata Schema: {id, title, owner, deliverable, dod[], parallelizable, dependencies[], touchpoints[]}
 ```
 
 ### Validate Stage Prompt
 
 ```
-Create a validation plan for the reminder-sync microservice covering:
+Create a validation plan for the reminder-sync microservice (Rust + Axum + SQLite) covering:
 - Unit, integration, and synthetic load tests (include tooling).
 - Monitoring metrics + alert thresholds.
 - Rollback procedure and success/failure criteria.
 - Estimated runtime cost of the validation suite.
 
+Validation Thresholds:
+- Latency: p95 ≤ 200ms @ 50 RPS (local)
+- Error Rate: < 1% over 5 minute window
+- Resource: RAM < 256MB steady state, CPU < 80% peak
+- Rollback Trigger: Sustained error rate ≥ 1% OR p95 > 200ms for 5 minutes
+
 Output sections for Test Matrix, Observability, Rollback, and Launch Readiness Checklist.
 ```
 
-Prompts may be copy-pasted directly when running the TUI if agents require clarification.
+**Reference Prompts Source**: These prompts are normative and versioned with the SPEC. Copy directly when agents need clarification. Prompt versions tracked in `docs/spec-kit/prompts.json` (embedded at compile-time via `tui/src/spec_prompts.rs`).
 
 ---
 
-## 5. QA Checklist
+## 5. Consensus and Evidence Standards
+
+### Consensus Definition
+
+**Agreement Threshold**: ≥90% substantive agreement on conclusions and recommendations.
+
+**Measurement**:
+- 3/3 agents participate and produce outputs without conflicting recommendations → "ok"
+- 2/3 agents participate OR minor wording variations with same conclusions → "degraded" (acceptable)
+- Conflicting recommendations OR <2 agents → "conflict" or "no-consensus" (blocks advancement)
+
+**Consensus Verdict Schema**:
+```json
+{
+  "consensus_ok": boolean,
+  "agreement_percent": number,
+  "participants": ["gemini", "claude", "code"],
+  "summary": "string describing convergence",
+  "conflicts": [],
+  "degraded": boolean
+}
+```
+
+### Cost Summary Schema
+
+**File**: `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/costs/SPEC-KIT-900_cost_summary.json`
+
+**Schema** (version 1):
+```json
+{
+  "schemaVersion": 1,
+  "spec_id": "SPEC-KIT-900",
+  "currency": "USD",
+  "total_cost_usd": 2.71,
+  "per_stage": {
+    "plan": 0.08,
+    "tasks": 0.10,
+    "validate": 0.35,
+    "implement": 0.11,
+    "audit": 0.80,
+    "unlock": 0.80
+  },
+  "breakdown": [
+    {
+      "stage": "plan",
+      "agent": "gemini",
+      "input_tokens": 1200,
+      "output_tokens": 800,
+      "cost_usd": 0.03
+    }
+  ]
+}
+```
+
+**Writer Contract**: Stage consensus finalizer updates `per_stage.*`; unlock stage computes `total_cost_usd`.
+
+### Guardrail Script Interface
+
+**Path**: `scripts/spec-kit/guardrail_check.sh` (to be created)
+
+**Exit Codes**:
+- 0 = Pass (all checks succeed)
+- 1 = Warning (degraded mode, e.g., MCP offline)
+- 2 = Fail (hard blocker, e.g., missing tools)
+
+**JSON Output** (stdout):
+```json
+{
+  "mcp_ok": true,
+  "tools": {
+    "ace": true,
+    "ripgrep": true,
+    "codegraphcontext": false,
+    "hal": true
+  },
+  "notes": "CodeGraphContext unavailable but not required for this SPEC"
+}
+```
+
+**Evidence**: Copy written to `evidence/commands/SPEC-KIT-900/tasks_guardrail.json`
+
+---
+
+## 6. QA Checklist
 
 - [ ] Outputs contain only generic terminology ("platform engineer", "reminder service") and no internal project codenames.
 - [ ] Plan includes timeline, risks, success metrics, and non-goals.
 - [ ] Task list counts between 8 and 12 items with clear parallelisation flags.
 - [ ] Validation plan enumerates tests, monitoring, rollback, and cost estimate.
 - [ ] Evidence directories populated (`commands/`, `consensus/`, `costs/`).
-- [ ] `cost_summary.json` shows three stage entries and total spend.
+- [ ] `cost_summary.json` shows three stage entries and total spend (matches schema above).
 
 ---
 
-## 6. Rollout & Maintenance
+## 7. Rollout & Maintenance
 
 - Store this SPEC under version control (already in `docs/SPEC-KIT-900-generic-smoke/`).
 - Update prompts if major routing changes demand different agent scaffolding; log changes in `CHANGELOG.md` (future extension).
@@ -108,7 +213,7 @@ Prompts may be copy-pasted directly when running the TUI if agents require clari
 
 ---
 
-## 7. Open Questions
+## 8. Open Questions
 
 1. Should we add a dedicated `/speckit.auto` scenario (Implement + Validate) for longer benchmarks? — TBD.
 2. Do we need a CI harness to run this nightly with stubbed agents? — Out of scope for now.
