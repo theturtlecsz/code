@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "command": "guardrail.plan",
+  "specId": "SPEC-KIT-900",
+  "sessionId": "1507116",
+  "timestamp": "2025-11-01T20:34:06Z",
+  "success": false,
+  "stage": "Plan",
+  "checks": [
+    {
+      "name": "spec-id-validation",
+      "status": "passed",
+      "message": "SPEC ID 'SPEC-KIT-900' is valid"
+    },
+    {
+      "name": "spec-files",
+      "status": "passed",
+      "message": "Required SPEC files present"
+    },
+    {
+      "name": "clean-tree",
+      "status": "failed",
+      "message": "Working tree has 7 uncommitted changes"
+    },
+    {
+      "name": "plan-stage",
+      "status": "passed",
+      "message": "Plan stage ready"
+    }
+  ],
+  "warnings": [],
+  "errors": [],
+  "artifacts": [
+    {
+      "path": "/home/thetu/code/docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-900/guardrail-plan-2025-11-01T20:34:06Z_1507116.json"
+    }
+  ]
+}

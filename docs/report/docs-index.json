@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-11-01T04:36:40.481Z",
+  "generatedAt": "2025-11-01T20:36:19.118Z",
   "docs": [
     {
       "path": "ACE_PREFETCH_IMPLEMENTATION.md",
@@ -47,6 +47,15 @@
       "updated": 1761968295000
     },
     {
+      "path": "NEXT-SESSION-CONTEXT.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1762027500000
+    },
+    {
       "path": "PLANNING.md",
       "score": 95,
       "orphan": false,
@@ -69,6 +78,24 @@
       "missingRefs": [],
       "staleDays": 0,
       "updated": 1761700210000
+    },
+    {
+      "path": "SESSION-HANDOFF-2025-11-01.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1762027305000
+    },
+    {
+      "path": "SPEC-KIT-900-VALIDATION-ISSUES.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1762027305000
     },
     {
       "path": "SPEC-KIT.md",
@@ -1721,7 +1748,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761660035000
+      "updated": 1761980741000
     },
     {
       "path": "docs/SPEC-KIT-900-generic-smoke/plan.md",
@@ -1739,7 +1766,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761700210000
+      "updated": 1761980741000
     },
     {
       "path": "docs/SPEC-KIT-900-generic-smoke/tasks.md",
@@ -2258,6 +2285,15 @@
       "missingRefs": [],
       "staleDays": 0,
       "updated": 1761065678000
+    },
+    {
+      "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-900/baseline_2025-11-01T19:48:42Z-2078417026.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
     },
     {
       "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-03T17:38:33Z-449014235.md",
@@ -3481,7 +3517,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761971427000
+      "updated": 1761971954000
     },
     {
       "path": "docs/report/verification.md",
@@ -3490,7 +3526,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761971427000
+      "updated": 1761971954000
     },
     {
       "path": "docs/sandbox.md",
@@ -3962,6 +3998,10 @@
     [
       "README.md",
       "docs/SPEC-KIT-025-add-automated-conflict-resolution-with/plan.md"
+    ],
+    [
+      "SESSION-HANDOFF-2025-11-01.md",
+      "docs/archive/2025-sessions/SESSION-HANDOFF-2025-10-18.md"
     ],
     [
       "SPEC-KIT.md",
