@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use codex_core::mcp_connection_manager::McpConnectionManager;
-use serde_json::json;
+use serde_json::{json, Value};
 use tokio::sync::{Mutex, mpsc};
 use tokio::time::{Duration, sleep};
 
@@ -157,138 +157,100 @@ impl QualityGateBroker {
 }
 
 async fn fetch_agent_payloads(
-    mcp_manager: Arc<Mutex<Option<Arc<McpConnectionManager>>>>,
+    _mcp_manager: Arc<Mutex<Option<Arc<McpConnectionManager>>>>,
     spec_id: &str,
     checkpoint: QualityCheckpoint,
     expected_agents: &[String],
-    gate_stages: &[String],
+    _gate_stages: &[String],
 ) -> QualityGateBrokerResult {
-    let mut attempts: u32 = 0;
     let mut info_lines = Vec::new();
-    let mut results_map: HashMap<(String, Option<String>), QualityGateAgentPayload> =
-        HashMap::new();
-    let mut last_error: Option<String> = None;
+    let mut results_map: HashMap<String, QualityGateAgentPayload> = HashMap::new();
 
-    for (idx, delay_ms) in RETRY_DELAYS_MS.iter().enumerate() {
-        attempts = idx as u32 + 1;
+    // Scan .code/agents/ directory for result files
+    let agents_dir = std::path::Path::new(".code/agents");
 
-        let manager = {
-            let guard = mcp_manager.lock().await;
-            guard.as_ref().cloned()
+    if !agents_dir.exists() {
+        return QualityGateBrokerResult {
+            spec_id: spec_id.to_string(),
+            checkpoint,
+            attempts: 1,
+            info_lines: vec!["Agents directory .code/agents not found".to_string()],
+            missing_agents: expected_agents.to_vec(),
+            found_agents: vec![],
+            payload: Err("Agents directory not found".to_string()),
         };
+    }
 
-        if let Some(manager) = manager {
-            for stage in gate_stages {
-                let args = json!({
-                    "query": format!("{} quality-gate {} {}", spec_id, checkpoint.name(), stage),
-                    "limit": 24,
-                    "tags": [
-                        "quality-gate",
-                        format!("spec:{}", spec_id),
-                        format!("checkpoint:{}", checkpoint.name()),
-                        format!("stage:{}", stage),
-                    ],
-                    "search_type": "hybrid"
-                });
+    match std::fs::read_dir(agents_dir) {
+        Ok(entries) => {
+            for entry in entries.flatten() {
+                if !entry.path().is_dir() {
+                    continue;
+                }
 
-                match manager
-                    .call_tool(
-                        "local-memory",
-                        "search",
-                        Some(args),
-                        Some(Duration::from_secs(10)),
-                    )
-                    .await
-                {
-                    Ok(call_result) => {
-                        match crate::spec_prompts::parse_mcp_results_to_local_memory(&call_result) {
-                            Ok(memory_results) => {
-                                for item in memory_results {
-                                    match serde_json::from_str::<serde_json::Value>(
-                                        &item.memory.content,
-                                    ) {
-                                        Ok(json_value) => {
-                                            let agent = json_value
-                                                .get("agent")
-                                                .and_then(|v| v.as_str())
-                                                .unwrap_or("unknown")
-                                                .to_string();
+                let result_path = entry.path().join("result.txt");
 
-                                            let key = (agent.to_lowercase(), Some(stage.clone()));
-                                            results_map.entry(key).or_insert(
+                if let Ok(content) = std::fs::read_to_string(&result_path) {
+                    // Extract JSON from content
+                    if let Some(json_str) = extract_json_from_content(&content) {
+                        if let Ok(json_val) = serde_json::from_str::<Value>(&json_str) {
+                            // Check if this is a quality gate artifact for THIS checkpoint
+                            if let Some(stage) = json_val.get("stage").and_then(|v| v.as_str()) {
+                                // Match quality-gate stages
+                                if stage.starts_with("quality-gate-") {
+                                    if let Some(agent) = json_val.get("agent").and_then(|v| v.as_str()) {
+                                        // Match against expected_agents
+                                        if expected_agents.iter().any(|a| a.to_lowercase() == agent.to_lowercase()) {
+                                            info_lines.push(format!(
+                                                "Found {} from {}",
+                                                agent,
+                                                result_path.display()
+                                            ));
+
+                                            results_map.insert(
+                                                agent.to_lowercase(),
                                                 QualityGateAgentPayload {
-                                                    agent,
-                                                    gate: Some(stage.clone()),
-                                                    content: json_value,
+                                                    agent: agent.to_string(),
+                                                    gate: Some(stage.to_string()),
+                                                    content: json_val,
                                                 },
                                             );
-                                        }
-                                        Err(err) => {
-                                            last_error = Some(format!(
-                                                "failed to decode agent JSON: {}",
-                                                err
-                                            ));
                                         }
                                     }
                                 }
                             }
-                            Err(err) => {
-                                last_error = Some(format!(
-                                    "failed to parse local-memory search results: {}",
-                                    err
-                                ));
-                            }
                         }
-                    }
-                    Err(err) => {
-                        last_error = Some(format!("local-memory search failed: {err}"));
                     }
                 }
             }
-        } else {
-            last_error = Some("MCP manager not available".to_string());
         }
-
-        let unique_agents: std::collections::HashSet<String> = results_map
-            .values()
-            .map(|payload| payload.agent.to_lowercase())
-            .collect();
-        info_lines.push(format!(
-            "Attempt {}: collected {} of {} agent artefacts",
-            attempts,
-            unique_agents.len(),
-            expected_agents.len()
-        ));
-
-        let min_required = match expected_agents.len() {
-            0 => 0,
-            1 => 1,
-            _ => MIN_PARTICIPATING_AGENTS,
-        };
-
-        if unique_agents.len() >= expected_agents.len()
-            || (unique_agents.len() >= min_required && idx == RETRY_DELAYS_MS.len() - 1)
-        {
-            break;
-        }
-
-        if idx < RETRY_DELAYS_MS.len() - 1 {
-            sleep(Duration::from_millis(*delay_ms)).await;
+        Err(err) => {
+            return QualityGateBrokerResult {
+                spec_id: spec_id.to_string(),
+                checkpoint,
+                attempts: 1,
+                info_lines: vec![format!("Failed to read agents directory: {}", err)],
+                missing_agents: expected_agents.to_vec(),
+                found_agents: vec![],
+                payload: Err(format!("Failed to read agents directory: {}", err)),
+            };
         }
     }
 
-    let payloads: Vec<QualityGateAgentPayload> = results_map.values().cloned().collect();
-    let found_agents_set: std::collections::HashSet<String> = payloads
+    // Build result from collected artifacts
+    let payloads: Vec<_> = results_map.values().cloned().collect();
+    let found_agents: Vec<_> = payloads.iter().map(|p| p.agent.clone()).collect();
+    let missing_agents: Vec<_> = expected_agents
         .iter()
-        .map(|payload| payload.agent.to_lowercase())
-        .collect();
-    let mut found_agents: Vec<String> = found_agents_set.iter().cloned().collect();
-    found_agents.sort();
-    let missing_agents: Vec<String> = expected_agents
-        .iter()
-        .filter(|agent| !found_agents_set.contains(&agent.to_lowercase()))
+        .filter(|a| !found_agents.iter().any(|f| f.to_lowercase() == a.to_lowercase()))
         .cloned()
         .collect();
+
+    info_lines.push(format!(
+        "Found {} of {} expected agents via filesystem scan",
+        found_agents.len(),
+        expected_agents.len()
+    ));
 
     let min_required = match expected_agents.len() {
         0 => 0,
@@ -296,27 +258,20 @@ async fn fetch_agent_payloads(
         _ => MIN_PARTICIPATING_AGENTS,
     };
 
-    let payload = if payloads.is_empty() {
-        Err(last_error.unwrap_or_else(|| {
-            format!(
-                "No quality gate artefacts found for checkpoint {}",
-                checkpoint.name()
-            )
-        }))
-    } else if found_agents_set.len() < min_required {
+    let payload = if payloads.len() >= min_required {
+        Ok(payloads)
+    } else {
         Err(format!(
-            "Only {} of {} expected agents produced artefacts",
-            found_agents_set.len(),
+            "Only found {}/{} agents",
+            payloads.len(),
             expected_agents.len()
         ))
-    } else {
-        Ok(payloads)
     };
 
     QualityGateBrokerResult {
         spec_id: spec_id.to_string(),
         checkpoint,
-        attempts,
+        attempts: 1,
         info_lines,
         missing_agents,
         found_agents,
@@ -430,4 +385,63 @@ async fn fetch_validation_payload(
         info_lines,
         payload,
     }
+}
+
+/// Extract JSON content from agent result text.
+///
+/// Tries two strategies:
+/// 1. Markdown code fence (```json ... ```)
+/// 2. Raw JSON (starts with { or [)
+fn extract_json_from_content(content: &str) -> Option<String> {
+    // Try markdown fence first
+    let lines: Vec<&str> = content.lines().collect();
+    let mut in_fence = false;
+    let mut json_lines = Vec::new();
+
+    for line in &lines {
+        let trimmed = line.trim();
+        if trimmed == "```json" || trimmed == "``` json" {
+            in_fence = true;
+            continue;
+        }
+        if trimmed == "```" && in_fence {
+            break;
+        }
+        if in_fence {
+            json_lines.push(*line);
+        }
+    }
+
+    if !json_lines.is_empty() {
+        return Some(json_lines.join("\n"));
+    }
+
+    // Try raw JSON
+    let mut found_json_start = false;
+    let mut raw_json_lines = Vec::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if !found_json_start && (trimmed.starts_with('{') || trimmed.starts_with('[')) {
+            found_json_start = true;
+            raw_json_lines.push(line);
+            continue;
+        }
+        if found_json_start {
+            // Stop at token usage footer
+            if trimmed.starts_with('[') && trimmed.contains("tokens used") {
+                break;
+            }
+            raw_json_lines.push(line);
+        }
+    }
+
+    if !raw_json_lines.is_empty() {
+        let json_str = raw_json_lines.join("\n");
+        if serde_json::from_str::<Value>(&json_str).is_ok() {
+            return Some(json_str);
+        }
+    }
+
+    None
 }
