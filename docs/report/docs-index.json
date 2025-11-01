@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-11-01T20:36:19.118Z",
+  "generatedAt": "2025-11-01T20:36:44.933Z",
   "docs": [
     {
       "path": "ACE_PREFETCH_IMPLEMENTATION.md",
@@ -2293,7 +2293,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1762029389000
     },
     {
       "path": "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-03T17:38:33Z-449014235.md",
@@ -3517,7 +3517,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761971954000
+      "updated": 1762029389000
     },
     {
       "path": "docs/report/verification.md",
@@ -3526,7 +3526,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761971954000
+      "updated": 1762029389000
     },
     {
       "path": "docs/sandbox.md",
