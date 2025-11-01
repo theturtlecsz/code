@@ -462,6 +462,12 @@ pub(crate) enum AppEvent {
     QualityGateCancelled {
         checkpoint: crate::chatwidget::spec_kit::QualityCheckpoint,
     },
+
+    /// Native quality gate agents completed (SPEC-KIT-900)
+    QualityGateNativeAgentsComplete {
+        checkpoint: crate::chatwidget::spec_kit::QualityCheckpoint,
+        agent_ids: Vec<String>,
+    },
     // === END FORK-SPECIFIC ===
 }
 

@@ -89,9 +89,9 @@ pub use state::{
 // Re-export handler functions
 pub use handler::{
     advance_spec_auto, auto_submit_spec_stage_prompt, halt_spec_auto_with_error, handle_guardrail,
-    handle_spec_auto, handle_spec_consensus, handle_spec_status, on_quality_gate_answers,
-    on_quality_gate_cancelled, on_spec_auto_agents_complete, on_spec_auto_task_complete,
-    on_spec_auto_task_started,
+    handle_spec_auto, handle_spec_consensus, handle_spec_status, on_quality_gate_agents_complete,
+    on_quality_gate_answers, on_quality_gate_cancelled, on_spec_auto_agents_complete,
+    on_spec_auto_task_complete, on_spec_auto_task_started,
 };
 
 // Re-export validation lifecycle functions

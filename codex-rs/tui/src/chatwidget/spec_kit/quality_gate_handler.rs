@@ -1008,12 +1008,13 @@ pub(super) fn execute_quality_checkpoint(
         }
     }
 
-    // Get execution logger and agent configs for spawning
+    // Get execution logger, agent configs, and event sender for spawning
     let logger = widget.spec_auto_state.as_ref()
         .map(|s| s.execution_logger.clone());
     let run_id = widget.spec_auto_state.as_ref()
         .and_then(|s| s.run_id.clone());
     let agent_configs = widget.config.agents.clone();
+    let event_tx = widget.app_event_tx.clone();
 
     // Spawn agents in background task
     let spawn_handle = tokio::spawn(async move {
@@ -1047,11 +1048,21 @@ pub(super) fn execute_quality_checkpoint(
                     .collect();
 
                 // Wait for completion (5 minute timeout)
-                if let Err(e) = super::native_quality_gate_orchestrator::wait_for_quality_gate_agents(
+                match super::native_quality_gate_orchestrator::wait_for_quality_gate_agents(
                     &agent_ids,
                     300, // 5 minutes
                 ).await {
-                    warn!("Quality gate agents timeout: {}", e);
+                    Ok(()) => {
+                        info!("Quality gate agents completed successfully");
+                        // Send completion event to trigger broker collection
+                        let _ = event_tx.send(crate::app_event::AppEvent::QualityGateNativeAgentsComplete {
+                            checkpoint: checkpoint_clone,
+                            agent_ids: agent_ids.clone(),
+                        });
+                    }
+                    Err(e) => {
+                        warn!("Quality gate agents timeout: {}", e);
+                    }
                 }
             }
             Err(e) => {

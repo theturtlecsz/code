@@ -46,6 +46,7 @@ use std::thread;
 use std::time::Duration;
 use std::time::Instant;
 use tokio::sync::oneshot;
+use tracing::info;
 
 /// Time window for debouncing redraw requests.
 ///
@@ -2712,6 +2713,13 @@ impl App<'_> {
                     if let AppState::Chat { widget } = &mut self.app_state {
                         // Delegate to quality gate handler
                         spec_kit::on_quality_gate_cancelled(widget, checkpoint);
+                    }
+                }
+                AppEvent::QualityGateNativeAgentsComplete { checkpoint, agent_ids } => {
+                    // Native orchestrator agents completed - trigger broker collection
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        info!("Handling native quality gate completion for {:?}", checkpoint);
+                        spec_kit::on_quality_gate_agents_complete(widget);
                     }
                 } // === END FORK-SPECIFIC ===
             }
