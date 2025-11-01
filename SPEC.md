@@ -109,16 +109,16 @@
 |-------|---------|-------|--------|--------|-----|--------|----|---------|-------|
 | 1 | SPEC-KIT-909 | Evidence Lifecycle Management (50MB Enforcement) | **Backlog** | Code | docs/SPEC-KIT-909-evidence-cleanup-automation/PRD.md | | | 2025-10-30 | **P1 - 30 Day**: Auto-archive >30d, enforce 50MB hard limit. 4-6 hours effort. Blocks 910, 902. |
 | 2 | SPEC-KIT-906 | Legacy Config Migration Warning | **Backlog** | Code | docs/SPEC-KIT-906-config-migration-warning/PRD.md | | | 2025-10-30 | **P1 - 30 Day**: Auto-migrate ~/.codex/ → ~/.code/. 2-3 hours effort. |
-| 3 | SPEC-KIT-904 | Deprecate Manual Quality Commands | **Backlog** | Code | docs/SPEC-KIT-904-deprecate-manual-quality/PRD.md | | | 2025-10-30 | **P1 - UX**: Mark clarify/analyze/checklist deprecated (use /speckit.auto). 2 hours effort. |
-| 4 | SPEC-KIT-903 | Add Template Version Tracking | **Backlog** | Code | docs/SPEC-KIT-903-template-versioning/PRD.md | | | 2025-10-30 | **P1 - 60 Day**: Embed template_version in generated artifacts. 3-4 hours effort. |
-| 5 | SPEC-KIT-901 | Formalize MCP Native Interface | **Backlog** | Code | docs/SPEC-KIT-901-mcp-native-interface-docs/PRD.md | | | 2025-10-30 | **P1 - 60 Day**: Document NativeMcpServer trait contract. 4 hours effort. |
-| 6 | SPEC-KIT-910 | Separate Consensus Database | **Backlog** | Code | docs/SPEC-KIT-910-consensus-db-separation/PRD.md | | | 2025-10-30 | **P1 - 60 Day**: Migrate consensus from local-memory to SQLite. 1-2 days effort. Depends on 909. |
-| 7 | SPEC-KIT-902 | Nativize Guardrail Scripts | **Backlog** | Code | docs/SPEC-KIT-902-nativize-guardrails/PRD.md | | | 2025-10-30 | **P2 - 90 Day**: Convert shell → Rust. 100-200ms speedup. 1 week effort. Depends on 909. |
+| 3 | SPEC-KIT-903 | Add Template Version Tracking | **Backlog** | Code | docs/SPEC-KIT-903-template-versioning/PRD.md | | | 2025-10-30 | **P1 - 60 Day**: Embed template_version in agent-generated artifacts (6 commands: plan, tasks, implement, validate, audit, unlock). Native commands excluded (no consensus artifacts). **Revised**: 3-4 hours → **2 hours** (reduced scope post SPEC-KIT-070). |
+| 4 | SPEC-KIT-901 | Formalize MCP Native Interface | **Backlog** | Code | docs/SPEC-KIT-901-mcp-native-interface-docs/PRD.md | | | 2025-10-30 | **P1 - 60 Day**: Document NativeMcpServer trait contract. 4 hours effort. |
+| 5 | SPEC-KIT-910 | Separate Consensus Database | **Backlog** | Code | docs/SPEC-KIT-910-consensus-db-separation/PRD.md | | | 2025-10-30 | **P1 - 60 Day**: Migrate consensus from local-memory to SQLite. **Post SPEC-KIT-070**: Reduced volume (6 agent commands vs 13, ~50% fewer artifacts). 1-2 days effort. Depends on 909. |
+| 6 | SPEC-KIT-902 | Nativize Guardrail Scripts | **Backlog** | Code | docs/SPEC-KIT-902-nativize-guardrails/PRD.md | | | 2025-10-30 | **P2 - 90 Day**: Convert shell → Rust. 100-200ms speedup. 1 week effort. Depends on 909. |
 
-**Sequencing** (Updated 2025-10-31):
-- **Week 1**: 909 → 906 → 904 → 903 (immediate wins, 11-15 hours)
-- **Month 2**: 901 → 910 (consolidation, 1.5-2.5 days)
-- **Month 3**: 902 (performance, 1 week)
+**Sequencing** (Updated 2025-11-01 post SPEC-KIT-070):
+- **Week 1**: 909 → 906 → 903 (revised scope) = **8-11 hours** (was 13-17)
+- **Month 2**: 901 → 910 (reduced complexity) = **1.5-2.5 days**
+- **Month 3**: 902 (performance) = **1 week**
+- **CLOSED**: 904 (obsolete - quality commands now valuable, not deprecated)
 | 7 | MAINT-9 | Document arbiter trigger conditions | **DONE** | Code | SPEC.md:24, SPEC_AUTO_FLOW.md | | | 2025-10-18 | CONFLICT_RESOLUTION.md (300 lines) | COMPLETE: Documented honest assessment of conflict resolution. Finding: **Arbiter not implemented** despite SPEC claim. Current: gpt_pro aggregator identifies conflicts, pipeline continues with `status: "conflict"`. Quality gate GPT-5 validation serves partial arbiter role (validates 2/3 majority, not full consensus conflicts). Evidence: 0% deadlocks observed (26 completed tasks, zero halts). Created CONFLICT_RESOLUTION.md documenting: current flow (gpt_pro as aggregator), conflict detection logic, quality gate comparison, arbiter design (SPEC_AUTO_FLOW.md), implementation priority (deferred, not blocking), honest SPEC vs reality assessment. Recommendation: Arbiter unnecessary (0% deadlock rate, gpt_pro sufficient). Effort: 30 min. |
 | 8 | MAINT-6 | Remove duplicate build profile | **DONE** | Code | Workspace Cargo.toml | | | 2025-10-18 | Cargo.toml (-4), build-fast.sh (+3 comments) | COMPLETE: Removed `[profile.release-prod]` (lines 230-234) - identical to `[profile.release]` (lto=fat, strip=symbols, codegen-units=1). Updated build-fast.sh references (release-prod→release in DETERMINISTIC mode, usage docs, env var). Left comment for future: "If production builds need different settings, add back with clear distinction". No functional impact (profiles were identical). Improves config clarity. Effort: 15 min. |
 | 9 | MAINT-7 | Centralize evidence path construction | **DONE** | Code | DRY principle | | | 2025-10-18 | evidence.rs (+14), consensus.rs (-5 literals), guardrail.rs (-1 literal) | COMPLETE: Created centralized path helpers in evidence.rs: DEFAULT_EVIDENCE_BASE constant, consensus_dir(cwd), commands_dir(cwd). Replaced 5 hardcoded path joins: consensus.rs (4 occurrences at lines 474,569,845,876), guardrail.rs (1 at line 345). FilesystemEvidence::new() now uses DEFAULT_EVIDENCE_BASE. All string literals eliminated outside evidence.rs. Tests: 68 spec-kit passing. DRY principle achieved (single source of truth for evidence paths). Future path changes require only 1-line edit. Effort: 20 min. |
@@ -219,6 +219,7 @@
 | T26 | SPEC-KIT-DEMO baseline | **OBSOLETE** | Docs already exist. Extraneous documentation task. |
 | T48 | Config validation utility | **REJECTED** | Low priority, not blocking. Plan/tasks exist if needed later. |
 | T61-64 | Webhook/search features | **OBSOLETE** | Test artifacts from T60 validation, not real features. |
+| **SPEC-KIT-904** | Deprecate Manual Quality Commands | **OBSOLETE** | Post SPEC-KIT-070: Quality commands now native (FREE, instant). Valuable as pre-flight checks BEFORE /speckit.auto, not deprecated. Complementary dual-tier quality system: native quick checks + multi-agent quality gates. |
 
 ---
 
