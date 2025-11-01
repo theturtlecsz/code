@@ -141,14 +141,9 @@ pub enum SlashCommand {
     SpecKitAudit,
     #[strum(serialize = "speckit.unlock")]
     SpecKitUnlock,
-    #[strum(serialize = "speckit.auto")]
-    SpecKitAuto,
-    #[strum(serialize = "speckit.status")]
-    SpecKitStatus,
-    #[strum(serialize = "speckit.constitution")]
-    SpecKitConstitution,
-    #[strum(serialize = "speckit.ace-status")]
-    SpecKitAceStatus,
+    // REMOVED: SpecKitAuto, SpecKitStatus, SpecKitConstitution, SpecKitAceStatus
+    // These are now ONLY in SPEC_KIT_REGISTRY (native execution)
+    // Removing from enum eliminates duplicate autocomplete entries
     // Guardrail commands (Phase 3 Week 2)
     #[strum(serialize = "guardrail.plan")]
     GuardrailPlan,
@@ -250,10 +245,8 @@ impl SlashCommand {
             SlashCommand::SpecKitValidate => "run test strategy with validation",
             SlashCommand::SpecKitAudit => "compliance review with multi-agent",
             SlashCommand::SpecKitUnlock => "final approval for merge",
-            SlashCommand::SpecKitAuto => "full 6-stage pipeline with auto-advancement",
-            SlashCommand::SpecKitStatus => "show SPEC progress dashboard",
-            SlashCommand::SpecKitConstitution => "extract and pin constitution bullets to ACE playbook",
-            SlashCommand::SpecKitAceStatus => "show ACE playbook status and statistics",
+            // REMOVED: SpecKitAuto, SpecKitStatus, SpecKitConstitution, SpecKitAceStatus
+            // Now handled exclusively by SPEC_KIT_REGISTRY
             // Legacy (deprecated)
             SlashCommand::NewSpec => "DEPRECATED: use /speckit.new",
             SlashCommand::SpecPlan => "DEPRECATED: use /speckit.plan",
@@ -346,8 +339,7 @@ impl SlashCommand {
                 | SlashCommand::SpecKitValidate
                 | SlashCommand::SpecKitAudit
                 | SlashCommand::SpecKitUnlock
-                | SlashCommand::SpecKitAuto
-                | SlashCommand::SpecKitStatus
+                // REMOVED: SpecKitAuto, SpecKitStatus (now registry-only)
         )
     }
 

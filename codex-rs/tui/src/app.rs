@@ -1770,16 +1770,11 @@ impl App<'_> {
                         | SlashCommand::SpecKitUnlock => {
                             // Prompt-expanded in the chat widget
                         }
-                        // SPEC-KIT-070 Phase 2+3: Native commands (execute via registry)
+                        // SPEC-KIT-070 Phase 2+3: Native quality commands (execute via registry)
                         SlashCommand::SpecKitClarify
                         | SlashCommand::SpecKitAnalyze
                         | SlashCommand::SpecKitChecklist
-                        | SlashCommand::SpecKitNew
-                        | SlashCommand::SpecKitAuto        // SPEC-KIT-900: Native pipeline coordinator
-                        | SlashCommand::SpecKitStatus      // Native status dashboard
-                        | SlashCommand::SpecKitConstitution // Native ACE extraction
-                        | SlashCommand::SpecKitAceStatus   // Native ACE status
-                         => {
+                        | SlashCommand::SpecKitNew => {
                             // Redirect to spec-kit registry for direct execution
                             // Fixes cursor position issue: autocomplete uses enum, must redirect to registry
                             if let AppState::Chat { widget } = &mut self.app_state {
@@ -1790,19 +1785,15 @@ impl App<'_> {
                                 );
                             }
                         }
+                        // NOTE: SpecKitAuto, SpecKitStatus, SpecKitConstitution, SpecKitAceStatus
+                        // removed from enum - now registry-only (eliminates duplicates)
                         // SpecKit agent commands
                         SlashCommand::SpecKitSpecify => {
                             // Single-agent orchestrator (gpt5-low)
                         }
-                        SlashCommand::SpecKitStatus => {
-                            if let AppState::Chat { widget } = &mut self.app_state {
-                                widget.handle_spec_status_command(command_args);
-                            }
-                        }
-                        SlashCommand::SpecKitConstitution | SlashCommand::SpecKitAceStatus => {
-                            // Handled by spec-kit registry at line 1708
-                            // Commands execute directly via command_registry
-                        }
+                        // REMOVED: SpecKitStatus, SpecKitConstitution, SpecKitAceStatus
+                        // Now registry-only (eliminates duplicate autocomplete entries)
+
                         // Legacy spec commands (backward compat)
                         SlashCommand::NewSpec => {
                             // Redirect to SpecKitNew
