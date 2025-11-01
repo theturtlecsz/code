@@ -67,48 +67,13 @@ args-write = ["-s", "workspace-write", "-a", "never", "exec", "--skip-git-repo-c
 
 [subagents]
 
-[[subagents.commands]]
-name = "spec-auto"
-read-only = false
-agents = ["code", "gemini", "claude"]
-orchestrator-instructions = """
-Execute full spec-kit pipeline with visible agent execution.
-Loop through stages (plan, tasks, implement, validate, audit, unlock):
-1. Run guardrail bash script (visible)
-2. Load prompts from prompts.json
-3. Spawn agents visibly (agent_run)
-4. Synthesize consensus
-5. Validate (halt on conflict)
-6. Advance to next stage
-Show all work. User must see bash output, agent execution, synthesis.
-"""
-
-[[subagents.commands]]
-name = "new-spec"
-read-only = false
-agents = ["code", "gemini", "claude"]
-orchestrator-instructions = """
-Unified SPEC creation from feature description. Entry point for new features.
-
-Phase 1: Generate SPEC-ID and scaffold
-1. Run: python3 scripts/spec_ops_004/generate_spec_id.py "<feature-description>"
-2. Store result as SPEC_ID
-3. Create directory: docs/${SPEC_ID}/
-4. Add SPEC.md table row
-
-Phase 2: Generate PRD (via /specify)
-5. Invoke /specify ${SPEC_ID} <feature-description>
-
-Phase 3: Multi-agent planning (via /plan)
-6. Invoke /plan ${SPEC_ID}
-
-Phase 4: Task breakdown (via /tasks)
-7. Invoke /tasks ${SPEC_ID}
-
-Phase 5: Present package
-8. Show summary and ask: "Ready to implement? Run: /spec-auto ${SPEC_ID}"
-
-Never auto-run /spec-auto - always require explicit approval."""
+# REMOVED: All spec-kit subagent configs (SPEC-KIT-900)
+# Native commands now use SPEC_KIT_REGISTRY exclusively:
+# - spec-auto → /speckit.auto (native pipeline coordinator)
+# - new-spec → /speckit.new (native SPEC creation)
+#
+# Prompt-expanding commands (plan, tasks, implement, validate, audit, unlock)
+# use subagent_defaults in Rust code, not config.toml entries.
 
 [mcp_servers.repo_search]
 command = "uvx"
