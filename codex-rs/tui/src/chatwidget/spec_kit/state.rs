@@ -512,10 +512,11 @@ impl SpecAutoState {
         let logger = Arc::new(super::execution_logger::ExecutionLogger::new());
         let run_id = super::execution_logger::generate_run_id(&spec_id);
 
+        // DISABLED: Execution logger causes stack overflow (investigating)
         // Initialize logger
-        if let Err(e) = logger.init(&spec_id, run_id.clone()) {
-            tracing::warn!("Failed to initialize execution logger: {}", e);
-        }
+        // if let Err(e) = logger.init(&spec_id, run_id.clone()) {
+        //     tracing::warn!("Failed to initialize execution logger: {}", e);
+        // }
 
         Self {
             spec_id,
