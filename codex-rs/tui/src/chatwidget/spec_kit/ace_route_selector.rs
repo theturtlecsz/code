@@ -295,6 +295,10 @@ pub fn decide_stage_routing(
         | crate::spec_prompts::SpecStage::Tasks
         | crate::spec_prompts::SpecStage::Audit
         | crate::spec_prompts::SpecStage::Implement => AggregatorEffort::Medium,
+        // Quality commands use minimal aggregation (no complex synthesis needed)
+        crate::spec_prompts::SpecStage::Clarify
+        | crate::spec_prompts::SpecStage::Analyze
+        | crate::spec_prompts::SpecStage::Checklist => AggregatorEffort::Minimal,
     };
 
     let mut reason: Option<String> = None;

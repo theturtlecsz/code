@@ -98,7 +98,13 @@ pub fn try_dispatch_spec_kit_command(
         .to_string();
 
     // Handle prompt-expanding vs direct execution
-    if spec_cmd.expand_prompt(&args).is_some() {
+    // SPEC-KIT-070 Phase 2+3: Native commands ALWAYS use direct execution
+    let is_native_command = matches!(
+        command_name,
+        "speckit.clarify" | "speckit.analyze" | "speckit.checklist" | "speckit.new"
+    );
+
+    if !is_native_command && spec_cmd.expand_prompt(&args).is_some() {
         // Prompt-expanding command: need to re-format with config to get orchestrator instructions
         // Use command_name directly - config.toml entries match (e.g., "speckit.new")
         let config_name = command_name;

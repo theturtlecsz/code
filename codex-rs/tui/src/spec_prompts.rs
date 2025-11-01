@@ -260,12 +260,17 @@ fn model_metadata(stage: SpecStage, agent: SpecAgent) -> Vec<(String, String)> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SpecStage {
+    // Main 6-stage pipeline
     Plan,
     Tasks,
     Implement,
     Validate,
     Audit,
     Unlock,
+    // Quality commands (not part of main pipeline)
+    Clarify,
+    Analyze,
+    Checklist,
 }
 
 impl SpecStage {
@@ -280,6 +285,21 @@ impl SpecStage {
         ]
     }
 
+    /// All stages including quality commands
+    pub fn all_including_quality() -> [SpecStage; 9] {
+        [
+            SpecStage::Plan,
+            SpecStage::Tasks,
+            SpecStage::Implement,
+            SpecStage::Validate,
+            SpecStage::Audit,
+            SpecStage::Unlock,
+            SpecStage::Clarify,
+            SpecStage::Analyze,
+            SpecStage::Checklist,
+        ]
+    }
+
     pub fn key(self) -> &'static str {
         match self {
             SpecStage::Plan => "spec-plan",
@@ -288,6 +308,9 @@ impl SpecStage {
             SpecStage::Validate => "spec-validate",
             SpecStage::Audit => "spec-audit",
             SpecStage::Unlock => "spec-unlock",
+            SpecStage::Clarify => "spec-clarify",
+            SpecStage::Analyze => "spec-analyze",
+            SpecStage::Checklist => "spec-checklist",
         }
     }
 
@@ -299,6 +322,9 @@ impl SpecStage {
             SpecStage::Validate => "spec-validate",
             SpecStage::Audit => "spec-audit",
             SpecStage::Unlock => "spec-unlock",
+            SpecStage::Clarify => "spec-clarify",
+            SpecStage::Analyze => "spec-analyze",
+            SpecStage::Checklist => "spec-checklist",
         }
     }
 
@@ -310,7 +336,15 @@ impl SpecStage {
             SpecStage::Validate => "Validate",
             SpecStage::Audit => "Audit",
             SpecStage::Unlock => "Unlock",
+            SpecStage::Clarify => "Clarify",
+            SpecStage::Analyze => "Analyze",
+            SpecStage::Checklist => "Checklist",
         }
+    }
+
+    /// Check if this is a quality command (not part of main pipeline)
+    pub fn is_quality_command(self) -> bool {
+        matches!(self, SpecStage::Clarify | SpecStage::Analyze | SpecStage::Checklist)
     }
 }
 
@@ -393,6 +427,9 @@ pub fn build_stage_prompt_with_mcp(
         }
         SpecStage::Validate | SpecStage::Audit | SpecStage::Unlock => {
             // No extra replacements required
+        }
+        SpecStage::Clarify | SpecStage::Analyze | SpecStage::Checklist => {
+            // Quality commands: no special replacements
         }
     }
 

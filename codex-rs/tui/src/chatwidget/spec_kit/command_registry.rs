@@ -509,12 +509,12 @@ mod tests {
     fn test_all_names_count() {
         let registry = SPEC_KIT_REGISTRY.lock().unwrap();
 
-        // 23 primary names + 16 aliases = 39 total names
+        // 23 primary names + 18 aliases = 41 total names (added quality stage aliases)
         let all_names = registry.all_names();
         assert_eq!(
             all_names.len(),
-            39,
-            "Should have 39 total command names (23 primary + 16 aliases)"
+            41,
+            "Should have 41 total command names (23 primary + 18 aliases)"
         );
     }
 

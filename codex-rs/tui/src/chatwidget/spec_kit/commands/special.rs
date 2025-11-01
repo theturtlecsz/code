@@ -62,7 +62,7 @@ impl SpecKitCommand for SpecKitAutoCommand {
 }
 
 /// Command: /speckit.new (and /new-spec)
-/// Create new SPEC from description with templates
+/// Create new SPEC from description with templates - FULLY NATIVE (zero agents, $0)
 pub struct SpecKitNewCommand;
 
 impl SpecKitCommand for SpecKitNewCommand {
@@ -75,43 +75,42 @@ impl SpecKitCommand for SpecKitNewCommand {
     }
 
     fn description(&self) -> &'static str {
-        "create new SPEC from description with templates (55% faster)"
+        "create new SPEC from description with templates (INSTANT, zero agents, $0)"
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
-        // SPEC-KIT-070: Generate SPEC-ID natively to eliminate $2.40 consensus cost
-        let spec_id = match super::super::spec_id_generator::generate_next_spec_id(&widget.config.cwd) {
-            Ok(id) => id,
-            Err(e) => {
-                widget.history_push(crate::history_cell::new_error_event(format!(
-                    "Failed to generate SPEC-ID: {}",
-                    e
-                )));
-                widget.request_redraw();
-                return;
+        use crate::history_cell::{PlainHistoryCell, HistoryCellType};
+        use ratatui::text::Line;
+
+        // SPEC-KIT-072: Fully native SPEC creation (eliminates 2 agents, $0.15 → $0)
+        match super::super::new_native::create_spec(&args, &widget.config.cwd) {
+            Ok(result) => {
+                widget.history_push(PlainHistoryCell::new(
+                    vec![
+                        Line::from(format!("✅ Created {}: {}", result.spec_id, result.feature_name)),
+                        Line::from(""),
+                        Line::from(format!("   Directory: docs/{}/", result.directory.file_name().unwrap().to_string_lossy())),
+                        Line::from(format!("   Files created: {}", result.files_created.join(", "))),
+                        Line::from(format!("   Updated: SPEC.md tracker")),
+                        Line::from(""),
+                        Line::from("Next steps:"),
+                        Line::from(format!("   • Run /speckit.clarify {} to resolve ambiguities", result.spec_id)),
+                        Line::from(format!("   • Run /speckit.analyze {} to check consistency", result.spec_id)),
+                        Line::from(format!("   • Run /speckit.auto {} to generate full implementation", result.spec_id)),
+                        Line::from(""),
+                        Line::from("Cost savings: $0.15 → $0 (100% reduction, zero agents used)"),
+                    ],
+                    HistoryCellType::Notice,
+                ));
             }
-        };
-
-        let slug = super::super::spec_id_generator::create_slug(&args);
-        let spec_dir_name = format!("{}-{}", spec_id, slug);
-
-        // Inject SPEC-ID into prompt for orchestrator
-        let enhanced_args = format!(
-            "Create SPEC with ID: {}, Directory: {}, Description: {}",
-            spec_id, spec_dir_name, args
-        );
-
-        // Routed to subagent orchestrators
-        // Use format_subagent_command and submit
-        let formatted = codex_core::slash_commands::format_subagent_command(
-            "speckit.new",
-            &enhanced_args,
-            Some(&widget.config.agents),
-            Some(&widget.config.subagent_commands),
-        );
-
-        let display = format!("{} ({})", args, spec_id);
-        widget.submit_prompt_with_display(display, formatted.prompt);
+            Err(err) => {
+                widget.history_push(crate::history_cell::new_error_event(format!(
+                    "Failed to create SPEC: {}",
+                    err
+                )));
+            }
+        }
+        widget.request_redraw();
     }
 
     fn requires_args(&self) -> bool {

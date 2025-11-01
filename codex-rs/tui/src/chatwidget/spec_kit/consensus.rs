@@ -141,6 +141,9 @@ pub(in super::super) fn parse_consensus_stage(stage: &str) -> Option<SpecStage> 
         "validate" | "spec-validate" => Some(SpecStage::Validate),
         "audit" | "review" | "spec-audit" | "spec-review" => Some(SpecStage::Audit),
         "unlock" | "spec-unlock" => Some(SpecStage::Unlock),
+        "clarify" | "spec-clarify" => Some(SpecStage::Clarify),
+        "analyze" | "spec-analyze" => Some(SpecStage::Analyze),
+        "checklist" | "spec-checklist" => Some(SpecStage::Checklist),
         _ => None,
     }
 }
@@ -157,6 +160,15 @@ pub(in super::super) fn expected_agents_for_stage(
             SpecAgent::Claude,
             SpecAgent::GptCodex,
             SpecAgent::GptPro,
+        ],
+        SpecStage::Clarify | SpecStage::Analyze => vec![
+            SpecAgent::Gemini,
+            SpecAgent::Claude,
+            SpecAgent::Code,
+        ],
+        SpecStage::Checklist => vec![
+            SpecAgent::Claude,
+            SpecAgent::Code,
         ],
         _ => vec![SpecAgent::Gemini, SpecAgent::Claude, SpecAgent::GptPro],
     }
@@ -196,6 +208,8 @@ pub(in super::super) fn validate_required_fields(stage: SpecStage, summary: &Val
         SpecStage::Validate => obj.contains_key("test_strategy"),
         SpecStage::Audit => obj.contains_key("audit_verdict"),
         SpecStage::Unlock => obj.contains_key("unlock_decision"),
+        SpecStage::Clarify | SpecStage::Analyze => obj.contains_key("issues"),
+        SpecStage::Checklist => obj.contains_key("requirements"),
     }
 }
 

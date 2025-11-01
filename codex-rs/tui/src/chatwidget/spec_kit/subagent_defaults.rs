@@ -43,27 +43,9 @@ pub fn default_for(name: &str) -> Option<SubagentCommandConfig> {
             "Use tier-2 routing for specification elaboration. Limit context to the provided spec_id artefacts and any prior clarify outputs. Ensure each agent writes its JSON update back to local-memory with tags `spec:<spec_id>` and `stage:specify` (importance >= 8).",
             "Follow the `speckit.specify` JSON schema in docs/spec-kit/prompts.json. Reference prior clarify artifacts when needed and store the final JSON via `local-memory store_memory` with tags `spec:<spec_id>`, `stage:specify`, `consensus-artifact`.",
         )),
-        "speckit.clarify" => Some(make_config(
-            name,
-            true,
-            &["gemini", "claude", "code"],
-            "Run the clarify stage with gemini, claude, and code (tier-2). Keep scope to ambiguity resolution for the supplied spec_id and cap the run at five questions. Provide only SPEC/PRD context and prior notes. After agents finish, ensure each JSON artifact is stored to local-memory with tags `spec:<spec_id>`, `stage:clarify`, `consensus-artifact` and importance >= 8 before summarising unresolved items.",
-            "Emit the clarify JSON schema (question, answer, confidence, magnitude, resolvability, reasoning) documented in docs/spec-kit/prompts.json. Include model metadata and spec_id. After producing the JSON, call `local-memory store_memory` with tags `spec:<spec_id>`, `stage:clarify`, `consensus-artifact`. Stay focused on ambiguity questions only.",
-        )),
-        "speckit.analyze" => Some(make_config(
-            name,
-            true,
-            &["gemini", "claude", "code"],
-            "Use tier-2 analysis routing (gemini, claude, code) to evaluate cross-artifact consistency for the given spec_id. Provide SPEC, plan, and tasks artefacts as context and require every agent to persist findings to local-memory with tags `spec:<spec_id>` and `stage:analyze`.",
-            "Return the analyze JSON schema (issue id, type, severity, suggested_fix, confidence, resolvability) described in docs/spec-kit/prompts.json. Include prompt metadata, cite affected artefacts, and store the JSON via `local-memory store_memory` tagged `spec:<spec_id>`, `stage:analyze`, `consensus-artifact`.",
-        )),
-        "speckit.checklist" => Some(make_config(
-            name,
-            true,
-            &["claude", "code"],
-            "Launch the tier-2-lite checklist flow with claude and code only. Score requirement quality for the supplied spec_id and persist each agent's scorecard to local-memory tagged `spec:<spec_id>` and `stage:checklist`.",
-            "Return the checklist JSON schema (scores for specificity, testability, completeness, clarity, plus suggested improvements) and persist it using `local-memory store_memory` with tags `spec:<spec_id>`, `stage:checklist`, `consensus-artifact`. Flag any requirement under 6.0.",
-        )),
+        "speckit.clarify" => None,  // Native execution - no orchestrator defaults needed
+        "speckit.analyze" => None,  // Native execution - no orchestrator defaults needed
+        "speckit.checklist" => None,  // Native execution - no orchestrator defaults needed
         "speckit.plan" => Some(make_config(
             name,
             true,

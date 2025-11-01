@@ -323,9 +323,8 @@ impl SlashCommand {
             SlashCommand::Plan
                 | SlashCommand::Solve
                 | SlashCommand::Code
-                | SlashCommand::SpecKitClarify
-                | SlashCommand::SpecKitAnalyze
-                | SlashCommand::SpecKitChecklist
+            // SPEC-KIT-070: Quality commands are NATIVE (not prompt-expanding)
+            // SpecKitClarify, SpecKitAnalyze, SpecKitChecklist removed
         )
     }
 
@@ -447,20 +446,8 @@ impl SlashCommand {
             SlashCommand::Code => Some(codex_core::slash_commands::format_code_command(
                 args, None, None,
             )),
-            // SpecKit commands use subagent orchestrators
-            SlashCommand::SpecKitClarify
-            | SlashCommand::SpecKitAnalyze
-            | SlashCommand::SpecKitChecklist => Some(
-                codex_core::slash_commands::format_subagent_command(
-                    self.command()
-                        .strip_prefix("speckit.")
-                        .unwrap_or(self.command()),
-                    args,
-                    None,
-                    None,
-                )
-                .prompt,
-            ),
+            // SPEC-KIT-070: Quality commands are NATIVE (handled by command registry)
+            // SpecKitClarify, SpecKitAnalyze, SpecKitChecklist removed (unreachable due to is_prompt_expanding check)
             _ => None,
         }
     }

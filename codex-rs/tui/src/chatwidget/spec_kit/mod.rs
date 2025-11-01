@@ -15,10 +15,14 @@ pub mod ace_prompt_injector; // ACE prompt injection logic
 pub mod ace_reflector; // ACE Reflector - Deep outcome analysis
 pub mod ace_route_selector; // ACE route selection for complex tasks
 pub mod agent_orchestrator; // Agent orchestration functions (extracted from handler.rs)
+pub mod analyze_native; // Native consistency checking (zero agents, zero cost)
+pub mod checklist_native; // Native quality scoring (zero agents, zero cost)
+pub mod clarify_native; // Native ambiguity detection (zero agents, zero cost)
 pub mod command_handlers; // Command entry points (status, consensus, guardrail)
 pub mod command_registry;
 pub mod commands;
 pub mod config_validator;
+pub mod new_native; // SPEC-KIT-072: Native SPEC creation (eliminates 2 agents, $0.15 → $0)
 pub mod consensus;
 pub mod consensus_coordinator; // Consensus checking with MCP retry logic
 pub mod context;
@@ -28,6 +32,7 @@ pub mod evidence;
 pub mod file_modifier;
 pub mod guardrail;
 pub mod handler;
+pub mod native_consensus_executor; // Native consensus orchestration (eliminates orchestrator agent)
 pub mod pipeline_coordinator; // MAINT-3 Phase 5: Pipeline state machine (extracted from handler.rs)
 // FORK-SPECIFIC (just-every/code): local_memory_client.rs deleted 2025-10-18
 // Replaced by native MCP integration in consensus.rs

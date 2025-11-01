@@ -19,7 +19,7 @@ pub mod token_data;
 pub use codex_conversation::CodexConversation;
 pub mod acp;
 pub mod agent_defaults;
-mod agent_tool;
+pub mod agent_tool; // Made public for native consensus orchestration
 mod command_safety;
 pub mod config;
 pub mod config_edit;

@@ -215,6 +215,7 @@ pub fn should_curate(reflection: &ReflectionResult) -> bool {
 mod tests {
     use super::*;
     use super::super::ace_route_selector::DiffStat;
+    use super::super::ace_reflector::ReflectedPattern;
 
     #[test]
     fn test_should_curate_with_high_confidence() {

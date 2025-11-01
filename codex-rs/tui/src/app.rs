@@ -1768,15 +1768,19 @@ impl App<'_> {
                         | SlashCommand::SpecKitValidate
                         | SlashCommand::SpecKitAudit
                         | SlashCommand::SpecKitUnlock
-                        | SlashCommand::SpecKitAuto
-                        | SlashCommand::SpecKitClarify
-                        | SlashCommand::SpecKitAnalyze
-                        | SlashCommand::SpecKitChecklist => {
+                        | SlashCommand::SpecKitAuto => {
                             // Prompt-expanded in the chat widget
                         }
-                        // SpecKit special handlers
-                        SlashCommand::SpecKitNew | SlashCommand::SpecKitSpecify => {
-                            // Routed to subagent orchestrators
+                        // SPEC-KIT-070 Phase 2+3: Native commands (handled by registry at line 1714)
+                        SlashCommand::SpecKitClarify
+                        | SlashCommand::SpecKitAnalyze
+                        | SlashCommand::SpecKitChecklist
+                        | SlashCommand::SpecKitNew => {
+                            // Handled by spec-kit registry (native execution, no agents)
+                        }
+                        // SpecKit agent commands
+                        SlashCommand::SpecKitSpecify => {
+                            // Single-agent orchestrator (gpt5-low)
                         }
                         SlashCommand::SpecKitStatus => {
                             if let AppState::Chat { widget } = &mut self.app_state {

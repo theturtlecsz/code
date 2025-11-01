@@ -77,6 +77,9 @@ pub fn validate_guardrail_schema(stage: SpecStage, telemetry: &Value) -> Vec<Str
             require_string_field(telemetry, &["lock_status"], &mut failures);
             require_string_field(telemetry, &["hook_status"], &mut failures);
         }
+        SpecStage::Clarify | SpecStage::Analyze | SpecStage::Checklist => {
+            // Quality commands: no special telemetry fields required
+        }
         SpecStage::Validate | SpecStage::Audit => {
             match telemetry.get("scenarios") {
                 Some(Value::Array(scenarios)) if !scenarios.is_empty() => {
@@ -330,6 +333,15 @@ pub fn evaluate_guardrail_value(stage: SpecStage, value: &Value) -> GuardrailEva
                 success,
                 summary: format!("Unlock status: {status}"),
                 failures,
+            }
+        }
+        SpecStage::Clarify | SpecStage::Analyze | SpecStage::Checklist => {
+            // Quality commands don't have guardrails (they are quality checks themselves)
+            // Return success by default if called
+            GuardrailEvaluation {
+                success: true,
+                summary: "Quality command (no guardrail)".to_string(),
+                failures: Vec::new(),
             }
         }
     }
