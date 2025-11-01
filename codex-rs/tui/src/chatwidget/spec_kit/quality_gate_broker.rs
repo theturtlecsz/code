@@ -183,12 +183,34 @@ async fn fetch_agent_payloads(
 
     match std::fs::read_dir(agents_dir) {
         Ok(entries) => {
+            // Limit scan to prevent stack overflow with too many agents
+            let mut scanned = 0;
+            const MAX_SCAN: usize = 100;
+
             for entry in entries.flatten() {
+                if scanned >= MAX_SCAN {
+                    info_lines.push(format!("Scanned {} agents (limit reached)", MAX_SCAN));
+                    break;
+                }
+
                 if !entry.path().is_dir() {
                     continue;
                 }
 
                 let result_path = entry.path().join("result.txt");
+
+                // Only check recent result files (last 1 hour)
+                if let Ok(metadata) = std::fs::metadata(&result_path) {
+                    if let Ok(modified) = metadata.modified() {
+                        if let Ok(elapsed) = modified.elapsed() {
+                            if elapsed.as_secs() > 3600 {
+                                continue; // Skip old agents
+                            }
+                        }
+                    }
+                }
+
+                scanned += 1;
 
                 if let Ok(content) = std::fs::read_to_string(&result_path) {
                     // Extract JSON from content
