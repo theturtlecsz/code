@@ -80,7 +80,10 @@ pub fn on_quality_gate_agents_complete(widget: &mut ChatWidget) {
     // STEP 3: Read agent result files and store to local-memory (SPEC-KIT-068 fix)
     // This was previously expected from orchestrator but never executed reliably.
     // Now implemented in Rust for deterministic execution.
-    let stored_count = store_quality_gate_artifacts(
+    //
+    // Note: Storage happens synchronously via spawn_blocking to ensure completion
+    // before broker searches. Small delay acceptable (typically <500ms for 3 agents).
+    let stored_count = store_quality_gate_artifacts_sync(
         widget,
         &spec_id,
         checkpoint,
@@ -101,6 +104,9 @@ pub fn on_quality_gate_agents_complete(widget: &mut ChatWidget) {
             "Warning: No agent artifacts stored - agents may not have completed yet".to_string()
         ));
     }
+
+    // Add small delay to ensure async storage tasks complete
+    std::thread::sleep(std::time::Duration::from_millis(200));
 
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
         vec![ratatui::text::Line::from(format!(
@@ -1343,22 +1349,45 @@ fn send_ace_learning_on_checkpoint_pass(
 // STEP 3 Implementation: Store quality gate artifacts to local-memory
 // ============================================================================
 
-/// Store quality gate agent artifacts to local-memory
+/// Store quality gate agent artifacts to local-memory (synchronously)
 ///
 /// Implements STEP 3 from execute_quality_checkpoint orchestrator prompt:
 /// Read .code/agents/{agent_id}/result.txt and store via local-memory MCP.
 ///
+/// Uses spawn_blocking to avoid tokio runtime nesting panic while still
+/// waiting for all storage operations to complete before returning.
+///
 /// Returns count of successfully stored artifacts.
-fn store_quality_gate_artifacts(
+fn store_quality_gate_artifacts_sync(
     widget: &mut ChatWidget,
     spec_id: &str,
     checkpoint: super::state::QualityCheckpoint,
     gate_names: &[String],
 ) -> usize {
-    let mut stored_count = 0;
-
-    // Get completed quality gate agents from active_agents
+    // Get completed quality gate agents from filesystem
     let completed_agents = get_completed_quality_gate_agents(widget);
+
+    if completed_agents.is_empty() {
+        warn!("No quality gate agents found in filesystem scan");
+        return 0;
+    }
+
+    info!(
+        "Found {} quality gate agents to store: {:?}",
+        completed_agents.len(),
+        completed_agents
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect::<Vec<_>>()
+    );
+
+    let mcp_manager = widget.mcp_manager.clone();
+    let spec_id_owned = spec_id.to_string();
+    let checkpoint_owned = checkpoint;
+    let stage_name = gate_names.first().map(|s| s.to_string()).unwrap_or_else(|| "clarify".to_string());
+
+    // Create storage tasks for each agent
+    let mut handles = Vec::new();
 
     for (agent_name, agent_id) in completed_agents {
         // Read agent result file
@@ -1374,7 +1403,7 @@ fn store_quality_gate_artifacts(
             }
         };
 
-        // Extract JSON from markdown code fence
+        // Extract JSON from markdown code fence or raw
         let json_str = match extract_json_from_markdown(&content) {
             Some(j) => j,
             None => {
@@ -1395,27 +1424,54 @@ fn store_quality_gate_artifacts(
             continue;
         }
 
-        // Store to local-memory via MCP (use first gate name for stage tag)
-        let stage_name = gate_names.first().map(|s| s.as_str()).unwrap_or("clarify");
-        let success = store_artifact_to_local_memory(
-            widget,
-            spec_id,
-            checkpoint,
-            &agent_name,
-            stage_name,
-            &json_str,
-        );
+        // Clone for async task
+        let mcp_clone = mcp_manager.clone();
+        let spec_clone = spec_id_owned.clone();
+        let checkpoint_clone = checkpoint_owned;
+        let agent_clone = agent_name.clone();
+        let stage_clone = stage_name.clone();
+        let json_clone = json_str.clone();
 
-        if success {
-            stored_count += 1;
-            debug!(
-                "Stored quality gate artifact: agent={}, checkpoint={}, stage={}",
-                agent_name,
-                checkpoint.name(),
-                stage_name
-            );
-        }
+        // Spawn async storage task
+        let handle = tokio::spawn(async move {
+            store_artifact_async(
+                mcp_clone,
+                &spec_clone,
+                checkpoint_clone,
+                &agent_clone,
+                &stage_clone,
+                &json_clone,
+            )
+            .await
+        });
+
+        handles.push((agent_name, handle));
     }
+
+    // Wait for all storage tasks to complete (with timeout)
+    let stored_count = tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current().block_on(async {
+            let mut count = 0;
+            for (agent_name, handle) in handles {
+                match tokio::time::timeout(std::time::Duration::from_secs(15), handle).await {
+                    Ok(Ok(Ok(_))) => {
+                        debug!("Successfully stored artifact for {}", agent_name);
+                        count += 1;
+                    }
+                    Ok(Ok(Err(e))) => {
+                        warn!("Failed to store artifact for {}: {}", agent_name, e);
+                    }
+                    Ok(Err(e)) => {
+                        warn!("Task join error for {}: {}", agent_name, e);
+                    }
+                    Err(_) => {
+                        warn!("Timeout storing artifact for {}", agent_name);
+                    }
+                }
+            }
+            count
+        })
+    });
 
     stored_count
 }
@@ -1567,70 +1623,50 @@ fn extract_json_from_markdown(content: &str) -> Option<String> {
     None
 }
 
-/// Store quality gate artifact to local-memory via MCP (async, fire-and-forget)
+/// Store quality gate artifact to local-memory via MCP (async helper)
 ///
-/// Spawns async task to avoid blocking. Returns immediately (doesn't wait for completion).
-fn store_artifact_to_local_memory(
-    widget: &ChatWidget,
+/// Async function called from spawned tasks. Returns Result for error propagation.
+async fn store_artifact_async(
+    mcp_manager: Arc<Mutex<Option<Arc<McpConnectionManager>>>>,
     spec_id: &str,
     checkpoint: super::state::QualityCheckpoint,
     agent_name: &str,
     stage_name: &str,
     json_content: &str,
-) -> bool {
-    let mcp_manager = widget.mcp_manager.clone();
-    let spec_id_owned = spec_id.to_string();
-    let agent_name_owned = agent_name.to_string();
-    let checkpoint_name = checkpoint.name().to_string();
-    let stage_name_owned = stage_name.to_string();
-    let json_content_owned = json_content.to_string();
-
+) -> Result<(), String> {
     let tags = vec![
         "quality-gate".to_string(),
         format!("spec:{}", spec_id),
-        format!("checkpoint:{}", checkpoint_name),
+        format!("checkpoint:{}", checkpoint.name()),
         format!("stage:{}", stage_name),
         format!("agent:{}", agent_name),
     ];
 
     let args = json!({
-        "content": json_content_owned,
+        "content": json_content,
         "domain": "spec-kit",
         "importance": 8,
         "tags": tags,
     });
 
-    // Spawn async task to store (fire-and-forget to avoid blocking UI thread)
-    tokio::spawn(async move {
-        let guard = mcp_manager.lock().await;
-        if let Some(manager) = guard.as_ref() {
-            match manager
-                .call_tool(
-                    "local-memory",
-                    "store_memory",
-                    Some(args),
-                    Some(std::time::Duration::from_secs(10)),
-                )
-                .await
-            {
-                Ok(_) => {
-                    debug!(
-                        "Successfully stored artifact to local-memory: agent={}, spec={}",
-                        agent_name_owned, spec_id_owned
-                    );
-                }
-                Err(e) => {
-                    warn!(
-                        "Failed to store artifact to local-memory for {}: {}",
-                        agent_name_owned, e
-                    );
-                }
-            }
-        } else {
-            warn!("MCP manager not available for artifact storage");
-        }
-    });
+    let guard = mcp_manager.lock().await;
+    if let Some(manager) = guard.as_ref() {
+        manager
+            .call_tool(
+                "local-memory",
+                "store_memory",
+                Some(args),
+                Some(std::time::Duration::from_secs(10)),
+            )
+            .await
+            .map_err(|e| format!("MCP call failed: {}", e))?;
 
-    // Return true optimistically (actual result handled in async task)
-    true
+        debug!(
+            "Successfully stored artifact to local-memory: agent={}, spec={}",
+            agent_name, spec_id
+        );
+        Ok(())
+    } else {
+        Err("MCP manager not available".to_string())
+    }
 }
