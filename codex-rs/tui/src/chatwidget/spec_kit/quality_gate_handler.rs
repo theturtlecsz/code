@@ -1567,9 +1567,9 @@ fn extract_json_from_markdown(content: &str) -> Option<String> {
     None
 }
 
-/// Store quality gate artifact to local-memory via MCP
+/// Store quality gate artifact to local-memory via MCP (async, fire-and-forget)
 ///
-/// Returns true if storage succeeded, false otherwise.
+/// Spawns async task to avoid blocking. Returns immediately (doesn't wait for completion).
 fn store_artifact_to_local_memory(
     widget: &ChatWidget,
     spec_id: &str,
@@ -1581,27 +1581,30 @@ fn store_artifact_to_local_memory(
     let mcp_manager = widget.mcp_manager.clone();
     let spec_id_owned = spec_id.to_string();
     let agent_name_owned = agent_name.to_string();
+    let checkpoint_name = checkpoint.name().to_string();
+    let stage_name_owned = stage_name.to_string();
+    let json_content_owned = json_content.to_string();
 
     let tags = vec![
         "quality-gate".to_string(),
         format!("spec:{}", spec_id),
-        format!("checkpoint:{}", checkpoint.name()),
+        format!("checkpoint:{}", checkpoint_name),
         format!("stage:{}", stage_name),
         format!("agent:{}", agent_name),
     ];
 
     let args = json!({
-        "content": json_content,
+        "content": json_content_owned,
         "domain": "spec-kit",
         "importance": 8,
         "tags": tags,
     });
 
-    // Call MCP store_memory tool via tokio runtime
-    let result = tokio::runtime::Handle::current().block_on(async move {
+    // Spawn async task to store (fire-and-forget to avoid blocking UI thread)
+    tokio::spawn(async move {
         let guard = mcp_manager.lock().await;
         if let Some(manager) = guard.as_ref() {
-            manager
+            match manager
                 .call_tool(
                     "local-memory",
                     "store_memory",
@@ -1609,25 +1612,25 @@ fn store_artifact_to_local_memory(
                     Some(std::time::Duration::from_secs(10)),
                 )
                 .await
+            {
+                Ok(_) => {
+                    debug!(
+                        "Successfully stored artifact to local-memory: agent={}, spec={}",
+                        agent_name_owned, spec_id_owned
+                    );
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to store artifact to local-memory for {}: {}",
+                        agent_name_owned, e
+                    );
+                }
+            }
         } else {
-            Err(anyhow::anyhow!("MCP manager not available"))
+            warn!("MCP manager not available for artifact storage");
         }
     });
 
-    match result {
-        Ok(_) => {
-            debug!(
-                "Successfully stored artifact to local-memory: agent={}, spec={}",
-                agent_name_owned, spec_id_owned
-            );
-            true
-        }
-        Err(e) => {
-            warn!(
-                "Failed to store artifact to local-memory for {}: {}",
-                agent_name_owned, e
-            );
-            false
-        }
-    }
+    // Return true optimistically (actual result handled in async task)
+    true
 }
