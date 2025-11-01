@@ -15,12 +15,20 @@ use codex_core::agent_tool::AGENT_MANAGER;
 use serde_json::Value;
 use std::path::Path;
 
+/// Agent spawn info for logging
+pub struct AgentSpawnInfo {
+    pub agent_id: String,
+    pub agent_name: String,
+    pub model_name: String,
+    pub prompt_preview: String,
+}
+
 /// Spawn quality gate agents natively (no LLM orchestrator)
 pub async fn spawn_quality_gate_agents_native(
     cwd: &Path,
     spec_id: &str,
     checkpoint: QualityCheckpoint,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<AgentSpawnInfo>, String> {
     let gates = checkpoint.gates();
 
     // For now, we only handle single-gate checkpoints
@@ -59,7 +67,7 @@ pub async fn spawn_quality_gate_agents_native(
         ("code", "gpt_medium"),      // gpt-5 medium reasoning (cheaper than high)
     ];
 
-    let mut agent_ids = Vec::new();
+    let mut spawn_infos = Vec::new();
     let batch_id = uuid::Uuid::new_v4().to_string();
 
     // Spawn each agent
@@ -77,6 +85,13 @@ pub async fn spawn_quality_gate_agents_native(
             cwd,
         ).await?;
 
+        // Get prompt preview (first 200 chars)
+        let prompt_preview = if prompt.len() > 200 {
+            format!("{}...", &prompt[..200])
+        } else {
+            prompt.clone()
+        };
+
         // Spawn agent via AgentManager
         let mut manager = AGENT_MANAGER.write().await;
         let agent_id = manager.create_agent(
@@ -89,10 +104,15 @@ pub async fn spawn_quality_gate_agents_native(
             Some(batch_id.clone()),
         ).await;
 
-        agent_ids.push(agent_id);
+        spawn_infos.push(AgentSpawnInfo {
+            agent_id,
+            agent_name: agent_name.to_string(),
+            model_name: model_name.to_string(),
+            prompt_preview,
+        });
     }
 
-    Ok(agent_ids)
+    Ok(spawn_infos)
 }
 
 /// Build quality gate prompt with SPEC context

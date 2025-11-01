@@ -1008,6 +1008,12 @@ pub(super) fn execute_quality_checkpoint(
         }
     }
 
+    // Get execution logger for event logging
+    let logger = widget.spec_auto_state.as_ref()
+        .map(|s| s.execution_logger.clone());
+    let run_id = widget.spec_auto_state.as_ref()
+        .and_then(|s| s.run_id.clone());
+
     // Spawn agents in background task
     let spawn_handle = tokio::spawn(async move {
         match super::native_quality_gate_orchestrator::spawn_quality_gate_agents_native(
@@ -1015,8 +1021,28 @@ pub(super) fn execute_quality_checkpoint(
             &spec_id_clone,
             checkpoint_clone,
         ).await {
-            Ok(agent_ids) => {
-                info!("Spawned {} quality gate agents: {:?}", agent_ids.len(), agent_ids);
+            Ok(spawn_infos) => {
+                info!("Spawned {} quality gate agents", spawn_infos.len());
+
+                // Log each agent spawn event (CRITICAL for SPEC-KIT-070 validation)
+                if let (Some(logger), Some(run_id)) = (&logger, &run_id) {
+                    for spawn_info in &spawn_infos {
+                        logger.log_event(super::execution_logger::ExecutionEvent::AgentSpawn {
+                            run_id: run_id.clone(),
+                            stage: format!("quality-gate-{}", checkpoint_clone.name()),
+                            agent_name: spawn_info.agent_name.clone(),
+                            agent_id: spawn_info.agent_id.clone(),
+                            model: spawn_info.model_name.clone(),
+                            prompt_preview: spawn_info.prompt_preview.clone(),
+                            timestamp: super::execution_logger::ExecutionEvent::now(),
+                        });
+                    }
+                }
+
+                // Extract agent IDs for waiting
+                let agent_ids: Vec<String> = spawn_infos.iter()
+                    .map(|info| info.agent_id.clone())
+                    .collect();
 
                 // Wait for completion (5 minute timeout)
                 if let Err(e) = super::native_quality_gate_orchestrator::wait_for_quality_gate_agents(
