@@ -93,9 +93,9 @@ if [[ -d "${consensus_base}" ]]; then
   fi
   print_section "Consensus artifact counts" printf '%b' "${count_output}"
 
-  warn_threshold_mb=20
-  fail_threshold_mb=25
-  echo "=== Policy Compliance (20 MB warn / 25 MB limit) ==="
+  warn_threshold_mb=40
+  fail_threshold_mb=50
+  echo "=== Policy Compliance (40 MB warn / 50 MB limit) - SPEC-KIT-909 ==="
   warn_count=0
   fail_count=0
   while IFS= read -r spec; do

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-11-01T03:35:35.224Z",
+  "generatedAt": "2025-11-01T03:57:18.779Z",
   "docs": [
     {
       "path": "ACE_PREFETCH_IMPLEMENTATION.md",
@@ -17,7 +17,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761355542000
+      "updated": 1761968735000
     },
     {
       "path": "CHANGELOG.md",
@@ -35,7 +35,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761355542000
+      "updated": 1761968456000
     },
     {
       "path": "IMPLEMENTATION_SUMMARY.md",
@@ -44,7 +44,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1761968295000
     },
     {
       "path": "PLANNING.md",
@@ -86,7 +86,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761925678000
+      "updated": 1761969408000
     },
     {
       "path": "TUI.md",
@@ -3472,7 +3472,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761880349000
+      "updated": 1761968295000
     },
     {
       "path": "docs/report/verification.md",
@@ -3481,7 +3481,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761880349000
+      "updated": 1761968295000
     },
     {
       "path": "docs/sandbox.md",
@@ -3934,19 +3934,21 @@
   ],
   "dupClusters": [
     [
+      "AGENTS.md",
+      "docs/SPEC-KIT-070-model-cost-optimization/PHASE1A_RESULTS.md"
+    ],
+    [
       "CHANGELOG.md",
       "docs/INDEX.md",
       "docs/archive/2025-sessions/ACE_TESTING_GUIDE.md"
     ],
     [
-      "IMPLEMENTATION_SUMMARY.md",
-      "docs/archive/2025-sessions/SESSION_SUMMARY_2025-10-16.md"
+      "CLAUDE.md",
+      "PLANNING.md"
     ],
     [
-      "PLANNING.md",
-      "docs/SPEC-KIT-900-generic-smoke/tasks.md",
-      "docs/archive/2025-sessions/CONFLICT_RESOLUTION.md",
-      "docs/archive/2025-sessions/RESTART.md"
+      "IMPLEMENTATION_SUMMARY.md",
+      "docs/archive/2025-sessions/SESSION_SUMMARY_2025-10-16.md"
     ],
     [
       "README.md",
@@ -3956,10 +3958,6 @@
       "SPEC-KIT.md",
       "docs/archive/2025-sessions/SESSION-HANDOFF-2025-10-18.md",
       "docs/spec-kit/consensus-runner-design.md"
-    ],
-    [
-      "SPEC.md",
-      "diagrams/spec-kit/IMPLEMENTATION_COMPLETE.md"
     ],
     [
       "codex-rs/MEMORY-POLICY.md",
@@ -4008,6 +4006,11 @@
       "docs/spec-kit/spec-auto-automation.md"
     ],
     [
+      "diagrams/spec-kit/IMPLEMENTATION_COMPLETE.md",
+      "docs/DOCUMENTATION_CLEANUP_PLAN.md",
+      "docs/archive/2025-sessions/spec-kit-planning/SERVICE_TRAITS_DEEP_ANALYSIS.md"
+    ],
+    [
       "diagrams/spec-kit/README.md",
       "docs/archive/2025-sessions/ace-analysis/ACE_FULL_FRAMEWORK.md",
       "docs/archive/2025-sessions/analysis/ANALYSIS_COMPLETE.md",
@@ -4034,11 +4037,6 @@
     [
       "diagrams/spec-kit/docs/SPEC-KIT-910-consensus-db-separation/PRD.md",
       "docs/SPEC-KIT-070-model-cost-optimization/PHASE1A_RESULTS.md"
-    ],
-    [
-      "docs/DOCUMENTATION_CLEANUP_PLAN.md",
-      "docs/archive/2025-sessions/spec-kit-planning/REMAINING_OPPORTUNITIES.md",
-      "docs/archive/2025-sessions/spec-kit-planning/SERVICE_TRAITS_DEEP_ANALYSIS.md"
     ],
     [
       "docs/SPEC-KIT-060-template-validation-test/final-comparison.md",
@@ -4170,6 +4168,10 @@
     [
       "docs/archive/2025-sessions/ACE_INTEGRATION.md",
       "docs/archive/2025-sessions/ACE_TEST_PLAN.md"
+    ],
+    [
+      "docs/archive/2025-sessions/CONFLICT_RESOLUTION.md",
+      "docs/archive/2025-sessions/RESTART.md"
     ],
     [
       "docs/archive/2025-sessions/EPIC_SESSION_SUMMARY_2025-10-16.md",

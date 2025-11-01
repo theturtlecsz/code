@@ -59,6 +59,18 @@ pub fn handle_spec_auto(
         return;
     }
 
+    // SPEC-KIT-909: Check evidence size before starting pipeline (50MB hard limit)
+    if let Err(err) = check_evidence_size_limit(&spec_id, &widget.config.cwd) {
+        widget.history_push(crate::history_cell::new_error_event(format!(
+            "Evidence size check failed: {}",
+            err
+        )));
+        widget.history_push(crate::history_cell::new_error_event(
+            "Run: bash scripts/spec_ops_004/evidence_archive.sh".to_string()
+        ));
+        return;
+    }
+
     let lifecycle = widget.ensure_validate_lifecycle(&spec_id);
     let mut state = super::state::SpecAutoState::new(spec_id, goal, resume_from, hal_mode);
     state.set_validate_lifecycle(lifecycle);
@@ -601,4 +613,41 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
             );
         }
     }
+}
+
+/// SPEC-KIT-909: Check evidence size limit (50MB hard limit)
+fn check_evidence_size_limit(spec_id: &str, cwd: &std::path::Path) -> super::error::Result<()> {
+    use std::process::Command;
+
+    // Use evidence_stats.sh to check size
+    let stats_script = cwd.join("scripts/spec_ops_004/evidence_stats.sh");
+    if !stats_script.exists() {
+        // Script missing - allow pipeline to continue (graceful degradation)
+        return Ok(());
+    }
+
+    let output = Command::new("bash")
+        .arg(&stats_script)
+        .arg("--spec")
+        .arg(spec_id)
+        .current_dir(cwd)
+        .output()
+        .map_err(|e| super::error::SpecKitError::Other(format!("Failed to run evidence_stats.sh: {}", e)))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Check for error indicator (❌ means >50MB)
+    if stdout.contains("❌") && stdout.contains(spec_id) {
+        // Extract size from output
+        let size_line = stdout.lines()
+            .find(|line| line.contains(spec_id) && line.contains("MB"))
+            .unwrap_or("");
+
+        return Err(super::error::SpecKitError::Other(format!(
+            "{} evidence exceeds 50MB limit. Archive consensus artifacts before continuing.",
+            spec_id
+        )));
+    }
+
+    Ok(())
 }

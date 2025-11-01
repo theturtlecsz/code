@@ -1,6 +1,6 @@
 # Docs Health Report
 
-Generated: 2025-11-01T03:35:35.241Z
+Generated: 2025-11-01T03:57:18.795Z
 
 ## Top risky docs (score < 70)
 - **codex-rs/README.md** — score 65, staleDays 0, orphan yes, broken links: codex-rs/core, codex-rs/exec, codex-rs/tui…
@@ -9,25 +9,25 @@ Generated: 2025-11-01T03:35:35.241Z
 - **docs/archive/2025-sessions/spec-kit-planning/PHASE_COMPLETION_TIMELINE.md** — score 65, staleDays 0, orphan yes, broken links: docs/archive/2025-sessions/archive/2025-sessions/, docs/archive/PHASE1_FINAL_REPORT.md, docs/archive/PHASE1_DAY1-2_COMPLETE.md…
 
 ## Near‑duplicate clusters
-- Cluster 1: CHANGELOG.md, docs/INDEX.md, docs/archive/2025-sessions/ACE_TESTING_GUIDE.md
-- Cluster 2: IMPLEMENTATION_SUMMARY.md, docs/archive/2025-sessions/SESSION_SUMMARY_2025-10-16.md
-- Cluster 3: PLANNING.md, docs/SPEC-KIT-900-generic-smoke/tasks.md, docs/archive/2025-sessions/CONFLICT_RESOLUTION.md, docs/archive/2025-sessions/RESTART.md
-- Cluster 4: README.md, docs/SPEC-KIT-025-add-automated-conflict-resolution-with/plan.md
-- Cluster 5: SPEC-KIT.md, docs/archive/2025-sessions/SESSION-HANDOFF-2025-10-18.md, docs/spec-kit/consensus-runner-design.md
-- Cluster 6: SPEC.md, diagrams/spec-kit/IMPLEMENTATION_COMPLETE.md
+- Cluster 1: AGENTS.md, docs/SPEC-KIT-070-model-cost-optimization/PHASE1A_RESULTS.md
+- Cluster 2: CHANGELOG.md, docs/INDEX.md, docs/archive/2025-sessions/ACE_TESTING_GUIDE.md
+- Cluster 3: CLAUDE.md, PLANNING.md
+- Cluster 4: IMPLEMENTATION_SUMMARY.md, docs/archive/2025-sessions/SESSION_SUMMARY_2025-10-16.md
+- Cluster 5: README.md, docs/SPEC-KIT-025-add-automated-conflict-resolution-with/plan.md
+- Cluster 6: SPEC-KIT.md, docs/archive/2025-sessions/SESSION-HANDOFF-2025-10-18.md, docs/spec-kit/consensus-runner-design.md
 - Cluster 7: codex-rs/MEMORY-POLICY.md, docs/DOCUMENTATION_CONSOLIDATION_COMPLETE.md
 - Cluster 8: codex-rs/REVIEW.md, docs/SPEC-OPS-004-integrated-coder-hooks/spec.md
 - Cluster 9: codex-rs/docs/protocol_v1.md, docs/SPEC-KIT-035-spec-status-diagnostics/PRD.md
 - Cluster 10: codex-rs/tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/PRD.md, codex-rs/tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/plan.md, codex-rs/tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/spec.md, codex-rs/tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/tasks.md, codex-rs/tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/PRD.md, codex-rs/tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/plan.md, codex-rs/tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/spec.md, codex-rs/tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/tasks.md, codex-rs/tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/PRD.md, codex-rs/tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/plan.md, codex-rs/tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/spec.md, codex-rs/tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/tasks.md, codex-rs/tui/tests/fixtures/spec_status/missing-doc/docs/SPEC-FIX-MISS/PRD.md, codex-rs/tui/tests/fixtures/spec_status/missing-doc/docs/SPEC-FIX-MISS/plan.md, codex-rs/tui/tests/fixtures/spec_status/missing-doc/docs/SPEC-FIX-MISS/spec.md, codex-rs/tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/PRD.md, codex-rs/tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/plan.md, codex-rs/tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/spec.md, codex-rs/tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/tasks.md, codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/PRD.md, codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/plan.md, codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/spec.md, codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/tasks.md
 - Cluster 11: diagrams/spec-kit/ARCHITECTURE_REVIEW.md, docs/SPEC-KIT-070-model-cost-optimization/PHASE2_COMPLEXITY_ROUTING.md, docs/spec-kit/testing-policy.md
 - Cluster 12: diagrams/spec-kit/CRITICAL_FINDINGS.md, docs/spec-kit/spec-auto-automation.md
-- Cluster 13: diagrams/spec-kit/README.md, docs/archive/2025-sessions/ace-analysis/ACE_FULL_FRAMEWORK.md, docs/archive/2025-sessions/analysis/ANALYSIS_COMPLETE.md, docs/spec-kit/REBASE_SAFETY_MATRIX_T80-T90.md
-- Cluster 14: diagrams/spec-kit/SPEC_KIT_ARCHITECTURE_COMPLETE.md, docs/archive/2025-sessions/spec-kit-planning/MAINT-10-EXTRACTION-PLAN.md
-- Cluster 15: diagrams/spec-kit/docs/SPEC-KIT-906-config-migration-warning/PRD.md, docs/archive/2025-sessions/SESSION_RESTART_PROMPT.md
-- Cluster 16: diagrams/spec-kit/docs/SPEC-KIT-907-fork-isolation-audit/PRD.md, docs/interrupt-resume-postmortem.md
-- Cluster 17: diagrams/spec-kit/docs/SPEC-KIT-908-api-surface-documentation/PRD.md, docs/DOCUMENTATION_CONSOLIDATION_COMPLETE.md, docs/SPEC-KIT-900-generic-smoke/tasks.md, docs/spec-kit/testing-policy.md
-- Cluster 18: diagrams/spec-kit/docs/SPEC-KIT-910-consensus-db-separation/PRD.md, docs/SPEC-KIT-070-model-cost-optimization/PHASE1A_RESULTS.md
-- Cluster 19: docs/DOCUMENTATION_CLEANUP_PLAN.md, docs/archive/2025-sessions/spec-kit-planning/REMAINING_OPPORTUNITIES.md, docs/archive/2025-sessions/spec-kit-planning/SERVICE_TRAITS_DEEP_ANALYSIS.md
+- Cluster 13: diagrams/spec-kit/IMPLEMENTATION_COMPLETE.md, docs/DOCUMENTATION_CLEANUP_PLAN.md, docs/archive/2025-sessions/spec-kit-planning/SERVICE_TRAITS_DEEP_ANALYSIS.md
+- Cluster 14: diagrams/spec-kit/README.md, docs/archive/2025-sessions/ace-analysis/ACE_FULL_FRAMEWORK.md, docs/archive/2025-sessions/analysis/ANALYSIS_COMPLETE.md, docs/spec-kit/REBASE_SAFETY_MATRIX_T80-T90.md
+- Cluster 15: diagrams/spec-kit/SPEC_KIT_ARCHITECTURE_COMPLETE.md, docs/archive/2025-sessions/spec-kit-planning/MAINT-10-EXTRACTION-PLAN.md
+- Cluster 16: diagrams/spec-kit/docs/SPEC-KIT-906-config-migration-warning/PRD.md, docs/archive/2025-sessions/SESSION_RESTART_PROMPT.md
+- Cluster 17: diagrams/spec-kit/docs/SPEC-KIT-907-fork-isolation-audit/PRD.md, docs/interrupt-resume-postmortem.md
+- Cluster 18: diagrams/spec-kit/docs/SPEC-KIT-908-api-surface-documentation/PRD.md, docs/DOCUMENTATION_CONSOLIDATION_COMPLETE.md, docs/SPEC-KIT-900-generic-smoke/tasks.md, docs/spec-kit/testing-policy.md
+- Cluster 19: diagrams/spec-kit/docs/SPEC-KIT-910-consensus-db-separation/PRD.md, docs/SPEC-KIT-070-model-cost-optimization/PHASE1A_RESULTS.md
 - Cluster 20: docs/SPEC-KIT-060-template-validation-test/final-comparison.md, docs/archive/2025-sessions/analysis/FORK_SPEC_KIT_ANALYSIS.md
 - Cluster 21: docs/SPEC-KIT-060-template-validation-test/plan.md, docs/spec-kit/spec-auto-automation.md
 - Cluster 22: docs/SPEC-KIT-066-native-tool-migration/IMPLEMENTATION_COMPLETE.md, docs/SPEC-KIT-070-model-cost-optimization/PRD.md
@@ -48,15 +48,16 @@ Generated: 2025-11-01T03:35:35.241Z
 - Cluster 37: docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-030-add-documentation-for-rebasing-from/baseline_2025-10-06T20:16:34Z-3269921348.md, docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-030-add-documentation-for-rebasing-from/baseline_2025-10-07T00:25:15Z-526413254.md, docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-030-add-documentation-for-rebasing-from/baseline_2025-10-07T01:45:15Z-2890123015.md, docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-067/baseline_2025-10-21T15:39:10Z-153168300.md, docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-067/baseline_2025-10-21T15:48:11Z-2703920966.md, docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-067/baseline_2025-10-21T16:36:01Z-311877671.md
 - Cluster 38: docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-03T17:38:33Z-449014235.md, docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-03T19:50:48Z-206618953.md, docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-04T23:53:42Z-178924721.md, docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-DEMO/baseline_2025-10-05T00:22:04Z-26505108.md
 - Cluster 39: docs/archive/2025-sessions/ACE_INTEGRATION.md, docs/archive/2025-sessions/ACE_TEST_PLAN.md
-- Cluster 40: docs/archive/2025-sessions/EPIC_SESSION_SUMMARY_2025-10-16.md, docs/archive/2025-sessions/spec-kit-planning/SERVICE_TRAITS_DEEP_ANALYSIS.md
-- Cluster 41: docs/archive/2025-sessions/PHASE_1_COMPLETE.md, docs/archive/2025-sessions/SESSION-HANDOFF-2025-10-18.md, docs/archive/2025-sessions/spec-kit-planning/REFACTORING_FINAL_STATUS.md
-- Cluster 42: docs/archive/2025-sessions/REFACTORING_COMPLETE_SUMMARY.md, docs/archive/2025-sessions/spec-kit-planning/MAINT-10-EXECUTION-PLAN.md
-- Cluster 43: docs/archive/2025-sessions/SPEC_OPS_TUI_IMPLEMENTATION.md, docs/spec-kit/COMMAND_REGISTRY_DESIGN.md
-- Cluster 44: docs/archive/2025-sessions/ace-analysis/ACE_INJECTION_FIX_REPORT.md, docs/archive/2025-sessions/spec-kit-planning/FORK_ISOLATION_AUDIT.md
-- Cluster 45: docs/archive/2025-sessions/analysis/ANALYSIS_SUMMARY.md, docs/archive/2025-sessions/analysis/PROJECT_STATUS_ULTRATHINK.md
-- Cluster 46: docs/archive/2025-sessions/spec-kit-planning/PHASE4_TEST_PLAN.md, docs/getting-started.md
-- Cluster 47: docs/archive/2025-sessions/spec-kit-planning/PHASE_3_DAY_4_TESTING_PLAN.md, docs/spec-kit/REBASE_SAFETY_MATRIX_T80-T90.md
-- Cluster 48: docs/archive/design-docs/model.md, docs/interrupt-resume-postmortem.md
+- Cluster 40: docs/archive/2025-sessions/CONFLICT_RESOLUTION.md, docs/archive/2025-sessions/RESTART.md
+- Cluster 41: docs/archive/2025-sessions/EPIC_SESSION_SUMMARY_2025-10-16.md, docs/archive/2025-sessions/spec-kit-planning/SERVICE_TRAITS_DEEP_ANALYSIS.md
+- Cluster 42: docs/archive/2025-sessions/PHASE_1_COMPLETE.md, docs/archive/2025-sessions/SESSION-HANDOFF-2025-10-18.md, docs/archive/2025-sessions/spec-kit-planning/REFACTORING_FINAL_STATUS.md
+- Cluster 43: docs/archive/2025-sessions/REFACTORING_COMPLETE_SUMMARY.md, docs/archive/2025-sessions/spec-kit-planning/MAINT-10-EXECUTION-PLAN.md
+- Cluster 44: docs/archive/2025-sessions/SPEC_OPS_TUI_IMPLEMENTATION.md, docs/spec-kit/COMMAND_REGISTRY_DESIGN.md
+- Cluster 45: docs/archive/2025-sessions/ace-analysis/ACE_INJECTION_FIX_REPORT.md, docs/archive/2025-sessions/spec-kit-planning/FORK_ISOLATION_AUDIT.md
+- Cluster 46: docs/archive/2025-sessions/analysis/ANALYSIS_SUMMARY.md, docs/archive/2025-sessions/analysis/PROJECT_STATUS_ULTRATHINK.md
+- Cluster 47: docs/archive/2025-sessions/spec-kit-planning/PHASE4_TEST_PLAN.md, docs/getting-started.md
+- Cluster 48: docs/archive/2025-sessions/spec-kit-planning/PHASE_3_DAY_4_TESTING_PLAN.md, docs/spec-kit/REBASE_SAFETY_MATRIX_T80-T90.md
+- Cluster 49: docs/archive/design-docs/model.md, docs/interrupt-resume-postmortem.md
 
 ## Suggested centralization
 Move low‑score/orphan files into `/docs` and generate `SUMMARY.md`. This script is dry‑run only.

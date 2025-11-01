@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-11-01T03:36:56.686Z",
+  "generatedAt": "2025-11-01T04:10:00.728Z",
   "incremental": true,
   "notes": [
     "Stub collector: replace with real scanners (dep-cruiser/madge/pydeps, Dredd/Prism, kubeconform, etc.).",
