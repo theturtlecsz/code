@@ -1,6 +1,6 @@
 # Docs Health Report
 
-Generated: 2025-11-01T03:57:18.795Z
+Generated: 2025-11-01T04:28:39.732Z
 
 ## Top risky docs (score < 70)
 - **codex-rs/README.md** — score 65, staleDays 0, orphan yes, broken links: codex-rs/core, codex-rs/exec, codex-rs/tui…
@@ -15,8 +15,8 @@ Generated: 2025-11-01T03:57:18.795Z
 - Cluster 4: IMPLEMENTATION_SUMMARY.md, docs/archive/2025-sessions/SESSION_SUMMARY_2025-10-16.md
 - Cluster 5: README.md, docs/SPEC-KIT-025-add-automated-conflict-resolution-with/plan.md
 - Cluster 6: SPEC-KIT.md, docs/archive/2025-sessions/SESSION-HANDOFF-2025-10-18.md, docs/spec-kit/consensus-runner-design.md
-- Cluster 7: codex-rs/MEMORY-POLICY.md, docs/DOCUMENTATION_CONSOLIDATION_COMPLETE.md
-- Cluster 8: codex-rs/REVIEW.md, docs/SPEC-OPS-004-integrated-coder-hooks/spec.md
+- Cluster 7: SPEC.md, codex-rs/REVIEW.md
+- Cluster 8: codex-rs/MEMORY-POLICY.md, docs/DOCUMENTATION_CONSOLIDATION_COMPLETE.md
 - Cluster 9: codex-rs/docs/protocol_v1.md, docs/SPEC-KIT-035-spec-status-diagnostics/PRD.md
 - Cluster 10: codex-rs/tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/PRD.md, codex-rs/tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/plan.md, codex-rs/tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/spec.md, codex-rs/tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/tasks.md, codex-rs/tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/PRD.md, codex-rs/tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/plan.md, codex-rs/tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/spec.md, codex-rs/tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/tasks.md, codex-rs/tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/PRD.md, codex-rs/tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/plan.md, codex-rs/tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/spec.md, codex-rs/tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/tasks.md, codex-rs/tui/tests/fixtures/spec_status/missing-doc/docs/SPEC-FIX-MISS/PRD.md, codex-rs/tui/tests/fixtures/spec_status/missing-doc/docs/SPEC-FIX-MISS/plan.md, codex-rs/tui/tests/fixtures/spec_status/missing-doc/docs/SPEC-FIX-MISS/spec.md, codex-rs/tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/PRD.md, codex-rs/tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/plan.md, codex-rs/tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/spec.md, codex-rs/tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/tasks.md, codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/PRD.md, codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/plan.md, codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/spec.md, codex-rs/tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/tasks.md
 - Cluster 11: diagrams/spec-kit/ARCHITECTURE_REVIEW.md, docs/SPEC-KIT-070-model-cost-optimization/PHASE2_COMPLEXITY_ROUTING.md, docs/spec-kit/testing-policy.md
@@ -58,6 +58,7 @@ Generated: 2025-11-01T03:57:18.795Z
 - Cluster 47: docs/archive/2025-sessions/spec-kit-planning/PHASE4_TEST_PLAN.md, docs/getting-started.md
 - Cluster 48: docs/archive/2025-sessions/spec-kit-planning/PHASE_3_DAY_4_TESTING_PLAN.md, docs/spec-kit/REBASE_SAFETY_MATRIX_T80-T90.md
 - Cluster 49: docs/archive/design-docs/model.md, docs/interrupt-resume-postmortem.md
+- Cluster 50: templates/plan-template.md, templates/validate-template.md
 
 ## Suggested centralization
 Move low‑score/orphan files into `/docs` and generate `SUMMARY.md`. This script is dry‑run only.

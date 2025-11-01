@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-11-01T03:57:18.779Z",
+  "generatedAt": "2025-11-01T04:28:39.717Z",
   "docs": [
     {
       "path": "ACE_PREFETCH_IMPLEMENTATION.md",
@@ -86,7 +86,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761969408000
+      "updated": 1761970904000
     },
     {
       "path": "TUI.md",
@@ -1805,6 +1805,15 @@
       "updated": 1761786293000
     },
     {
+      "path": "docs/SPEC-KIT-909-evidence-cleanup-automation/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761970230000
+    },
+    {
       "path": "docs/SPEC-KIT-909-evidence-cleanup-automation/spec.md",
       "score": 85,
       "orphan": true,
@@ -3472,7 +3481,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761968295000
+      "updated": 1761970230000
     },
     {
       "path": "docs/report/verification.md",
@@ -3481,7 +3490,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1761968295000
+      "updated": 1761970230000
     },
     {
       "path": "docs/sandbox.md",
@@ -3857,7 +3866,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1760631723000
+      "updated": 1761970904000
     },
     {
       "path": "templates/checklist-template.md",
@@ -3884,7 +3893,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1760631723000
+      "updated": 1761970904000
     },
     {
       "path": "templates/plan-template.md",
@@ -3893,7 +3902,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1760477122000
+      "updated": 1761970904000
     },
     {
       "path": "templates/spec-template.md",
@@ -3911,7 +3920,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1760477122000
+      "updated": 1761970904000
     },
     {
       "path": "templates/unlock-template.md",
@@ -3920,7 +3929,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1760631723000
+      "updated": 1761970904000
     },
     {
       "path": "templates/validate-template.md",
@@ -3929,7 +3938,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1760631723000
+      "updated": 1761970904000
     }
   ],
   "dupClusters": [
@@ -3960,12 +3969,12 @@
       "docs/spec-kit/consensus-runner-design.md"
     ],
     [
-      "codex-rs/MEMORY-POLICY.md",
-      "docs/DOCUMENTATION_CONSOLIDATION_COMPLETE.md"
+      "SPEC.md",
+      "codex-rs/REVIEW.md"
     ],
     [
-      "codex-rs/REVIEW.md",
-      "docs/SPEC-OPS-004-integrated-coder-hooks/spec.md"
+      "codex-rs/MEMORY-POLICY.md",
+      "docs/DOCUMENTATION_CONSOLIDATION_COMPLETE.md"
     ],
     [
       "codex-rs/docs/protocol_v1.md",
@@ -4209,6 +4218,10 @@
     [
       "docs/archive/design-docs/model.md",
       "docs/interrupt-resume-postmortem.md"
+    ],
+    [
+      "templates/plan-template.md",
+      "templates/validate-template.md"
     ]
   ]
 }
