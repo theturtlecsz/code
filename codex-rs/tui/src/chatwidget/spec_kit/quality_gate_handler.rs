@@ -15,8 +15,14 @@ use super::quality_gate_broker::{
 };
 use super::routing::{get_current_branch, get_repo_root};
 use super::state::SpecAutoPhase;
+use crate::chatwidget::AgentStatus;
 use crate::history_cell::HistoryCellType;
 use crate::spec_prompts::SpecStage;
+use codex_core::mcp_connection_manager::McpConnectionManager;
+use serde_json::json;
+use std::fs;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 
 /// Handle quality gate agents completing
@@ -64,9 +70,42 @@ pub fn on_quality_gate_agents_complete(widget: &mut ChatWidget) {
 
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
         vec![ratatui::text::Line::from(format!(
-            "Quality Gate: {} - retrieving agent responses asynchronously ({} gates)...",
+            "Quality Gate: {} - storing agent artifacts to local-memory ({} gates)...",
             checkpoint.name(),
             gate_count
+        ))],
+        crate::history_cell::HistoryCellType::Notice,
+    ));
+
+    // STEP 3: Read agent result files and store to local-memory (SPEC-KIT-068 fix)
+    // This was previously expected from orchestrator but never executed reliably.
+    // Now implemented in Rust for deterministic execution.
+    let stored_count = store_quality_gate_artifacts(
+        widget,
+        &spec_id,
+        checkpoint,
+        &gate_names,
+    );
+
+    if stored_count > 0 {
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![ratatui::text::Line::from(format!(
+                "Stored {}/{} agent artifacts to local-memory",
+                stored_count,
+                expected_agents.len()
+            ))],
+            crate::history_cell::HistoryCellType::Notice,
+        ));
+    } else {
+        widget.history_push(crate::history_cell::new_error_event(
+            "Warning: No agent artifacts stored - agents may not have completed yet".to_string()
+        ));
+    }
+
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+        vec![ratatui::text::Line::from(format!(
+            "Quality Gate: {} - retrieving agent responses asynchronously...",
+            checkpoint.name()
         ))],
         crate::history_cell::HistoryCellType::Notice,
     ));
@@ -1262,5 +1301,191 @@ fn send_ace_learning_on_checkpoint_pass(
             feedback,
             None,
         );
+    }
+}
+
+// ============================================================================
+// STEP 3 Implementation: Store quality gate artifacts to local-memory
+// ============================================================================
+
+/// Store quality gate agent artifacts to local-memory
+///
+/// Implements STEP 3 from execute_quality_checkpoint orchestrator prompt:
+/// Read .code/agents/{agent_id}/result.txt and store via local-memory MCP.
+///
+/// Returns count of successfully stored artifacts.
+fn store_quality_gate_artifacts(
+    widget: &mut ChatWidget,
+    spec_id: &str,
+    checkpoint: super::state::QualityCheckpoint,
+    gate_names: &[String],
+) -> usize {
+    let mut stored_count = 0;
+
+    // Get completed quality gate agents from active_agents
+    let completed_agents = get_completed_quality_gate_agents(widget);
+
+    for (agent_name, agent_id) in completed_agents {
+        // Read agent result file
+        let result_path = format!(".code/agents/{}/result.txt", agent_id);
+        let content = match fs::read_to_string(&result_path) {
+            Ok(c) => c,
+            Err(e) => {
+                debug!(
+                    "Failed to read agent result file {}: {}",
+                    result_path, e
+                );
+                continue;
+            }
+        };
+
+        // Extract JSON from markdown code fence
+        let json_str = match extract_json_from_markdown(&content) {
+            Some(j) => j,
+            None => {
+                warn!(
+                    "No JSON found in agent result file {} for {}",
+                    result_path, agent_name
+                );
+                continue;
+            }
+        };
+
+        // Validate JSON structure
+        if let Err(e) = serde_json::from_str::<serde_json::Value>(&json_str) {
+            warn!(
+                "Invalid JSON in agent result file {} for {}: {}",
+                result_path, agent_name, e
+            );
+            continue;
+        }
+
+        // Store to local-memory via MCP (use first gate name for stage tag)
+        let stage_name = gate_names.first().map(|s| s.as_str()).unwrap_or("clarify");
+        let success = store_artifact_to_local_memory(
+            widget,
+            spec_id,
+            checkpoint,
+            &agent_name,
+            stage_name,
+            &json_str,
+        );
+
+        if success {
+            stored_count += 1;
+            debug!(
+                "Stored quality gate artifact: agent={}, checkpoint={}, stage={}",
+                agent_name,
+                checkpoint.name(),
+                stage_name
+            );
+        }
+    }
+
+    stored_count
+}
+
+/// Get completed quality gate agents from widget.active_agents
+///
+/// Returns Vec<(agent_name, agent_id)> for completed agents.
+fn get_completed_quality_gate_agents(widget: &ChatWidget) -> Vec<(String, String)> {
+    widget
+        .active_agents
+        .iter()
+        .filter(|agent| matches!(agent.status, AgentStatus::Completed))
+        .map(|agent| (agent.name.to_lowercase(), agent.id.clone()))
+        .collect()
+}
+
+/// Extract JSON from markdown code fence (```json...```)
+///
+/// Returns the JSON string without fence markers, or None if not found.
+fn extract_json_from_markdown(content: &str) -> Option<String> {
+    let lines: Vec<&str> = content.lines().collect();
+    let mut in_fence = false;
+    let mut json_lines = Vec::new();
+
+    for line in lines {
+        if line.trim() == "```json" || line.trim() == "``` json" {
+            in_fence = true;
+            continue;
+        }
+        if line.trim() == "```" && in_fence {
+            break;
+        }
+        if in_fence {
+            json_lines.push(line);
+        }
+    }
+
+    if json_lines.is_empty() {
+        None
+    } else {
+        Some(json_lines.join("\n"))
+    }
+}
+
+/// Store quality gate artifact to local-memory via MCP
+///
+/// Returns true if storage succeeded, false otherwise.
+fn store_artifact_to_local_memory(
+    widget: &ChatWidget,
+    spec_id: &str,
+    checkpoint: super::state::QualityCheckpoint,
+    agent_name: &str,
+    stage_name: &str,
+    json_content: &str,
+) -> bool {
+    let mcp_manager = widget.mcp_manager.clone();
+    let spec_id_owned = spec_id.to_string();
+    let agent_name_owned = agent_name.to_string();
+
+    let tags = vec![
+        "quality-gate".to_string(),
+        format!("spec:{}", spec_id),
+        format!("checkpoint:{}", checkpoint.name()),
+        format!("stage:{}", stage_name),
+        format!("agent:{}", agent_name),
+    ];
+
+    let args = json!({
+        "content": json_content,
+        "domain": "spec-kit",
+        "importance": 8,
+        "tags": tags,
+    });
+
+    // Call MCP store_memory tool via tokio runtime
+    let result = tokio::runtime::Handle::current().block_on(async move {
+        let guard = mcp_manager.lock().await;
+        if let Some(manager) = guard.as_ref() {
+            manager
+                .call_tool(
+                    "local-memory",
+                    "store_memory",
+                    Some(args),
+                    Some(std::time::Duration::from_secs(10)),
+                )
+                .await
+        } else {
+            Err(anyhow::anyhow!("MCP manager not available"))
+        }
+    });
+
+    match result {
+        Ok(_) => {
+            debug!(
+                "Successfully stored artifact to local-memory: agent={}, spec={}",
+                agent_name_owned, spec_id_owned
+            );
+            true
+        }
+        Err(e) => {
+            warn!(
+                "Failed to store artifact to local-memory for {}: {}",
+                agent_name_owned, e
+            );
+            false
+        }
     }
 }
