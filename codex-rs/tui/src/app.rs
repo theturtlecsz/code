@@ -1767,15 +1767,19 @@ impl App<'_> {
                         | SlashCommand::SpecKitImplement
                         | SlashCommand::SpecKitValidate
                         | SlashCommand::SpecKitAudit
-                        | SlashCommand::SpecKitUnlock
-                        | SlashCommand::SpecKitAuto => {
+                        | SlashCommand::SpecKitUnlock => {
                             // Prompt-expanded in the chat widget
                         }
                         // SPEC-KIT-070 Phase 2+3: Native commands (handled by registry at line 1714)
                         SlashCommand::SpecKitClarify
                         | SlashCommand::SpecKitAnalyze
                         | SlashCommand::SpecKitChecklist
-                        | SlashCommand::SpecKitNew => {
+                        | SlashCommand::SpecKitNew
+                        | SlashCommand::SpecKitAuto        // SPEC-KIT-900: Native pipeline coordinator
+                        | SlashCommand::SpecKitStatus      // Native status dashboard
+                        | SlashCommand::SpecKitConstitution // Native ACE extraction
+                        | SlashCommand::SpecKitAceStatus   // Native ACE status
+                         => {
                             // Handled by spec-kit registry (native execution, no agents)
                         }
                         // SpecKit agent commands
