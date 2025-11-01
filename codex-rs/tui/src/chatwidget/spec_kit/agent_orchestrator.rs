@@ -280,6 +280,30 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                 }
             }
 
+            // Log agent spawn events for each expected agent (before consuming prompt)
+            let prompt_preview = prompt[..200.min(prompt.len())].to_string();
+            if let Some(state) = widget.spec_auto_state.as_ref() {
+                if let (Some(run_id), SpecAutoPhase::ExecutingAgents { expected_agents, .. }) =
+                    (&state.run_id, &state.phase)
+                {
+                    for agent_name in expected_agents {
+                        // Note: Agent IDs not yet available at submission time
+                        // Log with placeholder ID - will be updated when agents actually spawn
+                        state.execution_logger.log_event(
+                            super::execution_logger::ExecutionEvent::AgentSpawn {
+                                run_id: run_id.clone(),
+                                stage: stage.display_name().to_string(),
+                                agent_name: agent_name.clone(),
+                                agent_id: format!("pending-{}", agent_name), // Placeholder
+                                model: agent_name.clone(), // Best guess at this point
+                                prompt_preview: prompt_preview.clone(),
+                                timestamp: super::execution_logger::ExecutionEvent::now(),
+                            }
+                        );
+                    }
+                }
+            }
+
             let user_msg = super::super::message::UserMessage {
                 display_text: format!("[spec-auto] {} stage for {}", stage.display_name(), spec_id),
                 ordered_items: vec![InputItem::Text { text: prompt }],
@@ -405,11 +429,37 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
         _ => return, // Not in agent execution phase
     };
 
-    // Collect which agents completed successfully
+    // Collect which agents completed successfully and log completion events
     let mut completed_names = std::collections::HashSet::new();
     for agent_info in &widget.active_agents {
         if matches!(agent_info.status, super::super::AgentStatus::Completed) {
             completed_names.insert(agent_info.name.to_lowercase());
+
+            // Log agent complete event
+            if let Some(state) = widget.spec_auto_state.as_ref() {
+                if let Some(run_id) = &state.run_id {
+                    if let Some(current_stage) = state.current_stage() {
+                        // Calculate output lines from agent result (if available)
+                        let output_lines = agent_info.result
+                            .as_ref()
+                            .map(|r| r.lines().count())
+                            .unwrap_or(0);
+
+                        state.execution_logger.log_event(
+                            super::execution_logger::ExecutionEvent::AgentComplete {
+                                run_id: run_id.clone(),
+                                stage: current_stage.display_name().to_string(),
+                                agent_name: agent_info.name.clone(),
+                                agent_id: agent_info.id.clone(),
+                                duration_sec: 0.0, // TODO: Calculate from agent start time if available
+                                status: "completed".to_string(),
+                                output_lines,
+                                timestamp: super::execution_logger::ExecutionEvent::now(),
+                            }
+                        );
+                    }
+                }
+            }
         }
     }
 

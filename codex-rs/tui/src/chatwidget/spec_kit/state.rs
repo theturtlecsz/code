@@ -467,6 +467,10 @@ pub struct SpecAutoState {
     pub ace_bullets_cache: Option<Vec<super::ace_client::PlaybookBullet>>,
     // Track which bullet IDs were used (for learning feedback)
     pub ace_bullet_ids_used: Option<Vec<i32>>,
+
+    // SPEC-KIT-070: Execution logging for full pipeline visibility
+    pub execution_logger: Arc<super::execution_logger::ExecutionLogger>,
+    pub run_id: Option<String>,
 }
 
 impl SpecAutoState {
@@ -505,6 +509,13 @@ impl SpecAutoState {
         let initial_phase = SpecAutoPhase::Guardrail;
 
         let lifecycle = ValidateLifecycle::new(spec_id.clone());
+        let logger = Arc::new(super::execution_logger::ExecutionLogger::new());
+        let run_id = super::execution_logger::generate_run_id(&spec_id);
+
+        // Initialize logger
+        if let Err(e) = logger.init(&spec_id, run_id.clone()) {
+            tracing::warn!("Failed to initialize execution logger: {}", e);
+        }
 
         Self {
             spec_id,
@@ -531,6 +542,9 @@ impl SpecAutoState {
             // ACE Framework Integration
             ace_bullets_cache: None,
             ace_bullet_ids_used: None,
+            // Execution logging
+            execution_logger: logger,
+            run_id: Some(run_id),
         }
     }
 

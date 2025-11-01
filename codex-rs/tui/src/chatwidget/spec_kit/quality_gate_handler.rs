@@ -1020,6 +1020,20 @@ Gates: {gates}
 
     widget.submit_user_message(user_msg);
 
+    // Log quality gate start event
+    if let Some(state) = widget.spec_auto_state.as_ref() {
+        if let Some(run_id) = &state.run_id {
+            state.execution_logger.log_event(
+                super::execution_logger::ExecutionEvent::QualityGateStart {
+                    run_id: run_id.clone(),
+                    checkpoint: checkpoint.name().to_string(),
+                    gates: gate_names.clone(),
+                    timestamp: super::execution_logger::ExecutionEvent::now(),
+                }
+            );
+        }
+    }
+
     // Transition to quality gate executing phase
     if let Some(state) = widget.spec_auto_state.as_mut() {
         state.phase = SpecAutoPhase::QualityGateExecuting {
@@ -1120,7 +1134,7 @@ pub(super) fn finalize_quality_gates(widget: &mut ChatWidget) {
     // Step 1: Persist telemetry for each checkpoint
     let repo = FilesystemEvidence::new(cwd.clone(), None);
 
-    for (checkpoint, _auto_count, _esc_count) in &checkpoint_outcomes {
+    for (checkpoint, auto_count, esc_count) in &checkpoint_outcomes {
         // Build telemetry JSON
         let degraded_agents = degradations.get(checkpoint).map(|agents| agents.as_slice());
         let telemetry = super::quality::build_quality_checkpoint_telemetry(
@@ -1147,6 +1161,27 @@ pub(super) fn finalize_quality_gates(widget: &mut ChatWidget) {
                     checkpoint.name(),
                     err
                 )));
+            }
+        }
+
+        // Log quality gate complete event
+        if let Some(state) = widget.spec_auto_state.as_ref() {
+            if let Some(run_id) = &state.run_id {
+                let degraded_agent_vec = degraded_agents
+                    .map(|agents| agents.to_vec())
+                    .unwrap_or_default();
+
+                state.execution_logger.log_event(
+                    super::execution_logger::ExecutionEvent::QualityGateComplete {
+                        run_id: run_id.clone(),
+                        checkpoint: checkpoint.name().to_string(),
+                        status: "passed".to_string(),
+                        auto_resolved: *auto_count,
+                        escalated: *esc_count,
+                        degraded_agents: degraded_agent_vec,
+                        timestamp: super::execution_logger::ExecutionEvent::now(),
+                    }
+                );
             }
         }
 

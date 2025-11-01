@@ -72,8 +72,21 @@ pub fn handle_spec_auto(
     }
 
     let lifecycle = widget.ensure_validate_lifecycle(&spec_id);
-    let mut state = super::state::SpecAutoState::new(spec_id, goal, resume_from, hal_mode);
+    let mut state = super::state::SpecAutoState::new(spec_id.clone(), goal, resume_from, hal_mode);
     state.set_validate_lifecycle(lifecycle);
+
+    // Log run start event
+    if let Some(run_id) = &state.run_id {
+        state.execution_logger.log_event(super::execution_logger::ExecutionEvent::RunStart {
+            spec_id: spec_id.clone(),
+            run_id: run_id.clone(),
+            timestamp: super::execution_logger::ExecutionEvent::now(),
+            stages: state.stages.iter().map(|s| s.display_name().to_string()).collect(),
+            quality_gates_enabled: state.quality_gates_enabled,
+            hal_mode: hal_mode.map(|m| format!("{:?}", m)).unwrap_or_else(|| "mock".to_string()),
+        });
+    }
+
     widget.spec_auto_state = Some(state);
     advance_spec_auto(widget);
 }
@@ -126,6 +139,46 @@ pub fn advance_spec_auto(widget: &mut ChatWidget) {
 
                 match &state.phase {
                     SpecAutoPhase::Guardrail => {
+                        // Log stage start and add TUI boundary marker
+                        if let Some(run_id) = &state.run_id {
+                            let tier = super::execution_logger::tier_from_agent_count(
+                                super::consensus::expected_agents_for_stage(stage).len()
+                            );
+                            let expected_agents: Vec<String> = super::consensus::expected_agents_for_stage(stage)
+                                .into_iter()
+                                .map(|a| a.canonical_name().to_string())
+                                .collect();
+
+                            state.execution_logger.log_event(
+                                super::execution_logger::ExecutionEvent::StageStart {
+                                    run_id: run_id.clone(),
+                                    stage: stage.display_name().to_string(),
+                                    tier,
+                                    expected_agents: expected_agents.clone(),
+                                    timestamp: super::execution_logger::ExecutionEvent::now(),
+                                }
+                            );
+
+                            // Add visual boundary marker to TUI
+                            let marker_lines = vec![
+                                ratatui::text::Line::from("════════════════════════════════════════"),
+                                ratatui::text::Line::from(format!(
+                                    "  STAGE: {} (Tier {})",
+                                    stage.display_name().to_uppercase(),
+                                    tier
+                                )),
+                                ratatui::text::Line::from(format!(
+                                    "  Agents: {}",
+                                    expected_agents.join(", ")
+                                )),
+                                ratatui::text::Line::from("════════════════════════════════════════"),
+                            ];
+                            // Store marker for display after this function returns
+                            state.pending_prompt_summary = Some(
+                                marker_lines.iter().map(|l| l.to_string()).collect::<Vec<_>>().join("\n")
+                            );
+                        }
+
                         let command = super::state::guardrail_for_stage(stage);
                         let args = state.spec_id.clone();
                         state.waiting_guardrail = Some(GuardrailWait {
@@ -165,10 +218,37 @@ pub fn advance_spec_auto(widget: &mut ChatWidget) {
         match next_action {
             NextAction::PipelineComplete => {
                 // Finalize quality gates if enabled
+                let should_finalize_quality_gates = widget.spec_auto_state.as_ref()
+                    .map(|state| state.quality_gates_enabled && !state.quality_checkpoint_outcomes.is_empty())
+                    .unwrap_or(false);
+
+                if should_finalize_quality_gates {
+                    finalize_quality_gates(widget);
+                }
+
+                // Log run complete event
                 if let Some(state) = widget.spec_auto_state.as_ref() {
-                    if state.quality_gates_enabled && !state.quality_checkpoint_outcomes.is_empty()
-                    {
-                        finalize_quality_gates(widget);
+                    if let Some(run_id) = &state.run_id {
+                        let total_duration = state.execution_logger.elapsed_sec();
+                        // TODO: Calculate actual total cost from tracker
+                        let total_cost = 0.0;
+                        let stages_completed = state.stages.len() - state.current_index;
+                        let quality_gates_passed = state.completed_checkpoints.len();
+
+                        state.execution_logger.log_event(
+                            super::execution_logger::ExecutionEvent::RunComplete {
+                                run_id: run_id.clone(),
+                                spec_id: state.spec_id.clone(),
+                                total_duration_sec: total_duration,
+                                total_cost_usd: total_cost,
+                                stages_completed,
+                                quality_gates_passed,
+                                timestamp: super::execution_logger::ExecutionEvent::now(),
+                            }
+                        );
+
+                        // Finalize logger
+                        state.execution_logger.finalize();
                     }
                 }
 
@@ -185,6 +265,16 @@ pub fn advance_spec_auto(widget: &mut ChatWidget) {
                 args,
                 hal_mode,
             } => {
+                // Display stage boundary marker before starting guardrail
+                if let Some(state) = widget.spec_auto_state.as_ref() {
+                    if let Some(summary) = &state.pending_prompt_summary {
+                        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                            summary.lines().map(|l| ratatui::text::Line::from(l.to_string())).collect(),
+                            HistoryCellType::Notice,
+                        ));
+                    }
+                }
+
                 widget.handle_spec_ops_command(command, args, hal_mode);
                 return;
             }
@@ -501,6 +591,26 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                 }
 
                 persist_cost_summary(widget, &spec_id);
+
+                // Log stage complete event
+                if let Some(state) = widget.spec_auto_state.as_ref() {
+                    if let Some(run_id) = &state.run_id {
+                        let stage_duration = 0.0; // TODO: Track stage start time
+                        let stage_cost = None; // TODO: Get from cost tracker
+                        let evidence_written = true; // TODO: Check actual evidence status
+
+                        state.execution_logger.log_event(
+                            super::execution_logger::ExecutionEvent::StageComplete {
+                                run_id: run_id.clone(),
+                                stage: current_stage.display_name().to_string(),
+                                duration_sec: stage_duration,
+                                cost_usd: stage_cost,
+                                evidence_written,
+                                timestamp: super::execution_logger::ExecutionEvent::now(),
+                            }
+                        );
+                    }
+                }
 
                 // ACE Framework Integration (2025-10-29): Send learning feedback on success
                 if let Some(state) = widget.spec_auto_state.as_ref() {

@@ -29,6 +29,7 @@ pub mod context;
 pub mod cost_tracker; // SPEC-KIT-070: Cost tracking and budget management
 pub mod error;
 pub mod evidence;
+pub mod execution_logger; // SPEC-KIT-070: End-to-end execution visibility
 pub mod file_modifier;
 pub mod guardrail;
 pub mod handler;
