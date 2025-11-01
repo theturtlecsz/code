@@ -976,66 +976,23 @@ pub(super) fn execute_quality_checkpoint(
         crate::history_cell::HistoryCellType::Notice,
     ));
 
-    // Build prompts for each gate in the checkpoint
+    // SPEC-KIT-900, I-003: Native quality gate orchestration
+    // LLM orchestrator eliminated - native code spawns agents directly
     let gates = checkpoint.gates();
-
-    // Build orchestrator prompt to spawn quality gate agents
     let gate_names: Vec<String> = gates.iter().map(|g| g.command_name().to_string()).collect();
 
-    let orchestrator_prompt = format!(
-        r#"Quality Checkpoint: {checkpoint} for SPEC {spec_id}
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+        vec![ratatui::text::Line::from(format!(
+            "Spawning 3 quality gate agents (gemini, claude, code) for gates: {}",
+            gate_names.join(", ")
+        ))],
+        crate::history_cell::HistoryCellType::Notice,
+    ));
 
-YOUR ONLY JOB: Spawn 3 agents and wait for them. Native code handles all result collection.
-
-STEP 1: Read prompts from docs/spec-kit/prompts.json for gates: [{gates}]
-
-STEP 2: Spawn EXACTLY 3 agents with gate-specific prompts:
-
-agent_run(
-  models: ["gemini-25-flash"],
-  read_only: true,
-  task: "<gate prompt for Gemini with SPEC context>"
-)
-
-agent_run(
-  models: ["claude-haiku-45"],
-  read_only: true,
-  task: "<gate prompt for Claude with SPEC context>"
-)
-
-agent_run(
-  models: ["code"],
-  read_only: true,
-  task: "<gate prompt for GPT with SPEC context>"
-)
-
-STEP 3: Wait for agents to complete using agent_wait.
-
-STEP 4: Output "Quality checkpoint agents launched" and STOP.
-
-DO NOT:
-- Read agent result files (native broker handles this)
-- Parse JSON (native broker handles this)
-- Store to memory (native broker handles this)
-- Spawn extra agents
-- Use Python scripts for anything
-
-Your job is ONLY to spawn the 3 agents and wait. That's it.
-"#,
-        checkpoint = checkpoint.name(),
-        spec_id = spec_id,
-        gates = gate_names.join(", "),
-    );
-
-    // Submit orchestrator prompt (like regular stages do)
-    let user_msg = super::super::message::UserMessage {
-        display_text: format!("Quality Checkpoint: {}", checkpoint.name()),
-        ordered_items: vec![codex_core::protocol::InputItem::Text {
-            text: orchestrator_prompt,
-        }],
-    };
-
-    widget.submit_user_message(user_msg);
+    // Spawn agents natively (no LLM orchestrator)
+    let cwd_clone = cwd.clone();
+    let spec_id_clone = spec_id.clone();
+    let checkpoint_clone = checkpoint;
 
     // Log quality gate start event
     if let Some(state) = widget.spec_auto_state.as_ref() {
@@ -1050,6 +1007,33 @@ Your job is ONLY to spawn the 3 agents and wait. That's it.
             );
         }
     }
+
+    // Spawn agents in background task
+    let spawn_handle = tokio::spawn(async move {
+        match super::native_quality_gate_orchestrator::spawn_quality_gate_agents_native(
+            &cwd_clone,
+            &spec_id_clone,
+            checkpoint_clone,
+        ).await {
+            Ok(agent_ids) => {
+                info!("Spawned {} quality gate agents: {:?}", agent_ids.len(), agent_ids);
+
+                // Wait for completion (5 minute timeout)
+                if let Err(e) = super::native_quality_gate_orchestrator::wait_for_quality_gate_agents(
+                    &agent_ids,
+                    300, // 5 minutes
+                ).await {
+                    warn!("Quality gate agents timeout: {}", e);
+                }
+            }
+            Err(e) => {
+                warn!("Failed to spawn quality gate agents: {}", e);
+            }
+        }
+    });
+
+    // Store spawn handle (optional - for tracking)
+    drop(spawn_handle);
 
     // Transition to quality gate executing phase
     if let Some(state) = widget.spec_auto_state.as_mut() {
