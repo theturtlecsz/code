@@ -1,107 +1,535 @@
-model = "gpt-5"
+tui = { theme.colors.primary = "#82AAFF", theme.colors.secondary = "#FFD66B", theme.colors.background = "#0F1115", theme.colors.foreground = "#E6E6E6", theme.colors.border = "#1C2230", theme.colors.border_focused = "#2E3D54", theme.colors.selection = "#1A2633", theme.colors.cursor = "#FFD66B", theme.colors.success = "#00D787", theme.colors.warning = "#FFB454", theme.colors.error = "#FF6B6B", theme.colors.info = "#5FD7FF", theme.colors.text = "#E6E6E6", theme.colors.text_dim = "#6A6F7A", theme.colors.text_bright = "#F2F2F2", theme.colors.keyword = "#FF87D7", theme.colors.string = "#FFE089", theme.colors.comment = "#60666F", theme.colors.function = "#80E3FF", theme.colors.spinner = "#9AB9FF", theme.colors.progress = "#32E6A0", theme.name = "dark-oled-black-pro", alternate_screen = true, spinner = { name = "binaryDigits" } }
+preferred_auth_method = "chatgpt"
+model = "gpt-5-codex"
+model_reasoning_effort = "medium"
 
-[[agents]]
-name = "gemini"
+# ACE (Agentic Context Engine) - Local strategy memory
+[ace]
 enabled = true
-command-read-only = "gemini"
-command-write = "gemini"
-args-read-only = ["-y"]
-args-write = ["-y"]
+mode = "auto"
+slice_size = 8
+db_path = "~/.code/ace/playbooks_normalized.sqlite3"
+use_for = ["speckit.constitution", "speckit.specify", "speckit.plan", "speckit.tasks", "speckit.implement", "speckit.validate", "speckit.test", "speckit.audit", "speckit.unlock"]
+complex_task_files_threshold = 4
+rerun_window_minutes = 30
 
-[[agents]]
-name = "claude"
-enabled = true
-command-read-only = "claude"
-command-write = "claude"
-args-read-only = ["--model", "sonnet"]
-args-write = ["--model", "sonnet"]
+[projects."/home/thetu/kavedarr"]
+trust_level = "trusted"
+approval_policy = "never"
+sandbox_mode    = "danger-full-access"
 
-[[agents]]
-name = "gpt_pro"
-enabled = true
-command-read-only = "codex"
-command-write = "codex"
-args-read-only = ["-s", "read-only", "-a", "never", "exec", "--skip-git-repo-check", "-m", "gpt-5", "-c", "model_reasoning_effort=\"high\""]
-args-write = ["-s", "workspace-write", "-a", "never", "exec", "--skip-git-repo-check", "-m", "gpt-5", "-c", "model_reasoning_effort=\"high\""]
+[[projects."/home/thetu/kavedarr".hooks]]
+name = "spec-ops-session-start"
+event = "session.start"
+run = ["bash", "scripts/spec_ops_004/hooks/session_start.sh"]
+cwd = "/home/thetu/kavedarr"
 
-[[agents]]
-name = "gpt_codex"
-enabled = true
-command-read-only = "codex"
-command-write = "codex"
-args-read-only = ["-s", "read-only", "-a", "never", "exec", "--skip-git-repo-check", "-m", "gpt-5-codex", "-c", "model_reasoning_effort=\"high\""]
-args-write = ["-s", "workspace-write", "-a", "never", "exec", "--skip-git-repo-check", "-m", "gpt-5-codex", "-c", "model_reasoning_effort=\"high\""]
+[[projects."/home/thetu/kavedarr".hooks]]
+name = "spec-ops-tool-after"
+event = "tool.after"
+run = ["bash", "scripts/spec_ops_004/hooks/tool_after.sh"]
+cwd = "/home/thetu/kavedarr"
 
-[[agents]]
-name = "code"
-enabled = true
-command-read-only = "codex"
-command-write = "codex"
-args-read-only = ["-s", "read-only", "-a", "never", "exec", "--skip-git-repo-check", "-m", "gpt-5-codex"]
-args-write = ["-s", "workspace-write", "-a", "never", "exec", "--skip-git-repo-check", "-m", "gpt-5-codex"]
+[[projects."/home/thetu/kavedarr".hooks]]
+name = "spec-ops-file-after-write"
+event = "file.after_write"
+run = ["bash", "scripts/spec_ops_004/hooks/file_after_write.sh"]
+cwd = "/home/thetu/kavedarr"
 
-# SPEC-KIT-070 Tier 2: Cheap models for quality gates
-[[agents]]
-name = "gemini_flash"
-enabled = true
-command-read-only = "gemini"
-command-write = "gemini"
-args-read-only = ["-y", "--model", "gemini-2.5-flash"]
-args-write = ["-y", "--model", "gemini-2.5-flash"]
+[[projects."/home/thetu/kavedarr".commands]]
+name = "spec-ops-plan"
+description = "Run baseline audit, preload guards, and capture plan evidence"
+run = ["bash", "scripts/spec_ops_004/commands/spec_ops_plan.sh"]
+cwd = "/home/thetu/kavedarr"
 
-[[agents]]
-name = "claude_haiku"
-enabled = true
-command-read-only = "claude"
-command-write = "claude"
-args-read-only = ["--model", "haiku"]
-args-write = ["--model", "haiku"]
+[[projects."/home/thetu/kavedarr".commands]]
+name = "spec-ops-tasks"
+description = "Synthesize multi-agent tasks and hash evidence"
+run = ["bash", "scripts/spec_ops_004/commands/spec_ops_tasks.sh"]
+cwd = "/home/thetu/kavedarr"
 
-[[agents]]
-name = "gpt_medium"
-enabled = true
-command-read-only = "codex"
-command-write = "codex"
-args-read-only = ["-s", "read-only", "-a", "never", "exec", "--skip-git-repo-check", "-m", "gpt-5", "-c", "model_reasoning_effort=\"medium\""]
-args-write = ["-s", "workspace-write", "-a", "never", "exec", "--skip-git-repo-check", "-m", "gpt-5", "-c", "model_reasoning_effort=\"medium\""]
+[[projects."/home/thetu/kavedarr".commands]]
+name = "spec-ops-implement"
+description = "Enforce SPEC.md lock, apply diffs, capture telemetry"
+run = ["bash", "scripts/spec_ops_004/commands/spec_ops_implement.sh"]
+cwd = "/home/thetu/kavedarr"
 
-[subagents]
+[[projects."/home/thetu/kavedarr".commands]]
+name = "spec-ops-validate"
+description = "Run validation scenarios and core Rust gates"
+run = ["bash", "scripts/spec_ops_004/commands/spec_ops_validate.sh"]
+cwd = "/home/thetu/kavedarr"
 
-# REMOVED: All spec-kit subagent configs (SPEC-KIT-900)
-# Native commands now use SPEC_KIT_REGISTRY exclusively:
-# - spec-auto → /speckit.auto (native pipeline coordinator)
-# - new-spec → /speckit.new (native SPEC creation)
-#
-# Prompt-expanding commands (plan, tasks, implement, validate, audit, unlock)
-# use subagent_defaults in Rust code, not config.toml entries.
+[[projects."/home/thetu/kavedarr".commands]]
+name = "spec-ops-review"
+description = "Execute full scenario sweep with validation panel"
+run = ["bash", "scripts/spec_ops_004/commands/spec_ops_review.sh"]
+cwd = "/home/thetu/kavedarr"
+
+[[projects."/home/thetu/kavedarr".commands]]
+name = "spec-ops-unlock"
+description = "Force unlock SPEC.md copy-on-write guard"
+run = ["bash", "scripts/spec_ops_004/commands/spec_ops_unlock.sh"]
+cwd = "/home/thetu/kavedarr"
+[spec_ops_004]
+hooks_dir = "/home/thetu/.code/spec_ops_004/hooks"
+commands_dir = "/home/thetu/.code/spec_ops_004/commands"
+validation_dir = "/home/thetu/.code/spec_ops_004/validation"
+
+[projects."/home/thetu/cosign"]
+trust_level = "trusted"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+
+[projects."/home/thetu/cust/rocket"]
+trust_level = "trusted"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+
+# Test hooks for Codex repo
+[projects."/home/thetu/code"]
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+trust_level = "trusted"
+
+[projects."/home/thetu/cust"]
+trust_level = "trusted"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+
+[projects."/home/thetu/migrate"]
+trust_level = "trusted"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+
+[projects."/home/thetu"]
+trust_level = "trusted"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+
+# Removed old [mcp.servers.*] format - using [mcp_servers.*] below
+
+[mcp_servers.serena]
+command = "uvx"
+args = ["--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server", "--context", "codex"]
+
+[mcp_servers.ripgrep]
+command = "npx"
+args = ["-y", "mcp-ripgrep@latest"]
+
+[mcp_servers_disabled.context7]
+command = "npx"
+args = ["-y", "@upstash/context7-mcp", "--api-key", "CONTEXT7_API_KEY_HERE"]
+env.CONNECTION_MODE = "stdio"   
+
+[mcp_servers.local-memory]
+command = "local-memory"
+
+[mcp_servers.ace]
+command = "/home/thetu/agentic-context-engine/.venv/bin/python"
+args = ["-m", "ace_mcp_server"]
+startup_timeout_ms = 30000
 
 [mcp_servers.repo_search]
 command = "uvx"
-args = ["awslabs.git-repo-research-mcp-server@latest"]
-startup_timeout_sec = 30
-tool_timeout_sec = 120
+args = ["awslabs.git-repo-research-mcp-server"]
 
-[mcp_servers.doc_index]
-command = "npx"
-args = ["-y", "open-docs-mcp", "--docsDir", "/home/thetu/code/docs"]
-startup_timeout_sec = 20
-tool_timeout_sec = 60
+#[mcp_servers.shell_lite]
+#command = "npx"
+#args = ["-y", "super-shell-mcp"]
+#startup_timeout_ms = 5000
+#alwaysAllow = true
 
-[mcp_servers.git_status]
-command = "uvx"
-args = ["mcp-server-git", "--repository", "/home/thetu/code"]
-env = { "GIT_PAGER" = "cat" }
-startup_timeout_sec = 20
-tool_timeout_sec = 120
-
-[mcp_servers.uniprof]
-command = "npx"
-args = ["-y", "uniprof", "mcp", "run"]
-startup_timeout_sec = 30
-tool_timeout_sec = 300
 
 [mcp_servers.hal]
 command = "npx"
 args = ["-y", "hal-mcp"]
 startup_timeout_sec = 20
 tool_timeout_sec = 120
+
+[mcp_servers.hal.env]
+HAL_BASE_URL = "http://127.0.0.1:7878"
+
+[mcp_servers.codegraphcontext]
+command = "/home/thetu/.local/bin/cgc"
+args = ["start"]
+disabled = false
+
+[mcp_servers.codegraphcontext.env]
+NEO4J_URI = "bolt://localhost:7687"
+NEO4J_USERNAME = "neo4j"
+NEO4J_PASSWORD = "YOUR_PASSWORD_HERE"
+
+[mcp_servers.codegraphcontext.tools]
+alwaysAllow = [
+  "list_imports",
+  "add_code_to_graph",
+  "add_package_to_graph",
+  "check_job_status",
+  "list_jobs",
+  "find_code",
+  "analyze_code_relationships",
+  "watch_directory",
+  "find_dead_code",
+  "execute_cypher_query",
+  "calculate_cyclomatic_complexity",
+  "find_most_complex_functions",
+  "list_indexed_repositories",
+  "delete_repository"
+]
+disabled = false
+
+
+
+[spec_ops_004_commands]
+path = "/home/thetu/.code/spec_ops_004/commands"
+
+[[agents]]
+name = "gemini"
+enabled = true
+command = "gemini"
+# SPEC-KIT-070→071: Default to Gemini 2.0 Flash Thinking (experimental) but fall
+# back to Gemini 2.5 Flash automatically until the CLI exposes the new tier.
+env = { GEMINI_PRIMARY_MODEL = "gemini-2.0-flash-thinking-exp-01-21", GEMINI_FALLBACK_MODEL = "gemini-2.5-flash" }
+args-read-only = ["-y"]
+args-write = ["-y"]
+
+[[agents]]
+name = "gemini-25-pro"
+enabled = true
+command = "gemini"
+description = "Gemini 2.5 Pro (AI Ultra) for deep multi-step reasoning"
+env = { GEMINI_PRIMARY_MODEL = "gemini-2.5-pro", GEMINI_FALLBACK_MODEL = "gemini-2.5-flash" }
+args-read-only = ["-y"]
+args-write = ["-y"]
+
+[[agents]]
+name = "gemini-25-flash"
+enabled = true
+command = "gemini"
+description = "Gemini 2.5 Flash for balanced cost + latency"
+env = { GEMINI_PRIMARY_MODEL = "gemini-2.5-flash", GEMINI_FALLBACK_MODEL = "gemini-2.5-flash-lite" }
+args-read-only = ["-y"]
+args-write = ["-y"]
+
+[[agents]]
+name = "gemini-25-flashlite"
+enabled = true
+command = "gemini"
+description = "Gemini 2.5 Flash-Lite for telemetry and retry loops"
+env = { GEMINI_PRIMARY_MODEL = "gemini-2.5-flash-lite", GEMINI_FALLBACK_MODEL = "gemini-2.5-flash" }
+args-read-only = ["-y"]
+args-write = ["-y"]
+
+[[agents]]
+name = "claude"
+enabled = true
+command = "claude"
+# SPEC-KIT-070: Use Haiku 3.5 (12x cheaper: $0.25 vs $3/1M) for consensus/analysis
+# Keep Sonnet for critical tasks (implement, unlock) via command-specific overrides if needed
+args-read-only = ["--model", "haiku"]
+args-write = ["--model", "haiku"]
+
+[[agents]]
+name = "claude-haiku-45"
+enabled = true
+command = "claude"
+description = "Claude 3.5 Haiku (Max) for fast consensus runs"
+args-read-only = ["--model", "haiku"]
+args-write = ["--model", "haiku"]
+
+[[agents]]
+name = "claude-sonnet-45"
+enabled = true
+command = "claude"
+description = "Claude 4.5 Sonnet for high-accuracy planning"
+args-read-only = ["--model", "sonnet"]
+args-write = ["--model", "sonnet"]
+
+[[agents]]
+name = "claude-opus-41"
+enabled = true
+command = "claude"
+description = "Claude 4.1 Opus for Tier-X audits and unlocks"
+args-read-only = ["--model", "opus"]
+args-write = ["--model", "opus"]
+
+[[agents]]
+name = "gpt_pro"
+enabled = true
+command = "code"
+description = "LEGACY: Use gpt5-medium instead. GPT-5 general reasoning (medium effort)"
+args-read-only = ["exec", "--sandbox", "read-only", "--skip-git-repo-check", "--model", "gpt-5", "-c", 'model_reasoning_effort="medium"']
+args-write = ["exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "--model", "gpt-5", "-c", 'model_reasoning_effort="medium"']
+
+[[agents]]
+name = "gpt-4o-mini"
+enabled = true
+command = "code"
+command-read-only = "/home/thetu/code/codex-rs/target/dev-fast/code"
+command-write = "/home/thetu/code/codex-rs/target/dev-fast/code"
+description = "GPT-4o mini for guardrails, validation, and cost-sensitive consensus"
+args-read-only = ["exec", "--sandbox", "read-only", "--skip-git-repo-check", "--model", "gpt-4o-mini", "-c", "model_reasoning_effort=\"medium\""]
+args-write = ["exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "--model", "gpt-4o-mini", "-c", "model_reasoning_effort=\"medium\""]
+
+[[agents]]
+name = "gpt_codex"
+enabled = true
+command = "code"
+command-read-only = "/home/thetu/code/codex-rs/target/dev-fast/code"
+command-write = "/home/thetu/code/codex-rs/target/dev-fast/code"
+description = "GPT-5 Codex (code specialist, high reasoning effort)"
+args-read-only = ["exec", "--sandbox", "read-only", "--skip-git-repo-check", "--model", "gpt-5-codex", "-c", "model_reasoning_effort=\"high\""]
+args-write = ["exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "--model", "gpt-5-codex", "-c", "model_reasoning_effort=\"high\""]
+
+# SPEC-KIT-070 Phase 2: GPT-5 general reasoning variants (minimal/low/medium/high)
+[[agents]]
+name = "gpt5-minimal"
+enabled = true
+command = "code"
+command-read-only = "/home/thetu/code/codex-rs/target/dev-fast/code"
+command-write = "/home/thetu/code/codex-rs/target/dev-fast/code"
+description = "GPT-5 general reasoning (minimal effort) - deterministic tasks"
+args-read-only = ["exec", "--sandbox", "read-only", "--skip-git-repo-check", "--model", "gpt-5", "-c", "model_reasoning_effort=\"minimal\""]
+args-write = ["exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "--model", "gpt-5", "-c", "model_reasoning_effort=\"minimal\""]
+
+[[agents]]
+name = "gpt5-low"
+enabled = true
+command = "code"
+command-read-only = "/home/thetu/code/codex-rs/target/dev-fast/code"
+command-write = "/home/thetu/code/codex-rs/target/dev-fast/code"
+description = "GPT-5 general reasoning (low effort) - simple analysis"
+args-read-only = ["exec", "--sandbox", "read-only", "--skip-git-repo-check", "--model", "gpt-5", "-c", "model_reasoning_effort=\"low\""]
+args-write = ["exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "--model", "gpt-5", "-c", "model_reasoning_effort=\"low\""]
+
+[[agents]]
+name = "gpt5-high"
+enabled = true
+command = "code"
+command-read-only = "/home/thetu/code/codex-rs/target/dev-fast/code"
+command-write = "/home/thetu/code/codex-rs/target/dev-fast/code"
+description = "GPT-5 general reasoning (high effort) - critical decisions"
+args-read-only = ["exec", "--sandbox", "read-only", "--skip-git-repo-check", "--model", "gpt-5", "-c", "model_reasoning_effort=\"high\""]
+args-write = ["exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "--model", "gpt-5", "-c", "model_reasoning_effort=\"high\""]
+
+[[agents]]
+name = "qwen"
+enabled = false
+command-read-only = "qwen"
+command-write = "qwen"
+args-write = ["-y"]
+
+# SPEC-KIT-070 Tier 2: Cheap models for quality gates
+[[agents]]
+name = "gemini_flash"
+enabled = true
+command = "gemini"
+env = { GEMINI_PRIMARY_MODEL = "gemini-2.5-flash" }
+args-read-only = ["-y"]
+args-write = ["-y"]
+
+[[agents]]
+name = "claude_haiku"
+enabled = true
+command = "claude"
+args-read-only = ["--model", "haiku"]
+args-write = ["--model", "haiku"]
+
+[[agents]]
+name = "gpt_medium"
+enabled = true
+command = "code"
+description = "GPT-5 general reasoning (medium effort) - quality gates, planning"
+args-read-only = ["exec", "--sandbox", "read-only", "--skip-git-repo-check", "--model", "gpt-5", "-c", "model_reasoning_effort=\"medium\""]
+args-write = ["exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "--model", "gpt-5", "-c", "model_reasoning_effort=\"medium\""]
+
+[[agents]]
+name = "code"
+enabled = true
+command = "code"
+args_read_only = ["exec", "--sandbox", "read-only", "--skip-git-repo-check", "--model", "gpt-5-codex"]
+args_write = ["exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "--model", "gpt-5-codex"]
+
+
+[subagents]
+
+# REMOVED: constitution subagent config (SPEC-KIT-900)
+# /speckit.constitution is now native (registry-only)
+
+# DEPRECATED: /speckit.new is now fully native (SPEC-KIT-072)
+# Zero agents, zero cost, instant execution
+# Implementation: codex-rs/tui/src/chatwidget/spec_kit/new_native.rs
+# Savings: $0.15 → $0 (100% reduction)
+#
+# [[subagents.commands]]
+# name = "speckit.new"
+# read-only = false
+# agents = ["gemini-25-flash", "claude-haiku-45"]  # SPEC-KIT-070: Simple intake - 2 cheap models
+# orchestrator-instructions = """
+# Create SPEC from feature description. EXECUTE these steps using your tools:
+#
+# 1. Generate SPEC-ID:
+#    - Use Glob tool: pattern="SPEC-KIT-*" path="docs/"
+#    - Parse numbers from directory names (extract digits after SPEC-KIT-)
+#    - Find maximum number (e.g., if results include SPEC-KIT-060, SPEC-KIT-065, max is 065)
+#    - Increment by 1 (e.g., 065 + 1 = 066)
+#    - Create slug: lowercase feature description, replace spaces with hyphens, remove special chars
+#    - Format: SPEC-KIT-{number}-{slug}
+#    - Example: "Add search command" → "SPEC-KIT-066-add-search-command"
+#
+# 2. Check for templates (optional):
+#    - Use Read tool: ~/.code/templates/PRD-template.md (if exists)
+#    - Use Read tool: ~/.code/templates/spec-template.md (if exists)
+#    - If templates don't exist, generate comprehensive content from scratch
+#
+# 3. Multi-agent PRD generation:
+#    - Fan out agents to analyze feature description
+#    - Each agent proposes: problem statement, goals, requirements, acceptance criteria
+#    - Synthesize best elements from all agent proposals
+#    - Create comprehensive PRD with all standard sections
+#
+# 4. Create SPEC directory and files:
+#    - Use Write tool: docs/SPEC-KIT-{number}-{slug}/PRD.md
+#      (Write tool automatically creates parent directories)
+#    - Content: Synthesized PRD from agent consensus
+#
+#    - Use Write tool: docs/SPEC-KIT-{number}-{slug}/spec.md
+#    - Content: Initial spec referencing PRD, placeholder for requirements
+#
+# 5. Update SPEC.md tracker:
+#    - Use Read tool: SPEC.md (find "## Active Tasks" or "### Production Readiness" section)
+#    - Locate last table row to determine next Order number
+#    - Use Edit tool: Add new table row at end of table
+#    - Format: | {order} | SPEC-KIT-{number} | {title} | Backlog | Code | docs/SPEC-KIT-{number}-{slug}/PRD.md | | | {date} | | | Created via /speckit.new |
+#    - Ensure proper Markdown table formatting with | separators
+#
+# 6. Commit changes (REQUIRED for worktree visibility):
+#    CRITICAL: /speckit.auto uses isolated worktrees that require committed files.
+#
+#    Use Bash tool to commit:
+#    - Stage: git add SPEC.md docs/SPEC-KIT-{number}-{slug}/
+#    - Commit with proper message format:
+#      git commit -m "feat(spec-kit): add SPEC-KIT-{number} - {feature-title}"
+#
+#    COMMIT MESSAGE RULES (from RULES.md):
+#    - NEVER reference "Claude", "AI", "assistant" or similar
+#    - Use active voice and technical descriptions
+#    - Focus on WHAT changed, not WHO made it
+#    - Examples:
+#      ✅ "feat(spec-kit): add SPEC-KIT-067 - search command"
+#      ✅ "feat(spec-kit): add SPEC-KIT-068 - user authentication"
+#      ❌ "Claude added SPEC-KIT-067"
+#      ❌ "AI created new spec"
+#
+# 7. Report completion:
+#    Display to user:
+#    - "✅ SPEC created: SPEC-KIT-{number}-{slug}"
+#    - "📁 Location: docs/SPEC-KIT-{number}-{slug}/"
+#    - "📄 Files: PRD.md, spec.md"
+#    - "🔄 SPEC.md updated with new entry"
+#    - "✅ Changes committed to git"
+#    - ""
+#    - "Next: /speckit.auto SPEC-KIT-{number} to begin development"
+#
+# CRITICAL EXECUTION RULES:
+# - Actually USE your tools (Glob, Read, Write, Edit, Bash)
+# - Do NOT just describe steps - EXECUTE them
+# - Do NOT invoke other slash commands (/specify, /plan) - those are separate stages
+# - Do NOT use Python scripts - use native Codex tools
+# - Write tool creates parent directories automatically - no mkdir needed
+# - Multi-agent consensus applies ONLY to PRD content generation
+# - Auto-commit is REQUIRED (worktree isolation needs committed files)
+# - Keep execution fast (< 5 minutes target)
+# """
+
+[[subagents.commands]]
+name = "speckit.specify"
+read-only = false
+agents = ["gpt5-low"]  # SPEC-KIT-070 Phase 3: Single agent for PRD drafting ($0.10)
+orchestrator-instructions = """
+Single high-reasoning GPT-5 Codex session with staged context.
+1. Gather `memory/constitution.md`, `product-requirements.md`, planning.md, the SPEC.md row, and any existing plan/spec for the task.
+2. Draft or update `docs/SPEC-<AREA>-<slug>/PRD.md` using repo templates; capture assumptions, acceptance criteria, and open questions inline.
+3. Update the SPEC.md Tasks table atomically with PRD path, concise scope summary, status change, and dated evidence note.
+4. Emit a diff preview plus the open-question list for `/plan`; no code or implementation edits permitted.
+If Codex cannot complete after one retry, abort and surface the collected context for human follow-up—do not fall back to other agents."""
+
+[[subagents.commands]]
+name = "speckit.plan"
+read-only = true
+agents = ["gemini-25-flash", "claude-haiku-45", "gpt5-medium"]  # SPEC-KIT-070: Complex - multi-step planning
+orchestrator-instructions = """
+Multi-agent consensus planning. Ingest `docs/SPEC-<AREA>-<slug>/PRD.md` (and existing `docs/SPEC-<AREA>-<slug>/spec.md` if present), collect proposals from all agents, document disagreements, then synthesize `docs/SPEC-<AREA>-<slug>/plan.md` using `templates/plan-template.md`. Record consensus vs. dissent explicitly and leave SPEC.md untouched aside from referenced assumptions."""
+
+[[subagents.commands]]
+name = "speckit.tasks"
+read-only = false
+agents = ["gpt5-low"]  # SPEC-KIT-070 Phase 3: Single agent for task decomposition ($0.10)
+orchestrator-instructions = """
+Three-phase synthesis run:
+1. Fan out agents to draft task slices tied to the SPEC Task ID, listing dependencies, validation hooks, and required documentation touches.
+2. Merge outputs into `docs/SPEC-<AREA>-<slug>/spec.md`, explicitly logging agreements, disagreements, and rationale; include compare/contrast notes for any divergent recommendations.
+3. Update SPEC.md's Tasks table atomically (status, branch/PR placeholders, dated notes) and record unresolved risks within the spec.
+If an agent is unavailable, note the degraded mode and proceed with the remaining proposals; never omit consensus logging."""
+
+[[subagents.commands]]
+name = "speckit.implement"
+read-only = false
+agents = ["gpt_codex", "claude-haiku"]  # SPEC-KIT-070: Critical-Code - gpt-5-codex HIGH + cheap validator
+orchestrator-instructions = """
+Execute implementation per `docs/SPEC-<AREA>-<slug>/spec.md` using isolated worktrees for each agent.
+1. Collect candidate diffs, validation plans, and risk notes from every agent.
+2. Evaluate proposals against the spec acceptance mapping, select/merge the strongest diff, and document why alternatives were rejected.
+3. Apply the chosen diff locally, then run `scripts/env_run.sh cargo fmt --all -- --check`, clippy, targeted builds/tests, and any spec-specific checks; attach logs to the command output.
+4. Update SPEC.md status/notes and prepare doc/changelog stubs as directed by the spec.
+If gates fail or consensus cannot be reached, halt and surface evidence instead of auto-completing."""
+
+# REMOVED: speckit.auto subagent config (SPEC-KIT-900)
+# /speckit.auto is now a native pipeline coordinator (registry-only)
+# Native Rust handles ALL orchestration (no LLM for plumbing)
+
+# SPEC-KIT-070: Quality commands (clarify, analyze, checklist) are now NATIVE
+# No config needed - implemented in command registry with native heuristics
+
+# SPEC-KIT-070: speckit.status is NATIVE (Tier 0, pure Rust, no agents)
+# Implemented in commands/status.rs - no config needed
+
+[[subagents.commands]]
+name = "solve"
+read-only = true
+agents = ["claude", "gemini", "code"]
+orchestrator-instructions = """
+Solve a complicated problem leveraging multiple state-of-the-art agents working in parallel.
+
+1. If you do not fully understand the problem, research it briefly. Do not attempt to solve it yet, just understand what the problem is and what the desired result should be.
+2. Provide full context to the agents so they can work on the problem themselves. You do not need to guide them on how to solve the problem - focus on describing the current issue and desired outcome. Allow each agent to come up with it's own path to the solution. If there have been previous attempts at the problem which have not worked, please explain these.
+3. Wait for most agents to complete. If a couple of agents complete and one is still working, look at the completed agents first.
+4. Go through each possible solution to the problem from each agent. If you're able to test each solution to compare them, you should do so. Utilize short helper scripts to do this.
+5. If no solutions work, then start additional agents. You should always try to gather additional debugging information to feed to the agents.
+6. Do no stop any agents prematurely - wait until problem is completely solved. Longer running agents may sometimes come up with unique solutions.
+7. Once you have a working solution, check all running agents once again - see if there's any new solutions which might be optimal before completing the task."""
+
+[mcp_servers_disabled]
+
+[shell_environment_policy.set]
+SPEC_KIT_TELEMETRY_ENABLED = "1"
+SPEC_OPS_ALLOW_DIRTY = "1"
+# SPEC-KIT-070: Ensure cheap triad for validate/audit/unlock as well
+[[subagents.commands]]
+name = "speckit.validate"
+read-only = true
+agents = ["gemini-25-flash", "claude-haiku-45", "gpt5-medium"]  # SPEC-KIT-070: Complex - test strategy
+orchestrator-instructions = "Run test strategy with cheap models + gpt-5 medium. Persist artifacts to local-memory as importance 8 with proper tags."
+
+[[subagents.commands]]
+name = "speckit.audit"
+read-only = true
+agents = ["gemini-25-pro", "claude-sonnet-45", "gpt5-high"]  # SPEC-KIT-070: Critical - compliance/security
+orchestrator-instructions = "Compliance review using premium models with high reasoning. Persist artifacts via local-memory."
+
+[[subagents.commands]]
+name = "speckit.unlock"
+read-only = true
+agents = ["gemini-25-pro", "claude-sonnet-45", "gpt5-high"]  # SPEC-KIT-070: Critical - ship decision
+orchestrator-instructions = "Final approval synthesis using premium models with high reasoning; keep outputs concise and structured."
