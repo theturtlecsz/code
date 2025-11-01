@@ -99,9 +99,23 @@ pub fn try_dispatch_spec_kit_command(
 
     // Handle prompt-expanding vs direct execution
     // SPEC-KIT-070 Phase 2+3: Native commands ALWAYS use direct execution
+    // SPEC-KIT-900: All control/utility commands are native (not prompt-expanding)
     let is_native_command = matches!(
         command_name,
-        "speckit.clarify" | "speckit.analyze" | "speckit.checklist" | "speckit.new"
+        // Native quality commands (Tier 0: FREE, <1s)
+        "speckit.clarify"
+        | "speckit.analyze"
+        | "speckit.checklist"
+        | "speckit.new"
+        // Native control commands (direct execution through registry)
+        | "speckit.auto"           // Pipeline coordinator
+        | "speckit.status"         // Status dashboard
+        | "speckit.constitution"   // ACE constitution extraction
+        | "speckit.ace-status"     // ACE playbook status
+        // Legacy aliases
+        | "spec-auto"
+        | "spec-status"
+        | "new-spec"
     );
 
     if !is_native_command && spec_cmd.expand_prompt(&args).is_some() {
