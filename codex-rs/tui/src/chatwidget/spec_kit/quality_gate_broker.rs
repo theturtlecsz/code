@@ -245,14 +245,22 @@ async fn fetch_agent_payloads_from_memory(
                                 if let Some(stage) = stage {
                                     if stage.starts_with("quality-gate-") {
                                         if let Some(agent_name) = agent_name {
-                                            // Match against expected_agents
-                                            if expected_agents.iter().any(|a| a.to_lowercase() == agent_name.to_lowercase()) {
-                                                info_lines.push(format!("Found {} from memory", agent_name));
+                                            // Match against expected_agents (flexible: exact match or starts-with)
+                                            let matched_expected = expected_agents.iter().find(|expected| {
+                                                let expected_lower = expected.to_lowercase();
+                                                let agent_lower = agent_name.to_lowercase();
+                                                // Exact match OR agent starts with expected (e.g., "claude-haiku-4-5" matches "claude")
+                                                agent_lower == expected_lower || agent_lower.starts_with(&format!("{}-", expected_lower))
+                                            });
 
+                                            if let Some(expected) = matched_expected {
+                                                info_lines.push(format!("Found {} (as '{}') from memory", expected, agent_name));
+
+                                                // Use expected name as key for deduplication
                                                 results_map.insert(
-                                                    agent_name.to_lowercase(),
+                                                    expected.to_lowercase(),
                                                     QualityGateAgentPayload {
-                                                        agent: agent_name.to_string(),
+                                                        agent: expected.to_string(),
                                                         gate: Some(stage.to_string()),
                                                         content: json_val,
                                                     },
@@ -647,11 +655,40 @@ fn extract_json_from_content(content: &str) -> Option<String> {
         }
     }
 
-    // If no candidate found with quality-gate stage, try searching for specific pattern
-    // The code agent might output JSON after [codex] or similar markers
+    // If no candidate found, try finding JSON by searching for quality-gate stage marker
+    if let Some(stage_pos) = content.find(r#""stage": "quality-gate-"#) {
+        // Found the stage field! Now find the enclosing JSON block
+        // Search backwards for opening brace
+        let before_stage = &content[..stage_pos];
+        if let Some(open_brace) = before_stage.rfind('{') {
+            // Search forwards from open brace for matching close
+            let from_open = &content[open_brace..];
+            let mut depth = 0;
+            let mut json_end = 0;
+
+            for (pos, ch) in from_open.chars().enumerate() {
+                if ch == '{' { depth += 1; }
+                if ch == '}' {
+                    depth -= 1;
+                    if depth == 0 {
+                        json_end = pos + 1;
+                        break;
+                    }
+                }
+            }
+
+            if json_end > 0 {
+                let candidate = &from_open[..json_end];
+                if serde_json::from_str::<Value>(candidate).is_ok() {
+                    return Some(candidate.to_string());
+                }
+            }
+        }
+    }
+
+    // Last resort: try extraction after [codex] marker
     if let Some(codex_section) = content.find("[codex]") {
         let after_codex = &content[codex_section..];
-        // Recursively try extraction on the section after [codex]
         if let Some(extracted) = extract_json_from_section(after_codex) {
             if let Ok(json_val) = serde_json::from_str::<Value>(&extracted) {
                 if let Some(stage) = json_val.get("stage").and_then(|v| v.as_str()) {
