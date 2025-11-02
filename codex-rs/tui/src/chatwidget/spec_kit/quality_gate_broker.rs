@@ -299,23 +299,27 @@ async fn fetch_agent_payloads_from_memory(
                                 let abs_open = search_start + rel_open;
                                 let from_open = &result_text[abs_open..];
 
-                                // Find matching closing brace
+                                // Find matching closing brace using BYTE indices (char_indices, not chars().enumerate())
+                                // This is critical because string slicing uses bytes, not character positions
                                 let mut depth = 0;
-                                let mut json_end = 0;
-                                for (pos, ch) in from_open.chars().enumerate() {
-                                    if ch == '{' { depth += 1; }
+                                let mut json_end_bytes = 0;
+                                for (byte_pos, ch) in from_open.char_indices() {
+                                    if ch == '{' {
+                                        depth += 1;
+                                    }
                                     if ch == '}' {
                                         depth -= 1;
                                         if depth == 0 {
-                                            json_end = pos + 1;
+                                            // Add char length to include the closing brace itself
+                                            json_end_bytes = byte_pos + ch.len_utf8();
                                             break;
                                         }
                                     }
                                 }
 
-                                if json_end > 0 {
-                                    let candidate = &from_open[..json_end];
-                                    info_lines.push(format!("  Extracted via stage-marker search ({} chars)", candidate.len()));
+                                if json_end_bytes > 0 {
+                                    let candidate = &from_open[..json_end_bytes];
+                                    info_lines.push(format!("  Extracted via stage-marker search ({} bytes)", candidate.len()));
 
                                     match serde_json::from_str::<Value>(candidate) {
                                         Ok(json_val) => {
