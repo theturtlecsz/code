@@ -291,8 +291,8 @@ async fn fetch_agent_payloads_from_memory(
                         if let Some(stage_mention) = result_text.rfind(r#""stage": "quality-gate-clarify""#) {
                             info_lines.push(format!("  Found stage marker at position {} (last occurrence)", stage_mention));
 
-                            // Search backwards for opening brace (within 1000 chars)
-                            let search_start = stage_mention.saturating_sub(1000);
+                            // Search backwards for opening brace (within 5000 chars to handle large JSON)
+                            let search_start = stage_mention.saturating_sub(5000);
                             let before = &result_text[search_start..stage_mention];
 
                             if let Some(rel_open) = before.rfind('{') {
