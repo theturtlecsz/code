@@ -278,7 +278,9 @@ async fn fetch_agent_payloads_from_memory(
                             }
                             Err(e) => {
                                 info_lines.push(format!("  JSON parse error: {}", e));
+                                info_lines.push(format!("  JSON length: {} chars", json_str.len()));
                                 info_lines.push(format!("  First 200 chars: {}", &json_str.chars().take(200).collect::<String>()));
+                                info_lines.push(format!("  Last 200 chars: {}", &json_str.chars().rev().take(200).collect::<Vec<_>>().into_iter().rev().collect::<String>()));
                             }
                         }
                     }
