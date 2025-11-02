@@ -3,16 +3,16 @@
   "total_spent": 0.0,
   "budget": 2.0,
   "utilization": 0.0,
-  "call_count": 3,
+  "call_count": 5,
   "per_stage": {
     "spec-plan": 0.0
   },
   "per_model": {
-    "claude": 0.0,
     "gemini": 0.0,
-    "code": 0.0
+    "code": 0.0,
+    "claude": 0.0
   },
-  "duration": 140,
+  "duration": 288,
   "stage_notes": [
     {
       "stage": "spec-tasks"
