@@ -725,15 +725,40 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
 
                 // Definitive check: Are these quality gate agents completing late?
                 // Query SQLite to see if any completed agents were spawned as quality_gate phase_type
+                //
+                // SPEC-KIT-900 Session 2 FIX: Don't skip if we have BOTH quality gates AND regular agents
+                // Only skip if completion set contains ONLY quality gate agents (all stale)
                 if !quality_gate_agent_ids.is_empty() {
-                    tracing::warn!("DEBUG: Found {} quality gate agents in completion set - these are stale completions",
-                        quality_gate_agent_ids.len());
-                    tracing::warn!("DEBUG: Quality gate agent IDs: {:?}", quality_gate_agent_ids);
-                    tracing::warn!("DEBUG: Skipping - quality gates have their own completion handler");
-                    return;
+                    // Count how many regular_stage agents are in the completion set
+                    let regular_stage_count = widget.active_agents.iter()
+                        .filter(|a| matches!(a.status, super::super::AgentStatus::Completed))
+                        .filter(|a| {
+                            if let Some(ref database) = db {
+                                if let Ok(Some((phase_type, _))) = database.get_agent_spawn_info(&a.id) {
+                                    return phase_type == "regular_stage";
+                                }
+                            }
+                            false
+                        })
+                        .count();
+
+                    tracing::warn!("DEBUG: Found {} quality gate agents and {} regular_stage agents in completion set",
+                        quality_gate_agent_ids.len(), regular_stage_count);
+
+                    if regular_stage_count == 0 {
+                        // ONLY quality gates (all stale) - skip processing
+                        tracing::warn!("DEBUG: Completion set contains ONLY quality gate agents - skipping");
+                        tracing::warn!("DEBUG: Quality gate agent IDs: {:?}", quality_gate_agent_ids);
+                        return;
+                    } else {
+                        // Mixed: quality gates + regular agents
+                        // Continue processing, but filter out quality gates
+                        tracing::warn!("DEBUG: Mixed completion: {} regular + {} quality gates - processing regular agents only",
+                            regular_stage_count, quality_gate_agent_ids.len());
+                    }
                 }
 
-                tracing::warn!("DEBUG: No quality gate agents detected - these are regular stage agents");
+                tracing::warn!("DEBUG: Processing regular stage agents");
                 "regular"
             }
             SpecAutoPhase::QualityGateExecuting {
