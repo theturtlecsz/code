@@ -104,6 +104,22 @@ pub async fn spawn_quality_gate_agents_native(
             Some(batch_id.clone()),
         ).await.map_err(|e| format!("Failed to spawn {}: {}", config_name, e))?;
 
+        // Record agent spawn to SQLite for definitive routing at completion
+        if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+            let stage = crate::spec_prompts::SpecStage::Plan; // Quality gates run before Plan
+            if let Err(e) = db.record_agent_spawn(
+                &agent_id,
+                spec_id,
+                stage,
+                "quality_gate",
+                agent_name,
+            ) {
+                tracing::warn!("Failed to record agent spawn for {}: {}", agent_name, e);
+            } else {
+                tracing::info!("Recorded quality gate agent spawn: {} ({})", agent_name, agent_id);
+            }
+        }
+
         spawn_infos.push(AgentSpawnInfo {
             agent_id,
             agent_name: agent_name.to_string(),

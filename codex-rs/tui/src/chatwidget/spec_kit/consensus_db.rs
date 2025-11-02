@@ -104,6 +104,27 @@ impl ConsensusDb {
             [],
         )?;
 
+        // Agent execution tracking table (for definitive routing)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS agent_executions (
+                agent_id TEXT PRIMARY KEY,
+                spec_id TEXT NOT NULL,
+                stage TEXT NOT NULL,
+                phase_type TEXT NOT NULL,
+                agent_name TEXT NOT NULL,
+                spawned_at TEXT NOT NULL,
+                completed_at TEXT,
+                response_text TEXT
+            )",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_agent_executions_spec
+             ON agent_executions(spec_id, stage)",
+            [],
+        )?;
+
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -300,6 +321,81 @@ impl ConsensusDb {
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e),
         }
+    }
+
+    // === Agent Execution Tracking (for definitive routing) ===
+
+    /// Record agent spawn (called when agents are launched)
+    pub fn record_agent_spawn(
+        &self,
+        agent_id: &str,
+        spec_id: &str,
+        stage: SpecStage,
+        phase_type: &str, // "quality_gate" | "regular_stage"
+        agent_name: &str,
+    ) -> SqlResult<()> {
+        let conn = self.conn.lock().unwrap();
+
+        conn.execute(
+            "INSERT OR REPLACE INTO agent_executions
+             (agent_id, spec_id, stage, phase_type, agent_name, spawned_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'))",
+            params![
+                agent_id,
+                spec_id,
+                stage.command_name(),
+                phase_type,
+                agent_name,
+            ],
+        )?;
+
+        Ok(())
+    }
+
+    /// Get agent spawn info (called at completion to route correctly)
+    pub fn get_agent_spawn_info(&self, agent_id: &str) -> SqlResult<Option<(String, String)>> {
+        let conn = self.conn.lock().unwrap();
+
+        let result = conn.query_row(
+            "SELECT phase_type, stage FROM agent_executions WHERE agent_id = ?1",
+            params![agent_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        );
+
+        match result {
+            Ok(info) => Ok(Some(info)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Update agent completion info
+    pub fn record_agent_completion(
+        &self,
+        agent_id: &str,
+        response_text: &str,
+    ) -> SqlResult<()> {
+        let conn = self.conn.lock().unwrap();
+
+        conn.execute(
+            "UPDATE agent_executions
+             SET completed_at = datetime('now'), response_text = ?2
+             WHERE agent_id = ?1",
+            params![agent_id, response_text],
+        )?;
+
+        Ok(())
+    }
+
+    /// Clean up old agent execution records (older than N days)
+    pub fn cleanup_old_executions(&self, days: i64) -> SqlResult<usize> {
+        let conn = self.conn.lock().unwrap();
+
+        conn.execute(
+            "DELETE FROM agent_executions
+             WHERE spawned_at < datetime('now', ?1)",
+            params![format!("-{} days", days)],
+        )
     }
 }
 

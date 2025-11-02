@@ -437,10 +437,25 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
     };
 
     // Collect which agents completed successfully and log completion events
+    // Also check SQLite to determine if these are quality gate or regular stage agents
+    let db = super::consensus_db::ConsensusDb::init_default().ok();
     let mut completed_names = std::collections::HashSet::new();
+    let mut quality_gate_agent_ids = std::collections::HashSet::new();
+
     for agent_info in &widget.active_agents {
         if matches!(agent_info.status, super::super::AgentStatus::Completed) {
             completed_names.insert(agent_info.name.to_lowercase());
+
+            // Check if this agent was spawned as a quality gate agent
+            if let Some(ref database) = db {
+                if let Ok(Some((phase_type, _))) = database.get_agent_spawn_info(&agent_info.id) {
+                    tracing::warn!("DEBUG: Agent {} ({}) was spawned as phase_type={}",
+                        agent_info.name, agent_info.id, phase_type);
+                    if phase_type == "quality_gate" {
+                        quality_gate_agent_ids.insert(agent_info.id.clone());
+                    }
+                }
+            }
 
             // Log agent complete event
             if let Some(state) = widget.spec_auto_state.as_ref() {
@@ -481,23 +496,17 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
                 *completed_agents = completed_names.clone();
                 tracing::warn!("DEBUG: Phase match → ExecutingAgents, routing to 'regular'");
 
-                // Validate these are the RIGHT agents for this phase
-                // Quality gates complete late with different agent names
-                // Quality gate: [gemini, claude, code]
-                // Plan/Tasks: [gemini, claude, gpt_pro]
-
-                // Check if completed agents match what this phase expects
-                let has_code = completed_names.contains("code");
-                let expects_gpt_pro = phase_expected.iter().any(|a| a == "gpt_pro");
-
-                if has_code && expects_gpt_pro {
-                    // This phase expects gpt_pro but got code - quality gate completion!
-                    tracing::warn!("DEBUG: Agent mismatch - phase expects gpt_pro but got code (quality gate completion)");
-                    tracing::warn!("DEBUG: Completed: {:?}, Phase expected: {:?}", completed_names, phase_expected);
-                    tracing::warn!("DEBUG: Skipping stale quality gate completion");
+                // Definitive check: Are these quality gate agents completing late?
+                // Query SQLite to see if any completed agents were spawned as quality_gate phase_type
+                if !quality_gate_agent_ids.is_empty() {
+                    tracing::warn!("DEBUG: Found {} quality gate agents in completion set - these are stale completions",
+                        quality_gate_agent_ids.len());
+                    tracing::warn!("DEBUG: Quality gate agent IDs: {:?}", quality_gate_agent_ids);
+                    tracing::warn!("DEBUG: Skipping - quality gates have their own completion handler");
                     return;
                 }
 
+                tracing::warn!("DEBUG: No quality gate agents detected - these are regular stage agents");
                 "regular"
             }
             SpecAutoPhase::QualityGateExecuting {
