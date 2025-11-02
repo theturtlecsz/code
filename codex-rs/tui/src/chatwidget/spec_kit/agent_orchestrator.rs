@@ -474,10 +474,23 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
     let phase_type = if let Some(state) = widget.spec_auto_state.as_mut() {
         let phase_type = match &mut state.phase {
             SpecAutoPhase::ExecutingAgents {
-                completed_agents, ..
+                completed_agents,
+                expected_agents: phase_expected,
+                ..
             } => {
                 *completed_agents = completed_names.clone();
                 tracing::warn!("DEBUG: Phase match → ExecutingAgents, routing to 'regular'");
+
+                // Validate that these are actually the expected stage agents, not stale quality gate agents
+                // Quality gate agents may complete late after pipeline has advanced
+                let names_match = expected_agents == *phase_expected;
+                if !names_match {
+                    tracing::warn!("DEBUG: Agent name mismatch! Expected from handler: {:?}, Expected from phase: {:?}",
+                        expected_agents, phase_expected);
+                    tracing::warn!("DEBUG: This may be late quality gate completion - skipping");
+                    return; // Skip processing stale completions
+                }
+
                 "regular"
             }
             SpecAutoPhase::QualityGateExecuting {
