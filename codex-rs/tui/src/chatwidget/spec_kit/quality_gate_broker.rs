@@ -287,8 +287,9 @@ async fn fetch_agent_payloads_from_memory(
 
                         // LAST RESORT: Search for "quality-gate-clarify" string and extract surrounding JSON
                         // The code agent buries JSON deep in verbose output
-                        if let Some(stage_mention) = result_text.find(r#""stage": "quality-gate-clarify""#) {
-                            info_lines.push(format!("  Found stage marker at position {}", stage_mention));
+                        // Use RFIND to get LAST occurrence (actual response, not prompt example)
+                        if let Some(stage_mention) = result_text.rfind(r#""stage": "quality-gate-clarify""#) {
+                            info_lines.push(format!("  Found stage marker at position {} (last occurrence)", stage_mention));
 
                             // Search backwards for opening brace (within 1000 chars)
                             let search_start = stage_mention.saturating_sub(1000);
