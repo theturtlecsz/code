@@ -6817,6 +6817,7 @@ impl ChatWidget<'_> {
                 context,
                 task,
             }) => {
+                eprintln!("DEBUG: AgentStatusUpdate event received, {} agents", agents.len());
                 // Update the active agents list from the event and track timing
                 self.active_agents.clear();
                 let now = Instant::now();
