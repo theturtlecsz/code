@@ -43,17 +43,17 @@ async fn spawn_regular_stage_agents_native(
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
 ) -> Result<Vec<AgentSpawnInfo>, String> {
-    tracing::info!("🎬 AUDIT: spawn_regular_stage_agents_native called");
-    tracing::info!("  spec_id: {}", spec_id);
-    tracing::info!("  stage: {:?}", stage);
-    tracing::info!("  expected_agents: {:?}", expected_agents);
-    tracing::info!("  prompt length: {} chars", prompt.len());
-    tracing::info!("  prompt preview: {}", &prompt[..200.min(prompt.len())]);
+    tracing::warn!("🎬 AUDIT: spawn_regular_stage_agents_native called");
+    tracing::warn!("  spec_id: {}", spec_id);
+    tracing::warn!("  stage: {:?}", stage);
+    tracing::warn!("  expected_agents: {:?}", expected_agents);
+    tracing::warn!("  prompt length: {} chars", prompt.len());
+    tracing::warn!("  prompt preview: {}", &prompt[..200.min(prompt.len())]);
 
     let mut spawn_infos = Vec::new();
     let batch_id = uuid::Uuid::new_v4().to_string();
 
-    tracing::info!("  batch_id: {}", batch_id);
+    tracing::warn!("  batch_id: {}", batch_id);
 
     // Map canonical agent names to config names (must match ~/.code/config.toml [[agents]] entries)
     // For Plan stage: Use same tier as quality gates (Tier 2: cheap + fast)
@@ -64,17 +64,17 @@ async fn spawn_regular_stage_agents_native(
     ].iter().copied().collect();
 
     for (idx, agent_name) in expected_agents.iter().enumerate() {
-        tracing::info!("🤖 AUDIT: Spawning agent {}/{}: {}", idx+1, expected_agents.len(), agent_name);
+        tracing::warn!("🤖 AUDIT: Spawning agent {}/{}: {}", idx+1, expected_agents.len(), agent_name);
 
         let config_name = agent_config_map.get(agent_name.as_str())
             .ok_or_else(|| format!("No config mapping for agent {}", agent_name))?;
 
-        tracing::info!("  config_name: {} (from ~/.code/config.toml)", config_name);
+        tracing::warn!("  config_name: {} (from ~/.code/config.toml)", config_name);
 
         // Spawn agent via AgentManager (same as quality gates)
         let mut manager = AGENT_MANAGER.write().await;
 
-        tracing::info!("  Calling AGENT_MANAGER.create_agent_from_config_name...");
+        tracing::warn!("  Calling AGENT_MANAGER.create_agent_from_config_name...");
         let agent_id = manager.create_agent_from_config_name(
             config_name,
             agent_configs,
@@ -86,11 +86,11 @@ async fn spawn_regular_stage_agents_native(
             format!("Failed to spawn {}: {}", config_name, e)
         })?;
 
-        tracing::info!("  ✓ Agent spawned with ID: {}", agent_id);
+        tracing::warn!("  ✓ Agent spawned with ID: {}", agent_id);
 
         // Record agent spawn to SQLite for definitive routing
         if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
-            tracing::info!("  Recording spawn to SQLite (phase_type=regular_stage)...");
+            tracing::warn!("  Recording spawn to SQLite (phase_type=regular_stage)...");
             if let Err(e) = db.record_agent_spawn(
                 &agent_id,
                 spec_id,
@@ -100,7 +100,7 @@ async fn spawn_regular_stage_agents_native(
             ) {
                 tracing::warn!("  ⚠ Failed to record agent spawn for {}: {}", agent_name, e);
             } else {
-                tracing::info!("  ✓ SQLite record created for {} ({})", agent_name, &agent_id[..8]);
+                tracing::warn!("  ✓ SQLite record created for {} ({})", agent_name, &agent_id[..8]);
             }
         }
 
@@ -110,10 +110,10 @@ async fn spawn_regular_stage_agents_native(
             model_name: config_name.to_string(),
         });
 
-        tracing::info!("  ✅ Agent {} spawn complete", agent_name);
+        tracing::warn!("  ✅ Agent {} spawn complete", agent_name);
     }
 
-    tracing::info!("🎉 AUDIT: All {} agents spawned successfully", spawn_infos.len());
+    tracing::warn!("🎉 AUDIT: All {} agents spawned successfully", spawn_infos.len());
     Ok(spawn_infos)
 }
 
@@ -129,7 +129,7 @@ async fn wait_for_regular_stage_agents(
     let timeout = std::time::Duration::from_secs(timeout_secs);
     let poll_interval = std::time::Duration::from_millis(500);
 
-    tracing::info!("🔍 AUDIT: Starting to poll {} regular stage agents (timeout={}s)", agent_ids.len(), timeout_secs);
+    tracing::warn!("🔍 AUDIT: Starting to poll {} regular stage agents (timeout={}s)", agent_ids.len(), timeout_secs);
 
     let mut poll_count = 0;
     loop {
@@ -162,9 +162,9 @@ async fn wait_for_regular_stage_agents(
         }
 
         if poll_count % 10 == 1 {  // Log every 10th poll (every 5 seconds)
-            tracing::info!("📊 AUDIT: Poll #{} @ {}s - Status:", poll_count, elapsed.as_secs());
+            tracing::warn!("📊 AUDIT: Poll #{} @ {}s - Status:", poll_count, elapsed.as_secs());
             for (id, status, terminal) in &status_summary {
-                tracing::info!("  {} {}: {:?}",
+                tracing::warn!("  {} {}: {:?}",
                     if *terminal { "✓" } else { "⏳" },
                     &id[..8],
                     status
@@ -173,7 +173,7 @@ async fn wait_for_regular_stage_agents(
         }
 
         if all_done {
-            tracing::info!("✅ AUDIT: All {} agents reached terminal state after {} polls ({}s)",
+            tracing::warn!("✅ AUDIT: All {} agents reached terminal state after {} polls ({}s)",
                 agent_ids.len(), poll_count, elapsed.as_secs());
             return Ok(());
         }
@@ -490,10 +490,10 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
 
             match spawn_result {
                 Ok(spawn_infos) => {
-                    tracing::info!("🚀 AUDIT: Spawned {} agents directly via AgentManager for stage={:?}",
+                    tracing::warn!("🚀 AUDIT: Spawned {} agents directly via AgentManager for stage={:?}",
                         spawn_infos.len(), stage);
                     for info in &spawn_infos {
-                        tracing::info!("  ✓ {} ({}): model={}", info.agent_name, &info.agent_id[..8], info.model_name);
+                        tracing::warn!("  ✓ {} ({}): model={}", info.agent_name, &info.agent_id[..8], info.model_name);
                     }
 
                     // Extract agent IDs for polling
@@ -504,14 +504,14 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                     let spec_id_clone = spec_id.to_string();
                     let stage_clone = stage;
 
-                    tracing::info!("🔄 AUDIT: Starting background polling task for {} agents", agent_ids.len());
+                    tracing::warn!("🔄 AUDIT: Starting background polling task for {} agents", agent_ids.len());
 
                     let _poll_handle = tokio::spawn(async move {
-                        tracing::info!("📡 AUDIT: Background task started - waiting for {} agents", agent_ids.len());
+                        tracing::warn!("📡 AUDIT: Background task started - waiting for {} agents", agent_ids.len());
 
                         match wait_for_regular_stage_agents(&agent_ids, 300).await {  // 5 min timeout
                             Ok(()) => {
-                                tracing::info!("✅ AUDIT: All agents completed successfully - sending RegularStageAgentsComplete event");
+                                tracing::warn!("✅ AUDIT: All agents completed successfully - sending RegularStageAgentsComplete event");
 
                                 let _ = event_tx.send(crate::app_event::AppEvent::RegularStageAgentsComplete {
                                     stage: stage_clone,
@@ -519,7 +519,7 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                                     agent_ids: agent_ids.clone(),
                                 });
 
-                                tracing::info!("📬 AUDIT: RegularStageAgentsComplete event sent");
+                                tracing::warn!("📬 AUDIT: RegularStageAgentsComplete event sent");
                             }
                             Err(e) => {
                                 tracing::warn!("❌ AUDIT: Agent polling failed: {}", e);
@@ -527,10 +527,10 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                             }
                         }
 
-                        tracing::info!("🏁 AUDIT: Background polling task complete");
+                        tracing::warn!("🏁 AUDIT: Background polling task complete");
                     });
 
-                    tracing::info!("✓ AUDIT: Background polling task spawned, continuing main flow");
+                    tracing::warn!("✓ AUDIT: Background polling task spawned, continuing main flow");
                 }
                 Err(e) => {
                     tracing::error!("❌ AUDIT: Failed to spawn agents for {:?}: {}", stage, e);
