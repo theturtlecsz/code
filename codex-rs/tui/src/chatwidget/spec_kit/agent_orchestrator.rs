@@ -22,6 +22,75 @@ use super::validation_lifecycle::{
     compute_validate_payload_hash, record_validate_lifecycle_event,
     ValidateLifecycleEvent, ValidateMode,
 };
+use codex_core::agent_tool::AGENT_MANAGER;
+use codex_core::config_types::AgentConfig;
+use std::path::Path;
+
+/// Agent spawn info (matches native_quality_gate_orchestrator)
+pub struct AgentSpawnInfo {
+    pub agent_id: String,
+    pub agent_name: String,
+    pub model_name: String,
+}
+
+/// Spawn regular stage agents natively (SPEC-KIT-900 fix)
+/// Mirrors quality gate spawning to ensure AgentStatusUpdate events are sent
+async fn spawn_regular_stage_agents_native(
+    cwd: &Path,
+    spec_id: &str,
+    stage: SpecStage,
+    prompt: &str,
+    expected_agents: &[String],
+    agent_configs: &[AgentConfig],
+) -> Result<Vec<AgentSpawnInfo>, String> {
+    let mut spawn_infos = Vec::new();
+    let batch_id = uuid::Uuid::new_v4().to_string();
+
+    // Map canonical agent names to config names
+    let agent_config_map: std::collections::HashMap<&str, &str> = [
+        ("gemini", "gemini_flash"),
+        ("claude", "claude_haiku"),
+        ("gpt_pro", "gpt_medium"),
+    ].iter().copied().collect();
+
+    for agent_name in expected_agents {
+        let config_name = agent_config_map.get(agent_name.as_str())
+            .ok_or_else(|| format!("No config mapping for agent {}", agent_name))?;
+
+        // Spawn agent via AgentManager (same as quality gates)
+        let mut manager = AGENT_MANAGER.write().await;
+        let agent_id = manager.create_agent_from_config_name(
+            config_name,
+            agent_configs,
+            prompt.to_string(),
+            false, // read_write for regular stages
+            Some(batch_id.clone()),
+        ).await.map_err(|e| format!("Failed to spawn {}: {}", config_name, e))?;
+
+        // Record agent spawn to SQLite for definitive routing
+        if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+            if let Err(e) = db.record_agent_spawn(
+                &agent_id,
+                spec_id,
+                stage,
+                "regular_stage",
+                agent_name,
+            ) {
+                tracing::warn!("Failed to record agent spawn for {}: {}", agent_name, e);
+            } else {
+                tracing::info!("Recorded regular stage agent spawn: {} ({})", agent_name, agent_id);
+            }
+        }
+
+        spawn_infos.push(AgentSpawnInfo {
+            agent_id,
+            agent_name: agent_name.clone(),
+            model_name: config_name.to_string(),
+        });
+    }
+
+    Ok(spawn_infos)
+}
 
 pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, spec_id: &str) {
     let goal = widget
@@ -255,6 +324,9 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                 })
                 .collect();
 
+            // Clone for later use (before move into phase transition)
+            let stage_expected_for_spawn = stage_expected.clone();
+
             if let Some(state) = widget.spec_auto_state.as_mut() {
                 state.transition_phase(
                     SpecAutoPhase::ExecutingAgents {
@@ -307,12 +379,40 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                 }
             }
 
-            let user_msg = super::super::message::UserMessage {
-                display_text: format!("[spec-auto] {} stage for {}", stage.display_name(), spec_id),
-                ordered_items: vec![InputItem::Text { text: prompt }],
-            };
+            // SPEC-KIT-900 FIX: Spawn agents directly (like quality gates) instead of via text prompt
+            // This ensures AgentStatusUpdate events are sent, enabling SQLite tracking
+            let cwd = widget.config.cwd.clone();
+            let spec_id_owned = spec_id.to_string();
+            let prompt_owned = prompt.clone();
+            let agent_configs_owned = widget.config.agents.clone();
+            let expected_agents_owned = stage_expected_for_spawn.clone();
 
-            widget.submit_user_message(user_msg);
+            let spawn_result = block_on_sync(|| async move {
+                spawn_regular_stage_agents_native(
+                    &cwd,
+                    &spec_id_owned,
+                    stage,
+                    &prompt_owned,
+                    &expected_agents_owned,
+                    &agent_configs_owned,
+                ).await
+            });
+
+            match spawn_result {
+                Ok(spawn_infos) => {
+                    tracing::warn!("DEBUG: Spawned {} agents directly via AgentManager", spawn_infos.len());
+                    for info in &spawn_infos {
+                        tracing::warn!("DEBUG: Spawned {} ({}) with model {}",
+                            info.agent_name, info.agent_id, info.model_name);
+                    }
+                }
+                Err(e) => {
+                    halt_spec_auto_with_error(
+                        widget,
+                        format!("Failed to spawn agents for {}: {}", stage.display_name(), e),
+                    );
+                }
+            }
         }
         Err(err) => {
             halt_spec_auto_with_error(
