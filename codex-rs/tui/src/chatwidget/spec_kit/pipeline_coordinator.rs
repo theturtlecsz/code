@@ -451,6 +451,112 @@ pub fn on_spec_auto_task_complete(widget: &mut ChatWidget, task_id: &str) {
     }
 }
 
+/// Handle native guardrail completion (synchronous, no TaskComplete event)
+///
+/// Native guardrails complete instantly without emitting events. This function
+/// replicates the guardrail completion logic from on_spec_auto_task_complete
+/// but doesn't require a task_id since native guardrails don't have one.
+pub fn advance_spec_auto_after_native_guardrail(
+    widget: &mut ChatWidget,
+    stage: SpecStage,
+    spec_id: &str,
+) {
+    eprintln!("DEBUG: advance_spec_auto_after_native_guardrail called for stage={:?}", stage);
+
+    // Clear waiting_guardrail state
+    if let Some(state) = widget.spec_auto_state.as_mut() {
+        state.waiting_guardrail = None;
+    }
+
+    // Collect guardrail outcome
+    match widget.collect_guardrail_outcome(spec_id, stage) {
+        Ok(outcome) => {
+            if !outcome.success {
+                if stage == SpecStage::Validate {
+                    // Record failure and halt
+                    let completion = {
+                        let Some(state) = widget.spec_auto_state.as_mut() else {
+                            return;
+                        };
+                        state.reset_validate_run(ValidateCompletionReason::Failed)
+                    };
+
+                    if let Some(completion) = completion {
+                        record_validate_lifecycle_event(
+                            widget,
+                            spec_id,
+                            &completion.run_id,
+                            completion.attempt,
+                            completion.dedupe_count,
+                            completion.payload_hash.as_str(),
+                            completion.mode,
+                            ValidateLifecycleEvent::Failed,
+                        );
+                    }
+
+                    halt_spec_auto_with_error(widget, "Validation failed".to_string());
+                    return;
+                } else {
+                    cleanup_spec_auto_with_cancel(widget, "Guardrail step failed");
+                    return;
+                }
+            }
+
+            // Run consensus check
+            let consensus_result = match tokio::runtime::Handle::try_current() {
+                Ok(handle) => handle.block_on(run_consensus_with_retry(
+                    widget.mcp_manager.clone(),
+                    widget.config.cwd.clone(),
+                    spec_id.to_string(),
+                    stage,
+                    widget.spec_kit_telemetry_enabled(),
+                )),
+                Err(_) => Err(super::error::SpecKitError::from_string(
+                    "Tokio runtime not available".to_string(),
+                )),
+            };
+
+            match consensus_result {
+                Ok((consensus_lines, ok)) => {
+                    let cell = crate::history_cell::PlainHistoryCell::new(
+                        consensus_lines,
+                        if ok {
+                            HistoryCellType::Notice
+                        } else {
+                            HistoryCellType::Error
+                        },
+                    );
+                    widget.history_push(cell);
+                    if !ok {
+                        cleanup_spec_auto_with_cancel(
+                            widget,
+                            &format!("Consensus not reached for {}, manual resolution required", stage.display_name())
+                        );
+                        return;
+                    }
+                }
+                Err(err) => {
+                    cleanup_spec_auto_with_cancel(
+                        widget,
+                        &format!("Consensus check failed for {}: {}", stage.display_name(), err)
+                    );
+                    return;
+                }
+            }
+
+            // After guardrail success and consensus check OK, auto-submit multi-agent prompt
+            eprintln!("DEBUG: Native guardrail path - about to call auto_submit_spec_stage_prompt for stage={:?}", stage);
+            auto_submit_spec_stage_prompt(widget, stage, spec_id);
+            eprintln!("DEBUG: Native guardrail path - returned from auto_submit_spec_stage_prompt");
+        }
+        Err(err) => {
+            cleanup_spec_auto_with_cancel(
+                widget,
+                &format!("Unable to read telemetry for {}: {}", stage.display_name(), err)
+            );
+        }
+    }
+}
 
 /// Check consensus and advance to next stage
 // FORK-SPECIFIC (just-every/code): Made async-aware for native MCP

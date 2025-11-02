@@ -803,4 +803,25 @@ fn handle_native_guardrail(
 
     widget.history_push(crate::history_cell::PlainHistoryCell::new(lines, cell_type));
     widget.request_redraw();
+
+    // CRITICAL: Native guardrails are synchronous and don't emit TaskComplete events.
+    // After successful completion, manually trigger pipeline advancement for /speckit.auto.
+    // This replaces the task-based completion mechanism used by bash guardrails.
+    if result.success {
+        if let Some(state) = widget.spec_auto_state.as_ref() {
+            // Check if we're waiting for this guardrail stage
+            if let Some(wait) = &state.waiting_guardrail {
+                if wait.stage == stage {
+                    eprintln!("DEBUG: Native guardrail {:?} complete, manually advancing pipeline", stage);
+                    // Call advance_spec_auto to handle guardrail completion
+                    // This will collect the guardrail outcome and proceed
+                    super::pipeline_coordinator::advance_spec_auto_after_native_guardrail(
+                        widget,
+                        stage,
+                        &spec_id,
+                    );
+                }
+            }
+        }
+    }
 }
