@@ -304,7 +304,9 @@ pub fn on_spec_auto_task_complete(widget: &mut ChatWidget, task_id: &str) {
             return;
         };
         let Some(wait) = state.waiting_guardrail.take() else {
-            tracing::warn!("DEBUG: No waiting_guardrail, returning");
+            tracing::warn!("DEBUG: No waiting_guardrail - likely multi-agent task completion");
+            // This is multi-agent execution completing, trigger agent completion handler
+            super::agent_orchestrator::on_spec_auto_agents_complete(widget);
             return;
         };
         let Some(expected_id) = wait.task_id.as_deref() else {
