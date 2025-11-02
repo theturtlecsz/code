@@ -296,12 +296,15 @@ pub fn on_spec_auto_task_started(widget: &mut ChatWidget, task_id: &str) {
 /// Handle spec-auto task completion (guardrail finished)
 pub fn on_spec_auto_task_complete(widget: &mut ChatWidget, task_id: &str) {
     let _start = std::time::Instant::now(); // T90: Metrics instrumentation
+    eprintln!("DEBUG: on_spec_auto_task_complete called with task_id={}", task_id);
 
     let (spec_id, stage) = {
         let Some(state) = widget.spec_auto_state.as_mut() else {
+            eprintln!("DEBUG: No spec_auto_state, returning");
             return;
         };
         let Some(wait) = state.waiting_guardrail.take() else {
+            eprintln!("DEBUG: No waiting_guardrail, returning");
             return;
         };
         let Some(expected_id) = wait.task_id.as_deref() else {
@@ -435,7 +438,9 @@ pub fn on_spec_auto_task_complete(widget: &mut ChatWidget, task_id: &str) {
             }
 
             // After guardrail success and consensus check OK, auto-submit multi-agent prompt
+            eprintln!("DEBUG: About to call auto_submit_spec_stage_prompt for stage={:?}", stage);
             auto_submit_spec_stage_prompt(widget, stage, &spec_id);
+            eprintln!("DEBUG: Returned from auto_submit_spec_stage_prompt");
         }
         Err(err) => {
             cleanup_spec_auto_with_cancel(
