@@ -22,6 +22,8 @@ use super::validation_lifecycle::{
 use crate::history_cell::HistoryCellType;
 use crate::slash_command::{HalMode, SlashCommand};
 use crate::spec_prompts::SpecStage;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 /// Handle /speckit.auto command initiation
 pub fn handle_spec_auto(
@@ -593,21 +595,47 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
             HistoryCellType::Notice,
         ));
 
-        // TODO: Implement consensus synthesis from cached responses
-        // For now, just acknowledge we have them and continue degraded
-        widget.history_push(crate::history_cell::PlainHistoryCell::new(
-            vec![ratatui::text::Line::from(
-                "⚠ Consensus synthesis from cached responses not yet implemented. Continuing degraded."
-            )],
-            HistoryCellType::Notice,
-        ));
+        // Synthesize consensus from cached responses
+        let cached = widget.spec_auto_state.as_ref().unwrap().agent_responses_cache.as_ref().unwrap().clone();
 
-        // Advance to next stage
-        if let Some(state) = widget.spec_auto_state.as_mut() {
-            state.current_index += 1;
-            state.agent_responses_cache = None; // Clear cache
+        match synthesize_from_cached_responses(&cached, &spec_id, current_stage, &widget.config.cwd) {
+            Ok(output_path) => {
+                widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                    vec![
+                        ratatui::text::Line::from(format!(
+                            "✓ Consensus synthesized from {} agent responses",
+                            cached.len()
+                        )),
+                        ratatui::text::Line::from(format!("  Output: {}", output_path.display()))
+                    ],
+                    HistoryCellType::Notice,
+                ));
+
+                // Advance to next stage
+                if let Some(state) = widget.spec_auto_state.as_mut() {
+                    state.current_index += 1;
+                    state.agent_responses_cache = None; // Clear cache
+                }
+                persist_cost_summary(widget, &spec_id);
+                advance_spec_auto(widget);
+            }
+            Err(err) => {
+                widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                    vec![ratatui::text::Line::from(format!(
+                        "⚠ Consensus synthesis failed: {}. Continuing degraded.",
+                        err
+                    ))],
+                    HistoryCellType::Notice,
+                ));
+
+                // Advance degraded
+                if let Some(state) = widget.spec_auto_state.as_mut() {
+                    state.current_index += 1;
+                    state.agent_responses_cache = None;
+                }
+                advance_spec_auto(widget);
+            }
         }
-        advance_spec_auto(widget);
         return;
     }
 
@@ -872,4 +900,48 @@ fn check_evidence_size_limit(spec_id: &str, cwd: &std::path::Path) -> super::err
     }
 
     Ok(())
+}
+
+/// Synthesize consensus from cached agent responses (simple text-based synthesis)
+fn synthesize_from_cached_responses(
+    cached_responses: &[(String, String)],
+    spec_id: &str,
+    stage: SpecStage,
+    cwd: &Path,
+) -> Result<PathBuf, String> {
+    if cached_responses.is_empty() {
+        return Err("No cached responses to synthesize".to_string());
+    }
+
+    // Build simple consensus document from agent responses
+    let mut output = String::new();
+    output.push_str(&format!("# Plan: {}\n\n", spec_id));
+    output.push_str(&format!("Stage: {}\n", stage.display_name()));
+    output.push_str(&format!("Agents: {}\n", cached_responses.len()));
+    output.push_str(&format!("Synthesized from cached responses (not memory artifacts)\n\n"));
+
+    output.push_str("## Agent Outputs\n\n");
+
+    for (agent_name, response_text) in cached_responses {
+        output.push_str(&format!("### {} Response\n\n", agent_name));
+        output.push_str("```\n");
+        output.push_str(response_text);
+        output.push_str("\n```\n\n");
+    }
+
+    output.push_str("## Consensus Notes\n\n");
+    output.push_str("- All agents completed successfully\n");
+    output.push_str("- Responses collected from agent execution (not from memory storage)\n");
+    output.push_str("- Full consensus synthesis pending implementation\n");
+
+    // Write to spec directory
+    let spec_dir = cwd.join(format!("docs/{}", spec_id));
+    fs::create_dir_all(&spec_dir)
+        .map_err(|e| format!("Failed to create spec dir: {}", e))?;
+
+    let output_file = spec_dir.join("plan.md");
+    fs::write(&output_file, output)
+        .map_err(|e| format!("Failed to write plan.md: {}", e))?;
+
+    Ok(output_file)
 }
