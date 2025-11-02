@@ -635,12 +635,30 @@ fn extract_json_from_content(content: &str) -> Option<String> {
         }
     }
 
-    // Try each candidate, return first valid one with "stage" field
-    for candidate in json_candidates {
-        if let Ok(json_val) = serde_json::from_str::<Value>(&candidate) {
-            // Prefer JSON with "stage" field (actual response, not prompt example)
-            if json_val.get("stage").is_some() {
-                return Some(candidate);
+    // Try each candidate, return first valid one with "stage" field that starts with "quality-gate-"
+    for candidate in &json_candidates {
+        if let Ok(json_val) = serde_json::from_str::<Value>(candidate) {
+            // Must have "stage" field starting with "quality-gate-" (actual response, not prompt example)
+            if let Some(stage) = json_val.get("stage").and_then(|v| v.as_str()) {
+                if stage.starts_with("quality-gate-") {
+                    return Some(candidate.clone());
+                }
+            }
+        }
+    }
+
+    // If no candidate found with quality-gate stage, try searching for specific pattern
+    // The code agent might output JSON after [codex] or similar markers
+    if let Some(codex_section) = content.find("[codex]") {
+        let after_codex = &content[codex_section..];
+        // Recursively try extraction on the section after [codex]
+        if let Some(extracted) = extract_json_from_section(after_codex) {
+            if let Ok(json_val) = serde_json::from_str::<Value>(&extracted) {
+                if let Some(stage) = json_val.get("stage").and_then(|v| v.as_str()) {
+                    if stage.starts_with("quality-gate-") {
+                        return Some(extracted);
+                    }
+                }
             }
         }
     }
@@ -676,4 +694,41 @@ fn extract_json_from_content(content: &str) -> Option<String> {
     }
 
     None
+}
+
+/// Extract JSON from a section of text (helper for nested extraction)
+fn extract_json_from_section(content: &str) -> Option<String> {
+    // Look for the LAST occurrence of a JSON block (most likely to be the final output)
+    let mut last_valid_json: Option<String> = None;
+
+    for (idx, line) in content.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('{') {
+            // Try to parse from this point to end
+            let remaining = content.lines().skip(idx).collect::<Vec<_>>().join("\n");
+
+            // Find matching closing brace
+            let mut depth = 0;
+            let mut json_end = 0;
+            for (pos, ch) in remaining.chars().enumerate() {
+                if ch == '{' { depth += 1; }
+                if ch == '}' {
+                    depth -= 1;
+                    if depth == 0 {
+                        json_end = pos + 1;
+                        break;
+                    }
+                }
+            }
+
+            if json_end > 0 {
+                let candidate = &remaining[..json_end];
+                if serde_json::from_str::<Value>(candidate).is_ok() {
+                    last_valid_json = Some(candidate.to_string());
+                }
+            }
+        }
+    }
+
+    last_valid_json
 }
