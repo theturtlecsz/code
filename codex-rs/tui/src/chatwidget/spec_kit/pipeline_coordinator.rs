@@ -985,8 +985,20 @@ fn synthesize_from_cached_responses(
     output.push_str(&format!("- Synthesized from {} agent responses\n", agent_data.len()));
     output.push_str("- All agents completed successfully\n");
 
-    // Write to spec directory
-    let spec_dir = cwd.join(format!("docs/{}", spec_id));
+    // Find actual spec directory (may have slug suffix like SPEC-KIT-900-generic-smoke)
+    let docs_dir = cwd.join("docs");
+    let spec_dir = if let Ok(entries) = fs::read_dir(&docs_dir) {
+        entries.filter_map(|e| e.ok())
+            .find(|entry| {
+                entry.file_name().to_string_lossy().starts_with(&format!("{}-", spec_id))
+                    || entry.file_name().to_string_lossy() == spec_id
+            })
+            .map(|entry| entry.path())
+            .unwrap_or_else(|| cwd.join(format!("docs/{}", spec_id)))
+    } else {
+        cwd.join(format!("docs/{}", spec_id))
+    };
+
     fs::create_dir_all(&spec_dir)
         .map_err(|e| format!("Failed to create spec dir: {}", e))?;
 
@@ -999,24 +1011,39 @@ fn synthesize_from_cached_responses(
 
 /// Extract JSON from agent response (handles code blocks, tool output, etc.)
 fn extract_json_from_response(text: &str) -> Option<String> {
-    // Look for JSON in code blocks
+    // Look for JSON in markdown code blocks
     if let Some(start) = text.find("```json\n") {
-        if let Some(end) = text[start..].find("\n```") {
-            return Some(text[start + 8..start + end].to_string());
+        if let Some(end) = text[start + 8..].find("\n```") {
+            return Some(text[start + 8..start + 8 + end].to_string());
         }
     }
 
-    // Look for raw JSON objects
-    if let Some(start) = text.find("{\n  \"stage\":") {
-        // Find matching closing brace
+    // Look for JSON in plain code blocks (agents use this format)
+    if let Some(start) = text.find("│ {\n│   \"stage\"") {
+        // Extract JSON from piped format (│ prefix on each line)
         let from_start = &text[start..];
-        let mut depth = 0;
-        for (i, ch) in from_start.char_indices() {
-            if ch == '{' { depth += 1; }
-            if ch == '}' {
-                depth -= 1;
-                if depth == 0 {
-                    return Some(from_start[..=i].to_string());
+        if let Some(end) = from_start.find("\n│\n│ Ran for") {
+            let json_block = &from_start[2..end]; // Skip "│ " prefix
+            let cleaned = json_block.lines()
+                .map(|line| line.strip_prefix("│   ").or_else(|| line.strip_prefix("│ ")).unwrap_or(line))
+                .collect::<Vec<_>>()
+                .join("\n");
+            return Some(cleaned);
+        }
+    }
+
+    // Look for raw JSON objects (Python output format)
+    for pattern in &["{\n  \"stage\":", "{\n\"stage\":"] {
+        if let Some(start) = text.find(pattern) {
+            let from_start = &text[start..];
+            let mut depth = 0;
+            for (i, ch) in from_start.char_indices() {
+                if ch == '{' { depth += 1; }
+                if ch == '}' {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(from_start[..=i].to_string());
+                    }
                 }
             }
         }
