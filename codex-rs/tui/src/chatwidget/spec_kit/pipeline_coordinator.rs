@@ -456,10 +456,13 @@ pub fn on_spec_auto_task_complete(widget: &mut ChatWidget, task_id: &str) {
 /// Native guardrails complete instantly without emitting events. This function
 /// replicates the guardrail completion logic from on_spec_auto_task_complete
 /// but doesn't require a task_id since native guardrails don't have one.
+///
+/// Takes the guardrail result directly to avoid blocking file I/O re-reading telemetry.
 pub fn advance_spec_auto_after_native_guardrail(
     widget: &mut ChatWidget,
     stage: SpecStage,
     spec_id: &str,
+    native_result: super::native_guardrail::GuardrailResult,
 ) {
     eprintln!("DEBUG: advance_spec_auto_after_native_guardrail called for stage={:?}", stage);
 
@@ -468,98 +471,95 @@ pub fn advance_spec_auto_after_native_guardrail(
         state.waiting_guardrail = None;
     }
 
-    // Collect guardrail outcome
-    eprintln!("DEBUG: Collecting guardrail outcome...");
-    match widget.collect_guardrail_outcome(spec_id, stage) {
-        Ok(outcome) => {
-            eprintln!("DEBUG: Guardrail outcome collected, success={}", outcome.success);
-            if !outcome.success {
-                if stage == SpecStage::Validate {
-                    // Record failure and halt
-                    let completion = {
-                        let Some(state) = widget.spec_auto_state.as_mut() else {
-                            return;
-                        };
-                        state.reset_validate_run(ValidateCompletionReason::Failed)
-                    };
+    // Convert native result to GuardrailOutcome (avoid blocking file I/O)
+    eprintln!("DEBUG: Using passed native guardrail result (no file I/O)");
+    let outcome = super::state::GuardrailOutcome {
+        success: native_result.success,
+        summary: format!("{} stage ready", stage.display_name()),
+        telemetry_path: native_result.telemetry_path,
+        failures: native_result.errors,
+    };
 
-                    if let Some(completion) = completion {
-                        record_validate_lifecycle_event(
-                            widget,
-                            spec_id,
-                            &completion.run_id,
-                            completion.attempt,
-                            completion.dedupe_count,
-                            completion.payload_hash.as_str(),
-                            completion.mode,
-                            ValidateLifecycleEvent::Failed,
-                        );
-                    }
-
-                    halt_spec_auto_with_error(widget, "Validation failed".to_string());
+    eprintln!("DEBUG: Guardrail outcome converted, success={}", outcome.success);
+    if !outcome.success {
+        if stage == SpecStage::Validate {
+            // Record failure and halt
+            let completion = {
+                let Some(state) = widget.spec_auto_state.as_mut() else {
                     return;
-                } else {
-                    cleanup_spec_auto_with_cancel(widget, "Guardrail step failed");
-                    return;
-                }
-            }
-
-            // Run consensus check
-            eprintln!("DEBUG: Starting consensus check for stage={:?}", stage);
-            let consensus_result = match tokio::runtime::Handle::try_current() {
-                Ok(handle) => handle.block_on(run_consensus_with_retry(
-                    widget.mcp_manager.clone(),
-                    widget.config.cwd.clone(),
-                    spec_id.to_string(),
-                    stage,
-                    widget.spec_kit_telemetry_enabled(),
-                )),
-                Err(_) => Err(super::error::SpecKitError::from_string(
-                    "Tokio runtime not available".to_string(),
-                )),
+                };
+                state.reset_validate_run(ValidateCompletionReason::Failed)
             };
 
-            eprintln!("DEBUG: Consensus check completed, processing result");
-            match consensus_result {
-                Ok((consensus_lines, ok)) => {
-                    let cell = crate::history_cell::PlainHistoryCell::new(
-                        consensus_lines,
-                        if ok {
-                            HistoryCellType::Notice
-                        } else {
-                            HistoryCellType::Error
-                        },
-                    );
-                    widget.history_push(cell);
-                    if !ok {
-                        cleanup_spec_auto_with_cancel(
-                            widget,
-                            &format!("Consensus not reached for {}, manual resolution required", stage.display_name())
-                        );
-                        return;
-                    }
-                }
-                Err(err) => {
-                    cleanup_spec_auto_with_cancel(
-                        widget,
-                        &format!("Consensus check failed for {}: {}", stage.display_name(), err)
-                    );
-                    return;
-                }
+            if let Some(completion) = completion {
+                record_validate_lifecycle_event(
+                    widget,
+                    spec_id,
+                    &completion.run_id,
+                    completion.attempt,
+                    completion.dedupe_count,
+                    completion.payload_hash.as_str(),
+                    completion.mode,
+                    ValidateLifecycleEvent::Failed,
+                );
             }
 
-            // After guardrail success and consensus check OK, auto-submit multi-agent prompt
-            eprintln!("DEBUG: Native guardrail path - about to call auto_submit_spec_stage_prompt for stage={:?}", stage);
-            auto_submit_spec_stage_prompt(widget, stage, spec_id);
-            eprintln!("DEBUG: Native guardrail path - returned from auto_submit_spec_stage_prompt");
+            halt_spec_auto_with_error(widget, "Validation failed".to_string());
+            return;
+        } else {
+            cleanup_spec_auto_with_cancel(widget, "Guardrail step failed");
+            return;
+        }
+    }
+
+    // Run consensus check
+    eprintln!("DEBUG: Starting consensus check for stage={:?}", stage);
+    let consensus_result = match tokio::runtime::Handle::try_current() {
+        Ok(handle) => handle.block_on(run_consensus_with_retry(
+            widget.mcp_manager.clone(),
+            widget.config.cwd.clone(),
+            spec_id.to_string(),
+            stage,
+            widget.spec_kit_telemetry_enabled(),
+        )),
+        Err(_) => Err(super::error::SpecKitError::from_string(
+            "Tokio runtime not available".to_string(),
+        )),
+    };
+
+    eprintln!("DEBUG: Consensus check completed, processing result");
+    match consensus_result {
+        Ok((consensus_lines, ok)) => {
+            let cell = crate::history_cell::PlainHistoryCell::new(
+                consensus_lines,
+                if ok {
+                    HistoryCellType::Notice
+                } else {
+                    HistoryCellType::Error
+                },
+            );
+            widget.history_push(cell);
+            if !ok {
+                cleanup_spec_auto_with_cancel(
+                    widget,
+                    &format!("Consensus not reached for {}, manual resolution required", stage.display_name())
+                );
+                return;
+            }
         }
         Err(err) => {
             cleanup_spec_auto_with_cancel(
                 widget,
-                &format!("Unable to read telemetry for {}: {}", stage.display_name(), err)
+                &format!("Consensus check failed for {}: {}", stage.display_name(), err)
             );
+            return;
         }
     }
+
+    // After guardrail success and consensus check OK, auto-submit multi-agent prompt
+    eprintln!("DEBUG: Native guardrail path - about to call auto_submit_spec_stage_prompt for stage={:?}", stage);
+    auto_submit_spec_stage_prompt(widget, stage, spec_id);
+    eprintln!("DEBUG: Native guardrail path - returned from auto_submit_spec_stage_prompt");
 }
 
 /// Check consensus and advance to next stage
