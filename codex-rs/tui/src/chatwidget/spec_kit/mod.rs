@@ -25,6 +25,7 @@ pub mod config_validator;
 pub mod new_native; // SPEC-KIT-072: Native SPEC creation (eliminates 2 agents, $0.15 → $0)
 pub mod consensus;
 pub mod consensus_coordinator; // Consensus checking with MCP retry logic
+pub mod consensus_db; // SPEC-KIT-072: SQLite storage for consensus artifacts (replaces local-memory)
 pub mod context;
 pub mod cost_tracker; // SPEC-KIT-070: Cost tracking and budget management
 pub mod error;

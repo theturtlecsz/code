@@ -927,7 +927,7 @@ fn synthesize_from_cached_responses(
         tracing::warn!("DEBUG: Extracting JSON from {} ({} chars)", agent_name, response_text.len());
 
         // Try to extract JSON from response (agents may wrap in markdown code blocks)
-        let json_content = extract_json_from_response(response_text);
+        let json_content = extract_json_from_agent_response(response_text);
 
         if let Some(json_str) = json_content {
             tracing::warn!("DEBUG: Extracted JSON string from {} ({} chars)", agent_name, json_str.len());
@@ -1040,15 +1040,36 @@ fn synthesize_from_cached_responses(
         return Ok(output_file);
     }
 
-    fs::write(&output_file, output)
+    fs::write(&output_file, &output)
         .map_err(|e| format!("Failed to write {}: {}", output_filename, e))?;
 
     tracing::warn!("DEBUG: Wrote consensus output to {}", output_file.display());
+
+    // SPEC-KIT-072: Also store synthesis to SQLite
+    if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+        if let Err(e) = db.store_synthesis(
+            spec_id,
+            stage,
+            &output,
+            Some(&output_file),
+            "ok", // Simple status for now
+            cached_responses.len(),
+            None,
+            None,
+            false,
+            None, // run_id TODO
+        ) {
+            tracing::warn!("Failed to store synthesis to SQLite: {}", e);
+        } else {
+            tracing::info!("Stored consensus synthesis to SQLite");
+        }
+    }
+
     Ok(output_file)
 }
 
 /// Extract JSON from agent response (handles code blocks, tool output, etc.)
-fn extract_json_from_response(text: &str) -> Option<String> {
+pub(super) fn extract_json_from_agent_response(text: &str) -> Option<String> {
     // Look for JSON in markdown code blocks
     if let Some(start) = text.find("```json\n") {
         if let Some(end) = text[start + 8..].find("\n```") {

@@ -253,8 +253,8 @@ pub(crate) fn artifacts_from_cached_responses(
     Ok(artifacts)
 }
 
-/// Collect consensus artifacts from local-memory (primary) or evidence files (fallback)
-// FORK-SPECIFIC (just-every/code): Made async for native MCP with ARCH-002 fallback
+/// Collect consensus artifacts from SQLite (primary), local-memory, or evidence files (fallback)
+// SPEC-KIT-072: SQLite is now primary source for consensus artifacts
 pub(crate) async fn collect_consensus_artifacts(
     evidence_root: &Path,
     spec_id: &str,
@@ -263,7 +263,38 @@ pub(crate) async fn collect_consensus_artifacts(
 ) -> Result<(Vec<ConsensusArtifactData>, Vec<String>)> {
     let mut warnings: Vec<String> = Vec::new();
 
-    // ARCH-002: Try MCP first (faster, more current), fallback to files if unavailable
+    // SPEC-KIT-072: Try SQLite first (fastest, most reliable)
+    if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+        match db.query_artifacts(spec_id, stage) {
+            Ok(sqlite_artifacts) if !sqlite_artifacts.is_empty() => {
+                tracing::info!("Loaded {} consensus artifacts from SQLite", sqlite_artifacts.len());
+
+                let mut artifacts = Vec::new();
+                for artifact in sqlite_artifacts {
+                    if let Ok(content) = serde_json::from_str::<Value>(&artifact.content_json) {
+                        artifacts.push(ConsensusArtifactData {
+                            memory_id: Some(format!("sqlite_{}", artifact.id)),
+                            agent: artifact.agent_name,
+                            version: None,
+                            content,
+                        });
+                    }
+                }
+
+                if !artifacts.is_empty() {
+                    return Ok((artifacts, warnings));
+                }
+            }
+            Ok(_) => {
+                tracing::info!("No SQLite artifacts found for {} {}, trying local-memory", spec_id, stage.command_name());
+            }
+            Err(e) => {
+                tracing::warn!("SQLite query failed: {}, falling back to local-memory", e);
+            }
+        }
+    }
+
+    // ARCH-002: Fallback to local-memory MCP
     match fetch_memory_entries(spec_id, stage, mcp_manager).await {
         Ok((entries, mut memory_warnings)) => {
             warnings.append(&mut memory_warnings);

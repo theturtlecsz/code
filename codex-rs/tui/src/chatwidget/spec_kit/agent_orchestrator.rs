@@ -575,6 +575,35 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
 
                 tracing::warn!("DEBUG: Collected {} agent responses for consensus", agent_responses.len());
 
+                // SPEC-KIT-072: Store to SQLite for persistent consensus artifacts
+                if let Some(state) = widget.spec_auto_state.as_ref() {
+                    if let Some(current_stage) = state.current_stage() {
+                        if let Some(run_id) = &state.run_id {
+                            // Initialize SQLite database
+                            if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+                                for (agent_name, response_text) in &agent_responses {
+                                    // Try to extract JSON content for structured storage
+                                    let json_str = super::pipeline_coordinator::extract_json_from_agent_response(response_text)
+                                        .unwrap_or_else(|| response_text.clone());
+
+                                    if let Err(e) = db.store_artifact(
+                                        &state.spec_id,
+                                        current_stage,
+                                        agent_name,
+                                        &json_str,
+                                        Some(response_text),
+                                        Some(run_id),
+                                    ) {
+                                        tracing::warn!("Failed to store {} artifact to SQLite: {}", agent_name, e);
+                                    } else {
+                                        tracing::warn!("DEBUG: Stored {} artifact to SQLite", agent_name);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Store responses in state for consensus to use (REGULAR stages only, not quality gates)
                 if let Some(state) = widget.spec_auto_state.as_mut() {
                     state.agent_responses_cache = Some(agent_responses);
