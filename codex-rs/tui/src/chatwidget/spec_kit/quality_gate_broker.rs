@@ -698,8 +698,8 @@ fn extract_json_from_content(content: &str) -> Option<String> {
 
 /// Extract JSON from a section of text (helper for nested extraction)
 fn extract_json_from_section(content: &str) -> Option<String> {
-    // Look for the LAST occurrence of a JSON block (most likely to be the final output)
-    let mut last_valid_json: Option<String> = None;
+    // Look for JSON blocks with "stage": "quality-gate-*" specifically
+    let mut best_candidate: Option<String> = None;
 
     for (idx, line) in content.lines().enumerate() {
         let trimmed = line.trim();
@@ -723,12 +723,20 @@ fn extract_json_from_section(content: &str) -> Option<String> {
 
             if json_end > 0 {
                 let candidate = &remaining[..json_end];
-                if serde_json::from_str::<Value>(candidate).is_ok() {
-                    last_valid_json = Some(candidate.to_string());
+                if let Ok(json_val) = serde_json::from_str::<Value>(candidate) {
+                    // Check if this is a quality-gate JSON
+                    if let Some(stage) = json_val.get("stage").and_then(|v| v.as_str()) {
+                        if stage.starts_with("quality-gate-") {
+                            // Found quality gate JSON! Return immediately
+                            return Some(candidate.to_string());
+                        }
+                    }
+                    // Keep last valid JSON as fallback
+                    best_candidate = Some(candidate.to_string());
                 }
             }
         }
     }
 
-    last_valid_json
+    best_candidate
 }
