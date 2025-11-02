@@ -438,10 +438,15 @@ async fn fetch_memory_entries(
     use serde_json::json;
 
     let query = format!("{} {}", spec_id, stage.command_name());
+    // Note: Agents may tag with either "stage:plan" or "stage:spec-plan"
+    // Search for both variations to handle inconsistent tagging
+    let stage_tag_1 = format!("stage:{}", stage.display_name().to_lowercase()); // "stage:plan"
+    let stage_tag_2 = format!("stage:{}", stage.command_name());  // "stage:spec-plan"
+
     let args = json!({
         "query": query,
         "limit": 20,
-        "tags": [format!("spec:{}", spec_id), format!("stage:{}", stage.command_name())],
+        "tags": [format!("spec:{}", spec_id)],
         "search_type": "hybrid"
     });
 
