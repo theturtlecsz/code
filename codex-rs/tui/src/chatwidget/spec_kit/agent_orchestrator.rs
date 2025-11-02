@@ -481,14 +481,21 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
                 *completed_agents = completed_names.clone();
                 tracing::warn!("DEBUG: Phase match → ExecutingAgents, routing to 'regular'");
 
-                // Validate that these are actually the expected stage agents, not stale quality gate agents
-                // Quality gate agents may complete late after pipeline has advanced
-                let names_match = expected_agents == *phase_expected;
-                if !names_match {
-                    tracing::warn!("DEBUG: Agent name mismatch! Expected from handler: {:?}, Expected from phase: {:?}",
-                        expected_agents, phase_expected);
-                    tracing::warn!("DEBUG: This may be late quality gate completion - skipping");
-                    return; // Skip processing stale completions
+                // Validate these are the RIGHT agents for this phase
+                // Quality gates complete late with different agent names
+                // Quality gate: [gemini, claude, code]
+                // Plan/Tasks: [gemini, claude, gpt_pro]
+
+                // Check if completed agents match what this phase expects
+                let has_code = completed_names.contains("code");
+                let expects_gpt_pro = phase_expected.iter().any(|a| a == "gpt_pro");
+
+                if has_code && expects_gpt_pro {
+                    // This phase expects gpt_pro but got code - quality gate completion!
+                    tracing::warn!("DEBUG: Agent mismatch - phase expects gpt_pro but got code (quality gate completion)");
+                    tracing::warn!("DEBUG: Completed: {:?}, Phase expected: {:?}", completed_names, phase_expected);
+                    tracing::warn!("DEBUG: Skipping stale quality gate completion");
+                    return;
                 }
 
                 "regular"
