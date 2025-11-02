@@ -46,11 +46,12 @@ async fn spawn_regular_stage_agents_native(
     let mut spawn_infos = Vec::new();
     let batch_id = uuid::Uuid::new_v4().to_string();
 
-    // Map canonical agent names to config names
+    // Map canonical agent names to config names (must match ~/.code/config.toml [[agents]] entries)
+    // For Plan stage: Use same tier as quality gates (Tier 2: cheap + fast)
     let agent_config_map: std::collections::HashMap<&str, &str> = [
-        ("gemini", "gemini_flash"),
-        ("claude", "claude_haiku"),
-        ("gpt_pro", "gpt_medium"),
+        ("gemini", "gemini_flash"),     // gemini-2.5-flash
+        ("claude", "claude_haiku"),     // claude-3.5-haiku
+        ("gpt_pro", "gpt_pro"),         // gpt-5 medium effort (legacy name, still valid)
     ].iter().copied().collect();
 
     for agent_name in expected_agents {
