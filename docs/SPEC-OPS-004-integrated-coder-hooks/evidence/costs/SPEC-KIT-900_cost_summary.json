@@ -1,0 +1,21 @@
+{
+  "spec_id": "SPEC-KIT-900",
+  "total_spent": 0.0,
+  "budget": 2.0,
+  "utilization": 0.0,
+  "call_count": 3,
+  "per_stage": {
+    "spec-plan": 0.0
+  },
+  "per_model": {
+    "gemini": 0.0,
+    "claude": 0.0,
+    "code": 0.0
+  },
+  "duration": 241,
+  "stage_notes": [
+    {
+      "stage": "spec-tasks"
+    }
+  ]
+}
