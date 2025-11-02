@@ -5878,7 +5878,7 @@ impl ChatWidget<'_> {
                 self.stream.insert_reasoning_section_break(&sink);
             }
             EventMsg::TaskStarted => {
-                eprintln!("DEBUG: TaskStarted event received, id={}", id);
+                tracing::info!("DEBUG: TaskStarted event received, id={}", id);
                 spec_kit::on_spec_auto_task_started(self, &id);
                 // This begins the new turn; clear the pending prompt anchor count
                 // so subsequent background events use standard placement.
@@ -5910,7 +5910,7 @@ impl ChatWidget<'_> {
             EventMsg::TaskComplete(TaskCompleteEvent {
                 last_agent_message: _,
             }) => {
-                eprintln!("DEBUG: TaskComplete event received, id={}", id);
+                tracing::info!("DEBUG: TaskComplete event received, id={}", id);
                 spec_kit::on_spec_auto_task_complete(self, &id);
                 // Finalize any active streams
                 if self.stream.is_write_cycle_active() {
@@ -6817,7 +6817,7 @@ impl ChatWidget<'_> {
                 context,
                 task,
             }) => {
-                eprintln!("DEBUG: AgentStatusUpdate event received, {} agents", agents.len());
+                tracing::info!("DEBUG: AgentStatusUpdate event received, {} agents", agents.len());
                 // Update the active agents list from the event and track timing
                 self.active_agents.clear();
                 let now = Instant::now();
@@ -6875,23 +6875,23 @@ impl ChatWidget<'_> {
                             .agent_runtime
                             .values()
                             .all(|rt| rt.completed_at.is_some());
-                    eprintln!("DEBUG: Agent terminal check - all_terminal={}, runtime_count={}", all_agents_terminal, self.agent_runtime.len());
+                    tracing::info!("DEBUG: Agent terminal check - all_terminal={}, runtime_count={}", all_agents_terminal, self.agent_runtime.len());
                     if all_agents_terminal {
                         let any_tools_running = !self.exec.running_commands.is_empty()
                             || !self.tools_state.running_custom_tools.is_empty()
                             || !self.tools_state.running_web_search.is_empty();
                         let any_streaming = self.stream.is_write_cycle_active();
-                        eprintln!("DEBUG: Tools running={}, streaming={}", any_tools_running, any_streaming);
+                        tracing::info!("DEBUG: Tools running={}, streaming={}", any_tools_running, any_streaming);
 
                         if !(any_tools_running || any_streaming) {
-                            eprintln!("DEBUG: All agents terminal, no tools/streaming, calling spec_kit completion handler");
+                            tracing::info!("DEBUG: All agents terminal, no tools/streaming, calling spec_kit completion handler");
                             self.bottom_pane.set_task_running(false);
                             self.bottom_pane.update_status_text(String::new());
 
                             // NEW: Check if this is part of spec-auto pipeline
-                            eprintln!("DEBUG: About to call spec_kit::on_spec_auto_agents_complete");
+                            tracing::info!("DEBUG: About to call spec_kit::on_spec_auto_agents_complete");
                             spec_kit::on_spec_auto_agents_complete(self);
-                            eprintln!("DEBUG: Returned from spec_kit::on_spec_auto_agents_complete");
+                            tracing::info!("DEBUG: Returned from spec_kit::on_spec_auto_agents_complete");
                             self.finish_manual_validate_runs_if_idle();
                         }
                     }

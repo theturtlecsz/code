@@ -414,13 +414,13 @@ pub(crate) fn schedule_degraded_follow_up(
 
 
 pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
-    eprintln!("DEBUG: on_spec_auto_agents_complete called");
+    tracing::info!("DEBUG: on_spec_auto_agents_complete called");
     let Some(state) = widget.spec_auto_state.as_ref() else {
-        eprintln!("DEBUG: No spec_auto_state");
+        tracing::info!("DEBUG: No spec_auto_state");
         return;
     };
 
-    eprintln!("DEBUG: Current phase: {:?}", state.phase);
+    tracing::info!("DEBUG: Current phase: {:?}", state.phase);
     // Check which phase we're in
     let expected_agents = match &state.phase {
         SpecAutoPhase::ExecutingAgents {
@@ -509,22 +509,22 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
         }
         "regular" => {
             // Regular stage agents
-            eprintln!("DEBUG: Regular agent phase, checking completion");
-            eprintln!("DEBUG: Expected agents: {:?}", expected_agents);
-            eprintln!("DEBUG: Completed agents: {:?}", completed_names);
+            tracing::info!("DEBUG: Regular agent phase, checking completion");
+            tracing::info!("DEBUG: Expected agents: {:?}", expected_agents);
+            tracing::info!("DEBUG: Completed agents: {:?}", completed_names);
             let all_complete = expected_agents
                 .iter()
                 .all(|exp| completed_names.contains(&exp.to_lowercase()));
 
-            eprintln!("DEBUG: All complete: {}", all_complete);
+            tracing::info!("DEBUG: All complete: {}", all_complete);
             if all_complete {
-                eprintln!("DEBUG: All agents complete, setting CheckingConsensus phase");
+                tracing::info!("DEBUG: All agents complete, setting CheckingConsensus phase");
                 if let Some(state) = widget.spec_auto_state.as_mut() {
                     state.phase = SpecAutoPhase::CheckingConsensus;
                 }
-                eprintln!("DEBUG: Calling check_consensus_and_advance_spec_auto");
+                tracing::info!("DEBUG: Calling check_consensus_and_advance_spec_auto");
                 check_consensus_and_advance_spec_auto(widget);
-                eprintln!("DEBUG: Returned from check_consensus_and_advance_spec_auto");
+                tracing::info!("DEBUG: Returned from check_consensus_and_advance_spec_auto");
             }
         }
         _ => {}

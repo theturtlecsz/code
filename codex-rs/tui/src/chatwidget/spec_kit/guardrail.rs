@@ -812,7 +812,7 @@ fn handle_native_guardrail(
             // Check if we're waiting for this guardrail stage
             if let Some(wait) = &state.waiting_guardrail {
                 if wait.stage == stage {
-                    eprintln!("DEBUG: Native guardrail {:?} complete, manually advancing pipeline", stage);
+                    tracing::info!("DEBUG: Native guardrail {:?} complete, manually advancing pipeline", stage);
                     // Pass the guardrail result directly to avoid blocking file I/O
                     // The result is already in memory from run_native_guardrail above
                     super::pipeline_coordinator::advance_spec_auto_after_native_guardrail(

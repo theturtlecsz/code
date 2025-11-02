@@ -296,15 +296,15 @@ pub fn on_spec_auto_task_started(widget: &mut ChatWidget, task_id: &str) {
 /// Handle spec-auto task completion (guardrail finished)
 pub fn on_spec_auto_task_complete(widget: &mut ChatWidget, task_id: &str) {
     let _start = std::time::Instant::now(); // T90: Metrics instrumentation
-    eprintln!("DEBUG: on_spec_auto_task_complete called with task_id={}", task_id);
+    tracing::info!("DEBUG: on_spec_auto_task_complete called with task_id={}", task_id);
 
     let (spec_id, stage) = {
         let Some(state) = widget.spec_auto_state.as_mut() else {
-            eprintln!("DEBUG: No spec_auto_state, returning");
+            tracing::info!("DEBUG: No spec_auto_state, returning");
             return;
         };
         let Some(wait) = state.waiting_guardrail.take() else {
-            eprintln!("DEBUG: No waiting_guardrail, returning");
+            tracing::info!("DEBUG: No waiting_guardrail, returning");
             return;
         };
         let Some(expected_id) = wait.task_id.as_deref() else {
@@ -438,9 +438,9 @@ pub fn on_spec_auto_task_complete(widget: &mut ChatWidget, task_id: &str) {
             }
 
             // After guardrail success and consensus check OK, auto-submit multi-agent prompt
-            eprintln!("DEBUG: About to call auto_submit_spec_stage_prompt for stage={:?}", stage);
+            tracing::info!("DEBUG: About to call auto_submit_spec_stage_prompt for stage={:?}", stage);
             auto_submit_spec_stage_prompt(widget, stage, &spec_id);
-            eprintln!("DEBUG: Returned from auto_submit_spec_stage_prompt");
+            tracing::info!("DEBUG: Returned from auto_submit_spec_stage_prompt");
         }
         Err(err) => {
             cleanup_spec_auto_with_cancel(
@@ -464,7 +464,7 @@ pub fn advance_spec_auto_after_native_guardrail(
     spec_id: &str,
     native_result: super::native_guardrail::GuardrailResult,
 ) {
-    eprintln!("DEBUG: advance_spec_auto_after_native_guardrail called for stage={:?}", stage);
+    tracing::info!("DEBUG: advance_spec_auto_after_native_guardrail called for stage={:?}", stage);
 
     // Clear waiting_guardrail state
     if let Some(state) = widget.spec_auto_state.as_mut() {
@@ -472,7 +472,7 @@ pub fn advance_spec_auto_after_native_guardrail(
     }
 
     // Convert native result to GuardrailOutcome (avoid blocking file I/O)
-    eprintln!("DEBUG: Using passed native guardrail result (no file I/O)");
+    tracing::info!("DEBUG: Using passed native guardrail result (no file I/O)");
     let outcome = super::state::GuardrailOutcome {
         success: native_result.success,
         summary: format!("{} stage ready", stage.display_name()),
@@ -480,7 +480,7 @@ pub fn advance_spec_auto_after_native_guardrail(
         failures: native_result.errors,
     };
 
-    eprintln!("DEBUG: Guardrail outcome converted, success={}", outcome.success);
+    tracing::info!("DEBUG: Guardrail outcome converted, success={}", outcome.success);
     if !outcome.success {
         if stage == SpecStage::Validate {
             // Record failure and halt
@@ -517,9 +517,9 @@ pub fn advance_spec_auto_after_native_guardrail(
     //   on_spec_auto_agents_complete() → check_consensus_and_advance_spec_auto()
     //
     // This avoids nested runtime issues and follows the standard agent lifecycle.
-    eprintln!("DEBUG: Native guardrail validated, spawning agents for stage={:?}", stage);
+    tracing::info!("DEBUG: Native guardrail validated, spawning agents for stage={:?}", stage);
     auto_submit_spec_stage_prompt(widget, stage, spec_id);
-    eprintln!("DEBUG: Agents spawned, will check consensus after completion");
+    tracing::info!("DEBUG: Agents spawned, will check consensus after completion");
 }
 
 /// Check consensus and advance to next stage
