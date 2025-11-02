@@ -669,14 +669,62 @@ async fn fetch_validation_payload(
     }
 }
 
+/// Strip agent metadata prefixes (timestamps, version info, config lines)
+/// SPEC-KIT-900 Session 2: Fix for "code" agent wrapping JSON in metadata
+fn strip_agent_metadata(content: &str) -> String {
+    content
+        .lines()
+        .skip_while(|line| {
+            let trimmed = line.trim();
+            // Skip timestamp lines: [2025-11-02T21:09:09]
+            let is_timestamp = trimmed.starts_with('[') &&
+                               trimmed.contains(']') &&
+                               trimmed.len() < 30;
+
+            // Skip version/product lines: OpenAI Codex v0.0.0, Anthropic Claude...
+            let is_version = trimmed.starts_with("OpenAI") ||
+                            trimmed.starts_with("Codex") ||
+                            trimmed.starts_with("Anthropic") ||
+                            trimmed.starts_with("Claude");
+
+            // Skip separator lines: --------
+            let is_separator = trimmed.starts_with("---") || trimmed.starts_with("===");
+
+            // Skip config lines: workdir:, model:, provider:, sandbox:, etc.
+            let is_config = trimmed.contains(':') &&
+                           trimmed.len() < 100 &&
+                           (trimmed.starts_with("workdir") ||
+                            trimmed.starts_with("model") ||
+                            trimmed.starts_with("provider") ||
+                            trimmed.starts_with("sandbox") ||
+                            trimmed.starts_with("approval") ||
+                            trimmed.starts_with("reasoning"));
+
+            is_timestamp || is_version || is_separator || is_config
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Extract JSON content from agent result text.
 ///
-/// Tries two strategies:
+/// Tries multiple strategies:
+/// 0. Strip metadata prefixes (timestamps, version info)
 /// 1. Markdown code fence (```json ... ```)
 /// 2. Raw JSON (starts with { or [)
 fn extract_json_from_content(content: &str) -> Option<String> {
+    // SPEC-KIT-900 Session 2 fix: Pre-process to remove agent metadata
+    let cleaned_content = strip_agent_metadata(content);
+    let content_to_parse = if cleaned_content.trim().is_empty() {
+        content  // Fallback to original if stripping removed everything
+    } else {
+        &cleaned_content
+    };
+
+    tracing::warn!("🔍 Quality gate JSON extraction: original={} bytes, cleaned={} bytes",
+        content.len(), content_to_parse.len());
     // Try markdown fence first
-    let lines: Vec<&str> = content.lines().collect();
+    let lines: Vec<&str> = content_to_parse.lines().collect();
     let mut in_fence = false;
     let mut json_lines = Vec::new();
 
@@ -705,7 +753,7 @@ fn extract_json_from_content(content: &str) -> Option<String> {
     let mut in_json = false;
     let mut brace_depth: i32 = 0;
 
-    for line in content.lines() {
+    for line in content_to_parse.lines() {
         let trimmed = line.trim();
 
         // Skip obvious prompt/instruction lines
