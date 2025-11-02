@@ -6883,6 +6883,31 @@ impl ChatWidget<'_> {
                         let any_streaming = self.stream.is_write_cycle_active();
                         tracing::warn!("DEBUG: Tools running={}, streaming={}", any_tools_running, any_streaming);
 
+                        // Log completion check for spec-auto observability
+                        if let Some(state) = self.spec_auto_state.as_ref() {
+                            if let Some(run_id) = &state.run_id {
+                                if let Some(stage) = state.current_stage() {
+                                    let completed_count = self.active_agents.iter()
+                                        .filter(|a| matches!(a.status, crate::chatwidget::AgentStatus::Completed))
+                                        .count();
+
+                                    state.execution_logger.log_event(
+                                        spec_kit::execution_logger::ExecutionEvent::CompletionCheck {
+                                            run_id: run_id.clone(),
+                                            stage: stage.display_name().to_string(),
+                                            all_agents_terminal,
+                                            tools_running: any_tools_running,
+                                            streaming_active: any_streaming,
+                                            will_proceed: !(any_tools_running || any_streaming),
+                                            agent_count: self.agent_runtime.len(),
+                                            completed_count,
+                                            timestamp: spec_kit::execution_logger::ExecutionEvent::now(),
+                                        }
+                                    );
+                                }
+                            }
+                        }
+
                         if !(any_tools_running || any_streaming) {
                             tracing::warn!("DEBUG: All agents terminal, no tools/streaming, calling spec_kit completion handler");
                             self.bottom_pane.set_task_running(false);

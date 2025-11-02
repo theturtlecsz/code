@@ -118,6 +118,43 @@ pub enum ExecutionEvent {
         error: String,
         timestamp: String,
     },
+    /// Tool execution by an agent (start)
+    ToolExecutionStart {
+        run_id: RunId,
+        agent_id: String,
+        tool_name: String,
+        timestamp: String,
+    },
+    /// Tool execution completion
+    ToolExecutionComplete {
+        run_id: RunId,
+        agent_id: String,
+        tool_name: String,
+        duration_ms: u64,
+        status: String, // "success", "error"
+        timestamp: String,
+    },
+    /// Pipeline phase transition
+    PhaseTransition {
+        run_id: RunId,
+        from_phase: String,
+        to_phase: String,
+        stage: String,
+        trigger: String, // What caused the transition
+        timestamp: String,
+    },
+    /// Agent completion detection check
+    CompletionCheck {
+        run_id: RunId,
+        stage: String,
+        all_agents_terminal: bool,
+        tools_running: bool,
+        streaming_active: bool,
+        will_proceed: bool, // Whether completion handler will be called
+        agent_count: usize,
+        completed_count: usize,
+        timestamp: String,
+    },
 }
 
 impl ExecutionEvent {
@@ -139,7 +176,11 @@ impl ExecutionEvent {
             | Self::QualityGateComplete { run_id, .. }
             | Self::StageComplete { run_id, .. }
             | Self::RunComplete { run_id, .. }
-            | Self::RunError { run_id, .. } => run_id,
+            | Self::RunError { run_id, .. }
+            | Self::ToolExecutionStart { run_id, .. }
+            | Self::ToolExecutionComplete { run_id, .. }
+            | Self::PhaseTransition { run_id, .. }
+            | Self::CompletionCheck { run_id, .. } => run_id,
         }
     }
 }

@@ -256,10 +256,13 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                 .collect();
 
             if let Some(state) = widget.spec_auto_state.as_mut() {
-                state.phase = SpecAutoPhase::ExecutingAgents {
-                    expected_agents: stage_expected,
-                    completed_agents: std::collections::HashSet::new(),
-                };
+                state.transition_phase(
+                    SpecAutoPhase::ExecutingAgents {
+                        expected_agents: stage_expected,
+                        completed_agents: std::collections::HashSet::new(),
+                    },
+                    "agents_spawned"
+                );
 
                 if stage == SpecStage::Validate {
                     if let Some((info, payload_hash)) = validate_context.as_mut() {
@@ -520,7 +523,7 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
             if all_complete {
                 tracing::warn!("DEBUG: All agents complete, setting CheckingConsensus phase");
                 if let Some(state) = widget.spec_auto_state.as_mut() {
-                    state.phase = SpecAutoPhase::CheckingConsensus;
+                    state.transition_phase(SpecAutoPhase::CheckingConsensus, "all_agents_complete");
                 }
                 tracing::warn!("DEBUG: Calling check_consensus_and_advance_spec_auto");
                 check_consensus_and_advance_spec_auto(widget);

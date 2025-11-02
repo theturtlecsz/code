@@ -569,6 +569,27 @@ impl SpecAutoState {
         matches!(self.phase, SpecAutoPhase::ExecutingAgents { .. })
     }
 
+    /// Transition to new phase with logging
+    pub fn transition_phase(&mut self, new_phase: SpecAutoPhase, trigger: &str) {
+        let old_phase_name = format!("{:?}", self.phase);
+        let new_phase_name = format!("{:?}", new_phase);
+
+        if let (Some(run_id), Some(stage)) = (&self.run_id, self.current_stage()) {
+            self.execution_logger.log_event(
+                super::execution_logger::ExecutionEvent::PhaseTransition {
+                    run_id: run_id.clone(),
+                    from_phase: old_phase_name,
+                    to_phase: new_phase_name,
+                    stage: stage.display_name().to_string(),
+                    trigger: trigger.to_string(),
+                    timestamp: super::execution_logger::ExecutionEvent::now(),
+                }
+            );
+        }
+
+        self.phase = new_phase;
+    }
+
     pub fn set_validate_lifecycle(&mut self, lifecycle: ValidateLifecycle) {
         self.validate_lifecycle = lifecycle;
     }
