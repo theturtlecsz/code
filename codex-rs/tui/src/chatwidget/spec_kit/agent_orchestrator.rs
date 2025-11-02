@@ -43,8 +43,17 @@ async fn spawn_regular_stage_agents_native(
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
 ) -> Result<Vec<AgentSpawnInfo>, String> {
+    tracing::info!("🎬 AUDIT: spawn_regular_stage_agents_native called");
+    tracing::info!("  spec_id: {}", spec_id);
+    tracing::info!("  stage: {:?}", stage);
+    tracing::info!("  expected_agents: {:?}", expected_agents);
+    tracing::info!("  prompt length: {} chars", prompt.len());
+    tracing::info!("  prompt preview: {}", &prompt[..200.min(prompt.len())]);
+
     let mut spawn_infos = Vec::new();
     let batch_id = uuid::Uuid::new_v4().to_string();
+
+    tracing::info!("  batch_id: {}", batch_id);
 
     // Map canonical agent names to config names (must match ~/.code/config.toml [[agents]] entries)
     // For Plan stage: Use same tier as quality gates (Tier 2: cheap + fast)
@@ -54,22 +63,34 @@ async fn spawn_regular_stage_agents_native(
         ("gpt_pro", "gpt_pro"),         // gpt-5 medium effort (legacy name, still valid)
     ].iter().copied().collect();
 
-    for agent_name in expected_agents {
+    for (idx, agent_name) in expected_agents.iter().enumerate() {
+        tracing::info!("🤖 AUDIT: Spawning agent {}/{}: {}", idx+1, expected_agents.len(), agent_name);
+
         let config_name = agent_config_map.get(agent_name.as_str())
             .ok_or_else(|| format!("No config mapping for agent {}", agent_name))?;
 
+        tracing::info!("  config_name: {} (from ~/.code/config.toml)", config_name);
+
         // Spawn agent via AgentManager (same as quality gates)
         let mut manager = AGENT_MANAGER.write().await;
+
+        tracing::info!("  Calling AGENT_MANAGER.create_agent_from_config_name...");
         let agent_id = manager.create_agent_from_config_name(
             config_name,
             agent_configs,
             prompt.to_string(),
             false, // read_write for regular stages
             Some(batch_id.clone()),
-        ).await.map_err(|e| format!("Failed to spawn {}: {}", config_name, e))?;
+        ).await.map_err(|e| {
+            tracing::error!("  ❌ Failed to create agent {}: {}", config_name, e);
+            format!("Failed to spawn {}: {}", config_name, e)
+        })?;
+
+        tracing::info!("  ✓ Agent spawned with ID: {}", agent_id);
 
         // Record agent spawn to SQLite for definitive routing
         if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+            tracing::info!("  Recording spawn to SQLite (phase_type=regular_stage)...");
             if let Err(e) = db.record_agent_spawn(
                 &agent_id,
                 spec_id,
@@ -77,9 +98,9 @@ async fn spawn_regular_stage_agents_native(
                 "regular_stage",
                 agent_name,
             ) {
-                tracing::warn!("Failed to record agent spawn for {}: {}", agent_name, e);
+                tracing::warn!("  ⚠ Failed to record agent spawn for {}: {}", agent_name, e);
             } else {
-                tracing::info!("Recorded regular stage agent spawn: {} ({})", agent_name, agent_id);
+                tracing::info!("  ✓ SQLite record created for {} ({})", agent_name, &agent_id[..8]);
             }
         }
 
@@ -88,9 +109,77 @@ async fn spawn_regular_stage_agents_native(
             agent_name: agent_name.clone(),
             model_name: config_name.to_string(),
         });
+
+        tracing::info!("  ✅ Agent {} spawn complete", agent_name);
     }
 
+    tracing::info!("🎉 AUDIT: All {} agents spawned successfully", spawn_infos.len());
     Ok(spawn_infos)
+}
+
+/// Wait for regular stage agents to complete (mirrors quality gate polling)
+/// Returns when all agents reach terminal state or timeout expires
+async fn wait_for_regular_stage_agents(
+    agent_ids: &[String],
+    timeout_secs: u64,
+) -> Result<(), String> {
+    use codex_core::agent_tool::AGENT_MANAGER;
+
+    let start = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(timeout_secs);
+    let poll_interval = std::time::Duration::from_millis(500);
+
+    tracing::info!("🔍 AUDIT: Starting to poll {} regular stage agents (timeout={}s)", agent_ids.len(), timeout_secs);
+
+    let mut poll_count = 0;
+    loop {
+        poll_count += 1;
+        let elapsed = start.elapsed();
+
+        if elapsed > timeout {
+            tracing::warn!("❌ AUDIT: Agent polling timeout after {} polls ({}s)", poll_count, elapsed.as_secs());
+            return Err(format!("Timeout waiting for {} agents after {}s", agent_ids.len(), elapsed.as_secs()));
+        }
+
+        // Check if all agents are complete
+        let manager = AGENT_MANAGER.read().await;
+        let mut all_done = true;
+        let mut status_summary = Vec::new();
+
+        for agent_id in agent_ids {
+            if let Some(agent) = manager.get_agent(agent_id) {
+                use codex_core::agent_tool::AgentStatus;
+                let is_terminal = matches!(agent.status, AgentStatus::Completed | AgentStatus::Failed | AgentStatus::Cancelled);
+                status_summary.push((agent_id.clone(), agent.status.clone(), is_terminal));
+
+                if !is_terminal {
+                    all_done = false;
+                }
+            } else {
+                tracing::warn!("⚠ AUDIT: Agent {} not found in AGENT_MANAGER (poll #{})", agent_id, poll_count);
+                all_done = false;
+            }
+        }
+
+        if poll_count % 10 == 1 {  // Log every 10th poll (every 5 seconds)
+            tracing::info!("📊 AUDIT: Poll #{} @ {}s - Status:", poll_count, elapsed.as_secs());
+            for (id, status, terminal) in &status_summary {
+                tracing::info!("  {} {}: {:?}",
+                    if *terminal { "✓" } else { "⏳" },
+                    &id[..8],
+                    status
+                );
+            }
+        }
+
+        if all_done {
+            tracing::info!("✅ AUDIT: All {} agents reached terminal state after {} polls ({}s)",
+                agent_ids.len(), poll_count, elapsed.as_secs());
+            return Ok(());
+        }
+
+        tokio::time::sleep(poll_interval).await;
+    }
 }
 
 pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, spec_id: &str) {
@@ -401,13 +490,50 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
 
             match spawn_result {
                 Ok(spawn_infos) => {
-                    tracing::warn!("DEBUG: Spawned {} agents directly via AgentManager", spawn_infos.len());
+                    tracing::info!("🚀 AUDIT: Spawned {} agents directly via AgentManager for stage={:?}",
+                        spawn_infos.len(), stage);
                     for info in &spawn_infos {
-                        tracing::warn!("DEBUG: Spawned {} ({}) with model {}",
-                            info.agent_name, info.agent_id, info.model_name);
+                        tracing::info!("  ✓ {} ({}): model={}", info.agent_name, &info.agent_id[..8], info.model_name);
                     }
+
+                    // Extract agent IDs for polling
+                    let agent_ids: Vec<String> = spawn_infos.iter().map(|i| i.agent_id.clone()).collect();
+
+                    // Start background polling task (mirrors quality gate behavior)
+                    let event_tx = widget.app_event_tx.clone();
+                    let spec_id_clone = spec_id.to_string();
+                    let stage_clone = stage;
+
+                    tracing::info!("🔄 AUDIT: Starting background polling task for {} agents", agent_ids.len());
+
+                    let _poll_handle = tokio::spawn(async move {
+                        tracing::info!("📡 AUDIT: Background task started - waiting for {} agents", agent_ids.len());
+
+                        match wait_for_regular_stage_agents(&agent_ids, 300).await {  // 5 min timeout
+                            Ok(()) => {
+                                tracing::info!("✅ AUDIT: All agents completed successfully - sending RegularStageAgentsComplete event");
+
+                                let _ = event_tx.send(crate::app_event::AppEvent::RegularStageAgentsComplete {
+                                    stage: stage_clone,
+                                    spec_id: spec_id_clone,
+                                    agent_ids: agent_ids.clone(),
+                                });
+
+                                tracing::info!("📬 AUDIT: RegularStageAgentsComplete event sent");
+                            }
+                            Err(e) => {
+                                tracing::warn!("❌ AUDIT: Agent polling failed: {}", e);
+                                // TODO: Send error event or handle timeout gracefully
+                            }
+                        }
+
+                        tracing::info!("🏁 AUDIT: Background polling task complete");
+                    });
+
+                    tracing::info!("✓ AUDIT: Background polling task spawned, continuing main flow");
                 }
                 Err(e) => {
+                    tracing::error!("❌ AUDIT: Failed to spawn agents for {:?}: {}", stage, e);
                     halt_spec_auto_with_error(
                         widget,
                         format!("Failed to spawn agents for {}: {}", stage.display_name(), e),

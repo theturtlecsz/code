@@ -468,6 +468,14 @@ pub(crate) enum AppEvent {
         checkpoint: crate::chatwidget::spec_kit::QualityCheckpoint,
         agent_ids: Vec<String>,
     },
+
+    /// Regular stage agents completed (SPEC-KIT-900 Session 2)
+    /// Triggered when directly-spawned regular stage agents finish execution
+    RegularStageAgentsComplete {
+        stage: crate::spec_prompts::SpecStage,
+        spec_id: String,
+        agent_ids: Vec<String>,
+    },
     // === END FORK-SPECIFIC ===
 }
 

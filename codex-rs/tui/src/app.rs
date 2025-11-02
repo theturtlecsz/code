@@ -2724,6 +2724,19 @@ impl App<'_> {
                         // Trigger broker (will use memory-based collection)
                         spec_kit::on_quality_gate_agents_complete(widget);
                     }
+                }
+                AppEvent::RegularStageAgentsComplete { stage, spec_id, agent_ids } => {
+                    // Regular stage agents completed (SPEC-KIT-900 Session 2)
+                    // Triggered by background polling when all agents reach terminal state
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        info!("🎯 AUDIT: Regular stage agents complete: stage={:?}, spec={}, agents={}",
+                            stage, spec_id, agent_ids.len());
+                        for (i, agent_id) in agent_ids.iter().enumerate() {
+                            info!("  Agent {}/{}: {}", i+1, agent_ids.len(), agent_id);
+                        }
+                        // Trigger completion handler (which checks SQLite for phase_type)
+                        spec_kit::on_spec_auto_agents_complete(widget);
+                    }
                 } // === END FORK-SPECIFIC ===
             }
         }
