@@ -289,13 +289,17 @@ async fn fetch_agent_payloads_from_memory(
 
                         // LAST RESORT: Search for "quality-gate-clarify" string and extract surrounding JSON
                         // The code agent buries JSON deep in verbose output
-                        // Use RFIND to get LAST occurrence (actual response, not prompt example)
-                        if let Some(stage_mention) = result_text.rfind(r#""stage": "quality-gate-clarify""#) {
-                            info_lines.push(format!("  Found stage marker at position {} (last occurrence)", stage_mention));
+                        // Try ALL occurrences from last to first (actual response usually near end)
+                        let marker = r#""stage": "quality-gate-clarify""#;
+                        let mut search_pos = result_text.len();
+                        let mut found_valid_json = false;
+
+                        while let Some(relative_pos) = result_text[..search_pos].rfind(marker) {
+                            info_lines.push(format!("  Found stage marker at position {} (searching backwards)", relative_pos));
 
                             // Search backwards for opening brace (within 5000 chars to handle large JSON)
-                            let search_start = stage_mention.saturating_sub(5000);
-                            let before = &result_text[search_start..stage_mention];
+                            let search_start = relative_pos.saturating_sub(5000);
+                            let before = &result_text[search_start..relative_pos];
 
                             if let Some(rel_open) = before.rfind('{') {
                                 let abs_open = search_start + rel_open;
@@ -325,6 +329,16 @@ async fn fetch_agent_payloads_from_memory(
 
                                     match serde_json::from_str::<Value>(candidate) {
                                         Ok(json_val) => {
+                                            // Validate this is actually a quality-gate JSON
+                                            let stage_field = json_val.get("stage").and_then(|v| v.as_str());
+                                            if stage_field != Some("quality-gate-clarify") {
+                                                info_lines.push(format!("  Extracted JSON has wrong stage field: {:?}, trying earlier occurrence", stage_field));
+                                                // Continue searching for earlier occurrences
+                                                search_pos = relative_pos;
+                                                continue;
+                                            }
+
+                                            // Valid quality-gate JSON found!
                                             if let Some(agent_name) = json_val.get("agent").and_then(|v| v.as_str()) {
                                                 let matched_expected = expected_agents.iter().find(|expected| {
                                                     let expected_lower = expected.to_lowercase();
@@ -342,17 +356,31 @@ async fn fetch_agent_payloads_from_memory(
                                                             content: json_val,
                                                         },
                                                     );
+                                                    found_valid_json = true;
+                                                    break; // Found valid JSON, stop searching
                                                 }
                                             }
                                         }
                                         Err(e) => {
-                                            info_lines.push(format!("  Stage-marker JSON parse failed: {}", e));
+                                            info_lines.push(format!("  Stage-marker JSON parse failed: {}, trying earlier occurrence", e));
+                                            search_pos = relative_pos;
+                                            continue;
                                         }
                                     }
+                                } else {
+                                    info_lines.push("  No matching closing brace found, trying earlier occurrence".to_string());
+                                    search_pos = relative_pos;
+                                    continue;
                                 }
+                            } else {
+                                info_lines.push("  No opening brace found before marker, trying earlier occurrence".to_string());
+                                search_pos = relative_pos;
+                                continue;
                             }
-                        } else {
-                            info_lines.push("  No stage marker found in result".to_string());
+                        }
+
+                        if !found_valid_json {
+                            info_lines.push("  No valid quality-gate JSON found in any occurrence".to_string());
                             info_lines.push(format!("  First 500 chars: {}", &result_text.chars().take(500).collect::<String>()));
                         }
                     }
