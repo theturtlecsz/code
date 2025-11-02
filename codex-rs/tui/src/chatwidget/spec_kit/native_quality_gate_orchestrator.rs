@@ -151,9 +151,12 @@ async fn build_quality_gate_prompt(
     );
 
     // Replace placeholders
-    let prompt = prompt_template
+    let mut prompt = prompt_template
         .replace("${SPEC_ID}", spec_id)
         .replace("SPEC ${SPEC_ID}", &context); // Replace inline SPEC reference with full content
+
+    // CRITICAL: Enforce JSON-only output (agents sometimes respond in prose)
+    prompt.push_str("\n\nCRITICAL: You MUST output ONLY valid JSON matching the schema above. Do NOT add commentary, explanations, or prose. Start your response with { and end with }. No markdown fences, no preamble, just pure JSON.");
 
     Ok(prompt)
 }
