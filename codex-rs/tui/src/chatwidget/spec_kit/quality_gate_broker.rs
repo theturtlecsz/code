@@ -592,19 +592,75 @@ fn extract_json_from_content(content: &str) -> Option<String> {
         return Some(json_lines.join("\n"));
     }
 
-    // Try raw JSON
+    // Try raw JSON - look for actual JSON response, not prompt text
+    // Strategy: Find all potential JSON blocks and validate them
+    let mut json_candidates = Vec::new();
+    let mut current_json = Vec::new();
+    let mut in_json = false;
+    let mut brace_depth: i32 = 0;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        // Skip obvious prompt/instruction lines
+        if trimmed.contains("Output JSON:") || trimmed.contains("User instructions:") {
+            continue;
+        }
+
+        // Track JSON blocks by brace depth
+        for ch in trimmed.chars() {
+            if ch == '{' {
+                if brace_depth == 0 {
+                    in_json = true;
+                    current_json.clear();
+                }
+                brace_depth += 1;
+            }
+            if in_json {
+                // Collect full line when in JSON
+                if !current_json.contains(&line.to_string()) {
+                    current_json.push(line.to_string());
+                }
+            }
+            if ch == '}' {
+                brace_depth = brace_depth.saturating_sub(1);
+                if brace_depth == 0 && in_json {
+                    in_json = false;
+                    // Complete JSON block found
+                    let candidate = current_json.join("\n");
+                    json_candidates.push(candidate);
+                    current_json.clear();
+                }
+            }
+        }
+    }
+
+    // Try each candidate, return first valid one with "stage" field
+    for candidate in json_candidates {
+        if let Ok(json_val) = serde_json::from_str::<Value>(&candidate) {
+            // Prefer JSON with "stage" field (actual response, not prompt example)
+            if json_val.get("stage").is_some() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    // Fallback: try simple approach from beginning
     let mut found_json_start = false;
     let mut raw_json_lines = Vec::new();
 
     for line in content.lines() {
         let trimmed = line.trim();
-        if !found_json_start && (trimmed.starts_with('{') || trimmed.starts_with('[')) {
+        if !found_json_start && trimmed.starts_with('{') {
+            // Skip if this looks like prompt example
+            if trimmed.contains("${") || line.contains("Output JSON:") {
+                continue;
+            }
             found_json_start = true;
             raw_json_lines.push(line);
             continue;
         }
         if found_json_start {
-            // Stop at token usage footer
             if trimmed.starts_with('[') && trimmed.contains("tokens used") {
                 break;
             }
