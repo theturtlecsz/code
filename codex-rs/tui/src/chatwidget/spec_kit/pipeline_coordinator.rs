@@ -512,47 +512,14 @@ pub fn advance_spec_auto_after_native_guardrail(
         }
     }
 
-    // TODO: Consensus check causes nested runtime panic when called from native guardrails
-    // Skip for now - native guardrails already validated the stage
-    // The bash guardrail path (on_spec_auto_task_complete) can call block_on because
-    // it's triggered by TaskComplete event (outside async context)
-    eprintln!("DEBUG: Skipping consensus check for native guardrail path (would cause nested runtime panic)");
-    let consensus_result: Result<(Vec<ratatui::text::Line<'static>>, bool), super::error::SpecKitError> =
-        Ok((vec![ratatui::text::Line::from("Native guardrail - consensus skipped")], true));
-
-    eprintln!("DEBUG: Consensus check completed, processing result");
-    match consensus_result {
-        Ok((consensus_lines, ok)) => {
-            let cell = crate::history_cell::PlainHistoryCell::new(
-                consensus_lines,
-                if ok {
-                    HistoryCellType::Notice
-                } else {
-                    HistoryCellType::Error
-                },
-            );
-            widget.history_push(cell);
-            if !ok {
-                cleanup_spec_auto_with_cancel(
-                    widget,
-                    &format!("Consensus not reached for {}, manual resolution required", stage.display_name())
-                );
-                return;
-            }
-        }
-        Err(err) => {
-            cleanup_spec_auto_with_cancel(
-                widget,
-                &format!("Consensus check failed for {}: {}", stage.display_name(), err)
-            );
-            return;
-        }
-    }
-
-    // After guardrail success and consensus check OK, auto-submit multi-agent prompt
-    eprintln!("DEBUG: Native guardrail path - about to call auto_submit_spec_stage_prompt for stage={:?}", stage);
+    // Native guardrail path: Just spawn agents, skip consensus
+    // Consensus will run AFTER agents complete via the normal flow:
+    //   on_spec_auto_agents_complete() → check_consensus_and_advance_spec_auto()
+    //
+    // This avoids nested runtime issues and follows the standard agent lifecycle.
+    eprintln!("DEBUG: Native guardrail validated, spawning agents for stage={:?}", stage);
     auto_submit_spec_stage_prompt(widget, stage, spec_id);
-    eprintln!("DEBUG: Native guardrail path - returned from auto_submit_spec_stage_prompt");
+    eprintln!("DEBUG: Agents spawned, will check consensus after completion");
 }
 
 /// Check consensus and advance to next stage
