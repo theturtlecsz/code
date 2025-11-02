@@ -495,8 +495,10 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
     };
 
     // Handle different phase types
+    tracing::warn!("DEBUG: on_spec_auto_agents_complete - phase_type={}", phase_type);
     match phase_type {
         "quality_gate" => {
+            tracing::warn!("DEBUG: Quality gate path - calling on_quality_gate_agents_complete");
             if !completed_names.is_empty() {
                 on_quality_gate_agents_complete(widget);
             }
@@ -537,7 +539,7 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
 
             tracing::warn!("DEBUG: All complete: {}", all_complete);
             if all_complete {
-                tracing::warn!("DEBUG: All agents complete, collecting responses for consensus");
+                tracing::warn!("DEBUG: All regular stage agents complete, collecting responses for consensus");
 
                 // Collect agent responses from widget.active_agents
                 let agent_responses: Vec<(String, String)> = widget.active_agents.iter()
@@ -552,7 +554,7 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
 
                 tracing::warn!("DEBUG: Collected {} agent responses for consensus", agent_responses.len());
 
-                // Store responses in state for consensus to use
+                // Store responses in state for consensus to use (REGULAR stages only, not quality gates)
                 if let Some(state) = widget.spec_auto_state.as_mut() {
                     state.agent_responses_cache = Some(agent_responses);
                     state.transition_phase(SpecAutoPhase::CheckingConsensus, "all_agents_complete");

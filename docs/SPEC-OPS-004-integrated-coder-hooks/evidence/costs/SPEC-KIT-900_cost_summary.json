@@ -8,11 +8,11 @@
     "spec-plan": 0.0
   },
   "per_model": {
-    "claude": 0.0,
+    "code": 0.0,
     "gemini": 0.0,
-    "code": 0.0
+    "claude": 0.0
   },
-  "duration": 199,
+  "duration": 296,
   "stage_notes": [
     {
       "stage": "spec-tasks"
