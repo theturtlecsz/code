@@ -613,6 +613,8 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
                                         tracing::warn!("Failed to store {} artifact to SQLite: {}", agent_name, e);
                                     } else {
                                         tracing::warn!("DEBUG: Stored {} artifact to SQLite", agent_name);
+
+                                        // Note: Memory cleanup removed - SQLite-based consensus doesn't use local-memory
                                     }
                                 }
                             }

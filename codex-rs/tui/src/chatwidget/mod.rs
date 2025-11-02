@@ -6833,6 +6833,38 @@ impl ChatWidget<'_> {
                         AgentStatus::Running => {
                             if entry.started_at.is_none() {
                                 entry.started_at = Some(now);
+
+                                // Record agent spawn in SQLite for definitive routing
+                                // This ensures all agents (not just quality gates) are tracked
+                                if let Some(spec_auto_state) = self.spec_auto_state.as_ref() {
+                                    if let Ok(db) = spec_kit::consensus_db::ConsensusDb::init_default() {
+                                        if let Some(current_stage) = spec_auto_state.current_stage() {
+                                            // Determine phase_type based on current phase
+                                            let phase_type = match &spec_auto_state.phase {
+                                                spec_kit::state::SpecAutoPhase::QualityGateExecuting { .. } => "quality_gate",
+                                                spec_kit::state::SpecAutoPhase::ExecutingAgents { .. } => "regular_stage",
+                                                _ => {
+                                                    tracing::warn!("DEBUG: Agent {} spawned in unexpected phase: {:?}",
+                                                        agent.id, spec_auto_state.phase);
+                                                    "unknown"
+                                                }
+                                            };
+
+                                            tracing::warn!("DEBUG: Recording agent spawn in SQLite: agent_id={}, stage={:?}, phase_type={}",
+                                                agent.id, current_stage, phase_type);
+
+                                            if let Err(e) = db.record_agent_spawn(
+                                                &agent.id,
+                                                &spec_auto_state.spec_id,
+                                                current_stage,
+                                                phase_type,
+                                                &agent.name,
+                                            ) {
+                                                tracing::warn!("Failed to record agent spawn in SQLite: {}", e);
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                         AgentStatus::Completed | AgentStatus::Failed => {
