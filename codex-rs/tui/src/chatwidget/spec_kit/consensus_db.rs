@@ -200,6 +200,45 @@ impl ConsensusDb {
         Ok(count)
     }
 
+    /// List all SPECs with artifacts (for cleanup/maintenance)
+    pub fn list_specs(&self) -> SqlResult<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT spec_id FROM consensus_artifacts ORDER BY spec_id"
+        )?;
+
+        let specs = stmt
+            .query_map([], |row| row.get(0))?
+            .collect::<SqlResult<Vec<String>>>()?;
+
+        Ok(specs)
+    }
+
+    /// Get database statistics (for monitoring)
+    pub fn get_stats(&self) -> SqlResult<(i64, i64, i64)> {
+        let conn = self.conn.lock().unwrap();
+
+        let artifact_count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM consensus_artifacts",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let synthesis_count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM consensus_synthesis",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let db_size: i64 = conn.query_row(
+            "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()",
+            [],
+            |row| row.get(0),
+        ).unwrap_or(0);
+
+        Ok((artifact_count, synthesis_count, db_size))
+    }
+
     /// Store consensus synthesis output
     pub fn store_synthesis(
         &self,

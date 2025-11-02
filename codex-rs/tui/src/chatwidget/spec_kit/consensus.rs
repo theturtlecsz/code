@@ -263,11 +263,11 @@ pub(crate) async fn collect_consensus_artifacts(
 ) -> Result<(Vec<ConsensusArtifactData>, Vec<String>)> {
     let mut warnings: Vec<String> = Vec::new();
 
-    // SPEC-KIT-072: Try SQLite first (fastest, most reliable)
+    // SPEC-KIT-072 Phase 3: SQLite is PRIMARY source (local-memory deprecated for artifacts)
     if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
         match db.query_artifacts(spec_id, stage) {
             Ok(sqlite_artifacts) if !sqlite_artifacts.is_empty() => {
-                tracing::info!("Loaded {} consensus artifacts from SQLite", sqlite_artifacts.len());
+                tracing::info!("✓ Loaded {} consensus artifacts from SQLite (primary source)", sqlite_artifacts.len());
 
                 let mut artifacts = Vec::new();
                 for artifact in sqlite_artifacts {
@@ -282,19 +282,28 @@ pub(crate) async fn collect_consensus_artifacts(
                 }
 
                 if !artifacts.is_empty() {
+                    warnings.push(format!("Loaded {} artifacts from SQLite database", artifacts.len()));
                     return Ok((artifacts, warnings));
                 }
             }
             Ok(_) => {
-                tracing::info!("No SQLite artifacts found for {} {}, trying local-memory", spec_id, stage.command_name());
+                tracing::info!("No SQLite artifacts found for {} {}", spec_id, stage.command_name());
+                warnings.push("No artifacts in SQLite database (expected if agents just completed)".to_string());
             }
             Err(e) => {
-                tracing::warn!("SQLite query failed: {}, falling back to local-memory", e);
+                tracing::warn!("SQLite query failed: {}", e);
+                warnings.push(format!("SQLite error: {}", e));
             }
         }
+    } else {
+        warnings.push("SQLite database initialization failed - check ~/.code/ permissions".to_string());
     }
 
-    // ARCH-002: Fallback to local-memory MCP
+    // DEPRECATED: local-memory fallback (Phase 2 removed agent MCP tool usage)
+    // Keeping temporarily for migration period, but should not be needed
+    tracing::warn!("DEPRECATED: Falling back to local-memory MCP (should not happen after Phase 2)");
+
+    // ARCH-002: Fallback to local-memory MCP (DEPRECATED in Phase 2)
     match fetch_memory_entries(spec_id, stage, mcp_manager).await {
         Ok((entries, mut memory_warnings)) => {
             warnings.append(&mut memory_warnings);
