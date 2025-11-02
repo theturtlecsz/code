@@ -924,17 +924,28 @@ fn synthesize_from_cached_responses(
     let mut agent_data: Vec<(String, serde_json::Value)> = Vec::new();
 
     for (agent_name, response_text) in cached_responses {
+        tracing::warn!("DEBUG: Extracting JSON from {} ({} chars)", agent_name, response_text.len());
+
         // Try to extract JSON from response (agents may wrap in markdown code blocks)
         let json_content = extract_json_from_response(response_text);
 
         if let Some(json_str) = json_content {
+            tracing::warn!("DEBUG: Extracted JSON string from {} ({} chars)", agent_name, json_str.len());
             match serde_json::from_str::<serde_json::Value>(&json_str) {
                 Ok(parsed) => {
+                    tracing::warn!("DEBUG: Successfully parsed JSON for {}", agent_name);
                     agent_data.push((agent_name.clone(), parsed));
                     continue;
                 }
-                Err(_) => {}
+                Err(e) => {
+                    tracing::warn!("DEBUG: JSON parse failed for {}: {}", agent_name, e);
+                }
             }
+        } else {
+            tracing::warn!("DEBUG: No JSON extracted from {} response, using as plain text", agent_name);
+            // Log first 500 chars to see format
+            let preview = &response_text.chars().take(500).collect::<String>();
+            tracing::warn!("DEBUG: Response preview: {}", preview);
         }
 
         // Fallback: treat as plain text
