@@ -472,6 +472,10 @@ pub struct SpecAutoState {
     // SPEC-KIT-070: Execution logging for full pipeline visibility
     pub execution_logger: Arc<super::execution_logger::ExecutionLogger>,
     pub run_id: Option<String>,
+
+    // Agent response cache for consensus (avoids memory dependency)
+    // Collected from active_agents after completion, before consensus runs
+    pub agent_responses_cache: Option<Vec<(String, String)>>, // (agent_name, response_text)
 }
 
 impl SpecAutoState {
@@ -546,6 +550,8 @@ impl SpecAutoState {
             // Execution logging
             execution_logger: logger,
             run_id: Some(run_id),
+            // Agent response cache
+            agent_responses_cache: None,
         }
     }
 

@@ -537,10 +537,27 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
 
             tracing::warn!("DEBUG: All complete: {}", all_complete);
             if all_complete {
-                tracing::warn!("DEBUG: All agents complete, setting CheckingConsensus phase");
+                tracing::warn!("DEBUG: All agents complete, collecting responses for consensus");
+
+                // Collect agent responses from widget.active_agents
+                let agent_responses: Vec<(String, String)> = widget.active_agents.iter()
+                    .filter_map(|agent| {
+                        if matches!(agent.status, super::super::AgentStatus::Completed) {
+                            agent.result.as_ref().map(|result| (agent.name.clone(), result.clone()))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                tracing::warn!("DEBUG: Collected {} agent responses for consensus", agent_responses.len());
+
+                // Store responses in state for consensus to use
                 if let Some(state) = widget.spec_auto_state.as_mut() {
+                    state.agent_responses_cache = Some(agent_responses);
                     state.transition_phase(SpecAutoPhase::CheckingConsensus, "all_agents_complete");
                 }
+
                 tracing::warn!("DEBUG: Calling check_consensus_and_advance_spec_auto");
                 check_consensus_and_advance_spec_auto(widget);
                 tracing::warn!("DEBUG: Returned from check_consensus_and_advance_spec_auto");

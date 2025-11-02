@@ -7,7 +7,7 @@ use super::error::{Result, SpecKitError};
 // FORK-SPECIFIC (just-every/code): LocalMemoryClient removed, using native MCP
 use crate::spec_prompts::SpecStage;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::path::PathBuf;
 
 // ============================================================================
@@ -220,6 +220,38 @@ pub(in super::super) fn validate_required_fields(stage: SpecStage, summary: &Val
 use crate::local_memory_util::LocalMemorySearchResult;
 use std::fs;
 use std::path::Path;
+
+/// Build consensus artifacts from cached agent responses (bypasses memory/file lookup)
+pub(crate) fn artifacts_from_cached_responses(
+    cached_responses: &[(String, String)],
+    stage: SpecStage,
+) -> Result<Vec<ConsensusArtifactData>> {
+    let mut artifacts = Vec::new();
+
+    for (agent_name, response_text) in cached_responses {
+        // Try to parse response as JSON (agents may output structured data)
+        let content = match serde_json::from_str::<Value>(response_text) {
+            Ok(json) => json,
+            Err(_) => {
+                // Not JSON, wrap as text content
+                json!({
+                    "agent": agent_name,
+                    "stage": stage.command_name(),
+                    "content": response_text
+                })
+            }
+        };
+
+        artifacts.push(ConsensusArtifactData {
+            memory_id: Some(format!("cached_{}", agent_name)),
+            agent: agent_name.clone(),
+            version: None,
+            content,
+        });
+    }
+
+    Ok(artifacts)
+}
 
 /// Collect consensus artifacts from local-memory (primary) or evidence files (fallback)
 // FORK-SPECIFIC (just-every/code): Made async for native MCP with ARCH-002 fallback

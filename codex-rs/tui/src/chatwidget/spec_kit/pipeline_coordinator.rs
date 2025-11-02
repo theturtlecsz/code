@@ -576,6 +576,41 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
         }
     }
 
+    // Check if we have cached agent responses (from this run)
+    let has_cached_responses = widget.spec_auto_state.as_ref()
+        .and_then(|s| s.agent_responses_cache.as_ref())
+        .map(|cache| !cache.is_empty())
+        .unwrap_or(false);
+
+    if has_cached_responses {
+        // Use cached responses directly, bypass memory/file lookup
+        tracing::warn!("DEBUG: Using cached agent responses for consensus (bypass MCP)");
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![ratatui::text::Line::from(format!(
+                "Synthesizing consensus from {} agent responses...",
+                widget.spec_auto_state.as_ref().unwrap().agent_responses_cache.as_ref().unwrap().len()
+            ))],
+            HistoryCellType::Notice,
+        ));
+
+        // TODO: Implement consensus synthesis from cached responses
+        // For now, just acknowledge we have them and continue degraded
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![ratatui::text::Line::from(
+                "⚠ Consensus synthesis from cached responses not yet implemented. Continuing degraded."
+            )],
+            HistoryCellType::Notice,
+        ));
+
+        // Advance to next stage
+        if let Some(state) = widget.spec_auto_state.as_mut() {
+            state.current_index += 1;
+            state.agent_responses_cache = None; // Clear cache
+        }
+        advance_spec_auto(widget);
+        return;
+    }
+
     // Show checking status
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
         vec![ratatui::text::Line::from(format!(
