@@ -934,6 +934,11 @@ fn synthesize_from_cached_responses(
             match serde_json::from_str::<serde_json::Value>(&json_str) {
                 Ok(parsed) => {
                     tracing::warn!("DEBUG: Successfully parsed JSON for {}", agent_name);
+                    // Log top-level fields for debugging
+                    if let Some(obj) = parsed.as_object() {
+                        let fields: Vec<&String> = obj.keys().collect();
+                        tracing::warn!("DEBUG: {} has fields: {:?}", agent_name, fields);
+                    }
                     agent_data.push((agent_name.clone(), parsed));
                     continue;
                 }
@@ -962,6 +967,18 @@ fn synthesize_from_cached_responses(
     output.push_str(&format!("**Stage**: {}\n", stage.display_name()));
     output.push_str(&format!("**Agents**: {}\n", agent_data.len()));
     output.push_str(&format!("**Generated**: {}\n\n", chrono::Utc::now().format("%Y-%m-%d %H:%M UTC")));
+
+    // Debug: Log what we actually have
+    for (agent_name, data) in &agent_data {
+        tracing::warn!("DEBUG: Processing {} with {} top-level keys", agent_name,
+            data.as_object().map(|o| o.len()).unwrap_or(0));
+
+        // Dump raw JSON for debugging
+        output.push_str(&format!("## Debug: {} Raw JSON\n\n", agent_name));
+        output.push_str("```json\n");
+        output.push_str(&serde_json::to_string_pretty(data).unwrap_or_else(|_| "parse error".to_string()));
+        output.push_str("\n```\n\n");
+    }
 
     // Extract work breakdown, risks, acceptance from structured data
     for (agent_name, data) in &agent_data {
