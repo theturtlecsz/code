@@ -283,8 +283,71 @@ async fn fetch_agent_payloads_from_memory(
                         }
                     }
                     None => {
-                        info_lines.push("  No JSON found in result".to_string());
-                        info_lines.push(format!("  First 500 chars: {}", &result_text.chars().take(500).collect::<String>()));
+                        info_lines.push("  No JSON found via standard extraction".to_string());
+
+                        // LAST RESORT: Search for "quality-gate-clarify" string and extract surrounding JSON
+                        // The code agent buries JSON deep in verbose output
+                        if let Some(stage_mention) = result_text.find(r#""stage": "quality-gate-clarify""#) {
+                            info_lines.push(format!("  Found stage marker at position {}", stage_mention));
+
+                            // Search backwards for opening brace (within 1000 chars)
+                            let search_start = stage_mention.saturating_sub(1000);
+                            let before = &result_text[search_start..stage_mention];
+
+                            if let Some(rel_open) = before.rfind('{') {
+                                let abs_open = search_start + rel_open;
+                                let from_open = &result_text[abs_open..];
+
+                                // Find matching closing brace
+                                let mut depth = 0;
+                                let mut json_end = 0;
+                                for (pos, ch) in from_open.chars().enumerate() {
+                                    if ch == '{' { depth += 1; }
+                                    if ch == '}' {
+                                        depth -= 1;
+                                        if depth == 0 {
+                                            json_end = pos + 1;
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                if json_end > 0 {
+                                    let candidate = &from_open[..json_end];
+                                    info_lines.push(format!("  Extracted via stage-marker search ({} chars)", candidate.len()));
+
+                                    match serde_json::from_str::<Value>(candidate) {
+                                        Ok(json_val) => {
+                                            if let Some(agent_name) = json_val.get("agent").and_then(|v| v.as_str()) {
+                                                let matched_expected = expected_agents.iter().find(|expected| {
+                                                    let expected_lower = expected.to_lowercase();
+                                                    let agent_lower = agent_name.to_lowercase();
+                                                    agent_lower == expected_lower || agent_lower.starts_with(&format!("{}-", expected_lower))
+                                                });
+
+                                                if let Some(expected) = matched_expected {
+                                                    info_lines.push(format!("Found {} (via fallback extraction) from memory", expected));
+                                                    results_map.insert(
+                                                        expected.to_lowercase(),
+                                                        QualityGateAgentPayload {
+                                                            agent: expected.to_string(),
+                                                            gate: Some("quality-gate-clarify".to_string()),
+                                                            content: json_val,
+                                                        },
+                                                    );
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            info_lines.push(format!("  Stage-marker JSON parse failed: {}", e));
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            info_lines.push("  No stage marker found in result".to_string());
+                            info_lines.push(format!("  First 500 chars: {}", &result_text.chars().take(500).collect::<String>()));
+                        }
                     }
                 }
             } else {
