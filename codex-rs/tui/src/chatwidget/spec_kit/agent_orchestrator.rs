@@ -515,9 +515,25 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
             tracing::warn!("DEBUG: Regular agent phase, checking completion");
             tracing::warn!("DEBUG: Expected agents: {:?}", expected_agents);
             tracing::warn!("DEBUG: Completed agents: {:?}", completed_names);
-            let all_complete = expected_agents
-                .iter()
-                .all(|exp| completed_names.contains(&exp.to_lowercase()));
+
+            // Check completion with agent name normalization
+            // Handles aliases like "code" (command) vs "gpt_pro" (config name)
+            let all_complete = expected_agents.iter().all(|expected| {
+                let exp_lower = expected.to_lowercase();
+                // Direct match
+                if completed_names.contains(&exp_lower) {
+                    return true;
+                }
+                // Special case: gpt_pro config uses "code" command
+                if exp_lower == "gpt_pro" && (completed_names.contains("code") || completed_names.contains("gpt5") || completed_names.contains("gpt-5")) {
+                    return true;
+                }
+                // Special case: code config might report as gpt_pro
+                if exp_lower == "code" && completed_names.contains("gpt_pro") {
+                    return true;
+                }
+                false
+            });
 
             tracing::warn!("DEBUG: All complete: {}", all_complete);
             if all_complete {
