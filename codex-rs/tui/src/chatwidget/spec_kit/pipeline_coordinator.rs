@@ -469,8 +469,10 @@ pub fn advance_spec_auto_after_native_guardrail(
     }
 
     // Collect guardrail outcome
+    eprintln!("DEBUG: Collecting guardrail outcome...");
     match widget.collect_guardrail_outcome(spec_id, stage) {
         Ok(outcome) => {
+            eprintln!("DEBUG: Guardrail outcome collected, success={}", outcome.success);
             if !outcome.success {
                 if stage == SpecStage::Validate {
                     // Record failure and halt
@@ -503,6 +505,7 @@ pub fn advance_spec_auto_after_native_guardrail(
             }
 
             // Run consensus check
+            eprintln!("DEBUG: Starting consensus check for stage={:?}", stage);
             let consensus_result = match tokio::runtime::Handle::try_current() {
                 Ok(handle) => handle.block_on(run_consensus_with_retry(
                     widget.mcp_manager.clone(),
@@ -516,6 +519,7 @@ pub fn advance_spec_auto_after_native_guardrail(
                 )),
             };
 
+            eprintln!("DEBUG: Consensus check completed, processing result");
             match consensus_result {
                 Ok((consensus_lines, ok)) => {
                     let cell = crate::history_cell::PlainHistoryCell::new(
