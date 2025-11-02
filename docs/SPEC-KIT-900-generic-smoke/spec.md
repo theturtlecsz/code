@@ -199,10 +199,11 @@ Acceptance checks:
 ## Success Criteria (for the SPEC itself)
 
 - [ ] All three stages complete without manual editing of prompts.
-- [ ] `local-memory search "spec:SPEC-KIT-900 stage:plan"` returns ≥1 artifact per agent.
+- [ ] SQLite consensus database contains ≥3 artifacts per stage (1 per agent): `SELECT COUNT(*) FROM consensus_artifacts WHERE spec_id='SPEC-KIT-900' AND stage='spec-plan'` returns ≥3.
 - [ ] Cost summary JSON exists and contains `per_stage.plan`, `per_stage.tasks`, `per_stage.validate` entries.
 - [ ] Consensus verdicts show ≥90% substantive agreement on conclusions (degraded mode with 2/3 agents acceptable; see PRD §5 for consensus definition).
 - [ ] Manual review (by analyst using rubric: coherence, completeness, formatting, factual alignment) rates outputs "adequate" or better for clarity and structure.
+- [ ] SQLite synthesis table contains plan.md output: `SELECT output_path FROM consensus_synthesis WHERE spec_id='SPEC-KIT-900' AND stage='spec-plan'` returns file path.
 
 ---
 
@@ -216,7 +217,9 @@ Acceptance checks:
 - **Evidence Paths**:
   - Cost summary: `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/costs/SPEC-KIT-900_cost_summary.json`
   - Stage telemetry/commands: `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-900/`
-  - Consensus synthesis: `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/consensus/SPEC-KIT-900/`
+  - Consensus artifacts (SQLite): `~/.code/consensus_artifacts.db` (query: `SELECT * FROM consensus_artifacts WHERE spec_id='SPEC-KIT-900'`)
+  - Consensus synthesis (SQLite): `~/.code/consensus_artifacts.db` (query: `SELECT * FROM consensus_synthesis WHERE spec_id='SPEC-KIT-900'`)
+  - Plan/Tasks output files: `docs/SPEC-KIT-900-generic-smoke/plan.md`, `docs/SPEC-KIT-900-generic-smoke/tasks.md`
 - **Teardown**: Evidence can be archived with `./scripts/evidence_archive.sh --spec SPEC-KIT-900` once analysis is complete.
 
 ---
