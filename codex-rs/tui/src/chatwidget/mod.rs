@@ -5878,6 +5878,7 @@ impl ChatWidget<'_> {
                 self.stream.insert_reasoning_section_break(&sink);
             }
             EventMsg::TaskStarted => {
+                eprintln!("DEBUG: TaskStarted event received, id={}", id);
                 spec_kit::on_spec_auto_task_started(self, &id);
                 // This begins the new turn; clear the pending prompt anchor count
                 // so subsequent background events use standard placement.
@@ -5909,6 +5910,7 @@ impl ChatWidget<'_> {
             EventMsg::TaskComplete(TaskCompleteEvent {
                 last_agent_message: _,
             }) => {
+                eprintln!("DEBUG: TaskComplete event received, id={}", id);
                 spec_kit::on_spec_auto_task_complete(self, &id);
                 // Finalize any active streams
                 if self.stream.is_write_cycle_active() {
