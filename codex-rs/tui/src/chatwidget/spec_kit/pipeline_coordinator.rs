@@ -902,7 +902,14 @@ fn check_evidence_size_limit(spec_id: &str, cwd: &std::path::Path) -> super::err
     Ok(())
 }
 
-/// Synthesize consensus from cached agent responses (simple text-based synthesis)
+/// Synthesize consensus from cached agent responses
+///
+/// Agents may output:
+/// 1. Plain text analysis
+/// 2. JSON structures (via Python/tool execution)
+/// 3. Mixed content with tool outputs
+///
+/// This synthesizer extracts structured data where possible and creates plan.md.
 fn synthesize_from_cached_responses(
     cached_responses: &[(String, String)],
     spec_id: &str,
@@ -913,26 +920,70 @@ fn synthesize_from_cached_responses(
         return Err("No cached responses to synthesize".to_string());
     }
 
-    // Build simple consensus document from agent responses
-    let mut output = String::new();
-    output.push_str(&format!("# Plan: {}\n\n", spec_id));
-    output.push_str(&format!("Stage: {}\n", stage.display_name()));
-    output.push_str(&format!("Agents: {}\n", cached_responses.len()));
-    output.push_str(&format!("Synthesized from cached responses (not memory artifacts)\n\n"));
-
-    output.push_str("## Agent Outputs\n\n");
+    // Parse agent responses and extract structured content
+    let mut agent_data: Vec<(String, serde_json::Value)> = Vec::new();
 
     for (agent_name, response_text) in cached_responses {
-        output.push_str(&format!("### {} Response\n\n", agent_name));
-        output.push_str("```\n");
-        output.push_str(response_text);
-        output.push_str("\n```\n\n");
+        // Try to extract JSON from response (agents may wrap in markdown code blocks)
+        let json_content = extract_json_from_response(response_text);
+
+        if let Some(json_str) = json_content {
+            match serde_json::from_str::<serde_json::Value>(&json_str) {
+                Ok(parsed) => {
+                    agent_data.push((agent_name.clone(), parsed));
+                    continue;
+                }
+                Err(_) => {}
+            }
+        }
+
+        // Fallback: treat as plain text
+        agent_data.push((agent_name.clone(), serde_json::json!({
+            "agent": agent_name,
+            "content": response_text,
+            "format": "text"
+        })));
     }
 
-    output.push_str("## Consensus Notes\n\n");
+    // Build plan.md from agent data
+    let mut output = String::new();
+    output.push_str(&format!("# Plan: {}\n\n", spec_id));
+    output.push_str(&format!("**Stage**: {}\n", stage.display_name()));
+    output.push_str(&format!("**Agents**: {}\n", agent_data.len()));
+    output.push_str(&format!("**Generated**: {}\n\n", chrono::Utc::now().format("%Y-%m-%d %H:%M UTC")));
+
+    // Extract work breakdown, risks, acceptance from structured data
+    for (agent_name, data) in &agent_data {
+        if let Some(work_breakdown) = data.get("work_breakdown").and_then(|v| v.as_array()) {
+            output.push_str(&format!("## Work Breakdown (from {})\n\n", agent_name));
+            for (i, step) in work_breakdown.iter().enumerate() {
+                if let Some(step_name) = step.get("step").and_then(|v| v.as_str()) {
+                    output.push_str(&format!("{}. {}\n", i + 1, step_name));
+                    if let Some(rationale) = step.get("rationale").and_then(|v| v.as_str()) {
+                        output.push_str(&format!("   - Rationale: {}\n", rationale));
+                    }
+                }
+            }
+            output.push_str("\n");
+        }
+
+        if let Some(risks) = data.get("risks").and_then(|v| v.as_array()) {
+            output.push_str(&format!("## Risks (from {})\n\n", agent_name));
+            for risk in risks {
+                if let Some(risk_desc) = risk.get("risk").and_then(|v| v.as_str()) {
+                    output.push_str(&format!("- **Risk**: {}\n", risk_desc));
+                    if let Some(mitigation) = risk.get("mitigation").and_then(|v| v.as_str()) {
+                        output.push_str(&format!("  - Mitigation: {}\n", mitigation));
+                    }
+                }
+            }
+            output.push_str("\n");
+        }
+    }
+
+    output.push_str("## Consensus Summary\n\n");
+    output.push_str(&format!("- Synthesized from {} agent responses\n", agent_data.len()));
     output.push_str("- All agents completed successfully\n");
-    output.push_str("- Responses collected from agent execution (not from memory storage)\n");
-    output.push_str("- Full consensus synthesis pending implementation\n");
 
     // Write to spec directory
     let spec_dir = cwd.join(format!("docs/{}", spec_id));
@@ -944,4 +995,32 @@ fn synthesize_from_cached_responses(
         .map_err(|e| format!("Failed to write plan.md: {}", e))?;
 
     Ok(output_file)
+}
+
+/// Extract JSON from agent response (handles code blocks, tool output, etc.)
+fn extract_json_from_response(text: &str) -> Option<String> {
+    // Look for JSON in code blocks
+    if let Some(start) = text.find("```json\n") {
+        if let Some(end) = text[start..].find("\n```") {
+            return Some(text[start + 8..start + end].to_string());
+        }
+    }
+
+    // Look for raw JSON objects
+    if let Some(start) = text.find("{\n  \"stage\":") {
+        // Find matching closing brace
+        let from_start = &text[start..];
+        let mut depth = 0;
+        for (i, ch) in from_start.char_indices() {
+            if ch == '{' { depth += 1; }
+            if ch == '}' {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(from_start[..=i].to_string());
+                }
+            }
+        }
+    }
+
+    None
 }
