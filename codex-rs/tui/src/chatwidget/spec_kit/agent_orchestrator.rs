@@ -423,7 +423,8 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
         return;
     };
 
-    tracing::warn!("DEBUG: Current phase: {:?}", state.phase);
+    let current_stage_name = state.current_stage().map(|s| s.display_name()).unwrap_or("unknown");
+    tracing::warn!("DEBUG: Current stage={}, phase={:?}", current_stage_name, state.phase);
     // Check which phase we're in
     let expected_agents = match &state.phase {
         SpecAutoPhase::ExecutingAgents {
@@ -471,25 +472,32 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
 
     // Update completed agents in state and determine phase type
     let phase_type = if let Some(state) = widget.spec_auto_state.as_mut() {
-        match &mut state.phase {
+        let phase_type = match &mut state.phase {
             SpecAutoPhase::ExecutingAgents {
                 completed_agents, ..
             } => {
                 *completed_agents = completed_names.clone();
+                tracing::warn!("DEBUG: Phase match → ExecutingAgents, routing to 'regular'");
                 "regular"
             }
             SpecAutoPhase::QualityGateExecuting {
                 completed_agents, ..
             } => {
                 *completed_agents = completed_names.clone();
+                tracing::warn!("DEBUG: Phase match → QualityGateExecuting, routing to 'quality_gate'");
                 "quality_gate"
             }
             SpecAutoPhase::QualityGateValidating { .. } => {
                 // GPT-5 validation phase - single agent (GPT-5)
+                tracing::warn!("DEBUG: Phase match → QualityGateValidating, routing to 'gpt5_validation'");
                 "gpt5_validation"
             }
-            _ => "none",
-        }
+            _ => {
+                tracing::warn!("DEBUG: Phase match → Other ({:?}), routing to 'none'", state.phase);
+                "none"
+            }
+        };
+        phase_type
     } else {
         "none"
     };

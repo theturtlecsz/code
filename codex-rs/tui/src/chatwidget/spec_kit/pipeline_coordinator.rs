@@ -1030,10 +1030,20 @@ fn synthesize_from_cached_responses(
     fs::create_dir_all(&spec_dir)
         .map_err(|e| format!("Failed to create spec dir: {}", e))?;
 
-    let output_file = spec_dir.join("plan.md");
-    fs::write(&output_file, output)
-        .map_err(|e| format!("Failed to write plan.md: {}", e))?;
+    // Use standard filenames: plan.md, tasks.md, implement.md, etc.
+    let output_filename = format!("{}.md", stage.display_name().to_lowercase());
+    let output_file = spec_dir.join(&output_filename);
 
+    // Don't overwrite if file already exists (prevents quality gates from overwriting stage output)
+    if output_file.exists() {
+        tracing::warn!("DEBUG: {} already exists, skipping write to avoid overwrite", output_filename);
+        return Ok(output_file);
+    }
+
+    fs::write(&output_file, output)
+        .map_err(|e| format!("Failed to write {}: {}", output_filename, e))?;
+
+    tracing::warn!("DEBUG: Wrote consensus output to {}", output_file.display());
     Ok(output_file)
 }
 

@@ -1089,6 +1089,8 @@ pub(super) fn execute_quality_checkpoint(
 
     // Transition to quality gate executing phase
     if let Some(state) = widget.spec_auto_state.as_mut() {
+        tracing::warn!("DEBUG: Setting phase to QualityGateExecuting for checkpoint={:?}", checkpoint);
+        let old_phase = format!("{:?}", state.phase);
         state.phase = SpecAutoPhase::QualityGateExecuting {
             checkpoint,
             gates: gates.to_vec(),
@@ -1102,6 +1104,7 @@ pub(super) fn execute_quality_checkpoint(
             results: std::collections::HashMap::new(),
             native_agent_ids: None, // Will be set by completion event
         };
+        tracing::warn!("DEBUG: Phase transition: {} → QualityGateExecuting", old_phase);
     }
 }
 
