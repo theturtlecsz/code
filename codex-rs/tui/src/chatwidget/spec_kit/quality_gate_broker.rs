@@ -762,7 +762,7 @@ fn extract_json_from_content(content: &str) -> Option<String> {
         }
 
         // Track JSON blocks by brace depth
-        for ch in trimmed.chars() {
+        for ch in line.chars() {
             if ch == '{' {
                 if brace_depth == 0 {
                     in_json = true;
@@ -770,45 +770,66 @@ fn extract_json_from_content(content: &str) -> Option<String> {
                 }
                 brace_depth += 1;
             }
-            if in_json {
-                // Collect full line when in JSON
-                if !current_json.contains(&line.to_string()) {
-                    current_json.push(line.to_string());
-                }
-            }
             if ch == '}' {
                 brace_depth = brace_depth.saturating_sub(1);
                 if brace_depth == 0 && in_json {
                     in_json = false;
-                    // Complete JSON block found
+                    // Complete JSON block found - add the current line then finalize
+                    if !current_json.is_empty() || !line.trim().is_empty() {
+                        current_json.push(line.to_string());
+                    }
                     let candidate = current_json.join("\n");
                     json_candidates.push(candidate);
                     current_json.clear();
+                    continue; // Don't add line again below
                 }
             }
+        }
+
+        // Add line to current JSON if we're in a JSON block
+        if in_json && brace_depth > 0 {
+            current_json.push(line.to_string());
         }
     }
 
     // Try each candidate, return first valid one with "stage" field that starts with "quality-gate-"
     // Skip template/example JSON that contains TypeScript type annotations
     for candidate in &json_candidates {
-        // Quick check: skip if contains type annotation patterns (template JSON, not real response)
+        // Quick check: skip if contains TypeScript type annotation patterns (template JSON, not real response)
+        // Note: Don't check for ${MODEL_ID} since agents don't always replace it
         let has_type_annotations = candidate.contains(r#""id": string"#) ||
                                    candidate.contains(r#""text": string"#) ||
+                                   candidate.contains(r#""question": string"#) ||
+                                   candidate.contains(r#""answer": string"#) ||
                                    candidate.contains(r#": number"#) ||
-                                   candidate.contains(r#": boolean"#) ||
-                                   candidate.contains("${MODEL_ID}");
+                                   candidate.contains(r#": boolean"#);
 
         if has_type_annotations {
+            tracing::warn!("🔍 Skipping template JSON ({} bytes) - has type annotations", candidate.len());
             continue; // Skip template JSON from prompt
         }
 
-        if let Ok(json_val) = serde_json::from_str::<Value>(candidate) {
-            // Must have "stage" field starting with "quality-gate-" (actual response, not prompt example)
-            if let Some(stage) = json_val.get("stage").and_then(|v| v.as_str()) {
-                if stage.starts_with("quality-gate-") {
-                    return Some(candidate.clone());
+        tracing::warn!("🔍 Trying candidate ({} bytes): {}",
+            candidate.len(),
+            &candidate.chars().take(200).collect::<String>());
+
+        match serde_json::from_str::<Value>(candidate) {
+            Ok(json_val) => {
+                // Must have "stage" field starting with "quality-gate-" (actual response, not prompt example)
+                if let Some(stage) = json_val.get("stage").and_then(|v| v.as_str()) {
+                    if stage.starts_with("quality-gate-") {
+                        tracing::warn!("✅ Found valid quality-gate JSON!");
+                        return Some(candidate.clone());
+                    } else {
+                        tracing::warn!("❌ JSON has wrong stage: {:?}", stage);
+                    }
+                } else {
+                    tracing::warn!("❌ JSON missing 'stage' field");
                 }
+            }
+            Err(e) => {
+                tracing::warn!("❌ JSON parse error: {}", e);
+                tracing::warn!("   Failed JSON: {}", &candidate.chars().take(500).collect::<String>());
             }
         }
     }

@@ -9,10 +9,10 @@
   },
   "per_model": {
     "gemini": 0.0,
-    "code": 0.0,
-    "claude": 0.0
+    "claude": 0.0,
+    "code": 0.0
   },
-  "duration": 288,
+  "duration": 157,
   "stage_notes": [
     {
       "stage": "spec-tasks"
