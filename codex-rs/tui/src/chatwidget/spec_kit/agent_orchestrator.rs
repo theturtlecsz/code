@@ -90,8 +90,10 @@ async fn build_individual_agent_prompt(
         .map_err(|e| format!("Failed to read spec.md: {}", e))?;
 
     // Build context (include prior stage outputs with size limits)
-    // Max context size: ~500KB total to avoid OS argument list limits
-    const MAX_FILE_SIZE: usize = 150_000; // ~150KB per file
+    // OS argument limit is ~2MB, but be conservative
+    // Reserve space for: prompt template (~10KB) + injected outputs (~100KB) + safety margin
+    // Total budget: ~300KB for all files combined
+    const MAX_FILE_SIZE: usize = 50_000; // ~50KB per file (conservative)
 
     let mut context = format!("SPEC: {}\n\n## spec.md\n", spec_id);
 
