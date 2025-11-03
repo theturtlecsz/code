@@ -160,6 +160,9 @@ async fn spawn_and_wait_for_agent(
     use codex_core::agent_tool::{AGENT_MANAGER, AgentStatus};
 
     tracing::warn!("🎬 SEQUENTIAL: Spawning {} and waiting for completion...", agent_name);
+    tracing::warn!("  Config: {}", config_name);
+    tracing::warn!("  Prompt size: {} chars", prompt.len());
+    tracing::warn!("  Prompt preview: {}", &prompt.chars().take(300).collect::<String>());
 
     // Spawn agent
     let agent_id = {
@@ -167,13 +170,16 @@ async fn spawn_and_wait_for_agent(
         manager.create_agent_from_config_name(
             config_name,
             agent_configs,
-            prompt,
+            prompt.clone(),
             false,
             Some(batch_id.to_string()),
-        ).await.map_err(|e| format!("Failed to spawn {}: {}", agent_name, e))?
+        ).await.map_err(|e| {
+            tracing::error!("  ❌ Spawn error for {}: {}", agent_name, e);
+            format!("Failed to spawn {}: {}", agent_name, e)
+        })?
     };
 
-    tracing::warn!("  ✓ {} spawned: {}", agent_name, &agent_id[..8]);
+    tracing::warn!("  ✓ {} spawned successfully: {}", agent_name, &agent_id[..8]);
 
     // Record to SQLite
     if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
