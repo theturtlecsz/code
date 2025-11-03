@@ -87,7 +87,7 @@ pub fn halt_spec_auto_with_error(widget: &mut impl SpecKitContext, reason: Strin
         .and_then(|state| {
             state.current_stage().map(|stage| {
                 format!(
-                    "/spec-auto {} --from {}",
+                    "/speckit.auto {} --from {}",
                     state.spec_id,
                     stage.command_name()
                 )
@@ -97,7 +97,7 @@ pub fn halt_spec_auto_with_error(widget: &mut impl SpecKitContext, reason: Strin
 
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
         vec![
-            ratatui::text::Line::from("⚠ /spec-auto halted"),
+            ratatui::text::Line::from("⚠ /speckit.auto halted"),
             ratatui::text::Line::from(reason),
             ratatui::text::Line::from(""),
             ratatui::text::Line::from("Resume with:"),
