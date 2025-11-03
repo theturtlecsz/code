@@ -799,8 +799,7 @@ fn extract_json_from_content(content: &str) -> Option<String> {
     // Try each candidate, return first valid one with "stage" field that starts with "quality-gate-"
     // Skip template/example JSON that contains TypeScript type annotations
     for candidate in &json_candidates {
-        // Quick check: skip if contains TypeScript type annotation patterns (template JSON, not real response)
-        // Note: Don't check for ${MODEL_ID} since agents don't always replace it
+        // Skip template JSON with type annotations
         let has_type_annotations = candidate.contains(r#""id": string"#) ||
                                    candidate.contains(r#""text": string"#) ||
                                    candidate.contains(r#""question": string"#) ||
@@ -810,7 +809,19 @@ fn extract_json_from_content(content: &str) -> Option<String> {
 
         if has_type_annotations {
             tracing::warn!("🔍 Skipping template JSON ({} bytes) - has type annotations", candidate.len());
-            continue; // Skip template JSON from prompt
+            continue;
+        }
+
+        // Skip cost summary JSON (not quality gate response)
+        if candidate.contains(r#""schemaVersion""#) && candidate.contains(r#""total_cost_usd""#) {
+            tracing::warn!("🔍 Skipping cost summary JSON ({} bytes)", candidate.len());
+            continue;
+        }
+
+        // Skip if doesn't contain quality-gate stage marker
+        if !candidate.contains(r#""stage":"#) || !candidate.contains("quality-gate-") {
+            tracing::warn!("🔍 Skipping non-quality-gate JSON ({} bytes)", candidate.len());
+            continue;
         }
 
         tracing::warn!("🔍 Trying candidate ({} bytes): {}",
