@@ -509,7 +509,7 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                     let _poll_handle = tokio::spawn(async move {
                         tracing::warn!("📡 AUDIT: Background task started - waiting for {} agents", agent_ids.len());
 
-                        match wait_for_regular_stage_agents(&agent_ids, 300).await {  // 5 min timeout
+                        match wait_for_regular_stage_agents(&agent_ids, 600).await {  // 10 min timeout
                             Ok(()) => {
                                 tracing::warn!("✅ AUDIT: All agents completed successfully - sending RegularStageAgentsComplete event");
 
