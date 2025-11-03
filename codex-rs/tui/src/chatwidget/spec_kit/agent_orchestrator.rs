@@ -56,11 +56,13 @@ async fn spawn_regular_stage_agents_native(
     tracing::warn!("  batch_id: {}", batch_id);
 
     // Map canonical agent names to config names (must match ~/.code/config.toml [[agents]] entries)
-    // For Plan stage: Use same tier as quality gates (Tier 2: cheap + fast)
+    // Tier 2: cheap + fast models for Plan/Tasks/Validate
+    // Implement adds gpt_codex (code specialist)
     let agent_config_map: std::collections::HashMap<&str, &str> = [
         ("gemini", "gemini_flash"),     // gemini-2.5-flash
         ("claude", "claude_haiku"),     // claude-3.5-haiku
-        ("gpt_pro", "gpt_pro"),         // gpt-5 medium effort (legacy name, still valid)
+        ("gpt_pro", "gpt_pro"),         // gpt-5 medium effort
+        ("gpt_codex", "gpt_codex"),     // gpt-5 codex (Implement stage)
     ].iter().copied().collect();
 
     for (idx, agent_name) in expected_agents.iter().enumerate() {
