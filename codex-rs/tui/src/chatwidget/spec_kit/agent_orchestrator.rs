@@ -33,22 +33,110 @@ pub struct AgentSpawnInfo {
     pub model_name: String,
 }
 
+/// Build individual agent prompt with context (matches quality gate pattern)
+/// SPEC-KIT-900 Session 3: Fix architectural mismatch - each agent gets unique prompt
+async fn build_individual_agent_prompt(
+    spec_id: &str,
+    stage: SpecStage,
+    agent_name: &str,
+    cwd: &Path,
+) -> Result<String, String> {
+    use serde_json::Value;
+
+    // Load prompts.json
+    let prompts_path = cwd.join("docs/spec-kit/prompts.json");
+    let prompts_content = std::fs::read_to_string(&prompts_path)
+        .map_err(|e| format!("Failed to read prompts.json: {}", e))?;
+
+    let prompts: Value = serde_json::from_str(&prompts_content)
+        .map_err(|e| format!("Failed to parse prompts.json: {}", e))?;
+
+    // Get stage-specific prompts
+    let stage_key = stage.key(); // "spec-plan", "spec-tasks", etc.
+    let stage_prompts = prompts.get(stage_key)
+        .ok_or_else(|| format!("No prompts found for stage {}", stage_key))?;
+
+    // Get THIS agent's prompt template
+    let prompt_template = stage_prompts
+        .get(agent_name)
+        .and_then(|v| v.get("prompt"))
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| format!("No prompt found for agent {} in stage {}", agent_name, stage_key))?;
+
+    // Find SPEC directory (search docs/ for SPEC-*{spec_id}* pattern)
+    let spec_dir = {
+        let docs_dir = cwd.join("docs");
+        let pattern = format!("SPEC-*{}*", spec_id);
+
+        std::fs::read_dir(&docs_dir)
+            .ok()
+            .and_then(|entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .find(|entry| {
+                        entry.file_name()
+                            .to_string_lossy()
+                            .contains(spec_id)
+                    })
+                    .map(|entry| entry.path())
+            })
+            .ok_or_else(|| format!("SPEC directory not found for {}", spec_id))?
+    };
+
+    // Read SPEC files
+    let spec_md = spec_dir.join("spec.md");
+    let spec_content = std::fs::read_to_string(&spec_md)
+        .map_err(|e| format!("Failed to read spec.md: {}", e))?;
+
+    // Build context (include prior stage outputs)
+    let mut context = format!("SPEC: {}\n\n## spec.md\n{}\n\n", spec_id, spec_content);
+
+    // Add plan.md if available (for Tasks, Implement, Validate, etc.)
+    if stage != crate::spec_prompts::SpecStage::Plan {
+        let plan_md = spec_dir.join("plan.md");
+        if let Ok(plan_content) = std::fs::read_to_string(&plan_md) {
+            context.push_str("## plan.md\n");
+            context.push_str(&plan_content);
+            context.push_str("\n\n");
+        }
+    }
+
+    // Add tasks.md if available (for Implement, Validate, etc.)
+    if matches!(stage, crate::spec_prompts::SpecStage::Implement |
+                       crate::spec_prompts::SpecStage::Validate |
+                       crate::spec_prompts::SpecStage::Audit |
+                       crate::spec_prompts::SpecStage::Unlock) {
+        let tasks_md = spec_dir.join("tasks.md");
+        if let Ok(tasks_content) = std::fs::read_to_string(&tasks_md) {
+            context.push_str("## tasks.md\n");
+            context.push_str(&tasks_content);
+            context.push_str("\n\n");
+        }
+    }
+
+    // Replace placeholders
+    let prompt = prompt_template
+        .replace("${SPEC_ID}", spec_id)
+        .replace("${CONTEXT}", &context);
+
+    Ok(prompt)
+}
+
 /// Spawn regular stage agents natively (SPEC-KIT-900 fix)
 /// Mirrors quality gate spawning to ensure AgentStatusUpdate events are sent
+/// Session 3: Refactored to use individual prompts per agent (not mega-bundle)
 async fn spawn_regular_stage_agents_native(
     cwd: &Path,
     spec_id: &str,
     stage: SpecStage,
-    prompt: &str,
+    _prompt: &str,  // Deprecated: no longer used (was mega-bundle)
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
 ) -> Result<Vec<AgentSpawnInfo>, String> {
-    tracing::warn!("🎬 AUDIT: spawn_regular_stage_agents_native called");
+    tracing::warn!("🎬 AUDIT: spawn_regular_stage_agents_native called (individual prompts mode)");
     tracing::warn!("  spec_id: {}", spec_id);
     tracing::warn!("  stage: {:?}", stage);
     tracing::warn!("  expected_agents: {:?}", expected_agents);
-    tracing::warn!("  prompt length: {} chars", prompt.len());
-    tracing::warn!("  prompt preview: {}", &prompt[..200.min(prompt.len())]);
 
     let mut spawn_infos = Vec::new();
     let batch_id = uuid::Uuid::new_v4().to_string();
@@ -73,6 +161,20 @@ async fn spawn_regular_stage_agents_native(
 
         tracing::warn!("  config_name: {} (from ~/.code/config.toml)", config_name);
 
+        // Build individual prompt for THIS agent (Session 3 fix)
+        tracing::warn!("  Building individual prompt for {}...", agent_name);
+        let individual_prompt = build_individual_agent_prompt(
+            spec_id,
+            stage,
+            agent_name,
+            cwd,
+        ).await.map_err(|e| {
+            tracing::error!("  ❌ Failed to build prompt for {}: {}", agent_name, e);
+            format!("Failed to build prompt for {}: {}", agent_name, e)
+        })?;
+
+        tracing::warn!("  Prompt built: {} chars", individual_prompt.len());
+
         // Spawn agent via AgentManager (same as quality gates)
         let mut manager = AGENT_MANAGER.write().await;
 
@@ -80,7 +182,7 @@ async fn spawn_regular_stage_agents_native(
         let agent_id = manager.create_agent_from_config_name(
             config_name,
             agent_configs,
-            prompt.to_string(),
+            individual_prompt,  // ← INDIVIDUAL prompt, not mega-bundle
             false, // read_write for regular stages
             Some(batch_id.clone()),
         ).await.map_err(|e| {
