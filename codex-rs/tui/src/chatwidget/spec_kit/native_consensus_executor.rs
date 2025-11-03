@@ -1,6 +1,16 @@
 //! Native consensus orchestration without orchestrator agent
 //!
-//! This module implements direct agent spawning and result aggregation
+//! DEPRECATED: This module implements direct agent spawning and result aggregation
+//!
+//! **STATUS**: Legacy code, NOT used in current architecture
+//! **REPLACED BY**: pipeline_coordinator.rs (check_consensus_and_advance_spec_auto)
+//!
+//! This file is kept for reference but execute_native_consensus() is never called.
+//! The active flow uses:
+//! 1. agent_orchestrator.rs - Direct spawning via AGENT_MANAGER
+//! 2. pipeline_coordinator.rs - Consensus synthesis with SQLite storage
+//!
+//! **CLEANUP TODO**: Remove this file after confirming no dependencies
 //! to eliminate the wasteful "orchestrator agent" pattern that spawns
 //! unnecessary meta-agents.
 //!
@@ -111,7 +121,9 @@ pub fn execute_native_consensus(
     ));
 
     // 6. Store to local-memory using native MCP client
-    store_consensus_to_memory(widget, spec_id, stage, &synthesis, mcp_manager)?;
+    // DEPRECATED: Disabled - violates SPEC-KIT-072 (SQLite for consensus)
+    // Pipeline_coordinator.rs:1050 handles SQLite storage properly
+    // store_consensus_to_memory(widget, spec_id, stage, &synthesis, mcp_manager)?;
 
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
         vec![ratatui::text::Line::from(format!(
