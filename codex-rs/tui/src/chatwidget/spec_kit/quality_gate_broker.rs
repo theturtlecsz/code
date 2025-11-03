@@ -790,7 +790,19 @@ fn extract_json_from_content(content: &str) -> Option<String> {
     }
 
     // Try each candidate, return first valid one with "stage" field that starts with "quality-gate-"
+    // Skip template/example JSON that contains TypeScript type annotations
     for candidate in &json_candidates {
+        // Quick check: skip if contains type annotation patterns (template JSON, not real response)
+        let has_type_annotations = candidate.contains(r#""id": string"#) ||
+                                   candidate.contains(r#""text": string"#) ||
+                                   candidate.contains(r#": number"#) ||
+                                   candidate.contains(r#": boolean"#) ||
+                                   candidate.contains("${MODEL_ID}");
+
+        if has_type_annotations {
+            continue; // Skip template JSON from prompt
+        }
+
         if let Ok(json_val) = serde_json::from_str::<Value>(candidate) {
             // Must have "stage" field starting with "quality-gate-" (actual response, not prompt example)
             if let Some(stage) = json_val.get("stage").and_then(|v| v.as_str()) {

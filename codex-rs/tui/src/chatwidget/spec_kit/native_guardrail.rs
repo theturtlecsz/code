@@ -204,18 +204,38 @@ fn validate_clean_tree(cwd: &Path) -> GuardrailCheck {
 
     let status = String::from_utf8_lossy(&output.stdout);
 
-    if !status.trim().is_empty() {
+    // Filter out expected stage artifacts and telemetry files that are auto-generated
+    let unexpected_changes: Vec<&str> = status
+        .lines()
+        .filter(|line| {
+            let line = line.trim();
+            // Allow stage output files (plan.md, tasks.md, etc.)
+            if line.contains("/plan.md") || line.contains("/tasks.md") ||
+               line.contains("/validate.md") || line.contains("/implement.md") ||
+               line.contains("/audit.md") || line.contains("/unlock.md") {
+                return false;
+            }
+            // Allow evidence/telemetry files
+            if line.contains("/evidence/") || line.contains("_cost_summary.json") ||
+               line.contains("_telemetry.json") {
+                return false;
+            }
+            true
+        })
+        .collect();
+
+    if !unexpected_changes.is_empty() {
         return GuardrailCheck {
             name: "clean-tree".to_string(),
             status: CheckStatus::Failed,
-            message: Some(format!("Working tree has {} uncommitted changes", status.lines().count())),
+            message: Some(format!("Working tree has {} unexpected changes (stage artifacts excluded)", unexpected_changes.len())),
         };
     }
 
     GuardrailCheck {
         name: "clean-tree".to_string(),
         status: CheckStatus::Passed,
-        message: Some("Working tree is clean".to_string()),
+        message: Some("Working tree is clean (stage artifacts excluded)".to_string()),
     }
 }
 
