@@ -747,48 +747,47 @@ fn extract_json_from_content(content: &str) -> Option<String> {
     }
 
     // Try raw JSON - look for actual JSON response, not prompt text
-    // Strategy: Find all potential JSON blocks and validate them
+    // Strategy: Find all potential JSON blocks by searching for opening braces
     let mut json_candidates = Vec::new();
-    let mut current_json = Vec::new();
-    let mut in_json = false;
-    let mut brace_depth: i32 = 0;
 
-    for line in content_to_parse.lines() {
-        let trimmed = line.trim();
+    // Build full text to enable character-position based extraction
+    let full_text = content_to_parse;
+    let mut search_from = 0;
 
-        // Skip obvious prompt/instruction lines
-        if trimmed.contains("Output JSON:") || trimmed.contains("User instructions:") {
-            continue;
-        }
+    while let Some(open_pos) = full_text[search_from..].find('{') {
+        let abs_open_pos = search_from + open_pos;
 
-        // Track JSON blocks by brace depth
-        for ch in line.chars() {
+        // Track brace depth from this opening brace
+        let mut depth = 0;
+        let mut close_pos = None;
+
+        for (offset, ch) in full_text[abs_open_pos..].char_indices() {
             if ch == '{' {
-                if brace_depth == 0 {
-                    in_json = true;
-                    current_json.clear();
-                }
-                brace_depth += 1;
+                depth += 1;
             }
             if ch == '}' {
-                brace_depth = brace_depth.saturating_sub(1);
-                if brace_depth == 0 && in_json {
-                    in_json = false;
-                    // Complete JSON block found - add the current line then finalize
-                    if !current_json.is_empty() || !line.trim().is_empty() {
-                        current_json.push(line.to_string());
-                    }
-                    let candidate = current_json.join("\n");
-                    json_candidates.push(candidate);
-                    current_json.clear();
-                    continue; // Don't add line again below
+                depth -= 1;
+                if depth == 0 {
+                    close_pos = Some(abs_open_pos + offset + ch.len_utf8());
+                    break;
                 }
             }
         }
 
-        // Add line to current JSON if we're in a JSON block
-        if in_json && brace_depth > 0 {
-            current_json.push(line.to_string());
+        if let Some(end_pos) = close_pos {
+            let candidate = &full_text[abs_open_pos..end_pos];
+
+            // Skip obvious non-JSON like variable assignments
+            if !candidate.contains("Artifacts:") &&
+               !candidate.contains("CRITICAL:") &&
+               !candidate.trim().starts_with("${") {
+                json_candidates.push(candidate.to_string());
+            }
+
+            search_from = end_pos;
+        } else {
+            // No matching close brace, skip this position
+            search_from = abs_open_pos + 1;
         }
     }
 
