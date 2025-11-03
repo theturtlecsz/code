@@ -817,9 +817,27 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                 stage.display_name(),
                 spec_id
             )));
-            lines.push(ratatui::text::Line::from(
-                "Launching Gemini, Claude, and GPT Pro...",
-            ));
+            // Build clear agent list based on stage
+            let agent_count = expected_agents_for_stage(stage).len();
+            let execution_mode = if matches!(stage, crate::spec_prompts::SpecStage::Validate |
+                                                     crate::spec_prompts::SpecStage::Audit |
+                                                     crate::spec_prompts::SpecStage::Unlock) {
+                "parallel consensus"
+            } else {
+                "sequential pipeline"
+            };
+
+            lines.push(ratatui::text::Line::from(format!(
+                "🚀 Launching {} agents in {} mode...",
+                agent_count, execution_mode
+            )));
+            lines.push(ratatui::text::Line::from(format!(
+                "   Agents: {}",
+                expected_agents_for_stage(stage).iter()
+                    .map(|a| a.canonical_name())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )));
 
             widget.history_push(crate::history_cell::PlainHistoryCell::new(
                 lines,
@@ -962,6 +980,19 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                     } else {
                         // SEQUENTIAL execution - agents already complete, send event immediately
                         tracing::warn!("✅ SEQUENTIAL: All {} agents already completed, sending event now", agent_ids.len());
+
+                        // Show completion status in TUI
+                        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                            vec![
+                                ratatui::text::Line::from(format!(
+                                    "✅ All {} agents completed for {} stage",
+                                    agent_ids.len(), stage.display_name()
+                                )),
+                                ratatui::text::Line::from("   Building consensus and generating output..."),
+                            ],
+                            crate::history_cell::HistoryCellType::Notice,
+                        ));
+                        widget.request_redraw();
 
                         let _ = widget.app_event_tx.send(crate::app_event::AppEvent::RegularStageAgentsComplete {
                             stage,

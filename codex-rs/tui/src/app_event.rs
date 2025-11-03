@@ -476,6 +476,15 @@ pub(crate) enum AppEvent {
         spec_id: String,
         agent_ids: Vec<String>,
     },
+
+    /// Native guardrail validation completed (SPEC-KIT-900 Session 3)
+    /// Triggered when async guardrail checks finish
+    GuardrailComplete {
+        spec_id: String,
+        stage: crate::spec_prompts::SpecStage,
+        success: bool,
+        result_json: String, // Serialized GuardrailResult
+    },
     // === END FORK-SPECIFIC ===
 }
 

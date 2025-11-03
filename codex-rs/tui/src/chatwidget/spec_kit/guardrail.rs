@@ -739,13 +739,62 @@ fn handle_native_guardrail(
         }
     };
 
-    // Run native guardrail validation
-    let result = super::native_guardrail::run_native_guardrail(
-        &widget.config.cwd,
-        &spec_id,
-        stage,
-        allow_dirty,
-    );
+    // Run native guardrail validation ASYNCHRONOUSLY (Session 3 fix)
+    // This prevents UI from freezing during git status checks
+    let cwd = widget.config.cwd.clone();
+    let spec_id_clone = spec_id.clone();
+    let event_tx = widget.app_event_tx.clone();
+
+    tracing::info!("🔄 Starting async guardrail validation for {} stage", stage.display_name());
+
+    // Show immediate feedback
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+        vec![ratatui::text::Line::from(format!(
+            "Running guardrail validation for {} stage...",
+            stage.display_name()
+        ))],
+        crate::history_cell::HistoryCellType::Notice,
+    ));
+    widget.request_redraw();
+
+    // Spawn async task for guardrail validation
+    tokio::spawn(async move {
+        tracing::info!("📡 Async guardrail task started for {}", stage.display_name());
+
+        let result = super::native_guardrail::run_native_guardrail(
+            &cwd,
+            &spec_id_clone,
+            stage,
+            allow_dirty,
+        );
+
+        // Serialize result to JSON for event
+        let result_json = serde_json::to_string(&result).unwrap_or_else(|_| "{}".to_string());
+        let success = result.success;
+
+        // Send completion event
+        let _ = event_tx.send(crate::app_event::AppEvent::GuardrailComplete {
+            spec_id: spec_id_clone,
+            stage,
+            success,
+            result_json,
+        });
+
+        tracing::info!("✅ Async guardrail task complete for {} (success={})", stage.display_name(), success);
+    });
+
+    // Async guardrail spawned - UI remains responsive
+    // Result will be displayed via GuardrailComplete event handler
+}
+
+/// Display guardrail result and advance pipeline (called from GuardrailComplete event)
+pub fn display_guardrail_result_and_advance(
+    widget: &mut ChatWidget,
+    spec_id: String,
+    stage: SpecStage,
+    result: super::native_guardrail::GuardrailResult,
+) {
+    use crate::history_cell::HistoryCellType;
 
     // Display results
     let mut lines = vec![

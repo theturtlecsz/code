@@ -65,7 +65,7 @@ pub(crate) use error::Result;
 // Re-export key consensus functions (pub(crate) since types are private)
 
 // Re-export guardrail functions
-pub use guardrail::{evaluate_guardrail_value, validate_guardrail_schema};
+pub use guardrail::{evaluate_guardrail_value, validate_guardrail_schema, display_guardrail_result_and_advance};
 
 // Re-export routing functions
 pub use routing::try_dispatch_spec_kit_command;

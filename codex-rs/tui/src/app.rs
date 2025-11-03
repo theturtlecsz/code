@@ -2737,6 +2737,21 @@ impl App<'_> {
                         // Trigger completion handler (which checks SQLite for phase_type)
                         spec_kit::on_spec_auto_agents_complete(widget);
                     }
+                }
+
+                AppEvent::GuardrailComplete { spec_id, stage, success, result_json } => {
+                    // Guardrail validation completed asynchronously (SPEC-KIT-900 Session 3)
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        warn!("🛡️ AUDIT: Guardrail complete: stage={:?}, spec={}, success={}",
+                            stage, spec_id, success);
+
+                        // Deserialize result and display
+                        if let Ok(result) = serde_json::from_str::<spec_kit::native_guardrail::GuardrailResult>(&result_json) {
+                            spec_kit::display_guardrail_result_and_advance(widget, spec_id, stage, result);
+                        } else {
+                            warn!("Failed to deserialize guardrail result");
+                        }
+                    }
                 } // === END FORK-SPECIFIC ===
             }
         }

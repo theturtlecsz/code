@@ -14,7 +14,7 @@ use std::process::Command;
 use crate::spec_prompts::SpecStage;
 
 /// Result of guardrail validation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GuardrailResult {
     pub success: bool,
     pub stage: SpecStage,
@@ -26,14 +26,14 @@ pub struct GuardrailResult {
 }
 
 /// Individual guardrail check
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GuardrailCheck {
     pub name: String,
     pub status: CheckStatus,
     pub message: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum CheckStatus {
     Passed,
     Warning,

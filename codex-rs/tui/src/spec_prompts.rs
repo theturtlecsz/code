@@ -258,7 +258,7 @@ fn model_metadata(stage: SpecStage, agent: SpecAgent) -> Vec<(String, String)> {
     ]
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SpecStage {
     // Main 6-stage pipeline
     Plan,
