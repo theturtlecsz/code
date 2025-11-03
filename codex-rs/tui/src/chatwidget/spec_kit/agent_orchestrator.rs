@@ -315,7 +315,7 @@ async fn spawn_regular_stage_agents_sequential(
             &batch_id,
             spec_id,
             stage,
-            600, // 10min timeout per agent
+            1200, // 20min timeout per agent (Gemini can be slow)
         ).await?;
 
         // Store this agent's output for next agents to use
