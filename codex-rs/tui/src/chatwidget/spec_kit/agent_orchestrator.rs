@@ -811,47 +811,62 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
 
             match spawn_result {
                 Ok(spawn_infos) => {
-                    tracing::warn!("🚀 AUDIT: Spawned {} agents directly via AgentManager for stage={:?}",
-                        spawn_infos.len(), stage);
+                    tracing::warn!("🚀 AUDIT: Spawned {} agents for stage={:?}", spawn_infos.len(), stage);
                     for info in &spawn_infos {
                         tracing::warn!("  ✓ {} ({}): model={}", info.agent_name, &info.agent_id[..8], info.model_name);
                     }
 
-                    // Extract agent IDs for polling
                     let agent_ids: Vec<String> = spawn_infos.iter().map(|i| i.agent_id.clone()).collect();
 
-                    // Start background polling task (mirrors quality gate behavior)
-                    let event_tx = widget.app_event_tx.clone();
-                    let spec_id_clone = spec_id.to_string();
-                    let stage_clone = stage;
+                    // For PARALLEL stages, use background polling
+                    // For SEQUENTIAL stages, agents are already complete - send event immediately
+                    let is_parallel_stage = matches!(
+                        stage,
+                        crate::spec_prompts::SpecStage::Validate |
+                        crate::spec_prompts::SpecStage::Audit |
+                        crate::spec_prompts::SpecStage::Unlock
+                    );
 
-                    tracing::warn!("🔄 AUDIT: Starting background polling task for {} agents", agent_ids.len());
+                    if is_parallel_stage {
+                        // Start background polling task for parallel execution
+                        let event_tx = widget.app_event_tx.clone();
+                        let spec_id_clone = spec_id.to_string();
+                        let stage_clone = stage;
 
-                    let _poll_handle = tokio::spawn(async move {
-                        tracing::warn!("📡 AUDIT: Background task started - waiting for {} agents", agent_ids.len());
+                        tracing::warn!("🔄 PARALLEL: Starting background polling for {} agents", agent_ids.len());
 
-                        match wait_for_regular_stage_agents(&agent_ids, 600).await {  // 10 min timeout
-                            Ok(()) => {
-                                tracing::warn!("✅ AUDIT: All agents completed successfully - sending RegularStageAgentsComplete event");
+                        let _poll_handle = tokio::spawn(async move {
+                            tracing::warn!("📡 PARALLEL: Background task started");
 
-                                let _ = event_tx.send(crate::app_event::AppEvent::RegularStageAgentsComplete {
-                                    stage: stage_clone,
-                                    spec_id: spec_id_clone,
-                                    agent_ids: agent_ids.clone(),
-                                });
+                            match wait_for_regular_stage_agents(&agent_ids, 600).await {
+                                Ok(()) => {
+                                    tracing::warn!("✅ PARALLEL: All agents completed");
 
-                                tracing::warn!("📬 AUDIT: RegularStageAgentsComplete event sent");
+                                    let _ = event_tx.send(crate::app_event::AppEvent::RegularStageAgentsComplete {
+                                        stage: stage_clone,
+                                        spec_id: spec_id_clone,
+                                        agent_ids: agent_ids.clone(),
+                                    });
+                                }
+                                Err(e) => {
+                                    tracing::warn!("❌ PARALLEL: Polling failed: {}", e);
+                                }
                             }
-                            Err(e) => {
-                                tracing::warn!("❌ AUDIT: Agent polling failed: {}", e);
-                                // TODO: Send error event or handle timeout gracefully
-                            }
-                        }
 
-                        tracing::warn!("🏁 AUDIT: Background polling task complete");
-                    });
+                            tracing::warn!("🏁 PARALLEL: Polling task complete");
+                        });
+                    } else {
+                        // SEQUENTIAL execution - agents already complete, send event immediately
+                        tracing::warn!("✅ SEQUENTIAL: All {} agents already completed, sending event now", agent_ids.len());
 
-                    tracing::warn!("✓ AUDIT: Background polling task spawned, continuing main flow");
+                        let _ = widget.app_event_tx.send(crate::app_event::AppEvent::RegularStageAgentsComplete {
+                            stage,
+                            spec_id: spec_id.to_string(),
+                            agent_ids: agent_ids.clone(),
+                        });
+
+                        tracing::warn!("📬 SEQUENTIAL: RegularStageAgentsComplete event sent immediately");
+                    }
                 }
                 Err(e) => {
                     tracing::error!("❌ AUDIT: Failed to spawn agents for {:?}: {}", stage, e);
