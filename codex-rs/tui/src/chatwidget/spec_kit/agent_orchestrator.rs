@@ -89,16 +89,33 @@ async fn build_individual_agent_prompt(
     let spec_content = std::fs::read_to_string(&spec_md)
         .map_err(|e| format!("Failed to read spec.md: {}", e))?;
 
-    // Build context (include prior stage outputs)
-    let mut context = format!("SPEC: {}\n\n## spec.md\n{}\n\n", spec_id, spec_content);
+    // Build context (include prior stage outputs with size limits)
+    // Max context size: ~500KB total to avoid OS argument list limits
+    const MAX_FILE_SIZE: usize = 150_000; // ~150KB per file
+
+    let mut context = format!("SPEC: {}\n\n## spec.md\n", spec_id);
+
+    // Add spec.md (truncate if too large)
+    if spec_content.len() > MAX_FILE_SIZE {
+        context.push_str(&spec_content.chars().take(MAX_FILE_SIZE).collect::<String>());
+        context.push_str(&format!("\n\n[...truncated {} chars...]\n\n", spec_content.len() - MAX_FILE_SIZE));
+    } else {
+        context.push_str(&spec_content);
+        context.push_str("\n\n");
+    }
 
     // Add plan.md if available (for Tasks, Implement, Validate, etc.)
     if stage != crate::spec_prompts::SpecStage::Plan {
         let plan_md = spec_dir.join("plan.md");
         if let Ok(plan_content) = std::fs::read_to_string(&plan_md) {
             context.push_str("## plan.md\n");
-            context.push_str(&plan_content);
-            context.push_str("\n\n");
+            if plan_content.len() > MAX_FILE_SIZE {
+                context.push_str(&plan_content.chars().take(MAX_FILE_SIZE).collect::<String>());
+                context.push_str(&format!("\n\n[...truncated {} chars...]\n\n", plan_content.len() - MAX_FILE_SIZE));
+            } else {
+                context.push_str(&plan_content);
+                context.push_str("\n\n");
+            }
         }
     }
 
@@ -110,8 +127,13 @@ async fn build_individual_agent_prompt(
         let tasks_md = spec_dir.join("tasks.md");
         if let Ok(tasks_content) = std::fs::read_to_string(&tasks_md) {
             context.push_str("## tasks.md\n");
-            context.push_str(&tasks_content);
-            context.push_str("\n\n");
+            if tasks_content.len() > MAX_FILE_SIZE {
+                context.push_str(&tasks_content.chars().take(MAX_FILE_SIZE).collect::<String>());
+                context.push_str(&format!("\n\n[...truncated {} chars...]\n\n", tasks_content.len() - MAX_FILE_SIZE));
+            } else {
+                context.push_str(&tasks_content);
+                context.push_str("\n\n");
+            }
         }
     }
 
