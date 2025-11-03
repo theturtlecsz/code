@@ -837,9 +837,12 @@ fn extract_json_from_content(content: &str) -> Option<String> {
                         return Some(candidate.clone());
                     } else {
                         tracing::warn!("❌ JSON has wrong stage: {:?}", stage);
+                        tracing::warn!("   JSON preview: {}", &candidate.chars().take(300).collect::<String>());
                     }
                 } else {
                     tracing::warn!("❌ JSON missing 'stage' field");
+                    tracing::warn!("   JSON has fields: {:?}", json_val.as_object().map(|o| o.keys().collect::<Vec<_>>()));
+                    tracing::warn!("   JSON preview: {}", &candidate.chars().take(300).collect::<String>());
                 }
             }
             Err(e) => {
