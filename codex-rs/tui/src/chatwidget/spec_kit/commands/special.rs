@@ -8,8 +8,9 @@ use super::super::command_registry::SpecKitCommand;
 use super::super::handler;
 use super::super::routing::{get_current_branch, get_repo_root};
 
-/// Command: /speckit.auto (and /spec-auto)
+/// Command: /speckit.auto
 /// Full 6-stage pipeline with auto-advancement
+/// Note: Legacy /spec-auto alias removed to prevent confusion with subagent routing
 pub struct SpecKitAutoCommand;
 
 impl SpecKitCommand for SpecKitAutoCommand {
@@ -18,7 +19,7 @@ impl SpecKitCommand for SpecKitAutoCommand {
     }
 
     fn aliases(&self) -> &[&'static str] {
-        &["spec-auto"]
+        &[]  // No aliases - use /speckit.auto explicitly
     }
 
     fn description(&self) -> &'static str {
