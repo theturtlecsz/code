@@ -1144,19 +1144,20 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
             tracing::warn!("DEBUG: Completed agents: {:?}", completed_names);
 
             // Check completion with agent name normalization
-            // Handles aliases like "code" (command) vs "gpt_pro" (config name)
+            // Handles aliases like "code" (command) vs "gpt_pro"/"gpt_codex" (config names)
             let all_complete = expected_agents.iter().all(|expected| {
                 let exp_lower = expected.to_lowercase();
                 // Direct match
                 if completed_names.contains(&exp_lower) {
                     return true;
                 }
-                // Special case: gpt_pro config uses "code" command
-                if exp_lower == "gpt_pro" && (completed_names.contains("code") || completed_names.contains("gpt5") || completed_names.contains("gpt-5")) {
+                // Special case: gpt_pro and gpt_codex both use "code" command
+                if (exp_lower == "gpt_pro" || exp_lower == "gpt_codex") &&
+                   (completed_names.contains("code") || completed_names.contains("gpt5") || completed_names.contains("gpt-5")) {
                     return true;
                 }
-                // Special case: code config might report as gpt_pro
-                if exp_lower == "code" && completed_names.contains("gpt_pro") {
+                // Special case: code config might report as gpt_pro or gpt_codex
+                if exp_lower == "code" && (completed_names.contains("gpt_pro") || completed_names.contains("gpt_codex")) {
                     return true;
                 }
                 false
