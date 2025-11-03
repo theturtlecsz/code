@@ -33,6 +33,89 @@ pub struct AgentSpawnInfo {
     pub model_name: String,
 }
 
+/// Extract useful content from stage files (plan.md, tasks.md)
+/// Skips debug sections, mega-bundles, and raw JSON dumps
+fn extract_useful_content_from_stage_file(content: &str) -> String {
+    // Split by common debug section markers
+    let sections_to_skip = [
+        "## Debug:",
+        "## Raw JSON",
+        "## code\n",          // Debug section sometimes starts with "## code"
+        "## Debug: code",
+        "Raw JSON from agents",
+        "[2025-",              // Timestamp lines indicate debug output
+    ];
+
+    // Find the earliest debug section marker
+    let cut_pos = sections_to_skip.iter()
+        .filter_map(|marker| content.find(marker))
+        .min()
+        .unwrap_or(content.len());
+
+    content[..cut_pos].trim().to_string()
+}
+
+/// Extract clean JSON from agent output (strip timestamps, debug output, metadata)
+/// Critical for preventing exponential prompt growth in sequential execution
+fn extract_clean_json_from_agent_output(raw_output: &str) -> Option<String> {
+    use serde_json::Value;
+
+    // Strategy 1: Find JSON by looking for "stage": field (identifies actual response)
+    if let Some(stage_pos) = raw_output.find(r#""stage":"#) {
+        // Search backwards for opening brace
+        let before_stage = &raw_output[..stage_pos];
+        if let Some(open_pos) = before_stage.rfind('{') {
+            // Find matching closing brace
+            let mut depth = 0;
+            let mut close_pos = None;
+
+            for (offset, ch) in raw_output[open_pos..].char_indices() {
+                if ch == '{' { depth += 1; }
+                if ch == '}' {
+                    depth -= 1;
+                    if depth == 0 {
+                        close_pos = Some(open_pos + offset + ch.len_utf8());
+                        break;
+                    }
+                }
+            }
+
+            if let Some(end_pos) = close_pos {
+                let candidate = &raw_output[open_pos..end_pos];
+
+                // Validate it's actually valid JSON
+                if let Ok(value) = serde_json::from_str::<Value>(candidate) {
+                    // Re-serialize to get clean, minified JSON (removes extra whitespace)
+                    if let Ok(clean_json) = serde_json::to_string(&value) {
+                        tracing::info!("  📦 Extracted clean JSON: {} → {} chars ({}% compression)",
+                            raw_output.len(), clean_json.len(),
+                            (100 - (clean_json.len() * 100 / raw_output.len())));
+                        return Some(clean_json);
+                    }
+                }
+            }
+        }
+    }
+
+    // Strategy 2: Try finding first { to last }
+    if let Some(start) = raw_output.find('{') {
+        if let Some(end) = raw_output.rfind('}') {
+            if end > start {
+                let candidate = &raw_output[start..=end];
+                if let Ok(value) = serde_json::from_str::<Value>(candidate) {
+                    if let Ok(clean_json) = serde_json::to_string(&value) {
+                        tracing::info!("  📦 Fallback extraction: {} → {} chars",
+                            raw_output.len(), clean_json.len());
+                        return Some(clean_json);
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
 /// Build individual agent prompt with context (matches quality gate pattern)
 /// SPEC-KIT-900 Session 3: Fix architectural mismatch - each agent gets unique prompt
 async fn build_individual_agent_prompt(
@@ -90,10 +173,10 @@ async fn build_individual_agent_prompt(
         .map_err(|e| format!("Failed to read spec.md: {}", e))?;
 
     // Build context (include prior stage outputs with size limits)
-    // OS argument limit is ~2MB, but be conservative
-    // Reserve space for: prompt template (~10KB) + injected outputs (~100KB) + safety margin
-    // Total budget: ~300KB for all files combined
-    const MAX_FILE_SIZE: usize = 50_000; // ~50KB per file (conservative)
+    // OS argument limit is ~2MB, but prior stage outputs can contain nested mega-bundles
+    // Must be very conservative to prevent exponential growth
+    // Total budget: ~100KB for all files combined
+    const MAX_FILE_SIZE: usize = 20_000; // ~20KB per file (very conservative)
 
     let mut context = format!("SPEC: {}\n\n## spec.md\n", spec_id);
 
@@ -108,33 +191,52 @@ async fn build_individual_agent_prompt(
     }
 
     // Add plan.md if available (for Tasks, Implement, Validate, etc.)
+    // INTELLIGENT EXTRACTION: Skip debug sections and mega-bundles
     if stage != crate::spec_prompts::SpecStage::Plan {
         let plan_md = spec_dir.join("plan.md");
         if let Ok(plan_content) = std::fs::read_to_string(&plan_md) {
-            context.push_str("## plan.md\n");
-            if plan_content.len() > MAX_FILE_SIZE {
-                context.push_str(&plan_content.chars().take(MAX_FILE_SIZE).collect::<String>());
-                context.push_str(&format!("\n\n[...truncated {} chars...]\n\n", plan_content.len() - MAX_FILE_SIZE));
+            context.push_str("## plan.md (summary)\n");
+
+            // Extract only useful sections (skip debug output and embedded mega-bundles)
+            let useful_content = extract_useful_content_from_stage_file(&plan_content);
+
+            if useful_content.len() > MAX_FILE_SIZE {
+                tracing::warn!("  📄 plan.md: {} total → {} useful → {} final (truncated)",
+                    plan_content.len(), useful_content.len(), MAX_FILE_SIZE);
+                context.push_str(&useful_content.chars().take(MAX_FILE_SIZE).collect::<String>());
+                context.push_str(&format!("\n\n[...truncated...]\n\n"));
             } else {
-                context.push_str(&plan_content);
+                tracing::info!("  📄 plan.md: {} total → {} useful ({}% reduction)",
+                    plan_content.len(), useful_content.len(),
+                    100 - (useful_content.len() * 100 / plan_content.len().max(1)));
+                context.push_str(&useful_content);
                 context.push_str("\n\n");
             }
         }
     }
 
     // Add tasks.md if available (for Implement, Validate, etc.)
+    // INTELLIGENT EXTRACTION: Same filtering as plan.md
     if matches!(stage, crate::spec_prompts::SpecStage::Implement |
                        crate::spec_prompts::SpecStage::Validate |
                        crate::spec_prompts::SpecStage::Audit |
                        crate::spec_prompts::SpecStage::Unlock) {
         let tasks_md = spec_dir.join("tasks.md");
         if let Ok(tasks_content) = std::fs::read_to_string(&tasks_md) {
-            context.push_str("## tasks.md\n");
-            if tasks_content.len() > MAX_FILE_SIZE {
-                context.push_str(&tasks_content.chars().take(MAX_FILE_SIZE).collect::<String>());
-                context.push_str(&format!("\n\n[...truncated {} chars...]\n\n", tasks_content.len() - MAX_FILE_SIZE));
+            context.push_str("## tasks.md (summary)\n");
+
+            let useful_content = extract_useful_content_from_stage_file(&tasks_content);
+
+            if useful_content.len() > MAX_FILE_SIZE {
+                tracing::warn!("  📄 tasks.md: {} total → {} useful → {} final (truncated)",
+                    tasks_content.len(), useful_content.len(), MAX_FILE_SIZE);
+                context.push_str(&useful_content.chars().take(MAX_FILE_SIZE).collect::<String>());
+                context.push_str(&format!("\n\n[...truncated...]\n\n"));
             } else {
-                context.push_str(&tasks_content);
+                tracing::info!("  📄 tasks.md: {} total → {} useful ({}% reduction)",
+                    tasks_content.len(), useful_content.len(),
+                    100 - (useful_content.len() * 100 / tasks_content.len().max(1)));
+                context.push_str(&useful_content);
                 context.push_str("\n\n");
             }
         }
@@ -271,36 +373,38 @@ async fn spawn_regular_stage_agents_sequential(
         // Build prompt for THIS agent with previous agent outputs injected
         let mut prompt = build_individual_agent_prompt(spec_id, stage, agent_name, cwd).await?;
 
-        // Inject previous agent outputs into prompt
+        // Inject previous agent outputs into prompt (INTELLIGENT EXTRACTION)
         for (prev_agent_name, prev_output) in &agent_outputs {
             let placeholder = format!("${{PREVIOUS_OUTPUTS.{}}}", prev_agent_name);
 
-            // Extract JSON if possible, otherwise use full text
-            let output_to_inject = if prev_output.contains('{') && prev_output.contains("\"stage\"") {
-                // Try to extract clean JSON
-                if let Some(start) = prev_output.find('{') {
-                    if let Some(end) = prev_output.rfind('}') {
-                        &prev_output[start..=end]
+            // Extract and validate JSON (strip metadata, timestamps, debug output)
+            let output_to_inject = extract_clean_json_from_agent_output(prev_output)
+                .unwrap_or_else(|| {
+                    tracing::warn!("  ⚠️ Failed to extract JSON from {}, using truncated raw output", prev_agent_name);
+                    // Fallback: Truncate raw output to prevent explosion
+                    if prev_output.len() > 5000 {
+                        format!("{}...[truncated {} chars]",
+                            &prev_output.chars().take(5000).collect::<String>(),
+                            prev_output.len() - 5000)
                     } else {
-                        prev_output
+                        prev_output.to_string()
                     }
-                } else {
-                    prev_output
-                }
-            } else {
-                prev_output
-            };
+                });
 
-            tracing::warn!("  Injecting {} output ({} chars) into {} prompt",
-                prev_agent_name, output_to_inject.len(), agent_name);
+            tracing::warn!("  ✅ Injecting {} output ({} chars, extracted from {} raw) into {} prompt",
+                prev_agent_name, output_to_inject.len(), prev_output.len(), agent_name);
 
-            prompt = prompt.replace(&placeholder, output_to_inject);
+            prompt = prompt.replace(&placeholder, &output_to_inject);
         }
 
         // Also handle generic ${PREVIOUS_OUTPUTS} (all previous)
         if prompt.contains("${PREVIOUS_OUTPUTS}") {
             let all_outputs = agent_outputs.iter()
-                .map(|(name, output)| format!("## {}\n{}", name, output))
+                .map(|(name, output)| {
+                    let clean = extract_clean_json_from_agent_output(output)
+                        .unwrap_or_else(|| output.chars().take(5000).collect::<String>());
+                    format!("## {}\n{}", name, clean)
+                })
                 .collect::<Vec<_>>()
                 .join("\n\n");
             prompt = prompt.replace("${PREVIOUS_OUTPUTS}", &all_outputs);
