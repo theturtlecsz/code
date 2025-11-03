@@ -122,9 +122,177 @@ async fn build_individual_agent_prompt(
     Ok(prompt)
 }
 
+/// Spawn and wait for a single agent to complete (sequential execution)
+/// Returns the agent's output for injection into next agent's prompt
+async fn spawn_and_wait_for_agent(
+    agent_name: &str,
+    config_name: &str,
+    prompt: String,
+    agent_configs: &[AgentConfig],
+    batch_id: &str,
+    spec_id: &str,
+    stage: SpecStage,
+    timeout_secs: u64,
+) -> Result<(String, String), String> {
+    use codex_core::agent_tool::{AGENT_MANAGER, AgentStatus};
+
+    tracing::warn!("🎬 SEQUENTIAL: Spawning {} and waiting for completion...", agent_name);
+
+    // Spawn agent
+    let agent_id = {
+        let mut manager = AGENT_MANAGER.write().await;
+        manager.create_agent_from_config_name(
+            config_name,
+            agent_configs,
+            prompt,
+            false,
+            Some(batch_id.to_string()),
+        ).await.map_err(|e| format!("Failed to spawn {}: {}", agent_name, e))?
+    };
+
+    tracing::warn!("  ✓ {} spawned: {}", agent_name, &agent_id[..8]);
+
+    // Record to SQLite
+    if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+        let _ = db.record_agent_spawn(&agent_id, spec_id, stage, "regular_stage", agent_name);
+    }
+
+    // Wait for completion
+    let start = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(timeout_secs);
+    let poll_interval = std::time::Duration::from_millis(500);
+
+    loop {
+        if start.elapsed() > timeout {
+            return Err(format!("{} timeout after {}s", agent_name, timeout_secs));
+        }
+
+        let manager = AGENT_MANAGER.read().await;
+        if let Some(agent) = manager.get_agent(&agent_id) {
+            match agent.status {
+                AgentStatus::Completed => {
+                    if let Some(result) = &agent.result {
+                        tracing::warn!("  ✅ {} completed: {} chars", agent_name, result.len());
+                        return Ok((agent_id, result.clone()));
+                    } else {
+                        return Err(format!("{} completed but no result", agent_name));
+                    }
+                }
+                AgentStatus::Failed => {
+                    return Err(format!("{} failed", agent_name));
+                }
+                AgentStatus::Cancelled => {
+                    return Err(format!("{} cancelled", agent_name));
+                }
+                _ => {
+                    // Still running, continue polling
+                }
+            }
+        }
+
+        tokio::time::sleep(poll_interval).await;
+    }
+}
+
+/// Spawn regular stage agents SEQUENTIALLY with output passing
+/// Session 3: True sequential execution with agent collaboration
+async fn spawn_regular_stage_agents_sequential(
+    cwd: &Path,
+    spec_id: &str,
+    stage: SpecStage,
+    expected_agents: &[String],
+    agent_configs: &[AgentConfig],
+) -> Result<Vec<AgentSpawnInfo>, String> {
+    tracing::warn!("🎬 AUDIT: spawn_regular_stage_agents_sequential (true sequential mode)");
+    tracing::warn!("  spec_id: {}", spec_id);
+    tracing::warn!("  stage: {:?}", stage);
+    tracing::warn!("  expected_agents: {:?}", expected_agents);
+
+    let mut spawn_infos = Vec::new();
+    let mut agent_outputs: Vec<(String, String)> = Vec::new(); // (agent_name, output)
+    let batch_id = uuid::Uuid::new_v4().to_string();
+
+    let agent_config_map: std::collections::HashMap<&str, &str> = [
+        ("gemini", "gemini_flash"),
+        ("claude", "claude_haiku"),
+        ("gpt_pro", "gpt_pro"),
+        ("gpt_codex", "gpt_codex"),
+    ].iter().copied().collect();
+
+    // Spawn agents SEQUENTIALLY, each can use previous outputs
+    for (idx, agent_name) in expected_agents.iter().enumerate() {
+        tracing::warn!("🔄 SEQUENTIAL: Agent {}/{}: {}", idx+1, expected_agents.len(), agent_name);
+
+        let config_name = agent_config_map.get(agent_name.as_str())
+            .ok_or_else(|| format!("No config mapping for agent {}", agent_name))?;
+
+        // Build prompt for THIS agent with previous agent outputs injected
+        let mut prompt = build_individual_agent_prompt(spec_id, stage, agent_name, cwd).await?;
+
+        // Inject previous agent outputs into prompt
+        for (prev_agent_name, prev_output) in &agent_outputs {
+            let placeholder = format!("${{PREVIOUS_OUTPUTS.{}}}", prev_agent_name);
+
+            // Extract JSON if possible, otherwise use full text
+            let output_to_inject = if prev_output.contains('{') && prev_output.contains("\"stage\"") {
+                // Try to extract clean JSON
+                if let Some(start) = prev_output.find('{') {
+                    if let Some(end) = prev_output.rfind('}') {
+                        &prev_output[start..=end]
+                    } else {
+                        prev_output
+                    }
+                } else {
+                    prev_output
+                }
+            } else {
+                prev_output
+            };
+
+            tracing::warn!("  Injecting {} output ({} chars) into {} prompt",
+                prev_agent_name, output_to_inject.len(), agent_name);
+
+            prompt = prompt.replace(&placeholder, output_to_inject);
+        }
+
+        // Also handle generic ${PREVIOUS_OUTPUTS} (all previous)
+        if prompt.contains("${PREVIOUS_OUTPUTS}") {
+            let all_outputs = agent_outputs.iter()
+                .map(|(name, output)| format!("## {}\n{}", name, output))
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            prompt = prompt.replace("${PREVIOUS_OUTPUTS}", &all_outputs);
+        }
+
+        // Spawn and WAIT for this agent to complete
+        let (agent_id, agent_output) = spawn_and_wait_for_agent(
+            agent_name,
+            config_name,
+            prompt,
+            agent_configs,
+            &batch_id,
+            spec_id,
+            stage,
+            600, // 10min timeout per agent
+        ).await?;
+
+        // Store this agent's output for next agents to use
+        agent_outputs.push((agent_name.clone(), agent_output));
+
+        spawn_infos.push(AgentSpawnInfo {
+            agent_id,
+            agent_name: agent_name.clone(),
+            model_name: config_name.to_string(),
+        });
+    }
+
+    tracing::warn!("✅ SEQUENTIAL: All {} agents completed", expected_agents.len());
+
+    Ok(spawn_infos)
+}
+
 /// Spawn regular stage agents natively (SPEC-KIT-900 fix)
-/// Mirrors quality gate spawning to ensure AgentStatusUpdate events are sent
-/// Session 3: Refactored to use individual prompts per agent (not mega-bundle)
+/// Session 3: Wrapper that chooses parallel or sequential execution
 async fn spawn_regular_stage_agents_native(
     cwd: &Path,
     spec_id: &str,
@@ -133,92 +301,14 @@ async fn spawn_regular_stage_agents_native(
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
 ) -> Result<Vec<AgentSpawnInfo>, String> {
-    tracing::warn!("🎬 AUDIT: spawn_regular_stage_agents_native called (individual prompts mode)");
-    tracing::warn!("  spec_id: {}", spec_id);
-    tracing::warn!("  stage: {:?}", stage);
-    tracing::warn!("  expected_agents: {:?}", expected_agents);
-
-    let mut spawn_infos = Vec::new();
-    let batch_id = uuid::Uuid::new_v4().to_string();
-
-    tracing::warn!("  batch_id: {}", batch_id);
-
-    // Map canonical agent names to config names (must match ~/.code/config.toml [[agents]] entries)
-    // Tier 2: cheap + fast models for Plan/Tasks/Validate
-    // Implement adds gpt_codex (code specialist)
-    let agent_config_map: std::collections::HashMap<&str, &str> = [
-        ("gemini", "gemini_flash"),     // gemini-2.5-flash
-        ("claude", "claude_haiku"),     // claude-3.5-haiku
-        ("gpt_pro", "gpt_pro"),         // gpt-5 medium effort
-        ("gpt_codex", "gpt_codex"),     // gpt-5 codex (Implement stage)
-    ].iter().copied().collect();
-
-    for (idx, agent_name) in expected_agents.iter().enumerate() {
-        tracing::warn!("🤖 AUDIT: Spawning agent {}/{}: {}", idx+1, expected_agents.len(), agent_name);
-
-        let config_name = agent_config_map.get(agent_name.as_str())
-            .ok_or_else(|| format!("No config mapping for agent {}", agent_name))?;
-
-        tracing::warn!("  config_name: {} (from ~/.code/config.toml)", config_name);
-
-        // Build individual prompt for THIS agent (Session 3 fix)
-        tracing::warn!("  Building individual prompt for {}...", agent_name);
-        let individual_prompt = build_individual_agent_prompt(
-            spec_id,
-            stage,
-            agent_name,
-            cwd,
-        ).await.map_err(|e| {
-            tracing::error!("  ❌ Failed to build prompt for {}: {}", agent_name, e);
-            format!("Failed to build prompt for {}: {}", agent_name, e)
-        })?;
-
-        tracing::warn!("  Prompt built: {} chars", individual_prompt.len());
-
-        // Spawn agent via AgentManager (same as quality gates)
-        let mut manager = AGENT_MANAGER.write().await;
-
-        tracing::warn!("  Calling AGENT_MANAGER.create_agent_from_config_name...");
-        let agent_id = manager.create_agent_from_config_name(
-            config_name,
-            agent_configs,
-            individual_prompt,  // ← INDIVIDUAL prompt, not mega-bundle
-            false, // read_write for regular stages
-            Some(batch_id.clone()),
-        ).await.map_err(|e| {
-            tracing::error!("  ❌ Failed to create agent {}: {}", config_name, e);
-            format!("Failed to spawn {}: {}", config_name, e)
-        })?;
-
-        tracing::warn!("  ✓ Agent spawned with ID: {}", agent_id);
-
-        // Record agent spawn to SQLite for definitive routing
-        if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
-            tracing::warn!("  Recording spawn to SQLite (phase_type=regular_stage)...");
-            if let Err(e) = db.record_agent_spawn(
-                &agent_id,
-                spec_id,
-                stage,
-                "regular_stage",
-                agent_name,
-            ) {
-                tracing::warn!("  ⚠ Failed to record agent spawn for {}: {}", agent_name, e);
-            } else {
-                tracing::warn!("  ✓ SQLite record created for {} ({})", agent_name, &agent_id[..8]);
-            }
-        }
-
-        spawn_infos.push(AgentSpawnInfo {
-            agent_id,
-            agent_name: agent_name.clone(),
-            model_name: config_name.to_string(),
-        });
-
-        tracing::warn!("  ✅ Agent {} spawn complete", agent_name);
-    }
-
-    tracing::warn!("🎉 AUDIT: All {} agents spawned successfully", spawn_infos.len());
-    Ok(spawn_infos)
+    // Use SEQUENTIAL execution to enable true agent collaboration
+    spawn_regular_stage_agents_sequential(
+        cwd,
+        spec_id,
+        stage,
+        expected_agents,
+        agent_configs,
+    ).await
 }
 
 /// Wait for regular stage agents to complete (mirrors quality gate polling)

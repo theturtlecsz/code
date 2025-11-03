@@ -34,8 +34,11 @@
 | GPT_Pro | gpt-5 medium effort | `gpt_pro` | Executor & QA | Validate feasibility, build final_plan with consensus |
 
 **Cost**: ~$0.35
-**Duration**: 10-12 minutes
-**Execution**: Parallel with individual prompts (after Session 3 fix)
+**Duration**: 12-15 minutes (sequential execution)
+**Execution**: SEQUENTIAL with output passing ✅
+- Gemini runs first → output captured
+- Claude runs second → receives Gemini's actual output
+- GPT_Pro runs last → receives both Gemini + Claude outputs
 
 ---
 
@@ -50,8 +53,9 @@
 | GPT_Pro | gpt-5 medium effort | `gpt_pro` | Executor & QA | Verify guardrails, build command plan |
 
 **Cost**: ~$0.35
-**Duration**: 10-12 minutes
-**Execution**: Parallel with individual prompts
+**Duration**: 12-15 minutes (sequential execution)
+**Execution**: SEQUENTIAL with output passing ✅
+- Gemini → Claude (gets Gemini + plan.md) → GPT_Pro (gets all)
 
 ---
 
@@ -67,9 +71,12 @@
 | GPT_Pro | gpt-5 medium effort | `gpt_pro` | QA | Validate feasibility, build checklist, assess risks |
 
 **Cost**: ~$0.11 (codex cheaper than expected)
-**Duration**: 8-12 minutes
-**Execution**: Parallel with individual prompts
-**Note**: 4 agents (adds gpt_codex specialist)
+**Duration**: 20-30 minutes (sequential execution, 4 agents)
+**Execution**: SEQUENTIAL with output passing ✅
+- Gemini → Claude → GPT_Codex → GPT_Pro
+- Each agent receives all previous outputs
+- True collaborative code generation
+**Note**: 4 agents (adds gpt_codex specialist) - longest stage due to sequential execution
 
 ---
 
@@ -84,8 +91,8 @@
 | GPT_Pro | gpt-5 medium effort | `gpt_pro` | Validator | Confirm outputs, final decision |
 
 **Cost**: ~$0.35
-**Duration**: 10-12 minutes
-**Execution**: Parallel with individual prompts
+**Duration**: 12-15 minutes (sequential execution)
+**Execution**: SEQUENTIAL with output passing ✅
 
 ---
 
@@ -100,8 +107,8 @@
 | GPT_Pro | gpt-5 high reasoning | `gpt_pro` | Final Reviewer | Verify guardrails, recommendation |
 
 **Cost**: ~$0.80
-**Duration**: 10-12 minutes
-**Execution**: Parallel with individual prompts
+**Duration**: 12-15 minutes (sequential execution, premium models)
+**Execution**: SEQUENTIAL with output passing ✅
 
 ---
 
@@ -116,8 +123,8 @@
 | GPT_Pro | gpt-5 high reasoning | `gpt_pro` | Final Approver | Check compliance, make unlock decision |
 
 **Cost**: ~$0.80
-**Duration**: 10-12 minutes
-**Execution**: Parallel with individual prompts
+**Duration**: 12-15 minutes (sequential execution, premium models)
+**Execution**: SEQUENTIAL with output passing ✅
 
 ---
 
@@ -138,25 +145,37 @@
    Check: Ambiguities in SPEC
    Consensus: 3/3 or 2/3 → PASS
 
-3. Regular Stage: Plan (3 agents, ~$0.35, 4-5min)
-   Spawn: gemini_flash, claude_haiku, gpt_pro
-   Prompts: spec-plan (individual per agent) ← FIXED Session 3
+3. Regular Stage: Plan (3 agents SEQUENTIAL, ~$0.35, 12-15min)
 
-   Agent Execution (Parallel):
-   ├─ Gemini: Research SPEC, find conflicts
-   ├─ Claude: Build work_breakdown, acceptance_mapping
-   └─ GPT_Pro: Validate, build consensus
+   SEQUENTIAL EXECUTION WITH OUTPUT PASSING:
 
-   Background Polling:
-   ├─ Every 500ms, check agent status
-   ├─ Wait for all 3 agents: Completed|Failed|Cancelled
-   └─ Timeout: 600s (10 minutes)
+   Agent 1: Gemini (gemini_flash)
+   ├─ Prompt: spec-plan.gemini (research role)
+   ├─ Context: spec.md
+   ├─ Execute: Survey SPEC, find conflicts
+   ├─ Wait for completion (inline polling, 10min timeout)
+   └─ Output captured: Gemini JSON (~2-3k chars)
+
+   Agent 2: Claude (claude_haiku)
+   ├─ Prompt: spec-plan.claude (synthesis role)
+   ├─ Context: spec.md + Gemini's ACTUAL output ✅
+   ├─ Variable: ${PREVIOUS_OUTPUTS.gemini} → Gemini's JSON
+   ├─ Execute: Build work_breakdown using Gemini's findings
+   ├─ Wait for completion
+   └─ Output captured: Claude JSON (~5-8k chars)
+
+   Agent 3: GPT_Pro (gpt_pro)
+   ├─ Prompt: spec-plan.gpt_pro (arbiter role)
+   ├─ Context: spec.md + Gemini output + Claude output ✅
+   ├─ Variable: ${PREVIOUS_OUTPUTS} → Both previous outputs
+   ├─ Execute: Validate feasibility, build consensus
+   ├─ Wait for completion
+   └─ Output captured: GPT_Pro JSON (~4-6k chars)
 
    Completion:
-   ├─ Send: RegularStageAgentsComplete event
-   ├─ Collect: 3 agent responses
+   ├─ All 3 outputs collected in sequence
    ├─ Store: SQLite consensus_artifacts (3 rows)
-   └─ Synthesize: Generate plan.md from 3 perspectives
+   └─ Synthesize: Generate plan.md from 3 collaborative perspectives
 
    Output: docs/SPEC-KIT-900-generic-smoke/plan.md
 
@@ -301,9 +320,9 @@
 
 ---
 
-## Agent Spawning Mechanism (After Session 3 Fix)
+## Agent Spawning Mechanism (Session 3 Evolution)
 
-### Before Fix (Broken)
+### Original (Broken - Mega-Bundle)
 
 ```rust
 // spec_prompts.rs - Build mega-bundle
@@ -366,6 +385,51 @@ for agent_name in [gemini, claude, gpt_codex, gpt_pro] {
 
 ---
 
+### Final Fix (Sequential with Output Passing) ✅
+
+```rust
+// agent_orchestrator.rs:197-292 - Sequential execution
+async fn spawn_regular_stage_agents_sequential(...) {
+    let mut agent_outputs = Vec::new(); // Accumulate outputs
+
+    // FOR EACH agent in sequence
+    for agent_name in [gemini, claude, gpt_codex, gpt_pro] {
+        // 1. Build individual prompt
+        let mut prompt = build_individual_agent_prompt(spec_id, stage, agent_name, cwd)?;
+
+        // 2. Inject previous agent outputs ✅
+        for (prev_agent, prev_output) in &agent_outputs {
+            let placeholder = format!("${{{}}}", prev_agent);
+            prompt = prompt.replace(&placeholder, &prev_output); // REAL OUTPUT!
+        }
+
+        // 3. Spawn and WAIT for completion
+        let (agent_id, output) = spawn_and_wait_for_agent(agent_name, prompt).await?;
+
+        // 4. Store output for next agent
+        agent_outputs.push((agent_name, output)); // Next agent gets THIS output
+
+        // 5. Continue to next agent
+    }
+
+    Ok(spawn_infos) // All agents completed sequentially
+}
+```
+
+**Benefits**:
+- ✅ True sequential execution (Gemini → Claude → GPT_Pro → GPT_Codex)
+- ✅ Real output passing (Claude gets actual Gemini JSON)
+- ✅ Variables resolved with real data (not placeholders)
+- ✅ Agent collaboration as designed in prompts
+- ✅ Each agent builds on previous insights
+
+**Tradeoff**:
+- ⏱️ Slower: ~90min total (vs ~45min parallel)
+- 💰 Same cost: ~$2.97 (cost doesn't change)
+- 🎯 Higher quality: True collaborative refinement
+
+---
+
 ## Data Flow Through Stages
 
 ```
@@ -414,34 +478,42 @@ for agent_name in [gemini, claude, gpt_codex, gpt_pro] {
 
 ## Execution Timeline Example
 
-**For `/speckit.auto SPEC-KIT-900`** (typical timing):
+**For `/speckit.auto SPEC-KIT-900`** (sequential execution):
 
 ```
 00:00 - Start
 00:01 - Guardrail: Plan (native, <1s)
-00:01 - Quality Gate: before-specify (3 agents, 50s)
-00:51 - Regular Stage: Plan (3 agents spawn)
-04:51 - Plan agents complete, synthesize plan.md
-04:52 - Quality Gate: after-specify (3 agents, 50s)
-05:42 - Guardrail: Tasks (native, <1s)
-05:43 - Regular Stage: Tasks (3 agents spawn)
-09:43 - Tasks agents complete, synthesize tasks.md
-09:44 - Quality Gate: after-tasks (3 agents, 50s)
-10:34 - Guardrail: Implement (native, <1s)
-10:35 - Regular Stage: Implement (4 agents spawn) ← 4 AGENTS
-18:35 - Implement agents complete, synthesize implement.md
-18:36 - Guardrail: Validate (native, <1s)
-18:37 - Regular Stage: Validate (3 agents spawn)
-22:37 - Validate complete, synthesize validate.md
-22:38 - Guardrail: Audit (native, <1s)
-22:39 - Regular Stage: Audit (3 premium agents)
-32:39 - Audit complete, synthesize audit.md
-32:40 - Guardrail: Unlock (native, <1s)
-32:41 - Regular Stage: Unlock (3 premium agents)
-42:41 - Unlock complete, synthesize unlock.md
-42:42 - ✅ PIPELINE COMPLETE
+00:01 - Quality Gate: before-specify (3 agents parallel, 50s)
+00:51 - Regular Stage: Plan (3 agents SEQUENTIAL)
+        ├─ Gemini spawns, waits ~4min → output captured
+        ├─ Claude spawns (gets Gemini output), waits ~5min → output captured
+        └─ GPT_Pro spawns (gets both), waits ~4min → output captured
+13:51 - Plan complete (13min sequential), synthesize plan.md
+13:52 - Quality Gate: after-specify (3 agents parallel, 50s)
+14:42 - Guardrail: Tasks (native, <1s)
+14:43 - Regular Stage: Tasks (3 agents SEQUENTIAL, ~13min)
+27:43 - Tasks complete, synthesize tasks.md
+27:44 - Quality Gate: after-tasks (3 agents parallel, 50s)
+28:34 - Guardrail: Implement (native, <1s)
+28:35 - Regular Stage: Implement (4 agents SEQUENTIAL, ~25min) ← LONGEST
+        ├─ Gemini: ~5min
+        ├─ Claude: ~6min (gets Gemini)
+        ├─ GPT_Codex: ~8min (gets both, generates code)
+        └─ GPT_Pro: ~6min (gets all, validates)
+53:35 - Implement complete, synthesize implement.md
+53:36 - Guardrail: Validate (native, <1s)
+53:37 - Regular Stage: Validate (3 agents SEQUENTIAL, ~13min)
+66:37 - Validate complete, synthesize validate.md
+66:38 - Guardrail: Audit (native, <1s)
+66:39 - Regular Stage: Audit (3 premium SEQUENTIAL, ~13min)
+79:39 - Audit complete, synthesize audit.md
+79:40 - Guardrail: Unlock (native, <1s)
+79:41 - Regular Stage: Unlock (3 premium SEQUENTIAL, ~13min)
+92:41 - Unlock complete, synthesize unlock.md
+92:42 - ✅ PIPELINE COMPLETE
 
-Total: ~42-45 minutes, ~$2.97
+Total: ~92-95 minutes (was ~45min parallel), ~$2.97
+Sequential adds ~50min but enables true agent collaboration
 ```
 
 ---
