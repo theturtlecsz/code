@@ -314,8 +314,71 @@ async fn spawn_regular_stage_agents_sequential(
     Ok(spawn_infos)
 }
 
-/// Spawn regular stage agents natively (SPEC-KIT-900 fix)
-/// Session 3: Wrapper that chooses parallel or sequential execution
+/// Spawn regular stage agents in PARALLEL for consensus (no output passing)
+/// Used for stages where independent perspectives are critical (Validate, Audit, Unlock)
+async fn spawn_regular_stage_agents_parallel(
+    cwd: &Path,
+    spec_id: &str,
+    stage: SpecStage,
+    expected_agents: &[String],
+    agent_configs: &[AgentConfig],
+) -> Result<Vec<AgentSpawnInfo>, String> {
+    tracing::warn!("🎬 AUDIT: spawn_regular_stage_agents_parallel (independent consensus mode)");
+    tracing::warn!("  spec_id: {}", spec_id);
+    tracing::warn!("  stage: {:?}", stage);
+    tracing::warn!("  expected_agents: {:?}", expected_agents);
+
+    let mut spawn_infos = Vec::new();
+    let batch_id = uuid::Uuid::new_v4().to_string();
+
+    let agent_config_map: std::collections::HashMap<&str, &str> = [
+        ("gemini", "gemini_flash"),
+        ("claude", "claude_haiku"),
+        ("gpt_pro", "gpt_pro"),
+        ("gpt_codex", "gpt_codex"),
+    ].iter().copied().collect();
+
+    // Spawn all agents in PARALLEL (no waiting, no output passing)
+    for (idx, agent_name) in expected_agents.iter().enumerate() {
+        tracing::warn!("🚀 PARALLEL: Spawning agent {}/{}: {}", idx+1, expected_agents.len(), agent_name);
+
+        let config_name = agent_config_map.get(agent_name.as_str())
+            .ok_or_else(|| format!("No config mapping for agent {}", agent_name))?;
+
+        // Build individual prompt (no previous outputs)
+        let prompt = build_individual_agent_prompt(spec_id, stage, agent_name, cwd).await?;
+
+        // Spawn without waiting
+        let mut manager = AGENT_MANAGER.write().await;
+        let agent_id = manager.create_agent_from_config_name(
+            config_name,
+            agent_configs,
+            prompt,
+            false,
+            Some(batch_id.clone()),
+        ).await.map_err(|e| format!("Failed to spawn {}: {}", agent_name, e))?;
+
+        // Record to SQLite
+        if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+            let _ = db.record_agent_spawn(&agent_id, spec_id, stage, "regular_stage", agent_name);
+        }
+
+        spawn_infos.push(AgentSpawnInfo {
+            agent_id,
+            agent_name: agent_name.clone(),
+            model_name: config_name.to_string(),
+        });
+
+        tracing::warn!("  ✓ {} spawned (not waiting)", agent_name);
+    }
+
+    tracing::warn!("✅ PARALLEL: All {} agents spawned, executing independently", expected_agents.len());
+
+    Ok(spawn_infos)
+}
+
+/// Spawn regular stage agents natively (SPEC-KIT-900 Session 3)
+/// Routes to appropriate execution pattern based on stage type
 async fn spawn_regular_stage_agents_native(
     cwd: &Path,
     spec_id: &str,
@@ -324,14 +387,36 @@ async fn spawn_regular_stage_agents_native(
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
 ) -> Result<Vec<AgentSpawnInfo>, String> {
-    // Use SEQUENTIAL execution to enable true agent collaboration
-    spawn_regular_stage_agents_sequential(
-        cwd,
-        spec_id,
-        stage,
-        expected_agents,
-        agent_configs,
-    ).await
+    // Stage-specific execution patterns (Option 4)
+    match stage {
+        // Sequential pipeline: Research → Synthesis → QA
+        crate::spec_prompts::SpecStage::Plan |
+        crate::spec_prompts::SpecStage::Tasks => {
+            tracing::warn!("🔄 Using SEQUENTIAL execution for {} stage (progressive refinement)", stage.display_name());
+            spawn_regular_stage_agents_sequential(cwd, spec_id, stage, expected_agents, agent_configs).await
+        },
+
+        // Hybrid: Parallel research → Sequential implementation
+        crate::spec_prompts::SpecStage::Implement => {
+            tracing::warn!("🔀 Using SEQUENTIAL execution for {} stage (code generation pipeline)", stage.display_name());
+            // TODO: Implement hybrid pattern (parallel Gemini+Claude, then sequential Codex+Pro)
+            spawn_regular_stage_agents_sequential(cwd, spec_id, stage, expected_agents, agent_configs).await
+        },
+
+        // Parallel consensus: Independent validation critical
+        crate::spec_prompts::SpecStage::Validate |
+        crate::spec_prompts::SpecStage::Audit |
+        crate::spec_prompts::SpecStage::Unlock => {
+            tracing::warn!("⚡ Using PARALLEL execution for {} stage (independent consensus)", stage.display_name());
+            spawn_regular_stage_agents_parallel(cwd, spec_id, stage, expected_agents, agent_configs).await
+        },
+
+        // Fallback to sequential for other stages
+        _ => {
+            tracing::warn!("🔄 Using SEQUENTIAL execution for {} stage (default)", stage.display_name());
+            spawn_regular_stage_agents_sequential(cwd, spec_id, stage, expected_agents, agent_configs).await
+        }
+    }
 }
 
 /// Wait for regular stage agents to complete (mirrors quality gate polling)
