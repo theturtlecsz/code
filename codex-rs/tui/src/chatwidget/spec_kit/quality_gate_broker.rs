@@ -747,47 +747,52 @@ fn extract_json_from_content(content: &str) -> Option<String> {
     }
 
     // Try raw JSON - look for actual JSON response, not prompt text
-    // Strategy: Find all potential JSON blocks by searching for opening braces
+    // Strategy: Find JSON blocks that look like actual responses (contain "stage": field)
     let mut json_candidates = Vec::new();
 
-    // Build full text to enable character-position based extraction
-    let full_text = content_to_parse;
+    // Search for actual JSON by looking for "stage": field first
     let mut search_from = 0;
+    let full_text = content_to_parse;
 
-    while let Some(open_pos) = full_text[search_from..].find('{') {
-        let abs_open_pos = search_from + open_pos;
+    while let Some(stage_pos) = full_text[search_from..].find(r#""stage":"#) {
+        let abs_stage_pos = search_from + stage_pos;
 
-        // Track brace depth from this opening brace
-        let mut depth = 0;
-        let mut close_pos = None;
+        // Search backwards from "stage": to find opening {
+        let before_stage = &full_text[..abs_stage_pos];
+        if let Some(open_pos) = before_stage.rfind('{') {
+            // Now find matching close brace from the open position
+            let mut depth = 0;
+            let mut close_pos = None;
 
-        for (offset, ch) in full_text[abs_open_pos..].char_indices() {
-            if ch == '{' {
-                depth += 1;
-            }
-            if ch == '}' {
-                depth -= 1;
-                if depth == 0 {
-                    close_pos = Some(abs_open_pos + offset + ch.len_utf8());
-                    break;
+            for (offset, ch) in full_text[open_pos..].char_indices() {
+                if ch == '{' {
+                    depth += 1;
+                }
+                if ch == '}' {
+                    depth -= 1;
+                    if depth == 0 {
+                        close_pos = Some(open_pos + offset + ch.len_utf8());
+                        break;
+                    }
                 }
             }
-        }
 
-        if let Some(end_pos) = close_pos {
-            let candidate = &full_text[abs_open_pos..end_pos];
+            if let Some(end_pos) = close_pos {
+                let candidate = &full_text[open_pos..end_pos];
 
-            // Skip obvious non-JSON like variable assignments
-            if !candidate.contains("Artifacts:") &&
-               !candidate.contains("CRITICAL:") &&
-               !candidate.trim().starts_with("${") {
-                json_candidates.push(candidate.to_string());
+                // Only consider if it's substantial (>100 chars) and doesn't look like prose
+                if candidate.len() > 100 &&
+                   !candidate.contains("CRITICAL: You MUST") &&
+                   !candidate.contains("Start your response with") {
+                    json_candidates.push(candidate.to_string());
+                }
+
+                search_from = end_pos;
+            } else {
+                search_from = abs_stage_pos + 10;
             }
-
-            search_from = end_pos;
         } else {
-            // No matching close brace, skip this position
-            search_from = abs_open_pos + 1;
+            search_from = abs_stage_pos + 10;
         }
     }
 
