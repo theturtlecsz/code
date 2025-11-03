@@ -99,6 +99,7 @@ async fn build_individual_agent_prompt(
 
     // Add spec.md (truncate if too large)
     if spec_content.len() > MAX_FILE_SIZE {
+        tracing::warn!("  Truncating spec.md: {} → {} chars", spec_content.len(), MAX_FILE_SIZE);
         context.push_str(&spec_content.chars().take(MAX_FILE_SIZE).collect::<String>());
         context.push_str(&format!("\n\n[...truncated {} chars...]\n\n", spec_content.len() - MAX_FILE_SIZE));
     } else {
