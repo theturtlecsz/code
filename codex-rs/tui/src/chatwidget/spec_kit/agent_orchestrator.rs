@@ -202,11 +202,17 @@ async fn spawn_and_wait_for_agent(
                     }
                 }
                 AgentStatus::Failed => {
-                    let error_msg = agent.result.as_ref()
-                        .map(|r| format!("{} failed: {}", agent_name, r))
-                        .unwrap_or_else(|| format!("{} failed (no error message)", agent_name));
-                    tracing::error!("  ❌ Agent failure detail: {}", error_msg);
-                    return Err(error_msg);
+                    // Check both error field and result field
+                    let error_detail = agent.error.as_ref()
+                        .or(agent.result.as_ref())
+                        .map(|e| e.clone())
+                        .unwrap_or_else(|| "no error message available".to_string());
+
+                    tracing::error!("  ❌ {} FAILED - Status: {:?}", agent_name, agent.status);
+                    tracing::error!("  ❌ Error detail: {}", error_detail);
+                    tracing::error!("  ❌ Agent config: model={}", agent.model);
+
+                    return Err(format!("{} failed: {}", agent_name, error_detail));
                 }
                 AgentStatus::Cancelled => {
                     return Err(format!("{} cancelled", agent_name));
