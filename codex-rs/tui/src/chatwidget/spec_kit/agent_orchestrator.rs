@@ -66,7 +66,6 @@ async fn build_individual_agent_prompt(
     // Find SPEC directory (search docs/ for SPEC-*{spec_id}* pattern)
     let spec_dir = {
         let docs_dir = cwd.join("docs");
-        let pattern = format!("SPEC-*{}*", spec_id);
 
         std::fs::read_dir(&docs_dir)
             .ok()
@@ -74,6 +73,8 @@ async fn build_individual_agent_prompt(
                 entries
                     .filter_map(Result::ok)
                     .find(|entry| {
+                        // Must be a directory AND contain spec_id
+                        entry.path().is_dir() &&
                         entry.file_name()
                             .to_string_lossy()
                             .contains(spec_id)
