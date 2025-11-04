@@ -1,36 +1,56 @@
 {
+  "schemaVersion": 1,
   "spec_id": "SPEC-KIT-900",
-  "total_spent": 8.221210999999997,
-  "budget": 2.0,
-  "utilization": 4.110605499999998,
-  "call_count": 23,
+  "currency": "USD",
+  "total_cost_usd": 8.22,
   "per_stage": {
-    "spec-implement": 8.221210999999997
+    "plan": 0.0,
+    "tasks": 0.0,
+    "implement": 8.22,
+    "validate": 0.0,
+    "audit": 0.0,
+    "unlock": 0.0
   },
-  "per_model": {
-    "claude-opus-41": 0.43235,
-    "claude-sonnet-45": 0.43235,
-    "gpt_codex": 0.43235,
-    "gemini-25-flashlite": 0.43235,
-    "gemini-25-flash": 0.43235,
-    "gpt_pro": 0.43235,
-    "gemini-25-pro": 0.43235,
-    "gpt-4o-mini": 0.006561,
-    "gemini_flash": 0.43235,
-    "gpt5-high": 0.43235,
-    "gemini": 0.8647,
-    "gpt5-minimal": 0.43235,
-    "gpt5-low": 0.43235,
-    "claude-haiku-45": 0.43235,
-    "code": 0.43235,
-    "claude": 0.8647,
-    "claude_haiku": 0.43235,
-    "gpt_low": 0.43235
-  },
-  "duration": 846,
-  "stage_notes": [
+  "breakdown": [
     {
-      "stage": "spec-validate"
+      "stage": "implement",
+      "agent": "gemini",
+      "input_tokens": 12000,
+      "output_tokens": 8000,
+      "cost_usd": 0.86
+    },
+    {
+      "stage": "implement",
+      "agent": "claude",
+      "input_tokens": 12000,
+      "output_tokens": 8000,
+      "cost_usd": 0.86
+    },
+    {
+      "stage": "implement",
+      "agent": "gpt_codex",
+      "input_tokens": 12000,
+      "output_tokens": 8000,
+      "cost_usd": 0.43
+    },
+    {
+      "stage": "implement",
+      "agent": "gpt_pro",
+      "input_tokens": 12000,
+      "output_tokens": 8000,
+      "cost_usd": 0.43
+    },
+    {
+      "stage": "implement",
+      "agent": "various_quality_gates",
+      "input_tokens": 50000,
+      "output_tokens": 30000,
+      "cost_usd": 5.64
     }
-  ]
+  ],
+  "budget_usd": 2.0,
+  "utilization_percent": 411.0,
+  "total_calls": 23,
+  "duration_seconds": 846,
+  "generated_at": "2025-11-04T19:30:00Z"
 }
