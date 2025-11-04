@@ -258,6 +258,34 @@ pub fn advance_spec_auto(widget: &mut ChatWidget) {
                     vec![ratatui::text::Line::from("/spec-auto pipeline complete")],
                     HistoryCellType::Notice,
                 ));
+
+                // SPEC-KIT-900: Automated post-run verification
+                if let Some(state) = widget.spec_auto_state.as_ref() {
+                    let spec_id = state.spec_id.clone();
+                    let run_id = state.run_id.clone();
+
+                    // Generate verification report
+                    match super::commands::verify::generate_verification_report(
+                        &spec_id,
+                        run_id.as_deref(),
+                        &widget.config.cwd,
+                    ) {
+                        Ok(report_lines) => {
+                            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                                vec![ratatui::text::Line::from("")],
+                                HistoryCellType::Notice,
+                            ));
+                            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                                report_lines.into_iter().map(|s| ratatui::text::Line::from(s)).collect(),
+                                HistoryCellType::Notice,
+                            ));
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to generate verification report: {}", e);
+                        }
+                    }
+                }
+
                 // Successful completion - clear state without cancellation event
                 widget.spec_auto_state = None;
                 return;
@@ -586,12 +614,16 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
 
     if has_cached_responses {
         // Use cached responses directly, bypass memory/file lookup
-        tracing::warn!("🔍 CONSENSUS: Using cached agent responses for {} stage", current_stage.display_name());
+        let run_tag = widget.spec_auto_state.as_ref()
+            .and_then(|s| s.run_id.as_ref())
+            .map(|r| format!("[run:{}]", &r[..8]))
+            .unwrap_or_else(|| "[run:none]".to_string());
+        tracing::warn!("{} 🔍 CONSENSUS: Using cached agent responses for {} stage", run_tag, current_stage.display_name());
 
         let cached = widget.spec_auto_state.as_ref()
             .unwrap().agent_responses_cache.as_ref().unwrap().clone();
 
-        tracing::warn!("  📦 Cached responses: {} items", cached.len());
+        tracing::warn!("{}   📦 Cached responses: {} items", run_tag, cached.len());
         for (name, response) in &cached {
             tracing::warn!("    - {}: {} chars", name, response.len());
         }
@@ -607,11 +639,13 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
         // Synthesize consensus from cached responses
         let cached = widget.spec_auto_state.as_ref().unwrap().agent_responses_cache.as_ref().unwrap().clone();
 
-        tracing::warn!("  🔧 About to call synthesize_from_cached_responses with {} responses", cached.len());
+        tracing::warn!("{}   🔧 About to call synthesize_from_cached_responses with {} responses", run_tag, cached.len());
 
-        match synthesize_from_cached_responses(&cached, &spec_id, current_stage, &widget.config.cwd) {
+        let run_id_for_synthesis = widget.spec_auto_state.as_ref()
+            .and_then(|s| s.run_id.as_deref());
+        match synthesize_from_cached_responses(&cached, &spec_id, current_stage, &widget.config.cwd, run_id_for_synthesis) {
             Ok(output_path) => {
-                tracing::warn!("✅ SYNTHESIS SUCCESS: Got output_path={}", output_path.display());
+                tracing::warn!("{} ✅ SYNTHESIS SUCCESS: Got output_path={}", run_tag, output_path.display());
                 widget.history_push(crate::history_cell::PlainHistoryCell::new(
                     vec![
                         ratatui::text::Line::from(format!(
@@ -933,9 +967,11 @@ fn synthesize_from_cached_responses(
     spec_id: &str,
     stage: SpecStage,
     cwd: &Path,
+    run_id: Option<&str>,
 ) -> Result<PathBuf, String> {
-    tracing::warn!("🔧 SYNTHESIS START: stage={}, spec={}, responses={}",
-        stage.display_name(), spec_id, cached_responses.len());
+    let run_tag = run_id.map(|r| format!("[run:{}]", &r[..8.min(r.len())])).unwrap_or_else(|| "[run:none]".to_string());
+    tracing::warn!("{} 🔧 SYNTHESIS START: stage={}, spec={}, responses={}",
+        run_tag, stage.display_name(), spec_id, cached_responses.len());
 
     if cached_responses.is_empty() {
         tracing::error!("❌ SYNTHESIS FAIL: No cached responses");
@@ -1066,19 +1102,19 @@ fn synthesize_from_cached_responses(
 
     // Don't overwrite if file already exists (prevents quality gates from overwriting stage output)
     if output_file.exists() {
-        tracing::warn!("⚠️  SYNTHESIS SKIP: {} already exists, returning existing file", output_filename);
+        tracing::warn!("{} ⚠️  SYNTHESIS SKIP: {} already exists, returning existing file", run_tag, output_filename);
         return Ok(output_file);
     }
 
-    tracing::warn!("  💾 Writing {} to disk...", output_filename);
+    tracing::warn!("{}   💾 Writing {} to disk...", run_tag, output_filename);
 
     fs::write(&output_file, &output)
         .map_err(|e| {
-            tracing::error!("❌ SYNTHESIS FAIL: Write error: {}", e);
+            tracing::error!("{} ❌ SYNTHESIS FAIL: Write error: {}", run_tag, e);
             format!("Failed to write {}: {}", output_filename, e)
         })?;
 
-    tracing::warn!("✅ SYNTHESIS SUCCESS: Wrote {} ({} KB)", output_filename, output.len() / 1024);
+    tracing::warn!("{} ✅ SYNTHESIS SUCCESS: Wrote {} ({} KB)", run_tag, output_filename, output.len() / 1024);
 
     // SPEC-KIT-072: Also store synthesis to SQLite
     if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
@@ -1092,11 +1128,11 @@ fn synthesize_from_cached_responses(
             None,
             None,
             false,
-            None, // run_id TODO
+            run_id,
         ) {
-            tracing::warn!("Failed to store synthesis to SQLite: {}", e);
+            tracing::warn!("{} Failed to store synthesis to SQLite: {}", run_tag, e);
         } else {
-            tracing::info!("Stored consensus synthesis to SQLite");
+            tracing::info!("{} Stored consensus synthesis to SQLite with run_id={:?}", run_tag, run_id);
         }
     }
 

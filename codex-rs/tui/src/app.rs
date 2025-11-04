@@ -2728,6 +2728,7 @@ impl App<'_> {
                 AppEvent::RegularStageAgentsComplete { stage, spec_id, agent_ids } => {
                     // Regular stage agents completed (SPEC-KIT-900 Session 2)
                     // Triggered by background polling when all agents reach terminal state
+                    // Note: run_id logging happens in on_spec_auto_agents_complete_with_ids
                     if let AppState::Chat { widget } = &mut self.app_state {
                         warn!("🎯 AUDIT: Regular stage agents complete: stage={:?}, spec={}, agents={}",
                             stage, spec_id, agent_ids.len());
@@ -2741,6 +2742,7 @@ impl App<'_> {
 
                 AppEvent::GuardrailComplete { spec_id, stage, success, result_json } => {
                     // Guardrail validation completed asynchronously (SPEC-KIT-900 Session 3)
+                    // Note: run_id logging happens in guardrail display function
                     if let AppState::Chat { widget } = &mut self.app_state {
                         warn!("🛡️ AUDIT: Guardrail complete: stage={:?}, spec={}, success={}",
                             stage, spec_id, success);

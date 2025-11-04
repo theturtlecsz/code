@@ -30,6 +30,7 @@ pub async fn spawn_quality_gate_agents_native(
     spec_id: &str,
     checkpoint: QualityCheckpoint,
     agent_configs: &[AgentConfig],
+    run_id: Option<String>,
 ) -> Result<Vec<AgentSpawnInfo>, String> {
     let gates = checkpoint.gates();
 
@@ -113,11 +114,12 @@ pub async fn spawn_quality_gate_agents_native(
                 stage,
                 "quality_gate",
                 agent_name,
-                None, // Quality gates don't have run_id (not part of main pipeline)
+                run_id.as_deref(),
             ) {
                 tracing::warn!("Failed to record agent spawn for {}: {}", agent_name, e);
             } else {
-                tracing::info!("Recorded quality gate agent spawn: {} ({})", agent_name, agent_id);
+                tracing::info!("Recorded quality gate agent spawn: {} ({}) with run_id={:?}",
+                    agent_name, agent_id, run_id);
             }
         }
 
@@ -184,6 +186,7 @@ pub async fn wait_for_quality_gate_agents(
 ) -> Result<(), String> {
     let start = std::time::Instant::now();
     let timeout = std::time::Duration::from_secs(timeout_secs);
+    let mut recorded_completions = std::collections::HashSet::new();
 
     loop {
         if start.elapsed() > timeout {
@@ -199,7 +202,16 @@ pub async fn wait_for_quality_gate_agents(
                 use codex_core::agent_tool::AgentStatus;
                 match agent.status {
                     AgentStatus::Completed | AgentStatus::Failed | AgentStatus::Cancelled => {
-                        // Agent done
+                        // Agent done - record completion to SQLite (once)
+                        if matches!(agent.status, AgentStatus::Completed) && !recorded_completions.contains(agent_id) {
+                            if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+                                if let Some(result) = &agent.result {
+                                    let _ = db.record_agent_completion(agent_id, result);
+                                    tracing::info!("Recorded quality gate completion: {}", agent_id);
+                                    recorded_completions.insert(agent_id.clone());
+                                }
+                            }
+                        }
                     }
                     _ => {
                         all_done = false;

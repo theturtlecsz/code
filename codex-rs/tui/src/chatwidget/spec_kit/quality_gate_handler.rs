@@ -1036,6 +1036,7 @@ pub(super) fn execute_quality_checkpoint(
             &spec_id_clone,
             checkpoint_clone,
             &agent_configs,
+            run_id.clone(),
         ).await {
             Ok(spawn_infos) => {
                 info!("Spawned {} quality gate agents", spawn_infos.len());

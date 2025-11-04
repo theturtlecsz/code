@@ -247,10 +247,11 @@ async fn spawn_and_wait_for_agent(
 ) -> Result<(String, String), String> {
     use codex_core::agent_tool::{AGENT_MANAGER, AgentStatus};
 
-    tracing::warn!("🎬 SEQUENTIAL: Spawning {} and waiting for completion...", agent_name);
-    tracing::warn!("  Config: {}", config_name);
-    tracing::warn!("  Prompt size: {} chars", prompt.len());
-    tracing::warn!("  Prompt preview: {}", &prompt.chars().take(300).collect::<String>());
+    let run_tag = run_id.map(|r| format!("[run:{}]", &r[..8.min(r.len())])).unwrap_or_else(|| "[run:none]".to_string());
+    tracing::warn!("{} 🎬 SEQUENTIAL: Spawning {} and waiting for completion...", run_tag, agent_name);
+    tracing::warn!("{}   Config: {}", run_tag, config_name);
+    tracing::warn!("{}   Prompt size: {} chars", run_tag, prompt.len());
+    tracing::warn!("{}   Prompt preview: {}", run_tag, &prompt.chars().take(300).collect::<String>());
 
     // Spawn agent
     let agent_id = {
@@ -292,7 +293,7 @@ async fn spawn_and_wait_for_agent(
             match agent.status {
                 AgentStatus::Completed => {
                     if let Some(result) = &agent.result {
-                        tracing::warn!("  ✅ {} completed: {} chars", agent_name, result.len());
+                        tracing::warn!("{}   ✅ {} completed: {} chars", run_tag, agent_name, result.len());
 
                         // CRITICAL: Record completion to SQLite for audit trail
                         if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
@@ -344,10 +345,11 @@ async fn spawn_regular_stage_agents_sequential(
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
 ) -> Result<Vec<AgentSpawnInfo>, String> {
-    tracing::warn!("🎬 AUDIT: spawn_regular_stage_agents_sequential (true sequential mode)");
-    tracing::warn!("  spec_id: {}", spec_id);
-    tracing::warn!("  stage: {:?}", stage);
-    tracing::warn!("  expected_agents: {:?}", expected_agents);
+    let run_tag = run_id.as_ref().map(|r| format!("[run:{}]", &r[..8])).unwrap_or_else(|| "[run:none]".to_string());
+    tracing::warn!("{} 🎬 AUDIT: spawn_regular_stage_agents_sequential (true sequential mode)", run_tag);
+    tracing::warn!("{}   spec_id: {}", run_tag, spec_id);
+    tracing::warn!("{}   stage: {:?}", run_tag, stage);
+    tracing::warn!("{}   expected_agents: {:?}", run_tag, expected_agents);
 
     let mut spawn_infos = Vec::new();
     let mut agent_outputs: Vec<(String, String)> = Vec::new(); // (agent_name, output)
@@ -362,7 +364,7 @@ async fn spawn_regular_stage_agents_sequential(
 
     // Spawn agents SEQUENTIALLY, each can use previous outputs
     for (idx, agent_name) in expected_agents.iter().enumerate() {
-        tracing::warn!("🔄 SEQUENTIAL: Agent {}/{}: {}", idx+1, expected_agents.len(), agent_name);
+        tracing::warn!("{} 🔄 SEQUENTIAL: Agent {}/{}: {}", run_tag, idx+1, expected_agents.len(), agent_name);
 
         let config_name = agent_config_map.get(agent_name.as_str())
             .ok_or_else(|| format!("No config mapping for agent {}", agent_name))?;
@@ -430,7 +432,7 @@ async fn spawn_regular_stage_agents_sequential(
         });
     }
 
-    tracing::warn!("✅ SEQUENTIAL: All {} agents completed", expected_agents.len());
+    tracing::warn!("{} ✅ SEQUENTIAL: All {} agents completed", run_tag, expected_agents.len());
 
     Ok(spawn_infos)
 }
@@ -445,7 +447,8 @@ async fn spawn_regular_stage_agents_parallel(
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
 ) -> Result<Vec<AgentSpawnInfo>, String> {
-    tracing::warn!("🎬 AUDIT: spawn_regular_stage_agents_parallel (independent consensus mode)");
+    let run_tag = run_id.as_ref().map(|r| format!("[run:{}]", &r[..8])).unwrap_or_else(|| "[run:none]".to_string());
+    tracing::warn!("{} 🎬 AUDIT: spawn_regular_stage_agents_parallel (independent consensus mode)", run_tag);
     tracing::warn!("  spec_id: {}", spec_id);
     tracing::warn!("  stage: {:?}", stage);
     tracing::warn!("  expected_agents: {:?}", expected_agents);
@@ -462,7 +465,7 @@ async fn spawn_regular_stage_agents_parallel(
 
     // Spawn all agents in PARALLEL (no waiting, no output passing)
     for (idx, agent_name) in expected_agents.iter().enumerate() {
-        tracing::warn!("🚀 PARALLEL: Spawning agent {}/{}: {}", idx+1, expected_agents.len(), agent_name);
+        tracing::warn!("{} 🚀 PARALLEL: Spawning agent {}/{}: {}", run_tag, idx+1, expected_agents.len(), agent_name);
 
         let config_name = agent_config_map.get(agent_name.as_str())
             .ok_or_else(|| format!("No config mapping for agent {}", agent_name))?;
@@ -491,10 +494,10 @@ async fn spawn_regular_stage_agents_parallel(
             model_name: config_name.to_string(),
         });
 
-        tracing::warn!("  ✓ {} spawned (not waiting)", agent_name);
+        tracing::warn!("{}   ✓ {} spawned (not waiting)", run_tag, agent_name);
     }
 
-    tracing::warn!("✅ PARALLEL: All {} agents spawned, executing independently", expected_agents.len());
+    tracing::warn!("{} ✅ PARALLEL: All {} agents spawned, executing independently", run_tag, expected_agents.len());
 
     Ok(spawn_infos)
 }
@@ -510,18 +513,20 @@ async fn spawn_regular_stage_agents_native(
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
 ) -> Result<Vec<AgentSpawnInfo>, String> {
+    let run_tag = run_id.as_ref().map(|r| format!("[run:{}]", &r[..8])).unwrap_or_else(|| "[run:none]".to_string());
+
     // Stage-specific execution patterns (Option 4)
     match stage {
         // Sequential pipeline: Research → Synthesis → QA
         crate::spec_prompts::SpecStage::Plan |
         crate::spec_prompts::SpecStage::Tasks => {
-            tracing::warn!("🔄 Using SEQUENTIAL execution for {} stage (progressive refinement)", stage.display_name());
+            tracing::warn!("{} 🔄 Using SEQUENTIAL execution for {} stage (progressive refinement)", run_tag, stage.display_name());
             spawn_regular_stage_agents_sequential(cwd, spec_id, stage, run_id, expected_agents, agent_configs).await
         },
 
         // Hybrid: Parallel research → Sequential implementation
         crate::spec_prompts::SpecStage::Implement => {
-            tracing::warn!("🔀 Using SEQUENTIAL execution for {} stage (code generation pipeline)", stage.display_name());
+            tracing::warn!("{} 🔀 Using SEQUENTIAL execution for {} stage (code generation pipeline)", run_tag, stage.display_name());
             spawn_regular_stage_agents_sequential(cwd, spec_id, stage, run_id, expected_agents, agent_configs).await
         },
 
@@ -529,13 +534,13 @@ async fn spawn_regular_stage_agents_native(
         crate::spec_prompts::SpecStage::Validate |
         crate::spec_prompts::SpecStage::Audit |
         crate::spec_prompts::SpecStage::Unlock => {
-            tracing::warn!("⚡ Using PARALLEL execution for {} stage (independent consensus)", stage.display_name());
+            tracing::warn!("{} ⚡ Using PARALLEL execution for {} stage (independent consensus)", run_tag, stage.display_name());
             spawn_regular_stage_agents_parallel(cwd, spec_id, stage, run_id, expected_agents, agent_configs).await
         },
 
         // Fallback to sequential for other stages
         _ => {
-            tracing::warn!("🔄 Using SEQUENTIAL execution for {} stage (default)", stage.display_name());
+            tracing::warn!("{} 🔄 Using SEQUENTIAL execution for {} stage (default)", run_tag, stage.display_name());
             spawn_regular_stage_agents_sequential(cwd, spec_id, stage, run_id, expected_agents, agent_configs).await
         }
     }
@@ -546,14 +551,16 @@ async fn spawn_regular_stage_agents_native(
 async fn wait_for_regular_stage_agents(
     agent_ids: &[String],
     timeout_secs: u64,
+    run_id: Option<&str>,
 ) -> Result<(), String> {
     use codex_core::agent_tool::AGENT_MANAGER;
 
     let start = std::time::Instant::now();
     let timeout = std::time::Duration::from_secs(timeout_secs);
     let poll_interval = std::time::Duration::from_millis(500);
+    let run_tag = run_id.map(|r| format!("[run:{}]", &r[..8.min(r.len())])).unwrap_or_else(|| "[run:none]".to_string());
 
-    tracing::warn!("🔍 AUDIT: Starting to poll {} regular stage agents (timeout={}s)", agent_ids.len(), timeout_secs);
+    tracing::warn!("{} 🔍 AUDIT: Starting to poll {} regular stage agents (timeout={}s)", run_tag, agent_ids.len(), timeout_secs);
 
     let mut poll_count = 0;
     loop {
@@ -561,7 +568,7 @@ async fn wait_for_regular_stage_agents(
         let elapsed = start.elapsed();
 
         if elapsed > timeout {
-            tracing::warn!("❌ AUDIT: Agent polling timeout after {} polls ({}s)", poll_count, elapsed.as_secs());
+            tracing::warn!("{} ❌ AUDIT: Agent polling timeout after {} polls ({}s)", run_tag, poll_count, elapsed.as_secs());
             return Err(format!("Timeout waiting for {} agents after {}s", agent_ids.len(), elapsed.as_secs()));
         }
 
@@ -580,13 +587,13 @@ async fn wait_for_regular_stage_agents(
                     all_done = false;
                 }
             } else {
-                tracing::warn!("⚠ AUDIT: Agent {} not found in AGENT_MANAGER (poll #{})", agent_id, poll_count);
+                tracing::warn!("{} ⚠ AUDIT: Agent {} not found in AGENT_MANAGER (poll #{})", run_tag, agent_id, poll_count);
                 all_done = false;
             }
         }
 
         if poll_count % 10 == 1 {  // Log every 10th poll (every 5 seconds)
-            tracing::warn!("📊 AUDIT: Poll #{} @ {}s - Status:", poll_count, elapsed.as_secs());
+            tracing::warn!("{} 📊 AUDIT: Poll #{} @ {}s - Status:", run_tag, poll_count, elapsed.as_secs());
             for (id, status, terminal) in &status_summary {
                 tracing::warn!("  {} {}: {:?}",
                     if *terminal { "✓" } else { "⏳" },
@@ -597,8 +604,8 @@ async fn wait_for_regular_stage_agents(
         }
 
         if all_done {
-            tracing::warn!("✅ AUDIT: All {} agents reached terminal state after {} polls ({}s)",
-                agent_ids.len(), poll_count, elapsed.as_secs());
+            tracing::warn!("{} ✅ AUDIT: All {} agents reached terminal state after {} polls ({}s)",
+                run_tag, agent_ids.len(), poll_count, elapsed.as_secs());
 
             // Record all completions to SQLite for audit trail
             use codex_core::agent_tool::AgentStatus;
@@ -936,6 +943,7 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
             let expected_agents_owned = stage_expected_for_spawn.clone();
             let run_id_owned = widget.spec_auto_state.as_ref()
                 .and_then(|s| s.run_id.clone());
+            let run_id_for_spawn = run_id_owned.clone(); // Clone for async move
 
             let spawn_result = block_on_sync(|| async move {
                 spawn_regular_stage_agents_native(
@@ -943,7 +951,7 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                     &spec_id_owned,
                     stage,
                     &prompt_owned,
-                    run_id_owned,
+                    run_id_for_spawn,
                     &expected_agents_owned,
                     &agent_configs_owned,
                 ).await
@@ -967,20 +975,29 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                         crate::spec_prompts::SpecStage::Unlock
                     );
 
+                    // Create run_tag before branching (to avoid borrow issues)
+                    let run_tag_display = run_id_owned.as_ref()
+                        .map(|r| format!("[run:{}]", &r[..8]))
+                        .unwrap_or_else(|| "[run:none]".to_string());
+
                     if is_parallel_stage {
                         // Start background polling task for parallel execution
                         let event_tx = widget.app_event_tx.clone();
                         let spec_id_clone = spec_id.to_string();
                         let stage_clone = stage;
+                        let run_id_for_poll = run_id_owned.clone();
 
-                        tracing::warn!("🔄 PARALLEL: Starting background polling for {} agents", agent_ids.len());
+                        tracing::warn!("{} 🔄 PARALLEL: Starting background polling for {} agents", run_tag_display, agent_ids.len());
 
                         let _poll_handle = tokio::spawn(async move {
-                            tracing::warn!("📡 PARALLEL: Background task started");
+                            let run_tag_bg = run_id_for_poll.as_ref()
+                                .map(|r| format!("[run:{}]", &r[..8]))
+                                .unwrap_or_else(|| "[run:none]".to_string());
+                            tracing::warn!("{} 📡 PARALLEL: Background task started", run_tag_bg);
 
-                            match wait_for_regular_stage_agents(&agent_ids, 600).await {
+                            match wait_for_regular_stage_agents(&agent_ids, 600, run_id_for_poll.as_deref()).await {
                                 Ok(()) => {
-                                    tracing::warn!("✅ PARALLEL: All agents completed");
+                                    tracing::warn!("{} ✅ PARALLEL: All agents completed", run_tag_bg);
 
                                     let _ = event_tx.send(crate::app_event::AppEvent::RegularStageAgentsComplete {
                                         stage: stage_clone,
@@ -989,15 +1006,15 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                                     });
                                 }
                                 Err(e) => {
-                                    tracing::warn!("❌ PARALLEL: Polling failed: {}", e);
+                                    tracing::warn!("{} ❌ PARALLEL: Polling failed: {}", run_tag_bg, e);
                                 }
                             }
 
-                            tracing::warn!("🏁 PARALLEL: Polling task complete");
+                            tracing::warn!("{} 🏁 PARALLEL: Polling task complete", run_tag_bg);
                         });
                     } else {
                         // SEQUENTIAL execution - agents already complete, send event immediately
-                        tracing::warn!("✅ SEQUENTIAL: All {} agents already completed, sending event now", agent_ids.len());
+                        tracing::warn!("{} ✅ SEQUENTIAL: All {} agents already completed, sending event now", run_tag_display, agent_ids.len());
 
                         // Show completion status in TUI
                         widget.history_push(crate::history_cell::PlainHistoryCell::new(
@@ -1018,7 +1035,7 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                             agent_ids: agent_ids.clone(),
                         });
 
-                        tracing::warn!("📬 SEQUENTIAL: RegularStageAgentsComplete event sent immediately");
+                        tracing::warn!("{} 📬 SEQUENTIAL: RegularStageAgentsComplete event sent immediately", run_tag_display);
                     }
                 }
                 Err(e) => {
@@ -1139,17 +1156,22 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
 
 /// Handle agent completion with specific agent IDs (prevents collecting ALL historical agents)
 pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_agent_ids: Vec<String>) {
-    tracing::warn!("DEBUG: on_spec_auto_agents_complete_with_ids called with {} specific IDs", specific_agent_ids.len());
+    let run_tag = widget.spec_auto_state.as_ref()
+        .and_then(|s| s.run_id.as_ref())
+        .map(|r| format!("[run:{}]", &r[..8]))
+        .unwrap_or_else(|| "[run:none]".to_string());
+
+    tracing::warn!("{} DEBUG: on_spec_auto_agents_complete_with_ids called with {} specific IDs", run_tag, specific_agent_ids.len());
     if !specific_agent_ids.is_empty() {
-        tracing::warn!("  Specific agent IDs: {:?}", specific_agent_ids.iter().map(|id| &id[..8]).collect::<Vec<_>>());
+        tracing::warn!("{}   Specific agent IDs: {:?}", run_tag, specific_agent_ids.iter().map(|id| &id[..8]).collect::<Vec<_>>());
     }
     let Some(state) = widget.spec_auto_state.as_ref() else {
-        tracing::warn!("DEBUG: No spec_auto_state");
+        tracing::warn!("{} DEBUG: No spec_auto_state", run_tag);
         return;
     };
 
     let current_stage_name = state.current_stage().map(|s| s.display_name()).unwrap_or("unknown");
-    tracing::warn!("DEBUG: Current stage={}, phase={:?}", current_stage_name, state.phase);
+    tracing::warn!("{} DEBUG: Current stage={}, phase={:?}", run_tag, current_stage_name, state.phase);
     // Check which phase we're in
     let expected_agents = match &state.phase {
         SpecAutoPhase::ExecutingAgents {
@@ -1174,8 +1196,8 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
             // Check if this agent was spawned as a quality gate agent
             if let Some(ref database) = db {
                 if let Ok(Some((phase_type, _))) = database.get_agent_spawn_info(&agent_info.id) {
-                    tracing::warn!("DEBUG: Agent {} ({}) was spawned as phase_type={}",
-                        agent_info.name, agent_info.id, phase_type);
+                    tracing::warn!("{}   DEBUG: Agent {} ({}) was spawned as phase_type={}",
+                        run_tag, agent_info.name, agent_info.id, phase_type);
                     if phase_type == "quality_gate" {
                         quality_gate_agent_ids.insert(agent_info.id.clone());
                     }
@@ -1219,7 +1241,7 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
                 ..
             } => {
                 *completed_agents = completed_names.clone();
-                tracing::warn!("DEBUG: Phase match → ExecutingAgents, routing to 'regular'");
+                tracing::warn!("{} DEBUG: Phase match → ExecutingAgents, routing to 'regular'", run_tag);
 
                 // Definitive check: Are these quality gate agents completing late?
                 // Query SQLite to see if any completed agents were spawned as quality_gate phase_type
@@ -1240,39 +1262,39 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
                         })
                         .count();
 
-                    tracing::warn!("DEBUG: Found {} quality gate agents and {} regular_stage agents in completion set",
-                        quality_gate_agent_ids.len(), regular_stage_count);
+                    tracing::warn!("{} DEBUG: Found {} quality gate agents and {} regular_stage agents in completion set",
+                        run_tag, quality_gate_agent_ids.len(), regular_stage_count);
 
                     if regular_stage_count == 0 {
                         // ONLY quality gates (all stale) - skip processing
-                        tracing::warn!("DEBUG: Completion set contains ONLY quality gate agents - skipping");
-                        tracing::warn!("DEBUG: Quality gate agent IDs: {:?}", quality_gate_agent_ids);
+                        tracing::warn!("{} DEBUG: Completion set contains ONLY quality gate agents - skipping", run_tag);
+                        tracing::warn!("{}   DEBUG: Quality gate agent IDs: {:?}", run_tag, quality_gate_agent_ids);
                         return;
                     } else {
                         // Mixed: quality gates + regular agents
                         // Continue processing, but filter out quality gates
-                        tracing::warn!("DEBUG: Mixed completion: {} regular + {} quality gates - processing regular agents only",
-                            regular_stage_count, quality_gate_agent_ids.len());
+                        tracing::warn!("{} DEBUG: Mixed completion: {} regular + {} quality gates - processing regular agents only",
+                            run_tag, regular_stage_count, quality_gate_agent_ids.len());
                     }
                 }
 
-                tracing::warn!("DEBUG: Processing regular stage agents");
+                tracing::warn!("{} DEBUG: Processing regular stage agents", run_tag);
                 "regular"
             }
             SpecAutoPhase::QualityGateExecuting {
                 completed_agents, ..
             } => {
                 *completed_agents = completed_names.clone();
-                tracing::warn!("DEBUG: Phase match → QualityGateExecuting, routing to 'quality_gate'");
+                tracing::warn!("{} DEBUG: Phase match → QualityGateExecuting, routing to 'quality_gate'", run_tag);
                 "quality_gate"
             }
             SpecAutoPhase::QualityGateValidating { .. } => {
                 // GPT-5 validation phase - single agent (GPT-5)
-                tracing::warn!("DEBUG: Phase match → QualityGateValidating, routing to 'gpt5_validation'");
+                tracing::warn!("{} DEBUG: Phase match → QualityGateValidating, routing to 'gpt5_validation'", run_tag);
                 "gpt5_validation"
             }
             _ => {
-                tracing::warn!("DEBUG: Phase match → Other ({:?}), routing to 'none'", state.phase);
+                tracing::warn!("{} DEBUG: Phase match → Other ({:?}), routing to 'none'", run_tag, state.phase);
                 "none"
             }
         };
@@ -1282,10 +1304,10 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
     };
 
     // Handle different phase types
-    tracing::warn!("DEBUG: on_spec_auto_agents_complete - phase_type={}", phase_type);
+    tracing::warn!("{} DEBUG: on_spec_auto_agents_complete - phase_type={}", run_tag, phase_type);
     match phase_type {
         "quality_gate" => {
-            tracing::warn!("DEBUG: Quality gate path - calling on_quality_gate_agents_complete");
+            tracing::warn!("{} DEBUG: Quality gate path - calling on_quality_gate_agents_complete", run_tag);
             if !completed_names.is_empty() {
                 on_quality_gate_agents_complete(widget);
             }
@@ -1301,9 +1323,9 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
         }
         "regular" => {
             // Regular stage agents
-            tracing::warn!("DEBUG: Regular agent phase, checking completion");
-            tracing::warn!("DEBUG: Expected agents: {:?}", expected_agents);
-            tracing::warn!("DEBUG: Completed agents: {:?}", completed_names);
+            tracing::warn!("{} DEBUG: Regular agent phase, checking completion", run_tag);
+            tracing::warn!("{}   DEBUG: Expected agents: {:?}", run_tag, expected_agents);
+            tracing::warn!("{}   DEBUG: Completed agents: {:?}", run_tag, completed_names);
 
             // Check completion with agent name normalization
             // Handles aliases like "code" (command) vs "gpt_pro"/"gpt_codex" (config names)
@@ -1325,18 +1347,24 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
                 false
             });
 
-            tracing::warn!("DEBUG: All complete: {}", all_complete);
+            let run_tag_collection = widget.spec_auto_state.as_ref()
+                .and_then(|s| s.run_id.as_ref())
+                .map(|r| format!("[run:{}]", &r[..8]))
+                .unwrap_or_else(|| "[run:none]".to_string());
+
+            tracing::warn!("{} DEBUG: All complete: {}", run_tag_collection, all_complete);
             if all_complete {
-                tracing::warn!("DEBUG: All regular stage agents complete, collecting responses for consensus");
+                tracing::warn!("{} DEBUG: All regular stage agents complete, collecting responses for consensus", run_tag_collection);
 
                 // Collect agent responses - ONLY from specific agent IDs if provided
                 let agent_responses: Vec<(String, String)> = if !specific_agent_ids.is_empty() {
                     // FILTERED collection - only these specific agents (prevents collecting ALL history)
+                    tracing::warn!("{}   🎯 FILTERED collection: {} specific agent IDs", run_tag_collection, specific_agent_ids.len());
                     widget.active_agents.iter()
                         .filter(|agent| specific_agent_ids.contains(&agent.id))
                         .filter_map(|agent| {
                             if matches!(agent.status, super::super::AgentStatus::Completed) {
-                                tracing::warn!("  Collecting: {} ({})", agent.name, &agent.id[..8]);
+                                tracing::warn!("{}     Collecting: {} ({})", run_tag_collection, agent.name, &agent.id[..8]);
                                 agent.result.as_ref().map(|result| (agent.name.clone(), result.clone()))
                             } else {
                                 None
@@ -1345,7 +1373,7 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
                         .collect()
                 } else {
                     // FALLBACK: Collect all completed (for backward compatibility)
-                    tracing::warn!("  ⚠️ No specific IDs provided, collecting ALL completed agents");
+                    tracing::warn!("{}   ⚠️ FALLBACK: No specific IDs provided, collecting ALL completed agents", run_tag_collection);
                     widget.active_agents.iter()
                         .filter_map(|agent| {
                             if matches!(agent.status, super::super::AgentStatus::Completed) {
@@ -1357,8 +1385,8 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
                         .collect()
                 };
 
-                tracing::warn!("✅ Collected {} agent responses for consensus (expected: {})",
-                    agent_responses.len(), expected_agents.len());
+                tracing::warn!("{} ✅ Collected {} agent responses for consensus (expected: {})",
+                    run_tag_collection, agent_responses.len(), expected_agents.len());
 
                 // SPEC-KIT-072: Store to SQLite for persistent consensus artifacts
                 if let Some(state) = widget.spec_auto_state.as_ref() {
@@ -1397,9 +1425,9 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
                     state.transition_phase(SpecAutoPhase::CheckingConsensus, "all_agents_complete");
                 }
 
-                tracing::warn!("DEBUG: Calling check_consensus_and_advance_spec_auto");
+                tracing::warn!("{} DEBUG: Calling check_consensus_and_advance_spec_auto", run_tag_collection);
                 check_consensus_and_advance_spec_auto(widget);
-                tracing::warn!("DEBUG: Returned from check_consensus_and_advance_spec_auto");
+                tracing::warn!("{} DEBUG: Returned from check_consensus_and_advance_spec_auto", run_tag_collection);
             }
         }
         _ => {}
