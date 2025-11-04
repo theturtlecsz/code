@@ -234,7 +234,8 @@ fn check_undefined_terms(content: &str, issues: &mut Vec<Ambiguity>) {
 
 /// Main entry point: find all ambiguities in a SPEC
 pub fn find_ambiguities(spec_id: &str, cwd: &Path) -> Result<Vec<Ambiguity>> {
-    let spec_dir = find_spec_directory(spec_id, cwd)?;
+    let spec_dir = super::spec_directory::find_spec_directory(cwd, spec_id)
+        .map_err(|e| SpecKitError::Other(e))?;
     let mut all_issues = Vec::new();
 
     // Files to scan (in priority order)
@@ -316,44 +317,6 @@ pub fn find_ambiguities(spec_id: &str, cwd: &Path) -> Result<Vec<Ambiguity>> {
 }
 
 /// Find SPEC directory from SPEC-ID
-fn find_spec_directory(spec_id: &str, cwd: &Path) -> Result<PathBuf> {
-    let docs_dir = cwd.join("docs");
-
-    if !docs_dir.exists() {
-        return Err(SpecKitError::DirectoryRead {
-            path: docs_dir.clone(),
-            source: std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "docs/ directory not found",
-            ),
-        });
-    }
-
-    // Find directory matching SPEC-{ID}-*
-    let entries = fs::read_dir(&docs_dir)
-        .map_err(|e| SpecKitError::DirectoryRead {
-            path: docs_dir.clone(),
-            source: e,
-        })?;
-
-    for entry in entries {
-        let entry = entry.map_err(|e| SpecKitError::DirectoryRead {
-            path: docs_dir.clone(),
-            source: e,
-        })?;
-
-        let dir_name = entry.file_name();
-        let dir_name_str = dir_name.to_string_lossy();
-
-        if dir_name_str.starts_with(&format!("{}-", spec_id)) {
-            return Ok(entry.path());
-        }
-    }
-
-    Err(SpecKitError::InvalidSpecId {
-        spec_id: spec_id.to_string(),
-    })
-}
 
 /// Truncate context to reasonable length
 fn truncate_context(text: &str, max_len: usize) -> String {

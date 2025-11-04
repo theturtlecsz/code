@@ -38,7 +38,8 @@ struct RequirementRef {
 
 /// Check cross-artifact consistency
 pub fn check_consistency(spec_id: &str, cwd: &Path) -> Result<Vec<InconsistencyIssue>> {
-    let spec_dir = find_spec_directory(spec_id, cwd)?;
+    let spec_dir = super::spec_directory::find_spec_directory(cwd, spec_id)
+        .map_err(|e| SpecKitError::Other(e))?;
     let mut issues = Vec::new();
 
     // Load all artifacts
@@ -411,43 +412,6 @@ fn check_constitution_compliance(
 }
 
 /// Find SPEC directory from SPEC-ID
-fn find_spec_directory(spec_id: &str, cwd: &Path) -> Result<PathBuf> {
-    let docs_dir = cwd.join("docs");
-
-    if !docs_dir.exists() {
-        return Err(SpecKitError::DirectoryRead {
-            path: docs_dir.clone(),
-            source: std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "docs/ directory not found",
-            ),
-        });
-    }
-
-    let entries = fs::read_dir(&docs_dir)
-        .map_err(|e| SpecKitError::DirectoryRead {
-            path: docs_dir.clone(),
-            source: e,
-        })?;
-
-    for entry in entries {
-        let entry = entry.map_err(|e| SpecKitError::DirectoryRead {
-            path: docs_dir.clone(),
-            source: e,
-        })?;
-
-        let dir_name = entry.file_name();
-        let dir_name_str = dir_name.to_string_lossy();
-
-        if dir_name_str.starts_with(&format!("{}-", spec_id)) {
-            return Ok(entry.path());
-        }
-    }
-
-    Err(SpecKitError::InvalidSpecId {
-        spec_id: spec_id.to_string(),
-    })
-}
 
 #[cfg(test)]
 mod tests {

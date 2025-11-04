@@ -145,7 +145,7 @@ fn validate_spec_id(cwd: &Path, spec_id: &str) -> GuardrailCheck {
     }
 
     // Check if SPEC directory exists
-    let spec_dir = find_spec_directory(cwd, spec_id);
+    let spec_dir = super::spec_directory::find_spec_directory_opt(cwd, spec_id);
     if spec_dir.is_none() {
         return GuardrailCheck {
             name: "spec-id-exists".to_string(),
@@ -162,7 +162,7 @@ fn validate_spec_id(cwd: &Path, spec_id: &str) -> GuardrailCheck {
 }
 
 fn validate_spec_files(cwd: &Path, spec_id: &str) -> GuardrailCheck {
-    let Some(spec_dir) = find_spec_directory(cwd, spec_id) else {
+    let Some(spec_dir) = super::spec_directory::find_spec_directory_opt(cwd, spec_id) else {
         return GuardrailCheck {
             name: "spec-files".to_string(),
             status: CheckStatus::Skipped,
@@ -250,7 +250,7 @@ fn validate_plan_stage(_cwd: &Path, _spec_id: &str) -> GuardrailCheck {
 
 fn validate_tasks_stage(cwd: &Path, spec_id: &str) -> GuardrailCheck {
     // Tasks stage: Check if plan exists
-    let Some(spec_dir) = find_spec_directory(cwd, spec_id) else {
+    let Some(spec_dir) = super::spec_directory::find_spec_directory_opt(cwd, spec_id) else {
         return GuardrailCheck {
             name: "tasks-stage".to_string(),
             status: CheckStatus::Skipped,
@@ -276,7 +276,7 @@ fn validate_tasks_stage(cwd: &Path, spec_id: &str) -> GuardrailCheck {
 
 fn validate_implement_stage(cwd: &Path, spec_id: &str) -> GuardrailCheck {
     // Implement stage: Check if tasks exist
-    let Some(spec_dir) = find_spec_directory(cwd, spec_id) else {
+    let Some(spec_dir) = super::spec_directory::find_spec_directory_opt(cwd, spec_id) else {
         return GuardrailCheck {
             name: "implement-stage".to_string(),
             status: CheckStatus::Skipped,
@@ -329,26 +329,6 @@ fn validate_unlock_stage(_cwd: &Path, _spec_id: &str) -> GuardrailCheck {
 
 // === Helper Functions ===
 
-fn find_spec_directory(cwd: &Path, spec_id: &str) -> Option<PathBuf> {
-    let docs_dir = cwd.join("docs");
-    if !docs_dir.exists() {
-        return None;
-    }
-
-    // Try exact match first
-    let entries = std::fs::read_dir(&docs_dir).ok()?;
-    for entry in entries.flatten() {
-        let name = entry.file_name();
-        let name_str = name.to_string_lossy();
-
-        // Match SPEC-XXX-NNN-slug format
-        if name_str.starts_with(spec_id) && entry.path().is_dir() {
-            return Some(entry.path());
-        }
-    }
-
-    None
-}
 
 fn is_allow_dirty_env() -> bool {
     std::env::var("SPEC_OPS_ALLOW_DIRTY")
