@@ -1100,13 +1100,9 @@ fn synthesize_from_cached_responses(
     tracing::warn!("  📝 Output file: {}", output_file.display());
     tracing::warn!("  📏 Output size: {} chars ({} KB)", output.len(), output.len() / 1024);
 
-    // Don't overwrite if file already exists (prevents quality gates from overwriting stage output)
-    if output_file.exists() {
-        tracing::warn!("{} ⚠️  SYNTHESIS SKIP: {} already exists, returning existing file", run_tag, output_filename);
-        return Ok(output_file);
-    }
-
-    tracing::warn!("{}   💾 Writing {} to disk...", run_tag, output_filename);
+    // SPEC-KIT-900: Always write synthesis output to update with latest run
+    // Previous skip logic prevented updates, causing stale output files
+    tracing::warn!("{}   💾 Writing {} to disk (overwrite={})...", run_tag, output_filename, output_file.exists());
 
     fs::write(&output_file, &output)
         .map_err(|e| {
