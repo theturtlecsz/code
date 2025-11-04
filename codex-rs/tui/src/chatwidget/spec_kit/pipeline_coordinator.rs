@@ -586,7 +586,16 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
 
     if has_cached_responses {
         // Use cached responses directly, bypass memory/file lookup
-        tracing::warn!("DEBUG: Using cached agent responses for consensus (bypass MCP)");
+        tracing::warn!("🔍 CONSENSUS: Using cached agent responses for {} stage", current_stage.display_name());
+
+        let cached = widget.spec_auto_state.as_ref()
+            .unwrap().agent_responses_cache.as_ref().unwrap().clone();
+
+        tracing::warn!("  📦 Cached responses: {} items", cached.len());
+        for (name, response) in &cached {
+            tracing::warn!("    - {}: {} chars", name, response.len());
+        }
+
         widget.history_push(crate::history_cell::PlainHistoryCell::new(
             vec![ratatui::text::Line::from(format!(
                 "Synthesizing consensus from {} agent responses...",
@@ -598,8 +607,11 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
         // Synthesize consensus from cached responses
         let cached = widget.spec_auto_state.as_ref().unwrap().agent_responses_cache.as_ref().unwrap().clone();
 
+        tracing::warn!("  🔧 About to call synthesize_from_cached_responses with {} responses", cached.len());
+
         match synthesize_from_cached_responses(&cached, &spec_id, current_stage, &widget.config.cwd) {
             Ok(output_path) => {
+                tracing::warn!("✅ SYNTHESIS SUCCESS: Got output_path={}", output_path.display());
                 widget.history_push(crate::history_cell::PlainHistoryCell::new(
                     vec![
                         ratatui::text::Line::from(format!(
@@ -612,14 +624,20 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                 ));
 
                 // Advance to next stage
+                tracing::warn!("  ⏩ Advancing to next stage...");
                 if let Some(state) = widget.spec_auto_state.as_mut() {
+                    let old_index = state.current_index;
                     state.current_index += 1;
                     state.agent_responses_cache = None; // Clear cache
+                    tracing::warn!("    Stage index: {} → {}", old_index, state.current_index);
                 }
                 persist_cost_summary(widget, &spec_id);
+                tracing::warn!("  📞 Calling advance_spec_auto...");
                 advance_spec_auto(widget);
+                tracing::warn!("  ✅ advance_spec_auto returned");
             }
             Err(err) => {
+                tracing::error!("❌ SYNTHESIS ERROR: {}", err);
                 widget.history_push(crate::history_cell::PlainHistoryCell::new(
                     vec![ratatui::text::Line::from(format!(
                         "⚠ Consensus synthesis failed: {}. Continuing degraded.",
@@ -916,9 +934,16 @@ fn synthesize_from_cached_responses(
     stage: SpecStage,
     cwd: &Path,
 ) -> Result<PathBuf, String> {
+    tracing::warn!("🔧 SYNTHESIS START: stage={}, spec={}, responses={}",
+        stage.display_name(), spec_id, cached_responses.len());
+
     if cached_responses.is_empty() {
+        tracing::error!("❌ SYNTHESIS FAIL: No cached responses");
         return Err("No cached responses to synthesize".to_string());
     }
+
+    tracing::warn!("  📊 Agent responses: {:?}",
+        cached_responses.iter().map(|(name, _)| name.as_str()).collect::<Vec<_>>());
 
     // Parse agent responses and extract structured content
     let mut agent_data: Vec<(String, serde_json::Value)> = Vec::new();
@@ -1031,16 +1056,24 @@ fn synthesize_from_cached_responses(
     let output_filename = format!("{}.md", stage.display_name().to_lowercase());
     let output_file = spec_dir.join(&output_filename);
 
+    tracing::warn!("  📝 Output file: {}", output_file.display());
+    tracing::warn!("  📏 Output size: {} chars ({} KB)", output.len(), output.len() / 1024);
+
     // Don't overwrite if file already exists (prevents quality gates from overwriting stage output)
     if output_file.exists() {
-        tracing::warn!("DEBUG: {} already exists, skipping write to avoid overwrite", output_filename);
+        tracing::warn!("⚠️  SYNTHESIS SKIP: {} already exists, returning existing file", output_filename);
         return Ok(output_file);
     }
 
-    fs::write(&output_file, &output)
-        .map_err(|e| format!("Failed to write {}: {}", output_filename, e))?;
+    tracing::warn!("  💾 Writing {} to disk...", output_filename);
 
-    tracing::warn!("DEBUG: Wrote consensus output to {}", output_file.display());
+    fs::write(&output_file, &output)
+        .map_err(|e| {
+            tracing::error!("❌ SYNTHESIS FAIL: Write error: {}", e);
+            format!("Failed to write {}: {}", output_filename, e)
+        })?;
+
+    tracing::warn!("✅ SYNTHESIS SUCCESS: Wrote {} ({} KB)", output_filename, output.len() / 1024);
 
     // SPEC-KIT-072: Also store synthesis to SQLite
     if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
