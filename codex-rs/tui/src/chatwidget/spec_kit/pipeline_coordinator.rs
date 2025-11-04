@@ -1049,8 +1049,24 @@ fn synthesize_from_cached_responses(
         cwd.join(format!("docs/{}", spec_id))
     };
 
-    fs::create_dir_all(&spec_dir)
-        .map_err(|e| format!("Failed to create spec dir: {}", e))?;
+    tracing::warn!("  📁 SPEC directory: {}", spec_dir.display());
+    tracing::warn!("  📁 Is directory: {}", spec_dir.is_dir());
+    tracing::warn!("  📁 Exists: {}", spec_dir.exists());
+
+    // Only create if doesn't exist (avoid error if it's already there)
+    if !spec_dir.exists() {
+        tracing::warn!("  📁 Creating directory...");
+        fs::create_dir_all(&spec_dir)
+            .map_err(|e| {
+                tracing::error!("❌ Failed to create {}: {}", spec_dir.display(), e);
+                format!("Failed to create spec dir: {}", e)
+            })?;
+    } else if !spec_dir.is_dir() {
+        tracing::error!("❌ SPEC path exists but is NOT a directory: {}", spec_dir.display());
+        return Err(format!("SPEC path is not a directory: {}", spec_dir.display()));
+    } else {
+        tracing::warn!("  ✅ Directory already exists");
+    }
 
     // Use standard filenames: plan.md, tasks.md, implement.md, etc.
     let output_filename = format!("{}.md", stage.display_name().to_lowercase());
