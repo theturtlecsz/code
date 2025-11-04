@@ -289,6 +289,16 @@ async fn spawn_and_wait_for_agent(
                 AgentStatus::Completed => {
                     if let Some(result) = &agent.result {
                         tracing::warn!("  ✅ {} completed: {} chars", agent_name, result.len());
+
+                        // CRITICAL: Record completion to SQLite for audit trail
+                        if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+                            if let Err(e) = db.record_agent_completion(&agent_id, result) {
+                                tracing::warn!("    ⚠️ Failed to record completion to SQLite: {}", e);
+                            } else {
+                                tracing::debug!("    ✓ Completion recorded to SQLite");
+                            }
+                        }
+
                         return Ok((agent_id, result.clone()));
                     } else {
                         return Err(format!("{} completed but no result", agent_name));
@@ -582,6 +592,22 @@ async fn wait_for_regular_stage_agents(
         if all_done {
             tracing::warn!("✅ AUDIT: All {} agents reached terminal state after {} polls ({}s)",
                 agent_ids.len(), poll_count, elapsed.as_secs());
+
+            // Record all completions to SQLite for audit trail
+            use codex_core::agent_tool::AgentStatus;
+            if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+                for (agent_id, status, _) in &status_summary {
+                    if matches!(status, AgentStatus::Completed) {
+                        if let Some(agent) = manager.get_agent(agent_id) {
+                            if let Some(result_text) = &agent.result {
+                                let _ = db.record_agent_completion(agent_id, result_text);
+                            }
+                        }
+                    }
+                }
+                tracing::debug!("  ✓ Recorded {} agent completions to SQLite", agent_ids.len());
+            }
+
             return Ok(());
         }
 
