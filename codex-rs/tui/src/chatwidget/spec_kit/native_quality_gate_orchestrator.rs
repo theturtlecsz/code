@@ -138,9 +138,8 @@ async fn build_quality_gate_prompt(
     prompt_template: &str,
     cwd: &Path,
 ) -> Result<String, String> {
-    // Find SPEC directory
-    let spec_dir = find_spec_directory(cwd, spec_id)
-        .ok_or_else(|| format!("SPEC directory not found for {}", spec_id))?;
+    // Find SPEC directory using central ACID-compliant resolver
+    let spec_dir = super::spec_directory::find_spec_directory(cwd, spec_id)?;
 
     // Read SPEC files
     let spec_md = spec_dir.join("spec.md");
@@ -223,21 +222,4 @@ pub async fn wait_for_quality_gate_agents(
 
 // === Helper Functions ===
 
-fn find_spec_directory(cwd: &Path, spec_id: &str) -> Option<std::path::PathBuf> {
-    let docs_dir = cwd.join("docs");
-    if !docs_dir.exists() {
-        return None;
-    }
-
-    let entries = std::fs::read_dir(&docs_dir).ok()?;
-    for entry in entries.flatten() {
-        let name = entry.file_name();
-        let name_str = name.to_string_lossy();
-
-        if name_str.starts_with(spec_id) && entry.path().is_dir() {
-            return Some(entry.path());
-        }
-    }
-
-    None
-}
+// Removed: Use super::spec_directory::find_spec_directory instead

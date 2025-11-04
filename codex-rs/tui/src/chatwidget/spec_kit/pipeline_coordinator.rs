@@ -1035,19 +1035,8 @@ fn synthesize_from_cached_responses(
     output.push_str(&format!("- Synthesized from {} agent responses\n", agent_data.len()));
     output.push_str("- All agents completed successfully\n");
 
-    // Find actual spec directory (may have slug suffix like SPEC-KIT-900-generic-smoke)
-    let docs_dir = cwd.join("docs");
-    let spec_dir = if let Ok(entries) = fs::read_dir(&docs_dir) {
-        entries.filter_map(|e| e.ok())
-            .find(|entry| {
-                entry.file_name().to_string_lossy().starts_with(&format!("{}-", spec_id))
-                    || entry.file_name().to_string_lossy() == spec_id
-            })
-            .map(|entry| entry.path())
-            .unwrap_or_else(|| cwd.join(format!("docs/{}", spec_id)))
-    } else {
-        cwd.join(format!("docs/{}", spec_id))
-    };
+    // Find SPEC directory using ACID-compliant resolver
+    let spec_dir = super::spec_directory::find_spec_directory(cwd, spec_id)?;
 
     tracing::warn!("  📁 SPEC directory: {}", spec_dir.display());
     tracing::warn!("  📁 Is directory: {}", spec_dir.is_dir());

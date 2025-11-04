@@ -36,6 +36,7 @@ pub mod guardrail;
 pub mod handler;
 pub mod native_consensus_executor; // Native consensus orchestration (eliminates orchestrator agent)
 pub mod native_guardrail; // SPEC-KIT-066, SPEC-KIT-902: Native guardrail validation (replaces bash scripts)
+pub mod spec_directory; // SPEC-KIT-900 Session 3: ACID-compliant SPEC directory resolution
 pub mod native_quality_gate_orchestrator; // SPEC-KIT-900, I-003: Native quality gate orchestration (eliminates LLM plumbing)
 pub mod pipeline_coordinator; // MAINT-3 Phase 5: Pipeline state machine (extracted from handler.rs)
 // FORK-SPECIFIC (just-every/code): local_memory_client.rs deleted 2025-10-18

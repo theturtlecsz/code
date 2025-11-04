@@ -146,26 +146,8 @@ async fn build_individual_agent_prompt(
         .and_then(|v| v.as_str())
         .ok_or_else(|| format!("No prompt found for agent {} in stage {}", agent_name, stage_key))?;
 
-    // Find SPEC directory (search docs/ for SPEC-*{spec_id}* pattern)
-    let spec_dir = {
-        let docs_dir = cwd.join("docs");
-
-        std::fs::read_dir(&docs_dir)
-            .ok()
-            .and_then(|entries| {
-                entries
-                    .filter_map(Result::ok)
-                    .find(|entry| {
-                        // Must be a directory AND contain spec_id
-                        entry.path().is_dir() &&
-                        entry.file_name()
-                            .to_string_lossy()
-                            .contains(spec_id)
-                    })
-                    .map(|entry| entry.path())
-            })
-            .ok_or_else(|| format!("SPEC directory not found for {}", spec_id))?
-    };
+    // Find SPEC directory using ACID-compliant resolver
+    let spec_dir = super::spec_directory::find_spec_directory(cwd, spec_id)?;
 
     // Read SPEC files
     let spec_md = spec_dir.join("spec.md");
