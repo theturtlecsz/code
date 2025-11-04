@@ -1,25 +1,36 @@
 {
   "spec_id": "SPEC-KIT-900",
-  "total_spent": 0.0,
+  "total_spent": 8.221210999999997,
   "budget": 2.0,
-  "utilization": 0.0,
-  "call_count": 16,
+  "utilization": 4.110605499999998,
+  "call_count": 23,
   "per_stage": {
-    "spec-plan": 0.0,
-    "spec-tasks": 0.0
+    "spec-implement": 8.221210999999997
   },
   "per_model": {
-    "gemini": 0.0,
-    "claude": 0.0,
-    "code": 0.0
+    "claude-opus-41": 0.43235,
+    "claude-sonnet-45": 0.43235,
+    "gpt_codex": 0.43235,
+    "gemini-25-flashlite": 0.43235,
+    "gemini-25-flash": 0.43235,
+    "gpt_pro": 0.43235,
+    "gemini-25-pro": 0.43235,
+    "gpt-4o-mini": 0.006561,
+    "gemini_flash": 0.43235,
+    "gpt5-high": 0.43235,
+    "gemini": 0.8647,
+    "gpt5-minimal": 0.43235,
+    "gpt5-low": 0.43235,
+    "claude-haiku-45": 0.43235,
+    "code": 0.43235,
+    "claude": 0.8647,
+    "claude_haiku": 0.43235,
+    "gpt_low": 0.43235
   },
-  "duration": 519,
+  "duration": 846,
   "stage_notes": [
     {
-      "stage": "spec-tasks"
-    },
-    {
-      "stage": "spec-implement"
+      "stage": "spec-validate"
     }
   ]
 }

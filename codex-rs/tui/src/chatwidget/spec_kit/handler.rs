@@ -13,7 +13,7 @@ pub(crate) use super::consensus_coordinator::handle_spec_consensus_impl;
 
 // Re-export agent orchestration functions
 pub use super::agent_orchestrator::{
-    auto_submit_spec_stage_prompt, on_spec_auto_agents_complete, record_agent_costs,
+    auto_submit_spec_stage_prompt, on_spec_auto_agents_complete, on_spec_auto_agents_complete_with_ids, record_agent_costs,
 };
 pub(crate) use super::agent_orchestrator::schedule_degraded_follow_up;
 

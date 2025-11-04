@@ -1096,8 +1096,17 @@ pub(crate) fn schedule_degraded_follow_up(
 }
 
 
+/// Wrapper for backward compatibility
 pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
-    tracing::warn!("DEBUG: on_spec_auto_agents_complete called");
+    on_spec_auto_agents_complete_with_ids(widget, vec![]);
+}
+
+/// Handle agent completion with specific agent IDs (prevents collecting ALL historical agents)
+pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_agent_ids: Vec<String>) {
+    tracing::warn!("DEBUG: on_spec_auto_agents_complete_with_ids called with {} specific IDs", specific_agent_ids.len());
+    if !specific_agent_ids.is_empty() {
+        tracing::warn!("  Specific agent IDs: {:?}", specific_agent_ids.iter().map(|id| &id[..8]).collect::<Vec<_>>());
+    }
     let Some(state) = widget.spec_auto_state.as_ref() else {
         tracing::warn!("DEBUG: No spec_auto_state");
         return;
@@ -1284,18 +1293,36 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
             if all_complete {
                 tracing::warn!("DEBUG: All regular stage agents complete, collecting responses for consensus");
 
-                // Collect agent responses from widget.active_agents
-                let agent_responses: Vec<(String, String)> = widget.active_agents.iter()
-                    .filter_map(|agent| {
-                        if matches!(agent.status, super::super::AgentStatus::Completed) {
-                            agent.result.as_ref().map(|result| (agent.name.clone(), result.clone()))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
+                // Collect agent responses - ONLY from specific agent IDs if provided
+                let agent_responses: Vec<(String, String)> = if !specific_agent_ids.is_empty() {
+                    // FILTERED collection - only these specific agents (prevents collecting ALL history)
+                    widget.active_agents.iter()
+                        .filter(|agent| specific_agent_ids.contains(&agent.id))
+                        .filter_map(|agent| {
+                            if matches!(agent.status, super::super::AgentStatus::Completed) {
+                                tracing::warn!("  Collecting: {} ({})", agent.name, &agent.id[..8]);
+                                agent.result.as_ref().map(|result| (agent.name.clone(), result.clone()))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect()
+                } else {
+                    // FALLBACK: Collect all completed (for backward compatibility)
+                    tracing::warn!("  ⚠️ No specific IDs provided, collecting ALL completed agents");
+                    widget.active_agents.iter()
+                        .filter_map(|agent| {
+                            if matches!(agent.status, super::super::AgentStatus::Completed) {
+                                agent.result.as_ref().map(|result| (agent.name.clone(), result.clone()))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect()
+                };
 
-                tracing::warn!("DEBUG: Collected {} agent responses for consensus", agent_responses.len());
+                tracing::warn!("✅ Collected {} agent responses for consensus (expected: {})",
+                    agent_responses.len(), expected_agents.len());
 
                 // SPEC-KIT-072: Store to SQLite for persistent consensus artifacts
                 if let Some(state) = widget.spec_auto_state.as_ref() {

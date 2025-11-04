@@ -2732,10 +2732,10 @@ impl App<'_> {
                         warn!("🎯 AUDIT: Regular stage agents complete: stage={:?}, spec={}, agents={}",
                             stage, spec_id, agent_ids.len());
                         for (i, agent_id) in agent_ids.iter().enumerate() {
-                            warn!("  Agent {}/{}: {}", i+1, agent_ids.len(), agent_id);
+                            warn!("  Agent {}/{}: {} (type: regular_stage)", i+1, agent_ids.len(), agent_id);
                         }
-                        // Trigger completion handler (which checks SQLite for phase_type)
-                        spec_kit::on_spec_auto_agents_complete(widget);
+                        // Pass specific agent_ids to prevent collecting ALL historical agents
+                        spec_kit::on_spec_auto_agents_complete_with_ids(widget, agent_ids);
                     }
                 }
 
