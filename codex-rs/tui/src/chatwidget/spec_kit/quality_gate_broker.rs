@@ -402,6 +402,16 @@ async fn fetch_agent_payloads_from_memory(
 
     info_lines.push(format!("Found {}/{} agents via memory", found_agents.len(), expected_agents.len()));
 
+    // Accept 2/3 agents as valid consensus (degraded mode)
+    let min_required = if expected_agents.len() >= 3 { 2 } else { expected_agents.len() };
+    let is_valid = results_map.len() >= min_required;
+
+    if !is_valid {
+        info_lines.push(format!("⚠️ Insufficient: {}/{} (need {})", results_map.len(), expected_agents.len(), min_required));
+    } else if results_map.len() < expected_agents.len() {
+        info_lines.push(format!("✓ Degraded: {}/{} agents (acceptable)", results_map.len(), expected_agents.len()));
+    }
+
     QualityGateBrokerResult {
         spec_id: spec_id.to_string(),
         checkpoint,
@@ -409,10 +419,10 @@ async fn fetch_agent_payloads_from_memory(
         info_lines,
         missing_agents,
         found_agents,
-        payload: if results_map.len() == expected_agents.len() {
+        payload: if is_valid {
             Ok(results_map.values().cloned().collect())
         } else {
-            Err(format!("Only found {}/{} agents", results_map.len(), expected_agents.len()))
+            Err(format!("Only found {}/{} agents (need {})", results_map.len(), expected_agents.len(), min_required))
         },
     }
 }
