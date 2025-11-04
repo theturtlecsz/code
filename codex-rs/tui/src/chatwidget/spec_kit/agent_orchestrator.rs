@@ -242,6 +242,7 @@ async fn spawn_and_wait_for_agent(
     batch_id: &str,
     spec_id: &str,
     stage: SpecStage,
+    run_id: Option<&str>,
     timeout_secs: u64,
 ) -> Result<(String, String), String> {
     use codex_core::agent_tool::{AGENT_MANAGER, AgentStatus};
@@ -268,9 +269,12 @@ async fn spawn_and_wait_for_agent(
 
     tracing::warn!("  ✓ {} spawned successfully: {}", agent_name, &agent_id[..8]);
 
-    // Record to SQLite
+    // Record to SQLite with run_id for traceability
     if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
-        let _ = db.record_agent_spawn(&agent_id, spec_id, stage, "regular_stage", agent_name);
+        let _ = db.record_agent_spawn(&agent_id, spec_id, stage, "regular_stage", agent_name, run_id);
+        if let Some(rid) = run_id {
+            tracing::info!("    ✓ Recorded spawn with run_id: {}", rid);
+        }
     }
 
     // Wait for completion
@@ -336,6 +340,7 @@ async fn spawn_regular_stage_agents_sequential(
     cwd: &Path,
     spec_id: &str,
     stage: SpecStage,
+    run_id: Option<String>,
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
 ) -> Result<Vec<AgentSpawnInfo>, String> {
@@ -411,6 +416,7 @@ async fn spawn_regular_stage_agents_sequential(
             &batch_id,
             spec_id,
             stage,
+            run_id.as_deref(),
             1200, // 20min timeout per agent (Gemini can be slow)
         ).await?;
 
@@ -435,6 +441,7 @@ async fn spawn_regular_stage_agents_parallel(
     cwd: &Path,
     spec_id: &str,
     stage: SpecStage,
+    run_id: Option<String>,
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
 ) -> Result<Vec<AgentSpawnInfo>, String> {
@@ -473,9 +480,9 @@ async fn spawn_regular_stage_agents_parallel(
             Some(batch_id.clone()),
         ).await.map_err(|e| format!("Failed to spawn {}: {}", agent_name, e))?;
 
-        // Record to SQLite
+        // Record to SQLite with run_id
         if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
-            let _ = db.record_agent_spawn(&agent_id, spec_id, stage, "regular_stage", agent_name);
+            let _ = db.record_agent_spawn(&agent_id, spec_id, stage, "regular_stage", agent_name, run_id.as_deref());
         }
 
         spawn_infos.push(AgentSpawnInfo {
@@ -499,6 +506,7 @@ async fn spawn_regular_stage_agents_native(
     spec_id: &str,
     stage: SpecStage,
     _prompt: &str,  // Deprecated: no longer used (was mega-bundle)
+    run_id: Option<String>,
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
 ) -> Result<Vec<AgentSpawnInfo>, String> {
@@ -508,14 +516,13 @@ async fn spawn_regular_stage_agents_native(
         crate::spec_prompts::SpecStage::Plan |
         crate::spec_prompts::SpecStage::Tasks => {
             tracing::warn!("🔄 Using SEQUENTIAL execution for {} stage (progressive refinement)", stage.display_name());
-            spawn_regular_stage_agents_sequential(cwd, spec_id, stage, expected_agents, agent_configs).await
+            spawn_regular_stage_agents_sequential(cwd, spec_id, stage, run_id, expected_agents, agent_configs).await
         },
 
         // Hybrid: Parallel research → Sequential implementation
         crate::spec_prompts::SpecStage::Implement => {
             tracing::warn!("🔀 Using SEQUENTIAL execution for {} stage (code generation pipeline)", stage.display_name());
-            // TODO: Implement hybrid pattern (parallel Gemini+Claude, then sequential Codex+Pro)
-            spawn_regular_stage_agents_sequential(cwd, spec_id, stage, expected_agents, agent_configs).await
+            spawn_regular_stage_agents_sequential(cwd, spec_id, stage, run_id, expected_agents, agent_configs).await
         },
 
         // Parallel consensus: Independent validation critical
@@ -523,13 +530,13 @@ async fn spawn_regular_stage_agents_native(
         crate::spec_prompts::SpecStage::Audit |
         crate::spec_prompts::SpecStage::Unlock => {
             tracing::warn!("⚡ Using PARALLEL execution for {} stage (independent consensus)", stage.display_name());
-            spawn_regular_stage_agents_parallel(cwd, spec_id, stage, expected_agents, agent_configs).await
+            spawn_regular_stage_agents_parallel(cwd, spec_id, stage, run_id, expected_agents, agent_configs).await
         },
 
         // Fallback to sequential for other stages
         _ => {
             tracing::warn!("🔄 Using SEQUENTIAL execution for {} stage (default)", stage.display_name());
-            spawn_regular_stage_agents_sequential(cwd, spec_id, stage, expected_agents, agent_configs).await
+            spawn_regular_stage_agents_sequential(cwd, spec_id, stage, run_id, expected_agents, agent_configs).await
         }
     }
 }
@@ -927,6 +934,8 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
             let prompt_owned = prompt.clone();
             let agent_configs_owned = widget.config.agents.clone();
             let expected_agents_owned = stage_expected_for_spawn.clone();
+            let run_id_owned = widget.spec_auto_state.as_ref()
+                .and_then(|s| s.run_id.clone());
 
             let spawn_result = block_on_sync(|| async move {
                 spawn_regular_stage_agents_native(
@@ -934,6 +943,7 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                     &spec_id_owned,
                     stage,
                     &prompt_owned,
+                    run_id_owned,
                     &expected_agents_owned,
                     &agent_configs_owned,
                 ).await

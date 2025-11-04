@@ -112,6 +112,7 @@ impl ConsensusDb {
                 stage TEXT NOT NULL,
                 phase_type TEXT NOT NULL,
                 agent_name TEXT NOT NULL,
+                run_id TEXT,
                 spawned_at TEXT NOT NULL,
                 completed_at TEXT,
                 response_text TEXT
@@ -119,9 +120,21 @@ impl ConsensusDb {
             [],
         )?;
 
+        // Add run_id column if missing (migration for existing databases)
+        let _ = conn.execute(
+            "ALTER TABLE agent_executions ADD COLUMN run_id TEXT",
+            [],
+        );
+
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_agent_executions_spec
              ON agent_executions(spec_id, stage)",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_agent_executions_run
+             ON agent_executions(run_id)",
             [],
         )?;
 
@@ -333,19 +346,21 @@ impl ConsensusDb {
         stage: SpecStage,
         phase_type: &str, // "quality_gate" | "regular_stage"
         agent_name: &str,
+        run_id: Option<&str>,
     ) -> SqlResult<()> {
         let conn = self.conn.lock().unwrap();
 
         conn.execute(
             "INSERT OR REPLACE INTO agent_executions
-             (agent_id, spec_id, stage, phase_type, agent_name, spawned_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'))",
+             (agent_id, spec_id, stage, phase_type, agent_name, run_id, spawned_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'))",
             params![
                 agent_id,
                 spec_id,
                 stage.command_name(),
                 phase_type,
                 agent_name,
+                run_id,
             ],
         )?;
 

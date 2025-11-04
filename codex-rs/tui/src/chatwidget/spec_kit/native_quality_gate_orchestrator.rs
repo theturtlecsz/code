@@ -113,6 +113,7 @@ pub async fn spawn_quality_gate_agents_native(
                 stage,
                 "quality_gate",
                 agent_name,
+                None, // Quality gates don't have run_id (not part of main pipeline)
             ) {
                 tracing::warn!("Failed to record agent spawn for {}: {}", agent_name, e);
             } else {
