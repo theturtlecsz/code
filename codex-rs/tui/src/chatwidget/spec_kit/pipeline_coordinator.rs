@@ -1132,6 +1132,11 @@ fn synthesize_from_cached_responses(
             tracing::warn!("{} Failed to store synthesis to SQLite: {}", run_tag, e);
         } else {
             tracing::info!("{} Stored consensus synthesis to SQLite with run_id={:?}", run_tag, run_id);
+
+            // SPEC-KIT-900 Session 3: AUTO-EXPORT evidence for checklist compliance
+            // This ensures evidence/consensus/<SPEC-ID>/ is ALWAYS populated after EVERY synthesis
+            tracing::info!("{} Auto-exporting evidence to consensus directory...", run_tag);
+            super::evidence::auto_export_stage_evidence(cwd, spec_id, stage, run_id);
         }
     }
 
