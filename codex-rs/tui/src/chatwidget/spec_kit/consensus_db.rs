@@ -384,6 +384,23 @@ impl ConsensusDb {
         }
     }
 
+    /// Get expected agent name for an agent_id (for collection with correct names)
+    pub fn get_agent_name(&self, agent_id: &str) -> SqlResult<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+
+        let result = conn.query_row(
+            "SELECT agent_name FROM agent_executions WHERE agent_id = ?1",
+            params![agent_id],
+            |row| row.get::<_, String>(0),
+        );
+
+        match result {
+            Ok(name) => Ok(Some(name)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
     /// Update agent completion info
     pub fn record_agent_completion(
         &self,

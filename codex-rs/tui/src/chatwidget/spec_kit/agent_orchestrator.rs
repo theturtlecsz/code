@@ -1356,6 +1356,26 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
             if all_complete {
                 tracing::warn!("{} DEBUG: All regular stage agents complete, collecting responses for consensus", run_tag_collection);
 
+                // Build agent_id → expected_name mapping from database
+                // This handles agent name mismatches (e.g., "code" command vs "gpt_codex"/"gpt_pro" config names)
+                let agent_name_map: std::collections::HashMap<String, String> = if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+                    specific_agent_ids.iter()
+                        .filter_map(|agent_id| {
+                            db.get_agent_name(agent_id)
+                                .ok()
+                                .flatten()
+                                .map(|name| (agent_id.clone(), name))
+                        })
+                        .collect()
+                } else {
+                    std::collections::HashMap::new()
+                };
+
+                tracing::warn!("{}   📋 Agent name mapping: {} entries", run_tag_collection, agent_name_map.len());
+                for (id, name) in &agent_name_map {
+                    tracing::warn!("{}     {} → {}", run_tag_collection, &id[..8], name);
+                }
+
                 // Collect agent responses - ONLY from specific agent IDs if provided
                 let agent_responses: Vec<(String, String)> = if !specific_agent_ids.is_empty() {
                     // FILTERED collection - only these specific agents (prevents collecting ALL history)
@@ -1364,8 +1384,12 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
                         .filter(|agent| specific_agent_ids.contains(&agent.id))
                         .filter_map(|agent| {
                             if matches!(agent.status, super::super::AgentStatus::Completed) {
-                                tracing::warn!("{}     Collecting: {} ({})", run_tag_collection, agent.name, &agent.id[..8]);
-                                agent.result.as_ref().map(|result| (agent.name.clone(), result.clone()))
+                                // Use expected name from database, fallback to agent.name
+                                let expected_name = agent_name_map.get(&agent.id)
+                                    .cloned()
+                                    .unwrap_or_else(|| agent.name.clone());
+                                tracing::warn!("{}     Collecting: {} → {} ({})", run_tag_collection, agent.name, expected_name, &agent.id[..8]);
+                                agent.result.as_ref().map(|result| (expected_name, result.clone()))
                             } else {
                                 None
                             }
