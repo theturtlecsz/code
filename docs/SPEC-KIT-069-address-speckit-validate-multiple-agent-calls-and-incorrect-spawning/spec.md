@@ -1,6 +1,6 @@
 **SPEC-ID**: SPEC-KIT-069
 **Feature**: Stabilize /speckit.validate agent orchestration
-**Status**: Backlog
+**Status**: In Review (single-flight validate guard implemented)
 **Created**: 2025-10-23
 **Branch**: (pending)
 **Owner**: Code
@@ -84,6 +84,31 @@
 - Evidence directories and local-memory search show a single artifact set per validate attempt.
 - Auto retry path respects configured retry limits without over-scheduling validate.
 - Telemetry dashboards reflect new deduplication counters and stage_run_id references.
+
+---
+
+## Implementation Status (2025-10-23)
+
+- Added `ValidateLifecycle` guard to `SpecAutoState` with CAS helpers (`codex-rs/tui/src/chatwidget/spec_kit/state.rs`).
+- Shared lifecycle registry in `ChatWidget` prevents manual/auto overlap and surfaces dedupe notices (`codex-rs/tui/src/chatwidget/mod.rs`).
+- `auto_submit_spec_stage_prompt`, consensus, and guardrail paths honour single-flight semantics, emit lifecycle telemetry events, and reset on retries/cancellations (`codex-rs/tui/src/chatwidget/spec_kit/handler.rs`).
+- Lifecycle telemetry persisted to evidence + local-memory with tags `spec:SPEC-KIT-069`, `stage:validate`, `artifact:agent_lifecycle`.
+- Added dedicated unit / integration coverage (`state.rs` unit test, `spec_auto_e2e::validate_lifecycle_prevents_duplicates`).
+
+### Acceptance Mapping
+
+| Scenario | Status | Evidence |
+|----------|--------|----------|
+| **P1** Deterministic manual validate run | ✅ Manual commands use shared lifecycle map; duplicate triggers emit dedupe notice without dispatch (see `submit_prompt_with_display`). | Manual trigger during active run; telemetry event `deduped` recorded. |
+| **P2** Implement→Validate retry cycle | ✅ Retries reset lifecycle with reason `reset`, preventing double dispatch and reusing lifecycle attempt counter. | Handler retry branch emits `reset` telemetry, integration test ensures duplicates prevented. |
+| **P3** Manual + auto coexistence | ✅ Manual guard consults same lifecycle as auto, declining during active runs and completing once idle agents settle. | New manual completion hook `finish_manual_validate_runs_if_idle` + telemetry `completed`. |
+
+### Validation Plan
+
+- `cargo test -p codex-tui state::validate_lifecycle_transitions`
+- `cargo test -p codex-tui spec_auto_e2e::validate_lifecycle_prevents_duplicates`
+- Manual checks: `/speckit.validate SPEC-KIT-069` (duplicate trigger blocked); `/speckit.auto SPEC-KIT-069 --from implement --until validate` with induced failure to observe single-flight retries.
+- Telemetry inspection: `local-memory search "spec:SPEC-KIT-069 stage:validate artifact:agent_lifecycle"` and evidence JSON under `docs/SPEC-OPS-004.../consensus/SPEC-KIT-069/`.
 
 ---
 

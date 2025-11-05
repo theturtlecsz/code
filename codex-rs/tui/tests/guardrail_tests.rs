@@ -152,7 +152,10 @@ fn test_implement_stage_lock_status() {
     });
 
     assert!(telemetry.get("lock_status").is_some());
-    assert_eq!(telemetry.get("lock_status").unwrap().as_str().unwrap(), "clean");
+    assert_eq!(
+        telemetry.get("lock_status").unwrap().as_str().unwrap(),
+        "clean"
+    );
 }
 
 #[test]
@@ -325,9 +328,9 @@ fn test_scenario_all_passed() {
         json!({"name": "test2", "status": "passed"}),
     ];
 
-    let all_passed = scenarios.iter().all(|s| {
-        s.get("status").unwrap().as_str().unwrap() == "passed"
-    });
+    let all_passed = scenarios
+        .iter()
+        .all(|s| s.get("status").unwrap().as_str().unwrap() == "passed");
 
     assert!(all_passed);
 }
@@ -339,9 +342,9 @@ fn test_scenario_some_failed() {
         json!({"name": "test2", "status": "failed"}),
     ];
 
-    let any_failed = scenarios.iter().any(|s| {
-        s.get("status").unwrap().as_str().unwrap() == "failed"
-    });
+    let any_failed = scenarios
+        .iter()
+        .any(|s| s.get("status").unwrap().as_str().unwrap() == "failed");
 
     assert!(any_failed);
 }

@@ -145,6 +145,10 @@ pub enum SlashCommand {
     SpecKitAuto,
     #[strum(serialize = "speckit.status")]
     SpecKitStatus,
+    #[strum(serialize = "speckit.constitution")]
+    SpecKitConstitution,
+    #[strum(serialize = "speckit.ace-status")]
+    SpecKitAceStatus,
     // Guardrail commands (Phase 3 Week 2)
     #[strum(serialize = "guardrail.plan")]
     GuardrailPlan,
@@ -233,21 +237,21 @@ impl SlashCommand {
             SlashCommand::Model => "choose model & reasoning effort",
             SlashCommand::Agents => "create and configure agents",
             // SpecKit standardized commands
-            SlashCommand::SpecKitNew => {
-                "create new SPEC from description with templates (55% faster)"
-            }
+            SlashCommand::SpecKitNew => "create new SPEC (native, instant, $0)",
             SlashCommand::SpecKitSpecify => "generate PRD with multi-agent consensus",
-            SlashCommand::SpecKitClarify => "resolve spec ambiguities (max 5 questions)",
-            SlashCommand::SpecKitAnalyze => "check cross-artifact consistency",
-            SlashCommand::SpecKitChecklist => "evaluate requirement quality (generates scores)",
+            SlashCommand::SpecKitClarify => "detect ambiguities (native, <1s, $0)",
+            SlashCommand::SpecKitAnalyze => "check consistency (native, <1s, $0)",
+            SlashCommand::SpecKitChecklist => "score requirements (native, <1s, $0)",
             SlashCommand::SpecKitPlan => "create work breakdown with multi-agent consensus",
             SlashCommand::SpecKitTasks => "generate task list with validation mapping",
             SlashCommand::SpecKitImplement => "write code with multi-agent consensus",
             SlashCommand::SpecKitValidate => "run test strategy with validation",
             SlashCommand::SpecKitAudit => "compliance review with multi-agent",
             SlashCommand::SpecKitUnlock => "final approval for merge",
-            SlashCommand::SpecKitAuto => "full 6-stage pipeline with auto-advancement",
-            SlashCommand::SpecKitStatus => "show SPEC progress dashboard",
+            SlashCommand::SpecKitAuto => "full pipeline (native coordinator)",
+            SlashCommand::SpecKitStatus => "show progress dashboard (native)",
+            SlashCommand::SpecKitConstitution => "extract ACE bullets (native)",
+            SlashCommand::SpecKitAceStatus => "show ACE stats (native)",
             // Legacy (deprecated)
             SlashCommand::NewSpec => "DEPRECATED: use /speckit.new",
             SlashCommand::SpecPlan => "DEPRECATED: use /speckit.plan",
@@ -317,9 +321,8 @@ impl SlashCommand {
             SlashCommand::Plan
                 | SlashCommand::Solve
                 | SlashCommand::Code
-                | SlashCommand::SpecKitClarify
-                | SlashCommand::SpecKitAnalyze
-                | SlashCommand::SpecKitChecklist
+            // SPEC-KIT-070: Quality commands are NATIVE (not prompt-expanding)
+            // SpecKitClarify, SpecKitAnalyze, SpecKitChecklist removed
         )
     }
 
@@ -330,11 +333,8 @@ impl SlashCommand {
             SlashCommand::Plan
                 | SlashCommand::Solve
                 | SlashCommand::Code
-                | SlashCommand::SpecKitNew
+                // REMOVED: SpecKitNew, SpecKitClarify, SpecKitAnalyze, SpecKitChecklist (registry-only)
                 | SlashCommand::SpecKitSpecify
-                | SlashCommand::SpecKitClarify
-                | SlashCommand::SpecKitAnalyze
-                | SlashCommand::SpecKitChecklist
                 | SlashCommand::SpecKitPlan
                 | SlashCommand::SpecKitTasks
                 | SlashCommand::SpecKitImplement
@@ -441,20 +441,8 @@ impl SlashCommand {
             SlashCommand::Code => Some(codex_core::slash_commands::format_code_command(
                 args, None, None,
             )),
-            // SpecKit commands use subagent orchestrators
-            SlashCommand::SpecKitClarify
-            | SlashCommand::SpecKitAnalyze
-            | SlashCommand::SpecKitChecklist => Some(
-                codex_core::slash_commands::format_subagent_command(
-                    self.command()
-                        .strip_prefix("speckit.")
-                        .unwrap_or(self.command()),
-                    args,
-                    None,
-                    None,
-                )
-                .prompt,
-            ),
+            // SPEC-KIT-070: Quality commands are NATIVE (handled by command registry)
+            // SpecKitClarify, SpecKitAnalyze, SpecKitChecklist removed (unreachable due to is_prompt_expanding check)
             _ => None,
         }
     }

@@ -2,6 +2,7 @@
 
 **SPEC-ID**: [SPEC_ID]
 **Audit Version**: [VERSION]
+**Template Version**: audit-v1.0
 **Created**: [DATE]
 
 ---

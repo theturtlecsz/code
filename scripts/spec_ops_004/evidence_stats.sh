@@ -93,9 +93,11 @@ if [[ -d "${consensus_base}" ]]; then
   fi
   print_section "Consensus artifact counts" printf '%b' "${count_output}"
 
-  # MAINT-4: Warn if any SPEC exceeds 25 MB soft limit
-  echo "=== Policy Compliance (25 MB soft limit) ==="
-  warned=0
+  warn_threshold_mb=40
+  fail_threshold_mb=50
+  echo "=== Policy Compliance (40 MB warn / 50 MB limit) - SPEC-KIT-909 ==="
+  warn_count=0
+  fail_count=0
   while IFS= read -r spec; do
     [[ -z "${spec}" ]] && continue
     base_name=$(basename "${spec}")
@@ -106,18 +108,27 @@ if [[ -d "${consensus_base}" ]]; then
     total_bytes=$((consensus_size + commands_size))
     total_mb=$(awk "BEGIN {printf \"%.1f\", ${total_bytes} / 1048576}")
 
-    # Warn if exceeds 25 MB (use awk for comparison)
-    exceeds=$(awk "BEGIN {print (${total_mb} > 25) ? 1 : 0}")
-    if [[ ${exceeds} -eq 1 ]]; then
-      echo "⚠️  ${base_name}: ${total_mb} MB (exceeds 25 MB limit)"
-      echo "    Action: Review for archival (see docs/spec-kit/evidence-policy.md)"
-      echo "    Compress: scripts/spec_ops_004/evidence_archive.sh"
-      warned=$((warned + 1))
+    exceeds_fail=$(awk "BEGIN {print (${total_mb} > ${fail_threshold_mb}) ? 1 : 0}")
+    exceeds_warn=$(awk "BEGIN {print (${total_mb} > ${warn_threshold_mb}) ? 1 : 0}")
+
+    if [[ ${exceeds_fail} -eq 1 ]]; then
+      echo "❌ ${base_name}: ${total_mb} MB (exceeds ${fail_threshold_mb} MB limit)"
+      echo "    Action: Archive immediately (scripts/spec_ops_004/evidence_archive.sh)"
+      echo "    Policy: docs/spec-kit/evidence-policy.md"
+      fail_count=$((fail_count + 1))
+    elif [[ ${exceeds_warn} -eq 1 ]]; then
+      echo "⚠️  ${base_name}: ${total_mb} MB (above ${warn_threshold_mb} MB warning)"
+      echo "    Action: Plan cleanup before exceeding ${fail_threshold_mb} MB"
+      warn_count=$((warn_count + 1))
     fi
   done <<<"$(list_targets "${consensus_base}")"
 
-  if [[ ${warned} -eq 0 ]]; then
-    echo "✅ All SPECs within 25 MB limit"
+  if [[ ${fail_count} -eq 0 && ${warn_count} -eq 0 ]]; then
+    echo "✅ All SPECs within guardrails"
+  elif [[ ${fail_count} -eq 0 ]]; then
+    echo "⚠️  ${warn_count} SPEC(s) above ${warn_threshold_mb} MB warning"
+  else
+    echo "❌ ${fail_count} SPEC(s) above ${fail_threshold_mb} MB limit"
   fi
   echo
 fi

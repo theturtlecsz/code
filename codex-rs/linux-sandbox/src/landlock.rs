@@ -81,7 +81,9 @@ fn install_filesystem_landlock_rules_on_current_thread(writable_roots: Vec<PathB
         // Rather than aborting entirely, degrade gracefully so guardrail
         // commands can proceed. These environments are already isolated by the
         // surrounding harness, so the reduced protection is acceptable.
-        eprintln!("codex-linux-sandbox: Landlock not enforced, continuing without filesystem restrictions");
+        eprintln!(
+            "codex-linux-sandbox: Landlock not enforced, continuing without filesystem restrictions"
+        );
         return Ok(());
     }
 

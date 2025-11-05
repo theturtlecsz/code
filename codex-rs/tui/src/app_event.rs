@@ -15,6 +15,7 @@ use std::time::Duration;
 
 use crate::app::ChatWidgetArgs;
 use crate::bottom_pane::chrome_selection_view::ChromeLaunchOption;
+use crate::chatwidget::spec_kit::{QualityGateBrokerResult, QualityGateValidationResult};
 use crate::slash_command::SlashCommand;
 use codex_protocol::models::ResponseItem;
 use std::fmt;
@@ -115,9 +116,22 @@ pub(crate) enum AppEvent {
     /// bubbling channels through layers of widgets.
     CodexOp(codex_core::protocol::Op),
 
+    /// Async completion from the quality gate broker, delivering agent payloads
+    /// retrieved via local-memory without blocking the TUI thread.
+    SpecKitQualityGateResults {
+        broker_result: QualityGateBrokerResult,
+    },
+
+    /// Async completion from the GPT-5 validation broker fetch.
+    SpecKitQualityGateValidationResults {
+        broker_result: QualityGateValidationResult,
+    },
+
     /// Dispatch a recognized slash command from the UI (composer) to the app
     /// layer so it can be handled centrally. Includes the full command text.
     DispatchCommand(SlashCommand, String),
+    /// Submit prompt with ACE-enhanced content (async completion)
+    SubmitPreparedPrompt { display: String, prompt: String },
 
     /// Open undo options for a previously captured snapshot.
     ShowUndoOptions {
@@ -447,6 +461,30 @@ pub(crate) enum AppEvent {
     /// Quality gate was cancelled by user
     QualityGateCancelled {
         checkpoint: crate::chatwidget::spec_kit::QualityCheckpoint,
+    },
+
+    /// Native quality gate agents completed (SPEC-KIT-900)
+    QualityGateNativeAgentsComplete {
+        checkpoint: crate::chatwidget::spec_kit::QualityCheckpoint,
+        agent_ids: Vec<String>,
+    },
+
+    /// Regular stage agents completed (SPEC-KIT-900 Session 2)
+    /// Triggered when directly-spawned regular stage agents finish execution
+    RegularStageAgentsComplete {
+        stage: crate::spec_prompts::SpecStage,
+        spec_id: String,
+        agent_ids: Vec<String>,
+        agent_results: Vec<(String, String)>, // (agent_name, result) - direct from spawn, not active_agents
+    },
+
+    /// Native guardrail validation completed (SPEC-KIT-900 Session 3)
+    /// Triggered when async guardrail checks finish
+    GuardrailComplete {
+        spec_id: String,
+        stage: crate::spec_prompts::SpecStage,
+        success: bool,
+        result_json: String, // Serialized GuardrailResult
     },
     // === END FORK-SPECIFIC ===
 }

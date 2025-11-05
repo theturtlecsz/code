@@ -75,22 +75,17 @@ pub use chatwidget::spec_kit::{
 };
 
 // MAINT-3 Phase 2: Re-export testing utilities
-#[cfg(any(test, feature = "test-utils"))]
 pub use chatwidget::spec_kit::context::{SpecKitContext, test_mock::MockSpecKitContext};
 pub use chatwidget::spec_kit::state::SpecAutoPhase;
-#[cfg(any(test, feature = "test-utils"))]
 pub use chatwidget::spec_kit::{advance_spec_auto, halt_spec_auto_with_error};
 pub use spec_prompts::SpecAgent;
 
 // MAINT-3.2 Phase 2: Re-export P2 module testing utilities
-#[cfg(any(test, feature = "test-utils"))]
 pub use chatwidget::spec_kit::error::{Result as SpecKitResult, SpecKitError};
-#[cfg(any(test, feature = "test-utils"))]
 pub use chatwidget::spec_kit::schemas::{
     provider_supports_schemas, quality_gate_response_schema, schema_for_gate_type,
     spec_analysis_schema,
 };
-#[cfg(any(test, feature = "test-utils"))]
 pub use chatwidget::spec_kit::state::{
     ValidateBeginOutcome, ValidateCompletionReason, ValidateLifecycleEvent, ValidateMode,
     expected_guardrail_command, get_nested, guardrail_for_stage, require_object,
@@ -99,6 +94,13 @@ pub use chatwidget::spec_kit::state::{
 
 // FORK-SPECIFIC (just-every/code): Re-export consensus for MCP integration testing
 pub use chatwidget::spec_kit::consensus::run_spec_consensus;
+
+// FORK-SPECIFIC (just-every/code): SPEC-KIT-070 - Re-export native SPEC-ID generation
+pub use chatwidget::spec_kit::spec_id_generator;
+
+// FORK-SPECIFIC: ACE integration - Re-export for testing
+#[cfg(any(test, feature = "test-utils"))]
+pub use chatwidget::spec_kit::{should_use_ace, select_route, DiffStat, RouteDecision};
 
 // Re-export supporting types for E2E testing (T87)
 pub use slash_command::{HalMode, SlashCommand};
@@ -322,6 +324,24 @@ pub async fn run_main(
     } else {
         None
     };
+
+    // FORK-SPECIFIC: Initialize ACE MCP client if configured
+    if config.ace.enabled {
+        if let Some(ace_server) = config.mcp_servers.get("ace") {
+            if let Err(e) = chatwidget::spec_kit::ace_client::init_ace_client(
+                ace_server.command.clone(),
+                ace_server.args.clone(),
+                ace_server.env.clone(),
+            )
+            .await
+            {
+                tracing::warn!("Failed to initialize ACE client: {}", e);
+                // Continue anyway - ACE will gracefully degrade
+            }
+        } else {
+            tracing::info!("ACE enabled but no [mcp_servers.ace] configured");
+        }
+    }
 
     run_ratatui_app(
         cli,

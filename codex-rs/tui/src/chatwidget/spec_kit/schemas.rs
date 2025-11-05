@@ -127,7 +127,7 @@ pub fn schema_for_gate_type(gate_type: super::state::QualityGateType) -> serde_j
 pub fn provider_supports_schemas(provider_id: &str) -> bool {
     matches!(
         provider_id,
-        "openai" | "anthropic"  // Add more as supported
+        "openai" | "anthropic" // Add more as supported
     )
 }
 
@@ -167,9 +167,10 @@ mod tests {
     #[test]
     fn test_confidence_enum_values() {
         let schema = quality_gate_response_schema();
-        let confidence_enum = schema["schema"]["properties"]["issues"]["items"]["properties"]["confidence"]["enum"]
-            .as_array()
-            .unwrap();
+        let confidence_enum =
+            schema["schema"]["properties"]["issues"]["items"]["properties"]["confidence"]["enum"]
+                .as_array()
+                .unwrap();
 
         assert_eq!(confidence_enum.len(), 3);
         assert!(confidence_enum.contains(&json!("high")));

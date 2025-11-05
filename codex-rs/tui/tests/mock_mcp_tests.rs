@@ -18,7 +18,10 @@ async fn mock_mcp_returns_fixture() {
     );
 
     let args = json!({"query": "SPEC-TEST plan"});
-    let result = mock.call_tool("local-memory", "search", Some(args), None).await.unwrap();
+    let result = mock
+        .call_tool("local-memory", "search", Some(args), None)
+        .await
+        .unwrap();
 
     assert_eq!(result.content.len(), 1);
     assert_eq!(result.is_error, Some(false));
@@ -29,7 +32,14 @@ async fn mock_mcp_logs_calls() {
     let mut mock = MockMcpManager::new();
     mock.add_fixture("local-memory", "search", None, json!({}));
 
-    let _ = mock.call_tool("local-memory", "search", Some(json!({"query": "test"})), None).await;
+    let _ = mock
+        .call_tool(
+            "local-memory",
+            "search",
+            Some(json!({"query": "test"})),
+            None,
+        )
+        .await;
 
     let log = mock.call_log();
     assert_eq!(log.len(), 1);
@@ -41,10 +51,23 @@ async fn mock_mcp_logs_calls() {
 async fn mock_mcp_wildcard_matches() {
     let mut mock = MockMcpManager::new();
     // Add wildcard fixture (no query pattern)
-    mock.add_fixture("local-memory", "search", None, json!({"memory": {"content": "Wildcard"}}));
+    mock.add_fixture(
+        "local-memory",
+        "search",
+        None,
+        json!({"memory": {"content": "Wildcard"}}),
+    );
 
     // Should match any query
-    let result = mock.call_tool("local-memory", "search", Some(json!({"query": "anything"})), None).await.unwrap();
+    let result = mock
+        .call_tool(
+            "local-memory",
+            "search",
+            Some(json!({"query": "anything"})),
+            None,
+        )
+        .await
+        .unwrap();
 
     assert_eq!(result.content.len(), 1);
 }
@@ -53,7 +76,14 @@ async fn mock_mcp_wildcard_matches() {
 async fn mock_mcp_returns_error_when_no_fixture() {
     let mock = MockMcpManager::new();
 
-    let result = mock.call_tool("local-memory", "search", Some(json!({"query": "missing"})), None).await;
+    let result = mock
+        .call_tool(
+            "local-memory",
+            "search",
+            Some(json!({"query": "missing"})),
+            None,
+        )
+        .await;
 
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("No fixture found"));

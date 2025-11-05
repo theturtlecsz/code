@@ -2,6 +2,7 @@
 
 **SPEC-ID**: [SPEC_ID]
 **Validation Version**: [VERSION]
+**Template Version**: validate-v1.0
 **Created**: [DATE]
 
 ---

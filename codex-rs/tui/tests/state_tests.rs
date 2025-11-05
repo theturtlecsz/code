@@ -3,10 +3,9 @@
 //! Covers SpecAutoState, phase management, quality gates, and helper functions.
 
 use codex_tui::{
-    SpecAutoState, SpecAutoPhase, QualityCheckpoint, QualityGateType,
-    HalMode, SlashCommand, SpecStage,
-    guardrail_for_stage, spec_ops_stage_prefix, expected_guardrail_command,
-    validate_guardrail_evidence, get_nested, require_string_field, require_object,
+    HalMode, QualityCheckpoint, QualityGateType, SlashCommand, SpecAutoPhase, SpecAutoState,
+    SpecStage, expected_guardrail_command, get_nested, guardrail_for_stage, require_object,
+    require_string_field, spec_ops_stage_prefix, validate_guardrail_evidence,
 };
 use serde_json::json;
 use std::path::PathBuf;
@@ -206,12 +205,30 @@ fn test_quality_gate_command_names() {
 
 #[test]
 fn test_guardrail_for_stage() {
-    assert_eq!(guardrail_for_stage(SpecStage::Plan), SlashCommand::SpecOpsPlan);
-    assert_eq!(guardrail_for_stage(SpecStage::Tasks), SlashCommand::SpecOpsTasks);
-    assert_eq!(guardrail_for_stage(SpecStage::Implement), SlashCommand::SpecOpsImplement);
-    assert_eq!(guardrail_for_stage(SpecStage::Validate), SlashCommand::SpecOpsValidate);
-    assert_eq!(guardrail_for_stage(SpecStage::Audit), SlashCommand::SpecOpsAudit);
-    assert_eq!(guardrail_for_stage(SpecStage::Unlock), SlashCommand::SpecOpsUnlock);
+    assert_eq!(
+        guardrail_for_stage(SpecStage::Plan),
+        SlashCommand::SpecOpsPlan
+    );
+    assert_eq!(
+        guardrail_for_stage(SpecStage::Tasks),
+        SlashCommand::SpecOpsTasks
+    );
+    assert_eq!(
+        guardrail_for_stage(SpecStage::Implement),
+        SlashCommand::SpecOpsImplement
+    );
+    assert_eq!(
+        guardrail_for_stage(SpecStage::Validate),
+        SlashCommand::SpecOpsValidate
+    );
+    assert_eq!(
+        guardrail_for_stage(SpecStage::Audit),
+        SlashCommand::SpecOpsAudit
+    );
+    assert_eq!(
+        guardrail_for_stage(SpecStage::Unlock),
+        SlashCommand::SpecOpsUnlock
+    );
 }
 
 #[test]
@@ -227,11 +244,26 @@ fn test_spec_ops_stage_prefix() {
 #[test]
 fn test_expected_guardrail_command() {
     assert_eq!(expected_guardrail_command(SpecStage::Plan), "spec-ops-plan");
-    assert_eq!(expected_guardrail_command(SpecStage::Tasks), "spec-ops-tasks");
-    assert_eq!(expected_guardrail_command(SpecStage::Implement), "spec-ops-implement");
-    assert_eq!(expected_guardrail_command(SpecStage::Validate), "spec-ops-validate");
-    assert_eq!(expected_guardrail_command(SpecStage::Audit), "spec-ops-audit");
-    assert_eq!(expected_guardrail_command(SpecStage::Unlock), "spec-ops-unlock");
+    assert_eq!(
+        expected_guardrail_command(SpecStage::Tasks),
+        "spec-ops-tasks"
+    );
+    assert_eq!(
+        expected_guardrail_command(SpecStage::Implement),
+        "spec-ops-implement"
+    );
+    assert_eq!(
+        expected_guardrail_command(SpecStage::Validate),
+        "spec-ops-validate"
+    );
+    assert_eq!(
+        expected_guardrail_command(SpecStage::Audit),
+        "spec-ops-audit"
+    );
+    assert_eq!(
+        expected_guardrail_command(SpecStage::Unlock),
+        "spec-ops-unlock"
+    );
 }
 
 // ===== JSON Helper Tests =====

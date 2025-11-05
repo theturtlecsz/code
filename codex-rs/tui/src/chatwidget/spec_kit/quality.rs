@@ -5,7 +5,9 @@
 //! Implements agent-driven auto-resolution with intelligent escalation
 
 use super::error::{Result, SpecKitError};
-use super::file_modifier::{InsertPosition, ModificationOutcome, SpecModification, apply_modification};
+use super::file_modifier::{
+    InsertPosition, ModificationOutcome, SpecModification, apply_modification,
+};
 use super::state::*;
 use std::collections::HashMap;
 use std::path::Path;
@@ -41,11 +43,7 @@ pub fn classify_issue_agreement(
     match majority_count {
         3 => {
             // All 3 agree
-            (
-                Confidence::High,
-                Some(majority_answer.clone()),
-                None,
-            )
+            (Confidence::High, Some(majority_answer.clone()), None)
         }
         2 => {
             // 2 out of 3 agree
@@ -53,11 +51,7 @@ pub fn classify_issue_agreement(
                 .values()
                 .find(|v| **v != majority_answer)
                 .cloned();
-            (
-                Confidence::Medium,
-                Some(majority_answer.clone()),
-                dissent,
-            )
+            (Confidence::Medium, Some(majority_answer.clone()), dissent)
         }
         _ => {
             // All different or only 1 agrees
@@ -73,11 +67,43 @@ pub fn classify_issue_agreement(
 /// - Medium confidence + Minor + has fix → Auto-resolve
 /// - Everything else → Escalate
 pub fn should_auto_resolve(issue: &QualityIssue) -> bool {
+    should_auto_resolve_with_ace(issue, &[])
+}
+
+/// Enhanced auto-resolution with ACE playbook context
+///
+/// ACE Framework Integration (2025-10-29):
+/// Uses learned patterns from ACE playbook to boost auto-resolution confidence.
+/// If ACE has seen similar issues before and has helpful patterns, we can
+/// auto-resolve with higher confidence.
+pub fn should_auto_resolve_with_ace(
+    issue: &QualityIssue,
+    ace_bullets: &[super::ace_client::PlaybookBullet],
+) -> bool {
     use Confidence::*;
     use Magnitude::*;
     use Resolvability::*;
 
-    match (issue.confidence, issue.magnitude, issue.resolvability) {
+    // Check if ACE has helpful patterns for this issue type
+    let ace_boost = ace_bullets.iter().any(|bullet| {
+        if !bullet.helpful || bullet.confidence < 0.7 {
+            return false;
+        }
+
+        // Simple pattern matching - check if bullet text relates to issue
+        let bullet_lower = bullet.text.to_lowercase();
+        let issue_lower = issue.description.to_lowercase();
+        let issue_type_lower = issue.issue_type.to_lowercase();
+
+        // Check for keyword overlap
+        bullet_lower.contains(&issue_type_lower)
+            || issue_lower.contains(&bullet_lower.split_whitespace().next().unwrap_or(""))
+            || bullet.text.len() > 20 && issue.description.len() > 20
+                && similar_topics(&bullet_lower, &issue_lower)
+    });
+
+    // Base resolution rules
+    let base_auto = match (issue.confidence, issue.magnitude, issue.resolvability) {
         // High confidence cases
         (High, Minor, AutoFix) => true,
         (High, Minor, SuggestFix) => true,
@@ -88,7 +114,26 @@ pub fn should_auto_resolve(issue: &QualityIssue) -> bool {
 
         // Everything else escalates
         _ => false,
+    };
+
+    // ACE boost: if ACE has seen this before, trust Medium confidence more
+    if ace_boost && matches!(issue.confidence, Medium) && matches!(issue.resolvability, SuggestFix) {
+        tracing::info!("ACE boost: Auto-resolving Medium confidence issue due to playbook pattern match");
+        return true;
     }
+
+    base_auto
+}
+
+/// Simple topic similarity check (heuristic)
+fn similar_topics(text1: &str, text2: &str) -> bool {
+    let words1: std::collections::HashSet<_> = text1.split_whitespace().collect();
+    let words2: std::collections::HashSet<_> = text2.split_whitespace().collect();
+    let intersection = words1.intersection(&words2).count();
+    let union = words1.union(&words2).count();
+
+    // Jaccard similarity > 0.3
+    union > 0 && (intersection as f64 / union as f64) > 0.3
 }
 
 /// Find majority answer from agent responses
@@ -353,13 +398,18 @@ pub fn apply_auto_resolution(
                         ));
                     }
                 } else {
-                    return Err(SpecKitError::from_string("No suggested fix for terminology issue"));
+                    return Err(SpecKitError::from_string(
+                        "No suggested fix for terminology issue",
+                    ));
                 }
             } else if issue.issue_type.contains("missing") {
                 // Add missing requirement/task
                 SpecModification::AddRequirement {
                     section: "Objectives".to_string(),
-                    requirement_text: issue.suggested_fix.clone().unwrap_or_else(|| answer.to_string()),
+                    requirement_text: issue
+                        .suggested_fix
+                        .clone()
+                        .unwrap_or_else(|| answer.to_string()),
                     position: InsertPosition::End,
                 }
             } else {
@@ -372,7 +422,7 @@ pub fn apply_auto_resolution(
         }
     };
 
-    let file_path = spec_dir.join("spec.md");  // TODO: Determine correct file based on issue
+    let file_path = spec_dir.join("spec.md"); // TODO: Determine correct file based on issue
     apply_modification(&file_path, &modification)
 }
 
@@ -408,7 +458,8 @@ pub fn build_quality_checkpoint_telemetry(
     spec_id: &str,
     checkpoint: QualityCheckpoint,
     auto_resolved: &[(QualityIssue, String)],
-    escalated: &[(QualityIssue, String)],  // (issue, human_answer)
+    escalated: &[(QualityIssue, String)], // (issue, human_answer)
+    degraded_missing_agents: Option<&[String]>,
 ) -> serde_json::Value {
     use serde_json::json;
 
@@ -459,6 +510,9 @@ pub fn build_quality_checkpoint_telemetry(
             "total_issues": auto_resolved.len() + escalated.len(),
             "auto_resolved": auto_resolved.len(),
             "escalated": escalated.len(),
+            "degraded_missing_agents": degraded_missing_agents
+                .map(|agents| agents.to_vec())
+                .unwrap_or_default(),
         },
         "auto_resolved_details": auto_resolved_details,
         "escalated_details": escalated_details,
@@ -468,7 +522,7 @@ pub fn build_quality_checkpoint_telemetry(
 /// Generate git commit message for quality gate modifications
 pub fn build_quality_gate_commit_message(
     spec_id: &str,
-    checkpoint_outcomes: &[(QualityCheckpoint, usize, usize)],  // (checkpoint, auto_resolved, escalated)
+    checkpoint_outcomes: &[(QualityCheckpoint, usize, usize)], // (checkpoint, auto_resolved, escalated)
     modified_files: &[String],
 ) -> String {
     let total_auto: usize = checkpoint_outcomes.iter().map(|(_, auto, _)| auto).sum();
@@ -480,10 +534,7 @@ pub fn build_quality_gate_commit_message(
     );
 
     for (checkpoint, auto_resolved, escalated) in checkpoint_outcomes {
-        message.push_str(&format!(
-            "Checkpoint: {}\n",
-            checkpoint.name()
-        ));
+        message.push_str(&format!("Checkpoint: {}\n", checkpoint.name()));
 
         for gate in checkpoint.gates() {
             message.push_str(&format!("- {}: ", gate.command_name()));
@@ -503,8 +554,8 @@ pub fn build_quality_gate_commit_message(
     }
 
     message.push_str(&format!("\nTelemetry: quality-gate-*_{}.json\n", spec_id));
-    message.push_str("\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\n");
-    message.push_str("Co-Authored-By: Claude <noreply@anthropic.com>\n");
+    message.push_str("\n🤖 Generated with GPT-5 Codex\n\n");
+    message.push_str("Co-Authored-By: GPT-5 Codex <noreply@openai.com>\n");
 
     message
 }
@@ -516,15 +567,16 @@ pub fn build_quality_gate_summary(
     modified_files: &[String],
 ) -> Vec<ratatui::text::Line<'static>> {
     use ratatui::prelude::Stylize;
-    use ratatui::text::{Line, Span};
     use ratatui::style::{Color, Style};
+    use ratatui::text::{Line, Span};
 
     let mut lines = Vec::new();
 
     lines.push(Line::from(""));
-    lines.push(Line::from(vec![
-        Span::styled("Quality Gates Summary", Style::default().fg(Color::Cyan).bold()),
-    ]));
+    lines.push(Line::from(vec![Span::styled(
+        "Quality Gates Summary",
+        Style::default().fg(Color::Cyan).bold(),
+    )]));
     lines.push(Line::from(""));
 
     lines.push(Line::from(vec![
@@ -655,7 +707,7 @@ mod tests {
             issue_type: "architectural".to_string(),
             description: "Microservices or monolith?".to_string(),
             confidence: Confidence::High,
-            magnitude: Magnitude::Critical,  // Critical always escalates
+            magnitude: Magnitude::Critical, // Critical always escalates
             resolvability: Resolvability::SuggestFix,
             suggested_fix: Some("microservices".to_string()),
             context: "Architectural decision".to_string(),
@@ -720,7 +772,12 @@ mod tests {
         let resolution = resolve_quality_issue(&issue);
 
         match resolution {
-            Resolution::AutoApply { answer, confidence, reason, .. } => {
+            Resolution::AutoApply {
+                answer,
+                confidence,
+                reason,
+                ..
+            } => {
                 assert_eq!(answer, "yes");
                 assert_eq!(confidence, Confidence::High);
                 assert!(reason.contains("Unanimous"));
@@ -754,7 +811,11 @@ mod tests {
         let resolution = resolve_quality_issue(&issue);
 
         match resolution {
-            Resolution::Escalate { reason, recommended, .. } => {
+            Resolution::Escalate {
+                reason,
+                recommended,
+                ..
+            } => {
                 assert!(reason.contains("GPT-5 validation needed"));
                 assert_eq!(recommended, Some("yes".to_string()));
             }
@@ -787,7 +848,11 @@ mod tests {
         let resolution = resolve_quality_issue(&issue);
 
         match resolution {
-            Resolution::Escalate { reason, recommended, .. } => {
+            Resolution::Escalate {
+                reason,
+                recommended,
+                ..
+            } => {
                 assert!(reason.contains("No agent consensus"));
                 assert_eq!(recommended, None);
             }

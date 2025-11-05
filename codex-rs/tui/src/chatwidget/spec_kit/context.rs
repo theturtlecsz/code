@@ -5,7 +5,7 @@
 //! This trait decouples spec-kit from ChatWidget, enabling independent testing
 //! and reuse.
 
-use super::error::{Result, SpecKitError};
+use super::error::Result;
 use super::state::{EscalatedQuestion, GuardrailOutcome, QualityCheckpoint, SpecAutoState};
 use crate::app_event::BackgroundPlacement;
 use crate::history_cell::HistoryCell;
@@ -93,7 +93,12 @@ pub trait SpecKitContext {
     fn submit_user_message(&mut self, display: String, items: Vec<InputItem>);
 
     /// Execute spec-ops command (guardrail/consensus)
-    fn execute_spec_ops_command(&mut self, command: SlashCommand, args: String, hal_mode: Option<HalMode>);
+    fn execute_spec_ops_command(
+        &mut self,
+        command: SlashCommand,
+        args: String,
+        hal_mode: Option<HalMode>,
+    );
 
     /// Get active agent statuses (for completion checking)
     fn active_agent_names(&self) -> Vec<String>;
@@ -102,11 +107,14 @@ pub trait SpecKitContext {
     fn has_failed_agents(&self) -> bool;
 
     /// Show quality gate modal for escalated questions
-    fn show_quality_gate_modal(&mut self, checkpoint: QualityCheckpoint, questions: Vec<EscalatedQuestion>);
+    fn show_quality_gate_modal(
+        &mut self,
+        checkpoint: QualityCheckpoint,
+        questions: Vec<EscalatedQuestion>,
+    );
 }
 
 // MAINT-3 Phase 2: Mock context for testing (available in test builds)
-#[cfg(any(test, feature = "test-utils"))]
 pub mod test_mock {
     use super::*;
     use std::path::PathBuf;
@@ -231,7 +239,12 @@ pub mod test_mock {
             self.user_messages.push((display, items));
         }
 
-        fn execute_spec_ops_command(&mut self, command: SlashCommand, args: String, hal_mode: Option<HalMode>) {
+        fn execute_spec_ops_command(
+            &mut self,
+            command: SlashCommand,
+            args: String,
+            hal_mode: Option<HalMode>,
+        ) {
             self.spec_ops_commands.push((command, args, hal_mode));
         }
 
@@ -243,7 +256,11 @@ pub mod test_mock {
             self.has_failed_agents
         }
 
-        fn show_quality_gate_modal(&mut self, checkpoint: QualityCheckpoint, questions: Vec<EscalatedQuestion>) {
+        fn show_quality_gate_modal(
+            &mut self,
+            checkpoint: QualityCheckpoint,
+            questions: Vec<EscalatedQuestion>,
+        ) {
             self.quality_gate_modals.push((checkpoint, questions));
         }
     }
@@ -291,7 +308,12 @@ pub mod test_mock {
         let mut ctx = MockSpecKitContext::new();
         assert!(ctx.spec_auto_state().is_none());
 
-        let state = SpecAutoState::new("SPEC-TEST".to_string(), "test".to_string(), SpecStage::Plan, None);
+        let state = SpecAutoState::new(
+            "SPEC-TEST".to_string(),
+            "test".to_string(),
+            SpecStage::Plan,
+            None,
+        );
         *ctx.spec_auto_state_mut() = Some(state);
 
         assert!(ctx.spec_auto_state().is_some());

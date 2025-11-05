@@ -7,9 +7,51 @@
 
 use super::super::ChatWidget;
 use super::command_registry::SPEC_KIT_REGISTRY;
+use super::subagent_defaults;
 use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
 use codex_core::protocol::Op;
+use std::path::Path;
+use std::process::Command;
+
+/// Get the git repository root, if available
+pub fn get_repo_root(cwd: &Path) -> Option<String> {
+    Command::new("git")
+        .arg("rev-parse")
+        .arg("--show-toplevel")
+        .current_dir(cwd)
+        .output()
+        .ok()
+        .and_then(|output| {
+            if output.status.success() {
+                String::from_utf8(output.stdout)
+                    .ok()
+                    .map(|s| s.trim().to_string())
+            } else {
+                None
+            }
+        })
+}
+
+/// Get the current git branch, if available
+pub fn get_current_branch(cwd: &Path) -> Option<String> {
+    Command::new("git")
+        .arg("rev-parse")
+        .arg("--abbrev-ref")
+        .arg("HEAD")
+        .current_dir(cwd)
+        .output()
+        .ok()
+        .and_then(|output| {
+            if output.status.success() {
+                String::from_utf8(output.stdout)
+                    .ok()
+                    .map(|s| s.trim().to_string())
+            } else {
+                None
+            }
+        })
+}
 
 /// Try to dispatch a command through the spec-kit command registry
 ///
@@ -56,21 +98,56 @@ pub fn try_dispatch_spec_kit_command(
         .to_string();
 
     // Handle prompt-expanding vs direct execution
-    if spec_cmd.expand_prompt(&args).is_some() {
+    // SPEC-KIT-070 Phase 2+3: Native commands ALWAYS use direct execution
+    // SPEC-KIT-900: All control/utility commands are native (not prompt-expanding)
+    let is_native_command = matches!(
+        command_name,
+        // Native quality commands (Tier 0: FREE, <1s)
+        "speckit.clarify"
+        | "speckit.analyze"
+        | "speckit.checklist"
+        | "speckit.new"
+        // Native control commands (direct execution through registry)
+        | "speckit.auto"           // Pipeline coordinator
+        | "speckit.status"         // Status dashboard
+        | "speckit.constitution"   // ACE constitution extraction
+        | "speckit.ace-status"     // ACE playbook status
+        // Legacy aliases
+        | "spec-auto"
+        | "spec-status"
+        | "new-spec"
+    );
+
+    if !is_native_command && spec_cmd.expand_prompt(&args).is_some() {
         // Prompt-expanding command: need to re-format with config to get orchestrator instructions
         // Use command_name directly - config.toml entries match (e.g., "speckit.new")
         let config_name = command_name;
 
-        // Format with actual config to get orchestrator instructions
+        // Combine user-provided subagent command config with Spec-Kit defaults
+        let mut merged_commands = widget.config.subagent_commands.clone();
+        if !merged_commands
+            .iter()
+            .any(|cfg| cfg.name.eq_ignore_ascii_case(config_name))
+        {
+            if let Some(default_cfg) = subagent_defaults::default_for(config_name) {
+                merged_commands.push(default_cfg);
+            }
+        }
+
+        // Format with the resolved configuration to get orchestrator instructions
         let formatted = codex_core::slash_commands::format_subagent_command(
             config_name,
             &args,
             Some(&widget.config.agents),
-            Some(&widget.config.subagent_commands),
+            Some(merged_commands.as_slice()),
         );
 
-        // Submit with proper config-based prompt
-        widget.submit_prompt_with_display(command_text.to_string(), formatted.prompt);
+        // Submit with ACE injection (async, event-based)
+        widget.submit_prompt_with_ace(
+            command_text.to_string(),
+            formatted.prompt,
+            config_name,
+        );
     } else {
         // Direct execution: persist to history then execute
         let _ = app_event_tx.send(AppEvent::CodexOp(Op::AddToHistory {

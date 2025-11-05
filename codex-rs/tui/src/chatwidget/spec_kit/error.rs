@@ -54,7 +54,9 @@ pub enum SpecKitError {
     JsonSerialize { source: serde_json::Error },
 
     // === Missing Artifacts ===
-    #[error("No telemetry files found for {spec_id} stage {stage} matching pattern {pattern} in {directory}")]
+    #[error(
+        "No telemetry files found for {spec_id} stage {stage} matching pattern {pattern} in {directory}"
+    )]
     NoTelemetryFound {
         spec_id: String,
         stage: String,

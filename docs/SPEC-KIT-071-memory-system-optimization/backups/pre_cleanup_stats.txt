@@ -1,0 +1,2 @@
+Pre-cleanup stats captured: Sat Oct 25 01:15:42 AM UTC 2025
+Total memories: 574, Unique tags: 552, Avg importance: 7.88

@@ -6,8 +6,8 @@
 
 mod common;
 
+use codex_tui::{SpecAutoState, SpecStage};
 use common::{IntegrationTestContext, StateBuilder};
-use codex_tui::{SpecStage, SpecAutoState};
 use serde_json::json;
 
 // ============================================================================
@@ -52,12 +52,17 @@ fn ec03_zero_retries_configured_immediate_failure() {
 
     // Write failure with zero retries
     let failure = ctx.commands_dir().join("zero_retry_failure.json");
-    std::fs::write(&failure, json!({
-        "max_retries": 0,
-        "attempt": 1,
-        "status": "failed",
-        "no_retry_attempted": true
-    }).to_string()).unwrap();
+    std::fs::write(
+        &failure,
+        json!({
+            "max_retries": 0,
+            "attempt": 1,
+            "status": "failed",
+            "no_retry_attempted": true
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     let content = std::fs::read_to_string(&failure).unwrap();
     assert!(content.contains("no_retry_attempted"));
@@ -104,12 +109,17 @@ fn ec06_null_consensus_response_handler_detection() {
 
     // Write null consensus marker
     let null_marker = ctx.consensus_dir().join("null_consensus.json");
-    std::fs::write(&null_marker, json!({
-        "agent": "gemini",
-        "result": null,
-        "detected_as_empty": true,
-        "retry_triggered": true
-    }).to_string()).unwrap();
+    std::fs::write(
+        &null_marker,
+        json!({
+            "agent": "gemini",
+            "result": null,
+            "detected_as_empty": true,
+            "retry_triggered": true
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     let content = std::fs::read_to_string(&null_marker).unwrap();
     assert!(content.contains("detected_as_empty"));
@@ -143,10 +153,15 @@ fn ec08_missing_consensus_artifacts_fallback() {
 
     // Write fallback evidence
     let fallback = ctx.consensus_dir().join("fallback.json");
-    std::fs::write(&fallback, json!({
-        "mode": "fallback",
-        "reason": "missing_artifacts"
-    }).to_string()).unwrap();
+    std::fs::write(
+        &fallback,
+        json!({
+            "mode": "fallback",
+            "reason": "missing_artifacts"
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     assert_eq!(ctx.count_consensus_files(), 1);
 }
@@ -175,11 +190,16 @@ fn ec10_empty_agent_list_validation_error() {
 
     // Write validation error for empty agents
     let error = ctx.commands_dir().join("empty_agents_error.json");
-    std::fs::write(&error, json!({
-        "error": "validation_failed",
-        "reason": "empty_agent_list",
-        "message": "Cannot run consensus with zero agents"
-    }).to_string()).unwrap();
+    std::fs::write(
+        &error,
+        json!({
+            "error": "validation_failed",
+            "reason": "empty_agent_list",
+            "message": "Cannot run consensus with zero agents"
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     let content = std::fs::read_to_string(&error).unwrap();
     assert!(content.contains("empty_agent_list"));
@@ -206,7 +226,11 @@ fn ec11_truncated_json_parse_error_detected_and_retried() {
     std::fs::remove_file(&truncated).unwrap();
 
     let valid = ctx.consensus_dir().join("valid.json");
-    std::fs::write(&valid, json!({"agent": "gemini", "content": "complete"}).to_string()).unwrap();
+    std::fs::write(
+        &valid,
+        json!({"agent": "gemini", "content": "complete"}).to_string(),
+    )
+    .unwrap();
     assert!(valid.exists());
 }
 
@@ -217,10 +241,15 @@ fn ec12_corrupted_timestamp_parse_error_fallback_to_current() {
 
     // Write invalid timestamp
     let invalid_ts = ctx.consensus_dir().join("invalid_timestamp.json");
-    std::fs::write(&invalid_ts, json!({
-        "timestamp": "NOT-A-TIMESTAMP",
-        "fallback_to_current": true
-    }).to_string()).unwrap();
+    std::fs::write(
+        &invalid_ts,
+        json!({
+            "timestamp": "NOT-A-TIMESTAMP",
+            "fallback_to_current": true
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     let content = std::fs::read_to_string(&invalid_ts).unwrap();
     let data: serde_json::Value = serde_json::from_str(&content).unwrap();
@@ -295,12 +324,17 @@ fn ec16_hundred_retry_attempts_limit_enforcement() {
 
     let max_retries = 100;
     let retry_state = ctx.commands_dir().join("retry_limit.json");
-    std::fs::write(&retry_state, json!({
-        "retry_count": max_retries,
-        "max_retries": max_retries,
-        "limit_reached": true,
-        "halted": true
-    }).to_string()).unwrap();
+    std::fs::write(
+        &retry_state,
+        json!({
+            "retry_count": max_retries,
+            "max_retries": max_retries,
+            "limit_reached": true,
+            "halted": true
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     let content = std::fs::read_to_string(&retry_state).unwrap();
     let data: serde_json::Value = serde_json::from_str(&content).unwrap();
@@ -312,17 +346,26 @@ fn ec17_thousand_quality_issues_batch_processing() {
     // Test: 1000 quality issues → Batch processing → No OOM
     let ctx = IntegrationTestContext::new("SPEC-EC17-001").unwrap();
 
-    let issues: Vec<_> = (0..1000).map(|i| json!({
-        "id": i,
-        "type": "minor",
-        "description": format!("Issue {}", i)
-    })).collect();
+    let issues: Vec<_> = (0..1000)
+        .map(|i| {
+            json!({
+                "id": i,
+                "type": "minor",
+                "description": format!("Issue {}", i)
+            })
+        })
+        .collect();
 
     let batch_file = ctx.commands_dir().join("large_batch.json");
-    std::fs::write(&batch_file, json!({
-        "issues": issues,
-        "batch_size": 1000
-    }).to_string()).unwrap();
+    std::fs::write(
+        &batch_file,
+        json!({
+            "issues": issues,
+            "batch_size": 1000
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     let content = std::fs::read_to_string(&batch_file).unwrap();
     let data: serde_json::Value = serde_json::from_str(&content).unwrap();
@@ -336,12 +379,17 @@ fn ec18_gigabyte_evidence_file_size_limits() {
 
     // Don't actually create 1GB file (slow), just write metadata
     let size_warning = ctx.commands_dir().join("size_warning.json");
-    std::fs::write(&size_warning, json!({
-        "evidence_size_bytes": 1_073_741_824, // 1 GB
-        "threshold_bytes": 26_214_400, // 25 MB
-        "warning_issued": true,
-        "exceeds_policy": true
-    }).to_string()).unwrap();
+    std::fs::write(
+        &size_warning,
+        json!({
+            "evidence_size_bytes": 1_073_741_824, // 1 GB
+            "threshold_bytes": 26_214_400, // 25 MB
+            "warning_issued": true,
+            "exceeds_policy": true
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     let content = std::fs::read_to_string(&size_warning).unwrap();
     let data: serde_json::Value = serde_json::from_str(&content).unwrap();
@@ -373,11 +421,16 @@ fn ec20_year_2000_timestamp_staleness_detection() {
     let ctx = IntegrationTestContext::new("SPEC-EC20-001").unwrap();
 
     let ancient = ctx.consensus_dir().join("ancient.json");
-    std::fs::write(&ancient, json!({
-        "timestamp": "2000-01-01T00:00:00Z",
-        "age_hours": 225000, // ~25 years
-        "extremely_stale": true
-    }).to_string()).unwrap();
+    std::fs::write(
+        &ancient,
+        json!({
+            "timestamp": "2000-01-01T00:00:00Z",
+            "age_hours": 225000, // ~25 years
+            "extremely_stale": true
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     let content = std::fs::read_to_string(&ancient).unwrap();
     let data: serde_json::Value = serde_json::from_str(&content).unwrap();
@@ -446,12 +499,17 @@ fn ec24_readonly_filesystem_write_error_handling() {
 
     // Write error marker (simulates read-only failure)
     let error_marker = ctx.commands_dir().join("readonly_error.json");
-    std::fs::write(&error_marker, json!({
-        "error": "permission_denied",
-        "filesystem": "readonly",
-        "operation": "write",
-        "graceful_failure": true
-    }).to_string()).unwrap();
+    std::fs::write(
+        &error_marker,
+        json!({
+            "error": "permission_denied",
+            "filesystem": "readonly",
+            "operation": "write",
+            "graceful_failure": true
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     let content = std::fs::read_to_string(&error_marker).unwrap();
     assert!(content.contains("graceful_failure"));
@@ -463,11 +521,16 @@ fn ec25_unicode_in_evidence_content() {
     let ctx = IntegrationTestContext::new("SPEC-EC25-001").unwrap();
 
     let unicode = ctx.consensus_dir().join("unicode.json");
-    std::fs::write(&unicode, json!({
-        "content": "Hello 世界 🌍 مرحبا мир",
-        "emoji": "✅🎉🚀",
-        "symbols": "Σ ∞ √ ∂"
-    }).to_string()).unwrap();
+    std::fs::write(
+        &unicode,
+        json!({
+            "content": "Hello 世界 🌍 مرحبا мир",
+            "emoji": "✅🎉🚀",
+            "symbols": "Σ ∞ √ ∂"
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     let content = std::fs::read_to_string(&unicode).unwrap();
     assert!(content.contains("世界"));

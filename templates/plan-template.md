@@ -2,6 +2,7 @@
 
 **SPEC-ID**: [SPEC_ID]
 **Plan Version**: [VERSION]
+**Template Version**: plan-v1.0
 **Created**: [DATE]
 
 ---

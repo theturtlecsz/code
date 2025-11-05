@@ -436,16 +436,31 @@ impl ModelClient {
                     tokio::spawn(async move {
                         let process_result = timeout(
                             total_timeout,
-                            process_sse(stream, tx_event.clone(), idle_timeout, debug_logger, request_id_clone)
-                        ).await;
+                            process_sse(
+                                stream,
+                                tx_event.clone(),
+                                idle_timeout,
+                                debug_logger,
+                                request_id_clone,
+                            ),
+                        )
+                        .await;
 
                         if process_result.is_err() {
                             // Total timeout exceeded
-                            warn!("Agent execution exceeded total timeout ({:.1}min)", total_timeout.as_secs_f64() / 60.0);
-                            let _ = tx_event.send(Err(CodexErr::Stream(
-                                format!("Agent timeout: exceeded {:.1} minute limit", total_timeout.as_secs_f64() / 60.0),
-                                None
-                            ))).await;
+                            warn!(
+                                "Agent execution exceeded total timeout ({:.1}min)",
+                                total_timeout.as_secs_f64() / 60.0
+                            );
+                            let _ = tx_event
+                                .send(Err(CodexErr::Stream(
+                                    format!(
+                                        "Agent timeout: exceeded {:.1} minute limit",
+                                        total_timeout.as_secs_f64() / 60.0
+                                    ),
+                                    None,
+                                )))
+                                .await;
                         }
                     });
 

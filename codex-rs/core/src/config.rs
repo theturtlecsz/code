@@ -1,5 +1,6 @@
 use crate::codex::ApprovedCommandPattern;
 use crate::config_profile::ConfigProfile;
+use crate::config_types::AceConfig;
 use crate::config_types::AgentConfig;
 use crate::config_types::AllowedCommand;
 use crate::config_types::AllowedCommandMatchKind;
@@ -177,6 +178,9 @@ pub struct Config {
 
     /// Optional ACP client tool identifiers supplied by the host IDE.
     pub experimental_client_tools: Option<ClientTools>,
+
+    /// ACE (Agentic Context Engine) configuration for learning from outcomes
+    pub ace: AceConfig,
 
     /// Configuration for available agent models
     pub agents: Vec<AgentConfig>,
@@ -1436,6 +1440,10 @@ pub struct ConfigToml {
     #[serde(default)]
     pub experimental_client_tools: Option<ClientTools>,
 
+    /// ACE (Agentic Context Engine) configuration for learning from outcomes
+    #[serde(default)]
+    pub ace: Option<AceConfig>,
+
     /// Configuration for available agent models
     #[serde(default)]
     pub agents: Vec<AgentConfig>,
@@ -1987,6 +1995,7 @@ impl Config {
             base_instructions,
             mcp_servers: cfg.mcp_servers,
             experimental_client_tools: cfg.experimental_client_tools.clone(),
+            ace: cfg.ace.unwrap_or_default(),
             agents,
             model_providers,
             project_doc_max_bytes: cfg.project_doc_max_bytes.unwrap_or(PROJECT_DOC_MAX_BYTES),

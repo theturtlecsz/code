@@ -1,0 +1,128 @@
+digraph spec_kit_multi_agent_consensus {
+    rankdir=TB;
+    node [shape=box, style=rounded, fontname="Arial"];
+    edge [fontname="Arial", fontsize=10];
+
+    graph [fontname="Arial", fontsize=14, label="Spec-Kit Multi-Agent Consensus Flow\nHow AI Agents Collaborate", labelloc=t];
+
+    // Entry
+    trigger [label="Stage Trigger\n(e.g., /speckit.plan)", shape=oval, fillcolor="#E3F2FD", style="filled,rounded"];
+
+    // Prompt building
+    build_prompt [label="Build Stage Prompt\n• Load spec artifacts\n• Load constitution\n• Add retry context\n• Apply ACE injection", fillcolor="#FFE082", style=filled];
+
+    // Agent tier selection
+    tier_select [label="Select Agent Tier\n• Tier 2: 3 agents (standard)\n• Tier 3: 4 agents (implement)\n• Tier 4: 5 agents (auto with arbiter)", fillcolor="#FFF9C4", style=filled];
+
+    // Parallel agent execution
+    subgraph cluster_agents {
+        label="Parallel Agent Execution (Actual Models)";
+        style=filled;
+        fillcolor="#E8EAF6";
+
+        gemini [label="Agent: Gemini\nDefault: Flash Thinking\nImplement: 2.5 Pro\nAuto: Flash-Lite\n• Cost: $0.05-0.15", fillcolor="#CE93D8", style=filled];
+        claude [label="Agent: Claude\nDefault: Haiku 3.5\nImplement: Opus 4.1\nAuto: Haiku 4.5\n• Cost: $0.02-0.25", fillcolor="#90CAF9", style=filled];
+        code [label="Agent: Code\ngpt-5-codex via CLI\n• Native execution\n• Cost: $0.08", fillcolor="#A5D6A7", style=filled];
+        gpt_codex [label="Agent: GPT-Codex\n(Implement only)\ngpt-5-codex high effort\n• Code generation\n• Cost: ~$0.50", fillcolor="#FFAB91", style=filled, style="filled,dashed"];
+        gpt_pro [label="Agent: GPT-Pro\ngpt-5-codex medium effort\n• Aggregator role\n• Synthesizes consensus\n• Cost: ~$0.30", fillcolor="#FFCC80", style=filled];
+    }
+
+    // Local memory storage
+    subgraph cluster_storage {
+        label="Artifact Storage (Local-Memory MCP)";
+        style=filled;
+        fillcolor="#E0F2F1";
+
+        store_gemini [label="Store Gemini Verdict\n• domain: spec-kit\n• tags: [spec:ID, stage:X]\n• importance: 8", shape=cylinder, fillcolor="#B2DFDB", style=filled];
+        store_claude [label="Store Claude Verdict", shape=cylinder, fillcolor="#B2DFDB", style=filled];
+        store_code [label="Store Code Verdict", shape=cylinder, fillcolor="#B2DFDB", style=filled];
+        store_gpt_codex [label="Store GPT-Codex Verdict", shape=cylinder, fillcolor="#B2DFDB", style="filled,dashed"];
+        store_gpt_pro [label="Store GPT-Pro Verdict", shape=cylinder, fillcolor="#B2DFDB", style=filled];
+    }
+
+    // Consensus checking
+    query_artifacts [label="Query Artifacts\n• Search local-memory\n• Filter by spec_id + stage\n• Collect all verdicts", fillcolor="#B3E5FC", style=filled];
+
+    synthesize_consensus [label="Synthesize Consensus\n• Parse verdict fields\n• Compare outputs\n• Calculate agreement", fillcolor="#81D4FA", style=filled];
+
+    // Consensus types
+    consensus_type [label="Consensus Type?", shape=diamond, fillcolor="#FFE082", style=filled];
+
+    unanimous [label="Unanimous (3/3)\n• All agents agree\n• consensus_ok: true\n• degraded: false", fillcolor="#C8E6C9", style=filled];
+
+    majority [label="Majority (2/3)\n• Gemini disagrees OR\n• One agent missing\n• consensus_ok: true\n• degraded: true", fillcolor="#FFF9C4", style=filled];
+
+    conflict [label="Conflict (<2/3)\n• Multiple disagreements\n• consensus_ok: false\n• Requires resolution", fillcolor="#FFCDD2", style=filled];
+
+    // Degradation handling
+    degrade_check [label="Degraded?", shape=diamond, fillcolor="#FFE082", style=filled];
+    schedule_followup [label="Schedule Follow-up\n• /speckit.checklist\n• Review quality\n• Manual check", fillcolor="#FFAB91", style=filled];
+
+    // Retry logic
+    retry_check [label="Retry\nCount < 3?", shape=diamond, fillcolor="#FFE082", style=filled];
+    retry_stage [label="Retry Stage\n• Increment retry_count\n• Add context:\n  'Previous attempt failed'\n• Reset to Guardrail", fillcolor="#FFCCBC", style=filled];
+    max_retry [label="Max Retries\nReached\n• Halt pipeline\n• Manual intervention", shape=oval, fillcolor="#EF5350", style="filled,rounded"];
+
+    // Success path
+    advance_stage [label="Advance to\nNext Stage\n• Reset retry count\n• Increment stage_index\n• Persist cost summary", fillcolor="#4DB6AC", style=filled];
+
+    // Main flow
+    trigger -> build_prompt;
+    build_prompt -> tier_select;
+    tier_select -> gemini;
+    tier_select -> claude;
+    tier_select -> code;
+    tier_select -> gpt_codex [style=dashed, label="Tier 3"];
+    tier_select -> gpt_pro;
+
+    gemini -> store_gemini;
+    claude -> store_claude;
+    code -> store_code;
+    gpt_codex -> store_gpt_codex [style=dashed];
+    gpt_pro -> store_gpt_pro;
+
+    store_gemini -> query_artifacts;
+    store_claude -> query_artifacts;
+    store_code -> query_artifacts;
+    store_gpt_codex -> query_artifacts [style=dashed];
+    store_gpt_pro -> query_artifacts;
+
+    query_artifacts -> synthesize_consensus;
+    synthesize_consensus -> consensus_type;
+
+    consensus_type -> unanimous [label="3/3 or 4/4"];
+    consensus_type -> majority [label="2/3"];
+    consensus_type -> conflict [label="<2/3"];
+
+    unanimous -> degrade_check;
+    majority -> degrade_check;
+
+    degrade_check -> advance_stage [label="No"];
+    degrade_check -> schedule_followup [label="Yes"];
+    schedule_followup -> advance_stage;
+
+    conflict -> retry_check;
+    retry_check -> retry_stage [label="Yes"];
+    retry_check -> max_retry [label="No"];
+    retry_stage -> build_prompt;
+
+    // Cost tracking
+    advance_stage -> cost_persist [style=dashed, label="persist"];
+
+    // Legend
+    subgraph cluster_legend {
+        label="Agent Tiers (Actual Config)";
+        style=filled;
+        fillcolor="#FAFAFA";
+        rank=sink;
+
+        leg_tier2 [label="Tier 2-lite: claude + code\n$0.10-0.35, 5-8 min\n(checklist)", fillcolor="#E3F2FD", style=filled];
+        leg_tier2std [label="Tier 2: gemini + claude + code/gpt_pro\n$0.40-1.00, 8-12 min\n(new, specify, plan, tasks, validate, audit, unlock)", fillcolor="#FFF9C4", style=filled];
+        leg_tier3 [label="Tier 3: gemini-25-pro + opus + gpt_codex + gpt_pro\n$2.50, 15-20 min\n(implement only)", fillcolor="#FFE0B2", style=filled];
+        leg_tier4 [label="Tier 4: flashlite + haiku + gpt_pro + gpt_codex + code\n$5.50-6.60, 75 min\n(auto - full pipeline)", fillcolor="#FFCCBC", style=filled];
+
+        leg_tier2 -> leg_tier2std [style=invis];
+        leg_tier2std -> leg_tier3 [style=invis];
+        leg_tier3 -> leg_tier4 [style=invis];
+    }
+}

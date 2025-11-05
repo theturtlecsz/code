@@ -25,8 +25,10 @@ pub fn default_params_for(name: &str, read_only: bool) -> Vec<String> {
             }
         }
         // Gemini CLI: pin to a stable model by default; write mode adds -y
+        // SPEC-KIT-070 Phase 1: default Gemini to 2.5 Flash for cost reduction
+        // (previously: gemini-2.5-pro). Subagent configs can still override.
         "gemini" => {
-            let mut v = vec!["-m".to_string(), "gemini-2.5-pro".to_string()];
+            let mut v = vec!["-m".to_string(), "gemini-2.5-flash".to_string()];
             if !read_only {
                 v.push("-y".into());
             }

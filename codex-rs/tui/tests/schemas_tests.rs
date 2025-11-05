@@ -3,9 +3,8 @@
 //! Covers quality gate schemas, spec analysis schemas, and schema validation.
 
 use codex_tui::{
-    QualityGateType,
-    quality_gate_response_schema, spec_analysis_schema,
-    schema_for_gate_type, provider_supports_schemas,
+    QualityGateType, provider_supports_schemas, quality_gate_response_schema, schema_for_gate_type,
+    spec_analysis_schema,
 };
 use serde_json::json;
 
@@ -77,9 +76,10 @@ fn test_spec_analysis_priority_enum() {
 fn test_magnitude_enum_values() {
     let schema = quality_gate_response_schema();
 
-    let magnitude_enum = schema["schema"]["properties"]["issues"]["items"]["properties"]["magnitude"]["enum"]
-        .as_array()
-        .unwrap();
+    let magnitude_enum =
+        schema["schema"]["properties"]["issues"]["items"]["properties"]["magnitude"]["enum"]
+            .as_array()
+            .unwrap();
 
     assert_eq!(magnitude_enum.len(), 3);
     assert!(magnitude_enum.contains(&json!("critical")));
@@ -91,9 +91,10 @@ fn test_magnitude_enum_values() {
 fn test_resolvability_enum_values() {
     let schema = quality_gate_response_schema();
 
-    let resolvability_enum = schema["schema"]["properties"]["issues"]["items"]["properties"]["resolvability"]["enum"]
-        .as_array()
-        .unwrap();
+    let resolvability_enum =
+        schema["schema"]["properties"]["issues"]["items"]["properties"]["resolvability"]["enum"]
+            .as_array()
+            .unwrap();
 
     assert_eq!(resolvability_enum.len(), 3);
     assert!(resolvability_enum.contains(&json!("auto-fix")));
@@ -155,7 +156,10 @@ fn test_quality_gate_schema_no_additional_properties() {
     let schema = quality_gate_response_schema();
 
     assert_eq!(schema["schema"]["additionalProperties"], false);
-    assert_eq!(schema["schema"]["properties"]["issues"]["items"]["additionalProperties"], false);
+    assert_eq!(
+        schema["schema"]["properties"]["issues"]["items"]["additionalProperties"],
+        false
+    );
 }
 
 #[test]
@@ -163,7 +167,10 @@ fn test_spec_analysis_schema_no_additional_properties() {
     let schema = spec_analysis_schema();
 
     assert_eq!(schema["schema"]["additionalProperties"], false);
-    assert_eq!(schema["schema"]["properties"]["recommendations"]["items"]["additionalProperties"], false);
+    assert_eq!(
+        schema["schema"]["properties"]["recommendations"]["items"]["additionalProperties"],
+        false
+    );
 }
 
 #[test]
@@ -215,5 +222,8 @@ fn test_spec_analysis_fields_have_types() {
     let schema = spec_analysis_schema();
 
     assert_eq!(schema["schema"]["properties"]["analysis"]["type"], "string");
-    assert_eq!(schema["schema"]["properties"]["recommendations"]["type"], "array");
+    assert_eq!(
+        schema["schema"]["properties"]["recommendations"]["type"],
+        "array"
+    );
 }

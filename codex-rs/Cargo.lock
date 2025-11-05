@@ -229,6 +229,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "arrayref"
+version = "0.3.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76a2e8124351fda1ef8aaaa3bbd7ebbcb486bbcd4225aca0aa0d84bb2db8fecb"
+
+[[package]]
 name = "arrayvec"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -554,6 +560,19 @@ name = "bitstream-io"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6099cdc01846bc367c4e7dd630dc5966dccf36b652fae7a74e17b640411a91b2"
+
+[[package]]
+name = "blake3"
+version = "1.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3888aaa89e4b2a40fca9848e400f6a658a5a3978de7be858e209cafa8be9a4a0"
+dependencies = [
+ "arrayref",
+ "arrayvec 0.7.6",
+ "cc",
+ "cfg-if",
+ "constant_time_eq",
+]
 
 [[package]]
 name = "block-buffer"
@@ -919,7 +938,7 @@ dependencies = [
  "codex-protocol-ts",
  "codex-tui",
  "codex-version",
- "dirs",
+ "dirs 6.0.0",
  "flate2",
  "futures",
  "owo-colors",
@@ -972,7 +991,7 @@ dependencies = [
  "codex-protocol",
  "codex-version",
  "core_test_support",
- "dirs",
+ "dirs 6.0.0",
  "env-flags",
  "eventsource-stream",
  "fs2",
@@ -1248,6 +1267,7 @@ dependencies = [
  "anyhow",
  "arboard",
  "base64 0.22.1",
+ "blake3",
  "chrono",
  "clap",
  "codex-ansi-escape",
@@ -1265,6 +1285,7 @@ dependencies = [
  "color-eyre",
  "crossterm",
  "diffy",
+ "dirs 5.0.1",
  "fs2",
  "futures",
  "image 0.25.8",
@@ -1283,6 +1304,7 @@ dependencies = [
  "ratatui-image",
  "regex-lite",
  "reqwest",
+ "rusqlite",
  "serde",
  "serde_json",
  "sha2",
@@ -1425,6 +1447,12 @@ dependencies = [
  "once_cell",
  "windows-sys 0.59.0",
 ]
+
+[[package]]
+name = "constant_time_eq"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
 
 [[package]]
 name = "convert_case"
@@ -1743,11 +1771,20 @@ dependencies = [
 
 [[package]]
 name = "dirs"
+version = "5.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "44c45a9d03d6676652bcb5e724c7e988de1acad23a711b5217ab9cbecbec2225"
+dependencies = [
+ "dirs-sys 0.4.1",
+]
+
+[[package]]
+name = "dirs"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3e8aa94d75141228480295a7d0e7feb620b1a5ad9f12bc40be62411e38cce4e"
 dependencies = [
- "dirs-sys",
+ "dirs-sys 0.5.0",
 ]
 
 [[package]]
@@ -1758,6 +1795,18 @@ checksum = "b98cf8ebf19c3d1b223e151f99a4f9f0690dca41414773390fc824184ac833e1"
 dependencies = [
  "cfg-if",
  "dirs-sys-next",
+]
+
+[[package]]
+name = "dirs-sys"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "520f05a5cbd335fae5a99ff7a6ab8627577660ee5cfd6a94a6a929b52ff0321c"
+dependencies = [
+ "libc",
+ "option-ext",
+ "redox_users 0.4.6",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

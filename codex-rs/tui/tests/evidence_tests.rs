@@ -270,7 +270,8 @@ fn test_panic_releases_lock_via_poisoning() {
     let result = std::thread::spawn(move || {
         let _guard = lock_clone.lock().unwrap();
         // Lock held during panic
-    }).join();
+    })
+    .join();
 
     assert!(result.is_ok()); // Thread completed (no panic here)
 }

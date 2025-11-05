@@ -185,6 +185,11 @@
 - Resolution: Arbiter selects or synthesizes
 - Prevention: Quality commands (clarify, analyze) reduce conflicts
 
+**Validate Single-Flight (SPEC-KIT-069):**
+- Auto and manual validate stages share a CAS lifecycle guard keyed by `stage_run_id`.
+- Duplicate triggers emit a dedupe notice (`Validate run already active …`) and skip agent dispatch.
+- Telemetry + evidence add `stage_run_id`, `attempt`, and `dedupe_count` under tags `spec:SPEC-KIT-###`, `stage:validate`, `artifact:agent_lifecycle`.
+
 ---
 
 ## Future Enhancements

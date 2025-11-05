@@ -261,3 +261,15 @@
 **Status:** v1.3 (2025-10-18) — Repository references corrected, byterover deprecated
 **Repository:** https://github.com/theturtlecsz/code
 **Owner:** theturtlecsz
+
+---
+
+## 📚 Related Documentation
+
+- **[Documentation Index](docs/SUMMARY.md)** - Complete documentation navigation
+- **[Planning Document](PLANNING.md)** - Architecture and technical details
+- **[Project Status](docs/PROJECT_STATUS.md)** - Current state and roadmap
+- **[SPEC.md](SPEC.md)** - Task tracker
+- **[CLAUDE.md](CLAUDE.md)** - Operational guidelines
+- **[Spec-Kit README](docs/spec-kit/README.md)** - User guide and quick start
+- **[Getting Started](docs/getting-started.md)** - Installation and basic usage

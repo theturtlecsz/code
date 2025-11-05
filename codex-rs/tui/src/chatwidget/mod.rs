@@ -2,6 +2,8 @@
 // Made public for integration testing (T78)
 pub mod spec_kit;
 
+const SPEC_KIT_DEFAULT_BUDGET_USD: f64 = 2.0;
+
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -25,15 +27,18 @@ use ratatui::style::Style;
 use crate::slash_command::HalMode;
 use crate::slash_command::SlashCommand;
 use crate::slash_command::SpecAutoInvocation;
-use crate::spec_prompts;
 use crate::spec_prompts::SpecStage;
 use spec_kit::consensus::{
-    ConsensusArtifactVerdict, ConsensusEvidenceHandle, ConsensusSynthesisRaw,
-    ConsensusSynthesisSummary, ConsensusTelemetryPaths, ConsensusVerdict,
-    expected_agents_for_stage, extract_string_list, telemetry_agent_slug, validate_required_fields,
+    ConsensusEvidenceHandle, ConsensusSynthesisRaw, ConsensusSynthesisSummary,
+    ConsensusTelemetryPaths, ConsensusVerdict, telemetry_agent_slug,
+};
+use spec_kit::state::{
+    ValidateBeginOutcome, ValidateCompletionReason, ValidateLifecycle, ValidateLifecycleEvent,
+    ValidateMode, ValidateRunCompletion, ValidateRunInfo,
 };
 use spec_kit::{
-    GuardrailOutcome, SpecAutoState, spec_ops_stage_prefix, validate_guardrail_evidence,
+    GuardrailOutcome, QualityGateBroker, SpecAutoState, spec_ops_stage_prefix,
+    validate_guardrail_evidence,
 };
 use spec_kit::{evaluate_guardrail_value, validate_guardrail_schema};
 // spec_status functions moved to spec_kit::handler
@@ -198,7 +203,7 @@ use crate::streaming::StreamKind;
 use crate::streaming::controller::AppEventHistorySink;
 use crate::user_approval_widget::ApprovalRequest;
 use crate::util::buffer::fill_rect;
-use chrono::{DateTime, Duration as ChronoDuration, Local, SecondsFormat, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, Local, Utc};
 use codex_browser::BrowserManager;
 use codex_core::config::find_codex_home;
 use codex_core::config::resolve_codex_path_for_read;
@@ -380,6 +385,7 @@ pub(crate) struct ChatWidget<'a> {
     initial_user_message: Option<UserMessage>,
     total_token_usage: TokenUsage,
     last_token_usage: TokenUsage,
+    pub cost_tracker: Arc<spec_kit::cost_tracker::CostTracker>,
     rate_limit_snapshot: Option<RateLimitSnapshotEvent>,
     rate_limit_warnings: RateLimitWarningState,
     rate_limit_fetch_inflight: bool,
@@ -548,12 +554,18 @@ pub(crate) struct ChatWidget<'a> {
     // Preserve: This field during rebases
     // Handler methods extracted to spec_kit module (free functions)
     spec_auto_state: Option<SpecAutoState>,
+    validate_lifecycles: HashMap<String, spec_kit::state::ValidateLifecycle>,
     // === END FORK-SPECIFIC ===
 
     // === FORK-SPECIFIC (just-every/code): Native MCP for local-memory ===
     // Eliminates subprocess, 10x faster consensus queries
     // TUI-side MCP manager for querying local-memory during consensus checking
-    mcp_manager: Arc<tokio::sync::Mutex<Option<Arc<codex_core::mcp_connection_manager::McpConnectionManager>>>>,
+    mcp_manager: Arc<
+        tokio::sync::Mutex<Option<Arc<codex_core::mcp_connection_manager::McpConnectionManager>>>,
+    >,
+    /// Async quality gate broker used to avoid blocking the UI when fetching
+    /// agent artefacts and GPT-5 validation results from local-memory.
+    quality_gate_broker: QualityGateBroker,
     // === END FORK-SPECIFIC ===
 
     // Stable synthetic request bucket for pre‑turn system notices (set on first use)
@@ -1014,6 +1026,57 @@ enum SystemPlacement {
 impl ChatWidget<'_> {
     fn spec_kit_telemetry_enabled(&self) -> bool {
         spec_kit::state::spec_kit_telemetry_enabled(&self.config.shell_environment_policy)
+    }
+
+    fn ensure_validate_lifecycle(&mut self, spec_id: &str) -> ValidateLifecycle {
+        self.validate_lifecycles
+            .entry(spec_id.to_string())
+            .or_insert_with(|| ValidateLifecycle::new(spec_id))
+            .clone()
+    }
+
+    fn finish_manual_validate_runs_if_idle(&mut self) {
+        if self
+            .active_agents
+            .iter()
+            .any(|a| matches!(a.status, AgentStatus::Running))
+        {
+            return;
+        }
+
+        let mut completions: Vec<(String, ValidateRunCompletion)> = Vec::new();
+        for (spec_id, lifecycle) in self.validate_lifecycles.clone() {
+            if let Some(info) = lifecycle.active() {
+                if info.mode == ValidateMode::Manual {
+                    if let Some(completion) =
+                        lifecycle.complete(&info.run_id, ValidateCompletionReason::Completed)
+                    {
+                        completions.push((spec_id.clone(), completion));
+                    }
+                }
+            }
+        }
+
+        for (spec_id, completion) in completions {
+            spec_kit::record_validate_lifecycle_event(
+                self,
+                &spec_id,
+                &completion.run_id,
+                completion.attempt,
+                completion.dedupe_count,
+                completion.payload_hash.as_str(),
+                completion.mode,
+                ValidateLifecycleEvent::Completed,
+            );
+
+            self.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![ratatui::text::Line::from(format!(
+                    "✓ Manual validate run {} completed",
+                    completion.run_id
+                ))],
+                crate::history_cell::HistoryCellType::Notice,
+            ));
+        }
     }
 
     fn fmt_short_duration(&self, d: Duration) -> String {
@@ -2486,7 +2549,11 @@ impl ChatWidget<'_> {
         terminal_info: crate::tui::TerminalInfo,
         show_order_overlay: bool,
         latest_upgrade_version: Option<String>,
-        mcp_manager: Arc<tokio::sync::Mutex<Option<Arc<codex_core::mcp_connection_manager::McpConnectionManager>>>>,
+        mcp_manager: Arc<
+            tokio::sync::Mutex<
+                Option<Arc<codex_core::mcp_connection_manager::McpConnectionManager>>,
+            >,
+        >,
     ) -> Self {
         let (codex_op_tx, codex_op_rx) = unbounded_channel::<Op>();
 
@@ -2574,6 +2641,10 @@ impl ChatWidget<'_> {
 
         // Initialize image protocol for rendering screenshots
 
+        let broker_event_tx = app_event_tx.clone();
+        let broker_mcp = mcp_manager.clone();
+        let quality_gate_broker = QualityGateBroker::new(broker_event_tx, broker_mcp);
+
         let mut new_widget = Self {
             app_event_tx: app_event_tx.clone(),
             codex_op_tx,
@@ -2596,6 +2667,9 @@ impl ChatWidget<'_> {
             ),
             total_token_usage: TokenUsage::default(),
             last_token_usage: TokenUsage::default(),
+            cost_tracker: Arc::new(spec_kit::cost_tracker::CostTracker::new(
+                SPEC_KIT_DEFAULT_BUDGET_USD,
+            )),
             rate_limit_snapshot: None,
             rate_limit_warnings: RateLimitWarningState::default(),
             rate_limit_fetch_inflight: false,
@@ -2722,8 +2796,10 @@ impl ChatWidget<'_> {
             system_cell_by_id: HashMap::new(),
             standard_terminal_mode: !config.tui.alternate_screen,
             spec_auto_state: None,
+            validate_lifecycles: HashMap::new(),
             // FORK-SPECIFIC (just-every/code): Use shared MCP manager from App
             mcp_manager,
+            quality_gate_broker,
         };
         if let Ok(Some(active_id)) = auth_accounts::get_active_account_id(&config.codex_home) {
             if let Ok(records) = account_usage::list_rate_limit_snapshots(&config.codex_home) {
@@ -2781,7 +2857,11 @@ impl ChatWidget<'_> {
         latest_upgrade_version: Option<String>,
         auth_manager: Arc<AuthManager>,
         show_welcome: bool,
-        mcp_manager: Arc<tokio::sync::Mutex<Option<Arc<codex_core::mcp_connection_manager::McpConnectionManager>>>>,
+        mcp_manager: Arc<
+            tokio::sync::Mutex<
+                Option<Arc<codex_core::mcp_connection_manager::McpConnectionManager>>,
+            >,
+        >,
     ) -> Self {
         let (codex_op_tx, mut codex_op_rx) = unbounded_channel::<Op>();
 
@@ -2815,6 +2895,10 @@ impl ChatWidget<'_> {
         // Basic widget state mirrors `new`
         let history_cells: Vec<Box<dyn HistoryCell>> = Vec::new();
 
+        let broker_event_tx = app_event_tx.clone();
+        let broker_mcp = mcp_manager.clone();
+        let quality_gate_broker = QualityGateBroker::new(broker_event_tx, broker_mcp);
+
         let mut w = Self {
             app_event_tx: app_event_tx.clone(),
             codex_op_tx,
@@ -2834,6 +2918,9 @@ impl ChatWidget<'_> {
             initial_user_message: None,
             total_token_usage: TokenUsage::default(),
             last_token_usage: TokenUsage::default(),
+            cost_tracker: Arc::new(spec_kit::cost_tracker::CostTracker::new(
+                SPEC_KIT_DEFAULT_BUDGET_USD,
+            )),
             rate_limit_snapshot: None,
             rate_limit_warnings: RateLimitWarningState::default(),
             rate_limit_fetch_inflight: false,
@@ -2958,8 +3045,10 @@ impl ChatWidget<'_> {
             synthetic_system_req: None,
             system_cell_by_id: HashMap::new(),
             spec_auto_state: None,
+            validate_lifecycles: HashMap::new(),
             // FORK-SPECIFIC (just-every/code): Use shared MCP manager from App
             mcp_manager,
+            quality_gate_broker,
         };
         if let Ok(Some(active_id)) = auth_accounts::get_active_account_id(&config.codex_home) {
             if let Ok(records) = account_usage::list_rate_limit_snapshots(&config.codex_home) {
@@ -4066,7 +4155,9 @@ impl ChatWidget<'_> {
 
         // SPEC-KIT QUALITY GATE: Trigger handler if in QualityGateExecuting AND not already processing
         if let Some(state) = &self.spec_auto_state {
-            if let spec_kit::state::SpecAutoPhase::QualityGateExecuting { checkpoint, .. } = state.phase {
+            if let spec_kit::state::SpecAutoPhase::QualityGateExecuting { checkpoint, .. } =
+                state.phase
+            {
                 // Only trigger if:
                 // 1. Checkpoint not completed
                 // 2. Not currently processing (prevents recursion)
@@ -5787,6 +5878,7 @@ impl ChatWidget<'_> {
                 self.stream.insert_reasoning_section_break(&sink);
             }
             EventMsg::TaskStarted => {
+                tracing::warn!("DEBUG: TaskStarted event received, id={}", id);
                 spec_kit::on_spec_auto_task_started(self, &id);
                 // This begins the new turn; clear the pending prompt anchor count
                 // so subsequent background events use standard placement.
@@ -5818,6 +5910,7 @@ impl ChatWidget<'_> {
             EventMsg::TaskComplete(TaskCompleteEvent {
                 last_agent_message: _,
             }) => {
+                tracing::warn!("DEBUG: TaskComplete event received, id={}", id);
                 spec_kit::on_spec_auto_task_complete(self, &id);
                 // Finalize any active streams
                 if self.stream.is_write_cycle_active() {
@@ -6724,6 +6817,7 @@ impl ChatWidget<'_> {
                 context,
                 task,
             }) => {
+                tracing::warn!("DEBUG: AgentStatusUpdate event received, {} agents", agents.len());
                 // Update the active agents list from the event and track timing
                 self.active_agents.clear();
                 let now = Instant::now();
@@ -6762,6 +6856,8 @@ impl ChatWidget<'_> {
                     });
                 }
 
+                spec_kit::handler::record_agent_costs(self, &agents);
+
                 self.update_agents_terminal_state(&agents, context.clone(), task.clone());
 
                 // Store shared context and task
@@ -6779,18 +6875,49 @@ impl ChatWidget<'_> {
                             .agent_runtime
                             .values()
                             .all(|rt| rt.completed_at.is_some());
+                    tracing::warn!("DEBUG: Agent terminal check - all_terminal={}, runtime_count={}", all_agents_terminal, self.agent_runtime.len());
                     if all_agents_terminal {
                         let any_tools_running = !self.exec.running_commands.is_empty()
                             || !self.tools_state.running_custom_tools.is_empty()
                             || !self.tools_state.running_web_search.is_empty();
                         let any_streaming = self.stream.is_write_cycle_active();
+                        tracing::warn!("DEBUG: Tools running={}, streaming={}", any_tools_running, any_streaming);
+
+                        // Log completion check for spec-auto observability
+                        if let Some(state) = self.spec_auto_state.as_ref() {
+                            if let Some(run_id) = &state.run_id {
+                                if let Some(stage) = state.current_stage() {
+                                    let completed_count = self.active_agents.iter()
+                                        .filter(|a| matches!(a.status, crate::chatwidget::AgentStatus::Completed))
+                                        .count();
+
+                                    state.execution_logger.log_event(
+                                        spec_kit::execution_logger::ExecutionEvent::CompletionCheck {
+                                            run_id: run_id.clone(),
+                                            stage: stage.display_name().to_string(),
+                                            all_agents_terminal,
+                                            tools_running: any_tools_running,
+                                            streaming_active: any_streaming,
+                                            will_proceed: !(any_tools_running || any_streaming),
+                                            agent_count: self.agent_runtime.len(),
+                                            completed_count,
+                                            timestamp: spec_kit::execution_logger::ExecutionEvent::now(),
+                                        }
+                                    );
+                                }
+                            }
+                        }
 
                         if !(any_tools_running || any_streaming) {
+                            tracing::warn!("DEBUG: All agents terminal, no tools/streaming, calling spec_kit completion handler");
                             self.bottom_pane.set_task_running(false);
                             self.bottom_pane.update_status_text(String::new());
 
                             // NEW: Check if this is part of spec-auto pipeline
+                            tracing::warn!("DEBUG: About to call spec_kit::on_spec_auto_agents_complete");
                             spec_kit::on_spec_auto_agents_complete(self);
+                            tracing::warn!("DEBUG: Returned from spec_kit::on_spec_auto_agents_complete");
+                            self.finish_manual_validate_runs_if_idle();
                         }
                     }
                 }
@@ -6947,6 +7074,18 @@ impl ChatWidget<'_> {
 
     fn request_redraw(&mut self) {
         self.app_event_tx.send(AppEvent::RequestRedraw);
+    }
+
+    pub(crate) fn spec_cost_tracker(&self) -> Arc<spec_kit::cost_tracker::CostTracker> {
+        self.cost_tracker.clone()
+    }
+
+    pub(crate) fn cost_summary_dir(&self) -> PathBuf {
+        self
+            .config
+            .cwd
+            .join(spec_kit::evidence::DEFAULT_EVIDENCE_BASE)
+            .join("costs")
     }
 
     pub(crate) fn handle_perf_command(&mut self, args: String) {
@@ -13335,15 +13474,174 @@ impl ChatWidget<'_> {
         }
         use crate::chatwidget::message::UserMessage;
         use codex_core::protocol::InputItem;
+
+        let mut manual_validate_context: Option<(
+            String,
+            ValidateLifecycle,
+            ValidateRunInfo,
+            String,
+        )> = None;
+
+        if let Some((spec_id, _args)) = parse_validate_command(display.trim()) {
+            let lifecycle = self.ensure_validate_lifecycle(&spec_id);
+            let payload_hash = spec_kit::compute_validate_payload_hash(
+                ValidateMode::Manual,
+                SpecStage::Validate,
+                &spec_id,
+                prompt.as_str(),
+            );
+
+            match lifecycle.begin(ValidateMode::Manual, &payload_hash) {
+                ValidateBeginOutcome::Started(info) => {
+                    spec_kit::record_validate_lifecycle_event(
+                        self,
+                        &spec_id,
+                        &info.run_id,
+                        info.attempt,
+                        info.dedupe_count,
+                        &payload_hash,
+                        info.mode,
+                        ValidateLifecycleEvent::Queued,
+                    );
+                    manual_validate_context =
+                        Some((spec_id.clone(), lifecycle.clone(), info, payload_hash));
+                }
+                ValidateBeginOutcome::Duplicate(info) | ValidateBeginOutcome::Conflict(info) => {
+                    spec_kit::record_validate_lifecycle_event(
+                        self,
+                        &spec_id,
+                        &info.run_id,
+                        info.attempt,
+                        info.dedupe_count,
+                        &payload_hash,
+                        info.mode,
+                        ValidateLifecycleEvent::Deduped,
+                    );
+
+                    let mut lines: Vec<ratatui::text::Line<'static>> = Vec::new();
+                    lines.push(ratatui::text::Line::from(format!(
+                        "⚠ Validate run already active (run_id: {}, attempt: {})",
+                        info.run_id, info.attempt
+                    )));
+                    lines.push(ratatui::text::Line::from(
+                        "Current run must finish or be cancelled before triggering another.",
+                    ));
+                    self.history_push(crate::history_cell::PlainHistoryCell::new(
+                        lines,
+                        crate::history_cell::HistoryCellType::Notice,
+                    ));
+                    return;
+                }
+            }
+        }
+
         let mut ordered = Vec::new();
         if !prompt.trim().is_empty() {
-            ordered.push(InputItem::Text { text: prompt });
+            ordered.push(InputItem::Text {
+                text: prompt.clone(),
+            });
         }
         let msg = UserMessage {
             display_text: display,
             ordered_items: ordered,
         };
         self.submit_user_message(msg);
+
+        if let Some((spec_id, lifecycle, info, payload_hash)) = manual_validate_context {
+            if let Some(updated) = lifecycle.mark_dispatched(&info.run_id) {
+                spec_kit::record_validate_lifecycle_event(
+                    self,
+                    &spec_id,
+                    &updated.run_id,
+                    updated.attempt,
+                    updated.dedupe_count,
+                    &payload_hash,
+                    updated.mode,
+                    ValidateLifecycleEvent::Dispatched,
+                );
+            }
+        }
+    }
+
+    /// Submit prompt with ACE bullet injection (async)
+    ///
+    /// Fetches bullets from ACE playbook asynchronously and injects before submission.
+    /// Shows "preparing" message while fetching bullets.
+    pub(crate) fn submit_prompt_with_ace(
+        &mut self,
+        display: String,
+        prompt: String,
+        command_name: &str,
+    ) {
+        // If ACE disabled or not applicable, submit immediately
+        if !spec_kit::ace_prompt_injector::should_use_ace(&self.config.ace, command_name) {
+            self.submit_prompt_with_display(display, prompt);
+            return;
+        }
+
+        // Show preparing message
+        self.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![ratatui::text::Line::from("⏳ Preparing prompt with ACE context...")],
+            crate::history_cell::HistoryCellType::Notice,
+        ));
+
+        // Clone data for async task
+        let config = self.config.ace.clone();
+        let repo_root = spec_kit::routing::get_repo_root(&self.config.cwd)
+            .unwrap_or_else(|| ".".to_string());
+        let branch = spec_kit::routing::get_current_branch(&self.config.cwd)
+            .unwrap_or_else(|| "main".to_string());
+        let cmd_name = command_name.to_string();
+        let tx = self.app_event_tx.clone();
+
+        // Spawn async injection task
+        tokio::spawn(async move {
+            let scope = spec_kit::ace_prompt_injector::command_to_scope(&cmd_name);
+
+            let enhanced_prompt = if let Some(scope) = scope {
+                match spec_kit::ace_client::playbook_slice(
+                    repo_root,
+                    branch,
+                    scope.to_string(),
+                    config.slice_size,
+                    false,
+                )
+                .await
+                {
+                    spec_kit::ace_client::AceResult::Ok(response) => {
+                        // Format and inject bullets
+                        let selected = spec_kit::ace_prompt_injector::select_bullets(
+                            response.bullets,
+                            config.slice_size,
+                        );
+                        let (ace_section, _ids) =
+                            spec_kit::ace_prompt_injector::format_ace_section(&selected);
+
+                        if !ace_section.is_empty() {
+                            // Inject before <task>
+                            if let Some(pos) = prompt.find("<task>") {
+                                let mut enhanced = prompt.clone();
+                                enhanced.insert_str(pos, &ace_section);
+                                enhanced
+                            } else {
+                                format!("{}\n\n{}", ace_section, prompt)
+                            }
+                        } else {
+                            prompt
+                        }
+                    }
+                    _ => prompt,
+                }
+            } else {
+                prompt
+            };
+
+            // Submit via event
+            let _ = tx.send(crate::app_event::AppEvent::SubmitPreparedPrompt {
+                display,
+                prompt: enhanced_prompt,
+            });
+        });
     }
 
     /// Submit a visible text message, but prepend a hidden instruction that is
@@ -14577,7 +14875,8 @@ impl ChatWidget<'_> {
                     "Consensus synthesis stage mismatch: expected {}, found {}",
                     stage.command_name(),
                     raw_stage
-                ).into());
+                )
+                .into());
             }
         }
 
@@ -14586,7 +14885,8 @@ impl ChatWidget<'_> {
                 return Err(format!(
                     "Consensus synthesis spec mismatch: expected {}, found {}",
                     spec_id, raw_spec
-                ).into());
+                )
+                .into());
             }
         }
 
@@ -15973,6 +16273,27 @@ fn parse_spec_stage_invocation(input: &str) -> Option<SpecStageInvocation> {
         .or_else(|| parse_for_stage("/spec-review ", SpecStage::Audit))
         .or_else(|| parse_for_stage("/spec-audit ", SpecStage::Audit))
         .or_else(|| parse_for_stage("/spec-unlock ", SpecStage::Unlock))
+}
+
+fn parse_validate_command(input: &str) -> Option<(String, String)> {
+    let trimmed = input.trim();
+    if !trimmed.starts_with('/') {
+        return None;
+    }
+
+    let mut parts = trimmed[1..].split_whitespace();
+    let command = parts.next()?.to_ascii_lowercase();
+    let is_validate = matches!(
+        command.as_str(),
+        "speckit.validate" | "spec-validate" | "spec-ops-validate"
+    );
+    if !is_validate {
+        return None;
+    }
+
+    let spec_id = parts.next()?.to_string();
+    let remainder = parts.collect::<Vec<_>>().join(" ");
+    Some((spec_id, remainder))
 }
 
 impl ChatWidget<'_> {
@@ -21341,7 +21662,11 @@ impl spec_kit::SpecKitContext for ChatWidget<'_> {
         ChatWidget::history_push(self, cell);
     }
 
-    fn push_background(&mut self, message: String, placement: crate::app_event::BackgroundPlacement) {
+    fn push_background(
+        &mut self,
+        message: String,
+        placement: crate::app_event::BackgroundPlacement,
+    ) {
         self.insert_background_event_with_placement(message, placement);
     }
 
@@ -21403,7 +21728,12 @@ impl spec_kit::SpecKitContext for ChatWidget<'_> {
         self.submit_user_message(user_msg);
     }
 
-    fn execute_spec_ops_command(&mut self, command: SlashCommand, args: String, hal_mode: Option<HalMode>) {
+    fn execute_spec_ops_command(
+        &mut self,
+        command: SlashCommand,
+        args: String,
+        hal_mode: Option<HalMode>,
+    ) {
         self.handle_spec_ops_command(command, args, hal_mode);
     }
 
@@ -21421,8 +21751,13 @@ impl spec_kit::SpecKitContext for ChatWidget<'_> {
             .any(|a| matches!(a.status, crate::chatwidget::AgentStatus::Failed))
     }
 
-    fn show_quality_gate_modal(&mut self, checkpoint: spec_kit::QualityCheckpoint, questions: Vec<spec_kit::EscalatedQuestion>) {
-        self.bottom_pane.show_quality_gate_modal(checkpoint, questions);
+    fn show_quality_gate_modal(
+        &mut self,
+        checkpoint: spec_kit::QualityCheckpoint,
+        questions: Vec<spec_kit::EscalatedQuestion>,
+    ) {
+        self.bottom_pane
+            .show_quality_gate_modal(checkpoint, questions);
     }
 }
 // === END FORK-SPECIFIC ===

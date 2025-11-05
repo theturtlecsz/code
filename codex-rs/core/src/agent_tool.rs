@@ -161,6 +161,55 @@ impl AgentManager {
         .await
     }
 
+    /// Create agent using config name lookup (SPEC-KIT-900: Proper agent abstraction)
+    ///
+    /// This is the CORRECT way to spawn agents with specific model configurations.
+    ///
+    /// # Arguments
+    /// * `config_name` - Name from [[agents]] config (e.g., "gemini_flash", "claude_haiku")
+    /// * `agent_configs` - Vec of AgentConfig from config.toml
+    /// * `prompt` - Task prompt
+    /// * `read_only` - Whether agent runs read-only
+    /// * `batch_id` - Optional batch identifier
+    ///
+    /// # Returns
+    /// Agent ID if spawned successfully, error if config not found
+    pub async fn create_agent_from_config_name(
+        &mut self,
+        config_name: &str,
+        agent_configs: &[AgentConfig],
+        prompt: String,
+        read_only: bool,
+        batch_id: Option<String>,
+    ) -> Result<String, String> {
+        // Look up agent config by name
+        let agent_config = agent_configs
+            .iter()
+            .find(|c| c.name == config_name)
+            .ok_or_else(|| format!("Agent config '{}' not found in config.toml", config_name))?;
+
+        if !agent_config.enabled {
+            return Err(format!("Agent '{}' is disabled in config", config_name));
+        }
+
+        // Use the base command name as the "model" for execute_agent matching
+        // The actual model/args come from config
+        let base_command = agent_config.command.clone();
+
+        let agent_id = self.create_agent_internal(
+            base_command,  // "gemini", "claude", "codex", etc. (for execute_agent matching)
+            prompt,
+            None, // context
+            None, // output_goal
+            vec![], // files
+            read_only,
+            batch_id,
+            Some(agent_config.clone()),
+        ).await;
+
+        Ok(agent_id)
+    }
+
     pub async fn create_agent_with_config(
         &mut self,
         model: String,

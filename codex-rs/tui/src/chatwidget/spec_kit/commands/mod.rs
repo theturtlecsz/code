@@ -10,6 +10,7 @@ mod plan;
 mod quality;
 mod special;
 mod status;
+pub mod verify;
 
 // Re-export all commands
 pub use guardrail::*;
@@ -17,3 +18,4 @@ pub use plan::*;
 pub use quality::*;
 pub use special::*;
 pub use status::*;
+pub use verify::*;

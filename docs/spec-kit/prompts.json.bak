@@ -1,0 +1,185 @@
+{
+  "spec-plan": {
+    "version": "20251002-plan-a",
+    "gemini": {
+      "role": "Researcher",
+      "prompt": "Context:\n- Template: ~/.code/templates/plan-template.md (reference structure)\n${CONTEXT}\nStructure aligns with plan-template.md.\n\nTask:\nSurvey SPEC ${SPEC_ID}. Summarize:\n1. Acceptance criteria and evidence requirements.\n2. Conflicts, gaps, stale telemetry, blocked tasks.\n3. Related files/modules/tests worth touching.\n4. Questions to clarify before planning.\nKeep under 400 words. Cite file paths or memory IDs.\n\nOutput JSON:\n{\n  \"stage\": \"spec-plan\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"gemini\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"research_summary\": [ { \"topic\": string, \"details\": string } ],\n  \"questions\": [ string ]\n}\nPersist to local-memory (spec-tracker)."
+    },
+    "claude": {
+      "role": "Synthesizer",
+      "prompt": "Inputs:\n- SPEC packet\n- Gemini research (${PREVIOUS_OUTPUTS.gemini})\n- Template: ~/.code/templates/plan-template.md (reference for output structure)\n\nProduce JSON:\n{\n  \"stage\": \"spec-plan\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"claude\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"work_breakdown\": [ { \"step\": string, \"rationale\": string, \"success_signal\": string } ],\n  \"acceptance_mapping\": [ { \"requirement\": string, \"validation_step\": string, \"artifact\": string } ],\n  \"risks\": [ { \"risk\": string, \"owner\": string, \"mitigation\": string } ]\n}\nFill arrays to match plan-template.md structure. Use ${PREVIOUS_OUTPUTS.gemini} for context."
+    },
+    "gpt_pro": {
+      "role": "Executor & QA",
+      "prompt": "Inputs:\n- SPEC packet\n- Gemini and Claude outputs (${PREVIOUS_OUTPUTS})\n- Template: ~/.code/templates/plan-template.md (structure reference)\n\nValidate feasibility and emit JSON:\n{\n  \"stage\": \"spec-plan\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"gpt_pro\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"feasibility_notes\": [ string ],\n  \"missing_items\": [ string ],\n  \"final_plan\": {\n    \"work_breakdown\": [...copy of consensus steps...],\n    \"acceptance_mapping\": [...],\n    \"risks\": [...],\n    \"consensus\": { \"agreements\": [ string ], \"conflicts\": [ string ] }\n  }\n}\nJSON structure aligns with plan-template.md sections. Reference local evidence paths."
+    }
+  },
+  "spec-tasks": {
+    "version": "20251002-tasks-a",
+    "gemini": {
+      "role": "Researcher",
+      "prompt": "Context:\n- Template: ~/.code/templates/tasks-template.md (reference structure)\n${CONTEXT}\nStructure aligns with tasks-template.md.\n\nOutput JSON:\n{\n  \"stage\": \"spec-tasks\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"gemini\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"surfaces\": [ { \"area\": string, \"files\": [string], \"tests\": [string], \"notes\": string } ],\n  \"dependencies\": [ string ],\n  \"spec_status\": [ { \"task_id\": string, \"status\": string } ]\n}\nIdentify dependencies or blockers for ${SPEC_ID}."
+    },
+    "claude": {
+      "role": "Synthesizer",
+      "prompt": "Template: ~/.code/templates/tasks-template.md\n\nInputs: SPEC packet, Gemini analysis (${PREVIOUS_OUTPUTS.gemini}), Plan summary (${PREVIOUS_OUTPUTS.plan}).\n\nProduce JSON:\n{\n  \"stage\": \"spec-tasks\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"claude\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"tasks\": [ { \"order\": number, \"task_id\": string, \"title\": string, \"status\": string, \"validation_step\": string, \"artifact\": string, \"notes\": string } ],\n  \"acceptance_coverage\": [ string ],\n  \"followups\": [ string ]\n}\nEnsure acceptance mapping coverage and include lint/tests."
+    },
+    "gpt_pro": {
+      "role": "Executor & QA",
+      "prompt": "Template: ~/.code/templates/tasks-template.md\n\nReview Gemini/Claude JSON outputs, verify guardrail requirements (branch cleanliness, lint/test hooks). Emit JSON:\n{\n  \"stage\": \"spec-tasks\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"gpt_pro\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"validated_tasks\": [...],\n  \"command_plan\": [ string ],\n  \"consensus\": { \"agreements\": [ string ], \"conflicts\": [ string ] }\n}\nReference SPEC.md update steps and docs paths."
+    }
+  },
+  "spec-implement": {
+    "version": "20251002-implement-a",
+    "gemini": {
+      "prompt": "Template: ~/.code/templates/implement-template.md\n\nGiven ${CONTEXT} and task list (${PREVIOUS_OUTPUTS.tasks}), emit JSON:\n{\n  \"stage\": \"spec-implement\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"gemini\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"code_paths\": [ { \"area\": string, \"files\": [string], \"notes\": string } ],\n  \"recent_changes\": [ string ],\n  \"edge_cases\": [ string ],\n  \"tests\": [ string ]\n}\nFlag tricky integration points."
+    },
+    "claude": {
+      "prompt": "Template: ~/.code/templates/implement-template.md\n\nOutline implementation strategy as JSON:\n{\n  \"stage\": \"spec-implement\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"claude\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"approach\": [ { \"task_id\": string, \"summary\": string } ],\n  \"operations\": [ { \"file\": string, \"change_type\": string, \"description\": string } ],\n  \"validation_plan\": [ { \"command\": string, \"purpose\": string } ]\n}\nReference Gemini findings."
+    },
+    "gpt_codex": {
+      "prompt": "Template: ~/.code/templates/implement-template.md\n\nEmit code diff proposals as JSON:\n{\n  \"stage\": \"spec-implement\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"gpt_codex\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"diff_proposals\": [ { \"path\": string, \"change\": string (diff or summary), \"rationale\": string, \"confidence\": number } ],\n  \"test_commands\": [ string ],\n  \"tool_calls\": [ string ],\n  \"risks\": [ string ]\n}\nKeep output terse and focus on actionable edits."
+    },
+    "gpt_pro": {
+      "prompt": "Template: ~/.code/templates/implement-template.md\n\nValidate feasibility, schedule `/spec-ops-implement`, and output JSON:\n{\n  \"stage\": \"spec-implement\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"gpt_pro\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"checklist\": [ { \"step\": string, \"command\": string } ],\n  \"risks\": [ { \"risk\": string, \"mitigation\": string } ],\n  \"consensus\": { \"agreements\": [ string ], \"conflicts\": [ string ] }\n}\nApply diffs only when orchestrator runs."
+    }
+  },
+  "spec-validate": {
+    "version": "20251002-validate-a",
+    "gemini": {
+      "prompt": "Template: ~/.code/templates/validate-template.md\n\nSummarize telemetry from `/spec-ops-validate` as JSON:\n{\n  \"stage\": \"spec-validate\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"gemini\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"scenarios\": [ { \"name\": string, \"status\": string, \"failures\": [string], \"log\": string } ],\n  \"evidence\": [ string ]\n}"
+    },
+    "claude": {
+      "prompt": "Template: ~/.code/templates/validate-template.md\n\nCrosswalk acceptance criteria vs telemetry results. Output JSON:\n{\n  \"stage\": \"spec-validate\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"claude\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"analysis\": [ { \"requirement\": string, \"status\": string, \"notes\": string } ],\n  \"remediation\": [ string ]\n}"
+    },
+    "gpt_pro": {
+      "prompt": "Template: ~/.code/templates/validate-template.md\n\nConfirm shell outputs, ensure evidence hashes exist, and deliver final decision as JSON:\n{\n  \"stage\": \"spec-validate\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"gpt_pro\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"decision\": string,\n  \"next_actions\": [ string ],\n  \"consensus\": { \"agreements\": [ string ], \"conflicts\": [ string ] }\n}"
+    }
+  },
+  "spec-audit": {
+    "version": "20251002-audit-a",
+    "gemini": {
+      "prompt": "Template: ~/.code/templates/audit-template.md\n\nCollect audit artifacts and emit JSON:\n{\n  \"stage\": \"spec-audit\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"gemini\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"diff_summary\": string,\n  \"telemetry\": [ string ],\n  \"todos\": [ string ],\n  \"compliance_flags\": [ string ]\n}"
+    },
+    "claude": {
+      "prompt": "Template: ~/.code/templates/audit-template.md\n\nDraft audit memo as JSON:\n{\n  \"stage\": \"spec-audit\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"claude\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"decision\": string,\n  \"evidence\": [ { \"name\": string, \"path\": string } ],\n  \"risks\": [ { \"risk\": string, \"mitigation\": string } ],\n  \"open_items\": [ string ]\n}"
+    },
+    "gpt_pro": {
+      "prompt": "Template: ~/.code/templates/audit-template.md\n\nVerify guardrails and output JSON:\n{\n  \"stage\": \"spec-audit\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"gpt_pro\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"checks\": [ { \"item\": string, \"status\": string } ],\n  \"recommendation\": string,\n  \"conditions\": [ string ],\n  \"consensus\": { \"agreements\": [ string ], \"conflicts\": [ string ] }\n}"
+    }
+  },
+  "spec-unlock": {
+    "version": "20251002-unlock-a",
+    "gemini": {
+      "prompt": "Template: ~/.code/templates/unlock-template.md\n\nExplain lock context as JSON:\n{\n  \"stage\": \"spec-unlock\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"gemini\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"branch_state\": string,\n  \"pending_work\": [ string ],\n  \"risks\": [ string ]\n}"
+    },
+    "claude": {
+      "prompt": "Template: ~/.code/templates/unlock-template.md\n\nWrite unlock justification memo as JSON:\n{\n  \"stage\": \"spec-unlock\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"claude\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"rationale\": string,\n  \"safeguards\": [ string ],\n  \"followups\": [ string ]\n}"
+    },
+    "gpt_pro": {
+      "prompt": "Template: ~/.code/templates/unlock-template.md\n\nCheck guardrail compliance and decide unlock as JSON:\n{\n  \"stage\": \"spec-unlock\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"gpt_pro\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"decision\": string,\n  \"steps\": [ string ],\n  \"consensus\": { \"agreements\": [ string ], \"conflicts\": [ string ] }\n}"
+    }
+  },
+  "spec-auto": {
+    "version": "20251002-auto-notes-a",
+    "orchestrator_notes": [
+      "Before each stage: ensure guardrail shell succeeded; fan out prompts above; collect outputs.",
+      "After each stage: persist Gemini/Claude/GPT transcripts (with MCP IDs) to evidence dir and local-memory.",
+      "On failure: emit resume token {stage, reason, suggested fix}."
+    ]
+  },
+  "spec-clarify": {
+    "version": "20251028-clarify-a",
+    "gemini": {
+      "role": "Ambiguity Scout",
+      "prompt": "Context surfaces:\n- SPEC packet excerpts\n- PRD sections for ${SPEC_ID}\n- Prior consensus artifacts (plan/tasks if available)\n${CONTEXT}\n\nTask:\nIdentify up to five unresolved ambiguities that would block implementation. For each, attempt an authoritative answer based on industry norms or existing requirements.\n\nOutput JSON:\n{\n  \"stage\": \"spec-clarify\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"gemini\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"issues\": [ {\n      \"id\": string,\n      \"question\": string,\n      \"proposed_answer\": string|null,\n      \"confidence\": \"high\"|\"medium\"|\"low\",\n      \"magnitude\": \"critical\"|\"important\"|\"minor\",\n      \"resolvability\": \"auto-fix\"|\"suggest-fix\"|\"need-human\",\n      \"reasoning\": string,\n      \"evidence\": [string]\n  } ]\n}\nPersist JSON via local-memory store (tags: spec:${SPEC_ID}, stage:clarify, consensus-artifact, importance>=8)."
+    },
+    "claude": {
+      "role": "Consensus Resolver",
+      "prompt": "Inputs:\n- SPEC + PRD extracts\n- Gemini findings (${PREVIOUS_OUTPUTS.gemini})\n- Any prior stage syntheses\n\nTask:\nValidate or refine ambiguity answers, escalating anything that must go back to product/architecture.\n\nOutput JSON:\n{\n  \"stage\": \"spec-clarify\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"claude\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"issues\": [ {\n      \"id\": string,\n      \"question\": string,\n      \"answer\": string|null,\n      \"confidence\": \"high\"|\"medium\"|\"low\",\n      \"magnitude\": \"critical\"|\"important\"|\"minor\",\n      \"resolvability\": \"auto-fix\"|\"suggest-fix\"|\"need-human\",\n      \"reasoning\": string,\n      \"followup_action\": string|null\n  } ],\n  \"open_questions\": [ string ]\n}\nStore JSON to local-memory with tags spec:${SPEC_ID}, stage:clarify, consensus-artifact."
+    },
+    "code": {
+      "role": "Implementation Lens",
+      "prompt": "Focus on technical blockers for SPEC ${SPEC_ID}. Combine SPEC/PRD context with plan/tasks (if any) to answer: what do engineers still need to know?\n\nOutput JSON:\n{\n  \"stage\": \"spec-clarify\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"code\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"issues\": [ {\n      \"id\": string,\n      \"question\": string,\n      \"answer\": string|null,\n      \"confidence\": \"high\"|\"medium\"|\"low\",\n      \"magnitude\": \"critical\"|\"important\"|\"minor\",\n      \"resolvability\": \"auto-fix\"|\"suggest-fix\"|\"need-human\",\n      \"reasoning\": string,\n      \"related_files\": [string]\n  } ],\n  \"implementation_notes\": [ string ]\n}\nPersist to local-memory (tags spec:${SPEC_ID}, stage:clarify, consensus-artifact, importance>=8)."
+    }
+  },
+  "spec-analyze": {
+    "version": "20251028-analyze-a",
+    "gemini": {
+      "role": "Consistency Auditor",
+      "prompt": "Artifacts provided:\n${ARTIFACTS}\n\nGoal: Cross-check SPEC ${SPEC_ID} against downstream documents (plan/tasks/PRD). Flag gaps, contradictions, and terminology drift.\n\nOutput JSON mirrors quality-gate analyze schema but adds traceability:\n{\n  \"stage\": \"spec-analyze\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"gemini\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"issues\": [ {\n      \"id\": string,\n      \"type\": \"missing_requirement\"|\"terminology\"|\"contradiction\"|\"coverage_gap\",\n      \"description\": string,\n      \"severity\": \"critical\"|\"important\"|\"minor\",\n      \"affected_artifacts\": [string],\n      \"suggested_fix\": string|null,\n      \"confidence\": \"high\"|\"medium\"|\"low\",\n      \"resolvability\": \"auto-fix\"|\"suggest-fix\"|\"need-human\"\n  } ]\n}\nStore via local-memory (tags spec:${SPEC_ID}, stage:analyze, consensus-artifact)."
+    },
+    "claude": {
+      "role": "Validator",
+      "prompt": "Use SPEC, PRD, plan, tasks (if present) plus Gemini’s findings (${PREVIOUS_OUTPUTS.gemini}) to validate coverage. Escalate anything that threatens acceptance criteria.\n\nOutput JSON identical to spec-analyze schema but may collapse/merge issues. Include \"proposed_action\" when fix is obvious. Persist to local-memory with tags spec:${SPEC_ID}, stage:analyze, consensus-artifact."
+    },
+    "code": {
+      "role": "Implementation Checker",
+      "prompt": "From an engineering perspective, inspect references (files/tests) suggested by plan/tasks. Surface contradictions or missing detail that would break implementation.\n\nEmit the same spec-analyze JSON, adding \"implementation_hint\" inside each issue when a remediation command or file path is known. Store via local-memory (tags spec:${SPEC_ID}, stage:analyze, consensus-artifact)."
+    }
+  },
+  "spec-checklist": {
+    "version": "20251028-checklist-a",
+    "claude": {
+      "role": "Quality Assessor",
+      "prompt": "Evaluate requirement quality in SPEC ${SPEC_ID} (or PRD if SPEC delegates). Score using 0-10 rubric and note improvements.\n\nOutput JSON:\n{\n  \"stage\": \"spec-checklist\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"claude\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"requirements\": [ {\n      \"id\": string,\n      \"text\": string,\n      \"scores\": {\n        \"specificity\": number,\n        \"testability\": number,\n        \"completeness\": number,\n        \"clarity\": number\n      },\n      \"overall\": number,\n      \"needs_improvement\": boolean,\n      \"suggested_improvement\": string|null,\n      \"confidence\": \"high\"|\"medium\"|\"low\",\n      \"resolvability\": \"auto-fix\"|\"suggest-fix\"|\"need-human\"\n  } ],\n  \"summary\": string\n}\nPersist to local-memory (tags spec:${SPEC_ID}, stage:checklist, consensus-artifact)."
+    },
+    "code": {
+      "role": "Implementation Assessor",
+      "prompt": "Score requirements from implementability standpoint—focus on missing technical detail, test hooks, and integration clarity. Reuse spec-checklist JSON schema and ensure \"suggested_improvement\" points to specific files/tests when possible. Store via local-memory with tags spec:${SPEC_ID}, stage:checklist, consensus-artifact."
+    },
+    "gemini": {
+      "role": "Requirement Scorer",
+      "prompt": "Provide a quick first pass scoring (same schema) emphasising completeness and ambiguities. Keep feedback concise (<40 words per requirement). Persist with tags spec:${SPEC_ID}, stage:checklist, consensus-artifact."
+    }
+  },
+  "quality-gate-clarify": {
+    "version": "20251016-clarify-gate-a",
+    "gemini": {
+      "role": "Ambiguity Detector",
+      "prompt": "Analyze SPEC ${SPEC_ID} for ambiguities, unclear requirements, or missing details.\n\nClassification Rules:\n- confidence: high (obvious ambiguity), medium (probable), low (uncertain)\n- magnitude: critical (blocks progress), important (significant), minor (nice-to-have)\n- resolvability: auto-fix (industry standard/obvious), suggest-fix (reasonable default), need-human (judgment required)\n\nOutput JSON:\n{\n  \"stage\": \"quality-gate-clarify\",\n  \"agent\": \"gemini\",\n  \"model\": \"${MODEL_ID}\",\n  \"issues\": [\n    {\n      \"id\": string,\n      \"question\": string,\n      \"answer\": string (your answer),\n      \"confidence\": \"high\"|\"medium\"|\"low\",\n      \"magnitude\": \"critical\"|\"important\"|\"minor\",\n      \"resolvability\": \"auto-fix\"|\"suggest-fix\"|\"need-human\",\n      \"reasoning\": string,\n      \"context\": string,\n      \"affected_requirements\": [string]\n    }\n  ]\n}\n\nAuto-fix examples: \"Log errors?\"→yes, \"HTTPS?\"→yes (security). Escalate architectural decisions."
+    },
+    "claude": {
+      "role": "Ambiguity Resolver",
+      "prompt": "Review SPEC ${SPEC_ID} for unclear or ambiguous requirements.\n\nFor each ambiguity:\n1. Determine if answer is obvious (industry standard, security best practice)\n2. Classify confidence based on your certainty\n3. Assess impact (critical architectural decision vs minor detail)\n\nOutput JSON:\n{\n  \"stage\": \"quality-gate-clarify\",\n  \"agent\": \"claude\",\n  \"model\": \"${MODEL_ID}\",\n  \"issues\": [\n    {\n      \"id\": string,\n      \"question\": string,\n      \"answer\": string,\n      \"confidence\": \"high\"|\"medium\"|\"low\",\n      \"magnitude\": \"critical\"|\"important\"|\"minor\",\n      \"resolvability\": \"auto-fix\"|\"suggest-fix\"|\"need-human\",\n      \"reasoning\": string,\n      \"context\": string\n    }\n  ]\n}\n\nBe conservative: if unsure or critical, mark need-human."
+    },
+    "code": {
+      "role": "Implementation Validator",
+      "prompt": "Identify ambiguities in SPEC ${SPEC_ID} from implementation perspective.\n\nFocus on:\n- Missing technical details (APIs, data formats, protocols)\n- Unclear acceptance criteria\n- Implementation assumptions\n\nOutput JSON:\n{\n  \"stage\": \"quality-gate-clarify\",\n  \"agent\": \"code\",\n  \"model\": \"${MODEL_ID}\",\n  \"issues\": [\n    {\n      \"id\": string,\n      \"question\": string,\n      \"answer\": string (technical answer),\n      \"confidence\": \"high\"|\"medium\"|\"low\",\n      \"magnitude\": \"critical\"|\"important\"|\"minor\",\n      \"resolvability\": \"auto-fix\"|\"suggest-fix\"|\"need-human\",\n      \"reasoning\": string,\n      \"context\": string\n    }\n  ]\n}\n\nMark architectural or business decisions as need-human."
+    }
+  },
+  "quality-gate-checklist": {
+    "version": "20251016-checklist-gate-a",
+    "gemini": {
+      "role": "Requirement Scorer",
+      "prompt": "Score each requirement in SPEC ${SPEC_ID} on 0-10 scale.\n\nCriteria:\n- Specificity: Concrete vs vague\n- Testability: Can verify completion\n- Completeness: All details present\n- Clarity: Unambiguous language\n\nFor requirements scoring <6.0, suggest improvement if obvious.\n\nOutput JSON:\n{\n  \"stage\": \"quality-gate-checklist\",\n  \"agent\": \"gemini\",\n  \"model\": \"${MODEL_ID}\",\n  \"requirements\": [\n    {\n      \"id\": string,\n      \"text\": string,\n      \"scores\": {\n        \"specificity\": number,\n        \"testability\": number,\n        \"completeness\": number,\n        \"clarity\": number\n      },\n      \"overall\": number (average),\n      \"needs_improvement\": boolean (<6.0),\n      \"suggested_improvement\": string|null,\n      \"confidence\": \"high\"|\"medium\"|\"low\",\n      \"resolvability\": \"auto-fix\"|\"suggest-fix\"|\"need-human\"\n    }\n  ]\n}"
+    },
+    "claude": {
+      "role": "Quality Assessor",
+      "prompt": "Evaluate requirement quality in SPEC ${SPEC_ID}. Score 0-10, suggest improvements.\n\nOutput JSON:\n{\n  \"stage\": \"quality-gate-checklist\",\n  \"agent\": \"claude\",\n  \"model\": \"${MODEL_ID}\",\n  \"requirements\": [\n    {\n      \"id\": string,\n      \"text\": string,\n      \"scores\": {\"specificity\": number, \"testability\": number, \"completeness\": number, \"clarity\": number},\n      \"overall\": number,\n      \"needs_improvement\": boolean,\n      \"suggested_improvement\": string|null,\n      \"confidence\": \"high\"|\"medium\"|\"low\",\n      \"resolvability\": \"auto-fix\"|\"suggest-fix\"|\"need-human\"\n    }\n  ]\n}"
+    },
+    "code": {
+      "role": "Implementation Assessor",
+      "prompt": "Score requirements in SPEC ${SPEC_ID} from implementability perspective.\n\nOutput JSON:\n{\n  \"stage\": \"quality-gate-checklist\",\n  \"agent\": \"code\",\n  \"model\": \"${MODEL_ID}\",\n  \"requirements\": [\n    {\n      \"id\": string,\n      \"text\": string,\n      \"scores\": {\"specificity\": number, \"testability\": number, \"completeness\": number, \"clarity\": number},\n      \"overall\": number,\n      \"needs_improvement\": boolean,\n      \"suggested_improvement\": string|null,\n      \"confidence\": \"high\"|\"medium\"|\"low\",\n      \"resolvability\": \"auto-fix\"|\"suggest-fix\"|\"need-human\"\n    }\n  ]\n}"
+    }
+  },
+  "quality-gate-analyze": {
+    "version": "20251016-analyze-gate-a",
+    "gemini": {
+      "role": "Consistency Checker",
+      "prompt": "Check consistency between artifacts for SPEC ${SPEC_ID}.\n\nContext: ${ARTIFACTS} (spec.md, plan.md if post-plan, tasks.md if post-tasks)\n\nLook for:\n- Missing requirements in downstream artifacts\n- Terminology mismatches\n- Contradictions\n- Coverage gaps\n\nOutput JSON:\n{\n  \"stage\": \"quality-gate-analyze\",\n  \"agent\": \"gemini\",\n  \"model\": \"${MODEL_ID}\",\n  \"issues\": [\n    {\n      \"id\": string,\n      \"type\": \"missing_requirement\"|\"terminology\"|\"contradiction\"|\"coverage_gap\",\n      \"description\": string,\n      \"severity\": \"critical\"|\"important\"|\"minor\",\n      \"affected_artifacts\": [string],\n      \"suggested_fix\": string|null,\n      \"confidence\": \"high\"|\"medium\"|\"low\",\n      \"resolvability\": \"auto-fix\"|\"suggest-fix\"|\"need-human\"\n    }\n  ]\n}\n\nAuto-fix minor terminology issues. Escalate missing requirements."
+    },
+    "claude": {
+      "role": "Artifact Validator",
+      "prompt": "Validate artifact consistency for SPEC ${SPEC_ID}.\n\nArtifacts: ${ARTIFACTS}\n\nOutput JSON:\n{\n  \"stage\": \"quality-gate-analyze\",\n  \"agent\": \"claude\",\n  \"model\": \"${MODEL_ID}\",\n  \"issues\": [\n    {\n      \"id\": string,\n      \"type\": string,\n      \"description\": string,\n      \"severity\": \"critical\"|\"important\"|\"minor\",\n      \"affected_artifacts\": [string],\n      \"suggested_fix\": string|null,\n      \"confidence\": \"high\"|\"medium\"|\"low\",\n      \"resolvability\": \"auto-fix\"|\"suggest-fix\"|\"need-human\"\n    }\n  ]\n}"
+    },
+    "code": {
+      "role": "Coverage Validator",
+      "prompt": "Check that downstream artifacts cover all SPEC requirements.\n\nSPEC: ${SPEC_ID}\nArtifacts: ${ARTIFACTS}\n\nOutput JSON:\n{\n  \"stage\": \"quality-gate-analyze\",\n  \"agent\": \"code\",\n  \"model\": \"${MODEL_ID}\",\n  \"issues\": [\n    {\n      \"id\": string,\n      \"type\": string,\n      \"description\": string,\n      \"severity\": \"critical\"|\"important\"|\"minor\",\n      \"affected_artifacts\": [string],\n      \"suggested_fix\": string|null,\n      \"confidence\": \"high\"|\"medium\"|\"low\",\n      \"resolvability\": \"auto-fix\"|\"suggest-fix\"|\"need-human\"\n    }\n  ]\n}"
+    }
+  },
+  "gpt5-validation": {
+    "version": "20251016-validation-a",
+    "prompt": "You are validating a majority answer (2/3 agents agreed) for a quality gate issue.\n\nSPEC Content:\n${SPEC_CONTENT}\n\nPRD Content:\n${PRD_CONTENT}\n\nQuestion: ${QUESTION}\n\nAgent Answers:\n- Agent 1 (agrees): ${ANSWER_1} - Reasoning: ${REASONING_1}\n- Agent 2 (agrees): ${ANSWER_2} - Reasoning: ${REASONING_2}\n- Agent 3 (disagrees): ${ANSWER_3} - Reasoning: ${REASONING_3}\n\nMajority Answer: ${MAJORITY_ANSWER}\nDissenting Reasoning: ${DISSENT_REASONING}\n\nYour Task:\n1. Analyze SPEC intent and requirements context\n2. Evaluate if majority answer aligns with SPEC goals\n3. Consider if dissenting reasoning reveals valid concern\n4. Determine if majority should be applied or escalated\n\nOutput JSON:\n{\n  \"agrees_with_majority\": boolean,\n  \"reasoning\": string (detailed analysis),\n  \"recommended_answer\": string|null (if you disagree),\n  \"confidence\": \"high\"|\"medium\"|\"low\",\n  \"critical_flag\": boolean (true if issue is architectural/critical)\n}\n\nIf the dissenting view makes a valid point about SPEC intent, reject the majority."
+  }
+}

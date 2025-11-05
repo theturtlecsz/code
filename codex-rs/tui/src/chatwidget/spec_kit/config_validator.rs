@@ -88,7 +88,8 @@ impl SpecKitConfigValidator {
         if enabled_agents.is_empty() {
             errors.push(ValidationError {
                 field: "agents".to_string(),
-                issue: "No agents are enabled. Spec-kit requires at least 1 enabled agent.".to_string(),
+                issue: "No agents are enabled. Spec-kit requires at least 1 enabled agent."
+                    .to_string(),
                 severity: ValidationSeverity::Error,
             });
         }
@@ -119,7 +120,10 @@ impl SpecKitConfigValidator {
         // Warn if critical agents are disabled
         let critical_agents = ["gemini", "claude", "code"];
         for critical in &critical_agents {
-            if let Some(agent) = agents.iter().find(|a| a.name.eq_ignore_ascii_case(critical)) {
+            if let Some(agent) = agents
+                .iter()
+                .find(|a| a.name.eq_ignore_ascii_case(critical))
+            {
                 if !agent.enabled {
                     warnings.push(ValidationError {
                         field: format!("agents.{}", critical),
@@ -145,7 +149,10 @@ impl SpecKitConfigValidator {
             if !configured_commands.contains(cmd) {
                 warnings.push(ValidationError {
                     field: format!("subagent_commands.{}", cmd),
-                    issue: format!("Spec-kit command '{}' not configured, will use defaults", cmd),
+                    issue: format!(
+                        "Spec-kit command '{}' not configured, will use defaults",
+                        cmd
+                    ),
                     severity: ValidationSeverity::Info,
                 });
             }
@@ -172,7 +179,8 @@ impl SpecKitConfigValidator {
         if !git_dir.exists() {
             warnings.push(ValidationError {
                 field: "cwd".to_string(),
-                issue: "Not a git repository. Spec-kit requires git for commit generation.".to_string(),
+                issue: "Not a git repository. Spec-kit requires git for commit generation."
+                    .to_string(),
                 severity: ValidationSeverity::Warning,
             });
         }
@@ -236,7 +244,11 @@ mod tests {
         SpecKitConfigValidator::validate_agents(&agents, &mut errors, &mut warnings);
 
         assert!(!errors.is_empty());
-        assert!(errors.iter().any(|e| e.issue.contains("No agents are enabled")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.issue.contains("No agents are enabled"))
+        );
     }
 
     #[test]
@@ -262,21 +274,25 @@ mod tests {
         SpecKitConfigValidator::validate_agents(&[agent], &mut errors, &mut warnings);
 
         assert!(!errors.is_empty());
-        assert!(errors.iter().any(|e| e.issue.contains("command cannot be empty")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.issue.contains("command cannot be empty"))
+        );
     }
 
     #[test]
     fn test_validate_agents_disabled_critical_warns() {
         let agents = vec![
             make_agent("gemini", true),
-            make_agent("claude", false),  // Critical agent disabled
+            make_agent("claude", false), // Critical agent disabled
         ];
         let mut errors = Vec::new();
         let mut warnings = Vec::new();
 
         SpecKitConfigValidator::validate_agents(&agents, &mut errors, &mut warnings);
 
-        assert!(errors.is_empty());  // Not an error, just warning
+        assert!(errors.is_empty()); // Not an error, just warning
         assert!(warnings.iter().any(|w| w.field.contains("claude")));
     }
 
@@ -288,7 +304,7 @@ mod tests {
 
         SpecKitConfigValidator::validate_agents(&agents, &mut errors, &mut warnings);
 
-        assert!(errors.is_empty());  // Empty is OK (uses defaults)
+        assert!(errors.is_empty()); // Empty is OK (uses defaults)
         assert!(!warnings.is_empty());
     }
 

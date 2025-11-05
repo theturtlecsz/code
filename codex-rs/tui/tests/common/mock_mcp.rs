@@ -83,7 +83,13 @@ impl MockMcpManager {
     }
 
     /// Load fixture from JSON file
-    pub fn load_fixture_file(&mut self, server: &str, tool: &str, query_pattern: Option<&str>, path: &str) -> Result<()> {
+    pub fn load_fixture_file(
+        &mut self,
+        server: &str,
+        tool: &str,
+        query_pattern: Option<&str>,
+        path: &str,
+    ) -> Result<()> {
         let contents = std::fs::read_to_string(path)?;
         let fixture: Value = serde_json::from_str(&contents)?;
         self.add_fixture(server, tool, query_pattern, fixture);
@@ -201,7 +207,10 @@ mod tests {
         );
 
         let args = json!({"query": "SPEC-TEST plan"});
-        let result = mock.call_tool("local-memory", "search", Some(args), None).await.unwrap();
+        let result = mock
+            .call_tool("local-memory", "search", Some(args), None)
+            .await
+            .unwrap();
 
         assert_eq!(result.content.len(), 1);
         if let ContentBlock::TextContent(text) = &result.content[0] {
@@ -216,7 +225,14 @@ mod tests {
         let mut mock = MockMcpManager::new();
         mock.add_fixture("local-memory", "search", None, json!({}));
 
-        let _ = mock.call_tool("local-memory", "search", Some(json!({"query": "test"})), None).await;
+        let _ = mock
+            .call_tool(
+                "local-memory",
+                "search",
+                Some(json!({"query": "test"})),
+                None,
+            )
+            .await;
 
         let log = mock.call_log();
         assert_eq!(log.len(), 1);
@@ -228,10 +244,23 @@ mod tests {
     async fn test_mock_mcp_wildcard_matches() {
         let mut mock = MockMcpManager::new();
         // Add wildcard fixture (no query pattern)
-        mock.add_fixture("local-memory", "search", None, json!({"memory": {"content": "Wildcard"}}));
+        mock.add_fixture(
+            "local-memory",
+            "search",
+            None,
+            json!({"memory": {"content": "Wildcard"}}),
+        );
 
         // Should match any query
-        let result = mock.call_tool("local-memory", "search", Some(json!({"query": "anything"})), None).await.unwrap();
+        let result = mock
+            .call_tool(
+                "local-memory",
+                "search",
+                Some(json!({"query": "anything"})),
+                None,
+            )
+            .await
+            .unwrap();
 
         if let ContentBlock::TextContent(text) = &result.content[0] {
             assert!(text.text.contains("Wildcard"));

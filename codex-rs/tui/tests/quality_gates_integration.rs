@@ -8,9 +8,9 @@
 //! - File modifications and git commits
 
 use codex_tui::{
-    classify_issue_agreement, merge_agent_issues, parse_quality_issue_from_agent,
-    resolve_quality_issue, should_auto_resolve, Confidence, Magnitude, QualityCheckpoint,
-    QualityGateType, QualityIssue, Resolution, Resolvability,
+    Confidence, Magnitude, QualityCheckpoint, QualityGateType, QualityIssue, Resolution,
+    Resolvability, classify_issue_agreement, merge_agent_issues, parse_quality_issue_from_agent,
+    resolve_quality_issue, should_auto_resolve,
 };
 use serde_json::json;
 use std::collections::HashMap;
@@ -63,12 +63,8 @@ fn test_parse_agent_json_success() {
         ]
     });
 
-    let issues = parse_quality_issue_from_agent(
-        "gemini",
-        &agent_result,
-        QualityGateType::Clarify,
-    )
-    .expect("parse should succeed");
+    let issues = parse_quality_issue_from_agent("gemini", &agent_result, QualityGateType::Clarify)
+        .expect("parse should succeed");
 
     assert_eq!(issues.len(), 1);
     let issue = &issues[0];
@@ -85,11 +81,8 @@ fn test_parse_agent_json_missing_issues_array() {
         "no_issues_key": []
     });
 
-    let result = parse_quality_issue_from_agent(
-        "claude",
-        &agent_result,
-        QualityGateType::Checklist,
-    );
+    let result =
+        parse_quality_issue_from_agent("claude", &agent_result, QualityGateType::Checklist);
 
     assert!(result.is_err());
     let err = result.unwrap_err();
@@ -142,7 +135,12 @@ fn test_unanimous_issue_auto_resolves() {
     // Resolution should be AutoApply
     let resolution = resolve_quality_issue(&issue);
     match resolution {
-        Resolution::AutoApply { answer, confidence, reason, validation } => {
+        Resolution::AutoApply {
+            answer,
+            confidence,
+            reason,
+            validation,
+        } => {
             assert_eq!(answer, "yes");
             assert_eq!(confidence, Confidence::High);
             assert!(reason.contains("Unanimous"));
@@ -202,9 +200,18 @@ fn test_merge_issues_combines_agent_answers() {
     let merged_issue = &merged[0];
     assert_eq!(merged_issue.agent_answers.len(), 3);
     assert_eq!(merged_issue.confidence, Confidence::High); // Recalculated
-    assert_eq!(merged_issue.agent_answers.get("gemini"), Some(&"yes".to_string()));
-    assert_eq!(merged_issue.agent_answers.get("claude"), Some(&"yes".to_string()));
-    assert_eq!(merged_issue.agent_answers.get("code"), Some(&"yes".to_string()));
+    assert_eq!(
+        merged_issue.agent_answers.get("gemini"),
+        Some(&"yes".to_string())
+    );
+    assert_eq!(
+        merged_issue.agent_answers.get("claude"),
+        Some(&"yes".to_string())
+    );
+    assert_eq!(
+        merged_issue.agent_answers.get("code"),
+        Some(&"yes".to_string())
+    );
 }
 
 // ============================================================================
@@ -253,7 +260,11 @@ fn test_majority_issue_needs_validation() {
     // Resolution should escalate for GPT-5 validation
     let resolution = resolve_quality_issue(&issue);
     match resolution {
-        Resolution::Escalate { reason, recommended, .. } => {
+        Resolution::Escalate {
+            reason,
+            recommended,
+            ..
+        } => {
             assert!(reason.contains("GPT-5 validation needed"));
             assert_eq!(recommended, Some("OAuth2".to_string()));
         }
@@ -333,7 +344,11 @@ fn test_no_consensus_escalates() {
     // Resolution should escalate
     let resolution = resolve_quality_issue(&issue);
     match resolution {
-        Resolution::Escalate { reason, recommended, .. } => {
+        Resolution::Escalate {
+            reason,
+            recommended,
+            ..
+        } => {
             assert!(reason.contains("No agent consensus"));
             assert_eq!(recommended, None);
         }
@@ -441,12 +456,9 @@ fn test_parse_agent_json_defaults() {
         ]
     });
 
-    let issues = parse_quality_issue_from_agent(
-        "test-agent",
-        &agent_result,
-        QualityGateType::Analyze,
-    )
-    .expect("parse should succeed with defaults");
+    let issues =
+        parse_quality_issue_from_agent("test-agent", &agent_result, QualityGateType::Analyze)
+            .expect("parse should succeed with defaults");
 
     assert_eq!(issues.len(), 1);
     let issue = &issues[0];

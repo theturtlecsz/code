@@ -77,6 +77,9 @@ pub fn validate_guardrail_schema(stage: SpecStage, telemetry: &Value) -> Vec<Str
             require_string_field(telemetry, &["lock_status"], &mut failures);
             require_string_field(telemetry, &["hook_status"], &mut failures);
         }
+        SpecStage::Clarify | SpecStage::Analyze | SpecStage::Checklist => {
+            // Quality commands: no special telemetry fields required
+        }
         SpecStage::Validate | SpecStage::Audit => {
             match telemetry.get("scenarios") {
                 Some(Value::Array(scenarios)) if !scenarios.is_empty() => {
@@ -332,6 +335,15 @@ pub fn evaluate_guardrail_value(stage: SpecStage, value: &Value) -> GuardrailEva
                 failures,
             }
         }
+        SpecStage::Clarify | SpecStage::Analyze | SpecStage::Checklist => {
+            // Quality commands don't have guardrails (they are quality checks themselves)
+            // Return success by default if called
+            GuardrailEvaluation {
+                success: true,
+                summary: "Quality command (no guardrail)".to_string(),
+                failures: Vec::new(),
+            }
+        }
     }
 }
 
@@ -394,8 +406,10 @@ pub fn read_latest_spec_ops_telemetry(
         path: path.clone(),
         source: e,
     })?;
-    let value: Value =
-        serde_json::from_str(&buf).map_err(|e| SpecKitError::JsonParse { path: path.clone(), source: e })?;
+    let value: Value = serde_json::from_str(&buf).map_err(|e| SpecKitError::JsonParse {
+        path: path.clone(),
+        source: e,
+    })?;
     Ok((path, value))
 }
 
@@ -457,6 +471,13 @@ pub fn handle_guardrail_impl(
     raw_args: String,
     hal_override: Option<HalMode>,
 ) {
+    // SPEC-KIT-066, SPEC-KIT-902: Check if this is a native guardrail command
+    if command.spec_ops().is_none() {
+        // Native guardrail - run lightweight validation
+        handle_native_guardrail(widget, command, raw_args);
+        return;
+    }
+
     let Some(meta) = command.spec_ops() else {
         return;
     };
@@ -667,4 +688,190 @@ pub fn handle_guardrail_impl(
         env,
     });
     widget.request_redraw();
+}
+
+/// Handle native guardrail validation (SPEC-KIT-066, SPEC-KIT-902)
+fn handle_native_guardrail(
+    widget: &mut ChatWidget,
+    command: SlashCommand,
+    raw_args: String,
+) {
+    use crate::history_cell::HistoryCellType;
+
+    // Parse arguments
+    let trimmed = raw_args.trim();
+    if trimmed.is_empty() {
+        widget.history_push(crate::history_cell::new_error_event(format!(
+            "`/{}` requires a SPEC ID (e.g. `/{} SPEC-KIT-900`).",
+            command.command(),
+            command.command()
+        )));
+        widget.request_redraw();
+        return;
+    }
+
+    let mut tokens = trimmed.split_whitespace();
+    let spec_id = tokens.next().unwrap().to_string();
+
+    // Parse flags
+    let mut allow_dirty = false;
+    for token in tokens {
+        if token == "--allow-dirty" {
+            allow_dirty = true;
+        }
+    }
+
+    // Determine stage from command
+    let stage = match command {
+        SlashCommand::GuardrailPlan => SpecStage::Plan,
+        SlashCommand::GuardrailTasks => SpecStage::Tasks,
+        SlashCommand::GuardrailImplement => SpecStage::Implement,
+        SlashCommand::GuardrailValidate => SpecStage::Validate,
+        SlashCommand::GuardrailAudit => SpecStage::Audit,
+        SlashCommand::GuardrailUnlock => SpecStage::Unlock,
+        _ => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Unknown guardrail command: {}",
+                command.command()
+            )));
+            widget.request_redraw();
+            return;
+        }
+    };
+
+    // Run native guardrail validation ASYNCHRONOUSLY (Session 3 fix)
+    // This prevents UI from freezing during git status checks
+    let cwd = widget.config.cwd.clone();
+    let spec_id_clone = spec_id.clone();
+    let event_tx = widget.app_event_tx.clone();
+
+    tracing::info!("🔄 Starting async guardrail validation for {} stage", stage.display_name());
+
+    // Show immediate feedback
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+        vec![ratatui::text::Line::from(format!(
+            "Running guardrail validation for {} stage...",
+            stage.display_name()
+        ))],
+        crate::history_cell::HistoryCellType::Notice,
+    ));
+    widget.request_redraw();
+
+    // Spawn async task for guardrail validation
+    tokio::spawn(async move {
+        tracing::info!("📡 Async guardrail task started for {}", stage.display_name());
+
+        let result = super::native_guardrail::run_native_guardrail(
+            &cwd,
+            &spec_id_clone,
+            stage,
+            allow_dirty,
+        );
+
+        // Serialize result to JSON for event
+        let result_json = serde_json::to_string(&result).unwrap_or_else(|_| "{}".to_string());
+        let success = result.success;
+
+        // Send completion event
+        let _ = event_tx.send(crate::app_event::AppEvent::GuardrailComplete {
+            spec_id: spec_id_clone,
+            stage,
+            success,
+            result_json,
+        });
+
+        tracing::info!("✅ Async guardrail task complete for {} (success={})", stage.display_name(), success);
+    });
+
+    // Async guardrail spawned - UI remains responsive
+    // Result will be displayed via GuardrailComplete event handler
+}
+
+/// Display guardrail result and advance pipeline (called from GuardrailComplete event)
+pub fn display_guardrail_result_and_advance(
+    widget: &mut ChatWidget,
+    spec_id: String,
+    stage: SpecStage,
+    result: super::native_guardrail::GuardrailResult,
+) {
+    use crate::history_cell::HistoryCellType;
+
+    // Display results
+    let mut lines = vec![
+        ratatui::text::Line::from(format!(
+            "[native-guardrail] {} validation for {}",
+            stage.display_name(),
+            spec_id
+        )),
+    ];
+
+    // Add check results
+    for check in &result.checks_run {
+        let status_icon = match check.status {
+            super::native_guardrail::CheckStatus::Passed => "✓",
+            super::native_guardrail::CheckStatus::Warning => "⚠",
+            super::native_guardrail::CheckStatus::Failed => "✗",
+            super::native_guardrail::CheckStatus::Skipped => "○",
+        };
+
+        let msg = check.message.as_deref().unwrap_or("");
+        lines.push(ratatui::text::Line::from(format!(
+            "  {} {}: {}",
+            status_icon,
+            check.name,
+            msg
+        )));
+    }
+
+    // Add warnings
+    for warning in &result.warnings {
+        lines.push(ratatui::text::Line::from(format!("  ⚠ Warning: {}", warning)));
+    }
+
+    // Add errors
+    for error in &result.errors {
+        lines.push(ratatui::text::Line::from(format!("  ✗ Error: {}", error)));
+    }
+
+    // Add telemetry path
+    if let Some(path) = &result.telemetry_path {
+        lines.push(ratatui::text::Line::from(format!(
+            "  Telemetry: {}",
+            path.display()
+        )));
+    }
+
+    // Overall result
+    let cell_type = if result.success {
+        lines.push(ratatui::text::Line::from("  Status: PASSED"));
+        HistoryCellType::Notice
+    } else {
+        lines.push(ratatui::text::Line::from("  Status: FAILED"));
+        HistoryCellType::Error
+    };
+
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(lines, cell_type));
+    widget.request_redraw();
+
+    // CRITICAL: Native guardrails are synchronous and don't emit TaskComplete events.
+    // After successful completion, manually trigger pipeline advancement for /speckit.auto.
+    // This replaces the task-based completion mechanism used by bash guardrails.
+    if result.success {
+        if let Some(state) = widget.spec_auto_state.as_ref() {
+            // Check if we're waiting for this guardrail stage
+            if let Some(wait) = &state.waiting_guardrail {
+                if wait.stage == stage {
+                    tracing::warn!("DEBUG: Native guardrail {:?} complete, manually advancing pipeline", stage);
+                    // Pass the guardrail result directly to avoid blocking file I/O
+                    // The result is already in memory from run_native_guardrail above
+                    super::pipeline_coordinator::advance_spec_auto_after_native_guardrail(
+                        widget,
+                        stage,
+                        &spec_id,
+                        result.clone(), // Pass the result we just computed
+                    );
+                }
+            }
+        }
+    }
 }

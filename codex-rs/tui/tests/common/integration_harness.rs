@@ -8,7 +8,7 @@
 //! - Evidence verification helpers
 //! - State builders for complex scenarios
 
-use codex_tui::{SpecStage, SpecAutoState, HalMode};
+use codex_tui::{HalMode, SpecAutoState, SpecStage};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
@@ -50,21 +50,19 @@ impl IntegrationTestContext {
 
     /// Get the consensus directory for this SPEC
     pub fn consensus_dir(&self) -> PathBuf {
-        self.evidence_dir
-            .join("consensus")
-            .join(&self.spec_id)
+        self.evidence_dir.join("consensus").join(&self.spec_id)
     }
 
     /// Get the commands (guardrail) directory for this SPEC
     pub fn commands_dir(&self) -> PathBuf {
-        self.evidence_dir
-            .join("commands")
-            .join(&self.spec_id)
+        self.evidence_dir.join("commands").join(&self.spec_id)
     }
 
     /// Create SPEC directory structure
     pub fn create_spec_dirs(&self, spec_slug: &str) -> Result<PathBuf, std::io::Error> {
-        let spec_dir = self.cwd.join(format!("docs/{}-{}", self.spec_id, spec_slug));
+        let spec_dir = self
+            .cwd
+            .join(format!("docs/{}-{}", self.spec_id, spec_slug));
         std::fs::create_dir_all(&spec_dir)?;
         Ok(spec_dir)
     }
@@ -170,12 +168,8 @@ impl StateBuilder {
     }
 
     pub fn build(self) -> SpecAutoState {
-        let mut state = SpecAutoState::new(
-            self.spec_id,
-            self.goal,
-            self.start_stage,
-            self.hal_mode,
-        );
+        let mut state =
+            SpecAutoState::new(self.spec_id, self.goal, self.start_stage, self.hal_mode);
         state.quality_gates_enabled = self.quality_gates_enabled;
         state
     }
@@ -193,9 +187,9 @@ impl<'a> EvidenceVerifier<'a> {
 
     /// Verify consensus artifacts exist for all agents
     pub fn assert_consensus_complete(&self, stage: SpecStage, agents: &[&str]) -> bool {
-        agents.iter().all(|agent| {
-            self.context.assert_consensus_exists(stage, agent)
-        })
+        agents
+            .iter()
+            .all(|agent| self.context.assert_consensus_exists(stage, agent))
     }
 
     /// Verify guardrail telemetry exists and is valid JSON
@@ -210,8 +204,7 @@ impl<'a> EvidenceVerifier<'a> {
 
     /// Verify evidence directory structure is correct
     pub fn assert_structure_valid(&self) -> bool {
-        self.context.consensus_dir().exists() &&
-        self.context.commands_dir().exists()
+        self.context.consensus_dir().exists() && self.context.commands_dir().exists()
     }
 }
 

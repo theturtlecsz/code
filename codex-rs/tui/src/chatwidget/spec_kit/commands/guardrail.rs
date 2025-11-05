@@ -2,8 +2,8 @@
 //!
 //! FORK-SPECIFIC (just-every/code): Spec-kit multi-agent automation framework
 
-use super::super::command_registry::SpecKitCommand;
 use super::super::super::ChatWidget;
+use super::super::command_registry::SpecKitCommand;
 use crate::slash_command::HalMode;
 
 /// Command: /guardrail.plan (and /spec-ops-plan)
@@ -259,18 +259,18 @@ impl SpecKitCommand for GuardrailAutoCommand {
         super::super::handler::handle_spec_auto(
             widget,
             spec_id,
-            String::new(),  // goal
+            String::new(), // goal
             resume_from,
-            None,  // hal_mode
+            None, // hal_mode
         );
     }
 
     fn is_guardrail(&self) -> bool {
-        false  // T80: No longer a guardrail wrapper, redirects to native implementation
+        false // T80: No longer a guardrail wrapper, redirects to native implementation
     }
 
     fn guardrail_script(&self) -> Option<(&'static str, &'static str)> {
-        None  // T80: No bash script, uses native Rust orchestration
+        None // T80: No bash script, uses native Rust orchestration
     }
 }
 

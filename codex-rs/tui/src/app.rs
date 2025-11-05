@@ -1,7 +1,7 @@
 use crate::app_event::{AppEvent, TerminalRunController, TerminalRunEvent};
 use crate::app_event_sender::AppEventSender;
-use crate::chatwidget::{ChatWidget, GhostState};
 use crate::chatwidget::spec_kit;
+use crate::chatwidget::{ChatWidget, GhostState};
 use crate::exec_command::strip_bash_lc_and_escape;
 use crate::file_search::FileSearchManager;
 use crate::get_git_diff::get_git_diff;
@@ -46,6 +46,7 @@ use std::thread;
 use std::time::Duration;
 use std::time::Instant;
 use tokio::sync::oneshot;
+use tracing::{info, warn};
 
 /// Time window for debouncing redraw requests.
 ///
@@ -101,7 +102,9 @@ pub(crate) struct App<'a> {
 
     /// FORK-SPECIFIC (just-every/code): Shared MCP manager for local-memory
     /// All ChatWidgets share this single instance to prevent process multiplication
-    mcp_manager: Arc<tokio::sync::Mutex<Option<Arc<codex_core::mcp_connection_manager::McpConnectionManager>>>>,
+    mcp_manager: Arc<
+        tokio::sync::Mutex<Option<Arc<codex_core::mcp_connection_manager::McpConnectionManager>>>,
+    >,
 
     file_search: FileSearchManager,
 
@@ -188,7 +191,9 @@ pub(crate) struct ChatWidgetArgs {
     enable_perf: bool,
     resume_picker: bool,
     latest_upgrade_version: Option<String>,
-    mcp_manager: Arc<tokio::sync::Mutex<Option<Arc<codex_core::mcp_connection_manager::McpConnectionManager>>>>,
+    mcp_manager: Arc<
+        tokio::sync::Mutex<Option<Arc<codex_core::mcp_connection_manager::McpConnectionManager>>>,
+    >,
 }
 
 // Custom Debug impl that skips non-debuggable MCP manager
@@ -336,9 +341,9 @@ impl App<'_> {
             let app_event_tx_for_mcp = app_event_tx.clone();
 
             tokio::spawn(async move {
-                use std::collections::{HashMap, HashSet};
                 use codex_core::config_types::McpServerConfig;
                 use codex_core::mcp_connection_manager::McpConnectionManager;
+                use std::collections::{HashMap, HashSet};
 
                 let mcp_config = HashMap::from([(
                     "local-memory".to_string(),
@@ -347,7 +352,7 @@ impl App<'_> {
                         args: vec![],
                         env: None,
                         startup_timeout_ms: Some(5000), // 5 second timeout
-                    }
+                    },
                 )]);
 
                 match McpConnectionManager::new(mcp_config, HashSet::new()).await {
@@ -945,6 +950,22 @@ impl App<'_> {
                 None => break 'main,
             };
             match event {
+                AppEvent::SubmitPreparedPrompt { display, prompt } => {
+                    // ACE-enhanced prompt from async injection
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.submit_prompt_with_display(display, prompt);
+                    }
+                }
+                AppEvent::SpecKitQualityGateResults { broker_result } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        spec_kit::handler::on_quality_gate_broker_result(widget, broker_result);
+                    }
+                }
+                AppEvent::SpecKitQualityGateValidationResults { broker_result } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        spec_kit::handler::on_quality_gate_validation_result(widget, broker_result);
+                    }
+                }
                 AppEvent::InsertHistory(mut lines) => match &mut self.app_state {
                     AppState::Chat { widget } => {
                         // Coalesce consecutive InsertHistory events to reduce redraw churn.
@@ -1691,7 +1712,11 @@ impl App<'_> {
                 AppEvent::DispatchCommand(command, command_text) => {
                     // === FORK-SPECIFIC: Try spec-kit registry first ===
                     if let AppState::Chat { widget } = &mut self.app_state {
-                        if spec_kit::try_dispatch_spec_kit_command(widget, &command_text, &self.app_event_tx) {
+                        if spec_kit::try_dispatch_spec_kit_command(
+                            widget,
+                            &command_text,
+                            &self.app_event_tx,
+                        ) {
                             continue; // Command handled by spec-kit registry
                         }
                     }
@@ -1743,22 +1768,35 @@ impl App<'_> {
                         | SlashCommand::SpecKitImplement
                         | SlashCommand::SpecKitValidate
                         | SlashCommand::SpecKitAudit
-                        | SlashCommand::SpecKitUnlock
-                        | SlashCommand::SpecKitAuto
-                        | SlashCommand::SpecKitClarify
-                        | SlashCommand::SpecKitAnalyze
-                        | SlashCommand::SpecKitChecklist => {
+                        | SlashCommand::SpecKitUnlock => {
                             // Prompt-expanded in the chat widget
                         }
-                        // SpecKit special handlers
-                        SlashCommand::SpecKitNew | SlashCommand::SpecKitSpecify => {
-                            // Routed to subagent orchestrators
-                        }
-                        SlashCommand::SpecKitStatus => {
+                        // Native commands: Enum variants exist for autocomplete, but redirect to registry
+                        SlashCommand::SpecKitNew
+                        | SlashCommand::SpecKitClarify
+                        | SlashCommand::SpecKitAnalyze
+                        | SlashCommand::SpecKitChecklist
+                        | SlashCommand::SpecKitAuto
+                        | SlashCommand::SpecKitStatus
+                        | SlashCommand::SpecKitConstitution
+                        | SlashCommand::SpecKitAceStatus => {
+                            // ALWAYS redirect to registry (native execution)
+                            // Enum exists only for autocomplete discoverability
                             if let AppState::Chat { widget } = &mut self.app_state {
-                                widget.handle_spec_status_command(command_args);
+                                spec_kit::try_dispatch_spec_kit_command(
+                                    widget,
+                                    &command_text,
+                                    &self.app_event_tx,
+                                );
                             }
                         }
+                        // SpecKit agent commands
+                        SlashCommand::SpecKitSpecify => {
+                            // Single-agent orchestrator (gpt5-low)
+                        }
+                        // REMOVED: SpecKitStatus, SpecKitConstitution, SpecKitAceStatus
+                        // Now registry-only (eliminates duplicate autocomplete entries)
+
                         // Legacy spec commands (backward compat)
                         SlashCommand::NewSpec => {
                             // Redirect to SpecKitNew
@@ -2045,6 +2083,12 @@ impl App<'_> {
                                 order: None,
                             }));
                         }
+                    }
+                }
+                AppEvent::SubmitPreparedPrompt { display, prompt } => {
+                    // ACE-enhanced prompt ready for submission
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.submit_prompt_with_display(display, prompt);
                     }
                 }
                 AppEvent::SwitchCwd(new_cwd, initial_prompt) => {
@@ -2656,7 +2700,10 @@ impl App<'_> {
                 }
 
                 // === FORK-SPECIFIC: Quality gate events (T85) ===
-                AppEvent::QualityGateAnswersSubmitted { checkpoint, answers } => {
+                AppEvent::QualityGateAnswersSubmitted {
+                    checkpoint,
+                    answers,
+                } => {
                     if let AppState::Chat { widget } = &mut self.app_state {
                         // Delegate to quality gate handler in spec_kit
                         spec_kit::on_quality_gate_answers(widget, checkpoint, answers);
@@ -2668,7 +2715,52 @@ impl App<'_> {
                         spec_kit::on_quality_gate_cancelled(widget, checkpoint);
                     }
                 }
-                // === END FORK-SPECIFIC ===
+                AppEvent::QualityGateNativeAgentsComplete { checkpoint, agent_ids } => {
+                    // Native orchestrator agents completed - trigger broker collection
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        info!("Handling native quality gate completion for {:?} with {} agents", checkpoint, agent_ids.len());
+                        // Store agent IDs in phase for memory-based collection
+                        spec_kit::set_native_agent_ids(widget, agent_ids);
+                        // Trigger broker (will use memory-based collection)
+                        spec_kit::on_quality_gate_agents_complete(widget);
+                    }
+                }
+                AppEvent::RegularStageAgentsComplete { stage, spec_id, agent_ids, agent_results } => {
+                    // Regular stage agents completed (SPEC-KIT-900 Session 2)
+                    // Triggered by background polling when all agents reach terminal state
+                    // Note: run_id logging happens in on_spec_auto_agents_complete_with_ids
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        warn!("🎯 AUDIT: Regular stage agents complete: stage={:?}, spec={}, agents={}, direct_results={}",
+                            stage, spec_id, agent_ids.len(), agent_results.len());
+                        for (i, agent_id) in agent_ids.iter().enumerate() {
+                            warn!("  Agent {}/{}: {} (type: regular_stage)", i+1, agent_ids.len(), agent_id);
+                        }
+                        // Pass results directly if available (sequential), otherwise use agent_ids (parallel)
+                        if !agent_results.is_empty() {
+                            warn!("  Using {} direct results from spawn_infos (sequential execution)", agent_results.len());
+                            spec_kit::on_spec_auto_agents_complete_with_results(widget, agent_results);
+                        } else {
+                            warn!("  Using agent_ids for collection from active_agents (parallel execution)");
+                            spec_kit::on_spec_auto_agents_complete_with_ids(widget, agent_ids);
+                        }
+                    }
+                }
+
+                AppEvent::GuardrailComplete { spec_id, stage, success, result_json } => {
+                    // Guardrail validation completed asynchronously (SPEC-KIT-900 Session 3)
+                    // Note: run_id logging happens in guardrail display function
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        warn!("🛡️ AUDIT: Guardrail complete: stage={:?}, spec={}, success={}",
+                            stage, spec_id, success);
+
+                        // Deserialize result and display
+                        if let Ok(result) = serde_json::from_str::<spec_kit::native_guardrail::GuardrailResult>(&result_json) {
+                            spec_kit::display_guardrail_result_and_advance(widget, spec_id, stage, result);
+                        } else {
+                            warn!("Failed to deserialize guardrail result");
+                        }
+                    }
+                } // === END FORK-SPECIFIC ===
             }
         }
         if self.alt_screen_active {

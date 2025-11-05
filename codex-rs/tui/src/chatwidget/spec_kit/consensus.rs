@@ -7,7 +7,7 @@ use super::error::{Result, SpecKitError};
 // FORK-SPECIFIC (just-every/code): LocalMemoryClient removed, using native MCP
 use crate::spec_prompts::SpecStage;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::path::PathBuf;
 
 // ============================================================================
@@ -141,16 +141,35 @@ pub(in super::super) fn parse_consensus_stage(stage: &str) -> Option<SpecStage> 
         "validate" | "spec-validate" => Some(SpecStage::Validate),
         "audit" | "review" | "spec-audit" | "spec-review" => Some(SpecStage::Audit),
         "unlock" | "spec-unlock" => Some(SpecStage::Unlock),
+        "clarify" | "spec-clarify" => Some(SpecStage::Clarify),
+        "analyze" | "spec-analyze" => Some(SpecStage::Analyze),
+        "checklist" | "spec-checklist" => Some(SpecStage::Checklist),
         _ => None,
     }
 }
 
 /// Get expected agent roster for a spec stage
 // ARCH-006: Use SpecAgent enum instead of strings
-pub(in super::super) fn expected_agents_for_stage(stage: SpecStage) -> Vec<crate::spec_prompts::SpecAgent> {
+pub(in super::super) fn expected_agents_for_stage(
+    stage: SpecStage,
+) -> Vec<crate::spec_prompts::SpecAgent> {
     use crate::spec_prompts::SpecAgent;
     match stage {
-        SpecStage::Implement => vec![SpecAgent::Gemini, SpecAgent::Claude, SpecAgent::GptCodex, SpecAgent::GptPro],
+        SpecStage::Implement => vec![
+            SpecAgent::Gemini,
+            SpecAgent::Claude,
+            SpecAgent::GptCodex,
+            SpecAgent::GptPro,
+        ],
+        SpecStage::Clarify | SpecStage::Analyze => vec![
+            SpecAgent::Gemini,
+            SpecAgent::Claude,
+            SpecAgent::Code,
+        ],
+        SpecStage::Checklist => vec![
+            SpecAgent::Claude,
+            SpecAgent::Code,
+        ],
         _ => vec![SpecAgent::Gemini, SpecAgent::Claude, SpecAgent::GptPro],
     }
 }
@@ -189,6 +208,8 @@ pub(in super::super) fn validate_required_fields(stage: SpecStage, summary: &Val
         SpecStage::Validate => obj.contains_key("test_strategy"),
         SpecStage::Audit => obj.contains_key("audit_verdict"),
         SpecStage::Unlock => obj.contains_key("unlock_decision"),
+        SpecStage::Clarify | SpecStage::Analyze => obj.contains_key("issues"),
+        SpecStage::Checklist => obj.contains_key("requirements"),
     }
 }
 
@@ -196,12 +217,44 @@ pub(in super::super) fn validate_required_fields(stage: SpecStage, summary: &Val
 // CORE CONSENSUS LOGIC
 // ============================================================================
 
-use crate::local_memory_util::{self, LocalMemorySearchResult};
+use crate::local_memory_util::LocalMemorySearchResult;
 use std::fs;
 use std::path::Path;
 
-/// Collect consensus artifacts from local-memory (primary) or evidence files (fallback)
-// FORK-SPECIFIC (just-every/code): Made async for native MCP with ARCH-002 fallback
+/// Build consensus artifacts from cached agent responses (bypasses memory/file lookup)
+pub(crate) fn artifacts_from_cached_responses(
+    cached_responses: &[(String, String)],
+    stage: SpecStage,
+) -> Result<Vec<ConsensusArtifactData>> {
+    let mut artifacts = Vec::new();
+
+    for (agent_name, response_text) in cached_responses {
+        // Try to parse response as JSON (agents may output structured data)
+        let content = match serde_json::from_str::<Value>(response_text) {
+            Ok(json) => json,
+            Err(_) => {
+                // Not JSON, wrap as text content
+                json!({
+                    "agent": agent_name,
+                    "stage": stage.command_name(),
+                    "content": response_text
+                })
+            }
+        };
+
+        artifacts.push(ConsensusArtifactData {
+            memory_id: Some(format!("cached_{}", agent_name)),
+            agent: agent_name.clone(),
+            version: None,
+            content,
+        });
+    }
+
+    Ok(artifacts)
+}
+
+/// Collect consensus artifacts from SQLite (primary), local-memory, or evidence files (fallback)
+// SPEC-KIT-072: SQLite is now primary source for consensus artifacts
 pub(crate) async fn collect_consensus_artifacts(
     evidence_root: &Path,
     spec_id: &str,
@@ -210,7 +263,47 @@ pub(crate) async fn collect_consensus_artifacts(
 ) -> Result<(Vec<ConsensusArtifactData>, Vec<String>)> {
     let mut warnings: Vec<String> = Vec::new();
 
-    // ARCH-002: Try MCP first (faster, more current), fallback to files if unavailable
+    // SPEC-KIT-072 Phase 3: SQLite is PRIMARY source (local-memory deprecated for artifacts)
+    if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+        match db.query_artifacts(spec_id, stage) {
+            Ok(sqlite_artifacts) if !sqlite_artifacts.is_empty() => {
+                tracing::info!("✓ Loaded {} consensus artifacts from SQLite (primary source)", sqlite_artifacts.len());
+
+                let mut artifacts = Vec::new();
+                for artifact in sqlite_artifacts {
+                    if let Ok(content) = serde_json::from_str::<Value>(&artifact.content_json) {
+                        artifacts.push(ConsensusArtifactData {
+                            memory_id: Some(format!("sqlite_{}", artifact.id)),
+                            agent: artifact.agent_name,
+                            version: None,
+                            content,
+                        });
+                    }
+                }
+
+                if !artifacts.is_empty() {
+                    warnings.push(format!("Loaded {} artifacts from SQLite database", artifacts.len()));
+                    return Ok((artifacts, warnings));
+                }
+            }
+            Ok(_) => {
+                tracing::info!("No SQLite artifacts found for {} {}", spec_id, stage.command_name());
+                warnings.push("No artifacts in SQLite database (expected if agents just completed)".to_string());
+            }
+            Err(e) => {
+                tracing::warn!("SQLite query failed: {}", e);
+                warnings.push(format!("SQLite error: {}", e));
+            }
+        }
+    } else {
+        warnings.push("SQLite database initialization failed - check ~/.code/ permissions".to_string());
+    }
+
+    // DEPRECATED: local-memory fallback (Phase 2 removed agent MCP tool usage)
+    // Keeping temporarily for migration period, but should not be needed
+    tracing::warn!("DEPRECATED: Falling back to local-memory MCP (should not happen after Phase 2)");
+
+    // ARCH-002: Fallback to local-memory MCP (DEPRECATED in Phase 2)
     match fetch_memory_entries(spec_id, stage, mcp_manager).await {
         Ok((entries, mut memory_warnings)) => {
             warnings.append(&mut memory_warnings);
@@ -296,7 +389,10 @@ pub(crate) async fn collect_consensus_artifacts(
         }
         Err(mcp_err) => {
             // ARCH-002: Fallback to file-based evidence if MCP unavailable
-            tracing::warn!("MCP fetch failed, falling back to file-based evidence: {}", mcp_err);
+            tracing::warn!(
+                "MCP fetch failed, falling back to file-based evidence: {}",
+                mcp_err
+            );
             warnings.push(format!(
                 "⚠ Using file-based evidence (local-memory MCP unavailable: {})",
                 mcp_err
@@ -324,7 +420,6 @@ pub(crate) async fn collect_consensus_artifacts(
         directory: evidence_root.to_path_buf(),
     })
 }
-
 
 fn load_artifacts_from_evidence(
     evidence_root: &Path,
@@ -415,15 +510,25 @@ async fn fetch_memory_entries(
     use serde_json::json;
 
     let query = format!("{} {}", spec_id, stage.command_name());
+    // Note: Agents may tag with either "stage:plan" or "stage:spec-plan"
+    // Search for both variations to handle inconsistent tagging
+    let stage_tag_1 = format!("stage:{}", stage.display_name().to_lowercase()); // "stage:plan"
+    let stage_tag_2 = format!("stage:{}", stage.command_name());  // "stage:spec-plan"
+
     let args = json!({
         "query": query,
         "limit": 20,
-        "tags": [format!("spec:{}", spec_id), format!("stage:{}", stage.command_name())],
+        "tags": [format!("spec:{}", spec_id)],
         "search_type": "hybrid"
     });
 
     let result = mcp_manager
-        .call_tool("local-memory", "search", Some(args), Some(std::time::Duration::from_secs(30)))
+        .call_tool(
+            "local-memory",
+            "search",
+            Some(args),
+            Some(std::time::Duration::from_secs(30)),
+        )
         .await
         .map_err(|e| SpecKitError::from_string(format!("MCP local-memory search failed: {}", e)))?;
 
@@ -442,7 +547,9 @@ async fn fetch_memory_entries(
 }
 
 // FORK-SPECIFIC (just-every/code): Parse MCP search results
-fn parse_mcp_search_results(result: &mcp_types::CallToolResult) -> Result<Vec<LocalMemorySearchResult>> {
+fn parse_mcp_search_results(
+    result: &mcp_types::CallToolResult,
+) -> Result<Vec<LocalMemorySearchResult>> {
     if result.content.is_empty() {
         return Ok(Vec::new());
     }
@@ -453,7 +560,9 @@ fn parse_mcp_search_results(result: &mcp_types::CallToolResult) -> Result<Vec<Lo
             let text = &text_content.text;
             if let Ok(json_results) = serde_json::from_str::<Vec<serde_json::Value>>(text) {
                 for json_result in json_results {
-                    if let Ok(parsed) = serde_json::from_value::<LocalMemorySearchResult>(json_result) {
+                    if let Ok(parsed) =
+                        serde_json::from_value::<LocalMemorySearchResult>(json_result)
+                    {
                         all_results.push(parsed);
                     }
                 }
@@ -531,7 +640,8 @@ pub(crate) fn load_latest_consensus_synthesis(
                 "Consensus synthesis stage mismatch: expected {}, found {}",
                 stage.command_name(),
                 raw_stage
-            ).into());
+            )
+            .into());
         }
     }
 
@@ -540,7 +650,8 @@ pub(crate) fn load_latest_consensus_synthesis(
             return Err(format!(
                 "Consensus synthesis spec mismatch: expected {}, found {}",
                 spec_id, raw_spec
-            ).into());
+            )
+            .into());
         }
     }
 
@@ -568,7 +679,8 @@ pub async fn run_spec_consensus(
     // MAINT-7: Use centralized path helper
     let evidence_root = super::evidence::consensus_dir(cwd);
 
-    let (artifacts, mut warnings) = collect_consensus_artifacts(&evidence_root, spec_id, stage, mcp_manager).await?;
+    let (artifacts, mut warnings) =
+        collect_consensus_artifacts(&evidence_root, spec_id, stage, mcp_manager).await?;
     if artifacts.is_empty() {
         return Err(format!(
             "No structured local-memory entries found for {} stage '{}'. Ensure agents stored their JSON via local-memory remember.",
@@ -813,7 +925,9 @@ pub async fn run_spec_consensus(
                 }
 
                 // Remember in local-memory
-                if let Err(err) = remember_consensus_verdict(spec_id, stage, &verdict_obj, mcp_manager).await {
+                if let Err(err) =
+                    remember_consensus_verdict(spec_id, stage, &verdict_obj, mcp_manager).await
+                {
                     lines.push(ratatui::text::Line::from(format!(
                         "  Warning: failed to store in local-memory: {}",
                         err
@@ -1016,7 +1130,12 @@ pub(crate) async fn remember_consensus_verdict(
     });
 
     mcp_manager
-        .call_tool("local-memory", "store_memory", Some(args), Some(std::time::Duration::from_secs(10)))
+        .call_tool(
+            "local-memory",
+            "store_memory",
+            Some(args),
+            Some(std::time::Duration::from_secs(10)),
+        )
         .await
         .map_err(|e| SpecKitError::from_string(format!("MCP local-memory store failed: {}", e)))?;
 

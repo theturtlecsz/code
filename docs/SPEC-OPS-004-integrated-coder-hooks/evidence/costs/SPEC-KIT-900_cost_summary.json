@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "spec_id": "SPEC-KIT-900",
+  "currency": "USD",
+  "total_cost_usd": 8.22,
+  "per_stage": {
+    "plan": 0.0,
+    "tasks": 0.0,
+    "implement": 8.22,
+    "validate": 0.0,
+    "audit": 0.0,
+    "unlock": 0.0
+  },
+  "breakdown": [
+    {
+      "stage": "implement",
+      "agent": "gemini",
+      "input_tokens": 12000,
+      "output_tokens": 8000,
+      "cost_usd": 0.86
+    },
+    {
+      "stage": "implement",
+      "agent": "claude",
+      "input_tokens": 12000,
+      "output_tokens": 8000,
+      "cost_usd": 0.86
+    },
+    {
+      "stage": "implement",
+      "agent": "gpt_codex",
+      "input_tokens": 12000,
+      "output_tokens": 8000,
+      "cost_usd": 0.43
+    },
+    {
+      "stage": "implement",
+      "agent": "gpt_pro",
+      "input_tokens": 12000,
+      "output_tokens": 8000,
+      "cost_usd": 0.43
+    },
+    {
+      "stage": "implement",
+      "agent": "various_quality_gates",
+      "input_tokens": 50000,
+      "output_tokens": 30000,
+      "cost_usd": 5.64
+    }
+  ],
+  "budget_usd": 2.0,
+  "utilization_percent": 411.0,
+  "total_calls": 23,
+  "duration_seconds": 846,
+  "generated_at": "2025-11-04T19:30:00Z"
+}

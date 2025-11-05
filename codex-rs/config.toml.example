@@ -1,0 +1,96 @@
+# Example Codex CLI configuration
+# Save as ~/.code/config.toml
+
+# Model configuration
+model = "gpt-5-codex"
+model_provider = "openai"
+
+# ACE (Agentic Context Engine) integration
+# Provides compounding strategy memory for spec-kit workflows
+[ace]
+# Enable/disable ACE integration (default: true)
+enabled = true
+
+# When to use ACE (default: "auto")
+# - "auto": Use for commands in use_for list
+# - "always": Use for all spec-kit commands
+# - "never": Disable ACE completely
+mode = "auto"
+
+# Number of playbook bullets to inject (max 8 recommended)
+slice_size = 8
+
+# SQLite database path for ACE playbooks
+db_path = "~/.code/ace/playbooks_v1.sqlite3"
+
+# Commands that should receive ACE playbook injection
+use_for = [
+    "speckit.constitution",
+    "speckit.clarify",
+    "speckit.analyze",
+    "speckit.checklist",
+    "speckit.specify",
+    "speckit.tasks",
+    "speckit.implement",
+    "speckit.test"
+]
+
+# File count threshold for routing to ace.generate (complexity heuristic)
+complex_task_files_threshold = 4
+
+# Rerun detection window in minutes
+rerun_window_minutes = 30
+
+# MCP servers configuration
+[mcp_servers.ace]
+command = "python"
+args = ["-m", "ace_mcp_server"]
+
+# Optional: environment variables for ACE server
+# env = { ACE_LOG_LEVEL = "info" }
+
+# Example: Local memory MCP server
+[mcp_servers.local-memory]
+command = "npx"
+args = ["-y", "@theturtlecsz/local-memory-mcp"]
+
+# Agent configuration for multi-agent workflows
+[[agents]]
+name = "claude"
+command = "claude"
+enabled = true
+
+[[agents]]
+name = "gemini"
+command = "gemini"
+enabled = true
+
+[[agents]]
+name = "code"
+command = "code"
+enabled = true
+
+# Subagent command overrides
+[[subagents.commands]]
+name = "plan"
+read_only = true
+agents = ["claude", "gemini", "code"]
+
+[[subagents.commands]]
+name = "implement"
+read_only = false
+agents = ["gemini", "claude", "gpt_codex", "gpt_pro"]
+
+# Sandbox configuration
+sandbox_mode = "workspace-write"
+
+# Shell environment policy
+[shell_environment_policy]
+mode = "inherit"
+
+# Notifications (optional)
+# notify = ["notify-send", "Codex"]
+
+# TUI configuration
+[tui]
+theme = "dark"
