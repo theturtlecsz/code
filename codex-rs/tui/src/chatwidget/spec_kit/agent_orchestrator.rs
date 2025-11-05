@@ -31,6 +31,7 @@ pub struct AgentSpawnInfo {
     pub agent_id: String,
     pub agent_name: String,
     pub model_name: String,
+    pub result: Option<String>, // For sequential execution, includes agent result
 }
 
 /// Extract useful content from stage files (plan.md, tasks.md)
@@ -423,12 +424,13 @@ async fn spawn_regular_stage_agents_sequential(
         ).await?;
 
         // Store this agent's output for next agents to use
-        agent_outputs.push((agent_name.clone(), agent_output));
+        agent_outputs.push((agent_name.clone(), agent_output.clone()));
 
         spawn_infos.push(AgentSpawnInfo {
             agent_id,
             agent_name: agent_name.clone(),
             model_name: config_name.to_string(),
+            result: Some(agent_output), // Store result for direct access
         });
     }
 
@@ -492,6 +494,7 @@ async fn spawn_regular_stage_agents_parallel(
             agent_id,
             agent_name: agent_name.clone(),
             model_name: config_name.to_string(),
+            result: None, // Parallel execution doesn't have result yet
         });
 
         tracing::warn!("{}   ✓ {} spawned (not waiting)", run_tag, agent_name);
@@ -1003,6 +1006,7 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                                         stage: stage_clone,
                                         spec_id: spec_id_clone,
                                         agent_ids: agent_ids.clone(),
+                                        agent_results: vec![], // Parallel: results collected from active_agents later
                                     });
                                 }
                                 Err(e) => {
@@ -1015,6 +1019,15 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                     } else {
                         // SEQUENTIAL execution - agents already complete, send event immediately
                         tracing::warn!("{} ✅ SEQUENTIAL: All {} agents already completed, sending event now", run_tag_display, agent_ids.len());
+
+                        // Extract results from spawn_infos (sequential execution has results)
+                        let agent_results: Vec<(String, String)> = spawn_infos.iter()
+                            .filter_map(|info| {
+                                info.result.as_ref().map(|r| (info.agent_name.clone(), r.clone()))
+                            })
+                            .collect();
+
+                        tracing::warn!("{} 📋 SEQUENTIAL: Extracted {} results from spawn_infos", run_tag_display, agent_results.len());
 
                         // Show completion status in TUI
                         widget.history_push(crate::history_cell::PlainHistoryCell::new(
@@ -1029,13 +1042,16 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                         ));
                         widget.request_redraw();
 
+                        let result_count = agent_results.len();
+
                         let _ = widget.app_event_tx.send(crate::app_event::AppEvent::RegularStageAgentsComplete {
                             stage,
                             spec_id: spec_id.to_string(),
                             agent_ids: agent_ids.clone(),
+                            agent_results, // Pass results directly, no widget.active_agents dependency!
                         });
 
-                        tracing::warn!("{} 📬 SEQUENTIAL: RegularStageAgentsComplete event sent immediately", run_tag_display);
+                        tracing::warn!("{} 📬 SEQUENTIAL: RegularStageAgentsComplete event sent with {} results", run_tag_display, result_count);
                     }
                 }
                 Err(e) => {
@@ -1154,7 +1170,59 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
     on_spec_auto_agents_complete_with_ids(widget, vec![]);
 }
 
+/// Handle agent completion with DIRECT results (SPEC-KIT-900 Session 3 refactor)
+/// For SEQUENTIAL execution: uses results directly from spawn, eliminates active_agents dependency
+pub fn on_spec_auto_agents_complete_with_results(widget: &mut ChatWidget, agent_results: Vec<(String, String)>) {
+    let run_tag = widget.spec_auto_state.as_ref()
+        .and_then(|s| s.run_id.as_ref())
+        .map(|r| format!("[run:{}]", &r[..8]))
+        .unwrap_or_else(|| "[run:none]".to_string());
+
+    tracing::warn!("{} 🎯 DIRECT RESULTS: Processing {} agent results from spawn", run_tag, agent_results.len());
+    for (name, result) in &agent_results {
+        tracing::warn!("{}   - {}: {} chars", run_tag, name, result.len());
+    }
+
+    // SPEC-KIT-072: Store to SQLite for persistent consensus artifacts
+    if let Some(state) = widget.spec_auto_state.as_ref() {
+        if let Some(current_stage) = state.current_stage() {
+            if let Some(run_id) = &state.run_id {
+                if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+                    for (agent_name, response_text) in &agent_results {
+                        let json_str = super::pipeline_coordinator::extract_json_from_agent_response(response_text)
+                            .unwrap_or_else(|| response_text.clone());
+
+                        if let Err(e) = db.store_artifact(
+                            &state.spec_id,
+                            current_stage,
+                            agent_name,
+                            &json_str,
+                            Some(response_text),
+                            Some(run_id),
+                        ) {
+                            tracing::warn!("{} Failed to store {} artifact: {}", run_tag, agent_name, e);
+                        } else {
+                            tracing::warn!("{} ✓ Stored {} artifact to SQLite", run_tag, agent_name);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Store responses in state cache for synthesis
+    if let Some(state) = widget.spec_auto_state.as_mut() {
+        state.agent_responses_cache = Some(agent_results);
+        state.transition_phase(SpecAutoPhase::CheckingConsensus, "all_agents_complete_direct");
+    }
+
+    tracing::warn!("{} DEBUG: Calling check_consensus_and_advance_spec_auto", run_tag);
+    check_consensus_and_advance_spec_auto(widget);
+    tracing::warn!("{} DEBUG: Returned from check_consensus_and_advance_spec_auto", run_tag);
+}
+
 /// Handle agent completion with specific agent IDs (prevents collecting ALL historical agents)
+/// For PARALLEL execution: collects from active_agents using agent_ids filter
 pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_agent_ids: Vec<String>) {
     let run_tag = widget.spec_auto_state.as_ref()
         .and_then(|s| s.run_id.as_ref())

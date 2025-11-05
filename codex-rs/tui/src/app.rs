@@ -2725,18 +2725,24 @@ impl App<'_> {
                         spec_kit::on_quality_gate_agents_complete(widget);
                     }
                 }
-                AppEvent::RegularStageAgentsComplete { stage, spec_id, agent_ids } => {
+                AppEvent::RegularStageAgentsComplete { stage, spec_id, agent_ids, agent_results } => {
                     // Regular stage agents completed (SPEC-KIT-900 Session 2)
                     // Triggered by background polling when all agents reach terminal state
                     // Note: run_id logging happens in on_spec_auto_agents_complete_with_ids
                     if let AppState::Chat { widget } = &mut self.app_state {
-                        warn!("🎯 AUDIT: Regular stage agents complete: stage={:?}, spec={}, agents={}",
-                            stage, spec_id, agent_ids.len());
+                        warn!("🎯 AUDIT: Regular stage agents complete: stage={:?}, spec={}, agents={}, direct_results={}",
+                            stage, spec_id, agent_ids.len(), agent_results.len());
                         for (i, agent_id) in agent_ids.iter().enumerate() {
                             warn!("  Agent {}/{}: {} (type: regular_stage)", i+1, agent_ids.len(), agent_id);
                         }
-                        // Pass specific agent_ids to prevent collecting ALL historical agents
-                        spec_kit::on_spec_auto_agents_complete_with_ids(widget, agent_ids);
+                        // Pass results directly if available (sequential), otherwise use agent_ids (parallel)
+                        if !agent_results.is_empty() {
+                            warn!("  Using {} direct results from spawn_infos (sequential execution)", agent_results.len());
+                            spec_kit::on_spec_auto_agents_complete_with_results(widget, agent_results);
+                        } else {
+                            warn!("  Using agent_ids for collection from active_agents (parallel execution)");
+                            spec_kit::on_spec_auto_agents_complete_with_ids(widget, agent_ids);
+                        }
                     }
                 }
 

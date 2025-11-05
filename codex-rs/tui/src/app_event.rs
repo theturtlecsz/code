@@ -475,6 +475,7 @@ pub(crate) enum AppEvent {
         stage: crate::spec_prompts::SpecStage,
         spec_id: String,
         agent_ids: Vec<String>,
+        agent_results: Vec<(String, String)>, // (agent_name, result) - direct from spawn, not active_agents
     },
 
     /// Native guardrail validation completed (SPEC-KIT-900 Session 3)
