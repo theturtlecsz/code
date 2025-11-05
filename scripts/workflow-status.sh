@@ -256,13 +256,9 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 
 # Determine next action based on progress
 if [ "$COMPLETED" -eq 0 ]; then
-    echo "▸ Start workflow: bash scripts/test-spec-kit.sh $SPEC_ID /speckit.plan"
-elif [ "$COMPLETED" -eq 1 ]; then
-    echo "▸ Continue workflow: bash scripts/test-spec-kit.sh $SPEC_ID /speckit.tasks"
-elif [ "$COMPLETED" -eq 2 ]; then
-    echo "▸ Continue workflow: bash scripts/test-spec-kit.sh $SPEC_ID /speckit.validate"
+    echo "▸ Start workflow: bash scripts/test-speckit-auto.sh $SPEC_ID"
 elif [ "$COMPLETED" -lt 6 ]; then
-    echo "▸ Continue workflow: bash scripts/test-spec-kit.sh $SPEC_ID /speckit.auto"
+    echo "▸ Continue workflow: bash scripts/test-speckit-auto.sh $SPEC_ID"
 else
     echo "▸ Workflow complete! Review deliverables:"
     echo "  ls -lh docs/${SPEC_ID}-generic-smoke/"
