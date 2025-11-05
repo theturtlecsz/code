@@ -663,7 +663,9 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                     let old_index = state.current_index;
                     state.current_index += 1;
                     state.agent_responses_cache = None; // Clear cache
+                    state.phase = SpecAutoPhase::Guardrail; // CRITICAL: Reset to Guardrail for next stage
                     tracing::warn!("    Stage index: {} → {}", old_index, state.current_index);
+                    tracing::warn!("    Phase reset to: Guardrail");
                 }
                 persist_cost_summary(widget, &spec_id);
                 tracing::warn!("  📞 Calling advance_spec_auto...");
@@ -684,6 +686,7 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                 if let Some(state) = widget.spec_auto_state.as_mut() {
                     state.current_index += 1;
                     state.agent_responses_cache = None;
+                    state.phase = SpecAutoPhase::Guardrail; // CRITICAL: Reset to Guardrail for next stage
                 }
                 advance_spec_auto(widget);
             }
