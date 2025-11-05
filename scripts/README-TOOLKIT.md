@@ -8,8 +8,8 @@ Comprehensive tooling for testing, debugging, validating, and auditing the spec-
 # Master tool (recommended)
 ./scripts/spec-kit-tools.sh help
 
-# Run complete workflow test
-./scripts/spec-kit-tools.sh test SPEC-KIT-900 /speckit.plan
+# Run complete workflow test (full 6-stage automation)
+./scripts/spec-kit-tools.sh test SPEC-KIT-900
 
 # Check status
 ./scripts/spec-kit-tools.sh status SPEC-KIT-900
@@ -24,28 +24,26 @@ Comprehensive tooling for testing, debugging, validating, and auditing the spec-
 
 ### 🚀 Workflow Execution
 
-#### `test-spec-kit.sh` - Automated Workflow Test
-**Purpose**: Run complete end-to-end test of a spec-kit stage
+#### `test-speckit-auto.sh` - Full Auto Workflow Integration Test
+**Purpose**: Run complete end-to-end test of the full 6-stage `/speckit.auto` pipeline
 
 **Usage**:
 ```bash
-bash scripts/test-spec-kit.sh <SPEC-ID> <command>
+bash scripts/test-speckit-auto.sh <SPEC-ID>
 
-# Examples
-bash scripts/test-spec-kit.sh SPEC-KIT-900 /speckit.plan
-bash scripts/test-spec-kit.sh SPEC-KIT-900 /speckit.tasks
-bash scripts/test-spec-kit.sh SPEC-KIT-900 /speckit.auto
+# Example
+bash scripts/test-speckit-auto.sh SPEC-KIT-900
 ```
 
 **What it does**:
 1. Builds binary with `build-fast.sh`
 2. Cleans up old TUI sessions
-3. Starts TUI and executes command
-4. Waits for completion (up to 15 minutes)
-5. Shows output and deliverable preview
+3. Starts TUI and executes `/speckit.auto <SPEC-ID>`
+4. Waits for completion (up to 60 minutes for full 6-stage pipeline)
+5. Shows output and checks all deliverables (PRD.md, plan.md, tasks.md, validate.md, audit.md)
 6. Provides next steps
 
-**When to use**: You want hands-off execution and automated validation
+**When to use**: You want to test the complete automated workflow from start to finish
 
 ---
 
@@ -243,8 +241,8 @@ bash scripts/compare-runs.sh SPEC-KIT-900 before-fix after-fix plan
 ### Testing Prompt Fix
 
 ```bash
-# 1. Run the workflow
-bash scripts/test-spec-kit.sh SPEC-KIT-900 /speckit.plan
+# 1. Run the full workflow
+bash scripts/test-speckit-auto.sh SPEC-KIT-900
 
 # 2. Check status
 bash scripts/workflow-status.sh SPEC-KIT-900
@@ -264,8 +262,11 @@ bash scripts/validate-deliverable.sh SPEC-KIT-900 plan
 # 1. Check overall status
 bash scripts/workflow-status.sh SPEC-KIT-900
 
-# 2. Debug the failing stage
+# 2. Debug the failing stage (using database stage name)
 bash scripts/debug-consensus.sh SPEC-KIT-900 spec-tasks
+
+# Note: Database uses 'spec-tasks', TUI uses '/speckit.tasks'
+# Debug script expects database stage name format
 
 # 3. Check agent outputs individually
 sqlite3 ~/.code/consensus_artifacts.db \

@@ -11,7 +11,7 @@ function show_menu() {
 ╚═══════════════════════════════════════════════════════════════╝
 
 WORKFLOW EXECUTION:
-  test <SPEC> <command>      Run automated workflow test
+  test <SPEC>                Run full speckit.auto workflow test
   session start <command>    Start TUI session in background
   session send <command>     Send command to running session
   session logs               View session output
@@ -34,26 +34,29 @@ COMPARISON:
                              Compare two runs (before/after)
 
 EXAMPLES:
-  spec-kit-tools test SPEC-KIT-900 /speckit.plan
+  spec-kit-tools test SPEC-KIT-900
   spec-kit-tools status SPEC-KIT-900
-  spec-kit-tools debug SPEC-KIT-900 plan
+  spec-kit-tools debug SPEC-KIT-900 spec-plan
   spec-kit-tools validate SPEC-KIT-900 plan
   spec-kit-tools monitor SPEC-KIT-900
 
 QUICK SHORTCUTS:
-  # Full workflow test
-  ./scripts/spec-kit-tools.sh test SPEC-KIT-900 /speckit.auto
+  # Full 6-stage workflow test (/speckit.auto)
+  ./scripts/spec-kit-tools.sh test SPEC-KIT-900
 
   # Check status
   ./scripts/spec-kit-tools.sh status SPEC-KIT-900
 
-  # Validate prompt fix worked
+  # Validate deliverable quality
   ./scripts/spec-kit-tools.sh validate SPEC-KIT-900 plan
+
+  # Manual session for individual stages
+  ./scripts/spec-kit-tools.sh session start "/speckit.plan SPEC-KIT-900"
 EOF
 }
 
 function cmd_test() {
-    exec bash scripts/test-spec-kit.sh "$@"
+    exec bash scripts/test-speckit-auto.sh "$@"
 }
 
 function cmd_session() {
