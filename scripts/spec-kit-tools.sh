@@ -60,35 +60,35 @@ EOF
 }
 
 function cmd_test() {
-    exec bash "$SCRIPT_DIR/test-speckit-auto.sh "$@"
+    exec bash "$SCRIPT_DIR/test-speckit-auto.sh" "$@"
 }
 
 function cmd_session() {
-    exec bash "$SCRIPT_DIR/tui-session.sh "$@"
+    exec bash "$SCRIPT_DIR/tui-session.sh" "$@"
 }
 
 function cmd_status() {
-    exec bash "$SCRIPT_DIR/workflow-status.sh "$@"
+    exec bash "$SCRIPT_DIR/workflow-status.sh" "$@"
 }
 
 function cmd_debug() {
-    exec bash "$SCRIPT_DIR/debug-consensus.sh "$@"
+    exec bash "$SCRIPT_DIR/debug-consensus.sh" "$@"
 }
 
 function cmd_validate() {
-    exec bash "$SCRIPT_DIR/validate-deliverable.sh "$@"
+    exec bash "$SCRIPT_DIR/validate-deliverable.sh" "$@"
 }
 
 function cmd_monitor() {
-    exec bash "$SCRIPT_DIR/monitor-cost.sh "$@"
+    exec bash "$SCRIPT_DIR/monitor-cost.sh" "$@"
 }
 
 function cmd_audit() {
-    exec bash "$SCRIPT_DIR/audit-evidence.sh "$@"
+    exec bash "$SCRIPT_DIR/audit-evidence.sh" "$@"
 }
 
 function cmd_compare() {
-    exec bash "$SCRIPT_DIR/compare-runs.sh "$@"
+    exec bash "$SCRIPT_DIR/compare-runs.sh" "$@"
 }
 
 function cmd_agents() {
