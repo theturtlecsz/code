@@ -4,6 +4,10 @@
 
 set -e
 
+# Get script directory and repo root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 function show_menu() {
     cat <<'EOF'
 ╔═══════════════════════════════════════════════════════════════╗
@@ -56,35 +60,35 @@ EOF
 }
 
 function cmd_test() {
-    exec bash scripts/test-speckit-auto.sh "$@"
+    exec bash "$SCRIPT_DIR/test-speckit-auto.sh "$@"
 }
 
 function cmd_session() {
-    exec bash scripts/tui-session.sh "$@"
+    exec bash "$SCRIPT_DIR/tui-session.sh "$@"
 }
 
 function cmd_status() {
-    exec bash scripts/workflow-status.sh "$@"
+    exec bash "$SCRIPT_DIR/workflow-status.sh "$@"
 }
 
 function cmd_debug() {
-    exec bash scripts/debug-consensus.sh "$@"
+    exec bash "$SCRIPT_DIR/debug-consensus.sh "$@"
 }
 
 function cmd_validate() {
-    exec bash scripts/validate-deliverable.sh "$@"
+    exec bash "$SCRIPT_DIR/validate-deliverable.sh "$@"
 }
 
 function cmd_monitor() {
-    exec bash scripts/monitor-cost.sh "$@"
+    exec bash "$SCRIPT_DIR/monitor-cost.sh "$@"
 }
 
 function cmd_audit() {
-    exec bash scripts/audit-evidence.sh "$@"
+    exec bash "$SCRIPT_DIR/audit-evidence.sh "$@"
 }
 
 function cmd_compare() {
-    exec bash scripts/compare-runs.sh "$@"
+    exec bash "$SCRIPT_DIR/compare-runs.sh "$@"
 }
 
 function cmd_agents() {

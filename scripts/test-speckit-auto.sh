@@ -16,24 +16,26 @@ echo ""
 
 # Step 1: Build
 echo "Step 1: Building binary..."
-if [ ! -f "scripts/build-fast.sh" ]; then
-    echo "Error: build-fast.sh not found"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ ! -f "$REPO_ROOT/build-fast.sh" ]; then
+    echo "Error: build-fast.sh not found at $REPO_ROOT"
     exit 1
 fi
 
-bash scripts/build-fast.sh
+cd "$REPO_ROOT"
+bash build-fast.sh
 echo "✓ Build complete"
 echo ""
 
 # Step 2: Kill any existing session
 echo "Step 2: Cleaning up old sessions..."
-bash scripts/tui-session.sh kill 2>/dev/null || true
+bash "$REPO_ROOT/scripts/tui-session.sh" kill 2>/dev/null || true
 echo "✓ Cleanup complete"
 echo ""
 
 # Step 3: Start TUI with command
 echo "Step 3: Starting TUI session with /speckit.auto..."
-bash scripts/tui-session.sh start "/speckit.auto $SPEC_ID"
+bash "$REPO_ROOT/scripts/tui-session.sh" start "/speckit.auto $SPEC_ID"
 echo "✓ Session started"
 echo ""
 
@@ -51,7 +53,7 @@ while [ $elapsed -lt $timeout ]; do
     elapsed=$((elapsed + 10))
 
     # Capture output and look for completion signals
-    output=$(bash scripts/tui-session.sh capture 2>/dev/null || echo "")
+    output=$(bash "$REPO_ROOT/scripts/tui-session.sh" capture 2>/dev/null || echo "")
 
     if echo "$output" | grep -q "completed\|Error\|Failed"; then
         echo "✓ Command completed (after ${elapsed}s)"
@@ -68,7 +70,7 @@ echo ""
 # Step 5: Show output
 echo "Step 5: Capturing output..."
 echo "==================================="
-bash scripts/tui-session.sh logs
+bash "$REPO_ROOT/scripts/tui-session.sh" logs
 echo "==================================="
 echo ""
 
@@ -122,12 +124,12 @@ echo "Spec-Kit Auto Workflow Test Complete!"
 echo "=========================================="
 echo ""
 echo "Next steps:"
-echo "  View full output:    bash scripts/tui-session.sh capture"
-echo "  Attach to session:   bash scripts/tui-session.sh attach"
-echo "  Check status:        bash scripts/tui-session.sh send '/speckit.status $SPEC_ID'"
+echo "  View full output:    bash "$REPO_ROOT/scripts/tui-session.sh" capture"
+echo "  Attach to session:   bash "$REPO_ROOT/scripts/tui-session.sh" attach"
+echo "  Check status:        bash "$REPO_ROOT/scripts/tui-session.sh" send '/speckit.status $SPEC_ID'"
 echo "  View deliverables:   ls -lh $SPEC_DIR"
-echo "  Kill session:        bash scripts/tui-session.sh kill"
+echo "  Kill session:        bash "$REPO_ROOT/scripts/tui-session.sh" kill"
 echo ""
 echo "Evidence location:"
 echo "  SPEC artifacts:  $SPEC_DIR/"
-echo "  Test logs:       Use 'bash scripts/tui-session.sh logs' to review"
+echo "  Test logs:       Use 'bash "$REPO_ROOT/scripts/tui-session.sh" logs' to review"

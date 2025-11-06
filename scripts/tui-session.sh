@@ -4,8 +4,12 @@
 
 set -e
 
+# Get repo root relative to this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 SESSION_NAME="code-tui"
-BINARY="./codex-rs/target/release/code"
+BINARY="$REPO_ROOT/codex-rs/target/dev-fast/code"
 
 function usage() {
     cat <<EOF
@@ -58,9 +62,12 @@ function cmd_start() {
     fi
 
     echo "Starting TUI session with command: $command"
+    echo "Binary: $BINARY"
+    echo "Working dir: $REPO_ROOT"
 
-    # Start tmux session with TUI and initial command
-    tmux new-session -d -s "$SESSION_NAME" "$BINARY '$command'"
+    # Start tmux session with TUI and initial command in repo root
+    cd "$REPO_ROOT"
+    tmux new-session -d -s "$SESSION_NAME" -c "$REPO_ROOT" "$BINARY '$command'"
 
     echo "Session started: $SESSION_NAME"
     echo "Attach with: $0 attach"
