@@ -65,11 +65,19 @@ function cmd_start() {
     echo "Binary: $BINARY"
     echo "Working dir: $REPO_ROOT"
 
-    # Start tmux session with TUI and initial command in repo root
+    # Start tmux session with TUI in repo root
     cd "$REPO_ROOT"
-    tmux new-session -d -s "$SESSION_NAME" -c "$REPO_ROOT" "$BINARY '$command'"
+    tmux new-session -d -s "$SESSION_NAME" -c "$REPO_ROOT" "$BINARY"
+
+    # Wait for TUI to initialize
+    sleep 2
+
+    # Send the command to the session
+    echo "Sending command to TUI: $command"
+    tmux send-keys -t "$SESSION_NAME" "$command" Enter
 
     echo "Session started: $SESSION_NAME"
+    echo "Command sent: $command"
     echo "Attach with: $0 attach"
     echo "Capture output with: $0 capture"
 }
