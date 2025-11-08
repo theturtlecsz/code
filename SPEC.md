@@ -311,3 +311,4 @@ docs/SPEC-OPS-004-integrated-coder-hooks/evidence/
 - **Flow Diagram**: SPEC_AUTO_FLOW.md
 - **Agent Analysis**: AGENT_ANALYSIS_GUIDE.md
 - **Performance**: OPTIMIZATION_ANALYSIS.md
+| 7 | SPEC-KIT-920 | TUI Automation Support | **Backlog** | Code | docs/SPEC-KIT-920-tui-automation/spec.md | | | 2025-11-07 | **P1**: Add --command flag to enable headless automation. Blocks: automated testing, CI/CD, SPEC-KIT-900 validation. Effort: 1-2 days. |
