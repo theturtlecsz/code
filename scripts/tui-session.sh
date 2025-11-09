@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 SESSION_NAME="code-tui"
-BINARY="$REPO_ROOT/codex-rs/target/dev-fast/code"
+BINARY="$REPO_ROOT/codex-rs/target/release/code"
 
 function usage() {
     cat <<EOF
@@ -65,19 +65,14 @@ function cmd_start() {
     echo "Binary: $BINARY"
     echo "Working dir: $REPO_ROOT"
 
-    # Start tmux session with TUI in repo root
+    # SPEC-KIT-920: Start tmux session with --initial-command flag
+    # This replaces the old tmux send-keys approach which didn't work
+    # due to TUI's alternate screen buffer and custom input handling
     cd "$REPO_ROOT"
-    tmux new-session -d -s "$SESSION_NAME" -c "$REPO_ROOT" "$BINARY"
-
-    # Wait for TUI to initialize
-    sleep 2
-
-    # Send the command to the session
-    echo "Sending command to TUI: $command"
-    tmux send-keys -t "$SESSION_NAME" "$command" Enter
+    tmux new-session -d -s "$SESSION_NAME" -c "$REPO_ROOT" "$BINARY --initial-command '$command'"
 
     echo "Session started: $SESSION_NAME"
-    echo "Command sent: $command"
+    echo "Command will auto-execute: $command"
     echo "Attach with: $0 attach"
     echo "Capture output with: $0 capture"
 }
@@ -95,7 +90,11 @@ function cmd_send() {
         exit 1
     fi
 
-    echo "Sending command: $command"
+    echo "⚠️  WARNING: tmux send-keys doesn't work with TUI (SPEC-KIT-920)"
+    echo "   The TUI uses alternate screen buffer and custom input handling."
+    echo "   Use 'start' command with --initial-command instead, or attach manually."
+    echo ""
+    echo "   Attempting send-keys anyway (will likely not work)..."
     tmux send-keys -t "$SESSION_NAME" "$command" C-m
 }
 

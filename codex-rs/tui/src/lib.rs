@@ -402,6 +402,7 @@ fn run_ratatui_app(
         resume_picker,
         resume_last: _,
         resume_session_id: _,
+        initial_command,
         ..
     } = cli;
     let mut app = App::new(
@@ -416,6 +417,7 @@ fn run_ratatui_app(
         resume_picker,
         startup_footer_notice,
         latest_upgrade_version,
+        initial_command,
     );
 
     let app_result = app.run(&mut terminal);

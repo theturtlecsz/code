@@ -176,6 +176,13 @@ pub(crate) struct App<'a> {
 
     terminal_title_override: Option<String>,
     login_flow: Option<LoginFlowState>,
+
+    // === FORK-SPECIFIC (just-every/code): SPEC-KIT-920 TUI automation ===
+    /// Initial slash command to auto-submit after TUI is ready (for automation).
+    initial_command: Option<String>,
+    /// Track if initial_command has been dispatched (prevents duplicate dispatches).
+    initial_command_dispatched: bool,
+    // === END FORK-SPECIFIC ===
 }
 
 /// Aggregate parameters needed to create a `ChatWidget`, as creation may be
@@ -194,6 +201,7 @@ pub(crate) struct ChatWidgetArgs {
     mcp_manager: Arc<
         tokio::sync::Mutex<Option<Arc<codex_core::mcp_connection_manager::McpConnectionManager>>>,
     >,
+    initial_command: Option<String>, // SPEC-KIT-920
 }
 
 // Custom Debug impl that skips non-debuggable MCP manager
@@ -210,6 +218,7 @@ impl std::fmt::Debug for ChatWidgetArgs {
             .field("resume_picker", &self.resume_picker)
             .field("latest_upgrade_version", &self.latest_upgrade_version)
             .field("mcp_manager", &"<opaque>")
+            .field("initial_command", &self.initial_command)
             .finish()
     }
 }
@@ -229,7 +238,11 @@ impl App<'_> {
         resume_picker: bool,
         startup_footer_notice: Option<String>,
         latest_upgrade_version: Option<String>,
+        initial_command: Option<String>, // SPEC-KIT-920
     ) -> Self {
+        // SPEC-KIT-920: Log initial_command at startup
+        tracing::info!("SPEC-KIT-920: App::new called with initial_command={:?}", initial_command);
+
         let conversation_manager = Arc::new(ConversationManager::new(AuthManager::shared(
             config.codex_home.clone(),
             AuthMode::ApiKey,
@@ -394,6 +407,7 @@ impl App<'_> {
                 resume_picker,
                 latest_upgrade_version: latest_upgrade_version.clone(),
                 mcp_manager: mcp_manager.clone(),
+                initial_command: initial_command.clone(), // SPEC-KIT-920
             };
             AppState::Onboarding {
                 screen: OnboardingScreen::new(OnboardingScreenArgs {
@@ -417,6 +431,7 @@ impl App<'_> {
                 show_order_overlay,
                 latest_upgrade_version.clone(),
                 mcp_manager.clone(),
+                initial_command.clone(), // SPEC-KIT-920
             );
             chat_widget.enable_perf(enable_perf);
             if resume_picker {
@@ -469,6 +484,9 @@ impl App<'_> {
             terminal_runs: HashMap::new(),
             terminal_title_override: None,
             login_flow: None,
+            // SPEC-KIT-920: TUI automation support
+            initial_command,
+            initial_command_dispatched: false,
         }
     }
 
@@ -1091,6 +1109,48 @@ impl App<'_> {
                     draw_result??;
                     if self.timing_enabled {
                         self.timing.on_redraw_end(t0);
+                    }
+
+                    // SPEC-KIT-920: Auto-submit initial command after first successful redraw
+                    tracing::info!("SPEC-KIT-920 DEBUG: Redraw complete, dispatched={}, cmd={:?}",
+                        self.initial_command_dispatched, self.initial_command);
+                    if !self.initial_command_dispatched {
+                        if let Some(cmd_text) = &self.initial_command {
+                            use crate::slash_command::{ProcessedCommand, process_slash_command_message};
+                            match process_slash_command_message(cmd_text) {
+                                ProcessedCommand::RegularCommand { command, command_text, .. } => {
+                                    tracing::info!("SPEC-KIT-920: Auto-submitting initial command: {}", cmd_text);
+                                    self.app_event_tx.send(AppEvent::DispatchCommand(command, command_text));
+                                    self.initial_command_dispatched = true;
+                                }
+                                ProcessedCommand::ExpandedPrompt(_) | ProcessedCommand::SpecAuto(_) => {
+                                    // These are handled by the normal command processing flow
+                                    // Send the raw command text and let the dispatcher handle it
+                                    tracing::info!("SPEC-KIT-920: Submitting expanded/spec-auto command: {}", cmd_text);
+                                    // Try parsing as a regular command to dispatch
+                                    if let Ok(command) = cmd_text[1..].split_whitespace().next().unwrap_or("").parse::<SlashCommand>() {
+                                        self.app_event_tx.send(AppEvent::DispatchCommand(command, cmd_text.clone()));
+                                    }
+                                    self.initial_command_dispatched = true;
+                                }
+                                ProcessedCommand::Error(msg) => {
+                                    tracing::error!("SPEC-KIT-920: {}", msg);
+                                    if let AppState::Chat { widget } = &mut self.app_state {
+                                        widget.history_push(crate::history_cell::new_error_event(msg));
+                                    }
+                                    self.initial_command_dispatched = true;
+                                }
+                                ProcessedCommand::NotCommand(_) => {
+                                    tracing::error!("SPEC-KIT-920: Initial command must start with '/': {}", cmd_text);
+                                    if let AppState::Chat { widget } = &mut self.app_state {
+                                        widget.history_push(crate::history_cell::new_error_event(
+                                            format!("--initial-command must start with '/' (got: {})", cmd_text)
+                                        ));
+                                    }
+                                    self.initial_command_dispatched = true;
+                                }
+                            }
+                        }
                     }
                 }
                 AppEvent::StartCommitAnimation => {
@@ -1862,6 +1922,7 @@ impl App<'_> {
                                 self.show_order_overlay,
                                 self.latest_upgrade_version.clone(),
                                 self.mcp_manager.clone(),
+                                None, // SPEC-KIT-920: /new has no initial_command
                             );
                             new_widget.enable_perf(self.timing_enabled);
                             self.app_state = AppState::Chat {
@@ -2113,6 +2174,7 @@ impl App<'_> {
                             self.show_order_overlay,
                             self.latest_upgrade_version.clone(),
                             self.mcp_manager.clone(),
+                            None, // SPEC-KIT-920: resume has no initial_command
                         );
                         new_widget.enable_perf(self.timing_enabled);
                         self.app_state = AppState::Chat {
@@ -2501,6 +2563,7 @@ impl App<'_> {
                     resume_picker,
                     latest_upgrade_version,
                     mcp_manager,
+                    initial_command, // SPEC-KIT-920
                 }) => {
                     let mut w = ChatWidget::new(
                         config,
@@ -2512,6 +2575,7 @@ impl App<'_> {
                         show_order_overlay,
                         latest_upgrade_version,
                         mcp_manager,
+                        initial_command, // SPEC-KIT-920
                     );
                     w.enable_perf(enable_perf);
                     if resume_picker {

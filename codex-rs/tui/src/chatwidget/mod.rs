@@ -568,6 +568,12 @@ pub(crate) struct ChatWidget<'a> {
     quality_gate_broker: QualityGateBroker,
     // === END FORK-SPECIFIC ===
 
+    // === FORK-SPECIFIC (just-every/code): SPEC-KIT-920 TUI automation ===
+    /// Initial slash command to auto-submit after TUI is ready (for automation).
+    /// Consumed (taken) on first successful auto-submit.
+    initial_command: Option<String>,
+    // === END FORK-SPECIFIC ===
+
     // Stable synthetic request bucket for pre‑turn system notices (set on first use)
     synthetic_system_req: Option<u64>,
     // Map of system notice ids to their history index for in-place replacement
@@ -2554,6 +2560,7 @@ impl ChatWidget<'_> {
                 Option<Arc<codex_core::mcp_connection_manager::McpConnectionManager>>,
             >,
         >,
+        initial_command: Option<String>, // SPEC-KIT-920
     ) -> Self {
         let (codex_op_tx, codex_op_rx) = unbounded_channel::<Op>();
 
@@ -2800,6 +2807,8 @@ impl ChatWidget<'_> {
             // FORK-SPECIFIC (just-every/code): Use shared MCP manager from App
             mcp_manager,
             quality_gate_broker,
+            // SPEC-KIT-920: TUI automation support
+            initial_command,
         };
         if let Ok(Some(active_id)) = auth_accounts::get_active_account_id(&config.codex_home) {
             if let Ok(records) = account_usage::list_rate_limit_snapshots(&config.codex_home) {
@@ -3049,6 +3058,8 @@ impl ChatWidget<'_> {
             // FORK-SPECIFIC (just-every/code): Use shared MCP manager from App
             mcp_manager,
             quality_gate_broker,
+            // SPEC-KIT-920: TUI automation support (fork_from_ghost_state has no initial_command)
+            initial_command: None,
         };
         if let Ok(Some(active_id)) = auth_accounts::get_active_account_id(&config.codex_home) {
             if let Ok(records) = account_usage::list_rate_limit_snapshots(&config.codex_home) {

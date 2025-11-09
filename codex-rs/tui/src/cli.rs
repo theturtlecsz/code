@@ -102,6 +102,15 @@ pub struct Cli {
     /// Resume a specific session id when provided.
     #[clap(skip)]
     pub resume_session_id: Option<String>,
+
+    /// Initial slash command to execute after TUI starts (for automation).
+    /// Example: --initial-command "/speckit.auto SPEC-KIT-900"
+    #[arg(long = "initial-command")]
+    pub initial_command: Option<String>,
+
+    /// Exit after initial command completes (for automation).
+    #[arg(long = "exit-on-complete", requires = "initial_command")]
+    pub exit_on_complete: bool,
 }
 
 impl Cli {
