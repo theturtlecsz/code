@@ -2,11 +2,28 @@
 
 **SPEC-ID**: SPEC-KIT-920
 **Feature**: Enable headless TUI automation for test scripts and CI/CD
-**Status**: Ready for Implementation
+**Status**: Implementation Complete ✅ (2025-11-09)
 **Priority**: P1 (blocks SPEC-KIT-900 validation, automated testing, CI/CD)
 **Effort**: 8-12 hours (1-2 days)
 **Created**: 2025-11-07
 **Owner**: Code
+
+---
+
+## 🎯 CORE PURPOSE
+
+**Enable orchestration testing from within Claude Code without manual intervention.**
+
+This feature exists to allow Claude Code (and CI/CD) to:
+1. ✅ **Run `/speckit.auto` pipelines automatically** (45-50 min multi-agent workflows)
+2. ✅ **Test orchestration workflows headlessly** (via PTY wrapper, no human required)
+3. ✅ **Validate multi-agent consensus** in automated test suites
+4. ✅ **Execute spec-kit commands programmatically** from scripts
+
+**Before SPEC-920**: Manual testing only (human must type commands in TUI)
+**After SPEC-920**: Fully automated (scripts can trigger and monitor TUI commands)
+
+**Critical Use Case**: Claude Code running `bash scripts/validate-spec-kit-920.sh` to test orchestration automatically, completing the development-test loop without leaving the AI session.
 
 ---
 
@@ -20,8 +37,9 @@ Test automation scripts **cannot control the TUI**, blocking:
 3. ❌ CI/CD pipeline integration
 4. ❌ Headless workflow validation
 5. ❌ Nightly smoke tests
+6. ❌ **Claude Code orchestration testing** (the primary blocker)
 
-**Current Workaround**: Manual testing only (45-50 min per test, error-prone)
+**Current Workaround**: Manual testing only (45-50 min per test, error-prone, requires human)
 
 ### What Happens Now
 

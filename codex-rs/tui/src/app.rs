@@ -449,6 +449,7 @@ impl App<'_> {
 
         let file_search = FileSearchManager::new(config.cwd.clone(), app_event_tx.clone());
         let start_in_alt = config.tui.alternate_screen;
+
         Self {
             _server: conversation_manager,
             app_event_tx,
@@ -487,6 +488,52 @@ impl App<'_> {
             // SPEC-KIT-920: TUI automation support
             initial_command,
             initial_command_dispatched: false,
+        }
+    }
+
+    /// SPEC-KIT-920: Dispatch initial command after first redraw completes.
+    /// This ensures the UI is fully initialized before commands execute,
+    /// preventing output routing issues where build output gets piped into the input box.
+    fn dispatch_initial_command(app_event_tx: &AppEventSender, cmd_text: &str) {
+        use crate::slash_command::{process_slash_command_message, ProcessedCommand, SlashCommand};
+
+        tracing::info!("SPEC-KIT-920: Dispatching initial command at startup: {}", cmd_text);
+
+        match process_slash_command_message(cmd_text) {
+            ProcessedCommand::RegularCommand {
+                command,
+                command_text,
+                ..
+            } => {
+                tracing::info!("SPEC-KIT-920: Auto-submitting regular command: {}", cmd_text);
+                app_event_tx.send(AppEvent::DispatchCommand(command, command_text));
+            }
+            ProcessedCommand::ExpandedPrompt(_) | ProcessedCommand::SpecAuto(_) => {
+                // These are handled by the normal command processing flow
+                tracing::info!(
+                    "SPEC-KIT-920: Submitting expanded/spec-auto command: {}",
+                    cmd_text
+                );
+                // Parse and dispatch as a regular slash command
+                if let Ok(command) = cmd_text[1..]
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("")
+                    .parse::<SlashCommand>()
+                {
+                    app_event_tx.send(AppEvent::DispatchCommand(command, cmd_text.to_string()));
+                }
+            }
+            ProcessedCommand::Error(msg) => {
+                tracing::error!("SPEC-KIT-920: Command processing error: {}", msg);
+                // Error will be shown in the UI when it processes the next event
+            }
+            ProcessedCommand::NotCommand(_) => {
+                tracing::error!(
+                    "SPEC-KIT-920: Invalid or unrecognized slash command: {}",
+                    cmd_text
+                );
+            }
         }
     }
 
@@ -1112,44 +1159,12 @@ impl App<'_> {
                     }
 
                     // SPEC-KIT-920: Auto-submit initial command after first successful redraw
-                    tracing::info!("SPEC-KIT-920 DEBUG: Redraw complete, dispatched={}, cmd={:?}",
-                        self.initial_command_dispatched, self.initial_command);
+                    // This ensures the UI is fully initialized before commands execute,
+                    // preventing output routing issues where build output gets piped into the input box.
                     if !self.initial_command_dispatched {
                         if let Some(cmd_text) = &self.initial_command {
-                            use crate::slash_command::{ProcessedCommand, process_slash_command_message};
-                            match process_slash_command_message(cmd_text) {
-                                ProcessedCommand::RegularCommand { command, command_text, .. } => {
-                                    tracing::info!("SPEC-KIT-920: Auto-submitting initial command: {}", cmd_text);
-                                    self.app_event_tx.send(AppEvent::DispatchCommand(command, command_text));
-                                    self.initial_command_dispatched = true;
-                                }
-                                ProcessedCommand::ExpandedPrompt(_) | ProcessedCommand::SpecAuto(_) => {
-                                    // These are handled by the normal command processing flow
-                                    // Send the raw command text and let the dispatcher handle it
-                                    tracing::info!("SPEC-KIT-920: Submitting expanded/spec-auto command: {}", cmd_text);
-                                    // Try parsing as a regular command to dispatch
-                                    if let Ok(command) = cmd_text[1..].split_whitespace().next().unwrap_or("").parse::<SlashCommand>() {
-                                        self.app_event_tx.send(AppEvent::DispatchCommand(command, cmd_text.clone()));
-                                    }
-                                    self.initial_command_dispatched = true;
-                                }
-                                ProcessedCommand::Error(msg) => {
-                                    tracing::error!("SPEC-KIT-920: {}", msg);
-                                    if let AppState::Chat { widget } = &mut self.app_state {
-                                        widget.history_push(crate::history_cell::new_error_event(msg));
-                                    }
-                                    self.initial_command_dispatched = true;
-                                }
-                                ProcessedCommand::NotCommand(_) => {
-                                    tracing::error!("SPEC-KIT-920: Initial command must start with '/': {}", cmd_text);
-                                    if let AppState::Chat { widget } = &mut self.app_state {
-                                        widget.history_push(crate::history_cell::new_error_event(
-                                            format!("--initial-command must start with '/' (got: {})", cmd_text)
-                                        ));
-                                    }
-                                    self.initial_command_dispatched = true;
-                                }
-                            }
+                            Self::dispatch_initial_command(&self.app_event_tx, cmd_text);
+                            self.initial_command_dispatched = true;
                         }
                     }
                 }
