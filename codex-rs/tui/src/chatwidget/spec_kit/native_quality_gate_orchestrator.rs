@@ -103,6 +103,7 @@ pub async fn spawn_quality_gate_agents_native(
             prompt,
             true, // read_only
             Some(batch_id.clone()),
+            false, // tmux_enabled - quality gates don't use tmux (too fast)
         ).await.map_err(|e| format!("Failed to spawn {}: {}", config_name, e))?;
 
         // Record agent spawn to SQLite for definitive routing at completion

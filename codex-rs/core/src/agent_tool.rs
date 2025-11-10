@@ -53,6 +53,9 @@ pub struct Agent {
     #[serde(skip)]
     #[allow(dead_code)]
     pub config: Option<AgentConfig>,
+    /// Enable tmux pane execution for observable agent runs (SPEC-KIT-923)
+    #[serde(default)]
+    pub tmux_enabled: bool,
 }
 
 // Global agent manager
@@ -157,6 +160,7 @@ impl AgentManager {
             read_only,
             batch_id,
             None,
+            false, // tmux_enabled defaults to false
         )
         .await
     }
@@ -171,6 +175,7 @@ impl AgentManager {
     /// * `prompt` - Task prompt
     /// * `read_only` - Whether agent runs read-only
     /// * `batch_id` - Optional batch identifier
+    /// * `tmux_enabled` - Enable tmux pane execution for observability (SPEC-KIT-923)
     ///
     /// # Returns
     /// Agent ID if spawned successfully, error if config not found
@@ -181,6 +186,7 @@ impl AgentManager {
         prompt: String,
         read_only: bool,
         batch_id: Option<String>,
+        tmux_enabled: bool,
     ) -> Result<String, String> {
         // Look up agent config by name
         let agent_config = agent_configs
@@ -205,6 +211,7 @@ impl AgentManager {
             read_only,
             batch_id,
             Some(agent_config.clone()),
+            tmux_enabled,
         ).await;
 
         Ok(agent_id)
@@ -230,6 +237,7 @@ impl AgentManager {
             read_only,
             batch_id,
             Some(config),
+            false, // tmux_enabled defaults to false
         )
         .await
     }
@@ -244,6 +252,7 @@ impl AgentManager {
         read_only: bool,
         batch_id: Option<String>,
         config: Option<AgentConfig>,
+        tmux_enabled: bool,
     ) -> String {
         let agent_id = Uuid::new_v4().to_string();
 
@@ -266,6 +275,7 @@ impl AgentManager {
             worktree_path: None,
             branch_name: None,
             config: config.clone(),
+            tmux_enabled,
         };
 
         self.agents.insert(agent_id.clone(), agent.clone());
@@ -503,6 +513,7 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
     let context = agent.context.clone();
     let output_goal = agent.output_goal.clone();
     let files = agent.files.clone();
+    let tmux_enabled = agent.tmux_enabled;
 
     drop(manager); // Release the lock before executing
 
@@ -564,6 +575,7 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
                             false,
                             Some(worktree_path),
                             config.clone(),
+                            tmux_enabled,
                         )
                         .await
                     }
@@ -578,7 +590,7 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
             "{}\n\n[Running in read-only mode - no modifications allowed]",
             full_prompt
         );
-        execute_model_with_permissions(&model, &full_prompt, true, None, config).await
+        execute_model_with_permissions(&model, &full_prompt, true, None, config, tmux_enabled).await
     };
 
     // Update result
@@ -592,6 +604,7 @@ async fn execute_model_with_permissions(
     read_only: bool,
     working_dir: Option<PathBuf>,
     config: Option<AgentConfig>,
+    use_tmux: bool,
 ) -> Result<String, String> {
     // Helper: cross‑platform check whether an executable is available in PATH
     // and is directly spawnable by std::process::Command (no shell wrappers).
@@ -750,6 +763,121 @@ async fn execute_model_with_permissions(
             "Required agent '{}' is not installed or not in PATH",
             command
         ));
+    }
+
+    // SPEC-KIT-923: Observable agent execution via tmux panes
+    // If use_tmux is enabled and tmux is available, execute in a tmux pane
+    if use_tmux && crate::tmux::is_tmux_available().await {
+        tracing::info!("Using tmux pane execution for observable agent run");
+
+        // Generate session name based on context
+        let session_name = format!("agents-{}", model);
+
+        // Ensure session exists
+        if let Err(e) = crate::tmux::ensure_session(&session_name).await {
+            tracing::warn!("Failed to create tmux session, falling back to normal execution: {}", e);
+            // Fall through to normal execution
+        } else {
+            // Create pane for this agent
+            let pane_title = format!("{}", model);
+            match crate::tmux::create_pane(&session_name, &pane_title, false).await {
+                Ok(pane_id) => {
+                    // Build environment map
+                    let mut env: std::collections::HashMap<String, String> = std::env::vars().collect();
+                    if let Some(ref cfg) = config {
+                        if let Some(ref e) = cfg.env {
+                            for (k, v) in e {
+                                env.insert(k.clone(), v.clone());
+                            }
+                        }
+                    }
+
+                    // Build command string with args
+                    let program = if (model_lower == "code" || model_lower == "codex") && config.is_none() {
+                        std::env::current_exe()
+                            .map(|p| p.to_string_lossy().to_string())
+                            .unwrap_or_else(|_| command.clone())
+                    } else {
+                        command.clone()
+                    };
+
+                    // Build args exactly as normal execution would
+                    let mut args: Vec<String> = Vec::new();
+                    if let Some(ref cfg) = config {
+                        if read_only {
+                            if let Some(ro) = cfg.args_read_only.as_ref() {
+                                args.extend(ro.iter().cloned());
+                            } else {
+                                args.extend(cfg.args.iter().cloned());
+                            }
+                        } else if let Some(w) = cfg.args_write.as_ref() {
+                            args.extend(w.iter().cloned());
+                        } else {
+                            args.extend(cfg.args.iter().cloned());
+                        }
+                    }
+
+                    match model_name {
+                        "claude" | "gemini" | "qwen" => {
+                            let mut defaults = crate::agent_defaults::default_params_for(model_name, read_only);
+                            defaults.push("-p".into());
+                            defaults.push(prompt.to_string());
+                            args.extend(defaults);
+                        }
+                        "codex" | "code" => {
+                            let have_mode_args = config
+                                .as_ref()
+                                .map(|c| {
+                                    if read_only {
+                                        c.args_read_only.is_some()
+                                    } else {
+                                        c.args_write.is_some()
+                                    }
+                                })
+                                .unwrap_or(false);
+                            if have_mode_args {
+                                args.push(prompt.to_string());
+                            } else {
+                                let mut defaults = crate::agent_defaults::default_params_for(model_name, read_only);
+                                defaults.push(prompt.to_string());
+                                args.extend(defaults);
+                            }
+                        }
+                        _ => {}
+                    }
+
+                    // Execute in tmux pane with 10 minute timeout
+                    let timeout_secs = 600;
+                    match crate::tmux::execute_in_pane(
+                        &session_name,
+                        &pane_id,
+                        &program,
+                        &args,
+                        &env,
+                        working_dir.as_deref(),
+                        timeout_secs,
+                    ).await {
+                        Ok(output) => {
+                            tracing::info!("Agent completed via tmux pane, {} bytes output", output.len());
+
+                            // Print attach instructions for user
+                            let instructions = crate::tmux::get_attach_instructions(&session_name);
+                            tracing::info!("{}", instructions);
+
+                            return Ok(output);
+                        }
+                        Err(e) => {
+                            tracing::warn!("Tmux execution failed, falling back to normal execution: {}", e);
+                            // Fall through to normal execution
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to create tmux pane, falling back to normal execution: {}", e);
+                    // Fall through to normal execution
+                }
+            }
+        }
     }
 
     // Agents: run without OS sandboxing; rely on per-branch worktrees for isolation.

@@ -254,6 +254,15 @@ async fn spawn_and_wait_for_agent(
     tracing::warn!("{}   Prompt size: {} chars", run_tag, prompt.len());
     tracing::warn!("{}   Prompt preview: {}", run_tag, &prompt.chars().take(300).collect::<String>());
 
+    // SPEC-KIT-923: Check for observable agents flag
+    let tmux_enabled = std::env::var("SPEC_KIT_OBSERVABLE_AGENTS")
+        .map(|v| v == "1" || v.to_lowercase() == "true")
+        .unwrap_or(false);
+
+    if tmux_enabled {
+        tracing::info!("{}   🔍 Observable agents ENABLED (tmux mode)", run_tag);
+    }
+
     // Spawn agent
     let agent_id = {
         let mut manager = AGENT_MANAGER.write().await;
@@ -263,6 +272,7 @@ async fn spawn_and_wait_for_agent(
             prompt.clone(),
             false,
             Some(batch_id.to_string()),
+            tmux_enabled, // SPEC-KIT-923
         ).await.map_err(|e| {
             tracing::error!("  ❌ Spawn error for {}: {}", agent_name, e);
             format!("Failed to spawn {}: {}", agent_name, e)
@@ -458,6 +468,15 @@ async fn spawn_regular_stage_agents_parallel(
     let mut spawn_infos = Vec::new();
     let batch_id = uuid::Uuid::new_v4().to_string();
 
+    // SPEC-KIT-923: Check for observable agents flag
+    let tmux_enabled = std::env::var("SPEC_KIT_OBSERVABLE_AGENTS")
+        .map(|v| v == "1" || v.to_lowercase() == "true")
+        .unwrap_or(false);
+
+    if tmux_enabled {
+        tracing::info!("{} 🔍 Observable agents ENABLED (tmux mode)", run_tag);
+    }
+
     let agent_config_map: std::collections::HashMap<&str, &str> = [
         ("gemini", "gemini_flash"),
         ("claude", "claude_haiku"),
@@ -483,6 +502,7 @@ async fn spawn_regular_stage_agents_parallel(
             prompt,
             false,
             Some(batch_id.clone()),
+            tmux_enabled, // SPEC-KIT-923
         ).await.map_err(|e| format!("Failed to spawn {}: {}", agent_name, e))?;
 
         // Record to SQLite with run_id
