@@ -88,6 +88,12 @@ sandbox_mode = "workspace-write"
 [shell_environment_policy]
 mode = "inherit"
 
+# Spec-Kit automation settings (SPEC-KIT-922)
+# These can be configured via environment variables set here
+# Example: [shell_environment_policy.set]
+# SPEC_KIT_AUTO_COMMIT = "true"  # Enable auto-commit (default: true)
+# SPEC_KIT_TELEMETRY_ENABLED = "true"  # Enable telemetry (default: false)
+
 # Notifications (optional)
 # notify = ["notify-send", "Codex"]
 

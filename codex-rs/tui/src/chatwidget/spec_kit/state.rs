@@ -984,3 +984,20 @@ pub fn spec_kit_telemetry_enabled(env_policy: &ShellEnvironmentPolicy) -> bool {
 
     false
 }
+
+/// Check if spec-kit auto-commit is enabled via env or config
+/// Defaults to true for automated workflows (SPEC-KIT-922)
+pub fn spec_kit_auto_commit_enabled(env_policy: &ShellEnvironmentPolicy) -> bool {
+    // Check environment variable first (explicit override)
+    if let Ok(value) = std::env::var("SPEC_KIT_AUTO_COMMIT") {
+        return super::consensus::telemetry_value_truthy(&value);
+    }
+
+    // Check config override
+    if let Some(value) = env_policy.r#set.get("SPEC_KIT_AUTO_COMMIT") {
+        return super::consensus::telemetry_value_truthy(value);
+    }
+
+    // Default to true (enabled by default for clean tree maintenance)
+    true
+}

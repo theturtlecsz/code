@@ -1034,6 +1034,10 @@ impl ChatWidget<'_> {
         spec_kit::state::spec_kit_telemetry_enabled(&self.config.shell_environment_policy)
     }
 
+    fn spec_kit_auto_commit_enabled(&self) -> bool {
+        spec_kit::state::spec_kit_auto_commit_enabled(&self.config.shell_environment_policy)
+    }
+
     fn ensure_validate_lifecycle(&mut self, spec_id: &str) -> ValidateLifecycle {
         self.validate_lifecycles
             .entry(spec_id.to_string())

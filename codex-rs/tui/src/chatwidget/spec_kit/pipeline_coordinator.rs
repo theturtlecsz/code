@@ -787,6 +787,30 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
 
                 persist_cost_summary(widget, &spec_id);
 
+                // SPEC-KIT-922: Auto-commit stage artifacts after consensus succeeds
+                if widget.spec_kit_auto_commit_enabled() {
+                    match super::git_integration::auto_commit_stage_artifacts(
+                        &spec_id,
+                        current_stage,
+                        &widget.config.cwd,
+                        true, // Already checked via spec_kit_auto_commit_enabled()
+                    ) {
+                        Ok(()) => {
+                            tracing::info!("Auto-commit successful for {} stage", current_stage.display_name());
+                        }
+                        Err(err) => {
+                            tracing::warn!("Auto-commit failed (non-fatal): {}", err);
+                            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                                vec![ratatui::text::Line::from(format!(
+                                    "⚠ Auto-commit failed (continuing): {}",
+                                    err
+                                ))],
+                                HistoryCellType::Notice,
+                            ));
+                        }
+                    }
+                }
+
                 // Log stage complete event
                 if let Some(state) = widget.spec_auto_state.as_ref() {
                     if let Some(run_id) = &state.run_id {
