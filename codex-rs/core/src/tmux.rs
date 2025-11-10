@@ -194,11 +194,9 @@ pub async fn execute_in_pane(
     // Append marker for completion detection
     full_command.push_str("; echo '___AGENT_COMPLETE___'");
 
-    // Add cleanup for temp files AND output file
+    // Add cleanup for temp files ONLY (NOT output file - we need to read it first)
     if !temp_files.is_empty() {
-        full_command.push_str(&format!("; rm -f {} {}", temp_files.join(" "), output_file));
-    } else {
-        full_command.push_str(&format!("; rm -f {}", output_file));
+        full_command.push_str(&format!("; rm -f {}", temp_files.join(" ")));
     }
 
     tracing::debug!(
@@ -212,9 +210,9 @@ pub async fn execute_in_pane(
         }
     );
 
-    // Clear the pane first
+    // Clear the pane history first (use proper clear-history command, not send-keys -X)
     let _ = Command::new("tmux")
-        .args(["send-keys", "-t", pane_id, "-X", "clear-history"])
+        .args(["clear-history", "-t", pane_id])
         .status()
         .await;
 
@@ -285,6 +283,10 @@ pub async fn execute_in_pane(
                 let output = match tokio::fs::read_to_string(&output_file).await {
                     Ok(content) => {
                         tracing::debug!("Read {} bytes from output file: {}", content.len(), output_file);
+
+                        // Clean up output file after successful read
+                        let _ = tokio::fs::remove_file(&output_file).await;
+
                         content
                     }
                     Err(e) => {
@@ -318,9 +320,8 @@ pub async fn execute_in_pane(
                     }
                 };
 
-                // Note: temp files and output file are cleaned up by the shell command itself
-                // (via the "rm -f" appended to full_command)
-                // We only need manual cleanup on error/timeout paths
+                // Note: temp files are cleaned up by the shell command itself
+                // Output file is cleaned up after successful read (or on error/timeout paths)
 
                 return Ok(output.trim().to_string());
             }
