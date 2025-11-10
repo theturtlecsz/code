@@ -1,0 +1,633 @@
+{
+  "generatedAt": "2025-11-09T18:14:43.502Z",
+  "docs": [
+    {
+      "path": "ACE_ACTIVATION_GUIDE.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761512817000
+    },
+    {
+      "path": "ACE_TROUBLESHOOTING.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761512817000
+    },
+    {
+      "path": "MEMORY-POLICY.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761700210000
+    },
+    {
+      "path": "README.md",
+      "score": 65,
+      "orphan": true,
+      "broken": [
+        "../docs/config.md",
+        "../docs/config.md",
+        "core",
+        "exec",
+        "tui",
+        "cli"
+      ],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761512817000
+    },
+    {
+      "path": "REVIEW.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761700210000
+    },
+    {
+      "path": "TMUX-AUTOMATION-SUMMARY.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "ansi-escape/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1745526700000
+    },
+    {
+      "path": "apply-patch/apply_patch_tool_instructions.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1755832061000
+    },
+    {
+      "path": "chatgpt/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1752255011000
+    },
+    {
+      "path": "common/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1746578336000
+    },
+    {
+      "path": "config.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760759796000
+    },
+    {
+      "path": "core/README.md",
+      "score": 80,
+      "orphan": true,
+      "broken": [
+        "../docs/slash-commands.md"
+      ],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1757289363000
+    },
+    {
+      "path": "core/gpt_5_codex_prompt.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758152900000
+    },
+    {
+      "path": "core/prompt.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758005136000
+    },
+    {
+      "path": "core/prompt_coder.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1760759796000
+    },
+    {
+      "path": "core/review_prompt.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1757719510000
+    },
+    {
+      "path": "core/src/prompt_for_pro_observer.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758576178000
+    },
+    {
+      "path": "core/templates/compact/history_bridge.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1757707630000
+    },
+    {
+      "path": "core/templates/compact/prompt.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1757707630000
+    },
+    {
+      "path": "docs/SPEC-KIT-DEMO/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759709593000
+    },
+    {
+      "path": "docs/architecture/phase0-baseline.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758411212000
+    },
+    {
+      "path": "docs/codex_mcp_interface.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758598847000
+    },
+    {
+      "path": "docs/protocol_v1.md",
+      "score": 70,
+      "orphan": true,
+      "broken": [
+        "core/src/protocol.rs",
+        "core/src/agent.rs",
+        "core/src/protocol.rs"
+      ],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1745526700000
+    },
+    {
+      "path": "docs/report/docs-report.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/report/verification.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "execpolicy/README.md",
+      "score": 75,
+      "orphan": true,
+      "broken": [
+        "execpolicy/src/default.policy",
+        "execpolicy/tests"
+      ],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1745540087000
+    },
+    {
+      "path": "file-search/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1750883343000
+    },
+    {
+      "path": "git-tooling/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758671227000
+    },
+    {
+      "path": "linux-sandbox/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1748025427000
+    },
+    {
+      "path": "mcp-types/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1752898174000
+    },
+    {
+      "path": "protocol/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1755422854000
+    },
+    {
+      "path": "scripts/TMUX-AUTOMATION-README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "tui/ACE_LEARNING_USAGE.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1761445034000
+    },
+    {
+      "path": "tui/HISTORY_CELLS_PLAN.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1758798760000
+    },
+    {
+      "path": "tui/prompt_for_init_command.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1754506737000
+    },
+    {
+      "path": "tui/styles.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1755532945000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/conflict/SPEC.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/hal-skipped/SPEC.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/healthy/SPEC.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/missing-doc/SPEC.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/missing-doc/docs/SPEC-FIX-MISS/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/missing-doc/docs/SPEC-FIX-MISS/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/missing-doc/docs/SPEC-FIX-MISS/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/oversized/SPEC.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/stale/SPEC.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/plan.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/spec.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    },
+    {
+      "path": "tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/tasks.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1759928771000
+    }
+  ],
+  "dupClusters": [
+    [
+      "tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/PRD.md",
+      "tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/plan.md",
+      "tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/spec.md",
+      "tui/tests/fixtures/spec_status/conflict/docs/SPEC-FIX-CONFLICT/tasks.md",
+      "tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/PRD.md",
+      "tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/plan.md",
+      "tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/spec.md",
+      "tui/tests/fixtures/spec_status/hal-skipped/docs/SPEC-FIX-HALSKIP/tasks.md",
+      "tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/PRD.md",
+      "tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/plan.md",
+      "tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/spec.md",
+      "tui/tests/fixtures/spec_status/healthy/docs/SPEC-FIX-HEALTHY/tasks.md",
+      "tui/tests/fixtures/spec_status/missing-doc/docs/SPEC-FIX-MISS/PRD.md",
+      "tui/tests/fixtures/spec_status/missing-doc/docs/SPEC-FIX-MISS/plan.md",
+      "tui/tests/fixtures/spec_status/missing-doc/docs/SPEC-FIX-MISS/spec.md",
+      "tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/PRD.md",
+      "tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/plan.md",
+      "tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/spec.md",
+      "tui/tests/fixtures/spec_status/oversized/docs/SPEC-FIX-OVERSIZED/tasks.md",
+      "tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/PRD.md",
+      "tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/plan.md",
+      "tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/spec.md",
+      "tui/tests/fixtures/spec_status/stale/docs/SPEC-FIX-STALE/tasks.md"
+    ]
+  ]
+}
