@@ -177,18 +177,26 @@ pub async fn execute_in_pane(
         full_command.push_str(&format!("export {}='{}'; ", key, escaped_value));
     }
 
+    // Create unique output file for this agent execution
+    let output_file = format!("/tmp/tmux-agent-output-{}-{}.txt", std::process::id(), pane_id.replace(":", "-").replace(".", "-"));
+
     // Add the actual command with processed arguments
     full_command.push_str(command);
     for arg in &processed_args {
         full_command.push_str(&format!(" {}", arg));
     }
 
+    // Redirect stdout and stderr to output file
+    full_command.push_str(&format!(" > {} 2>&1", output_file));
+
     // Append marker for completion detection
     full_command.push_str("; echo '___AGENT_COMPLETE___'");
 
-    // Add cleanup for temp files
+    // Add cleanup for temp files AND output file
     if !temp_files.is_empty() {
-        full_command.push_str(&format!("; rm -f {}", temp_files.join(" ")));
+        full_command.push_str(&format!("; rm -f {} {}", temp_files.join(" "), output_file));
+    } else {
+        full_command.push_str(&format!("; rm -f {}", output_file));
     }
 
     tracing::debug!(
@@ -223,7 +231,7 @@ pub async fn execute_in_pane(
         return Err(format!("Failed to execute command in pane {}", pane_id));
     }
 
-    // Wait for completion (poll for marker)
+    // Wait for completion (poll for marker by checking pane content)
     let start = std::time::Instant::now();
     let timeout = std::time::Duration::from_secs(timeout_secs);
     let poll_interval = std::time::Duration::from_millis(500);
@@ -236,10 +244,11 @@ pub async fn execute_in_pane(
                 .status()
                 .await;
 
-            // Cleanup temp files on timeout (command may not have finished)
+            // Cleanup temp files and output file on timeout
             for temp_file in &temp_files {
                 let _ = tokio::fs::remove_file(temp_file).await;
             }
+            let _ = tokio::fs::remove_file(&output_file).await;
 
             return Err(format!(
                 "Timeout waiting for agent completion after {}s",
@@ -247,37 +256,71 @@ pub async fn execute_in_pane(
             ));
         }
 
-        // Capture pane content
+        // Check pane content for completion marker (to know when to read output file)
         let capture = Command::new("tmux")
             .args(["capture-pane", "-t", pane_id, "-p", "-S", "-"])
             .output()
             .await
             .map_err(|e| {
-                // Cleanup temp files on error
+                // Cleanup temp files and output file on error
                 let temp_files_clone = temp_files.clone();
+                let output_file_clone = output_file.clone();
                 tokio::spawn(async move {
                     for temp_file in &temp_files_clone {
                         let _ = tokio::fs::remove_file(temp_file).await;
                     }
+                    let _ = tokio::fs::remove_file(&output_file_clone).await;
                 });
                 format!("Failed to capture pane: {}", e)
             })?;
 
         if capture.status.success() {
-            let output = String::from_utf8_lossy(&capture.stdout).to_string();
-            if output.contains("___AGENT_COMPLETE___") {
-                // Remove the marker from output
-                let output = output
-                    .replace("___AGENT_COMPLETE___", "")
-                    .trim()
-                    .to_string();
-                tracing::info!("Agent completed in pane {}", pane_id);
+            let pane_content = String::from_utf8_lossy(&capture.stdout).to_string();
+            if pane_content.contains("___AGENT_COMPLETE___") {
+                tracing::info!("Agent completed in pane {}, reading output file", pane_id);
 
-                // Note: temp files are cleaned up by the shell command itself
+                // Read clean output from dedicated output file
+                let output = match tokio::fs::read_to_string(&output_file).await {
+                    Ok(content) => {
+                        tracing::debug!("Read {} bytes from output file: {}", content.len(), output_file);
+                        content
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to read agent output file {}: {}", output_file, e);
+                        // Fallback to pane capture if output file read fails
+                        // This strips shell noise as best we can
+                        let lines: Vec<&str> = pane_content.lines().collect();
+                        let mut clean_lines = Vec::new();
+                        let mut in_output = false;
+
+                        for line in lines {
+                            // Skip shell prompts and environment setup
+                            if line.starts_with("thetu@") || line.contains("cd ") || line.contains("export ") {
+                                continue;
+                            }
+                            // Skip the agent command line itself
+                            if line.contains("/usr/bin/spec") {
+                                in_output = true;
+                                continue;
+                            }
+                            // Skip the completion marker
+                            if line.contains("___AGENT_COMPLETE___") {
+                                break;
+                            }
+                            if in_output {
+                                clean_lines.push(line);
+                            }
+                        }
+
+                        clean_lines.join("\n")
+                    }
+                };
+
+                // Note: temp files and output file are cleaned up by the shell command itself
                 // (via the "rm -f" appended to full_command)
                 // We only need manual cleanup on error/timeout paths
 
-                return Ok(output);
+                return Ok(output.trim().to_string());
             }
         }
 
