@@ -178,7 +178,9 @@ pub async fn execute_in_pane(
     }
 
     // Create unique output file for this agent execution
-    let output_file = format!("/tmp/tmux-agent-output-{}-{}.txt", std::process::id(), pane_id.replace(":", "-").replace(".", "-"));
+    // Tmux pane IDs use %XX format - strip % and sanitize for safe filenames
+    let sanitized_pane = pane_id.replace("%", "").replace(":", "-").replace(".", "-");
+    let output_file = format!("/tmp/tmux-agent-output-{}-{}.txt", std::process::id(), sanitized_pane);
 
     // Add the actual command with processed arguments
     full_command.push_str(command);
