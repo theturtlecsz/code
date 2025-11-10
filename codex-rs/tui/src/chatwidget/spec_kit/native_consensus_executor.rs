@@ -30,7 +30,7 @@ use super::consensus_coordinator::block_on_sync;
 use super::error::{Result, SpecKitError};
 use crate::history_cell::HistoryCellType;
 use crate::spec_prompts::{SpecAgent, SpecStage};
-use codex_core::agent_tool::{AgentManager, AgentStatus, AGENT_MANAGER};
+use codex_core::agent_tool::{AGENT_MANAGER, AgentManager, AgentStatus};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -74,23 +74,14 @@ pub fn execute_native_consensus(
         async move { manager.lock().await.as_ref().cloned() }
     });
 
-    let prompt_base = crate::spec_prompts::build_stage_prompt_with_mcp(
-        stage,
-        spec_id,
-        mcp_manager.clone(),
-    )
-    .map_err(|e| SpecKitError::from_string(format!("Failed to build prompt: {}", e)))?;
+    let prompt_base =
+        crate::spec_prompts::build_stage_prompt_with_mcp(stage, spec_id, mcp_manager.clone())
+            .map_err(|e| SpecKitError::from_string(format!("Failed to build prompt: {}", e)))?;
 
     // 3. Spawn agents in parallel using AgentManager
     let batch_id = uuid::Uuid::new_v4().to_string();
-    let agent_ids = spawn_agents_natively(
-        widget,
-        stage,
-        agents,
-        &prompt_base,
-        &context,
-        &batch_id,
-    )?;
+    let agent_ids =
+        spawn_agents_natively(widget, stage, agents, &prompt_base, &context, &batch_id)?;
 
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
         vec![ratatui::text::Line::from(format!(
@@ -137,11 +128,7 @@ pub fn execute_native_consensus(
 }
 
 /// Read context files natively
-fn read_context_files(
-    _widget: &ChatWidget,
-    spec_id: &str,
-    stage: SpecStage,
-) -> Result<String> {
+fn read_context_files(_widget: &ChatWidget, spec_id: &str, stage: SpecStage) -> Result<String> {
     use std::fs;
     use std::path::PathBuf;
 
@@ -201,9 +188,8 @@ fn spawn_agents_natively(
     let mut agent_ids = Vec::new();
 
     for agent_name in agents {
-        let spec_agent = SpecAgent::from_string(agent_name).ok_or_else(|| {
-            SpecKitError::from_string(format!("Unknown agent: {}", agent_name))
-        })?;
+        let spec_agent = SpecAgent::from_string(agent_name)
+            .ok_or_else(|| SpecKitError::from_string(format!("Unknown agent: {}", agent_name)))?;
 
         // Get agent config
         let agent_config = widget
@@ -217,8 +203,8 @@ fn spawn_agents_natively(
             .clone();
 
         // Get agent prompt from prompts.json
-        let agent_prompt = crate::spec_prompts::agent_prompt(stage.key(), spec_agent)
-            .ok_or_else(|| {
+        let agent_prompt =
+            crate::spec_prompts::agent_prompt(stage.key(), spec_agent).ok_or_else(|| {
                 SpecKitError::from_string(format!(
                     "No prompt for {} in stage {}",
                     agent_name,
@@ -244,10 +230,10 @@ fn spawn_agents_natively(
                     .create_agent_with_config(
                         model,
                         prompt,
-                        None,         // context (already in prompt)
-                        None,         // output_goal
-                        Vec::new(),   // files
-                        true,         // read_only
+                        None,       // context (already in prompt)
+                        None,       // output_goal
+                        Vec::new(), // files
+                        true,       // read_only
                         batch,
                         config,
                     )
@@ -262,10 +248,7 @@ fn spawn_agents_natively(
 }
 
 /// Wait for agents to complete natively (poll status)
-fn wait_for_agents_natively(
-    agent_ids: &[String],
-    timeout: Duration,
-) -> Result<Vec<AgentResult>> {
+fn wait_for_agents_natively(agent_ids: &[String], timeout: Duration) -> Result<Vec<AgentResult>> {
     let start = std::time::Instant::now();
     let poll_interval = Duration::from_millis(500);
 
@@ -357,10 +340,7 @@ fn aggregate_results_natively(
     }
 
     // Collect successful results
-    let agent_outputs: Vec<String> = results
-        .iter()
-        .filter_map(|r| r.result.clone())
-        .collect();
+    let agent_outputs: Vec<String> = results.iter().filter_map(|r| r.result.clone()).collect();
 
     // Simple native aggregation: concatenate outputs
     // TODO: Use gpt_pro for synthesis if needed
@@ -372,7 +352,12 @@ fn aggregate_results_natively(
     );
 
     // Optional: Use gpt_pro for synthesis
-    if widget.config.agents.iter().any(|cfg| cfg.enabled && cfg.name.eq_ignore_ascii_case("gpt_pro")) {
+    if widget
+        .config
+        .agents
+        .iter()
+        .any(|cfg| cfg.enabled && cfg.name.eq_ignore_ascii_case("gpt_pro"))
+    {
         // TODO: Spawn gpt_pro agent to synthesize results
         // For now, use simple concatenation
     }

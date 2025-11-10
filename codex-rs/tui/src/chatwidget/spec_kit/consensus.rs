@@ -7,7 +7,7 @@ use super::error::{Result, SpecKitError};
 // FORK-SPECIFIC (just-every/code): LocalMemoryClient removed, using native MCP
 use crate::spec_prompts::SpecStage;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::PathBuf;
 
 // ============================================================================
@@ -161,15 +161,10 @@ pub(in super::super) fn expected_agents_for_stage(
             SpecAgent::GptCodex,
             SpecAgent::GptPro,
         ],
-        SpecStage::Clarify | SpecStage::Analyze => vec![
-            SpecAgent::Gemini,
-            SpecAgent::Claude,
-            SpecAgent::Code,
-        ],
-        SpecStage::Checklist => vec![
-            SpecAgent::Claude,
-            SpecAgent::Code,
-        ],
+        SpecStage::Clarify | SpecStage::Analyze => {
+            vec![SpecAgent::Gemini, SpecAgent::Claude, SpecAgent::Code]
+        }
+        SpecStage::Checklist => vec![SpecAgent::Claude, SpecAgent::Code],
         _ => vec![SpecAgent::Gemini, SpecAgent::Claude, SpecAgent::GptPro],
     }
 }
@@ -267,7 +262,10 @@ pub(crate) async fn collect_consensus_artifacts(
     if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
         match db.query_artifacts(spec_id, stage) {
             Ok(sqlite_artifacts) if !sqlite_artifacts.is_empty() => {
-                tracing::info!("✓ Loaded {} consensus artifacts from SQLite (primary source)", sqlite_artifacts.len());
+                tracing::info!(
+                    "✓ Loaded {} consensus artifacts from SQLite (primary source)",
+                    sqlite_artifacts.len()
+                );
 
                 let mut artifacts = Vec::new();
                 for artifact in sqlite_artifacts {
@@ -282,13 +280,23 @@ pub(crate) async fn collect_consensus_artifacts(
                 }
 
                 if !artifacts.is_empty() {
-                    warnings.push(format!("Loaded {} artifacts from SQLite database", artifacts.len()));
+                    warnings.push(format!(
+                        "Loaded {} artifacts from SQLite database",
+                        artifacts.len()
+                    ));
                     return Ok((artifacts, warnings));
                 }
             }
             Ok(_) => {
-                tracing::info!("No SQLite artifacts found for {} {}", spec_id, stage.command_name());
-                warnings.push("No artifacts in SQLite database (expected if agents just completed)".to_string());
+                tracing::info!(
+                    "No SQLite artifacts found for {} {}",
+                    spec_id,
+                    stage.command_name()
+                );
+                warnings.push(
+                    "No artifacts in SQLite database (expected if agents just completed)"
+                        .to_string(),
+                );
             }
             Err(e) => {
                 tracing::warn!("SQLite query failed: {}", e);
@@ -296,12 +304,15 @@ pub(crate) async fn collect_consensus_artifacts(
             }
         }
     } else {
-        warnings.push("SQLite database initialization failed - check ~/.code/ permissions".to_string());
+        warnings
+            .push("SQLite database initialization failed - check ~/.code/ permissions".to_string());
     }
 
     // DEPRECATED: local-memory fallback (Phase 2 removed agent MCP tool usage)
     // Keeping temporarily for migration period, but should not be needed
-    tracing::warn!("DEPRECATED: Falling back to local-memory MCP (should not happen after Phase 2)");
+    tracing::warn!(
+        "DEPRECATED: Falling back to local-memory MCP (should not happen after Phase 2)"
+    );
 
     // ARCH-002: Fallback to local-memory MCP (DEPRECATED in Phase 2)
     match fetch_memory_entries(spec_id, stage, mcp_manager).await {
@@ -513,7 +524,7 @@ async fn fetch_memory_entries(
     // Note: Agents may tag with either "stage:plan" or "stage:spec-plan"
     // Search for both variations to handle inconsistent tagging
     let stage_tag_1 = format!("stage:{}", stage.display_name().to_lowercase()); // "stage:plan"
-    let stage_tag_2 = format!("stage:{}", stage.command_name());  // "stage:spec-plan"
+    let stage_tag_2 = format!("stage:{}", stage.command_name()); // "stage:spec-plan"
 
     let args = json!({
         "query": query,

@@ -5372,8 +5372,11 @@ fn write_agent_meta(dir: &Path, agent: &crate::agent_tool::Agent) -> Result<Path
         "read_only": agent.read_only,
         "worktree_path": agent.worktree_path,
     });
-    std::fs::write(&meta_path, serde_json::to_string_pretty(&meta).unwrap_or_default())
-        .map_err(|e| format!("Failed to write {}: {}", meta_path.display(), e))?;
+    std::fs::write(
+        &meta_path,
+        serde_json::to_string_pretty(&meta).unwrap_or_default(),
+    )
+    .map_err(|e| format!("Failed to write {}: {}", meta_path.display(), e))?;
     Ok(meta_path)
 }
 
@@ -7302,7 +7305,8 @@ async fn handle_check_agent_status(
                                 }
                             };
                             // Best-effort: write/update meta.json for discovery
-                            if let Some(agent) = AGENT_MANAGER.read().await.get_agent(&params.agent_id)
+                            if let Some(agent) =
+                                AGENT_MANAGER.read().await.get_agent(&params.agent_id)
                             {
                                 let _ = write_agent_meta(&dir, &agent);
                             }

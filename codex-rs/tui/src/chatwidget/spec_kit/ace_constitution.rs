@@ -134,9 +134,9 @@ fn convert_to_imperative(text: &str) -> String {
 
     // Already imperative (starts with verb)
     let imperative_verbs = [
-        "Keep", "Update", "Maintain", "Ensure", "Validate", "Check", "Use", "Avoid",
-        "Never", "Always", "Document", "Test", "Record", "Surface", "Add", "Remove",
-        "Extract", "Pin", "Call", "Run", "Execute", "Build", "Format", "Lint",
+        "Keep", "Update", "Maintain", "Ensure", "Validate", "Check", "Use", "Avoid", "Never",
+        "Always", "Document", "Test", "Record", "Surface", "Add", "Remove", "Extract", "Pin",
+        "Call", "Run", "Execute", "Build", "Format", "Lint",
     ];
 
     for verb in &imperative_verbs {
@@ -215,7 +215,10 @@ pub async fn pin_constitution_to_ace(
         match result {
             AceResult::Ok(response) => {
                 total_pinned += response.pinned_count;
-                debug!("Pinned {} bullets to scope {}", response.pinned_count, scope);
+                debug!(
+                    "Pinned {} bullets to scope {}",
+                    response.pinned_count, scope
+                );
             }
             AceResult::Error(e) => {
                 warn!("Failed to pin to scope {}: {}", scope, e);
@@ -316,10 +319,22 @@ mod tests {
 
     #[test]
     fn test_convert_to_imperative() {
-        assert_eq!(convert_to_imperative("Keep templates in sync"), "Keep templates in sync");
-        assert_eq!(convert_to_imperative("Templates must be synchronized"), "Ensure Templates be synchronized");
-        assert_eq!(convert_to_imperative("All tests should pass"), "Ensure all tests should pass");
-        assert_eq!(convert_to_imperative("The system validates"), "Follow: The system validates");
+        assert_eq!(
+            convert_to_imperative("Keep templates in sync"),
+            "Keep templates in sync"
+        );
+        assert_eq!(
+            convert_to_imperative("Templates must be synchronized"),
+            "Ensure Templates be synchronized"
+        );
+        assert_eq!(
+            convert_to_imperative("All tests should pass"),
+            "Ensure all tests should pass"
+        );
+        assert_eq!(
+            convert_to_imperative("The system validates"),
+            "Follow: The system validates"
+        );
     }
 
     #[test]

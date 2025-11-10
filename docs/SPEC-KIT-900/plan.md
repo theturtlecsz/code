@@ -2,43 +2,7 @@
 
 **Stage**: Plan
 **Agents**: 3
-**Generated**: 2025-11-10 03:26 UTC
-
-## Work Breakdown (from claude)
-
-1. 1. Infrastructure Validation & Quality Gates
-   - Rationale: SPEC-KIT-900 must validate foundational system health before executing core plan/tasks/validate stages. Quality gates catch ambiguities in spec and consistency issues early, preventing rework downstream. Current status: infrastructure complete (Session 3), prompts recently fixed (commit 5ffa267ae).
-2. 2. Plan Stage: Multi-Agent Work Breakdown (Gemini + Claude + GPT-Pro Sequential)
-   - Rationale: Plan stage solicits 3-agent research on reminder microservice requirements, builds consensus work breakdown, risk register, and success metrics. Sequential execution (Gemini → Claude → GPT-Pro) enables output passing and true collaborative synthesis. Gemini provides breadth (research), Claude provides synthesis (structure), GPT-Pro provides feasibility validation. Output: plan.md matching template structure.
-3. 3. Tasks Stage: Decompose Reminder Microservice Into 8-12 Implementable Tasks
-   - Rationale: Tasks stage breaks down plan milestones into specific, actionable work items. Gemini identifies surfaces/dependencies, Claude produces structured task list with validation steps, GPT-Pro verifies guardrails. Output: tasks.md with task table (Order | Task ID | Title | Status | Dependencies | Parallel? | Owner | Deliverable | DoD). Each task must reference one or more acceptance criteria from spec.
-4. 4. Validate Stage: Design Test Strategy, Rollback, Monitoring, Cost
-   - Rationale: Validate stage requests comprehensive validation strategy covering unit/integration/synthetic load tests, rollback checklist, monitoring KPIs, and cost estimate. Gemini analyzes test coverage gaps, Claude designs testing approach, GPT-Pro validates feasibility. Output: validate.md describing validation plan including unit/integration/e2e test matrix, rollback trigger thresholds, monitoring dashboard KPIs, estimated cost of validation suite.
-5. 5. Evidence Export & Telemetry Consolidation
-   - Rationale: Each stage produces JSON telemetry (schema v1), consensus artifacts (SQLite), and stage deliverables. Evidence must be automatically exported to docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-900/ with run_id, timestamp, stage metadata. Cost summary JSON aggregates per-stage costs into consolidated report. Local-memory stores high-value discoveries (importance ≥8).
-6. 6. Validation & Sign-Off: Confirm Outputs Match Acceptance Criteria
-   - Rationale: Final validation step ensures plan/tasks/validate outputs meet spec requirements. Analyst reviews outputs against acceptance mapping rubric (coherence, completeness, formatting, factual alignment) and confirms SQLite records contain expected artifact counts. Validates cost reporting and consensus quality metrics (≥90% agent agreement, <5% deadlocks).
-
-## Risks (from claude)
-
-- **Risk**: MCP Connectivity Offline: Current MCP endpoints reported offline (per Gemini research). If `/speckit.tasks` re-execution needed after prompt fix, delays recovery of live test run.
-  - Mitigation: Prerequisite: Verify MCP health (hal, local-memory, git-status endpoints reachable) before starting. If offline, set SPEC_OPS_HAL_SKIP=1 and use local fallbacks (file I/O instead of MCP queries). Document degradation in telemetry. Schedule post-fix live run once connectivity restored (per spec §Outstanding Risks T1 follow-up).
-- **Risk**: Telemetry Schema Enforcement Drift: Spec defines schema v1 structure (command, specId, sessionId, schemaVersion, artifacts[]) but enforcement may have lapsed if prompts/guardrails not updated in tandem. Adoption metrics (T7) degrade if schema not enforced.
-  - Mitigation: Before execution: Validate schema_smoke.py test passes on archived evidence. If guardrail scripts missing schema checks, add validation to `/guardrail.plan` /tasks /validate. Store schema contract in local-memory (importance:9) with enforcement status. Re-run T3 telemetry schema definition task if gaps found.
-- **Risk**: Evidence Footprint Compliance: SPEC-KIT-900 already has multiple prior runs. Footprint may exceed 25MB soft limit, triggering archival SOP. Lack of clear archival procedure (T5 Deliverable) risks repository bloat.
-  - Mitigation: Prerequisite: Run /spec-evidence-stats --spec SPEC-KIT-900 to confirm current footprint. If >15MB, implement cleanup per T5 SOP before new run. Document archival in local-memory (importance:8, tags: 'spec:SPEC-KIT-900', 'type:maintenance'). Verify T5 Evidence Footprint Guardrails task completed; if not, execute guardrail script manually.
-- **Risk**: Prompt Content Mismatch (Recent Fix): Prompts fixed 2025-11-05 (commit 5ffa267ae) to focus on reminder microservice workload instead of SPEC-KIT-900 infrastructure meta-analysis. No test run with corrected prompts yet. Risk: agents still produce wrong content.
-  - Mitigation: Verify prompts.json contains corrected stage prompts (spec-plan, spec-tasks, spec-validate all mention 'reminder' and 'microservice' and 'workload', NOT 'SPEC-KIT-900 infrastructure'). If mismatch detected, reload prompts.json from commit 5ffa267ae. Plan one validation test run to confirm outputs contain reminder microservice content, not debug logs or meta-analysis.
-- **Risk**: Agent Output Quality Degradation: Sequential execution with output passing (Gemini → Claude → GPT-Pro) depends on prior agent outputs being injected into prompts correctly. If variable substitution fails or context too large, downstream agents receive broken input.
-  - Mitigation: Verify agent_orchestrator.rs:197-292 sequential execution code passes actual outputs (not placeholder text) to next agent. Check ${PREVIOUS_OUTPUTS} variable substitution logic. If degraded, fallback to parallel execution (faster, lower quality) and document in telemetry. Implement output size limits (truncate if >8KB) to prevent context overflow.
-- **Risk**: Consensus Artifact Collection Incomplete: Session 3 fix ensures all agents are collected, but no guarantee synthesis merges correctly. Risk: Missing 1/3 agent perspectives in final plan.md/tasks.md/validate.md.
-  - Mitigation: After each stage completes, verify SQLite consensus_artifacts table has 3 rows (one per agent: gemini, claude, gpt_pro or gpt_codex). If <3, check guardrail logs for agent failure. Re-run stage if degraded mode unacceptable. Document agent_count in consensus_synthesis table; if <3, flag as 'degraded' for analyst review.
-- **Risk**: Cost Tracking Accuracy: Spec expects cost_summary.json to contain per-stage costs. If AI model pricing changes or agent cost configurations drift, reported costs may not match actual billing.
-  - Mitigation: Validate cost calculation against actual model pricing (Gemini Flash $0.075/1M input, Claude Haiku $0.08/1M input, GPT-Pro rates from OpenAI). Implement cost auditing step in T9 Telemetry Validation QA Sweep. If discrepancies found, recalculate and document in audit packet. Store cost assumptions in local-memory (importance:8).
-- **Risk**: Cross-Stage Context Loss: Plan outputs passed to Tasks stage; Tasks outputs passed to Validate. If file I/O fails or context truncated, downstream stages lose critical information (e.g., Plan risk register not visible during Validate design).
-  - Mitigation: Verify each stage's prompt includes references to all prior stage outputs (spec.md + plan.md in tasks prompts; spec.md + plan.md + tasks.md in validate prompts). Implement file integrity checks (read file, verify non-empty, count words >100). If context missing, error and retry with explicit context injection.
-- **Risk**: Acceptance Criteria Mapping Incomplete: Spec defines detailed Task Decomposition (T1-T9) with Dependencies and Deliverables, but plan.md/tasks.md may not cross-reference all 9 tasks. Risk: Plan/Tasks outputs don't fully satisfy spec requirements.
-  - Mitigation: After tasks.md generated, cross-check against spec §Task Decomposition table: verify tasks.md mentions all 9 items (T1-T9) or explains scope reduction. If <9 tasks, re-run /speckit.tasks with explicit instruction to address all task categories. Document mapping in tasks.md table with 'Spec Ref' column linking to T1-T9.
+**Generated**: 2025-11-10 21:32 UTC
 
 ## Consensus Summary
 

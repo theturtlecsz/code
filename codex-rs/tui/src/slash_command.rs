@@ -318,11 +318,8 @@ impl SlashCommand {
     pub fn is_prompt_expanding(self) -> bool {
         matches!(
             self,
-            SlashCommand::Plan
-                | SlashCommand::Solve
-                | SlashCommand::Code
-            // SPEC-KIT-070: Quality commands are NATIVE (not prompt-expanding)
-            // SpecKitClarify, SpecKitAnalyze, SpecKitChecklist removed
+            SlashCommand::Plan | SlashCommand::Solve | SlashCommand::Code // SPEC-KIT-070: Quality commands are NATIVE (not prompt-expanding)
+                                                                          // SpecKitClarify, SpecKitAnalyze, SpecKitChecklist removed
         )
     }
 

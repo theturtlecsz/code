@@ -22,7 +22,6 @@ pub mod command_handlers; // Command entry points (status, consensus, guardrail)
 pub mod command_registry;
 pub mod commands;
 pub mod config_validator;
-pub mod new_native; // SPEC-KIT-072: Native SPEC creation (eliminates 2 agents, $0.15 → $0)
 pub mod consensus;
 pub mod consensus_coordinator; // Consensus checking with MCP retry logic
 pub mod consensus_db; // SPEC-KIT-072: SQLite storage for consensus artifacts (replaces local-memory)
@@ -37,9 +36,10 @@ pub mod guardrail;
 pub mod handler;
 pub mod native_consensus_executor; // Native consensus orchestration (eliminates orchestrator agent)
 pub mod native_guardrail; // SPEC-KIT-066, SPEC-KIT-902: Native guardrail validation (replaces bash scripts)
-pub mod spec_directory; // SPEC-KIT-900 Session 3: ACID-compliant SPEC directory resolution
 pub mod native_quality_gate_orchestrator; // SPEC-KIT-900, I-003: Native quality gate orchestration (eliminates LLM plumbing)
-pub mod pipeline_coordinator; // MAINT-3 Phase 5: Pipeline state machine (extracted from handler.rs)
+pub mod new_native; // SPEC-KIT-072: Native SPEC creation (eliminates 2 agents, $0.15 → $0)
+pub mod pipeline_coordinator;
+pub mod spec_directory; // SPEC-KIT-900 Session 3: ACID-compliant SPEC directory resolution // MAINT-3 Phase 5: Pipeline state machine (extracted from handler.rs)
 // FORK-SPECIFIC (just-every/code): local_memory_client.rs deleted 2025-10-18
 // Replaced by native MCP integration in consensus.rs
 pub mod quality;
@@ -67,7 +67,9 @@ pub(crate) use error::Result;
 // Re-export key consensus functions (pub(crate) since types are private)
 
 // Re-export guardrail functions
-pub use guardrail::{evaluate_guardrail_value, validate_guardrail_schema, display_guardrail_result_and_advance};
+pub use guardrail::{
+    display_guardrail_result_and_advance, evaluate_guardrail_value, validate_guardrail_schema,
+};
 
 // Re-export routing functions
 pub use routing::try_dispatch_spec_kit_command;
@@ -105,8 +107,8 @@ pub use quality_gate_handler::set_native_agent_ids;
 
 // Re-export validation lifecycle functions
 pub use validation_lifecycle::{
-    cleanup_spec_auto_with_cancel, compute_validate_payload_hash,
-    record_validate_lifecycle_event, ValidateLifecycleEvent, ValidateMode,
+    ValidateLifecycleEvent, ValidateMode, cleanup_spec_auto_with_cancel,
+    compute_validate_payload_hash, record_validate_lifecycle_event,
 };
 
 // Re-export quality gate functions
@@ -119,7 +121,7 @@ pub use quality::{
 #[cfg(any(test, feature = "test-utils"))]
 pub use ace_prompt_injector::should_use_ace;
 #[cfg(any(test, feature = "test-utils"))]
-pub use ace_route_selector::{select_route, DiffStat, RouteDecision};
+pub use ace_route_selector::{DiffStat, RouteDecision, select_route};
 
 // Re-export broker handle for UI integration
 pub(crate) use quality_gate_broker::{

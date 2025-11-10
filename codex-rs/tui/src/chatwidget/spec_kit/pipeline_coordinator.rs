@@ -16,8 +16,8 @@ use super::quality_gate_handler::{
 };
 use super::state::{GuardrailWait, SpecAutoPhase, ValidateRunInfo};
 use super::validation_lifecycle::{
-    cleanup_spec_auto_with_cancel, record_validate_lifecycle_event, ValidateCompletionReason,
-    ValidateLifecycleEvent,
+    ValidateCompletionReason, ValidateLifecycleEvent, cleanup_spec_auto_with_cancel,
+    record_validate_lifecycle_event,
 };
 use crate::history_cell::HistoryCellType;
 use crate::slash_command::{HalMode, SlashCommand};
@@ -68,7 +68,7 @@ pub fn handle_spec_auto(
             err
         )));
         widget.history_push(crate::history_cell::new_error_event(
-            "Run: bash scripts/spec_ops_004/evidence_archive.sh".to_string()
+            "Run: bash scripts/spec_ops_004/evidence_archive.sh".to_string(),
         ));
         return;
     }
@@ -79,14 +79,22 @@ pub fn handle_spec_auto(
 
     // Log run start event
     if let Some(run_id) = &state.run_id {
-        state.execution_logger.log_event(super::execution_logger::ExecutionEvent::RunStart {
-            spec_id: spec_id.clone(),
-            run_id: run_id.clone(),
-            timestamp: super::execution_logger::ExecutionEvent::now(),
-            stages: state.stages.iter().map(|s| s.display_name().to_string()).collect(),
-            quality_gates_enabled: state.quality_gates_enabled,
-            hal_mode: hal_mode.map(|m| format!("{:?}", m)).unwrap_or_else(|| "mock".to_string()),
-        });
+        state
+            .execution_logger
+            .log_event(super::execution_logger::ExecutionEvent::RunStart {
+                spec_id: spec_id.clone(),
+                run_id: run_id.clone(),
+                timestamp: super::execution_logger::ExecutionEvent::now(),
+                stages: state
+                    .stages
+                    .iter()
+                    .map(|s| s.display_name().to_string())
+                    .collect(),
+                quality_gates_enabled: state.quality_gates_enabled,
+                hal_mode: hal_mode
+                    .map(|m| format!("{:?}", m))
+                    .unwrap_or_else(|| "mock".to_string()),
+            });
     }
 
     widget.spec_auto_state = Some(state);
@@ -144,12 +152,13 @@ pub fn advance_spec_auto(widget: &mut ChatWidget) {
                         // Log stage start and add TUI boundary marker
                         if let Some(run_id) = &state.run_id {
                             let tier = super::execution_logger::tier_from_agent_count(
-                                super::consensus::expected_agents_for_stage(stage).len()
+                                super::consensus::expected_agents_for_stage(stage).len(),
                             );
-                            let expected_agents: Vec<String> = super::consensus::expected_agents_for_stage(stage)
-                                .into_iter()
-                                .map(|a| a.canonical_name().to_string())
-                                .collect();
+                            let expected_agents: Vec<String> =
+                                super::consensus::expected_agents_for_stage(stage)
+                                    .into_iter()
+                                    .map(|a| a.canonical_name().to_string())
+                                    .collect();
 
                             state.execution_logger.log_event(
                                 super::execution_logger::ExecutionEvent::StageStart {
@@ -158,12 +167,14 @@ pub fn advance_spec_auto(widget: &mut ChatWidget) {
                                     tier,
                                     expected_agents: expected_agents.clone(),
                                     timestamp: super::execution_logger::ExecutionEvent::now(),
-                                }
+                                },
                             );
 
                             // Add visual boundary marker to TUI
                             let marker_lines = vec![
-                                ratatui::text::Line::from("════════════════════════════════════════"),
+                                ratatui::text::Line::from(
+                                    "════════════════════════════════════════",
+                                ),
                                 ratatui::text::Line::from(format!(
                                     "  STAGE: {} (Tier {})",
                                     stage.display_name().to_uppercase(),
@@ -173,11 +184,17 @@ pub fn advance_spec_auto(widget: &mut ChatWidget) {
                                     "  Agents: {}",
                                     expected_agents.join(", ")
                                 )),
-                                ratatui::text::Line::from("════════════════════════════════════════"),
+                                ratatui::text::Line::from(
+                                    "════════════════════════════════════════",
+                                ),
                             ];
                             // Store marker for display after this function returns
                             state.pending_prompt_summary = Some(
-                                marker_lines.iter().map(|l| l.to_string()).collect::<Vec<_>>().join("\n")
+                                marker_lines
+                                    .iter()
+                                    .map(|l| l.to_string())
+                                    .collect::<Vec<_>>()
+                                    .join("\n"),
                             );
                         }
 
@@ -220,8 +237,12 @@ pub fn advance_spec_auto(widget: &mut ChatWidget) {
         match next_action {
             NextAction::PipelineComplete => {
                 // Finalize quality gates if enabled
-                let should_finalize_quality_gates = widget.spec_auto_state.as_ref()
-                    .map(|state| state.quality_gates_enabled && !state.quality_checkpoint_outcomes.is_empty())
+                let should_finalize_quality_gates = widget
+                    .spec_auto_state
+                    .as_ref()
+                    .map(|state| {
+                        state.quality_gates_enabled && !state.quality_checkpoint_outcomes.is_empty()
+                    })
                     .unwrap_or(false);
 
                 if should_finalize_quality_gates {
@@ -246,7 +267,7 @@ pub fn advance_spec_auto(widget: &mut ChatWidget) {
                                 stages_completed,
                                 quality_gates_passed,
                                 timestamp: super::execution_logger::ExecutionEvent::now(),
-                            }
+                            },
                         );
 
                         // Finalize logger
@@ -276,7 +297,10 @@ pub fn advance_spec_auto(widget: &mut ChatWidget) {
                                 HistoryCellType::Notice,
                             ));
                             widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                                report_lines.into_iter().map(|s| ratatui::text::Line::from(s)).collect(),
+                                report_lines
+                                    .into_iter()
+                                    .map(|s| ratatui::text::Line::from(s))
+                                    .collect(),
                                 HistoryCellType::Notice,
                             ));
                         }
@@ -299,7 +323,10 @@ pub fn advance_spec_auto(widget: &mut ChatWidget) {
                 if let Some(state) = widget.spec_auto_state.as_ref() {
                     if let Some(summary) = &state.pending_prompt_summary {
                         widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                            summary.lines().map(|l| ratatui::text::Line::from(l.to_string())).collect(),
+                            summary
+                                .lines()
+                                .map(|l| ratatui::text::Line::from(l.to_string()))
+                                .collect(),
                             HistoryCellType::Notice,
                         ));
                     }
@@ -326,7 +353,10 @@ pub fn on_spec_auto_task_started(widget: &mut ChatWidget, task_id: &str) {
 /// Handle spec-auto task completion (guardrail finished)
 pub fn on_spec_auto_task_complete(widget: &mut ChatWidget, task_id: &str) {
     let _start = std::time::Instant::now(); // T90: Metrics instrumentation
-    tracing::warn!("DEBUG: on_spec_auto_task_complete called with task_id={}", task_id);
+    tracing::warn!(
+        "DEBUG: on_spec_auto_task_complete called with task_id={}",
+        task_id
+    );
 
     let (spec_id, stage) = {
         let Some(state) = widget.spec_auto_state.as_mut() else {
@@ -411,7 +441,7 @@ pub fn on_spec_auto_task_complete(widget: &mut ChatWidget, task_id: &str) {
 
                     widget.history_push(crate::history_cell::PlainHistoryCell::new(
                         vec![ratatui::text::Line::from(
-                            "⚠ Validation failed. Manual review required."
+                            "⚠ Validation failed. Manual review required.",
                         )],
                         HistoryCellType::Notice,
                     ));
@@ -419,10 +449,7 @@ pub fn on_spec_auto_task_complete(widget: &mut ChatWidget, task_id: &str) {
                     halt_spec_auto_with_error(widget, "Validation failed".to_string());
                     return;
                 } else {
-                    cleanup_spec_auto_with_cancel(
-                        widget,
-                        "Guardrail step failed"
-                    );
+                    cleanup_spec_auto_with_cancel(widget, "Guardrail step failed");
                     return;
                 }
             }
@@ -455,7 +482,10 @@ pub fn on_spec_auto_task_complete(widget: &mut ChatWidget, task_id: &str) {
                     if !ok {
                         cleanup_spec_auto_with_cancel(
                             widget,
-                            &format!("Consensus not reached for {}, manual resolution required", stage.display_name())
+                            &format!(
+                                "Consensus not reached for {}, manual resolution required",
+                                stage.display_name()
+                            ),
                         );
                         return;
                     }
@@ -463,21 +493,32 @@ pub fn on_spec_auto_task_complete(widget: &mut ChatWidget, task_id: &str) {
                 Err(err) => {
                     cleanup_spec_auto_with_cancel(
                         widget,
-                        &format!("Consensus check failed for {}: {}", stage.display_name(), err)
+                        &format!(
+                            "Consensus check failed for {}: {}",
+                            stage.display_name(),
+                            err
+                        ),
                     );
                     return;
                 }
             }
 
             // After guardrail success and consensus check OK, auto-submit multi-agent prompt
-            tracing::warn!("DEBUG: About to call auto_submit_spec_stage_prompt for stage={:?}", stage);
+            tracing::warn!(
+                "DEBUG: About to call auto_submit_spec_stage_prompt for stage={:?}",
+                stage
+            );
             auto_submit_spec_stage_prompt(widget, stage, &spec_id);
             tracing::warn!("DEBUG: Returned from auto_submit_spec_stage_prompt");
         }
         Err(err) => {
             cleanup_spec_auto_with_cancel(
                 widget,
-                &format!("Unable to read telemetry for {}: {}", stage.display_name(), err)
+                &format!(
+                    "Unable to read telemetry for {}: {}",
+                    stage.display_name(),
+                    err
+                ),
             );
         }
     }
@@ -496,7 +537,10 @@ pub fn advance_spec_auto_after_native_guardrail(
     spec_id: &str,
     native_result: super::native_guardrail::GuardrailResult,
 ) {
-    tracing::warn!("DEBUG: advance_spec_auto_after_native_guardrail called for stage={:?}", stage);
+    tracing::warn!(
+        "DEBUG: advance_spec_auto_after_native_guardrail called for stage={:?}",
+        stage
+    );
 
     // Clear waiting_guardrail state
     if let Some(state) = widget.spec_auto_state.as_mut() {
@@ -512,7 +556,10 @@ pub fn advance_spec_auto_after_native_guardrail(
         failures: native_result.errors,
     };
 
-    tracing::warn!("DEBUG: Guardrail outcome converted, success={}", outcome.success);
+    tracing::warn!(
+        "DEBUG: Guardrail outcome converted, success={}",
+        outcome.success
+    );
     if !outcome.success {
         if stage == SpecStage::Validate {
             // Record failure and halt
@@ -549,7 +596,10 @@ pub fn advance_spec_auto_after_native_guardrail(
     //   on_spec_auto_agents_complete() → check_consensus_and_advance_spec_auto()
     //
     // This avoids nested runtime issues and follows the standard agent lifecycle.
-    tracing::warn!("DEBUG: Native guardrail validated, spawning agents for stage={:?}", stage);
+    tracing::warn!(
+        "DEBUG: Native guardrail validated, spawning agents for stage={:?}",
+        stage
+    );
     auto_submit_spec_stage_prompt(widget, stage, spec_id);
     tracing::warn!("DEBUG: Agents spawned, will check consensus after completion");
 }
@@ -607,21 +657,35 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
     }
 
     // Check if we have cached agent responses (from this run)
-    let has_cached_responses = widget.spec_auto_state.as_ref()
+    let has_cached_responses = widget
+        .spec_auto_state
+        .as_ref()
         .and_then(|s| s.agent_responses_cache.as_ref())
         .map(|cache| !cache.is_empty())
         .unwrap_or(false);
 
     if has_cached_responses {
         // Use cached responses directly, bypass memory/file lookup
-        let run_tag = widget.spec_auto_state.as_ref()
+        let run_tag = widget
+            .spec_auto_state
+            .as_ref()
             .and_then(|s| s.run_id.as_ref())
             .map(|r| format!("[run:{}]", &r[..8]))
             .unwrap_or_else(|| "[run:none]".to_string());
-        tracing::warn!("{} 🔍 CONSENSUS: Using cached agent responses for {} stage", run_tag, current_stage.display_name());
+        tracing::warn!(
+            "{} 🔍 CONSENSUS: Using cached agent responses for {} stage",
+            run_tag,
+            current_stage.display_name()
+        );
 
-        let cached = widget.spec_auto_state.as_ref()
-            .unwrap().agent_responses_cache.as_ref().unwrap().clone();
+        let cached = widget
+            .spec_auto_state
+            .as_ref()
+            .unwrap()
+            .agent_responses_cache
+            .as_ref()
+            .unwrap()
+            .clone();
 
         tracing::warn!("{}   📦 Cached responses: {} items", run_tag, cached.len());
         for (name, response) in &cached {
@@ -631,28 +695,58 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
         widget.history_push(crate::history_cell::PlainHistoryCell::new(
             vec![ratatui::text::Line::from(format!(
                 "Synthesizing consensus from {} agent responses...",
-                widget.spec_auto_state.as_ref().unwrap().agent_responses_cache.as_ref().unwrap().len()
+                widget
+                    .spec_auto_state
+                    .as_ref()
+                    .unwrap()
+                    .agent_responses_cache
+                    .as_ref()
+                    .unwrap()
+                    .len()
             ))],
             HistoryCellType::Notice,
         ));
 
         // Synthesize consensus from cached responses
-        let cached = widget.spec_auto_state.as_ref().unwrap().agent_responses_cache.as_ref().unwrap().clone();
+        let cached = widget
+            .spec_auto_state
+            .as_ref()
+            .unwrap()
+            .agent_responses_cache
+            .as_ref()
+            .unwrap()
+            .clone();
 
-        tracing::warn!("{}   🔧 About to call synthesize_from_cached_responses with {} responses", run_tag, cached.len());
+        tracing::warn!(
+            "{}   🔧 About to call synthesize_from_cached_responses with {} responses",
+            run_tag,
+            cached.len()
+        );
 
-        let run_id_for_synthesis = widget.spec_auto_state.as_ref()
+        let run_id_for_synthesis = widget
+            .spec_auto_state
+            .as_ref()
             .and_then(|s| s.run_id.as_deref());
-        match synthesize_from_cached_responses(&cached, &spec_id, current_stage, &widget.config.cwd, run_id_for_synthesis) {
+        match synthesize_from_cached_responses(
+            &cached,
+            &spec_id,
+            current_stage,
+            &widget.config.cwd,
+            run_id_for_synthesis,
+        ) {
             Ok(output_path) => {
-                tracing::warn!("{} ✅ SYNTHESIS SUCCESS: Got output_path={}", run_tag, output_path.display());
+                tracing::warn!(
+                    "{} ✅ SYNTHESIS SUCCESS: Got output_path={}",
+                    run_tag,
+                    output_path.display()
+                );
                 widget.history_push(crate::history_cell::PlainHistoryCell::new(
                     vec![
                         ratatui::text::Line::from(format!(
                             "✓ Consensus synthesized from {} agent responses",
                             cached.len()
                         )),
-                        ratatui::text::Line::from(format!("  Output: {}", output_path.display()))
+                        ratatui::text::Line::from(format!("  Output: {}", output_path.display())),
                     ],
                     HistoryCellType::Notice,
                 ));
@@ -731,7 +825,7 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
 
                 widget.history_push(crate::history_cell::PlainHistoryCell::new(
                     vec![ratatui::text::Line::from(
-                        "⚠ Degraded consensus. Scheduling follow-up checklist."
+                        "⚠ Degraded consensus. Scheduling follow-up checklist.",
                     )],
                     crate::history_cell::HistoryCellType::Notice,
                 ));
@@ -739,7 +833,9 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                 // Schedule checklist for degraded follow-up
                 if let Some(state) = widget.spec_auto_state.as_ref() {
                     if let Some(stage) = state.current_stage() {
-                        super::agent_orchestrator::schedule_degraded_follow_up(widget, stage, &spec_id);
+                        super::agent_orchestrator::schedule_degraded_follow_up(
+                            widget, stage, &spec_id,
+                        );
                     }
                 }
             }
@@ -796,7 +892,10 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                         true, // Already checked via spec_kit_auto_commit_enabled()
                     ) {
                         Ok(()) => {
-                            tracing::info!("Auto-commit successful for {} stage", current_stage.display_name());
+                            tracing::info!(
+                                "Auto-commit successful for {} stage",
+                                current_stage.display_name()
+                            );
                         }
                         Err(err) => {
                             tracing::warn!("Auto-commit failed (non-fatal): {}", err);
@@ -826,7 +925,7 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                                 cost_usd: stage_cost,
                                 evidence_written,
                                 timestamp: super::execution_logger::ExecutionEvent::now(),
-                            }
+                            },
                         );
                     }
                 }
@@ -836,7 +935,7 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                     if let Some(bullet_ids) = &state.ace_bullet_ids_used {
                         if !bullet_ids.is_empty() {
                             use super::ace_learning::send_learning_feedback_sync;
-                            use super::routing::{get_repo_root, get_current_branch};
+                            use super::routing::{get_current_branch, get_repo_root};
 
                             let feedback = super::ace_learning::ExecutionFeedback {
                                 compile_ok: true,
@@ -849,10 +948,16 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
 
                             let ace_config = &widget.config.ace;
                             if ace_config.enabled {
-                                let repo_root = get_repo_root(&widget.config.cwd).unwrap_or_else(|| widget.config.cwd.display().to_string());
-                                let branch = get_current_branch(&widget.config.cwd).unwrap_or_else(|| "main".to_string());
+                                let repo_root = get_repo_root(&widget.config.cwd)
+                                    .unwrap_or_else(|| widget.config.cwd.display().to_string());
+                                let branch = get_current_branch(&widget.config.cwd)
+                                    .unwrap_or_else(|| "main".to_string());
                                 let scope = format!("speckit.{}", current_stage.command_name());
-                                let task_title = format!("{} stage for {}", current_stage.display_name(), spec_id);
+                                let task_title = format!(
+                                    "{} stage for {}",
+                                    current_stage.display_name(),
+                                    spec_id
+                                );
 
                                 send_learning_feedback_sync(
                                     ace_config,
@@ -864,7 +969,11 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                                     None, // No diff_stat for consensus stages
                                 );
 
-                                tracing::info!("ACE: Sent learning feedback for {} ({} bullets)", current_stage.display_name(), bullet_ids.len());
+                                tracing::info!(
+                                    "ACE: Sent learning feedback for {} ({} bullets)",
+                                    current_stage.display_name(),
+                                    bullet_ids.len()
+                                );
                             }
                         }
                     }
@@ -904,10 +1013,7 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                 // Consensus failed - halt (no retries)
                 halt_spec_auto_with_error(
                     widget,
-                    format!(
-                        "Consensus failed for {}",
-                        current_stage.display_name()
-                    ),
+                    format!("Consensus failed for {}", current_stage.display_name()),
                 );
             }
         }
@@ -961,14 +1067,17 @@ fn check_evidence_size_limit(spec_id: &str, cwd: &std::path::Path) -> super::err
         .arg(spec_id)
         .current_dir(cwd)
         .output()
-        .map_err(|e| super::error::SpecKitError::Other(format!("Failed to run evidence_stats.sh: {}", e)))?;
+        .map_err(|e| {
+            super::error::SpecKitError::Other(format!("Failed to run evidence_stats.sh: {}", e))
+        })?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     // Check for error indicator (❌ means >50MB)
     if stdout.contains("❌") && stdout.contains(spec_id) {
         // Extract size from output
-        let size_line = stdout.lines()
+        let size_line = stdout
+            .lines()
             .find(|line| line.contains(spec_id) && line.contains("MB"))
             .unwrap_or("");
 
@@ -996,29 +1105,49 @@ fn synthesize_from_cached_responses(
     cwd: &Path,
     run_id: Option<&str>,
 ) -> Result<PathBuf, String> {
-    let run_tag = run_id.map(|r| format!("[run:{}]", &r[..8.min(r.len())])).unwrap_or_else(|| "[run:none]".to_string());
-    tracing::warn!("{} 🔧 SYNTHESIS START: stage={}, spec={}, responses={}",
-        run_tag, stage.display_name(), spec_id, cached_responses.len());
+    let run_tag = run_id
+        .map(|r| format!("[run:{}]", &r[..8.min(r.len())]))
+        .unwrap_or_else(|| "[run:none]".to_string());
+    tracing::warn!(
+        "{} 🔧 SYNTHESIS START: stage={}, spec={}, responses={}",
+        run_tag,
+        stage.display_name(),
+        spec_id,
+        cached_responses.len()
+    );
 
     if cached_responses.is_empty() {
         tracing::error!("❌ SYNTHESIS FAIL: No cached responses");
         return Err("No cached responses to synthesize".to_string());
     }
 
-    tracing::warn!("  📊 Agent responses: {:?}",
-        cached_responses.iter().map(|(name, _)| name.as_str()).collect::<Vec<_>>());
+    tracing::warn!(
+        "  📊 Agent responses: {:?}",
+        cached_responses
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect::<Vec<_>>()
+    );
 
     // Parse agent responses and extract structured content
     let mut agent_data: Vec<(String, serde_json::Value)> = Vec::new();
 
     for (agent_name, response_text) in cached_responses {
-        tracing::warn!("DEBUG: Extracting JSON from {} ({} chars)", agent_name, response_text.len());
+        tracing::warn!(
+            "DEBUG: Extracting JSON from {} ({} chars)",
+            agent_name,
+            response_text.len()
+        );
 
         // Try to extract JSON from response (agents may wrap in markdown code blocks)
         let json_content = extract_json_from_agent_response(response_text);
 
         if let Some(json_str) = json_content {
-            tracing::warn!("DEBUG: Extracted JSON string from {} ({} chars)", agent_name, json_str.len());
+            tracing::warn!(
+                "DEBUG: Extracted JSON string from {} ({} chars)",
+                agent_name,
+                json_str.len()
+            );
             match serde_json::from_str::<serde_json::Value>(&json_str) {
                 Ok(parsed) => {
                     tracing::warn!("DEBUG: Successfully parsed JSON for {}", agent_name);
@@ -1035,18 +1164,24 @@ fn synthesize_from_cached_responses(
                 }
             }
         } else {
-            tracing::warn!("DEBUG: No JSON extracted from {} response, using as plain text", agent_name);
+            tracing::warn!(
+                "DEBUG: No JSON extracted from {} response, using as plain text",
+                agent_name
+            );
             // Log first 500 chars to see format
             let preview = &response_text.chars().take(500).collect::<String>();
             tracing::warn!("DEBUG: Response preview: {}", preview);
         }
 
         // Fallback: treat as plain text
-        agent_data.push((agent_name.clone(), serde_json::json!({
-            "agent": agent_name,
-            "content": response_text,
-            "format": "text"
-        })));
+        agent_data.push((
+            agent_name.clone(),
+            serde_json::json!({
+                "agent": agent_name,
+                "content": response_text,
+                "format": "text"
+            }),
+        ));
     }
 
     // Build plan.md from agent data
@@ -1054,12 +1189,18 @@ fn synthesize_from_cached_responses(
     output.push_str(&format!("# Plan: {}\n\n", spec_id));
     output.push_str(&format!("**Stage**: {}\n", stage.display_name()));
     output.push_str(&format!("**Agents**: {}\n", agent_data.len()));
-    output.push_str(&format!("**Generated**: {}\n\n", chrono::Utc::now().format("%Y-%m-%d %H:%M UTC")));
+    output.push_str(&format!(
+        "**Generated**: {}\n\n",
+        chrono::Utc::now().format("%Y-%m-%d %H:%M UTC")
+    ));
 
     // Debug: Log what we actually have
     for (agent_name, data) in &agent_data {
-        tracing::warn!("DEBUG: Processing {} with {} top-level keys", agent_name,
-            data.as_object().map(|o| o.len()).unwrap_or(0));
+        tracing::warn!(
+            "DEBUG: Processing {} with {} top-level keys",
+            agent_name,
+            data.as_object().map(|o| o.len()).unwrap_or(0)
+        );
 
         // Debug JSON sections removed - caused exponential growth when nested in later stages
         // If debugging needed, check SQLite: SELECT * FROM consensus_artifacts WHERE spec_id='...'
@@ -1095,7 +1236,10 @@ fn synthesize_from_cached_responses(
     }
 
     output.push_str("## Consensus Summary\n\n");
-    output.push_str(&format!("- Synthesized from {} agent responses\n", agent_data.len()));
+    output.push_str(&format!(
+        "- Synthesized from {} agent responses\n",
+        agent_data.len()
+    ));
     output.push_str("- All agents completed successfully\n");
 
     // Find SPEC directory using ACID-compliant resolver
@@ -1108,14 +1252,19 @@ fn synthesize_from_cached_responses(
     // Only create if doesn't exist (avoid error if it's already there)
     if !spec_dir.exists() {
         tracing::warn!("  📁 Creating directory...");
-        fs::create_dir_all(&spec_dir)
-            .map_err(|e| {
-                tracing::error!("❌ Failed to create {}: {}", spec_dir.display(), e);
-                format!("Failed to create spec dir: {}", e)
-            })?;
+        fs::create_dir_all(&spec_dir).map_err(|e| {
+            tracing::error!("❌ Failed to create {}: {}", spec_dir.display(), e);
+            format!("Failed to create spec dir: {}", e)
+        })?;
     } else if !spec_dir.is_dir() {
-        tracing::error!("❌ SPEC path exists but is NOT a directory: {}", spec_dir.display());
-        return Err(format!("SPEC path is not a directory: {}", spec_dir.display()));
+        tracing::error!(
+            "❌ SPEC path exists but is NOT a directory: {}",
+            spec_dir.display()
+        );
+        return Err(format!(
+            "SPEC path is not a directory: {}",
+            spec_dir.display()
+        ));
     } else {
         tracing::warn!("  ✅ Directory already exists");
     }
@@ -1125,19 +1274,32 @@ fn synthesize_from_cached_responses(
     let output_file = spec_dir.join(&output_filename);
 
     tracing::warn!("  📝 Output file: {}", output_file.display());
-    tracing::warn!("  📏 Output size: {} chars ({} KB)", output.len(), output.len() / 1024);
+    tracing::warn!(
+        "  📏 Output size: {} chars ({} KB)",
+        output.len(),
+        output.len() / 1024
+    );
 
     // SPEC-KIT-900: Always write synthesis output to update with latest run
     // Previous skip logic prevented updates, causing stale output files
-    tracing::warn!("{}   💾 Writing {} to disk (overwrite={})...", run_tag, output_filename, output_file.exists());
+    tracing::warn!(
+        "{}   💾 Writing {} to disk (overwrite={})...",
+        run_tag,
+        output_filename,
+        output_file.exists()
+    );
 
-    fs::write(&output_file, &output)
-        .map_err(|e| {
-            tracing::error!("{} ❌ SYNTHESIS FAIL: Write error: {}", run_tag, e);
-            format!("Failed to write {}: {}", output_filename, e)
-        })?;
+    fs::write(&output_file, &output).map_err(|e| {
+        tracing::error!("{} ❌ SYNTHESIS FAIL: Write error: {}", run_tag, e);
+        format!("Failed to write {}: {}", output_filename, e)
+    })?;
 
-    tracing::warn!("{} ✅ SYNTHESIS SUCCESS: Wrote {} ({} KB)", run_tag, output_filename, output.len() / 1024);
+    tracing::warn!(
+        "{} ✅ SYNTHESIS SUCCESS: Wrote {} ({} KB)",
+        run_tag,
+        output_filename,
+        output.len() / 1024
+    );
 
     // SPEC-KIT-072: Also store synthesis to SQLite
     if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
@@ -1155,11 +1317,18 @@ fn synthesize_from_cached_responses(
         ) {
             tracing::warn!("{} Failed to store synthesis to SQLite: {}", run_tag, e);
         } else {
-            tracing::info!("{} Stored consensus synthesis to SQLite with run_id={:?}", run_tag, run_id);
+            tracing::info!(
+                "{} Stored consensus synthesis to SQLite with run_id={:?}",
+                run_tag,
+                run_id
+            );
 
             // SPEC-KIT-900 Session 3: AUTO-EXPORT evidence for checklist compliance
             // This ensures evidence/consensus/<SPEC-ID>/ is ALWAYS populated after EVERY synthesis
-            tracing::info!("{} Auto-exporting evidence to consensus directory...", run_tag);
+            tracing::info!(
+                "{} Auto-exporting evidence to consensus directory...",
+                run_tag
+            );
             super::evidence::auto_export_stage_evidence(cwd, spec_id, stage, run_id);
         }
     }
@@ -1182,8 +1351,13 @@ pub(super) fn extract_json_from_agent_response(text: &str) -> Option<String> {
         let from_start = &text[start..];
         if let Some(end) = from_start.find("\n│\n│ Ran for") {
             let json_block = &from_start[2..end]; // Skip "│ " prefix
-            let cleaned = json_block.lines()
-                .map(|line| line.strip_prefix("│   ").or_else(|| line.strip_prefix("│ ")).unwrap_or(line))
+            let cleaned = json_block
+                .lines()
+                .map(|line| {
+                    line.strip_prefix("│   ")
+                        .or_else(|| line.strip_prefix("│ "))
+                        .unwrap_or(line)
+                })
                 .collect::<Vec<_>>()
                 .join("\n");
             return Some(cleaned);
@@ -1196,7 +1370,9 @@ pub(super) fn extract_json_from_agent_response(text: &str) -> Option<String> {
             let from_start = &text[start..];
             let mut depth = 0;
             for (i, ch) in from_start.char_indices() {
-                if ch == '{' { depth += 1; }
+                if ch == '{' {
+                    depth += 1;
+                }
                 if ch == '}' {
                     depth -= 1;
                     if depth == 0 {

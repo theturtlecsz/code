@@ -25,7 +25,12 @@ pub fn generate_run_id(spec_id: &str) -> RunId {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    format!("run_{}_{}_{}", spec_id, timestamp, uuid::Uuid::new_v4().to_string()[..8].to_string())
+    format!(
+        "run_{}_{}_{}",
+        spec_id,
+        timestamp,
+        uuid::Uuid::new_v4().to_string()[..8].to_string()
+    )
 }
 
 /// Event types in the execution log
@@ -320,11 +325,7 @@ impl ExecutionLogger {
                 status.current_phase = Some("guardrail".to_string());
             }
             ExecutionEvent::AgentSpawn { agent_name, .. } => {
-                if !status
-                    .current_agents
-                    .iter()
-                    .any(|a| a.name == *agent_name)
-                {
+                if !status.current_agents.iter().any(|a| a.name == *agent_name) {
                     status.current_agents.push(AgentStatus {
                         name: agent_name.clone(),
                         status: "running".to_string(),
@@ -361,7 +362,9 @@ impl ExecutionLogger {
             ExecutionEvent::QualityGateComplete { .. } => {
                 status.current_phase = Some("quality_gate_complete".to_string());
             }
-            ExecutionEvent::StageComplete { stage, cost_usd, .. } => {
+            ExecutionEvent::StageComplete {
+                stage, cost_usd, ..
+            } => {
                 if let Some(cost) = cost_usd {
                     status.cost_accumulated_usd += cost;
                 }
@@ -373,9 +376,7 @@ impl ExecutionLogger {
                 status.current_stage = None;
                 status.current_phase = None;
             }
-            ExecutionEvent::RunComplete {
-                total_cost_usd, ..
-            } => {
+            ExecutionEvent::RunComplete { total_cost_usd, .. } => {
                 status.status = "completed".to_string();
                 status.cost_accumulated_usd = *total_cost_usd;
                 status.current_stage = None;
@@ -455,7 +456,14 @@ pub fn generate_summary(log_path: &Path) -> Result<String, std::io::Error> {
             timestamp,
             quality_gates_enabled,
             hal_mode,
-        } => Some((spec_id, run_id, stages, timestamp, quality_gates_enabled, hal_mode)),
+        } => Some((
+            spec_id,
+            run_id,
+            stages,
+            timestamp,
+            quality_gates_enabled,
+            hal_mode,
+        )),
         _ => None,
     });
 
@@ -480,12 +488,19 @@ pub fn generate_summary(log_path: &Path) -> Result<String, std::io::Error> {
         summary.push_str(&format!("**Run ID**: {}\n", run_id));
         summary.push_str(&format!("**Started**: {}\n", started));
         summary.push_str(&format!("**HAL Mode**: {}\n", hal_mode));
-        summary.push_str(&format!("**Quality Gates**: {}\n\n", if *qg_enabled { "enabled" } else { "disabled" }));
+        summary.push_str(&format!(
+            "**Quality Gates**: {}\n\n",
+            if *qg_enabled { "enabled" } else { "disabled" }
+        ));
 
         if let Some((duration, cost, completed, qg_passed)) = run_complete {
             summary.push_str(&format!("**Duration**: {}\n", format_duration(duration)));
             summary.push_str(&format!("**Cost**: ${:.2}\n", cost));
-            summary.push_str(&format!("**Stages Completed**: {}/{}\n", completed, stages.len()));
+            summary.push_str(&format!(
+                "**Stages Completed**: {}/{}\n",
+                completed,
+                stages.len()
+            ));
             if *qg_enabled {
                 summary.push_str(&format!("**Quality Gates Passed**: {}\n", qg_passed));
             }
@@ -513,14 +528,16 @@ pub fn generate_summary(log_path: &Path) -> Result<String, std::io::Error> {
                 timestamp,
                 ..
             } => {
-                stage_map.entry(stage.clone()).or_insert_with(|| StageMetrics {
-                    tier: *tier,
-                    agents: expected_agents.clone(),
-                    start_time: timestamp.clone(),
-                    duration_sec: 0.0,
-                    cost_usd: 0.0,
-                    status: "in_progress".to_string(),
-                });
+                stage_map
+                    .entry(stage.clone())
+                    .or_insert_with(|| StageMetrics {
+                        tier: *tier,
+                        agents: expected_agents.clone(),
+                        start_time: timestamp.clone(),
+                        duration_sec: 0.0,
+                        cost_usd: 0.0,
+                        status: "in_progress".to_string(),
+                    });
             }
             ExecutionEvent::StageComplete {
                 stage,
@@ -651,10 +668,10 @@ pub fn format_duration(secs: f64) -> String {
 /// Determine tier from agent count (heuristic)
 pub fn tier_from_agent_count(count: usize) -> u8 {
     match count {
-        0 => 0,       // Native
-        1 => 1,       // Single agent
-        2..=3 => 2,   // Multi-agent
-        _ => 3,       // Premium
+        0 => 0,     // Native
+        1 => 1,     // Single agent
+        2..=3 => 2, // Multi-agent
+        _ => 3,     // Premium
     }
 }
 

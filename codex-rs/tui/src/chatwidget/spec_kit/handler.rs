@@ -12,16 +12,17 @@ pub use super::command_handlers::{
 pub(crate) use super::consensus_coordinator::handle_spec_consensus_impl;
 
 // Re-export agent orchestration functions
-pub use super::agent_orchestrator::{
-    auto_submit_spec_stage_prompt, on_spec_auto_agents_complete, on_spec_auto_agents_complete_with_ids, record_agent_costs,
-};
 pub(crate) use super::agent_orchestrator::schedule_degraded_follow_up;
+pub use super::agent_orchestrator::{
+    auto_submit_spec_stage_prompt, on_spec_auto_agents_complete,
+    on_spec_auto_agents_complete_with_ids, record_agent_costs,
+};
 
 // Re-export pipeline coordination functions (MAINT-3 Phase 5: Extracted to pipeline_coordinator.rs)
+pub(crate) use super::pipeline_coordinator::check_consensus_and_advance_spec_auto;
 pub use super::pipeline_coordinator::{
     advance_spec_auto, handle_spec_auto, on_spec_auto_task_complete, on_spec_auto_task_started,
 };
-pub(crate) use super::pipeline_coordinator::check_consensus_and_advance_spec_auto;
 
 // === Quality Gate Handlers ===
 // MAINT-2: Extracted to quality_gate_handler.rs (925 LOC)

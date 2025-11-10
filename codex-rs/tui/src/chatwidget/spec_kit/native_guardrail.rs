@@ -140,7 +140,10 @@ fn validate_spec_id(cwd: &Path, spec_id: &str) -> GuardrailCheck {
         return GuardrailCheck {
             name: "spec-id-format".to_string(),
             status: CheckStatus::Warning,
-            message: Some(format!("SPEC ID '{}' doesn't match expected format SPEC-*", spec_id)),
+            message: Some(format!(
+                "SPEC ID '{}' doesn't match expected format SPEC-*",
+                spec_id
+            )),
         };
     }
 
@@ -210,14 +213,20 @@ fn validate_clean_tree(cwd: &Path) -> GuardrailCheck {
         .filter(|line| {
             let line = line.trim();
             // Allow stage output files (plan.md, tasks.md, etc.)
-            if line.contains("/plan.md") || line.contains("/tasks.md") ||
-               line.contains("/validate.md") || line.contains("/implement.md") ||
-               line.contains("/audit.md") || line.contains("/unlock.md") {
+            if line.contains("/plan.md")
+                || line.contains("/tasks.md")
+                || line.contains("/validate.md")
+                || line.contains("/implement.md")
+                || line.contains("/audit.md")
+                || line.contains("/unlock.md")
+            {
                 return false;
             }
             // Allow evidence/telemetry files
-            if line.contains("/evidence/") || line.contains("_cost_summary.json") ||
-               line.contains("_telemetry.json") {
+            if line.contains("/evidence/")
+                || line.contains("_cost_summary.json")
+                || line.contains("_telemetry.json")
+            {
                 return false;
             }
             true
@@ -228,7 +237,10 @@ fn validate_clean_tree(cwd: &Path) -> GuardrailCheck {
         return GuardrailCheck {
             name: "clean-tree".to_string(),
             status: CheckStatus::Failed,
-            message: Some(format!("Working tree has {} unexpected changes (stage artifacts excluded)", unexpected_changes.len())),
+            message: Some(format!(
+                "Working tree has {} unexpected changes (stage artifacts excluded)",
+                unexpected_changes.len()
+            )),
         };
     }
 
@@ -329,7 +341,6 @@ fn validate_unlock_stage(_cwd: &Path, _spec_id: &str) -> GuardrailCheck {
 
 // === Helper Functions ===
 
-
 fn is_allow_dirty_env() -> bool {
     std::env::var("SPEC_OPS_ALLOW_DIRTY")
         .map(|v| v == "1")
@@ -339,7 +350,8 @@ fn is_allow_dirty_env() -> bool {
 fn emit_telemetry(cwd: &Path, result: &GuardrailResult) -> Result<PathBuf, std::io::Error> {
     use std::io::Write;
 
-    let evidence_dir = cwd.join("docs")
+    let evidence_dir = cwd
+        .join("docs")
         .join("SPEC-OPS-004-integrated-coder-hooks")
         .join("evidence")
         .join("commands")
@@ -349,7 +361,8 @@ fn emit_telemetry(cwd: &Path, result: &GuardrailResult) -> Result<PathBuf, std::
 
     let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ");
     let session_id = std::process::id();
-    let filename = format!("guardrail-{}-{}_{}.json",
+    let filename = format!(
+        "guardrail-{}-{}_{}.json",
         result.stage.display_name().to_lowercase(),
         timestamp,
         session_id

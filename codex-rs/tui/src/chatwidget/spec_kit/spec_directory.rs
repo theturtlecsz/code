@@ -57,11 +57,14 @@ pub fn find_spec_directory(cwd: &Path, spec_id: &str) -> Result<PathBuf, String>
     }
 
     if !docs_dir.is_dir() {
-        return Err(format!("docs/ exists but is not a directory: {}", docs_dir.display()));
+        return Err(format!(
+            "docs/ exists but is not a directory: {}",
+            docs_dir.display()
+        ));
     }
 
-    let entries = std::fs::read_dir(&docs_dir)
-        .map_err(|e| format!("Cannot read docs/ directory: {}", e))?;
+    let entries =
+        std::fs::read_dir(&docs_dir).map_err(|e| format!("Cannot read docs/ directory: {}", e))?;
 
     // Collect all matching DIRECTORIES (not files)
     let mut candidates: Vec<PathBuf> = Vec::new();
@@ -90,8 +93,11 @@ pub fn find_spec_directory(cwd: &Path, spec_id: &str) -> Result<PathBuf, String>
     }
 
     if !skipped_files.is_empty() {
-        tracing::warn!("⚠️  Skipped {} matching files (need directories): {:?}",
-            skipped_files.len(), skipped_files);
+        tracing::warn!(
+            "⚠️  Skipped {} matching files (need directories): {:?}",
+            skipped_files.len(),
+            skipped_files
+        );
     }
 
     // Apply ACID principles: Deterministic selection
@@ -99,7 +105,9 @@ pub fn find_spec_directory(cwd: &Path, spec_id: &str) -> Result<PathBuf, String>
         0 => {
             return Err(format!(
                 "No SPEC directory found for '{}' in {}\nChecked: docs/ directory\nSkipped files: {:?}",
-                spec_id, docs_dir.display(), skipped_files
+                spec_id,
+                docs_dir.display(),
+                skipped_files
             ));
         }
         1 => {
@@ -111,8 +119,14 @@ pub fn find_spec_directory(cwd: &Path, spec_id: &str) -> Result<PathBuf, String>
             // Sort alphabetically for deterministic ordering
             candidates.sort();
 
-            tracing::warn!("⚠️  Multiple SPEC directories found for {}: {:?}", spec_id,
-                candidates.iter().map(|p| p.file_name().unwrap().to_string_lossy()).collect::<Vec<_>>());
+            tracing::warn!(
+                "⚠️  Multiple SPEC directories found for {}: {:?}",
+                spec_id,
+                candidates
+                    .iter()
+                    .map(|p| p.file_name().unwrap().to_string_lossy())
+                    .collect::<Vec<_>>()
+            );
 
             // Precedence: Exact match > First alphabetically
             if let Some(exact) = candidates.iter().find(|p| {
@@ -150,7 +164,10 @@ pub fn find_spec_directory(cwd: &Path, spec_id: &str) -> Result<PathBuf, String>
 }
 
 /// Find SPEC directory with full validation
-pub fn find_and_validate_spec_directory(cwd: &Path, spec_id: &str) -> Result<SpecDirectoryValidation, String> {
+pub fn find_and_validate_spec_directory(
+    cwd: &Path,
+    spec_id: &str,
+) -> Result<SpecDirectoryValidation, String> {
     let path = find_spec_directory(cwd, spec_id)?;
 
     let spec_md = path.join("spec.md");

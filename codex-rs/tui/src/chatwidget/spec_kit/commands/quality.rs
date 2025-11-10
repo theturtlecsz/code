@@ -4,9 +4,9 @@
 //! Eliminates ALL agent usage from pattern-matching quality checks
 
 use super::super::super::ChatWidget;
-use super::super::clarify_native;
 use super::super::analyze_native;
 use super::super::checklist_native;
+use super::super::clarify_native;
 use super::super::command_registry::SpecKitCommand;
 use crate::history_cell;
 
@@ -88,7 +88,8 @@ impl SpecKitCommand for SpecKitAnalyzeCommand {
             }
             Err(err) => {
                 widget.history_push(history_cell::new_error_event(format!(
-                    "Analyze failed: {}", err
+                    "Analyze failed: {}",
+                    err
                 )));
             }
         }
@@ -132,7 +133,8 @@ impl SpecKitCommand for SpecKitChecklistCommand {
             }
             Err(err) => {
                 widget.history_push(history_cell::new_error_event(format!(
-                    "Checklist failed: {}", err
+                    "Checklist failed: {}",
+                    err
                 )));
             }
         }
@@ -152,7 +154,8 @@ fn display_clarify_results(
     if ambiguities.is_empty() {
         widget.history_push(history_cell::PlainHistoryCell::new(
             vec![ratatui::text::Line::from(format!(
-                "✅ No ambiguities found in {}", spec_id
+                "✅ No ambiguities found in {}",
+                spec_id
             ))],
             history_cell::HistoryCellType::Notice,
         ));
@@ -162,20 +165,32 @@ fn display_clarify_results(
     // Header
     widget.history_push(history_cell::PlainHistoryCell::new(
         vec![ratatui::text::Line::from(format!(
-            "🔍 Found {} ambiguities in {}:", ambiguities.len(), spec_id
+            "🔍 Found {} ambiguities in {}:",
+            ambiguities.len(),
+            spec_id
         ))],
         history_cell::HistoryCellType::Notice,
     ));
 
     // Group by severity
-    let critical: Vec<_> = ambiguities.iter().filter(|a| matches!(a.severity, clarify_native::Severity::Critical)).collect();
-    let important: Vec<_> = ambiguities.iter().filter(|a| matches!(a.severity, clarify_native::Severity::Important)).collect();
-    let minor: Vec<_> = ambiguities.iter().filter(|a| matches!(a.severity, clarify_native::Severity::Minor)).collect();
+    let critical: Vec<_> = ambiguities
+        .iter()
+        .filter(|a| matches!(a.severity, clarify_native::Severity::Critical))
+        .collect();
+    let important: Vec<_> = ambiguities
+        .iter()
+        .filter(|a| matches!(a.severity, clarify_native::Severity::Important))
+        .collect();
+    let minor: Vec<_> = ambiguities
+        .iter()
+        .filter(|a| matches!(a.severity, clarify_native::Severity::Minor))
+        .collect();
 
     // Display by severity
     if !critical.is_empty() {
         widget.history_push(history_cell::new_error_event(format!(
-            "CRITICAL ({})", critical.len()
+            "CRITICAL ({})",
+            critical.len()
         )));
         for amb in critical {
             let mut lines = vec![
@@ -184,10 +199,16 @@ fn display_clarify_results(
                 ratatui::text::Line::from(format!("  Location: {}", amb.location)),
             ];
             if !amb.context.is_empty() {
-                lines.push(ratatui::text::Line::from(format!("  Context: {}", amb.context)));
+                lines.push(ratatui::text::Line::from(format!(
+                    "  Context: {}",
+                    amb.context
+                )));
             }
             if let Some(suggestion) = &amb.suggestion {
-                lines.push(ratatui::text::Line::from(format!("  Suggestion: {}", suggestion)));
+                lines.push(ratatui::text::Line::from(format!(
+                    "  Suggestion: {}",
+                    suggestion
+                )));
             }
             lines.push(ratatui::text::Line::from(""));
 
@@ -200,7 +221,8 @@ fn display_clarify_results(
 
     if !important.is_empty() {
         widget.history_push(history_cell::new_warning_event(format!(
-            "IMPORTANT ({})", important.len()
+            "IMPORTANT ({})",
+            important.len()
         )));
         for amb in important {
             let mut lines = vec![
@@ -209,7 +231,10 @@ fn display_clarify_results(
                 ratatui::text::Line::from(format!("  Location: {}", amb.location)),
             ];
             if let Some(suggestion) = &amb.suggestion {
-                lines.push(ratatui::text::Line::from(format!("  Suggestion: {}", suggestion)));
+                lines.push(ratatui::text::Line::from(format!(
+                    "  Suggestion: {}",
+                    suggestion
+                )));
             }
             lines.push(ratatui::text::Line::from(""));
 
@@ -223,11 +248,13 @@ fn display_clarify_results(
     if !minor.is_empty() {
         widget.history_push(history_cell::PlainHistoryCell::new(
             vec![ratatui::text::Line::from(format!(
-                "MINOR ({})", minor.len()
+                "MINOR ({})",
+                minor.len()
             ))],
             history_cell::HistoryCellType::Notice,
         ));
-        for amb in minor.iter().take(5) { // Limit minor display
+        for amb in minor.iter().take(5) {
+            // Limit minor display
             let mut lines = vec![
                 ratatui::text::Line::from(format!("  {} [{}]", amb.id, amb.pattern)),
                 ratatui::text::Line::from(format!("  Question: {}", amb.question)),
@@ -243,7 +270,8 @@ fn display_clarify_results(
         if minor.len() > 5 {
             widget.history_push(history_cell::PlainHistoryCell::new(
                 vec![ratatui::text::Line::from(format!(
-                    "  ... and {} more minor issues", minor.len() - 5
+                    "  ... and {} more minor issues",
+                    minor.len() - 5
                 ))],
                 history_cell::HistoryCellType::Notice,
             ));
@@ -267,10 +295,13 @@ fn display_analyze_results(
 ) {
     if issues.is_empty() {
         widget.history_push(history_cell::new_warning_event(format!(
-            "No consistency issues found in {}", spec_id
+            "No consistency issues found in {}",
+            spec_id
         )));
         widget.history_push(history_cell::PlainHistoryCell::new(
-            vec![ratatui::text::Line::from("Cost savings: $0.80 (zero agents used)")],
+            vec![ratatui::text::Line::from(
+                "Cost savings: $0.80 (zero agents used)",
+            )],
             history_cell::HistoryCellType::Notice,
         ));
         return;
@@ -279,28 +310,44 @@ fn display_analyze_results(
     // Header
     widget.history_push(history_cell::PlainHistoryCell::new(
         vec![ratatui::text::Line::from(format!(
-            "🔍 Found {} consistency issues in {}:", issues.len(), spec_id
+            "🔍 Found {} consistency issues in {}:",
+            issues.len(),
+            spec_id
         ))],
         history_cell::HistoryCellType::Notice,
     ));
 
     // Group by severity
-    let critical: Vec<_> = issues.iter().filter(|i| matches!(i.severity, clarify_native::Severity::Critical)).collect();
-    let important: Vec<_> = issues.iter().filter(|i| matches!(i.severity, clarify_native::Severity::Important)).collect();
-    let minor: Vec<_> = issues.iter().filter(|i| matches!(i.severity, clarify_native::Severity::Minor)).collect();
+    let critical: Vec<_> = issues
+        .iter()
+        .filter(|i| matches!(i.severity, clarify_native::Severity::Critical))
+        .collect();
+    let important: Vec<_> = issues
+        .iter()
+        .filter(|i| matches!(i.severity, clarify_native::Severity::Important))
+        .collect();
+    let minor: Vec<_> = issues
+        .iter()
+        .filter(|i| matches!(i.severity, clarify_native::Severity::Minor))
+        .collect();
 
     // Display by severity
     if !critical.is_empty() {
         widget.history_push(history_cell::new_error_event(format!(
-            "\n❌ CRITICAL ({}):", critical.len()
+            "\n❌ CRITICAL ({}):",
+            critical.len()
         )));
         for issue in critical {
             widget.history_push(history_cell::PlainHistoryCell::new(
                 vec![ratatui::text::Line::from(format!(
                     "  {} [{}]\n    {}\n    {} @ {} → {} @ {}\n    Fix: {}",
-                    issue.id, issue.issue_type, issue.description,
-                    issue.source_file, issue.source_location,
-                    issue.target_file, issue.target_location,
+                    issue.id,
+                    issue.issue_type,
+                    issue.description,
+                    issue.source_file,
+                    issue.source_location,
+                    issue.target_file,
+                    issue.target_location,
                     issue.suggested_fix.as_ref().unwrap_or(&"N/A".to_string())
                 ))],
                 history_cell::HistoryCellType::Notice,
@@ -310,14 +357,18 @@ fn display_analyze_results(
 
     if !important.is_empty() {
         widget.history_push(history_cell::new_warning_event(format!(
-            "\n⚠️  IMPORTANT ({}):", important.len()
+            "\n⚠️  IMPORTANT ({}):",
+            important.len()
         )));
         for issue in important {
             widget.history_push(history_cell::PlainHistoryCell::new(
                 vec![ratatui::text::Line::from(format!(
                     "  {} [{}] {}\n    {} → {}",
-                    issue.id, issue.issue_type, issue.description,
-                    issue.source_file, issue.target_file
+                    issue.id,
+                    issue.issue_type,
+                    issue.description,
+                    issue.source_file,
+                    issue.target_file
                 ))],
                 history_cell::HistoryCellType::Notice,
             ));
@@ -327,14 +378,16 @@ fn display_analyze_results(
     if !minor.is_empty() {
         widget.history_push(history_cell::PlainHistoryCell::new(
             vec![ratatui::text::Line::from(format!(
-                "\nℹ️  MINOR ({}):", minor.len()
+                "\nℹ️  MINOR ({}):",
+                minor.len()
             ))],
             history_cell::HistoryCellType::Notice,
         ));
         for issue in minor.iter().take(3) {
             widget.history_push(history_cell::PlainHistoryCell::new(
                 vec![ratatui::text::Line::from(format!(
-                    "  {} [{}] {}", issue.id, issue.issue_type, issue.description
+                    "  {} [{}] {}",
+                    issue.id, issue.issue_type, issue.description
                 ))],
                 history_cell::HistoryCellType::Notice,
             ));
@@ -342,7 +395,8 @@ fn display_analyze_results(
         if minor.len() > 3 {
             widget.history_push(history_cell::PlainHistoryCell::new(
                 vec![ratatui::text::Line::from(format!(
-                    "  ... and {} more minor issues", minor.len() - 3
+                    "  ... and {} more minor issues",
+                    minor.len() - 3
                 ))],
                 history_cell::HistoryCellType::Notice,
             ));
@@ -367,7 +421,9 @@ fn display_checklist_results(
     widget.history_push(history_cell::PlainHistoryCell::new(
         vec![ratatui::text::Line::from(format!(
             "Quality Report for {}: {} ({:.1}%)",
-            spec_id, report.grade(), report.overall_score
+            spec_id,
+            report.grade(),
+            report.overall_score
         ))],
         history_cell::HistoryCellType::Notice,
     ));
@@ -395,8 +451,16 @@ fn display_checklist_results(
             history_cell::HistoryCellType::Notice,
         ));
 
-        let critical: Vec<_> = report.issues.iter().filter(|i| matches!(i.severity, clarify_native::Severity::Critical)).collect();
-        let important: Vec<_> = report.issues.iter().filter(|i| matches!(i.severity, clarify_native::Severity::Important)).collect();
+        let critical: Vec<_> = report
+            .issues
+            .iter()
+            .filter(|i| matches!(i.severity, clarify_native::Severity::Critical))
+            .collect();
+        let important: Vec<_> = report
+            .issues
+            .iter()
+            .filter(|i| matches!(i.severity, clarify_native::Severity::Important))
+            .collect();
 
         for issue in critical.iter().chain(important.iter()).take(5) {
             widget.history_push(history_cell::PlainHistoryCell::new(
@@ -414,7 +478,8 @@ fn display_checklist_results(
         if report.issues.len() > 5 {
             widget.history_push(history_cell::PlainHistoryCell::new(
                 vec![ratatui::text::Line::from(format!(
-                    "  ... and {} more issues", report.issues.len() - 5
+                    "  ... and {} more issues",
+                    report.issues.len() - 5
                 ))],
                 history_cell::HistoryCellType::Notice,
             ));

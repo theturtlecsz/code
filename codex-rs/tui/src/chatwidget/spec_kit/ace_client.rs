@@ -55,7 +55,7 @@ impl<T> AceResult<T> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlaybookBullet {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<i32>,  // ACE uses integer IDs
+    pub id: Option<i32>, // ACE uses integer IDs
     pub text: String,
     #[serde(default)]
     pub helpful: bool,
@@ -138,7 +138,10 @@ pub async fn init_ace_client(
                                     name: "code-cli".to_string(),
                                     title: Some("Code CLI".to_string()),
                                     version: env!("CARGO_PKG_VERSION").to_string(),
-                                    user_agent: Some(format!("code-cli/{}", env!("CARGO_PKG_VERSION"))),
+                                    user_agent: Some(format!(
+                                        "code-cli/{}",
+                                        env!("CARGO_PKG_VERSION")
+                                    )),
                                 },
                             },
                             None,
@@ -380,15 +383,13 @@ fn parse_tool_result<T: for<'de> Deserialize<'de>>(result: &CallToolResult) -> R
     let text = match content {
         ContentBlock::TextContent(text_content) => &text_content.text,
         ContentBlock::ImageContent(_) => {
-            return Err(anyhow!("ACE tool returned image content, expected text"))
+            return Err(anyhow!("ACE tool returned image content, expected text"));
         }
         ContentBlock::AudioContent(_) => {
-            return Err(anyhow!("ACE tool returned audio content, expected text"))
+            return Err(anyhow!("ACE tool returned audio content, expected text"));
         }
         ContentBlock::ResourceLink(_) | ContentBlock::EmbeddedResource(_) => {
-            return Err(anyhow!(
-                "ACE tool returned resource content, expected text"
-            ))
+            return Err(anyhow!("ACE tool returned resource content, expected text"));
         }
     };
 
@@ -397,7 +398,10 @@ fn parse_tool_result<T: for<'de> Deserialize<'de>>(result: &CallToolResult) -> R
 
     // Parse JSON response
     serde_json::from_str(text).with_context(|| {
-        format!("Failed to parse ACE tool response as JSON. Response was: {}", text)
+        format!(
+            "Failed to parse ACE tool response as JSON. Response was: {}",
+            text
+        )
     })
 }
 

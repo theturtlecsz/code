@@ -94,8 +94,16 @@ TASK: Analyze this spec-kit execution and extract reusable patterns.
 "#,
             task_title = self.task_title,
             scope = self.scope,
-            compile_status = if self.feedback.compile_ok { "✅ OK" } else { "❌ FAILED" },
-            test_status = if self.feedback.tests_passed { "✅ PASSED" } else { "❌ FAILED" },
+            compile_status = if self.feedback.compile_ok {
+                "✅ OK"
+            } else {
+                "❌ FAILED"
+            },
+            test_status = if self.feedback.tests_passed {
+                "✅ PASSED"
+            } else {
+                "❌ FAILED"
+            },
             lint_count = self.feedback.lint_issues,
         );
 
@@ -174,7 +182,7 @@ Return JSON:
 - Scope based on where pattern applies
 
 ## Begin Analysis
-"#
+"#,
         );
 
         prompt
@@ -227,8 +235,7 @@ mod tests {
 
     #[test]
     fn test_should_reflect_on_failure() {
-        let feedback = ExecutionFeedback::new()
-            .with_compile_ok(false);
+        let feedback = ExecutionFeedback::new().with_compile_ok(false);
 
         assert!(should_reflect(&feedback));
     }
@@ -311,7 +318,10 @@ Hope this helps!
 
         let result = parse_reflection_response(response).unwrap();
         assert_eq!(result.patterns.len(), 1);
-        assert_eq!(result.patterns[0].pattern, "Use tokio::sync::Mutex in async");
+        assert_eq!(
+            result.patterns[0].pattern,
+            "Use tokio::sync::Mutex in async"
+        );
         assert_eq!(result.patterns[0].kind, PatternKind::Helpful);
     }
 }

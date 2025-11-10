@@ -56,8 +56,7 @@ async fn call_llm_for_ace(prompt: String) -> Result<String, String> {
         .map_err(|e| format!("Failed to wait for gemini: {}", e))?;
 
     if output.status.success() {
-        String::from_utf8(output.stdout)
-            .map_err(|e| format!("Invalid UTF-8 from gemini: {}", e))
+        String::from_utf8(output.stdout).map_err(|e| format!("Invalid UTF-8 from gemini: {}", e))
     } else {
         Err(format!(
             "gemini exited with status: {}",
@@ -93,12 +92,9 @@ pub async fn run_ace_cycle(
     // STEP 1: Reflection (LLM analyzes outcome)
     info!("ACE Reflector: Analyzing execution outcome...");
 
-    let reflection_prompt = ReflectionPromptBuilder::new(
-        task_title.to_string(),
-        scope.to_string(),
-        feedback.clone(),
-    )
-    .build();
+    let reflection_prompt =
+        ReflectionPromptBuilder::new(task_title.to_string(), scope.to_string(), feedback.clone())
+            .build();
 
     let reflection_response = call_llm_for_ace(reflection_prompt).await?;
     let reflection = ace_reflector::parse_reflection_response(&reflection_response)
@@ -126,7 +122,7 @@ pub async fn run_ace_cycle(
             repo_root.clone(),
             branch.clone(),
             scope.to_string(),
-            20, // Get more bullets for curation context
+            20,   // Get more bullets for curation context
             true, // Include neutral
         )
         .await
@@ -137,12 +133,9 @@ pub async fn run_ace_cycle(
 
         info!("ACE Curator: Deciding playbook updates...");
 
-        let curation_prompt = CurationPromptBuilder::new(
-            reflection.clone(),
-            current_bullets,
-            scope.to_string(),
-        )
-        .build();
+        let curation_prompt =
+            CurationPromptBuilder::new(reflection.clone(), current_bullets, scope.to_string())
+                .build();
 
         let curation_response = call_llm_for_ace(curation_prompt).await?;
         let curation = ace_curator::parse_curation_response(&curation_response)
@@ -287,7 +280,7 @@ mod tests {
 
     #[test]
     fn test_ace_cycle_result_construction() {
-        use super::super::ace_reflector::{ReflectedPattern, PatternKind};
+        use super::super::ace_reflector::{PatternKind, ReflectedPattern};
 
         let reflection = ReflectionResult {
             patterns: vec![ReflectedPattern {

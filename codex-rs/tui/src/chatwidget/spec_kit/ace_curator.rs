@@ -29,7 +29,7 @@ pub struct CurationDecision {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewBulletSpec {
     pub text: String,
-    pub kind: String,  // "helpful" | "harmful"
+    pub kind: String, // "helpful" | "harmful"
     pub scope: String,
 }
 
@@ -104,7 +104,7 @@ TASK: Decide how to update the playbook based on reflection insights.
                     bullet.id.unwrap_or(-1),
                     bullet.text,
                     bullet.confidence,
-                    false  // We don't have pinned field in our struct yet
+                    false // We don't have pinned field in our struct yet
                 ));
             }
         }
@@ -198,8 +198,7 @@ pub fn parse_curation_response(response: &str) -> Result<CurationDecision, Strin
 
     if let (Some(start), Some(end)) = (json_start, json_end) {
         let json_str = &response[start..=end];
-        serde_json::from_str(json_str)
-            .map_err(|e| format!("Failed to parse curation JSON: {}", e))
+        serde_json::from_str(json_str).map_err(|e| format!("Failed to parse curation JSON: {}", e))
     } else {
         Err("No JSON found in curation response".to_string())
     }
@@ -213,22 +212,20 @@ pub fn should_curate(reflection: &ReflectionResult) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::super::ace_route_selector::DiffStat;
     use super::super::ace_reflector::ReflectedPattern;
+    use super::super::ace_route_selector::DiffStat;
+    use super::*;
 
     #[test]
     fn test_should_curate_with_high_confidence() {
         let reflection = ReflectionResult {
-            patterns: vec![
-                ReflectedPattern {
-                    pattern: "Test pattern".to_string(),
-                    rationale: "Because".to_string(),
-                    kind: PatternKind::Helpful,
-                    confidence: 0.9,
-                    scope: "implement".to_string(),
-                },
-            ],
+            patterns: vec![ReflectedPattern {
+                pattern: "Test pattern".to_string(),
+                rationale: "Because".to_string(),
+                kind: PatternKind::Helpful,
+                confidence: 0.9,
+                scope: "implement".to_string(),
+            }],
             successes: vec![],
             failures: vec![],
             recommendations: vec![],
@@ -241,15 +238,13 @@ mod tests {
     #[test]
     fn test_should_not_curate_with_low_confidence() {
         let reflection = ReflectionResult {
-            patterns: vec![
-                ReflectedPattern {
-                    pattern: "Low confidence pattern".to_string(),
-                    rationale: "Uncertain".to_string(),
-                    kind: PatternKind::Neutral,
-                    confidence: 0.3,
-                    scope: "global".to_string(),
-                },
-            ],
+            patterns: vec![ReflectedPattern {
+                pattern: "Low confidence pattern".to_string(),
+                rationale: "Uncertain".to_string(),
+                kind: PatternKind::Neutral,
+                confidence: 0.3,
+                scope: "global".to_string(),
+            }],
             successes: vec![],
             failures: vec![],
             recommendations: vec![],
@@ -262,31 +257,27 @@ mod tests {
     #[test]
     fn test_curation_prompt_includes_reflection() {
         let reflection = ReflectionResult {
-            patterns: vec![
-                ReflectedPattern {
-                    pattern: "Use async".to_string(),
-                    rationale: "Better perf".to_string(),
-                    kind: PatternKind::Helpful,
-                    confidence: 0.8,
-                    scope: "implement".to_string(),
-                },
-            ],
+            patterns: vec![ReflectedPattern {
+                pattern: "Use async".to_string(),
+                rationale: "Better perf".to_string(),
+                kind: PatternKind::Helpful,
+                confidence: 0.8,
+                scope: "implement".to_string(),
+            }],
             successes: vec!["Fast".to_string()],
             failures: vec!["Slow sync".to_string()],
             recommendations: vec!["Add async".to_string()],
             summary: "Good progress".to_string(),
         };
 
-        let bullets = vec![
-            PlaybookBullet {
-                id: Some(1),
-                text: "Old bullet".to_string(),
-                helpful: true,
-                harmful: false,
-                confidence: 0.5,
-                source: None,
-            },
-        ];
+        let bullets = vec![PlaybookBullet {
+            id: Some(1),
+            text: "Old bullet".to_string(),
+            helpful: true,
+            harmful: false,
+            confidence: 0.5,
+            source: None,
+        }];
 
         let builder = CurationPromptBuilder::new(reflection, bullets, "implement".to_string());
         let prompt = builder.build();

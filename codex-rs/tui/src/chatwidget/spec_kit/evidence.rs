@@ -759,30 +759,32 @@ fn export_synthesis_record(
     let conn = rusqlite::Connection::open(&db_path)
         .map_err(|e| SpecKitError::from_string(format!("Failed to open database: {}", e)))?;
 
-    let synthesis_data = conn.query_row(
-        "SELECT spec_id, stage, artifacts_count, output_markdown, output_path,
+    let synthesis_data = conn
+        .query_row(
+            "SELECT spec_id, stage, artifacts_count, output_markdown, output_path,
                 status, agreements, conflicts, degraded, run_id, created_at
          FROM consensus_synthesis
          WHERE spec_id = ?1 AND stage = ?2
          ORDER BY created_at DESC
          LIMIT 1",
-        rusqlite::params![spec_id, stage_command],
-        |row| {
-            Ok(serde_json::json!({
-                "spec_id": row.get::<_, String>(0)?,
-                "stage": row.get::<_, String>(1)?,
-                "artifacts_count": row.get::<_, Option<i64>>(2)?,
-                "output_markdown": row.get::<_, String>(3)?,
-                "output_path": row.get::<_, Option<String>>(4)?,
-                "status": row.get::<_, String>(5)?,
-                "agreements": row.get::<_, Option<String>>(6)?,
-                "conflicts": row.get::<_, Option<String>>(7)?,
-                "degraded": row.get::<_, Option<bool>>(8)?,
-                "run_id": row.get::<_, Option<String>>(9)?,
-                "created_at": row.get::<_, String>(10)?,
-            }))
-        },
-    ).map_err(|e| SpecKitError::from_string(format!("Query failed: {}", e)))?;
+            rusqlite::params![spec_id, stage_command],
+            |row| {
+                Ok(serde_json::json!({
+                    "spec_id": row.get::<_, String>(0)?,
+                    "stage": row.get::<_, String>(1)?,
+                    "artifacts_count": row.get::<_, Option<i64>>(2)?,
+                    "output_markdown": row.get::<_, String>(3)?,
+                    "output_path": row.get::<_, Option<String>>(4)?,
+                    "status": row.get::<_, String>(5)?,
+                    "agreements": row.get::<_, Option<String>>(6)?,
+                    "conflicts": row.get::<_, Option<String>>(7)?,
+                    "degraded": row.get::<_, Option<bool>>(8)?,
+                    "run_id": row.get::<_, Option<String>>(9)?,
+                    "created_at": row.get::<_, String>(10)?,
+                }))
+            },
+        )
+        .map_err(|e| SpecKitError::from_string(format!("Query failed: {}", e)))?;
 
     let synthesis_file = consensus_dir.join(format!("{}_synthesis.json", stage_name));
     let json_str = serde_json::to_string_pretty(&synthesis_data)
@@ -812,12 +814,14 @@ fn export_verdict_record(
     // Get agent proposals for this stage
     let proposals: Vec<Value> = if let Some(rid) = run_id {
         // Query with run_id filter
-        let mut stmt = conn.prepare(
-            "SELECT agent_name, content_json, created_at
+        let mut stmt = conn
+            .prepare(
+                "SELECT agent_name, content_json, created_at
              FROM consensus_artifacts
              WHERE spec_id = ?1 AND stage = ?2 AND run_id = ?3
-             ORDER BY created_at"
-        ).map_err(|e| SpecKitError::from_string(format!("Prepare failed: {}", e)))?;
+             ORDER BY created_at",
+            )
+            .map_err(|e| SpecKitError::from_string(format!("Prepare failed: {}", e)))?;
 
         stmt.query_map(rusqlite::params![spec_id, stage_command, rid], |row| {
             let agent_name: String = row.get(0)?;
@@ -838,12 +842,14 @@ fn export_verdict_record(
         .collect()
     } else {
         // Query without run_id filter
-        let mut stmt = conn.prepare(
-            "SELECT agent_name, content_json, created_at
+        let mut stmt = conn
+            .prepare(
+                "SELECT agent_name, content_json, created_at
              FROM consensus_artifacts
              WHERE spec_id = ?1 AND stage = ?2
-             ORDER BY created_at"
-        ).map_err(|e| SpecKitError::from_string(format!("Prepare failed: {}", e)))?;
+             ORDER BY created_at",
+            )
+            .map_err(|e| SpecKitError::from_string(format!("Prepare failed: {}", e)))?;
 
         stmt.query_map(rusqlite::params![spec_id, stage_command], |row| {
             let agent_name: String = row.get(0)?;

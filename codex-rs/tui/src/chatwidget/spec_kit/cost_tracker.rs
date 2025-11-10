@@ -24,58 +24,75 @@ impl ModelPricing {
     pub fn for_model(model: &str) -> Self {
         match model {
             // Claude models
-            "claude-haiku" | "claude-haiku-3.5" | "haiku" => {
-                Self { input_per_million: 0.25, output_per_million: 1.25 }
-            }
-            "claude-sonnet" | "claude-sonnet-4" | "sonnet" => {
-                Self { input_per_million: 3.0, output_per_million: 15.0 }
-            }
-            "claude-opus" | "claude-opus-4" | "opus" => {
-                Self { input_per_million: 15.0, output_per_million: 75.0 }
-            }
+            "claude-haiku" | "claude-haiku-3.5" | "haiku" => Self {
+                input_per_million: 0.25,
+                output_per_million: 1.25,
+            },
+            "claude-sonnet" | "claude-sonnet-4" | "sonnet" => Self {
+                input_per_million: 3.0,
+                output_per_million: 15.0,
+            },
+            "claude-opus" | "claude-opus-4" | "opus" => Self {
+                input_per_million: 15.0,
+                output_per_million: 75.0,
+            },
 
             // Gemini models
-            "gemini-2.5-flash" | "gemini-flash-2.5" | "flash-2.5" => {
-                Self { input_per_million: 0.10, output_per_million: 0.40 }
-            }
-            "gemini-2.0-flash" | "flash-2.0" => {
-                Self { input_per_million: 0.10, output_per_million: 0.40 }
-            }
-            "gemini-1.5-flash" | "flash-1.5" | "flash" => {
-                Self { input_per_million: 0.075, output_per_million: 0.30 }
-            }
-            "gemini-2.5-flash-lite" | "flash-lite" => {
-                Self { input_per_million: 0.05, output_per_million: 0.20 }
-            }
-            "gemini-2.5-pro" | "gemini-pro-2.5" => {
-                Self { input_per_million: 1.25, output_per_million: 5.0 }
-            }
-            "gemini-1.5-pro" | "gemini-pro-1.5" | "gemini-pro" => {
-                Self { input_per_million: 1.25, output_per_million: 5.0 }
-            }
+            "gemini-2.5-flash" | "gemini-flash-2.5" | "flash-2.5" => Self {
+                input_per_million: 0.10,
+                output_per_million: 0.40,
+            },
+            "gemini-2.0-flash" | "flash-2.0" => Self {
+                input_per_million: 0.10,
+                output_per_million: 0.40,
+            },
+            "gemini-1.5-flash" | "flash-1.5" | "flash" => Self {
+                input_per_million: 0.075,
+                output_per_million: 0.30,
+            },
+            "gemini-2.5-flash-lite" | "flash-lite" => Self {
+                input_per_million: 0.05,
+                output_per_million: 0.20,
+            },
+            "gemini-2.5-pro" | "gemini-pro-2.5" => Self {
+                input_per_million: 1.25,
+                output_per_million: 5.0,
+            },
+            "gemini-1.5-pro" | "gemini-pro-1.5" | "gemini-pro" => Self {
+                input_per_million: 1.25,
+                output_per_million: 5.0,
+            },
 
             // OpenAI models
-            "gpt-4o" => {
-                Self { input_per_million: 2.50, output_per_million: 10.0 }
-            }
-            "gpt-4o-mini" => {
-                Self { input_per_million: 0.15, output_per_million: 0.60 }
-            }
-            "gpt-4-turbo" | "gpt-4" => {
-                Self { input_per_million: 10.0, output_per_million: 30.0 }
-            }
-            "gpt-3.5-turbo" => {
-                Self { input_per_million: 0.50, output_per_million: 1.50 }
-            }
+            "gpt-4o" => Self {
+                input_per_million: 2.50,
+                output_per_million: 10.0,
+            },
+            "gpt-4o-mini" => Self {
+                input_per_million: 0.15,
+                output_per_million: 0.60,
+            },
+            "gpt-4-turbo" | "gpt-4" => Self {
+                input_per_million: 10.0,
+                output_per_million: 30.0,
+            },
+            "gpt-3.5-turbo" => Self {
+                input_per_million: 0.50,
+                output_per_million: 1.50,
+            },
             "gpt-5" | "gpt-5-codex" => {
                 // Estimated - not public pricing yet
-                Self { input_per_million: 10.0, output_per_million: 30.0 }
+                Self {
+                    input_per_million: 10.0,
+                    output_per_million: 30.0,
+                }
             }
 
             // Unknown model - use expensive default for safety
-            _ => {
-                Self { input_per_million: 10.0, output_per_million: 30.0 }
-            }
+            _ => Self {
+                input_per_million: 10.0,
+                output_per_million: 30.0,
+            },
         }
     }
 
@@ -116,14 +133,12 @@ impl SpecCostTracker {
     }
 
     /// Record a model call and return warning if approaching budget
-    pub fn record_call(
-        &mut self,
-        stage: SpecStage,
-        model: &str,
-        cost: f64,
-    ) -> Option<BudgetAlert> {
+    pub fn record_call(&mut self, stage: SpecStage, model: &str, cost: f64) -> Option<BudgetAlert> {
         self.spent += cost;
-        *self.per_stage.entry(stage.command_name().to_string()).or_insert(0.0) += cost;
+        *self
+            .per_stage
+            .entry(stage.command_name().to_string())
+            .or_insert(0.0) += cost;
         *self.per_model.entry(model.to_string()).or_insert(0.0) += cost;
         self.call_count += 1;
         self.last_updated = Utc::now();
@@ -198,19 +213,34 @@ pub enum BudgetAlert {
 impl BudgetAlert {
     pub fn to_user_message(&self) -> String {
         match self {
-            BudgetAlert::Warning { spec_id, budget, spent, remaining } => {
+            BudgetAlert::Warning {
+                spec_id,
+                budget,
+                spent,
+                remaining,
+            } => {
                 format!(
                     "⚠️  {} budget warning: ${:.2} / ${:.2} spent (80%), ${:.2} remaining",
                     spec_id, spent, budget, remaining
                 )
             }
-            BudgetAlert::Critical { spec_id, budget, spent, remaining } => {
+            BudgetAlert::Critical {
+                spec_id,
+                budget,
+                spent,
+                remaining,
+            } => {
                 format!(
                     "🚨 {} budget critical: ${:.2} / ${:.2} spent (90%), only ${:.2} remaining",
                     spec_id, spent, budget, remaining
                 )
             }
-            BudgetAlert::Exceeded { spec_id, budget, spent, overage } => {
+            BudgetAlert::Exceeded {
+                spec_id,
+                budget,
+                spent,
+                overage,
+            } => {
                 format!(
                     "❌ {} budget EXCEEDED: ${:.2} / ${:.2} spent, ${:.2} over budget",
                     spec_id, spent, budget, overage
@@ -313,7 +343,10 @@ impl CostTracker {
             stage_notes: Vec<StageRoutingNote>,
         }
 
-        let ext = ExtendedSummary { base: &summary, stage_notes: notes };
+        let ext = ExtendedSummary {
+            base: &summary,
+            stage_notes: notes,
+        };
         let json = serde_json::to_string_pretty(&ext)?;
         let path = evidence_dir.join(format!("{}_cost_summary.json", spec_id));
 
@@ -391,10 +424,10 @@ impl TaskComplexity {
     /// Get budget multiplier for this complexity
     pub fn budget_multiplier(&self) -> f64 {
         match self {
-            TaskComplexity::Simple => 0.1,    // $0.02-0.05
-            TaskComplexity::Medium => 0.2,    // $0.20-0.40
-            TaskComplexity::Complex => 0.5,   // $0.60-1.00
-            TaskComplexity::Critical => 1.5,  // $2.00-3.00
+            TaskComplexity::Simple => 0.1,   // $0.02-0.05
+            TaskComplexity::Medium => 0.2,   // $0.20-0.40
+            TaskComplexity::Complex => 0.5,  // $0.60-1.00
+            TaskComplexity::Critical => 1.5, // $2.00-3.00
         }
     }
 }

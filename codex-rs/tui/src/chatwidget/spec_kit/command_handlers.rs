@@ -16,7 +16,7 @@ use super::state::ValidateCompletionReason;
 use crate::app_event::BackgroundPlacement;
 use crate::history_cell::HistoryCellType;
 use crate::slash_command::{HalMode, SlashCommand};
-use crate::spec_status::{collect_report, degraded_warning, render_dashboard, SpecStatusArgs};
+use crate::spec_status::{SpecStatusArgs, collect_report, degraded_warning, render_dashboard};
 
 /// Handle /speckit.status command (native dashboard)
 ///

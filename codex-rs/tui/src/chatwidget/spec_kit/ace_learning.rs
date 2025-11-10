@@ -346,10 +346,8 @@ mod tests {
         let summary = create_patch_summary("Add authentication", None);
         assert_eq!(summary, "Add authentication");
 
-        let summary_with_diff = create_patch_summary(
-            "Add authentication",
-            Some(&DiffStat::new(3, 150, 20)),
-        );
+        let summary_with_diff =
+            create_patch_summary("Add authentication", Some(&DiffStat::new(3, 150, 20)));
         assert!(summary_with_diff.contains("3 files"));
         assert!(summary_with_diff.contains("+150"));
         assert!(summary_with_diff.contains("-20"));

@@ -241,7 +241,10 @@ impl App<'_> {
         initial_command: Option<String>, // SPEC-KIT-920
     ) -> Self {
         // SPEC-KIT-920: Log initial_command at startup
-        tracing::info!("SPEC-KIT-920: App::new called with initial_command={:?}", initial_command);
+        tracing::info!(
+            "SPEC-KIT-920: App::new called with initial_command={:?}",
+            initial_command
+        );
 
         let conversation_manager = Arc::new(ConversationManager::new(AuthManager::shared(
             config.codex_home.clone(),
@@ -495,9 +498,12 @@ impl App<'_> {
     /// This ensures the UI is fully initialized before commands execute,
     /// preventing output routing issues where build output gets piped into the input box.
     fn dispatch_initial_command(app_event_tx: &AppEventSender, cmd_text: &str) {
-        use crate::slash_command::{process_slash_command_message, ProcessedCommand, SlashCommand};
+        use crate::slash_command::{ProcessedCommand, SlashCommand, process_slash_command_message};
 
-        tracing::info!("SPEC-KIT-920: Dispatching initial command at startup: {}", cmd_text);
+        tracing::info!(
+            "SPEC-KIT-920: Dispatching initial command at startup: {}",
+            cmd_text
+        );
 
         match process_slash_command_message(cmd_text) {
             ProcessedCommand::RegularCommand {
@@ -505,7 +511,10 @@ impl App<'_> {
                 command_text,
                 ..
             } => {
-                tracing::info!("SPEC-KIT-920: Auto-submitting regular command: {}", cmd_text);
+                tracing::info!(
+                    "SPEC-KIT-920: Auto-submitting regular command: {}",
+                    cmd_text
+                );
                 app_event_tx.send(AppEvent::DispatchCommand(command, command_text));
             }
             ProcessedCommand::ExpandedPrompt(_) | ProcessedCommand::SpecAuto(_) => {
@@ -2794,47 +2803,89 @@ impl App<'_> {
                         spec_kit::on_quality_gate_cancelled(widget, checkpoint);
                     }
                 }
-                AppEvent::QualityGateNativeAgentsComplete { checkpoint, agent_ids } => {
+                AppEvent::QualityGateNativeAgentsComplete {
+                    checkpoint,
+                    agent_ids,
+                } => {
                     // Native orchestrator agents completed - trigger broker collection
                     if let AppState::Chat { widget } = &mut self.app_state {
-                        info!("Handling native quality gate completion for {:?} with {} agents", checkpoint, agent_ids.len());
+                        info!(
+                            "Handling native quality gate completion for {:?} with {} agents",
+                            checkpoint,
+                            agent_ids.len()
+                        );
                         // Store agent IDs in phase for memory-based collection
                         spec_kit::set_native_agent_ids(widget, agent_ids);
                         // Trigger broker (will use memory-based collection)
                         spec_kit::on_quality_gate_agents_complete(widget);
                     }
                 }
-                AppEvent::RegularStageAgentsComplete { stage, spec_id, agent_ids, agent_results } => {
+                AppEvent::RegularStageAgentsComplete {
+                    stage,
+                    spec_id,
+                    agent_ids,
+                    agent_results,
+                } => {
                     // Regular stage agents completed (SPEC-KIT-900 Session 2)
                     // Triggered by background polling when all agents reach terminal state
                     // Note: run_id logging happens in on_spec_auto_agents_complete_with_ids
                     if let AppState::Chat { widget } = &mut self.app_state {
-                        warn!("🎯 AUDIT: Regular stage agents complete: stage={:?}, spec={}, agents={}, direct_results={}",
-                            stage, spec_id, agent_ids.len(), agent_results.len());
+                        warn!(
+                            "🎯 AUDIT: Regular stage agents complete: stage={:?}, spec={}, agents={}, direct_results={}",
+                            stage,
+                            spec_id,
+                            agent_ids.len(),
+                            agent_results.len()
+                        );
                         for (i, agent_id) in agent_ids.iter().enumerate() {
-                            warn!("  Agent {}/{}: {} (type: regular_stage)", i+1, agent_ids.len(), agent_id);
+                            warn!(
+                                "  Agent {}/{}: {} (type: regular_stage)",
+                                i + 1,
+                                agent_ids.len(),
+                                agent_id
+                            );
                         }
                         // Pass results directly if available (sequential), otherwise use agent_ids (parallel)
                         if !agent_results.is_empty() {
-                            warn!("  Using {} direct results from spawn_infos (sequential execution)", agent_results.len());
-                            spec_kit::on_spec_auto_agents_complete_with_results(widget, agent_results);
+                            warn!(
+                                "  Using {} direct results from spawn_infos (sequential execution)",
+                                agent_results.len()
+                            );
+                            spec_kit::on_spec_auto_agents_complete_with_results(
+                                widget,
+                                agent_results,
+                            );
                         } else {
-                            warn!("  Using agent_ids for collection from active_agents (parallel execution)");
+                            warn!(
+                                "  Using agent_ids for collection from active_agents (parallel execution)"
+                            );
                             spec_kit::on_spec_auto_agents_complete_with_ids(widget, agent_ids);
                         }
                     }
                 }
 
-                AppEvent::GuardrailComplete { spec_id, stage, success, result_json } => {
+                AppEvent::GuardrailComplete {
+                    spec_id,
+                    stage,
+                    success,
+                    result_json,
+                } => {
                     // Guardrail validation completed asynchronously (SPEC-KIT-900 Session 3)
                     // Note: run_id logging happens in guardrail display function
                     if let AppState::Chat { widget } = &mut self.app_state {
-                        warn!("🛡️ AUDIT: Guardrail complete: stage={:?}, spec={}, success={}",
-                            stage, spec_id, success);
+                        warn!(
+                            "🛡️ AUDIT: Guardrail complete: stage={:?}, spec={}, success={}",
+                            stage, spec_id, success
+                        );
 
                         // Deserialize result and display
-                        if let Ok(result) = serde_json::from_str::<spec_kit::native_guardrail::GuardrailResult>(&result_json) {
-                            spec_kit::display_guardrail_result_and_advance(widget, spec_id, stage, result);
+                        if let Ok(result) = serde_json::from_str::<
+                            spec_kit::native_guardrail::GuardrailResult,
+                        >(&result_json)
+                        {
+                            spec_kit::display_guardrail_result_and_advance(
+                                widget, spec_id, stage, result,
+                            );
                         } else {
                             warn!("Failed to deserialize guardrail result");
                         }

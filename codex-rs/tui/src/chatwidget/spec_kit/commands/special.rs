@@ -19,7 +19,7 @@ impl SpecKitCommand for SpecKitAutoCommand {
     }
 
     fn aliases(&self) -> &[&'static str] {
-        &[]  // No aliases - use /speckit.auto explicitly
+        &[] // No aliases - use /speckit.auto explicitly
     }
 
     fn description(&self) -> &'static str {
@@ -80,7 +80,7 @@ impl SpecKitCommand for SpecKitNewCommand {
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
-        use crate::history_cell::{PlainHistoryCell, HistoryCellType};
+        use crate::history_cell::{HistoryCellType, PlainHistoryCell};
         use ratatui::text::Line;
 
         // SPEC-KIT-072: Fully native SPEC creation (eliminates 2 agents, $0.15 → $0)
@@ -88,16 +88,34 @@ impl SpecKitCommand for SpecKitNewCommand {
             Ok(result) => {
                 widget.history_push(PlainHistoryCell::new(
                     vec![
-                        Line::from(format!("✅ Created {}: {}", result.spec_id, result.feature_name)),
+                        Line::from(format!(
+                            "✅ Created {}: {}",
+                            result.spec_id, result.feature_name
+                        )),
                         Line::from(""),
-                        Line::from(format!("   Directory: docs/{}/", result.directory.file_name().unwrap().to_string_lossy())),
-                        Line::from(format!("   Files created: {}", result.files_created.join(", "))),
+                        Line::from(format!(
+                            "   Directory: docs/{}/",
+                            result.directory.file_name().unwrap().to_string_lossy()
+                        )),
+                        Line::from(format!(
+                            "   Files created: {}",
+                            result.files_created.join(", ")
+                        )),
                         Line::from(format!("   Updated: SPEC.md tracker")),
                         Line::from(""),
                         Line::from("Next steps:"),
-                        Line::from(format!("   • Run /speckit.clarify {} to resolve ambiguities", result.spec_id)),
-                        Line::from(format!("   • Run /speckit.analyze {} to check consistency", result.spec_id)),
-                        Line::from(format!("   • Run /speckit.auto {} to generate full implementation", result.spec_id)),
+                        Line::from(format!(
+                            "   • Run /speckit.clarify {} to resolve ambiguities",
+                            result.spec_id
+                        )),
+                        Line::from(format!(
+                            "   • Run /speckit.analyze {} to check consistency",
+                            result.spec_id
+                        )),
+                        Line::from(format!(
+                            "   • Run /speckit.auto {} to generate full implementation",
+                            result.spec_id
+                        )),
                         Line::from(""),
                         Line::from("Cost savings: $0.15 → $0 (100% reduction, zero agents used)"),
                     ],
@@ -201,7 +219,10 @@ impl SpecKitCommand for SpecKitConstitutionCommand {
         // Find constitution.md in the repository
         let constitution_path = widget.config.cwd.join("memory").join("constitution.md");
 
-        tracing::info!("SpecKitConstitution: Looking for constitution at: {:?}", constitution_path);
+        tracing::info!(
+            "SpecKitConstitution: Looking for constitution at: {:?}",
+            constitution_path
+        );
 
         if !constitution_path.exists() {
             widget.history_push(crate::history_cell::new_error_event(
@@ -280,7 +301,9 @@ impl SpecKitCommand for SpecKitConstitutionCommand {
                             "✅ Successfully pinned {} bullets to ACE playbook",
                             pinned_count
                         )),
-                        ratatui::text::Line::from("   Database: ~/.code/ace/playbooks_normalized.sqlite3"),
+                        ratatui::text::Line::from(
+                            "   Database: ~/.code/ace/playbooks_normalized.sqlite3",
+                        ),
                         ratatui::text::Line::from("   Use /speckit.ace-status to view playbook"),
                     ],
                     crate::history_cell::HistoryCellType::Notice,
@@ -348,8 +371,12 @@ impl SpecKitCommand for SpecKitAceStatusCommand {
 
                 let mut lines = vec![
                     ratatui::text::Line::from(""),
-                    ratatui::text::Line::from("Scope      | Total | Pinned | Avg Score | Max Score"),
-                    ratatui::text::Line::from("-----------|-------|--------|-----------|----------"),
+                    ratatui::text::Line::from(
+                        "Scope      | Total | Pinned | Avg Score | Max Score",
+                    ),
+                    ratatui::text::Line::from(
+                        "-----------|-------|--------|-----------|----------",
+                    ),
                 ];
 
                 for line in stats.lines() {

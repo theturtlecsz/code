@@ -98,7 +98,8 @@ pub fn should_auto_resolve_with_ace(
         // Check for keyword overlap
         bullet_lower.contains(&issue_type_lower)
             || issue_lower.contains(&bullet_lower.split_whitespace().next().unwrap_or(""))
-            || bullet.text.len() > 20 && issue.description.len() > 20
+            || bullet.text.len() > 20
+                && issue.description.len() > 20
                 && similar_topics(&bullet_lower, &issue_lower)
     });
 
@@ -117,8 +118,11 @@ pub fn should_auto_resolve_with_ace(
     };
 
     // ACE boost: if ACE has seen this before, trust Medium confidence more
-    if ace_boost && matches!(issue.confidence, Medium) && matches!(issue.resolvability, SuggestFix) {
-        tracing::info!("ACE boost: Auto-resolving Medium confidence issue due to playbook pattern match");
+    if ace_boost && matches!(issue.confidence, Medium) && matches!(issue.resolvability, SuggestFix)
+    {
+        tracing::info!(
+            "ACE boost: Auto-resolving Medium confidence issue due to playbook pattern match"
+        );
         return true;
     }
 

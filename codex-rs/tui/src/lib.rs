@@ -100,7 +100,7 @@ pub use chatwidget::spec_kit::spec_id_generator;
 
 // FORK-SPECIFIC: ACE integration - Re-export for testing
 #[cfg(any(test, feature = "test-utils"))]
-pub use chatwidget::spec_kit::{should_use_ace, select_route, DiffStat, RouteDecision};
+pub use chatwidget::spec_kit::{DiffStat, RouteDecision, select_route, should_use_ace};
 
 // Re-export supporting types for E2E testing (T87)
 pub use slash_command::{HalMode, SlashCommand};

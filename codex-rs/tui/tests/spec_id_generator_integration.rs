@@ -41,8 +41,7 @@ fn test_create_full_spec_name_real_repo() {
         .expect("Expected repo root")
         .to_path_buf();
 
-    let spec_name =
-        generate_spec_directory_name(&repo_root, "Test native ID generation").unwrap();
+    let spec_name = generate_spec_directory_name(&repo_root, "Test native ID generation").unwrap();
 
     // Should be SPEC-KIT-071-test-native-id-generation (or higher)
     assert!(spec_name.starts_with("SPEC-KIT-"));
@@ -62,8 +61,5 @@ fn test_slug_creation_examples() {
         create_slug("Model cost optimization"),
         "model-cost-optimization"
     );
-    assert_eq!(
-        create_slug("Add search command"),
-        "add-search-command"
-    );
+    assert_eq!(create_slug("Add search command"), "add-search-command");
 }

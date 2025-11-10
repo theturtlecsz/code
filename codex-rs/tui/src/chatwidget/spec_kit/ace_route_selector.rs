@@ -20,12 +20,7 @@ impl TaskSignature {
     /// Create a new task signature from components
     ///
     /// Format: blake3("<command>|<branch>|<spec_or_title>|<sorted_files>")
-    pub fn new(
-        command: &str,
-        branch: &str,
-        spec_or_title: &str,
-        primary_files: &[String],
-    ) -> Self {
+    pub fn new(command: &str, branch: &str, spec_or_title: &str, primary_files: &[String]) -> Self {
         let mut hasher = Hasher::new();
 
         // Canonicalize components
@@ -95,11 +90,7 @@ fn get_cache() -> &'static Mutex<HashMap<String, TaskRunMetadata>> {
 }
 
 /// Check if this is a rerun of a recent task
-pub fn is_rerun(
-    signature: &TaskSignature,
-    branch: &str,
-    rerun_window_minutes: u64,
-) -> bool {
+pub fn is_rerun(signature: &TaskSignature, branch: &str, rerun_window_minutes: u64) -> bool {
     let cache = get_cache();
     let Ok(guard) = cache.lock() else {
         warn!("Failed to lock task run cache");
@@ -155,7 +146,10 @@ pub fn record_task_run(
 
     // Cleanup old entries (keep last 100)
     if guard.len() > 100 {
-        let mut entries: Vec<_> = guard.iter().map(|(k, v)| (k.clone(), v.timestamp)).collect();
+        let mut entries: Vec<_> = guard
+            .iter()
+            .map(|(k, v)| (k.clone(), v.timestamp))
+            .collect();
         entries.sort_by_key(|(_, ts)| *ts);
 
         // Remove oldest 20
@@ -289,8 +283,9 @@ pub fn decide_stage_routing(
 ) -> StageRoutingDecision {
     // Baseline per stage
     let mut effort = match stage {
-        crate::spec_prompts::SpecStage::Validate
-        | crate::spec_prompts::SpecStage::Unlock => AggregatorEffort::Minimal,
+        crate::spec_prompts::SpecStage::Validate | crate::spec_prompts::SpecStage::Unlock => {
+            AggregatorEffort::Minimal
+        }
         crate::spec_prompts::SpecStage::Plan
         | crate::spec_prompts::SpecStage::Tasks
         | crate::spec_prompts::SpecStage::Audit
@@ -465,21 +460,17 @@ mod tests {
 
     #[test]
     fn test_canonicalize_text() {
-        assert_eq!(
-            canonicalize_text("  Add  User  Auth  "),
-            "add user auth"
-        );
-        assert_eq!(
-            canonicalize_text("Add\nUser\tAuth"),
-            "add user auth"
-        );
+        assert_eq!(canonicalize_text("  Add  User  Auth  "), "add user auth");
+        assert_eq!(canonicalize_text("Add\nUser\tAuth"), "add user auth");
     }
 
     #[test]
     fn test_has_cross_cutting_keywords() {
         assert!(has_cross_cutting_keywords("Refactor authentication module"));
         assert!(has_cross_cutting_keywords("Migrate to new API"));
-        assert!(has_cross_cutting_keywords("Rename variables across codebase"));
+        assert!(has_cross_cutting_keywords(
+            "Rename variables across codebase"
+        ));
         assert!(has_cross_cutting_keywords("Cross-cutting concern"));
         assert!(has_cross_cutting_keywords("Monorepo restructure"));
         assert!(!has_cross_cutting_keywords("Add new feature"));
@@ -709,10 +700,10 @@ mod tests {
             &config,
             "speckit.implement",
             "main",
-            "Refactor monorepo structure",  // Cross-cutting keyword
+            "Refactor monorepo structure", // Cross-cutting keyword
             &[],
-            Some(&DiffStat::new(10, 500, 200)),  // High file count
-            true,  // Prior failure
+            Some(&DiffStat::new(10, 500, 200)), // High file count
+            true,                               // Prior failure
         );
 
         assert!(!decision.should_use_ace());
@@ -735,8 +726,24 @@ mod tests {
         let diff = DiffStat::new(10, 100, 50);
 
         // Both should make same decision
-        let decision1 = select_route(&disabled, "speckit.implement", "main", "Test", &[], Some(&diff), true);
-        let decision2 = select_route(&never, "speckit.implement", "main", "Test", &[], Some(&diff), true);
+        let decision1 = select_route(
+            &disabled,
+            "speckit.implement",
+            "main",
+            "Test",
+            &[],
+            Some(&diff),
+            true,
+        );
+        let decision2 = select_route(
+            &never,
+            "speckit.implement",
+            "main",
+            "Test",
+            &[],
+            Some(&diff),
+            true,
+        );
 
         assert!(!decision1.should_use_ace());
         assert!(!decision2.should_use_ace());

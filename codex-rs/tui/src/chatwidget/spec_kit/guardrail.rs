@@ -691,11 +691,7 @@ pub fn handle_guardrail_impl(
 }
 
 /// Handle native guardrail validation (SPEC-KIT-066, SPEC-KIT-902)
-fn handle_native_guardrail(
-    widget: &mut ChatWidget,
-    command: SlashCommand,
-    raw_args: String,
-) {
+fn handle_native_guardrail(widget: &mut ChatWidget, command: SlashCommand, raw_args: String) {
     use crate::history_cell::HistoryCellType;
 
     // Parse arguments
@@ -745,7 +741,10 @@ fn handle_native_guardrail(
     let spec_id_clone = spec_id.clone();
     let event_tx = widget.app_event_tx.clone();
 
-    tracing::info!("🔄 Starting async guardrail validation for {} stage", stage.display_name());
+    tracing::info!(
+        "🔄 Starting async guardrail validation for {} stage",
+        stage.display_name()
+    );
 
     // Show immediate feedback
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
@@ -759,14 +758,13 @@ fn handle_native_guardrail(
 
     // Spawn async task for guardrail validation
     tokio::spawn(async move {
-        tracing::info!("📡 Async guardrail task started for {}", stage.display_name());
-
-        let result = super::native_guardrail::run_native_guardrail(
-            &cwd,
-            &spec_id_clone,
-            stage,
-            allow_dirty,
+        tracing::info!(
+            "📡 Async guardrail task started for {}",
+            stage.display_name()
         );
+
+        let result =
+            super::native_guardrail::run_native_guardrail(&cwd, &spec_id_clone, stage, allow_dirty);
 
         // Serialize result to JSON for event
         let result_json = serde_json::to_string(&result).unwrap_or_else(|_| "{}".to_string());
@@ -780,7 +778,11 @@ fn handle_native_guardrail(
             result_json,
         });
 
-        tracing::info!("✅ Async guardrail task complete for {} (success={})", stage.display_name(), success);
+        tracing::info!(
+            "✅ Async guardrail task complete for {} (success={})",
+            stage.display_name(),
+            success
+        );
     });
 
     // Async guardrail spawned - UI remains responsive
@@ -797,13 +799,11 @@ pub fn display_guardrail_result_and_advance(
     use crate::history_cell::HistoryCellType;
 
     // Display results
-    let mut lines = vec![
-        ratatui::text::Line::from(format!(
-            "[native-guardrail] {} validation for {}",
-            stage.display_name(),
-            spec_id
-        )),
-    ];
+    let mut lines = vec![ratatui::text::Line::from(format!(
+        "[native-guardrail] {} validation for {}",
+        stage.display_name(),
+        spec_id
+    ))];
 
     // Add check results
     for check in &result.checks_run {
@@ -817,15 +817,16 @@ pub fn display_guardrail_result_and_advance(
         let msg = check.message.as_deref().unwrap_or("");
         lines.push(ratatui::text::Line::from(format!(
             "  {} {}: {}",
-            status_icon,
-            check.name,
-            msg
+            status_icon, check.name, msg
         )));
     }
 
     // Add warnings
     for warning in &result.warnings {
-        lines.push(ratatui::text::Line::from(format!("  ⚠ Warning: {}", warning)));
+        lines.push(ratatui::text::Line::from(format!(
+            "  ⚠ Warning: {}",
+            warning
+        )));
     }
 
     // Add errors
@@ -861,7 +862,10 @@ pub fn display_guardrail_result_and_advance(
             // Check if we're waiting for this guardrail stage
             if let Some(wait) = &state.waiting_guardrail {
                 if wait.stage == stage {
-                    tracing::warn!("DEBUG: Native guardrail {:?} complete, manually advancing pipeline", stage);
+                    tracing::warn!(
+                        "DEBUG: Native guardrail {:?} complete, manually advancing pipeline",
+                        stage
+                    );
                     // Pass the guardrail result directly to avoid blocking file I/O
                     // The result is already in memory from run_native_guardrail above
                     super::pipeline_coordinator::advance_spec_auto_after_native_guardrail(

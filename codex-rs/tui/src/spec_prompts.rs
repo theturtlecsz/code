@@ -79,10 +79,7 @@ impl SpecAgent {
 
     /// Parse from various string representations (case-insensitive)
     pub fn from_string(s: &str) -> Option<Self> {
-        let normalized = s
-            .to_ascii_lowercase()
-            .replace('-', "_")
-            .replace(' ', "_");
+        let normalized = s.to_ascii_lowercase().replace('-', "_").replace(' ', "_");
         let trimmed = normalized.trim_matches('_');
 
         if trimmed.is_empty() {
@@ -344,7 +341,10 @@ impl SpecStage {
 
     /// Check if this is a quality command (not part of main pipeline)
     pub fn is_quality_command(self) -> bool {
-        matches!(self, SpecStage::Clarify | SpecStage::Analyze | SpecStage::Checklist)
+        matches!(
+            self,
+            SpecStage::Clarify | SpecStage::Analyze | SpecStage::Checklist
+        )
     }
 }
 

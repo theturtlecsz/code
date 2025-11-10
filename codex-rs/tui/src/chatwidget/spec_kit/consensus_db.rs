@@ -9,7 +9,7 @@
 //! - Schema validation and indexing
 //! - No reset conflicts (delete SQLite rows, not memories)
 
-use rusqlite::{params, Connection, Result as SqlResult};
+use rusqlite::{Connection, Result as SqlResult, params};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -121,10 +121,7 @@ impl ConsensusDb {
         )?;
 
         // Add run_id column if missing (migration for existing databases)
-        let _ = conn.execute(
-            "ALTER TABLE agent_executions ADD COLUMN run_id TEXT",
-            [],
-        );
+        let _ = conn.execute("ALTER TABLE agent_executions ADD COLUMN run_id TEXT", []);
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_agent_executions_spec
@@ -237,9 +234,8 @@ impl ConsensusDb {
     /// List all SPECs with artifacts (for cleanup/maintenance)
     pub fn list_specs(&self) -> SqlResult<Vec<String>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT DISTINCT spec_id FROM consensus_artifacts ORDER BY spec_id"
-        )?;
+        let mut stmt =
+            conn.prepare("SELECT DISTINCT spec_id FROM consensus_artifacts ORDER BY spec_id")?;
 
         let specs = stmt
             .query_map([], |row| row.get(0))?
@@ -252,23 +248,23 @@ impl ConsensusDb {
     pub fn get_stats(&self) -> SqlResult<(i64, i64, i64)> {
         let conn = self.conn.lock().unwrap();
 
-        let artifact_count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM consensus_artifacts",
-            [],
-            |row| row.get(0),
-        )?;
+        let artifact_count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM consensus_artifacts", [], |row| {
+                row.get(0)
+            })?;
 
-        let synthesis_count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM consensus_synthesis",
-            [],
-            |row| row.get(0),
-        )?;
+        let synthesis_count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM consensus_synthesis", [], |row| {
+                row.get(0)
+            })?;
 
-        let db_size: i64 = conn.query_row(
-            "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()",
-            [],
-            |row| row.get(0),
-        ).unwrap_or(0);
+        let db_size: i64 = conn
+            .query_row(
+                "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
 
         Ok((artifact_count, synthesis_count, db_size))
     }
@@ -402,11 +398,7 @@ impl ConsensusDb {
     }
 
     /// Update agent completion info
-    pub fn record_agent_completion(
-        &self,
-        agent_id: &str,
-        response_text: &str,
-    ) -> SqlResult<()> {
+    pub fn record_agent_completion(&self, agent_id: &str, response_text: &str) -> SqlResult<()> {
         let conn = self.conn.lock().unwrap();
 
         conn.execute(
@@ -472,7 +464,9 @@ mod tests {
         assert!(id > 0);
 
         // Query artifacts
-        let artifacts = db.query_artifacts("SPEC-TEST-001", SpecStage::Plan).unwrap();
+        let artifacts = db
+            .query_artifacts("SPEC-TEST-001", SpecStage::Plan)
+            .unwrap();
         assert_eq!(artifacts.len(), 1);
         assert_eq!(artifacts[0].agent_name, "gemini");
         assert_eq!(artifacts[0].content_json, r#"{"test":"data"}"#);
@@ -497,8 +491,15 @@ mod tests {
         // Store multiple artifacts
         db.store_artifact("SPEC-TEST-002", SpecStage::Plan, "gemini", "{}", None, None)
             .unwrap();
-        db.store_artifact("SPEC-TEST-002", SpecStage::Tasks, "claude", "{}", None, None)
-            .unwrap();
+        db.store_artifact(
+            "SPEC-TEST-002",
+            SpecStage::Tasks,
+            "claude",
+            "{}",
+            None,
+            None,
+        )
+        .unwrap();
 
         // Delete by spec
         let deleted = db.delete_spec_artifacts("SPEC-TEST-002").unwrap();

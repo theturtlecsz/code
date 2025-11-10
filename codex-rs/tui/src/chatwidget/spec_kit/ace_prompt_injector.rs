@@ -30,7 +30,9 @@ pub fn should_use_ace(config: &AceConfig, command_name: &str) -> bool {
 /// Map command name to ACE scope
 pub fn command_to_scope(command_name: &str) -> Option<&str> {
     // Remove "speckit." prefix if present
-    let name = command_name.strip_prefix("speckit.").unwrap_or(command_name);
+    let name = command_name
+        .strip_prefix("speckit.")
+        .unwrap_or(command_name);
 
     match name {
         "constitution" => Some("global"),
@@ -77,7 +79,11 @@ pub fn select_bullets(mut bullets: Vec<PlaybookBullet>, slice_size: usize) -> Ve
     bullets = dedupe_bullets(bullets);
 
     // Separate by type
-    let helpful: Vec<_> = bullets.iter().filter(|b| b.helpful && !b.harmful).cloned().collect();
+    let helpful: Vec<_> = bullets
+        .iter()
+        .filter(|b| b.helpful && !b.harmful)
+        .cloned()
+        .collect();
     let mut harmful: Vec<_> = bullets.iter().filter(|b| b.harmful).cloned().collect();
     let mut neutral: Vec<_> = bullets
         .iter()
@@ -93,7 +99,9 @@ pub fn select_bullets(mut bullets: Vec<PlaybookBullet>, slice_size: usize) -> Ve
     let mut result = Vec::new();
 
     // Add helpful bullets first (these are most valuable)
-    let helpful_count = slice_size.saturating_sub(harmful.len()).saturating_sub(neutral.len());
+    let helpful_count = slice_size
+        .saturating_sub(harmful.len())
+        .saturating_sub(neutral.len());
     result.extend(helpful.into_iter().take(helpful_count));
 
     // Add harmful bullets (warnings/anti-patterns)
@@ -157,7 +165,10 @@ pub fn inject_ace_section(
 
     // Get scope for this command
     let Some(scope) = command_to_scope(command_name) else {
-        debug!("ACE injection skipped: no scope mapping for {}", command_name);
+        debug!(
+            "ACE injection skipped: no scope mapping for {}",
+            command_name
+        );
         return prompt;
     };
 
@@ -274,18 +285,9 @@ mod tests {
 
     #[test]
     fn test_normalize_text() {
-        assert_eq!(
-            normalize_text("Use X pattern"),
-            "use x pattern"
-        );
-        assert_eq!(
-            normalize_text("  USE   X   PATTERN  "),
-            "use x pattern"
-        );
-        assert_eq!(
-            normalize_text("Use-X-Pattern!!!"),
-            "use x pattern"
-        );
+        assert_eq!(normalize_text("Use X pattern"), "use x pattern");
+        assert_eq!(normalize_text("  USE   X   PATTERN  "), "use x pattern");
+        assert_eq!(normalize_text("Use-X-Pattern!!!"), "use x pattern");
     }
 
     #[test]

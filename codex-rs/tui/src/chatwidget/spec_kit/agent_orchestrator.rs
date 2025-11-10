@@ -8,10 +8,6 @@
 //! - Degraded follow-up scheduling
 
 use super::super::ChatWidget;
-use crate::history_cell::HistoryCellType;
-use crate::spec_prompts::SpecStage;
-use codex_core::protocol::{AgentInfo, InputItem};
-use codex_core::slash_commands::format_subagent_command;
 use super::command_handlers::halt_spec_auto_with_error;
 use super::consensus::expected_agents_for_stage;
 use super::consensus_coordinator::block_on_sync;
@@ -19,11 +15,15 @@ use super::handler::check_consensus_and_advance_spec_auto;
 use super::quality_gate_handler::on_quality_gate_agents_complete;
 use super::state::{SpecAutoPhase, ValidateBeginOutcome, ValidateRunInfo};
 use super::validation_lifecycle::{
-    compute_validate_payload_hash, record_validate_lifecycle_event,
-    ValidateLifecycleEvent, ValidateMode,
+    ValidateLifecycleEvent, ValidateMode, compute_validate_payload_hash,
+    record_validate_lifecycle_event,
 };
+use crate::history_cell::HistoryCellType;
+use crate::spec_prompts::SpecStage;
 use codex_core::agent_tool::AGENT_MANAGER;
 use codex_core::config_types::AgentConfig;
+use codex_core::protocol::{AgentInfo, InputItem};
+use codex_core::slash_commands::format_subagent_command;
 use std::path::Path;
 
 /// Agent spawn info (matches native_quality_gate_orchestrator)
@@ -41,14 +41,15 @@ fn extract_useful_content_from_stage_file(content: &str) -> String {
     let sections_to_skip = [
         "## Debug:",
         "## Raw JSON",
-        "## code\n",          // Debug section sometimes starts with "## code"
+        "## code\n", // Debug section sometimes starts with "## code"
         "## Debug: code",
         "Raw JSON from agents",
-        "[2025-",              // Timestamp lines indicate debug output
+        "[2025-", // Timestamp lines indicate debug output
     ];
 
     // Find the earliest debug section marker
-    let cut_pos = sections_to_skip.iter()
+    let cut_pos = sections_to_skip
+        .iter()
         .filter_map(|marker| content.find(marker))
         .min()
         .unwrap_or(content.len());
@@ -71,7 +72,9 @@ fn extract_clean_json_from_agent_output(raw_output: &str) -> Option<String> {
             let mut close_pos = None;
 
             for (offset, ch) in raw_output[open_pos..].char_indices() {
-                if ch == '{' { depth += 1; }
+                if ch == '{' {
+                    depth += 1;
+                }
                 if ch == '}' {
                     depth -= 1;
                     if depth == 0 {
@@ -88,9 +91,12 @@ fn extract_clean_json_from_agent_output(raw_output: &str) -> Option<String> {
                 if let Ok(value) = serde_json::from_str::<Value>(candidate) {
                     // Re-serialize to get clean, minified JSON (removes extra whitespace)
                     if let Ok(clean_json) = serde_json::to_string(&value) {
-                        tracing::info!("  📦 Extracted clean JSON: {} → {} chars ({}% compression)",
-                            raw_output.len(), clean_json.len(),
-                            (100 - (clean_json.len() * 100 / raw_output.len())));
+                        tracing::info!(
+                            "  📦 Extracted clean JSON: {} → {} chars ({}% compression)",
+                            raw_output.len(),
+                            clean_json.len(),
+                            (100 - (clean_json.len() * 100 / raw_output.len()))
+                        );
                         return Some(clean_json);
                     }
                 }
@@ -105,8 +111,11 @@ fn extract_clean_json_from_agent_output(raw_output: &str) -> Option<String> {
                 let candidate = &raw_output[start..=end];
                 if let Ok(value) = serde_json::from_str::<Value>(candidate) {
                     if let Ok(clean_json) = serde_json::to_string(&value) {
-                        tracing::info!("  📦 Fallback extraction: {} → {} chars",
-                            raw_output.len(), clean_json.len());
+                        tracing::info!(
+                            "  📦 Fallback extraction: {} → {} chars",
+                            raw_output.len(),
+                            clean_json.len()
+                        );
                         return Some(clean_json);
                     }
                 }
@@ -137,7 +146,8 @@ async fn build_individual_agent_prompt(
 
     // Get stage-specific prompts
     let stage_key = stage.key(); // "spec-plan", "spec-tasks", etc.
-    let stage_prompts = prompts.get(stage_key)
+    let stage_prompts = prompts
+        .get(stage_key)
         .ok_or_else(|| format!("No prompts found for stage {}", stage_key))?;
 
     // Get THIS agent's prompt template
@@ -145,15 +155,20 @@ async fn build_individual_agent_prompt(
         .get(agent_name)
         .and_then(|v| v.get("prompt"))
         .and_then(|v| v.as_str())
-        .ok_or_else(|| format!("No prompt found for agent {} in stage {}", agent_name, stage_key))?;
+        .ok_or_else(|| {
+            format!(
+                "No prompt found for agent {} in stage {}",
+                agent_name, stage_key
+            )
+        })?;
 
     // Find SPEC directory using ACID-compliant resolver
     let spec_dir = super::spec_directory::find_spec_directory(cwd, spec_id)?;
 
     // Read SPEC files
     let spec_md = spec_dir.join("spec.md");
-    let spec_content = std::fs::read_to_string(&spec_md)
-        .map_err(|e| format!("Failed to read spec.md: {}", e))?;
+    let spec_content =
+        std::fs::read_to_string(&spec_md).map_err(|e| format!("Failed to read spec.md: {}", e))?;
 
     // Build context (include prior stage outputs with size limits)
     // OS argument limit is ~2MB, but prior stage outputs can contain nested mega-bundles
@@ -165,9 +180,16 @@ async fn build_individual_agent_prompt(
 
     // Add spec.md (truncate if too large)
     if spec_content.len() > MAX_FILE_SIZE {
-        tracing::warn!("  Truncating spec.md: {} → {} chars", spec_content.len(), MAX_FILE_SIZE);
+        tracing::warn!(
+            "  Truncating spec.md: {} → {} chars",
+            spec_content.len(),
+            MAX_FILE_SIZE
+        );
         context.push_str(&spec_content.chars().take(MAX_FILE_SIZE).collect::<String>());
-        context.push_str(&format!("\n\n[...truncated {} chars...]\n\n", spec_content.len() - MAX_FILE_SIZE));
+        context.push_str(&format!(
+            "\n\n[...truncated {} chars...]\n\n",
+            spec_content.len() - MAX_FILE_SIZE
+        ));
     } else {
         context.push_str(&spec_content);
         context.push_str("\n\n");
@@ -184,14 +206,26 @@ async fn build_individual_agent_prompt(
             let useful_content = extract_useful_content_from_stage_file(&plan_content);
 
             if useful_content.len() > MAX_FILE_SIZE {
-                tracing::warn!("  📄 plan.md: {} total → {} useful → {} final (truncated)",
-                    plan_content.len(), useful_content.len(), MAX_FILE_SIZE);
-                context.push_str(&useful_content.chars().take(MAX_FILE_SIZE).collect::<String>());
+                tracing::warn!(
+                    "  📄 plan.md: {} total → {} useful → {} final (truncated)",
+                    plan_content.len(),
+                    useful_content.len(),
+                    MAX_FILE_SIZE
+                );
+                context.push_str(
+                    &useful_content
+                        .chars()
+                        .take(MAX_FILE_SIZE)
+                        .collect::<String>(),
+                );
                 context.push_str(&format!("\n\n[...truncated...]\n\n"));
             } else {
-                tracing::info!("  📄 plan.md: {} total → {} useful ({}% reduction)",
-                    plan_content.len(), useful_content.len(),
-                    100 - (useful_content.len() * 100 / plan_content.len().max(1)));
+                tracing::info!(
+                    "  📄 plan.md: {} total → {} useful ({}% reduction)",
+                    plan_content.len(),
+                    useful_content.len(),
+                    100 - (useful_content.len() * 100 / plan_content.len().max(1))
+                );
                 context.push_str(&useful_content);
                 context.push_str("\n\n");
             }
@@ -200,10 +234,13 @@ async fn build_individual_agent_prompt(
 
     // Add tasks.md if available (for Implement, Validate, etc.)
     // INTELLIGENT EXTRACTION: Same filtering as plan.md
-    if matches!(stage, crate::spec_prompts::SpecStage::Implement |
-                       crate::spec_prompts::SpecStage::Validate |
-                       crate::spec_prompts::SpecStage::Audit |
-                       crate::spec_prompts::SpecStage::Unlock) {
+    if matches!(
+        stage,
+        crate::spec_prompts::SpecStage::Implement
+            | crate::spec_prompts::SpecStage::Validate
+            | crate::spec_prompts::SpecStage::Audit
+            | crate::spec_prompts::SpecStage::Unlock
+    ) {
         let tasks_md = spec_dir.join("tasks.md");
         if let Ok(tasks_content) = std::fs::read_to_string(&tasks_md) {
             context.push_str("## tasks.md (summary)\n");
@@ -211,14 +248,26 @@ async fn build_individual_agent_prompt(
             let useful_content = extract_useful_content_from_stage_file(&tasks_content);
 
             if useful_content.len() > MAX_FILE_SIZE {
-                tracing::warn!("  📄 tasks.md: {} total → {} useful → {} final (truncated)",
-                    tasks_content.len(), useful_content.len(), MAX_FILE_SIZE);
-                context.push_str(&useful_content.chars().take(MAX_FILE_SIZE).collect::<String>());
+                tracing::warn!(
+                    "  📄 tasks.md: {} total → {} useful → {} final (truncated)",
+                    tasks_content.len(),
+                    useful_content.len(),
+                    MAX_FILE_SIZE
+                );
+                context.push_str(
+                    &useful_content
+                        .chars()
+                        .take(MAX_FILE_SIZE)
+                        .collect::<String>(),
+                );
                 context.push_str(&format!("\n\n[...truncated...]\n\n"));
             } else {
-                tracing::info!("  📄 tasks.md: {} total → {} useful ({}% reduction)",
-                    tasks_content.len(), useful_content.len(),
-                    100 - (useful_content.len() * 100 / tasks_content.len().max(1)));
+                tracing::info!(
+                    "  📄 tasks.md: {} total → {} useful ({}% reduction)",
+                    tasks_content.len(),
+                    useful_content.len(),
+                    100 - (useful_content.len() * 100 / tasks_content.len().max(1))
+                );
                 context.push_str(&useful_content);
                 context.push_str("\n\n");
             }
@@ -248,11 +297,21 @@ async fn spawn_and_wait_for_agent(
 ) -> Result<(String, String), String> {
     use codex_core::agent_tool::{AGENT_MANAGER, AgentStatus};
 
-    let run_tag = run_id.map(|r| format!("[run:{}]", &r[..8.min(r.len())])).unwrap_or_else(|| "[run:none]".to_string());
-    tracing::warn!("{} 🎬 SEQUENTIAL: Spawning {} and waiting for completion...", run_tag, agent_name);
+    let run_tag = run_id
+        .map(|r| format!("[run:{}]", &r[..8.min(r.len())]))
+        .unwrap_or_else(|| "[run:none]".to_string());
+    tracing::warn!(
+        "{} 🎬 SEQUENTIAL: Spawning {} and waiting for completion...",
+        run_tag,
+        agent_name
+    );
     tracing::warn!("{}   Config: {}", run_tag, config_name);
     tracing::warn!("{}   Prompt size: {} chars", run_tag, prompt.len());
-    tracing::warn!("{}   Prompt preview: {}", run_tag, &prompt.chars().take(300).collect::<String>());
+    tracing::warn!(
+        "{}   Prompt preview: {}",
+        run_tag,
+        &prompt.chars().take(300).collect::<String>()
+    );
 
     // SPEC-KIT-923: Check for observable agents flag
     let tmux_enabled = std::env::var("SPEC_KIT_OBSERVABLE_AGENTS")
@@ -266,24 +325,38 @@ async fn spawn_and_wait_for_agent(
     // Spawn agent
     let agent_id = {
         let mut manager = AGENT_MANAGER.write().await;
-        manager.create_agent_from_config_name(
-            config_name,
-            agent_configs,
-            prompt.clone(),
-            false,
-            Some(batch_id.to_string()),
-            tmux_enabled, // SPEC-KIT-923
-        ).await.map_err(|e| {
-            tracing::error!("  ❌ Spawn error for {}: {}", agent_name, e);
-            format!("Failed to spawn {}: {}", agent_name, e)
-        })?
+        manager
+            .create_agent_from_config_name(
+                config_name,
+                agent_configs,
+                prompt.clone(),
+                false,
+                Some(batch_id.to_string()),
+                tmux_enabled, // SPEC-KIT-923
+            )
+            .await
+            .map_err(|e| {
+                tracing::error!("  ❌ Spawn error for {}: {}", agent_name, e);
+                format!("Failed to spawn {}: {}", agent_name, e)
+            })?
     };
 
-    tracing::warn!("  ✓ {} spawned successfully: {}", agent_name, &agent_id[..8]);
+    tracing::warn!(
+        "  ✓ {} spawned successfully: {}",
+        agent_name,
+        &agent_id[..8]
+    );
 
     // Record to SQLite with run_id for traceability
     if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
-        let _ = db.record_agent_spawn(&agent_id, spec_id, stage, "regular_stage", agent_name, run_id);
+        let _ = db.record_agent_spawn(
+            &agent_id,
+            spec_id,
+            stage,
+            "regular_stage",
+            agent_name,
+            run_id,
+        );
         if let Some(rid) = run_id {
             tracing::info!("    ✓ Recorded spawn with run_id: {}", rid);
         }
@@ -304,12 +377,20 @@ async fn spawn_and_wait_for_agent(
             match agent.status {
                 AgentStatus::Completed => {
                     if let Some(result) = &agent.result {
-                        tracing::warn!("{}   ✅ {} completed: {} chars", run_tag, agent_name, result.len());
+                        tracing::warn!(
+                            "{}   ✅ {} completed: {} chars",
+                            run_tag,
+                            agent_name,
+                            result.len()
+                        );
 
                         // CRITICAL: Record completion to SQLite for audit trail
                         if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
                             if let Err(e) = db.record_agent_completion(&agent_id, result) {
-                                tracing::warn!("    ⚠️ Failed to record completion to SQLite: {}", e);
+                                tracing::warn!(
+                                    "    ⚠️ Failed to record completion to SQLite: {}",
+                                    e
+                                );
                             } else {
                                 tracing::debug!("    ✓ Completion recorded to SQLite");
                             }
@@ -322,7 +403,9 @@ async fn spawn_and_wait_for_agent(
                 }
                 AgentStatus::Failed => {
                     // Check both error field and result field
-                    let error_detail = agent.error.as_ref()
+                    let error_detail = agent
+                        .error
+                        .as_ref()
                         .or(agent.result.as_ref())
                         .map(|e| e.clone())
                         .unwrap_or_else(|| "no error message available".to_string());
@@ -356,8 +439,14 @@ async fn spawn_regular_stage_agents_sequential(
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
 ) -> Result<Vec<AgentSpawnInfo>, String> {
-    let run_tag = run_id.as_ref().map(|r| format!("[run:{}]", &r[..8])).unwrap_or_else(|| "[run:none]".to_string());
-    tracing::warn!("{} 🎬 AUDIT: spawn_regular_stage_agents_sequential (true sequential mode)", run_tag);
+    let run_tag = run_id
+        .as_ref()
+        .map(|r| format!("[run:{}]", &r[..8]))
+        .unwrap_or_else(|| "[run:none]".to_string());
+    tracing::warn!(
+        "{} 🎬 AUDIT: spawn_regular_stage_agents_sequential (true sequential mode)",
+        run_tag
+    );
     tracing::warn!("{}   spec_id: {}", run_tag, spec_id);
     tracing::warn!("{}   stage: {:?}", run_tag, stage);
     tracing::warn!("{}   expected_agents: {:?}", run_tag, expected_agents);
@@ -371,13 +460,23 @@ async fn spawn_regular_stage_agents_sequential(
         ("claude", "claude_haiku"),
         ("gpt_pro", "gpt_pro"),
         ("gpt_codex", "gpt_codex"),
-    ].iter().copied().collect();
+    ]
+    .iter()
+    .copied()
+    .collect();
 
     // Spawn agents SEQUENTIALLY, each can use previous outputs
     for (idx, agent_name) in expected_agents.iter().enumerate() {
-        tracing::warn!("{} 🔄 SEQUENTIAL: Agent {}/{}: {}", run_tag, idx+1, expected_agents.len(), agent_name);
+        tracing::warn!(
+            "{} 🔄 SEQUENTIAL: Agent {}/{}: {}",
+            run_tag,
+            idx + 1,
+            expected_agents.len(),
+            agent_name
+        );
 
-        let config_name = agent_config_map.get(agent_name.as_str())
+        let config_name = agent_config_map
+            .get(agent_name.as_str())
             .ok_or_else(|| format!("No config mapping for agent {}", agent_name))?;
 
         // Build prompt for THIS agent with previous agent outputs injected
@@ -390,26 +489,37 @@ async fn spawn_regular_stage_agents_sequential(
             // Extract and validate JSON (strip metadata, timestamps, debug output)
             let output_to_inject = extract_clean_json_from_agent_output(prev_output)
                 .unwrap_or_else(|| {
-                    tracing::warn!("  ⚠️ Failed to extract JSON from {}, using truncated raw output", prev_agent_name);
+                    tracing::warn!(
+                        "  ⚠️ Failed to extract JSON from {}, using truncated raw output",
+                        prev_agent_name
+                    );
                     // Fallback: Truncate raw output to prevent explosion
                     if prev_output.len() > 5000 {
-                        format!("{}...[truncated {} chars]",
+                        format!(
+                            "{}...[truncated {} chars]",
                             &prev_output.chars().take(5000).collect::<String>(),
-                            prev_output.len() - 5000)
+                            prev_output.len() - 5000
+                        )
                     } else {
                         prev_output.to_string()
                     }
                 });
 
-            tracing::warn!("  ✅ Injecting {} output ({} chars, extracted from {} raw) into {} prompt",
-                prev_agent_name, output_to_inject.len(), prev_output.len(), agent_name);
+            tracing::warn!(
+                "  ✅ Injecting {} output ({} chars, extracted from {} raw) into {} prompt",
+                prev_agent_name,
+                output_to_inject.len(),
+                prev_output.len(),
+                agent_name
+            );
 
             prompt = prompt.replace(&placeholder, &output_to_inject);
         }
 
         // Also handle generic ${PREVIOUS_OUTPUTS} (all previous)
         if prompt.contains("${PREVIOUS_OUTPUTS}") {
-            let all_outputs = agent_outputs.iter()
+            let all_outputs = agent_outputs
+                .iter()
                 .map(|(name, output)| {
                     let clean = extract_clean_json_from_agent_output(output)
                         .unwrap_or_else(|| output.chars().take(5000).collect::<String>());
@@ -431,7 +541,8 @@ async fn spawn_regular_stage_agents_sequential(
             stage,
             run_id.as_deref(),
             1200, // 20min timeout per agent (Gemini can be slow)
-        ).await?;
+        )
+        .await?;
 
         // Store this agent's output for next agents to use
         agent_outputs.push((agent_name.clone(), agent_output.clone()));
@@ -444,7 +555,11 @@ async fn spawn_regular_stage_agents_sequential(
         });
     }
 
-    tracing::warn!("{} ✅ SEQUENTIAL: All {} agents completed", run_tag, expected_agents.len());
+    tracing::warn!(
+        "{} ✅ SEQUENTIAL: All {} agents completed",
+        run_tag,
+        expected_agents.len()
+    );
 
     Ok(spawn_infos)
 }
@@ -459,8 +574,14 @@ async fn spawn_regular_stage_agents_parallel(
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
 ) -> Result<Vec<AgentSpawnInfo>, String> {
-    let run_tag = run_id.as_ref().map(|r| format!("[run:{}]", &r[..8])).unwrap_or_else(|| "[run:none]".to_string());
-    tracing::warn!("{} 🎬 AUDIT: spawn_regular_stage_agents_parallel (independent consensus mode)", run_tag);
+    let run_tag = run_id
+        .as_ref()
+        .map(|r| format!("[run:{}]", &r[..8]))
+        .unwrap_or_else(|| "[run:none]".to_string());
+    tracing::warn!(
+        "{} 🎬 AUDIT: spawn_regular_stage_agents_parallel (independent consensus mode)",
+        run_tag
+    );
     tracing::warn!("  spec_id: {}", spec_id);
     tracing::warn!("  stage: {:?}", stage);
     tracing::warn!("  expected_agents: {:?}", expected_agents);
@@ -482,13 +603,23 @@ async fn spawn_regular_stage_agents_parallel(
         ("claude", "claude_haiku"),
         ("gpt_pro", "gpt_pro"),
         ("gpt_codex", "gpt_codex"),
-    ].iter().copied().collect();
+    ]
+    .iter()
+    .copied()
+    .collect();
 
     // Spawn all agents in PARALLEL (no waiting, no output passing)
     for (idx, agent_name) in expected_agents.iter().enumerate() {
-        tracing::warn!("{} 🚀 PARALLEL: Spawning agent {}/{}: {}", run_tag, idx+1, expected_agents.len(), agent_name);
+        tracing::warn!(
+            "{} 🚀 PARALLEL: Spawning agent {}/{}: {}",
+            run_tag,
+            idx + 1,
+            expected_agents.len(),
+            agent_name
+        );
 
-        let config_name = agent_config_map.get(agent_name.as_str())
+        let config_name = agent_config_map
+            .get(agent_name.as_str())
             .ok_or_else(|| format!("No config mapping for agent {}", agent_name))?;
 
         // Build individual prompt (no previous outputs)
@@ -496,18 +627,28 @@ async fn spawn_regular_stage_agents_parallel(
 
         // Spawn without waiting
         let mut manager = AGENT_MANAGER.write().await;
-        let agent_id = manager.create_agent_from_config_name(
-            config_name,
-            agent_configs,
-            prompt,
-            false,
-            Some(batch_id.clone()),
-            tmux_enabled, // SPEC-KIT-923
-        ).await.map_err(|e| format!("Failed to spawn {}: {}", agent_name, e))?;
+        let agent_id = manager
+            .create_agent_from_config_name(
+                config_name,
+                agent_configs,
+                prompt,
+                false,
+                Some(batch_id.clone()),
+                tmux_enabled, // SPEC-KIT-923
+            )
+            .await
+            .map_err(|e| format!("Failed to spawn {}: {}", agent_name, e))?;
 
         // Record to SQLite with run_id
         if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
-            let _ = db.record_agent_spawn(&agent_id, spec_id, stage, "regular_stage", agent_name, run_id.as_deref());
+            let _ = db.record_agent_spawn(
+                &agent_id,
+                spec_id,
+                stage,
+                "regular_stage",
+                agent_name,
+                run_id.as_deref(),
+            );
         }
 
         spawn_infos.push(AgentSpawnInfo {
@@ -520,7 +661,11 @@ async fn spawn_regular_stage_agents_parallel(
         tracing::warn!("{}   ✓ {} spawned (not waiting)", run_tag, agent_name);
     }
 
-    tracing::warn!("{} ✅ PARALLEL: All {} agents spawned, executing independently", run_tag, expected_agents.len());
+    tracing::warn!(
+        "{} ✅ PARALLEL: All {} agents spawned, executing independently",
+        run_tag,
+        expected_agents.len()
+    );
 
     Ok(spawn_infos)
 }
@@ -531,40 +676,90 @@ async fn spawn_regular_stage_agents_native(
     cwd: &Path,
     spec_id: &str,
     stage: SpecStage,
-    _prompt: &str,  // Deprecated: no longer used (was mega-bundle)
+    _prompt: &str, // Deprecated: no longer used (was mega-bundle)
     run_id: Option<String>,
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
 ) -> Result<Vec<AgentSpawnInfo>, String> {
-    let run_tag = run_id.as_ref().map(|r| format!("[run:{}]", &r[..8])).unwrap_or_else(|| "[run:none]".to_string());
+    let run_tag = run_id
+        .as_ref()
+        .map(|r| format!("[run:{}]", &r[..8]))
+        .unwrap_or_else(|| "[run:none]".to_string());
 
     // Stage-specific execution patterns (Option 4)
     match stage {
         // Sequential pipeline: Research → Synthesis → QA
-        crate::spec_prompts::SpecStage::Plan |
-        crate::spec_prompts::SpecStage::Tasks => {
-            tracing::warn!("{} 🔄 Using SEQUENTIAL execution for {} stage (progressive refinement)", run_tag, stage.display_name());
-            spawn_regular_stage_agents_sequential(cwd, spec_id, stage, run_id, expected_agents, agent_configs).await
-        },
+        crate::spec_prompts::SpecStage::Plan | crate::spec_prompts::SpecStage::Tasks => {
+            tracing::warn!(
+                "{} 🔄 Using SEQUENTIAL execution for {} stage (progressive refinement)",
+                run_tag,
+                stage.display_name()
+            );
+            spawn_regular_stage_agents_sequential(
+                cwd,
+                spec_id,
+                stage,
+                run_id,
+                expected_agents,
+                agent_configs,
+            )
+            .await
+        }
 
         // Hybrid: Parallel research → Sequential implementation
         crate::spec_prompts::SpecStage::Implement => {
-            tracing::warn!("{} 🔀 Using SEQUENTIAL execution for {} stage (code generation pipeline)", run_tag, stage.display_name());
-            spawn_regular_stage_agents_sequential(cwd, spec_id, stage, run_id, expected_agents, agent_configs).await
-        },
+            tracing::warn!(
+                "{} 🔀 Using SEQUENTIAL execution for {} stage (code generation pipeline)",
+                run_tag,
+                stage.display_name()
+            );
+            spawn_regular_stage_agents_sequential(
+                cwd,
+                spec_id,
+                stage,
+                run_id,
+                expected_agents,
+                agent_configs,
+            )
+            .await
+        }
 
         // Parallel consensus: Independent validation critical
-        crate::spec_prompts::SpecStage::Validate |
-        crate::spec_prompts::SpecStage::Audit |
-        crate::spec_prompts::SpecStage::Unlock => {
-            tracing::warn!("{} ⚡ Using PARALLEL execution for {} stage (independent consensus)", run_tag, stage.display_name());
-            spawn_regular_stage_agents_parallel(cwd, spec_id, stage, run_id, expected_agents, agent_configs).await
-        },
+        crate::spec_prompts::SpecStage::Validate
+        | crate::spec_prompts::SpecStage::Audit
+        | crate::spec_prompts::SpecStage::Unlock => {
+            tracing::warn!(
+                "{} ⚡ Using PARALLEL execution for {} stage (independent consensus)",
+                run_tag,
+                stage.display_name()
+            );
+            spawn_regular_stage_agents_parallel(
+                cwd,
+                spec_id,
+                stage,
+                run_id,
+                expected_agents,
+                agent_configs,
+            )
+            .await
+        }
 
         // Fallback to sequential for other stages
         _ => {
-            tracing::warn!("{} 🔄 Using SEQUENTIAL execution for {} stage (default)", run_tag, stage.display_name());
-            spawn_regular_stage_agents_sequential(cwd, spec_id, stage, run_id, expected_agents, agent_configs).await
+            tracing::warn!(
+                "{} 🔄 Using SEQUENTIAL execution for {} stage (default)",
+                run_tag,
+                stage.display_name()
+            );
+            spawn_regular_stage_agents_sequential(
+                cwd,
+                spec_id,
+                stage,
+                run_id,
+                expected_agents,
+                agent_configs,
+            )
+            .await
         }
     }
 }
@@ -581,9 +776,16 @@ async fn wait_for_regular_stage_agents(
     let start = std::time::Instant::now();
     let timeout = std::time::Duration::from_secs(timeout_secs);
     let poll_interval = std::time::Duration::from_millis(500);
-    let run_tag = run_id.map(|r| format!("[run:{}]", &r[..8.min(r.len())])).unwrap_or_else(|| "[run:none]".to_string());
+    let run_tag = run_id
+        .map(|r| format!("[run:{}]", &r[..8.min(r.len())]))
+        .unwrap_or_else(|| "[run:none]".to_string());
 
-    tracing::warn!("{} 🔍 AUDIT: Starting to poll {} regular stage agents (timeout={}s)", run_tag, agent_ids.len(), timeout_secs);
+    tracing::warn!(
+        "{} 🔍 AUDIT: Starting to poll {} regular stage agents (timeout={}s)",
+        run_tag,
+        agent_ids.len(),
+        timeout_secs
+    );
 
     let mut poll_count = 0;
     loop {
@@ -591,8 +793,17 @@ async fn wait_for_regular_stage_agents(
         let elapsed = start.elapsed();
 
         if elapsed > timeout {
-            tracing::warn!("{} ❌ AUDIT: Agent polling timeout after {} polls ({}s)", run_tag, poll_count, elapsed.as_secs());
-            return Err(format!("Timeout waiting for {} agents after {}s", agent_ids.len(), elapsed.as_secs()));
+            tracing::warn!(
+                "{} ❌ AUDIT: Agent polling timeout after {} polls ({}s)",
+                run_tag,
+                poll_count,
+                elapsed.as_secs()
+            );
+            return Err(format!(
+                "Timeout waiting for {} agents after {}s",
+                agent_ids.len(),
+                elapsed.as_secs()
+            ));
         }
 
         // Check if all agents are complete
@@ -603,22 +814,37 @@ async fn wait_for_regular_stage_agents(
         for agent_id in agent_ids {
             if let Some(agent) = manager.get_agent(agent_id) {
                 use codex_core::agent_tool::AgentStatus;
-                let is_terminal = matches!(agent.status, AgentStatus::Completed | AgentStatus::Failed | AgentStatus::Cancelled);
+                let is_terminal = matches!(
+                    agent.status,
+                    AgentStatus::Completed | AgentStatus::Failed | AgentStatus::Cancelled
+                );
                 status_summary.push((agent_id.clone(), agent.status.clone(), is_terminal));
 
                 if !is_terminal {
                     all_done = false;
                 }
             } else {
-                tracing::warn!("{} ⚠ AUDIT: Agent {} not found in AGENT_MANAGER (poll #{})", run_tag, agent_id, poll_count);
+                tracing::warn!(
+                    "{} ⚠ AUDIT: Agent {} not found in AGENT_MANAGER (poll #{})",
+                    run_tag,
+                    agent_id,
+                    poll_count
+                );
                 all_done = false;
             }
         }
 
-        if poll_count % 10 == 1 {  // Log every 10th poll (every 5 seconds)
-            tracing::warn!("{} 📊 AUDIT: Poll #{} @ {}s - Status:", run_tag, poll_count, elapsed.as_secs());
+        if poll_count % 10 == 1 {
+            // Log every 10th poll (every 5 seconds)
+            tracing::warn!(
+                "{} 📊 AUDIT: Poll #{} @ {}s - Status:",
+                run_tag,
+                poll_count,
+                elapsed.as_secs()
+            );
             for (id, status, terminal) in &status_summary {
-                tracing::warn!("  {} {}: {:?}",
+                tracing::warn!(
+                    "  {} {}: {:?}",
                     if *terminal { "✓" } else { "⏳" },
                     &id[..8],
                     status
@@ -627,8 +853,13 @@ async fn wait_for_regular_stage_agents(
         }
 
         if all_done {
-            tracing::warn!("{} ✅ AUDIT: All {} agents reached terminal state after {} polls ({}s)",
-                run_tag, agent_ids.len(), poll_count, elapsed.as_secs());
+            tracing::warn!(
+                "{} ✅ AUDIT: All {} agents reached terminal state after {} polls ({}s)",
+                run_tag,
+                agent_ids.len(),
+                poll_count,
+                elapsed.as_secs()
+            );
 
             // Record all completions to SQLite for audit trail
             use codex_core::agent_tool::AgentStatus;
@@ -642,7 +873,10 @@ async fn wait_for_regular_stage_agents(
                         }
                     }
                 }
-                tracing::debug!("  ✓ Recorded {} agent completions to SQLite", agent_ids.len());
+                tracing::debug!(
+                    "  ✓ Recorded {} agent completions to SQLite",
+                    agent_ids.len()
+                );
             }
 
             return Ok(());
@@ -664,8 +898,8 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
     let ace_bullets = {
         let ace_config = &widget.config.ace;
         if ace_config.enabled {
-            use super::ace_prompt_injector::{should_use_ace, command_to_scope};
-            use super::routing::{get_repo_root, get_current_branch};
+            use super::ace_prompt_injector::{command_to_scope, should_use_ace};
+            use super::routing::{get_current_branch, get_repo_root};
 
             let command_name = format!("speckit.{}", stage.command_name());
 
@@ -679,9 +913,8 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                     let branch_opt = get_current_branch(&widget.config.cwd);
 
                     // Fallback to defaults if git commands fail
-                    let repo_root = repo_root_opt.unwrap_or_else(|| {
-                        widget.config.cwd.to_string_lossy().to_string()
-                    });
+                    let repo_root = repo_root_opt
+                        .unwrap_or_else(|| widget.config.cwd.to_string_lossy().to_string());
                     let branch = branch_opt.unwrap_or_else(|| "main".to_string());
                     let slice_size = ace_config.slice_size;
                     let stage_name = stage.display_name().to_string();
@@ -767,7 +1000,11 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                         prompt.push_str("\n\n");
                         prompt.push_str(&ace_section);
                         state.ace_bullet_ids_used = Some(bullet_ids);
-                        tracing::info!("ACE: Injected {} bullets into {} prompt", bullets.len(), stage.display_name());
+                        tracing::info!(
+                            "ACE: Injected {} bullets into {} prompt",
+                            bullets.len(),
+                            stage.display_name()
+                        );
                     }
                 }
             }
@@ -775,11 +1012,8 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
             // SPEC-KIT-070: ACE-aligned routing — set aggregator effort per stage
             // Estimate tokens ~ chars/4
             // Always use standard routing (no retry logic)
-            let routing = super::ace_route_selector::decide_stage_routing(
-                stage,
-                prompt.len(),
-                false,
-            );
+            let routing =
+                super::ace_route_selector::decide_stage_routing(stage, prompt.len(), false);
 
             // Apply aggregator effort by updating gpt_pro args in-session
             apply_aggregator_effort(widget, routing.aggregator_effort);
@@ -790,9 +1024,7 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                     .aggregator_effort_notes
                     .insert(stage, routing.aggregator_effort.as_str().to_string());
                 if let Some(reason) = routing.escalation_reason.as_ref() {
-                    state
-                        .escalation_reason_notes
-                        .insert(stage, reason.clone());
+                    state.escalation_reason_notes.insert(stage, reason.clone());
                 }
             }
             let mut validate_context: Option<(ValidateRunInfo, String)> = None;
@@ -864,9 +1096,12 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
             )));
             // Build clear agent list based on stage
             let agent_count = expected_agents_for_stage(stage).len();
-            let execution_mode = if matches!(stage, crate::spec_prompts::SpecStage::Validate |
-                                                     crate::spec_prompts::SpecStage::Audit |
-                                                     crate::spec_prompts::SpecStage::Unlock) {
+            let execution_mode = if matches!(
+                stage,
+                crate::spec_prompts::SpecStage::Validate
+                    | crate::spec_prompts::SpecStage::Audit
+                    | crate::spec_prompts::SpecStage::Unlock
+            ) {
                 "parallel consensus"
             } else {
                 "sequential pipeline"
@@ -878,7 +1113,8 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
             )));
             lines.push(ratatui::text::Line::from(format!(
                 "   Agents: {}",
-                expected_agents_for_stage(stage).iter()
+                expected_agents_for_stage(stage)
+                    .iter()
                     .map(|a| a.canonical_name())
                     .collect::<Vec<_>>()
                     .join(", ")
@@ -911,7 +1147,7 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                         expected_agents: stage_expected,
                         completed_agents: std::collections::HashSet::new(),
                     },
-                    "agents_spawned"
+                    "agents_spawned",
                 );
 
                 if stage == SpecStage::Validate {
@@ -936,8 +1172,12 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
             // Log agent spawn events for each expected agent (before consuming prompt)
             let prompt_preview = prompt[..200.min(prompt.len())].to_string();
             if let Some(state) = widget.spec_auto_state.as_ref() {
-                if let (Some(run_id), SpecAutoPhase::ExecutingAgents { expected_agents, .. }) =
-                    (&state.run_id, &state.phase)
+                if let (
+                    Some(run_id),
+                    SpecAutoPhase::ExecutingAgents {
+                        expected_agents, ..
+                    },
+                ) = (&state.run_id, &state.phase)
                 {
                     for agent_name in expected_agents {
                         // Note: Agent IDs not yet available at submission time
@@ -951,7 +1191,7 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                                 model: agent_name.clone(), // Best guess at this point
                                 prompt_preview: prompt_preview.clone(),
                                 timestamp: super::execution_logger::ExecutionEvent::now(),
-                            }
+                            },
                         );
                     }
                 }
@@ -964,7 +1204,9 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
             let prompt_owned = prompt.clone();
             let agent_configs_owned = widget.config.agents.clone();
             let expected_agents_owned = stage_expected_for_spawn.clone();
-            let run_id_owned = widget.spec_auto_state.as_ref()
+            let run_id_owned = widget
+                .spec_auto_state
+                .as_ref()
                 .and_then(|s| s.run_id.clone());
             let run_id_for_spawn = run_id_owned.clone(); // Clone for async move
 
@@ -977,29 +1219,41 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                     run_id_for_spawn,
                     &expected_agents_owned,
                     &agent_configs_owned,
-                ).await
+                )
+                .await
             });
 
             match spawn_result {
                 Ok(spawn_infos) => {
-                    tracing::warn!("🚀 AUDIT: Spawned {} agents for stage={:?}", spawn_infos.len(), stage);
+                    tracing::warn!(
+                        "🚀 AUDIT: Spawned {} agents for stage={:?}",
+                        spawn_infos.len(),
+                        stage
+                    );
                     for info in &spawn_infos {
-                        tracing::warn!("  ✓ {} ({}): model={}", info.agent_name, &info.agent_id[..8], info.model_name);
+                        tracing::warn!(
+                            "  ✓ {} ({}): model={}",
+                            info.agent_name,
+                            &info.agent_id[..8],
+                            info.model_name
+                        );
                     }
 
-                    let agent_ids: Vec<String> = spawn_infos.iter().map(|i| i.agent_id.clone()).collect();
+                    let agent_ids: Vec<String> =
+                        spawn_infos.iter().map(|i| i.agent_id.clone()).collect();
 
                     // For PARALLEL stages, use background polling
                     // For SEQUENTIAL stages, agents are already complete - send event immediately
                     let is_parallel_stage = matches!(
                         stage,
-                        crate::spec_prompts::SpecStage::Validate |
-                        crate::spec_prompts::SpecStage::Audit |
-                        crate::spec_prompts::SpecStage::Unlock
+                        crate::spec_prompts::SpecStage::Validate
+                            | crate::spec_prompts::SpecStage::Audit
+                            | crate::spec_prompts::SpecStage::Unlock
                     );
 
                     // Create run_tag before branching (to avoid borrow issues)
-                    let run_tag_display = run_id_owned.as_ref()
+                    let run_tag_display = run_id_owned
+                        .as_ref()
                         .map(|r| format!("[run:{}]", &r[..8]))
                         .unwrap_or_else(|| "[run:none]".to_string());
 
@@ -1010,27 +1264,47 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                         let stage_clone = stage;
                         let run_id_for_poll = run_id_owned.clone();
 
-                        tracing::warn!("{} 🔄 PARALLEL: Starting background polling for {} agents", run_tag_display, agent_ids.len());
+                        tracing::warn!(
+                            "{} 🔄 PARALLEL: Starting background polling for {} agents",
+                            run_tag_display,
+                            agent_ids.len()
+                        );
 
                         let _poll_handle = tokio::spawn(async move {
-                            let run_tag_bg = run_id_for_poll.as_ref()
+                            let run_tag_bg = run_id_for_poll
+                                .as_ref()
                                 .map(|r| format!("[run:{}]", &r[..8]))
                                 .unwrap_or_else(|| "[run:none]".to_string());
                             tracing::warn!("{} 📡 PARALLEL: Background task started", run_tag_bg);
 
-                            match wait_for_regular_stage_agents(&agent_ids, 600, run_id_for_poll.as_deref()).await {
+                            match wait_for_regular_stage_agents(
+                                &agent_ids,
+                                600,
+                                run_id_for_poll.as_deref(),
+                            )
+                            .await
+                            {
                                 Ok(()) => {
-                                    tracing::warn!("{} ✅ PARALLEL: All agents completed", run_tag_bg);
+                                    tracing::warn!(
+                                        "{} ✅ PARALLEL: All agents completed",
+                                        run_tag_bg
+                                    );
 
-                                    let _ = event_tx.send(crate::app_event::AppEvent::RegularStageAgentsComplete {
-                                        stage: stage_clone,
-                                        spec_id: spec_id_clone,
-                                        agent_ids: agent_ids.clone(),
-                                        agent_results: vec![], // Parallel: results collected from active_agents later
-                                    });
+                                    let _ = event_tx.send(
+                                        crate::app_event::AppEvent::RegularStageAgentsComplete {
+                                            stage: stage_clone,
+                                            spec_id: spec_id_clone,
+                                            agent_ids: agent_ids.clone(),
+                                            agent_results: vec![], // Parallel: results collected from active_agents later
+                                        },
+                                    );
                                 }
                                 Err(e) => {
-                                    tracing::warn!("{} ❌ PARALLEL: Polling failed: {}", run_tag_bg, e);
+                                    tracing::warn!(
+                                        "{} ❌ PARALLEL: Polling failed: {}",
+                                        run_tag_bg,
+                                        e
+                                    );
                                 }
                             }
 
@@ -1038,25 +1312,39 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                         });
                     } else {
                         // SEQUENTIAL execution - agents already complete, send event immediately
-                        tracing::warn!("{} ✅ SEQUENTIAL: All {} agents already completed, sending event now", run_tag_display, agent_ids.len());
+                        tracing::warn!(
+                            "{} ✅ SEQUENTIAL: All {} agents already completed, sending event now",
+                            run_tag_display,
+                            agent_ids.len()
+                        );
 
                         // Extract results from spawn_infos (sequential execution has results)
-                        let agent_results: Vec<(String, String)> = spawn_infos.iter()
+                        let agent_results: Vec<(String, String)> = spawn_infos
+                            .iter()
                             .filter_map(|info| {
-                                info.result.as_ref().map(|r| (info.agent_name.clone(), r.clone()))
+                                info.result
+                                    .as_ref()
+                                    .map(|r| (info.agent_name.clone(), r.clone()))
                             })
                             .collect();
 
-                        tracing::warn!("{} 📋 SEQUENTIAL: Extracted {} results from spawn_infos", run_tag_display, agent_results.len());
+                        tracing::warn!(
+                            "{} 📋 SEQUENTIAL: Extracted {} results from spawn_infos",
+                            run_tag_display,
+                            agent_results.len()
+                        );
 
                         // Show completion status in TUI
                         widget.history_push(crate::history_cell::PlainHistoryCell::new(
                             vec![
                                 ratatui::text::Line::from(format!(
                                     "✅ All {} agents completed for {} stage",
-                                    agent_ids.len(), stage.display_name()
+                                    agent_ids.len(),
+                                    stage.display_name()
                                 )),
-                                ratatui::text::Line::from("   Building consensus and generating output..."),
+                                ratatui::text::Line::from(
+                                    "   Building consensus and generating output...",
+                                ),
                             ],
                             crate::history_cell::HistoryCellType::Notice,
                         ));
@@ -1064,14 +1352,20 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
 
                         let result_count = agent_results.len();
 
-                        let _ = widget.app_event_tx.send(crate::app_event::AppEvent::RegularStageAgentsComplete {
-                            stage,
-                            spec_id: spec_id.to_string(),
-                            agent_ids: agent_ids.clone(),
-                            agent_results, // Pass results directly, no widget.active_agents dependency!
-                        });
+                        let _ = widget.app_event_tx.send(
+                            crate::app_event::AppEvent::RegularStageAgentsComplete {
+                                stage,
+                                spec_id: spec_id.to_string(),
+                                agent_ids: agent_ids.clone(),
+                                agent_results, // Pass results directly, no widget.active_agents dependency!
+                            },
+                        );
 
-                        tracing::warn!("{} 📬 SEQUENTIAL: RegularStageAgentsComplete event sent with {} results", run_tag_display, result_count);
+                        tracing::warn!(
+                            "{} 📬 SEQUENTIAL: RegularStageAgentsComplete event sent with {} results",
+                            run_tag_display,
+                            result_count
+                        );
                     }
                 }
                 Err(e) => {
@@ -1092,8 +1386,10 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
     }
 }
 
-
-fn apply_aggregator_effort(widget: &mut ChatWidget, effort: super::ace_route_selector::AggregatorEffort) {
+fn apply_aggregator_effort(
+    widget: &mut ChatWidget,
+    effort: super::ace_route_selector::AggregatorEffort,
+) {
     let effort_str = effort.as_str();
     // Find existing config for gpt_pro
     let ro_default = vec![
@@ -1184,7 +1480,6 @@ pub(crate) fn schedule_degraded_follow_up(
     widget.submit_user_message(user_msg);
 }
 
-
 /// Wrapper for backward compatibility
 pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
     on_spec_auto_agents_complete_with_ids(widget, vec![]);
@@ -1192,13 +1487,22 @@ pub fn on_spec_auto_agents_complete(widget: &mut ChatWidget) {
 
 /// Handle agent completion with DIRECT results (SPEC-KIT-900 Session 3 refactor)
 /// For SEQUENTIAL execution: uses results directly from spawn, eliminates active_agents dependency
-pub fn on_spec_auto_agents_complete_with_results(widget: &mut ChatWidget, agent_results: Vec<(String, String)>) {
-    let run_tag = widget.spec_auto_state.as_ref()
+pub fn on_spec_auto_agents_complete_with_results(
+    widget: &mut ChatWidget,
+    agent_results: Vec<(String, String)>,
+) {
+    let run_tag = widget
+        .spec_auto_state
+        .as_ref()
         .and_then(|s| s.run_id.as_ref())
         .map(|r| format!("[run:{}]", &r[..8]))
         .unwrap_or_else(|| "[run:none]".to_string());
 
-    tracing::warn!("{} 🎯 DIRECT RESULTS: Processing {} agent results from spawn", run_tag, agent_results.len());
+    tracing::warn!(
+        "{} 🎯 DIRECT RESULTS: Processing {} agent results from spawn",
+        run_tag,
+        agent_results.len()
+    );
     for (name, result) in &agent_results {
         tracing::warn!("{}   - {}: {} chars", run_tag, name, result.len());
     }
@@ -1209,7 +1513,10 @@ pub fn on_spec_auto_agents_complete_with_results(widget: &mut ChatWidget, agent_
             if let Some(run_id) = &state.run_id {
                 if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
                     for (agent_name, response_text) in &agent_results {
-                        let json_str = super::pipeline_coordinator::extract_json_from_agent_response(response_text)
+                        let json_str =
+                            super::pipeline_coordinator::extract_json_from_agent_response(
+                                response_text,
+                            )
                             .unwrap_or_else(|| response_text.clone());
 
                         if let Err(e) = db.store_artifact(
@@ -1220,9 +1527,18 @@ pub fn on_spec_auto_agents_complete_with_results(widget: &mut ChatWidget, agent_
                             Some(response_text),
                             Some(run_id),
                         ) {
-                            tracing::warn!("{} Failed to store {} artifact: {}", run_tag, agent_name, e);
+                            tracing::warn!(
+                                "{} Failed to store {} artifact: {}",
+                                run_tag,
+                                agent_name,
+                                e
+                            );
                         } else {
-                            tracing::warn!("{} ✓ Stored {} artifact to SQLite", run_tag, agent_name);
+                            tracing::warn!(
+                                "{} ✓ Stored {} artifact to SQLite",
+                                run_tag,
+                                agent_name
+                            );
                         }
                     }
                 }
@@ -1233,33 +1549,66 @@ pub fn on_spec_auto_agents_complete_with_results(widget: &mut ChatWidget, agent_
     // Store responses in state cache for synthesis
     if let Some(state) = widget.spec_auto_state.as_mut() {
         state.agent_responses_cache = Some(agent_results);
-        state.transition_phase(SpecAutoPhase::CheckingConsensus, "all_agents_complete_direct");
+        state.transition_phase(
+            SpecAutoPhase::CheckingConsensus,
+            "all_agents_complete_direct",
+        );
     }
 
-    tracing::warn!("{} DEBUG: Calling check_consensus_and_advance_spec_auto", run_tag);
+    tracing::warn!(
+        "{} DEBUG: Calling check_consensus_and_advance_spec_auto",
+        run_tag
+    );
     check_consensus_and_advance_spec_auto(widget);
-    tracing::warn!("{} DEBUG: Returned from check_consensus_and_advance_spec_auto", run_tag);
+    tracing::warn!(
+        "{} DEBUG: Returned from check_consensus_and_advance_spec_auto",
+        run_tag
+    );
 }
 
 /// Handle agent completion with specific agent IDs (prevents collecting ALL historical agents)
 /// For PARALLEL execution: collects from active_agents using agent_ids filter
-pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_agent_ids: Vec<String>) {
-    let run_tag = widget.spec_auto_state.as_ref()
+pub fn on_spec_auto_agents_complete_with_ids(
+    widget: &mut ChatWidget,
+    specific_agent_ids: Vec<String>,
+) {
+    let run_tag = widget
+        .spec_auto_state
+        .as_ref()
         .and_then(|s| s.run_id.as_ref())
         .map(|r| format!("[run:{}]", &r[..8]))
         .unwrap_or_else(|| "[run:none]".to_string());
 
-    tracing::warn!("{} DEBUG: on_spec_auto_agents_complete_with_ids called with {} specific IDs", run_tag, specific_agent_ids.len());
+    tracing::warn!(
+        "{} DEBUG: on_spec_auto_agents_complete_with_ids called with {} specific IDs",
+        run_tag,
+        specific_agent_ids.len()
+    );
     if !specific_agent_ids.is_empty() {
-        tracing::warn!("{}   Specific agent IDs: {:?}", run_tag, specific_agent_ids.iter().map(|id| &id[..8]).collect::<Vec<_>>());
+        tracing::warn!(
+            "{}   Specific agent IDs: {:?}",
+            run_tag,
+            specific_agent_ids
+                .iter()
+                .map(|id| &id[..8])
+                .collect::<Vec<_>>()
+        );
     }
     let Some(state) = widget.spec_auto_state.as_ref() else {
         tracing::warn!("{} DEBUG: No spec_auto_state", run_tag);
         return;
     };
 
-    let current_stage_name = state.current_stage().map(|s| s.display_name()).unwrap_or("unknown");
-    tracing::warn!("{} DEBUG: Current stage={}, phase={:?}", run_tag, current_stage_name, state.phase);
+    let current_stage_name = state
+        .current_stage()
+        .map(|s| s.display_name())
+        .unwrap_or("unknown");
+    tracing::warn!(
+        "{} DEBUG: Current stage={}, phase={:?}",
+        run_tag,
+        current_stage_name,
+        state.phase
+    );
     // Check which phase we're in
     let expected_agents = match &state.phase {
         SpecAutoPhase::ExecutingAgents {
@@ -1284,8 +1633,13 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
             // Check if this agent was spawned as a quality gate agent
             if let Some(ref database) = db {
                 if let Ok(Some((phase_type, _))) = database.get_agent_spawn_info(&agent_info.id) {
-                    tracing::warn!("{}   DEBUG: Agent {} ({}) was spawned as phase_type={}",
-                        run_tag, agent_info.name, agent_info.id, phase_type);
+                    tracing::warn!(
+                        "{}   DEBUG: Agent {} ({}) was spawned as phase_type={}",
+                        run_tag,
+                        agent_info.name,
+                        agent_info.id,
+                        phase_type
+                    );
                     if phase_type == "quality_gate" {
                         quality_gate_agent_ids.insert(agent_info.id.clone());
                     }
@@ -1297,7 +1651,8 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
                 if let Some(run_id) = &state.run_id {
                     if let Some(current_stage) = state.current_stage() {
                         // Calculate output lines from agent result (if available)
-                        let output_lines = agent_info.result
+                        let output_lines = agent_info
+                            .result
                             .as_ref()
                             .map(|r| r.lines().count())
                             .unwrap_or(0);
@@ -1312,7 +1667,7 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
                                 status: "completed".to_string(),
                                 output_lines,
                                 timestamp: super::execution_logger::ExecutionEvent::now(),
-                            }
+                            },
                         );
                     }
                 }
@@ -1329,7 +1684,10 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
                 ..
             } => {
                 *completed_agents = completed_names.clone();
-                tracing::warn!("{} DEBUG: Phase match → ExecutingAgents, routing to 'regular'", run_tag);
+                tracing::warn!(
+                    "{} DEBUG: Phase match → ExecutingAgents, routing to 'regular'",
+                    run_tag
+                );
 
                 // Definitive check: Are these quality gate agents completing late?
                 // Query SQLite to see if any completed agents were spawned as quality_gate phase_type
@@ -1338,11 +1696,15 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
                 // Only skip if completion set contains ONLY quality gate agents (all stale)
                 if !quality_gate_agent_ids.is_empty() {
                     // Count how many regular_stage agents are in the completion set
-                    let regular_stage_count = widget.active_agents.iter()
+                    let regular_stage_count = widget
+                        .active_agents
+                        .iter()
                         .filter(|a| matches!(a.status, super::super::AgentStatus::Completed))
                         .filter(|a| {
                             if let Some(ref database) = db {
-                                if let Ok(Some((phase_type, _))) = database.get_agent_spawn_info(&a.id) {
+                                if let Ok(Some((phase_type, _))) =
+                                    database.get_agent_spawn_info(&a.id)
+                                {
                                     return phase_type == "regular_stage";
                                 }
                             }
@@ -1350,19 +1712,34 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
                         })
                         .count();
 
-                    tracing::warn!("{} DEBUG: Found {} quality gate agents and {} regular_stage agents in completion set",
-                        run_tag, quality_gate_agent_ids.len(), regular_stage_count);
+                    tracing::warn!(
+                        "{} DEBUG: Found {} quality gate agents and {} regular_stage agents in completion set",
+                        run_tag,
+                        quality_gate_agent_ids.len(),
+                        regular_stage_count
+                    );
 
                     if regular_stage_count == 0 {
                         // ONLY quality gates (all stale) - skip processing
-                        tracing::warn!("{} DEBUG: Completion set contains ONLY quality gate agents - skipping", run_tag);
-                        tracing::warn!("{}   DEBUG: Quality gate agent IDs: {:?}", run_tag, quality_gate_agent_ids);
+                        tracing::warn!(
+                            "{} DEBUG: Completion set contains ONLY quality gate agents - skipping",
+                            run_tag
+                        );
+                        tracing::warn!(
+                            "{}   DEBUG: Quality gate agent IDs: {:?}",
+                            run_tag,
+                            quality_gate_agent_ids
+                        );
                         return;
                     } else {
                         // Mixed: quality gates + regular agents
                         // Continue processing, but filter out quality gates
-                        tracing::warn!("{} DEBUG: Mixed completion: {} regular + {} quality gates - processing regular agents only",
-                            run_tag, regular_stage_count, quality_gate_agent_ids.len());
+                        tracing::warn!(
+                            "{} DEBUG: Mixed completion: {} regular + {} quality gates - processing regular agents only",
+                            run_tag,
+                            regular_stage_count,
+                            quality_gate_agent_ids.len()
+                        );
                     }
                 }
 
@@ -1373,16 +1750,26 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
                 completed_agents, ..
             } => {
                 *completed_agents = completed_names.clone();
-                tracing::warn!("{} DEBUG: Phase match → QualityGateExecuting, routing to 'quality_gate'", run_tag);
+                tracing::warn!(
+                    "{} DEBUG: Phase match → QualityGateExecuting, routing to 'quality_gate'",
+                    run_tag
+                );
                 "quality_gate"
             }
             SpecAutoPhase::QualityGateValidating { .. } => {
                 // GPT-5 validation phase - single agent (GPT-5)
-                tracing::warn!("{} DEBUG: Phase match → QualityGateValidating, routing to 'gpt5_validation'", run_tag);
+                tracing::warn!(
+                    "{} DEBUG: Phase match → QualityGateValidating, routing to 'gpt5_validation'",
+                    run_tag
+                );
                 "gpt5_validation"
             }
             _ => {
-                tracing::warn!("{} DEBUG: Phase match → Other ({:?}), routing to 'none'", run_tag, state.phase);
+                tracing::warn!(
+                    "{} DEBUG: Phase match → Other ({:?}), routing to 'none'",
+                    run_tag,
+                    state.phase
+                );
                 "none"
             }
         };
@@ -1392,10 +1779,17 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
     };
 
     // Handle different phase types
-    tracing::warn!("{} DEBUG: on_spec_auto_agents_complete - phase_type={}", run_tag, phase_type);
+    tracing::warn!(
+        "{} DEBUG: on_spec_auto_agents_complete - phase_type={}",
+        run_tag,
+        phase_type
+    );
     match phase_type {
         "quality_gate" => {
-            tracing::warn!("{} DEBUG: Quality gate path - calling on_quality_gate_agents_complete", run_tag);
+            tracing::warn!(
+                "{} DEBUG: Quality gate path - calling on_quality_gate_agents_complete",
+                run_tag
+            );
             if !completed_names.is_empty() {
                 on_quality_gate_agents_complete(widget);
             }
@@ -1411,9 +1805,20 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
         }
         "regular" => {
             // Regular stage agents
-            tracing::warn!("{} DEBUG: Regular agent phase, checking completion", run_tag);
-            tracing::warn!("{}   DEBUG: Expected agents: {:?}", run_tag, expected_agents);
-            tracing::warn!("{}   DEBUG: Completed agents: {:?}", run_tag, completed_names);
+            tracing::warn!(
+                "{} DEBUG: Regular agent phase, checking completion",
+                run_tag
+            );
+            tracing::warn!(
+                "{}   DEBUG: Expected agents: {:?}",
+                run_tag,
+                expected_agents
+            );
+            tracing::warn!(
+                "{}   DEBUG: Completed agents: {:?}",
+                run_tag,
+                completed_names
+            );
 
             // Check completion with agent name normalization
             // Handles aliases like "code" (command) vs "gpt_pro"/"gpt_codex" (config names)
@@ -1424,42 +1829,63 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
                     return true;
                 }
                 // Special case: gpt_pro and gpt_codex both use "code" command
-                if (exp_lower == "gpt_pro" || exp_lower == "gpt_codex") &&
-                   (completed_names.contains("code") || completed_names.contains("gpt5") || completed_names.contains("gpt-5")) {
+                if (exp_lower == "gpt_pro" || exp_lower == "gpt_codex")
+                    && (completed_names.contains("code")
+                        || completed_names.contains("gpt5")
+                        || completed_names.contains("gpt-5"))
+                {
                     return true;
                 }
                 // Special case: code config might report as gpt_pro or gpt_codex
-                if exp_lower == "code" && (completed_names.contains("gpt_pro") || completed_names.contains("gpt_codex")) {
+                if exp_lower == "code"
+                    && (completed_names.contains("gpt_pro")
+                        || completed_names.contains("gpt_codex"))
+                {
                     return true;
                 }
                 false
             });
 
-            let run_tag_collection = widget.spec_auto_state.as_ref()
+            let run_tag_collection = widget
+                .spec_auto_state
+                .as_ref()
                 .and_then(|s| s.run_id.as_ref())
                 .map(|r| format!("[run:{}]", &r[..8]))
                 .unwrap_or_else(|| "[run:none]".to_string());
 
-            tracing::warn!("{} DEBUG: All complete: {}", run_tag_collection, all_complete);
+            tracing::warn!(
+                "{} DEBUG: All complete: {}",
+                run_tag_collection,
+                all_complete
+            );
             if all_complete {
-                tracing::warn!("{} DEBUG: All regular stage agents complete, collecting responses for consensus", run_tag_collection);
+                tracing::warn!(
+                    "{} DEBUG: All regular stage agents complete, collecting responses for consensus",
+                    run_tag_collection
+                );
 
                 // Build agent_id → expected_name mapping from database
                 // This handles agent name mismatches (e.g., "code" command vs "gpt_codex"/"gpt_pro" config names)
-                let agent_name_map: std::collections::HashMap<String, String> = if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
-                    specific_agent_ids.iter()
-                        .filter_map(|agent_id| {
-                            db.get_agent_name(agent_id)
-                                .ok()
-                                .flatten()
-                                .map(|name| (agent_id.clone(), name))
-                        })
-                        .collect()
-                } else {
-                    std::collections::HashMap::new()
-                };
+                let agent_name_map: std::collections::HashMap<String, String> =
+                    if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+                        specific_agent_ids
+                            .iter()
+                            .filter_map(|agent_id| {
+                                db.get_agent_name(agent_id)
+                                    .ok()
+                                    .flatten()
+                                    .map(|name| (agent_id.clone(), name))
+                            })
+                            .collect()
+                    } else {
+                        std::collections::HashMap::new()
+                    };
 
-                tracing::warn!("{}   📋 Agent name mapping: {} entries", run_tag_collection, agent_name_map.len());
+                tracing::warn!(
+                    "{}   📋 Agent name mapping: {} entries",
+                    run_tag_collection,
+                    agent_name_map.len()
+                );
                 for (id, name) in &agent_name_map {
                     tracing::warn!("{}     {} → {}", run_tag_collection, &id[..8], name);
                 }
@@ -1467,17 +1893,33 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
                 // Collect agent responses - ONLY from specific agent IDs if provided
                 let agent_responses: Vec<(String, String)> = if !specific_agent_ids.is_empty() {
                     // FILTERED collection - only these specific agents (prevents collecting ALL history)
-                    tracing::warn!("{}   🎯 FILTERED collection: {} specific agent IDs", run_tag_collection, specific_agent_ids.len());
-                    widget.active_agents.iter()
+                    tracing::warn!(
+                        "{}   🎯 FILTERED collection: {} specific agent IDs",
+                        run_tag_collection,
+                        specific_agent_ids.len()
+                    );
+                    widget
+                        .active_agents
+                        .iter()
                         .filter(|agent| specific_agent_ids.contains(&agent.id))
                         .filter_map(|agent| {
                             if matches!(agent.status, super::super::AgentStatus::Completed) {
                                 // Use expected name from database, fallback to agent.name
-                                let expected_name = agent_name_map.get(&agent.id)
+                                let expected_name = agent_name_map
+                                    .get(&agent.id)
                                     .cloned()
                                     .unwrap_or_else(|| agent.name.clone());
-                                tracing::warn!("{}     Collecting: {} → {} ({})", run_tag_collection, agent.name, expected_name, &agent.id[..8]);
-                                agent.result.as_ref().map(|result| (expected_name, result.clone()))
+                                tracing::warn!(
+                                    "{}     Collecting: {} → {} ({})",
+                                    run_tag_collection,
+                                    agent.name,
+                                    expected_name,
+                                    &agent.id[..8]
+                                );
+                                agent
+                                    .result
+                                    .as_ref()
+                                    .map(|result| (expected_name, result.clone()))
                             } else {
                                 None
                             }
@@ -1485,11 +1927,19 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
                         .collect()
                 } else {
                     // FALLBACK: Collect all completed (for backward compatibility)
-                    tracing::warn!("{}   ⚠️ FALLBACK: No specific IDs provided, collecting ALL completed agents", run_tag_collection);
-                    widget.active_agents.iter()
+                    tracing::warn!(
+                        "{}   ⚠️ FALLBACK: No specific IDs provided, collecting ALL completed agents",
+                        run_tag_collection
+                    );
+                    widget
+                        .active_agents
+                        .iter()
                         .filter_map(|agent| {
                             if matches!(agent.status, super::super::AgentStatus::Completed) {
-                                agent.result.as_ref().map(|result| (agent.name.clone(), result.clone()))
+                                agent
+                                    .result
+                                    .as_ref()
+                                    .map(|result| (agent.name.clone(), result.clone()))
                             } else {
                                 None
                             }
@@ -1497,8 +1947,12 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
                         .collect()
                 };
 
-                tracing::warn!("{} ✅ Collected {} agent responses for consensus (expected: {})",
-                    run_tag_collection, agent_responses.len(), expected_agents.len());
+                tracing::warn!(
+                    "{} ✅ Collected {} agent responses for consensus (expected: {})",
+                    run_tag_collection,
+                    agent_responses.len(),
+                    expected_agents.len()
+                );
 
                 // SPEC-KIT-072: Store to SQLite for persistent consensus artifacts
                 if let Some(state) = widget.spec_auto_state.as_ref() {
@@ -1519,9 +1973,16 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
                                         Some(response_text),
                                         Some(run_id),
                                     ) {
-                                        tracing::warn!("Failed to store {} artifact to SQLite: {}", agent_name, e);
+                                        tracing::warn!(
+                                            "Failed to store {} artifact to SQLite: {}",
+                                            agent_name,
+                                            e
+                                        );
                                     } else {
-                                        tracing::warn!("DEBUG: Stored {} artifact to SQLite", agent_name);
+                                        tracing::warn!(
+                                            "DEBUG: Stored {} artifact to SQLite",
+                                            agent_name
+                                        );
 
                                         // Note: Memory cleanup removed - SQLite-based consensus doesn't use local-memory
                                     }
@@ -1537,9 +1998,15 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
                     state.transition_phase(SpecAutoPhase::CheckingConsensus, "all_agents_complete");
                 }
 
-                tracing::warn!("{} DEBUG: Calling check_consensus_and_advance_spec_auto", run_tag_collection);
+                tracing::warn!(
+                    "{} DEBUG: Calling check_consensus_and_advance_spec_auto",
+                    run_tag_collection
+                );
                 check_consensus_and_advance_spec_auto(widget);
-                tracing::warn!("{} DEBUG: Returned from check_consensus_and_advance_spec_auto", run_tag_collection);
+                tracing::warn!(
+                    "{} DEBUG: Returned from check_consensus_and_advance_spec_auto",
+                    run_tag_collection
+                );
             }
         }
         _ => {}
@@ -1579,7 +2046,9 @@ pub fn on_spec_auto_agents_complete_with_ids(widget: &mut ChatWidget, specific_a
 
             // Mark for degraded follow-up
             let followup_data = widget.spec_auto_state.as_ref().and_then(|state| {
-                state.current_stage().map(|stage| (state.spec_id.clone(), stage))
+                state
+                    .current_stage()
+                    .map(|stage| (state.spec_id.clone(), stage))
             });
             if let Some((spec_id, stage)) = followup_data {
                 schedule_degraded_follow_up(widget, stage, &spec_id);

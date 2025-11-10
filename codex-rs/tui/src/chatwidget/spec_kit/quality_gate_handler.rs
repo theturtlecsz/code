@@ -86,12 +86,7 @@ pub fn on_quality_gate_agents_complete(widget: &mut ChatWidget) {
     //
     // Note: Storage happens synchronously via spawn_blocking to ensure completion
     // before broker searches. Small delay acceptable (typically <500ms for 3 agents).
-    let stored_count = store_quality_gate_artifacts_sync(
-        widget,
-        &spec_id,
-        checkpoint,
-        &gate_names,
-    );
+    let stored_count = store_quality_gate_artifacts_sync(widget, &spec_id, checkpoint, &gate_names);
 
     if stored_count > 0 {
         widget.history_push(crate::history_cell::PlainHistoryCell::new(
@@ -104,7 +99,7 @@ pub fn on_quality_gate_agents_complete(widget: &mut ChatWidget) {
         ));
     } else {
         widget.history_push(crate::history_cell::new_error_event(
-            "Warning: No agent artifacts stored - agents may not have completed yet".to_string()
+            "Warning: No agent artifacts stored - agents may not have completed yet".to_string(),
         ));
     }
 
@@ -115,7 +110,11 @@ pub fn on_quality_gate_agents_complete(widget: &mut ChatWidget) {
         vec![ratatui::text::Line::from(format!(
             "Quality Gate: {} - retrieving agent responses{}...",
             checkpoint.name(),
-            if native_agent_ids.is_some() { " from memory (native)" } else { " from filesystem" }
+            if native_agent_ids.is_some() {
+                " from memory (native)"
+            } else {
+                " from filesystem"
+            }
         ))],
         crate::history_cell::HistoryCellType::Notice,
     ));
@@ -956,9 +955,9 @@ pub(super) fn determine_quality_checkpoint(
     // AfterSpecify: Checklist (BEFORE tasks - validate PRD+plan quality)
     // AfterTasks: Analyze (BEFORE implement - full consistency check)
     let checkpoint = match stage {
-        SpecStage::Plan => super::state::QualityCheckpoint::BeforeSpecify,      // Clarify before planning
-        SpecStage::Tasks => super::state::QualityCheckpoint::AfterSpecify,      // Checklist after plan
-        SpecStage::Implement => super::state::QualityCheckpoint::AfterTasks,   // Analyze after tasks
+        SpecStage::Plan => super::state::QualityCheckpoint::BeforeSpecify, // Clarify before planning
+        SpecStage::Tasks => super::state::QualityCheckpoint::AfterSpecify, // Checklist after plan
+        SpecStage::Implement => super::state::QualityCheckpoint::AfterTasks, // Analyze after tasks
         _ => return None,
     };
 
@@ -1016,15 +1015,19 @@ pub(super) fn execute_quality_checkpoint(
                     checkpoint: checkpoint.name().to_string(),
                     gates: gate_names.clone(),
                     timestamp: super::execution_logger::ExecutionEvent::now(),
-                }
+                },
             );
         }
     }
 
     // Get execution logger, agent configs, and event sender for spawning
-    let logger = widget.spec_auto_state.as_ref()
+    let logger = widget
+        .spec_auto_state
+        .as_ref()
         .map(|s| s.execution_logger.clone());
-    let run_id = widget.spec_auto_state.as_ref()
+    let run_id = widget
+        .spec_auto_state
+        .as_ref()
         .and_then(|s| s.run_id.clone());
     let agent_configs = widget.config.agents.clone();
     let event_tx = widget.app_event_tx.clone();
@@ -1037,7 +1040,9 @@ pub(super) fn execute_quality_checkpoint(
             checkpoint_clone,
             &agent_configs,
             run_id.clone(),
-        ).await {
+        )
+        .await
+        {
             Ok(spawn_infos) => {
                 info!("Spawned {} quality gate agents", spawn_infos.len());
 
@@ -1057,22 +1062,26 @@ pub(super) fn execute_quality_checkpoint(
                 }
 
                 // Extract agent IDs for waiting
-                let agent_ids: Vec<String> = spawn_infos.iter()
+                let agent_ids: Vec<String> = spawn_infos
+                    .iter()
                     .map(|info| info.agent_id.clone())
                     .collect();
 
                 // Wait for completion (5 minute timeout)
                 match super::native_quality_gate_orchestrator::wait_for_quality_gate_agents(
-                    &agent_ids,
-                    300, // 5 minutes
-                ).await {
+                    &agent_ids, 300, // 5 minutes
+                )
+                .await
+                {
                     Ok(()) => {
                         info!("Quality gate agents completed successfully");
                         // Send completion event to trigger broker collection
-                        let _ = event_tx.send(crate::app_event::AppEvent::QualityGateNativeAgentsComplete {
-                            checkpoint: checkpoint_clone,
-                            agent_ids: agent_ids.clone(),
-                        });
+                        let _ = event_tx.send(
+                            crate::app_event::AppEvent::QualityGateNativeAgentsComplete {
+                                checkpoint: checkpoint_clone,
+                                agent_ids: agent_ids.clone(),
+                            },
+                        );
                     }
                     Err(e) => {
                         warn!("Quality gate agents timeout: {}", e);
@@ -1090,7 +1099,10 @@ pub(super) fn execute_quality_checkpoint(
 
     // Transition to quality gate executing phase
     if let Some(state) = widget.spec_auto_state.as_mut() {
-        tracing::warn!("DEBUG: Setting phase to QualityGateExecuting for checkpoint={:?}", checkpoint);
+        tracing::warn!(
+            "DEBUG: Setting phase to QualityGateExecuting for checkpoint={:?}",
+            checkpoint
+        );
         let old_phase = format!("{:?}", state.phase);
         state.phase = SpecAutoPhase::QualityGateExecuting {
             checkpoint,
@@ -1105,14 +1117,20 @@ pub(super) fn execute_quality_checkpoint(
             results: std::collections::HashMap::new(),
             native_agent_ids: None, // Will be set by completion event
         };
-        tracing::warn!("DEBUG: Phase transition: {} → QualityGateExecuting", old_phase);
+        tracing::warn!(
+            "DEBUG: Phase transition: {} → QualityGateExecuting",
+            old_phase
+        );
     }
 }
 
 /// Update phase with native agent IDs when event arrives
 pub fn set_native_agent_ids(widget: &mut ChatWidget, agent_ids: Vec<String>) {
     if let Some(state) = widget.spec_auto_state.as_mut() {
-        if let SpecAutoPhase::QualityGateExecuting { native_agent_ids, .. } = &mut state.phase {
+        if let SpecAutoPhase::QualityGateExecuting {
+            native_agent_ids, ..
+        } = &mut state.phase
+        {
             *native_agent_ids = Some(agent_ids);
         }
     }
@@ -1247,7 +1265,7 @@ pub(super) fn finalize_quality_gates(widget: &mut ChatWidget) {
                         escalated: *esc_count,
                         degraded_agents: degraded_agent_vec,
                         timestamp: super::execution_logger::ExecutionEvent::now(),
-                    }
+                    },
                 );
             }
         }
@@ -1386,7 +1404,9 @@ fn send_ace_learning_on_checkpoint_pass(
                     get_current_branch(&widget.config.cwd).unwrap_or_else(|| "main".to_string()),
                     scope,
                     task_title,
-                    ExecutionFeedback::new().with_compile_ok(true).with_tests_passed(true),
+                    ExecutionFeedback::new()
+                        .with_compile_ok(true)
+                        .with_tests_passed(true),
                     None,
                 );
             }
@@ -1445,7 +1465,10 @@ fn store_quality_gate_artifacts_sync(
     let mcp_manager = widget.mcp_manager.clone();
     let spec_id_owned = spec_id.to_string();
     let checkpoint_owned = checkpoint;
-    let stage_name = gate_names.first().map(|s| s.to_string()).unwrap_or_else(|| "clarify".to_string());
+    let stage_name = gate_names
+        .first()
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "clarify".to_string());
 
     // Create storage tasks for each agent
     let mut handles = Vec::new();
@@ -1456,10 +1479,7 @@ fn store_quality_gate_artifacts_sync(
         let content = match fs::read_to_string(&result_path) {
             Ok(c) => c,
             Err(e) => {
-                debug!(
-                    "Failed to read agent result file {}: {}",
-                    result_path, e
-                );
+                debug!("Failed to read agent result file {}: {}", result_path, e);
                 continue;
             }
         };
@@ -1666,7 +1686,8 @@ fn extract_json_from_markdown(content: &str) -> Option<String> {
         // If we're collecting JSON, continue until we hit something that's clearly not JSON
         if found_json_start {
             // Stop if we hit a line that starts with [ and looks like a log timestamp
-            if trimmed.starts_with('[') && trimmed.contains(']') && trimmed.contains("tokens used") {
+            if trimmed.starts_with('[') && trimmed.contains(']') && trimmed.contains("tokens used")
+            {
                 break;
             }
             raw_json_lines.push(line);

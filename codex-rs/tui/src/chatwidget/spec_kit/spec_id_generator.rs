@@ -30,8 +30,8 @@ pub fn generate_next_spec_id(cwd: &Path) -> Result<String, String> {
         ));
     }
 
-    let entries = fs::read_dir(&docs_dir)
-        .map_err(|e| format!("Failed to read docs directory: {}", e))?;
+    let entries =
+        fs::read_dir(&docs_dir).map_err(|e| format!("Failed to read docs directory: {}", e))?;
 
     let max_id = entries
         .filter_map(|entry| entry.ok())
@@ -147,7 +147,10 @@ mod tests {
 
     #[test]
     fn test_create_slug_basic() {
-        assert_eq!(create_slug("Add User Authentication"), "add-user-authentication");
+        assert_eq!(
+            create_slug("Add User Authentication"),
+            "add-user-authentication"
+        );
         assert_eq!(create_slug("Fix Bug #123"), "fix-bug-123");
         assert_eq!(create_slug("OAuth2 Integration"), "oauth2-integration");
     }
@@ -161,8 +164,14 @@ mod tests {
 
     #[test]
     fn test_create_slug_multiple_spaces() {
-        assert_eq!(create_slug("Add    multiple   spaces"), "add-multiple-spaces");
-        assert_eq!(create_slug("  Leading and trailing  "), "leading-and-trailing");
+        assert_eq!(
+            create_slug("Add    multiple   spaces"),
+            "add-multiple-spaces"
+        );
+        assert_eq!(
+            create_slug("  Leading and trailing  "),
+            "leading-and-trailing"
+        );
     }
 
     #[test]

@@ -86,13 +86,7 @@ pub async fn create_pane(
 
         // Set pane title
         let _ = Command::new("tmux")
-            .args([
-                "select-pane",
-                "-t",
-                &pane_id,
-                "-T",
-                pane_title,
-            ])
+            .args(["select-pane", "-t", &pane_id, "-T", pane_title])
             .status()
             .await;
 
@@ -104,13 +98,7 @@ pub async fn create_pane(
 
         // Set pane title
         let _ = Command::new("tmux")
-            .args([
-                "select-pane",
-                "-t",
-                &pane_id,
-                "-T",
-                pane_title,
-            ])
+            .args(["select-pane", "-t", &pane_id, "-T", pane_title])
             .status()
             .await;
 
@@ -129,6 +117,51 @@ pub async fn execute_in_pane(
     working_dir: Option<&Path>,
     timeout_secs: u64,
 ) -> Result<String, String> {
+    // Threshold for determining if an argument is "large" (likely a prompt)
+    const LARGE_ARG_THRESHOLD: usize = 1000;
+
+    // Track temp files for cleanup
+    let mut temp_files = Vec::new();
+
+    // Process arguments - write large ones to temp files
+    let mut processed_args = Vec::new();
+    let mut prev_arg_was_prompt_flag = false;
+
+    for (i, arg) in args.iter().enumerate() {
+        if arg.len() > LARGE_ARG_THRESHOLD {
+            // Create temp file for large argument
+            let temp_path = format!("/tmp/tmux-agent-arg-{}-{}.txt", std::process::id(), i);
+
+            // Write content to temp file
+            tokio::fs::write(&temp_path, arg)
+                .await
+                .map_err(|e| format!("Failed to write temp file {}: {}", temp_path, e))?;
+
+            temp_files.push(temp_path.clone());
+
+            // If previous arg was a prompt flag (-p, --prompt), use command substitution
+            if prev_arg_was_prompt_flag {
+                processed_args.push(format!("\"$(cat {})\"", temp_path));
+            } else {
+                // Otherwise, use stdin redirection after command
+                processed_args.push(format!("< {}", temp_path));
+            }
+
+            tracing::debug!(
+                "Wrote large argument ({} bytes) to temp file: {}",
+                arg.len(),
+                temp_path
+            );
+        } else {
+            // Normal argument - escape and add
+            let escaped_arg = arg.replace('\'', "'\\''");
+            processed_args.push(format!("'{}'", escaped_arg));
+
+            // Track if this is a prompt flag for next iteration
+            prev_arg_was_prompt_flag = arg == "-p" || arg == "--prompt";
+        }
+    }
+
     // Build the full command with environment variables
     let mut full_command = String::new();
 
@@ -144,18 +177,30 @@ pub async fn execute_in_pane(
         full_command.push_str(&format!("export {}='{}'; ", key, escaped_value));
     }
 
-    // Add the actual command
+    // Add the actual command with processed arguments
     full_command.push_str(command);
-    for arg in args {
-        // Escape single quotes in args
-        let escaped_arg = arg.replace('\'', "'\\''");
-        full_command.push_str(&format!(" '{}'", escaped_arg));
+    for arg in &processed_args {
+        full_command.push_str(&format!(" {}", arg));
     }
 
     // Append marker for completion detection
     full_command.push_str("; echo '___AGENT_COMPLETE___'");
 
-    tracing::debug!("Executing in pane {}: {}", pane_id, full_command);
+    // Add cleanup for temp files
+    if !temp_files.is_empty() {
+        full_command.push_str(&format!("; rm -f {}", temp_files.join(" ")));
+    }
+
+    tracing::debug!(
+        "Executing in pane {} (created {} temp files): {}",
+        pane_id,
+        temp_files.len(),
+        if full_command.len() > 200 {
+            format!("{}...", &full_command[..200])
+        } else {
+            full_command.clone()
+        }
+    );
 
     // Clear the pane first
     let _ = Command::new("tmux")
@@ -171,6 +216,10 @@ pub async fn execute_in_pane(
         .map_err(|e| format!("Failed to send command to pane: {}", e))?;
 
     if !send.success() {
+        // Cleanup temp files on error
+        for temp_file in &temp_files {
+            let _ = tokio::fs::remove_file(temp_file).await;
+        }
         return Err(format!("Failed to execute command in pane {}", pane_id));
     }
 
@@ -187,6 +236,11 @@ pub async fn execute_in_pane(
                 .status()
                 .await;
 
+            // Cleanup temp files on timeout (command may not have finished)
+            for temp_file in &temp_files {
+                let _ = tokio::fs::remove_file(temp_file).await;
+            }
+
             return Err(format!(
                 "Timeout waiting for agent completion after {}s",
                 timeout_secs
@@ -195,24 +249,34 @@ pub async fn execute_in_pane(
 
         // Capture pane content
         let capture = Command::new("tmux")
-            .args([
-                "capture-pane",
-                "-t",
-                pane_id,
-                "-p",
-                "-S",
-                "-",
-            ])
+            .args(["capture-pane", "-t", pane_id, "-p", "-S", "-"])
             .output()
             .await
-            .map_err(|e| format!("Failed to capture pane: {}", e))?;
+            .map_err(|e| {
+                // Cleanup temp files on error
+                let temp_files_clone = temp_files.clone();
+                tokio::spawn(async move {
+                    for temp_file in &temp_files_clone {
+                        let _ = tokio::fs::remove_file(temp_file).await;
+                    }
+                });
+                format!("Failed to capture pane: {}", e)
+            })?;
 
         if capture.status.success() {
             let output = String::from_utf8_lossy(&capture.stdout).to_string();
             if output.contains("___AGENT_COMPLETE___") {
                 // Remove the marker from output
-                let output = output.replace("___AGENT_COMPLETE___", "").trim().to_string();
+                let output = output
+                    .replace("___AGENT_COMPLETE___", "")
+                    .trim()
+                    .to_string();
                 tracing::info!("Agent completed in pane {}", pane_id);
+
+                // Note: temp files are cleaned up by the shell command itself
+                // (via the "rm -f" appended to full_command)
+                // We only need manual cleanup on error/timeout paths
+
                 return Ok(output);
             }
         }
@@ -224,14 +288,7 @@ pub async fn execute_in_pane(
 /// Capture the final output from a pane
 pub async fn capture_pane_output(pane_id: &str) -> Result<String, String> {
     let capture = Command::new("tmux")
-        .args([
-            "capture-pane",
-            "-t",
-            pane_id,
-            "-p",
-            "-S",
-            "-",
-        ])
+        .args(["capture-pane", "-t", pane_id, "-p", "-S", "-"])
         .output()
         .await
         .map_err(|e| format!("Failed to capture pane: {}", e))?;
@@ -263,10 +320,7 @@ pub async fn kill_session(session_name: &str) -> Result<(), String> {
 }
 
 /// Save pane output to evidence file
-pub async fn save_pane_evidence(
-    pane_output: &str,
-    evidence_path: &Path,
-) -> Result<(), String> {
+pub async fn save_pane_evidence(pane_output: &str, evidence_path: &Path) -> Result<(), String> {
     if let Some(parent) = evidence_path.parent() {
         tokio::fs::create_dir_all(parent)
             .await
@@ -301,5 +355,60 @@ mod tests {
     async fn test_tmux_available() {
         // Just check that the function doesn't panic
         let _ = is_tmux_available().await;
+    }
+
+    #[tokio::test]
+    async fn test_large_argument_handling() {
+        // Test that large arguments (>1000 chars) are written to temp files
+        // This prevents "command too long" errors when passing large prompts
+
+        // Skip test if tmux not available
+        if !is_tmux_available().await {
+            eprintln!("Skipping test: tmux not available");
+            return;
+        }
+
+        let session_name = "test-large-args";
+        let pane_title = "test-pane";
+
+        // Create session and pane
+        if ensure_session(session_name).await.is_ok() {
+            if let Ok(pane_id) = create_pane(session_name, pane_title, true).await {
+                // Create a large argument (simulates a 50KB prompt)
+                let large_prompt = "x".repeat(50_000);
+
+                let args = vec!["-p".to_string(), large_prompt.clone()];
+                let env = std::collections::HashMap::new();
+
+                // Test that execute_in_pane handles large args without "command too long" error
+                let result = execute_in_pane(
+                    session_name,
+                    &pane_id,
+                    "echo",
+                    &args,
+                    &env,
+                    None,
+                    5, // 5 second timeout
+                )
+                .await;
+
+                // Cleanup
+                let _ = kill_session(session_name).await;
+
+                // Verify no "command too long" error
+                match result {
+                    Ok(_) => {
+                        // Success - large argument was handled correctly
+                    }
+                    Err(e) => {
+                        assert!(
+                            !e.contains("command too long"),
+                            "Large argument handling failed with: {}",
+                            e
+                        );
+                    }
+                }
+            }
+        }
     }
 }

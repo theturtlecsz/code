@@ -43,9 +43,9 @@ pub fn default_for(name: &str) -> Option<SubagentCommandConfig> {
             "Use tier-2 routing for specification elaboration. Limit context to the provided spec_id artefacts and any prior clarify outputs. Ensure each agent writes its JSON update back to local-memory with tags `spec:<spec_id>` and `stage:specify` (importance >= 8).",
             "Follow the `speckit.specify` JSON schema in docs/spec-kit/prompts.json. Reference prior clarify artifacts when needed and store the final JSON via `local-memory store_memory` with tags `spec:<spec_id>`, `stage:specify`, `consensus-artifact`.",
         )),
-        "speckit.clarify" => None,  // Native execution - no orchestrator defaults needed
-        "speckit.analyze" => None,  // Native execution - no orchestrator defaults needed
-        "speckit.checklist" => None,  // Native execution - no orchestrator defaults needed
+        "speckit.clarify" => None, // Native execution - no orchestrator defaults needed
+        "speckit.analyze" => None, // Native execution - no orchestrator defaults needed
+        "speckit.checklist" => None, // Native execution - no orchestrator defaults needed
         "speckit.plan" => Some(make_config(
             name,
             true,
@@ -113,4 +113,3 @@ mod tests {
         );
     }
 }
-

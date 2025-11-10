@@ -589,7 +589,7 @@ impl SpecAutoState {
                     stage: stage.display_name().to_string(),
                     trigger: trigger.to_string(),
                     timestamp: super::execution_logger::ExecutionEvent::now(),
-                }
+                },
             );
         }
 

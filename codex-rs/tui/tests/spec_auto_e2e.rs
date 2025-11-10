@@ -6,7 +6,10 @@
 //! - Pipeline state transitions
 //! - Error handling and recovery
 
-use codex_tui::{HalMode, QualityCheckpoint, SpecAutoState, SpecStage, ValidateBeginOutcome, ValidateCompletionReason};
+use codex_tui::{
+    HalMode, QualityCheckpoint, SpecAutoState, SpecStage, ValidateBeginOutcome,
+    ValidateCompletionReason,
+};
 use std::collections::HashSet;
 
 // ============================================================================
@@ -755,7 +758,10 @@ fn test_validate_retry_cycle() {
 
     // Verify cleanup on retry exhaustion
     state.reset_validate_run(ValidateCompletionReason::Cancelled);
-    assert!(state.active_validate_run().is_none(), "Should have no active run after cancel");
+    assert!(
+        state.active_validate_run().is_none(),
+        "Should have no active run after cancel"
+    );
 }
 
 #[test]

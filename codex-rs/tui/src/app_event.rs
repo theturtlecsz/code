@@ -131,7 +131,10 @@ pub(crate) enum AppEvent {
     /// layer so it can be handled centrally. Includes the full command text.
     DispatchCommand(SlashCommand, String),
     /// Submit prompt with ACE-enhanced content (async completion)
-    SubmitPreparedPrompt { display: String, prompt: String },
+    SubmitPreparedPrompt {
+        display: String,
+        prompt: String,
+    },
 
     /// Open undo options for a previously captured snapshot.
     ShowUndoOptions {

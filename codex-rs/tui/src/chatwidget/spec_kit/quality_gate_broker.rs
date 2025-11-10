@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use codex_core::mcp_connection_manager::McpConnectionManager;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::sync::{Mutex, mpsc};
 use tokio::time::{Duration, sleep};
 
@@ -170,12 +170,15 @@ impl QualityGateBroker {
         expected_agents: Vec<String>,
         agent_ids: Vec<String>,
     ) {
-        if let Err(err) = self.sender.send(QualityGateCommand::FetchAgentPayloadsFromMemory {
-            spec_id: spec_id.into(),
-            checkpoint,
-            expected_agents,
-            agent_ids,
-        }) {
+        if let Err(err) = self
+            .sender
+            .send(QualityGateCommand::FetchAgentPayloadsFromMemory {
+                spec_id: spec_id.into(),
+                checkpoint,
+                expected_agents,
+                agent_ids,
+            })
+        {
             tracing::error!("quality gate broker channel closed: {err}");
         }
     }
@@ -218,14 +221,20 @@ async fn fetch_agent_payloads_from_memory(
     let mut info_lines = Vec::new();
     let mut results_map: HashMap<String, QualityGateAgentPayload> = HashMap::new();
 
-    info_lines.push(format!("Collecting from AGENT_MANAGER: {} agents", agent_ids.len()));
+    info_lines.push(format!(
+        "Collecting from AGENT_MANAGER: {} agents",
+        agent_ids.len()
+    ));
 
     // Read from AGENT_MANAGER memory (native orchestrator path)
     let manager = codex_core::agent_tool::AGENT_MANAGER.read().await;
 
     for agent_id in agent_ids {
         if let Some(agent) = manager.get_agent(agent_id) {
-            info_lines.push(format!("Agent {} ({}): {:?}", agent_id, agent.model, agent.status));
+            info_lines.push(format!(
+                "Agent {} ({}): {:?}",
+                agent_id, agent.model, agent.status
+            ));
 
             if let Some(result_text) = &agent.result {
                 info_lines.push(format!("  Result length: {} chars", result_text.len()));
@@ -239,22 +248,33 @@ async fn fetch_agent_payloads_from_memory(
                             Ok(json_val) => {
                                 let stage = json_val.get("stage").and_then(|v| v.as_str());
                                 let agent_name = json_val.get("agent").and_then(|v| v.as_str());
-                                info_lines.push(format!("  JSON stage: {:?}, agent: {:?}", stage, agent_name));
+                                info_lines.push(format!(
+                                    "  JSON stage: {:?}, agent: {:?}",
+                                    stage, agent_name
+                                ));
 
                                 // Check if this is a quality gate artifact
                                 if let Some(stage) = stage {
                                     if stage.starts_with("quality-gate-") {
                                         if let Some(agent_name) = agent_name {
                                             // Match against expected_agents (flexible: exact match or starts-with)
-                                            let matched_expected = expected_agents.iter().find(|expected| {
-                                                let expected_lower = expected.to_lowercase();
-                                                let agent_lower = agent_name.to_lowercase();
-                                                // Exact match OR agent starts with expected (e.g., "claude-haiku-4-5" matches "claude")
-                                                agent_lower == expected_lower || agent_lower.starts_with(&format!("{}-", expected_lower))
-                                            });
+                                            let matched_expected =
+                                                expected_agents.iter().find(|expected| {
+                                                    let expected_lower = expected.to_lowercase();
+                                                    let agent_lower = agent_name.to_lowercase();
+                                                    // Exact match OR agent starts with expected (e.g., "claude-haiku-4-5" matches "claude")
+                                                    agent_lower == expected_lower
+                                                        || agent_lower.starts_with(&format!(
+                                                            "{}-",
+                                                            expected_lower
+                                                        ))
+                                                });
 
                                             if let Some(expected) = matched_expected {
-                                                info_lines.push(format!("Found {} (as '{}') from memory", expected, agent_name));
+                                                info_lines.push(format!(
+                                                    "Found {} (as '{}') from memory",
+                                                    expected, agent_name
+                                                ));
 
                                                 // Use expected name as key for deduplication
                                                 results_map.insert(
@@ -266,21 +286,42 @@ async fn fetch_agent_payloads_from_memory(
                                                     },
                                                 );
                                             } else {
-                                                info_lines.push(format!("  Agent '{}' not in expected list", agent_name));
+                                                info_lines.push(format!(
+                                                    "  Agent '{}' not in expected list",
+                                                    agent_name
+                                                ));
                                             }
                                         } else {
-                                            info_lines.push("  Missing 'agent' field in JSON".to_string());
+                                            info_lines.push(
+                                                "  Missing 'agent' field in JSON".to_string(),
+                                            );
                                         }
                                     } else {
-                                        info_lines.push(format!("  Stage '{}' doesn't start with 'quality-gate-'", stage));
+                                        info_lines.push(format!(
+                                            "  Stage '{}' doesn't start with 'quality-gate-'",
+                                            stage
+                                        ));
                                     }
                                 }
                             }
                             Err(e) => {
                                 info_lines.push(format!("  JSON parse error: {}", e));
                                 info_lines.push(format!("  JSON length: {} chars", json_str.len()));
-                                info_lines.push(format!("  First 200 chars: {}", &json_str.chars().take(200).collect::<String>()));
-                                info_lines.push(format!("  Last 200 chars: {}", &json_str.chars().rev().take(200).collect::<Vec<_>>().into_iter().rev().collect::<String>()));
+                                info_lines.push(format!(
+                                    "  First 200 chars: {}",
+                                    &json_str.chars().take(200).collect::<String>()
+                                ));
+                                info_lines.push(format!(
+                                    "  Last 200 chars: {}",
+                                    &json_str
+                                        .chars()
+                                        .rev()
+                                        .take(200)
+                                        .collect::<Vec<_>>()
+                                        .into_iter()
+                                        .rev()
+                                        .collect::<String>()
+                                ));
                             }
                         }
                     }
@@ -295,7 +336,10 @@ async fn fetch_agent_payloads_from_memory(
                         let mut found_valid_json = false;
 
                         while let Some(relative_pos) = result_text[..search_pos].rfind(marker) {
-                            info_lines.push(format!("  Found stage marker at position {} (searching backwards)", relative_pos));
+                            info_lines.push(format!(
+                                "  Found stage marker at position {} (searching backwards)",
+                                relative_pos
+                            ));
 
                             // Search backwards for opening brace (within 5000 chars to handle large JSON)
                             let search_start = relative_pos.saturating_sub(5000);
@@ -325,12 +369,16 @@ async fn fetch_agent_payloads_from_memory(
 
                                 if json_end_bytes > 0 {
                                     let candidate = &from_open[..json_end_bytes];
-                                    info_lines.push(format!("  Extracted via stage-marker search ({} bytes)", candidate.len()));
+                                    info_lines.push(format!(
+                                        "  Extracted via stage-marker search ({} bytes)",
+                                        candidate.len()
+                                    ));
 
                                     match serde_json::from_str::<Value>(candidate) {
                                         Ok(json_val) => {
                                             // Validate this is actually a quality-gate JSON
-                                            let stage_field = json_val.get("stage").and_then(|v| v.as_str());
+                                            let stage_field =
+                                                json_val.get("stage").and_then(|v| v.as_str());
                                             if stage_field != Some("quality-gate-clarify") {
                                                 info_lines.push(format!("  Extracted JSON has wrong stage field: {:?}, trying earlier occurrence", stage_field));
                                                 // Continue searching for earlier occurrences
@@ -339,12 +387,20 @@ async fn fetch_agent_payloads_from_memory(
                                             }
 
                                             // Valid quality-gate JSON found!
-                                            if let Some(agent_name) = json_val.get("agent").and_then(|v| v.as_str()) {
-                                                let matched_expected = expected_agents.iter().find(|expected| {
-                                                    let expected_lower = expected.to_lowercase();
-                                                    let agent_lower = agent_name.to_lowercase();
-                                                    agent_lower == expected_lower || agent_lower.starts_with(&format!("{}-", expected_lower))
-                                                });
+                                            if let Some(agent_name) =
+                                                json_val.get("agent").and_then(|v| v.as_str())
+                                            {
+                                                let matched_expected =
+                                                    expected_agents.iter().find(|expected| {
+                                                        let expected_lower =
+                                                            expected.to_lowercase();
+                                                        let agent_lower = agent_name.to_lowercase();
+                                                        agent_lower == expected_lower
+                                                            || agent_lower.starts_with(&format!(
+                                                                "{}-",
+                                                                expected_lower
+                                                            ))
+                                                    });
 
                                                 if let Some(expected) = matched_expected {
                                                     info_lines.push(format!("Found {} (via fallback extraction) from memory", expected));
@@ -352,7 +408,9 @@ async fn fetch_agent_payloads_from_memory(
                                                         expected.to_lowercase(),
                                                         QualityGateAgentPayload {
                                                             agent: expected.to_string(),
-                                                            gate: Some("quality-gate-clarify".to_string()),
+                                                            gate: Some(
+                                                                "quality-gate-clarify".to_string(),
+                                                            ),
                                                             content: json_val,
                                                         },
                                                     );
@@ -380,8 +438,13 @@ async fn fetch_agent_payloads_from_memory(
                         }
 
                         if !found_valid_json {
-                            info_lines.push("  No valid quality-gate JSON found in any occurrence".to_string());
-                            info_lines.push(format!("  First 500 chars: {}", &result_text.chars().take(500).collect::<String>()));
+                            info_lines.push(
+                                "  No valid quality-gate JSON found in any occurrence".to_string(),
+                            );
+                            info_lines.push(format!(
+                                "  First 500 chars: {}",
+                                &result_text.chars().take(500).collect::<String>()
+                            ));
                         }
                     }
                 }
@@ -400,16 +463,33 @@ async fn fetch_agent_payloads_from_memory(
         .cloned()
         .collect();
 
-    info_lines.push(format!("Found {}/{} agents via memory", found_agents.len(), expected_agents.len()));
+    info_lines.push(format!(
+        "Found {}/{} agents via memory",
+        found_agents.len(),
+        expected_agents.len()
+    ));
 
     // Accept 2/3 agents as valid consensus (degraded mode)
-    let min_required = if expected_agents.len() >= 3 { 2 } else { expected_agents.len() };
+    let min_required = if expected_agents.len() >= 3 {
+        2
+    } else {
+        expected_agents.len()
+    };
     let is_valid = results_map.len() >= min_required;
 
     if !is_valid {
-        info_lines.push(format!("⚠️ Insufficient: {}/{} (need {})", results_map.len(), expected_agents.len(), min_required));
+        info_lines.push(format!(
+            "⚠️ Insufficient: {}/{} (need {})",
+            results_map.len(),
+            expected_agents.len(),
+            min_required
+        ));
     } else if results_map.len() < expected_agents.len() {
-        info_lines.push(format!("✓ Degraded: {}/{} agents (acceptable)", results_map.len(), expected_agents.len()));
+        info_lines.push(format!(
+            "✓ Degraded: {}/{} agents (acceptable)",
+            results_map.len(),
+            expected_agents.len()
+        ));
     }
 
     QualityGateBrokerResult {
@@ -422,7 +502,12 @@ async fn fetch_agent_payloads_from_memory(
         payload: if is_valid {
             Ok(results_map.values().cloned().collect())
         } else {
-            Err(format!("Only found {}/{} agents (need {})", results_map.len(), expected_agents.len(), min_required))
+            Err(format!(
+                "Only found {}/{} agents (need {})",
+                results_map.len(),
+                expected_agents.len(),
+                min_required
+            ))
         },
     }
 }
@@ -490,9 +575,14 @@ async fn fetch_agent_payloads_from_filesystem(
                             if let Some(stage) = json_val.get("stage").and_then(|v| v.as_str()) {
                                 // Match quality-gate stages
                                 if stage.starts_with("quality-gate-") {
-                                    if let Some(agent) = json_val.get("agent").and_then(|v| v.as_str()) {
+                                    if let Some(agent) =
+                                        json_val.get("agent").and_then(|v| v.as_str())
+                                    {
                                         // Match against expected_agents
-                                        if expected_agents.iter().any(|a| a.to_lowercase() == agent.to_lowercase()) {
+                                        if expected_agents
+                                            .iter()
+                                            .any(|a| a.to_lowercase() == agent.to_lowercase())
+                                        {
                                             info_lines.push(format!(
                                                 "Found {} from {}",
                                                 agent,
@@ -534,7 +624,11 @@ async fn fetch_agent_payloads_from_filesystem(
     let found_agents: Vec<_> = payloads.iter().map(|p| p.agent.clone()).collect();
     let missing_agents: Vec<_> = expected_agents
         .iter()
-        .filter(|a| !found_agents.iter().any(|f| f.to_lowercase() == a.to_lowercase()))
+        .filter(|a| {
+            !found_agents
+                .iter()
+                .any(|f| f.to_lowercase() == a.to_lowercase())
+        })
         .cloned()
         .collect();
 
@@ -687,28 +781,27 @@ fn strip_agent_metadata(content: &str) -> String {
         .skip_while(|line| {
             let trimmed = line.trim();
             // Skip timestamp lines: [2025-11-02T21:09:09]
-            let is_timestamp = trimmed.starts_with('[') &&
-                               trimmed.contains(']') &&
-                               trimmed.len() < 30;
+            let is_timestamp =
+                trimmed.starts_with('[') && trimmed.contains(']') && trimmed.len() < 30;
 
             // Skip version/product lines: OpenAI Codex v0.0.0, Anthropic Claude...
-            let is_version = trimmed.starts_with("OpenAI") ||
-                            trimmed.starts_with("Codex") ||
-                            trimmed.starts_with("Anthropic") ||
-                            trimmed.starts_with("Claude");
+            let is_version = trimmed.starts_with("OpenAI")
+                || trimmed.starts_with("Codex")
+                || trimmed.starts_with("Anthropic")
+                || trimmed.starts_with("Claude");
 
             // Skip separator lines: --------
             let is_separator = trimmed.starts_with("---") || trimmed.starts_with("===");
 
             // Skip config lines: workdir:, model:, provider:, sandbox:, etc.
-            let is_config = trimmed.contains(':') &&
-                           trimmed.len() < 100 &&
-                           (trimmed.starts_with("workdir") ||
-                            trimmed.starts_with("model") ||
-                            trimmed.starts_with("provider") ||
-                            trimmed.starts_with("sandbox") ||
-                            trimmed.starts_with("approval") ||
-                            trimmed.starts_with("reasoning"));
+            let is_config = trimmed.contains(':')
+                && trimmed.len() < 100
+                && (trimmed.starts_with("workdir")
+                    || trimmed.starts_with("model")
+                    || trimmed.starts_with("provider")
+                    || trimmed.starts_with("sandbox")
+                    || trimmed.starts_with("approval")
+                    || trimmed.starts_with("reasoning"));
 
             is_timestamp || is_version || is_separator || is_config
         })
@@ -726,13 +819,16 @@ fn extract_json_from_content(content: &str) -> Option<String> {
     // SPEC-KIT-900 Session 2 fix: Pre-process to remove agent metadata
     let cleaned_content = strip_agent_metadata(content);
     let content_to_parse = if cleaned_content.trim().is_empty() {
-        content  // Fallback to original if stripping removed everything
+        content // Fallback to original if stripping removed everything
     } else {
         &cleaned_content
     };
 
-    tracing::warn!("🔍 Quality gate JSON extraction: original={} bytes, cleaned={} bytes",
-        content.len(), content_to_parse.len());
+    tracing::warn!(
+        "🔍 Quality gate JSON extraction: original={} bytes, cleaned={} bytes",
+        content.len(),
+        content_to_parse.len()
+    );
     // Try markdown fence first
     let lines: Vec<&str> = content_to_parse.lines().collect();
     let mut in_fence = false;
@@ -791,9 +887,10 @@ fn extract_json_from_content(content: &str) -> Option<String> {
                 let candidate = &full_text[open_pos..end_pos];
 
                 // Only consider if it's substantial (>100 chars) and doesn't look like prose
-                if candidate.len() > 100 &&
-                   !candidate.contains("CRITICAL: You MUST") &&
-                   !candidate.contains("Start your response with") {
+                if candidate.len() > 100
+                    && !candidate.contains("CRITICAL: You MUST")
+                    && !candidate.contains("Start your response with")
+                {
                     json_candidates.push(candidate.to_string());
                 }
 
@@ -810,15 +907,18 @@ fn extract_json_from_content(content: &str) -> Option<String> {
     // Skip template/example JSON that contains TypeScript type annotations
     for candidate in &json_candidates {
         // Skip template JSON with type annotations
-        let has_type_annotations = candidate.contains(r#""id": string"#) ||
-                                   candidate.contains(r#""text": string"#) ||
-                                   candidate.contains(r#""question": string"#) ||
-                                   candidate.contains(r#""answer": string"#) ||
-                                   candidate.contains(r#": number"#) ||
-                                   candidate.contains(r#": boolean"#);
+        let has_type_annotations = candidate.contains(r#""id": string"#)
+            || candidate.contains(r#""text": string"#)
+            || candidate.contains(r#""question": string"#)
+            || candidate.contains(r#""answer": string"#)
+            || candidate.contains(r#": number"#)
+            || candidate.contains(r#": boolean"#);
 
         if has_type_annotations {
-            tracing::warn!("🔍 Skipping template JSON ({} bytes) - has type annotations", candidate.len());
+            tracing::warn!(
+                "🔍 Skipping template JSON ({} bytes) - has type annotations",
+                candidate.len()
+            );
             continue;
         }
 
@@ -830,13 +930,18 @@ fn extract_json_from_content(content: &str) -> Option<String> {
 
         // Skip if doesn't contain quality-gate stage marker
         if !candidate.contains(r#""stage":"#) || !candidate.contains("quality-gate-") {
-            tracing::warn!("🔍 Skipping non-quality-gate JSON ({} bytes)", candidate.len());
+            tracing::warn!(
+                "🔍 Skipping non-quality-gate JSON ({} bytes)",
+                candidate.len()
+            );
             continue;
         }
 
-        tracing::warn!("🔍 Trying candidate ({} bytes): {}",
+        tracing::warn!(
+            "🔍 Trying candidate ({} bytes): {}",
             candidate.len(),
-            &candidate.chars().take(200).collect::<String>());
+            &candidate.chars().take(200).collect::<String>()
+        );
 
         match serde_json::from_str::<Value>(candidate) {
             Ok(json_val) => {
@@ -847,17 +952,29 @@ fn extract_json_from_content(content: &str) -> Option<String> {
                         return Some(candidate.clone());
                     } else {
                         tracing::warn!("❌ JSON has wrong stage: {:?}", stage);
-                        tracing::warn!("   JSON preview: {}", &candidate.chars().take(300).collect::<String>());
+                        tracing::warn!(
+                            "   JSON preview: {}",
+                            &candidate.chars().take(300).collect::<String>()
+                        );
                     }
                 } else {
                     tracing::warn!("❌ JSON missing 'stage' field");
-                    tracing::warn!("   JSON has fields: {:?}", json_val.as_object().map(|o| o.keys().collect::<Vec<_>>()));
-                    tracing::warn!("   JSON preview: {}", &candidate.chars().take(300).collect::<String>());
+                    tracing::warn!(
+                        "   JSON has fields: {:?}",
+                        json_val.as_object().map(|o| o.keys().collect::<Vec<_>>())
+                    );
+                    tracing::warn!(
+                        "   JSON preview: {}",
+                        &candidate.chars().take(300).collect::<String>()
+                    );
                 }
             }
             Err(e) => {
                 tracing::warn!("❌ JSON parse error: {}", e);
-                tracing::warn!("   Failed JSON: {}", &candidate.chars().take(500).collect::<String>());
+                tracing::warn!(
+                    "   Failed JSON: {}",
+                    &candidate.chars().take(500).collect::<String>()
+                );
             }
         }
     }
@@ -874,7 +991,9 @@ fn extract_json_from_content(content: &str) -> Option<String> {
             let mut json_end = 0;
 
             for (pos, ch) in from_open.chars().enumerate() {
-                if ch == '{' { depth += 1; }
+                if ch == '{' {
+                    depth += 1;
+                }
                 if ch == '}' {
                     depth -= 1;
                     if depth == 0 {
@@ -955,7 +1074,9 @@ fn extract_json_from_section(content: &str) -> Option<String> {
             let mut depth = 0;
             let mut json_end = 0;
             for (pos, ch) in remaining.chars().enumerate() {
-                if ch == '{' { depth += 1; }
+                if ch == '{' {
+                    depth += 1;
+                }
                 if ch == '}' {
                     depth -= 1;
                     if depth == 0 {

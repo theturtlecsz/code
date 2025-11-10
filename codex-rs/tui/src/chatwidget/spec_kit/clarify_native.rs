@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 /// Severity levels for ambiguity issues
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Severity {
-    Critical, // Blocks implementation
+    Critical,  // Blocks implementation
     Important, // Should fix before implementation
     Minor,     // Nice to fix
 }
@@ -33,13 +33,13 @@ impl Severity {
 /// Detected ambiguity issue
 #[derive(Debug, Clone)]
 pub struct Ambiguity {
-    pub id: String,                  // AMB-001, AMB-002...
-    pub question: String,             // What's unclear?
-    pub location: String,             // "PRD.md:45" or "spec.md:## Data Model"
-    pub severity: Severity,           // Critical, Important, Minor
-    pub pattern: String,              // Which pattern triggered it
-    pub context: String,              // Surrounding text
-    pub suggestion: Option<String>,   // Auto-fix if obvious
+    pub id: String,                 // AMB-001, AMB-002...
+    pub question: String,           // What's unclear?
+    pub location: String,           // "PRD.md:45" or "spec.md:## Data Model"
+    pub severity: Severity,         // Critical, Important, Minor
+    pub pattern: String,            // Which pattern triggered it
+    pub context: String,            // Surrounding text
+    pub suggestion: Option<String>, // Auto-fix if obvious
 }
 
 /// Pattern detector for ambiguity analysis
@@ -98,7 +98,12 @@ impl PatternDetector {
     }
 
     /// Check for incomplete markers
-    fn check_incomplete_markers(&self, content: &str, line_num: usize, issues: &mut Vec<Ambiguity>) {
+    fn check_incomplete_markers(
+        &self,
+        content: &str,
+        line_num: usize,
+        issues: &mut Vec<Ambiguity>,
+    ) {
         if let Some(mat) = self.incomplete_markers.find(content) {
             let marker = mat.as_str();
             issues.push(Ambiguity {
@@ -114,7 +119,12 @@ impl PatternDetector {
     }
 
     /// Check for quantifier ambiguity
-    fn check_quantifier_ambiguity(&self, content: &str, line_num: usize, issues: &mut Vec<Ambiguity>) {
+    fn check_quantifier_ambiguity(
+        &self,
+        content: &str,
+        line_num: usize,
+        issues: &mut Vec<Ambiguity>,
+    ) {
         // Only flag if no metrics present in same line
         if self.quantifier_ambiguity.is_match(content) && !has_metrics(content) {
             if let Some(mat) = self.quantifier_ambiguity.find(content) {
@@ -187,7 +197,10 @@ fn check_missing_sections(content: &str, file_path: &str, issues: &mut Vec<Ambig
                 severity,
                 pattern: "missing_section".to_string(),
                 context: format!("Section '{}' not found", section),
-                suggestion: Some(format!("Add '## {}' section with detailed criteria", section)),
+                suggestion: Some(format!(
+                    "Add '## {}' section with detailed criteria",
+                    section
+                )),
             });
         }
     }
@@ -213,7 +226,8 @@ fn check_undefined_terms(content: &str, issues: &mut Vec<Ambiguity>) {
             let re = Regex::new(pattern_str).unwrap();
             if re.is_match(line) && !first_uses.contains(*term) {
                 // Check if definition follows (naive: looks for colon or dash after term)
-                let definition_re = Regex::new(&format!(r"{}(\s*[:\-]|\s+is\s+)", regex_escape(term))).unwrap();
+                let definition_re =
+                    Regex::new(&format!(r"{}(\s*[:\-]|\s+is\s+)", regex_escape(term))).unwrap();
 
                 if !definition_re.is_match(line) {
                     issues.push(Ambiguity {
@@ -240,7 +254,7 @@ pub fn find_ambiguities(spec_id: &str, cwd: &Path) -> Result<Vec<Ambiguity>> {
 
     // Files to scan (in priority order)
     let files_to_scan = vec![
-        ("PRD.md", true),  // required
+        ("PRD.md", true),   // required
         ("spec.md", false), // optional
         ("plan.md", false), // optional
     ];
@@ -265,8 +279,8 @@ pub fn find_ambiguities(spec_id: &str, cwd: &Path) -> Result<Vec<Ambiguity>> {
             continue;
         }
 
-        let content = fs::read_to_string(&file_path)
-            .map_err(|e| SpecKitError::file_read(&file_path, e))?;
+        let content =
+            fs::read_to_string(&file_path).map_err(|e| SpecKitError::file_read(&file_path, e))?;
 
         // Check for missing sections (PRD only)
         if filename == "PRD.md" {
@@ -296,16 +310,14 @@ pub fn find_ambiguities(spec_id: &str, cwd: &Path) -> Result<Vec<Ambiguity>> {
     }
 
     // Sort by severity (Critical first)
-    all_issues.sort_by(|a, b| {
-        match (&a.severity, &b.severity) {
-            (Severity::Critical, Severity::Critical) => std::cmp::Ordering::Equal,
-            (Severity::Critical, _) => std::cmp::Ordering::Less,
-            (_, Severity::Critical) => std::cmp::Ordering::Greater,
-            (Severity::Important, Severity::Important) => std::cmp::Ordering::Equal,
-            (Severity::Important, _) => std::cmp::Ordering::Less,
-            (_, Severity::Important) => std::cmp::Ordering::Greater,
-            _ => std::cmp::Ordering::Equal,
-        }
+    all_issues.sort_by(|a, b| match (&a.severity, &b.severity) {
+        (Severity::Critical, Severity::Critical) => std::cmp::Ordering::Equal,
+        (Severity::Critical, _) => std::cmp::Ordering::Less,
+        (_, Severity::Critical) => std::cmp::Ordering::Greater,
+        (Severity::Important, Severity::Important) => std::cmp::Ordering::Equal,
+        (Severity::Important, _) => std::cmp::Ordering::Less,
+        (_, Severity::Important) => std::cmp::Ordering::Greater,
+        _ => std::cmp::Ordering::Equal,
     });
 
     // Re-number after sorting
@@ -415,13 +427,11 @@ mod tests {
         };
 
         let mut issues = vec![minor.clone(), critical.clone()];
-        issues.sort_by(|a, b| {
-            match (&a.severity, &b.severity) {
-                (Severity::Critical, Severity::Critical) => std::cmp::Ordering::Equal,
-                (Severity::Critical, _) => std::cmp::Ordering::Less,
-                (_, Severity::Critical) => std::cmp::Ordering::Greater,
-                _ => std::cmp::Ordering::Equal,
-            }
+        issues.sort_by(|a, b| match (&a.severity, &b.severity) {
+            (Severity::Critical, Severity::Critical) => std::cmp::Ordering::Equal,
+            (Severity::Critical, _) => std::cmp::Ordering::Less,
+            (_, Severity::Critical) => std::cmp::Ordering::Greater,
+            _ => std::cmp::Ordering::Equal,
         });
 
         assert_eq!(issues[0].severity, Severity::Critical);

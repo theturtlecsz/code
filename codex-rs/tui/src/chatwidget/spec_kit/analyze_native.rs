@@ -16,8 +16,8 @@ use std::path::{Path, PathBuf};
 /// Inconsistency issue detected across artifacts
 #[derive(Debug, Clone)]
 pub struct InconsistencyIssue {
-    pub id: String,              // INC-001...
-    pub issue_type: String,      // "ID mismatch", "missing coverage", etc.
+    pub id: String,         // INC-001...
+    pub issue_type: String, // "ID mismatch", "missing coverage", etc.
     pub severity: Severity,
     pub source_file: String,     // "PRD.md"
     pub target_file: String,     // "plan.md"
@@ -30,10 +30,10 @@ pub struct InconsistencyIssue {
 /// Requirement reference (FR-001, NFR-002, etc.)
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct RequirementRef {
-    id: String,        // FR-001
-    file: String,      // PRD.md
-    line: usize,       // Line number
-    context: String,   // Brief description
+    id: String,      // FR-001
+    file: String,    // PRD.md
+    line: usize,     // Line number
+    context: String, // Brief description
 }
 
 /// Check cross-artifact consistency
@@ -65,25 +65,31 @@ pub fn check_consistency(spec_id: &str, cwd: &Path) -> Result<Vec<InconsistencyI
         return Ok(issues);
     }
 
-    let prd_content = fs::read_to_string(&prd_path)
-        .map_err(|e| SpecKitError::file_read(&prd_path, e))?;
+    let prd_content =
+        fs::read_to_string(&prd_path).map_err(|e| SpecKitError::file_read(&prd_path, e))?;
 
     // Extract requirements from PRD
     let prd_requirements = extract_requirements(&prd_content, "PRD.md");
 
     // Check ID consistency across artifacts
     if plan_path.exists() {
-        let plan_content = fs::read_to_string(&plan_path)
-            .map_err(|e| SpecKitError::file_read(&plan_path, e))?;
+        let plan_content =
+            fs::read_to_string(&plan_path).map_err(|e| SpecKitError::file_read(&plan_path, e))?;
         check_id_consistency(&prd_requirements, &plan_content, "plan.md", &mut issues);
         check_requirement_coverage(&prd_requirements, &plan_content, "plan.md", &mut issues);
-        check_contradiction_detection(&prd_content, &plan_content, "PRD.md", "plan.md", &mut issues);
+        check_contradiction_detection(
+            &prd_content,
+            &plan_content,
+            "PRD.md",
+            "plan.md",
+            &mut issues,
+        );
         check_version_drift(&prd_path, &plan_path, &mut issues)?;
     }
 
     if tasks_path.exists() {
-        let tasks_content = fs::read_to_string(&tasks_path)
-            .map_err(|e| SpecKitError::file_read(&tasks_path, e))?;
+        let tasks_content =
+            fs::read_to_string(&tasks_path).map_err(|e| SpecKitError::file_read(&tasks_path, e))?;
         check_orphan_tasks(&prd_requirements, &tasks_content, &mut issues);
     }
 
@@ -96,22 +102,20 @@ pub fn check_consistency(spec_id: &str, cwd: &Path) -> Result<Vec<InconsistencyI
 
     // Check scope creep (plan has features not in PRD)
     if plan_path.exists() {
-        let plan_content = fs::read_to_string(&plan_path)
-            .map_err(|e| SpecKitError::file_read(&plan_path, e))?;
+        let plan_content =
+            fs::read_to_string(&plan_path).map_err(|e| SpecKitError::file_read(&plan_path, e))?;
         check_scope_creep(&prd_requirements, &plan_content, &mut issues);
     }
 
     // Sort by severity
-    issues.sort_by(|a, b| {
-        match (&a.severity, &b.severity) {
-            (Severity::Critical, Severity::Critical) => std::cmp::Ordering::Equal,
-            (Severity::Critical, _) => std::cmp::Ordering::Less,
-            (_, Severity::Critical) => std::cmp::Ordering::Greater,
-            (Severity::Important, Severity::Important) => std::cmp::Ordering::Equal,
-            (Severity::Important, _) => std::cmp::Ordering::Less,
-            (_, Severity::Important) => std::cmp::Ordering::Greater,
-            _ => std::cmp::Ordering::Equal,
-        }
+    issues.sort_by(|a, b| match (&a.severity, &b.severity) {
+        (Severity::Critical, Severity::Critical) => std::cmp::Ordering::Equal,
+        (Severity::Critical, _) => std::cmp::Ordering::Less,
+        (_, Severity::Critical) => std::cmp::Ordering::Greater,
+        (Severity::Important, Severity::Important) => std::cmp::Ordering::Equal,
+        (Severity::Important, _) => std::cmp::Ordering::Less,
+        (_, Severity::Important) => std::cmp::Ordering::Greater,
+        _ => std::cmp::Ordering::Equal,
     });
 
     // Re-number
@@ -164,8 +168,14 @@ fn check_id_consistency(
                 target_file: target_file.to_string(),
                 source_location: "NOT FOUND".to_string(),
                 target_location: format!("line {}", target_req.line),
-                description: format!("ID '{}' referenced in {} but not defined in PRD", target_req.id, target_file),
-                suggested_fix: Some(format!("Add '{}' to PRD or remove from {}", target_req.id, target_file)),
+                description: format!(
+                    "ID '{}' referenced in {} but not defined in PRD",
+                    target_req.id, target_file
+                ),
+                suggested_fix: Some(format!(
+                    "Add '{}' to PRD or remove from {}",
+                    target_req.id, target_file
+                )),
             });
         }
     }
@@ -229,7 +239,9 @@ fn check_contradiction_detection(
 
         if let Some((plan_line_num, plan_line)) = plan_context {
             // Check for contradictions
-            if prd_line.to_lowercase().contains("must") && plan_line.to_lowercase().contains("optional") {
+            if prd_line.to_lowercase().contains("must")
+                && plan_line.to_lowercase().contains("optional")
+            {
                 issues.push(InconsistencyIssue {
                     id: format!("INC-{:03}", issues.len() + 1),
                     issue_type: "contradiction".to_string(),
@@ -238,12 +250,19 @@ fn check_contradiction_detection(
                     target_file: plan_file.to_string(),
                     source_location: format!("line {}", prd_req.line),
                     target_location: format!("line {}", plan_line_num),
-                    description: format!("Contradiction: '{}' is 'must' in PRD but 'optional' in plan", prd_req.id),
-                    suggested_fix: Some("Align PRD and plan - clarify if truly required".to_string()),
+                    description: format!(
+                        "Contradiction: '{}' is 'must' in PRD but 'optional' in plan",
+                        prd_req.id
+                    ),
+                    suggested_fix: Some(
+                        "Align PRD and plan - clarify if truly required".to_string(),
+                    ),
                 });
             }
 
-            if prd_line.to_lowercase().contains("real-time") && plan_line.to_lowercase().contains("batch") {
+            if prd_line.to_lowercase().contains("real-time")
+                && plan_line.to_lowercase().contains("batch")
+            {
                 issues.push(InconsistencyIssue {
                     id: format!("INC-{:03}", issues.len() + 1),
                     issue_type: "contradiction".to_string(),
@@ -252,7 +271,10 @@ fn check_contradiction_detection(
                     target_file: plan_file.to_string(),
                     source_location: format!("line {}", prd_req.line),
                     target_location: format!("line {}", plan_line_num),
-                    description: format!("Contradiction: '{}' requires real-time in PRD but batch in plan", prd_req.id),
+                    description: format!(
+                        "Contradiction: '{}' requires real-time in PRD but batch in plan",
+                        prd_req.id
+                    ),
                     suggested_fix: Some("Align PRD and plan on processing model".to_string()),
                 });
             }
@@ -292,14 +314,15 @@ fn check_version_drift(
     plan_path: &Path,
     issues: &mut Vec<InconsistencyIssue>,
 ) -> Result<()> {
-    let prd_metadata = fs::metadata(prd_path)
-        .map_err(|e| SpecKitError::file_read(prd_path, e))?;
-    let plan_metadata = fs::metadata(plan_path)
-        .map_err(|e| SpecKitError::file_read(plan_path, e))?;
+    let prd_metadata = fs::metadata(prd_path).map_err(|e| SpecKitError::file_read(prd_path, e))?;
+    let plan_metadata =
+        fs::metadata(plan_path).map_err(|e| SpecKitError::file_read(plan_path, e))?;
 
-    let prd_modified = prd_metadata.modified()
+    let prd_modified = prd_metadata
+        .modified()
         .map_err(|e| SpecKitError::file_read(prd_path, e))?;
-    let plan_modified = plan_metadata.modified()
+    let plan_modified = plan_metadata
+        .modified()
         .map_err(|e| SpecKitError::file_read(plan_path, e))?;
 
     // If PRD is newer than plan by more than 1 minute, flag it
@@ -317,7 +340,9 @@ fn check_version_drift(
                     "PRD modified {} seconds after plan - plan may be stale",
                     duration.as_secs()
                 ),
-                suggested_fix: Some("Regenerate plan with /speckit.plan if PRD changed significantly".to_string()),
+                suggested_fix: Some(
+                    "Regenerate plan with /speckit.plan if PRD changed significantly".to_string(),
+                ),
             });
         }
     }
@@ -335,7 +360,8 @@ fn check_scope_creep(
     let prd_ids: HashSet<&str> = prd_requirements.iter().map(|r| r.id.as_str()).collect();
 
     // Count how many plan requirements are NOT in PRD
-    let orphan_count = plan_requirements.iter()
+    let orphan_count = plan_requirements
+        .iter()
         .filter(|r| !prd_ids.contains(r.id.as_str()))
         .count();
 
@@ -357,7 +383,10 @@ fn check_scope_creep(
                     plan_requirements.len(),
                     orphan_ratio * 100.0
                 ),
-                suggested_fix: Some("Review plan and add missing requirements to PRD or remove from plan".to_string()),
+                suggested_fix: Some(
+                    "Review plan and add missing requirements to PRD or remove from plan"
+                        .to_string(),
+                ),
             });
         }
     }
@@ -372,7 +401,9 @@ fn check_constitution_compliance(
     // Extract rules from constitution (simple heuristic: "MUST", "MUST NOT")
     let must_rules: Vec<&str> = constitution_content
         .lines()
-        .filter(|line| line.to_uppercase().contains("MUST") && !line.to_uppercase().contains("MUST NOT"))
+        .filter(|line| {
+            line.to_uppercase().contains("MUST") && !line.to_uppercase().contains("MUST NOT")
+        })
         .collect();
 
     let must_not_rules: Vec<&str> = constitution_content
@@ -385,10 +416,7 @@ fn check_constitution_compliance(
         // Extract keywords from rule (naive: words after "MUST NOT")
         if let Some(pos) = rule.to_uppercase().find("MUST NOT") {
             let keywords_part = &rule[pos + 8..];
-            let keywords: Vec<&str> = keywords_part
-                .split_whitespace()
-                .take(3)
-                .collect();
+            let keywords: Vec<&str> = keywords_part.split_whitespace().take(3).collect();
 
             for keyword in keywords {
                 let keyword_lower = keyword.to_lowercase();

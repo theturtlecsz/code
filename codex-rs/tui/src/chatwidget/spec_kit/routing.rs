@@ -143,11 +143,7 @@ pub fn try_dispatch_spec_kit_command(
         );
 
         // Submit with ACE injection (async, event-based)
-        widget.submit_prompt_with_ace(
-            command_text.to_string(),
-            formatted.prompt,
-            config_name,
-        );
+        widget.submit_prompt_with_ace(command_text.to_string(), formatted.prompt, config_name);
     } else {
         // Direct execution: persist to history then execute
         let _ = app_event_tx.send(AppEvent::CodexOp(Op::AddToHistory {

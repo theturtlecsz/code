@@ -60,14 +60,15 @@ pub async fn spawn_quality_gate_agents_native(
         QualityGateType::Analyze => "quality-gate-analyze",
     };
 
-    let gate_prompts = prompts.get(gate_key)
+    let gate_prompts = prompts
+        .get(gate_key)
         .ok_or_else(|| format!("No prompts found for {}", gate_key))?;
 
     // Define the 3 agents to spawn (SPEC-KIT-070 Tier 2: cheapest models for quality gates)
     let agent_spawn_configs = vec![
-        ("gemini", "gemini_flash"),  // gemini-2.5-flash (cheapest)
-        ("claude", "claude_haiku"),  // claude-haiku (cheapest)
-        ("code", "gpt_low"),         // gpt-5 low reasoning (cheapest, matches flash/haiku tier)
+        ("gemini", "gemini_flash"), // gemini-2.5-flash (cheapest)
+        ("claude", "claude_haiku"), // claude-haiku (cheapest)
+        ("code", "gpt_low"),        // gpt-5 low reasoning (cheapest, matches flash/haiku tier)
     ];
 
     let mut spawn_infos = Vec::new();
@@ -75,18 +76,14 @@ pub async fn spawn_quality_gate_agents_native(
 
     // Spawn each agent
     for (agent_name, config_name) in agent_spawn_configs {
-        let prompt_template = gate_prompts.get(agent_name)
+        let prompt_template = gate_prompts
+            .get(agent_name)
             .and_then(|v| v.get("prompt"))
             .and_then(|v| v.as_str())
             .ok_or_else(|| format!("No prompt found for {} in {}", agent_name, gate_key))?;
 
         // Build prompt with SPEC context
-        let prompt = build_quality_gate_prompt(
-            spec_id,
-            gate,
-            prompt_template,
-            cwd,
-        ).await?;
+        let prompt = build_quality_gate_prompt(spec_id, gate, prompt_template, cwd).await?;
 
         // Get prompt preview (first 200 chars)
         let prompt_preview = if prompt.len() > 200 {
@@ -97,14 +94,17 @@ pub async fn spawn_quality_gate_agents_native(
 
         // Spawn agent via AgentManager using config lookup
         let mut manager = AGENT_MANAGER.write().await;
-        let agent_id = manager.create_agent_from_config_name(
-            config_name, // Config name (e.g., "gemini_flash", "claude_haiku")
-            agent_configs,
-            prompt,
-            true, // read_only
-            Some(batch_id.clone()),
-            false, // tmux_enabled - quality gates don't use tmux (too fast)
-        ).await.map_err(|e| format!("Failed to spawn {}: {}", config_name, e))?;
+        let agent_id = manager
+            .create_agent_from_config_name(
+                config_name, // Config name (e.g., "gemini_flash", "claude_haiku")
+                agent_configs,
+                prompt,
+                true, // read_only
+                Some(batch_id.clone()),
+                false, // tmux_enabled - quality gates don't use tmux (too fast)
+            )
+            .await
+            .map_err(|e| format!("Failed to spawn {}: {}", config_name, e))?;
 
         // Record agent spawn to SQLite for definitive routing at completion
         if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
@@ -119,8 +119,12 @@ pub async fn spawn_quality_gate_agents_native(
             ) {
                 tracing::warn!("Failed to record agent spawn for {}: {}", agent_name, e);
             } else {
-                tracing::info!("Recorded quality gate agent spawn: {} ({}) with run_id={:?}",
-                    agent_name, agent_id, run_id);
+                tracing::info!(
+                    "Recorded quality gate agent spawn: {} ({}) with run_id={:?}",
+                    agent_name,
+                    agent_id,
+                    run_id
+                );
             }
         }
 
@@ -147,12 +151,12 @@ async fn build_quality_gate_prompt(
 
     // Read SPEC files
     let spec_md = spec_dir.join("spec.md");
-    let spec_content = std::fs::read_to_string(&spec_md)
-        .map_err(|e| format!("Failed to read spec.md: {}", e))?;
+    let spec_content =
+        std::fs::read_to_string(&spec_md).map_err(|e| format!("Failed to read spec.md: {}", e))?;
 
     let prd_md = spec_dir.join("PRD.md");
-    let prd_content = std::fs::read_to_string(&prd_md)
-        .map_err(|e| format!("Failed to read PRD.md: {}", e))?;
+    let prd_content =
+        std::fs::read_to_string(&prd_md).map_err(|e| format!("Failed to read PRD.md: {}", e))?;
 
     // Build context
     let context = format!(
@@ -164,9 +168,7 @@ async fn build_quality_gate_prompt(
 ## PRD.md
 {}
 "#,
-        spec_id,
-        spec_content,
-        prd_content
+        spec_id, spec_content, prd_content
     );
 
     // Replace placeholders
@@ -204,11 +206,16 @@ pub async fn wait_for_quality_gate_agents(
                 match agent.status {
                     AgentStatus::Completed | AgentStatus::Failed | AgentStatus::Cancelled => {
                         // Agent done - record completion to SQLite (once)
-                        if matches!(agent.status, AgentStatus::Completed) && !recorded_completions.contains(agent_id) {
+                        if matches!(agent.status, AgentStatus::Completed)
+                            && !recorded_completions.contains(agent_id)
+                        {
                             if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
                                 if let Some(result) = &agent.result {
                                     let _ = db.record_agent_completion(agent_id, result);
-                                    tracing::info!("Recorded quality gate completion: {}", agent_id);
+                                    tracing::info!(
+                                        "Recorded quality gate completion: {}",
+                                        agent_id
+                                    );
                                     recorded_completions.insert(agent_id.clone());
                                 }
                             }

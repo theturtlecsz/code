@@ -6832,7 +6832,10 @@ impl ChatWidget<'_> {
                 context,
                 task,
             }) => {
-                tracing::warn!("DEBUG: AgentStatusUpdate event received, {} agents", agents.len());
+                tracing::warn!(
+                    "DEBUG: AgentStatusUpdate event received, {} agents",
+                    agents.len()
+                );
                 // Update the active agents list from the event and track timing
                 self.active_agents.clear();
                 let now = Instant::now();
@@ -6890,20 +6893,35 @@ impl ChatWidget<'_> {
                             .agent_runtime
                             .values()
                             .all(|rt| rt.completed_at.is_some());
-                    tracing::warn!("DEBUG: Agent terminal check - all_terminal={}, runtime_count={}", all_agents_terminal, self.agent_runtime.len());
+                    tracing::warn!(
+                        "DEBUG: Agent terminal check - all_terminal={}, runtime_count={}",
+                        all_agents_terminal,
+                        self.agent_runtime.len()
+                    );
                     if all_agents_terminal {
                         let any_tools_running = !self.exec.running_commands.is_empty()
                             || !self.tools_state.running_custom_tools.is_empty()
                             || !self.tools_state.running_web_search.is_empty();
                         let any_streaming = self.stream.is_write_cycle_active();
-                        tracing::warn!("DEBUG: Tools running={}, streaming={}", any_tools_running, any_streaming);
+                        tracing::warn!(
+                            "DEBUG: Tools running={}, streaming={}",
+                            any_tools_running,
+                            any_streaming
+                        );
 
                         // Log completion check for spec-auto observability
                         if let Some(state) = self.spec_auto_state.as_ref() {
                             if let Some(run_id) = &state.run_id {
                                 if let Some(stage) = state.current_stage() {
-                                    let completed_count = self.active_agents.iter()
-                                        .filter(|a| matches!(a.status, crate::chatwidget::AgentStatus::Completed))
+                                    let completed_count = self
+                                        .active_agents
+                                        .iter()
+                                        .filter(|a| {
+                                            matches!(
+                                                a.status,
+                                                crate::chatwidget::AgentStatus::Completed
+                                            )
+                                        })
                                         .count();
 
                                     state.execution_logger.log_event(
@@ -6924,14 +6942,20 @@ impl ChatWidget<'_> {
                         }
 
                         if !(any_tools_running || any_streaming) {
-                            tracing::warn!("DEBUG: All agents terminal, no tools/streaming, calling spec_kit completion handler");
+                            tracing::warn!(
+                                "DEBUG: All agents terminal, no tools/streaming, calling spec_kit completion handler"
+                            );
                             self.bottom_pane.set_task_running(false);
                             self.bottom_pane.update_status_text(String::new());
 
                             // NEW: Check if this is part of spec-auto pipeline
-                            tracing::warn!("DEBUG: About to call spec_kit::on_spec_auto_agents_complete");
+                            tracing::warn!(
+                                "DEBUG: About to call spec_kit::on_spec_auto_agents_complete"
+                            );
                             spec_kit::on_spec_auto_agents_complete(self);
-                            tracing::warn!("DEBUG: Returned from spec_kit::on_spec_auto_agents_complete");
+                            tracing::warn!(
+                                "DEBUG: Returned from spec_kit::on_spec_auto_agents_complete"
+                            );
                             self.finish_manual_validate_runs_if_idle();
                         }
                     }
@@ -7096,8 +7120,7 @@ impl ChatWidget<'_> {
     }
 
     pub(crate) fn cost_summary_dir(&self) -> PathBuf {
-        self
-            .config
+        self.config
             .cwd
             .join(spec_kit::evidence::DEFAULT_EVIDENCE_BASE)
             .join("costs")
@@ -13596,14 +13619,16 @@ impl ChatWidget<'_> {
 
         // Show preparing message
         self.history_push(crate::history_cell::PlainHistoryCell::new(
-            vec![ratatui::text::Line::from("⏳ Preparing prompt with ACE context...")],
+            vec![ratatui::text::Line::from(
+                "⏳ Preparing prompt with ACE context...",
+            )],
             crate::history_cell::HistoryCellType::Notice,
         ));
 
         // Clone data for async task
         let config = self.config.ace.clone();
-        let repo_root = spec_kit::routing::get_repo_root(&self.config.cwd)
-            .unwrap_or_else(|| ".".to_string());
+        let repo_root =
+            spec_kit::routing::get_repo_root(&self.config.cwd).unwrap_or_else(|| ".".to_string());
         let branch = spec_kit::routing::get_current_branch(&self.config.cwd)
             .unwrap_or_else(|| "main".to_string());
         let cmd_name = command_name.to_string();

@@ -110,9 +110,12 @@ pub(crate) fn persist_cost_summary(widget: &mut ChatWidget, spec_id: &str) {
         if let Some(stage) = state.current_stage() {
             let effort = state.aggregator_effort_notes.get(&stage).cloned();
             let reason = state.escalation_reason_notes.get(&stage).cloned();
-            widget
-                .spec_cost_tracker()
-                .set_stage_routing_note(spec_id, stage, effort.as_deref(), reason.as_deref());
+            widget.spec_cost_tracker().set_stage_routing_note(
+                spec_id,
+                stage,
+                effort.as_deref(),
+                reason.as_deref(),
+            );
         }
     }
     if let Err(err) = widget.spec_cost_tracker().write_summary(spec_id, &dir) {

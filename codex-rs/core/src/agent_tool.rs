@@ -202,17 +202,19 @@ impl AgentManager {
         // The actual model/args come from config
         let base_command = agent_config.command.clone();
 
-        let agent_id = self.create_agent_internal(
-            base_command,  // "gemini", "claude", "codex", etc. (for execute_agent matching)
-            prompt,
-            None, // context
-            None, // output_goal
-            vec![], // files
-            read_only,
-            batch_id,
-            Some(agent_config.clone()),
-            tmux_enabled,
-        ).await;
+        let agent_id = self
+            .create_agent_internal(
+                base_command, // "gemini", "claude", "codex", etc. (for execute_agent matching)
+                prompt,
+                None,   // context
+                None,   // output_goal
+                vec![], // files
+                read_only,
+                batch_id,
+                Some(agent_config.clone()),
+                tmux_enabled,
+            )
+            .await;
 
         Ok(agent_id)
     }
@@ -775,7 +777,10 @@ async fn execute_model_with_permissions(
 
         // Ensure session exists
         if let Err(e) = crate::tmux::ensure_session(&session_name).await {
-            tracing::warn!("Failed to create tmux session, falling back to normal execution: {}", e);
+            tracing::warn!(
+                "Failed to create tmux session, falling back to normal execution: {}",
+                e
+            );
             // Fall through to normal execution
         } else {
             // Create pane for this agent
@@ -783,7 +788,8 @@ async fn execute_model_with_permissions(
             match crate::tmux::create_pane(&session_name, &pane_title, false).await {
                 Ok(pane_id) => {
                     // Build environment map
-                    let mut env: std::collections::HashMap<String, String> = std::env::vars().collect();
+                    let mut env: std::collections::HashMap<String, String> =
+                        std::env::vars().collect();
                     if let Some(ref cfg) = config {
                         if let Some(ref e) = cfg.env {
                             for (k, v) in e {
@@ -793,13 +799,14 @@ async fn execute_model_with_permissions(
                     }
 
                     // Build command string with args
-                    let program = if (model_lower == "code" || model_lower == "codex") && config.is_none() {
-                        std::env::current_exe()
-                            .map(|p| p.to_string_lossy().to_string())
-                            .unwrap_or_else(|_| command.clone())
-                    } else {
-                        command.clone()
-                    };
+                    let program =
+                        if (model_lower == "code" || model_lower == "codex") && config.is_none() {
+                            std::env::current_exe()
+                                .map(|p| p.to_string_lossy().to_string())
+                                .unwrap_or_else(|_| command.clone())
+                        } else {
+                            command.clone()
+                        };
 
                     // Build args exactly as normal execution would
                     let mut args: Vec<String> = Vec::new();
@@ -819,7 +826,8 @@ async fn execute_model_with_permissions(
 
                     match model_name {
                         "claude" | "gemini" | "qwen" => {
-                            let mut defaults = crate::agent_defaults::default_params_for(model_name, read_only);
+                            let mut defaults =
+                                crate::agent_defaults::default_params_for(model_name, read_only);
                             defaults.push("-p".into());
                             defaults.push(prompt.to_string());
                             args.extend(defaults);
@@ -838,7 +846,9 @@ async fn execute_model_with_permissions(
                             if have_mode_args {
                                 args.push(prompt.to_string());
                             } else {
-                                let mut defaults = crate::agent_defaults::default_params_for(model_name, read_only);
+                                let mut defaults = crate::agent_defaults::default_params_for(
+                                    model_name, read_only,
+                                );
                                 defaults.push(prompt.to_string());
                                 args.extend(defaults);
                             }
@@ -856,9 +866,14 @@ async fn execute_model_with_permissions(
                         &env,
                         working_dir.as_deref(),
                         timeout_secs,
-                    ).await {
+                    )
+                    .await
+                    {
                         Ok(output) => {
-                            tracing::info!("Agent completed via tmux pane, {} bytes output", output.len());
+                            tracing::info!(
+                                "Agent completed via tmux pane, {} bytes output",
+                                output.len()
+                            );
 
                             // Print attach instructions for user
                             let instructions = crate::tmux::get_attach_instructions(&session_name);
@@ -867,13 +882,19 @@ async fn execute_model_with_permissions(
                             return Ok(output);
                         }
                         Err(e) => {
-                            tracing::warn!("Tmux execution failed, falling back to normal execution: {}", e);
+                            tracing::warn!(
+                                "Tmux execution failed, falling back to normal execution: {}",
+                                e
+                            );
                             // Fall through to normal execution
                         }
                     }
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to create tmux pane, falling back to normal execution: {}", e);
+                    tracing::warn!(
+                        "Failed to create tmux pane, falling back to normal execution: {}",
+                        e
+                    );
                     // Fall through to normal execution
                 }
             }

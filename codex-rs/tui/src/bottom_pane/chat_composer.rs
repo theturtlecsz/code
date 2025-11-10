@@ -1591,9 +1591,14 @@ impl ChatComposer {
                             .filter(|n| {
                                 let l = n.to_ascii_lowercase();
                                 // SPEC-KIT-070 Phase 2+3: Filter out native commands (no agents)
-                                l != "plan" && l != "solve" && l != "code"
-                                    && l != "speckit.clarify" && l != "speckit.analyze" && l != "speckit.checklist"
-                                    && l != "speckit.new" && l != "speckit.status"
+                                l != "plan"
+                                    && l != "solve"
+                                    && l != "code"
+                                    && l != "speckit.clarify"
+                                    && l != "speckit.analyze"
+                                    && l != "speckit.checklist"
+                                    && l != "speckit.new"
+                                    && l != "speckit.status"
                             })
                             .collect();
                         // Stable sort for presentation

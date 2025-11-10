@@ -30,17 +30,27 @@ pub fn auto_commit_stage_artifacts(
     auto_commit_enabled: bool,
 ) -> Result<()> {
     if !auto_commit_enabled {
-        tracing::debug!("Auto-commit disabled, skipping for {} stage", stage.display_name());
+        tracing::debug!(
+            "Auto-commit disabled, skipping for {} stage",
+            stage.display_name()
+        );
         return Ok(());
     }
 
-    tracing::info!("Auto-committing {} stage artifacts for {}", stage.display_name(), spec_id);
+    tracing::info!(
+        "Auto-committing {} stage artifacts for {}",
+        stage.display_name(),
+        spec_id
+    );
 
     // 1. Collect paths to commit
     let paths_to_commit = collect_stage_artifact_paths(spec_id, stage, cwd)?;
 
     if paths_to_commit.is_empty() {
-        tracing::debug!("No stage artifacts found to commit for {} stage", stage.display_name());
+        tracing::debug!(
+            "No stage artifacts found to commit for {} stage",
+            stage.display_name()
+        );
         return Ok(());
     }
 
@@ -54,7 +64,10 @@ pub fn auto_commit_stage_artifacts(
 
     // 3. Check if there are changes to commit
     if !has_staged_changes(cwd)? {
-        tracing::info!("No changes staged for {} stage (files may already be committed)", stage.display_name());
+        tracing::info!(
+            "No changes staged for {} stage (files may already be committed)",
+            stage.display_name()
+        );
         return Ok(());
     }
 
@@ -62,7 +75,11 @@ pub fn auto_commit_stage_artifacts(
     let commit_msg = format_stage_commit_message(spec_id, stage);
     commit_staged_files(&commit_msg, cwd)?;
 
-    tracing::info!("✅ Auto-committed {} stage artifacts for {}", stage.display_name(), spec_id);
+    tracing::info!(
+        "✅ Auto-committed {} stage artifacts for {}",
+        stage.display_name(),
+        spec_id
+    );
     Ok(())
 }
 
@@ -119,9 +136,9 @@ fn collect_stage_artifact_paths(
 /// Stage files using git add
 fn stage_files(paths: &[PathBuf], cwd: &Path) -> Result<()> {
     for path in paths {
-        let relative_path = path
-            .strip_prefix(cwd)
-            .map_err(|e| SpecKitError::from_string(format!("Invalid path {}: {}", path.display(), e)))?;
+        let relative_path = path.strip_prefix(cwd).map_err(|e| {
+            SpecKitError::from_string(format!("Invalid path {}: {}", path.display(), e))
+        })?;
 
         let output = Command::new("git")
             .args(&["add", "--"])
@@ -166,7 +183,10 @@ fn commit_staged_files(message: &str, cwd: &Path) -> Result<()> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(SpecKitError::from_string(format!("Git commit failed: {}", stderr)));
+        return Err(SpecKitError::from_string(format!(
+            "Git commit failed: {}",
+            stderr
+        )));
     }
 
     Ok(())

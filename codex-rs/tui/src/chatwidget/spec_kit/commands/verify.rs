@@ -71,8 +71,7 @@ impl SpecKitCommand for VerifyCommand {
 
 fn get_latest_run_id(spec_id: &str) -> Result<Option<String>, String> {
     let db_path = get_db_path()?;
-    let conn = Connection::open(&db_path)
-        .map_err(|e| format!("Failed to open database: {}", e))?;
+    let conn = Connection::open(&db_path).map_err(|e| format!("Failed to open database: {}", e))?;
 
     let result = conn.query_row(
         "SELECT DISTINCT run_id FROM agent_executions
@@ -100,15 +99,21 @@ pub fn generate_verification_report(
     cwd: &PathBuf,
 ) -> Result<Vec<String>, String> {
     let db_path = get_db_path()?;
-    let conn = Connection::open(&db_path)
-        .map_err(|e| format!("Failed to open database: {}", e))?;
+    let conn = Connection::open(&db_path).map_err(|e| format!("Failed to open database: {}", e))?;
 
     let mut lines = Vec::new();
 
     // Header
-    lines.push(format!("╔═══════════════════════════════════════════════════════════════╗"));
-    lines.push(format!("║ SPEC-KIT VERIFICATION REPORT: {}                          ║", spec_id));
-    lines.push(format!("╚═══════════════════════════════════════════════════════════════╝"));
+    lines.push(format!(
+        "╔═══════════════════════════════════════════════════════════════╗"
+    ));
+    lines.push(format!(
+        "║ SPEC-KIT VERIFICATION REPORT: {}                          ║",
+        spec_id
+    ));
+    lines.push(format!(
+        "╚═══════════════════════════════════════════════════════════════╝"
+    ));
     lines.push(String::new());
 
     if let Some(rid) = run_id {
@@ -138,10 +143,12 @@ pub fn generate_verification_report(
         )
     };
 
-    let mut stmt = conn.prepare(&query)
+    let mut stmt = conn
+        .prepare(&query)
         .map_err(|e| format!("Failed to prepare query: {}", e))?;
 
-    let mut rows = stmt.query([])
+    let mut rows = stmt
+        .query([])
         .map_err(|e| format!("Failed to execute query: {}", e))?;
 
     // Group by stage
@@ -182,24 +189,44 @@ pub fn generate_verification_report(
     lines.push(format!("═══ Stage Execution ═══"));
     lines.push(String::new());
 
-    let stage_order = vec!["spec-plan", "spec-tasks", "spec-implement", "spec-validate", "spec-audit", "spec-unlock"];
+    let stage_order = vec![
+        "spec-plan",
+        "spec-tasks",
+        "spec-implement",
+        "spec-validate",
+        "spec-audit",
+        "spec-unlock",
+    ];
 
     for stage in &stage_order {
         if let Some(agents) = stage_data.get(*stage) {
             let stage_name = stage.strip_prefix("spec-").unwrap_or(stage);
-            lines.push(format!("├─ {} ({} agents)", stage_name.to_uppercase(), agents.len()));
+            lines.push(format!(
+                "├─ {} ({} agents)",
+                stage_name.to_uppercase(),
+                agents.len()
+            ));
 
             for (agent_name, phase_type, duration, status) in agents {
-                lines.push(format!("│  {} {} ({}) - {}",
-                    status, agent_name, phase_type, duration));
+                lines.push(format!(
+                    "│  {} {} ({}) - {}",
+                    status, agent_name, phase_type, duration
+                ));
             }
 
             // Check for output file
             let output_file = format!("{}.md", stage_name);
-            let output_path = cwd.join("docs").join(format!("{}-*", spec_id)).join(&output_file);
+            let output_path = cwd
+                .join("docs")
+                .join(format!("{}-*", spec_id))
+                .join(&output_file);
 
             if let Some(size) = get_file_size_fuzzy(cwd, spec_id, &output_file) {
-                lines.push(format!("│  Output: {} ({})", output_file, format_size(size)));
+                lines.push(format!(
+                    "│  Output: {} ({})",
+                    output_file,
+                    format_size(size)
+                ));
             } else {
                 lines.push(format!("│  Output: {} (not found)", output_file));
             }
@@ -230,25 +257,32 @@ pub fn generate_verification_report(
         )
     };
 
-    let mut synthesis_stmt = conn.prepare(&synthesis_query)
+    let mut synthesis_stmt = conn
+        .prepare(&synthesis_query)
         .map_err(|e| format!("Failed to prepare synthesis query: {}", e))?;
 
-    let mut synthesis_rows = synthesis_stmt.query([])
+    let mut synthesis_rows = synthesis_stmt
+        .query([])
         .map_err(|e| format!("Failed to execute synthesis query: {}", e))?;
 
     lines.push(format!("═══ Synthesis Records ═══"));
     lines.push(String::new());
 
     let mut synthesis_count = 0;
-    while let Some(row) = synthesis_rows.next().map_err(|e| format!("Row error: {}", e))? {
+    while let Some(row) = synthesis_rows
+        .next()
+        .map_err(|e| format!("Row error: {}", e))?
+    {
         let stage: String = row.get(0).unwrap_or_default();
         let artifacts: i64 = row.get(1).unwrap_or(0);
         let size: i64 = row.get(2).unwrap_or(0);
         let status: String = row.get(3).unwrap_or_default();
 
         let stage_name = stage.strip_prefix("spec-").unwrap_or(&stage);
-        lines.push(format!("  {} - {} agents, {} bytes, status: {}",
-            stage_name, artifacts, size, status));
+        lines.push(format!(
+            "  {} - {} agents, {} bytes, status: {}",
+            stage_name, artifacts, size, status
+        ));
         synthesis_count += 1;
     }
 
@@ -262,8 +296,15 @@ pub fn generate_verification_report(
     lines.push(format!("═══ Summary ═══"));
     lines.push(String::new());
     lines.push(format!("Total Agents: {}", total_agents));
-    lines.push(format!("Completed: {} ({:.1}%)", completed_agents,
-        if total_agents > 0 { (completed_agents as f64 / total_agents as f64) * 100.0 } else { 0.0 }));
+    lines.push(format!(
+        "Completed: {} ({:.1}%)",
+        completed_agents,
+        if total_agents > 0 {
+            (completed_agents as f64 / total_agents as f64) * 100.0
+        } else {
+            0.0
+        }
+    ));
     lines.push(format!("Stages: {} with data", stage_data.len()));
     lines.push(format!("Synthesis Records: {}", synthesis_count));
     lines.push(String::new());
@@ -275,13 +316,20 @@ pub fn generate_verification_report(
     if all_complete && has_synthesis {
         lines.push(format!("✅ PASS: Pipeline completed successfully"));
     } else if total_agents == 0 {
-        lines.push(format!("⚠️  WARNING: No agent executions found for this SPEC/run"));
+        lines.push(format!(
+            "⚠️  WARNING: No agent executions found for this SPEC/run"
+        ));
     } else {
-        lines.push(format!("⚠️  IN PROGRESS: {}/{} agents complete", completed_agents, total_agents));
+        lines.push(format!(
+            "⚠️  IN PROGRESS: {}/{} agents complete",
+            completed_agents, total_agents
+        ));
     }
 
     lines.push(String::new());
-    lines.push(format!("═══════════════════════════════════════════════════════════════"));
+    lines.push(format!(
+        "═══════════════════════════════════════════════════════════════"
+    ));
 
     Ok(lines)
 }

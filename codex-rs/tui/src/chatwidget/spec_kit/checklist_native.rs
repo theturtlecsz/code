@@ -6,7 +6,7 @@
 //! Principle: Agents for reasoning, NOT transactions. Quality scoring is
 //! pattern-matching (FREE) not reasoning ($0.35).
 
-use super::analyze_native::{check_consistency, InconsistencyIssue};
+use super::analyze_native::{InconsistencyIssue, check_consistency};
 use super::clarify_native::Severity;
 use super::error::{Result, SpecKitError};
 use regex_lite::Regex;
@@ -16,11 +16,11 @@ use std::path::{Path, PathBuf};
 /// Quality issue detected during rubric evaluation
 #[derive(Debug, Clone)]
 pub struct QualityIssue {
-    pub id: String,           // CHK-001...
-    pub category: String,     // "completeness", "clarity", "testability", "consistency"
+    pub id: String,       // CHK-001...
+    pub category: String, // "completeness", "clarity", "testability", "consistency"
     pub severity: Severity,
     pub description: String,
-    pub impact: String,       // Impact on score
+    pub impact: String, // Impact on score
     pub suggestion: String,
 }
 
@@ -74,8 +74,8 @@ pub fn score_quality(spec_id: &str, cwd: &Path) -> Result<QualityReport> {
         });
     }
 
-    let prd_content = fs::read_to_string(&prd_path)
-        .map_err(|e| SpecKitError::file_read(&prd_path, e))?;
+    let prd_content =
+        fs::read_to_string(&prd_path).map_err(|e| SpecKitError::file_read(&prd_path, e))?;
 
     // Score each dimension
     let completeness = score_completeness(&prd_content, &mut issues);
@@ -84,7 +84,8 @@ pub fn score_quality(spec_id: &str, cwd: &Path) -> Result<QualityReport> {
     let consistency = score_consistency(spec_id, cwd, &mut issues)?;
 
     // Overall score (weighted average)
-    let overall_score = (completeness * 0.3) + (clarity * 0.2) + (testability * 0.3) + (consistency * 0.2);
+    let overall_score =
+        (completeness * 0.3) + (clarity * 0.2) + (testability * 0.3) + (consistency * 0.2);
 
     // Generate recommendations
     let mut recommendations = Vec::new();
@@ -200,7 +201,10 @@ fn score_clarity(prd_content: &str, issues: &mut Vec<QualityIssue>) -> f32 {
             id: format!("CHK-{:03}", issues.len() + 1),
             category: "clarity".to_string(),
             severity: Severity::Minor,
-            description: format!("{} requirements are too long (>200 words)", long_requirements),
+            description: format!(
+                "{} requirements are too long (>200 words)",
+                long_requirements
+            ),
             impact: format!("-{:.0}%", penalty),
             suggestion: "Break long requirements into smaller, focused statements".to_string(),
         });
@@ -213,7 +217,10 @@ fn score_clarity(prd_content: &str, issues: &mut Vec<QualityIssue>) -> f32 {
             id: format!("CHK-{:03}", issues.len() + 1),
             category: "clarity".to_string(),
             severity: Severity::Minor,
-            description: format!("{} requirements are too short (<20 words)", short_requirements),
+            description: format!(
+                "{} requirements are too short (<20 words)",
+                short_requirements
+            ),
             impact: format!("-{:.0}%", penalty),
             suggestion: "Add more detail to short requirements".to_string(),
         });
@@ -230,9 +237,13 @@ fn score_clarity(prd_content: &str, issues: &mut Vec<QualityIssue>) -> f32 {
             id: format!("CHK-{:03}", issues.len() + 1),
             category: "clarity".to_string(),
             severity: Severity::Important,
-            description: format!("{} instances of vague language (should, might, could, etc.)", vague_count),
+            description: format!(
+                "{} instances of vague language (should, might, could, etc.)",
+                vague_count
+            ),
             impact: format!("-{:.0}%", penalty),
-            suggestion: "Replace vague language with definitive statements (must, will)".to_string(),
+            suggestion: "Replace vague language with definitive statements (must, will)"
+                .to_string(),
         });
     }
 
@@ -242,7 +253,8 @@ fn score_clarity(prd_content: &str, issues: &mut Vec<QualityIssue>) -> f32 {
 
     for term in terms {
         let term_re = Regex::new(&format!(r"\b{}\b", regex_escape(term))).unwrap();
-        let definition_re = Regex::new(&format!(r"{}(\s*[:\-]|\s+is\s+)", regex_escape(term))).unwrap();
+        let definition_re =
+            Regex::new(&format!(r"{}(\s*[:\-]|\s+is\s+)", regex_escape(term))).unwrap();
 
         if term_re.is_match(prd_content) && !definition_re.is_match(prd_content) {
             undefined_terms.push(term);
@@ -256,7 +268,11 @@ fn score_clarity(prd_content: &str, issues: &mut Vec<QualityIssue>) -> f32 {
             id: format!("CHK-{:03}", issues.len() + 1),
             category: "clarity".to_string(),
             severity: Severity::Minor,
-            description: format!("{} technical terms used without definition: {:?}", undefined_terms.len(), undefined_terms),
+            description: format!(
+                "{} technical terms used without definition: {:?}",
+                undefined_terms.len(),
+                undefined_terms
+            ),
             impact: format!("-{:.0}%", penalty),
             suggestion: "Define technical terms on first use".to_string(),
         });
@@ -304,16 +320,21 @@ fn score_testability(prd_content: &str, issues: &mut Vec<QualityIssue>) -> f32 {
                 severity: Severity::Important,
                 description: format!(
                     "Low acceptance criteria coverage: {}/{} requirements ({:.0}%)",
-                    ac_count, requirement_count, coverage_ratio * 100.0
+                    ac_count,
+                    requirement_count,
+                    coverage_ratio * 100.0
                 ),
                 impact: format!("-{:.0}%", 40.0 - coverage_score),
-                suggestion: "Add acceptance criteria for all requirements (target: 1+ AC per requirement)".to_string(),
+                suggestion:
+                    "Add acceptance criteria for all requirements (target: 1+ AC per requirement)"
+                        .to_string(),
             });
         }
     }
 
     // Check if criteria are measurable (have numbers/metrics)
-    let metrics_re = Regex::new(r"(<|>|<=|>=)?\s*\d+\s*(ms|MB|KB|GB|%|RPS|req/s|users?|\d+)").unwrap();
+    let metrics_re =
+        Regex::new(r"(<|>|<=|>=)?\s*\d+\s*(ms|MB|KB|GB|%|RPS|req/s|users?|\d+)").unwrap();
     let measurable_count = prd_content
         .lines()
         .filter(|line| ac_re.is_match(line) && metrics_re.is_match(line))
@@ -331,10 +352,13 @@ fn score_testability(prd_content: &str, issues: &mut Vec<QualityIssue>) -> f32 {
                 severity: Severity::Important,
                 description: format!(
                     "Only {}/{} acceptance criteria are measurable ({:.0}%)",
-                    measurable_count, ac_count, measurable_ratio * 100.0
+                    measurable_count,
+                    ac_count,
+                    measurable_ratio * 100.0
                 ),
                 impact: format!("-{:.0}%", 20.0 - measurable_score),
-                suggestion: "Add metrics to acceptance criteria (e.g., <100ms, >90% accuracy)".to_string(),
+                suggestion: "Add metrics to acceptance criteria (e.g., <100ms, >90% accuracy)"
+                    .to_string(),
             });
         }
     }
@@ -367,18 +391,23 @@ fn score_consistency(spec_id: &str, cwd: &Path, issues: &mut Vec<QualityIssue>) 
     }
 
     // Count by severity
-    let critical_count = inconsistencies.iter()
+    let critical_count = inconsistencies
+        .iter()
         .filter(|i| matches!(i.severity, Severity::Critical))
         .count();
-    let important_count = inconsistencies.iter()
+    let important_count = inconsistencies
+        .iter()
         .filter(|i| matches!(i.severity, Severity::Important))
         .count();
-    let minor_count = inconsistencies.iter()
+    let minor_count = inconsistencies
+        .iter()
         .filter(|i| matches!(i.severity, Severity::Minor))
         .count();
 
     // Penalty calculation
-    let penalty = (critical_count as f32 * 20.0) + (important_count as f32 * 10.0) + (minor_count as f32 * 5.0);
+    let penalty = (critical_count as f32 * 20.0)
+        + (important_count as f32 * 10.0)
+        + (minor_count as f32 * 5.0);
     let score = (100.0 - penalty).max(0.0);
 
     // Add summary issue
@@ -394,7 +423,10 @@ fn score_consistency(spec_id: &str, cwd: &Path, issues: &mut Vec<QualityIssue>) 
         },
         description: format!(
             "{} consistency issues found ({} critical, {} important, {} minor)",
-            inconsistencies.len(), critical_count, important_count, minor_count
+            inconsistencies.len(),
+            critical_count,
+            important_count,
+            minor_count
         ),
         impact: format!("-{:.0}%", penalty),
         suggestion: "Run /speckit.analyze for detailed consistency report".to_string(),
@@ -492,7 +524,11 @@ FR-006: System could benefit from caching
         let mut issues = Vec::new();
         let score = score_clarity(prd, &mut issues);
         assert!(score < 100.0); // Penalized for vague language (6 instances)
-        assert!(issues.iter().any(|i| i.description.contains("vague language")));
+        assert!(
+            issues
+                .iter()
+                .any(|i| i.description.contains("vague language"))
+        );
     }
 
     #[test]
