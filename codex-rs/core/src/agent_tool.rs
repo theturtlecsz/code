@@ -489,6 +489,81 @@ fn generate_branch_id(model: &str, agent: &str) -> String {
 
 use crate::git_worktree::setup_worktree;
 
+/// SPEC-KIT-927+: Extract JSON from agent output that may be markdown-wrapped
+/// or include explanatory text before the JSON.
+///
+/// Handles:
+/// - ```json\n{...}\n``` (markdown code fence)
+/// - Text before JSON: "Here's the result:\n```json\n{...}\n```"
+/// - Plain JSON: {...} (returns as-is)
+///
+/// Returns the extracted JSON string, or original input if no extraction needed.
+fn extract_json_from_output(output: &str) -> String {
+    let trimmed = output.trim();
+
+    // Pattern 1: Check for markdown code fence with ```json
+    if let Some(json_start) = trimmed.find("```json") {
+        // Find the content after ```json
+        let after_fence = &trimmed[json_start + 7..]; // Skip "```json"
+
+        // Find the closing ```
+        if let Some(closing_fence) = after_fence.find("```") {
+            let json_content = after_fence[..closing_fence].trim();
+            return json_content.to_string();
+        }
+    }
+
+    // Pattern 2: Check for generic code fence with ```
+    if let Some(first_fence) = trimmed.find("```") {
+        let after_fence = &trimmed[first_fence + 3..];
+
+        // Skip language identifier if present (e.g., "```\n{" or "```json\n{")
+        let json_start = after_fence.find('{').unwrap_or(0);
+        let content_from_brace = &after_fence[json_start..];
+
+        // Find closing ```
+        if let Some(closing_fence) = content_from_brace.find("```") {
+            let json_content = content_from_brace[..closing_fence].trim();
+            return json_content.to_string();
+        }
+    }
+
+    // Pattern 3: Check for JSON object starting with { (no markdown)
+    if let Some(brace_start) = trimmed.find('{') {
+        // If the output starts with explanatory text followed by JSON
+        // Extract from the first { to the end (or last })
+        let from_brace = &trimmed[brace_start..];
+
+        // Try to find a balanced JSON object
+        // For now, take everything from first { to last }
+        if let Some(last_brace) = from_brace.rfind('}') {
+            let potential_json = &from_brace[..=last_brace];
+
+            // Quick validation: should look like JSON
+            if potential_json.contains(':') && potential_json.contains('"') {
+                return potential_json.to_string();
+            }
+        }
+    }
+
+    // Pattern 4: Check for JSON array starting with [
+    if let Some(bracket_start) = trimmed.find('[') {
+        let from_bracket = &trimmed[bracket_start..];
+
+        if let Some(last_bracket) = from_bracket.rfind(']') {
+            let potential_json = &from_bracket[..=last_bracket];
+
+            // Quick validation: should look like JSON array
+            if potential_json.contains(',') || potential_json.contains('{') {
+                return potential_json.to_string();
+            }
+        }
+    }
+
+    // No extraction needed, return original
+    output.to_string()
+}
+
 async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
     let mut manager = AGENT_MANAGER.write().await;
 
@@ -644,26 +719,44 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
                 Err("Agent returned JSON schema template instead of actual data. Premature output collection detected.".to_string())
             }
             // Validation 3: JSON parsing (must be valid JSON)
-            else if let Err(e) = serde_json::from_str::<serde_json::Value>(&output) {
-                tracing::error!(
-                    "❌ Agent {} output is not valid JSON after {}s: {}",
-                    model,
-                    execution_duration.as_secs(),
-                    e
-                );
-                tracing::debug!("Invalid JSON preview: {}...",
-                    &output.chars().take(500).collect::<String>());
-                Err(format!("Agent output is not valid JSON: {}", e))
-            }
-            // All validations passed
             else {
-                tracing::info!(
-                    "✅ Agent {} output validated: {} bytes, valid JSON, completed in {}s",
-                    model,
-                    output.len(),
-                    execution_duration.as_secs()
-                );
-                Ok(output)
+                // SPEC-KIT-927+: Extract JSON from markdown-wrapped output
+                // Agents often wrap JSON in ```json ... ``` or include explanatory text
+                let cleaned_output = extract_json_from_output(&output);
+
+                match serde_json::from_str::<serde_json::Value>(&cleaned_output) {
+                    Ok(_) => {
+                        // Log if we had to clean the output
+                        if cleaned_output != output {
+                            tracing::info!(
+                                "✅ Agent {} output cleaned: {} -> {} bytes, valid JSON after {}s",
+                                model,
+                                output.len(),
+                                cleaned_output.len(),
+                                execution_duration.as_secs()
+                            );
+                        } else {
+                            tracing::info!(
+                                "✅ Agent {} output validated: {} bytes, valid JSON, completed in {}s",
+                                model,
+                                output.len(),
+                                execution_duration.as_secs()
+                            );
+                        }
+                        Ok(cleaned_output)
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "❌ Agent {} output is not valid JSON after {}s: {}",
+                            model,
+                            execution_duration.as_secs(),
+                            e
+                        );
+                        tracing::debug!("Invalid JSON preview: {}...",
+                            &cleaned_output.chars().take(500).collect::<String>());
+                        Err(format!("Agent output is not valid JSON: {}", e))
+                    }
+                }
             }
         }
         Err(e) => {
