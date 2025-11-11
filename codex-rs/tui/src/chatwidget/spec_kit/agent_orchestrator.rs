@@ -348,6 +348,29 @@ async fn spawn_and_wait_for_agent(
 
     if tmux_enabled {
         tracing::info!("{}   🔍 Observable agents ENABLED (tmux mode)", run_tag);
+
+        // SPEC-KIT-927: Check for and cleanup zombie processes before spawning new agents
+        // This prevents orphaned agents from previous runs from interfering
+        let session_name = format!("agents-{}", config_name);
+        if let Ok(zombie_count) = codex_core::tmux::check_zombie_panes(&session_name).await {
+            if zombie_count > 0 {
+                tracing::warn!(
+                    "{}   ⚠️ Found {} zombie panes in session {}, cleaning up...",
+                    run_tag,
+                    zombie_count,
+                    session_name
+                );
+                if let Err(e) = codex_core::tmux::cleanup_zombie_panes(&session_name).await {
+                    tracing::warn!(
+                        "{}   ⚠️ Failed to cleanup zombie panes: {}",
+                        run_tag,
+                        e
+                    );
+                } else {
+                    tracing::info!("{}   ✅ Cleaned up {} zombie panes", run_tag, zombie_count);
+                }
+            }
+        }
     }
 
     // Spawn agent

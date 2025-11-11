@@ -326,6 +326,12 @@ pub async fn execute_in_pane(
     let timeout = std::time::Duration::from_secs(timeout_secs);
     let poll_interval = std::time::Duration::from_millis(500);
 
+    // SPEC-KIT-927: Track file size stability to prevent premature output collection
+    let mut last_file_size: Option<u64> = None;
+    let mut stable_since: Option<std::time::Instant> = None;
+    let min_stable_duration = std::time::Duration::from_secs(2);
+    let min_file_size: u64 = 1000; // Minimum 1KB for valid agent output
+
     loop {
         if start.elapsed() > timeout {
             // Kill the running process in the pane
@@ -345,6 +351,56 @@ pub async fn execute_in_pane(
                 timeout_secs
             ));
         }
+
+        // SPEC-KIT-927: Check output file size and stability before reading
+        // This prevents collecting partial output (headers only) before agent finishes
+        let current_file_size = if let Ok(metadata) = tokio::fs::metadata(&output_file).await {
+            Some(metadata.len())
+        } else {
+            None
+        };
+
+        // Track file size changes to detect when agent finishes writing
+        let file_is_stable = if let Some(current_size) = current_file_size {
+            if let Some(last_size) = last_file_size {
+                if current_size == last_size && current_size >= min_file_size {
+                    // File size unchanged and meets minimum threshold
+                    if stable_since.is_none() {
+                        stable_since = Some(std::time::Instant::now());
+                        tracing::debug!(
+                            "📊 Output file stable at {} bytes, waiting {}s for confirmation",
+                            current_size,
+                            min_stable_duration.as_secs()
+                        );
+                    }
+
+                    // Check if stable for long enough
+                    if let Some(since) = stable_since {
+                        since.elapsed() >= min_stable_duration
+                    } else {
+                        false
+                    }
+                } else {
+                    // File still growing or too small, reset stability timer
+                    if current_size != last_size {
+                        tracing::trace!("📈 Output file growing: {} -> {} bytes", last_size, current_size);
+                    }
+                    stable_since = None;
+                    false
+                }
+            } else {
+                // First size reading
+                tracing::debug!("📝 Output file created: {} bytes", current_size);
+                stable_since = None;
+                false
+            }
+        } else {
+            // File doesn't exist yet
+            stable_since = None;
+            false
+        };
+
+        last_file_size = current_file_size;
 
         // Check pane content for completion marker (to know when to read output file)
         tracing::debug!("🔍 Polling pane {} for completion (expecting output file: {})", pane_id, output_file);
@@ -377,11 +433,12 @@ pub async fn execute_in_pane(
             let has_marker = pane_content.contains("___AGENT_COMPLETE___");
 
             tracing::trace!(
-                "📋 Pane {} capture: {} bytes, {} lines, marker={}, preview: {}",
+                "📋 Pane {} capture: {} bytes, {} lines, marker={}, file_stable={}, preview: {}",
                 pane_id,
                 pane_content.len(),
                 pane_content.lines().count(),
                 has_marker,
+                file_is_stable,
                 if content_preview.len() > 200 {
                     format!("{}...", &content_preview[..200])
                 } else {
@@ -389,8 +446,10 @@ pub async fn execute_in_pane(
                 }
             );
 
-            if has_marker {
-                tracing::info!("✅ Agent completed in pane {}, reading output file", pane_id);
+            // SPEC-KIT-927: Require BOTH completion marker AND stable file size
+            // This prevents premature output collection before agent finishes writing
+            if has_marker && file_is_stable {
+                tracing::info!("✅ Agent completed in pane {} (marker + stable file), reading output file", pane_id);
 
                 // Read clean output from dedicated output file
                 let file_exists = tokio::fs::metadata(&output_file).await.is_ok();
@@ -487,6 +546,105 @@ pub async fn capture_pane_output(pane_id: &str) -> Result<String, String> {
             String::from_utf8_lossy(&capture.stderr)
         ))
     }
+}
+
+/// SPEC-KIT-927: Kill zombie agent process in a tmux pane
+///
+/// Sends Ctrl+C to gracefully stop the process, waits briefly,
+/// then force-kills if still running. This prevents orphaned
+/// agent processes from accumulating.
+pub async fn kill_pane_process(session_name: &str, pane_id: &str) -> Result<(), String> {
+    tracing::info!("🔫 Killing process in pane {} (session: {})", pane_id, session_name);
+
+    // Send Ctrl+C to gracefully stop the process
+    let send_keys_result = Command::new("tmux")
+        .args(["send-keys", "-t", pane_id, "C-c"])
+        .status()
+        .await;
+
+    if let Err(e) = send_keys_result {
+        tracing::warn!("Failed to send Ctrl+C to pane {}: {}", pane_id, e);
+    } else {
+        tracing::debug!("Sent Ctrl+C to pane {}, waiting 2s for graceful exit", pane_id);
+    }
+
+    // Give process 2 seconds to exit gracefully
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+    // Check if pane still exists and has running process
+    let pane_exists = Command::new("tmux")
+        .args(["list-panes", "-t", session_name, "-F", "#{pane_id}"])
+        .output()
+        .await
+        .map(|output| {
+            let panes = String::from_utf8_lossy(&output.stdout);
+            panes.lines().any(|p| p.trim() == pane_id)
+        })
+        .unwrap_or(false);
+
+    if pane_exists {
+        tracing::debug!("Pane {} still exists, killing it", pane_id);
+        // Force kill the pane
+        let _ = Command::new("tmux")
+            .args(["kill-pane", "-t", pane_id])
+            .status()
+            .await;
+    }
+
+    tracing::info!("✅ Cleaned up pane {}", pane_id);
+    Ok(())
+}
+
+/// SPEC-KIT-927: Check for zombie agent processes in a session
+///
+/// Returns the number of zombie panes found (panes that should have
+/// completed but are still running).
+pub async fn check_zombie_panes(session_name: &str) -> Result<usize, String> {
+    let list_panes = Command::new("tmux")
+        .args(["list-panes", "-t", session_name, "-F", "#{pane_id}"])
+        .output()
+        .await
+        .map_err(|e| format!("Failed to list panes: {}", e))?;
+
+    if !list_panes.status.success() {
+        // Session doesn't exist or no panes
+        return Ok(0);
+    }
+
+    let pane_ids = String::from_utf8_lossy(&list_panes.stdout);
+    let zombie_count = pane_ids.lines().count();
+
+    if zombie_count > 0 {
+        tracing::warn!(
+            "⚠️ Found {} potentially zombie panes in session {}",
+            zombie_count,
+            session_name
+        );
+    }
+
+    Ok(zombie_count)
+}
+
+/// SPEC-KIT-927: Clean up all zombie panes in a session
+///
+/// This is called before starting new agents to ensure clean state.
+pub async fn cleanup_zombie_panes(session_name: &str) -> Result<usize, String> {
+    let zombie_count = check_zombie_panes(session_name).await?;
+
+    if zombie_count > 0 {
+        tracing::warn!(
+            "🧹 Cleaning up {} zombie panes in session {}",
+            zombie_count,
+            session_name
+        );
+
+        // Kill the entire session (simplest approach)
+        let _ = kill_session(session_name).await;
+
+        tracing::info!("✅ Killed session {} to clean up zombies", session_name);
+    }
+
+    Ok(zombie_count)
 }
 
 /// Kill a tmux session (cleanup after agents complete)

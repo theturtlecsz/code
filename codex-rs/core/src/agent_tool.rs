@@ -519,6 +519,9 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
 
     drop(manager); // Release the lock before executing
 
+    // SPEC-KIT-927: Track execution duration for suspicious completion detection
+    let execution_start = std::time::Instant::now();
+
     // Build the full prompt with context
     let mut full_prompt = prompt.clone();
     // Prepend any per-agent instructions from config when available
@@ -595,9 +598,84 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
         execute_model_with_permissions(&model, &full_prompt, true, None, config, tmux_enabled).await
     };
 
-    // Update result
+    // SPEC-KIT-927: Calculate execution duration for suspicious completion detection
+    let execution_duration = execution_start.elapsed();
+
+    // SPEC-KIT-927: Validate output before marking agent as complete
+    // This prevents storing partial/invalid output (schema templates, headers only)
+    let validated_result = match result {
+        Ok(output) => {
+            // SPEC-KIT-927: Warn about suspiciously fast completions
+            // Fast + small output often indicates premature collection
+            if execution_duration < std::time::Duration::from_secs(30) && output.len() < 1000 {
+                tracing::warn!(
+                    "⚠️ SUSPICIOUS: Agent {} completed in {}s with only {} bytes - possible premature collection!",
+                    model,
+                    execution_duration.as_secs(),
+                    output.len()
+                );
+            }
+
+            // Validation 1: Minimum size check (>500 bytes for valid agent output)
+            if output.len() < 500 {
+                tracing::warn!(
+                    "⚠️ Agent {} output too small: {} bytes (minimum 500) after {}s",
+                    model,
+                    output.len(),
+                    execution_duration.as_secs()
+                );
+                Err(format!(
+                    "Agent output too small ({} bytes, minimum 500). Possible premature collection after {}s.",
+                    output.len(),
+                    execution_duration.as_secs()
+                ))
+            }
+            // Validation 2: Schema template detection (common in corrupted outputs)
+            else if output.contains("{ \"path\": string") ||
+                    output.contains("\"diff_proposals\": [ {") ||
+                    output.contains("\"change\": string (diff or summary)") {
+                tracing::error!(
+                    "❌ Agent {} returned JSON schema instead of data after {}s!",
+                    model,
+                    execution_duration.as_secs()
+                );
+                tracing::debug!("Schema output preview: {}...",
+                    &output.chars().take(500).collect::<String>());
+                Err("Agent returned JSON schema template instead of actual data. Premature output collection detected.".to_string())
+            }
+            // Validation 3: JSON parsing (must be valid JSON)
+            else if let Err(e) = serde_json::from_str::<serde_json::Value>(&output) {
+                tracing::error!(
+                    "❌ Agent {} output is not valid JSON after {}s: {}",
+                    model,
+                    execution_duration.as_secs(),
+                    e
+                );
+                tracing::debug!("Invalid JSON preview: {}...",
+                    &output.chars().take(500).collect::<String>());
+                Err(format!("Agent output is not valid JSON: {}", e))
+            }
+            // All validations passed
+            else {
+                tracing::info!(
+                    "✅ Agent {} output validated: {} bytes, valid JSON, completed in {}s",
+                    model,
+                    output.len(),
+                    execution_duration.as_secs()
+                );
+                Ok(output)
+            }
+        }
+        Err(e) => {
+            // Error already occurred during execution
+            tracing::error!("❌ Agent {} execution failed after {}s: {}", model, execution_duration.as_secs(), e);
+            Err(e)
+        }
+    };
+
+    // Update result with validated output
     let mut manager = AGENT_MANAGER.write().await;
-    manager.update_agent_result(&agent_id, result).await;
+    manager.update_agent_result(&agent_id, validated_result).await;
 }
 
 async fn execute_model_with_permissions(
