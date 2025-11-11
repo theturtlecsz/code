@@ -317,17 +317,22 @@ pub async fn execute_in_pane(
                 tracing::info!("Agent completed in pane {}, reading output file", pane_id);
 
                 // Read clean output from dedicated output file
+                tracing::info!("🔍 Attempting to read output file: {}", output_file);
+                tracing::info!("🔍 File exists check: {}", tokio::fs::metadata(&output_file).await.is_ok());
+
                 let output = match tokio::fs::read_to_string(&output_file).await {
                     Ok(content) => {
-                        tracing::debug!("Read {} bytes from output file: {}", content.len(), output_file);
+                        tracing::info!("✅ Successfully read {} bytes from output file: {}", content.len(), output_file);
 
                         // Clean up output file after successful read
                         let _ = tokio::fs::remove_file(&output_file).await;
+                        tracing::debug!("🗑️ Deleted output file after reading");
 
                         content
                     }
                     Err(e) => {
-                        tracing::warn!("Failed to read agent output file {}: {}", output_file, e);
+                        tracing::error!("❌ FAILED to read agent output file {}: {}", output_file, e);
+                        tracing::error!("❌ Falling back to pane capture (may lose content)");
                         // Fallback to pane capture if output file read fails
                         // This strips shell noise as best we can
                         let lines: Vec<&str> = pane_content.lines().collect();
@@ -353,9 +358,15 @@ pub async fn execute_in_pane(
                             }
                         }
 
-                        clean_lines.join("\n")
+                        let fallback_output = clean_lines.join("\n");
+                        tracing::warn!("📋 Fallback pane capture returned {} bytes", fallback_output.len());
+                        tracing::debug!("📋 Fallback preview: {}...",
+                            &fallback_output.chars().take(200).collect::<String>());
+                        fallback_output
                     }
                 };
+
+                tracing::info!("📤 Returning {} bytes to caller", output.len());
 
                 // Note: temp files are cleaned up by the shell command itself
                 // Output file is cleaned up after successful read (or on error/timeout paths)
