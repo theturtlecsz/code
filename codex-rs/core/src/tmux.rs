@@ -344,8 +344,10 @@ pub async fn execute_in_pane(
                         tracing::info!("✅ Successfully read {} bytes from output file: {}", content.len(), output_file);
 
                         // Clean up output file after successful read
-                        let _ = tokio::fs::remove_file(&output_file).await;
-                        tracing::debug!("🗑️ Deleted output file after reading");
+                        match tokio::fs::remove_file(&output_file).await {
+                            Ok(_) => tracing::info!("🗑️ Deleted output file: {}", output_file),
+                            Err(e) => tracing::error!("❌ Failed to delete output file {}: {}", output_file, e),
+                        }
 
                         content
                     }

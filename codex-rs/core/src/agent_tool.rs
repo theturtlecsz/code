@@ -785,8 +785,9 @@ async fn execute_model_with_permissions(
         } else {
             // Create pane for this agent
             let pane_title = format!("{}", model);
-            // SPEC-923: Always create fresh panes (split=true) to avoid reusing stale panes from previous runs
-            match crate::tmux::create_pane(&session_name, &pane_title, true).await {
+            // SPEC-923: Always split new panes (is_first=false) to avoid reusing stale panes from previous runs
+            // Each agent gets a fresh pane, ensuring clean shell state and proper completion marker detection
+            match crate::tmux::create_pane(&session_name, &pane_title, false).await {
                 Ok(pane_id) => {
                     // Build environment map, filtering out debug-related vars that pollute output
                     let mut env: std::collections::HashMap<String, String> =
