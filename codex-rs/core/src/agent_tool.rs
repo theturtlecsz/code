@@ -540,33 +540,57 @@ fn extract_json_from_mixed_output(output: &str, model: &str) -> String {
     }
 
     // Pattern 2: Check for codex headers (timestamp + headers + "User instructions:")
-    // Output structure: [timestamp] headers... [timestamp] User instructions: ... {json}
+    // Output structure: [timestamp] headers... [timestamp] User instructions: PROMPT_SCHEMA ... AGENT_RESPONSE
+    // CRITICAL: Skip the prompt schema and find the ACTUAL agent response
     if output.contains("OpenAI Codex v") && output.contains("User instructions:") {
-        // Find where user instructions section ends
-        if let Some(instructions_pos) = output.find("User instructions:") {
-            let after_instructions = &output[instructions_pos + "User instructions:".len()..];
+        // Look for "OpenAI Codex" response separator or timestamp after the prompt
+        // Agent responses typically start with a new timestamp like [2025-11-11Txx:xx:xx]
 
-            // Split into lines and find first line starting with { or [
-            let lines: Vec<&str> = after_instructions.lines().collect();
-            for (idx, line) in lines.iter().enumerate() {
-                let trimmed = line.trim();
-                // Look for line that starts with { or [ (actual JSON, not prompt text)
-                // Must be at least a few lines after "User instructions:" to skip prompt
-                if trimmed.starts_with('{') || trimmed.starts_with('[') {
-                    // Found potential JSON start - extract from here to end
-                    let json_portion = lines[idx..].join("\n");
-                    if !json_portion.is_empty() && json_portion.len() > 100 {
-                        tracing::debug!(
-                            "📦 Extracted JSON from after codex headers: {} -> {} bytes (line {} after instructions)",
-                            output.len(),
-                            json_portion.len(),
-                            idx
-                        );
-                        return json_portion;
+        // Strategy: Find the LAST occurrence of a timestamp in the output
+        // That's likely where the agent's actual response starts
+        let timestamp_pattern = "[2025-";
+        let mut last_timestamp_pos = 0;
+        let mut search_start = 0;
+
+        while let Some(pos) = output[search_start..].find(timestamp_pattern) {
+            last_timestamp_pos = search_start + pos;
+            search_start = last_timestamp_pos + 1;
+        }
+
+        // If we found at least 2 timestamps (one for start, one for response)
+        if last_timestamp_pos > 100 {
+            // Check if there's content after the last timestamp
+            let after_last_timestamp = &output[last_timestamp_pos..];
+
+            // Find agent name response (e.g., "] codex" or "] claude")
+            if let Some(agent_response_start) = after_last_timestamp.find("] ") {
+                let potential_response = &after_last_timestamp[agent_response_start + 2..];
+
+                // Look for JSON in the response section
+                let lines: Vec<&str> = potential_response.lines().collect();
+                for (idx, line) in lines.iter().enumerate() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with('{') || trimmed.starts_with('[') {
+                        let json_portion = lines[idx..].join("\n");
+                        if json_portion.len() > 100 {
+                            tracing::debug!(
+                                "📦 Extracted JSON from after codex response timestamp: {} -> {} bytes",
+                                output.len(),
+                                json_portion.len()
+                            );
+                            return json_portion;
+                        }
                     }
                 }
             }
         }
+
+        // Fallback: If timestamp approach didn't work, log warning and return original
+        tracing::warn!(
+            "⚠️ Codex headers detected but couldn't find agent response (found {} bytes, last_timestamp_pos: {})",
+            output.len(),
+            last_timestamp_pos
+        );
     }
 
     // Pattern 3: No extraction needed
