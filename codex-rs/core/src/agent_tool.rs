@@ -489,6 +489,90 @@ fn generate_branch_id(model: &str, agent: &str) -> String {
 
 use crate::git_worktree::setup_worktree;
 
+/// SPEC-KIT-927+: Extract JSON from agent output with mixed content
+///
+/// Handles three patterns:
+/// 1. Markdown fence (anywhere): "text...\n```json\n{...}\n```"
+/// 2. Codex headers: "[timestamp] headers... [timestamp] User instructions: ... {json}"
+/// 3. Plain JSON: "{...}" (no extraction needed)
+///
+/// Returns extracted JSON string, or original if no extraction needed.
+fn extract_json_from_mixed_output(output: &str, model: &str) -> String {
+    let output_preview = if output.len() > 100 {
+        format!("{}...", &output[..100])
+    } else {
+        output.to_string()
+    };
+    tracing::trace!("🔍 Extraction input for {}: {} bytes, starts with: {}", model, output.len(), output_preview);
+
+    // Pattern 1: Check for markdown code fence (ANYWHERE in output, not just start)
+    if let Some(fence_start) = output.find("```json") {
+        tracing::trace!("   Found ```json at position {}", fence_start);
+
+        // Skip "```json" and any immediate newline
+        let mut start_offset = fence_start + 7;
+        let after_fence = &output[start_offset..];
+
+        // Skip leading newline if present
+        if after_fence.starts_with('\n') {
+            start_offset += 1;
+        } else if after_fence.starts_with("\r\n") {
+            start_offset += 2;
+        }
+
+        let content_after_fence = &output[start_offset..];
+
+        if let Some(fence_end) = content_after_fence.find("```") {
+            let json_content = content_after_fence[..fence_end].trim();
+            if !json_content.is_empty() {
+                tracing::debug!(
+                    "📦 Extracted JSON from markdown fence: {} -> {} bytes",
+                    output.len(),
+                    json_content.len()
+                );
+                return json_content.to_string();
+            } else {
+                tracing::warn!("⚠️ Markdown fence found but content is empty after trim");
+            }
+        } else {
+            tracing::warn!("⚠️ Markdown fence ```json found but no closing ```");
+        }
+    }
+
+    // Pattern 2: Check for codex headers (timestamp + headers + "User instructions:")
+    // Output structure: [timestamp] headers... [timestamp] User instructions: ... {json}
+    if output.contains("OpenAI Codex v") && output.contains("User instructions:") {
+        // Find where user instructions section ends
+        if let Some(instructions_pos) = output.find("User instructions:") {
+            let after_instructions = &output[instructions_pos + "User instructions:".len()..];
+
+            // Split into lines and find first line starting with { or [
+            let lines: Vec<&str> = after_instructions.lines().collect();
+            for (idx, line) in lines.iter().enumerate() {
+                let trimmed = line.trim();
+                // Look for line that starts with { or [ (actual JSON, not prompt text)
+                // Must be at least a few lines after "User instructions:" to skip prompt
+                if trimmed.starts_with('{') || trimmed.starts_with('[') {
+                    // Found potential JSON start - extract from here to end
+                    let json_portion = lines[idx..].join("\n");
+                    if !json_portion.is_empty() && json_portion.len() > 100 {
+                        tracing::debug!(
+                            "📦 Extracted JSON from after codex headers: {} -> {} bytes (line {} after instructions)",
+                            output.len(),
+                            json_portion.len(),
+                            idx
+                        );
+                        return json_portion;
+                    }
+                }
+            }
+        }
+    }
+
+    // Pattern 3: No extraction needed
+    output.to_string()
+}
+
 async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
     let mut manager = AGENT_MANAGER.write().await;
 
@@ -647,32 +731,27 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
                 );
             }
 
-            // SPEC-KIT-927+: Extract JSON from markdown code fences if present
-            // Many models wrap JSON in ```json ... ``` for readability
-            let cleaned_output = if output.trim_start().starts_with("```json") {
-                // Find the closing ```
-                if let Some(start) = output.find("```json") {
-                    let after_fence = &output[start + 7..]; // Skip "```json"
-                    if let Some(end) = after_fence.find("```") {
-                        let json_content = after_fence[..end].trim();
-                        tracing::debug!(
-                            "📦 Extracted JSON from markdown fence: {} -> {} bytes",
-                            output.len(),
-                            json_content.len()
-                        );
-                        json_content.to_string()
-                    } else {
-                        output.to_string()
-                    }
-                } else {
-                    output.to_string()
-                }
+            // SPEC-KIT-927+: Extract JSON from mixed content
+            // Handles both markdown-wrapped JSON and codex headers with embedded JSON
+            let cleaned_output = extract_json_from_mixed_output(&output, &model);
+
+            // Log extraction result
+            if cleaned_output.len() != output.len() {
+                tracing::info!(
+                    "📦 Extraction changed output: {} -> {} bytes",
+                    output.len(),
+                    cleaned_output.len()
+                );
             } else {
-                output.to_string()
-            };
+                tracing::trace!("   No extraction performed (output unchanged)");
+            }
 
             // Validation 0: Output corruption detection (TUI text, conversation, etc.)
-            if cleaned_output.contains("thetu@arch-dev") || cleaned_output.contains("codex\n\nShort answer:") {
+            // Expanded patterns based on diagnostic analysis
+            if cleaned_output.contains("thetu@arch-dev") ||
+               cleaned_output.contains("codex\n\nShort answer:") ||
+               cleaned_output.contains("How do you want to proceed") ||
+               (cleaned_output.contains("codex") && cleaned_output.contains("Got it. I'm focused")) {
                 tracing::error!(
                     "❌ Agent {} output contains TUI conversation text! This indicates stdout mixing/pollution.",
                     model
