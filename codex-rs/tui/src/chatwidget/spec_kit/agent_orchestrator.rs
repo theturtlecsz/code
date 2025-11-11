@@ -341,10 +341,11 @@ async fn spawn_and_wait_for_agent(
         &prompt.chars().take(300).collect::<String>()
     );
 
-    // SPEC-KIT-923: Check for observable agents flag
+    // SPEC-KIT-927: Enable observable agents by default for file stability protection
+    // Set SPEC_KIT_OBSERVABLE_AGENTS=0 to disable if needed
     let tmux_enabled = std::env::var("SPEC_KIT_OBSERVABLE_AGENTS")
-        .map(|v| v == "1" || v.to_lowercase() == "true")
-        .unwrap_or(false);
+        .map(|v| v != "0" && v.to_lowercase() != "false")
+        .unwrap_or(true);
 
     if tmux_enabled {
         tracing::info!("{}   🔍 Observable agents ENABLED (tmux mode)", run_tag);

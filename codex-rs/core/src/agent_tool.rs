@@ -601,6 +601,37 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
     // SPEC-KIT-927: Calculate execution duration for suspicious completion detection
     let execution_duration = execution_start.elapsed();
 
+    // SPEC-KIT-927+: Comprehensive output diagnostics before validation
+    // Helps diagnose corruption patterns (TUI text, headers, schemas)
+    if let Ok(ref output) = result {
+        // Analyze output characteristics
+        let has_json_start = output.trim_start().starts_with('{') || output.trim_start().starts_with('[');
+        let has_markdown_fence = output.contains("```json") || output.contains("```");
+        let has_codex_header = output.contains("OpenAI Codex v") || output.contains("[2025-");
+        let has_tui_text = output.contains("codex\n\n") || output.contains("thetu@arch-dev");
+        let has_unquoted_types = output.contains(": string") || output.contains(": number");
+        let has_template_vars = output.contains("${");
+        let line_count = output.lines().count();
+
+        tracing::debug!(
+            "📊 Agent {} output analysis: size={} bytes, lines={}, duration={}s, json_start={}, markdown={}, header={}, tui_text={}, unquoted_types={}, template_vars={}",
+            model,
+            output.len(),
+            line_count,
+            execution_duration.as_secs(),
+            has_json_start,
+            has_markdown_fence,
+            has_codex_header,
+            has_tui_text,
+            has_unquoted_types,
+            has_template_vars
+        );
+
+        // Detailed preview logging
+        let preview_len = 300.min(output.len());
+        tracing::debug!("📄 Output preview (first {} chars): {}", preview_len, &output[..preview_len]);
+    }
+
     // SPEC-KIT-927: Validate output before marking agent as complete
     // This prevents storing partial/invalid output (schema templates, headers only)
     let validated_result = match result {
@@ -616,8 +647,31 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
                 );
             }
 
+            // Validation 0: Output corruption detection (TUI text, conversation, etc.)
+            if output.contains("thetu@arch-dev") || output.contains("codex\n\nShort answer:") {
+                tracing::error!(
+                    "❌ Agent {} output contains TUI conversation text! This indicates stdout mixing/pollution.",
+                    model
+                );
+                tracing::error!("🔍 Corruption pattern: Terminal prompt or conversation detected");
+                tracing::debug!("Corrupted output sample: {}", &output.chars().take(500).collect::<String>());
+                Err(format!(
+                    "Agent output polluted with TUI conversation text. Stdout redirection broken."
+                ))
+            }
+            // Check for headers-only output (codex initialization without actual response)
+            else if output.contains("OpenAI Codex v") && output.contains("User instructions:") && !output.contains("{") {
+                tracing::error!(
+                    "❌ Agent {} returned headers only (no JSON)! Premature collection detected.",
+                    model
+                );
+                tracing::debug!("Headers-only output: {}", &output.chars().take(400).collect::<String>());
+                Err(format!(
+                    "Agent returned initialization headers without JSON output. Premature collection."
+                ))
+            }
             // Validation 1: Minimum size check (>500 bytes for valid agent output)
-            if output.len() < 500 {
+            else if output.len() < 500 {
                 tracing::warn!(
                     "⚠️ Agent {} output too small: {} bytes (minimum 500) after {}s",
                     model,
