@@ -57,74 +57,7 @@ fn extract_useful_content_from_stage_file(content: &str) -> String {
     content[..cut_pos].trim().to_string()
 }
 
-/// Extract clean JSON from agent output (strip timestamps, debug output, metadata)
-/// Critical for preventing exponential prompt growth in sequential execution
-fn extract_clean_json_from_agent_output(raw_output: &str) -> Option<String> {
-    use serde_json::Value;
-
-    // Strategy 1: Find JSON by looking for "stage": field (identifies actual response)
-    if let Some(stage_pos) = raw_output.find(r#""stage":"#) {
-        // Search backwards for opening brace
-        let before_stage = &raw_output[..stage_pos];
-        if let Some(open_pos) = before_stage.rfind('{') {
-            // Find matching closing brace
-            let mut depth = 0;
-            let mut close_pos = None;
-
-            for (offset, ch) in raw_output[open_pos..].char_indices() {
-                if ch == '{' {
-                    depth += 1;
-                }
-                if ch == '}' {
-                    depth -= 1;
-                    if depth == 0 {
-                        close_pos = Some(open_pos + offset + ch.len_utf8());
-                        break;
-                    }
-                }
-            }
-
-            if let Some(end_pos) = close_pos {
-                let candidate = &raw_output[open_pos..end_pos];
-
-                // Validate it's actually valid JSON
-                if let Ok(value) = serde_json::from_str::<Value>(candidate) {
-                    // Re-serialize to get clean, minified JSON (removes extra whitespace)
-                    if let Ok(clean_json) = serde_json::to_string(&value) {
-                        tracing::info!(
-                            "  📦 Extracted clean JSON: {} → {} chars ({}% compression)",
-                            raw_output.len(),
-                            clean_json.len(),
-                            (100 - (clean_json.len() * 100 / raw_output.len()))
-                        );
-                        return Some(clean_json);
-                    }
-                }
-            }
-        }
-    }
-
-    // Strategy 2: Try finding first { to last }
-    if let Some(start) = raw_output.find('{') {
-        if let Some(end) = raw_output.rfind('}') {
-            if end > start {
-                let candidate = &raw_output[start..=end];
-                if let Ok(value) = serde_json::from_str::<Value>(candidate) {
-                    if let Ok(clean_json) = serde_json::to_string(&value) {
-                        tracing::info!(
-                            "  📦 Fallback extraction: {} → {} chars",
-                            raw_output.len(),
-                            clean_json.len()
-                        );
-                        return Some(clean_json);
-                    }
-                }
-            }
-        }
-    }
-
-    None
-}
+// SPEC-KIT-927: extract_clean_json_from_agent_output() removed - replaced by json_extractor.rs
 
 /// Build individual agent prompt with context (matches quality gate pattern)
 /// SPEC-KIT-900 Session 3: Fix architectural mismatch - each agent gets unique prompt
@@ -538,9 +471,13 @@ async fn spawn_regular_stage_agents_sequential(
         for (prev_agent_name, prev_output) in &agent_outputs {
             let placeholder = format!("${{PREVIOUS_OUTPUTS.{}}}", prev_agent_name);
 
-            // Extract and validate JSON (strip metadata, timestamps, debug output)
-            let output_to_inject = extract_clean_json_from_agent_output(prev_output)
-                .unwrap_or_else(|| {
+            // SPEC-KIT-927: Extract JSON using robust cascade
+            let output_to_inject = super::json_extractor::extract_stage_agent_json(prev_output)
+                .map(|result| {
+                    // Re-serialize to compact JSON
+                    result.json.to_string()
+                })
+                .unwrap_or_else(|_| {
                     tracing::warn!(
                         "  ⚠️ Failed to extract JSON from {}, using truncated raw output",
                         prev_agent_name
@@ -573,8 +510,10 @@ async fn spawn_regular_stage_agents_sequential(
             let all_outputs = agent_outputs
                 .iter()
                 .map(|(name, output)| {
-                    let clean = extract_clean_json_from_agent_output(output)
-                        .unwrap_or_else(|| output.chars().take(5000).collect::<String>());
+                    // SPEC-KIT-927: Use robust extraction
+                    let clean = super::json_extractor::extract_stage_agent_json(output)
+                        .map(|r| r.json.to_string())
+                        .unwrap_or_else(|_| output.chars().take(5000).collect::<String>());
                     format!("## {}\n{}", name, clean)
                 })
                 .collect::<Vec<_>>()

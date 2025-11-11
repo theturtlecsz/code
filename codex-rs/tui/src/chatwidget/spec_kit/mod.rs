@@ -34,6 +34,7 @@ pub mod file_modifier;
 pub mod git_integration; // SPEC-KIT-922: Auto-commit stage artifacts
 pub mod guardrail;
 pub mod handler;
+pub mod json_extractor; // SPEC-KIT-927: Industrial-strength JSON extraction from LLM outputs
 pub mod native_consensus_executor; // Native consensus orchestration (eliminates orchestrator agent)
 pub mod native_guardrail; // SPEC-KIT-066, SPEC-KIT-902: Native guardrail validation (replaces bash scripts)
 pub mod native_quality_gate_orchestrator; // SPEC-KIT-900, I-003: Native quality gate orchestration (eliminates LLM plumbing)

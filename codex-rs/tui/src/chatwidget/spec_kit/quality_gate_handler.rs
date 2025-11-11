@@ -1545,26 +1545,27 @@ fn store_quality_gate_artifacts_sync(
             }
         };
 
-        // Extract JSON from markdown code fence or raw
-        let json_str = match extract_json_from_markdown(&content) {
-            Some(j) => j,
-            None => {
+        // SPEC-KIT-927: Use robust JSON extraction with validation
+        let json_str = match super::json_extractor::extract_and_validate_quality_gate(
+            &content,
+            &agent_name,
+        ) {
+            Ok(extraction_result) => {
+                debug!(
+                    "Extracted {} via {:?} (confidence: {:.2})",
+                    agent_name, extraction_result.method, extraction_result.confidence
+                );
+                // Re-serialize to string for storage
+                extraction_result.json.to_string()
+            }
+            Err(e) => {
                 warn!(
-                    "No JSON found in agent result file {} for {}",
-                    result_path, agent_name
+                    "Extraction failed for agent result file {} ({}): {}",
+                    result_path, agent_name, e
                 );
                 continue;
             }
         };
-
-        // Validate JSON structure
-        if let Err(e) = serde_json::from_str::<serde_json::Value>(&json_str) {
-            warn!(
-                "Invalid JSON in agent result file {} for {}: {}",
-                result_path, agent_name, e
-            );
-            continue;
-        }
 
         // Clone for async task
         let mcp_clone = mcp_manager.clone();
@@ -1653,32 +1654,24 @@ fn get_completed_quality_gate_agents(_widget: &ChatWidget) -> Vec<(String, Strin
             Err(_) => continue, // No result file yet
         };
 
-        // Extract JSON to check if this is a quality gate agent
-        let json_str = match extract_json_from_markdown(&content) {
-            Some(j) => j,
-            None => continue, // No JSON found
-        };
+        // SPEC-KIT-927: Use robust JSON extraction with validation
+        match super::json_extractor::extract_and_validate_quality_gate(&content, "scanner") {
+            Ok(extraction_result) => {
+                let json_val = extraction_result.json;
 
-        // Parse JSON to verify it's a quality gate artifact
-        let json_val: serde_json::Value = match serde_json::from_str(&json_str) {
-            Ok(v) => v,
-            Err(_) => continue, // Invalid JSON
-        };
-
-        // Check if this is a quality gate stage
-        let stage = match json_val.get("stage").and_then(|v| v.as_str()) {
-            Some(s) => s,
-            None => continue,
-        };
-
-        if stage == "quality-gate-clarify" || stage.starts_with("quality-gate-") {
-            // Extract agent name
-            if let Some(agent) = json_val.get("agent").and_then(|v| v.as_str()) {
-                quality_gate_agents.push((agent.to_lowercase().to_string(), agent_id.clone()));
-                debug!(
-                    "Found quality gate agent: {} (id: {}, stage: {})",
-                    agent, agent_id, stage
-                );
+                // Already validated by extractor - just get agent name
+                if let Some(agent) = json_val.get("agent").and_then(|v| v.as_str()) {
+                    let stage = json_val.get("stage").and_then(|v| v.as_str()).unwrap_or("unknown");
+                    quality_gate_agents.push((agent.to_lowercase().to_string(), agent_id.clone()));
+                    debug!(
+                        "Found quality gate agent: {} (id: {}, stage: {}) via {:?}",
+                        agent, agent_id, stage, extraction_result.method
+                    );
+                }
+            }
+            Err(_) => {
+                // Not a quality gate agent or extraction failed
+                continue;
             }
         }
     }
@@ -1699,72 +1692,7 @@ fn get_completed_quality_gate_agents(_widget: &ChatWidget) -> Vec<(String, Strin
     quality_gate_agents
 }
 
-/// Extract JSON from markdown code fence or raw JSON
-///
-/// Handles two formats:
-/// 1. Markdown code fence: ```json...```
-/// 2. Raw JSON: Content starting with { or [
-///
-/// Returns the JSON string, or None if not found.
-fn extract_json_from_markdown(content: &str) -> Option<String> {
-    // First try to extract from markdown code fence
-    let lines: Vec<&str> = content.lines().collect();
-    let mut in_fence = false;
-    let mut json_lines = Vec::new();
-
-    for line in lines {
-        if line.trim() == "```json" || line.trim() == "``` json" {
-            in_fence = true;
-            continue;
-        }
-        if line.trim() == "```" && in_fence {
-            break;
-        }
-        if in_fence {
-            json_lines.push(line);
-        }
-    }
-
-    if !json_lines.is_empty() {
-        return Some(json_lines.join("\n"));
-    }
-
-    // If no code fence found, try to find raw JSON (starts with { or [)
-    // Look for lines starting with { or [ after skipping agent metadata
-    let mut found_json_start = false;
-    let mut raw_json_lines = Vec::new();
-
-    for line in content.lines() {
-        let trimmed = line.trim();
-
-        // Start collecting when we find { or [
-        if !found_json_start && (trimmed.starts_with('{') || trimmed.starts_with('[')) {
-            found_json_start = true;
-            raw_json_lines.push(line);
-            continue;
-        }
-
-        // If we're collecting JSON, continue until we hit something that's clearly not JSON
-        if found_json_start {
-            // Stop if we hit a line that starts with [ and looks like a log timestamp
-            if trimmed.starts_with('[') && trimmed.contains(']') && trimmed.contains("tokens used")
-            {
-                break;
-            }
-            raw_json_lines.push(line);
-        }
-    }
-
-    if !raw_json_lines.is_empty() {
-        let json_str = raw_json_lines.join("\n");
-        // Validate it looks like JSON by checking it parses
-        if serde_json::from_str::<serde_json::Value>(&json_str).is_ok() {
-            return Some(json_str);
-        }
-    }
-
-    None
-}
+// SPEC-KIT-927: extract_json_from_markdown() removed - replaced by json_extractor.rs
 
 /// Store quality gate artifact to local-memory via MCP (async helper)
 ///
