@@ -123,32 +123,33 @@ pub async fn execute_in_pane(
     // Track temp files for cleanup
     let mut temp_files = Vec::new();
 
-    // Process arguments - write large ones to temp files
+    // Process arguments - properly escape all for shell execution
+    // FIXED (SPEC-923): Instead of using command substitution $(cat file) which fails
+    // in tmux context, we properly escape content for direct shell execution
     let mut processed_args = Vec::new();
     let mut prev_arg_was_prompt_flag = false;
 
     for (i, arg) in args.iter().enumerate() {
         if arg.len() > LARGE_ARG_THRESHOLD {
-            // Create temp file for large argument
+            // For large arguments, still write to temp file for logging/debugging,
+            // but also read back immediately for proper escaping
             let temp_path = format!("/tmp/tmux-agent-arg-{}-{}.txt", std::process::id(), i);
 
-            // Write content to temp file
+            // Write content to temp file (for debugging)
             tokio::fs::write(&temp_path, arg)
                 .await
                 .map_err(|e| format!("Failed to write temp file {}: {}", temp_path, e))?;
 
             temp_files.push(temp_path.clone());
 
-            // If previous arg was a prompt flag (-p, --prompt), use command substitution
-            if prev_arg_was_prompt_flag {
-                processed_args.push(format!("\"$(cat {})\"", temp_path));
-            } else {
-                // Otherwise, use stdin redirection after command
-                processed_args.push(format!("< {}", temp_path));
-            }
+            // Properly escape the argument content for shell
+            // Single quotes preserve everything literally except single quotes themselves
+            // We escape single quotes by ending the quote, adding escaped quote, then restarting
+            let escaped_arg = arg.replace('\'', "'\\''");
+            processed_args.push(format!("'{}'", escaped_arg));
 
             tracing::debug!(
-                "Wrote large argument ({} bytes) to temp file: {}",
+                "Processed large argument ({} bytes, temp file: {})",
                 arg.len(),
                 temp_path
             );
@@ -200,11 +201,15 @@ pub async fn execute_in_pane(
     }
 
     tracing::debug!(
-        "Executing in pane {} (created {} temp files): {}",
+        "Executing in pane {} ({} temp files for debugging): command length {} chars",
         pane_id,
         temp_files.len(),
-        if full_command.len() > 200 {
-            format!("{}...", &full_command[..200])
+        full_command.len()
+    );
+    tracing::trace!(
+        "Full command: {}",
+        if full_command.len() > 500 {
+            format!("{}... (truncated)", &full_command[..500])
         } else {
             full_command.clone()
         }
