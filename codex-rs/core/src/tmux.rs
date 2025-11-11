@@ -123,128 +123,127 @@ pub async fn execute_in_pane(
     // Track temp files for cleanup
     let mut temp_files = Vec::new();
 
-    // Process arguments - use temp files for large args to avoid command length limits
-    // FIXED (SPEC-923): Large arguments passed via temp files with cat piping to avoid:
-    // 1. Command length limits (shell ARG_MAX)
-    // 2. Command substitution issues in tmux context
-    // 3. Complex escaping of newlines and special characters
-    let mut processed_args = Vec::new();
-    let mut has_large_prompt_arg = false;
-
-    for (i, arg) in args.iter().enumerate() {
-        // Check if this is a prompt flag
-        let is_prompt_flag = arg == "-p" || arg == "--prompt";
-
-        if arg.len() > LARGE_ARG_THRESHOLD && !is_prompt_flag {
-            // Large non-flag argument: write to file and mark for stdin reading
-            let temp_path = format!("/tmp/tmux-agent-arg-{}-{}.txt", std::process::id(), i);
-
-            tokio::fs::write(&temp_path, arg)
-                .await
-                .map_err(|e| format!("Failed to write temp file {}: {}", temp_path, e))?;
-
-            temp_files.push(temp_path.clone());
-            has_large_prompt_arg = true;
-
-            // Store the path for later use in command construction
-            processed_args.push(format!("__LARGE_ARG_FILE__:{}", temp_path));
-
-            tracing::debug!(
-                "Stored large argument ({} bytes) in temp file: {}",
-                arg.len(),
-                temp_path
-            );
-        } else {
-            // Normal argument (including flags) - escape and add
-            let escaped_arg = arg.replace('\'', "'\\''");
-            processed_args.push(format!("'{}'", escaped_arg));
-        }
-    }
-
-    // Build the full command with environment variables
-    let mut full_command = String::new();
-
-    // Add working directory change if specified
-    if let Some(dir) = working_dir {
-        full_command.push_str(&format!("cd {} && ", dir.display()));
-    }
-
-    // Add environment variables
-    for (key, value) in env {
-        // Escape single quotes in value
-        let escaped_value = value.replace('\'', "'\\''");
-        full_command.push_str(&format!("export {}='{}'; ", key, escaped_value));
-    }
-
     // Create unique output file for this agent execution
-    // Tmux pane IDs use %XX format - strip % and sanitize for safe filenames
     let sanitized_pane = pane_id.replace("%", "").replace(":", "-").replace(".", "-");
     let output_file = format!("/tmp/tmux-agent-output-{}-{}.txt", std::process::id(), sanitized_pane);
 
-    // Build the command - if we have large args, use cat to pipe content
-    if has_large_prompt_arg {
-        // Find the large arg file and separate other args
-        let mut large_file_path = String::new();
-        let mut cmd_args = Vec::new();
-        let mut found_prompt_flag = false;
+    // Check if we have large arguments - if so, use wrapper script approach
+    let has_large_arg = args.iter().any(|a| a.len() > LARGE_ARG_THRESHOLD);
 
-        for arg in &processed_args {
-            if arg.starts_with("__LARGE_ARG_FILE__:") {
-                large_file_path = arg.strip_prefix("__LARGE_ARG_FILE__:").unwrap().to_string();
-                // Add '-' to read from stdin if previous arg was -p
-                if found_prompt_flag {
-                    cmd_args.push("'-'".to_string());
-                }
+    let full_command = if has_large_arg {
+        // WRAPPER SCRIPT APPROACH: Create a shell script with heredoc for large prompts
+        // This avoids: command length limits, stdin issues, and command substitution complexity
+
+        let wrapper_script_path = format!("/tmp/tmux-agent-wrapper-{}-{}.sh", std::process::id(), sanitized_pane);
+        temp_files.push(wrapper_script_path.clone());
+
+        // Build wrapper script content
+        let mut script_content = String::from("#!/bin/bash\nset -e\n\n");
+
+        // Add environment variables to script
+        for (key, value) in env {
+            let escaped_value = value.replace('\'', "'\\''");
+            script_content.push_str(&format!("export {}='{}'\n", key, escaped_value));
+        }
+
+        // Add working directory change if needed
+        if let Some(dir) = working_dir {
+            script_content.push_str(&format!("cd '{}'\n\n", dir.display()));
+        }
+
+        // Build command with heredoc for large arguments
+        script_content.push_str(&format!("{}", command));
+
+        for arg in args {
+            if arg.len() > LARGE_ARG_THRESHOLD {
+                // Use heredoc for large argument - perfectly preserves content
+                script_content.push_str(" \"$(cat <<'PROMPT_HEREDOC_EOF'\n");
+                script_content.push_str(arg);
+                script_content.push_str("\nPROMPT_HEREDOC_EOF\n)\"");
+
+                tracing::debug!("Using heredoc for large argument ({} bytes)", arg.len());
             } else {
-                // Track if this is a prompt flag for stdin handling
-                if arg == "'-p'" || arg == "'--prompt'" {
-                    found_prompt_flag = true;
-                } else {
-                    found_prompt_flag = false;
-                }
-                cmd_args.push(arg.clone());
+                // Normal argument - properly escape
+                let escaped = arg.replace('\'', "'\\''");
+                script_content.push_str(&format!(" '{}'", escaped));
             }
         }
 
-        // Use cat to pipe the large content to the agent via stdin
-        // This avoids command length limits and works reliably in tmux
-        full_command.push_str(&format!("cat {} | {}", large_file_path, command));
-        for arg in &cmd_args {
-            full_command.push_str(&format!(" {}", arg));
+        // Redirect output
+        script_content.push_str(&format!(" > {} 2>&1\n", output_file));
+
+        // Write wrapper script
+        tokio::fs::write(&wrapper_script_path, script_content)
+            .await
+            .map_err(|e| format!("Failed to write wrapper script: {}", e))?;
+
+        // Make script executable
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = tokio::fs::metadata(&wrapper_script_path)
+                .await
+                .map_err(|e| format!("Failed to get script permissions: {}", e))?
+                .permissions();
+            perms.set_mode(0o755);
+            tokio::fs::set_permissions(&wrapper_script_path, perms)
+                .await
+                .map_err(|e| format!("Failed to set script permissions: {}", e))?;
         }
 
-        tracing::debug!("Using cat pipe for large argument from: {}", large_file_path);
+        tracing::info!("Created wrapper script: {}", wrapper_script_path);
+
+        // Simple command to execute wrapper script
+        format!("bash {}", wrapper_script_path)
     } else {
-        // Normal command with all arguments inline
-        full_command.push_str(command);
-        for arg in &processed_args {
-            full_command.push_str(&format!(" {}", arg));
+        // NORMAL APPROACH: Small arguments can be passed directly
+        let mut cmd = String::new();
+
+        // Add working directory change if specified
+        if let Some(dir) = working_dir {
+            cmd.push_str(&format!("cd {} && ", dir.display()));
         }
-    }
 
-    // Redirect stdout and stderr to output file
-    full_command.push_str(&format!(" > {} 2>&1", output_file));
+        // Add environment variables
+        for (key, value) in env {
+            let escaped_value = value.replace('\'', "'\\''");
+            cmd.push_str(&format!("export {}='{}'; ", key, escaped_value));
+        }
 
-    // Append marker for completion detection
-    full_command.push_str("; echo '___AGENT_COMPLETE___'");
+        // Add command with escaped arguments
+        cmd.push_str(command);
+        for arg in args {
+            let escaped_arg = arg.replace('\'', "'\\''");
+            cmd.push_str(&format!(" '{}'", escaped_arg));
+        }
 
-    // Add cleanup for temp files ONLY (NOT output file - we need to read it first)
+        // Redirect output
+        cmd.push_str(&format!(" > {} 2>&1", output_file));
+
+        cmd
+    };
+
+    // Append completion marker and cleanup to the command
+    let mut final_command = full_command;
+    final_command.push_str("; echo '___AGENT_COMPLETE___'");
+
+    // Add cleanup for temp files (wrapper scripts) - NOT output file
     if !temp_files.is_empty() {
-        full_command.push_str(&format!("; rm -f {}", temp_files.join(" ")));
+        final_command.push_str(&format!("; rm -f {}", temp_files.join(" ")));
     }
 
     tracing::debug!(
-        "Executing in pane {} ({} temp files for debugging): command length {} chars",
+        "Executing in pane {} ({} temp files): command length {} chars",
         pane_id,
         temp_files.len(),
-        full_command.len()
+        final_command.len()
     );
     tracing::trace!(
-        "Full command: {}",
-        if full_command.len() > 500 {
-            format!("{}... (truncated)", &full_command[..500])
+        "Command: {}",
+        if final_command.len() > 500 {
+            format!("{}... (truncated)", &final_command[..500])
         } else {
-            full_command.clone()
+            final_command.clone()
         }
     );
 
@@ -256,7 +255,7 @@ pub async fn execute_in_pane(
 
     // Send the command to the pane
     let send = Command::new("tmux")
-        .args(["send-keys", "-t", pane_id, &full_command, "Enter"])
+        .args(["send-keys", "-t", pane_id, &final_command, "Enter"])
         .status()
         .await
         .map_err(|e| format!("Failed to send command to pane: {}", e))?;
