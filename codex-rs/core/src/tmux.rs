@@ -173,6 +173,9 @@ pub async fn execute_in_pane(
         // Redirect output
         script_content.push_str(&format!(" > {} 2>&1\n", output_file));
 
+        // SPEC-923: Add completion marker so polling can detect when agent finishes
+        script_content.push_str("echo '___AGENT_COMPLETE___'\n");
+
         // Write wrapper script
         tokio::fs::write(&wrapper_script_path, script_content)
             .await

@@ -1,0 +1,11 @@
+{
+  "spec_id": "SPEC-KIT-900",
+  "stage": "validate",
+  "event": "dispatched",
+  "mode": "auto",
+  "stage_run_id": "validate-SPEC-KIT-900-auto-attempt-1-5b7645cae43240a0b75e0eeb99b1aa30",
+  "attempt": 1,
+  "dedupe_count": 0,
+  "payload_hash": "5c0461cb1c7348767fe00b6d901539f0c7091f00650bb22aecb507bb9bcc65bf",
+  "timestamp": "2025-11-11T02:35:22.154432767+00:00"
+}

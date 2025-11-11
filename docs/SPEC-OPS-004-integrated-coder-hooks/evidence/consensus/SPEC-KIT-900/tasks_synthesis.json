@@ -2,12 +2,12 @@
   "spec_id": "SPEC-KIT-900",
   "stage": "spec-tasks",
   "artifacts_count": 3,
-  "output_markdown": "# Plan: SPEC-KIT-900\n\n**Stage**: Tasks\n**Agents**: 3\n**Generated**: 2025-11-10 22:48 UTC\n\n## Consensus Summary\n\n- Synthesized from 3 agent responses\n- All agents completed successfully\n",
+  "output_markdown": "# Plan: SPEC-KIT-900\n\n**Stage**: Tasks\n**Agents**: 3\n**Generated**: 2025-11-11 02:34 UTC\n\n## Agent Responses (Raw)\n\n*Note: Structured extraction failed, displaying raw agent data*\n\n### gemini\n\n**content**:\n\n\n\n### claude\n\n**content**:\n\n\n\n### gpt_pro\n\n**content**:\n\n\n\n## Consensus Summary\n\n- Synthesized from 3 agent responses\n- All agents completed successfully\n",
   "output_path": "/home/thetu/code/docs/SPEC-KIT-900/tasks.md",
   "status": "ok",
   "agreements": null,
   "conflicts": null,
   "degraded": false,
-  "run_id": "run_SPEC-KIT-900_1762814610_e2107fba",
-  "created_at": "2025-11-10 22:48:13"
+  "run_id": "run_SPEC-KIT-900_1762828295_44b21920",
+  "created_at": "2025-11-11 02:34:35"
 }
