@@ -489,6 +489,48 @@ fn generate_branch_id(model: &str, agent: &str) -> String {
 
 use crate::git_worktree::setup_worktree;
 
+/// SPEC-KIT-927+: Detect if output is a JSON schema template rather than actual data
+///
+/// Catches TypeScript-style type annotations that indicate schema templates:
+/// - Unquoted types: "field": string, "field": number, "field": boolean
+/// - Union types: "field": "opt1"|"opt2"|"opt3"
+/// - Type with description: string (description text)
+/// - Template variables: ${VARIABLE_NAME}
+/// - Array type syntax: [ { "field": string } ]
+///
+/// Returns true if output appears to be a schema template, not real data.
+fn is_json_schema_template(output: &str) -> bool {
+    // Pattern 1: Unquoted primitive types after colon (most common)
+    // Match: ": string" or ": number" or ": boolean" (with optional comma/space)
+    let has_unquoted_types = output.contains(": string") ||
+                            output.contains(": number") ||
+                            output.contains(": boolean") ||
+                            output.contains(": object") ||
+                            output.contains(": array");
+
+    // Pattern 2: Union types with pipe operator
+    // Match: "high"|"medium"|"low" or similar patterns
+    let has_union_types = output.contains("\"|\"");
+
+    // Pattern 3: Type annotations with descriptions in parentheses
+    // Match: string (description) or number (some text)
+    let has_type_descriptions = (output.contains("string (") && output.contains(")")) ||
+                               (output.contains("number (") && output.contains(")"));
+
+    // Pattern 4: Template variable syntax
+    // Match: ${VARIABLE} or ${MODEL_ID}
+    let has_template_vars = output.contains("${");
+
+    // Pattern 5: Specific known schema patterns from prompts
+    let has_known_patterns = output.contains("{ \"path\": string") ||
+                            output.contains("\"diff_proposals\": [ {") ||
+                            output.contains("\"change\": string (diff or summary)");
+
+    // If any pattern matches, it's likely a schema template
+    has_unquoted_types || has_union_types || has_type_descriptions ||
+    has_template_vars || has_known_patterns
+}
+
 /// SPEC-KIT-927+: Extract JSON from agent output that may be markdown-wrapped
 /// or include explanatory text before the JSON.
 ///
@@ -706,9 +748,8 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
                 ))
             }
             // Validation 2: Schema template detection (common in corrupted outputs)
-            else if output.contains("{ \"path\": string") ||
-                    output.contains("\"diff_proposals\": [ {") ||
-                    output.contains("\"change\": string (diff or summary)") {
+            // Enhanced to catch all TypeScript-style type annotations
+            else if is_json_schema_template(&output) {
                 tracing::error!(
                     "❌ Agent {} returned JSON schema instead of data after {}s!",
                     model,
