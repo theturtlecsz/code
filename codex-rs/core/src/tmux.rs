@@ -21,6 +21,9 @@ pub async fn is_tmux_available() -> bool {
 }
 
 /// Create or reuse a tmux session for agent execution
+///
+/// SPEC-KIT-925: Kill stale sessions (>5min old) to prevent state corruption
+/// that causes completion marker detection failures
 pub async fn ensure_session(session_name: &str) -> Result<(), String> {
     // Check if session exists
     let check = Command::new("tmux")
@@ -31,25 +34,71 @@ pub async fn ensure_session(session_name: &str) -> Result<(), String> {
         .await
         .map_err(|e| format!("Failed to check tmux session: {}", e))?;
 
-    if !check.success() {
-        // Create new session (detached)
-        let create = Command::new("tmux")
-            .args(["new-session", "-d", "-s", session_name])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
+    if check.success() {
+        // Session exists - check if it's stale (>5 minutes old)
+        let session_info = Command::new("tmux")
+            .args([
+                "display-message",
+                "-t",
+                session_name,
+                "-p",
+                "#{session_created}",
+            ])
+            .output()
             .await
-            .map_err(|e| format!("Failed to create tmux session: {}", e))?;
+            .map_err(|e| format!("Failed to get session info: {}", e))?;
 
-        if !create.success() {
-            return Err(format!("Failed to create tmux session '{}'", session_name));
+        if session_info.status.success() {
+            let created_str = String::from_utf8_lossy(&session_info.stdout);
+            if let Ok(created_timestamp) = created_str.trim().parse::<i64>() {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64;
+
+                let age_secs = now - created_timestamp;
+                const MAX_SESSION_AGE_SECS: i64 = 300; // 5 minutes
+
+                if age_secs > MAX_SESSION_AGE_SECS {
+                    tracing::warn!(
+                        "Session '{}' is stale ({} seconds old), killing and recreating",
+                        session_name,
+                        age_secs
+                    );
+
+                    // Kill stale session
+                    let _ = Command::new("tmux")
+                        .args(["kill-session", "-t", session_name])
+                        .status()
+                        .await;
+
+                    // Fall through to create new session
+                } else {
+                    tracing::debug!(
+                        "Reusing fresh tmux session: {} ({} seconds old)",
+                        session_name,
+                        age_secs
+                    );
+                    return Ok(());
+                }
+            }
         }
-
-        tracing::info!("Created tmux session: {}", session_name);
-    } else {
-        tracing::debug!("Reusing existing tmux session: {}", session_name);
     }
 
+    // Create new session (detached)
+    let create = Command::new("tmux")
+        .args(["new-session", "-d", "-s", session_name])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .await
+        .map_err(|e| format!("Failed to create tmux session: {}", e))?;
+
+    if !create.success() {
+        return Err(format!("Failed to create tmux session '{}'", session_name));
+    }
+
+    tracing::info!("Created fresh tmux session: {}", session_name);
     Ok(())
 }
 
@@ -318,7 +367,29 @@ pub async fn execute_in_pane(
 
         if capture.status.success() {
             let pane_content = String::from_utf8_lossy(&capture.stdout).to_string();
-            if pane_content.contains("___AGENT_COMPLETE___") {
+
+            // SPEC-KIT-925: Enhanced diagnostics for debugging completion detection
+            let content_preview = pane_content
+                .lines()
+                .take(5)
+                .collect::<Vec<_>>()
+                .join(" | ");
+            let has_marker = pane_content.contains("___AGENT_COMPLETE___");
+
+            tracing::trace!(
+                "📋 Pane {} capture: {} bytes, {} lines, marker={}, preview: {}",
+                pane_id,
+                pane_content.len(),
+                pane_content.lines().count(),
+                has_marker,
+                if content_preview.len() > 200 {
+                    format!("{}...", &content_preview[..200])
+                } else {
+                    content_preview
+                }
+            );
+
+            if has_marker {
                 tracing::info!("✅ Agent completed in pane {}, reading output file", pane_id);
 
                 // Read clean output from dedicated output file
