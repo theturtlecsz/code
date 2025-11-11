@@ -224,7 +224,7 @@ fn resolve_metadata_field(
     default.to_string()
 }
 
-fn model_metadata(stage: SpecStage, agent: SpecAgent) -> Vec<(String, String)> {
+pub fn model_metadata(stage: SpecStage, agent: SpecAgent) -> Vec<(String, String)> {
     let (model_id_default, release_default, mode_default) = match (stage, agent) {
         (SpecStage::Tasks | SpecStage::Unlock, SpecAgent::Gemini) => {
             ("gemini-2.5-flash", "2025-05-14", "fast")
