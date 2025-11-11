@@ -1,9 +1,10 @@
 # SPEC-KIT-927: Premature Output Collection Bug (Zombie Agents)
 
-**Status**: Critical Bug - Active Investigation
+**Status**: PARTIALLY FIXED - Core Validation Issues Remain
 **Priority**: P0 - Blocks reliable multi-agent execution
 **Created**: 2025-11-11
 **Discovered**: SPEC-KIT-900 /speckit.auto run (zombie process 4175310)
+**Session 1**: 2025-11-11 - See SESSION-SUMMARY-2025-11-11.md for details
 
 ---
 
