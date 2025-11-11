@@ -647,58 +647,82 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
                 );
             }
 
+            // SPEC-KIT-927+: Extract JSON from markdown code fences if present
+            // Many models wrap JSON in ```json ... ``` for readability
+            let cleaned_output = if output.trim_start().starts_with("```json") {
+                // Find the closing ```
+                if let Some(start) = output.find("```json") {
+                    let after_fence = &output[start + 7..]; // Skip "```json"
+                    if let Some(end) = after_fence.find("```") {
+                        let json_content = after_fence[..end].trim();
+                        tracing::debug!(
+                            "📦 Extracted JSON from markdown fence: {} -> {} bytes",
+                            output.len(),
+                            json_content.len()
+                        );
+                        json_content.to_string()
+                    } else {
+                        output.to_string()
+                    }
+                } else {
+                    output.to_string()
+                }
+            } else {
+                output.to_string()
+            };
+
             // Validation 0: Output corruption detection (TUI text, conversation, etc.)
-            if output.contains("thetu@arch-dev") || output.contains("codex\n\nShort answer:") {
+            if cleaned_output.contains("thetu@arch-dev") || cleaned_output.contains("codex\n\nShort answer:") {
                 tracing::error!(
                     "❌ Agent {} output contains TUI conversation text! This indicates stdout mixing/pollution.",
                     model
                 );
                 tracing::error!("🔍 Corruption pattern: Terminal prompt or conversation detected");
-                tracing::debug!("Corrupted output sample: {}", &output.chars().take(500).collect::<String>());
+                tracing::debug!("Corrupted output sample: {}", &cleaned_output.chars().take(500).collect::<String>());
                 Err(format!(
                     "Agent output polluted with TUI conversation text. Stdout redirection broken."
                 ))
             }
             // Check for headers-only output (codex initialization without actual response)
-            else if output.contains("OpenAI Codex v") && output.contains("User instructions:") && !output.contains("{") {
+            else if cleaned_output.contains("OpenAI Codex v") && cleaned_output.contains("User instructions:") && !cleaned_output.contains("{") {
                 tracing::error!(
                     "❌ Agent {} returned headers only (no JSON)! Premature collection detected.",
                     model
                 );
-                tracing::debug!("Headers-only output: {}", &output.chars().take(400).collect::<String>());
+                tracing::debug!("Headers-only output: {}", &cleaned_output.chars().take(400).collect::<String>());
                 Err(format!(
                     "Agent returned initialization headers without JSON output. Premature collection."
                 ))
             }
             // Validation 1: Minimum size check (>500 bytes for valid agent output)
-            else if output.len() < 500 {
+            else if cleaned_output.len() < 500 {
                 tracing::warn!(
                     "⚠️ Agent {} output too small: {} bytes (minimum 500) after {}s",
                     model,
-                    output.len(),
+                    cleaned_output.len(),
                     execution_duration.as_secs()
                 );
                 Err(format!(
                     "Agent output too small ({} bytes, minimum 500). Possible premature collection after {}s.",
-                    output.len(),
+                    cleaned_output.len(),
                     execution_duration.as_secs()
                 ))
             }
             // Validation 2: Schema template detection (common in corrupted outputs)
-            else if output.contains("{ \"path\": string") ||
-                    output.contains("\"diff_proposals\": [ {") ||
-                    output.contains("\"change\": string (diff or summary)") {
+            else if cleaned_output.contains("{ \"path\": string") ||
+                    cleaned_output.contains("\"diff_proposals\": [ {") ||
+                    cleaned_output.contains("\"change\": string (diff or summary)") {
                 tracing::error!(
                     "❌ Agent {} returned JSON schema instead of data after {}s!",
                     model,
                     execution_duration.as_secs()
                 );
                 tracing::debug!("Schema output preview: {}...",
-                    &output.chars().take(500).collect::<String>());
+                    &cleaned_output.chars().take(500).collect::<String>());
                 Err("Agent returned JSON schema template instead of actual data. Premature output collection detected.".to_string())
             }
             // Validation 3: JSON parsing (must be valid JSON)
-            else if let Err(e) = serde_json::from_str::<serde_json::Value>(&output) {
+            else if let Err(e) = serde_json::from_str::<serde_json::Value>(&cleaned_output) {
                 tracing::error!(
                     "❌ Agent {} output is not valid JSON after {}s: {}",
                     model,
@@ -706,7 +730,7 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
                     e
                 );
                 tracing::debug!("Invalid JSON preview: {}...",
-                    &output.chars().take(500).collect::<String>());
+                    &cleaned_output.chars().take(500).collect::<String>());
                 Err(format!("Agent output is not valid JSON: {}", e))
             }
             // All validations passed
@@ -714,10 +738,10 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
                 tracing::info!(
                     "✅ Agent {} output validated: {} bytes, valid JSON, completed in {}s",
                     model,
-                    output.len(),
+                    cleaned_output.len(),
                     execution_duration.as_secs()
                 );
-                Ok(output)
+                Ok(cleaned_output)
             }
         }
         Err(e) => {
