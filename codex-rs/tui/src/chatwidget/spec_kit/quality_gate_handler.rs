@@ -928,7 +928,68 @@ fn submit_gpt5_validations(
         storage_tags
     );
 
-    widget.submit_prompt_with_display(format!("[GPT-5 Validation] {}", spec_id), combined_prompt);
+    // SPEC-KIT-927: Spawn gpt_pro agent DIRECTLY instead of submitting to main LLM
+    // This prevents the main LLM from calling run_agent tool with 18 models
+    let agent_configs = widget.config.agents.clone();
+    let spec_id_clone = spec_id.to_string();
+    let checkpoint_clone = checkpoint;
+
+    tokio::spawn(async move {
+        use codex_core::agent_tool::AGENT_MANAGER;
+
+        let batch_id = uuid::Uuid::new_v4().to_string();
+
+        // Spawn gpt_pro (gpt-5 with medium reasoning) directly
+        let agent_id = {
+            let mut manager = AGENT_MANAGER.write().await;
+            match manager
+                .create_agent_from_config_name(
+                    "gpt5-medium", // Use gpt5-medium for validation
+                    &agent_configs,
+                    combined_prompt,
+                    true, // read_only
+                    Some(batch_id),
+                    false, // No tmux for single validation agent
+                )
+                .await
+            {
+                Ok(id) => {
+                    info!("✅ Spawned GPT-5 validation agent: {}", &id[..8]);
+                    id
+                }
+                Err(e) => {
+                    warn!("❌ Failed to spawn GPT-5 validation: {}", e);
+                    return;
+                }
+            }
+        };
+
+        // Wait for completion (max 5 minutes)
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(300);
+
+        loop {
+            if start.elapsed() > timeout {
+                warn!("❌ GPT-5 validation timeout after 5 minutes");
+                break;
+            }
+
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+            let manager = AGENT_MANAGER.read().await;
+            if let Some(agent) = manager.get_agent(&agent_id) {
+                if agent.status == codex_core::agent_tool::AgentStatus::Completed {
+                    info!("✅ GPT-5 validation completed");
+                    break;
+                } else if agent.status == codex_core::agent_tool::AgentStatus::Failed {
+                    warn!("❌ GPT-5 validation failed");
+                    break;
+                }
+            }
+        }
+    });
+
+    // Trigger broker to collect validation results
     widget
         .quality_gate_broker
         .fetch_validation_payload(spec_id.to_string(), checkpoint);
