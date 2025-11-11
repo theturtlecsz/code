@@ -123,43 +123,41 @@ pub async fn execute_in_pane(
     // Track temp files for cleanup
     let mut temp_files = Vec::new();
 
-    // Process arguments - properly escape all for shell execution
-    // FIXED (SPEC-923): Instead of using command substitution $(cat file) which fails
-    // in tmux context, we properly escape content for direct shell execution
+    // Process arguments - use temp files for large args to avoid command length limits
+    // FIXED (SPEC-923): Large arguments passed via temp files with cat piping to avoid:
+    // 1. Command length limits (shell ARG_MAX)
+    // 2. Command substitution issues in tmux context
+    // 3. Complex escaping of newlines and special characters
     let mut processed_args = Vec::new();
-    let mut prev_arg_was_prompt_flag = false;
+    let mut has_large_prompt_arg = false;
 
     for (i, arg) in args.iter().enumerate() {
-        if arg.len() > LARGE_ARG_THRESHOLD {
-            // For large arguments, still write to temp file for logging/debugging,
-            // but also read back immediately for proper escaping
+        // Check if this is a prompt flag
+        let is_prompt_flag = arg == "-p" || arg == "--prompt";
+
+        if arg.len() > LARGE_ARG_THRESHOLD && !is_prompt_flag {
+            // Large non-flag argument: write to file and mark for stdin reading
             let temp_path = format!("/tmp/tmux-agent-arg-{}-{}.txt", std::process::id(), i);
 
-            // Write content to temp file (for debugging)
             tokio::fs::write(&temp_path, arg)
                 .await
                 .map_err(|e| format!("Failed to write temp file {}: {}", temp_path, e))?;
 
             temp_files.push(temp_path.clone());
+            has_large_prompt_arg = true;
 
-            // Properly escape the argument content for shell
-            // Single quotes preserve everything literally except single quotes themselves
-            // We escape single quotes by ending the quote, adding escaped quote, then restarting
-            let escaped_arg = arg.replace('\'', "'\\''");
-            processed_args.push(format!("'{}'", escaped_arg));
+            // Store the path for later use in command construction
+            processed_args.push(format!("__LARGE_ARG_FILE__:{}", temp_path));
 
             tracing::debug!(
-                "Processed large argument ({} bytes, temp file: {})",
+                "Stored large argument ({} bytes) in temp file: {}",
                 arg.len(),
                 temp_path
             );
         } else {
-            // Normal argument - escape and add
+            // Normal argument (including flags) - escape and add
             let escaped_arg = arg.replace('\'', "'\\''");
             processed_args.push(format!("'{}'", escaped_arg));
-
-            // Track if this is a prompt flag for next iteration
-            prev_arg_was_prompt_flag = arg == "-p" || arg == "--prompt";
         }
     }
 
@@ -183,10 +181,45 @@ pub async fn execute_in_pane(
     let sanitized_pane = pane_id.replace("%", "").replace(":", "-").replace(".", "-");
     let output_file = format!("/tmp/tmux-agent-output-{}-{}.txt", std::process::id(), sanitized_pane);
 
-    // Add the actual command with processed arguments
-    full_command.push_str(command);
-    for arg in &processed_args {
-        full_command.push_str(&format!(" {}", arg));
+    // Build the command - if we have large args, use cat to pipe content
+    if has_large_prompt_arg {
+        // Find the large arg file and separate other args
+        let mut large_file_path = String::new();
+        let mut cmd_args = Vec::new();
+        let mut found_prompt_flag = false;
+
+        for arg in &processed_args {
+            if arg.starts_with("__LARGE_ARG_FILE__:") {
+                large_file_path = arg.strip_prefix("__LARGE_ARG_FILE__:").unwrap().to_string();
+                // Add '-' to read from stdin if previous arg was -p
+                if found_prompt_flag {
+                    cmd_args.push("'-'".to_string());
+                }
+            } else {
+                // Track if this is a prompt flag for stdin handling
+                if arg == "'-p'" || arg == "'--prompt'" {
+                    found_prompt_flag = true;
+                } else {
+                    found_prompt_flag = false;
+                }
+                cmd_args.push(arg.clone());
+            }
+        }
+
+        // Use cat to pipe the large content to the agent via stdin
+        // This avoids command length limits and works reliably in tmux
+        full_command.push_str(&format!("cat {} | {}", large_file_path, command));
+        for arg in &cmd_args {
+            full_command.push_str(&format!(" {}", arg));
+        }
+
+        tracing::debug!("Using cat pipe for large argument from: {}", large_file_path);
+    } else {
+        // Normal command with all arguments inline
+        full_command.push_str(command);
+        for arg in &processed_args {
+            full_command.push_str(&format!(" {}", arg));
+        }
     }
 
     // Redirect stdout and stderr to output file
