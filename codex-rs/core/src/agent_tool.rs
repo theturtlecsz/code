@@ -787,9 +787,17 @@ async fn execute_model_with_permissions(
             let pane_title = format!("{}", model);
             match crate::tmux::create_pane(&session_name, &pane_title, false).await {
                 Ok(pane_id) => {
-                    // Build environment map
+                    // Build environment map, filtering out debug-related vars that pollute output
                     let mut env: std::collections::HashMap<String, String> =
-                        std::env::vars().collect();
+                        std::env::vars()
+                            .filter(|(k, _)| {
+                                // Filter out debug/logging vars that would pollute agent JSON output
+                                k != "RUST_LOG"
+                                    && k != "RUST_BACKTRACE"
+                                    && k != "RUST_LOG_STYLE"
+                                    && !k.starts_with("RUST_LOG_")
+                            })
+                            .collect();
                     if let Some(ref cfg) = config {
                         if let Some(ref e) = cfg.env {
                             for (k, v) in e {

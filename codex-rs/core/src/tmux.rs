@@ -126,6 +126,7 @@ pub async fn execute_in_pane(
     // Create unique output file for this agent execution
     let sanitized_pane = pane_id.replace("%", "").replace(":", "-").replace(".", "-");
     let output_file = format!("/tmp/tmux-agent-output-{}-{}.txt", std::process::id(), sanitized_pane);
+    tracing::info!("🆔 Creating output file for pane {} (sanitized: {}) -> {}", pane_id, sanitized_pane, output_file);
 
     // Check if we have large arguments - if so, use wrapper script approach
     let has_large_arg = args.iter().any(|a| a.len() > LARGE_ARG_THRESHOLD);
@@ -294,6 +295,7 @@ pub async fn execute_in_pane(
         }
 
         // Check pane content for completion marker (to know when to read output file)
+        tracing::debug!("🔍 Polling pane {} for completion (expecting output file: {})", pane_id, output_file);
         let capture = Command::new("tmux")
             .args(["capture-pane", "-t", pane_id, "-p", "-S", "-"])
             .output()
@@ -314,11 +316,25 @@ pub async fn execute_in_pane(
         if capture.status.success() {
             let pane_content = String::from_utf8_lossy(&capture.stdout).to_string();
             if pane_content.contains("___AGENT_COMPLETE___") {
-                tracing::info!("Agent completed in pane {}, reading output file", pane_id);
+                tracing::info!("✅ Agent completed in pane {}, reading output file", pane_id);
 
                 // Read clean output from dedicated output file
-                tracing::info!("🔍 Attempting to read output file: {}", output_file);
-                tracing::info!("🔍 File exists check: {}", tokio::fs::metadata(&output_file).await.is_ok());
+                let file_exists = tokio::fs::metadata(&output_file).await.is_ok();
+                tracing::info!("🔍 Attempting to read output file: {} (exists: {})", output_file, file_exists);
+
+                // If file doesn't exist, check for similar files to diagnose pane ID mismatch
+                if !file_exists {
+                    tracing::warn!("⚠️ Output file not found! Checking for similar files...");
+                    if let Ok(mut entries) = tokio::fs::read_dir("/tmp").await {
+                        while let Ok(Some(entry)) = entries.next_entry().await {
+                            let name = entry.file_name();
+                            let name_str = name.to_string_lossy();
+                            if name_str.starts_with("tmux-agent-output-") {
+                                tracing::warn!("  Found: {}", name_str);
+                            }
+                        }
+                    }
+                }
 
                 let output = match tokio::fs::read_to_string(&output_file).await {
                     Ok(content) => {

@@ -1207,6 +1207,8 @@ fn synthesize_from_cached_responses(
     }
 
     // Extract work breakdown, risks, acceptance from structured data
+    let mut structured_content_found = false;
+
     for (agent_name, data) in &agent_data {
         if let Some(work_breakdown) = data.get("work_breakdown").and_then(|v| v.as_array()) {
             output.push_str(&format!("## Work Breakdown (from {})\n\n", agent_name));
@@ -1219,6 +1221,7 @@ fn synthesize_from_cached_responses(
                 }
             }
             output.push_str("\n");
+            structured_content_found = true;
         }
 
         if let Some(risks) = data.get("risks").and_then(|v| v.as_array()) {
@@ -1228,6 +1231,81 @@ fn synthesize_from_cached_responses(
                     output.push_str(&format!("- **Risk**: {}\n", risk_desc));
                     if let Some(mitigation) = risk.get("mitigation").and_then(|v| v.as_str()) {
                         output.push_str(&format!("  - Mitigation: {}\n", mitigation));
+                    }
+                }
+            }
+            output.push_str("\n");
+            structured_content_found = true;
+        }
+
+        // SPEC-923: Generic fallback for agent schemas we don't explicitly handle
+        // Extract common fields that agents may use (tasks, surfaces, research_summary, etc.)
+        if let Some(tasks) = data.get("tasks").and_then(|v| v.as_array()) {
+            output.push_str(&format!("## Tasks (from {})\n\n", agent_name));
+            for task in tasks {
+                if let Some(task_str) = task.as_str() {
+                    output.push_str(&format!("- {}\n", task_str));
+                } else if let Some(obj) = task.as_object() {
+                    if let Some(name) = obj.get("name").or_else(|| obj.get("task")).and_then(|v| v.as_str()) {
+                        output.push_str(&format!("- {}\n", name));
+                        if let Some(desc) = obj.get("description").or_else(|| obj.get("details")).and_then(|v| v.as_str()) {
+                            output.push_str(&format!("  {}\n", desc));
+                        }
+                    }
+                }
+            }
+            output.push_str("\n");
+            structured_content_found = true;
+        }
+
+        if let Some(surfaces) = data.get("surfaces").and_then(|v| v.as_array()) {
+            output.push_str(&format!("## Affected Surfaces (from {})\n\n", agent_name));
+            for surface in surfaces {
+                if let Some(s) = surface.as_str() {
+                    output.push_str(&format!("- {}\n", s));
+                }
+            }
+            output.push_str("\n");
+            structured_content_found = true;
+        }
+
+        // Plain text content fallback
+        if let Some(content) = data.get("content").and_then(|v| v.as_str()) {
+            if !content.is_empty() {
+                output.push_str(&format!("## Response from {}\n\n", agent_name));
+                output.push_str(content);
+                output.push_str("\n\n");
+                structured_content_found = true;
+            }
+        }
+    }
+
+    // Ultimate fallback: if no structured content extracted, pretty-print raw JSON
+    if !structured_content_found {
+        tracing::warn!("⚠️ No structured fields found, using generic JSON extraction");
+        output.push_str("## Agent Responses (Raw)\n\n");
+        output.push_str("*Note: Structured extraction failed, displaying raw agent data*\n\n");
+
+        for (agent_name, data) in &agent_data {
+            output.push_str(&format!("### {}\n\n", agent_name));
+
+            // Skip wrapper fields and extract meaningful content
+            if let Some(obj) = data.as_object() {
+                for (key, value) in obj {
+                    if key != "agent" && key != "format" {
+                        output.push_str(&format!("**{}**:\n", key));
+                        match value {
+                            serde_json::Value::String(s) => output.push_str(&format!("{}\n\n", s)),
+                            serde_json::Value::Array(arr) => {
+                                for item in arr {
+                                    output.push_str(&format!("- {}\n",
+                                        serde_json::to_string_pretty(item).unwrap_or_else(|_| item.to_string())));
+                                }
+                                output.push_str("\n");
+                            }
+                            _ => output.push_str(&format!("```json\n{}\n```\n\n",
+                                serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())))
+                        }
                     }
                 }
             }
