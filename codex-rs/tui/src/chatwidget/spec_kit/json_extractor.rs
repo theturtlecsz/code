@@ -272,12 +272,23 @@ fn is_schema_template(json_str: &str) -> bool {
 fn strip_codex_wrapper(content: &str) -> String {
     let mut result = content;
 
-    // Strip header (everything before first {  or [ at line start)
-    // But keep content if it starts with JSON (no header)
-    if !result.trim_start().starts_with('{') && !result.trim_start().starts_with('[') {
-        // Find first line that starts with { or [
+    // SPEC-KIT-928: Strip header by finding LAST occurrence of "] codex" marker
+    // The actual response comes AFTER this marker, not at first {
+    // Pattern: [timestamp] thinking ... [timestamp] codex ... {actual response}
+    if let Some(codex_marker_pos) = result.rfind("] codex\n") {
+        // Start from after the "codex" marker
+        result = &result[codex_marker_pos + 8..]; // Skip "] codex\n"
+        tracing::debug!("📍 Found codex marker, extracting from position {}", codex_marker_pos + 8);
+    } else if let Some(codex_marker_pos) = result.rfind("] codex") {
+        // Handle case without newline
+        result = &result[codex_marker_pos + 7..]; // Skip "] codex"
+        tracing::debug!("📍 Found codex marker (no newline), extracting from position {}", codex_marker_pos + 7);
+    } else if !result.trim_start().starts_with('{') && !result.trim_start().starts_with('[') {
+        // Fallback: No codex marker, try to find first { or [ at line start
+        // But this might grab schema example instead of actual response
         if let Some(json_start) = result.find("\n{").or_else(|| result.find("\n[")) {
             result = &result[json_start + 1..]; // Skip the newline
+            tracing::warn!("⚠️ No codex marker found, using first {{ - may grab schema instead of response");
         }
     }
 
