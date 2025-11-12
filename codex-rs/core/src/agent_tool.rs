@@ -600,56 +600,63 @@ fn extract_json_from_mixed_output(output: &str, model: &str) -> String {
     }
 
     // Pattern 2: Check for codex headers (timestamp + headers + "User instructions:")
-    // Output structure: [timestamp] headers... [timestamp] User instructions: PROMPT_SCHEMA ... AGENT_RESPONSE
-    // CRITICAL: Skip the prompt schema and find the ACTUAL agent response
+    // SPEC-KIT-928: Output structure has prompt schema BEFORE actual response
+    // Lines 1-40: [timestamp] Codex header + User instructions + PROMPT SCHEMA
+    // Lines 50-198: [timestamp] thinking ... [timestamp] codex
+    // Lines 199+: ACTUAL AGENT RESPONSE { ... }
+    // CRITICAL: Use "] codex" marker to find where actual response starts
     if output.contains("OpenAI Codex v") && output.contains("User instructions:") {
-        // Look for "OpenAI Codex" response separator or timestamp after the prompt
-        // Agent responses typically start with a new timestamp like [2025-11-11Txx:xx:xx]
+        // SPEC-KIT-928: Look for "] codex" marker - appears right before actual response
+        if let Some(codex_marker_pos) = output.rfind("] codex\n") {
+            let after_marker = &output[codex_marker_pos + 8..]; // Skip "] codex\n"
+            tracing::debug!("📍 Found '] codex\\n' marker at position {}, extracting response", codex_marker_pos);
 
-        // Strategy: Find the LAST occurrence of a timestamp in the output
-        // That's likely where the agent's actual response starts
-        let timestamp_pattern = "[2025-";
-        let mut last_timestamp_pos = 0;
-        let mut search_start = 0;
-
-        while let Some(pos) = output[search_start..].find(timestamp_pattern) {
-            last_timestamp_pos = search_start + pos;
-            search_start = last_timestamp_pos + 1;
-        }
-
-        // If we found at least 2 timestamps (one for start, one for response)
-        if last_timestamp_pos > 100 {
-            // Check if there's content after the last timestamp
-            let after_last_timestamp = &output[last_timestamp_pos..];
-
-            // Find agent name response (e.g., "] codex" or "] claude")
-            if let Some(agent_response_start) = after_last_timestamp.find("] ") {
-                let potential_response = &after_last_timestamp[agent_response_start + 2..];
-
-                // Look for JSON in the response section
-                let lines: Vec<&str> = potential_response.lines().collect();
-                for (idx, line) in lines.iter().enumerate() {
-                    let trimmed = line.trim();
-                    if trimmed.starts_with('{') || trimmed.starts_with('[') {
-                        let json_portion = lines[idx..].join("\n");
-                        if json_portion.len() > 100 {
-                            tracing::debug!(
-                                "📦 Extracted JSON from after codex response timestamp: {} -> {} bytes",
-                                output.len(),
-                                json_portion.len()
-                            );
-                            return json_portion;
-                        }
-                    }
+            // Strip trailing footer ([timestamp] tokens used: N)
+            let cleaned = if let Some(footer_pos) = after_marker.rfind("] tokens used:") {
+                if let Some(bracket_pos) = after_marker[..footer_pos].rfind('[') {
+                    let result = after_marker[..bracket_pos].trim_end();
+                    tracing::debug!("📍 Stripped tokens footer, response is now {} bytes", result.len());
+                    result
+                } else {
+                    after_marker
                 }
+            } else {
+                after_marker
+            };
+
+            if cleaned.len() > 100 {
+                tracing::debug!(
+                    "📦 Extracted JSON after '] codex' marker: {} -> {} bytes",
+                    output.len(),
+                    cleaned.len()
+                );
+                return cleaned.to_string();
+            }
+        } else if let Some(codex_marker_pos) = output.rfind("] codex") {
+            // Handle case without newline
+            let after_marker = output[codex_marker_pos + 7..].trim_start();
+            tracing::debug!("📍 Found '] codex' marker (no newline) at position {}", codex_marker_pos);
+
+            // Strip trailing footer
+            let cleaned = if let Some(footer_pos) = after_marker.rfind("] tokens used:") {
+                if let Some(bracket_pos) = after_marker[..footer_pos].rfind('[') {
+                    after_marker[..bracket_pos].trim_end()
+                } else {
+                    after_marker
+                }
+            } else {
+                after_marker
+            };
+
+            if cleaned.len() > 100 {
+                tracing::debug!("📦 Extracted JSON after '] codex': {} bytes", cleaned.len());
+                return cleaned.to_string();
             }
         }
 
-        // Fallback: If timestamp approach didn't work, log warning and return original
+        // Fallback: If codex marker not found, log warning
         tracing::warn!(
-            "⚠️ Codex headers detected but couldn't find agent response (found {} bytes, last_timestamp_pos: {})",
-            output.len(),
-            last_timestamp_pos
+            "⚠️ Codex headers detected but no '] codex' marker found - output may include prompt schema"
         );
     }
 
