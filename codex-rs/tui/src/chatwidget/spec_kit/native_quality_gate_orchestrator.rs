@@ -256,15 +256,23 @@ pub async fn wait_for_quality_gate_agents(
                 match agent.status {
                     AgentStatus::Completed | AgentStatus::Failed | AgentStatus::Cancelled => {
                         // Agent done - record completion to SQLite (once)
-                        if matches!(agent.status, AgentStatus::Completed)
+                        // SPEC-KIT-928: Record BOTH Completed and Failed (Failed agents now store output)
+                        if (matches!(agent.status, AgentStatus::Completed | AgentStatus::Failed))
                             && !recorded_completions.contains(agent_id)
                         {
                             if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
                                 if let Some(result) = &agent.result {
                                     let _ = db.record_agent_completion(agent_id, result);
+                                    let status_str = match agent.status {
+                                        AgentStatus::Completed => "completion",
+                                        AgentStatus::Failed => "failure (with output)",
+                                        _ => "other",
+                                    };
                                     tracing::info!(
-                                        "Recorded quality gate completion: {}",
-                                        agent_id
+                                        "Recorded quality gate {}: {} ({} bytes)",
+                                        status_str,
+                                        agent_id,
+                                        result.len()
                                     );
                                     recorded_completions.insert(agent_id.clone());
                                 }
