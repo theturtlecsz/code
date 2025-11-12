@@ -558,12 +558,14 @@ use crate::git_worktree::setup_worktree;
 ///
 /// Returns extracted JSON string, or original if no extraction needed.
 fn extract_json_from_mixed_output(output: &str, model: &str) -> String {
-    let output_preview = if output.len() > 100 {
-        format!("{}...", &output[..100])
+    // SPEC-KIT-928: Use char boundaries to avoid UTF-8 panic
+    let output_preview = output.chars().take(100).collect::<String>();
+    let preview_with_ellipsis = if output.len() > 100 {
+        format!("{}...", output_preview)
     } else {
-        output.to_string()
+        output_preview
     };
-    tracing::trace!("🔍 Extraction input for {}: {} bytes, starts with: {}", model, output.len(), output_preview);
+    tracing::trace!("🔍 Extraction input for {}: {} bytes, starts with: {}", model, output.len(), preview_with_ellipsis);
 
     // Pattern 1: Check for markdown code fence (ANYWHERE in output, not just start)
     if let Some(fence_start) = output.find("```json") {

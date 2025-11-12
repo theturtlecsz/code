@@ -239,7 +239,7 @@ pub fn extract_json_robust(content: &str) -> Result<ExtractionResult, Extraction
 /// - "age": number
 /// - "enabled": boolean
 fn is_schema_template(json_str: &str) -> bool {
-    // Type annotation patterns
+    // Type annotation patterns (e.g., "id": string, "count": number)
     let has_type_annotations = json_str.contains(": string")
         || json_str.contains(": number")
         || json_str.contains(": boolean")
@@ -256,7 +256,18 @@ fn is_schema_template(json_str: &str) -> bool {
     // Prose instructions inside JSON (agents sometimes do this)
     let has_instructions = json_str.contains("MUST") || json_str.contains("CRITICAL:");
 
-    has_type_annotations || has_placeholders || has_example_markers || has_instructions
+    // SPEC-KIT-928: Schema template requires type annotations + other indicators
+    // Just having ${MODEL_ID} placeholder doesn't make it a schema if it has real data
+    // Real data indicators: issue IDs like "Q-001" or "SK900-001"
+    let has_real_issue_ids = json_str.contains("\"Q-") || json_str.contains("\"SK") || json_str.contains("\"SPEC-");
+
+    // If it has real issue IDs, it's probably real data even with placeholders
+    if has_real_issue_ids {
+        return false;
+    }
+
+    // Otherwise, it's a schema if it has type annotations OR (placeholders + instructions)
+    has_type_annotations || (has_placeholders && has_instructions) || has_example_markers
 }
 
 /// Extract JSON from markdown code fence (```json ... ```)
