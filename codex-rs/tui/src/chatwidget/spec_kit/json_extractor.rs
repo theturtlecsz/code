@@ -88,8 +88,18 @@ pub fn extract_json_robust(content: &str) -> Result<ExtractionResult, Extraction
         content.lines().count()
     );
 
+    // SPEC-KIT-928: Preprocess to strip Codex headers/footers
+    let cleaned_content = strip_codex_wrapper(content);
+    if cleaned_content.len() != content_len {
+        debug!(
+            "📦 Stripped Codex wrapper: {} -> {} bytes",
+            content_len,
+            cleaned_content.len()
+        );
+    }
+
     // Strategy 1: Try direct parse (handles already-clean JSON)
-    if let Ok(json) = serde_json::from_str::<Value>(content) {
+    if let Ok(json) = serde_json::from_str::<Value>(&cleaned_content) {
         debug!("✅ Strategy 1 (DirectParse) succeeded");
         return Ok(ExtractionResult {
             json,
@@ -101,7 +111,7 @@ pub fn extract_json_robust(content: &str) -> Result<ExtractionResult, Extraction
     warnings.push("Strategy 1 (DirectParse) failed - trying markdown extraction".to_string());
 
     // Strategy 2: Extract from markdown fence
-    if let Some(extracted) = extract_from_markdown_fence(content) {
+    if let Some(extracted) = extract_from_markdown_fence(&cleaned_content) {
         match serde_json::from_str::<Value>(&extracted) {
             Ok(json) => {
                 debug!(
@@ -149,7 +159,7 @@ pub fn extract_json_robust(content: &str) -> Result<ExtractionResult, Extraction
     }
 
     // Strategy 3: Depth-aware region extraction
-    if let Some(region) = extract_json_region_depth_aware(content) {
+    if let Some(region) = extract_json_region_depth_aware(&cleaned_content) {
         match serde_json::from_str::<Value>(&region) {
             Ok(json) => {
                 debug!(
@@ -182,7 +192,7 @@ pub fn extract_json_robust(content: &str) -> Result<ExtractionResult, Extraction
     }
 
     // Strategy 4: Schema marker search (finds actual response by "stage": field)
-    if let Some(json_block) = extract_by_schema_marker(content, "stage") {
+    if let Some(json_block) = extract_by_schema_marker(&cleaned_content, "stage") {
         match serde_json::from_str::<Value>(&json_block) {
             Ok(json) => {
                 debug!(
@@ -251,6 +261,44 @@ fn is_schema_template(json_str: &str) -> bool {
 
 /// Extract JSON from markdown code fence (```json ... ```)
 /// If multiple fences exist, returns the LAST one (actual response usually last)
+/// SPEC-KIT-928: Strip Codex headers and footers from output
+///
+/// Removes:
+/// - Header: [timestamp] OpenAI Codex v... through User instructions: ...
+/// - Footer: [timestamp] tokens used: N
+/// - Thinking sections: [timestamp] thinking ... [timestamp] codex
+///
+/// Returns cleaned content with only the actual agent response
+fn strip_codex_wrapper(content: &str) -> String {
+    let mut result = content;
+
+    // Strip header (everything before first {  or [ at line start)
+    // But keep content if it starts with JSON (no header)
+    if !result.trim_start().starts_with('{') && !result.trim_start().starts_with('[') {
+        // Find first line that starts with { or [
+        if let Some(json_start) = result.find("\n{").or_else(|| result.find("\n[")) {
+            result = &result[json_start + 1..]; // Skip the newline
+        }
+    }
+
+    // Strip footer ([timestamp] tokens used: N)
+    if let Some(footer_pos) = result.rfind("] tokens used:") {
+        // Find start of timestamp (look backwards for [)
+        if let Some(bracket_pos) = result[..footer_pos].rfind('[') {
+            result = &result[..bracket_pos].trim_end();
+        }
+    }
+
+    // Strip trailing "thinking" sections ([timestamp] thinking ...)
+    if let Some(thinking_pos) = result.rfind("] thinking") {
+        if let Some(bracket_pos) = result[..thinking_pos].rfind('[') {
+            result = &result[..bracket_pos].trim_end();
+        }
+    }
+
+    result.to_string()
+}
+
 fn extract_from_markdown_fence(content: &str) -> Option<String> {
     let lines: Vec<&str> = content.lines().collect();
     let mut all_fences = Vec::new();
