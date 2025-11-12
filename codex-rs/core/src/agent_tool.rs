@@ -782,6 +782,13 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
     // SPEC-KIT-927: Calculate execution duration for suspicious completion detection
     let execution_duration = execution_start.elapsed();
 
+    tracing::info!(
+        "📊 Agent {} execution returned after {:.2}s, result size: {}",
+        agent_id,
+        execution_duration.as_secs_f64(),
+        result.as_ref().map(|s| s.len()).unwrap_or(0)
+    );
+
     // SPEC-KIT-928: Log execution result for debugging
     match &result {
         Ok(output) => tracing::warn!(
@@ -825,12 +832,15 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
         tracing::debug!("📄 Output preview (first {} chars): {}", preview_len, &output[..preview_len]);
     }
 
+    tracing::info!("🔍 Agent {} starting validation phase", agent_id);
+
     // SPEC-KIT-927: Validate output before marking agent as complete
     // This prevents storing partial/invalid output (schema templates, headers only)
     // SPEC-KIT-928: Keep reference to raw output for storing on validation failure
     let raw_output_for_storage = result.as_ref().ok().map(|s| s.clone());
     let validated_result = match result {
         Ok(output) => {
+            tracing::info!("🔍 Agent {} validating {} byte output", agent_id, output.len());
             // SPEC-KIT-927: Warn about suspiciously fast completions
             // Fast + small output often indicates premature collection
             if execution_duration < std::time::Duration::from_secs(30) && output.len() < 1000 {
@@ -950,15 +960,22 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
         }
     };
 
+    tracing::info!("🔍 Agent {} acquiring AGENT_MANAGER lock for status update", agent_id);
+
     // SPEC-KIT-928: Store raw output even if validation fails (for debugging)
     // Quality gate orchestrator needs to access agent.result to extract/fix JSON
     let mut manager = AGENT_MANAGER.write().await;
+
+    tracing::info!("🔍 Agent {} acquired lock, updating result", agent_id);
+
     match &validated_result {
         Ok(_) => {
             // Validation passed - store normally
+            tracing::info!("✅ Agent {} validation passed, updating with OK result", agent_id);
             manager.update_agent_result(&agent_id, validated_result).await;
         }
         Err(validation_error) => {
+            tracing::warn!("⚠️ Agent {} validation failed, storing raw output anyway", agent_id);
             // Validation failed - but store the RAW output anyway for debugging
             // The error will be in agent.error, but result will have the raw data
             if let Some(raw_output) = raw_output_for_storage {
@@ -979,6 +996,8 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
             }
         }
     }
+
+    tracing::info!("✅ Agent {} execute_agent() task completed", agent_id);
 }
 
 async fn execute_model_with_permissions(
