@@ -228,6 +228,13 @@ pub async fn execute_in_pane(
         // SPEC-923: Add completion marker so polling can detect when agent finishes
         script_content.push_str("echo '___AGENT_COMPLETE___'\n");
 
+        // SPEC-KIT-928: Log wrapper script details for debugging
+        tracing::debug!(
+            "Wrapper script size: {} bytes, prompt size: {} bytes",
+            script_content.len(),
+            args.iter().find(|a| a.len() > LARGE_ARG_THRESHOLD).map(|a| a.len()).unwrap_or(0)
+        );
+
         // Write wrapper script
         tokio::fs::write(&wrapper_script_path, script_content)
             .await
@@ -281,10 +288,22 @@ pub async fn execute_in_pane(
 
     // Append completion marker and cleanup to the command
     let mut final_command = full_command;
-    final_command.push_str("; echo '___AGENT_COMPLETE___'");
 
-    // Add cleanup for temp files (wrapper scripts) - NOT output file
+    // SPEC-KIT-928: Wrapper scripts already have completion marker (line 229)
+    // Only add it for direct commands (non-wrapper path)
+    let has_wrapper = !temp_files.is_empty();
+    if !has_wrapper {
+        final_command.push_str("; echo '___AGENT_COMPLETE___'");
+    }
+
+    // SPEC-KIT-928: Copy wrapper scripts for debugging before deletion
     if !temp_files.is_empty() {
+        for temp_file in &temp_files {
+            if temp_file.contains("tmux-agent-wrapper") {
+                let debug_copy = temp_file.replace(".sh", "-debug.sh");
+                final_command.push_str(&format!("; cp {} {} 2>/dev/null || true", temp_file, debug_copy));
+            }
+        }
         final_command.push_str(&format!("; rm -f {}", temp_files.join(" ")));
     }
 
