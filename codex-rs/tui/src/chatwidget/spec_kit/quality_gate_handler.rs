@@ -1093,6 +1093,53 @@ pub(super) fn execute_quality_checkpoint(
     let agent_configs = widget.config.agents.clone();
     let event_tx = widget.app_event_tx.clone();
 
+    // SPEC-KIT-928: Check for already-running quality gate agents (single-flight guard)
+    let expected_agents = vec!["gemini", "claude", "code"];
+    let already_running = {
+        if let Ok(manager_check) = codex_core::agent_tool::AGENT_MANAGER.try_read() {
+            let running_agents = manager_check.get_running_agents();
+            let mut matched = Vec::new();
+
+            for (agent_id, model, _status) in running_agents {
+                for expected in &expected_agents {
+                    if model.to_lowercase().contains(expected) {
+                        matched.push((expected.to_string(), agent_id));
+                        break;
+                    }
+                }
+            }
+            matched
+        } else {
+            Vec::new() // Failed to acquire lock, skip check
+        }
+    };
+
+    if !already_running.is_empty() {
+        let running_list: Vec<String> = already_running
+            .iter()
+            .map(|(name, id)| format!("{} ({})", name, &id[..8]))
+            .collect();
+
+        tracing::warn!(
+            "🚨 DUPLICATE SPAWN DETECTED: {} quality gate agents already running for {}: {}",
+            already_running.len(),
+            spec_id,
+            running_list.join(", ")
+        );
+
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![
+                ratatui::text::Line::from(format!(
+                    "⚠ Quality gate agents already running: {}",
+                    already_running.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(", ")
+                )),
+                ratatui::text::Line::from("Skipping duplicate spawn. Waiting for current run to complete."),
+            ],
+            crate::history_cell::HistoryCellType::Notice,
+        ));
+        return;
+    }
+
     // Spawn agents in background task
     let spawn_handle = tokio::spawn(async move {
         match super::native_quality_gate_orchestrator::spawn_quality_gate_agents_native(

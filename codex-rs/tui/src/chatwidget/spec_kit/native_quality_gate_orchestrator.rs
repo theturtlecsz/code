@@ -74,6 +74,27 @@ pub async fn spawn_quality_gate_agents_native(
     let mut spawn_infos = Vec::new();
     let batch_id = uuid::Uuid::new_v4().to_string();
 
+    // SPEC-KIT-928: Log concurrent agent check BEFORE spawning
+    {
+        let manager_pre_check = AGENT_MANAGER.read().await;
+        let running_agents = manager_pre_check.get_running_agents();
+
+        if !running_agents.is_empty() {
+            let running_list: Vec<String> = running_agents
+                .iter()
+                .map(|(id, model, _)| format!("{} ({})", model, &id[..8]))
+                .collect();
+            tracing::info!(
+                "📊 Pre-spawn check for {}: {} agents currently running: {}",
+                spec_id,
+                running_list.len(),
+                running_list.join(", ")
+            );
+        } else {
+            tracing::info!("📊 Pre-spawn check for {}: No agents currently running", spec_id);
+        }
+    }
+
     // Spawn each agent
     for (agent_name, config_name) in agent_spawn_configs {
         let prompt_template = gate_prompts
@@ -101,7 +122,7 @@ pub async fn spawn_quality_gate_agents_native(
                 prompt,
                 true, // read_only
                 Some(batch_id.clone()),
-                false, // tmux_enabled - quality gates don't use tmux (too fast)
+                true, // tmux_enabled - needed for output capture and debugging (SPEC-KIT-928)
             )
             .await
             .map_err(|e| format!("Failed to spawn {}: {}", config_name, e))?;
@@ -134,6 +155,35 @@ pub async fn spawn_quality_gate_agents_native(
             model_name: config_name.to_string(),
             prompt_preview,
         });
+    }
+
+    // SPEC-KIT-928: Log post-spawn state to detect concurrent execution
+    {
+        let manager_post_check = AGENT_MANAGER.read().await;
+        let now_running = manager_post_check.get_running_agents();
+
+        let running_list: Vec<String> = now_running
+            .iter()
+            .map(|(id, model, _)| format!("{} ({})", model, &id[..8]))
+            .collect();
+
+        tracing::info!(
+            "📊 Post-spawn check for {}: {} agents now running (spawned {}): {}",
+            spec_id,
+            now_running.len(),
+            spawn_infos.len(),
+            running_list.join(", ")
+        );
+
+        // Detect if we have duplicates using the helper function
+        let concurrent = manager_post_check.check_concurrent_agents();
+        for (model, count) in concurrent {
+            tracing::warn!(
+                "🚨 CONCURRENT AGENTS DETECTED: {} instances of '{}' running simultaneously!",
+                count,
+                model
+            );
+        }
     }
 
     Ok(spawn_infos)

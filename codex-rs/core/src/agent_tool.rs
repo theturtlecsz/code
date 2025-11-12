@@ -401,6 +401,17 @@ impl AgentManager {
                     agent.status = AgentStatus::Completed;
                 }
                 Err(error) => {
+                    // SPEC-KIT-928: Extract raw output from error if available
+                    // Format: "VALIDATION_FAILED: error\n\n--- RAW OUTPUT ---\ndata"
+                    if let Some(raw_start) = error.find("--- RAW OUTPUT ---\n") {
+                        let raw_output = &error[raw_start + 19..]; // Skip marker
+                        agent.result = Some(raw_output.to_string());
+                        tracing::info!(
+                            "📦 Stored raw output ({} bytes) despite validation failure for agent {}",
+                            raw_output.len(),
+                            agent_id
+                        );
+                    }
                     agent.error = Some(error);
                     agent.status = AgentStatus::Failed;
                 }
@@ -419,6 +430,55 @@ impl AgentManager {
             // Send updated agent status with the latest progress
             self.send_agent_status_update().await;
         }
+    }
+
+    /// SPEC-KIT-928: Check for concurrent agents of the same model type
+    /// Returns list of (model_name, count) for any models with >1 running instance
+    pub fn check_concurrent_agents(&self) -> Vec<(String, usize)> {
+        let mut agent_counts: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+
+        for agent in self.agents.values() {
+            if matches!(
+                agent.status,
+                AgentStatus::Running | AgentStatus::Pending
+            ) {
+                // Extract base model name (e.g., "gemini" from "gemini-2.5-flash")
+                let model_base = agent
+                    .model
+                    .split('-')
+                    .next()
+                    .unwrap_or(&agent.model)
+                    .to_lowercase();
+                *agent_counts.entry(model_base).or_insert(0) += 1;
+            }
+        }
+
+        agent_counts
+            .into_iter()
+            .filter(|(_, count)| *count > 1)
+            .collect()
+    }
+
+    /// SPEC-KIT-928: Get all currently running agents with details
+    pub fn get_running_agents(&self) -> Vec<(String, String, String)> {
+        // Returns: (agent_id, model, status)
+        self.agents
+            .values()
+            .filter(|a| {
+                matches!(
+                    a.status,
+                    AgentStatus::Running | AgentStatus::Pending
+                )
+            })
+            .map(|a| {
+                (
+                    a.id.clone(),
+                    a.model.clone(),
+                    format!("{:?}", a.status),
+                )
+            })
+            .collect()
     }
 
     pub async fn update_worktree_info(
@@ -627,6 +687,12 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
 
     drop(manager); // Release the lock before executing
 
+    // SPEC-KIT-928: Log execution parameters for debugging
+    tracing::warn!(
+        "🔍 AGENT EXEC START: agent_id={}, model={}, read_only={}, tmux={}",
+        agent_id, model, read_only, tmux_enabled
+    );
+
     // SPEC-KIT-927: Track execution duration for suspicious completion detection
     let execution_start = std::time::Instant::now();
 
@@ -709,6 +775,18 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
     // SPEC-KIT-927: Calculate execution duration for suspicious completion detection
     let execution_duration = execution_start.elapsed();
 
+    // SPEC-KIT-928: Log execution result for debugging
+    match &result {
+        Ok(output) => tracing::warn!(
+            "✅ AGENT EXEC OK: agent_id={}, output_bytes={}, duration={:.2}s",
+            agent_id, output.len(), execution_duration.as_secs_f64()
+        ),
+        Err(e) => tracing::warn!(
+            "❌ AGENT EXEC FAILED: agent_id={}, error={}, duration={:.2}s",
+            agent_id, e, execution_duration.as_secs_f64()
+        ),
+    }
+
     // SPEC-KIT-927+: Comprehensive output diagnostics before validation
     // Helps diagnose corruption patterns (TUI text, headers, schemas)
     if let Ok(ref output) = result {
@@ -742,6 +820,8 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
 
     // SPEC-KIT-927: Validate output before marking agent as complete
     // This prevents storing partial/invalid output (schema templates, headers only)
+    // SPEC-KIT-928: Keep reference to raw output for storing on validation failure
+    let raw_output_for_storage = result.as_ref().ok().map(|s| s.clone());
     let validated_result = match result {
         Ok(output) => {
             // SPEC-KIT-927: Warn about suspiciously fast completions
@@ -834,6 +914,15 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
                 );
                 tracing::debug!("Invalid JSON preview: {}...",
                     &cleaned_output.chars().take(500).collect::<String>());
+
+                // SPEC-KIT-928: Save full invalid output to temp file for debugging
+                let temp_file = format!("/tmp/agent-invalid-json-{}.txt", agent_id);
+                if let Err(write_err) = std::fs::write(&temp_file, &cleaned_output) {
+                    tracing::warn!("Failed to write invalid JSON to {}: {}", temp_file, write_err);
+                } else {
+                    tracing::error!("📝 Full invalid JSON saved to: {}", temp_file);
+                }
+
                 Err(format!("Agent output is not valid JSON: {}", e))
             }
             // All validations passed
@@ -854,9 +943,35 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
         }
     };
 
-    // Update result with validated output
+    // SPEC-KIT-928: Store raw output even if validation fails (for debugging)
+    // Quality gate orchestrator needs to access agent.result to extract/fix JSON
     let mut manager = AGENT_MANAGER.write().await;
-    manager.update_agent_result(&agent_id, validated_result).await;
+    match &validated_result {
+        Ok(_) => {
+            // Validation passed - store normally
+            manager.update_agent_result(&agent_id, validated_result).await;
+        }
+        Err(validation_error) => {
+            // Validation failed - but store the RAW output anyway for debugging
+            // The error will be in agent.error, but result will have the raw data
+            if let Some(raw_output) = raw_output_for_storage {
+                let cleaned = extract_json_from_mixed_output(&raw_output, &model);
+                tracing::warn!(
+                    "⚠️ Storing raw output despite validation failure for agent {}",
+                    agent_id
+                );
+                // Store output with validation error message prepended
+                let output_with_error = format!(
+                    "VALIDATION_FAILED: {}\n\n--- RAW OUTPUT ---\n{}",
+                    validation_error, cleaned
+                );
+                manager.update_agent_result(&agent_id, Err(output_with_error)).await;
+            } else {
+                // Execution itself failed (not just validation)
+                manager.update_agent_result(&agent_id, validated_result).await;
+            }
+        }
+    }
 }
 
 async fn execute_model_with_permissions(

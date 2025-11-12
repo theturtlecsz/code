@@ -136,6 +136,21 @@ pub fn advance_spec_auto(widget: &mut ChatWidget) {
                 let stage = state.stages[state.current_index];
                 let hal_mode = state.hal_mode;
 
+                // SPEC-KIT-928: Check if quality gates are still running (single-flight guard)
+                // Prevent stage advancement while quality gates are executing
+                if matches!(state.phase,
+                    SpecAutoPhase::QualityGateExecuting { .. } |
+                    SpecAutoPhase::QualityGateProcessing { .. } |
+                    SpecAutoPhase::QualityGateValidating { .. } |
+                    SpecAutoPhase::QualityGateAwaitingHuman { .. }
+                ) {
+                    tracing::warn!(
+                        "⚠️ Stage advancement blocked: Quality gates still in progress (phase: {:?})",
+                        state.phase
+                    );
+                    return;
+                }
+
                 // Check if we should run a quality checkpoint before this stage
                 if state.quality_gates_enabled {
                     if let Some(checkpoint) =
