@@ -249,6 +249,7 @@ pub async fn wait_for_quality_gate_agents(
         // Check if all agents are complete
         let manager = AGENT_MANAGER.read().await;
         let mut all_done = true;
+        let mut still_running = Vec::new();
 
         for agent_id in agent_ids {
             if let Some(agent) = manager.get_agent(agent_id) {
@@ -281,13 +282,26 @@ pub async fn wait_for_quality_gate_agents(
                     }
                     _ => {
                         all_done = false;
-                        break;
+                        still_running.push((agent_id.clone(), format!("{:?}", agent.status)));
                     }
                 }
             } else {
                 all_done = false;
-                break;
+                still_running.push((agent_id.clone(), "NotFound".to_string()));
             }
+        }
+
+        // SPEC-KIT-928: Log which agents are still running (every 10 seconds)
+        if !still_running.is_empty() && start.elapsed().as_secs() % 10 == 0 {
+            let running_summary: Vec<String> = still_running
+                .iter()
+                .map(|(id, status)| format!("{}... ({})", &id[..8], status))
+                .collect();
+            tracing::info!(
+                "⏳ Waiting for {} agents: {}",
+                still_running.len(),
+                running_summary.join(", ")
+            );
         }
 
         if all_done {
