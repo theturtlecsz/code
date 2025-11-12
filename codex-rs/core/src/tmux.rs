@@ -222,6 +222,9 @@ pub async fn execute_in_pane(
         // Redirect output
         script_content.push_str(&format!(" > {} 2>&1\n", output_file));
 
+        // SPEC-KIT-928: Add debug marker to verify redirect is working
+        script_content.push_str(&format!("echo \"OUTPUT_FILE_CREATED: {}\" >&2\n", output_file));
+
         // SPEC-923: Add completion marker so polling can detect when agent finishes
         script_content.push_str("echo '___AGENT_COMPLETE___'\n");
 
@@ -496,7 +499,12 @@ pub async fn execute_in_pane(
                                 continue;
                             }
                             // Skip the agent command line itself
-                            if line.contains("/usr/bin/spec") {
+                            // SPEC-KIT-928: Handle multiple agent command patterns
+                            if line.contains("/usr/bin/spec") ||
+                               line.contains("code exec") ||
+                               line.contains("gemini") ||
+                               line.contains("claude") ||
+                               line.contains("/tmp/tmux-agent-wrapper") {
                                 in_output = true;
                                 continue;
                             }
