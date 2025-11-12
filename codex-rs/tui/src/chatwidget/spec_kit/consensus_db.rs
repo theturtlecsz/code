@@ -115,13 +115,15 @@ impl ConsensusDb {
                 run_id TEXT,
                 spawned_at TEXT NOT NULL,
                 completed_at TEXT,
-                response_text TEXT
+                response_text TEXT,
+                extraction_error TEXT
             )",
             [],
         )?;
 
-        // Add run_id column if missing (migration for existing databases)
+        // Migrations for existing databases (errors are OK if columns already exist)
         let _ = conn.execute("ALTER TABLE agent_executions ADD COLUMN run_id TEXT", []);
+        let _ = conn.execute("ALTER TABLE agent_executions ADD COLUMN extraction_error TEXT", []);
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_agent_executions_spec
@@ -409,6 +411,63 @@ impl ConsensusDb {
         )?;
 
         Ok(())
+    }
+
+    /// Record extraction failure with raw output for debugging
+    ///
+    /// Stores raw agent output even when JSON extraction fails.
+    /// Enables post-mortem debugging of malformed output.
+    pub fn record_extraction_failure(
+        &self,
+        agent_id: &str,
+        raw_output: &str,
+        error: &str,
+    ) -> SqlResult<()> {
+        let conn = self.conn.lock().unwrap();
+
+        conn.execute(
+            "UPDATE agent_executions
+             SET completed_at = datetime('now'),
+                 response_text = ?2,
+                 extraction_error = ?3
+             WHERE agent_id = ?1",
+            params![agent_id, raw_output, error],
+        )?;
+
+        Ok(())
+    }
+
+    /// Query extraction failures for debugging
+    ///
+    /// Returns (agent_id, agent_name, error, raw_output_preview) for failed extractions.
+    pub fn query_extraction_failures(
+        &self,
+        spec_id: &str,
+    ) -> SqlResult<Vec<(String, String, String, String)>> {
+        let conn = self.conn.lock().unwrap();
+
+        let mut stmt = conn.prepare(
+            "SELECT agent_id, agent_name, extraction_error, substr(response_text, 1, 1000)
+             FROM agent_executions
+             WHERE spec_id = ?1 AND extraction_error IS NOT NULL
+             ORDER BY spawned_at DESC",
+        )?;
+
+        let rows = stmt.query_map(params![spec_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row?);
+        }
+
+        Ok(results)
     }
 
     /// Clean up old agent execution records (older than N days)

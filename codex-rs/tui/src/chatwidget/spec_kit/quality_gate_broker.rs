@@ -316,6 +316,26 @@ async fn fetch_agent_payloads_from_memory(
                             "  First 500 chars: {}",
                             &result_text.chars().take(500).collect::<String>()
                         ));
+
+                        // SPEC-KIT-927: Store raw output even on extraction failure
+                        if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+                            let error_msg = format!("{}", e);
+                            if let Err(db_err) = db.record_extraction_failure(
+                                agent_id,
+                                result_text,
+                                &error_msg,
+                            ) {
+                                tracing::warn!(
+                                    "Failed to record extraction failure for {}: {}",
+                                    agent_id,
+                                    db_err
+                                );
+                            } else {
+                                info_lines.push(format!(
+                                    "  Stored raw output to DB (extraction_error column)"
+                                ));
+                            }
+                        }
                     }
                 }
             } else {
@@ -477,8 +497,17 @@ async fn fetch_agent_payloads_from_filesystem(
                             }
                         }
                         Err(e) => {
-                            // Extraction failed - agent didn't produce valid output
+                            // SPEC-KIT-927: Store raw output on extraction failure
                             tracing::debug!("Extraction failed for {}: {}", result_path.display(), e);
+
+                            // Try to get agent_id from directory name
+                            if let Some(agent_id) = result_path.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str()) {
+                                if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+                                    let error_msg = format!("{}", e);
+                                    let _ = db.record_extraction_failure(agent_id, &content, &error_msg);
+                                    tracing::debug!("Stored raw output to DB for {}", agent_id);
+                                }
+                            }
                         }
                     }
                 }
