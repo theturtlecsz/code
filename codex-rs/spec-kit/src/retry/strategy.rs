@@ -38,7 +38,7 @@ impl Default for RetryConfig {
 pub async fn execute_with_backoff<F, T, E>(_operation: F, _config: &RetryConfig) -> super::Result<T>
 where
     F: Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, E>> + Send>>,
-    E: std::error::Error + crate::error::RetryClassifiable,
+    E: std::error::Error + super::classifier::RetryClassifiable,
 {
     todo!("SPEC-945C: Implement exponential backoff with backon")
 }
