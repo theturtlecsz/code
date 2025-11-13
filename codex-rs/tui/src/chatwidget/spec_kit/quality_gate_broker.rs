@@ -270,10 +270,8 @@ async fn fetch_agent_payloads_from_memory(
                                             let agent_lower = agent_name.to_lowercase();
                                             // Exact match OR agent starts with expected (e.g., "claude-haiku-4-5" matches "claude")
                                             agent_lower == expected_lower
-                                                || agent_lower.starts_with(&format!(
-                                                    "{}-",
-                                                    expected_lower
-                                                ))
+                                                || agent_lower
+                                                    .starts_with(&format!("{}-", expected_lower))
                                         });
 
                                     if let Some(expected) = matched_expected {
@@ -298,9 +296,7 @@ async fn fetch_agent_payloads_from_memory(
                                         ));
                                     }
                                 } else {
-                                    info_lines.push(
-                                        "  Missing 'agent' field in JSON".to_string(),
-                                    );
+                                    info_lines.push("  Missing 'agent' field in JSON".to_string());
                                 }
                             } else {
                                 info_lines.push(format!(
@@ -320,11 +316,9 @@ async fn fetch_agent_payloads_from_memory(
                         // SPEC-KIT-927: Store raw output even on extraction failure
                         if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
                             let error_msg = format!("{}", e);
-                            if let Err(db_err) = db.record_extraction_failure(
-                                agent_id,
-                                result_text,
-                                &error_msg,
-                            ) {
+                            if let Err(db_err) =
+                                db.record_extraction_failure(agent_id, result_text, &error_msg)
+                            {
                                 tracing::warn!(
                                     "Failed to record extraction failure for {}: {}",
                                     agent_id,
@@ -498,13 +492,22 @@ async fn fetch_agent_payloads_from_filesystem(
                         }
                         Err(e) => {
                             // SPEC-KIT-927: Store raw output on extraction failure
-                            tracing::debug!("Extraction failed for {}: {}", result_path.display(), e);
+                            tracing::debug!(
+                                "Extraction failed for {}: {}",
+                                result_path.display(),
+                                e
+                            );
 
                             // Try to get agent_id from directory name
-                            if let Some(agent_id) = result_path.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str()) {
+                            if let Some(agent_id) = result_path
+                                .parent()
+                                .and_then(|p| p.file_name())
+                                .and_then(|n| n.to_str())
+                            {
                                 if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
                                     let error_msg = format!("{}", e);
-                                    let _ = db.record_extraction_failure(agent_id, &content, &error_msg);
+                                    let _ = db
+                                        .record_extraction_failure(agent_id, &content, &error_msg);
                                     tracing::debug!("Stored raw output to DB for {}", agent_id);
                                 }
                             }

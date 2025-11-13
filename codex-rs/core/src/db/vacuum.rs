@@ -2,8 +2,8 @@
 //!
 //! SPEC-945B Component 3: Auto-vacuum
 
-use r2d2_sqlite::SqliteConnectionManager;
 use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
 use tokio::task::JoinHandle;
 
 use super::Result;
@@ -25,18 +25,14 @@ pub struct VacuumStats {
 /// - Telemetry (space reclaimed, DB size)
 ///
 /// # TODO: Implementation Week 1, Day 5
-pub fn spawn_vacuum_daemon(
-    _pool: Pool<SqliteConnectionManager>,
-) -> JoinHandle<()> {
+pub fn spawn_vacuum_daemon(_pool: Pool<SqliteConnectionManager>) -> JoinHandle<()> {
     todo!("SPEC-945B: Implement background vacuum scheduler")
 }
 
 /// Execute incremental vacuum cycle
 ///
 /// # TODO: Implementation Week 1, Day 5
-async fn _run_vacuum_cycle(
-    _pool: &Pool<SqliteConnectionManager>,
-) -> Result<VacuumStats> {
+async fn _run_vacuum_cycle(_pool: &Pool<SqliteConnectionManager>) -> Result<VacuumStats> {
     todo!("SPEC-945B: Execute PRAGMA incremental_vacuum")
 }
 

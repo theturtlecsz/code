@@ -2,8 +2,8 @@
 //!
 //! SPEC-945B Component: Migration system
 
-use rusqlite::Connection;
 use super::Result;
+use rusqlite::Connection;
 
 /// Current schema version
 pub const SCHEMA_VERSION: i32 = 1;

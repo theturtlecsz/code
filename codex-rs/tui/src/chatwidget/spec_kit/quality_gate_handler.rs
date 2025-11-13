@@ -1131,9 +1131,15 @@ pub(super) fn execute_quality_checkpoint(
             vec![
                 ratatui::text::Line::from(format!(
                     "⚠ Quality gate agents already running: {}",
-                    already_running.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(", ")
+                    already_running
+                        .iter()
+                        .map(|(n, _)| n.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 )),
-                ratatui::text::Line::from("Skipping duplicate spawn. Waiting for current run to complete."),
+                ratatui::text::Line::from(
+                    "Skipping duplicate spawn. Waiting for current run to complete.",
+                ),
             ],
             crate::history_cell::HistoryCellType::Notice,
         ));
@@ -1593,26 +1599,24 @@ fn store_quality_gate_artifacts_sync(
         };
 
         // SPEC-KIT-927: Use robust JSON extraction with validation
-        let json_str = match super::json_extractor::extract_and_validate_quality_gate(
-            &content,
-            &agent_name,
-        ) {
-            Ok(extraction_result) => {
-                debug!(
-                    "Extracted {} via {:?} (confidence: {:.2})",
-                    agent_name, extraction_result.method, extraction_result.confidence
-                );
-                // Re-serialize to string for storage
-                extraction_result.json.to_string()
-            }
-            Err(e) => {
-                warn!(
-                    "Extraction failed for agent result file {} ({}): {}",
-                    result_path, agent_name, e
-                );
-                continue;
-            }
-        };
+        let json_str =
+            match super::json_extractor::extract_and_validate_quality_gate(&content, &agent_name) {
+                Ok(extraction_result) => {
+                    debug!(
+                        "Extracted {} via {:?} (confidence: {:.2})",
+                        agent_name, extraction_result.method, extraction_result.confidence
+                    );
+                    // Re-serialize to string for storage
+                    extraction_result.json.to_string()
+                }
+                Err(e) => {
+                    warn!(
+                        "Extraction failed for agent result file {} ({}): {}",
+                        result_path, agent_name, e
+                    );
+                    continue;
+                }
+            };
 
         // Clone for async task
         let mcp_clone = mcp_manager.clone();
@@ -1708,7 +1712,10 @@ fn get_completed_quality_gate_agents(_widget: &ChatWidget) -> Vec<(String, Strin
 
                 // Already validated by extractor - just get agent name
                 if let Some(agent) = json_val.get("agent").and_then(|v| v.as_str()) {
-                    let stage = json_val.get("stage").and_then(|v| v.as_str()).unwrap_or("unknown");
+                    let stage = json_val
+                        .get("stage")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown");
                     quality_gate_agents.push((agent.to_lowercase().to_string(), agent_id.clone()));
                     debug!(
                         "Found quality gate agent: {} (id: {}, stage: {}) via {:?}",

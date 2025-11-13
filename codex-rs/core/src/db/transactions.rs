@@ -2,8 +2,8 @@
 //!
 //! SPEC-945B Component 2: Transaction coordination
 
-use rusqlite::{Connection, Transaction, TransactionBehavior};
 use super::Result;
+use rusqlite::{Connection, Transaction, TransactionBehavior};
 
 /// Execute operation within ACID transaction
 ///

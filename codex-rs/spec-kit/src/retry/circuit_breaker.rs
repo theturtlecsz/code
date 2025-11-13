@@ -5,9 +5,9 @@
 /// Circuit breaker state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CircuitState {
-    Closed,    // Normal operation
-    Open,      // Failure threshold exceeded, fast-fail
-    HalfOpen,  // Testing if service recovered
+    Closed,   // Normal operation
+    Open,     // Failure threshold exceeded, fast-fail
+    HalfOpen, // Testing if service recovered
 }
 
 /// Circuit breaker implementation

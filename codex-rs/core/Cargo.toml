@@ -77,9 +77,9 @@ codex-browser = { path = "../browser" }
 codex-version = { path = "../codex-version" }
 
 # SPEC-945B: SQLite optimization & connection pooling
-rusqlite = { version = "0.31", features = ["bundled"] }
+rusqlite = { workspace = true }
 r2d2 = "0.8"
-r2d2-sqlite = "0.23"
+r2d2_sqlite = "0.31"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 landlock = "0.4.1"

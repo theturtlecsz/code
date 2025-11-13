@@ -10,8 +10,8 @@
 
 // TODO: Implementation in Phase 1, Week 2-3
 
-pub mod classifier;
 pub mod circuit_breaker;
+pub mod classifier;
 pub mod strategy;
 
 pub use classifier::{ErrorClass, RetryClassifiable};

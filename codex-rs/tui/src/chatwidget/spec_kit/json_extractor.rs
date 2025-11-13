@@ -128,7 +128,8 @@ pub fn extract_json_robust(content: &str) -> Result<ExtractionResult, Extraction
                     .unwrap_or(false);
 
                 if is_template {
-                    warnings.push("Warning: Extracted JSON appears to be schema template".to_string());
+                    warnings
+                        .push("Warning: Extracted JSON appears to be schema template".to_string());
                     // Continue to other strategies
                 } else if json.get("stage").is_some() && !is_quality_gate {
                     // Has stage field but not quality-gate - might be example/template
@@ -168,7 +169,9 @@ pub fn extract_json_robust(content: &str) -> Result<ExtractionResult, Extraction
                 );
 
                 if is_schema_template(&region) {
-                    warnings.push("Warning: Depth-extracted JSON appears to be schema template".to_string());
+                    warnings.push(
+                        "Warning: Depth-extracted JSON appears to be schema template".to_string(),
+                    );
                     // Continue to schema marker search
                 } else {
                     return Ok(ExtractionResult {
@@ -250,8 +253,7 @@ fn is_schema_template(json_str: &str) -> bool {
     let has_placeholders = json_str.contains("${") || json_str.contains("...");
 
     // Example markers
-    let has_example_markers =
-        json_str.contains("Example:") || json_str.contains("example output");
+    let has_example_markers = json_str.contains("Example:") || json_str.contains("example output");
 
     // Prose instructions inside JSON (agents sometimes do this)
     let has_instructions = json_str.contains("MUST") || json_str.contains("CRITICAL:");
@@ -259,7 +261,8 @@ fn is_schema_template(json_str: &str) -> bool {
     // SPEC-KIT-928: Schema template requires type annotations + other indicators
     // Just having ${MODEL_ID} placeholder doesn't make it a schema if it has real data
     // Real data indicators: issue IDs like "Q-001" or "SK900-001"
-    let has_real_issue_ids = json_str.contains("\"Q-") || json_str.contains("\"SK") || json_str.contains("\"SPEC-");
+    let has_real_issue_ids =
+        json_str.contains("\"Q-") || json_str.contains("\"SK") || json_str.contains("\"SPEC-");
 
     // If it has real issue IDs, it's probably real data even with placeholders
     if has_real_issue_ids {
@@ -289,17 +292,25 @@ fn strip_codex_wrapper(content: &str) -> String {
     if let Some(codex_marker_pos) = result.rfind("] codex\n") {
         // Start from after the "codex" marker
         result = &result[codex_marker_pos + 8..]; // Skip "] codex\n"
-        tracing::debug!("📍 Found codex marker, extracting from position {}", codex_marker_pos + 8);
+        tracing::debug!(
+            "📍 Found codex marker, extracting from position {}",
+            codex_marker_pos + 8
+        );
     } else if let Some(codex_marker_pos) = result.rfind("] codex") {
         // Handle case without newline
         result = &result[codex_marker_pos + 7..]; // Skip "] codex"
-        tracing::debug!("📍 Found codex marker (no newline), extracting from position {}", codex_marker_pos + 7);
+        tracing::debug!(
+            "📍 Found codex marker (no newline), extracting from position {}",
+            codex_marker_pos + 7
+        );
     } else if !result.trim_start().starts_with('{') && !result.trim_start().starts_with('[') {
         // Fallback: No codex marker, try to find first { or [ at line start
         // But this might grab schema example instead of actual response
         if let Some(json_start) = result.find("\n{").or_else(|| result.find("\n[")) {
             result = &result[json_start + 1..]; // Skip the newline
-            tracing::warn!("⚠️ No codex marker found, using first {{ - may grab schema instead of response");
+            tracing::warn!(
+                "⚠️ No codex marker found, using first {{ - may grab schema instead of response"
+            );
         }
     }
 
@@ -697,10 +708,12 @@ Generate quality gate analysis...
         let json: Value = serde_json::from_str(r#"{"stage": "quality-gate-clarify"}"#).unwrap();
         let result = validate_quality_gate_json(&json);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Missing required field: agent"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Missing required field: agent")
+        );
     }
 
     #[test]

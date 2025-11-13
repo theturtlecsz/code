@@ -35,10 +35,7 @@ impl Default for RetryConfig {
 /// - Max 3-5 attempts
 ///
 /// # TODO: Implementation Week 2-3, Day 1-2
-pub async fn execute_with_backoff<F, T, E>(
-    _operation: F,
-    _config: &RetryConfig,
-) -> super::Result<T>
+pub async fn execute_with_backoff<F, T, E>(_operation: F, _config: &RetryConfig) -> super::Result<T>
 where
     F: Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, E>> + Send>>,
     E: std::error::Error + crate::error::RetryClassifiable,

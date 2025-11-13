@@ -91,7 +91,10 @@ pub async fn spawn_quality_gate_agents_native(
                 running_list.join(", ")
             );
         } else {
-            tracing::info!("📊 Pre-spawn check for {}: No agents currently running", spec_id);
+            tracing::info!(
+                "📊 Pre-spawn check for {}: No agents currently running",
+                spec_id
+            );
         }
     }
 

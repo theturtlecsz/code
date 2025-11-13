@@ -152,7 +152,7 @@ webbrowser = "1.0"
 which = "6"
 wildmatch = "2.5.0"
 wiremock = "0.6"
-rusqlite = { version = "0.31", features = ["bundled"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
 
 [workspace.lints]
 rust = {}

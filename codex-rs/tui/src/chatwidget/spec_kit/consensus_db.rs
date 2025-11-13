@@ -123,7 +123,10 @@ impl ConsensusDb {
 
         // Migrations for existing databases (errors are OK if columns already exist)
         let _ = conn.execute("ALTER TABLE agent_executions ADD COLUMN run_id TEXT", []);
-        let _ = conn.execute("ALTER TABLE agent_executions ADD COLUMN extraction_error TEXT", []);
+        let _ = conn.execute(
+            "ALTER TABLE agent_executions ADD COLUMN extraction_error TEXT",
+            [],
+        );
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_agent_executions_spec
