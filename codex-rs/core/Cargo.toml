@@ -96,6 +96,7 @@ openssl-sys = { version = "*", features = ["vendored"] }
 [dev-dependencies]
 assert_cmd = "2"
 core_test_support = { path = "tests/common" }
+criterion = { version = "0.5", features = ["html_reports"] }
 maplit = "1.0.2"
 predicates = "3"
 pretty_assertions = "1.4.1"
@@ -103,6 +104,10 @@ tempfile = "3"
 tokio-test = "0.4"
 walkdir = "2.5.0"
 wiremock = "0.6"
+
+[[bench]]
+name = "db_performance"
+harness = false
 
 [package.metadata.cargo-shear]
 ignored = ["openssl-sys"]
