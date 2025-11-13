@@ -196,11 +196,11 @@ impl ConsensusDb {
 
     /// Store agent artifact (from cached response)
     ///
-    /// SPEC-945B Dual-Write: Writes to BOTH old and new schemas.
-    /// - Old schema: consensus_artifacts table (backward compatibility)
-    /// - New schema: consensus_runs + agent_outputs (connection pool)
+    /// SPEC-945B Write-Path Cutover (Week 2 Day 6): Writes to NEW schema ONLY.
+    /// - New schema: consensus_runs + agent_outputs (connection pool with WAL)
+    /// - Old schema: Read-only (dual-schema reader provides fallback)
     ///
-    /// Returns old schema ID for backward compatibility.
+    /// Returns new schema output ID (agent_outputs.id).
     pub fn store_artifact(
         &self,
         spec_id: &str,
@@ -210,130 +210,54 @@ impl ConsensusDb {
         response_text: Option<&str>,
         run_id: Option<&str>,
     ) -> SqlResult<i64> {
-        // Generate timestamp once for consistency across both writes
-        let timestamp = Self::get_timestamp();
+        // Ensure connection pool is available
+        let pool = self
+            .pool
+            .as_ref()
+            .ok_or_else(|| rusqlite::Error::InvalidQuery)?;
 
-        // 1. Write to OLD schema (existing single-connection approach)
-        let old_id = {
-            let conn = self.conn.lock().unwrap();
-            conn.execute(
-                "INSERT INTO consensus_artifacts
-                 (spec_id, stage, agent_name, content_json, response_text, run_id, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                params![
-                    spec_id,
-                    stage.command_name(),
-                    agent_name,
-                    content_json,
-                    response_text,
-                    run_id,
-                    timestamp,
-                ],
-            )?;
-            conn.last_insert_rowid()
-        };
-
-        // 2. Write to NEW schema (if pool available)
-        if let Some(pool) = &self.pool {
-            match self.write_new_schema_artifact(
-                pool,
-                spec_id,
-                stage.command_name(),
-                agent_name,
-                content_json,
-                timestamp.clone(),
-            ) {
-                Ok(new_id) => {
-                    // Validate consistency (both writes succeeded)
-                    if let Err(e) = self.validate_dual_write(old_id, new_id) {
-                        eprintln!("Warning: Dual-write validation failed: {}", e);
-                        // Continue anyway - old schema is source of truth
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Warning: New schema write failed: {}", e);
-                    // Continue anyway - old schema write succeeded
-                }
-            }
-        }
-
-        // Return old schema ID for backward compatibility
-        Ok(old_id)
-    }
-
-    /// Generate consistent timestamp for dual-write
-    fn get_timestamp() -> String {
-        chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string()
-    }
-
-    /// Write artifact to new schema using async wrapper
-    ///
-    /// Uses blocking strategy appropriate for the calling context.
-    /// This is a synchronous wrapper around async database operations.
-    fn write_new_schema_artifact(
-        &self,
-        pool: &Pool<SqliteConnectionManager>,
-        spec_id: &str,
-        stage: &str,
-        agent_name: &str,
-        content_json: &str,
-        timestamp: String,
-    ) -> Result<i64, String> {
-        // Clone data for move into closure
+        // Clone data for move into async closure
         let pool = pool.clone();
         let spec_id = spec_id.to_string();
-        let stage = stage.to_string();
+        let stage = stage.command_name().to_string();
         let agent_name = agent_name.to_string();
         let content_json = content_json.to_string();
 
+        // Write to NEW schema using async wrapper
         // Use Runtime::new() to avoid nested runtime issues
-        // This creates a dedicated runtime for this operation
         let runtime = tokio::runtime::Runtime::new()
-            .map_err(|e| format!("Failed to create tokio runtime: {}", e))?;
+            .map_err(|_| rusqlite::Error::InvalidQuery)?;
 
-        runtime.block_on(async {
-            use codex_core::db::async_wrapper::{store_agent_output, store_consensus_run};
+        runtime
+            .block_on(async {
+                use codex_core::db::async_wrapper::{store_agent_output, store_consensus_run};
 
-            // 1. Store/update consensus run
-            let run_id = store_consensus_run(
-                &pool, &spec_id, &stage, true,  // consensus_ok (artifact exists)
-                false, // degraded
-                None,  // synthesis_json (not available at artifact stage)
-            )
-            .await
-            .map_err(|e| format!("Failed to store consensus run: {}", e))?;
+                // 1. Store/update consensus run
+                let run_id = store_consensus_run(
+                    &pool,
+                    &spec_id,
+                    &stage,
+                    true,  // consensus_ok (artifact exists)
+                    false, // degraded
+                    None,  // synthesis_json (not available at artifact stage)
+                )
+                .await
+                .map_err(|_| rusqlite::Error::InvalidQuery)?;
 
-            // 2. Store agent output
-            let output_id = store_agent_output(
-                &pool,
-                run_id,
-                &agent_name,
-                None, // model_version (not available in old schema)
-                &content_json,
-            )
-            .await
-            .map_err(|e| format!("Failed to store agent output: {}", e))?;
+                // 2. Store agent output
+                let output_id = store_agent_output(
+                    &pool,
+                    run_id,
+                    &agent_name,
+                    None, // model_version (not available in old schema)
+                    &content_json,
+                )
+                .await
+                .map_err(|_| rusqlite::Error::InvalidQuery)?;
 
-            Ok::<i64, String>(output_id)
-        })
-    }
-
-    /// Validate dual-write consistency
-    ///
-    /// Compares old and new schema IDs. In dual-write mode, both should succeed.
-    /// Logs mismatches but doesn't fail (old schema is source of truth).
-    fn validate_dual_write(&self, old_id: i64, new_id: i64) -> Result<(), String> {
-        if old_id <= 0 || new_id <= 0 {
-            return Err(format!(
-                "Dual-write validation failed: invalid IDs (old={}, new={})",
-                old_id, new_id
-            ));
-        }
-
-        // Both IDs should be positive (successful inserts)
-        // Note: IDs won't match because they're from different tables
-        // This validation just ensures both writes succeeded
-        Ok(())
+                Ok(output_id)
+            })
+            .map_err(|_: rusqlite::Error| rusqlite::Error::InvalidQuery)
     }
 
     // === Read-Path Migration (SPEC-945B Week 2 Day 5) ===
@@ -627,11 +551,11 @@ impl ConsensusDb {
 
     /// Store consensus synthesis output
     ///
-    /// SPEC-945B Dual-Write: Writes to BOTH old and new schemas.
-    /// - Old schema: consensus_synthesis table
-    /// - New schema: consensus_runs.synthesis_json column
+    /// SPEC-945B Write-Path Cutover (Week 2 Day 6): Writes to NEW schema ONLY.
+    /// - New schema: consensus_runs.synthesis_json column (connection pool with WAL)
+    /// - Old schema: Read-only (dual-schema reader provides fallback)
     ///
-    /// Returns old schema ID for backward compatibility.
+    /// Returns new schema run ID (consensus_runs.id).
     pub fn store_synthesis(
         &self,
         spec_id: &str,
@@ -645,102 +569,52 @@ impl ConsensusDb {
         degraded: bool,
         run_id: Option<&str>,
     ) -> SqlResult<i64> {
-        // 1. Write to OLD schema (existing approach)
-        let old_id = {
-            let conn = self.conn.lock().unwrap();
-            let path_str = output_path.map(|p| p.display().to_string());
+        // Ensure connection pool is available
+        let pool = self
+            .pool
+            .as_ref()
+            .ok_or_else(|| rusqlite::Error::InvalidQuery)?;
 
-            conn.execute(
-                "INSERT INTO consensus_synthesis
-                 (spec_id, stage, output_markdown, output_path, status, artifacts_count, agreements, conflicts, degraded, run_id)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-                params![
-                    spec_id,
-                    stage.command_name(),
-                    output_markdown,
-                    path_str,
-                    status,
-                    artifacts_count as i64,
-                    agreements,
-                    conflicts,
-                    degraded,
-                    run_id,
-                ],
-            )?;
+        // Build synthesis JSON for new schema
+        let synthesis_json = serde_json::json!({
+            "output_markdown": output_markdown,
+            "output_path": output_path.map(|p| p.display().to_string()),
+            "status": status,
+            "artifacts_count": artifacts_count,
+            "agreements": agreements,
+            "conflicts": conflicts,
+        })
+        .to_string();
 
-            conn.last_insert_rowid()
-        };
-
-        // 2. Write to NEW schema (if pool available)
-        if let Some(pool) = &self.pool {
-            // Build synthesis JSON from old schema fields
-            let synthesis_json = serde_json::json!({
-                "output_markdown": output_markdown,
-                "output_path": output_path.map(|p| p.display().to_string()),
-                "status": status,
-                "artifacts_count": artifacts_count,
-                "agreements": agreements,
-                "conflicts": conflicts,
-            })
-            .to_string();
-
-            match self.write_new_schema_synthesis(
-                pool,
-                spec_id,
-                stage.command_name(),
-                &synthesis_json,
-                degraded,
-            ) {
-                Ok(new_id) => {
-                    if let Err(e) = self.validate_dual_write(old_id, new_id) {
-                        eprintln!("Warning: Synthesis dual-write validation failed: {}", e);
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Warning: New schema synthesis write failed: {}", e);
-                }
-            }
-        }
-
-        Ok(old_id)
-    }
-
-    /// Write synthesis to new schema using async wrapper
-    fn write_new_schema_synthesis(
-        &self,
-        pool: &Pool<SqliteConnectionManager>,
-        spec_id: &str,
-        stage: &str,
-        synthesis_json: &str,
-        degraded: bool,
-    ) -> Result<i64, String> {
-        // Clone data for move into closure
+        // Clone data for move into async closure
         let pool = pool.clone();
         let spec_id = spec_id.to_string();
-        let stage = stage.to_string();
-        let synthesis_json = synthesis_json.to_string();
+        let stage = stage.command_name().to_string();
 
+        // Write to NEW schema using async wrapper
         // Use Runtime::new() to avoid nested runtime issues
         let runtime = tokio::runtime::Runtime::new()
-            .map_err(|e| format!("Failed to create tokio runtime: {}", e))?;
+            .map_err(|_| rusqlite::Error::InvalidQuery)?;
 
-        runtime.block_on(async {
-            use codex_core::db::async_wrapper::store_consensus_run;
+        runtime
+            .block_on(async {
+                use codex_core::db::async_wrapper::store_consensus_run;
 
-            // Store/update consensus run with synthesis
-            let run_id = store_consensus_run(
-                &pool,
-                &spec_id,
-                &stage,
-                true, // consensus_ok (synthesis exists)
-                degraded,
-                Some(&synthesis_json),
-            )
-            .await
-            .map_err(|e| format!("Failed to store consensus run with synthesis: {}", e))?;
+                // Store/update consensus run with synthesis
+                let run_id = store_consensus_run(
+                    &pool,
+                    &spec_id,
+                    &stage,
+                    true, // consensus_ok (synthesis exists)
+                    degraded,
+                    Some(&synthesis_json),
+                )
+                .await
+                .map_err(|_| rusqlite::Error::InvalidQuery)?;
 
-            Ok::<i64, String>(run_id)
-        })
+                Ok(run_id)
+            })
+            .map_err(|_: rusqlite::Error| rusqlite::Error::InvalidQuery)
     }
 
     /// Query latest synthesis for a spec and stage (DUAL-SCHEMA READER)
@@ -1238,30 +1112,6 @@ mod tests {
         let _ = std::fs::remove_file(&db_path);
         let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
         let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
-    }
-
-    /// Test validation logic detects invalid IDs
-    #[test]
-    fn test_validate_dual_write() {
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join("test_validate.db");
-        let _ = std::fs::remove_file(&db_path);
-
-        let db = ConsensusDb::init(&db_path).unwrap();
-
-        // Valid IDs should pass
-        assert!(db.validate_dual_write(1, 2).is_ok());
-        assert!(db.validate_dual_write(100, 200).is_ok());
-
-        // Invalid IDs should fail
-        assert!(db.validate_dual_write(0, 1).is_err());
-        assert!(db.validate_dual_write(1, 0).is_err());
-        assert!(db.validate_dual_write(-1, 1).is_err());
-        assert!(db.validate_dual_write(1, -1).is_err());
-
-        // Cleanup
-        drop(db);
-        let _ = std::fs::remove_file(&db_path);
     }
 
     /// Test graceful degradation when pool initialization fails
