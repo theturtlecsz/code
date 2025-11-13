@@ -23,6 +23,7 @@ pub mod agent_tool; // Made public for native consensus orchestration
 mod command_safety;
 pub mod config;
 pub mod config_edit;
+pub mod db;  // SPEC-945B: Database layer (SQLite optimization, transactions, vacuum)
 pub mod config_profile;
 pub mod config_types;
 mod conversation_history;
