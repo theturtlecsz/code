@@ -174,8 +174,17 @@ pub async fn execute_in_pane(
 
     // Create unique output file for this agent execution
     let sanitized_pane = pane_id.replace("%", "").replace(":", "-").replace(".", "-");
-    let output_file = format!("/tmp/tmux-agent-output-{}-{}.txt", std::process::id(), sanitized_pane);
-    tracing::info!("🆔 Creating output file for pane {} (sanitized: {}) -> {}", pane_id, sanitized_pane, output_file);
+    let output_file = format!(
+        "/tmp/tmux-agent-output-{}-{}.txt",
+        std::process::id(),
+        sanitized_pane
+    );
+    tracing::info!(
+        "🆔 Creating output file for pane {} (sanitized: {}) -> {}",
+        pane_id,
+        sanitized_pane,
+        output_file
+    );
 
     // Check if we have large arguments - if so, use wrapper script approach
     let has_large_arg = args.iter().any(|a| a.len() > LARGE_ARG_THRESHOLD);
@@ -184,7 +193,11 @@ pub async fn execute_in_pane(
         // WRAPPER SCRIPT APPROACH: Create a shell script with heredoc for large prompts
         // This avoids: command length limits, stdin issues, and command substitution complexity
 
-        let wrapper_script_path = format!("/tmp/tmux-agent-wrapper-{}-{}.sh", std::process::id(), sanitized_pane);
+        let wrapper_script_path = format!(
+            "/tmp/tmux-agent-wrapper-{}-{}.sh",
+            std::process::id(),
+            sanitized_pane
+        );
         temp_files.push(wrapper_script_path.clone());
 
         // Build wrapper script content
@@ -223,7 +236,10 @@ pub async fn execute_in_pane(
         script_content.push_str(&format!(" > {} 2>&1\n", output_file));
 
         // SPEC-KIT-928: Add debug marker to verify redirect is working
-        script_content.push_str(&format!("echo \"OUTPUT_FILE_CREATED: {}\" >&2\n", output_file));
+        script_content.push_str(&format!(
+            "echo \"OUTPUT_FILE_CREATED: {}\" >&2\n",
+            output_file
+        ));
 
         // SPEC-923: Add completion marker so polling can detect when agent finishes
         script_content.push_str("echo '___AGENT_COMPLETE___'\n");
@@ -232,7 +248,10 @@ pub async fn execute_in_pane(
         tracing::debug!(
             "Wrapper script size: {} bytes, prompt size: {} bytes",
             script_content.len(),
-            args.iter().find(|a| a.len() > LARGE_ARG_THRESHOLD).map(|a| a.len()).unwrap_or(0)
+            args.iter()
+                .find(|a| a.len() > LARGE_ARG_THRESHOLD)
+                .map(|a| a.len())
+                .unwrap_or(0)
         );
 
         // Write wrapper script
@@ -301,7 +320,10 @@ pub async fn execute_in_pane(
         for temp_file in &temp_files {
             if temp_file.contains("tmux-agent-wrapper") {
                 let debug_copy = temp_file.replace(".sh", "-debug.sh");
-                final_command.push_str(&format!("; cp {} {} 2>/dev/null || true", temp_file, debug_copy));
+                final_command.push_str(&format!(
+                    "; cp {} {} 2>/dev/null || true",
+                    temp_file, debug_copy
+                ));
             }
         }
         final_command.push_str(&format!("; rm -f {}", temp_files.join(" ")));
@@ -405,7 +427,11 @@ pub async fn execute_in_pane(
                 } else {
                     // File still growing or too small, reset stability timer
                     if current_size != last_size {
-                        tracing::trace!("📈 Output file growing: {} -> {} bytes", last_size, current_size);
+                        tracing::trace!(
+                            "📈 Output file growing: {} -> {} bytes",
+                            last_size,
+                            current_size
+                        );
                     }
                     stable_since = None;
                     false
@@ -425,7 +451,11 @@ pub async fn execute_in_pane(
         last_file_size = current_file_size;
 
         // Check pane content for completion marker (to know when to read output file)
-        tracing::debug!("🔍 Polling pane {} for completion (expecting output file: {})", pane_id, output_file);
+        tracing::debug!(
+            "🔍 Polling pane {} for completion (expecting output file: {})",
+            pane_id,
+            output_file
+        );
         let capture = Command::new("tmux")
             .args(["capture-pane", "-t", pane_id, "-p", "-S", "-"])
             .output()
@@ -447,11 +477,7 @@ pub async fn execute_in_pane(
             let pane_content = String::from_utf8_lossy(&capture.stdout).to_string();
 
             // SPEC-KIT-925: Enhanced diagnostics for debugging completion detection
-            let content_preview = pane_content
-                .lines()
-                .take(5)
-                .collect::<Vec<_>>()
-                .join(" | ");
+            let content_preview = pane_content.lines().take(5).collect::<Vec<_>>().join(" | ");
             let has_marker = pane_content.contains("___AGENT_COMPLETE___");
 
             tracing::trace!(
@@ -471,11 +497,18 @@ pub async fn execute_in_pane(
             // SPEC-KIT-927: Require BOTH completion marker AND stable file size
             // This prevents premature output collection before agent finishes writing
             if has_marker && file_is_stable {
-                tracing::info!("✅ Agent completed in pane {} (marker + stable file), reading output file", pane_id);
+                tracing::info!(
+                    "✅ Agent completed in pane {} (marker + stable file), reading output file",
+                    pane_id
+                );
 
                 // Read clean output from dedicated output file
                 let file_exists = tokio::fs::metadata(&output_file).await.is_ok();
-                tracing::info!("🔍 Attempting to read output file: {} (exists: {})", output_file, file_exists);
+                tracing::info!(
+                    "🔍 Attempting to read output file: {} (exists: {})",
+                    output_file,
+                    file_exists
+                );
 
                 // If file doesn't exist, check for similar files to diagnose pane ID mismatch
                 if !file_exists {
@@ -493,18 +526,30 @@ pub async fn execute_in_pane(
 
                 let output = match tokio::fs::read_to_string(&output_file).await {
                     Ok(content) => {
-                        tracing::info!("✅ Successfully read {} bytes from output file: {}", content.len(), output_file);
+                        tracing::info!(
+                            "✅ Successfully read {} bytes from output file: {}",
+                            content.len(),
+                            output_file
+                        );
 
                         // Clean up output file after successful read
                         match tokio::fs::remove_file(&output_file).await {
                             Ok(_) => tracing::info!("🗑️ Deleted output file: {}", output_file),
-                            Err(e) => tracing::error!("❌ Failed to delete output file {}: {}", output_file, e),
+                            Err(e) => tracing::error!(
+                                "❌ Failed to delete output file {}: {}",
+                                output_file,
+                                e
+                            ),
                         }
 
                         content
                     }
                     Err(e) => {
-                        tracing::error!("❌ FAILED to read agent output file {}: {}", output_file, e);
+                        tracing::error!(
+                            "❌ FAILED to read agent output file {}: {}",
+                            output_file,
+                            e
+                        );
                         tracing::error!("❌ Falling back to pane capture (may lose content)");
                         // Fallback to pane capture if output file read fails
                         // This strips shell noise as best we can
@@ -514,16 +559,20 @@ pub async fn execute_in_pane(
 
                         for line in lines {
                             // Skip shell prompts and environment setup
-                            if line.starts_with("thetu@") || line.contains("cd ") || line.contains("export ") {
+                            if line.starts_with("thetu@")
+                                || line.contains("cd ")
+                                || line.contains("export ")
+                            {
                                 continue;
                             }
                             // Skip the agent command line itself
                             // SPEC-KIT-928: Handle multiple agent command patterns
-                            if line.contains("/usr/bin/spec") ||
-                               line.contains("code exec") ||
-                               line.contains("gemini") ||
-                               line.contains("claude") ||
-                               line.contains("/tmp/tmux-agent-wrapper") {
+                            if line.contains("/usr/bin/spec")
+                                || line.contains("code exec")
+                                || line.contains("gemini")
+                                || line.contains("claude")
+                                || line.contains("/tmp/tmux-agent-wrapper")
+                            {
                                 in_output = true;
                                 continue;
                             }
@@ -537,9 +586,14 @@ pub async fn execute_in_pane(
                         }
 
                         let fallback_output = clean_lines.join("\n");
-                        tracing::warn!("📋 Fallback pane capture returned {} bytes", fallback_output.len());
-                        tracing::debug!("📋 Fallback preview: {}...",
-                            &fallback_output.chars().take(200).collect::<String>());
+                        tracing::warn!(
+                            "📋 Fallback pane capture returned {} bytes",
+                            fallback_output.len()
+                        );
+                        tracing::debug!(
+                            "📋 Fallback preview: {}...",
+                            &fallback_output.chars().take(200).collect::<String>()
+                        );
                         fallback_output
                     }
                 };
@@ -581,7 +635,11 @@ pub async fn capture_pane_output(pane_id: &str) -> Result<String, String> {
 /// then force-kills if still running. This prevents orphaned
 /// agent processes from accumulating.
 pub async fn kill_pane_process(session_name: &str, pane_id: &str) -> Result<(), String> {
-    tracing::info!("🔫 Killing process in pane {} (session: {})", pane_id, session_name);
+    tracing::info!(
+        "🔫 Killing process in pane {} (session: {})",
+        pane_id,
+        session_name
+    );
 
     // Send Ctrl+C to gracefully stop the process
     let send_keys_result = Command::new("tmux")
@@ -592,7 +650,10 @@ pub async fn kill_pane_process(session_name: &str, pane_id: &str) -> Result<(), 
     if let Err(e) = send_keys_result {
         tracing::warn!("Failed to send Ctrl+C to pane {}: {}", pane_id, e);
     } else {
-        tracing::debug!("Sent Ctrl+C to pane {}, waiting 2s for graceful exit", pane_id);
+        tracing::debug!(
+            "Sent Ctrl+C to pane {}, waiting 2s for graceful exit",
+            pane_id
+        );
     }
 
     // Give process 2 seconds to exit gracefully

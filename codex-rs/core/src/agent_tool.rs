@@ -439,10 +439,7 @@ impl AgentManager {
             std::collections::HashMap::new();
 
         for agent in self.agents.values() {
-            if matches!(
-                agent.status,
-                AgentStatus::Running | AgentStatus::Pending
-            ) {
+            if matches!(agent.status, AgentStatus::Running | AgentStatus::Pending) {
                 // Extract base model name (e.g., "gemini" from "gemini-2.5-flash")
                 let model_base = agent
                     .model
@@ -465,19 +462,8 @@ impl AgentManager {
         // Returns: (agent_id, model, status)
         self.agents
             .values()
-            .filter(|a| {
-                matches!(
-                    a.status,
-                    AgentStatus::Running | AgentStatus::Pending
-                )
-            })
-            .map(|a| {
-                (
-                    a.id.clone(),
-                    a.model.clone(),
-                    format!("{:?}", a.status),
-                )
-            })
+            .filter(|a| matches!(a.status, AgentStatus::Running | AgentStatus::Pending))
+            .map(|a| (a.id.clone(), a.model.clone(), format!("{:?}", a.status)))
             .collect()
     }
 
@@ -565,7 +551,12 @@ fn extract_json_from_mixed_output(output: &str, model: &str) -> String {
     } else {
         output_preview
     };
-    tracing::trace!("🔍 Extraction input for {}: {} bytes, starts with: {}", model, output.len(), preview_with_ellipsis);
+    tracing::trace!(
+        "🔍 Extraction input for {}: {} bytes, starts with: {}",
+        model,
+        output.len(),
+        preview_with_ellipsis
+    );
 
     // Pattern 1: Check for markdown code fence (ANYWHERE in output, not just start)
     if let Some(fence_start) = output.find("```json") {
@@ -611,13 +602,19 @@ fn extract_json_from_mixed_output(output: &str, model: &str) -> String {
         // SPEC-KIT-928: Look for "] codex" marker - appears right before actual response
         if let Some(codex_marker_pos) = output.rfind("] codex\n") {
             let after_marker = &output[codex_marker_pos + 8..]; // Skip "] codex\n"
-            tracing::debug!("📍 Found '] codex\\n' marker at position {}, extracting response", codex_marker_pos);
+            tracing::debug!(
+                "📍 Found '] codex\\n' marker at position {}, extracting response",
+                codex_marker_pos
+            );
 
             // Strip trailing footer ([timestamp] tokens used: N)
             let cleaned = if let Some(footer_pos) = after_marker.rfind("] tokens used:") {
                 if let Some(bracket_pos) = after_marker[..footer_pos].rfind('[') {
                     let result = after_marker[..bracket_pos].trim_end();
-                    tracing::debug!("📍 Stripped tokens footer, response is now {} bytes", result.len());
+                    tracing::debug!(
+                        "📍 Stripped tokens footer, response is now {} bytes",
+                        result.len()
+                    );
                     result
                 } else {
                     after_marker
@@ -637,7 +634,10 @@ fn extract_json_from_mixed_output(output: &str, model: &str) -> String {
         } else if let Some(codex_marker_pos) = output.rfind("] codex") {
             // Handle case without newline
             let after_marker = output[codex_marker_pos + 7..].trim_start();
-            tracing::debug!("📍 Found '] codex' marker (no newline) at position {}", codex_marker_pos);
+            tracing::debug!(
+                "📍 Found '] codex' marker (no newline) at position {}",
+                codex_marker_pos
+            );
 
             // Strip trailing footer
             let cleaned = if let Some(footer_pos) = after_marker.rfind("] tokens used:") {
@@ -699,7 +699,10 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
     // SPEC-KIT-928: Log execution parameters for debugging
     tracing::warn!(
         "🔍 AGENT EXEC START: agent_id={}, model={}, read_only={}, tmux={}",
-        agent_id, model, read_only, tmux_enabled
+        agent_id,
+        model,
+        read_only,
+        tmux_enabled
     );
 
     // SPEC-KIT-927: Track execution duration for suspicious completion detection
@@ -795,11 +798,15 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
     match &result {
         Ok(output) => tracing::warn!(
             "✅ AGENT EXEC OK: agent_id={}, output_bytes={}, duration={:.2}s",
-            agent_id, output.len(), execution_duration.as_secs_f64()
+            agent_id,
+            output.len(),
+            execution_duration.as_secs_f64()
         ),
         Err(e) => tracing::warn!(
             "❌ AGENT EXEC FAILED: agent_id={}, error={}, duration={:.2}s",
-            agent_id, e, execution_duration.as_secs_f64()
+            agent_id,
+            e,
+            execution_duration.as_secs_f64()
         ),
     }
 
@@ -807,7 +814,8 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
     // Helps diagnose corruption patterns (TUI text, headers, schemas)
     if let Ok(ref output) = result {
         // Analyze output characteristics
-        let has_json_start = output.trim_start().starts_with('{') || output.trim_start().starts_with('[');
+        let has_json_start =
+            output.trim_start().starts_with('{') || output.trim_start().starts_with('[');
         let has_markdown_fence = output.contains("```json") || output.contains("```");
         let has_codex_header = output.contains("OpenAI Codex v") || output.contains("[2025-");
         let has_tui_text = output.contains("codex\n\n") || output.contains("thetu@arch-dev");
@@ -831,7 +839,11 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
 
         // Detailed preview logging
         let preview_len = 300.min(output.len());
-        tracing::debug!("📄 Output preview (first {} chars): {}", preview_len, &output[..preview_len]);
+        tracing::debug!(
+            "📄 Output preview (first {} chars): {}",
+            preview_len,
+            &output[..preview_len]
+        );
     }
 
     tracing::info!("🔍 Agent {} starting validation phase", agent_id);
@@ -842,7 +854,11 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
     let raw_output_for_storage = result.as_ref().ok().map(|s| s.clone());
     let validated_result = match result {
         Ok(output) => {
-            tracing::info!("🔍 Agent {} validating {} byte output", agent_id, output.len());
+            tracing::info!(
+                "🔍 Agent {} validating {} byte output",
+                agent_id,
+                output.len()
+            );
             // SPEC-KIT-927: Warn about suspiciously fast completions
             // Fast + small output often indicates premature collection
             if execution_duration < std::time::Duration::from_secs(30) && output.len() < 1000 {
@@ -871,27 +887,38 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
 
             // Validation 0: Output corruption detection (TUI text, conversation, etc.)
             // Expanded patterns based on diagnostic analysis
-            if cleaned_output.contains("thetu@arch-dev") ||
-               cleaned_output.contains("codex\n\nShort answer:") ||
-               cleaned_output.contains("How do you want to proceed") ||
-               (cleaned_output.contains("codex") && cleaned_output.contains("Got it. I'm focused")) {
+            if cleaned_output.contains("thetu@arch-dev")
+                || cleaned_output.contains("codex\n\nShort answer:")
+                || cleaned_output.contains("How do you want to proceed")
+                || (cleaned_output.contains("codex")
+                    && cleaned_output.contains("Got it. I'm focused"))
+            {
                 tracing::error!(
                     "❌ Agent {} output contains TUI conversation text! This indicates stdout mixing/pollution.",
                     model
                 );
                 tracing::error!("🔍 Corruption pattern: Terminal prompt or conversation detected");
-                tracing::debug!("Corrupted output sample: {}", &cleaned_output.chars().take(500).collect::<String>());
+                tracing::debug!(
+                    "Corrupted output sample: {}",
+                    &cleaned_output.chars().take(500).collect::<String>()
+                );
                 Err(format!(
                     "Agent output polluted with TUI conversation text. Stdout redirection broken."
                 ))
             }
             // Check for headers-only output (codex initialization without actual response)
-            else if cleaned_output.contains("OpenAI Codex v") && cleaned_output.contains("User instructions:") && !cleaned_output.contains("{") {
+            else if cleaned_output.contains("OpenAI Codex v")
+                && cleaned_output.contains("User instructions:")
+                && !cleaned_output.contains("{")
+            {
                 tracing::error!(
                     "❌ Agent {} returned headers only (no JSON)! Premature collection detected.",
                     model
                 );
-                tracing::debug!("Headers-only output: {}", &cleaned_output.chars().take(400).collect::<String>());
+                tracing::debug!(
+                    "Headers-only output: {}",
+                    &cleaned_output.chars().take(400).collect::<String>()
+                );
                 Err(format!(
                     "Agent returned initialization headers without JSON output. Premature collection."
                 ))
@@ -911,16 +938,19 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
                 ))
             }
             // Validation 2: Schema template detection (common in corrupted outputs)
-            else if cleaned_output.contains("{ \"path\": string") ||
-                    cleaned_output.contains("\"diff_proposals\": [ {") ||
-                    cleaned_output.contains("\"change\": string (diff or summary)") {
+            else if cleaned_output.contains("{ \"path\": string")
+                || cleaned_output.contains("\"diff_proposals\": [ {")
+                || cleaned_output.contains("\"change\": string (diff or summary)")
+            {
                 tracing::error!(
                     "❌ Agent {} returned JSON schema instead of data after {}s!",
                     model,
                     execution_duration.as_secs()
                 );
-                tracing::debug!("Schema output preview: {}...",
-                    &cleaned_output.chars().take(500).collect::<String>());
+                tracing::debug!(
+                    "Schema output preview: {}...",
+                    &cleaned_output.chars().take(500).collect::<String>()
+                );
                 Err("Agent returned JSON schema template instead of actual data. Premature output collection detected.".to_string())
             }
             // Validation 3: JSON parsing (must be valid JSON)
@@ -931,13 +961,19 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
                     execution_duration.as_secs(),
                     e
                 );
-                tracing::debug!("Invalid JSON preview: {}...",
-                    &cleaned_output.chars().take(500).collect::<String>());
+                tracing::debug!(
+                    "Invalid JSON preview: {}...",
+                    &cleaned_output.chars().take(500).collect::<String>()
+                );
 
                 // SPEC-KIT-928: Save full invalid output to temp file for debugging
                 let temp_file = format!("/tmp/agent-invalid-json-{}.txt", agent_id);
                 if let Err(write_err) = std::fs::write(&temp_file, &cleaned_output) {
-                    tracing::warn!("Failed to write invalid JSON to {}: {}", temp_file, write_err);
+                    tracing::warn!(
+                        "Failed to write invalid JSON to {}: {}",
+                        temp_file,
+                        write_err
+                    );
                 } else {
                     tracing::error!("📝 Full invalid JSON saved to: {}", temp_file);
                 }
@@ -957,12 +993,20 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
         }
         Err(e) => {
             // Error already occurred during execution
-            tracing::error!("❌ Agent {} execution failed after {}s: {}", model, execution_duration.as_secs(), e);
+            tracing::error!(
+                "❌ Agent {} execution failed after {}s: {}",
+                model,
+                execution_duration.as_secs(),
+                e
+            );
             Err(e)
         }
     };
 
-    tracing::info!("🔍 Agent {} acquiring AGENT_MANAGER lock for status update", agent_id);
+    tracing::info!(
+        "🔍 Agent {} acquiring AGENT_MANAGER lock for status update",
+        agent_id
+    );
 
     // SPEC-KIT-928: Store raw output even if validation fails (for debugging)
     // Quality gate orchestrator needs to access agent.result to extract/fix JSON
@@ -973,11 +1017,19 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
     match &validated_result {
         Ok(_) => {
             // Validation passed - store normally
-            tracing::info!("✅ Agent {} validation passed, updating with OK result", agent_id);
-            manager.update_agent_result(&agent_id, validated_result).await;
+            tracing::info!(
+                "✅ Agent {} validation passed, updating with OK result",
+                agent_id
+            );
+            manager
+                .update_agent_result(&agent_id, validated_result)
+                .await;
         }
         Err(validation_error) => {
-            tracing::warn!("⚠️ Agent {} validation failed, storing raw output anyway", agent_id);
+            tracing::warn!(
+                "⚠️ Agent {} validation failed, storing raw output anyway",
+                agent_id
+            );
             // Validation failed - but store the RAW output anyway for debugging
             // The error will be in agent.error, but result will have the raw data
             if let Some(raw_output) = raw_output_for_storage {
@@ -991,10 +1043,14 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
                     "VALIDATION_FAILED: {}\n\n--- RAW OUTPUT ---\n{}",
                     validation_error, cleaned
                 );
-                manager.update_agent_result(&agent_id, Err(output_with_error)).await;
+                manager
+                    .update_agent_result(&agent_id, Err(output_with_error))
+                    .await;
             } else {
                 // Execution itself failed (not just validation)
-                manager.update_agent_result(&agent_id, validated_result).await;
+                manager
+                    .update_agent_result(&agent_id, validated_result)
+                    .await;
             }
         }
     }
@@ -1192,16 +1248,15 @@ async fn execute_model_with_permissions(
             match crate::tmux::create_pane(&session_name, &pane_title, false).await {
                 Ok(pane_id) => {
                     // Build environment map, filtering out debug-related vars that pollute output
-                    let mut env: std::collections::HashMap<String, String> =
-                        std::env::vars()
-                            .filter(|(k, _)| {
-                                // Filter out debug/logging vars that would pollute agent JSON output
-                                k != "RUST_LOG"
-                                    && k != "RUST_BACKTRACE"
-                                    && k != "RUST_LOG_STYLE"
-                                    && !k.starts_with("RUST_LOG_")
-                            })
-                            .collect();
+                    let mut env: std::collections::HashMap<String, String> = std::env::vars()
+                        .filter(|(k, _)| {
+                            // Filter out debug/logging vars that would pollute agent JSON output
+                            k != "RUST_LOG"
+                                && k != "RUST_BACKTRACE"
+                                && k != "RUST_LOG_STYLE"
+                                && !k.starts_with("RUST_LOG_")
+                        })
+                        .collect();
                     if let Some(ref cfg) = config {
                         if let Some(ref e) = cfg.env {
                             for (k, v) in e {

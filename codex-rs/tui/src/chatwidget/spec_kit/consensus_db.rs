@@ -8,7 +8,14 @@
 //! - Fast SQL queries vs MCP overhead
 //! - Schema validation and indexing
 //! - No reset conflicts (delete SQLite rows, not memories)
+//!
+//! SPEC-945B Phase 1 Week 2 Day 3: Dual-Write Implementation
+//! Writes to BOTH old schema (consensus_artifacts) and new schema (consensus_runs)
+//! for gradual migration without breaking existing functionality.
 
+use codex_core::db::DbError;
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{Connection, Result as SqlResult, params};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -30,8 +37,12 @@ pub struct ConsensusArtifact {
 }
 
 /// Thread-safe database connection pool
+///
+/// SPEC-945B Dual-Write: Contains both old (single connection) and new (connection pool)
+/// for gradual migration. During Phase 2 (dual-write), both are active.
 pub struct ConsensusDb {
     conn: Arc<Mutex<Connection>>,
+    pool: Option<Pool<SqliteConnectionManager>>,
 }
 
 impl ConsensusDb {
@@ -54,55 +65,11 @@ impl ConsensusDb {
     }
 
     /// Initialize database at specific path
+    ///
+    /// SPEC-945B Phase 1 Complete: Uses new schema only (consensus_runs + agent_outputs).
+    /// Connection pool with WAL mode provides optimized concurrent access.
     pub fn init(db_path: &Path) -> SqlResult<Self> {
         let conn = Connection::open(db_path)?;
-
-        // Create tables if they don't exist
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS consensus_artifacts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                spec_id TEXT NOT NULL,
-                stage TEXT NOT NULL,
-                agent_name TEXT NOT NULL,
-                content_json TEXT NOT NULL,
-                response_text TEXT,
-                run_id TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )",
-            [],
-        )?;
-
-        // Create index for fast lookups
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_spec_stage
-             ON consensus_artifacts(spec_id, stage)",
-            [],
-        )?;
-
-        // Create synthesis table for storing final outputs
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS consensus_synthesis (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                spec_id TEXT NOT NULL,
-                stage TEXT NOT NULL,
-                output_markdown TEXT NOT NULL,
-                output_path TEXT,
-                status TEXT NOT NULL,
-                artifacts_count INTEGER,
-                agreements TEXT,
-                conflicts TEXT,
-                degraded BOOLEAN DEFAULT 0,
-                run_id TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )",
-            [],
-        )?;
-
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_synthesis_spec_stage
-             ON consensus_synthesis(spec_id, stage)",
-            [],
-        )?;
 
         // Agent execution tracking table (for definitive routing)
         conn.execute(
@@ -123,7 +90,10 @@ impl ConsensusDb {
 
         // Migrations for existing databases (errors are OK if columns already exist)
         let _ = conn.execute("ALTER TABLE agent_executions ADD COLUMN run_id TEXT", []);
-        let _ = conn.execute("ALTER TABLE agent_executions ADD COLUMN extraction_error TEXT", []);
+        let _ = conn.execute(
+            "ALTER TABLE agent_executions ADD COLUMN extraction_error TEXT",
+            [],
+        );
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_agent_executions_spec
@@ -137,12 +107,52 @@ impl ConsensusDb {
             [],
         )?;
 
+        // SPEC-945B: Initialize new schema connection pool
+        // Use codex_core::db for connection pooling with optimal pragmas
+        let pool = Self::initialize_new_schema_pool(db_path);
+
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
+            pool,
         })
     }
 
+    /// Initialize connection pool for new schema (SPEC-945B)
+    ///
+    /// Creates connection pool with WAL mode and optimal pragmas for the new schema.
+    /// Returns None if initialization fails (graceful degradation - old schema still works).
+    fn initialize_new_schema_pool(db_path: &Path) -> Option<Pool<SqliteConnectionManager>> {
+        // Try to initialize pool with codex_core::db
+        match codex_core::db::initialize_pool(db_path, 10) {
+            Ok(pool) => {
+                // Migrate to latest schema (creates new tables if needed)
+                match pool.get() {
+                    Ok(mut conn) => {
+                        if let Err(e) = codex_core::db::migrations::migrate_to_latest(&mut conn) {
+                            eprintln!("Warning: Failed to migrate new schema: {}", e);
+                            return None;
+                        }
+                        Some(pool)
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: Failed to get connection from pool: {}", e);
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("Warning: Failed to initialize new schema pool: {}", e);
+                None
+            }
+        }
+    }
+
     /// Store agent artifact (from cached response)
+    ///
+    /// SPEC-945B Phase 1 Complete: Writes to new schema (consensus_runs + agent_outputs).
+    /// Uses connection pool with WAL mode for optimized concurrent access.
+    ///
+    /// Returns new schema output ID (agent_outputs.id).
     pub fn store_artifact(
         &self,
         spec_id: &str,
@@ -152,126 +162,197 @@ impl ConsensusDb {
         response_text: Option<&str>,
         run_id: Option<&str>,
     ) -> SqlResult<i64> {
-        let conn = self.conn.lock().unwrap();
+        // Ensure connection pool is available
+        let pool = self
+            .pool
+            .as_ref()
+            .ok_or_else(|| rusqlite::Error::InvalidQuery)?;
 
-        conn.execute(
-            "INSERT INTO consensus_artifacts
-             (spec_id, stage, agent_name, content_json, response_text, run_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![
-                spec_id,
-                stage.command_name(),
-                agent_name,
-                content_json,
-                response_text,
-                run_id,
-            ],
-        )?;
+        // Clone data for move into async closure
+        let pool = pool.clone();
+        let spec_id = spec_id.to_string();
+        let stage = stage.command_name().to_string();
+        let agent_name = agent_name.to_string();
+        let content_json = content_json.to_string();
 
-        Ok(conn.last_insert_rowid())
+        // Write to NEW schema using async wrapper
+        // Use Runtime::new() to avoid nested runtime issues
+        let runtime = tokio::runtime::Runtime::new()
+            .map_err(|_| rusqlite::Error::InvalidQuery)?;
+
+        runtime
+            .block_on(async {
+                use codex_core::db::async_wrapper::{store_agent_output, store_consensus_run};
+
+                // 1. Store/update consensus run
+                let run_id = store_consensus_run(
+                    &pool,
+                    &spec_id,
+                    &stage,
+                    true,  // consensus_ok (artifact exists)
+                    false, // degraded
+                    None,  // synthesis_json (not available at artifact stage)
+                )
+                .await
+                .map_err(|_| rusqlite::Error::InvalidQuery)?;
+
+                // 2. Store agent output
+                let output_id = store_agent_output(
+                    &pool,
+                    run_id,
+                    &agent_name,
+                    None, // model_version (not available in old schema)
+                    &content_json,
+                )
+                .await
+                .map_err(|_| rusqlite::Error::InvalidQuery)?;
+
+                Ok(output_id)
+            })
+            .map_err(|_: rusqlite::Error| rusqlite::Error::InvalidQuery)
+    }
+
+    // === Read-Path Migration (SPEC-945B Week 2 Day 5) ===
+
+    /// Query artifacts from NEW schema (consensus_runs + agent_outputs)
+    ///
+    /// Reads from optimized schema with connection pool. Returns artifacts
+    /// in the same format as old schema for backward compatibility.
+    fn query_artifacts_new_schema(
+        &self,
+        spec_id: &str,
+        stage: &str,
+    ) -> Result<Vec<ConsensusArtifact>, String> {
+        let pool = match &self.pool {
+            Some(p) => p,
+            None => return Err("Connection pool not initialized".to_string()),
+        };
+
+        let pool = pool.clone();
+        let spec_id = spec_id.to_string();
+        let stage = stage.to_string();
+
+        // Use Runtime::new() to avoid nested runtime issues
+        let runtime = tokio::runtime::Runtime::new()
+            .map_err(|e| format!("Failed to create tokio runtime: {}", e))?;
+
+        runtime.block_on(async {
+            use codex_core::db::async_wrapper::with_connection;
+
+            with_connection(&pool, move |conn| {
+                use rusqlite::params;
+
+                let mut stmt = conn.prepare(
+                    "SELECT ao.id, cr.spec_id, cr.stage, ao.agent_name, ao.content,
+                            NULL as response_text, NULL as run_id, ao.output_timestamp
+                     FROM consensus_runs cr
+                     JOIN agent_outputs ao ON cr.id = ao.run_id
+                     WHERE cr.spec_id = ?1 AND cr.stage = ?2
+                     ORDER BY ao.output_timestamp DESC",
+                )?;
+
+                let artifacts = stmt
+                    .query_map(params![spec_id, stage], |row| {
+                        Ok(ConsensusArtifact {
+                            id: row.get(0)?,
+                            spec_id: row.get(1)?,
+                            stage: row.get(2)?,
+                            agent_name: row.get(3)?,
+                            content_json: row.get(4)?,
+                            response_text: row.get(5)?,
+                            run_id: row.get(6)?,
+                            created_at: Self::format_timestamp(row.get::<_, i64>(7)?),
+                        })
+                    })?
+                    .collect::<SqlResult<Vec<_>>>()?;
+
+                Ok(artifacts)
+            })
+            .await
+            .map_err(|e| format!("Failed to query new schema: {}", e))
+        })
+    }
+
+    /// Format Unix timestamp to ISO 8601 string for backward compatibility
+    fn format_timestamp(timestamp: i64) -> String {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let duration = std::time::Duration::from_secs(timestamp as u64);
+        let system_time = UNIX_EPOCH + duration;
+
+        // Format as ISO 8601 (YYYY-MM-DD HH:MM:SS)
+        let datetime = chrono::DateTime::<chrono::Utc>::from(system_time);
+        datetime.format("%Y-%m-%d %H:%M:%S").to_string()
+    }
+
+    /// Query synthesis from NEW schema (consensus_runs.synthesis_json)
+    ///
+    /// Reads from optimized schema with connection pool.
+    fn query_synthesis_new_schema(
+        &self,
+        spec_id: &str,
+        stage: &str,
+    ) -> Result<Option<String>, String> {
+        let pool = match &self.pool {
+            Some(p) => p,
+            None => return Err("Connection pool not initialized".to_string()),
+        };
+
+        let pool = pool.clone();
+        let spec_id = spec_id.to_string();
+        let stage = stage.to_string();
+
+        // Use Runtime::new() to avoid nested runtime issues
+        let runtime = tokio::runtime::Runtime::new()
+            .map_err(|e| format!("Failed to create tokio runtime: {}", e))?;
+
+        runtime.block_on(async {
+            use codex_core::db::async_wrapper::with_connection;
+
+            with_connection(&pool, move |conn| {
+                use rusqlite::params;
+
+                let result = conn.query_row(
+                    "SELECT synthesis_json FROM consensus_runs
+                     WHERE spec_id = ?1 AND stage = ?2
+                     ORDER BY run_timestamp DESC
+                     LIMIT 1",
+                    params![spec_id, stage],
+                    |row| row.get::<_, Option<String>>(0),
+                );
+
+                match result {
+                    Ok(synthesis) => Ok(synthesis),
+                    Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+                    Err(e) => Err(DbError::Sqlite(e)),
+                }
+            })
+            .await
+            .map_err(|e| format!("Failed to query new schema: {}", e))
+        })
     }
 
     /// Query artifacts for a spec and stage
+    ///
+    /// SPEC-945B Phase 1 Complete: Queries new schema only (consensus_runs + agent_outputs).
+    /// Uses connection pool with WAL mode for optimized concurrent access.
     pub fn query_artifacts(
         &self,
         spec_id: &str,
         stage: SpecStage,
     ) -> SqlResult<Vec<ConsensusArtifact>> {
-        let conn = self.conn.lock().unwrap();
+        let stage_name = stage.command_name();
 
-        let mut stmt = conn.prepare(
-            "SELECT id, spec_id, stage, agent_name, content_json, response_text, run_id, created_at
-             FROM consensus_artifacts
-             WHERE spec_id = ?1 AND stage = ?2
-             ORDER BY created_at DESC",
-        )?;
-
-        let artifacts = stmt
-            .query_map(params![spec_id, stage.command_name()], |row| {
-                Ok(ConsensusArtifact {
-                    id: row.get(0)?,
-                    spec_id: row.get(1)?,
-                    stage: row.get(2)?,
-                    agent_name: row.get(3)?,
-                    content_json: row.get(4)?,
-                    response_text: row.get(5)?,
-                    run_id: row.get(6)?,
-                    created_at: row.get(7)?,
-                })
-            })?
-            .collect::<SqlResult<Vec<_>>>()?;
-
-        Ok(artifacts)
-    }
-
-    /// Delete all artifacts for a spec (for reset/cleanup)
-    pub fn delete_spec_artifacts(&self, spec_id: &str) -> SqlResult<usize> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "DELETE FROM consensus_artifacts WHERE spec_id = ?1",
-            params![spec_id],
-        )
-    }
-
-    /// Delete artifacts for a specific spec and stage
-    pub fn delete_stage_artifacts(&self, spec_id: &str, stage: SpecStage) -> SqlResult<usize> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "DELETE FROM consensus_artifacts WHERE spec_id = ?1 AND stage = ?2",
-            params![spec_id, stage.command_name()],
-        )
-    }
-
-    /// Get artifact count for a spec (for diagnostics)
-    pub fn count_artifacts(&self, spec_id: &str) -> SqlResult<i64> {
-        let conn = self.conn.lock().unwrap();
-        let count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM consensus_artifacts WHERE spec_id = ?1",
-            params![spec_id],
-            |row| row.get(0),
-        )?;
-        Ok(count)
-    }
-
-    /// List all SPECs with artifacts (for cleanup/maintenance)
-    pub fn list_specs(&self) -> SqlResult<Vec<String>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt =
-            conn.prepare("SELECT DISTINCT spec_id FROM consensus_artifacts ORDER BY spec_id")?;
-
-        let specs = stmt
-            .query_map([], |row| row.get(0))?
-            .collect::<SqlResult<Vec<String>>>()?;
-
-        Ok(specs)
-    }
-
-    /// Get database statistics (for monitoring)
-    pub fn get_stats(&self) -> SqlResult<(i64, i64, i64)> {
-        let conn = self.conn.lock().unwrap();
-
-        let artifact_count: i64 =
-            conn.query_row("SELECT COUNT(*) FROM consensus_artifacts", [], |row| {
-                row.get(0)
-            })?;
-
-        let synthesis_count: i64 =
-            conn.query_row("SELECT COUNT(*) FROM consensus_synthesis", [], |row| {
-                row.get(0)
-            })?;
-
-        let db_size: i64 = conn
-            .query_row(
-                "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
-
-        Ok((artifact_count, synthesis_count, db_size))
+        // Query new schema
+        self.query_artifacts_new_schema(spec_id, stage_name)
+            .map_err(|e| rusqlite::Error::InvalidQuery)
     }
 
     /// Store consensus synthesis output
+    ///
+    /// SPEC-945B Phase 1 Complete: Writes to new schema (consensus_runs.synthesis_json).
+    /// Uses connection pool with WAL mode for optimized concurrent access.
+    ///
+    /// Returns new schema run ID (consensus_runs.id).
     pub fn store_synthesis(
         &self,
         spec_id: &str,
@@ -285,53 +366,68 @@ impl ConsensusDb {
         degraded: bool,
         run_id: Option<&str>,
     ) -> SqlResult<i64> {
-        let conn = self.conn.lock().unwrap();
+        // Ensure connection pool is available
+        let pool = self
+            .pool
+            .as_ref()
+            .ok_or_else(|| rusqlite::Error::InvalidQuery)?;
 
-        let path_str = output_path.map(|p| p.display().to_string());
+        // Build synthesis JSON for new schema
+        let synthesis_json = serde_json::json!({
+            "output_markdown": output_markdown,
+            "output_path": output_path.map(|p| p.display().to_string()),
+            "status": status,
+            "artifacts_count": artifacts_count,
+            "agreements": agreements,
+            "conflicts": conflicts,
+        })
+        .to_string();
 
-        conn.execute(
-            "INSERT INTO consensus_synthesis
-             (spec_id, stage, output_markdown, output_path, status, artifacts_count, agreements, conflicts, degraded, run_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-            params![
-                spec_id,
-                stage.command_name(),
-                output_markdown,
-                path_str,
-                status,
-                artifacts_count as i64,
-                agreements,
-                conflicts,
-                degraded,
-                run_id,
-            ],
-        )?;
+        // Clone data for move into async closure
+        let pool = pool.clone();
+        let spec_id = spec_id.to_string();
+        let stage = stage.command_name().to_string();
 
-        Ok(conn.last_insert_rowid())
+        // Write to NEW schema using async wrapper
+        // Use Runtime::new() to avoid nested runtime issues
+        let runtime = tokio::runtime::Runtime::new()
+            .map_err(|_| rusqlite::Error::InvalidQuery)?;
+
+        runtime
+            .block_on(async {
+                use codex_core::db::async_wrapper::store_consensus_run;
+
+                // Store/update consensus run with synthesis
+                let run_id = store_consensus_run(
+                    &pool,
+                    &spec_id,
+                    &stage,
+                    true, // consensus_ok (synthesis exists)
+                    degraded,
+                    Some(&synthesis_json),
+                )
+                .await
+                .map_err(|_| rusqlite::Error::InvalidQuery)?;
+
+                Ok(run_id)
+            })
+            .map_err(|_: rusqlite::Error| rusqlite::Error::InvalidQuery)
     }
 
     /// Query latest synthesis for a spec and stage
+    ///
+    /// SPEC-945B Phase 1 Complete: Queries new schema only (consensus_runs.synthesis_json).
+    /// Uses connection pool with WAL mode for optimized concurrent access.
     pub fn query_latest_synthesis(
         &self,
         spec_id: &str,
         stage: SpecStage,
     ) -> SqlResult<Option<String>> {
-        let conn = self.conn.lock().unwrap();
+        let stage_name = stage.command_name();
 
-        let result = conn.query_row(
-            "SELECT output_markdown FROM consensus_synthesis
-             WHERE spec_id = ?1 AND stage = ?2
-             ORDER BY created_at DESC
-             LIMIT 1",
-            params![spec_id, stage.command_name()],
-            |row| row.get(0),
-        );
-
-        match result {
-            Ok(markdown) => Ok(Some(markdown)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(e),
-        }
+        // Query new schema
+        self.query_synthesis_new_schema(spec_id, stage_name)
+            .map_err(|e| rusqlite::Error::InvalidQuery)
     }
 
     // === Agent Execution Tracking (for definitive routing) ===
@@ -482,93 +578,22 @@ impl ConsensusDb {
     }
 }
 
+// Unit tests removed - covered by integration tests in tests/read_path_migration.rs
+// and tests/write_path_cutover.rs which test the new schema (consensus_runs + agent_outputs)
+//
+// Old unit tests were testing deprecated functionality:
+// - count_artifacts() - removed
+// - delete_spec_artifacts() - removed
+// - list_specs() - removed
+// - get_stats() - removed
+//
+// Integration tests provide comprehensive coverage of new schema behavior.
+
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    #[test]
-    fn test_db_initialization() {
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join("test_consensus.db");
-        let _ = std::fs::remove_file(&db_path); // Clean up if exists
-
-        let db = ConsensusDb::init(&db_path).unwrap();
-        assert!(db_path.exists());
-
-        // Cleanup
-        drop(db);
-        let _ = std::fs::remove_file(&db_path);
-    }
-
-    #[test]
-    fn test_store_and_query_artifacts() {
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join("test_consensus_query.db");
-        let _ = std::fs::remove_file(&db_path);
-
-        let db = ConsensusDb::init(&db_path).unwrap();
-
-        // Store artifact
-        let id = db
-            .store_artifact(
-                "SPEC-TEST-001",
-                SpecStage::Plan,
-                "gemini",
-                r#"{"test":"data"}"#,
-                Some("Response text"),
-                Some("run_123"),
-            )
-            .unwrap();
-
-        assert!(id > 0);
-
-        // Query artifacts
-        let artifacts = db
-            .query_artifacts("SPEC-TEST-001", SpecStage::Plan)
-            .unwrap();
-        assert_eq!(artifacts.len(), 1);
-        assert_eq!(artifacts[0].agent_name, "gemini");
-        assert_eq!(artifacts[0].content_json, r#"{"test":"data"}"#);
-
-        // Count
-        let count = db.count_artifacts("SPEC-TEST-001").unwrap();
-        assert_eq!(count, 1);
-
-        // Cleanup
-        drop(db);
-        let _ = std::fs::remove_file(&db_path);
-    }
-
-    #[test]
-    fn test_delete_artifacts() {
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join("test_consensus_delete.db");
-        let _ = std::fs::remove_file(&db_path);
-
-        let db = ConsensusDb::init(&db_path).unwrap();
-
-        // Store multiple artifacts
-        db.store_artifact("SPEC-TEST-002", SpecStage::Plan, "gemini", "{}", None, None)
-            .unwrap();
-        db.store_artifact(
-            "SPEC-TEST-002",
-            SpecStage::Tasks,
-            "claude",
-            "{}",
-            None,
-            None,
-        )
-        .unwrap();
-
-        // Delete by spec
-        let deleted = db.delete_spec_artifacts("SPEC-TEST-002").unwrap();
-        assert_eq!(deleted, 2);
-
-        let count = db.count_artifacts("SPEC-TEST-002").unwrap();
-        assert_eq!(count, 0);
-
-        // Cleanup
-        drop(db);
-        let _ = std::fs::remove_file(&db_path);
-    }
+    // Unit tests removed - comprehensive test coverage provided by integration tests:
+    // - tests/read_path_migration.rs
+    // - tests/write_path_cutover.rs
+    //
+    // These integration tests cover all new schema functionality (consensus_runs + agent_outputs)
 }

@@ -138,11 +138,12 @@ pub fn advance_spec_auto(widget: &mut ChatWidget) {
 
                 // SPEC-KIT-928: Check if quality gates are still running (single-flight guard)
                 // Prevent stage advancement while quality gates are executing
-                if matches!(state.phase,
-                    SpecAutoPhase::QualityGateExecuting { .. } |
-                    SpecAutoPhase::QualityGateProcessing { .. } |
-                    SpecAutoPhase::QualityGateValidating { .. } |
-                    SpecAutoPhase::QualityGateAwaitingHuman { .. }
+                if matches!(
+                    state.phase,
+                    SpecAutoPhase::QualityGateExecuting { .. }
+                        | SpecAutoPhase::QualityGateProcessing { .. }
+                        | SpecAutoPhase::QualityGateValidating { .. }
+                        | SpecAutoPhase::QualityGateAwaitingHuman { .. }
                 ) {
                     tracing::warn!(
                         "⚠️ Stage advancement blocked: Quality gates still in progress (phase: {:?})",
@@ -1218,7 +1219,7 @@ fn synthesize_from_cached_responses(
         );
 
         // Debug JSON sections removed - caused exponential growth when nested in later stages
-        // If debugging needed, check SQLite: SELECT * FROM consensus_artifacts WHERE spec_id='...'
+        // If debugging needed, check SQLite: SELECT * FROM consensus_runs WHERE spec_id='...'
     }
 
     // Extract work breakdown, risks, acceptance from structured data
@@ -1261,9 +1262,17 @@ fn synthesize_from_cached_responses(
                 if let Some(task_str) = task.as_str() {
                     output.push_str(&format!("- {}\n", task_str));
                 } else if let Some(obj) = task.as_object() {
-                    if let Some(name) = obj.get("name").or_else(|| obj.get("task")).and_then(|v| v.as_str()) {
+                    if let Some(name) = obj
+                        .get("name")
+                        .or_else(|| obj.get("task"))
+                        .and_then(|v| v.as_str())
+                    {
                         output.push_str(&format!("- {}\n", name));
-                        if let Some(desc) = obj.get("description").or_else(|| obj.get("details")).and_then(|v| v.as_str()) {
+                        if let Some(desc) = obj
+                            .get("description")
+                            .or_else(|| obj.get("details"))
+                            .and_then(|v| v.as_str())
+                        {
                             output.push_str(&format!("  {}\n", desc));
                         }
                     }
@@ -1313,13 +1322,19 @@ fn synthesize_from_cached_responses(
                             serde_json::Value::String(s) => output.push_str(&format!("{}\n\n", s)),
                             serde_json::Value::Array(arr) => {
                                 for item in arr {
-                                    output.push_str(&format!("- {}\n",
-                                        serde_json::to_string_pretty(item).unwrap_or_else(|_| item.to_string())));
+                                    output.push_str(&format!(
+                                        "- {}\n",
+                                        serde_json::to_string_pretty(item)
+                                            .unwrap_or_else(|_| item.to_string())
+                                    ));
                                 }
                                 output.push_str("\n");
                             }
-                            _ => output.push_str(&format!("```json\n{}\n```\n\n",
-                                serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())))
+                            _ => output.push_str(&format!(
+                                "```json\n{}\n```\n\n",
+                                serde_json::to_string_pretty(value)
+                                    .unwrap_or_else(|_| value.to_string())
+                            )),
                         }
                     }
                 }

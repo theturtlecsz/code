@@ -16782,7 +16782,7 @@ mod tests {
             false,
             None,
             Arc::new(tokio::sync::Mutex::new(None)), // Test: no MCP manager needed
-            None, // initial_command (SPEC-KIT-920)
+            None,                                    // initial_command (SPEC-KIT-920)
         )
     }
 

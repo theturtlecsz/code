@@ -76,6 +76,10 @@ img_hash = "3"
 codex-browser = { path = "../browser" }
 codex-version = { path = "../codex-version" }
 
+# SPEC-945B: SQLite optimization & connection pooling
+rusqlite = { workspace = true }
+r2d2 = "0.8"
+r2d2_sqlite = "0.31"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 landlock = "0.4.1"
@@ -92,6 +96,7 @@ openssl-sys = { version = "*", features = ["vendored"] }
 [dev-dependencies]
 assert_cmd = "2"
 core_test_support = { path = "tests/common" }
+criterion = { version = "0.5", features = ["html_reports"] }
 maplit = "1.0.2"
 predicates = "3"
 pretty_assertions = "1.4.1"
@@ -99,6 +104,10 @@ tempfile = "3"
 tokio-test = "0.4"
 walkdir = "2.5.0"
 wiremock = "0.6"
+
+[[bench]]
+name = "db_performance"
+harness = false
 
 [package.metadata.cargo-shear]
 ignored = ["openssl-sys"]

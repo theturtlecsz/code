@@ -11,6 +11,7 @@
 #![deny(clippy::print_stdout, clippy::print_stderr)]
 
 pub mod error;
+pub mod retry; // SPEC-945C: Retry logic (backoff, error classification)
 pub mod types;
 
 // Phase 1: Core types and error handling

@@ -19,7 +19,7 @@ use super::validation_lifecycle::{
     record_validate_lifecycle_event,
 };
 use crate::history_cell::HistoryCellType;
-use crate::spec_prompts::{SpecStage, SpecAgent};
+use crate::spec_prompts::{SpecAgent, SpecStage};
 use codex_core::agent_tool::AGENT_MANAGER;
 use codex_core::config_types::AgentConfig;
 use codex_core::protocol::{AgentInfo, InputItem};
@@ -213,20 +213,23 @@ async fn build_individual_agent_prompt(
         .ok_or_else(|| format!("Unknown agent name: {}", agent_name))?;
 
     // Get prompt version
-    let prompt_version = crate::spec_prompts::stage_version_enum(stage)
-        .unwrap_or_else(|| "unversioned".to_string());
+    let prompt_version =
+        crate::spec_prompts::stage_version_enum(stage).unwrap_or_else(|| "unversioned".to_string());
 
     // Get model metadata (MODEL_ID, MODEL_RELEASE, REASONING_MODE)
     let metadata = crate::spec_prompts::model_metadata(stage, spec_agent);
-    let model_id = metadata.iter()
+    let model_id = metadata
+        .iter()
         .find(|(k, _)| k == "MODEL_ID")
         .map(|(_, v)| v.as_str())
         .unwrap_or("unknown");
-    let model_release = metadata.iter()
+    let model_release = metadata
+        .iter()
         .find(|(k, _)| k == "MODEL_RELEASE")
         .map(|(_, v)| v.as_str())
         .unwrap_or("unknown");
-    let reasoning_mode = metadata.iter()
+    let reasoning_mode = metadata
+        .iter()
         .find(|(k, _)| k == "REASONING_MODE")
         .map(|(_, v)| v.as_str())
         .unwrap_or("unknown");
@@ -295,11 +298,7 @@ async fn spawn_and_wait_for_agent(
                     session_name
                 );
                 if let Err(e) = codex_core::tmux::cleanup_zombie_panes(&session_name).await {
-                    tracing::warn!(
-                        "{}   ⚠️ Failed to cleanup zombie panes: {}",
-                        run_tag,
-                        e
-                    );
+                    tracing::warn!("{}   ⚠️ Failed to cleanup zombie panes: {}", run_tag, e);
                 } else {
                     tracing::info!("{}   ✅ Cleaned up {} zombie panes", run_tag, zombie_count);
                 }
