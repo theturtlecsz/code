@@ -1219,7 +1219,7 @@ fn synthesize_from_cached_responses(
         );
 
         // Debug JSON sections removed - caused exponential growth when nested in later stages
-        // If debugging needed, check SQLite: SELECT * FROM consensus_artifacts WHERE spec_id='...'
+        // If debugging needed, check SQLite: SELECT * FROM consensus_runs WHERE spec_id='...'
     }
 
     // Extract work breakdown, risks, acceptance from structured data

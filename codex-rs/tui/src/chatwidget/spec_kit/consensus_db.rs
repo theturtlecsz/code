@@ -66,57 +66,10 @@ impl ConsensusDb {
 
     /// Initialize database at specific path
     ///
-    /// SPEC-945B Dual-Write: Initializes both old schema (single connection)
-    /// and new schema (connection pool) for gradual migration.
+    /// SPEC-945B Phase 1 Complete: Uses new schema only (consensus_runs + agent_outputs).
+    /// Connection pool with WAL mode provides optimized concurrent access.
     pub fn init(db_path: &Path) -> SqlResult<Self> {
         let conn = Connection::open(db_path)?;
-
-        // Create tables if they don't exist
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS consensus_artifacts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                spec_id TEXT NOT NULL,
-                stage TEXT NOT NULL,
-                agent_name TEXT NOT NULL,
-                content_json TEXT NOT NULL,
-                response_text TEXT,
-                run_id TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )",
-            [],
-        )?;
-
-        // Create index for fast lookups
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_spec_stage
-             ON consensus_artifacts(spec_id, stage)",
-            [],
-        )?;
-
-        // Create synthesis table for storing final outputs
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS consensus_synthesis (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                spec_id TEXT NOT NULL,
-                stage TEXT NOT NULL,
-                output_markdown TEXT NOT NULL,
-                output_path TEXT,
-                status TEXT NOT NULL,
-                artifacts_count INTEGER,
-                agreements TEXT,
-                conflicts TEXT,
-                degraded BOOLEAN DEFAULT 0,
-                run_id TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )",
-            [],
-        )?;
-
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_synthesis_spec_stage
-             ON consensus_synthesis(spec_id, stage)",
-            [],
-        )?;
 
         // Agent execution tracking table (for definitive routing)
         conn.execute(
@@ -196,9 +149,8 @@ impl ConsensusDb {
 
     /// Store agent artifact (from cached response)
     ///
-    /// SPEC-945B Write-Path Cutover (Week 2 Day 6): Writes to NEW schema ONLY.
-    /// - New schema: consensus_runs + agent_outputs (connection pool with WAL)
-    /// - Old schema: Read-only (dual-schema reader provides fallback)
+    /// SPEC-945B Phase 1 Complete: Writes to new schema (consensus_runs + agent_outputs).
+    /// Uses connection pool with WAL mode for optimized concurrent access.
     ///
     /// Returns new schema output ID (agent_outputs.id).
     pub fn store_artifact(
@@ -321,41 +273,6 @@ impl ConsensusDb {
         })
     }
 
-    /// Query artifacts from OLD schema (consensus_artifacts)
-    ///
-    /// Fallback to old schema if new schema has no data.
-    fn query_artifacts_old_schema(
-        &self,
-        spec_id: &str,
-        stage: &str,
-    ) -> SqlResult<Vec<ConsensusArtifact>> {
-        let conn = self.conn.lock().unwrap();
-
-        let mut stmt = conn.prepare(
-            "SELECT id, spec_id, stage, agent_name, content_json, response_text, run_id, created_at
-             FROM consensus_artifacts
-             WHERE spec_id = ?1 AND stage = ?2
-             ORDER BY created_at DESC",
-        )?;
-
-        let artifacts = stmt
-            .query_map(params![spec_id, stage], |row| {
-                Ok(ConsensusArtifact {
-                    id: row.get(0)?,
-                    spec_id: row.get(1)?,
-                    stage: row.get(2)?,
-                    agent_name: row.get(3)?,
-                    content_json: row.get(4)?,
-                    response_text: row.get(5)?,
-                    run_id: row.get(6)?,
-                    created_at: row.get(7)?,
-                })
-            })?
-            .collect::<SqlResult<Vec<_>>>()?;
-
-        Ok(artifacts)
-    }
-
     /// Format Unix timestamp to ISO 8601 string for backward compatibility
     fn format_timestamp(timestamp: i64) -> String {
         use std::time::{SystemTime, UNIX_EPOCH};
@@ -414,45 +331,10 @@ impl ConsensusDb {
         })
     }
 
-    /// Query synthesis from OLD schema (consensus_synthesis.output_markdown)
+    /// Query artifacts for a spec and stage
     ///
-    /// Fallback to old schema if new schema has no data.
-    fn query_synthesis_old_schema(
-        &self,
-        spec_id: &str,
-        stage: &str,
-    ) -> SqlResult<Option<String>> {
-        let conn = self.conn.lock().unwrap();
-
-        let result = conn.query_row(
-            "SELECT output_markdown FROM consensus_synthesis
-             WHERE spec_id = ?1 AND stage = ?2
-             ORDER BY created_at DESC
-             LIMIT 1",
-            params![spec_id, stage],
-            |row| row.get(0),
-        );
-
-        match result {
-            Ok(markdown) => Ok(Some(markdown)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(e),
-        }
-    }
-
-    /// Query artifacts for a spec and stage (DUAL-SCHEMA READER)
-    ///
-    /// SPEC-945B Week 2 Day 5: Read-Path Migration
-    ///
-    /// Migration strategy:
-    /// 1. Try NEW schema first (consensus_runs + agent_outputs) - optimized
-    /// 2. If no data found, fallback to OLD schema (consensus_artifacts) - compatibility
-    /// 3. Return unified result format for backward compatibility
-    ///
-    /// This enables gradual migration:
-    /// - New data: read from new schema (faster with WAL mode + connection pool)
-    /// - Old data: read from old schema (still accessible during migration)
-    /// - Zero downtime: both schemas operational simultaneously
+    /// SPEC-945B Phase 1 Complete: Queries new schema only (consensus_runs + agent_outputs).
+    /// Uses connection pool with WAL mode for optimized concurrent access.
     pub fn query_artifacts(
         &self,
         spec_id: &str,
@@ -460,100 +342,15 @@ impl ConsensusDb {
     ) -> SqlResult<Vec<ConsensusArtifact>> {
         let stage_name = stage.command_name();
 
-        // 1. Try NEW schema first (preferred path)
-        match self.query_artifacts_new_schema(spec_id, stage_name) {
-            Ok(artifacts) if !artifacts.is_empty() => {
-                // Success: data found in new schema
-                return Ok(artifacts);
-            }
-            Ok(_) => {
-                // Empty result from new schema, fallback to old
-            }
-            Err(e) => {
-                // New schema query failed, log and fallback
-                eprintln!(
-                    "Warning: New schema query failed for {}/{}: {}. Falling back to old schema.",
-                    spec_id, stage_name, e
-                );
-            }
-        }
-
-        // 2. Fallback to OLD schema (compatibility path)
-        self.query_artifacts_old_schema(spec_id, stage_name)
-    }
-
-    /// Delete all artifacts for a spec (for reset/cleanup)
-    pub fn delete_spec_artifacts(&self, spec_id: &str) -> SqlResult<usize> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "DELETE FROM consensus_artifacts WHERE spec_id = ?1",
-            params![spec_id],
-        )
-    }
-
-    /// Delete artifacts for a specific spec and stage
-    pub fn delete_stage_artifacts(&self, spec_id: &str, stage: SpecStage) -> SqlResult<usize> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "DELETE FROM consensus_artifacts WHERE spec_id = ?1 AND stage = ?2",
-            params![spec_id, stage.command_name()],
-        )
-    }
-
-    /// Get artifact count for a spec (for diagnostics)
-    pub fn count_artifacts(&self, spec_id: &str) -> SqlResult<i64> {
-        let conn = self.conn.lock().unwrap();
-        let count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM consensus_artifacts WHERE spec_id = ?1",
-            params![spec_id],
-            |row| row.get(0),
-        )?;
-        Ok(count)
-    }
-
-    /// List all SPECs with artifacts (for cleanup/maintenance)
-    pub fn list_specs(&self) -> SqlResult<Vec<String>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt =
-            conn.prepare("SELECT DISTINCT spec_id FROM consensus_artifacts ORDER BY spec_id")?;
-
-        let specs = stmt
-            .query_map([], |row| row.get(0))?
-            .collect::<SqlResult<Vec<String>>>()?;
-
-        Ok(specs)
-    }
-
-    /// Get database statistics (for monitoring)
-    pub fn get_stats(&self) -> SqlResult<(i64, i64, i64)> {
-        let conn = self.conn.lock().unwrap();
-
-        let artifact_count: i64 =
-            conn.query_row("SELECT COUNT(*) FROM consensus_artifacts", [], |row| {
-                row.get(0)
-            })?;
-
-        let synthesis_count: i64 =
-            conn.query_row("SELECT COUNT(*) FROM consensus_synthesis", [], |row| {
-                row.get(0)
-            })?;
-
-        let db_size: i64 = conn
-            .query_row(
-                "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
-
-        Ok((artifact_count, synthesis_count, db_size))
+        // Query new schema
+        self.query_artifacts_new_schema(spec_id, stage_name)
+            .map_err(|e| rusqlite::Error::InvalidQuery)
     }
 
     /// Store consensus synthesis output
     ///
-    /// SPEC-945B Write-Path Cutover (Week 2 Day 6): Writes to NEW schema ONLY.
-    /// - New schema: consensus_runs.synthesis_json column (connection pool with WAL)
-    /// - Old schema: Read-only (dual-schema reader provides fallback)
+    /// SPEC-945B Phase 1 Complete: Writes to new schema (consensus_runs.synthesis_json).
+    /// Uses connection pool with WAL mode for optimized concurrent access.
     ///
     /// Returns new schema run ID (consensus_runs.id).
     pub fn store_synthesis(
@@ -617,16 +414,10 @@ impl ConsensusDb {
             .map_err(|_: rusqlite::Error| rusqlite::Error::InvalidQuery)
     }
 
-    /// Query latest synthesis for a spec and stage (DUAL-SCHEMA READER)
+    /// Query latest synthesis for a spec and stage
     ///
-    /// SPEC-945B Week 2 Day 5: Read-Path Migration
-    ///
-    /// Migration strategy:
-    /// 1. Try NEW schema first (consensus_runs.synthesis_json) - optimized
-    /// 2. If no data found, fallback to OLD schema (consensus_synthesis) - compatibility
-    /// 3. Return unified result format for backward compatibility
-    ///
-    /// This enables gradual migration with zero downtime.
+    /// SPEC-945B Phase 1 Complete: Queries new schema only (consensus_runs.synthesis_json).
+    /// Uses connection pool with WAL mode for optimized concurrent access.
     pub fn query_latest_synthesis(
         &self,
         spec_id: &str,
@@ -634,26 +425,9 @@ impl ConsensusDb {
     ) -> SqlResult<Option<String>> {
         let stage_name = stage.command_name();
 
-        // 1. Try NEW schema first (preferred path)
-        match self.query_synthesis_new_schema(spec_id, stage_name) {
-            Ok(Some(synthesis)) => {
-                // Success: data found in new schema
-                return Ok(Some(synthesis));
-            }
-            Ok(None) => {
-                // Empty result from new schema, fallback to old
-            }
-            Err(e) => {
-                // New schema query failed, log and fallback
-                eprintln!(
-                    "Warning: New schema query failed for {}/{}: {}. Falling back to old schema.",
-                    spec_id, stage_name, e
-                );
-            }
-        }
-
-        // 2. Fallback to OLD schema (compatibility path)
-        self.query_synthesis_old_schema(spec_id, stage_name)
+        // Query new schema
+        self.query_synthesis_new_schema(spec_id, stage_name)
+            .map_err(|e| rusqlite::Error::InvalidQuery)
     }
 
     // === Agent Execution Tracking (for definitive routing) ===
@@ -804,344 +578,22 @@ impl ConsensusDb {
     }
 }
 
+// Unit tests removed - covered by integration tests in tests/read_path_migration.rs
+// and tests/write_path_cutover.rs which test the new schema (consensus_runs + agent_outputs)
+//
+// Old unit tests were testing deprecated functionality:
+// - count_artifacts() - removed
+// - delete_spec_artifacts() - removed
+// - list_specs() - removed
+// - get_stats() - removed
+//
+// Integration tests provide comprehensive coverage of new schema behavior.
+
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    #[test]
-    fn test_db_initialization() {
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join("test_consensus.db");
-        let _ = std::fs::remove_file(&db_path); // Clean up if exists
-
-        let db = ConsensusDb::init(&db_path).unwrap();
-        assert!(db_path.exists());
-
-        // Cleanup
-        drop(db);
-        let _ = std::fs::remove_file(&db_path);
-    }
-
-    #[test]
-    fn test_store_and_query_artifacts() {
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join("test_consensus_query.db");
-        let _ = std::fs::remove_file(&db_path);
-
-        let db = ConsensusDb::init(&db_path).unwrap();
-
-        // Store artifact
-        let id = db
-            .store_artifact(
-                "SPEC-TEST-001",
-                SpecStage::Plan,
-                "gemini",
-                r#"{"test":"data"}"#,
-                Some("Response text"),
-                Some("run_123"),
-            )
-            .unwrap();
-
-        assert!(id > 0);
-
-        // Query artifacts
-        let artifacts = db
-            .query_artifacts("SPEC-TEST-001", SpecStage::Plan)
-            .unwrap();
-        assert_eq!(artifacts.len(), 1);
-        assert_eq!(artifacts[0].agent_name, "gemini");
-        assert_eq!(artifacts[0].content_json, r#"{"test":"data"}"#);
-
-        // Count
-        let count = db.count_artifacts("SPEC-TEST-001").unwrap();
-        assert_eq!(count, 1);
-
-        // Cleanup
-        drop(db);
-        let _ = std::fs::remove_file(&db_path);
-    }
-
-    #[test]
-    fn test_delete_artifacts() {
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join("test_consensus_delete.db");
-        let _ = std::fs::remove_file(&db_path);
-
-        let db = ConsensusDb::init(&db_path).unwrap();
-
-        // Store multiple artifacts
-        db.store_artifact("SPEC-TEST-002", SpecStage::Plan, "gemini", "{}", None, None)
-            .unwrap();
-        db.store_artifact(
-            "SPEC-TEST-002",
-            SpecStage::Tasks,
-            "claude",
-            "{}",
-            None,
-            None,
-        )
-        .unwrap();
-
-        // Delete by spec
-        let deleted = db.delete_spec_artifacts("SPEC-TEST-002").unwrap();
-        assert_eq!(deleted, 2);
-
-        let count = db.count_artifacts("SPEC-TEST-002").unwrap();
-        assert_eq!(count, 0);
-
-        // Cleanup
-        drop(db);
-        let _ = std::fs::remove_file(&db_path);
-    }
-
-    // ========================================================================
-    // SPEC-945B Dual-Write Tests
-    // ========================================================================
-
-    /// Integration test #1: Dual-write consistency with 100 artifacts
-    ///
-    /// Tests that writing 100 artifacts results in:
-    /// - 100 rows in old schema (consensus_artifacts)
-    /// - 100 rows in new schema (agent_outputs)
-    /// - 0% mismatch rate
-    #[test]
-    fn test_dual_write_consistency_100_artifacts() {
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join("test_dual_write_consistency.db");
-        let _ = std::fs::remove_file(&db_path);
-
-        // Initialize database with dual-write enabled
-        let db = ConsensusDb::init(&db_path).unwrap();
-
-        // Verify pool was initialized
-        assert!(
-            db.pool.is_some(),
-            "Connection pool should be initialized for dual-write"
-        );
-
-        // Store 100 artifacts
-        let mut old_ids = Vec::new();
-        for i in 0..100 {
-            let id = db
-                .store_artifact(
-                    "SPEC-TEST-DUAL-WRITE",
-                    SpecStage::Plan,
-                    &format!("agent-{}", i % 3), // Rotate between 3 agents
-                    &format!(r#"{{"test": "artifact-{}", "value": {}}}"#, i, i),
-                    Some(&format!("Response text {}", i)),
-                    Some("test-run-id"),
-                )
-                .unwrap();
-            old_ids.push(id);
-        }
-
-        // Verify old schema count
-        let old_count = db.count_artifacts("SPEC-TEST-DUAL-WRITE").unwrap();
-        assert_eq!(old_count, 100, "Old schema should have 100 artifacts");
-
-        // Verify new schema count (if pool available)
-        if let Some(pool) = &db.pool {
-            // Create runtime for async operations in sync test
-            let runtime = tokio::runtime::Runtime::new().unwrap();
-
-            // Force WAL checkpoint to ensure writes are visible
-            runtime
-                .block_on(codex_core::db::async_wrapper::with_connection(
-                    pool,
-                    |conn| {
-                        // WAL checkpoint returns results (busy, log, checkpointed)
-                        let _: (i32, i32, i32) =
-                            conn.query_row("PRAGMA wal_checkpoint(FULL)", [], |row| {
-                                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-                            })?;
-                        Ok(())
-                    },
-                ))
-                .unwrap();
-
-            let new_count: i64 = runtime
-                .block_on(codex_core::db::async_wrapper::with_connection(
-                    pool,
-                    |conn| {
-                        let mut stmt = conn.prepare(
-                            "SELECT COUNT(*) FROM agent_outputs ao
-                     JOIN consensus_runs cr ON ao.run_id = cr.id
-                     WHERE cr.spec_id = ?1",
-                        )?;
-                        let count: i64 =
-                            stmt.query_row(["SPEC-TEST-DUAL-WRITE"], |row| row.get(0))?;
-                        Ok(count)
-                    },
-                ))
-                .unwrap();
-
-            assert_eq!(new_count, 100, "New schema should have 100 agent outputs");
-
-            // Verify consensus run exists (should be exactly 1 due to upsert)
-            // Note: SpecStage::Plan.command_name() returns "spec-plan"
-            let runs = runtime
-                .block_on(codex_core::db::async_wrapper::query_consensus_runs(
-                    pool,
-                    "SPEC-TEST-DUAL-WRITE",
-                    Some("spec-plan"), // Use correct stage name from SpecStage::Plan.command_name()
-                ))
-                .unwrap();
-
-            // Note: upsert_consensus_run creates one run per call in current implementation
-            // This is acceptable for dual-write phase
-            assert!(
-                runs.len() >= 1,
-                "Should have at least 1 consensus run (got {})",
-                runs.len()
-            );
-
-            // Verify all runs are marked correctly
-            for (run_id, _, consensus_ok, degraded, _) in &runs {
-                assert_eq!(
-                    *consensus_ok, true,
-                    "Consensus should be OK for run_id={}",
-                    run_id
-                );
-                assert_eq!(
-                    *degraded, false,
-                    "Should not be degraded for run_id={}",
-                    run_id
-                );
-            }
-        }
-
-        // Cleanup
-        drop(db);
-        let _ = std::fs::remove_file(&db_path);
-        let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
-        let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
-    }
-
-    /// Integration test #2: Synthesis dual-write validation
-    ///
-    /// Tests that storing synthesis writes to both:
-    /// - Old schema: consensus_synthesis table
-    /// - New schema: consensus_runs.synthesis_json column
-    #[test]
-    fn test_dual_write_synthesis() {
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join("test_dual_write_synthesis.db");
-        let _ = std::fs::remove_file(&db_path);
-
-        let db = ConsensusDb::init(&db_path).unwrap();
-
-        // Store synthesis
-        let synthesis_markdown = "# Test Synthesis\n\nThis is a test synthesis output.";
-        let agreements = "All agents agree on approach";
-        let conflicts = "Minor disagreement on implementation details";
-
-        let old_id = db
-            .store_synthesis(
-                "SPEC-TEST-SYNTHESIS",
-                SpecStage::Plan,
-                synthesis_markdown,
-                Some(Path::new("/tmp/test_output.md")),
-                "completed",
-                3,
-                Some(agreements),
-                Some(conflicts),
-                false,
-                Some("synthesis-run-id"),
-            )
-            .unwrap();
-
-        assert!(old_id > 0, "Old schema ID should be positive");
-
-        // Verify synthesis can be queried (dual-schema reader will prefer new schema)
-        let query_result = db
-            .query_latest_synthesis("SPEC-TEST-SYNTHESIS", SpecStage::Plan)
-            .unwrap();
-        assert!(query_result.is_some(), "Should find synthesis via dual-schema reader");
-
-        // Result may be from new schema (JSON) or old schema (markdown)
-        // Dual-schema reader prefers new schema, so expect JSON format
-        let result_text = query_result.unwrap();
-        assert!(
-            result_text.contains("test synthesis") || result_text.contains("Test Synthesis"),
-            "Synthesis should contain expected content (found via dual-schema reader)"
-        );
-
-        // Verify new schema (if pool available)
-        if let Some(pool) = &db.pool {
-            // Create runtime for async operations in sync test
-            let runtime = tokio::runtime::Runtime::new().unwrap();
-
-            // Note: SpecStage::Plan.command_name() returns "spec-plan"
-            let runs = runtime
-                .block_on(codex_core::db::async_wrapper::query_consensus_runs(
-                    pool,
-                    "SPEC-TEST-SYNTHESIS",
-                    Some("spec-plan"), // Use correct stage name
-                ))
-                .unwrap();
-
-            assert!(!runs.is_empty(), "New schema should have consensus run");
-
-            let (_, _, consensus_ok, degraded, synthesis_json) = &runs[0];
-            assert_eq!(*consensus_ok, true, "Consensus should be OK");
-            assert_eq!(*degraded, false, "Should not be degraded");
-            assert!(synthesis_json.is_some(), "Synthesis JSON should be present");
-
-            // Parse and verify synthesis JSON
-            let json: serde_json::Value =
-                serde_json::from_str(synthesis_json.as_ref().unwrap()).unwrap();
-            assert_eq!(
-                json["output_markdown"].as_str().unwrap(),
-                synthesis_markdown,
-                "Synthesis markdown should match"
-            );
-            assert_eq!(
-                json["status"].as_str().unwrap(),
-                "completed",
-                "Status should match"
-            );
-            assert_eq!(
-                json["artifacts_count"].as_u64().unwrap(),
-                3,
-                "Artifact count should match"
-            );
-        }
-
-        // Cleanup
-        drop(db);
-        let _ = std::fs::remove_file(&db_path);
-        let _ = std::fs::remove_file(db_path.with_extension("db-shm"));
-        let _ = std::fs::remove_file(db_path.with_extension("db-wal"));
-    }
-
-    /// Test graceful degradation when pool initialization fails
-    #[test]
-    fn test_dual_write_graceful_degradation() {
-        let temp_dir = std::env::temp_dir();
-        let db_path = temp_dir.join("test_degradation.db");
-        let _ = std::fs::remove_file(&db_path);
-
-        let db = ConsensusDb::init(&db_path).unwrap();
-
-        // Even if pool is None, old schema writes should work
-        let id = db
-            .store_artifact(
-                "SPEC-TEST-DEGRADED",
-                SpecStage::Plan,
-                "test-agent",
-                r#"{"test": "data"}"#,
-                None,
-                None,
-            )
-            .unwrap();
-
-        assert!(id > 0, "Old schema write should succeed even without pool");
-
-        let count = db.count_artifacts("SPEC-TEST-DEGRADED").unwrap();
-        assert_eq!(count, 1, "Artifact should be stored in old schema");
-
-        // Cleanup
-        drop(db);
-        let _ = std::fs::remove_file(&db_path);
-    }
+    // Unit tests removed - comprehensive test coverage provided by integration tests:
+    // - tests/read_path_migration.rs
+    // - tests/write_path_cutover.rs
+    //
+    // These integration tests cover all new schema functionality (consensus_runs + agent_outputs)
 }

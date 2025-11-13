@@ -1,9 +1,9 @@
-//! Integration tests for read-path migration (SPEC-945B Week 2 Day 5)
+//! Integration tests for new schema (SPEC-945B Phase 1 Complete)
 //!
-//! Tests dual-schema reader behavior through public API:
-//! 1. Data in NEITHER schema (not found case)
-//! 2. Dual-write ensures data in BOTH schemas
-//! 3. Queries return correct data after dual-write
+//! Tests new schema behavior through public API:
+//! 1. Data not found (empty result case)
+//! 2. Write operations succeed and data is persisted
+//! 3. Queries return correct data after writes
 
 use codex_tui::{ConsensusDb, SpecStage};
 use tempfile::NamedTempFile;
@@ -45,7 +45,7 @@ fn test_query_synthesis_not_found() {
 }
 
 // ============================================================================
-// Test 2: Dual-write ensures zero data loss
+// Test 2: Write operations ensure zero data loss
 // ============================================================================
 
 #[test]
@@ -55,30 +55,30 @@ fn test_dual_write_artifact_zero_data_loss() {
     let spec_id = "SPEC-KIT-TEST-001";
     let stage = SpecStage::Plan;
 
-    // Use dual-write API (store_artifact writes to BOTH schemas)
+    // Store artifact (writes to new schema)
     let artifact_id = db
         .store_artifact(
             spec_id,
             stage,
             "test-agent",
-            r#"{"test": "dual-write artifact"}"#,
+            r#"{"test": "artifact test"}"#,
             Some("Response text"),
             Some("run-123"),
         )
-        .expect("Dual-write failed");
+        .expect("Store artifact failed");
 
     assert!(artifact_id > 0, "Should return valid ID");
 
-    // Query should return data (dual-schema reader prefers new, falls back to old)
+    // Query should return data from new schema
     let artifacts = db.query_artifacts(spec_id, stage).expect("Query failed");
 
     assert_eq!(
         artifacts.len(),
         1,
-        "Should find artifact after dual-write"
+        "Should find artifact after write"
     );
     assert_eq!(artifacts[0].agent_name, "test-agent");
-    assert!(artifacts[0].content_json.contains("dual-write artifact"));
+    assert!(artifacts[0].content_json.contains("artifact test"));
 
     // Verify multiple reads are consistent
     for _i in 0..5 {
@@ -95,12 +95,12 @@ fn test_dual_write_synthesis_zero_data_loss() {
     let spec_id = "SPEC-KIT-TEST-002";
     let stage = SpecStage::Validate;
 
-    // Use dual-write API for synthesis
+    // Store synthesis (writes to new schema)
     use std::path::Path;
     db.store_synthesis(
         spec_id,
         stage,
-        "# Test Synthesis\n\nDual-write synthesis test.",
+        "# Test Synthesis\n\nSynthesis test.",
         Some(Path::new("/tmp/test-output.md")),
         "success",
         3,
@@ -109,9 +109,9 @@ fn test_dual_write_synthesis_zero_data_loss() {
         false,
         Some("run-456"),
     )
-    .expect("Synthesis dual-write failed");
+    .expect("Store synthesis failed");
 
-    // Query should return synthesis (dual-schema reader prefers new, falls back to old)
+    // Query should return synthesis from new schema
     let synthesis = db
         .query_latest_synthesis(spec_id, stage)
         .expect("Query failed");
@@ -120,7 +120,7 @@ fn test_dual_write_synthesis_zero_data_loss() {
     assert!(synthesis
         .as_ref()
         .unwrap()
-        .contains("Dual-write synthesis test"));
+        .contains("Synthesis test"));
 
     // Verify multiple reads are consistent
     for _i in 0..5 {
@@ -130,12 +130,12 @@ fn test_dual_write_synthesis_zero_data_loss() {
         assert!(synthesis_read.is_some(), "Should consistently find synthesis");
         assert!(synthesis_read
             .unwrap()
-            .contains("Dual-write synthesis test"));
+            .contains("Synthesis test"));
     }
 }
 
 // ============================================================================
-// Test 3: Multiple artifacts - dual-write consistency
+// Test 3: Multiple artifacts - consistency
 // ============================================================================
 
 #[test]
@@ -145,7 +145,7 @@ fn test_multiple_artifacts_dual_write() {
     let spec_id = "SPEC-KIT-TEST-003";
     let stage = SpecStage::Plan;
 
-    // Store multiple artifacts (all should dual-write)
+    // Store multiple artifacts
     for i in 1..=5 {
         db.store_artifact(
             spec_id,
@@ -155,7 +155,7 @@ fn test_multiple_artifacts_dual_write() {
             None,
             None,
         )
-        .expect("Dual-write failed");
+        .expect("Write failed");
     }
 
     // Query should return all artifacts
@@ -187,14 +187,14 @@ fn test_read_path_migration_gradual_cutover() {
     let stage = SpecStage::Plan;
 
     // Simulate gradual migration:
-    // - Some data written before dual-write started (old schema only)
-    // - Some data written after dual-write started (both schemas)
+    // - Some data written before write started (old schema only)
+    // - Some data written after write started (both schemas)
 
     // Write to old schema only (simulating pre-migration data)
     // We can't do this directly without accessing private methods,
-    // so instead we just test that dual-write works for new data
+    // so instead we just test that write works for new data
 
-    // Write new data (dual-write active)
+    // Write new data (write active)
     db.store_artifact(
         spec_id_new,
         stage,
@@ -203,7 +203,7 @@ fn test_read_path_migration_gradual_cutover() {
         None,
         None,
     )
-    .expect("Dual-write failed");
+    .expect("Write failed");
 
     // Query new data - should work
     let artifacts_new = db
@@ -239,7 +239,7 @@ fn test_dual_schema_reader_consistency() {
             None,
             None,
         )
-        .expect("Dual-write failed");
+        .expect("Write failed");
     }
 
     // Query should return all 20 artifacts
@@ -278,7 +278,7 @@ fn test_stage_specific_queries() {
         None,
         None,
     )
-    .expect("Plan dual-write failed");
+    .expect("Plan write failed");
 
     db.store_artifact(
         spec_id,
@@ -288,7 +288,7 @@ fn test_stage_specific_queries() {
         None,
         None,
     )
-    .expect("Implement dual-write failed");
+    .expect("Implement write failed");
 
     db.store_artifact(
         spec_id,
@@ -298,7 +298,7 @@ fn test_stage_specific_queries() {
         None,
         None,
     )
-    .expect("Validate dual-write failed");
+    .expect("Validate write failed");
 
     // Query each stage - should only return stage-specific artifacts
     let plan_artifacts = db

@@ -698,8 +698,8 @@ mod tests {
 /// directory is ALWAYS populated for checklist compliance.
 ///
 /// Exports:
-/// - <stage>_synthesis.json (from consensus_synthesis table)
-/// - <stage>_verdict.json (from consensus_artifacts table)
+/// - <stage>_synthesis.json (from consensus_runs.synthesis_json column)
+/// - <stage>_verdict.json (from agent_outputs table)
 ///
 /// Does NOT fail pipeline if export fails (logs warning instead).
 pub fn auto_export_stage_evidence(
@@ -759,32 +759,27 @@ fn export_synthesis_record(
     let conn = rusqlite::Connection::open(&db_path)
         .map_err(|e| SpecKitError::from_string(format!("Failed to open database: {}", e)))?;
 
-    let synthesis_data = conn
+    // Query new schema (consensus_runs.synthesis_json column)
+    let synthesis_json_str: String = conn
         .query_row(
-            "SELECT spec_id, stage, artifacts_count, output_markdown, output_path,
-                status, agreements, conflicts, degraded, run_id, created_at
-         FROM consensus_synthesis
-         WHERE spec_id = ?1 AND stage = ?2
-         ORDER BY created_at DESC
-         LIMIT 1",
+            "SELECT synthesis_json FROM consensus_runs
+             WHERE spec_id = ?1 AND stage = ?2 AND synthesis_json IS NOT NULL
+             ORDER BY run_timestamp DESC
+             LIMIT 1",
             rusqlite::params![spec_id, stage_command],
-            |row| {
-                Ok(serde_json::json!({
-                    "spec_id": row.get::<_, String>(0)?,
-                    "stage": row.get::<_, String>(1)?,
-                    "artifacts_count": row.get::<_, Option<i64>>(2)?,
-                    "output_markdown": row.get::<_, String>(3)?,
-                    "output_path": row.get::<_, Option<String>>(4)?,
-                    "status": row.get::<_, String>(5)?,
-                    "agreements": row.get::<_, Option<String>>(6)?,
-                    "conflicts": row.get::<_, Option<String>>(7)?,
-                    "degraded": row.get::<_, Option<bool>>(8)?,
-                    "run_id": row.get::<_, Option<String>>(9)?,
-                    "created_at": row.get::<_, String>(10)?,
-                }))
-            },
+            |row| row.get(0),
         )
         .map_err(|e| SpecKitError::from_string(format!("Query failed: {}", e)))?;
+
+    // Parse synthesis JSON and add metadata
+    let mut synthesis_data: serde_json::Value = serde_json::from_str(&synthesis_json_str)
+        .map_err(|e| SpecKitError::from_string(format!("JSON parse failed: {}", e)))?;
+
+    // Add spec_id and stage metadata if not present
+    if let Some(obj) = synthesis_data.as_object_mut() {
+        obj.insert("spec_id".to_string(), serde_json::Value::String(spec_id.to_string()));
+        obj.insert("stage".to_string(), serde_json::Value::String(stage_command.to_string()));
+    }
 
     let synthesis_file = consensus_dir.join(format!("{}_synthesis.json", stage_name));
     let json_str = serde_json::to_string_pretty(&synthesis_data)
@@ -811,25 +806,31 @@ fn export_verdict_record(
     let conn = rusqlite::Connection::open(&db_path)
         .map_err(|e| SpecKitError::from_string(format!("Failed to open database: {}", e)))?;
 
-    // Get agent proposals for this stage
+    // Get agent proposals for this stage from new schema
     let proposals: Vec<Value> = if let Some(rid) = run_id {
-        // Query with run_id filter
+        // Query with run_id filter - join agent_outputs with consensus_runs
         let mut stmt = conn
             .prepare(
-                "SELECT agent_name, content_json, created_at
-             FROM consensus_artifacts
-             WHERE spec_id = ?1 AND stage = ?2 AND run_id = ?3
-             ORDER BY created_at",
+                "SELECT ao.agent_name, ao.content, ao.output_timestamp
+             FROM agent_outputs ao
+             JOIN consensus_runs cr ON ao.run_id = cr.id
+             WHERE cr.spec_id = ?1 AND cr.stage = ?2 AND ao.run_id = ?3
+             ORDER BY ao.output_timestamp",
             )
             .map_err(|e| SpecKitError::from_string(format!("Prepare failed: {}", e)))?;
 
         stmt.query_map(rusqlite::params![spec_id, stage_command, rid], |row| {
             let agent_name: String = row.get(0)?;
             let content_json: String = row.get(1)?;
-            let created_at: String = row.get(2)?;
+            let timestamp: i64 = row.get(2)?;
 
             let content = serde_json::from_str::<Value>(&content_json)
                 .unwrap_or_else(|_| Value::String(content_json));
+
+            // Format timestamp as ISO 8601
+            let datetime = chrono::DateTime::<chrono::Utc>::from_timestamp(timestamp, 0)
+                .unwrap_or_default();
+            let created_at = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
 
             Ok(serde_json::json!({
                 "agent_name": agent_name,
@@ -844,20 +845,26 @@ fn export_verdict_record(
         // Query without run_id filter
         let mut stmt = conn
             .prepare(
-                "SELECT agent_name, content_json, created_at
-             FROM consensus_artifacts
-             WHERE spec_id = ?1 AND stage = ?2
-             ORDER BY created_at",
+                "SELECT ao.agent_name, ao.content, ao.output_timestamp
+             FROM agent_outputs ao
+             JOIN consensus_runs cr ON ao.run_id = cr.id
+             WHERE cr.spec_id = ?1 AND cr.stage = ?2
+             ORDER BY ao.output_timestamp",
             )
             .map_err(|e| SpecKitError::from_string(format!("Prepare failed: {}", e)))?;
 
         stmt.query_map(rusqlite::params![spec_id, stage_command], |row| {
             let agent_name: String = row.get(0)?;
             let content_json: String = row.get(1)?;
-            let created_at: String = row.get(2)?;
+            let timestamp: i64 = row.get(2)?;
 
             let content = serde_json::from_str::<Value>(&content_json)
                 .unwrap_or_else(|_| Value::String(content_json));
+
+            // Format timestamp as ISO 8601
+            let datetime = chrono::DateTime::<chrono::Utc>::from_timestamp(timestamp, 0)
+                .unwrap_or_default();
+            let created_at = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
 
             Ok(serde_json::json!({
                 "agent_name": agent_name,

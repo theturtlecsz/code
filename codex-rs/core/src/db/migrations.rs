@@ -7,7 +7,7 @@ use rusqlite::{Connection, TransactionBehavior};
 use tracing::info;
 
 /// Current schema version
-pub const SCHEMA_VERSION: i32 = 1;
+pub const SCHEMA_VERSION: i32 = 2;
 
 /// Apply all migrations to bring DB to current version
 ///
@@ -78,6 +78,7 @@ fn get_schema_version(conn: &Connection) -> Result<i32> {
 fn apply_migration(conn: &Connection, version: i32) -> Result<()> {
     match version {
         1 => migration_v1(conn),
+        2 => migration_v2(conn),
         _ => Err(DbError::Migration(format!(
             "Unknown migration version: {}",
             version
@@ -136,6 +137,37 @@ fn migration_v1(conn: &Connection) -> Result<()> {
     .map_err(|e| DbError::Migration(format!("Failed to execute migration V1: {}", e)))?;
 
     info!("Migration V1 complete: created consensus_runs and agent_outputs tables");
+    Ok(())
+}
+
+/// Migration V2: Remove old schema tables
+///
+/// Drops:
+/// - consensus_artifacts table (replaced by agent_outputs)
+/// - consensus_synthesis table (replaced by consensus_runs.synthesis_json)
+/// - Associated indexes
+///
+/// # Implementation: SPEC-945B Phase 1 Complete (Week 3)
+fn migration_v2(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "
+        -- Drop old schema tables and indexes
+        -- These tables were used during dual-schema migration phase
+        -- Now deprecated in favor of consensus_runs + agent_outputs
+
+        DROP TABLE IF EXISTS consensus_artifacts;
+        DROP TABLE IF EXISTS consensus_synthesis;
+
+        -- Drop old indexes if they exist
+        DROP INDEX IF EXISTS idx_spec_stage;
+        DROP INDEX IF EXISTS idx_synthesis_spec_stage;
+        ",
+    )
+    .map_err(|e| DbError::Migration(format!("Failed to execute migration V2: {}", e)))?;
+
+    info!(
+        "Migration V2 complete: removed old schema tables (consensus_artifacts, consensus_synthesis)"
+    );
     Ok(())
 }
 
