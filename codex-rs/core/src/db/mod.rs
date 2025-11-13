@@ -18,7 +18,9 @@ pub mod vacuum;
 
 pub use connection::initialize_pool;
 pub use transactions::{batch_insert, execute_in_transaction};
-pub use vacuum::{VacuumStats, spawn_vacuum_daemon};
+pub use vacuum::{
+    VacuumStats, estimate_vacuum_savings, get_freelist_size, run_vacuum_cycle, spawn_vacuum_daemon,
+};
 
 /// Database module result type
 pub type Result<T> = std::result::Result<T, DbError>;
