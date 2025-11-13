@@ -13,6 +13,7 @@
 //! Writes to BOTH old schema (consensus_artifacts) and new schema (consensus_runs)
 //! for gradual migration without breaking existing functionality.
 
+use codex_core::db::DbError;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{Connection, Result as SqlResult, params};
@@ -335,11 +336,74 @@ impl ConsensusDb {
         Ok(())
     }
 
-    /// Query artifacts for a spec and stage
-    pub fn query_artifacts(
+    // === Read-Path Migration (SPEC-945B Week 2 Day 5) ===
+
+    /// Query artifacts from NEW schema (consensus_runs + agent_outputs)
+    ///
+    /// Reads from optimized schema with connection pool. Returns artifacts
+    /// in the same format as old schema for backward compatibility.
+    fn query_artifacts_new_schema(
         &self,
         spec_id: &str,
-        stage: SpecStage,
+        stage: &str,
+    ) -> Result<Vec<ConsensusArtifact>, String> {
+        let pool = match &self.pool {
+            Some(p) => p,
+            None => return Err("Connection pool not initialized".to_string()),
+        };
+
+        let pool = pool.clone();
+        let spec_id = spec_id.to_string();
+        let stage = stage.to_string();
+
+        // Use Runtime::new() to avoid nested runtime issues
+        let runtime = tokio::runtime::Runtime::new()
+            .map_err(|e| format!("Failed to create tokio runtime: {}", e))?;
+
+        runtime.block_on(async {
+            use codex_core::db::async_wrapper::with_connection;
+
+            with_connection(&pool, move |conn| {
+                use rusqlite::params;
+
+                let mut stmt = conn.prepare(
+                    "SELECT ao.id, cr.spec_id, cr.stage, ao.agent_name, ao.content,
+                            NULL as response_text, NULL as run_id, ao.output_timestamp
+                     FROM consensus_runs cr
+                     JOIN agent_outputs ao ON cr.id = ao.run_id
+                     WHERE cr.spec_id = ?1 AND cr.stage = ?2
+                     ORDER BY ao.output_timestamp DESC",
+                )?;
+
+                let artifacts = stmt
+                    .query_map(params![spec_id, stage], |row| {
+                        Ok(ConsensusArtifact {
+                            id: row.get(0)?,
+                            spec_id: row.get(1)?,
+                            stage: row.get(2)?,
+                            agent_name: row.get(3)?,
+                            content_json: row.get(4)?,
+                            response_text: row.get(5)?,
+                            run_id: row.get(6)?,
+                            created_at: Self::format_timestamp(row.get::<_, i64>(7)?),
+                        })
+                    })?
+                    .collect::<SqlResult<Vec<_>>>()?;
+
+                Ok(artifacts)
+            })
+            .await
+            .map_err(|e| format!("Failed to query new schema: {}", e))
+        })
+    }
+
+    /// Query artifacts from OLD schema (consensus_artifacts)
+    ///
+    /// Fallback to old schema if new schema has no data.
+    fn query_artifacts_old_schema(
+        &self,
+        spec_id: &str,
+        stage: &str,
     ) -> SqlResult<Vec<ConsensusArtifact>> {
         let conn = self.conn.lock().unwrap();
 
@@ -351,7 +415,7 @@ impl ConsensusDb {
         )?;
 
         let artifacts = stmt
-            .query_map(params![spec_id, stage.command_name()], |row| {
+            .query_map(params![spec_id, stage], |row| {
                 Ok(ConsensusArtifact {
                     id: row.get(0)?,
                     spec_id: row.get(1)?,
@@ -366,6 +430,132 @@ impl ConsensusDb {
             .collect::<SqlResult<Vec<_>>>()?;
 
         Ok(artifacts)
+    }
+
+    /// Format Unix timestamp to ISO 8601 string for backward compatibility
+    fn format_timestamp(timestamp: i64) -> String {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let duration = std::time::Duration::from_secs(timestamp as u64);
+        let system_time = UNIX_EPOCH + duration;
+
+        // Format as ISO 8601 (YYYY-MM-DD HH:MM:SS)
+        let datetime = chrono::DateTime::<chrono::Utc>::from(system_time);
+        datetime.format("%Y-%m-%d %H:%M:%S").to_string()
+    }
+
+    /// Query synthesis from NEW schema (consensus_runs.synthesis_json)
+    ///
+    /// Reads from optimized schema with connection pool.
+    fn query_synthesis_new_schema(
+        &self,
+        spec_id: &str,
+        stage: &str,
+    ) -> Result<Option<String>, String> {
+        let pool = match &self.pool {
+            Some(p) => p,
+            None => return Err("Connection pool not initialized".to_string()),
+        };
+
+        let pool = pool.clone();
+        let spec_id = spec_id.to_string();
+        let stage = stage.to_string();
+
+        // Use Runtime::new() to avoid nested runtime issues
+        let runtime = tokio::runtime::Runtime::new()
+            .map_err(|e| format!("Failed to create tokio runtime: {}", e))?;
+
+        runtime.block_on(async {
+            use codex_core::db::async_wrapper::with_connection;
+
+            with_connection(&pool, move |conn| {
+                use rusqlite::params;
+
+                let result = conn.query_row(
+                    "SELECT synthesis_json FROM consensus_runs
+                     WHERE spec_id = ?1 AND stage = ?2
+                     ORDER BY run_timestamp DESC
+                     LIMIT 1",
+                    params![spec_id, stage],
+                    |row| row.get::<_, Option<String>>(0),
+                );
+
+                match result {
+                    Ok(synthesis) => Ok(synthesis),
+                    Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+                    Err(e) => Err(DbError::Sqlite(e)),
+                }
+            })
+            .await
+            .map_err(|e| format!("Failed to query new schema: {}", e))
+        })
+    }
+
+    /// Query synthesis from OLD schema (consensus_synthesis.output_markdown)
+    ///
+    /// Fallback to old schema if new schema has no data.
+    fn query_synthesis_old_schema(
+        &self,
+        spec_id: &str,
+        stage: &str,
+    ) -> SqlResult<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+
+        let result = conn.query_row(
+            "SELECT output_markdown FROM consensus_synthesis
+             WHERE spec_id = ?1 AND stage = ?2
+             ORDER BY created_at DESC
+             LIMIT 1",
+            params![spec_id, stage],
+            |row| row.get(0),
+        );
+
+        match result {
+            Ok(markdown) => Ok(Some(markdown)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Query artifacts for a spec and stage (DUAL-SCHEMA READER)
+    ///
+    /// SPEC-945B Week 2 Day 5: Read-Path Migration
+    ///
+    /// Migration strategy:
+    /// 1. Try NEW schema first (consensus_runs + agent_outputs) - optimized
+    /// 2. If no data found, fallback to OLD schema (consensus_artifacts) - compatibility
+    /// 3. Return unified result format for backward compatibility
+    ///
+    /// This enables gradual migration:
+    /// - New data: read from new schema (faster with WAL mode + connection pool)
+    /// - Old data: read from old schema (still accessible during migration)
+    /// - Zero downtime: both schemas operational simultaneously
+    pub fn query_artifacts(
+        &self,
+        spec_id: &str,
+        stage: SpecStage,
+    ) -> SqlResult<Vec<ConsensusArtifact>> {
+        let stage_name = stage.command_name();
+
+        // 1. Try NEW schema first (preferred path)
+        match self.query_artifacts_new_schema(spec_id, stage_name) {
+            Ok(artifacts) if !artifacts.is_empty() => {
+                // Success: data found in new schema
+                return Ok(artifacts);
+            }
+            Ok(_) => {
+                // Empty result from new schema, fallback to old
+            }
+            Err(e) => {
+                // New schema query failed, log and fallback
+                eprintln!(
+                    "Warning: New schema query failed for {}/{}: {}. Falling back to old schema.",
+                    spec_id, stage_name, e
+                );
+            }
+        }
+
+        // 2. Fallback to OLD schema (compatibility path)
+        self.query_artifacts_old_schema(spec_id, stage_name)
     }
 
     /// Delete all artifacts for a spec (for reset/cleanup)
@@ -553,28 +743,43 @@ impl ConsensusDb {
         })
     }
 
-    /// Query latest synthesis for a spec and stage
+    /// Query latest synthesis for a spec and stage (DUAL-SCHEMA READER)
+    ///
+    /// SPEC-945B Week 2 Day 5: Read-Path Migration
+    ///
+    /// Migration strategy:
+    /// 1. Try NEW schema first (consensus_runs.synthesis_json) - optimized
+    /// 2. If no data found, fallback to OLD schema (consensus_synthesis) - compatibility
+    /// 3. Return unified result format for backward compatibility
+    ///
+    /// This enables gradual migration with zero downtime.
     pub fn query_latest_synthesis(
         &self,
         spec_id: &str,
         stage: SpecStage,
     ) -> SqlResult<Option<String>> {
-        let conn = self.conn.lock().unwrap();
+        let stage_name = stage.command_name();
 
-        let result = conn.query_row(
-            "SELECT output_markdown FROM consensus_synthesis
-             WHERE spec_id = ?1 AND stage = ?2
-             ORDER BY created_at DESC
-             LIMIT 1",
-            params![spec_id, stage.command_name()],
-            |row| row.get(0),
-        );
-
-        match result {
-            Ok(markdown) => Ok(Some(markdown)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(e),
+        // 1. Try NEW schema first (preferred path)
+        match self.query_synthesis_new_schema(spec_id, stage_name) {
+            Ok(Some(synthesis)) => {
+                // Success: data found in new schema
+                return Ok(Some(synthesis));
+            }
+            Ok(None) => {
+                // Empty result from new schema, fallback to old
+            }
+            Err(e) => {
+                // New schema query failed, log and fallback
+                eprintln!(
+                    "Warning: New schema query failed for {}/{}: {}. Falling back to old schema.",
+                    spec_id, stage_name, e
+                );
+            }
         }
+
+        // 2. Fallback to OLD schema (compatibility path)
+        self.query_synthesis_old_schema(spec_id, stage_name)
     }
 
     // === Agent Execution Tracking (for definitive routing) ===
@@ -973,15 +1178,18 @@ mod tests {
 
         assert!(old_id > 0, "Old schema ID should be positive");
 
-        // Verify old schema
-        let old_result = db
+        // Verify synthesis can be queried (dual-schema reader will prefer new schema)
+        let query_result = db
             .query_latest_synthesis("SPEC-TEST-SYNTHESIS", SpecStage::Plan)
             .unwrap();
-        assert!(old_result.is_some(), "Old schema should contain synthesis");
-        assert_eq!(
-            old_result.unwrap(),
-            synthesis_markdown,
-            "Old schema synthesis should match"
+        assert!(query_result.is_some(), "Should find synthesis via dual-schema reader");
+
+        // Result may be from new schema (JSON) or old schema (markdown)
+        // Dual-schema reader prefers new schema, so expect JSON format
+        let result_text = query_result.unwrap();
+        assert!(
+            result_text.contains("test synthesis") || result_text.contains("Test Synthesis"),
+            "Synthesis should contain expected content (found via dual-schema reader)"
         );
 
         // Verify new schema (if pool available)

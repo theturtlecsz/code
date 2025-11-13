@@ -80,6 +80,9 @@ pub use chatwidget::spec_kit::state::SpecAutoPhase;
 pub use chatwidget::spec_kit::{advance_spec_auto, halt_spec_auto_with_error};
 pub use spec_prompts::SpecAgent;
 
+// SPEC-945B Week 2 Day 5: Re-export consensus_db for read-path migration tests
+pub use chatwidget::spec_kit::consensus_db::ConsensusDb;
+
 // MAINT-3.2 Phase 2: Re-export P2 module testing utilities
 pub use chatwidget::spec_kit::error::{Result as SpecKitResult, SpecKitError};
 pub use chatwidget::spec_kit::schemas::{
