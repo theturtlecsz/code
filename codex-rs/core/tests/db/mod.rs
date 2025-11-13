@@ -189,4 +189,177 @@ mod integration_tests {
             .expect("Failed to count new tables");
         assert_eq!(count, 2, "New tables should exist");
     }
+
+    /// Integration Test: Concurrent transactions (no deadlock)
+    ///
+    /// SPEC-945B Week 2 Day 1-2: Verify multiple threads can execute transactions
+    /// concurrently without deadlock. Uses IMMEDIATE behavior to acquire write locks.
+    #[test]
+    fn test_concurrent_transactions_no_deadlock() {
+        use codex_core::db::transactions::execute_in_transaction;
+        use rusqlite::TransactionBehavior;
+        use std::sync::Arc;
+        use std::thread;
+
+        let (_temp_dir, db_path) = create_temp_db();
+        let pool = initialize_pool(&db_path, 10).expect("Failed to create pool");
+
+        // Migrate database first
+        {
+            let mut conn = pool.get().expect("Failed to get connection");
+            codex_core::db::migrations::migrate_to_latest(&mut conn)
+                .expect("Migration failed");
+        }
+
+        let pool = Arc::new(pool);
+        let mut handles = vec![];
+
+        // Spawn 5 threads, each performing 10 transactions
+        for thread_id in 0..5 {
+            let pool_clone = Arc::clone(&pool);
+
+            let handle = thread::spawn(move || {
+                for i in 0..10 {
+                    let mut conn = pool_clone.get().expect("Failed to get connection");
+
+                    let result = execute_in_transaction(
+                        &mut conn,
+                        TransactionBehavior::Immediate,
+                        |tx| {
+                            tx.execute(
+                                "INSERT INTO consensus_runs (spec_id, stage, run_timestamp, consensus_ok)
+                                 VALUES (?, ?, ?, ?)",
+                                rusqlite::params![
+                                    format!("THREAD-{}", thread_id),
+                                    format!("iteration-{}", i),
+                                    chrono::Utc::now().timestamp_millis(),
+                                    1
+                                ],
+                            )?;
+                            Ok(())
+                        },
+                    );
+
+                    assert!(
+                        result.is_ok(),
+                        "Transaction should succeed (thread={}, iter={})",
+                        thread_id,
+                        i
+                    );
+                }
+            });
+
+            handles.push(handle);
+        }
+
+        // Wait for all threads to complete
+        for handle in handles {
+            handle.join().expect("Thread panicked");
+        }
+
+        // Verify all 50 transactions committed (5 threads × 10 iterations)
+        let mut conn = pool.get().expect("Failed to get connection");
+        let count: i32 = conn
+            .query_row("SELECT COUNT(*) FROM consensus_runs", [], |row| row.get(0))
+            .expect("Failed to count rows");
+
+        assert_eq!(
+            count, 50,
+            "All 50 concurrent transactions should commit successfully"
+        );
+    }
+
+    /// Integration Test: Crash recovery simulation (panic handling)
+    ///
+    /// SPEC-945B Week 2 Day 1-2: Verify that panics during transactions
+    /// trigger automatic rollback (no partial updates persist).
+    #[test]
+    fn test_crash_recovery_rollback_on_panic() {
+        use codex_core::db::transactions::execute_in_transaction;
+        use rusqlite::TransactionBehavior;
+        use std::panic;
+
+        let (_temp_dir, db_path) = create_temp_db();
+        let pool = initialize_pool(&db_path, 5).expect("Failed to create pool");
+
+        // Migrate database
+        {
+            let mut conn = pool.get().expect("Failed to get connection");
+            codex_core::db::migrations::migrate_to_latest(&mut conn)
+                .expect("Migration failed");
+        }
+
+        // Insert baseline data
+        {
+            let mut conn = pool.get().expect("Failed to get connection");
+            execute_in_transaction(&mut conn, TransactionBehavior::Immediate, |tx| {
+                tx.execute(
+                    "INSERT INTO consensus_runs (spec_id, stage, run_timestamp, consensus_ok)
+                     VALUES (?, ?, ?, ?)",
+                    rusqlite::params!["BASELINE", "test", 1000000, 1],
+                )?;
+                Ok(())
+            })
+            .expect("Baseline insert failed");
+        }
+
+        // Verify baseline exists
+        {
+            let mut conn = pool.get().expect("Failed to get connection");
+            let count: i32 = conn
+                .query_row("SELECT COUNT(*) FROM consensus_runs", [], |row| row.get(0))
+                .expect("Failed to count rows");
+            assert_eq!(count, 1, "Should have baseline row");
+        }
+
+        // Attempt transaction with intentional panic
+        let result = panic::catch_unwind(|| {
+            let mut conn = pool.get().expect("Failed to get connection");
+
+            let _result = execute_in_transaction(&mut conn, TransactionBehavior::Immediate, |tx| {
+                // Insert data that should NOT persist
+                tx.execute(
+                    "INSERT INTO consensus_runs (spec_id, stage, run_timestamp, consensus_ok)
+                     VALUES (?, ?, ?, ?)",
+                    rusqlite::params!["PANIC-TEST", "should-rollback", 2000000, 1],
+                )?;
+
+                // Simulate crash (panic)
+                panic!("Simulated crash during transaction");
+
+                #[allow(unreachable_code)]
+                Ok::<(), codex_core::db::DbError>(())
+            });
+        });
+
+        assert!(result.is_err(), "Should catch panic");
+
+        // Verify NO partial updates persisted (rollback on panic)
+        {
+            let mut conn = pool.get().expect("Failed to get connection");
+
+            let count: i32 = conn
+                .query_row("SELECT COUNT(*) FROM consensus_runs", [], |row| row.get(0))
+                .expect("Failed to count rows");
+
+            assert_eq!(
+                count, 1,
+                "Panic should trigger rollback (only baseline should exist)"
+            );
+
+            // Verify the panic'd insert is NOT present
+            let panic_exists: bool = conn
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM consensus_runs WHERE spec_id = 'PANIC-TEST')",
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("Failed to check panic data");
+
+            assert!(
+                !panic_exists,
+                "Panic'd transaction should not have persisted any data"
+            );
+        }
+    }
 }

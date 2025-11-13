@@ -17,7 +17,7 @@ pub mod transactions;
 pub mod vacuum;
 
 pub use connection::initialize_pool;
-pub use transactions::{batch_insert, execute_in_transaction};
+pub use transactions::{batch_insert, execute_in_transaction, upsert_consensus_run};
 pub use vacuum::{
     VacuumStats, estimate_vacuum_savings, get_freelist_size, run_vacuum_cycle, spawn_vacuum_daemon,
 };

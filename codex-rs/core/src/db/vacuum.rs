@@ -46,9 +46,9 @@ pub async fn run_vacuum_cycle(pool: &Pool<SqliteConnectionManager>) -> Result<Va
     tokio::task::spawn_blocking({
         let pool = pool.clone();
         move || {
-            let conn = pool
-                .get()
-                .map_err(|e| DbError::Pool(format!("Failed to acquire connection for vacuum: {}", e)))?;
+            let conn = pool.get().map_err(|e| {
+                DbError::Pool(format!("Failed to acquire connection for vacuum: {}", e))
+            })?;
 
             let size_before = get_db_size(&conn)?;
 
