@@ -195,15 +195,43 @@ find docs/SPEC-OPS-004-integrated-coder-hooks/evidence/consensus/ \
 rm -rf docs/SPEC-OPS-004-integrated-coder-hooks/evidence/{commands,consensus}/SPEC-KIT-065/
 ```
 
-### 6.2 Automated Cleanup (Future)
+### 6.2 Automated Cleanup (SPEC-933 Component 4)
 
-**Not currently implemented**. Future automation could:
-- Scan SPEC.md for completed SPECs
-- Auto-compress after 30 days
-- Auto-offload after 90 days
-- Warn when total size >400 MB
+**Status**: IMPLEMENTED (2025-11-14)
 
-**Implementation**: Consider adding to `/spec-evidence-stats` script or new `evidence_cleanup.sh`
+**Module**: `codex-rs/tui/src/chatwidget/spec_kit/evidence_cleanup.rs`
+
+**Capabilities**:
+- Archive artifacts >30 days old (configurable)
+- Purge artifacts >180 days old (safety margin from 90d policy)
+- Exempt "In Progress" SPECs (files modified within 7 days)
+- Monitor 50MB limit with warnings at 45MB
+- Dry-run mode for safe validation
+- Telemetry tracking (files archived/purged, space reclaimed)
+
+**Configuration** (`CleanupConfig`):
+```rust
+archive_after_days: 30,    // Days before archival
+purge_after_days: 180,     // Days before deletion (safety margin)
+enabled: true,             // Enable/disable cleanup
+dry_run: false,            // Dry-run mode (report without executing)
+warning_threshold_mb: 45,  // Warning threshold
+hard_limit_mb: 50,         // Hard limit (blocks automation)
+```
+
+**Usage**:
+```rust
+let config = CleanupConfig::default();
+let summary = run_daily_cleanup(&config)?;
+// summary contains: files_archived, files_purged, space_reclaimed_bytes, warnings
+```
+
+**Safety Features**:
+- In-progress detection (7-day activity window)
+- Archive before purge (180d for extra safety)
+- Comprehensive logging and telemetry
+- Dry-run validation mode
+- Error recovery and reporting
 
 ---
 

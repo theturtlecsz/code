@@ -1368,6 +1368,7 @@ dependencies = [
  "crossterm",
  "diffy",
  "dirs 5.0.1",
+ "filetime",
  "fs2",
  "futures",
  "image 0.25.8",

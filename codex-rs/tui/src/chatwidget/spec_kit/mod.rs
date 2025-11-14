@@ -30,6 +30,7 @@ pub mod context;
 pub mod cost_tracker; // SPEC-KIT-070: Cost tracking and budget management
 pub mod error;
 pub mod evidence;
+pub mod evidence_cleanup; // SPEC-933 Component 4: Automated evidence cleanup (archive/purge)
 pub mod execution_logger; // SPEC-KIT-070: End-to-end execution visibility
 pub mod file_modifier;
 pub mod git_integration; // SPEC-KIT-922: Auto-commit stage artifacts
