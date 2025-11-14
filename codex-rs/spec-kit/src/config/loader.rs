@@ -315,6 +315,12 @@ impl ConfigLoader {
         let config = builder.build()?;
         let app_config: AppConfig = config.try_deserialize()?;
 
+        // Validate with schema if enabled
+        if app_config.quality_gates.schema_validation {
+            let validator = crate::config::validator::SchemaValidator::new()?;
+            validator.validate(&app_config)?;
+        }
+
         Ok(app_config)
     }
 
@@ -554,5 +560,188 @@ max_retries = 5
         assert_eq!(openai_config.cost_per_input_million, 10.0);
         assert_eq!(openai_config.cost_per_output_million, 30.0);
         assert_eq!(openai_config.retry.max_retries, 5);
+    }
+
+    // Integration tests for schema validation
+
+    #[test]
+    #[serial]
+    fn test_load_with_invalid_config_file() {
+        let toml_content = r#"
+[quality_gates]
+enabled = true
+consensus_threshold = 1.5  # Invalid: > 1.0
+schema_validation = true
+"#;
+
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let config_path = temp_dir.path().join("invalid_config.toml");
+        std::fs::write(&config_path, toml_content).expect("Failed to write");
+
+        let loader = ConfigLoader::new().with_file(&config_path);
+        let result = loader.load();
+
+        assert!(
+            result.is_err(),
+            "Expected validation error for invalid config"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, ConfigError::SchemaValidationError(_)),
+            "Expected SchemaValidationError, got: {:?}",
+            err
+        );
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains("consensus_threshold") || err_msg.contains("quality_gates"),
+            "Error should mention consensus_threshold, got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_load_with_schema_validation_disabled() {
+        let toml_content = r#"
+[quality_gates]
+enabled = true
+consensus_threshold = 1.5  # Invalid but validation is disabled
+schema_validation = false
+"#;
+
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let config_path = temp_dir.path().join("config_no_validation.toml");
+        std::fs::write(&config_path, toml_content).expect("Failed to write");
+
+        let loader = ConfigLoader::new().with_file(&config_path);
+        let result = loader.load();
+
+        // Should succeed because schema_validation = false
+        assert!(
+            result.is_ok(),
+            "Config should load when validation is disabled: {:?}",
+            result
+        );
+        let config = result.unwrap();
+        assert_eq!(config.quality_gates.consensus_threshold, 1.5);
+        assert_eq!(config.quality_gates.schema_validation, false);
+    }
+
+    #[test]
+    #[serial]
+    fn test_env_override_triggers_validation() {
+        // Start with valid config from file
+        let toml_content = r#"
+[quality_gates]
+consensus_threshold = 0.7
+schema_validation = true
+"#;
+
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let config_path = temp_dir.path().join("config.toml");
+        std::fs::write(&config_path, toml_content).expect("Failed to write");
+
+        // Override with invalid value via env var
+        unsafe {
+            env::set_var("SPECKIT_CONSENSUS__MIN_AGENTS", "1"); // Invalid: < 2
+        }
+
+        let loader = ConfigLoader::new().with_file(&config_path);
+        let result = loader.load();
+
+        assert!(
+            result.is_err(),
+            "Expected validation error for env override: {:?}",
+            result
+        );
+        let err = result.unwrap_err();
+        assert!(matches!(err, ConfigError::SchemaValidationError(_)));
+
+        // Cleanup
+        unsafe {
+            env::remove_var("SPECKIT_CONSENSUS__MIN_AGENTS");
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_validation_error_message_quality() {
+        let toml_content = r#"
+[quality_gates]
+consensus_threshold = 1.5
+schema_validation = true
+
+[consensus]
+min_agents = 1
+"#;
+
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let config_path = temp_dir.path().join("bad_config.toml");
+        std::fs::write(&config_path, toml_content).expect("Failed to write");
+
+        let loader = ConfigLoader::new().with_file(&config_path);
+        let result = loader.load();
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+
+        // Error message should be helpful and descriptive
+        assert!(
+            err_msg.contains("validation failed") || err_msg.contains("Configuration"),
+            "Should have clear error prefix: {}",
+            err_msg
+        );
+        assert!(
+            err_msg.len() > 50,
+            "Error message should be descriptive: {}",
+            err_msg
+        );
+
+        // Should mention at least one of the invalid fields
+        let has_field_mention = err_msg.contains("consensus_threshold")
+            || err_msg.contains("min_agents")
+            || err_msg.contains("quality_gates")
+            || err_msg.contains("consensus");
+
+        assert!(
+            has_field_mention,
+            "Error should mention invalid field(s), got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_multiple_invalid_fields_caught() {
+        let toml_content = r#"
+[quality_gates]
+consensus_threshold = -0.5  # Invalid: < 0.0
+schema_validation = true
+
+[cost]
+alert_threshold = 2.0  # Invalid: > 1.0
+
+[consensus]
+max_agents = 20  # Invalid: > 10
+"#;
+
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let config_path = temp_dir.path().join("multi_invalid.toml");
+        std::fs::write(&config_path, toml_content).expect("Failed to write");
+
+        let loader = ConfigLoader::new().with_file(&config_path);
+        let result = loader.load();
+
+        assert!(result.is_err(), "Multiple invalid fields should be caught");
+        let err = result.unwrap_err();
+        assert!(matches!(err, ConfigError::SchemaValidationError(_)));
+
+        // Error message should indicate multiple errors
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains("error"),
+            "Should mention errors: {}",
+            err_msg
+        );
     }
 }

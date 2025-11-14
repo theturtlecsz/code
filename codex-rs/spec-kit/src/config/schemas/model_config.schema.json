@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ModelConfig",
+  "description": "Model-specific configuration for AI providers",
+  "type": "object",
+  "properties": {
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Model identifier (e.g., 'gpt-4', 'claude-3-opus')"
+    },
+    "endpoint": {
+      "type": ["string", "null"],
+      "format": "uri",
+      "description": "Optional API endpoint URL override"
+    },
+    "temperature": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 2.0,
+      "default": 0.7,
+      "description": "Temperature setting for model output randomness"
+    },
+    "max_tokens": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "description": "Maximum tokens to generate in response"
+    },
+    "cost_per_input_million": {
+      "type": "number",
+      "minimum": 0.0,
+      "default": 0.0,
+      "description": "Cost per 1M input tokens in USD"
+    },
+    "cost_per_output_million": {
+      "type": "number",
+      "minimum": 0.0,
+      "default": 0.0,
+      "description": "Cost per 1M output tokens in USD"
+    },
+    "retry": {
+      "$ref": "retry_config.schema.json",
+      "description": "Retry configuration for this model"
+    }
+  },
+  "required": ["model", "temperature", "cost_per_input_million", "cost_per_output_million", "retry"]
+}

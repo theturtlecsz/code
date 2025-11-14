@@ -21,6 +21,7 @@
 /// ```
 pub mod error;
 pub mod loader;
+pub mod validator;
 
 // Re-export main types
 pub use error::{ConfigError, Result};
@@ -28,3 +29,4 @@ pub use loader::{
     AppConfig, ConfigLoader, ConsensusConfig, CostConfig, EvidenceConfig, ModelConfig,
     QualityGateConfig, RetryConfig,
 };
+pub use validator::SchemaValidator;
