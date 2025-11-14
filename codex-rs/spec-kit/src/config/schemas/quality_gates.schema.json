@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QualityGateConfig",
+  "description": "Quality gate thresholds and validation settings",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable quality gates globally"
+    },
+    "consensus_threshold": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "default": 0.67,
+      "description": "Minimum consensus agreement threshold (0.0-1.0)"
+    },
+    "min_test_coverage": {
+      "type": ["number", "null"],
+      "minimum": 0.0,
+      "maximum": 100.0,
+      "description": "Minimum test coverage percentage required"
+    },
+    "schema_validation": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable JSON schema validation for configurations"
+    }
+  },
+  "required": ["enabled", "consensus_threshold", "schema_validation"]
+}

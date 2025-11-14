@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CostConfig",
+  "description": "Cost tracking and budget limit configuration",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable cost tracking"
+    },
+    "daily_limit_usd": {
+      "type": ["number", "null"],
+      "minimum": 0.0,
+      "description": "Daily cost limit in USD (optional)"
+    },
+    "monthly_limit_usd": {
+      "type": ["number", "null"],
+      "minimum": 0.0,
+      "description": "Monthly cost limit in USD (optional)"
+    },
+    "alert_threshold": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "default": 0.8,
+      "description": "Alert when cost reaches this percentage of limit (0.0-1.0)"
+    }
+  },
+  "required": ["enabled", "alert_threshold"]
+}

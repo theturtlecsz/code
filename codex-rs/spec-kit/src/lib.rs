@@ -10,6 +10,7 @@
 
 #![deny(clippy::print_stdout, clippy::print_stderr)]
 
+pub mod config; // SPEC-945D: Configuration management (layered config, hot-reload)
 pub mod error;
 pub mod retry; // SPEC-945C: Retry logic (backoff, error classification)
 pub mod types;

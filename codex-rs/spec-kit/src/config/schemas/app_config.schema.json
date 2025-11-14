@@ -1,0 +1,183 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AppConfig",
+  "description": "Root application configuration for spec-kit",
+  "type": "object",
+  "definitions": {
+    "RetryConfig": {
+      "type": "object",
+      "properties": {
+        "max_retries": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 3
+        },
+        "base_delay_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 1000
+        },
+        "max_delay_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 30000
+        }
+      },
+      "required": ["max_retries", "base_delay_ms", "max_delay_ms"]
+    },
+    "ModelConfig": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "endpoint": {
+          "type": ["string", "null"]
+        },
+        "temperature": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 2.0,
+          "default": 0.7
+        },
+        "max_tokens": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "cost_per_input_million": {
+          "type": "number",
+          "minimum": 0.0,
+          "default": 0.0
+        },
+        "cost_per_output_million": {
+          "type": "number",
+          "minimum": 0.0,
+          "default": 0.0
+        },
+        "retry": {
+          "$ref": "#/definitions/RetryConfig"
+        }
+      },
+      "required": ["model", "temperature", "cost_per_input_million", "cost_per_output_million", "retry"]
+    },
+    "QualityGateConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "consensus_threshold": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 0.67
+        },
+        "min_test_coverage": {
+          "type": ["number", "null"],
+          "minimum": 0.0,
+          "maximum": 100.0
+        },
+        "schema_validation": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "required": ["enabled", "consensus_threshold", "schema_validation"]
+    },
+    "CostConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "daily_limit_usd": {
+          "type": ["number", "null"],
+          "minimum": 0.0
+        },
+        "monthly_limit_usd": {
+          "type": ["number", "null"],
+          "minimum": 0.0
+        },
+        "alert_threshold": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 0.8
+        }
+      },
+      "required": ["enabled", "alert_threshold"]
+    },
+    "EvidenceConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "base_dir": {
+          "type": "string",
+          "minLength": 1,
+          "default": "docs/evidence"
+        },
+        "max_size_per_spec_mb": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 25
+        },
+        "retention_days": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 90
+        }
+      },
+      "required": ["enabled", "base_dir", "max_size_per_spec_mb", "retention_days"]
+    },
+    "ConsensusConfig": {
+      "type": "object",
+      "properties": {
+        "min_agents": {
+          "type": "integer",
+          "minimum": 2,
+          "default": 2
+        },
+        "max_agents": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 10,
+          "default": 5
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 300
+        }
+      },
+      "required": ["min_agents", "max_agents", "timeout_seconds"]
+    }
+  },
+  "properties": {
+    "models": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/ModelConfig"
+      },
+      "default": {}
+    },
+    "quality_gates": {
+      "$ref": "#/definitions/QualityGateConfig"
+    },
+    "cost": {
+      "$ref": "#/definitions/CostConfig"
+    },
+    "evidence": {
+      "$ref": "#/definitions/EvidenceConfig"
+    },
+    "consensus": {
+      "$ref": "#/definitions/ConsensusConfig"
+    }
+  },
+  "required": ["models", "quality_gates", "cost", "evidence", "consensus"]
+}

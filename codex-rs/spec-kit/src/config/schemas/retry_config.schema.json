@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RetryConfig",
+  "description": "Retry configuration for model API calls",
+  "type": "object",
+  "properties": {
+    "max_retries": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 3,
+      "description": "Maximum number of retry attempts"
+    },
+    "base_delay_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 1000,
+      "description": "Base delay between retries in milliseconds"
+    },
+    "max_delay_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 30000,
+      "description": "Maximum delay between retries in milliseconds"
+    }
+  },
+  "required": ["max_retries", "base_delay_ms", "max_delay_ms"]
+}
