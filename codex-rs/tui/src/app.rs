@@ -182,6 +182,12 @@ pub(crate) struct App<'a> {
     initial_command: Option<String>,
     /// Track if initial_command has been dispatched (prevents duplicate dispatches).
     initial_command_dispatched: bool,
+
+    // === FORK-SPECIFIC (just-every/code): SPEC-945D Config hot-reload ===
+    /// Configuration hot-reload watcher for live config updates.
+    config_watcher: Option<Arc<codex_spec_kit::config::HotReloadWatcher>>,
+    /// Pending config reload (deferred when busy).
+    pending_config_reload: bool,
     // === END FORK-SPECIFIC ===
 }
 
@@ -202,6 +208,7 @@ pub(crate) struct ChatWidgetArgs {
         tokio::sync::Mutex<Option<Arc<codex_core::mcp_connection_manager::McpConnectionManager>>>,
     >,
     initial_command: Option<String>, // SPEC-KIT-920
+    config_watcher: Option<Arc<codex_spec_kit::config::HotReloadWatcher>>, // SPEC-945D
 }
 
 // Custom Debug impl that skips non-debuggable MCP manager
@@ -219,6 +226,7 @@ impl std::fmt::Debug for ChatWidgetArgs {
             .field("latest_upgrade_version", &self.latest_upgrade_version)
             .field("mcp_manager", &"<opaque>")
             .field("initial_command", &self.initial_command)
+            .field("config_watcher", &"<opaque>")
             .finish()
     }
 }
@@ -239,6 +247,7 @@ impl App<'_> {
         startup_footer_notice: Option<String>,
         latest_upgrade_version: Option<String>,
         initial_command: Option<String>, // SPEC-KIT-920
+        config_watcher: Option<Arc<codex_spec_kit::config::HotReloadWatcher>>, // SPEC-945D
     ) -> Self {
         // SPEC-KIT-920: Log initial_command at startup
         tracing::info!(
@@ -260,6 +269,26 @@ impl App<'_> {
         let redraw_inflight = Arc::new(AtomicBool::new(false));
         let post_frame_redraw = Arc::new(AtomicBool::new(false));
         let scheduled_frame_armed = Arc::new(AtomicBool::new(false));
+
+        // SPEC-945D: Spawn tokio task to bridge config watcher events to app_event_tx
+        if let Some(watcher) = &config_watcher {
+            let watcher = Arc::clone(watcher);
+            let app_event_tx_clone = app_event_tx.clone();
+            tokio::spawn(async move {
+                loop {
+                    match watcher.recv_event().await {
+                        Some(event) => {
+                            tracing::debug!("Config reload event: {:?}", event);
+                            app_event_tx_clone.send(AppEvent::ConfigReload { event });
+                        }
+                        None => {
+                            tracing::info!("Config watcher channel closed");
+                            break;
+                        }
+                    }
+                }
+            });
+        }
 
         let enhanced_keys_supported = supports_keyboard_enhancement().unwrap_or(false);
 
@@ -411,6 +440,7 @@ impl App<'_> {
                 latest_upgrade_version: latest_upgrade_version.clone(),
                 mcp_manager: mcp_manager.clone(),
                 initial_command: initial_command.clone(), // SPEC-KIT-920
+                config_watcher: config_watcher.clone(), // SPEC-945D
             };
             AppState::Onboarding {
                 screen: OnboardingScreen::new(OnboardingScreenArgs {
@@ -435,6 +465,7 @@ impl App<'_> {
                 latest_upgrade_version.clone(),
                 mcp_manager.clone(),
                 initial_command.clone(), // SPEC-KIT-920
+                config_watcher.clone(), // SPEC-945D
             );
             chat_widget.enable_perf(enable_perf);
             if resume_picker {
@@ -491,8 +522,47 @@ impl App<'_> {
             // SPEC-KIT-920: TUI automation support
             initial_command,
             initial_command_dispatched: false,
+
+            // SPEC-945D: Config hot-reload
+            config_watcher: config_watcher.clone(),
+            pending_config_reload: false,
         }
     }
+
+    // === FORK-SPECIFIC (just-every/code): SPEC-945D Config hot-reload ===
+
+    /// Process pending config reload if no longer busy.
+    /// Called after quality gates complete or agents finish.
+    fn process_pending_config_reload(&mut self) {
+        if !self.pending_config_reload {
+            return;
+        }
+
+        // Check if still busy
+        let still_busy = if let AppState::Chat { widget } = &self.app_state {
+            widget.is_quality_gate_active() || widget.is_agent_running()
+        } else {
+            false
+        };
+
+        if still_busy {
+            return; // Still busy, keep pending
+        }
+
+        // No longer busy, process the pending reload
+        if let AppState::Chat { widget } = &mut self.app_state {
+            widget.refresh_quality_gates();
+            widget.refresh_agent_selection();
+            widget.refresh_cost_tracker();
+            info!("✅ Deferred config reload processed - components refreshed");
+            // Show UI notification
+            widget.debug_notice("✅ Config reload complete (was deferred)".to_string());
+        }
+
+        self.pending_config_reload = false;
+    }
+
+    // === END FORK-SPECIFIC ===
 
     /// SPEC-KIT-920: Dispatch initial command after first redraw completes.
     /// This ensures the UI is fully initialized before commands execute,
@@ -1947,6 +2017,7 @@ impl App<'_> {
                                 self.latest_upgrade_version.clone(),
                                 self.mcp_manager.clone(),
                                 None, // SPEC-KIT-920: /new has no initial_command
+                                self.config_watcher.clone(), // SPEC-945D
                             );
                             new_widget.enable_perf(self.timing_enabled);
                             self.app_state = AppState::Chat {
@@ -2199,6 +2270,7 @@ impl App<'_> {
                             self.latest_upgrade_version.clone(),
                             self.mcp_manager.clone(),
                             None, // SPEC-KIT-920: resume has no initial_command
+                            self.config_watcher.clone(), // SPEC-945D
                         );
                         new_widget.enable_perf(self.timing_enabled);
                         self.app_state = AppState::Chat {
@@ -2588,6 +2660,7 @@ impl App<'_> {
                     latest_upgrade_version,
                     mcp_manager,
                     initial_command, // SPEC-KIT-920
+                    config_watcher, // SPEC-945D
                 }) => {
                     let mut w = ChatWidget::new(
                         config,
@@ -2600,6 +2673,7 @@ impl App<'_> {
                         latest_upgrade_version,
                         mcp_manager,
                         initial_command, // SPEC-KIT-920
+                        config_watcher, // SPEC-945D
                     );
                     w.enable_perf(enable_perf);
                     if resume_picker {
@@ -2819,6 +2893,8 @@ impl App<'_> {
                         // Trigger broker (will use memory-based collection)
                         spec_kit::on_quality_gate_agents_complete(widget);
                     }
+                    // SPEC-945D: Check for pending config reload now that agents completed
+                    self.process_pending_config_reload();
                 }
                 AppEvent::RegularStageAgentsComplete {
                     stage,
@@ -2862,6 +2938,8 @@ impl App<'_> {
                             spec_kit::on_spec_auto_agents_complete_with_ids(widget, agent_ids);
                         }
                     }
+                    // SPEC-945D: Check for pending config reload now that agents completed
+                    self.process_pending_config_reload();
                 }
 
                 AppEvent::GuardrailComplete {
@@ -2888,6 +2966,84 @@ impl App<'_> {
                             );
                         } else {
                             warn!("Failed to deserialize guardrail result");
+                        }
+                    }
+                }
+                AppEvent::ConfigReload { event } => {
+                    // Config hot-reload event (SPEC-945D Phase 2.3)
+                    use codex_spec_kit::config::ConfigReloadEvent;
+                    match event {
+                        ConfigReloadEvent::FileChanged(path) => {
+                            info!("📝 Config file changed: {}", path.display());
+                            // Show UI notification
+                            if let AppState::Chat { widget } = &mut self.app_state {
+                                widget.debug_notice(format!("📝 Config changed: {}", path.display()));
+                            }
+                            // File change detected, reload will happen after debounce window
+                        }
+                        ConfigReloadEvent::ReloadSuccess => {
+                            info!("✅ Config reloaded successfully");
+
+                            // Get updated config from watcher
+                            if let Some(watcher) = &self.config_watcher {
+                                let new_spec_config = watcher.get_config();
+                                info!(
+                                    "   Quality gates: {}",
+                                    if new_spec_config.quality_gates.enabled {
+                                        "enabled"
+                                    } else {
+                                        "disabled"
+                                    }
+                                );
+                                info!(
+                                    "   Consensus threshold: {}",
+                                    new_spec_config.quality_gates.consensus_threshold
+                                );
+
+                                // SPEC-945D Phase 2.4: Check if we should defer reload
+                                let should_defer = if let AppState::Chat { widget } = &self.app_state {
+                                    // Check if quality gate or agents are running
+                                    widget.is_quality_gate_active() || widget.is_agent_running()
+                                } else {
+                                    false
+                                };
+
+                                if should_defer {
+                                    // Defer reload until current operation completes
+                                    self.pending_config_reload = true;
+                                    info!("   Reload deferred (quality gate or agents running)");
+                                    info!("   Will refresh components when operation completes");
+                                    // Show UI notification
+                                    if let AppState::Chat { widget } = &mut self.app_state {
+                                        widget.debug_notice("⏸️ Config reload deferred (operation in progress)".to_string());
+                                    }
+                                } else {
+                                    // Refresh UI components immediately
+                                    if let AppState::Chat { widget } = &mut self.app_state {
+                                        widget.refresh_quality_gates();
+                                        widget.refresh_agent_selection();
+                                        widget.refresh_cost_tracker();
+                                        info!("   Components refreshed with new config");
+                                        // Show UI notification
+                                        widget.debug_notice("✅ Config reloaded successfully".to_string());
+                                    }
+                                    self.pending_config_reload = false;
+                                }
+
+                                // Note: Full integration with codex_core::Config is deferred
+                                // Current implementation refreshes components which will read
+                                // the updated config on next access
+                            }
+                        }
+                        ConfigReloadEvent::ReloadFailed(err) => {
+                            warn!("❌ Config reload failed: {}", err);
+                            warn!("   Old configuration preserved");
+                            // Show UI notification
+                            if let AppState::Chat { widget } = &mut self.app_state {
+                                widget.debug_notice(format!("❌ Config reload failed: {}", err));
+                            }
+                            // The watcher automatically preserves the previous valid config
+                            // on validation failures, so the app continues with stable config.
                         }
                     }
                 } // === END FORK-SPECIFIC ===

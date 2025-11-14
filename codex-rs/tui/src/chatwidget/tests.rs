@@ -260,6 +260,7 @@ async fn helpers_are_available_and_do_not_panic() {
         picker: None,
         font_size: (8, 16),
     };
+    let mcp_manager = Arc::new(tokio::sync::Mutex::new(None));
     let mut w = ChatWidget::new(
         cfg,
         tx,
@@ -269,6 +270,9 @@ async fn helpers_are_available_and_do_not_panic() {
         term,
         false,
         None,
+        mcp_manager,
+        None, // initial_command
+        None, // config_watcher
     );
     // Basic construction sanity.
     let _ = &mut w;

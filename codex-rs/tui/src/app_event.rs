@@ -489,6 +489,12 @@ pub(crate) enum AppEvent {
         success: bool,
         result_json: String, // Serialized GuardrailResult
     },
+
+    /// Config hot-reload event (SPEC-945D Phase 2.3)
+    /// Triggered when config file changes are detected and processed
+    ConfigReload {
+        event: codex_spec_kit::config::ConfigReloadEvent,
+    },
     // === END FORK-SPECIFIC ===
 }
 

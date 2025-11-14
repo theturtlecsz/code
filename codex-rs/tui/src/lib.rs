@@ -346,6 +346,22 @@ pub async fn run_main(
         }
     }
 
+    // FORK-SPECIFIC (SPEC-945D): Initialize config hot-reload watcher
+    let config_watcher = {
+        use codex_spec_kit::config::HotReloadWatcher;
+        let config_path = config.codex_home.join("config.toml");
+        match HotReloadWatcher::new(&config_path, std::time::Duration::from_secs(2)).await {
+            Ok(watcher) => {
+                tracing::info!("Config hot-reload watcher initialized: {:?}", config_path);
+                Some(std::sync::Arc::new(watcher))
+            }
+            Err(e) => {
+                tracing::warn!("Failed to initialize config watcher: {}", e);
+                None // Graceful degradation - TUI works without hot-reload
+            }
+        }
+    };
+
     run_ratatui_app(
         cli,
         config,
@@ -353,6 +369,7 @@ pub async fn run_main(
         startup_footer_notice,
         latest_upgrade_version,
         theme_configured_explicitly,
+        config_watcher,
     )
     .map_err(|err| std::io::Error::other(err.to_string()))
 }
@@ -364,6 +381,7 @@ fn run_ratatui_app(
     startup_footer_notice: Option<String>,
     latest_upgrade_version: Option<String>,
     theme_configured_explicitly: bool,
+    config_watcher: Option<std::sync::Arc<codex_spec_kit::config::HotReloadWatcher>>,
 ) -> color_eyre::Result<codex_core::protocol::TokenUsage> {
     color_eyre::install()?;
 
@@ -421,6 +439,7 @@ fn run_ratatui_app(
         startup_footer_notice,
         latest_upgrade_version,
         initial_command,
+        config_watcher,
     );
 
     let app_result = app.run(&mut terminal);
