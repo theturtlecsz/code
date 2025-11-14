@@ -49,6 +49,7 @@ pub mod quality_gate_broker;
 pub mod quality_gate_handler; // MAINT-2: Extracted from handler.rs (925 LOC)
 pub mod routing;
 pub mod schemas;
+pub mod spawn_metrics; // SPEC-933 Component 3: Agent spawn performance tracking
 pub mod spec_id_generator; // SPEC-KIT-070: Native SPEC-ID generation (cost optimization)
 pub mod state;
 pub mod subagent_defaults;

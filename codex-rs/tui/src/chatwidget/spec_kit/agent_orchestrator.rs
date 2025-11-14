@@ -556,6 +556,9 @@ async fn spawn_regular_stage_agents_sequential(
 
 /// Spawn regular stage agents in PARALLEL for consensus (no output passing)
 /// Used for stages where independent perspectives are critical (Validate, Audit, Unlock)
+///
+/// SPEC-933 Component 3: Optimized parallel spawning with tokio::JoinSet
+/// Target: 150ms → 50ms (3× speedup) via true concurrent initialization
 async fn spawn_regular_stage_agents_parallel(
     cwd: &Path,
     spec_id: &str,
@@ -564,19 +567,25 @@ async fn spawn_regular_stage_agents_parallel(
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
 ) -> Result<Vec<AgentSpawnInfo>, String> {
+    use tokio::task::JoinSet;
+    use std::time::Instant;
+
     let run_tag = run_id
         .as_ref()
         .map(|r| format!("[run:{}]", &r[..8]))
         .unwrap_or_else(|| "[run:none]".to_string());
+
     tracing::warn!(
-        "{} 🎬 AUDIT: spawn_regular_stage_agents_parallel (independent consensus mode)",
+        "{} 🎬 PARALLEL-OPTIMIZED: spawn_regular_stage_agents_parallel (true concurrent mode)",
         run_tag
     );
     tracing::warn!("  spec_id: {}", spec_id);
     tracing::warn!("  stage: {:?}", stage);
     tracing::warn!("  expected_agents: {:?}", expected_agents);
 
-    let mut spawn_infos = Vec::new();
+    // SPEC-933: Track total spawn time
+    let total_start = Instant::now();
+
     let batch_id = uuid::Uuid::new_v4().to_string();
 
     // SPEC-KIT-923: Check for observable agents flag
@@ -598,63 +607,128 @@ async fn spawn_regular_stage_agents_parallel(
     .copied()
     .collect();
 
-    // Spawn all agents in PARALLEL (no waiting, no output passing)
-    for (idx, agent_name) in expected_agents.iter().enumerate() {
-        tracing::warn!(
-            "{} 🚀 PARALLEL: Spawning agent {}/{}: {}",
-            run_tag,
-            idx + 1,
-            expected_agents.len(),
-            agent_name
-        );
+    // SPEC-933 Component 3: Use JoinSet for TRUE parallel spawning
+    let mut join_set = JoinSet::new();
+    let mut individual_durations = Vec::new();
+
+    for agent_name in expected_agents {
+        // Clone data for async move
+        let agent_name = agent_name.clone();
+        let cwd = cwd.to_path_buf();
+        let spec_id = spec_id.to_string();
+        let stage = stage;
+        let run_id = run_id.clone();
+        let batch_id = batch_id.clone();
+        let agent_configs = agent_configs.to_vec();
+        let tmux_enabled = tmux_enabled;
 
         let config_name = agent_config_map
             .get(agent_name.as_str())
-            .ok_or_else(|| format!("No config mapping for agent {}", agent_name))?;
+            .ok_or_else(|| format!("No config mapping for agent {}", agent_name))?
+            .to_string();
 
-        // Build individual prompt (no previous outputs)
-        let prompt = build_individual_agent_prompt(spec_id, stage, agent_name, cwd).await?;
+        // Spawn concurrent task
+        join_set.spawn(async move {
+            let spawn_start = Instant::now();
 
-        // Spawn without waiting
-        let mut manager = AGENT_MANAGER.write().await;
-        let agent_id = manager
-            .create_agent_from_config_name(
-                config_name,
-                agent_configs,
-                prompt,
-                false,
-                Some(batch_id.clone()),
-                tmux_enabled, // SPEC-KIT-923
-            )
-            .await
-            .map_err(|e| format!("Failed to spawn {}: {}", agent_name, e))?;
+            // Build individual prompt (no previous outputs)
+            let prompt = build_individual_agent_prompt(&spec_id, stage, &agent_name, &cwd).await?;
 
-        // Record to SQLite with run_id
-        if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
-            let _ = db.record_agent_spawn(
-                &agent_id,
-                spec_id,
-                stage,
-                "regular_stage",
+            // Spawn agent (critical section - AGENT_MANAGER write lock)
+            let agent_id = {
+                let mut manager = AGENT_MANAGER.write().await;
+                manager
+                    .create_agent_from_config_name(
+                        &config_name,
+                        &agent_configs,
+                        prompt,
+                        false,
+                        Some(batch_id.clone()),
+                        tmux_enabled,
+                    )
+                    .await
+                    .map_err(|e| format!("Failed to spawn {}: {}", agent_name, e))?
+            };
+
+            let spawn_duration = spawn_start.elapsed();
+
+            // Record to SQLite with run_id (has built-in retry logic)
+            if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+                let _ = db.record_agent_spawn(
+                    &agent_id,
+                    &spec_id,
+                    stage,
+                    "regular_stage",
+                    &agent_name,
+                    run_id.as_deref(),
+                );
+            }
+
+            // SPEC-933: Record spawn metrics
+            super::spawn_metrics::record_agent_spawn(&agent_name, spawn_duration, true);
+
+            tracing::warn!(
+                "{}   ✓ {} spawned in {:?} ({})",
+                run_id.as_ref().map(|r| format!("[run:{}]", &r[..8])).unwrap_or_else(|| "[run:none]".to_string()),
                 agent_name,
-                run_id.as_deref(),
+                spawn_duration,
+                &agent_id[..8]
             );
-        }
 
-        spawn_infos.push(AgentSpawnInfo {
-            agent_id,
-            agent_name: agent_name.clone(),
-            model_name: config_name.to_string(),
-            result: None, // Parallel execution doesn't have result yet
+            Ok::<(AgentSpawnInfo, std::time::Duration), String>((
+                AgentSpawnInfo {
+                    agent_id,
+                    agent_name: agent_name.clone(),
+                    model_name: config_name.clone(),
+                    result: None, // Parallel execution doesn't have result yet
+                },
+                spawn_duration,
+            ))
         });
-
-        tracing::warn!("{}   ✓ {} spawned (not waiting)", run_tag, agent_name);
     }
 
+    // SPEC-933: Collect results from concurrent spawns
+    let mut spawn_infos = Vec::new();
+
+    while let Some(result) = join_set.join_next().await {
+        match result {
+            Ok(Ok((spawn_info, duration))) => {
+                spawn_infos.push(spawn_info);
+                individual_durations.push(duration);
+            }
+            Ok(Err(e)) => {
+                // Spawn failed, but continue with other agents (degraded mode)
+                tracing::error!("{} ❌ Agent spawn failed: {}", run_tag, e);
+                // Record failure metric
+                super::spawn_metrics::record_agent_spawn("unknown", std::time::Duration::from_secs(0), false);
+            }
+            Err(join_error) => {
+                tracing::error!("{} ❌ Join error: {}", run_tag, join_error);
+                super::spawn_metrics::record_agent_spawn("unknown", std::time::Duration::from_secs(0), false);
+            }
+        }
+    }
+
+    let total_duration = total_start.elapsed();
+
+    // SPEC-933: Record batch metrics
+    super::spawn_metrics::record_batch_spawn(
+        expected_agents.len(),
+        spawn_infos.len(),
+        total_duration,
+        &individual_durations,
+    );
+
     tracing::warn!(
-        "{} ✅ PARALLEL: All {} agents spawned, executing independently",
+        "{} ✅ PARALLEL-OPTIMIZED: {} agents spawned in {:?} (avg: {:?})",
         run_tag,
-        expected_agents.len()
+        spawn_infos.len(),
+        total_duration,
+        if !individual_durations.is_empty() {
+            individual_durations.iter().sum::<std::time::Duration>() / individual_durations.len() as u32
+        } else {
+            std::time::Duration::from_secs(0)
+        }
     );
 
     Ok(spawn_infos)
