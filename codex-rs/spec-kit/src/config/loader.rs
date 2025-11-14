@@ -315,6 +315,9 @@ impl ConfigLoader {
         let config = builder.build()?;
         let app_config: AppConfig = config.try_deserialize()?;
 
+        // Check for unknown environment variables (warn only, don't fail)
+        Self::check_unknown_env_vars();
+
         // Validate with schema if enabled
         if app_config.quality_gates.schema_validation {
             let validator = crate::config::validator::SchemaValidator::new()?;
@@ -322,6 +325,37 @@ impl ConfigLoader {
         }
 
         Ok(app_config)
+    }
+
+    /// Check environment variables for unknown SPECKIT_* variables and warn.
+    ///
+    /// This helps catch typos in environment variable names during configuration.
+    #[allow(clippy::print_stderr)]
+    fn check_unknown_env_vars() {
+        use crate::config::registry::FieldPath;
+
+        for (key, _value) in std::env::vars() {
+            if key.starts_with("SPECKIT_") && !FieldPath::is_known_env_var(&key) {
+                eprintln!(
+                    "WARNING: Unknown environment variable '{key}' - will be ignored"
+                );
+                eprintln!(
+                    "         Did you mean one of: {}",
+                    FieldPath::all_known_env_prefixes()
+                        .iter()
+                        .filter(|&&prefix| {
+                            // Find similar prefixes
+                            let key_start = key.split("__").next().unwrap_or("");
+                            let prefix_start = prefix.split("__").next().unwrap_or("");
+                            key_start.contains(prefix_start) || prefix_start.contains(key_start)
+                        })
+                        .take(3)
+                        .copied()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+        }
     }
 
     /// Locate the default config file in standard locations:
@@ -531,6 +565,58 @@ consensus_threshold = 0.8
         assert_eq!(consensus.min_agents, 2);
         assert_eq!(consensus.max_agents, 5);
         assert_eq!(consensus.timeout_seconds, 300);
+    }
+
+    // Task 4 Tests: Integration with ConfigLoader (2-3 tests)
+
+    #[test]
+    fn test_unknown_env_var_detection() {
+        use crate::config::registry::FieldPath;
+
+        // Test that unknown vars are detected
+        assert!(!FieldPath::is_known_env_var("SPECKIT_UNKNOWN__FIELD"));
+        assert!(!FieldPath::is_known_env_var("SPECKIT_TYPO__ENABLED"));
+
+        // Test that known vars are accepted
+        assert!(FieldPath::is_known_env_var("SPECKIT_COST__ENABLED"));
+        assert!(FieldPath::is_known_env_var("SPECKIT_QUALITY_GATES__ENABLED"));
+        assert!(FieldPath::is_known_env_var("SPECKIT_MODELS__OPENAI__TEMPERATURE"));
+    }
+
+    #[test]
+    fn test_env_var_prefix_list() {
+        use crate::config::registry::FieldPath;
+
+        let prefixes = FieldPath::all_known_env_prefixes();
+
+        // Verify key prefixes are present
+        assert!(prefixes.contains(&"SPECKIT_QUALITY_GATES__ENABLED"));
+        assert!(prefixes.contains(&"SPECKIT_COST__DAILY_LIMIT_USD"));
+        assert!(prefixes.contains(&"SPECKIT_EVIDENCE__BASE_DIR"));
+        assert!(prefixes.contains(&"SPECKIT_CONSENSUS__MIN_AGENTS"));
+        assert!(prefixes.contains(&"SPECKIT_MODELS__"));
+    }
+
+    #[test]
+    #[serial]
+    fn test_valid_env_var_acceptance() {
+        // Set a valid env var
+        unsafe {
+            env::set_var("SPECKIT_COST__ENABLED", "true");
+        }
+
+        let loader = ConfigLoader::new();
+        let result = loader.load();
+
+        // Should succeed without warnings
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        assert_eq!(config.cost.enabled, true);
+
+        // Cleanup
+        unsafe {
+            env::remove_var("SPECKIT_COST__ENABLED");
+        }
     }
 
     #[test]

@@ -26,6 +26,10 @@ toml = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 tracing = "0.1"
 
+# SPEC-945D: Filesystem watching for config hot-reload
+notify = "6.1"
+notify-debouncer-full = "0.3"
+
 # MCP integration
 mcp-types = { path = "../mcp-types" }
 
