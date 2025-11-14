@@ -3151,12 +3151,15 @@ impl ChatWidget<'_> {
         use spec_kit::state::SpecAutoPhase;
         self.spec_auto_state
             .as_ref()
-            .map(|state| matches!(state.phase,
-                SpecAutoPhase::QualityGateExecuting { .. } |
-                SpecAutoPhase::QualityGateProcessing { .. } |
-                SpecAutoPhase::QualityGateValidating { .. } |
-                SpecAutoPhase::QualityGateAwaitingHuman { .. }
-            ))
+            .map(|state| {
+                matches!(
+                    state.phase,
+                    SpecAutoPhase::QualityGateExecuting { .. }
+                        | SpecAutoPhase::QualityGateProcessing { .. }
+                        | SpecAutoPhase::QualityGateValidating { .. }
+                        | SpecAutoPhase::QualityGateAwaitingHuman { .. }
+                )
+            })
             .unwrap_or(false)
     }
 

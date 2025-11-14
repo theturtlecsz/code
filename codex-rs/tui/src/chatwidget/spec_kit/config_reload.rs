@@ -72,9 +72,7 @@ use std::sync::Arc;
 #[derive(Debug, Clone)]
 pub enum ReloadNotification {
     /// Config file changed (before reload).
-    FileChanged {
-        path: String,
-    },
+    FileChanged { path: String },
 
     /// Config successfully reloaded.
     Success {
@@ -125,11 +123,9 @@ pub fn handle_reload_event(
     old_config: Option<Arc<AppConfig>>,
 ) -> Option<ReloadNotification> {
     match event {
-        ConfigReloadEvent::FileChanged(path) => {
-            Some(ReloadNotification::FileChanged {
-                path: path.display().to_string(),
-            })
-        }
+        ConfigReloadEvent::FileChanged(path) => Some(ReloadNotification::FileChanged {
+            path: path.display().to_string(),
+        }),
 
         ConfigReloadEvent::ReloadSuccess => {
             // If we have old config, compute what changed
@@ -172,16 +168,14 @@ pub fn handle_reload_event(
 /// # Returns
 ///
 /// Tuple of (models_changed, quality_gates_changed, cost_changed)
-pub fn detect_config_changes(
-    old: &AppConfig,
-    new: &AppConfig,
-) -> (usize, bool, bool) {
+pub fn detect_config_changes(old: &AppConfig, new: &AppConfig) -> (usize, bool, bool) {
     // Count models that changed
     let models_changed = count_model_changes(old, new);
 
     // Check if quality gates changed
     let quality_gates_changed = old.quality_gates.enabled != new.quality_gates.enabled
-        || (old.quality_gates.consensus_threshold - new.quality_gates.consensus_threshold).abs() > f32::EPSILON;
+        || (old.quality_gates.consensus_threshold - new.quality_gates.consensus_threshold).abs()
+            > f32::EPSILON;
 
     // Check if cost settings changed
     let cost_changed = old.cost.enabled != new.cost.enabled
@@ -240,10 +234,7 @@ fn count_model_changes(old: &AppConfig, new: &AppConfig) -> usize {
 /// let defer = should_defer_reload(true, false);
 /// assert!(defer, "Should defer when quality gate is active");
 /// ```
-pub fn should_defer_reload(
-    quality_gate_active: bool,
-    agent_running: bool,
-) -> bool {
+pub fn should_defer_reload(quality_gate_active: bool, agent_running: bool) -> bool {
     // Defer reload if:
     // 1. Quality gate is active (don't interrupt validation)
     // 2. Agents are running (don't interrupt agent execution)

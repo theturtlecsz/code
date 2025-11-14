@@ -440,7 +440,7 @@ impl App<'_> {
                 latest_upgrade_version: latest_upgrade_version.clone(),
                 mcp_manager: mcp_manager.clone(),
                 initial_command: initial_command.clone(), // SPEC-KIT-920
-                config_watcher: config_watcher.clone(), // SPEC-945D
+                config_watcher: config_watcher.clone(),   // SPEC-945D
             };
             AppState::Onboarding {
                 screen: OnboardingScreen::new(OnboardingScreenArgs {
@@ -465,7 +465,7 @@ impl App<'_> {
                 latest_upgrade_version.clone(),
                 mcp_manager.clone(),
                 initial_command.clone(), // SPEC-KIT-920
-                config_watcher.clone(), // SPEC-945D
+                config_watcher.clone(),  // SPEC-945D
             );
             chat_widget.enable_perf(enable_perf);
             if resume_picker {
@@ -2660,7 +2660,7 @@ impl App<'_> {
                     latest_upgrade_version,
                     mcp_manager,
                     initial_command, // SPEC-KIT-920
-                    config_watcher, // SPEC-945D
+                    config_watcher,  // SPEC-945D
                 }) => {
                     let mut w = ChatWidget::new(
                         config,
@@ -2673,7 +2673,7 @@ impl App<'_> {
                         latest_upgrade_version,
                         mcp_manager,
                         initial_command, // SPEC-KIT-920
-                        config_watcher, // SPEC-945D
+                        config_watcher,  // SPEC-945D
                     );
                     w.enable_perf(enable_perf);
                     if resume_picker {
@@ -2977,7 +2977,8 @@ impl App<'_> {
                             info!("📝 Config file changed: {}", path.display());
                             // Show UI notification
                             if let AppState::Chat { widget } = &mut self.app_state {
-                                widget.debug_notice(format!("📝 Config changed: {}", path.display()));
+                                widget
+                                    .debug_notice(format!("📝 Config changed: {}", path.display()));
                             }
                             // File change detected, reload will happen after debounce window
                         }
@@ -3001,12 +3002,13 @@ impl App<'_> {
                                 );
 
                                 // SPEC-945D Phase 2.4: Check if we should defer reload
-                                let should_defer = if let AppState::Chat { widget } = &self.app_state {
-                                    // Check if quality gate or agents are running
-                                    widget.is_quality_gate_active() || widget.is_agent_running()
-                                } else {
-                                    false
-                                };
+                                let should_defer =
+                                    if let AppState::Chat { widget } = &self.app_state {
+                                        // Check if quality gate or agents are running
+                                        widget.is_quality_gate_active() || widget.is_agent_running()
+                                    } else {
+                                        false
+                                    };
 
                                 if should_defer {
                                     // Defer reload until current operation completes
@@ -3015,7 +3017,10 @@ impl App<'_> {
                                     info!("   Will refresh components when operation completes");
                                     // Show UI notification
                                     if let AppState::Chat { widget } = &mut self.app_state {
-                                        widget.debug_notice("⏸️ Config reload deferred (operation in progress)".to_string());
+                                        widget.debug_notice(
+                                            "⏸️ Config reload deferred (operation in progress)"
+                                                .to_string(),
+                                        );
                                     }
                                 } else {
                                     // Refresh UI components immediately
@@ -3025,7 +3030,9 @@ impl App<'_> {
                                         widget.refresh_cost_tracker();
                                         info!("   Components refreshed with new config");
                                         // Show UI notification
-                                        widget.debug_notice("✅ Config reloaded successfully".to_string());
+                                        widget.debug_notice(
+                                            "✅ Config reloaded successfully".to_string(),
+                                        );
                                     }
                                     self.pending_config_reload = false;
                                 }

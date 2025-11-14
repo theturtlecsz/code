@@ -72,10 +72,13 @@
 use crate::config::{AppConfig, ConfigLoader};
 use anyhow::{Context, Result};
 use notify::{Event, EventKind, RecursiveMode, Watcher};
-use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, FileIdMap};
+use notify_debouncer_full::{DebounceEventResult, Debouncer, FileIdMap, new_debouncer};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
 /// Configuration reload events.
@@ -121,6 +124,16 @@ pub struct HotReloadWatcher {
 
     /// Reload event receiver.
     event_rx: Arc<tokio::sync::Mutex<mpsc::Receiver<ConfigReloadEvent>>>,
+
+    // ========== Phase 3 Metrics ==========
+    /// Count of successful config reloads (Phase 3).
+    reload_counter: Arc<AtomicUsize>,
+
+    /// Reload latency samples for histogram (Phase 3).
+    reload_latencies: Arc<Mutex<Vec<Duration>>>,
+
+    /// Hash of last successfully loaded config file (Phase 3).
+    last_file_hash: Arc<RwLock<Option<u64>>>,
 }
 
 impl HotReloadWatcher {
@@ -149,10 +162,7 @@ impl HotReloadWatcher {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn new<P: AsRef<Path>>(
-        config_path: P,
-        debounce_duration: Duration,
-    ) -> Result<Self> {
+    pub async fn new<P: AsRef<Path>>(config_path: P, debounce_duration: Duration) -> Result<Self> {
         let config_path = expand_path(config_path.as_ref())?;
 
         // Load initial config
@@ -170,6 +180,16 @@ impl HotReloadWatcher {
         let config_clone = Arc::clone(&config);
         let path_clone = config_path.clone();
 
+        // Phase 3: Create metrics fields
+        let reload_counter = Arc::new(AtomicUsize::new(0));
+        let reload_latencies = Arc::new(Mutex::new(Vec::with_capacity(1000)));
+        let last_file_hash = Arc::new(RwLock::new(None));
+
+        // Clone for closure
+        let counter_clone = Arc::clone(&reload_counter);
+        let latencies_clone = Arc::clone(&reload_latencies);
+        let hash_clone = Arc::clone(&last_file_hash);
+
         // Get tokio runtime handle for spawning from debouncer callback
         let handle = tokio::runtime::Handle::current();
 
@@ -180,20 +200,24 @@ impl HotReloadWatcher {
                 let config = Arc::clone(&config_clone);
                 let event_tx = event_tx.clone();
                 let path = path_clone.clone();
+                // Phase 3: Clone metrics for async task
+                let counter = Arc::clone(&counter_clone);
+                let latencies = Arc::clone(&latencies_clone);
+                let hash = Arc::clone(&hash_clone);
 
                 // Spawn async task to handle reload using runtime handle
                 handle.spawn(async move {
                     if let Err(e) = Self::handle_fs_event(
-                        result,
-                        config,
-                        event_tx,
-                        path,
-                    ).await {
+                        result, config, event_tx, path, counter, latencies, hash,
+                    )
+                    .await
+                    {
                         tracing::error!("Failed to handle filesystem event: {}", e);
                     }
                 });
             },
-        ).context("Failed to create filesystem watcher")?;
+        )
+        .context("Failed to create filesystem watcher")?;
 
         // Watch the config file
         let mut debouncer_mut = debouncer;
@@ -207,6 +231,10 @@ impl HotReloadWatcher {
             config_path,
             debouncer: debouncer_mut,
             event_rx: Arc::new(tokio::sync::Mutex::new(event_rx)),
+            // Phase 3 metrics (use the same Arc as closure)
+            reload_counter,
+            reload_latencies,
+            last_file_hash,
         })
     }
 
@@ -261,6 +289,107 @@ impl HotReloadWatcher {
         self.event_rx.lock().await.recv().await
     }
 
+    // ========== Phase 3 Metrics Accessors ==========
+
+    /// Get total count of successful config reloads (Phase 3).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use codex_spec_kit::config::HotReloadWatcher;
+    /// # use std::time::Duration;
+    /// # async fn example() -> anyhow::Result<()> {
+    /// # let watcher = HotReloadWatcher::new("config.toml", Duration::from_secs(2)).await?;
+    /// let count = watcher.reload_count();
+    /// println!("Config has been reloaded {} times", count);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn reload_count(&self) -> usize {
+        self.reload_counter.load(Ordering::Relaxed)
+    }
+
+    /// Get average reload latency (Phase 3).
+    ///
+    /// Returns `None` if no reloads have occurred.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use codex_spec_kit::config::HotReloadWatcher;
+    /// # use std::time::Duration;
+    /// # async fn example() -> anyhow::Result<()> {
+    /// # let watcher = HotReloadWatcher::new("config.toml", Duration::from_secs(2)).await?;
+    /// if let Some(avg) = watcher.average_reload_latency() {
+    ///     println!("Average reload latency: {:?}", avg);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn average_reload_latency(&self) -> Option<Duration> {
+        let latencies = self.reload_latencies.lock().unwrap();
+        if latencies.is_empty() {
+            return None;
+        }
+        let sum: Duration = latencies.iter().sum();
+        Some(sum / latencies.len() as u32)
+    }
+
+    /// Get p95 reload latency (Phase 3).
+    ///
+    /// Returns `None` if fewer than 20 samples available.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use codex_spec_kit::config::HotReloadWatcher;
+    /// # use std::time::Duration;
+    /// # async fn example() -> anyhow::Result<()> {
+    /// # let watcher = HotReloadWatcher::new("config.toml", Duration::from_secs(2)).await?;
+    /// if let Some(p95) = watcher.p95_reload_latency() {
+    ///     println!("p95 reload latency: {:?}", p95);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn p95_reload_latency(&self) -> Option<Duration> {
+        let latencies = self.reload_latencies.lock().unwrap();
+        if latencies.len() < 20 {
+            return None;
+        }
+        let mut sorted = latencies.clone();
+        sorted.sort();
+        let p95_index = (sorted.len() as f64 * 0.95) as usize;
+        Some(sorted[p95_index])
+    }
+
+    /// Check if config file has drifted from loaded config (Phase 3).
+    ///
+    /// Returns `true` if file hash differs from last successful reload.
+    ///
+    /// # Errors
+    ///
+    /// - Config file unreadable or invalid UTF-8
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use codex_spec_kit::config::HotReloadWatcher;
+    /// # use std::time::Duration;
+    /// # async fn example() -> anyhow::Result<()> {
+    /// # let watcher = HotReloadWatcher::new("config.toml", Duration::from_secs(2)).await?;
+    /// if watcher.has_config_drift()? {
+    ///     println!("⚠️  Config file has changed but not reloaded");
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn has_config_drift(&self) -> Result<bool> {
+        let current_hash = Self::compute_file_hash(&self.config_path)?;
+        let last_hash = self.last_file_hash.read().unwrap();
+        Ok(last_hash.map_or(false, |h| h != current_hash))
+    }
+
     /// Handle filesystem event (internal).
     ///
     /// Called by debouncer when file changes are detected. Validates new
@@ -270,6 +399,10 @@ impl HotReloadWatcher {
         config: Arc<RwLock<Arc<AppConfig>>>,
         event_tx: mpsc::Sender<ConfigReloadEvent>,
         config_path: PathBuf,
+        // Phase 3 metrics
+        reload_counter: Arc<AtomicUsize>,
+        reload_latencies: Arc<Mutex<Vec<Duration>>>,
+        last_file_hash: Arc<RwLock<Option<u64>>>,
     ) -> Result<()> {
         match result {
             Ok(events) => {
@@ -283,8 +416,16 @@ impl HotReloadWatcher {
                     return Ok(());
                 }
 
+                // Phase 3: Start latency timer
+                let reload_start = Instant::now();
+
+                // Phase 3: Compute file hash before reload
+                let new_file_hash = Self::compute_file_hash(&config_path)?;
+
                 // Emit file changed event
-                let _ = event_tx.send(ConfigReloadEvent::FileChanged(config_path.clone())).await;
+                let _ = event_tx
+                    .send(ConfigReloadEvent::FileChanged(config_path.clone()))
+                    .await;
 
                 // Attempt reload (validation happens here)
                 match ConfigLoader::new().with_file(&config_path).load() {
@@ -295,13 +436,29 @@ impl HotReloadWatcher {
                             *config_guard = Arc::new(new_config);
                         } // Write lock released
 
+                        // Phase 3: Record metrics on successful reload
+                        reload_counter.fetch_add(1, Ordering::Relaxed);
+                        let latency = reload_start.elapsed();
+                        reload_latencies.lock().unwrap().push(latency);
+                        *last_file_hash.write().unwrap() = Some(new_file_hash);
+
                         let _ = event_tx.send(ConfigReloadEvent::ReloadSuccess).await;
-                        tracing::info!("Config reloaded successfully from {:?}", config_path);
+                        tracing::info!(
+                            "Config reloaded successfully from {:?} (latency: {:?}, count: {})",
+                            config_path,
+                            latency,
+                            reload_counter.load(Ordering::Relaxed)
+                        );
                     }
                     Err(e) => {
                         let error_msg = format!("Config validation failed: {}", e);
-                        let _ = event_tx.send(ConfigReloadEvent::ReloadFailed(error_msg.clone())).await;
-                        tracing::warn!("Config reload failed, preserving old config: {}", error_msg);
+                        let _ = event_tx
+                            .send(ConfigReloadEvent::ReloadFailed(error_msg.clone()))
+                            .await;
+                        tracing::warn!(
+                            "Config reload failed, preserving old config: {}",
+                            error_msg
+                        );
                     }
                 }
             }
@@ -313,6 +470,17 @@ impl HotReloadWatcher {
         }
 
         Ok(())
+    }
+
+    /// Compute hash of config file contents (Phase 3).
+    ///
+    /// Used for drift detection - compares file hash with last loaded hash.
+    fn compute_file_hash(path: &Path) -> Result<u64> {
+        let content =
+            std::fs::read_to_string(path).context("Failed to read config file for hashing")?;
+        let mut hasher = DefaultHasher::new();
+        content.hash(&mut hasher);
+        Ok(hasher.finish())
     }
 
     /// Check if event is relevant for config reload.
@@ -442,7 +610,8 @@ max_agents = 5
 
         // Make 3 rapid edits (within debounce window)
         for i in 1..=3 {
-            let updated = VALID_CONFIG.replace("enabled = true", &format!("enabled = {}", i % 2 == 0));
+            let updated =
+                VALID_CONFIG.replace("enabled = true", &format!("enabled = {}", i % 2 == 0));
             fs::write(&config_path, updated).unwrap();
             sleep(Duration::from_millis(200)).await; // Rapid edits
         }
@@ -470,7 +639,11 @@ max_agents = 5
         }
 
         // Debouncing should consolidate to 1-2 reloads (not 3)
-        assert!(reload_count <= 2, "Expected 1-2 reloads, got {}", reload_count);
+        assert!(
+            reload_count <= 2,
+            "Expected 1-2 reloads, got {}",
+            reload_count
+        );
     }
 
     #[tokio::test]
@@ -490,8 +663,14 @@ max_agents = 5
         sleep(Duration::from_millis(1000)).await;
 
         // Should receive FileChanged + ReloadSuccess
-        let event1 = timeout(Duration::from_millis(100), watcher.recv_event()).await.ok().flatten();
-        let event2 = timeout(Duration::from_millis(100), watcher.recv_event()).await.ok().flatten();
+        let event1 = timeout(Duration::from_millis(100), watcher.recv_event())
+            .await
+            .ok()
+            .flatten();
+        let event2 = timeout(Duration::from_millis(100), watcher.recv_event())
+            .await
+            .ok()
+            .flatten();
 
         assert!(matches!(event1, Some(ConfigReloadEvent::FileChanged(_))));
         assert!(matches!(event2, Some(ConfigReloadEvent::ReloadSuccess)));
@@ -526,8 +705,14 @@ max_agents = 5
         sleep(Duration::from_millis(1000)).await;
 
         // Should receive FileChanged + ReloadFailed
-        let event1 = timeout(Duration::from_millis(100), watcher.recv_event()).await.ok().flatten();
-        let event2 = timeout(Duration::from_millis(100), watcher.recv_event()).await.ok().flatten();
+        let event1 = timeout(Duration::from_millis(100), watcher.recv_event())
+            .await
+            .ok()
+            .flatten();
+        let event2 = timeout(Duration::from_millis(100), watcher.recv_event())
+            .await
+            .ok()
+            .flatten();
 
         assert!(matches!(event1, Some(ConfigReloadEvent::FileChanged(_))));
         assert!(matches!(event2, Some(ConfigReloadEvent::ReloadFailed(_))));
@@ -547,7 +732,7 @@ max_agents = 5
         let watcher = Arc::new(
             HotReloadWatcher::new(&config_path, Duration::from_millis(500))
                 .await
-                .unwrap()
+                .unwrap(),
         );
 
         // Spawn concurrent readers
@@ -678,7 +863,11 @@ max_agents = 5
         }
 
         let latency = start.elapsed();
-        assert!(latency.as_millis() < 150, "Reload latency {}ms exceeds target", latency.as_millis());
+        assert!(
+            latency.as_millis() < 150,
+            "Reload latency {}ms exceeds target",
+            latency.as_millis()
+        );
     }
 
     #[tokio::test]
@@ -704,5 +893,154 @@ max_agents = 5
 
         // Should be <1μs per call
         assert!(avg_ns < 1000, "get_config() too slow: {}ns average", avg_ns);
+    }
+
+    // ====================
+    // Phase 3 Metrics Tests
+    // ====================
+
+    #[tokio::test]
+    #[serial]
+    async fn test_reload_counter_increments() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = create_test_config(&temp_dir, VALID_CONFIG);
+
+        let watcher = HotReloadWatcher::new(&config_path, Duration::from_millis(100))
+            .await
+            .unwrap();
+
+        // Initial count should be 0
+        assert_eq!(watcher.reload_count(), 0);
+
+        // Trigger first reload
+        fs::write(&config_path, UPDATED_CONFIG).unwrap();
+        sleep(Duration::from_millis(300)).await;
+        let _ = watcher.recv_event().await; // FileChanged
+        let _ = watcher.recv_event().await; // ReloadSuccess
+
+        // Count should be 1
+        assert_eq!(watcher.reload_count(), 1);
+
+        // Trigger second reload
+        fs::write(&config_path, VALID_CONFIG).unwrap();
+        sleep(Duration::from_millis(300)).await;
+        let _ = watcher.recv_event().await; // FileChanged
+        let _ = watcher.recv_event().await; // ReloadSuccess
+
+        // Count should be 2
+        assert_eq!(watcher.reload_count(), 2);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_reload_latency_tracking() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = create_test_config(&temp_dir, VALID_CONFIG);
+
+        let watcher = HotReloadWatcher::new(&config_path, Duration::from_millis(100))
+            .await
+            .unwrap();
+
+        // Initially no latency data
+        assert!(watcher.average_reload_latency().is_none());
+
+        // Trigger reload
+        fs::write(&config_path, UPDATED_CONFIG).unwrap();
+        sleep(Duration::from_millis(300)).await;
+        let _ = watcher.recv_event().await; // FileChanged
+        let _ = watcher.recv_event().await; // ReloadSuccess
+
+        // Should have latency data now
+        let avg = watcher
+            .average_reload_latency()
+            .expect("Should have latency data");
+        assert!(avg.as_millis() < 150, "Reload took too long: {:?}", avg);
+
+        // p95 requires 20 samples, should be None
+        assert!(watcher.p95_reload_latency().is_none());
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_reload_latency_p95() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = create_test_config(&temp_dir, VALID_CONFIG);
+
+        let watcher = HotReloadWatcher::new(&config_path, Duration::from_millis(50))
+            .await
+            .unwrap();
+
+        // Trigger 25 reloads to get p95
+        for i in 0..25 {
+            let content = if i % 2 == 0 {
+                VALID_CONFIG
+            } else {
+                UPDATED_CONFIG
+            };
+            fs::write(&config_path, content).unwrap();
+            sleep(Duration::from_millis(150)).await;
+            let _ = watcher.recv_event().await; // FileChanged
+            let _ = watcher.recv_event().await; // ReloadSuccess
+        }
+
+        // Should have p95 after 25 samples
+        let p95 = watcher.p95_reload_latency().expect("Should have p95 data");
+        assert!(p95.as_millis() < 200, "p95 latency too high: {:?}", p95);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_config_drift_detection() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = create_test_config(&temp_dir, VALID_CONFIG);
+
+        let watcher = HotReloadWatcher::new(&config_path, Duration::from_millis(100))
+            .await
+            .unwrap();
+
+        // First, trigger a successful reload to establish baseline hash
+        fs::write(&config_path, UPDATED_CONFIG).unwrap();
+        sleep(Duration::from_millis(300)).await;
+        let _ = watcher.recv_event().await; // FileChanged
+        let _ = watcher.recv_event().await; // ReloadSuccess
+
+        // No drift immediately after reload
+        assert!(!watcher.has_config_drift().expect("Should check drift"));
+
+        // Now modify file again without triggering reload
+        // (write different content directly, bypass debounce by immediate check)
+        fs::write(&config_path, VALID_CONFIG).unwrap();
+
+        // Check drift immediately (file changed but watcher hasn't reloaded yet)
+        sleep(Duration::from_millis(50)).await; // Give FS time to flush
+        let has_drift = watcher.has_config_drift().expect("Should check drift");
+        assert!(
+            has_drift,
+            "Should detect config drift after file modification"
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_config_no_drift_after_reload() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = create_test_config(&temp_dir, VALID_CONFIG);
+
+        let watcher = HotReloadWatcher::new(&config_path, Duration::from_millis(100))
+            .await
+            .unwrap();
+
+        // Trigger reload
+        fs::write(&config_path, UPDATED_CONFIG).unwrap();
+        sleep(Duration::from_millis(300)).await;
+        let _ = watcher.recv_event().await; // FileChanged
+        let _ = watcher.recv_event().await; // ReloadSuccess
+
+        // No drift after successful reload
+        let has_drift = watcher.has_config_drift().expect("Should check drift");
+        assert!(
+            !has_drift,
+            "Should not detect drift after successful reload"
+        );
     }
 }
