@@ -21,6 +21,7 @@ pub mod clarify_native; // Native ambiguity detection (zero agents, zero cost)
 pub mod command_handlers; // Command entry points (status, consensus, guardrail)
 pub mod command_registry;
 pub mod commands;
+pub mod config_reload; // SPEC-945D Phase 2.2: Config hot-reload handler
 pub mod config_validator;
 pub mod consensus;
 pub mod consensus_coordinator; // Consensus checking with MCP retry logic

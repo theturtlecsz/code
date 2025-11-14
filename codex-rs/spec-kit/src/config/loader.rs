@@ -336,9 +336,7 @@ impl ConfigLoader {
 
         for (key, _value) in std::env::vars() {
             if key.starts_with("SPECKIT_") && !FieldPath::is_known_env_var(&key) {
-                eprintln!(
-                    "WARNING: Unknown environment variable '{key}' - will be ignored"
-                );
+                eprintln!("WARNING: Unknown environment variable '{key}' - will be ignored");
                 eprintln!(
                     "         Did you mean one of: {}",
                     FieldPath::all_known_env_prefixes()
@@ -579,8 +577,12 @@ consensus_threshold = 0.8
 
         // Test that known vars are accepted
         assert!(FieldPath::is_known_env_var("SPECKIT_COST__ENABLED"));
-        assert!(FieldPath::is_known_env_var("SPECKIT_QUALITY_GATES__ENABLED"));
-        assert!(FieldPath::is_known_env_var("SPECKIT_MODELS__OPENAI__TEMPERATURE"));
+        assert!(FieldPath::is_known_env_var(
+            "SPECKIT_QUALITY_GATES__ENABLED"
+        ));
+        assert!(FieldPath::is_known_env_var(
+            "SPECKIT_MODELS__OPENAI__TEMPERATURE"
+        ));
     }
 
     #[test]

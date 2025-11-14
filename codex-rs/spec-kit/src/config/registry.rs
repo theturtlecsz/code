@@ -163,9 +163,13 @@ impl FieldPath {
         match self {
             // Quality Gates
             Self::QualityGates_Enabled => "SPECKIT_QUALITY_GATES__ENABLED".into(),
-            Self::QualityGates_ConsensusThreshold => "SPECKIT_QUALITY_GATES__CONSENSUS_THRESHOLD".into(),
+            Self::QualityGates_ConsensusThreshold => {
+                "SPECKIT_QUALITY_GATES__CONSENSUS_THRESHOLD".into()
+            }
             Self::QualityGates_MinTestCoverage => "SPECKIT_QUALITY_GATES__MIN_TEST_COVERAGE".into(),
-            Self::QualityGates_SchemaValidation => "SPECKIT_QUALITY_GATES__SCHEMA_VALIDATION".into(),
+            Self::QualityGates_SchemaValidation => {
+                "SPECKIT_QUALITY_GATES__SCHEMA_VALIDATION".into()
+            }
 
             // Cost
             Self::Cost_Enabled => "SPECKIT_COST__ENABLED".into(),
@@ -185,15 +189,42 @@ impl FieldPath {
             Self::Consensus_TimeoutSeconds => "SPECKIT_CONSENSUS__TIMEOUT_SECONDS".into(),
 
             // Models (dynamic)
-            Self::Model_Name(provider) => format!("SPECKIT_MODELS__{provider}__MODEL", provider = provider.to_uppercase().replace('-', "_")),
-            Self::Model_Endpoint(provider) => format!("SPECKIT_MODELS__{provider}__ENDPOINT", provider = provider.to_uppercase().replace('-', "_")),
-            Self::Model_Temperature(provider) => format!("SPECKIT_MODELS__{provider}__TEMPERATURE", provider = provider.to_uppercase().replace('-', "_")),
-            Self::Model_MaxTokens(provider) => format!("SPECKIT_MODELS__{provider}__MAX_TOKENS", provider = provider.to_uppercase().replace('-', "_")),
-            Self::Model_CostPerInputMillion(provider) => format!("SPECKIT_MODELS__{provider}__COST_PER_INPUT_MILLION", provider = provider.to_uppercase().replace('-', "_")),
-            Self::Model_CostPerOutputMillion(provider) => format!("SPECKIT_MODELS__{provider}__COST_PER_OUTPUT_MILLION", provider = provider.to_uppercase().replace('-', "_")),
-            Self::Model_Retry_MaxRetries(provider) => format!("SPECKIT_MODELS__{provider}__RETRY__MAX_RETRIES", provider = provider.to_uppercase().replace('-', "_")),
-            Self::Model_Retry_BaseDelayMs(provider) => format!("SPECKIT_MODELS__{provider}__RETRY__BASE_DELAY_MS", provider = provider.to_uppercase().replace('-', "_")),
-            Self::Model_Retry_MaxDelayMs(provider) => format!("SPECKIT_MODELS__{provider}__RETRY__MAX_DELAY_MS", provider = provider.to_uppercase().replace('-', "_")),
+            Self::Model_Name(provider) => format!(
+                "SPECKIT_MODELS__{provider}__MODEL",
+                provider = provider.to_uppercase().replace('-', "_")
+            ),
+            Self::Model_Endpoint(provider) => format!(
+                "SPECKIT_MODELS__{provider}__ENDPOINT",
+                provider = provider.to_uppercase().replace('-', "_")
+            ),
+            Self::Model_Temperature(provider) => format!(
+                "SPECKIT_MODELS__{provider}__TEMPERATURE",
+                provider = provider.to_uppercase().replace('-', "_")
+            ),
+            Self::Model_MaxTokens(provider) => format!(
+                "SPECKIT_MODELS__{provider}__MAX_TOKENS",
+                provider = provider.to_uppercase().replace('-', "_")
+            ),
+            Self::Model_CostPerInputMillion(provider) => format!(
+                "SPECKIT_MODELS__{provider}__COST_PER_INPUT_MILLION",
+                provider = provider.to_uppercase().replace('-', "_")
+            ),
+            Self::Model_CostPerOutputMillion(provider) => format!(
+                "SPECKIT_MODELS__{provider}__COST_PER_OUTPUT_MILLION",
+                provider = provider.to_uppercase().replace('-', "_")
+            ),
+            Self::Model_Retry_MaxRetries(provider) => format!(
+                "SPECKIT_MODELS__{provider}__RETRY__MAX_RETRIES",
+                provider = provider.to_uppercase().replace('-', "_")
+            ),
+            Self::Model_Retry_BaseDelayMs(provider) => format!(
+                "SPECKIT_MODELS__{provider}__RETRY__BASE_DELAY_MS",
+                provider = provider.to_uppercase().replace('-', "_")
+            ),
+            Self::Model_Retry_MaxDelayMs(provider) => format!(
+                "SPECKIT_MODELS__{provider}__RETRY__MAX_DELAY_MS",
+                provider = provider.to_uppercase().replace('-', "_")
+            ),
         }
     }
 
@@ -244,11 +275,21 @@ impl FieldPath {
             Self::Model_Endpoint(provider) => format!("models.{provider}.endpoint"),
             Self::Model_Temperature(provider) => format!("models.{provider}.temperature"),
             Self::Model_MaxTokens(provider) => format!("models.{provider}.max_tokens"),
-            Self::Model_CostPerInputMillion(provider) => format!("models.{provider}.cost_per_input_million"),
-            Self::Model_CostPerOutputMillion(provider) => format!("models.{provider}.cost_per_output_million"),
-            Self::Model_Retry_MaxRetries(provider) => format!("models.{provider}.retry.max_retries"),
-            Self::Model_Retry_BaseDelayMs(provider) => format!("models.{provider}.retry.base_delay_ms"),
-            Self::Model_Retry_MaxDelayMs(provider) => format!("models.{provider}.retry.max_delay_ms"),
+            Self::Model_CostPerInputMillion(provider) => {
+                format!("models.{provider}.cost_per_input_million")
+            }
+            Self::Model_CostPerOutputMillion(provider) => {
+                format!("models.{provider}.cost_per_output_million")
+            }
+            Self::Model_Retry_MaxRetries(provider) => {
+                format!("models.{provider}.retry.max_retries")
+            }
+            Self::Model_Retry_BaseDelayMs(provider) => {
+                format!("models.{provider}.retry.base_delay_ms")
+            }
+            Self::Model_Retry_MaxDelayMs(provider) => {
+                format!("models.{provider}.retry.max_delay_ms")
+            }
         }
     }
 
@@ -296,9 +337,7 @@ impl FieldPath {
             "CONSENSUS__TIMEOUT_SECONDS" => Some(Self::Consensus_TimeoutSeconds),
 
             // Models (dynamic) - e.g., MODELS__OPENAI__TEMPERATURE
-            other if other.starts_with("MODELS__") => {
-                Self::parse_model_env_var(other)
-            }
+            other if other.starts_with("MODELS__") => Self::parse_model_env_var(other),
 
             _ => None,
         }
@@ -344,9 +383,7 @@ impl FieldPath {
             "consensus.timeout_seconds" => Some(Self::Consensus_TimeoutSeconds),
 
             // Models (dynamic) - e.g., models.openai.temperature
-            other if other.starts_with("models.") => {
-                Self::parse_model_toml_key(other)
-            }
+            other if other.starts_with("models.") => Self::parse_model_toml_key(other),
 
             _ => None,
         }
@@ -757,7 +794,9 @@ impl FieldPath {
         match self {
             // Quality Gates
             Self::QualityGates_Enabled => "Enable quality gate validation",
-            Self::QualityGates_ConsensusThreshold => "Minimum consensus agreement threshold (0.0-1.0)",
+            Self::QualityGates_ConsensusThreshold => {
+                "Minimum consensus agreement threshold (0.0-1.0)"
+            }
             Self::QualityGates_MinTestCoverage => "Minimum test coverage percentage required",
             Self::QualityGates_SchemaValidation => "Enable JSON schema validation",
 
@@ -856,11 +895,13 @@ impl FieldPath {
     pub fn constraints(&self) -> Option<Constraints> {
         match self {
             // Threshold fields: 0.0-1.0
-            Self::QualityGates_ConsensusThreshold | Self::Cost_AlertThreshold => Some(Constraints {
-                min: Some(0.0),
-                max: Some(1.0),
-                pattern: None,
-            }),
+            Self::QualityGates_ConsensusThreshold | Self::Cost_AlertThreshold => {
+                Some(Constraints {
+                    min: Some(0.0),
+                    max: Some(1.0),
+                    pattern: None,
+                })
+            }
 
             // Test coverage: 0.0-100.0
             Self::QualityGates_MinTestCoverage => Some(Constraints {
@@ -912,11 +953,13 @@ impl FieldPath {
             }),
 
             // Retry delays: positive values only
-            Self::Model_Retry_BaseDelayMs(_) | Self::Model_Retry_MaxDelayMs(_) => Some(Constraints {
-                min: Some(0.0),
-                max: None,
-                pattern: None,
-            }),
+            Self::Model_Retry_BaseDelayMs(_) | Self::Model_Retry_MaxDelayMs(_) => {
+                Some(Constraints {
+                    min: Some(0.0),
+                    max: None,
+                    pattern: None,
+                })
+            }
 
             // Max retries: 0-10 (reasonable range)
             Self::Model_Retry_MaxRetries(_) => Some(Constraints {
@@ -1009,7 +1052,10 @@ mod tests {
     #[test]
     fn test_model_retry_field() {
         let path = FieldPath::Model_Retry_MaxRetries("claude".into());
-        assert_eq!(path.to_env_var(), "SPECKIT_MODELS__CLAUDE__RETRY__MAX_RETRIES");
+        assert_eq!(
+            path.to_env_var(),
+            "SPECKIT_MODELS__CLAUDE__RETRY__MAX_RETRIES"
+        );
         assert_eq!(path.to_toml_key(), "models.claude.retry.max_retries");
 
         assert_eq!(
@@ -1117,7 +1163,10 @@ mod tests {
 
         let path = ConfigPath::model("gpt-4").retry().base_delay_ms();
         assert_eq!(path, FieldPath::Model_Retry_BaseDelayMs("gpt-4".into()));
-        assert_eq!(path.to_env_var(), "SPECKIT_MODELS__GPT_4__RETRY__BASE_DELAY_MS");
+        assert_eq!(
+            path.to_env_var(),
+            "SPECKIT_MODELS__GPT_4__RETRY__BASE_DELAY_MS"
+        );
     }
 
     #[test]
@@ -1136,12 +1185,24 @@ mod tests {
     fn test_builder_path_correctness() {
         // Comprehensive path validation
         let paths = vec![
-            (ConfigPath::quality_gates().schema_validation(), "quality_gates.schema_validation"),
-            (ConfigPath::cost().monthly_limit_usd(), "cost.monthly_limit_usd"),
-            (ConfigPath::evidence().retention_days(), "evidence.retention_days"),
+            (
+                ConfigPath::quality_gates().schema_validation(),
+                "quality_gates.schema_validation",
+            ),
+            (
+                ConfigPath::cost().monthly_limit_usd(),
+                "cost.monthly_limit_usd",
+            ),
+            (
+                ConfigPath::evidence().retention_days(),
+                "evidence.retention_days",
+            ),
             (ConfigPath::consensus().max_agents(), "consensus.max_agents"),
             (ConfigPath::model("test").endpoint(), "models.test.endpoint"),
-            (ConfigPath::model("test").retry().max_delay_ms(), "models.test.retry.max_delay_ms"),
+            (
+                ConfigPath::model("test").retry().max_delay_ms(),
+                "models.test.retry.max_delay_ms",
+            ),
         ];
 
         for (path, expected_toml) in paths {
@@ -1169,7 +1230,10 @@ mod tests {
 
     #[test]
     fn test_value_type_bool() {
-        assert_eq!(FieldPath::QualityGates_Enabled.value_type(), ValueType::Bool);
+        assert_eq!(
+            FieldPath::QualityGates_Enabled.value_type(),
+            ValueType::Bool
+        );
         assert_eq!(FieldPath::Cost_Enabled.value_type(), ValueType::Bool);
         assert_eq!(FieldPath::Evidence_Enabled.value_type(), ValueType::Bool);
     }
@@ -1178,36 +1242,63 @@ mod tests {
     fn test_value_type_numeric() {
         // Floats
         assert_eq!(FieldPath::Cost_DailyLimitUsd.value_type(), ValueType::Float);
-        assert_eq!(FieldPath::QualityGates_ConsensusThreshold.value_type(), ValueType::Float);
-        assert_eq!(FieldPath::Model_Temperature("test".into()).value_type(), ValueType::Float);
+        assert_eq!(
+            FieldPath::QualityGates_ConsensusThreshold.value_type(),
+            ValueType::Float
+        );
+        assert_eq!(
+            FieldPath::Model_Temperature("test".into()).value_type(),
+            ValueType::Float
+        );
 
         // Integers
-        assert_eq!(FieldPath::Consensus_MinAgents.value_type(), ValueType::Integer);
-        assert_eq!(FieldPath::Evidence_RetentionDays.value_type(), ValueType::Integer);
-        assert_eq!(FieldPath::Model_MaxTokens("test".into()).value_type(), ValueType::Integer);
+        assert_eq!(
+            FieldPath::Consensus_MinAgents.value_type(),
+            ValueType::Integer
+        );
+        assert_eq!(
+            FieldPath::Evidence_RetentionDays.value_type(),
+            ValueType::Integer
+        );
+        assert_eq!(
+            FieldPath::Model_MaxTokens("test".into()).value_type(),
+            ValueType::Integer
+        );
     }
 
     #[test]
     fn test_value_type_string_and_path() {
-        assert_eq!(FieldPath::Model_Name("test".into()).value_type(), ValueType::String);
-        assert_eq!(FieldPath::Model_Endpoint("test".into()).value_type(), ValueType::String);
+        assert_eq!(
+            FieldPath::Model_Name("test".into()).value_type(),
+            ValueType::String
+        );
+        assert_eq!(
+            FieldPath::Model_Endpoint("test".into()).value_type(),
+            ValueType::String
+        );
         assert_eq!(FieldPath::Evidence_BaseDir.value_type(), ValueType::Path);
     }
 
     #[test]
     fn test_constraints_thresholds() {
         // Consensus threshold: 0.0-1.0
-        let c = FieldPath::QualityGates_ConsensusThreshold.constraints().unwrap();
+        let c = FieldPath::QualityGates_ConsensusThreshold
+            .constraints()
+            .unwrap();
         assert_eq!(c.min, Some(0.0));
         assert_eq!(c.max, Some(1.0));
 
         // Test coverage: 0.0-100.0
-        let c = FieldPath::QualityGates_MinTestCoverage.constraints().unwrap();
+        let c = FieldPath::QualityGates_MinTestCoverage
+            .constraints()
+            .unwrap();
         assert_eq!(c.min, Some(0.0));
         assert_eq!(c.max, Some(100.0));
 
         // Temperature: 0.0-2.0
-        let c = FieldPath::Model_Temperature("test".into()).constraints().unwrap();
+        let c = FieldPath::Model_Temperature("test".into())
+            .constraints()
+            .unwrap();
         assert_eq!(c.min, Some(0.0));
         assert_eq!(c.max, Some(2.0));
     }
