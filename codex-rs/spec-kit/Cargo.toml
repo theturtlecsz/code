@@ -29,7 +29,9 @@ mcp-types = { path = "../mcp-types" }
 codex-core = { path = "../core" }
 
 # SPEC-945C: Retry logic with exponential backoff
-backon = "1.1"
+backon = { workspace = true }
+rand = { workspace = true }
+rusqlite = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

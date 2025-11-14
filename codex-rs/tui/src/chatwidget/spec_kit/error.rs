@@ -222,6 +222,138 @@ impl From<&str> for SpecKitError {
     }
 }
 
+// ============================================================================
+// SPEC-945C Day 4-5: Retry Logic Integration for Evidence Repository
+// ============================================================================
+
+use codex_spec_kit::retry::classifier::{
+    ErrorClass, PermanentError, RetryClassifiable, RetryableError,
+};
+use std::time::Duration;
+
+impl RetryClassifiable for SpecKitError {
+    fn classify(&self) -> ErrorClass {
+        match self {
+            // File I/O errors: classify based on underlying std::io::Error kind
+            SpecKitError::FileWrite { source, .. }
+            | SpecKitError::FileRead { source, .. }
+            | SpecKitError::FileCreate { source, .. }
+            | SpecKitError::DirectoryRead { source, .. }
+            | SpecKitError::DirectoryCreate { source, .. } => {
+                use std::io::ErrorKind;
+                match source.kind() {
+                    // Transient errors (retry recommended)
+                    ErrorKind::TimedOut | ErrorKind::Interrupted | ErrorKind::WouldBlock => {
+                        ErrorClass::Retryable(RetryableError::NetworkTimeout(30))
+                    }
+                    ErrorKind::ConnectionRefused
+                    | ErrorKind::ConnectionReset
+                    | ErrorKind::ConnectionAborted => {
+                        ErrorClass::Retryable(RetryableError::ConnectionRefused)
+                    }
+                    // Permanent errors (won't fix themselves)
+                    ErrorKind::NotFound => {
+                        ErrorClass::Permanent(PermanentError::ResourceNotFound(source.to_string()))
+                    }
+                    ErrorKind::PermissionDenied => ErrorClass::Permanent(
+                        PermanentError::AuthenticationFailed(source.to_string()),
+                    ),
+                    ErrorKind::InvalidInput | ErrorKind::InvalidData => {
+                        ErrorClass::Permanent(PermanentError::InvalidInput {
+                            field: "io".to_string(),
+                            reason: source.to_string(),
+                        })
+                    }
+                    // Other I/O errors: retry with caution
+                    _ => ErrorClass::Retryable(RetryableError::ServiceUnavailable),
+                }
+            }
+
+            // JSON errors: permanent (won't fix themselves)
+            SpecKitError::JsonParse { .. } | SpecKitError::JsonSerialize { .. } => {
+                ErrorClass::Permanent(PermanentError::InvalidInput {
+                    field: "json".to_string(),
+                    reason: self.to_string(),
+                })
+            }
+
+            // Missing artifacts: permanent (file doesn't exist)
+            SpecKitError::NoTelemetryFound { .. }
+            | SpecKitError::NoConsensusFound { .. }
+            | SpecKitError::MissingArtifact { .. } => {
+                ErrorClass::Permanent(PermanentError::ResourceNotFound(self.to_string()))
+            }
+
+            // Validation errors: permanent
+            SpecKitError::SchemaValidation { .. }
+            | SpecKitError::MissingField { .. }
+            | SpecKitError::InvalidFieldValue { .. }
+            | SpecKitError::EvidenceValidation { .. }
+            | SpecKitError::InvalidSpecId { .. }
+            | SpecKitError::UnknownStage { .. }
+            | SpecKitError::InvalidStageTransition { .. } => {
+                ErrorClass::Permanent(PermanentError::InvalidInput {
+                    field: "validation".to_string(),
+                    reason: self.to_string(),
+                })
+            }
+
+            // Consensus errors: might be retryable if network-related
+            SpecKitError::MissingAgents { .. }
+            | SpecKitError::ConsensusConflict { .. }
+            | SpecKitError::ConsensusParse { .. } => {
+                ErrorClass::Retryable(RetryableError::ServiceUnavailable)
+            }
+
+            // Local memory errors: retryable (could be transient)
+            SpecKitError::LocalMemorySearch { .. } | SpecKitError::LocalMemoryStore { .. } => {
+                ErrorClass::Retryable(RetryableError::ServiceUnavailable)
+            }
+
+            // Pipeline errors: permanent (indicates logic failure)
+            SpecKitError::PipelineHalted { .. } => {
+                ErrorClass::Permanent(PermanentError::InvalidInput {
+                    field: "pipeline".to_string(),
+                    reason: self.to_string(),
+                })
+            }
+
+            // Generic errors: parse message for clues
+            SpecKitError::Other(msg) => {
+                let msg_lower = msg.to_lowercase();
+                if msg_lower.contains("lock")
+                    || msg_lower.contains("busy")
+                    || msg_lower.contains("sqlite_busy")
+                {
+                    ErrorClass::Retryable(RetryableError::DatabaseLocked)
+                } else if msg_lower.contains("timeout") || msg_lower.contains("timed out") {
+                    ErrorClass::Retryable(RetryableError::NetworkTimeout(30))
+                } else {
+                    ErrorClass::Permanent(PermanentError::InvalidInput {
+                        field: "unknown".to_string(),
+                        reason: msg.clone(),
+                    })
+                }
+            }
+        }
+    }
+
+    fn suggested_backoff(&self) -> Option<Duration> {
+        match self.classify() {
+            ErrorClass::Retryable(ref err) => match err {
+                RetryableError::RateLimitExceeded { retry_after } => {
+                    Some(Duration::from_secs(*retry_after))
+                }
+                RetryableError::DatabaseLocked => Some(Duration::from_millis(200)),
+                RetryableError::NetworkTimeout(_) | RetryableError::ConnectionRefused => None,
+                RetryableError::ServiceUnavailable => Some(Duration::from_secs(5)),
+            },
+            ErrorClass::Permanent(_) => None,
+            ErrorClass::Degraded(_) => Some(Duration::from_millis(500)),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -21,18 +21,14 @@ fn create_test_db() -> (ConsensusDb, TempDir, PathBuf) {
 /// Test helper: Count records in new schema
 fn count_new_schema_runs(db_path: &PathBuf) -> i64 {
     let conn = Connection::open(db_path).unwrap();
-    conn.query_row("SELECT COUNT(*) FROM consensus_runs", [], |row| {
-        row.get(0)
-    })
-    .unwrap()
+    conn.query_row("SELECT COUNT(*) FROM consensus_runs", [], |row| row.get(0))
+        .unwrap()
 }
 
 fn count_new_schema_outputs(db_path: &PathBuf) -> i64 {
     let conn = Connection::open(db_path).unwrap();
-    conn.query_row("SELECT COUNT(*) FROM agent_outputs", [], |row| {
-        row.get(0)
-    })
-    .unwrap()
+    conn.query_row("SELECT COUNT(*) FROM agent_outputs", [], |row| row.get(0))
+        .unwrap()
 }
 
 #[test]
@@ -108,7 +104,9 @@ fn test_write_path_cutover_zero_data_loss() {
     .unwrap();
 
     // Read should find the artifact
-    let artifacts = db.query_artifacts("SPEC-TEST-003", SpecStage::Plan).unwrap();
+    let artifacts = db
+        .query_artifacts("SPEC-TEST-003", SpecStage::Plan)
+        .unwrap();
     assert_eq!(artifacts.len(), 1, "Should find artifact");
     assert_eq!(artifacts[0].agent_name, "gemini");
 }
@@ -178,14 +176,12 @@ fn test_write_path_cutover_multiple_artifacts_new_schema() {
     }
 
     // Verify all stored in new schema
-    assert_eq!(
-        count_new_schema_outputs(&db_path),
-        5,
-        "5 outputs created"
-    );
+    assert_eq!(count_new_schema_outputs(&db_path), 5, "5 outputs created");
 
     // Verify all readable
-    let artifacts = db.query_artifacts("SPEC-TEST-006", SpecStage::Plan).unwrap();
+    let artifacts = db
+        .query_artifacts("SPEC-TEST-006", SpecStage::Plan)
+        .unwrap();
     assert_eq!(artifacts.len(), 5, "Should find all 5 artifacts");
 }
 
@@ -224,7 +220,11 @@ fn test_write_path_cutover_stage_specific_isolation() {
     let implement_artifacts = db
         .query_artifacts("SPEC-TEST-007", SpecStage::Implement)
         .unwrap();
-    assert_eq!(implement_artifacts.len(), 1, "Should find 1 implement artifact");
+    assert_eq!(
+        implement_artifacts.len(),
+        1,
+        "Should find 1 implement artifact"
+    );
 }
 
 #[test]
@@ -248,21 +248,12 @@ fn test_write_path_cutover_consistency_under_load() {
 
     // Verify counts
     assert_eq!(count_new_schema_runs(&db_path), 20, "20 runs created");
-    assert_eq!(
-        count_new_schema_outputs(&db_path),
-        20,
-        "20 outputs created"
-    );
+    assert_eq!(count_new_schema_outputs(&db_path), 20, "20 outputs created");
 
     // Verify all 20 specs readable
     for i in 1..=20 {
         let spec_id = format!("SPEC-TEST-{:03}", i);
         let artifacts = db.query_artifacts(&spec_id, SpecStage::Plan).unwrap();
-        assert_eq!(
-            artifacts.len(),
-            1,
-            "Spec {} artifact accessible",
-            spec_id
-        );
+        assert_eq!(artifacts.len(), 1, "Spec {} artifact accessible", spec_id);
     }
 }

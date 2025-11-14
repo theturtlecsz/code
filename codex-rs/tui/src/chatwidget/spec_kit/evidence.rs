@@ -8,6 +8,7 @@
 
 use super::error::{Result, SpecKitError};
 use crate::spec_prompts::SpecStage;
+use codex_spec_kit::retry::strategy::{RetryConfig, execute_with_backoff_sync};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -140,11 +141,25 @@ impl FilesystemEvidence {
                 source: e,
             })?;
 
-        // Write with lock held
-        let result = std::fs::write(target_path, content).map_err(|e| SpecKitError::FileWrite {
-            path: target_path.clone(),
-            source: e,
-        });
+        // SPEC-945C Day 4-5: Write with retry logic to handle transient I/O errors
+        let retry_config = RetryConfig {
+            max_attempts: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 5_000,
+            backoff_multiplier: 2.0,
+            jitter_factor: 0.5,
+        };
+
+        let result = execute_with_backoff_sync(
+            || {
+                std::fs::write(target_path, content).map_err(|e| SpecKitError::FileWrite {
+                    path: target_path.clone(),
+                    source: e,
+                })
+            },
+            &retry_config,
+        )
+        .map_err(|_| SpecKitError::from_string("Evidence write failed after retries"));
 
         // Lock auto-released when lock_file drops (RAII)
         result
@@ -777,8 +792,14 @@ fn export_synthesis_record(
 
     // Add spec_id and stage metadata if not present
     if let Some(obj) = synthesis_data.as_object_mut() {
-        obj.insert("spec_id".to_string(), serde_json::Value::String(spec_id.to_string()));
-        obj.insert("stage".to_string(), serde_json::Value::String(stage_command.to_string()));
+        obj.insert(
+            "spec_id".to_string(),
+            serde_json::Value::String(spec_id.to_string()),
+        );
+        obj.insert(
+            "stage".to_string(),
+            serde_json::Value::String(stage_command.to_string()),
+        );
     }
 
     let synthesis_file = consensus_dir.join(format!("{}_synthesis.json", stage_name));
@@ -828,8 +849,8 @@ fn export_verdict_record(
                 .unwrap_or_else(|_| Value::String(content_json));
 
             // Format timestamp as ISO 8601
-            let datetime = chrono::DateTime::<chrono::Utc>::from_timestamp(timestamp, 0)
-                .unwrap_or_default();
+            let datetime =
+                chrono::DateTime::<chrono::Utc>::from_timestamp(timestamp, 0).unwrap_or_default();
             let created_at = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
 
             Ok(serde_json::json!({
@@ -862,8 +883,8 @@ fn export_verdict_record(
                 .unwrap_or_else(|_| Value::String(content_json));
 
             // Format timestamp as ISO 8601
-            let datetime = chrono::DateTime::<chrono::Utc>::from_timestamp(timestamp, 0)
-                .unwrap_or_default();
+            let datetime =
+                chrono::DateTime::<chrono::Utc>::from_timestamp(timestamp, 0).unwrap_or_default();
             let created_at = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
 
             Ok(serde_json::json!({
