@@ -44,6 +44,7 @@ codex-common = { path = "../common", features = [
 ] }
 codex-core = { path = "../core" }
 codex-file-search = { path = "../file-search" }
+codex-spec-kit = { path = "../spec-kit" }
 codex-git-tooling = { path = "../git-tooling" }
 codex-login = { path = "../login" }
 codex-ollama = { path = "../ollama" }

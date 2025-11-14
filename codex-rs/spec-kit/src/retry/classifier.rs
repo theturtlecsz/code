@@ -47,6 +47,9 @@ pub enum PermanentError {
 
     #[error("Resource not found: {0}")]
     ResourceNotFound(String),
+
+    #[error("Database error: {0}")]
+    DatabaseError(String),
 }
 
 /// Degraded state (partial success)

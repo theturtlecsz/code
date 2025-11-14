@@ -72,18 +72,18 @@ fn test_dual_write_artifact_zero_data_loss() {
     // Query should return data from new schema
     let artifacts = db.query_artifacts(spec_id, stage).expect("Query failed");
 
-    assert_eq!(
-        artifacts.len(),
-        1,
-        "Should find artifact after write"
-    );
+    assert_eq!(artifacts.len(), 1, "Should find artifact after write");
     assert_eq!(artifacts[0].agent_name, "test-agent");
     assert!(artifacts[0].content_json.contains("artifact test"));
 
     // Verify multiple reads are consistent
     for _i in 0..5 {
         let artifacts_read = db.query_artifacts(spec_id, stage).expect("Query failed");
-        assert_eq!(artifacts_read.len(), 1, "Should consistently find 1 artifact");
+        assert_eq!(
+            artifacts_read.len(),
+            1,
+            "Should consistently find 1 artifact"
+        );
         assert_eq!(artifacts_read[0].agent_name, "test-agent");
     }
 }
@@ -117,20 +117,18 @@ fn test_dual_write_synthesis_zero_data_loss() {
         .expect("Query failed");
 
     assert!(synthesis.is_some(), "Should find synthesis");
-    assert!(synthesis
-        .as_ref()
-        .unwrap()
-        .contains("Synthesis test"));
+    assert!(synthesis.as_ref().unwrap().contains("Synthesis test"));
 
     // Verify multiple reads are consistent
     for _i in 0..5 {
         let synthesis_read = db
             .query_latest_synthesis(spec_id, stage)
             .expect("Query failed");
-        assert!(synthesis_read.is_some(), "Should consistently find synthesis");
-        assert!(synthesis_read
-            .unwrap()
-            .contains("Synthesis test"));
+        assert!(
+            synthesis_read.is_some(),
+            "Should consistently find synthesis"
+        );
+        assert!(synthesis_read.unwrap().contains("Synthesis test"));
     }
 }
 
@@ -305,7 +303,11 @@ fn test_stage_specific_queries() {
         .query_artifacts(spec_id, SpecStage::Plan)
         .expect("Plan query failed");
     assert_eq!(plan_artifacts.len(), 1, "Should find 1 plan artifact");
-    assert!(plan_artifacts[0].content_json.contains(r#""stage": "plan""#));
+    assert!(
+        plan_artifacts[0]
+            .content_json
+            .contains(r#""stage": "plan""#)
+    );
 
     let implement_artifacts = db
         .query_artifacts(spec_id, SpecStage::Implement)
@@ -315,9 +317,11 @@ fn test_stage_specific_queries() {
         1,
         "Should find 1 implement artifact"
     );
-    assert!(implement_artifacts[0]
-        .content_json
-        .contains(r#""stage": "implement""#));
+    assert!(
+        implement_artifacts[0]
+            .content_json
+            .contains(r#""stage": "implement""#)
+    );
 
     let validate_artifacts = db
         .query_artifacts(spec_id, SpecStage::Validate)
@@ -327,7 +331,9 @@ fn test_stage_specific_queries() {
         1,
         "Should find 1 validate artifact"
     );
-    assert!(validate_artifacts[0]
-        .content_json
-        .contains(r#""stage": "validate""#));
+    assert!(
+        validate_artifacts[0]
+            .content_json
+            .contains(r#""stage": "validate""#)
+    );
 }
