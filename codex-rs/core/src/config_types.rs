@@ -267,6 +267,16 @@ fn default_true() -> bool {
     true
 }
 
+impl AgentConfig {
+    /// Get the effective agent name, preferring canonical_name over the deprecated name field.
+    ///
+    /// Returns canonical_name if present, otherwise falls back to name.
+    /// This supports migration from name to canonical_name.
+    pub fn get_agent_name(&self) -> &str {
+        self.canonical_name.as_deref().unwrap_or(&self.name)
+    }
+}
+
 /// GitHub integration settings.
 #[derive(Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct GithubConfig {
@@ -1330,7 +1340,10 @@ mod tests {
 
         assert_eq!(config.enabled, false);
         assert_eq!(config.debounce_ms, 5000);
-        assert_eq!(config.watch_paths, vec!["config.toml", "models/", "agents/"]);
+        assert_eq!(
+            config.watch_paths,
+            vec!["config.toml", "models/", "agents/"]
+        );
     }
 
     #[test]

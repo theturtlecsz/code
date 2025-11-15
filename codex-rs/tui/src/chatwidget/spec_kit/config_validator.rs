@@ -94,12 +94,13 @@ impl SpecKitConfigValidator {
             });
         }
 
-        // Check for duplicate agent names
+        // Check for duplicate agent names (using canonical_name)
         let mut seen_names = HashSet::new();
         for agent in agents {
-            if !seen_names.insert(&agent.name) {
+            let agent_name = agent.get_agent_name();
+            if !seen_names.insert(agent_name) {
                 errors.push(ValidationError {
-                    field: format!("agents.{}", agent.name),
+                    field: format!("agents.{}", agent_name),
                     issue: "Duplicate agent name".to_string(),
                     severity: ValidationSeverity::Error,
                 });
@@ -110,7 +111,7 @@ impl SpecKitConfigValidator {
         for agent in agents {
             if agent.command.is_empty() {
                 errors.push(ValidationError {
-                    field: format!("agents.{}.command", agent.name),
+                    field: format!("agents.{}.command", agent.get_agent_name()),
                     issue: "Agent command cannot be empty".to_string(),
                     severity: ValidationSeverity::Error,
                 });

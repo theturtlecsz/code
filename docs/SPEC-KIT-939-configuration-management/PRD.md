@@ -433,15 +433,41 @@ async fn handle_config_reload_event() {
 }
 ```
 
-**Migration**:
+**Migration** (Component 1b - IMPLEMENTED):
+
+The migration from `name` to `canonical_name` is backwards-compatible:
+- `name` field remains required (for backwards compatibility)
+- `canonical_name` is optional but recommended
+- Code uses `agent.get_agent_name()` helper which prefers `canonical_name` over `name`
+- Validation warnings guide users to migrate
+
+**Migration Path**:
+```toml
+# Old config (still works, but warns)
+[[agents]]
+name = "gemini"
+command = "gemini"
+
+# New config (recommended)
+[[agents]]
+name = "gemini"  # Still required for backwards compatibility
+canonical_name = "gemini"  # NEW: Single source of truth
+command = "gemini"
+```
+
+**Warning Message**:
+```
+WARN: Agent 'gemini' uses deprecated 'name' field without 'canonical_name'.
+      The 'name' field will be removed in a future version.
+      Migration: Add 'canonical_name = "gemini"' to this agent's config
+```
+
+**Helper Method** (core/src/config_types.rs):
 ```rust
-// Auto-migrate on load
-fn migrate_config_v1_to_v2(config: &mut Config) {
-    for agent in &mut config.agents {
-        if agent.canonical_name.is_none() {
-            // Use existing "name" field
-            agent.canonical_name = agent.name.clone();
-        }
+impl AgentConfig {
+    /// Get the effective agent name, preferring canonical_name over deprecated name field.
+    pub fn get_agent_name(&self) -> &str {
+        self.canonical_name.as_deref().unwrap_or(&self.name)
     }
 }
 ```

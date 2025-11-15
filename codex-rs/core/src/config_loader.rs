@@ -42,7 +42,11 @@ pub enum ConfigLoadError {
     MissingRequiredField { field: String, context: String },
 
     /// Invalid environment variable value
-    InvalidEnvValue { var: String, value: String, expected: String },
+    InvalidEnvValue {
+        var: String,
+        value: String,
+        expected: String,
+    },
 
     /// Schema validation failed (when using JSON Schema)
     SchemaValidationFailed(Vec<String>),
@@ -51,18 +55,24 @@ pub enum ConfigLoadError {
 impl std::fmt::Display for ConfigLoadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConfigLoadError::IoError(e) =>
-                write!(f, "I/O error loading config: {}", e),
-            ConfigLoadError::TomlParseError(e) =>
-                write!(f, "TOML parsing error: {}", e),
-            ConfigLoadError::ValidationError(msg) =>
-                write!(f, "Config validation error: {}", msg),
-            ConfigLoadError::MissingRequiredField { field, context } =>
-                write!(f, "Missing required field '{}' in {}", field, context),
-            ConfigLoadError::InvalidEnvValue { var, value, expected } =>
-                write!(f, "Invalid value for ${}: '{}' (expected: {})", var, value, expected),
-            ConfigLoadError::SchemaValidationFailed(errors) =>
-                write!(f, "Schema validation failed: {}", errors.join("; ")),
+            ConfigLoadError::IoError(e) => write!(f, "I/O error loading config: {}", e),
+            ConfigLoadError::TomlParseError(e) => write!(f, "TOML parsing error: {}", e),
+            ConfigLoadError::ValidationError(msg) => write!(f, "Config validation error: {}", msg),
+            ConfigLoadError::MissingRequiredField { field, context } => {
+                write!(f, "Missing required field '{}' in {}", field, context)
+            }
+            ConfigLoadError::InvalidEnvValue {
+                var,
+                value,
+                expected,
+            } => write!(
+                f,
+                "Invalid value for ${}: '{}' (expected: {})",
+                var, value, expected
+            ),
+            ConfigLoadError::SchemaValidationFailed(errors) => {
+                write!(f, "Schema validation failed: {}", errors.join("; "))
+            }
         }
     }
 }
@@ -254,9 +264,9 @@ impl ConfigLoader {
         // Default to ~/.code
         dirs::home_dir()
             .map(|home| home.join(".code"))
-            .ok_or_else(|| ConfigLoadError::ValidationError(
-                "Cannot determine home directory".to_string()
-            ))
+            .ok_or_else(|| {
+                ConfigLoadError::ValidationError("Cannot determine home directory".to_string())
+            })
     }
 
     /// Provide sensible default configuration.
@@ -275,7 +285,7 @@ impl ConfigLoader {
             ace: Some(AceConfig::default()),
             agents: Vec::new(),
             quality_gates: None, // Use runtime defaults
-            hot_reload: None, // Disabled by default
+            hot_reload: None,    // Disabled by default
             validation: Some(ValidationConfig::default()),
             model_provider: Some("openai".to_string()),
             model: Some("gpt-5-codex".to_string()),
@@ -323,8 +333,10 @@ impl ConfigLoader {
         if let TomlValue::Table(table) = value {
             // Extract known top-level fields
             if let Some(ace_value) = table.get("ace") {
-                config.ace = Some(toml::from_str(&toml::to_string(ace_value).unwrap())
-                    .map_err(ConfigLoadError::TomlParseError)?);
+                config.ace = Some(
+                    toml::from_str(&toml::to_string(ace_value).unwrap())
+                        .map_err(ConfigLoadError::TomlParseError)?,
+                );
             }
 
             if let Some(agents_value) = table.get("agents") {
@@ -333,18 +345,24 @@ impl ConfigLoader {
             }
 
             if let Some(quality_gates_value) = table.get("quality_gates") {
-                config.quality_gates = Some(toml::from_str(&toml::to_string(quality_gates_value).unwrap())
-                    .map_err(ConfigLoadError::TomlParseError)?);
+                config.quality_gates = Some(
+                    toml::from_str(&toml::to_string(quality_gates_value).unwrap())
+                        .map_err(ConfigLoadError::TomlParseError)?,
+                );
             }
 
             if let Some(hot_reload_value) = table.get("hot_reload") {
-                config.hot_reload = Some(toml::from_str(&toml::to_string(hot_reload_value).unwrap())
-                    .map_err(ConfigLoadError::TomlParseError)?);
+                config.hot_reload = Some(
+                    toml::from_str(&toml::to_string(hot_reload_value).unwrap())
+                        .map_err(ConfigLoadError::TomlParseError)?,
+                );
             }
 
             if let Some(validation_value) = table.get("validation") {
-                config.validation = Some(toml::from_str(&toml::to_string(validation_value).unwrap())
-                    .map_err(ConfigLoadError::TomlParseError)?);
+                config.validation = Some(
+                    toml::from_str(&toml::to_string(validation_value).unwrap())
+                        .map_err(ConfigLoadError::TomlParseError)?,
+                );
             }
 
             if let Some(TomlValue::String(s)) = table.get("model_provider") {
@@ -361,9 +379,16 @@ impl ConfigLoader {
 
             // Store unknown fields in extra for forward compatibility
             for (key, value) in table {
-                if !matches!(key.as_str(),
-                    "ace" | "agents" | "quality_gates" | "hot_reload" |
-                    "validation" | "model_provider" | "model" | "auto_upgrade_enabled"
+                if !matches!(
+                    key.as_str(),
+                    "ace"
+                        | "agents"
+                        | "quality_gates"
+                        | "hot_reload"
+                        | "validation"
+                        | "model_provider"
+                        | "model"
+                        | "auto_upgrade_enabled"
                 ) {
                     config.extra.insert(key, value);
                 }
@@ -411,12 +436,15 @@ impl ConfigLoader {
             base.auto_upgrade_enabled = overlay.auto_upgrade_enabled;
         }
 
-        // Merge agents (overlay appends/replaces by name)
+        // Merge agents (overlay appends/replaces by canonical_name or name)
         if !overlay.agents.is_empty() {
             // Replace agents with matching names, append new ones
             for overlay_agent in overlay.agents {
-                if let Some(existing) = base.agents.iter_mut()
-                    .find(|a| a.name == overlay_agent.name)
+                let overlay_name = overlay_agent.get_agent_name();
+                if let Some(existing) = base
+                    .agents
+                    .iter_mut()
+                    .find(|a| a.get_agent_name() == overlay_name)
                 {
                     *existing = overlay_agent;
                 } else {
@@ -545,13 +573,11 @@ mod tests {
     #[test]
     fn test_merge_agents_by_name() {
         let mut base = LayeredConfig {
-            agents: vec![
-                AgentConfig {
-                    name: "agent1".to_string(),
-                    command: "old-command".to_string(),
-                    ..Default::default()
-                },
-            ],
+            agents: vec![AgentConfig {
+                name: "agent1".to_string(),
+                command: "old-command".to_string(),
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
@@ -644,7 +670,10 @@ mod tests {
         let result = ConfigLoader::apply_env_overrides(&mut config, "TEST");
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), ConfigLoadError::InvalidEnvValue { .. }));
+        assert!(matches!(
+            result.unwrap_err(),
+            ConfigLoadError::InvalidEnvValue { .. }
+        ));
 
         unsafe {
             std::env::remove_var("TEST_AUTO_UPGRADE");

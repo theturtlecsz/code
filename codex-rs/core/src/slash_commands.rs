@@ -11,7 +11,7 @@ pub fn get_enabled_agents(agents: &[AgentConfig]) -> Vec<String> {
     agents
         .iter()
         .filter(|agent| agent.enabled)
-        .map(|agent| agent.name.clone())
+        .map(|agent| agent.get_agent_name().to_string())
         .collect()
 }
 
