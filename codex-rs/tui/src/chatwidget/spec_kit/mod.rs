@@ -15,6 +15,7 @@ pub mod ace_prompt_injector; // ACE prompt injection logic
 pub mod ace_reflector; // ACE Reflector - Deep outcome analysis
 pub mod ace_route_selector; // ACE route selection for complex tasks
 pub mod agent_orchestrator; // Agent orchestration functions (extracted from handler.rs)
+pub mod agent_retry; // SPEC-938: Agent spawn retry logic with exponential backoff
 pub mod analyze_native; // Native consistency checking (zero agents, zero cost)
 pub mod checklist_native; // Native quality scoring (zero agents, zero cost)
 pub mod clarify_native; // Native ambiguity detection (zero agents, zero cost)

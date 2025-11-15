@@ -1086,13 +1086,15 @@ pub(crate) fn persist_consensus_telemetry_bundle(
     })
 }
 
-/// Remember consensus verdict in local-memory
-// FORK-SPECIFIC (just-every/code): Made async for native MCP
+/// Remember consensus verdict in SQLite (SPEC-934)
+///
+/// Replaces MCP local-memory storage with SQLite consensus_db.
+// FORK-SPECIFIC (just-every/code): Made async for native MCP, now async for SQLite
 pub(crate) async fn remember_consensus_verdict(
     spec_id: &str,
     stage: SpecStage,
     verdict: &ConsensusVerdict,
-    mcp_manager: &codex_core::mcp_connection_manager::McpConnectionManager,
+    _mcp_manager: &codex_core::mcp_connection_manager::McpConnectionManager,
 ) -> Result<()> {
     use serde_json::json;
 
@@ -1132,23 +1134,26 @@ pub(crate) async fn remember_consensus_verdict(
     let summary = serde_json::to_string(&summary_value)
         .map_err(|e| SpecKitError::JsonSerialize { source: e })?;
 
-    // Call local-memory store_memory via MCP
-    let args = json!({
-        "content": summary,
-        "domain": "spec-kit",
-        "tags": [format!("spec:{}", spec_id), format!("stage:{}", stage.command_name()), "consensus-verdict"],
-        "importance": 8
-    });
+    // SPEC-934: Store to SQLite instead of MCP local-memory
+    let db = super::consensus_db::ConsensusDb::init_default()
+        .map_err(|e| SpecKitError::from_string(format!("Failed to initialize consensus DB: {}", e)))?;
 
-    mcp_manager
-        .call_tool(
-            "local-memory",
-            "store_memory",
-            Some(args),
-            Some(std::time::Duration::from_secs(10)),
-        )
-        .await
-        .map_err(|e| SpecKitError::from_string(format!("MCP local-memory store failed: {}", e)))?;
+    // Store as artifact with special agent name to distinguish from agent outputs
+    db.store_artifact(
+        spec_id,
+        stage,
+        "consensus-verdict",
+        &summary,
+        None, // response_text
+        None, // run_id
+    )
+    .map_err(|e| SpecKitError::from_string(format!("SQLite storage failed: {}", e)))?;
+
+    tracing::debug!(
+        "Stored consensus verdict to SQLite: spec={}, stage={}",
+        spec_id,
+        stage.command_name()
+    );
 
     Ok(())
 }

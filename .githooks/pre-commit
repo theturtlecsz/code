@@ -1,0 +1,37 @@
+#!/bin/bash
+# Pre-commit hook for policy compliance (SPEC-941)
+#
+# Runs fast policy checks (<5s) to catch violations before commit.
+# Can be bypassed with --no-verify for emergencies.
+#
+# See: codex-rs/MEMORY-POLICY.md
+
+# Only run if spec_kit modules modified
+SPEC_KIT_CHANGES=$(git diff --cached --name-only | grep "spec_kit" || true)
+
+if [ -z "$SPEC_KIT_CHANGES" ]; then
+    # No spec_kit changes, skip policy checks
+    exit 0
+fi
+
+echo "🔍 Running policy compliance checks (spec_kit modified)..."
+echo ""
+
+# Check 1: Storage policy
+if ! bash scripts/validate_storage_policy.sh; then
+    echo ""
+    echo "❌ Storage policy violation detected"
+    echo "Fix violations before committing, or skip with: git commit --no-verify"
+    exit 1
+fi
+
+# Check 2: Tag schema
+if ! bash scripts/validate_tag_schema.sh; then
+    echo ""
+    echo "❌ Tag schema violation detected"
+    echo "Fix violations before committing, or skip with: git commit --no-verify"
+    exit 1
+fi
+
+echo "✅ Policy compliance checks passed"
+exit 0

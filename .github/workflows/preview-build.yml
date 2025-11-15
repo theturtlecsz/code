@@ -15,6 +15,31 @@ permissions:
   actions: read
 
 jobs:
+  # SPEC-941: Automated policy compliance validation
+  policy-compliance:
+    name: Policy Compliance (SPEC-KIT-072)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate Storage Policy
+        run: bash scripts/validate_storage_policy.sh
+
+      - name: Validate Tag Schema
+        run: bash scripts/validate_tag_schema.sh
+
+      - name: Generate Compliance Dashboard
+        run: bash scripts/policy_compliance_dashboard.sh > compliance-report.md
+
+      - name: Upload Compliance Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: policy-compliance-report
+          path: compliance-report.md
+          retention-days: 30
+
   build:
     # Skip preview builds for the automated upstream-merge PRs.
     # These PRs are large, frequent, and not meant for end-user preview binaries.
@@ -25,6 +50,7 @@ jobs:
         github.event.pull_request.draft == false &&
         github.event.pull_request.head.ref != 'upstream-merge'
       )
+    needs: policy-compliance  # Block build if policy fails
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     env:

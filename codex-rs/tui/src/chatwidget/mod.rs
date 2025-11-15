@@ -9322,6 +9322,7 @@ impl ChatWidget<'_> {
         if !updated_existing {
             let new_cfg = AgentConfig {
                 name: name.to_string(),
+                canonical_name: None,
                 command: name.to_string(),
                 args: Vec::new(),
                 read_only: false,

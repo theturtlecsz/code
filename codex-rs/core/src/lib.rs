@@ -25,6 +25,7 @@ pub mod config;
 pub mod config_edit;
 pub mod config_profile;
 pub mod config_types;
+pub mod schema_validator;
 mod conversation_history;
 pub mod custom_prompts;
 pub mod db; // SPEC-945B: Database layer (SQLite optimization, transactions, vacuum)

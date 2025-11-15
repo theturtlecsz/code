@@ -1029,6 +1029,26 @@ pub(super) fn determine_quality_checkpoint(
     }
 }
 
+/// Get quality gate agents from config, falling back to defaults
+fn get_quality_gate_agents(
+    widget: &ChatWidget,
+    checkpoint: super::state::QualityCheckpoint,
+) -> Vec<String> {
+    // Try to get from config first
+    if let Some(quality_gates) = &widget.config.quality_gates {
+        let agents = match checkpoint {
+            super::state::QualityCheckpoint::BeforeSpecify => &quality_gates.plan,
+            super::state::QualityCheckpoint::AfterSpecify => &quality_gates.tasks,
+            super::state::QualityCheckpoint::AfterTasks => &quality_gates.validate,
+        };
+        if !agents.is_empty() {
+            return agents.clone();
+        }
+    }
+    // Fallback to default agents
+    vec!["gemini".to_string(), "claude".to_string(), "code".to_string()]
+}
+
 /// Execute quality checkpoint by starting quality gate agents
 pub(super) fn execute_quality_checkpoint(
     widget: &mut ChatWidget,
@@ -1054,9 +1074,14 @@ pub(super) fn execute_quality_checkpoint(
     let gates = checkpoint.gates();
     let gate_names: Vec<String> = gates.iter().map(|g| g.command_name().to_string()).collect();
 
+    // Get quality gate agents from config (SPEC-939: configurable quality gates)
+    let quality_gate_agents = get_quality_gate_agents(widget, checkpoint);
+
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
         vec![ratatui::text::Line::from(format!(
-            "Spawning 3 quality gate agents (gemini, claude, code) for gates: {}",
+            "Spawning {} quality gate agents ({}) for gates: {}",
+            quality_gate_agents.len(),
+            quality_gate_agents.join(", "),
             gate_names.join(", ")
         ))],
         crate::history_cell::HistoryCellType::Notice,
@@ -1094,7 +1119,8 @@ pub(super) fn execute_quality_checkpoint(
     let event_tx = widget.app_event_tx.clone();
 
     // SPEC-KIT-928: Check for already-running quality gate agents (single-flight guard)
-    let expected_agents = vec!["gemini", "claude", "code"];
+    // Use configured agents instead of hardcoded list (SPEC-939)
+    let expected_agents = quality_gate_agents.clone();
     let already_running = {
         if let Ok(manager_check) = codex_core::agent_tool::AGENT_MANAGER.try_read() {
             let running_agents = manager_check.get_running_agents();
@@ -1748,50 +1774,37 @@ fn get_completed_quality_gate_agents(_widget: &ChatWidget) -> Vec<(String, Strin
 
 // SPEC-KIT-927: extract_json_from_markdown() removed - replaced by json_extractor.rs
 
-/// Store quality gate artifact to local-memory via MCP (async helper)
+/// Store quality gate artifact to SQLite (SPEC-934)
 ///
 /// Async function called from spawned tasks. Returns Result for error propagation.
+/// Replaces MCP local-memory storage with SQLite consensus_db.
 async fn store_artifact_async(
-    mcp_manager: Arc<Mutex<Option<Arc<McpConnectionManager>>>>,
+    _mcp_manager: Arc<Mutex<Option<Arc<McpConnectionManager>>>>,
     spec_id: &str,
     checkpoint: super::state::QualityCheckpoint,
     agent_name: &str,
-    stage_name: &str,
+    _stage_name: &str,
     json_content: &str,
 ) -> Result<(), String> {
-    let tags = vec![
-        "quality-gate".to_string(),
-        format!("spec:{}", spec_id),
-        format!("checkpoint:{}", checkpoint.name()),
-        format!("stage:{}", stage_name),
-        format!("agent:{}", agent_name),
-    ];
+    // SPEC-934: Store to SQLite instead of MCP local-memory
+    // Quality gate checkpoints use checkpoint name as stage (e.g., "before-specify", "after-specify")
+    let stage_for_db = checkpoint.name();
 
-    let args = json!({
-        "content": json_content,
-        "domain": "spec-kit",
-        "importance": 8,
-        "tags": tags,
-    });
+    let db = super::consensus_db::ConsensusDb::init_default()
+        .map_err(|e| format!("Failed to initialize consensus DB: {}", e))?;
 
-    let guard = mcp_manager.lock().await;
-    if let Some(manager) = guard.as_ref() {
-        manager
-            .call_tool(
-                "local-memory",
-                "store_memory",
-                Some(args),
-                Some(std::time::Duration::from_secs(10)),
-            )
-            .await
-            .map_err(|e| format!("MCP call failed: {}", e))?;
+    db.store_artifact_with_stage_name(
+        spec_id,
+        stage_for_db,
+        agent_name,
+        json_content,
+        None, // run_id not available for quality gates
+    )
+    .map_err(|e| format!("SQLite storage failed: {}", e))?;
 
-        debug!(
-            "Successfully stored artifact to local-memory: agent={}, spec={}",
-            agent_name, spec_id
-        );
-        Ok(())
-    } else {
-        Err("MCP manager not available".to_string())
-    }
+    debug!(
+        "Successfully stored artifact to SQLite: agent={}, spec={}, checkpoint={}",
+        agent_name, spec_id, checkpoint.name()
+    );
+    Ok(())
 }

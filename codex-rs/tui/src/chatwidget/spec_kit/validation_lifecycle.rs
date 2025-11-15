@@ -78,35 +78,23 @@ pub fn record_validate_lifecycle_event(
     let repo = FilesystemEvidence::new(widget.config.cwd.clone(), None);
     let _ = repo.write_telemetry_bundle(spec_id, SpecStage::Validate, &telemetry);
 
-    // Write to local-memory MCP (async, fire-and-forget)
+    // SPEC-934: Write to SQLite instead of MCP local-memory (async, fire-and-forget)
     if let Ok(handle) = tokio::runtime::Handle::try_current() {
-        let manager = widget.mcp_manager.clone();
         let content = match serde_json::to_string(&telemetry) {
             Ok(s) => s,
             Err(_) => return,
         };
         let spec_id_owned = spec_id.to_string();
         handle.spawn(async move {
-            let guard = manager.lock().await;
-            if let Some(mgr) = guard.as_ref() {
-                let args = json!({
-                    "content": content,
-                    "domain": "spec-kit",
-                    "importance": 8,
-                    "tags": [
-                        format!("spec:{}", spec_id_owned),
-                        "stage:validate",
-                        "artifact:agent_lifecycle"
-                    ]
-                });
-                let _ = mgr
-                    .call_tool(
-                        "local-memory",
-                        "store_memory",
-                        Some(args),
-                        Some(std::time::Duration::from_secs(10)),
-                    )
-                    .await;
+            if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+                // Store as "validate-lifecycle" stage to distinguish from main validate consensus
+                let _ = db.store_artifact_with_stage_name(
+                    &spec_id_owned,
+                    "validate-lifecycle",
+                    "agent-lifecycle-telemetry",
+                    &content,
+                    None, // run_id not available
+                );
             }
         });
     }

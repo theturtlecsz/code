@@ -814,6 +814,84 @@ impl ConsensusDb {
         )
         .map_err(|_| rusqlite::Error::InvalidQuery)
     }
+
+    /// Store quality gate or telemetry artifact with string-based stage name
+    ///
+    /// SPEC-934: Replaces MCP local-memory storage for quality gate and telemetry artifacts.
+    /// Uses string-based stage names for flexibility (e.g., "before-specify", "after-tasks", "gpt5-validation").
+    ///
+    /// SPEC-945C: Wrapped with sync retry logic (3 attempts, 100ms initial, 1.5x multiplier).
+    /// Retries on SQLITE_BUSY and SQLITE_LOCKED errors.
+    ///
+    /// Returns new schema output ID (agent_outputs.id).
+    pub fn store_artifact_with_stage_name(
+        &self,
+        spec_id: &str,
+        stage_name: &str,
+        agent_name: &str,
+        content_json: &str,
+        run_id: Option<&str>,
+    ) -> SqlResult<i64> {
+        // Ensure connection pool is available
+        let pool = self
+            .pool
+            .as_ref()
+            .ok_or_else(|| rusqlite::Error::InvalidQuery)?;
+
+        // Clone data for move into async closure
+        let pool = pool.clone();
+        let spec_id = spec_id.to_string();
+        let stage_name = stage_name.to_string();
+        let agent_name = agent_name.to_string();
+        let content_json = content_json.to_string();
+
+        // Retry configuration for SQLite writes
+        let retry_config = RetryConfig {
+            max_attempts: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 5_000,
+            backoff_multiplier: 1.5,
+            jitter_factor: 0.5,
+        };
+
+        // Write to NEW schema using async wrapper with retry
+        // Use Runtime::new() to avoid nested runtime issues
+        let runtime = tokio::runtime::Runtime::new().map_err(|_| rusqlite::Error::InvalidQuery)?;
+
+        runtime.block_on(async {
+            // Wrap async operations with retry logic
+            execute_with_backoff(
+                || async {
+                    use codex_core::db::async_wrapper::{store_agent_output, store_consensus_run};
+
+                    // 1. Store/update consensus run with string-based stage
+                    let run_id = store_consensus_run(
+                        &pool, &spec_id, &stage_name, true,  // consensus_ok (artifact exists)
+                        false, // degraded
+                        None,  // synthesis_json (not available at artifact stage)
+                    )
+                    .await
+                    .map_err(|e| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
+
+                    // 2. Store agent output
+                    let output_id = store_agent_output(
+                        &pool,
+                        run_id,
+                        &agent_name,
+                        None, // model_version (not available for quality gates)
+                        &content_json,
+                    )
+                    .await
+                    .map_err(|e| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
+
+                    Ok::<i64, DbError>(output_id)
+                },
+                &retry_config,
+            )
+            .await
+            .map_err(|_| rusqlite::Error::InvalidQuery)
+        })
+    }
 }
 
 // Unit tests removed - covered by integration tests in tests/read_path_migration.rs

@@ -1,0 +1,37 @@
+SPEC-933 Component 3: Parallel Agent Spawning Implementation
+
+Context:
+- Previous: SPEC-933 PRD created (memory: 4f566d03-94f9-4cc2-8c43-62f810d01d55)
+- Status: 75% complete (Components 1-2 done via SPEC-945B)
+- Branch: main (clean, all merged and pushed)
+- PRD: docs/SPEC-KIT-933-database-integrity-hygiene/PRD.md
+
+Goal:
+Implement parallel agent spawning to reduce spawn time from 150ms → 50ms (3× speedup)
+
+Tasks:
+1. Load context from local-memory (id: 4f566d03-94f9-4cc2-8c43-62f810d01d55)
+2. Read PRD Component 3 section: docs/SPEC-KIT-933-database-integrity-hygiene/PRD.md
+3. Locate current agent spawning code (search spec-kit/src/ for spawn/initialize patterns)
+4. Design spawn_agents_parallel() function using tokio::JoinSet
+5. Implement parallel spawning with metrics instrumentation
+6. Write tests: 3 unit + 2 integration + benchmarks (validate 3× speedup)
+7. Validate: full test suite passing, p95 spawn time ≤50ms, zero corruption
+8. Update SPEC.md status (75% → 87.5%)
+9. Store completion in local-memory (importance: 9)
+10. Create handoff for Component 4 (cleanup cron, 8-12h remaining)
+
+Success Criteria:
+- Spawn time ≤50ms p95 (currently 150ms baseline)
+- 3× speedup demonstrated with statistical validation
+- Zero corruption under 100 concurrent spawn cycles
+- All 604+ tests passing
+- Spawn metrics exported to telemetry
+
+Effort: 10-15 hours
+Priority: P0-CRITICAL
+
+Please implement Component 3 using the PRD guidance, then provide:
+- Session summary (time, achievements)
+- Performance results (actual spawn time achieved)
+- Next session handoff for Component 4

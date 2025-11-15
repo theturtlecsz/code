@@ -197,6 +197,11 @@ pub struct AgentConfig {
     /// Name of the agent (e.g., "claude", "gemini", "gpt-4")
     pub name: String,
 
+    /// Canonical name (single source of truth for agent identity)
+    /// Used to resolve agent names across different contexts (config name, command name, model ID)
+    #[serde(default)]
+    pub canonical_name: Option<String>,
+
     /// Command to execute the agent (e.g., "claude", "gemini").
     /// If omitted, defaults to the agent `name` during config load.
     #[serde(default)]
@@ -1166,4 +1171,40 @@ impl From<codex_protocol::config_types::ReasoningSummary> for ReasoningSummary {
             codex_protocol::config_types::ReasoningSummary::None => ReasoningSummary::None,
         }
     }
+}
+
+/// Quality gate configuration per checkpoint
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+pub struct QualityGateConfig {
+    pub plan: Vec<String>,
+    pub tasks: Vec<String>,
+    pub validate: Vec<String>,
+    pub audit: Vec<String>,
+    pub unlock: Vec<String>,
+}
+
+/// Hot-reload configuration
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+pub struct HotReloadConfig {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_debounce_ms")]
+    pub debounce_ms: u64,
+    #[serde(default)]
+    pub watch_paths: Vec<String>,
+}
+
+fn default_debounce_ms() -> u64 {
+    2000
+}
+
+/// Startup validation configuration
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+pub struct ValidationConfigExt {
+    #[serde(default = "default_true")]
+    pub check_api_keys: bool,
+    #[serde(default = "default_true")]
+    pub check_commands: bool,
+    #[serde(default = "default_true")]
+    pub strict_schema: bool,
 }

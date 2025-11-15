@@ -248,6 +248,9 @@ async fn build_individual_agent_prompt(
 
 /// Spawn and wait for a single agent to complete (sequential execution)
 /// Returns the agent's output for injection into next agent's prompt
+///
+/// SPEC-938: Wrapped with exponential backoff retry (max 3 attempts)
+/// Handles transient errors: timeouts, rate limits, service unavailable
 async fn spawn_and_wait_for_agent(
     agent_name: &str,
     config_name: &str,
@@ -260,6 +263,7 @@ async fn spawn_and_wait_for_agent(
     timeout_secs: u64,
 ) -> Result<(String, String), String> {
     use codex_core::agent_tool::{AGENT_MANAGER, AgentStatus};
+    use super::agent_retry::spawn_agent_with_retry;
 
     let run_tag = run_id
         .map(|r| format!("[run:{}]", &r[..8.min(r.len())]))
@@ -306,111 +310,128 @@ async fn spawn_and_wait_for_agent(
         }
     }
 
-    // Spawn agent
-    let agent_id = {
-        let mut manager = AGENT_MANAGER.write().await;
-        manager
-            .create_agent_from_config_name(
-                config_name,
-                agent_configs,
-                prompt.clone(),
-                false,
-                Some(batch_id.to_string()),
-                tmux_enabled, // SPEC-KIT-923
-            )
-            .await
-            .map_err(|e| {
-                tracing::error!("  ❌ Spawn error for {}: {}", agent_name, e);
-                format!("Failed to spawn {}: {}", agent_name, e)
-            })?
-    };
+    // SPEC-938: Wrap spawn+wait operation with retry logic
+    // Closure captures all necessary context for retryable operation
+    let prompt_clone = prompt.clone();
+    let config_name_clone = config_name.to_string();
+    let batch_id_clone = batch_id.to_string();
+    let agent_configs_clone = agent_configs.to_vec();
+    let spec_id_clone = spec_id.to_string();
+    let stage_clone = stage;
+    let run_id_clone = run_id.map(|s| s.to_string());
+    let agent_name_clone = agent_name.to_string();
+    let run_tag_clone = run_tag.clone();
 
-    tracing::warn!(
-        "  ✓ {} spawned successfully: {}",
-        agent_name,
-        &agent_id[..8]
-    );
+    // Define retryable spawn+wait operation
+    let spawn_operation = || {
+        let prompt = prompt_clone.clone();
+        let config_name = config_name_clone.clone();
+        let batch_id = batch_id_clone.clone();
+        let agent_configs = agent_configs_clone.clone();
+        let spec_id = spec_id_clone.clone();
+        let run_id_opt = run_id_clone.clone();
+        let agent_name = agent_name_clone.clone();
+        let run_tag = run_tag_clone.clone();
 
-    // Record to SQLite with run_id for traceability
-    if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
-        let _ = db.record_agent_spawn(
-            &agent_id,
-            spec_id,
-            stage,
-            "regular_stage",
-            agent_name,
-            run_id,
-        );
-        if let Some(rid) = run_id {
-            tracing::info!("    ✓ Recorded spawn with run_id: {}", rid);
-        }
-    }
+        async move {
+            // Spawn agent
+            let agent_id = {
+                let mut manager = AGENT_MANAGER.write().await;
+                manager
+                    .create_agent_from_config_name(
+                        &config_name,
+                        &agent_configs,
+                        prompt,
+                        false,
+                        Some(batch_id),
+                        tmux_enabled,
+                    )
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("  ❌ Spawn error for {}: {}", agent_name, e);
+                        format!("Failed to spawn {}: {}", agent_name, e)
+                    })?
+            };
 
-    // Wait for completion
-    let start = std::time::Instant::now();
-    let timeout = std::time::Duration::from_secs(timeout_secs);
-    let poll_interval = std::time::Duration::from_millis(500);
+            tracing::warn!(
+                "  ✓ {} spawned successfully: {}",
+                agent_name,
+                &agent_id[..8]
+            );
 
-    loop {
-        if start.elapsed() > timeout {
-            return Err(format!("{} timeout after {}s", agent_name, timeout_secs));
-        }
+            // Record to SQLite (idempotent, safe to retry)
+            if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+                let _ = db.record_agent_spawn(
+                    &agent_id,
+                    &spec_id,
+                    stage_clone,
+                    "regular_stage",
+                    &agent_name,
+                    run_id_opt.as_deref(),
+                );
+            }
 
-        let manager = AGENT_MANAGER.read().await;
-        if let Some(agent) = manager.get_agent(&agent_id) {
-            match agent.status {
-                AgentStatus::Completed => {
-                    if let Some(result) = &agent.result {
-                        tracing::warn!(
-                            "{}   ✅ {} completed: {} chars",
-                            run_tag,
-                            agent_name,
-                            result.len()
-                        );
+            // Wait for completion
+            let start = std::time::Instant::now();
+            let timeout = std::time::Duration::from_secs(timeout_secs);
+            let poll_interval = std::time::Duration::from_millis(500);
 
-                        // CRITICAL: Record completion to SQLite for audit trail
-                        if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
-                            if let Err(e) = db.record_agent_completion(&agent_id, result) {
+            loop {
+                if start.elapsed() > timeout {
+                    return Err(format!("{} timeout after {}s", agent_name, timeout_secs));
+                }
+
+                let manager = AGENT_MANAGER.read().await;
+                if let Some(agent) = manager.get_agent(&agent_id) {
+                    match agent.status {
+                        AgentStatus::Completed => {
+                            if let Some(result) = &agent.result {
                                 tracing::warn!(
-                                    "    ⚠️ Failed to record completion to SQLite: {}",
-                                    e
+                                    "{}   ✅ {} completed: {} chars",
+                                    run_tag,
+                                    agent_name,
+                                    result.len()
                                 );
+
+                                // Record completion (idempotent)
+                                if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+                                    let _ = db.record_agent_completion(&agent_id, result);
+                                }
+
+                                return Ok((agent_id.clone(), result.clone()));
                             } else {
-                                tracing::debug!("    ✓ Completion recorded to SQLite");
+                                return Err(format!("{} completed but no result", agent_name));
                             }
                         }
+                        AgentStatus::Failed => {
+                            let error_detail = agent
+                                .error
+                                .as_ref()
+                                .or(agent.result.as_ref())
+                                .map(|e| e.clone())
+                                .unwrap_or_else(|| "no error message available".to_string());
 
-                        return Ok((agent_id, result.clone()));
-                    } else {
-                        return Err(format!("{} completed but no result", agent_name));
+                            tracing::error!("  ❌ {} FAILED - Status: {:?}", agent_name, agent.status);
+                            tracing::error!("  ❌ Error detail: {}", error_detail);
+
+                            return Err(format!("{} failed: {}", agent_name, error_detail));
+                        }
+                        AgentStatus::Cancelled => {
+                            return Err(format!("{} cancelled", agent_name));
+                        }
+                        _ => {
+                            // Still running, continue polling
+                        }
                     }
                 }
-                AgentStatus::Failed => {
-                    // Check both error field and result field
-                    let error_detail = agent
-                        .error
-                        .as_ref()
-                        .or(agent.result.as_ref())
-                        .map(|e| e.clone())
-                        .unwrap_or_else(|| "no error message available".to_string());
 
-                    tracing::error!("  ❌ {} FAILED - Status: {:?}", agent_name, agent.status);
-                    tracing::error!("  ❌ Error detail: {}", error_detail);
-                    tracing::error!("  ❌ Agent config: model={}", agent.model);
-
-                    return Err(format!("{} failed: {}", agent_name, error_detail));
-                }
-                AgentStatus::Cancelled => {
-                    return Err(format!("{} cancelled", agent_name));
-                }
-                _ => {
-                    // Still running, continue polling
-                }
+                tokio::time::sleep(poll_interval).await;
             }
         }
+    };
 
-        tokio::time::sleep(poll_interval).await;
-    }
+    // Execute with retry (SPEC-938: exponential backoff, max 3 attempts)
+    spawn_agent_with_retry(agent_name, spawn_operation).await.map_err(|e| e.to_string())
 }
 
 /// Spawn regular stage agents SEQUENTIALLY with output passing

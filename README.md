@@ -251,6 +251,9 @@ git clone https://github.com/just-every/code.git
 cd code
 npm install
 
+# **REQUIRED**: Setup git hooks (policy compliance - SPEC-KIT-072)
+bash scripts/setup-hooks.sh
+
 # Build (use fast build for development)
 ./build-fast.sh
 
