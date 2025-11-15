@@ -10,7 +10,9 @@ use crate::config_types::ClientTools;
 use crate::config_types::ConfirmGuardConfig;
 use crate::config_types::GithubConfig;
 use crate::config_types::History;
+use crate::config_types::HotReloadConfig;
 use crate::config_types::McpServerConfig;
+use crate::config_types::QualityGateConfig;
 use crate::config_types::Notifications;
 use crate::config_types::ProjectCommandConfig;
 use crate::config_types::ProjectHookConfig;
@@ -184,6 +186,12 @@ pub struct Config {
 
     /// Configuration for available agent models
     pub agents: Vec<AgentConfig>,
+
+    /// Quality gate configuration per checkpoint (plan, tasks, validate, audit, unlock)
+    pub quality_gates: Option<QualityGateConfig>,
+
+    /// Hot-reload configuration
+    pub hot_reload: Option<HotReloadConfig>,
 
     /// Combined provider map (defaults merged with user-defined overrides).
     pub model_providers: HashMap<String, ModelProviderInfo>,
@@ -1524,6 +1532,14 @@ pub struct ConfigToml {
     /// Validation harness configuration.
     pub validation: Option<ValidationConfig>,
 
+    /// Quality gate configuration per checkpoint (plan, tasks, validate, audit, unlock)
+    #[serde(default)]
+    pub quality_gates: Option<QualityGateConfig>,
+
+    /// Hot-reload configuration
+    #[serde(default)]
+    pub hot_reload: Option<HotReloadConfig>,
+
     /// Configuration for subagent commands (built-ins and custom).
     #[serde(default)]
     pub subagents: Option<crate::config_types::SubagentsToml>,
@@ -2043,6 +2059,8 @@ impl Config {
             using_chatgpt_auth,
             github: cfg.github.unwrap_or_default(),
             validation: cfg.validation.unwrap_or_default(),
+            quality_gates: cfg.quality_gates,
+            hot_reload: cfg.hot_reload,
             subagent_commands: cfg.subagents.map(|s| s.commands).unwrap_or_default(),
             experimental_resume: cfg.experimental_resume,
             // Surface TUI notifications preference from config when present.
@@ -2052,6 +2070,10 @@ impl Config {
                 .map(|t| t.notifications.clone())
                 .unwrap_or_default(),
         };
+
+        // Validate configuration and log warnings for misconfigurations
+        Self::validate_config(&config);
+
         Ok(config)
     }
 
@@ -2123,6 +2145,54 @@ impl Config {
             ))
         } else {
             Ok(Some(s))
+        }
+    }
+
+    /// Validate configuration and log warnings for potential issues.
+    /// Does not fail hard - just logs warnings for misconfigurations.
+    fn validate_config(config: &Config) {
+        // Validate quality gates reference existing agents
+        if let Some(qg) = &config.quality_gates {
+            for (checkpoint_name, agent_list) in [
+                ("plan", &qg.plan),
+                ("tasks", &qg.tasks),
+                ("validate", &qg.validate),
+                ("audit", &qg.audit),
+                ("unlock", &qg.unlock),
+            ] {
+                for agent_name in agent_list {
+                    if !config.agents.iter().any(|a| a.name == *agent_name) {
+                        tracing::warn!(
+                            "Quality gate '{}' references unknown agent '{}' (not in [[agents]])",
+                            checkpoint_name,
+                            agent_name
+                        );
+                    }
+                }
+            }
+        }
+
+        // Validate hot-reload debounce_ms is in reasonable range
+        if let Some(hr) = &config.hot_reload {
+            if hr.debounce_ms < 100 || hr.debounce_ms > 10000 {
+                tracing::warn!(
+                    "Hot-reload debounce_ms ({}) outside recommended range (100-10000ms)",
+                    hr.debounce_ms
+                );
+            }
+        }
+
+        // Validate no duplicate canonical_names
+        let mut canonical_names = std::collections::HashSet::new();
+        for agent in &config.agents {
+            if let Some(canonical) = &agent.canonical_name {
+                if !canonical_names.insert(canonical) {
+                    tracing::warn!(
+                        "Duplicate canonical_name '{}' found in agent configs",
+                        canonical
+                    );
+                }
+            }
         }
     }
 }
