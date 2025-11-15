@@ -253,7 +253,7 @@ mod tests {
         let mut conn = setup_test_db();
 
         // Execute transaction that should rollback
-        let result = execute_in_transaction(&mut conn, TransactionBehavior::Immediate, |tx| {
+        let result: Result<()> = execute_in_transaction(&mut conn, TransactionBehavior::Immediate, |tx| {
             tx.execute("INSERT INTO test_data (value) VALUES (?1)", [99])?;
             // Simulate error - this should trigger rollback
             Err(super::super::DbError::Transaction(
@@ -294,7 +294,7 @@ mod tests {
         assert_eq!(count, 3, "All 3 rows should be committed atomically");
 
         // Now test failure case - none should persist
-        let result = execute_in_transaction(&mut conn, TransactionBehavior::Immediate, |tx| {
+        let result: Result<()> = execute_in_transaction(&mut conn, TransactionBehavior::Immediate, |tx| {
             tx.execute("INSERT INTO test_data (value) VALUES (?1)", [10])?;
             tx.execute("INSERT INTO test_data (value) VALUES (?1)", [20])?;
             // Fail after 2 inserts

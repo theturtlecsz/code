@@ -245,6 +245,24 @@ pub struct AgentConfig {
     pub instructions: Option<String>,
 }
 
+impl Default for AgentConfig {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            canonical_name: None,
+            command: String::new(),
+            args: Vec::new(),
+            read_only: false,
+            enabled: true,
+            description: None,
+            env: None,
+            args_read_only: None,
+            args_write: None,
+            instructions: None,
+        }
+    }
+}
+
 fn default_true() -> bool {
     true
 }

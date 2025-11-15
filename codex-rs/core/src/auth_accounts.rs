@@ -419,7 +419,7 @@ mod tests {
             .expect("insert chatgpt");
 
         let active_before = get_active_account_id(home.path()).expect("active id");
-        assert_eq!(active_before.as_deref(), Some(&stored.id));
+        assert_eq!(active_before.as_deref(), Some(stored.id.as_str()));
 
         let removed = remove_account(home.path(), &stored.id).expect("remove");
         assert!(removed.is_some());
