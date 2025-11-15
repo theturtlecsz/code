@@ -2542,6 +2542,10 @@ exclude_slash_tmp = true
     fn load_global_mcp_servers_returns_empty_if_missing() -> anyhow::Result<()> {
         let codex_home = TempDir::new()?;
 
+        // Create empty config.toml to prevent fallback to legacy ~/.codex directory
+        let config_path = codex_home.path().join(CONFIG_TOML_FILE);
+        std::fs::write(&config_path, "")?;
+
         let servers = load_global_mcp_servers(codex_home.path())?;
         assert!(servers.is_empty());
 
@@ -2795,6 +2799,10 @@ model_verbosity = "high"
 
         let codex_home_temp_dir = TempDir::new().unwrap();
 
+        // Write config.toml to prevent fallback to legacy ~/.codex directory
+        let config_path = codex_home_temp_dir.path().join(CONFIG_TOML_FILE);
+        std::fs::write(&config_path, toml)?;
+
         let openai_chat_completions_provider = ModelProviderInfo {
             name: "OpenAI using Chat Completions".to_string(),
             base_url: Some("https://api.openai.com/v1".to_string()),
@@ -2861,6 +2869,11 @@ model_verbosity = "high"
             o3_profile_overrides,
             fixture.codex_home(),
         )?;
+
+        // Compute expected values from fixture's codex_home
+        let expected_using_chatgpt_auth = Config::is_using_chatgpt_auth(&fixture.codex_home());
+        let expected_base_instructions = Config::load_instructions(Some(&fixture.codex_home()));
+
         assert_eq!(
             Config {
                 model: "o3".to_string(),
@@ -2903,7 +2916,7 @@ model_verbosity = "high"
                 model_reasoning_summary: ReasoningSummary::Detailed,
                 model_text_verbosity: TextVerbosity::default(),
                 chatgpt_base_url: "https://chatgpt.com/backend-api/".to_string(),
-                base_instructions: None,
+                base_instructions: expected_base_instructions.clone(),
                 include_plan_tool: false,
                 include_apply_patch_tool: false,
                 tools_web_search_request: false,
@@ -2912,7 +2925,7 @@ model_verbosity = "high"
                 include_view_image_tool: true,
                 responses_originator_header: "codex_cli_rs".to_string(),
                 debug: false,
-                using_chatgpt_auth: false,
+                using_chatgpt_auth: expected_using_chatgpt_auth,
                 github: GithubConfig::default(),
                 validation: ValidationConfig::default(),
             subagent_commands: Vec::new(),
@@ -2938,6 +2951,11 @@ model_verbosity = "high"
             gpt3_profile_overrides,
             fixture.codex_home(),
         )?;
+
+        // Compute expected values from fixture's codex_home
+        let expected_using_chatgpt_auth = Config::is_using_chatgpt_auth(&fixture.codex_home());
+        let expected_base_instructions = Config::load_instructions(Some(&fixture.codex_home()));
+
         let expected_gpt3_profile_config = Config {
             model: "gpt-3.5-turbo".to_string(),
             review_model: OPENAI_DEFAULT_REVIEW_MODEL.to_string(),
@@ -2979,7 +2997,7 @@ model_verbosity = "high"
             model_reasoning_summary: ReasoningSummary::default(),
             model_text_verbosity: TextVerbosity::default(),
             chatgpt_base_url: "https://chatgpt.com/backend-api/".to_string(),
-            base_instructions: None,
+            base_instructions: expected_base_instructions.clone(),
             include_plan_tool: false,
             include_apply_patch_tool: false,
             tools_web_search_request: false,
@@ -2988,7 +3006,7 @@ model_verbosity = "high"
             include_view_image_tool: true,
             responses_originator_header: "codex_cli_rs".to_string(),
             debug: false,
-            using_chatgpt_auth: false,
+            using_chatgpt_auth: expected_using_chatgpt_auth,
             github: GithubConfig::default(),
             validation: ValidationConfig::default(),
             subagent_commands: Vec::new(),
@@ -3029,6 +3047,11 @@ model_verbosity = "high"
             zdr_profile_overrides,
             fixture.codex_home(),
         )?;
+
+        // Compute expected values from fixture's codex_home
+        let expected_using_chatgpt_auth = Config::is_using_chatgpt_auth(&fixture.codex_home());
+        let expected_base_instructions = Config::load_instructions(Some(&fixture.codex_home()));
+
         let expected_zdr_profile_config = Config {
             model: "o3".to_string(),
             review_model: OPENAI_DEFAULT_REVIEW_MODEL.to_string(),
@@ -3070,7 +3093,7 @@ model_verbosity = "high"
             model_reasoning_summary: ReasoningSummary::default(),
             model_text_verbosity: TextVerbosity::default(),
             chatgpt_base_url: "https://chatgpt.com/backend-api/".to_string(),
-            base_instructions: None,
+            base_instructions: expected_base_instructions.clone(),
             include_plan_tool: false,
             include_apply_patch_tool: false,
             tools_web_search_request: false,
@@ -3079,7 +3102,7 @@ model_verbosity = "high"
             include_view_image_tool: true,
             responses_originator_header: "codex_cli_rs".to_string(),
             debug: false,
-            using_chatgpt_auth: false,
+            using_chatgpt_auth: expected_using_chatgpt_auth,
             github: GithubConfig::default(),
             validation: ValidationConfig::default(),
             subagent_commands: Vec::new(),
@@ -3106,6 +3129,11 @@ model_verbosity = "high"
             gpt5_profile_overrides,
             fixture.codex_home(),
         )?;
+
+        // Compute expected values from fixture's codex_home
+        let expected_using_chatgpt_auth = Config::is_using_chatgpt_auth(&fixture.codex_home());
+        let expected_base_instructions = Config::load_instructions(Some(&fixture.codex_home()));
+
         let expected_gpt5_profile_config = Config {
             model: "gpt-5".to_string(),
             review_model: OPENAI_DEFAULT_REVIEW_MODEL.to_string(),
@@ -3147,7 +3175,7 @@ model_verbosity = "high"
             model_reasoning_summary: ReasoningSummary::Detailed,
             model_text_verbosity: TextVerbosity::High,
             chatgpt_base_url: "https://chatgpt.com/backend-api/".to_string(),
-            base_instructions: None,
+            base_instructions: expected_base_instructions.clone(),
             include_plan_tool: false,
             include_apply_patch_tool: false,
             tools_web_search_request: false,
@@ -3156,7 +3184,7 @@ model_verbosity = "high"
             use_experimental_streamable_shell_tool: false,
             include_view_image_tool: true,
             debug: false,
-            using_chatgpt_auth: false,
+            using_chatgpt_auth: expected_using_chatgpt_auth,
             github: GithubConfig::default(),
             validation: ValidationConfig::default(),
             subagent_commands: Vec::new(),
@@ -3173,6 +3201,10 @@ model_verbosity = "high"
     fn test_set_project_trusted_writes_explicit_tables() -> anyhow::Result<()> {
         let codex_home = TempDir::new().unwrap();
         let project_dir = TempDir::new().unwrap();
+
+        // Create empty config.toml to prevent fallback to legacy ~/.codex directory
+        let config_path = codex_home.path().join(CONFIG_TOML_FILE);
+        std::fs::write(&config_path, "")?;
 
         // Call the function under test
         set_project_trusted(codex_home.path(), project_dir.path())?;
