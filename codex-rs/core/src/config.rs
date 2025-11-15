@@ -2151,7 +2151,49 @@ impl Config {
 
     /// Validate configuration and log warnings for potential issues.
     /// Does not fail hard - just logs warnings for misconfigurations.
+    ///
+    /// Implements Component 3a from SPEC-939: Startup Config Validation.
+    /// Validates:
+    /// - Required fields (agent name, command non-empty)
+    /// - Command availability (using `which`)
+    /// - Quality gate agent references
+    /// - Hot-reload debounce range
+    /// - Duplicate canonical names
     fn validate_config(config: &Config) {
+        // === Required Fields Validation ===
+        // Validate agent names and commands are non-empty
+        for (idx, agent) in config.agents.iter().enumerate() {
+            if agent.name.trim().is_empty() {
+                tracing::error!(
+                    "Agent #{} has empty name. \
+                     Hint: Add 'name = \"agent-name\"' to [[agents]] entry in config.toml",
+                    idx
+                );
+            }
+
+            if agent.command.trim().is_empty() {
+                tracing::error!(
+                    "Agent '{}' has empty command. \
+                     Hint: Add 'command = \"cli-command\"' or remove agent from config.toml",
+                    agent.name
+                );
+            }
+        }
+
+        // === Command Availability Verification ===
+        // Check if agent commands are available in PATH
+        for agent in &config.agents {
+            if !agent.command.trim().is_empty() && !Self::command_exists(&agent.command) {
+                tracing::warn!(
+                    "Command '{}' for agent '{}' not found in PATH. \
+                     Hint: Install the CLI tool or update 'command' field in config.toml",
+                    agent.command,
+                    agent.name
+                );
+            }
+        }
+
+        // === Quality Gates Validation ===
         // Validate quality gates reference existing agents
         if let Some(qg) = &config.quality_gates {
             for (checkpoint_name, agent_list) in [
@@ -2164,37 +2206,55 @@ impl Config {
                 for agent_name in agent_list {
                     if !config.agents.iter().any(|a| a.name == *agent_name) {
                         tracing::warn!(
-                            "Quality gate '{}' references unknown agent '{}' (not in [[agents]])",
+                            "Quality gate '{}' references unknown agent '{}' (not in [[agents]]). \
+                             Hint: Add the agent to [[agents]] or remove it from quality_gates.{}",
                             checkpoint_name,
-                            agent_name
+                            agent_name,
+                            checkpoint_name
                         );
                     }
                 }
             }
         }
 
+        // === Hot-Reload Validation ===
         // Validate hot-reload debounce_ms is in reasonable range
         if let Some(hr) = &config.hot_reload {
             if hr.debounce_ms < 100 || hr.debounce_ms > 10000 {
                 tracing::warn!(
-                    "Hot-reload debounce_ms ({}) outside recommended range (100-10000ms)",
+                    "Hot-reload debounce_ms ({}) outside recommended range (100-10000ms). \
+                     Hint: Adjust hot_reload.debounce_ms in config.toml",
                     hr.debounce_ms
                 );
             }
         }
 
+        // === Canonical Names Validation ===
         // Validate no duplicate canonical_names
         let mut canonical_names = std::collections::HashSet::new();
         for agent in &config.agents {
             if let Some(canonical) = &agent.canonical_name {
                 if !canonical_names.insert(canonical) {
                     tracing::warn!(
-                        "Duplicate canonical_name '{}' found in agent configs",
+                        "Duplicate canonical_name '{}' found in agent configs. \
+                         Hint: Each agent must have a unique canonical_name",
                         canonical
                     );
                 }
             }
         }
+    }
+
+    /// Check if a command exists in PATH.
+    ///
+    /// Uses `which` command to verify availability.
+    /// Returns false if `which` is not available or command is not found.
+    fn command_exists(cmd: &str) -> bool {
+        std::process::Command::new("which")
+            .arg(cmd)
+            .output()
+            .map(|output| output.status.success())
+            .unwrap_or(false)
     }
 }
 
@@ -3149,6 +3209,40 @@ trust_level = "trusted"
     }
 
     // No test enforcing the presence of a standalone [projects] header.
+
+    // ============================================================================
+    // SPEC-939 Component 3a: Startup Config Validation Tests
+    // ============================================================================
+
+    #[test]
+    fn test_command_exists_returns_true_for_valid_command() {
+        // Test with a command that should exist on all Unix systems
+        // Note: This test assumes 'ls' and 'echo' are available (Unix/Linux/macOS)
+        #[cfg(unix)]
+        {
+            assert!(Config::command_exists("ls"));
+            assert!(Config::command_exists("echo"));
+        }
+
+        // On Windows, test with common Windows commands
+        #[cfg(windows)]
+        {
+            assert!(Config::command_exists("cmd"));
+            assert!(Config::command_exists("where"));
+        }
+    }
+
+    #[test]
+    fn test_command_exists_returns_false_for_invalid_command() {
+        // Test with a command that definitely doesn't exist
+        assert!(!Config::command_exists("nonexistent-command-12345-xyz"));
+    }
+
+    // Note: More comprehensive validate_config tests would require creating full Config objects
+    // with all required fields. For now, the command_exists tests above validate the core
+    // command availability verification logic, which is the main enhancement in Component 3a.
+    // The validate_config function is called automatically during config loading, so it's
+    // validated through integration tests when the TUI starts up.
 }
 
 #[cfg(test)]
