@@ -216,6 +216,32 @@ model_reasoning_effort = "high"
 model_reasoning_summary = "detailed"
 ```
 
+### Quality Gate Customization (SPEC-939)
+
+Customize multi-agent quality gates per checkpoint to balance cost and quality:
+
+```toml
+[quality_gates]
+# Configurable agent selection per stage
+plan = ["gemini", "claude", "code"]        # Multi-agent consensus for planning
+tasks = ["gemini"]                          # Single cheap agent for simple tasks
+validate = ["gemini", "claude", "code"]     # Full consensus for validation
+audit = ["gemini", "claude", "gpt_codex"]   # Premium agents for critical audit
+unlock = ["gemini", "claude", "gpt_codex"]  # Premium agents for ship decision
+
+[hot_reload]
+enabled = true
+debounce_ms = 2000              # Debounce window (prevents reload storms)
+watch_paths = ["config.toml"]   # Paths to watch for changes
+```
+
+**Benefits**:
+- **Cost Control**: Use cheaper agents (`gemini`) for simple stages, premium (`gpt_codex`) for critical
+- **Experimentation**: Try different agent combinations per checkpoint
+- **No Restarts**: Hot-reload config changes while preserving session state
+
+See [Authentication Guide](docs/authentication.md) for API key setup.
+
 ### Environment variables
 
 - `CODEX_HOME`: Override config directory location
