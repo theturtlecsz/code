@@ -23,6 +23,7 @@ pub mod agent_tool; // Made public for native consensus orchestration
 mod command_safety;
 pub mod config;
 pub mod config_edit;
+pub mod config_loader;
 pub mod config_profile;
 pub mod config_types;
 pub mod schema_validator;
