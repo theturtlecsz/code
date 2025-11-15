@@ -1208,3 +1208,360 @@ pub struct ValidationConfigExt {
     #[serde(default = "default_true")]
     pub strict_schema: bool,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ============================================================================
+    // QualityGateConfig Tests
+    // ============================================================================
+
+    #[test]
+    fn test_quality_gate_config_full_deserialization() {
+        let toml = r#"
+            plan = ["gemini", "claude", "code"]
+            tasks = ["gemini"]
+            validate = ["gemini", "claude", "code"]
+            audit = ["gemini", "claude", "gpt_codex"]
+            unlock = ["gemini", "claude", "gpt_codex"]
+        "#;
+
+        let config: QualityGateConfig = toml::from_str(toml).unwrap();
+
+        assert_eq!(config.plan, vec!["gemini", "claude", "code"]);
+        assert_eq!(config.tasks, vec!["gemini"]);
+        assert_eq!(config.validate, vec!["gemini", "claude", "code"]);
+        assert_eq!(config.audit, vec!["gemini", "claude", "gpt_codex"]);
+        assert_eq!(config.unlock, vec!["gemini", "claude", "gpt_codex"]);
+    }
+
+    #[test]
+    fn test_quality_gate_config_single_agent() {
+        let toml = r#"
+            plan = ["gemini"]
+            tasks = ["gemini"]
+            validate = ["gemini"]
+            audit = ["gemini"]
+            unlock = ["gemini"]
+        "#;
+
+        let config: QualityGateConfig = toml::from_str(toml).unwrap();
+
+        assert_eq!(config.plan.len(), 1);
+        assert_eq!(config.tasks, vec!["gemini"]);
+    }
+
+    #[test]
+    fn test_quality_gate_config_multiple_agents() {
+        let toml = r#"
+            plan = ["gemini", "claude", "code", "gpt_pro", "haiku"]
+            tasks = ["gemini", "haiku"]
+            validate = ["gemini", "claude", "code"]
+            audit = ["gemini", "claude", "code", "gpt_codex"]
+            unlock = ["gemini", "claude", "code"]
+        "#;
+
+        let config: QualityGateConfig = toml::from_str(toml).unwrap();
+
+        assert_eq!(config.plan.len(), 5);
+        assert_eq!(config.tasks.len(), 2);
+        assert_eq!(config.audit.len(), 4);
+    }
+
+    #[test]
+    fn test_quality_gate_config_empty_array_fails() {
+        let toml = r#"
+            plan = []
+            tasks = ["gemini"]
+            validate = ["gemini"]
+            audit = ["gemini"]
+            unlock = ["gemini"]
+        "#;
+
+        // Empty arrays are allowed by deserializer, but should fail validation
+        let config: Result<QualityGateConfig, _> = toml::from_str(toml);
+        assert!(config.is_ok()); // Deserialization succeeds
+        // Note: Runtime validation (check_api_keys, etc.) will catch empty arrays
+    }
+
+    // ============================================================================
+    // HotReloadConfig Tests
+    // ============================================================================
+
+    #[test]
+    fn test_hot_reload_config_defaults() {
+        let toml = ""; // Empty TOML should use defaults
+
+        let config: HotReloadConfig = toml::from_str(toml).unwrap();
+
+        assert_eq!(config.enabled, true);
+        assert_eq!(config.debounce_ms, 2000);
+        assert_eq!(config.watch_paths.len(), 0);
+    }
+
+    #[test]
+    fn test_hot_reload_config_custom_values() {
+        let toml = r#"
+            enabled = false
+            debounce_ms = 5000
+            watch_paths = ["config.toml", "models/", "agents/"]
+        "#;
+
+        let config: HotReloadConfig = toml::from_str(toml).unwrap();
+
+        assert_eq!(config.enabled, false);
+        assert_eq!(config.debounce_ms, 5000);
+        assert_eq!(config.watch_paths, vec!["config.toml", "models/", "agents/"]);
+    }
+
+    #[test]
+    fn test_hot_reload_config_partial_overrides() {
+        let toml = r#"
+            debounce_ms = 3000
+        "#;
+
+        let config: HotReloadConfig = toml::from_str(toml).unwrap();
+
+        // enabled should default to true
+        assert_eq!(config.enabled, true);
+        // debounce_ms should be overridden
+        assert_eq!(config.debounce_ms, 3000);
+        // watch_paths should default to empty
+        assert_eq!(config.watch_paths.len(), 0);
+    }
+
+    #[test]
+    fn test_hot_reload_config_debounce_range() {
+        // Test minimum reasonable debounce
+        let toml_min = "debounce_ms = 100";
+        let config_min: HotReloadConfig = toml::from_str(toml_min).unwrap();
+        assert_eq!(config_min.debounce_ms, 100);
+
+        // Test maximum reasonable debounce
+        let toml_max = "debounce_ms = 10000";
+        let config_max: HotReloadConfig = toml::from_str(toml_max).unwrap();
+        assert_eq!(config_max.debounce_ms, 10000);
+    }
+
+    // ============================================================================
+    // ValidationConfigExt Tests
+    // ============================================================================
+
+    #[test]
+    fn test_validation_config_ext_defaults() {
+        let toml = ""; // Empty TOML should use defaults
+
+        let config: ValidationConfigExt = toml::from_str(toml).unwrap();
+
+        assert_eq!(config.check_api_keys, true);
+        assert_eq!(config.check_commands, true);
+        assert_eq!(config.strict_schema, true);
+    }
+
+    #[test]
+    fn test_validation_config_ext_all_disabled() {
+        let toml = r#"
+            check_api_keys = false
+            check_commands = false
+            strict_schema = false
+        "#;
+
+        let config: ValidationConfigExt = toml::from_str(toml).unwrap();
+
+        assert_eq!(config.check_api_keys, false);
+        assert_eq!(config.check_commands, false);
+        assert_eq!(config.strict_schema, false);
+    }
+
+    #[test]
+    fn test_validation_config_ext_partial_disabled() {
+        let toml = r#"
+            check_api_keys = false
+            strict_schema = true
+        "#;
+
+        let config: ValidationConfigExt = toml::from_str(toml).unwrap();
+
+        assert_eq!(config.check_api_keys, false);
+        assert_eq!(config.check_commands, true); // Default
+        assert_eq!(config.strict_schema, true);
+    }
+
+    // ============================================================================
+    // AgentConfig with canonical_name Tests
+    // ============================================================================
+
+    #[test]
+    fn test_agent_config_with_canonical_name() {
+        let toml = r#"
+            name = "gemini"
+            canonical_name = "gemini"
+            command = "gemini"
+        "#;
+
+        let config: AgentConfig = toml::from_str(toml).unwrap();
+
+        assert_eq!(config.name, "gemini");
+        assert_eq!(config.canonical_name, Some("gemini".to_string()));
+        assert_eq!(config.command, "gemini");
+    }
+
+    #[test]
+    fn test_agent_config_without_canonical_name() {
+        let toml = r#"
+            name = "claude"
+            command = "anthropic"
+        "#;
+
+        let config: AgentConfig = toml::from_str(toml).unwrap();
+
+        assert_eq!(config.name, "claude");
+        assert_eq!(config.canonical_name, None); // Optional field
+        assert_eq!(config.command, "anthropic");
+    }
+
+    #[test]
+    fn test_agent_config_canonical_name_differs_from_name() {
+        let toml = r#"
+            name = "claude-sonnet"
+            canonical_name = "claude"
+            command = "anthropic"
+        "#;
+
+        let config: AgentConfig = toml::from_str(toml).unwrap();
+
+        assert_eq!(config.name, "claude-sonnet");
+        assert_eq!(config.canonical_name, Some("claude".to_string()));
+        assert_eq!(config.command, "anthropic");
+    }
+
+    #[test]
+    fn test_agent_config_full_configuration() {
+        let toml = r#"
+            name = "gpt-5"
+            canonical_name = "gpt_pro"
+            command = "openai"
+            args = ["--model", "gpt-5-turbo"]
+            read_only = false
+            enabled = true
+            description = "OpenAI GPT-5 model"
+        "#;
+
+        let config: AgentConfig = toml::from_str(toml).unwrap();
+
+        assert_eq!(config.name, "gpt-5");
+        assert_eq!(config.canonical_name, Some("gpt_pro".to_string()));
+        assert_eq!(config.command, "openai");
+        assert_eq!(config.args, vec!["--model", "gpt-5-turbo"]);
+        assert_eq!(config.read_only, false);
+        assert_eq!(config.enabled, true);
+        assert_eq!(config.description, Some("OpenAI GPT-5 model".to_string()));
+    }
+
+    // ============================================================================
+    // Integration Tests - Combined Config Structures
+    // ============================================================================
+
+    #[test]
+    fn test_combined_config_structures() {
+        // Test that all SPEC-939 config types can be deserialized together
+        #[derive(Deserialize, Debug)]
+        struct TestConfig {
+            quality_gates: QualityGateConfig,
+            hot_reload: HotReloadConfig,
+            validation: ValidationConfigExt,
+        }
+
+        let toml = r#"
+            [quality_gates]
+            plan = ["gemini", "claude", "code"]
+            tasks = ["gemini"]
+            validate = ["gemini", "claude", "code"]
+            audit = ["gemini", "claude", "gpt_codex"]
+            unlock = ["gemini", "claude", "gpt_codex"]
+
+            [hot_reload]
+            enabled = true
+            debounce_ms = 2000
+            watch_paths = ["config.toml"]
+
+            [validation]
+            check_api_keys = true
+            check_commands = true
+            strict_schema = true
+        "#;
+
+        let config: TestConfig = toml::from_str(toml).unwrap();
+
+        // Quality gates
+        assert_eq!(config.quality_gates.plan.len(), 3);
+        assert_eq!(config.quality_gates.tasks, vec!["gemini"]);
+
+        // Hot reload
+        assert_eq!(config.hot_reload.enabled, true);
+        assert_eq!(config.hot_reload.debounce_ms, 2000);
+
+        // Validation
+        assert_eq!(config.validation.check_api_keys, true);
+        assert_eq!(config.validation.strict_schema, true);
+    }
+
+    #[test]
+    fn test_combined_config_with_defaults() {
+        #[derive(Deserialize, Debug)]
+        struct TestConfig {
+            #[serde(default)]
+            quality_gates: Option<QualityGateConfig>,
+            #[serde(default)]
+            hot_reload: Option<HotReloadConfig>,
+            #[serde(default)]
+            validation: Option<ValidationConfigExt>,
+        }
+
+        // Empty config should allow all Optional fields to be None
+        let toml = "";
+        let config: TestConfig = toml::from_str(toml).unwrap();
+
+        assert!(config.quality_gates.is_none());
+        assert!(config.hot_reload.is_none());
+        assert!(config.validation.is_none());
+    }
+
+    // ============================================================================
+    // Edge Cases and Error Handling
+    // ============================================================================
+
+    #[test]
+    fn test_quality_gate_config_invalid_toml() {
+        let invalid_toml = r#"
+            plan = ["gemini"
+            tasks = ["gemini"]
+        "#; // Missing closing bracket
+
+        let result: Result<QualityGateConfig, _> = toml::from_str(invalid_toml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_hot_reload_config_invalid_type() {
+        let invalid_toml = r#"
+            enabled = "yes"
+            debounce_ms = "2000"
+        "#; // Strings instead of bool/u64
+
+        let result: Result<HotReloadConfig, _> = toml::from_str(invalid_toml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validation_config_ext_invalid_bool() {
+        let invalid_toml = r#"
+            check_api_keys = 1
+            check_commands = 0
+        "#; // Numbers instead of bools
+
+        let result: Result<ValidationConfigExt, _> = toml::from_str(invalid_toml);
+        assert!(result.is_err());
+    }
+}

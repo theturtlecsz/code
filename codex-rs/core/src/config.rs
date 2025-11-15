@@ -39,6 +39,7 @@ use crate::protocol::ApprovedCommandMatchKind;
 use crate::protocol::AskForApproval;
 use crate::protocol::SandboxPolicy;
 use codex_protocol::config_types::SandboxMode;
+use codex_protocol::config_types::Verbosity;
 use codex_protocol::mcp_protocol::AuthMode;
 use dirs::home_dir;
 use serde::Deserialize;

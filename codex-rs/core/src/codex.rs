@@ -6949,6 +6949,7 @@ mod resolve_read_only_tests {
     fn make_config(read_only: bool) -> AgentConfig {
         AgentConfig {
             name: "test".into(),
+            canonical_name: None,
             command: "test".into(),
             args: Vec::new(),
             read_only,

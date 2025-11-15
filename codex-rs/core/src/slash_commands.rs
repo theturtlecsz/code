@@ -270,21 +270,29 @@ mod tests {
         let agents = vec![
             AgentConfig {
                 name: "test-claude".to_string(),
+                canonical_name: None,
                 command: "claude".to_string(),
                 args: vec![],
                 read_only: false,
                 enabled: true,
                 description: None,
                 env: None,
+                args_read_only: None,
+                args_write: None,
+                instructions: None,
             },
             AgentConfig {
                 name: "test-gemini".to_string(),
+                canonical_name: None,
                 command: "gemini".to_string(),
                 args: vec![],
                 read_only: false,
                 enabled: false, // disabled
                 description: None,
                 env: None,
+                args_read_only: None,
+                args_write: None,
+                instructions: None,
             },
         ];
 
