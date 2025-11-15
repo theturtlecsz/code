@@ -2802,7 +2802,7 @@ model_provider = "openai"
 approval_policy = "on-failure"
 model_reasoning_effort = "high"
 model_reasoning_summary = "detailed"
-model_verbosity = "high"
+model_text_verbosity = "high"
 "#;
 
         let cfg: ConfigToml = toml::from_str(toml).expect("TOML deserialization should succeed");
@@ -2900,7 +2900,7 @@ model_verbosity = "high"
                 model_context_window: Some(200_000),
                 model_max_output_tokens: Some(100_000),
                 model_auto_compact_token_limit: None,
-                active_profile: None,
+                active_profile: Some("o3".to_string()),
                 model_provider_id: "openai".to_string(),
                 model_provider: fixture.openai_provider.clone(),
                 approval_policy: AskForApproval::Never,
@@ -3156,7 +3156,7 @@ model_verbosity = "high"
             model: "gpt-5".to_string(),
             review_model: OPENAI_DEFAULT_REVIEW_MODEL.to_string(),
             model_family: find_family_for_model("gpt-5").expect("known model slug"),
-            model_context_window: Some(400_000),
+            model_context_window: Some(272_000), // From get_model_info() for gpt-5
             model_max_output_tokens: Some(128_000),
             model_auto_compact_token_limit: None,
             model_provider_id: "openai".to_string(),
