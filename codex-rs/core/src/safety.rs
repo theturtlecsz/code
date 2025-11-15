@@ -288,6 +288,7 @@ mod tests {
             network_access: false,
             exclude_tmpdir_env_var: true,
             exclude_slash_tmp: true,
+            allow_git_writes: true,
         };
 
         assert!(is_write_patch_constrained_to_writable_paths(
@@ -309,6 +310,7 @@ mod tests {
             network_access: false,
             exclude_tmpdir_env_var: true,
             exclude_slash_tmp: true,
+            allow_git_writes: true,
         };
         assert!(is_write_patch_constrained_to_writable_paths(
             &add_outside,

@@ -39,7 +39,6 @@ use crate::protocol::ApprovedCommandMatchKind;
 use crate::protocol::AskForApproval;
 use crate::protocol::SandboxPolicy;
 use codex_protocol::config_types::SandboxMode;
-use codex_protocol::config_types::Verbosity;
 use codex_protocol::mcp_protocol::AuthMode;
 use dirs::home_dir;
 use serde::Deserialize;
@@ -2533,6 +2532,7 @@ exclude_slash_tmp = true
                 network_access: false,
                 exclude_tmpdir_env_var: true,
                 exclude_slash_tmp: true,
+                allow_git_writes: true,
             },
             sandbox_workspace_write_cfg.derive_sandbox_policy(sandbox_mode_override)
         );
@@ -2807,6 +2807,7 @@ model_verbosity = "high"
             request_max_retries: Some(4),
             stream_max_retries: Some(10),
             stream_idle_timeout_ms: Some(300_000),
+            agent_total_timeout_ms: None,
             requires_openai_auth: false,
             openrouter: None,
         };

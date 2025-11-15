@@ -1308,6 +1308,7 @@ mod tests {
             request_max_retries: Some(0),
             stream_max_retries: Some(0),
             stream_idle_timeout_ms: Some(1000),
+            agent_total_timeout_ms: None,
             requires_openai_auth: false,
             openrouter: None,
         };
@@ -1322,13 +1323,13 @@ mod tests {
 
         matches!(
             &events[0],
-            Ok(ResponseEvent::OutputItemDone(ResponseItem::Message { role, .. }))
+            Ok(ResponseEvent::OutputItemDone { item: ResponseItem::Message { role, .. }, .. })
                 if role == "assistant"
         );
 
         matches!(
             &events[1],
-            Ok(ResponseEvent::OutputItemDone(ResponseItem::Message { role, .. }))
+            Ok(ResponseEvent::OutputItemDone { item: ResponseItem::Message { role, .. }, .. })
                 if role == "assistant"
         );
 
@@ -1369,6 +1370,7 @@ mod tests {
             request_max_retries: Some(0),
             stream_max_retries: Some(0),
             stream_idle_timeout_ms: Some(1000),
+            agent_total_timeout_ms: None,
             requires_openai_auth: false,
             openrouter: None,
         };
@@ -1377,7 +1379,7 @@ mod tests {
 
         assert_eq!(events.len(), 2);
 
-        matches!(events[0], Ok(ResponseEvent::OutputItemDone(_)));
+        matches!(events[0], Ok(ResponseEvent::OutputItemDone { .. }));
 
         match &events[1] {
             Err(CodexErr::Stream(msg, _)) => {
@@ -1404,6 +1406,7 @@ mod tests {
             request_max_retries: Some(0),
             stream_max_retries: Some(0),
             stream_idle_timeout_ms: Some(1000),
+            agent_total_timeout_ms: None,
             requires_openai_auth: false,
             openrouter: None,
         };
@@ -1443,7 +1446,7 @@ mod tests {
             matches!(ev, ResponseEvent::Created)
         }
         fn is_output(ev: &ResponseEvent) -> bool {
-            matches!(ev, ResponseEvent::OutputItemDone(_))
+            matches!(ev, ResponseEvent::OutputItemDone { .. })
         }
         fn is_completed(ev: &ResponseEvent) -> bool {
             matches!(ev, ResponseEvent::Completed { .. })
@@ -1510,6 +1513,7 @@ mod tests {
                 request_max_retries: Some(0),
                 stream_max_retries: Some(0),
                 stream_idle_timeout_ms: Some(1000),
+                agent_total_timeout_ms: None,
                 requires_openai_auth: false,
                 openrouter: None,
             };

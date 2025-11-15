@@ -426,7 +426,7 @@ pub fn built_in_model_providers() -> HashMap<String, ModelProviderInfo> {
                 request_max_retries: None,
                 stream_max_retries: None,
                 stream_idle_timeout_ms: None,
-                agent_total_timeout_ms: None, // FORK-SPECIFIC: Use default 30min
+            agent_total_timeout_ms: None, // FORK-SPECIFIC: Use default 30min
                 requires_openai_auth: true,
                 openrouter: None,
             },
@@ -472,7 +472,7 @@ pub fn create_oss_provider_with_base_url(base_url: &str) -> ModelProviderInfo {
         request_max_retries: None,
         stream_max_retries: None,
         stream_idle_timeout_ms: None,
-        agent_total_timeout_ms: None, // FORK-SPECIFIC: Use default 30min
+            agent_total_timeout_ms: None, // FORK-SPECIFIC: Use default 30min
         requires_openai_auth: false,
         openrouter: None,
     }
@@ -513,6 +513,7 @@ base_url = "http://localhost:11434/v1"
             request_max_retries: None,
             stream_max_retries: None,
             stream_idle_timeout_ms: None,
+            agent_total_timeout_ms: None,
             requires_openai_auth: false,
             openrouter: None,
         };
@@ -543,6 +544,7 @@ query_params = { api-version = "2025-04-01-preview" }
             request_max_retries: None,
             stream_max_retries: None,
             stream_idle_timeout_ms: None,
+            agent_total_timeout_ms: None,
             requires_openai_auth: false,
             openrouter: None,
         };
@@ -576,6 +578,7 @@ env_http_headers = { "X-Example-Env-Header" = "EXAMPLE_ENV_VAR" }
             request_max_retries: None,
             stream_max_retries: None,
             stream_idle_timeout_ms: None,
+            agent_total_timeout_ms: None,
             requires_openai_auth: false,
             openrouter: None,
         };
@@ -599,6 +602,7 @@ env_http_headers = { "X-Example-Env-Header" = "EXAMPLE_ENV_VAR" }
                 request_max_retries: None,
                 stream_max_retries: None,
                 stream_idle_timeout_ms: None,
+            agent_total_timeout_ms: None,
                 requires_openai_auth: false,
                 openrouter: None,
             }
@@ -632,6 +636,7 @@ env_http_headers = { "X-Example-Env-Header" = "EXAMPLE_ENV_VAR" }
             request_max_retries: None,
             stream_max_retries: None,
             stream_idle_timeout_ms: None,
+            agent_total_timeout_ms: None,
             requires_openai_auth: false,
             openrouter: None,
         };

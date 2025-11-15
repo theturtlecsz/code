@@ -499,6 +499,7 @@ mod tests {
             network_access,
             exclude_tmpdir_env_var: false,
             exclude_slash_tmp: false,
+            allow_git_writes: true,
         }
     }
 

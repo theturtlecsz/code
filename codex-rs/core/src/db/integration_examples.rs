@@ -12,7 +12,7 @@
 //! The async wrapper is designed to work alongside existing synchronous code.
 //! Gradual migration allows testing and validation before full replacement.
 
-use super::{DbError, Result};
+use super::Result;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::TransactionBehavior;
@@ -321,10 +321,11 @@ mod tests {
     use super::*;
     use crate::db::initialize_pool;
     use crate::db::migrations::migrate_to_latest;
+    use std::path::Path;
 
     #[tokio::test]
     async fn test_store_consensus_with_agents() {
-        let pool = initialize_pool(":memory:").expect("Pool creation failed");
+        let pool = initialize_pool(Path::new(":memory:"), 1).expect("Pool creation failed");
 
         // Migrate to create tables
         {
@@ -368,7 +369,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_agent_state() {
-        let pool = initialize_pool(":memory:").expect("Pool creation failed");
+        let pool = initialize_pool(Path::new(":memory:"), 1).expect("Pool creation failed");
 
         // Update agent state
         update_agent_state(
@@ -395,7 +396,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_batch_store_agent_outputs() {
-        let pool = initialize_pool(":memory:").expect("Pool creation failed");
+        let pool = initialize_pool(Path::new(":memory:"), 1).expect("Pool creation failed");
 
         // Migrate to create tables
         {
@@ -425,7 +426,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_concurrent_agent_updates() {
-        let pool = initialize_pool(":memory:").expect("Pool creation failed");
+        let pool = initialize_pool(Path::new(":memory:"), 1).expect("Pool creation failed");
 
         // Spawn 5 concurrent agent state updates
         let mut handles = Vec::new();

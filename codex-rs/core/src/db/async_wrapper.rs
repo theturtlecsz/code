@@ -306,10 +306,11 @@ mod tests {
     use super::*;
     use crate::db::initialize_pool;
     use crate::db::migrations::migrate_to_latest;
+    use std::path::Path;
 
     #[tokio::test]
     async fn test_with_connection_basic() {
-        let pool = initialize_pool(":memory:").expect("Pool creation failed");
+        let pool = initialize_pool(Path::new(":memory:"), 1).expect("Pool creation failed");
 
         // Migrate to create tables
         {
@@ -335,7 +336,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_with_connection_error_propagation() {
-        let pool = initialize_pool(":memory:").expect("Pool creation failed");
+        let pool = initialize_pool(Path::new(":memory:"), 1).expect("Pool creation failed");
 
         // Test error propagation
         let result: Result<()> = with_connection(&pool, |conn| {
@@ -349,7 +350,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_store_consensus_run() {
-        let pool = initialize_pool(":memory:").expect("Pool creation failed");
+        let pool = initialize_pool(Path::new(":memory:"), 1).expect("Pool creation failed");
 
         // Migrate to create tables
         {
@@ -384,7 +385,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_store_agent_output() {
-        let pool = initialize_pool(":memory:").expect("Pool creation failed");
+        let pool = initialize_pool(Path::new(":memory:"), 1).expect("Pool creation failed");
 
         // Migrate and create run
         {
@@ -423,7 +424,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_concurrent_operations() {
-        let pool = initialize_pool(":memory:").expect("Pool creation failed");
+        let pool = initialize_pool(Path::new(":memory:"), 1).expect("Pool creation failed");
 
         // Migrate
         {
