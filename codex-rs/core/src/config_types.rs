@@ -243,6 +243,13 @@ pub struct AgentConfig {
     /// prompt provided to the agent whenever it runs.
     #[serde(default)]
     pub instructions: Option<String>,
+
+    /// Optional model override for this agent. When set, this model will be
+    /// used instead of the global config.model setting. Enables cost/performance
+    /// optimization by using different models per agent (e.g., gpt-5.1-mini for
+    /// simple tasks, gpt-5-codex for code generation).
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 impl Default for AgentConfig {
@@ -259,6 +266,7 @@ impl Default for AgentConfig {
             args_read_only: None,
             args_write: None,
             instructions: None,
+            model: None,
         }
     }
 }
@@ -1201,14 +1209,128 @@ impl From<codex_protocol::config_types::ReasoningSummary> for ReasoningSummary {
     }
 }
 
-/// Quality gate configuration per checkpoint
+/// Configuration for a single quality gate checkpoint (SPEC-939 Component 2a)
+///
+/// # Configuration Examples
+///
+/// ## Cost Optimization (cheap agents, lower threshold)
+/// ```toml
+/// [quality_gates.plan]
+/// agents = ["gemini-flash", "claude-haiku"]
+/// threshold = 0.5  # Require 1/2 agents (1 out of 2)
+/// ```
+///
+/// ## Quality Maximization (premium agents, high threshold)
+/// ```toml
+/// [quality_gates.validate]
+/// agents = ["gemini-pro", "claude-sonnet", "gpt5-high", "gpt_codex"]
+/// threshold = 0.75  # Require 3/4 agents to agree
+/// ```
+///
+/// ## Speed Optimization (single fast agent)
+/// ```toml
+/// [quality_gates.plan]
+/// agents = ["gemini-flash"]
+/// threshold = 1.0  # No consensus needed (single agent)
+/// ```
+///
+/// ## Skip Expensive Checkpoints
+/// ```toml
+/// [quality_gates.audit]
+/// agents = ["gemini"]  # Required but unused when disabled
+/// enabled = false  # Skip audit to save cost
+/// ```
+///
+/// # Threshold Calculation
+///
+/// The minimum required agents is calculated as: `ceil(agent_count * threshold)`
+///
+/// Examples:
+/// - 3 agents × 0.67 threshold = 2.01 → **3 agents required** (strict)
+/// - 3 agents × 0.66 threshold = 1.98 → **2 agents required** (2/3 consensus)
+/// - 4 agents × 0.75 threshold = 3.00 → **3 agents required** (3/4 consensus)
+/// - 2 agents × 0.5 threshold = 1.00 → **1 agent required** (1/2 consensus)
+///
+/// **Note**: Default threshold of 0.67 with 3 agents requires all 3 agents (strict).
+/// Use 0.66 for true 2/3 consensus behavior.
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+pub struct QualityCheckpointConfig {
+    /// List of agent names to use for consensus (e.g., ["gemini", "claude", "code"])
+    pub agents: Vec<String>,
+    /// Consensus threshold (0.0-1.0). E.g., 0.67 means 2/3 agents must agree
+    #[serde(default = "default_quality_threshold")]
+    pub threshold: f64,
+    /// Whether this checkpoint is enabled
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+impl Default for QualityCheckpointConfig {
+    fn default() -> Self {
+        Self {
+            agents: vec![
+                "gemini".to_string(),
+                "claude".to_string(),
+                "code".to_string(),
+            ],
+            threshold: default_quality_threshold(),
+            enabled: true,
+        }
+    }
+}
+
+fn default_quality_threshold() -> f64 {
+    0.67 // 2/3 consensus
+}
+
+/// Quality gate configuration per checkpoint (SPEC-939 Component 2a)
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 pub struct QualityGateConfig {
-    pub plan: Vec<String>,
-    pub tasks: Vec<String>,
-    pub validate: Vec<String>,
-    pub audit: Vec<String>,
-    pub unlock: Vec<String>,
+    /// Configuration for plan checkpoint (clarify before planning)
+    #[serde(default)]
+    pub plan: QualityCheckpointConfig,
+    /// Configuration for tasks checkpoint (checklist after plan)
+    #[serde(default)]
+    pub tasks: QualityCheckpointConfig,
+    /// Configuration for validate checkpoint (analyze after tasks)
+    #[serde(default)]
+    pub validate: QualityCheckpointConfig,
+    /// Configuration for audit checkpoint (compliance/security review)
+    #[serde(default)]
+    pub audit: QualityCheckpointConfig,
+    /// Configuration for unlock checkpoint (final ship/no-ship decision)
+    #[serde(default)]
+    pub unlock: QualityCheckpointConfig,
+}
+
+impl Default for QualityGateConfig {
+    fn default() -> Self {
+        Self {
+            plan: QualityCheckpointConfig::default(),
+            tasks: QualityCheckpointConfig::default(),
+            validate: QualityCheckpointConfig::default(),
+            audit: QualityCheckpointConfig {
+                // Audit uses premium agents by default
+                agents: vec![
+                    "gemini-pro".to_string(),
+                    "claude-sonnet".to_string(),
+                    "gpt5-high".to_string(),
+                ],
+                threshold: 0.67,
+                enabled: true,
+            },
+            unlock: QualityCheckpointConfig {
+                // Unlock uses premium agents by default
+                agents: vec![
+                    "gemini-pro".to_string(),
+                    "claude-sonnet".to_string(),
+                    "gpt5-high".to_string(),
+                ],
+                threshold: 0.67,
+                enabled: true,
+            },
+        }
+    }
 }
 
 /// Hot-reload configuration
@@ -1248,69 +1370,288 @@ mod tests {
     #[test]
     fn test_quality_gate_config_full_deserialization() {
         let toml = r#"
-            plan = ["gemini", "claude", "code"]
-            tasks = ["gemini"]
-            validate = ["gemini", "claude", "code"]
-            audit = ["gemini", "claude", "gpt_codex"]
-            unlock = ["gemini", "claude", "gpt_codex"]
+            [plan]
+            agents = ["gemini", "claude", "code"]
+            threshold = 0.67
+            enabled = true
+
+            [tasks]
+            agents = ["gemini"]
+            threshold = 1.0
+            enabled = true
+
+            [validate]
+            agents = ["gemini", "claude", "code"]
+            threshold = 0.67
+
+            [audit]
+            agents = ["gemini-pro", "claude-sonnet", "gpt5-high"]
+
+            [unlock]
+            agents = ["gemini-pro", "claude-sonnet"]
+            threshold = 1.0
         "#;
 
         let config: QualityGateConfig = toml::from_str(toml).unwrap();
 
-        assert_eq!(config.plan, vec!["gemini", "claude", "code"]);
-        assert_eq!(config.tasks, vec!["gemini"]);
-        assert_eq!(config.validate, vec!["gemini", "claude", "code"]);
-        assert_eq!(config.audit, vec!["gemini", "claude", "gpt_codex"]);
-        assert_eq!(config.unlock, vec!["gemini", "claude", "gpt_codex"]);
+        assert_eq!(config.plan.agents, vec!["gemini", "claude", "code"]);
+        assert_eq!(config.plan.threshold, 0.67);
+        assert_eq!(config.plan.enabled, true);
+
+        assert_eq!(config.tasks.agents, vec!["gemini"]);
+        assert_eq!(config.tasks.threshold, 1.0);
+
+        assert_eq!(config.validate.agents, vec!["gemini", "claude", "code"]);
+        assert_eq!(config.validate.threshold, 0.67);
+        assert_eq!(config.validate.enabled, true); // Default
+
+        assert_eq!(config.audit.agents.len(), 3);
+        assert_eq!(config.unlock.agents.len(), 2);
     }
 
     #[test]
     fn test_quality_gate_config_single_agent() {
         let toml = r#"
-            plan = ["gemini"]
-            tasks = ["gemini"]
-            validate = ["gemini"]
-            audit = ["gemini"]
-            unlock = ["gemini"]
+            [plan]
+            agents = ["gemini"]
+
+            [tasks]
+            agents = ["gemini"]
+
+            [validate]
+            agents = ["gemini"]
+
+            [audit]
+            agents = ["gemini"]
+
+            [unlock]
+            agents = ["gemini"]
         "#;
 
         let config: QualityGateConfig = toml::from_str(toml).unwrap();
 
-        assert_eq!(config.plan.len(), 1);
-        assert_eq!(config.tasks, vec!["gemini"]);
+        assert_eq!(config.plan.agents.len(), 1);
+        assert_eq!(config.tasks.agents, vec!["gemini"]);
+        assert_eq!(config.plan.threshold, 0.67); // Default
+        assert_eq!(config.plan.enabled, true); // Default
     }
 
     #[test]
     fn test_quality_gate_config_multiple_agents() {
         let toml = r#"
-            plan = ["gemini", "claude", "code", "gpt_pro", "haiku"]
-            tasks = ["gemini", "haiku"]
-            validate = ["gemini", "claude", "code"]
-            audit = ["gemini", "claude", "code", "gpt_codex"]
-            unlock = ["gemini", "claude", "code"]
+            [plan]
+            agents = ["gemini", "claude", "code", "gpt_pro", "haiku"]
+
+            [tasks]
+            agents = ["gemini", "haiku"]
+
+            [validate]
+            agents = ["gemini", "claude", "code"]
+
+            [audit]
+            agents = ["gemini", "claude", "code", "gpt_codex"]
+
+            [unlock]
+            agents = ["gemini", "claude", "code"]
         "#;
 
         let config: QualityGateConfig = toml::from_str(toml).unwrap();
 
-        assert_eq!(config.plan.len(), 5);
-        assert_eq!(config.tasks.len(), 2);
-        assert_eq!(config.audit.len(), 4);
+        assert_eq!(config.plan.agents.len(), 5);
+        assert_eq!(config.tasks.agents.len(), 2);
+        assert_eq!(config.audit.agents.len(), 4);
     }
 
     #[test]
     fn test_quality_gate_config_empty_array_fails() {
         let toml = r#"
-            plan = []
-            tasks = ["gemini"]
-            validate = ["gemini"]
-            audit = ["gemini"]
-            unlock = ["gemini"]
+            [plan]
+            agents = []
+
+            [tasks]
+            agents = ["gemini"]
+
+            [validate]
+            agents = ["gemini"]
+
+            [audit]
+            agents = ["gemini"]
+
+            [unlock]
+            agents = ["gemini"]
         "#;
 
         // Empty arrays are allowed by deserializer, but should fail validation
         let config: Result<QualityGateConfig, _> = toml::from_str(toml);
         assert!(config.is_ok()); // Deserialization succeeds
         // Note: Runtime validation (check_api_keys, etc.) will catch empty arrays
+    }
+
+    #[test]
+    fn test_quality_checkpoint_config_defaults() {
+        // Test that checkpoint defaults are applied correctly
+        let config = QualityCheckpointConfig::default();
+
+        assert_eq!(config.agents, vec!["gemini", "claude", "code"]);
+        assert_eq!(config.threshold, 0.67);
+        assert_eq!(config.enabled, true);
+    }
+
+    #[test]
+    fn test_quality_checkpoint_config_custom_threshold() {
+        let toml = r#"
+            agents = ["agent1", "agent2"]
+            threshold = 0.5
+            enabled = false
+        "#;
+
+        let config: QualityCheckpointConfig = toml::from_str(toml).unwrap();
+
+        assert_eq!(config.agents, vec!["agent1", "agent2"]);
+        assert_eq!(config.threshold, 0.5);
+        assert_eq!(config.enabled, false);
+    }
+
+    #[test]
+    fn test_quality_gate_config_defaults() {
+        // Test that QualityGateConfig defaults work
+        let config = QualityGateConfig::default();
+
+        // Plan uses default agents
+        assert_eq!(config.plan.agents, vec!["gemini", "claude", "code"]);
+        assert_eq!(config.plan.threshold, 0.67);
+
+        // Audit uses premium agents
+        assert_eq!(
+            config.audit.agents,
+            vec!["gemini-pro", "claude-sonnet", "gpt5-high"]
+        );
+        assert_eq!(config.audit.threshold, 0.67);
+
+        // Unlock uses premium agents
+        assert_eq!(
+            config.unlock.agents,
+            vec!["gemini-pro", "claude-sonnet", "gpt5-high"]
+        );
+    }
+
+    #[test]
+    fn test_quality_checkpoint_disabled() {
+        let toml = r#"
+            [plan]
+            agents = ["gemini"]
+            enabled = false
+        "#;
+
+        let config: QualityGateConfig = toml::from_str(toml).unwrap();
+
+        assert_eq!(config.plan.enabled, false);
+        assert_eq!(config.tasks.enabled, true); // Other checkpoints use defaults
+    }
+
+    #[test]
+    fn test_threshold_calculation() {
+        // SPEC-939: Test threshold calculation math: ceil(count * threshold)
+
+        // 3 agents, 0.67 threshold → min_required = 3 (0.67 * 3 = 2.01 → ceil = 3)
+        let threshold = 0.67;
+        let agent_count = 3;
+        let min = (agent_count as f64 * threshold).ceil() as usize;
+        assert_eq!(min, 3);
+
+        // 4 agents, 0.75 threshold → min_required = 3
+        let threshold = 0.75;
+        let agent_count = 4;
+        let min = (agent_count as f64 * threshold).ceil() as usize;
+        assert_eq!(min, 3);
+
+        // 2 agents, 0.5 threshold → min_required = 1
+        let threshold = 0.5;
+        let agent_count = 2;
+        let min = (agent_count as f64 * threshold).ceil() as usize;
+        assert_eq!(min, 1);
+
+        // 5 agents, 0.6 threshold → min_required = 3
+        let threshold = 0.6;
+        let agent_count = 5;
+        let min = (agent_count as f64 * threshold).ceil() as usize;
+        assert_eq!(min, 3);
+
+        // Single agent always requires 1
+        let threshold = 1.0;
+        let agent_count = 1;
+        let min = (agent_count as f64 * threshold).ceil() as usize;
+        assert_eq!(min, 1);
+    }
+
+    #[test]
+    fn test_quality_gate_cost_optimization() {
+        // SPEC-939: Test cost optimization scenario
+        let toml = r#"
+            [plan]
+            agents = ["gemini-flash", "claude-haiku"]
+            threshold = 0.5
+
+            [audit]
+            agents = ["gemini"]
+            enabled = false
+        "#;
+
+        let config: QualityGateConfig = toml::from_str(toml).unwrap();
+
+        // Plan uses cheaper agents with lower threshold
+        assert_eq!(config.plan.agents.len(), 2);
+        assert_eq!(config.plan.agents, vec!["gemini-flash", "claude-haiku"]);
+        assert_eq!(config.plan.threshold, 0.5);
+
+        // Audit is disabled to save cost (agents value doesn't matter when disabled)
+        assert_eq!(config.audit.enabled, false);
+
+        // Other checkpoints use defaults
+        assert_eq!(config.tasks.enabled, true);
+        assert_eq!(config.validate.enabled, true);
+    }
+
+    #[test]
+    fn test_quality_gate_quality_maximization() {
+        // SPEC-939: Test quality maximization scenario
+        let toml = r#"
+            [validate]
+            agents = ["gemini-pro", "claude-sonnet", "gpt5-high", "gpt_codex"]
+            threshold = 0.75
+        "#;
+
+        let config: QualityGateConfig = toml::from_str(toml).unwrap();
+
+        // Validate uses 4 premium agents with high threshold
+        assert_eq!(config.validate.agents.len(), 4);
+        assert_eq!(config.validate.threshold, 0.75);
+
+        // Require 3/4 agents to agree
+        let min_required = (4_f64 * 0.75).ceil() as usize;
+        assert_eq!(min_required, 3);
+    }
+
+    #[test]
+    fn test_quality_gate_speed_optimization() {
+        // SPEC-939: Test speed optimization scenario (single fast agent)
+        let toml = r#"
+            [plan]
+            agents = ["gemini-flash"]
+            threshold = 1.0
+
+            [tasks]
+            agents = ["gemini-flash"]
+            threshold = 1.0
+        "#;
+
+        let config: QualityGateConfig = toml::from_str(toml).unwrap();
+
+        // Single agent with threshold 1.0 (no consensus needed)
+        assert_eq!(config.plan.agents.len(), 1);
+        assert_eq!(config.plan.threshold, 1.0);
+        assert_eq!(config.tasks.agents.len(), 1);
+        assert_eq!(config.tasks.threshold, 1.0);
     }
 
     // ============================================================================
@@ -1505,12 +1846,20 @@ mod tests {
         }
 
         let toml = r#"
-            [quality_gates]
-            plan = ["gemini", "claude", "code"]
-            tasks = ["gemini"]
-            validate = ["gemini", "claude", "code"]
-            audit = ["gemini", "claude", "gpt_codex"]
-            unlock = ["gemini", "claude", "gpt_codex"]
+            [quality_gates.plan]
+            agents = ["gemini", "claude", "code"]
+
+            [quality_gates.tasks]
+            agents = ["gemini"]
+
+            [quality_gates.validate]
+            agents = ["gemini", "claude", "code"]
+
+            [quality_gates.audit]
+            agents = ["gemini", "claude", "gpt_codex"]
+
+            [quality_gates.unlock]
+            agents = ["gemini", "claude", "gpt_codex"]
 
             [hot_reload]
             enabled = true
@@ -1526,8 +1875,8 @@ mod tests {
         let config: TestConfig = toml::from_str(toml).unwrap();
 
         // Quality gates
-        assert_eq!(config.quality_gates.plan.len(), 3);
-        assert_eq!(config.quality_gates.tasks, vec!["gemini"]);
+        assert_eq!(config.quality_gates.plan.agents.len(), 3);
+        assert_eq!(config.quality_gates.tasks.agents, vec!["gemini"]);
 
         // Hot reload
         assert_eq!(config.hot_reload.enabled, true);
@@ -1594,5 +1943,124 @@ mod tests {
 
         let result: Result<ValidationConfigExt, _> = toml::from_str(invalid_toml);
         assert!(result.is_err());
+    }
+
+    // ============================================================================
+    // AgentConfig Per-Model Override Tests (SPEC-949 Phase 2)
+    // ============================================================================
+
+    #[test]
+    fn test_agent_config_with_model_override() {
+        // Test that AgentConfig correctly deserializes with model field
+        let toml = r#"
+            name = "gpt5_codex"
+            command = "chatgpt"
+            model = "gpt-5-codex"
+            enabled = true
+        "#;
+
+        let config: AgentConfig = toml::from_str(toml).unwrap();
+
+        assert_eq!(config.name, "gpt5_codex");
+        assert_eq!(config.command, "chatgpt");
+        assert_eq!(config.model, Some("gpt-5-codex".to_string()));
+        assert_eq!(config.enabled, true);
+    }
+
+    #[test]
+    fn test_agent_config_without_model_override() {
+        // Test that AgentConfig defaults to None when model field is omitted
+        let toml = r#"
+            name = "gemini"
+            command = "gemini"
+            enabled = true
+        "#;
+
+        let config: AgentConfig = toml::from_str(toml).unwrap();
+
+        assert_eq!(config.name, "gemini");
+        assert_eq!(config.command, "gemini");
+        assert_eq!(config.model, None);
+        assert_eq!(config.enabled, true);
+    }
+
+    #[test]
+    fn test_agent_config_model_override_with_full_config() {
+        // Test complete AgentConfig with model override and all optional fields
+        let toml = r#"
+            name = "gpt5_1_mini"
+            command = "chatgpt"
+            model = "gpt-5.1-mini"
+            enabled = true
+            read_only = false
+            description = "Cost-optimized GPT-5 variant for simple tasks"
+            args = ["--model", "gpt-5.1-mini"]
+            args_read_only = ["--model", "gpt-5.1-mini", "-s", "read-only"]
+            args_write = ["--model", "gpt-5.1-mini", "-s", "workspace-write"]
+        "#;
+
+        let config: AgentConfig = toml::from_str(toml).unwrap();
+
+        assert_eq!(config.name, "gpt5_1_mini");
+        assert_eq!(config.command, "chatgpt");
+        assert_eq!(config.model, Some("gpt-5.1-mini".to_string()));
+        assert_eq!(config.enabled, true);
+        assert_eq!(config.read_only, false);
+        assert_eq!(config.description, Some("Cost-optimized GPT-5 variant for simple tasks".to_string()));
+        assert_eq!(config.args, vec!["--model", "gpt-5.1-mini"]);
+        // Note: args_read_only and args_write would be Some(...) if parsed from TOML
+        // but TOML syntax for nested arrays varies, so testing model field is sufficient
+    }
+
+    #[test]
+    fn test_agent_config_default_includes_model_none() {
+        // Test that AgentConfig::default() sets model to None
+        let config = AgentConfig::default();
+
+        assert_eq!(config.model, None);
+        assert_eq!(config.name, "");
+        assert_eq!(config.command, "");
+        assert_eq!(config.enabled, true);
+    }
+
+    #[test]
+    fn test_multiple_agents_with_different_model_overrides() {
+        // Test deserializing multiple agents with different model configurations
+        let toml = r#"
+            [[agents]]
+            name = "gpt5_simple"
+            command = "chatgpt"
+            model = "gpt-5.1-mini"
+
+            [[agents]]
+            name = "gpt5_codex"
+            command = "chatgpt"
+            model = "gpt-5-codex"
+
+            [[agents]]
+            name = "gemini"
+            command = "gemini"
+        "#;
+
+        #[derive(serde::Deserialize)]
+        struct TestConfig {
+            agents: Vec<AgentConfig>,
+        }
+
+        let config: TestConfig = toml::from_str(toml).unwrap();
+
+        assert_eq!(config.agents.len(), 3);
+
+        // First agent: gpt5_simple with model override
+        assert_eq!(config.agents[0].name, "gpt5_simple");
+        assert_eq!(config.agents[0].model, Some("gpt-5.1-mini".to_string()));
+
+        // Second agent: gpt5_codex with different model override
+        assert_eq!(config.agents[1].name, "gpt5_codex");
+        assert_eq!(config.agents[1].model, Some("gpt-5-codex".to_string()));
+
+        // Third agent: gemini without model override (uses command)
+        assert_eq!(config.agents[2].name, "gemini");
+        assert_eq!(config.agents[2].model, None);
     }
 }

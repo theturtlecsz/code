@@ -139,21 +139,20 @@ pub fn is_in_progress(spec_id: &str, evidence_base: &Path) -> Result<bool> {
             .max_depth(3)
             .follow_links(false)
         {
-            let entry = entry.map_err(|e| {
-                SpecKitError::Other(format!("Failed to walk directory: {}", e))
-            })?;
+            let entry = entry
+                .map_err(|e| SpecKitError::Other(format!("Failed to walk directory: {}", e)))?;
 
             if !entry.file_type().is_file() {
                 continue;
             }
 
-            let metadata = entry.metadata().map_err(|e| {
-                SpecKitError::Other(format!("Failed to read metadata: {}", e))
-            })?;
+            let metadata = entry
+                .metadata()
+                .map_err(|e| SpecKitError::Other(format!("Failed to read metadata: {}", e)))?;
 
-            let modified = metadata.modified().map_err(|e| {
-                SpecKitError::Other(format!("Failed to read modified time: {}", e))
-            })?;
+            let modified = metadata
+                .modified()
+                .map_err(|e| SpecKitError::Other(format!("Failed to read modified time: {}", e)))?;
 
             let modified_dt: DateTime<Utc> = modified.into();
 
@@ -172,10 +171,7 @@ pub fn is_in_progress(spec_id: &str, evidence_base: &Path) -> Result<bool> {
 }
 
 /// Find old artifacts eligible for archival or purge
-fn find_old_artifacts(
-    evidence_base: &Path,
-    cutoff_days: i64,
-) -> Result<Vec<ArtifactMetadata>> {
+fn find_old_artifacts(evidence_base: &Path, cutoff_days: i64) -> Result<Vec<ArtifactMetadata>> {
     let cutoff = Utc::now() - Duration::days(cutoff_days);
     let mut artifacts = Vec::new();
 
@@ -187,9 +183,9 @@ fn find_old_artifacts(
         }
 
         // Walk each SPEC directory
-        for spec_entry in fs::read_dir(&category_dir).map_err(|e| {
-            SpecKitError::Other(format!("Failed to read directory: {}", e))
-        })? {
+        for spec_entry in fs::read_dir(&category_dir)
+            .map_err(|e| SpecKitError::Other(format!("Failed to read directory: {}", e)))?
+        {
             let spec_entry = spec_entry.map_err(|e| {
                 SpecKitError::Other(format!("Failed to read directory entry: {}", e))
             })?;
@@ -211,17 +207,16 @@ fn find_old_artifacts(
                 .max_depth(3)
                 .follow_links(false)
             {
-                let entry = entry.map_err(|e| {
-                    SpecKitError::Other(format!("Failed to walk directory: {}", e))
-                })?;
+                let entry = entry
+                    .map_err(|e| SpecKitError::Other(format!("Failed to walk directory: {}", e)))?;
 
                 if !entry.file_type().is_file() {
                     continue;
                 }
 
-                let metadata = entry.metadata().map_err(|e| {
-                    SpecKitError::Other(format!("Failed to read metadata: {}", e))
-                })?;
+                let metadata = entry
+                    .metadata()
+                    .map_err(|e| SpecKitError::Other(format!("Failed to read metadata: {}", e)))?;
 
                 let modified = metadata.modified().map_err(|e| {
                     SpecKitError::Other(format!("Failed to read modified time: {}", e))
@@ -341,18 +336,14 @@ fn purge_artifacts(
 fn calculate_total_size(evidence_base: &Path) -> Result<u64> {
     let mut total_bytes = 0u64;
 
-    for entry in WalkDir::new(evidence_base)
-        .min_depth(1)
-        .follow_links(false)
-    {
-        let entry = entry.map_err(|e| {
-            SpecKitError::Other(format!("Failed to walk directory: {}", e))
-        })?;
+    for entry in WalkDir::new(evidence_base).min_depth(1).follow_links(false) {
+        let entry =
+            entry.map_err(|e| SpecKitError::Other(format!("Failed to walk directory: {}", e)))?;
 
         if entry.file_type().is_file() {
-            let metadata = entry.metadata().map_err(|e| {
-                SpecKitError::Other(format!("Failed to read metadata: {}", e))
-            })?;
+            let metadata = entry
+                .metadata()
+                .map_err(|e| SpecKitError::Other(format!("Failed to read metadata: {}", e)))?;
             total_bytes += metadata.len();
         }
     }
@@ -361,10 +352,7 @@ fn calculate_total_size(evidence_base: &Path) -> Result<u64> {
 }
 
 /// Check evidence size limits and generate warnings
-fn check_size_limits(
-    config: &CleanupConfig,
-    summary: &mut CleanupSummary,
-) -> Result<()> {
+fn check_size_limits(config: &CleanupConfig, summary: &mut CleanupSummary) -> Result<()> {
     let total_size_mb = summary.total_size_bytes / (1024 * 1024);
 
     if total_size_mb >= config.hard_limit_mb {
@@ -508,12 +496,7 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
-    fn create_test_artifact(
-        base: &Path,
-        spec_id: &str,
-        category: &str,
-        age_days: i64,
-    ) -> PathBuf {
+    fn create_test_artifact(base: &Path, spec_id: &str, category: &str, age_days: i64) -> PathBuf {
         let dir = base.join(category).join(spec_id);
         fs::create_dir_all(&dir).unwrap();
 

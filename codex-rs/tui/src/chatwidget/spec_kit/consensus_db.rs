@@ -866,7 +866,10 @@ impl ConsensusDb {
 
                     // 1. Store/update consensus run with string-based stage
                     let run_id = store_consensus_run(
-                        &pool, &spec_id, &stage_name, true,  // consensus_ok (artifact exists)
+                        &pool,
+                        &spec_id,
+                        &stage_name,
+                        true,  // consensus_ok (artifact exists)
                         false, // degraded
                         None,  // synthesis_json (not available at artifact stage)
                     )

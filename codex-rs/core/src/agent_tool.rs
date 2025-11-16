@@ -7,12 +7,14 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use tokio::process::Command;
 use tokio::sync::RwLock;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
+use crate::async_agent_executor::{AsyncAgentExecutor, DirectProcessExecutor, ProviderRegistry};
 use crate::config_types::AgentConfig;
 use crate::openai_tools::JsonSchema;
 use crate::openai_tools::OpenAiTool;
@@ -198,13 +200,18 @@ impl AgentManager {
             return Err(format!("Agent '{}' is disabled in config", config_name));
         }
 
-        // Use the base command name as the "model" for execute_agent matching
-        // The actual model/args come from config
-        let base_command = agent_config.command.clone();
+        // SPEC-949 Phase 2: Per-agent model override
+        // If agent_config.model is set, use it; otherwise use base command
+        // This enables cost/performance optimization by using different models per agent
+        // (e.g., gpt-5.1-mini for simple tasks, gpt-5-codex for code generation)
+        let model = agent_config
+            .model
+            .clone()
+            .unwrap_or_else(|| agent_config.command.clone());
 
         let agent_id = self
             .create_agent_internal(
-                base_command, // "gemini", "claude", "codex", etc. (for execute_agent matching)
+                model, // Per-agent model override or base command
                 prompt,
                 None,   // context
                 None,   // output_goal
@@ -1058,13 +1065,31 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
     tracing::info!("✅ Agent {} execute_agent() task completed", agent_id);
 }
 
+/// Get global ProviderRegistry singleton with default providers.
+///
+/// Initializes once on first call, returns cached instance on subsequent calls.
+/// Registry includes: Anthropic (claude), Google (gemini), OpenAI (openai).
+///
+/// # Example
+///
+/// ```
+/// let registry = get_provider_registry();
+/// let provider = registry.detect_from_cli("claude")
+///     .expect("claude provider should be registered");
+/// assert_eq!(provider.name(), "anthropic");
+/// ```
+fn get_provider_registry() -> &'static ProviderRegistry {
+    static REGISTRY: OnceLock<ProviderRegistry> = OnceLock::new();
+    REGISTRY.get_or_init(|| ProviderRegistry::with_defaults())
+}
+
 async fn execute_model_with_permissions(
     model: &str,
     prompt: &str,
     read_only: bool,
     working_dir: Option<PathBuf>,
     config: Option<AgentConfig>,
-    use_tmux: bool,
+    _use_tmux: bool, // Kept for backward compatibility, now unused (SPEC-936)
 ) -> Result<String, String> {
     // Helper: cross‑platform check whether an executable is available in PATH
     // and is directly spawnable by std::process::Command (no shell wrappers).
@@ -1225,276 +1250,139 @@ async fn execute_model_with_permissions(
         ));
     }
 
-    // SPEC-KIT-923: Observable agent execution via tmux panes
-    // If use_tmux is enabled and tmux is available, execute in a tmux pane
-    if use_tmux && crate::tmux::is_tmux_available().await {
-        tracing::info!("Using tmux pane execution for observable agent run");
+    // SPEC-936: DirectProcessExecutor replaces tmux and normal execution paths
+    // Detect provider from CLI command name
+    let registry = get_provider_registry();
+    let provider = registry.detect_from_cli(&command).ok_or_else(|| {
+        let available = registry.list_available_clis();
+        format!(
+            "Unknown CLI provider: '{}'. Available: {:?}. \
+             Register custom providers with ProviderRegistry::register()",
+            command, available
+        )
+    })?;
 
-        // Generate session name based on context
-        let session_name = format!("agents-{}", model);
+    // Build environment map, filtering out debug vars that pollute JSON output
+    let mut env: std::collections::HashMap<String, String> = std::env::vars()
+        .filter(|(k, _)| {
+            k != "RUST_LOG"
+                && k != "RUST_BACKTRACE"
+                && k != "RUST_LOG_STYLE"
+                && !k.starts_with("RUST_LOG_")
+        })
+        .collect();
 
-        // Ensure session exists
-        if let Err(e) = crate::tmux::ensure_session(&session_name).await {
-            tracing::warn!(
-                "Failed to create tmux session, falling back to normal execution: {}",
-                e
-            );
-            // Fall through to normal execution
-        } else {
-            // Create pane for this agent
-            let pane_title = format!("{}", model);
-            // SPEC-923: Always split new panes (is_first=false) to avoid reusing stale panes from previous runs
-            // Each agent gets a fresh pane, ensuring clean shell state and proper completion marker detection
-            match crate::tmux::create_pane(&session_name, &pane_title, false).await {
-                Ok(pane_id) => {
-                    // Build environment map, filtering out debug-related vars that pollute output
-                    let mut env: std::collections::HashMap<String, String> = std::env::vars()
-                        .filter(|(k, _)| {
-                            // Filter out debug/logging vars that would pollute agent JSON output
-                            k != "RUST_LOG"
-                                && k != "RUST_BACKTRACE"
-                                && k != "RUST_LOG_STYLE"
-                                && !k.starts_with("RUST_LOG_")
-                        })
-                        .collect();
-                    if let Some(ref cfg) = config {
-                        if let Some(ref e) = cfg.env {
-                            for (k, v) in e {
-                                env.insert(k.clone(), v.clone());
-                            }
-                        }
-                    }
-
-                    // Build command string with args
-                    let program =
-                        if (model_lower == "code" || model_lower == "codex") && config.is_none() {
-                            std::env::current_exe()
-                                .map(|p| p.to_string_lossy().to_string())
-                                .unwrap_or_else(|_| command.clone())
-                        } else {
-                            command.clone()
-                        };
-
-                    // Build args exactly as normal execution would
-                    let mut args: Vec<String> = Vec::new();
-                    if let Some(ref cfg) = config {
-                        if read_only {
-                            if let Some(ro) = cfg.args_read_only.as_ref() {
-                                args.extend(ro.iter().cloned());
-                            } else {
-                                args.extend(cfg.args.iter().cloned());
-                            }
-                        } else if let Some(w) = cfg.args_write.as_ref() {
-                            args.extend(w.iter().cloned());
-                        } else {
-                            args.extend(cfg.args.iter().cloned());
-                        }
-                    }
-
-                    match model_name {
-                        "claude" | "gemini" | "qwen" => {
-                            let mut defaults =
-                                crate::agent_defaults::default_params_for(model_name, read_only);
-                            defaults.push("-p".into());
-                            defaults.push(prompt.to_string());
-                            args.extend(defaults);
-                        }
-                        "codex" | "code" => {
-                            let have_mode_args = config
-                                .as_ref()
-                                .map(|c| {
-                                    if read_only {
-                                        c.args_read_only.is_some()
-                                    } else {
-                                        c.args_write.is_some()
-                                    }
-                                })
-                                .unwrap_or(false);
-                            if have_mode_args {
-                                args.push(prompt.to_string());
-                            } else {
-                                let mut defaults = crate::agent_defaults::default_params_for(
-                                    model_name, read_only,
-                                );
-                                defaults.push(prompt.to_string());
-                                args.extend(defaults);
-                            }
-                        }
-                        _ => {}
-                    }
-
-                    // Execute in tmux pane with 10 minute timeout
-                    let timeout_secs = 600;
-                    match crate::tmux::execute_in_pane(
-                        &session_name,
-                        &pane_id,
-                        &program,
-                        &args,
-                        &env,
-                        working_dir.as_deref(),
-                        timeout_secs,
-                    )
-                    .await
-                    {
-                        Ok(output) => {
-                            tracing::info!(
-                                "Agent completed via tmux pane, {} bytes output",
-                                output.len()
-                            );
-
-                            // Print attach instructions for user
-                            let instructions = crate::tmux::get_attach_instructions(&session_name);
-                            tracing::info!("{}", instructions);
-
-                            return Ok(output);
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                "Tmux execution failed, falling back to normal execution: {}",
-                                e
-                            );
-                            // Fall through to normal execution
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        "Failed to create tmux pane, falling back to normal execution: {}",
-                        e
-                    );
-                    // Fall through to normal execution
-                }
+    // Overlay config-provided env vars
+    if let Some(ref cfg) = config {
+        if let Some(ref e) = cfg.env {
+            for (k, v) in e {
+                env.insert(k.clone(), v.clone());
             }
         }
     }
 
-    // Agents: run without OS sandboxing; rely on per-branch worktrees for isolation.
-    use crate::protocol::SandboxPolicy;
-    use crate::spawn::StdioPolicy;
-    let output = if !read_only {
-        // Build env from current process then overlay any config-provided vars.
-        let mut env: std::collections::HashMap<String, String> = std::env::vars().collect();
-        let orig_home: Option<String> = env.get("HOME").cloned();
-        if let Some(ref cfg) = config {
-            if let Some(ref e) = cfg.env {
-                for (k, v) in e {
-                    env.insert(k.clone(), v.clone());
-                }
-            }
-        }
+    // Convenience: map common API key names so external CLIs "just work"
+    if let Some(google_key) = env.get("GOOGLE_API_KEY").cloned() {
+        env.entry("GEMINI_API_KEY".to_string())
+            .or_insert(google_key);
+    }
+    if let Some(claude_key) = env.get("CLAUDE_API_KEY").cloned() {
+        env.entry("ANTHROPIC_API_KEY".to_string())
+            .or_insert(claude_key);
+    }
+    if let Some(anthropic_key) = env.get("ANTHROPIC_API_KEY").cloned() {
+        env.entry("CLAUDE_API_KEY".to_string())
+            .or_insert(anthropic_key);
+    }
+    if let Some(anthropic_base) = env.get("ANTHROPIC_BASE_URL").cloned() {
+        env.entry("CLAUDE_BASE_URL".to_string())
+            .or_insert(anthropic_base);
+    }
+    // Qwen/DashScope convenience
+    if let Some(qwen_key) = env.get("QWEN_API_KEY").cloned() {
+        env.entry("DASHSCOPE_API_KEY".to_string())
+            .or_insert(qwen_key);
+    }
+    if let Some(dashscope_key) = env.get("DASHSCOPE_API_KEY").cloned() {
+        env.entry("QWEN_API_KEY".to_string())
+            .or_insert(dashscope_key);
+    }
+    if let Some(qwen_base) = env.get("QWEN_BASE_URL").cloned() {
+        env.entry("DASHSCOPE_BASE_URL".to_string())
+            .or_insert(qwen_base);
+    }
+    if let Some(ds_base) = env.get("DASHSCOPE_BASE_URL").cloned() {
+        env.entry("QWEN_BASE_URL".to_string()).or_insert(ds_base);
+    }
+    // Reduce startup overhead for Claude CLI
+    env.entry("DISABLE_AUTOUPDATER".to_string())
+        .or_insert("1".to_string());
+    env.entry("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".to_string())
+        .or_insert("1".to_string());
+    env.entry("DISABLE_ERROR_REPORTING".to_string())
+        .or_insert("1".to_string());
 
-        // Convenience: map common key names so external CLIs "just work".
-        if let Some(google_key) = env.get("GOOGLE_API_KEY").cloned() {
-            env.entry("GEMINI_API_KEY".to_string())
-                .or_insert(google_key);
-        }
-        if let Some(claude_key) = env.get("CLAUDE_API_KEY").cloned() {
-            env.entry("ANTHROPIC_API_KEY".to_string())
-                .or_insert(claude_key);
-        }
-        if let Some(anthropic_key) = env.get("ANTHROPIC_API_KEY").cloned() {
-            env.entry("CLAUDE_API_KEY".to_string())
-                .or_insert(anthropic_key);
-        }
-        if let Some(anthropic_base) = env.get("ANTHROPIC_BASE_URL").cloned() {
-            env.entry("CLAUDE_BASE_URL".to_string())
-                .or_insert(anthropic_base);
-        }
-        // Qwen/DashScope convenience: mirror API keys and base URLs both ways so
-        // either variable name works across tools.
-        if let Some(qwen_key) = env.get("QWEN_API_KEY").cloned() {
-            env.entry("DASHSCOPE_API_KEY".to_string())
-                .or_insert(qwen_key);
-        }
-        if let Some(dashscope_key) = env.get("DASHSCOPE_API_KEY").cloned() {
-            env.entry("QWEN_API_KEY".to_string())
-                .or_insert(dashscope_key);
-        }
-        if let Some(qwen_base) = env.get("QWEN_BASE_URL").cloned() {
-            env.entry("DASHSCOPE_BASE_URL".to_string())
-                .or_insert(qwen_base);
-        }
-        if let Some(ds_base) = env.get("DASHSCOPE_BASE_URL").cloned() {
-            env.entry("QWEN_BASE_URL".to_string()).or_insert(ds_base);
-        }
-        // Reduce startup overhead for Claude CLI: disable auto-updater/telemetry.
-        env.entry("DISABLE_AUTOUPDATER".to_string())
-            .or_insert("1".to_string());
-        env.entry("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".to_string())
-            .or_insert("1".to_string());
-        env.entry("DISABLE_ERROR_REPORTING".to_string())
-            .or_insert("1".to_string());
-        // Prefer explicit Claude config dir to avoid touching $HOME/.claude.json.
-        // Do not force CLAUDE_CONFIG_DIR here; leave CLI free to use its default
-        // (including Keychain) unless we explicitly redirect HOME below.
+    // Resolve program path
+    let program = if (model_lower == "code" || model_lower == "codex") && config.is_none() {
+        std::env::current_exe()
+            .map_err(|e| format!("Failed to resolve current executable: {}", e))?
+            .to_string_lossy()
+            .to_string()
+    } else {
+        command.clone()
+    };
 
-        // If GEMINI_API_KEY not provided, try pointing to host config for read‑only
-        // discovery (Gemini CLI supports GEMINI_CONFIG_DIR). We keep HOME as-is so
-        // CLIs that require ~/.gemini and ~/.claude continue to work with your
-        // existing config.
-        if env.get("GEMINI_API_KEY").is_none() {
-            if let Some(h) = orig_home.clone() {
-                let host_gem_cfg = std::path::PathBuf::from(&h).join(".gemini");
-                if host_gem_cfg.is_dir() {
-                    env.insert(
-                        "GEMINI_CONFIG_DIR".to_string(),
-                        host_gem_cfg.to_string_lossy().to_string(),
-                    );
-                }
-            }
-        }
-
-        // No OS sandbox.
-
-        // Resolve the command and args we prepared above into Vec<String> for spawn helpers.
-        // Intentionally build args fresh for sandbox helpers; `Command` does not expose argv.
-        // Rebuild the invocation as `command` + args set above.
-        // We reconstruct to run under our sandbox helpers.
-        let program = if (model_lower == "code" || model_lower == "codex") && config.is_none() {
-            // Use current exe path
-            std::env::current_exe()
-                .map_err(|e| format!("Failed to resolve current executable: {}", e))?
-        } else {
-            // Use program name; PATH resolution will be handled by spawn helper with provided env.
-            std::path::PathBuf::from(&command)
-        };
-
-        // Rebuild args exactly as above
-        let mut args: Vec<String> = Vec::new();
-        // Include configured args (mode‑specific preferred) first, to mirror the
-        // immediate-Command path above.
-        if let Some(ref cfg) = config {
-            if read_only {
-                if let Some(ro) = cfg.args_read_only.as_ref() {
-                    args.extend(ro.iter().cloned());
-                } else {
-                    args.extend(cfg.args.iter().cloned());
-                }
-            } else if let Some(w) = cfg.args_write.as_ref() {
-                args.extend(w.iter().cloned());
+    // Build args from config and model-specific defaults
+    let mut args: Vec<String> = Vec::new();
+    if let Some(ref cfg) = config {
+        if read_only {
+            if let Some(ro) = cfg.args_read_only.as_ref() {
+                args.extend(ro.iter().cloned());
             } else {
                 args.extend(cfg.args.iter().cloned());
             }
+        } else if let Some(w) = cfg.args_write.as_ref() {
+            args.extend(w.iter().cloned());
+        } else {
+            args.extend(cfg.args.iter().cloned());
         }
+    }
 
-        match model_name {
-            "claude" | "gemini" | "qwen" => {
+    // Detect large prompts (>1KB) for stdin piping
+    let large_input = if prompt.len() > 1024 {
+        Some(prompt)
+    } else {
+        None
+    };
+
+    // Add model-specific args, handling large prompts via stdin
+    match model_name {
+        "claude" | "gemini" | "qwen" => {
+            if large_input.is_none() {
+                // Small prompt: use -p flag
                 let mut defaults = crate::agent_defaults::default_params_for(model_name, read_only);
                 defaults.push("-p".into());
                 defaults.push(prompt.to_string());
                 args.extend(defaults);
+            } else {
+                // Large prompt: will use stdin, only add defaults
+                let defaults = crate::agent_defaults::default_params_for(model_name, read_only);
+                args.extend(defaults);
             }
-            "codex" | "code" => {
-                let have_mode_args = config
-                    .as_ref()
-                    .map(|c| {
-                        if read_only {
-                            c.args_read_only.is_some()
-                        } else {
-                            c.args_write.is_some()
-                        }
-                    })
-                    .unwrap_or(false);
+        }
+        "codex" | "code" => {
+            let have_mode_args = config
+                .as_ref()
+                .map(|c| {
+                    if read_only {
+                        c.args_read_only.is_some()
+                    } else {
+                        c.args_write.is_some()
+                    }
+                })
+                .unwrap_or(false);
+            if large_input.is_none() {
+                // Small prompt: include in args
                 if have_mode_args {
                     args.push(prompt.to_string());
                 } else {
@@ -1503,111 +1391,43 @@ async fn execute_model_with_permissions(
                     defaults.push(prompt.to_string());
                     args.extend(defaults);
                 }
-            }
-            _ => {}
-        }
-
-        // Always run agents without OS sandboxing.
-        let sandbox_type = crate::exec::SandboxType::None;
-
-        // Spawn via helpers and capture output
-        let child_result: std::io::Result<tokio::process::Child> = match sandbox_type {
-            crate::exec::SandboxType::None
-            | crate::exec::SandboxType::MacosSeatbelt
-            | crate::exec::SandboxType::LinuxSeccomp => {
-                crate::spawn::spawn_child_async(
-                    program.clone(),
-                    args.clone(),
-                    Some(&program.to_string_lossy()),
-                    working_dir.clone().unwrap_or_else(|| {
-                        std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
-                    }),
-                    &SandboxPolicy::DangerFullAccess,
-                    StdioPolicy::RedirectForShellTool,
-                    env.clone(),
-                )
-                .await
-            }
-        };
-
-        match child_result {
-            Ok(child) => child
-                .wait_with_output()
-                .await
-                .map_err(|e| format!("Failed to read output: {}", e))?,
-            Err(e) => {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    return Err(format!(
-                        "Required agent '{}' is not installed or not in PATH",
-                        command
-                    ));
+            } else {
+                // Large prompt: will use stdin
+                if !have_mode_args {
+                    let defaults = crate::agent_defaults::default_params_for(model_name, read_only);
+                    args.extend(defaults);
                 }
-                return Err(format!("Failed to spawn sandboxed agent: {}", e));
             }
         }
-    } else {
-        // Read-only path: use prior behavior
-        match cmd.output().await {
-            Ok(o) => o,
-            Err(e) => {
-                // Only fall back for external CLIs (not the built-in code/codex path)
-                if model_name == "codex" || model_name == "code" {
-                    return Err(format!("Failed to execute {}: {}", model, e));
-                }
-                let mut fb = match std::env::current_exe() {
-                    Ok(p) => Command::new(p),
-                    Err(e2) => {
-                        return Err(format!(
-                            "Failed to execute {} and could not resolve built-in fallback: {} / {}",
-                            model, e, e2
-                        ));
-                    }
-                };
-                if read_only {
-                    fb.args([
-                        "-s",
-                        "read-only",
-                        "-a",
-                        "never",
-                        "exec",
-                        "--skip-git-repo-check",
-                        prompt,
-                    ]);
-                } else {
-                    fb.args([
-                        "-s",
-                        "workspace-write",
-                        "-a",
-                        "never",
-                        "exec",
-                        "--skip-git-repo-check",
-                        prompt,
-                    ]);
-                }
-                fb.output().await.map_err(|e2| {
-                    format!(
-                        "Failed to execute {} ({}). Built-in fallback also failed: {}",
-                        model, e, e2
-                    )
-                })?
-            }
-        }
-    };
-
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let combined = if stderr.trim().is_empty() {
-            stdout.trim().to_string()
-        } else if stdout.trim().is_empty() {
-            stderr.trim().to_string()
-        } else {
-            format!("{}\n{}", stderr.trim(), stdout.trim())
-        };
-        Err(format!("Command failed: {}", combined))
+        _ => {}
     }
+
+    // Execute via DirectProcessExecutor
+    let executor = DirectProcessExecutor;
+    let timeout_secs = 600; // 10 minutes
+
+    tracing::info!(
+        "Executing agent '{}' via DirectProcessExecutor (provider: {})",
+        command,
+        provider.name()
+    );
+
+    let output = executor
+        .execute(
+            &program,
+            &args,
+            &env,
+            working_dir.as_deref(),
+            timeout_secs,
+            large_input,
+            provider,
+        )
+        .await
+        .map_err(|e| format!("Agent execution failed: {}", e))?;
+
+    // DirectProcessExecutor returns AgentOutput with stdout/stderr already separated
+    // On success, return stdout; errors are already handled by executor
+    Ok(output.stdout)
 }
 
 // Tool creation functions

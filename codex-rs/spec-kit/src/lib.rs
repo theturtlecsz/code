@@ -13,11 +13,15 @@
 pub mod config; // SPEC-945D: Configuration management (layered config, hot-reload)
 pub mod error;
 pub mod retry; // SPEC-945C: Retry logic (backoff, error classification)
+pub mod timing; // SPEC-940: Performance timing infrastructure
 pub mod types;
 
 // Phase 1: Core types and error handling
 pub use error::{Result, SpecKitError};
 pub use types::{SpecAgent, SpecStage};
+
+// SPEC-940: Re-export timing macros for convenience
+pub use timing::Timer;
 
 /// Spec-Kit version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

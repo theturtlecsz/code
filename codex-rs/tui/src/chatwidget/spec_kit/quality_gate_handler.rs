@@ -119,6 +119,9 @@ pub fn on_quality_gate_agents_complete(widget: &mut ChatWidget) {
         crate::history_cell::HistoryCellType::Notice,
     ));
 
+    // SPEC-939: Get threshold from config
+    let threshold = get_quality_gate_threshold(widget, checkpoint);
+
     // Use memory-based collection for native orchestrator, filesystem for legacy
     if let Some(agent_ids) = native_agent_ids {
         widget.quality_gate_broker.fetch_agent_payloads_from_memory(
@@ -126,6 +129,7 @@ pub fn on_quality_gate_agents_complete(widget: &mut ChatWidget) {
             checkpoint,
             expected_agents,
             agent_ids,
+            threshold,
         );
     } else {
         widget.quality_gate_broker.fetch_agent_payloads(
@@ -1029,24 +1033,62 @@ pub(super) fn determine_quality_checkpoint(
     }
 }
 
-/// Get quality gate agents from config, falling back to defaults
+/// Get quality gate agents from config, falling back to defaults (SPEC-939 Component 2a)
 fn get_quality_gate_agents(
     widget: &ChatWidget,
     checkpoint: super::state::QualityCheckpoint,
 ) -> Vec<String> {
     // Try to get from config first
     if let Some(quality_gates) = &widget.config.quality_gates {
-        let agents = match checkpoint {
+        let checkpoint_config = match checkpoint {
             super::state::QualityCheckpoint::BeforeSpecify => &quality_gates.plan,
             super::state::QualityCheckpoint::AfterSpecify => &quality_gates.tasks,
             super::state::QualityCheckpoint::AfterTasks => &quality_gates.validate,
         };
-        if !agents.is_empty() {
-            return agents.clone();
+        // Only use if checkpoint is enabled and has agents configured
+        if checkpoint_config.enabled && !checkpoint_config.agents.is_empty() {
+            return checkpoint_config.agents.clone();
         }
     }
     // Fallback to default agents
-    vec!["gemini".to_string(), "claude".to_string(), "code".to_string()]
+    vec![
+        "gemini".to_string(),
+        "claude".to_string(),
+        "code".to_string(),
+    ]
+}
+
+/// Get quality gate consensus threshold from config, falling back to default (SPEC-939 Component 2a)
+fn get_quality_gate_threshold(
+    widget: &ChatWidget,
+    checkpoint: super::state::QualityCheckpoint,
+) -> f64 {
+    if let Some(quality_gates) = &widget.config.quality_gates {
+        let checkpoint_config = match checkpoint {
+            super::state::QualityCheckpoint::BeforeSpecify => &quality_gates.plan,
+            super::state::QualityCheckpoint::AfterSpecify => &quality_gates.tasks,
+            super::state::QualityCheckpoint::AfterTasks => &quality_gates.validate,
+        };
+        if checkpoint_config.enabled {
+            return checkpoint_config.threshold;
+        }
+    }
+    // Fallback to default 2/3 consensus
+    0.67
+}
+
+/// Check if a quality gate checkpoint is enabled (SPEC-939 Component 2a)
+fn is_checkpoint_enabled(widget: &ChatWidget, checkpoint: super::state::QualityCheckpoint) -> bool {
+    if let Some(quality_gates) = &widget.config.quality_gates {
+        let checkpoint_config = match checkpoint {
+            super::state::QualityCheckpoint::BeforeSpecify => &quality_gates.plan,
+            super::state::QualityCheckpoint::AfterSpecify => &quality_gates.tasks,
+            super::state::QualityCheckpoint::AfterTasks => &quality_gates.validate,
+        };
+        return checkpoint_config.enabled;
+    }
+    // Default to enabled
+    true
 }
 
 /// Execute quality checkpoint by starting quality gate agents
@@ -1057,6 +1099,28 @@ pub(super) fn execute_quality_checkpoint(
     let Some(state) = widget.spec_auto_state.as_ref() else {
         return;
     };
+
+    // SPEC-939: Skip disabled checkpoints
+    if !is_checkpoint_enabled(widget, checkpoint) {
+        tracing::info!("Quality checkpoint {:?} is disabled, skipping", checkpoint);
+
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![ratatui::text::Line::from(format!(
+                "Quality Checkpoint: {} - SKIPPED (disabled in config)",
+                checkpoint.name()
+            ))],
+            crate::history_cell::HistoryCellType::Notice,
+        ));
+
+        // Mark checkpoint as completed (skipped)
+        if let Some(state) = widget.spec_auto_state.as_mut() {
+            state.completed_checkpoints.insert(checkpoint);
+        }
+
+        // Advance to next stage
+        super::handler::advance_spec_auto(widget);
+        return;
+    }
 
     let spec_id = state.spec_id.clone();
     let cwd = widget.config.cwd.clone();
@@ -1076,6 +1140,16 @@ pub(super) fn execute_quality_checkpoint(
 
     // Get quality gate agents from config (SPEC-939: configurable quality gates)
     let quality_gate_agents = get_quality_gate_agents(widget, checkpoint);
+    let quality_gate_threshold = get_quality_gate_threshold(widget, checkpoint);
+
+    // SPEC-939: Log configuration being used
+    tracing::info!(
+        "Quality checkpoint {:?}: {} agents [{}], threshold {:.2}",
+        checkpoint,
+        quality_gate_agents.len(),
+        quality_gate_agents.join(", "),
+        quality_gate_threshold
+    );
 
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
         vec![ratatui::text::Line::from(format!(
@@ -1804,7 +1878,9 @@ async fn store_artifact_async(
 
     debug!(
         "Successfully stored artifact to SQLite: agent={}, spec={}, checkpoint={}",
-        agent_name, spec_id, checkpoint.name()
+        agent_name,
+        spec_id,
+        checkpoint.name()
     );
     Ok(())
 }

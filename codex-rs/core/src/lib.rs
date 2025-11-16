@@ -20,13 +20,14 @@ pub use codex_conversation::CodexConversation;
 pub mod acp;
 pub mod agent_defaults;
 pub mod agent_tool; // Made public for native consensus orchestration
+pub mod async_agent_executor; // SPEC-936: Async agent execution without tmux
 mod command_safety;
 pub mod config;
 pub mod config_edit;
 pub mod config_loader;
 pub mod config_profile;
 pub mod config_types;
-pub mod schema_validator;
+pub mod config_watcher;
 mod conversation_history;
 pub mod custom_prompts;
 pub mod db; // SPEC-945B: Database layer (SQLite optimization, transactions, vacuum)
@@ -49,6 +50,7 @@ mod mcp_tool_call;
 mod message_history;
 mod model_provider_info;
 pub mod parse_command;
+pub mod schema_validator;
 pub mod slash_commands;
 mod truncate;
 mod unified_exec;
@@ -86,6 +88,7 @@ pub mod seatbelt;
 pub mod shell;
 pub mod spawn;
 pub mod terminal;
+pub mod timing; // SPEC-940: Performance timing infrastructure
 pub mod tmux; // Observable agent execution (SPEC-KIT-923)
 mod tool_apply_patch;
 pub mod turn_diff_tracker;

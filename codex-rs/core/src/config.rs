@@ -2202,7 +2202,8 @@ impl Config {
                 ("audit", &qg.audit),
                 ("unlock", &qg.unlock),
             ] {
-                for agent_name in agent_list {
+                // SPEC-939: Access agents field from QualityCheckpointConfig
+                for agent_name in &agent_list.agents {
                     if !config
                         .agents
                         .iter()
@@ -2272,6 +2273,66 @@ impl Config {
             .output()
             .map(|output| output.status.success())
             .unwrap_or(false)
+    }
+
+    /// Reload configuration from disk while preserving session state.
+    ///
+    /// This method re-reads the config.toml file and applies the same overrides
+    /// that were used when the current Config was created. This allows hot-reloading
+    /// of configuration changes without restarting the TUI or losing session state.
+    ///
+    /// # Preserved State
+    /// - Active profile (if any was specified)
+    /// - Current working directory
+    /// - Codex home directory
+    ///
+    /// # Reloaded State
+    /// - Agent configurations
+    /// - Quality gate settings
+    /// - Model configurations
+    /// - MCP server configurations
+    /// - Hot-reload settings
+    /// - Validation settings
+    ///
+    /// # Returns
+    /// - `Ok(Config)` - New configuration with preserved session state
+    /// - `Err(ConfigLoadError)` - If config file is invalid or cannot be read
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use codex_core::config::Config;
+    /// # fn example(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+    /// let new_config = config.reload_from_file()?;
+    /// // Use new_config with updated settings but preserved session state
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn reload_from_file(&self) -> Result<Config, crate::config_loader::ConfigLoadError> {
+        // Re-read config file from disk
+        let config_path = self.codex_home.join("config.toml");
+        let contents = std::fs::read_to_string(&config_path)
+            .map_err(crate::config_loader::ConfigLoadError::IoError)?;
+
+        // Parse raw ConfigToml (preserves all fields including profiles)
+        let cfg: ConfigToml = toml::from_str(&contents)
+            .map_err(crate::config_loader::ConfigLoadError::TomlParseError)?;
+
+        // Build overrides that preserve current session state
+        let overrides = ConfigOverrides {
+            config_profile: self.active_profile.clone(),
+            cwd: Some(self.cwd.clone()),
+            // All other overrides default to None - will use values from reloaded config
+            ..Default::default()
+        };
+
+        // Load config with preserved overrides
+        Config::load_from_base_config_with_overrides(cfg, overrides, self.codex_home.clone())
+            .map_err(|e| {
+                crate::config_loader::ConfigLoadError::IoError(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Failed to reload config: {}", e),
+                ))
+            })
     }
 }
 
@@ -2429,6 +2490,7 @@ pub fn log_dir(cfg: &Config) -> std::io::Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used)]
+    use crate::config::ConfigOverrides;
     use crate::config_types::HistoryPersistence;
     use crate::config_types::Notifications;
 
@@ -3385,6 +3447,7 @@ trust_level = "trusted"
 
 #[cfg(test)]
 mod notifications_tests {
+    use crate::config::{Config, ConfigOverrides, ConfigToml};
     use crate::config_types::Notifications;
     use serde::Deserialize;
 
@@ -3423,5 +3486,175 @@ mod notifications_tests {
             parsed.tui.notifications,
             Notifications::Custom(ref v) if v == &vec!["foo".to_string()]
         ));
+    }
+
+    #[test]
+    fn test_reload_preserves_active_profile() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        // Create initial config
+        let initial_toml = r#"
+            model = "gpt-4"
+            [profiles.dev]
+            model = "gpt-3.5-turbo"
+        "#;
+        fs::write(&config_path, initial_toml).unwrap();
+
+        // Parse directly into ConfigToml
+        let cfg: ConfigToml = toml::from_str(initial_toml).unwrap();
+
+        let config = Config::load_from_base_config_with_overrides(
+            cfg,
+            ConfigOverrides {
+                config_profile: Some("dev".to_string()),
+                cwd: Some(temp_dir.path().to_path_buf()),
+                ..Default::default()
+            },
+            temp_dir.path().to_path_buf(),
+        )
+        .unwrap();
+
+        assert_eq!(config.active_profile.as_deref(), Some("dev"));
+        assert_eq!(config.model, "gpt-3.5-turbo");
+
+        // Modify config file
+        fs::write(
+            &config_path,
+            r#"
+            model = "gpt-4"
+            [profiles.dev]
+            model = "claude-3-opus"
+        "#,
+        )
+        .unwrap();
+
+        // Reload should preserve profile
+        let reloaded = config.reload_from_file().unwrap();
+        assert_eq!(reloaded.active_profile.as_deref(), Some("dev"));
+        assert_eq!(reloaded.model, "claude-3-opus"); // Updated from config
+    }
+
+    #[test]
+    fn test_reload_preserves_cwd() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+        let custom_cwd = temp_dir.path().join("custom_dir");
+        fs::create_dir(&custom_cwd).unwrap();
+
+        // Create initial config
+        let initial_toml = r#"model = "gpt-4""#;
+        fs::write(&config_path, initial_toml).unwrap();
+
+        let cfg: ConfigToml = toml::from_str(initial_toml).unwrap();
+
+        let config = Config::load_from_base_config_with_overrides(
+            cfg,
+            ConfigOverrides {
+                cwd: Some(custom_cwd.clone()),
+                ..Default::default()
+            },
+            temp_dir.path().to_path_buf(),
+        )
+        .unwrap();
+
+        assert_eq!(config.cwd, custom_cwd);
+
+        // Reload should preserve cwd
+        let reloaded = config.reload_from_file().unwrap();
+        assert_eq!(reloaded.cwd, custom_cwd);
+    }
+
+    #[test]
+    fn test_reload_updates_agents() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        // Create initial config with one agent
+        let initial_toml = r#"
+            [[agents]]
+            name = "test-agent"
+            command = "echo test"
+        "#;
+        fs::write(&config_path, initial_toml).unwrap();
+
+        let cfg: ConfigToml = toml::from_str(initial_toml).unwrap();
+
+        let config = Config::load_from_base_config_with_overrides(
+            cfg,
+            ConfigOverrides {
+                cwd: Some(temp_dir.path().to_path_buf()),
+                ..Default::default()
+            },
+            temp_dir.path().to_path_buf(),
+        )
+        .unwrap();
+
+        assert_eq!(config.agents.len(), 1);
+        assert_eq!(config.agents[0].name, "test-agent");
+
+        // Modify config to add another agent
+        fs::write(
+            &config_path,
+            r#"
+            [[agents]]
+            name = "test-agent"
+            command = "echo test"
+
+            [[agents]]
+            name = "new-agent"
+            command = "echo new"
+        "#,
+        )
+        .unwrap();
+
+        // Reload should pick up new agent
+        let reloaded = config.reload_from_file().unwrap();
+        assert_eq!(reloaded.agents.len(), 2);
+        assert_eq!(reloaded.agents[1].name, "new-agent");
+    }
+
+    #[test]
+    fn test_reload_rollback_on_invalid_config() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        // Create valid initial config
+        let initial_toml = r#"model = "gpt-4""#;
+        fs::write(&config_path, initial_toml).unwrap();
+
+        let cfg: ConfigToml = toml::from_str(initial_toml).unwrap();
+
+        let config = Config::load_from_base_config_with_overrides(
+            cfg,
+            ConfigOverrides {
+                cwd: Some(temp_dir.path().to_path_buf()),
+                ..Default::default()
+            },
+            temp_dir.path().to_path_buf(),
+        )
+        .unwrap();
+
+        // Write invalid TOML
+        fs::write(&config_path, "invalid toml ][[[").unwrap();
+
+        // Reload should fail
+        let result = config.reload_from_file();
+        assert!(result.is_err());
+
+        // Original config should still be usable (no mutation on error)
+        assert_eq!(config.model, "gpt-4");
     }
 }

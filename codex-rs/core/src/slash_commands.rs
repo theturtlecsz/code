@@ -280,6 +280,7 @@ mod tests {
                 args_read_only: None,
                 args_write: None,
                 instructions: None,
+                model: None,
             },
             AgentConfig {
                 name: "test-gemini".to_string(),
@@ -293,6 +294,7 @@ mod tests {
                 args_read_only: None,
                 args_write: None,
                 instructions: None,
+                model: None,
             },
         ];
 

@@ -8,7 +8,9 @@
 //! - Classifies agent spawn errors as retryable vs permanent
 //! - Logs retry attempts with telemetry
 
-use codex_spec_kit::retry::classifier::{ErrorClass, PermanentError, RetryClassifiable, RetryableError};
+use codex_spec_kit::retry::classifier::{
+    ErrorClass, PermanentError, RetryClassifiable, RetryableError,
+};
 use codex_spec_kit::retry::strategy::{RetryConfig, execute_with_backoff};
 use rand::Rng;
 use std::time::Duration;
@@ -51,23 +53,28 @@ impl RetryClassifiable for AgentError {
                 } else if msg_lower.contains("service unavailable")
                     || msg_lower.contains("503")
                     || msg_lower.contains("502")
-                    || msg_lower.contains("overloaded") {
+                    || msg_lower.contains("overloaded")
+                {
                     ErrorClass::Retryable(RetryableError::ServiceUnavailable)
                 } else if msg_lower.contains("connection refused")
-                    || msg_lower.contains("connection reset") {
+                    || msg_lower.contains("connection reset")
+                {
                     ErrorClass::Retryable(RetryableError::ConnectionRefused)
                 }
                 // Permanent patterns
                 else if msg_lower.contains("invalid api key")
                     || msg_lower.contains("unauthorized")
-                    || msg_lower.contains("401") {
+                    || msg_lower.contains("401")
+                {
                     ErrorClass::Permanent(PermanentError::AuthenticationFailed(msg.clone()))
                 } else if msg_lower.contains("model not found")
                     || msg_lower.contains("invalid model")
-                    || msg_lower.contains("404") {
+                    || msg_lower.contains("404")
+                {
                     ErrorClass::Permanent(PermanentError::ResourceNotFound(msg.clone()))
                 } else if msg_lower.contains("quota exceeded")
-                    || msg_lower.contains("insufficient quota") {
+                    || msg_lower.contains("insufficient quota")
+                {
                     ErrorClass::Permanent(PermanentError::InvalidInput {
                         field: "quota".to_string(),
                         reason: msg.clone(),
@@ -80,12 +87,10 @@ impl RetryClassifiable for AgentError {
             }
 
             // No result: permanent (agent logic error)
-            AgentError::NoResult => {
-                ErrorClass::Permanent(PermanentError::InvalidInput {
-                    field: "result".to_string(),
-                    reason: "Agent completed but returned no result".to_string(),
-                })
-            }
+            AgentError::NoResult => ErrorClass::Permanent(PermanentError::InvalidInput {
+                field: "result".to_string(),
+                reason: "Agent completed but returned no result".to_string(),
+            }),
         }
     }
 

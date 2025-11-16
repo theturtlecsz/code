@@ -262,8 +262,8 @@ async fn spawn_and_wait_for_agent(
     run_id: Option<&str>,
     timeout_secs: u64,
 ) -> Result<(String, String), String> {
-    use codex_core::agent_tool::{AGENT_MANAGER, AgentStatus};
     use super::agent_retry::spawn_agent_with_retry;
+    use codex_core::agent_tool::{AGENT_MANAGER, AgentStatus};
 
     let run_tag = run_id
         .map(|r| format!("[run:{}]", &r[..8.min(r.len())]))
@@ -411,7 +411,11 @@ async fn spawn_and_wait_for_agent(
                                 .map(|e| e.clone())
                                 .unwrap_or_else(|| "no error message available".to_string());
 
-                            tracing::error!("  ❌ {} FAILED - Status: {:?}", agent_name, agent.status);
+                            tracing::error!(
+                                "  ❌ {} FAILED - Status: {:?}",
+                                agent_name,
+                                agent.status
+                            );
                             tracing::error!("  ❌ Error detail: {}", error_detail);
 
                             return Err(format!("{} failed: {}", agent_name, error_detail));
@@ -431,7 +435,9 @@ async fn spawn_and_wait_for_agent(
     };
 
     // Execute with retry (SPEC-938: exponential backoff, max 3 attempts)
-    spawn_agent_with_retry(agent_name, spawn_operation).await.map_err(|e| e.to_string())
+    spawn_agent_with_retry(agent_name, spawn_operation)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Spawn regular stage agents SEQUENTIALLY with output passing
@@ -588,8 +594,8 @@ async fn spawn_regular_stage_agents_parallel(
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
 ) -> Result<Vec<AgentSpawnInfo>, String> {
-    use tokio::task::JoinSet;
     use std::time::Instant;
+    use tokio::task::JoinSet;
 
     let run_tag = run_id
         .as_ref()
@@ -690,7 +696,10 @@ async fn spawn_regular_stage_agents_parallel(
 
             tracing::warn!(
                 "{}   ✓ {} spawned in {:?} ({})",
-                run_id.as_ref().map(|r| format!("[run:{}]", &r[..8])).unwrap_or_else(|| "[run:none]".to_string()),
+                run_id
+                    .as_ref()
+                    .map(|r| format!("[run:{}]", &r[..8]))
+                    .unwrap_or_else(|| "[run:none]".to_string()),
                 agent_name,
                 spawn_duration,
                 &agent_id[..8]
@@ -721,11 +730,19 @@ async fn spawn_regular_stage_agents_parallel(
                 // Spawn failed, but continue with other agents (degraded mode)
                 tracing::error!("{} ❌ Agent spawn failed: {}", run_tag, e);
                 // Record failure metric
-                super::spawn_metrics::record_agent_spawn("unknown", std::time::Duration::from_secs(0), false);
+                super::spawn_metrics::record_agent_spawn(
+                    "unknown",
+                    std::time::Duration::from_secs(0),
+                    false,
+                );
             }
             Err(join_error) => {
                 tracing::error!("{} ❌ Join error: {}", run_tag, join_error);
-                super::spawn_metrics::record_agent_spawn("unknown", std::time::Duration::from_secs(0), false);
+                super::spawn_metrics::record_agent_spawn(
+                    "unknown",
+                    std::time::Duration::from_secs(0),
+                    false,
+                );
             }
         }
     }
@@ -746,7 +763,8 @@ async fn spawn_regular_stage_agents_parallel(
         spawn_infos.len(),
         total_duration,
         if !individual_durations.is_empty() {
-            individual_durations.iter().sum::<std::time::Duration>() / individual_durations.len() as u32
+            individual_durations.iter().sum::<std::time::Duration>()
+                / individual_durations.len() as u32
         } else {
             std::time::Duration::from_secs(0)
         }

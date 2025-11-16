@@ -1135,8 +1135,9 @@ pub(crate) async fn remember_consensus_verdict(
         .map_err(|e| SpecKitError::JsonSerialize { source: e })?;
 
     // SPEC-934: Store to SQLite instead of MCP local-memory
-    let db = super::consensus_db::ConsensusDb::init_default()
-        .map_err(|e| SpecKitError::from_string(format!("Failed to initialize consensus DB: {}", e)))?;
+    let db = super::consensus_db::ConsensusDb::init_default().map_err(|e| {
+        SpecKitError::from_string(format!("Failed to initialize consensus DB: {}", e))
+    })?;
 
     // Store as artifact with special agent name to distinguish from agent outputs
     db.store_artifact(
