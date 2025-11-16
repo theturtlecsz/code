@@ -272,7 +272,7 @@ impl PipelineConfig {
         let home = std::env::var("HOME").map_err(|_| "HOME not set".to_string())?;
         let path = format!("{}/.code/config.toml", home);
 
-        // Check if [pipeline.defaults] section exists
+        // Check if file exists
         if !Path::new(&path).exists() {
             return Err("Global config not found".to_string());
         }
@@ -280,9 +280,23 @@ impl PipelineConfig {
         let content = fs::read_to_string(&path)
             .map_err(|e| format!("Failed to read global config: {}", e))?;
 
-        // Parse TOML and extract [pipeline.defaults] section if it exists
-        // For now, return error if section doesn't exist (will be added in Phase 2)
-        Err("No [pipeline.defaults] section in global config".to_string())
+        // Parse TOML as generic value to extract nested section
+        let toml_value: toml::Value = toml::from_str(&content)
+            .map_err(|e| format!("Failed to parse global TOML: {}", e))?;
+
+        // Extract [pipeline.defaults] section
+        let defaults_section = toml_value
+            .get("pipeline")
+            .and_then(|p| p.get("defaults"))
+            .ok_or_else(|| "No [pipeline.defaults] section in global config".to_string())?;
+
+        // Deserialize the defaults section into PipelineConfig
+        let config: Self = defaults_section
+            .clone()
+            .try_into()
+            .map_err(|e: toml::de::Error| format!("Failed to parse pipeline.defaults: {}", e))?;
+
+        Ok(config)
     }
 
     /// Load config from specific TOML file
@@ -639,5 +653,77 @@ mod tests {
         assert!(gates.contains(&QualityCheckpoint::PrePlanning));
         assert!(gates.contains(&QualityCheckpoint::PostPlan));
         assert!(gates.contains(&QualityCheckpoint::PostTasks));
+    }
+
+    #[test]
+    fn test_global_config_loading_with_valid_section() {
+        // Test TOML parsing logic for [pipeline.defaults] section
+        let toml_content = r#"
+[pipeline.defaults]
+spec_id = "GLOBAL"
+enabled_stages = ["new", "specify", "plan", "implement"]
+
+[pipeline.defaults.quality_gates]
+enabled = true
+auto_resolve = false
+"#;
+
+        // Parse the config manually to test the logic
+        let toml_value: toml::Value = toml::from_str(toml_content).unwrap();
+        let defaults_section = toml_value
+            .get("pipeline")
+            .and_then(|p| p.get("defaults"))
+            .unwrap();
+        let config: PipelineConfig = defaults_section.clone().try_into().unwrap();
+
+        // Validate parsed config
+        assert_eq!(config.spec_id, "GLOBAL");
+        assert_eq!(config.enabled_stages.len(), 4);
+        assert!(config.is_enabled(StageType::Plan));
+        assert!(!config.is_enabled(StageType::Validate));
+        assert!(config.quality_gates.enabled);
+        assert!(!config.quality_gates.auto_resolve);
+    }
+
+    #[test]
+    fn test_global_config_missing_section() {
+        // Test that missing [pipeline.defaults] is handled correctly
+        let toml_content = r#"
+[other_section]
+key = "value"
+"#;
+
+        // Parse should fail when section doesn't exist
+        let toml_value: toml::Value = toml::from_str(toml_content).unwrap();
+        let defaults_section = toml_value.get("pipeline").and_then(|p| p.get("defaults"));
+
+        assert!(defaults_section.is_none());
+    }
+
+    #[test]
+    fn test_precedence_global_to_per_spec() {
+        // Test that per-SPEC config overrides global defaults via merge
+        let per_spec_toml = r#"
+[pipeline]
+spec_id = "SPEC-TEST"
+enabled_stages = ["implement", "validate", "unlock"]
+"#;
+
+        // Parse per-SPEC config
+        let per_spec: PipelineConfig = toml::from_str(per_spec_toml).unwrap();
+
+        // Start with defaults (simulating global)
+        let mut config = PipelineConfig::defaults();
+        assert_eq!(config.enabled_stages.len(), 8); // All stages
+
+        // Merge per-SPEC (should override)
+        config.merge(per_spec);
+
+        // Verify per-SPEC took precedence
+        assert_eq!(config.enabled_stages.len(), 3);
+        assert!(config.is_enabled(StageType::Implement));
+        assert!(config.is_enabled(StageType::Validate));
+        assert!(config.is_enabled(StageType::Unlock));
+        assert!(!config.is_enabled(StageType::Plan));
     }
 }
