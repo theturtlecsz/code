@@ -62,16 +62,118 @@ pub(crate) fn get_model_info(model_family: &ModelFamily) -> Option<ModelInfo> {
         // https://platform.openai.com/docs/models/gpt-3.5-turbo
         "gpt-3.5-turbo" => Some(ModelInfo::new(16_385, 4_096)),
 
-        _ if slug.starts_with("gpt-5-codex") => Some(ModelInfo {
+        // GPT-5 codex variants (any gpt-5* with "codex" gets auto-compact optimization)
+        _ if slug.starts_with("gpt-5") && slug.contains("codex") => Some(ModelInfo {
             context_window: 272_000,
             max_output_tokens: 128_000,
             auto_compact_token_limit: Some(350_000),
         }),
 
+        // GPT-5 base and adaptive reasoning models
         _ if slug.starts_with("gpt-5") => Some(ModelInfo::new(272_000, 128_000)),
 
+        // Standalone codex models
         _ if slug.starts_with("codex-") => Some(ModelInfo::new(272_000, 128_000)),
 
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model_family::find_family_for_model;
+
+    #[test]
+    fn test_gpt5_base_model() {
+        let family = find_family_for_model("gpt-5").expect("gpt-5 should have family");
+        let info = get_model_info(&family).expect("gpt-5 should be recognized");
+
+        assert_eq!(info.context_window, 272_000, "GPT-5 context window");
+        assert_eq!(info.max_output_tokens, 128_000, "GPT-5 max output");
+        assert_eq!(
+            info.auto_compact_token_limit, None,
+            "GPT-5 base has no auto-compact"
+        );
+    }
+
+    #[test]
+    fn test_gpt5_1_model() {
+        let family = find_family_for_model("gpt-5.1").expect("gpt-5.1 should have family");
+        let info = get_model_info(&family).expect("gpt-5.1 should be recognized");
+
+        assert_eq!(info.context_window, 272_000, "GPT-5.1 context window");
+        assert_eq!(info.max_output_tokens, 128_000, "GPT-5.1 max output");
+        assert_eq!(
+            info.auto_compact_token_limit, None,
+            "GPT-5.1 has no auto-compact"
+        );
+    }
+
+    #[test]
+    fn test_gpt5_codex_model() {
+        let family = find_family_for_model("gpt-5-codex").expect("gpt-5-codex should have family");
+        let info = get_model_info(&family).expect("gpt-5-codex should be recognized");
+
+        assert_eq!(info.context_window, 272_000, "GPT-5-codex context window");
+        assert_eq!(info.max_output_tokens, 128_000, "GPT-5-codex max output");
+        assert_eq!(
+            info.auto_compact_token_limit,
+            Some(350_000),
+            "GPT-5-codex should have auto-compact for agentic workflows"
+        );
+    }
+
+    #[test]
+    fn test_gpt5_1_codex_model() {
+        let family =
+            find_family_for_model("gpt-5.1-codex").expect("gpt-5.1-codex should have family");
+        let info = get_model_info(&family).expect("gpt-5.1-codex should be recognized");
+
+        assert_eq!(info.context_window, 272_000, "GPT-5.1-codex context window");
+        assert_eq!(info.max_output_tokens, 128_000, "GPT-5.1-codex max output");
+        assert_eq!(
+            info.auto_compact_token_limit,
+            Some(350_000),
+            "GPT-5.1-codex should have auto-compact (contains 'codex')"
+        );
+    }
+
+    #[test]
+    fn test_gpt5_1_codex_mini_model() {
+        let family = find_family_for_model("gpt-5.1-codex-mini")
+            .expect("gpt-5.1-codex-mini should have family");
+        let info = get_model_info(&family).expect("gpt-5.1-codex-mini should be recognized");
+
+        assert_eq!(
+            info.context_window, 272_000,
+            "GPT-5.1-codex-mini context window"
+        );
+        assert_eq!(
+            info.max_output_tokens, 128_000,
+            "GPT-5.1-codex-mini max output"
+        );
+        assert_eq!(
+            info.auto_compact_token_limit,
+            Some(350_000),
+            "GPT-5.1-codex-mini should have auto-compact (contains 'codex')"
+        );
+    }
+
+    #[test]
+    fn test_generic_codex_model() {
+        let family =
+            find_family_for_model("codex-latest").expect("codex-latest should have family");
+        let info = get_model_info(&family).expect("codex-latest should be recognized");
+
+        assert_eq!(info.context_window, 272_000, "codex-* context window");
+        assert_eq!(info.max_output_tokens, 128_000, "codex-* max output");
+    }
+
+    #[test]
+    fn test_unknown_model_returns_none() {
+        // Unknown slug won't have family, so get_model_info gets None as input
+        let family = find_family_for_model("unknown-model-xyz");
+        assert!(family.is_none(), "Unknown models should have no family");
     }
 }
