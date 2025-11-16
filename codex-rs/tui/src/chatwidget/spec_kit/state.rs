@@ -501,25 +501,17 @@ impl SpecAutoState {
         quality_gates_enabled: bool,
         pipeline_config: super::pipeline_config::PipelineConfig,
     ) -> Self {
-        // SPEC-948: Use pipeline_config.enabled_stages instead of hardcoded list
-        // Filter to only SpecStage variants (Plan→Unlock), excluding New/Specify
-        let stages: Vec<SpecStage> = pipeline_config
-            .enabled_stages
-            .iter()
-            .filter_map(|stage_type| {
-                use super::pipeline_config::StageType;
-                match stage_type {
-                    StageType::Plan => Some(SpecStage::Plan),
-                    StageType::Tasks => Some(SpecStage::Tasks),
-                    StageType::Implement => Some(SpecStage::Implement),
-                    StageType::Validate => Some(SpecStage::Validate),
-                    StageType::Audit => Some(SpecStage::Audit),
-                    StageType::Unlock => Some(SpecStage::Unlock),
-                    // New and Specify are not part of /speckit.auto pipeline
-                    StageType::New | StageType::Specify => None,
-                }
-            })
-            .collect();
+        // SPEC-948 Task 2.2: Include ALL stages (Plan→Unlock) for skip telemetry tracking
+        // Stage filtering happens in advance_spec_auto(), not here
+        // This allows us to record telemetry for skipped stages
+        let stages: Vec<SpecStage> = vec![
+            SpecStage::Plan,
+            SpecStage::Tasks,
+            SpecStage::Implement,
+            SpecStage::Validate,
+            SpecStage::Audit,
+            SpecStage::Unlock,
+        ];
 
         let start_index = stages
             .iter()
