@@ -308,11 +308,14 @@ pub mod test_mock {
         let mut ctx = MockSpecKitContext::new();
         assert!(ctx.spec_auto_state().is_none());
 
+        let mut config = crate::chatwidget::spec_kit::pipeline_config::PipelineConfig::defaults();
+        config.spec_id = "SPEC-TEST".to_string();
         let state = SpecAutoState::new(
             "SPEC-TEST".to_string(),
             "test".to_string(),
             SpecStage::Plan,
             None,
+            config, // SPEC-948: pipeline_config
         );
         *ctx.spec_auto_state_mut() = Some(state);
 

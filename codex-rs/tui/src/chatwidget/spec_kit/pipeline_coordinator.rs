@@ -11,6 +11,7 @@ use super::super::ChatWidget;
 use super::agent_orchestrator::auto_submit_spec_stage_prompt;
 use super::command_handlers::halt_spec_auto_with_error;
 use super::consensus_coordinator::{block_on_sync, persist_cost_summary, run_consensus_with_retry};
+use super::pipeline_config::{PipelineConfig, PipelineOverrides}; // SPEC-948
 use super::quality_gate_handler::{
     determine_quality_checkpoint, execute_quality_checkpoint, finalize_quality_gates,
 };
@@ -32,6 +33,7 @@ pub fn handle_spec_auto(
     goal: String,
     resume_from: SpecStage,
     hal_mode: Option<HalMode>,
+    cli_overrides: Option<PipelineOverrides>, // SPEC-948: CLI flags for stage filtering
 ) {
     let mut header: Vec<ratatui::text::Line<'static>> = Vec::new();
     header.push(ratatui::text::Line::from(format!("/spec-auto {}", spec_id)));
@@ -61,6 +63,28 @@ pub fn handle_spec_auto(
         return;
     }
 
+    // SPEC-948: Load pipeline configuration with 3-tier precedence
+    let pipeline_config = match PipelineConfig::load(&spec_id, cli_overrides) {
+        Ok(config) => config,
+        Err(err) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Pipeline configuration error: {}",
+                err
+            )));
+            return;
+        }
+    };
+
+    // SPEC-948: Display validation warnings (quality gate bypass, cost savings, etc.)
+    if let Ok(validation) = pipeline_config.validate() {
+        for warning in &validation.warnings {
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![ratatui::text::Line::from(warning.clone())],
+                HistoryCellType::Notice,
+            ));
+        }
+    }
+
     // SPEC-KIT-909: Check evidence size before starting pipeline (50MB hard limit)
     if let Err(err) = check_evidence_size_limit(&spec_id, &widget.config.cwd) {
         widget.history_push(crate::history_cell::new_error_event(format!(
@@ -74,7 +98,13 @@ pub fn handle_spec_auto(
     }
 
     let lifecycle = widget.ensure_validate_lifecycle(&spec_id);
-    let mut state = super::state::SpecAutoState::new(spec_id.clone(), goal, resume_from, hal_mode);
+    let mut state = super::state::SpecAutoState::new(
+        spec_id.clone(),
+        goal,
+        resume_from,
+        hal_mode,
+        pipeline_config, // SPEC-948: Pass pipeline config
+    );
     state.set_validate_lifecycle(lifecycle);
 
     // Log run start event

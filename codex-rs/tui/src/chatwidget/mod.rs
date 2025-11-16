@@ -16600,7 +16600,7 @@ impl ChatWidget<'_> {
             resume_from,
             hal_mode,
         } = invocation;
-        spec_kit::handle_spec_auto(self, spec_id, goal, resume_from, hal_mode);
+        spec_kit::handle_spec_auto(self, spec_id, goal, resume_from, hal_mode, None /* cli_overrides */);
     }
 
     fn advance_spec_auto(&mut self) {

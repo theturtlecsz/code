@@ -262,6 +262,7 @@ impl SpecKitCommand for GuardrailAutoCommand {
             String::new(), // goal
             resume_from,
             None, // hal_mode
+            None, // cli_overrides (SPEC-948: Phase 3 will add CLI parsing)
         );
     }
 

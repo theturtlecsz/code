@@ -476,6 +476,9 @@ pub struct SpecAutoState {
     // Agent response cache for consensus (avoids memory dependency)
     // Collected from active_agents after completion, before consensus runs
     pub agent_responses_cache: Option<Vec<(String, String)>>, // (agent_name, response_text)
+
+    // SPEC-948: Pipeline configuration for modular stage execution
+    pub pipeline_config: super::pipeline_config::PipelineConfig,
 }
 
 impl SpecAutoState {
@@ -485,8 +488,9 @@ impl SpecAutoState {
         goal: String,
         resume_from: SpecStage,
         hal_mode: Option<HalMode>,
+        pipeline_config: super::pipeline_config::PipelineConfig,
     ) -> Self {
-        Self::with_quality_gates(spec_id, goal, resume_from, hal_mode, true)
+        Self::with_quality_gates(spec_id, goal, resume_from, hal_mode, true, pipeline_config)
     }
 
     pub fn with_quality_gates(
@@ -495,15 +499,28 @@ impl SpecAutoState {
         resume_from: SpecStage,
         hal_mode: Option<HalMode>,
         quality_gates_enabled: bool,
+        pipeline_config: super::pipeline_config::PipelineConfig,
     ) -> Self {
-        let stages = vec![
-            SpecStage::Plan,
-            SpecStage::Tasks,
-            SpecStage::Implement,
-            SpecStage::Validate,
-            SpecStage::Audit,
-            SpecStage::Unlock,
-        ];
+        // SPEC-948: Use pipeline_config.enabled_stages instead of hardcoded list
+        // Filter to only SpecStage variants (Plan→Unlock), excluding New/Specify
+        let stages: Vec<SpecStage> = pipeline_config
+            .enabled_stages
+            .iter()
+            .filter_map(|stage_type| {
+                use super::pipeline_config::StageType;
+                match stage_type {
+                    StageType::Plan => Some(SpecStage::Plan),
+                    StageType::Tasks => Some(SpecStage::Tasks),
+                    StageType::Implement => Some(SpecStage::Implement),
+                    StageType::Validate => Some(SpecStage::Validate),
+                    StageType::Audit => Some(SpecStage::Audit),
+                    StageType::Unlock => Some(SpecStage::Unlock),
+                    // New and Specify are not part of /speckit.auto pipeline
+                    StageType::New | StageType::Specify => None,
+                }
+            })
+            .collect();
+
         let start_index = stages
             .iter()
             .position(|stage| *stage == resume_from)
@@ -552,6 +569,8 @@ impl SpecAutoState {
             run_id: Some(run_id),
             // Agent response cache
             agent_responses_cache: None,
+            // Pipeline configuration (SPEC-948)
+            pipeline_config,
         }
     }
 
