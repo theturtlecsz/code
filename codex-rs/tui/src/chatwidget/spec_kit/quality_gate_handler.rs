@@ -1091,6 +1091,45 @@ fn is_checkpoint_enabled(widget: &ChatWidget, checkpoint: super::state::QualityC
     true
 }
 
+/// Calculate active quality gate checkpoints based on pipeline configuration (SPEC-948 Task 2.4)
+///
+/// Returns Vec of quality checkpoints that should execute based on which stages are enabled.
+/// Checkpoint logic:
+/// - BeforeSpecify: Enabled if Plan stage is enabled (runs before Plan)
+/// - AfterSpecify: Enabled if Tasks stage is enabled (runs before Tasks, after Plan)
+/// - AfterTasks: Enabled if Implement stage is enabled (runs before Implement, after Tasks)
+///
+/// This enables quality gate bypass awareness - if stages are skipped in config, corresponding
+/// checkpoints are automatically disabled.
+pub(super) fn active_quality_gates(
+    config: &super::pipeline_config::PipelineConfig,
+) -> Vec<super::state::QualityCheckpoint> {
+    use super::pipeline_config::StageType;
+    use super::state::QualityCheckpoint;
+
+    let mut checkpoints = Vec::new();
+
+    // Checkpoint 1: BeforeSpecify (runs before Plan stage)
+    // Enabled if Plan stage is enabled
+    if config.is_enabled(StageType::Plan) {
+        checkpoints.push(QualityCheckpoint::BeforeSpecify);
+    }
+
+    // Checkpoint 2: AfterSpecify (runs after Plan, before Tasks)
+    // Enabled if Tasks stage is enabled
+    if config.is_enabled(StageType::Tasks) {
+        checkpoints.push(QualityCheckpoint::AfterSpecify);
+    }
+
+    // Checkpoint 3: AfterTasks (runs after Tasks, before Implement)
+    // Enabled if Implement stage is enabled
+    if config.is_enabled(StageType::Implement) {
+        checkpoints.push(QualityCheckpoint::AfterTasks);
+    }
+
+    checkpoints
+}
+
 /// Execute quality checkpoint by starting quality gate agents
 pub(super) fn execute_quality_checkpoint(
     widget: &mut ChatWidget,
@@ -1883,4 +1922,116 @@ async fn store_artifact_async(
         checkpoint.name()
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::super::pipeline_config::{PipelineConfig, StageType};
+    use super::super::state::QualityCheckpoint;
+
+    #[test]
+    fn test_active_quality_gates_all_stages_enabled() {
+        // Default config has all stages enabled
+        let config = PipelineConfig::defaults();
+        let gates = active_quality_gates(&config);
+
+        // Should have all 3 checkpoints
+        assert_eq!(gates.len(), 3);
+        assert!(gates.contains(&QualityCheckpoint::BeforeSpecify));
+        assert!(gates.contains(&QualityCheckpoint::AfterSpecify));
+        assert!(gates.contains(&QualityCheckpoint::AfterTasks));
+    }
+
+    #[test]
+    fn test_active_quality_gates_only_plan_enabled() {
+        // Only Plan stage enabled
+        let mut config = PipelineConfig::defaults();
+        config.enabled_stages = vec![StageType::Plan];
+
+        let gates = active_quality_gates(&config);
+
+        // Only BeforeSpecify checkpoint (runs before Plan)
+        assert_eq!(gates.len(), 1);
+        assert!(gates.contains(&QualityCheckpoint::BeforeSpecify));
+        assert!(!gates.contains(&QualityCheckpoint::AfterSpecify));
+        assert!(!gates.contains(&QualityCheckpoint::AfterTasks));
+    }
+
+    #[test]
+    fn test_active_quality_gates_plan_and_tasks_enabled() {
+        // Plan and Tasks stages enabled
+        let mut config = PipelineConfig::defaults();
+        config.enabled_stages = vec![StageType::Plan, StageType::Tasks];
+
+        let gates = active_quality_gates(&config);
+
+        // BeforeSpecify and AfterSpecify checkpoints
+        assert_eq!(gates.len(), 2);
+        assert!(gates.contains(&QualityCheckpoint::BeforeSpecify));
+        assert!(gates.contains(&QualityCheckpoint::AfterSpecify));
+        assert!(!gates.contains(&QualityCheckpoint::AfterTasks));
+    }
+
+    #[test]
+    fn test_active_quality_gates_only_implement_enabled() {
+        // Only Implement stage enabled (skipping Plan and Tasks)
+        let mut config = PipelineConfig::defaults();
+        config.enabled_stages = vec![StageType::Implement];
+
+        let gates = active_quality_gates(&config);
+
+        // Only AfterTasks checkpoint (runs before Implement)
+        assert_eq!(gates.len(), 1);
+        assert!(!gates.contains(&QualityCheckpoint::BeforeSpecify));
+        assert!(!gates.contains(&QualityCheckpoint::AfterSpecify));
+        assert!(gates.contains(&QualityCheckpoint::AfterTasks));
+    }
+
+    #[test]
+    fn test_active_quality_gates_no_quality_gate_stages() {
+        // Validate and Audit enabled (no quality gate checkpoints for these)
+        let mut config = PipelineConfig::defaults();
+        config.enabled_stages = vec![StageType::Validate, StageType::Audit];
+
+        let gates = active_quality_gates(&config);
+
+        // No checkpoints
+        assert_eq!(gates.len(), 0);
+    }
+
+    #[test]
+    fn test_active_quality_gates_partial_pipeline() {
+        // Typical partial pipeline: plan, tasks, implement, validate
+        let mut config = PipelineConfig::defaults();
+        config.enabled_stages = vec![
+            StageType::Plan,
+            StageType::Tasks,
+            StageType::Implement,
+            StageType::Validate,
+        ];
+
+        let gates = active_quality_gates(&config);
+
+        // All 3 checkpoints should be active
+        assert_eq!(gates.len(), 3);
+        assert!(gates.contains(&QualityCheckpoint::BeforeSpecify));
+        assert!(gates.contains(&QualityCheckpoint::AfterSpecify));
+        assert!(gates.contains(&QualityCheckpoint::AfterTasks));
+    }
+
+    #[test]
+    fn test_active_quality_gates_docs_only_workflow() {
+        // Docs-only workflow: typically just specify, plan
+        let mut config = PipelineConfig::defaults();
+        config.enabled_stages = vec![StageType::Specify, StageType::Plan];
+
+        let gates = active_quality_gates(&config);
+
+        // Only BeforeSpecify (runs before Plan)
+        assert_eq!(gates.len(), 1);
+        assert!(gates.contains(&QualityCheckpoint::BeforeSpecify));
+        assert!(!gates.contains(&QualityCheckpoint::AfterSpecify));
+        assert!(!gates.contains(&QualityCheckpoint::AfterTasks));
+    }
 }
