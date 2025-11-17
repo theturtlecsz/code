@@ -13,7 +13,8 @@
 3. [CLI Flags Reference](#3-cli-flags-reference)
 4. [Dependency Rules](#4-dependency-rules)
 5. [Quality Gate Interaction](#5-quality-gate-interaction)
-6. [Troubleshooting](#6-troubleshooting)
+6. [Common Workflows](#6-common-workflows)
+7. [Troubleshooting](#7-troubleshooting)
 
 ---
 
@@ -562,7 +563,378 @@ auto_resolve = false  # Human must review all clarify/checklist/analyze issues
 
 ---
 
-## 6. Troubleshooting
+## 6. Common Workflows
+
+This section documents the 4 primary workflow patterns supported by modular pipeline configuration, with complete use cases, cost/time analysis, and selection guidance.
+
+### Overview: When to Use Each Workflow
+
+| Workflow | Best For | Stages | Cost | Time | Savings |
+|----------|----------|--------|------|------|---------|
+| **Full Pipeline** | Production features, critical changes | All 8 | $2.46 | ~50 min | Baseline |
+| **Rapid Prototyping** | POC, experimental features, quick iteration | 5/8 | $0.66 | ~20 min | 73% cost, 60% time |
+| **Docs-Only** | Documentation updates, planning exercises | 3/8 | $1.15 | ~15 min | 53% cost, 70% time |
+| **Code Refactoring** | Bug fixes, optimization, technical debt | 3/8 | $1.06 | ~25 min | 57% cost, 50% time |
+| **Debug Single Stage** | Stage debugging, testing changes | 1/8 | $0.35 | ~11 min | 86% cost, 78% time |
+
+---
+
+### Workflow Pattern 1: Rapid Prototyping
+
+**Use Case**: Proof-of-concept development, exploratory features, throwaway code, low-risk experimentation
+
+**Stages Enabled**: `new` → `specify` → `plan` → `tasks` → `implement`
+
+**Stages Skipped**: `validate`, `audit`, `unlock` (all validation stages)
+
+**Cost Analysis**:
+- Full pipeline: $2.46 (~50 min)
+- This workflow: $0.66 (~20 min)
+- **Savings**: $2.05 (73% cost reduction), ~30 min (60% time savings)
+
+**Quality Gates**: ✅ All 3 checkpoints active (Pre-Planning, Post-Plan, Post-Tasks)
+
+**Trade-offs**:
+- ✅ Fast iteration cycles (implement → manual test → iterate)
+- ✅ Low cost for experimental features
+- ✅ Full planning quality gates still active
+- ❌ No automated test coverage (validate skipped)
+- ❌ No compliance checks (audit skipped)
+- ❌ No production readiness validation (unlock skipped)
+
+**When to Use**:
+- ✅ Exploring new features or architectures
+- ✅ Quick proof-of-concept demonstrations
+- ✅ Throwaway prototype code
+- ✅ Low-risk experimental features
+- ✅ Learning or training exercises
+- ❌ Production-ready features (use full pipeline)
+- ❌ Security-critical changes (need audit)
+- ❌ Public-facing features (need unlock validation)
+
+**Configuration**:
+
+```toml
+# docs/SPEC-XXX/pipeline.toml
+spec_id = "SPEC-XXX"
+enabled_stages = ["new", "specify", "plan", "tasks", "implement"]
+
+[skip_reasons]
+validate = "Prototype: no automated tests needed yet"
+audit = "Low-risk experimental feature"
+unlock = "Not ready for production deployment"
+```
+
+**CLI Usage**:
+```bash
+# Method 1: Copy example config
+cp docs/spec-kit/workflow-examples/rapid-prototyping.toml docs/SPEC-XXX/pipeline.toml
+/speckit.auto SPEC-XXX
+
+# Method 2: CLI flags (one-time)
+/speckit.auto SPEC-XXX --skip-validate --skip-audit --skip-unlock
+```
+
+**Example File**: `docs/spec-kit/workflow-examples/rapid-prototyping.toml`
+
+---
+
+### Workflow Pattern 2: Documentation-Only
+
+**Use Case**: README updates, architecture docs, planning refinement, spec improvements, pure documentation work
+
+**Stages Enabled**: `specify` → `plan` → `unlock`
+
+**Stages Skipped**: `new`, `tasks`, `implement`, `validate`, `audit` (all code stages)
+
+**Cost Analysis**:
+- Full pipeline: $2.46 (~50 min)
+- This workflow: $1.15 (~15 min)
+- **Savings**: $1.56 (53% cost reduction), ~35 min (70% time savings)
+
+**Quality Gates**: ✅ 2/3 checkpoints active (Pre-Planning, Post-Plan; Post-Tasks skipped)
+
+**Trade-offs**:
+- ✅ Fast documentation updates without code generation overhead
+- ✅ Strategic planning without implementation commitment
+- ✅ Architecture exploration and design iteration
+- ✅ Unlock stage validates final documentation quality
+- ❌ No task decomposition (tasks skipped)
+- ❌ No code generation (implement skipped)
+- ❌ No automated testing (validate skipped)
+
+**When to Use**:
+- ✅ Architecture documentation updates
+- ✅ README or user guide improvements
+- ✅ Planning exercises without code commitment
+- ✅ Design exploration and iteration
+- ✅ Specification refinement and clarification
+- ❌ Features requiring code changes
+- ❌ Bug fixes or performance optimization
+- ❌ Test coverage improvements
+
+**Configuration**:
+
+```toml
+# docs/SPEC-XXX/pipeline.toml
+spec_id = "SPEC-XXX"
+enabled_stages = ["specify", "plan", "unlock"]
+
+[skip_reasons]
+new = "Using existing SPEC directory"
+tasks = "Documentation-only: no task breakdown needed"
+implement = "No code changes required"
+validate = "Documentation-only: no tests to validate"
+audit = "Documentation updates: skip compliance checks"
+```
+
+**CLI Usage**:
+```bash
+# Method 1: Copy example config
+cp docs/spec-kit/workflow-examples/docs-only.toml docs/SPEC-XXX/pipeline.toml
+/speckit.auto SPEC-XXX
+
+# Method 2: CLI flags (one-time)
+/speckit.auto SPEC-XXX --stages=specify,plan,unlock
+```
+
+**Example File**: `docs/spec-kit/workflow-examples/docs-only.toml`
+
+---
+
+### Workflow Pattern 3: Code Refactoring
+
+**Use Case**: Bug fixes, performance optimization, technical debt reduction, code cleanup
+
+**Stages Enabled**: `implement` → `validate` → `unlock`
+
+**Stages Skipped**: `new`, `specify`, `plan`, `tasks`, `audit` (planning stages + audit)
+
+**Prerequisites**:
+- **REQUIRED**: Pre-existing `docs/SPEC-XXX/tasks.md` (from previous run or manual creation)
+- Clear understanding of changes needed (no planning required)
+
+**Cost Analysis**:
+- Full pipeline: $2.46 (~50 min)
+- This workflow: $1.06 (~25 min)
+- **Savings**: $1.65 (57% cost reduction), ~25 min (50% time savings)
+
+**Quality Gates**: ❌ 0/3 checkpoints (all planning stages skipped, no checkpoints available)
+
+**Trade-offs**:
+- ✅ Fast iteration on known changes
+- ✅ Skip redundant planning when scope is clear
+- ✅ Automated testing validation still enforced
+- ✅ Production readiness check via unlock stage
+- ❌ No AI-powered planning (relies on existing tasks.md)
+- ❌ No PRD refinement (assumes clear requirements)
+- ❌ No quality gate checkpoints (plan/tasks gates skipped)
+
+**When to Use**:
+- ✅ Bug fixes with clear reproduction steps
+- ✅ Performance optimization with known bottlenecks
+- ✅ Technical debt reduction with defined scope
+- ✅ Refactoring with existing task breakdown
+- ✅ Changes where requirements are already documented
+- ❌ New features (requires planning)
+- ❌ Exploratory work (needs PRD + plan)
+- ❌ When tasks.md doesn't exist (hard dependency violation)
+
+**Configuration**:
+
+```toml
+# docs/SPEC-XXX/pipeline.toml
+spec_id = "SPEC-XXX"
+enabled_stages = ["implement", "validate", "unlock"]
+
+[quality_gates]
+enabled = false  # No quality gates (plan/tasks skipped)
+
+[skip_reasons]
+new = "Using existing SPEC directory"
+specify = "Requirements already clear"
+plan = "Using pre-existing plan.md"
+tasks = "Using pre-existing tasks.md"
+audit = "Low-risk refactoring"
+```
+
+**CLI Usage**:
+```bash
+# Method 1: Copy example config (after verifying tasks.md exists)
+ls docs/SPEC-XXX/tasks.md  # Verify prerequisite
+cp docs/spec-kit/workflow-examples/code-refactoring.toml docs/SPEC-XXX/pipeline.toml
+/speckit.auto SPEC-XXX
+
+# Method 2: CLI flags (one-time)
+/speckit.auto SPEC-XXX --stages=implement,validate,unlock
+```
+
+**Example File**: `docs/spec-kit/workflow-examples/code-refactoring.toml`
+
+---
+
+### Workflow Pattern 4: Debug Single Stage
+
+**Use Case**: Test individual stage quality, debug consensus issues, verify agent output, test prompt changes
+
+**Stages Enabled**: Any single stage (e.g., `plan` only)
+
+**Stages Skipped**: All others (7/8 skipped)
+
+**Cost Analysis** (Example: plan stage):
+- Full pipeline: $2.46 (~50 min)
+- Single stage (plan): $0.35 (~11 min)
+- **Savings**: $2.36 (86% cost reduction), ~39 min (78% time savings)
+
+**Note**: Cost/time varies by stage (see cost table below)
+
+**Quality Gates**: Usually disabled (unless testing quality gates specifically)
+
+**Trade-offs**:
+- ✅ Extremely fast iteration (<15 min per test)
+- ✅ Minimal cost for debugging ($0.10-$0.80 per run)
+- ✅ Isolate stage behavior for troubleshooting
+- ✅ Test agent prompt changes without full pipeline
+- ❌ No artifact carryover (stage runs in isolation)
+- ❌ May require manual setup of prerequisite artifacts
+- ❌ No end-to-end validation
+
+**When to Use**:
+- ✅ Debugging consensus failures (agents disagree)
+- ✅ Testing agent prompt modifications
+- ✅ Verifying stage quality before full pipeline
+- ✅ Reproducing stage-specific issues
+- ✅ Performance benchmarking individual stages
+- ✅ Agent model comparison testing
+- ❌ Production workflows (use full or partial pipelines)
+- ❌ When artifact carryover is needed
+
+**Per-Stage Costs**:
+
+| Stage | Cost | Time | Common Debug Scenarios |
+|-------|------|------|------------------------|
+| new | $0.00 | <1 min | SPEC-ID generation testing |
+| specify | $0.10 | ~4 min | PRD refinement quality |
+| plan | $0.35 | ~11 min | **Planning consensus debugging** |
+| tasks | $0.10 | ~4 min | Task decomposition quality |
+| implement | $0.11 | ~10 min | Code generation validation |
+| validate | $0.35 | ~11 min | Test strategy debugging |
+| audit | $0.80 | ~11 min | Compliance check testing |
+| unlock | $0.80 | ~11 min | Ship decision validation |
+
+**Configuration**:
+
+```toml
+# docs/SPEC-XXX/pipeline.toml
+spec_id = "SPEC-XXX"
+enabled_stages = ["plan"]  # Change to target stage
+
+[quality_gates]
+enabled = false  # Usually disabled for debugging
+```
+
+**CLI Usage** (Fastest Method):
+```bash
+# Debug plan stage
+/speckit.auto SPEC-XXX --stages=plan
+
+# Debug implement stage
+/speckit.auto SPEC-XXX --stages=implement
+
+# Debug validate stage
+/speckit.auto SPEC-XXX --stages=validate
+
+# Test multiple stages (e.g., plan → tasks)
+/speckit.auto SPEC-XXX --stages=plan,tasks
+```
+
+**Example File**: `docs/spec-kit/workflow-examples/debug-single-stage.toml`
+
+---
+
+### Decision Matrix: Choosing the Right Workflow
+
+Use this decision tree to select the appropriate workflow pattern:
+
+```
+START
+  │
+  ├─ Is this a production-ready feature or critical change?
+  │  └─ YES → Use FULL PIPELINE
+  │
+  ├─ Does this involve code changes?
+  │  │
+  │  ├─ NO → Is it purely documentation?
+  │  │  └─ YES → Use DOCS-ONLY WORKFLOW
+  │  │
+  │  └─ YES → Do you have existing tasks.md?
+  │     │
+  │     ├─ YES → Are requirements clear (skip planning)?
+  │     │  └─ YES → Use CODE REFACTORING WORKFLOW
+  │     │
+  │     └─ NO → Is this a prototype/POC?
+  │        │
+  │        ├─ YES → Use RAPID PROTOTYPING WORKFLOW
+  │        │
+  │        └─ NO → Use FULL PIPELINE
+  │
+  └─ Are you debugging/testing a specific stage?
+     └─ YES → Use DEBUG SINGLE STAGE WORKFLOW
+```
+
+**Scenario-Based Recommendations**:
+
+| Your Goal | Recommended Workflow | Why |
+|-----------|---------------------|-----|
+| **Build MVP for user testing** | Rapid Prototyping | Fast iteration, no production overhead |
+| **Update architecture docs** | Docs-Only | No code needed, planning validation only |
+| **Fix critical bug** | Code Refactoring | Skip redundant planning, keep validation |
+| **Production launch** | Full Pipeline | Complete quality assurance |
+| **Test plan consensus quality** | Debug Single Stage | Isolate planning, run 3-5 times |
+| **Exploratory feature spike** | Rapid Prototyping | Low cost, fast feedback |
+| **Security audit fix** | Full Pipeline | Critical: need full compliance |
+| **README improvement** | Docs-Only | Documentation-specific workflow |
+| **Performance optimization** | Code Refactoring | Known scope, focus on implementation |
+| **New complex feature** | Full Pipeline | Comprehensive validation required |
+
+---
+
+### Cost Comparison Table
+
+**Full Cost Breakdown** (Post-SPEC-949 GPT-5 Baseline):
+
+| Workflow | new | specify | plan | tasks | implement | validate | audit | unlock | **Total** | **Savings** |
+|----------|-----|---------|------|-------|-----------|----------|-------|--------|-----------|-------------|
+| **Full Pipeline** | $0.00 | $0.10 | $0.35 | $0.10 | $0.11 | $0.35 | $0.80 | $0.80 | **$2.46** | - |
+| **Rapid Prototyping** | $0.00 | $0.10 | $0.35 | $0.10 | $0.11 | - | - | - | **$0.66** | **$2.05 (73%)** |
+| **Docs-Only** | - | $0.10 | $0.35 | - | - | - | - | $0.80 | **$1.15** | **$1.56 (53%)** |
+| **Code Refactoring** | - | - | - | - | $0.11 | $0.35 | - | $0.80 | **$1.06** | **$1.65 (57%)** |
+| **Debug (plan)** | - | - | $0.35 | - | - | - | - | - | **$0.35** | **$2.36 (86%)** |
+
+**Time Comparison**:
+
+| Workflow | Time | Savings vs Full |
+|----------|------|-----------------|
+| Full Pipeline | ~50 min | Baseline |
+| Rapid Prototyping | ~20 min | **30 min (60%)** |
+| Docs-Only | ~15 min | **35 min (70%)** |
+| Code Refactoring | ~25 min | **25 min (50%)** |
+| Debug (plan) | ~11 min | **39 min (78%)** |
+
+**Monthly Cost Projections** (Assuming 20 SPECs/month):
+
+| Workflow Mix | Monthly Cost | Annual Cost | Savings vs Full |
+|--------------|--------------|-------------|-----------------|
+| 100% Full Pipeline | $49.20 | $590 | Baseline |
+| 50% Full, 50% Rapid Prototyping | $31.20 | $374 | **$216/year (37%)** |
+| 25% Full, 50% Rapid, 25% Docs | $28.50 | $342 | **$248/year (42%)** |
+| 100% Rapid Prototyping | $13.20 | $158 | **$432/year (73%)** |
+
+**Key Insight**: Strategic workflow selection based on feature requirements can reduce annual costs by 37-73% while maintaining appropriate quality levels for each use case.
+
+---
+
+## 7. Troubleshooting
 
 ### Common Validation Errors
 
