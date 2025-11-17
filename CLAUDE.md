@@ -145,18 +145,22 @@ See `MEMORY-POLICY.md` for complete policy. Local-memory is the **only** knowled
 
 **Partial pipeline workflows (SPEC-948):**
 ```bash
-# Rapid prototyping - skip validation stages (~$0.66, 60% time savings)
+# Rapid prototyping - skip validation stages ($0.66, ~20 min, 73% cost savings)
 /speckit.auto SPEC-KIT-948 --skip-validate --skip-audit --skip-unlock
 
-# Docs-only workflow - just planning and unlock (~$1.18)
+# Docs-only workflow - just planning and unlock ($1.15, ~15 min, 53% savings)
 /speckit.auto SPEC-KIT-948 --stages=specify,plan,unlock
 
-# Code refactoring - skip planning, focus on implementation (~$1.70)
-/speckit.auto SPEC-KIT-948 --only-implement --only-validate --only-unlock
+# Code refactoring - skip planning, focus on implementation ($1.06, ~25 min, 57% savings)
+/speckit.auto SPEC-KIT-948 --stages=implement,validate,unlock
 
-# Debug single stage - run only plan (~$0.30)
+# Debug single stage - run only plan ($0.35, ~11 min, 86% savings)
 /speckit.auto SPEC-KIT-948 --stages=plan
 ```
+
+**For complete workflow patterns, cost analysis, and decision guidance:**
+See `docs/spec-kit/PIPELINE_CONFIGURATION_GUIDE.md` section 6 (Common Workflows) and
+`docs/spec-kit/workflow-examples/*.toml` for ready-to-use configuration files.
 
 ### Tiered Model Strategy (Updated 2025-11-01, SPEC-KIT-070 Phase 2+3)
 
