@@ -280,10 +280,10 @@ impl PipelineConfiguratorWidget {
             .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
             .split(inner_area);
 
-        // Left pane: Stage selector (checkbox list) - Phase 3
-        render_stage_selector(frame, chunks[0], state);
+        // Left pane: Stage selector (checkbox list) - Phase 3 Task 3.1
+        super::stage_selector::render_stage_selector(frame, chunks[0], state);
 
-        // Right pane: Stage details + warnings - Phase 3
+        // Right pane: Stage details + warnings - Phase 3 Task 3.2
         render_stage_details(frame, chunks[1], state);
 
         // Bottom: Help bar - Phase 3
@@ -323,20 +323,6 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 // ============================================================================
 // Placeholder Render Functions (Phase 3 Implementation)
 // ============================================================================
-
-/// Render stage selector (checkbox list) - Phase 3 Task 3.1
-///
-/// Will render:
-/// - Checkbox list with stage names
-/// - [✓] or [ ] indicators
-/// - Cost per stage
-/// - Visual indicators ($, ⚠, 🔒)
-/// - Highlight selected row
-/// - Total cost/duration footer
-fn render_stage_selector(_frame: &mut Frame, _area: Rect, _state: &PipelineConfiguratorState) {
-    // TODO: Phase 3 Task 3.1 - Implement checkbox list widget
-    // See implementation plan lines 363-459 for details
-}
 
 /// Render stage details (right pane) - Phase 3 Task 3.2
 ///
