@@ -67,7 +67,10 @@ See `MEMORY-POLICY.md` for complete policy. Local-memory is the **only** knowled
 - `/speckit.unlock SPEC-ID` – Final approval (Tier 3: 3 premium - gemini-pro, claude-sonnet, gpt5-high). Ship/no-ship decision. ~10-12 min, ~$0.80.
 
 **Automation:**
-- `/speckit.auto SPEC-ID` – Full 6-stage pipeline with auto-advancement and quality gate checkpoints. Uses strategic agent routing: native for quality, single-agent for simple stages, multi-agent for complex decisions, premium for critical stages. ~45-50 min, **~$2.70** (was $11, 75% reduction via SPEC-KIT-070).
+- `/speckit.auto SPEC-ID [--skip-STAGE] [--only-STAGE] [--stages=LIST]` – Full 6-stage pipeline with auto-advancement and quality gate checkpoints. Uses strategic agent routing: native for quality, single-agent for simple stages, multi-agent for complex decisions, premium for critical stages. ~45-50 min, **~$2.70** (was $11, 75% reduction via SPEC-KIT-070).
+  - **CLI Flags (SPEC-948)**: `--skip-validate`, `--skip-audit`, `--only-plan`, `--stages=plan,tasks,implement`
+  - **Precedence**: CLI flags > per-SPEC pipeline.toml > global config > defaults
+  - **Cost Savings**: Skip expensive stages ($0.66-$2.70 vs $2.70 full pipeline)
 
 **Diagnostic:**
 - `/speckit.status SPEC-ID` – Native TUI dashboard (Tier 0: instant, no agents). Shows stage completion, artifacts, evidence paths. <1s, $0.
@@ -138,6 +141,21 @@ See `MEMORY-POLICY.md` for complete policy. Local-memory is the **only** knowled
 
 # Monitor evidence footprint
 /spec-evidence-stats --spec SPEC-KIT-065
+```
+
+**Partial pipeline workflows (SPEC-948):**
+```bash
+# Rapid prototyping - skip validation stages (~$0.66, 60% time savings)
+/speckit.auto SPEC-KIT-948 --skip-validate --skip-audit --skip-unlock
+
+# Docs-only workflow - just planning and unlock (~$1.18)
+/speckit.auto SPEC-KIT-948 --stages=specify,plan,unlock
+
+# Code refactoring - skip planning, focus on implementation (~$1.70)
+/speckit.auto SPEC-KIT-948 --only-implement --only-validate --only-unlock
+
+# Debug single stage - run only plan (~$0.30)
+/speckit.auto SPEC-KIT-948 --stages=plan
 ```
 
 ### Tiered Model Strategy (Updated 2025-11-01, SPEC-KIT-070 Phase 2+3)
