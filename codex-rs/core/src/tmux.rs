@@ -86,13 +86,16 @@ pub async fn ensure_session(session_name: &str) -> Result<(), String> {
     }
 
     // Create new session (detached)
-    let create = Command::new("tmux")
-        .args(["new-session", "-d", "-s", session_name])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .await
-        .map_err(|e| format!("Failed to create tmux session: {}", e))?;
+    // SPEC-940: Measure tmux session creation time
+    let create = crate::measure_time_async!(
+        "tmux_create_session",
+        Command::new("tmux")
+            .args(["new-session", "-d", "-s", session_name])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+    )
+    .map_err(|e| format!("Failed to create tmux session: {}", e))?;
 
     if !create.success() {
         return Err(format!("Failed to create tmux session '{}'", session_name));
@@ -110,19 +113,22 @@ pub async fn create_pane(
 ) -> Result<String, String> {
     if !is_first {
         // Split horizontally for additional panes
-        let split = Command::new("tmux")
-            .args([
-                "split-window",
-                "-t",
-                session_name,
-                "-h",
-                "-P",
-                "-F",
-                "#{pane_id}",
-            ])
-            .output()
-            .await
-            .map_err(|e| format!("Failed to split tmux pane: {}", e))?;
+        // SPEC-940: Measure tmux pane creation time
+        let split = crate::measure_time_async!(
+            "tmux_create_pane",
+            Command::new("tmux")
+                .args([
+                    "split-window",
+                    "-t",
+                    session_name,
+                    "-h",
+                    "-P",
+                    "-F",
+                    "#{pane_id}",
+                ])
+                .output()
+        )
+        .map_err(|e| format!("Failed to split tmux pane: {}", e))?;
 
         if !split.status.success() {
             return Err(format!(

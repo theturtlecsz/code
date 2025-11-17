@@ -476,6 +476,9 @@ pub struct SpecAutoState {
     // Agent response cache for consensus (avoids memory dependency)
     // Collected from active_agents after completion, before consensus runs
     pub agent_responses_cache: Option<Vec<(String, String)>>, // (agent_name, response_text)
+
+    // SPEC-948: Pipeline configuration for modular stage execution
+    pub pipeline_config: super::pipeline_config::PipelineConfig,
 }
 
 impl SpecAutoState {
@@ -485,8 +488,9 @@ impl SpecAutoState {
         goal: String,
         resume_from: SpecStage,
         hal_mode: Option<HalMode>,
+        pipeline_config: super::pipeline_config::PipelineConfig,
     ) -> Self {
-        Self::with_quality_gates(spec_id, goal, resume_from, hal_mode, true)
+        Self::with_quality_gates(spec_id, goal, resume_from, hal_mode, true, pipeline_config)
     }
 
     pub fn with_quality_gates(
@@ -495,8 +499,12 @@ impl SpecAutoState {
         resume_from: SpecStage,
         hal_mode: Option<HalMode>,
         quality_gates_enabled: bool,
+        pipeline_config: super::pipeline_config::PipelineConfig,
     ) -> Self {
-        let stages = vec![
+        // SPEC-948 Task 2.2: Include ALL stages (Plan→Unlock) for skip telemetry tracking
+        // Stage filtering happens in advance_spec_auto(), not here
+        // This allows us to record telemetry for skipped stages
+        let stages: Vec<SpecStage> = vec![
             SpecStage::Plan,
             SpecStage::Tasks,
             SpecStage::Implement,
@@ -504,6 +512,7 @@ impl SpecAutoState {
             SpecStage::Audit,
             SpecStage::Unlock,
         ];
+
         let start_index = stages
             .iter()
             .position(|stage| *stage == resume_from)
@@ -552,6 +561,8 @@ impl SpecAutoState {
             run_id: Some(run_id),
             // Agent response cache
             agent_responses_cache: None,
+            // Pipeline configuration (SPEC-948)
+            pipeline_config,
         }
     }
 

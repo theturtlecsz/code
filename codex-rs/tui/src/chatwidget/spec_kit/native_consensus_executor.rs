@@ -376,22 +376,23 @@ fn store_consensus_to_memory(
     _mcp_manager: Option<Arc<codex_core::mcp_connection_manager::McpConnectionManager>>,
 ) -> Result<()> {
     // SPEC-934: Store to SQLite instead of MCP local-memory
-    let db = super::consensus_db::ConsensusDb::init_default()
-        .map_err(|e| SpecKitError::from_string(format!("Failed to initialize consensus DB: {}", e)))?;
+    let db = super::consensus_db::ConsensusDb::init_default().map_err(|e| {
+        SpecKitError::from_string(format!("Failed to initialize consensus DB: {}", e))
+    })?;
 
     db.store_synthesis(
-        spec_id,
-        stage,
-        synthesis,
-        None, // output_path (not written to file for native consensus)
+        spec_id, stage, synthesis,
+        None,      // output_path (not written to file for native consensus)
         "success", // status
-        1, // artifacts_count (native synthesis is single artifact)
-        None, // agreements
-        None, // conflicts
-        false, // degraded
-        None, // run_id
+        1,         // artifacts_count (native synthesis is single artifact)
+        None,      // agreements
+        None,      // conflicts
+        false,     // degraded
+        None,      // run_id
     )
-    .map_err(|e| SpecKitError::from_string(format!("Failed to store consensus synthesis: {}", e)))?;
+    .map_err(|e| {
+        SpecKitError::from_string(format!("Failed to store consensus synthesis: {}", e))
+    })?;
 
     tracing::debug!(
         "Stored native consensus synthesis to SQLite: spec={}, stage={}",

@@ -45,22 +45,25 @@ pub fn execute_in_transaction<F, T>(
 where
     F: FnOnce(&Transaction) -> Result<T>,
 {
-    // Begin transaction with specified behavior
-    let tx = conn.transaction_with_behavior(behavior)?;
+    // SPEC-940: Measure database transaction time
+    crate::measure_time!("database_transaction", {
+        // Begin transaction with specified behavior
+        let tx = conn.transaction_with_behavior(behavior)?;
 
-    // Execute operation
-    match operation(&tx) {
-        Ok(result) => {
-            // Commit on success
-            tx.commit()?;
-            Ok(result)
+        // Execute operation
+        match operation(&tx) {
+            Ok(result) => {
+                // Commit on success
+                tx.commit()?;
+                Ok(result)
+            }
+            Err(e) => {
+                // Rollback happens automatically via Drop trait
+                // No need to call tx.rollback() explicitly
+                Err(e)
+            }
         }
-        Err(e) => {
-            // Rollback happens automatically via Drop trait
-            // No need to call tx.rollback() explicitly
-            Err(e)
-        }
-    }
+    })
 }
 
 /// Batch insert with single transaction (performance optimization)
@@ -253,13 +256,14 @@ mod tests {
         let mut conn = setup_test_db();
 
         // Execute transaction that should rollback
-        let result: Result<()> = execute_in_transaction(&mut conn, TransactionBehavior::Immediate, |tx| {
-            tx.execute("INSERT INTO test_data (value) VALUES (?1)", [99])?;
-            // Simulate error - this should trigger rollback
-            Err(super::super::DbError::Transaction(
-                "Intentional error".to_string(),
-            ))
-        });
+        let result: Result<()> =
+            execute_in_transaction(&mut conn, TransactionBehavior::Immediate, |tx| {
+                tx.execute("INSERT INTO test_data (value) VALUES (?1)", [99])?;
+                // Simulate error - this should trigger rollback
+                Err(super::super::DbError::Transaction(
+                    "Intentional error".to_string(),
+                ))
+            });
 
         assert!(result.is_err(), "Transaction should fail");
 
@@ -294,14 +298,15 @@ mod tests {
         assert_eq!(count, 3, "All 3 rows should be committed atomically");
 
         // Now test failure case - none should persist
-        let result: Result<()> = execute_in_transaction(&mut conn, TransactionBehavior::Immediate, |tx| {
-            tx.execute("INSERT INTO test_data (value) VALUES (?1)", [10])?;
-            tx.execute("INSERT INTO test_data (value) VALUES (?1)", [20])?;
-            // Fail after 2 inserts
-            Err(super::super::DbError::Transaction(
-                "Simulated failure".to_string(),
-            ))
-        });
+        let result: Result<()> =
+            execute_in_transaction(&mut conn, TransactionBehavior::Immediate, |tx| {
+                tx.execute("INSERT INTO test_data (value) VALUES (?1)", [10])?;
+                tx.execute("INSERT INTO test_data (value) VALUES (?1)", [20])?;
+                // Fail after 2 inserts
+                Err(super::super::DbError::Transaction(
+                    "Simulated failure".to_string(),
+                ))
+            });
 
         assert!(result.is_err(), "Transaction should fail");
 

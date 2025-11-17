@@ -64,6 +64,7 @@ enum QualityGateCommand {
         checkpoint: QualityCheckpoint,
         expected_agents: Vec<String>,
         agent_ids: Vec<String>,
+        threshold: f64,
     },
     FetchValidationPayload {
         spec_id: String,
@@ -113,12 +114,14 @@ impl QualityGateBroker {
                         checkpoint,
                         expected_agents,
                         agent_ids,
+                        threshold,
                     } => {
                         let result = fetch_agent_payloads_from_memory(
                             &spec_id,
                             checkpoint,
                             &expected_agents,
                             &agent_ids,
+                            threshold,
                         )
                         .await;
 
@@ -169,6 +172,7 @@ impl QualityGateBroker {
         checkpoint: QualityCheckpoint,
         expected_agents: Vec<String>,
         agent_ids: Vec<String>,
+        threshold: f64,
     ) {
         if let Err(err) = self
             .sender
@@ -177,6 +181,7 @@ impl QualityGateBroker {
                 checkpoint,
                 expected_agents,
                 agent_ids,
+                threshold,
             })
         {
             tracing::error!("quality gate broker channel closed: {err}");
@@ -217,6 +222,7 @@ async fn fetch_agent_payloads_from_memory(
     checkpoint: QualityCheckpoint,
     expected_agents: &[String],
     agent_ids: &[String],
+    threshold: f64,
 ) -> QualityGateBrokerResult {
     let mut info_lines = Vec::new();
     let mut results_map: HashMap<String, QualityGateAgentPayload> = HashMap::new();
@@ -353,10 +359,14 @@ async fn fetch_agent_payloads_from_memory(
         expected_agents.len()
     ));
 
-    // Accept 2/3 agents as valid consensus (degraded mode)
-    let min_required = if expected_agents.len() >= 3 {
-        2
+    // SPEC-939: Calculate minimum required agents based on consensus threshold
+    // Threshold is now passed from widget.config.quality_gates[checkpoint].threshold
+    let min_required = if expected_agents.len() >= 2 {
+        // Calculate minimum as ceil(count * threshold)
+        let min = (expected_agents.len() as f64 * threshold).ceil() as usize;
+        min.max(1).min(expected_agents.len())
     } else {
+        // For 0-1 agents, require all
         expected_agents.len()
     };
     let is_valid = results_map.len() >= min_required;

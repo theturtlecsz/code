@@ -8,9 +8,9 @@
 //!
 //! Target: 150ms → 50ms (3× speedup) via parallel initialization
 
+use once_cell::sync::Lazy;
 use std::sync::Mutex;
 use std::time::Duration;
-use once_cell::sync::Lazy;
 
 /// Individual agent spawn metric
 #[derive(Debug, Clone)]
@@ -73,7 +73,10 @@ pub fn record_batch_spawn(
     let total_duration_ms = total_duration.as_millis() as u64;
 
     let avg_spawn_duration_ms = if !individual_durations.is_empty() {
-        individual_durations.iter().map(|d| d.as_millis() as u64).sum::<u64>()
+        individual_durations
+            .iter()
+            .map(|d| d.as_millis() as u64)
+            .sum::<u64>()
             / individual_durations.len() as u64
     } else {
         0

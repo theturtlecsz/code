@@ -465,7 +465,6 @@ impl App<'_> {
                 latest_upgrade_version.clone(),
                 mcp_manager.clone(),
                 initial_command.clone(), // SPEC-KIT-920
-                config_watcher.clone(),  // SPEC-945D
             );
             chat_widget.enable_perf(enable_perf);
             if resume_picker {
@@ -1235,6 +1234,11 @@ impl App<'_> {
                     draw_result??;
                     if self.timing_enabled {
                         self.timing.on_redraw_end(t0);
+                    }
+
+                    // SPEC-939: Poll config watcher for file changes
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.poll_config_watcher();
                     }
 
                     // SPEC-KIT-920: Auto-submit initial command after first successful redraw
@@ -2017,7 +2021,6 @@ impl App<'_> {
                                 self.latest_upgrade_version.clone(),
                                 self.mcp_manager.clone(),
                                 None, // SPEC-KIT-920: /new has no initial_command
-                                self.config_watcher.clone(), // SPEC-945D
                             );
                             new_widget.enable_perf(self.timing_enabled);
                             self.app_state = AppState::Chat {
@@ -2270,7 +2273,6 @@ impl App<'_> {
                             self.latest_upgrade_version.clone(),
                             self.mcp_manager.clone(),
                             None, // SPEC-KIT-920: resume has no initial_command
-                            self.config_watcher.clone(), // SPEC-945D
                         );
                         new_widget.enable_perf(self.timing_enabled);
                         self.app_state = AppState::Chat {
@@ -2673,7 +2675,6 @@ impl App<'_> {
                         latest_upgrade_version,
                         mcp_manager,
                         initial_command, // SPEC-KIT-920
-                        config_watcher,  // SPEC-945D
                     );
                     w.enable_perf(enable_perf);
                     if resume_picker {

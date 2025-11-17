@@ -119,6 +119,9 @@ pub fn on_quality_gate_agents_complete(widget: &mut ChatWidget) {
         crate::history_cell::HistoryCellType::Notice,
     ));
 
+    // SPEC-939: Get threshold from config
+    let threshold = get_quality_gate_threshold(widget, checkpoint);
+
     // Use memory-based collection for native orchestrator, filesystem for legacy
     if let Some(agent_ids) = native_agent_ids {
         widget.quality_gate_broker.fetch_agent_payloads_from_memory(
@@ -126,6 +129,7 @@ pub fn on_quality_gate_agents_complete(widget: &mut ChatWidget) {
             checkpoint,
             expected_agents,
             agent_ids,
+            threshold,
         );
     } else {
         widget.quality_gate_broker.fetch_agent_payloads(
@@ -1029,24 +1033,101 @@ pub(super) fn determine_quality_checkpoint(
     }
 }
 
-/// Get quality gate agents from config, falling back to defaults
+/// Get quality gate agents from config, falling back to defaults (SPEC-939 Component 2a)
 fn get_quality_gate_agents(
     widget: &ChatWidget,
     checkpoint: super::state::QualityCheckpoint,
 ) -> Vec<String> {
     // Try to get from config first
     if let Some(quality_gates) = &widget.config.quality_gates {
-        let agents = match checkpoint {
+        let checkpoint_config = match checkpoint {
             super::state::QualityCheckpoint::BeforeSpecify => &quality_gates.plan,
             super::state::QualityCheckpoint::AfterSpecify => &quality_gates.tasks,
             super::state::QualityCheckpoint::AfterTasks => &quality_gates.validate,
         };
-        if !agents.is_empty() {
-            return agents.clone();
+        // Only use if checkpoint is enabled and has agents configured
+        if checkpoint_config.enabled && !checkpoint_config.agents.is_empty() {
+            return checkpoint_config.agents.clone();
         }
     }
     // Fallback to default agents
-    vec!["gemini".to_string(), "claude".to_string(), "code".to_string()]
+    vec![
+        "gemini".to_string(),
+        "claude".to_string(),
+        "code".to_string(),
+    ]
+}
+
+/// Get quality gate consensus threshold from config, falling back to default (SPEC-939 Component 2a)
+fn get_quality_gate_threshold(
+    widget: &ChatWidget,
+    checkpoint: super::state::QualityCheckpoint,
+) -> f64 {
+    if let Some(quality_gates) = &widget.config.quality_gates {
+        let checkpoint_config = match checkpoint {
+            super::state::QualityCheckpoint::BeforeSpecify => &quality_gates.plan,
+            super::state::QualityCheckpoint::AfterSpecify => &quality_gates.tasks,
+            super::state::QualityCheckpoint::AfterTasks => &quality_gates.validate,
+        };
+        if checkpoint_config.enabled {
+            return checkpoint_config.threshold;
+        }
+    }
+    // Fallback to default 2/3 consensus
+    0.67
+}
+
+/// Check if a quality gate checkpoint is enabled (SPEC-939 Component 2a)
+fn is_checkpoint_enabled(widget: &ChatWidget, checkpoint: super::state::QualityCheckpoint) -> bool {
+    if let Some(quality_gates) = &widget.config.quality_gates {
+        let checkpoint_config = match checkpoint {
+            super::state::QualityCheckpoint::BeforeSpecify => &quality_gates.plan,
+            super::state::QualityCheckpoint::AfterSpecify => &quality_gates.tasks,
+            super::state::QualityCheckpoint::AfterTasks => &quality_gates.validate,
+        };
+        return checkpoint_config.enabled;
+    }
+    // Default to enabled
+    true
+}
+
+/// Calculate active quality gate checkpoints based on pipeline configuration (SPEC-948 Task 2.4)
+///
+/// Returns Vec of quality checkpoints that should execute based on which stages are enabled.
+/// Checkpoint logic:
+/// - BeforeSpecify: Enabled if Plan stage is enabled (runs before Plan)
+/// - AfterSpecify: Enabled if Tasks stage is enabled (runs before Tasks, after Plan)
+/// - AfterTasks: Enabled if Implement stage is enabled (runs before Implement, after Tasks)
+///
+/// This enables quality gate bypass awareness - if stages are skipped in config, corresponding
+/// checkpoints are automatically disabled.
+pub(super) fn active_quality_gates(
+    config: &super::pipeline_config::PipelineConfig,
+) -> Vec<super::state::QualityCheckpoint> {
+    use super::pipeline_config::StageType;
+    use super::state::QualityCheckpoint;
+
+    let mut checkpoints = Vec::new();
+
+    // Checkpoint 1: BeforeSpecify (runs before Plan stage)
+    // Enabled if Plan stage is enabled
+    if config.is_enabled(StageType::Plan) {
+        checkpoints.push(QualityCheckpoint::BeforeSpecify);
+    }
+
+    // Checkpoint 2: AfterSpecify (runs after Plan, before Tasks)
+    // Enabled if Tasks stage is enabled
+    if config.is_enabled(StageType::Tasks) {
+        checkpoints.push(QualityCheckpoint::AfterSpecify);
+    }
+
+    // Checkpoint 3: AfterTasks (runs after Tasks, before Implement)
+    // Enabled if Implement stage is enabled
+    if config.is_enabled(StageType::Implement) {
+        checkpoints.push(QualityCheckpoint::AfterTasks);
+    }
+
+    checkpoints
 }
 
 /// Execute quality checkpoint by starting quality gate agents
@@ -1057,6 +1138,28 @@ pub(super) fn execute_quality_checkpoint(
     let Some(state) = widget.spec_auto_state.as_ref() else {
         return;
     };
+
+    // SPEC-939: Skip disabled checkpoints
+    if !is_checkpoint_enabled(widget, checkpoint) {
+        tracing::info!("Quality checkpoint {:?} is disabled, skipping", checkpoint);
+
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![ratatui::text::Line::from(format!(
+                "Quality Checkpoint: {} - SKIPPED (disabled in config)",
+                checkpoint.name()
+            ))],
+            crate::history_cell::HistoryCellType::Notice,
+        ));
+
+        // Mark checkpoint as completed (skipped)
+        if let Some(state) = widget.spec_auto_state.as_mut() {
+            state.completed_checkpoints.insert(checkpoint);
+        }
+
+        // Advance to next stage
+        super::handler::advance_spec_auto(widget);
+        return;
+    }
 
     let spec_id = state.spec_id.clone();
     let cwd = widget.config.cwd.clone();
@@ -1076,6 +1179,16 @@ pub(super) fn execute_quality_checkpoint(
 
     // Get quality gate agents from config (SPEC-939: configurable quality gates)
     let quality_gate_agents = get_quality_gate_agents(widget, checkpoint);
+    let quality_gate_threshold = get_quality_gate_threshold(widget, checkpoint);
+
+    // SPEC-939: Log configuration being used
+    tracing::info!(
+        "Quality checkpoint {:?}: {} agents [{}], threshold {:.2}",
+        checkpoint,
+        quality_gate_agents.len(),
+        quality_gate_agents.join(", "),
+        quality_gate_threshold
+    );
 
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
         vec![ratatui::text::Line::from(format!(
@@ -1804,7 +1917,121 @@ async fn store_artifact_async(
 
     debug!(
         "Successfully stored artifact to SQLite: agent={}, spec={}, checkpoint={}",
-        agent_name, spec_id, checkpoint.name()
+        agent_name,
+        spec_id,
+        checkpoint.name()
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::super::pipeline_config::{PipelineConfig, StageType};
+    use super::super::state::QualityCheckpoint;
+
+    #[test]
+    fn test_active_quality_gates_all_stages_enabled() {
+        // Default config has all stages enabled
+        let config = PipelineConfig::defaults();
+        let gates = active_quality_gates(&config);
+
+        // Should have all 3 checkpoints
+        assert_eq!(gates.len(), 3);
+        assert!(gates.contains(&QualityCheckpoint::BeforeSpecify));
+        assert!(gates.contains(&QualityCheckpoint::AfterSpecify));
+        assert!(gates.contains(&QualityCheckpoint::AfterTasks));
+    }
+
+    #[test]
+    fn test_active_quality_gates_only_plan_enabled() {
+        // Only Plan stage enabled
+        let mut config = PipelineConfig::defaults();
+        config.enabled_stages = vec![StageType::Plan];
+
+        let gates = active_quality_gates(&config);
+
+        // Only BeforeSpecify checkpoint (runs before Plan)
+        assert_eq!(gates.len(), 1);
+        assert!(gates.contains(&QualityCheckpoint::BeforeSpecify));
+        assert!(!gates.contains(&QualityCheckpoint::AfterSpecify));
+        assert!(!gates.contains(&QualityCheckpoint::AfterTasks));
+    }
+
+    #[test]
+    fn test_active_quality_gates_plan_and_tasks_enabled() {
+        // Plan and Tasks stages enabled
+        let mut config = PipelineConfig::defaults();
+        config.enabled_stages = vec![StageType::Plan, StageType::Tasks];
+
+        let gates = active_quality_gates(&config);
+
+        // BeforeSpecify and AfterSpecify checkpoints
+        assert_eq!(gates.len(), 2);
+        assert!(gates.contains(&QualityCheckpoint::BeforeSpecify));
+        assert!(gates.contains(&QualityCheckpoint::AfterSpecify));
+        assert!(!gates.contains(&QualityCheckpoint::AfterTasks));
+    }
+
+    #[test]
+    fn test_active_quality_gates_only_implement_enabled() {
+        // Only Implement stage enabled (skipping Plan and Tasks)
+        let mut config = PipelineConfig::defaults();
+        config.enabled_stages = vec![StageType::Implement];
+
+        let gates = active_quality_gates(&config);
+
+        // Only AfterTasks checkpoint (runs before Implement)
+        assert_eq!(gates.len(), 1);
+        assert!(!gates.contains(&QualityCheckpoint::BeforeSpecify));
+        assert!(!gates.contains(&QualityCheckpoint::AfterSpecify));
+        assert!(gates.contains(&QualityCheckpoint::AfterTasks));
+    }
+
+    #[test]
+    fn test_active_quality_gates_no_quality_gate_stages() {
+        // Validate and Audit enabled (no quality gate checkpoints for these)
+        let mut config = PipelineConfig::defaults();
+        config.enabled_stages = vec![StageType::Validate, StageType::Audit];
+
+        let gates = active_quality_gates(&config);
+
+        // No checkpoints
+        assert_eq!(gates.len(), 0);
+    }
+
+    #[test]
+    fn test_active_quality_gates_partial_pipeline() {
+        // Typical partial pipeline: plan, tasks, implement, validate
+        let mut config = PipelineConfig::defaults();
+        config.enabled_stages = vec![
+            StageType::Plan,
+            StageType::Tasks,
+            StageType::Implement,
+            StageType::Validate,
+        ];
+
+        let gates = active_quality_gates(&config);
+
+        // All 3 checkpoints should be active
+        assert_eq!(gates.len(), 3);
+        assert!(gates.contains(&QualityCheckpoint::BeforeSpecify));
+        assert!(gates.contains(&QualityCheckpoint::AfterSpecify));
+        assert!(gates.contains(&QualityCheckpoint::AfterTasks));
+    }
+
+    #[test]
+    fn test_active_quality_gates_docs_only_workflow() {
+        // Docs-only workflow: typically just specify, plan
+        let mut config = PipelineConfig::defaults();
+        config.enabled_stages = vec![StageType::Specify, StageType::Plan];
+
+        let gates = active_quality_gates(&config);
+
+        // Only BeforeSpecify (runs before Plan)
+        assert_eq!(gates.len(), 1);
+        assert!(gates.contains(&QualityCheckpoint::BeforeSpecify));
+        assert!(!gates.contains(&QualityCheckpoint::AfterSpecify));
+        assert!(!gates.contains(&QualityCheckpoint::AfterTasks));
+    }
 }

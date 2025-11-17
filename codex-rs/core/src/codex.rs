@@ -6959,6 +6959,7 @@ mod resolve_read_only_tests {
             args_read_only: None,
             args_write: None,
             instructions: None,
+            model: None,
         }
     }
 

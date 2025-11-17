@@ -11,6 +11,7 @@ use super::super::ChatWidget;
 use super::agent_orchestrator::auto_submit_spec_stage_prompt;
 use super::command_handlers::halt_spec_auto_with_error;
 use super::consensus_coordinator::{block_on_sync, persist_cost_summary, run_consensus_with_retry};
+use super::pipeline_config::{PipelineConfig, PipelineOverrides}; // SPEC-948
 use super::quality_gate_handler::{
     determine_quality_checkpoint, execute_quality_checkpoint, finalize_quality_gates,
 };
@@ -32,6 +33,7 @@ pub fn handle_spec_auto(
     goal: String,
     resume_from: SpecStage,
     hal_mode: Option<HalMode>,
+    cli_overrides: Option<PipelineOverrides>, // SPEC-948: CLI flags for stage filtering
 ) {
     let mut header: Vec<ratatui::text::Line<'static>> = Vec::new();
     header.push(ratatui::text::Line::from(format!("/spec-auto {}", spec_id)));
@@ -61,6 +63,28 @@ pub fn handle_spec_auto(
         return;
     }
 
+    // SPEC-948: Load pipeline configuration with 3-tier precedence
+    let pipeline_config = match PipelineConfig::load(&spec_id, cli_overrides) {
+        Ok(config) => config,
+        Err(err) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Pipeline configuration error: {}",
+                err
+            )));
+            return;
+        }
+    };
+
+    // SPEC-948: Display validation warnings (quality gate bypass, cost savings, etc.)
+    if let Ok(validation) = pipeline_config.validate() {
+        for warning in &validation.warnings {
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![ratatui::text::Line::from(warning.clone())],
+                HistoryCellType::Notice,
+            ));
+        }
+    }
+
     // SPEC-KIT-909: Check evidence size before starting pipeline (50MB hard limit)
     if let Err(err) = check_evidence_size_limit(&spec_id, &widget.config.cwd) {
         widget.history_push(crate::history_cell::new_error_event(format!(
@@ -74,7 +98,13 @@ pub fn handle_spec_auto(
     }
 
     let lifecycle = widget.ensure_validate_lifecycle(&spec_id);
-    let mut state = super::state::SpecAutoState::new(spec_id.clone(), goal, resume_from, hal_mode);
+    let mut state = super::state::SpecAutoState::new(
+        spec_id.clone(),
+        goal,
+        resume_from,
+        hal_mode,
+        pipeline_config, // SPEC-948: Pass pipeline config
+    );
     state.set_validate_lifecycle(lifecycle);
 
     // Log run start event
@@ -135,6 +165,30 @@ pub fn advance_spec_auto(widget: &mut ChatWidget) {
             } else {
                 let stage = state.stages[state.current_index];
                 let hal_mode = state.hal_mode;
+
+                // SPEC-948 Task 2.2: Check if stage is enabled in pipeline configuration
+                let stage_type = spec_stage_to_stage_type(stage);
+                if !state.pipeline_config.is_enabled(stage_type) {
+                    let spec_id = state.spec_id.clone();
+                    let reason = state
+                        .pipeline_config
+                        .skip_reason(stage_type)
+                        .unwrap_or("Disabled in pipeline configuration");
+
+                    // Record skip telemetry
+                    if let Err(err) = record_stage_skip(&spec_id, stage, reason) {
+                        tracing::warn!("Failed to record skip telemetry: {}", err);
+                    }
+
+                    // Log skip to console
+                    tracing::info!("⏭️  Skipping stage {}: {}", stage.display_name(), reason);
+
+                    // Advance to next stage
+                    state.current_index += 1;
+
+                    // Continue loop to check next stage
+                    continue;
+                }
 
                 // SPEC-KIT-928: Check if quality gates are still running (single-flight guard)
                 // Prevent stage advancement while quality gates are executing
@@ -1492,4 +1546,69 @@ pub(super) fn extract_json_from_agent_response(text: &str) -> Option<String> {
     }
 
     None
+}
+
+/// SPEC-948 Task 2.2: Convert SpecStage to StageType for pipeline config lookups
+fn spec_stage_to_stage_type(stage: SpecStage) -> super::pipeline_config::StageType {
+    use super::pipeline_config::StageType;
+    match stage {
+        SpecStage::Plan => StageType::Plan,
+        SpecStage::Tasks => StageType::Tasks,
+        SpecStage::Implement => StageType::Implement,
+        SpecStage::Validate => StageType::Validate,
+        SpecStage::Audit => StageType::Audit,
+        SpecStage::Unlock => StageType::Unlock,
+        // Quality commands are not part of /speckit.auto pipeline
+        // They should never appear in state.stages (which is Plan→Unlock only)
+        SpecStage::Clarify | SpecStage::Analyze | SpecStage::Checklist => {
+            panic!(
+                "Quality command stage {:?} should not be in /speckit.auto pipeline",
+                stage
+            )
+        }
+    }
+}
+
+/// SPEC-948 Task 2.3: Record skip telemetry for disabled stages
+fn record_stage_skip(
+    spec_id: &str,
+    stage: SpecStage,
+    reason: &str,
+) -> Result<(), String> {
+    use serde_json::json;
+    use std::fs;
+
+    let skip_metadata = json!({
+        "command": format!("speckit.{}", stage.display_name().to_lowercase()),
+        "specId": spec_id,
+        "stage": stage.display_name(),
+        "action": "skipped",
+        "reason": reason,
+        "configSource": "pipeline.toml",
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "schemaVersion": "1.0"
+    });
+
+    // Evidence directory path matches existing telemetry structure
+    let evidence_dir = format!(
+        "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/{}",
+        spec_id
+    );
+    fs::create_dir_all(&evidence_dir)
+        .map_err(|e| format!("Failed to create evidence directory: {}", e))?;
+
+    let skip_file = format!(
+        "{}/speckit-{}_SKIPPED.json",
+        evidence_dir,
+        stage.display_name().to_lowercase()
+    );
+
+    let json_str = serde_json::to_string_pretty(&skip_metadata)
+        .map_err(|e| format!("Failed to serialize skip metadata: {}", e))?;
+
+    fs::write(&skip_file, json_str)
+        .map_err(|e| format!("Failed to write skip telemetry to {}: {}", skip_file, e))?;
+
+    tracing::debug!("📝 Skip telemetry recorded: {}", skip_file);
+    Ok(())
 }

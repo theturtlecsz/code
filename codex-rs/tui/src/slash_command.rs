@@ -612,6 +612,8 @@ pub struct SpecAutoInvocation {
     pub goal: String,
     pub resume_from: SpecStage,
     pub hal_mode: Option<HalMode>,
+    /// SPEC-948: CLI args for pipeline configuration (--skip-*, --stages=, etc.)
+    pub cli_args: Vec<String>,
 }
 
 #[derive(Debug, Error)]
@@ -637,6 +639,7 @@ pub fn parse_spec_auto_args(args: &str) -> Result<SpecAutoInvocation, SpecAutoPa
     let mut pending_from = false;
     let mut pending_hal = false;
     let mut hal_mode: Option<HalMode> = None;
+    let mut cli_args: Vec<String> = Vec::new(); // SPEC-948: Pipeline config flags
 
     for token in tokens {
         if pending_from {
@@ -663,6 +666,11 @@ pub fn parse_spec_auto_args(args: &str) -> Result<SpecAutoInvocation, SpecAutoPa
                 );
                 continue;
             }
+            // SPEC-948: Collect --stages=plan,tasks,... flags
+            if flag == "--stages" {
+                cli_args.push(token.to_string());
+                continue;
+            }
         }
 
         match token {
@@ -671,6 +679,10 @@ pub fn parse_spec_auto_args(args: &str) -> Result<SpecAutoInvocation, SpecAutoPa
             }
             "--hal" | "--hal-mode" => {
                 pending_hal = true;
+            }
+            // SPEC-948: Collect --skip-* and --only-* pipeline flags
+            t if t.starts_with("--skip-") || t.starts_with("--only-") => {
+                cli_args.push(t.to_string());
             }
             _ => goal_tokens.push(token.to_string()),
         }
@@ -688,6 +700,7 @@ pub fn parse_spec_auto_args(args: &str) -> Result<SpecAutoInvocation, SpecAutoPa
         goal: goal_tokens.join(" "),
         resume_from,
         hal_mode,
+        cli_args, // SPEC-948
     })
 }
 
@@ -766,5 +779,61 @@ mod tests {
         let meta = command.spec_ops().expect("Spec Ops metadata");
         assert_eq!(meta.display, "evidence-stats");
         assert_eq!(meta.script, "evidence_stats.sh");
+    }
+
+    // SPEC-948 Phase 3 Task 3.2: CLI flag parsing tests
+    #[test]
+    fn parse_spec_auto_args_supports_skip_flags() {
+        let auto = parse_spec_auto_args("SPEC-948 --skip-validate --skip-audit").unwrap();
+        assert_eq!(auto.spec_id, "SPEC-948");
+        assert_eq!(auto.cli_args.len(), 2);
+        assert!(auto.cli_args.contains(&"--skip-validate".to_string()));
+        assert!(auto.cli_args.contains(&"--skip-audit".to_string()));
+    }
+
+    #[test]
+    fn parse_spec_auto_args_supports_only_flags() {
+        let auto = parse_spec_auto_args("SPEC-948 --only-plan --only-tasks").unwrap();
+        assert_eq!(auto.spec_id, "SPEC-948");
+        assert_eq!(auto.cli_args.len(), 2);
+        assert!(auto.cli_args.contains(&"--only-plan".to_string()));
+        assert!(auto.cli_args.contains(&"--only-tasks".to_string()));
+    }
+
+    #[test]
+    fn parse_spec_auto_args_supports_stages_list() {
+        let auto = parse_spec_auto_args("SPEC-948 --stages=plan,tasks,implement").unwrap();
+        assert_eq!(auto.spec_id, "SPEC-948");
+        assert_eq!(auto.cli_args.len(), 1);
+        assert_eq!(auto.cli_args[0], "--stages=plan,tasks,implement");
+    }
+
+    #[test]
+    fn parse_spec_auto_args_cli_flags_with_goal() {
+        let auto = parse_spec_auto_args("SPEC-948 --skip-validate optimize cost").unwrap();
+        assert_eq!(auto.spec_id, "SPEC-948");
+        assert_eq!(auto.goal, "optimize cost");
+        assert_eq!(auto.cli_args.len(), 1);
+        assert_eq!(auto.cli_args[0], "--skip-validate");
+    }
+
+    #[test]
+    fn parse_spec_auto_args_cli_flags_with_from_and_hal() {
+        let auto =
+            parse_spec_auto_args("SPEC-948 --from tasks --hal live --skip-audit debug").unwrap();
+        assert_eq!(auto.spec_id, "SPEC-948");
+        assert_eq!(auto.resume_from, SpecStage::Tasks);
+        assert_eq!(auto.hal_mode, Some(HalMode::Live));
+        assert_eq!(auto.goal, "debug");
+        assert_eq!(auto.cli_args.len(), 1);
+        assert_eq!(auto.cli_args[0], "--skip-audit");
+    }
+
+    #[test]
+    fn parse_spec_auto_args_no_cli_flags_empty_vec() {
+        let auto = parse_spec_auto_args("SPEC-948 simple goal").unwrap();
+        assert_eq!(auto.spec_id, "SPEC-948");
+        assert_eq!(auto.goal, "simple goal");
+        assert!(auto.cli_args.is_empty());
     }
 }

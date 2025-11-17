@@ -52,6 +52,7 @@ use codex_core::config::Config;
 use codex_core::config_types::AgentConfig;
 use codex_core::config_types::ReasoningEffort;
 use codex_core::config_types::TextVerbosity;
+use codex_core::config_watcher::ConfigWatcher;
 use codex_core::git_info::CommitLogEntry;
 use codex_core::model_family::derive_default_model_family;
 use codex_core::model_family::find_family_for_model;
@@ -574,10 +575,12 @@ pub(crate) struct ChatWidget<'a> {
     initial_command: Option<String>,
     // === END FORK-SPECIFIC ===
 
-    // === FORK-SPECIFIC (just-every/code): SPEC-945D Config hot-reload ===
+    // === FORK-SPECIFIC (just-every/code): SPEC-939 Component 1a - Config hot-reload ===
     /// Configuration hot-reload watcher for live config updates.
     /// Enables component refresh on config changes without restart.
-    config_watcher: Option<Arc<codex_spec_kit::config::HotReloadWatcher>>,
+    config_watcher: Option<ConfigWatcher>,
+    /// Pending config reload paths (deferred if quality gate active)
+    pending_config_reload: Option<Vec<PathBuf>>,
     // === END FORK-SPECIFIC ===
 
     // Stable synthetic request bucket for pre‑turn system notices (set on first use)
@@ -2571,7 +2574,6 @@ impl ChatWidget<'_> {
             >,
         >,
         initial_command: Option<String>, // SPEC-KIT-920
-        config_watcher: Option<Arc<codex_spec_kit::config::HotReloadWatcher>>, // SPEC-945D
     ) -> Self {
         let (codex_op_tx, codex_op_rx) = unbounded_channel::<Op>();
 
@@ -2820,8 +2822,9 @@ impl ChatWidget<'_> {
             quality_gate_broker,
             // SPEC-KIT-920: TUI automation support
             initial_command,
-            // SPEC-945D: Config hot-reload support
-            config_watcher,
+            // SPEC-939: Config hot-reload support (initialized below based on config.hot_reload)
+            config_watcher: None,
+            pending_config_reload: None,
         };
         if let Ok(Some(active_id)) = auth_accounts::get_active_account_id(&config.codex_home) {
             if let Ok(records) = account_usage::list_rate_limit_snapshots(&config.codex_home) {
@@ -3073,8 +3076,9 @@ impl ChatWidget<'_> {
             quality_gate_broker,
             // SPEC-KIT-920: TUI automation support (fork_from_ghost_state has no initial_command)
             initial_command: None,
-            // SPEC-945D: Config hot-reload support (forked sessions don't need hot-reload)
-            config_watcher: None,
+            // SPEC-939: Config hot-reload support (initialized below based on config.hot_reload)
+            config_watcher: None, // Initialized after struct creation
+            pending_config_reload: None,
         };
         if let Ok(Some(active_id)) = auth_accounts::get_active_account_id(&config.codex_home) {
             if let Ok(records) = account_usage::list_rate_limit_snapshots(&config.codex_home) {
@@ -3089,6 +3093,51 @@ impl ChatWidget<'_> {
             w.history_push_top_next_req(history_cell::new_animated_welcome());
         }
         w.maybe_start_auto_upgrade_task();
+
+        // SPEC-939: Initialize config hot-reload watcher if enabled
+        if config
+            .hot_reload
+            .as_ref()
+            .map(|h| h.enabled)
+            .unwrap_or(false)
+        {
+            let watch_paths = config
+                .hot_reload
+                .as_ref()
+                .and_then(|h| {
+                    if h.watch_paths.is_empty() {
+                        None
+                    } else {
+                        Some(
+                            h.watch_paths
+                                .iter()
+                                .map(|p| config.codex_home.join(p))
+                                .collect(),
+                        )
+                    }
+                })
+                .unwrap_or_else(|| vec![config.codex_home.join("config.toml")]);
+
+            let debounce_ms = config
+                .hot_reload
+                .as_ref()
+                .map(|h| h.debounce_ms)
+                .unwrap_or(2000);
+
+            match ConfigWatcher::new(&watch_paths, debounce_ms) {
+                Ok(watcher) => {
+                    w.config_watcher = Some(watcher);
+                    tracing::info!(
+                        "Config hot-reload watcher initialized (debounce={}ms, paths={:?})",
+                        debounce_ms,
+                        watch_paths
+                    );
+                }
+                Err(e) => {
+                    tracing::error!("Failed to initialize config watcher: {}", e);
+                }
+            }
+        }
 
         w
     }
@@ -3203,6 +3252,79 @@ impl ChatWidget<'_> {
         // Note: Full config integration with spec-kit AppConfig is deferred
         // The config_watcher (if present) holds the updated AppConfig
         // self.cost_tracker reads from it dynamically
+    }
+
+    /// Poll config watcher for file changes (SPEC-939 Component 1a).
+    /// Defers reload if quality gate is active.
+    pub(crate) fn poll_config_watcher(&mut self) {
+        // SPEC-939: Poll config watcher for file changes
+        if let Some(ref mut watcher) = self.config_watcher {
+            if let Some(changed_paths) = watcher.check_for_changes() {
+                // Defer reload if quality gate is active (SPEC-939 requirement)
+                if self.is_quality_gate_active() {
+                    self.pending_config_reload = Some(changed_paths);
+                    tracing::debug!("Config change detected but deferred (quality gate active)");
+                } else {
+                    self.show_reload_prompt(changed_paths);
+                }
+            }
+        }
+    }
+
+    /// Check for pending config reload after quality gate completes (SPEC-939 Component 1a).
+    pub(crate) fn check_pending_config_reload(&mut self) {
+        // After quality gate completes, check for pending reload
+        if let Some(paths) = self.pending_config_reload.take() {
+            self.show_reload_prompt(paths);
+        }
+    }
+
+    /// Show config reload prompt to user (SPEC-939 Component 1a).
+    fn show_reload_prompt(&mut self, paths: Vec<std::path::PathBuf>) {
+        let paths_display: Vec<_> = paths
+            .iter()
+            .map(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("config.toml")
+            })
+            .collect();
+
+        let prompt = format!(
+            "Config changed: {}. Reload? [Y/n]",
+            paths_display.join(", ")
+        );
+
+        // Use existing notification system to show prompt
+        let _ = self.app_event_tx.send_background_event(prompt);
+
+        // TODO: Wire up Y/n input handler in future iteration
+        // For now, auto-reload after notification
+        self.reload_config();
+    }
+
+    /// Reload config from disk (SPEC-939 Component 1a).
+    fn reload_config(&mut self) {
+        match self.config.reload_from_file() {
+            Ok(new_config) => {
+                self.config = new_config;
+                let _ = self
+                    .app_event_tx
+                    .send_background_event("✅ Config reloaded successfully".to_string());
+                tracing::info!("Config reloaded from disk");
+
+                // Refresh components that depend on config
+                self.refresh_quality_gates();
+                self.refresh_agent_selection();
+                self.refresh_cost_tracker();
+            }
+            Err(e) => {
+                let error_msg = format!("❌ Config reload failed: {}", e);
+                let _ = self.app_event_tx.send_background_event(error_msg.clone());
+                tracing::error!("Config reload failed: {}", e);
+                // Old config is preserved (automatic rollback behavior)
+            }
+        }
     }
 
     // === END FORK-SPECIFIC ===
@@ -4252,6 +4374,8 @@ impl ChatWidget<'_> {
                     && state.quality_gate_processing.is_none()
                 {
                     spec_kit::handler::on_quality_gate_agents_complete(self);
+                    // SPEC-939: Check for pending config reload after quality gate completes
+                    self.check_pending_config_reload();
                 }
             }
         }
@@ -9332,6 +9456,7 @@ impl ChatWidget<'_> {
                 args_read_only: args_ro.clone(),
                 args_write: args_wr.clone(),
                 instructions: instr.clone(),
+                model: None,
             };
             self.config.agents.push(new_cfg);
         }
@@ -16474,8 +16599,17 @@ impl ChatWidget<'_> {
             goal,
             resume_from,
             hal_mode,
+            cli_args,
         } = invocation;
-        spec_kit::handle_spec_auto(self, spec_id, goal, resume_from, hal_mode);
+
+        // SPEC-948: Parse CLI flags into PipelineOverrides
+        let cli_overrides = if !cli_args.is_empty() {
+            Some(spec_kit::PipelineOverrides::from_cli_args(&cli_args))
+        } else {
+            None
+        };
+
+        spec_kit::handle_spec_auto(self, spec_id, goal, resume_from, hal_mode, cli_overrides);
     }
 
     fn advance_spec_auto(&mut self) {

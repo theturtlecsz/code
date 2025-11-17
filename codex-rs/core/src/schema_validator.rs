@@ -44,10 +44,9 @@ impl SchemaValidator {
     pub fn new(schema_path: Option<&Path>) -> Result<Self, SchemaValidationError> {
         let schema = if let Some(path) = schema_path {
             // Load schema from external file
-            let content = std::fs::read_to_string(path)
-                .map_err(|e| SchemaValidationError::IoError(e))?;
-            serde_json::from_str(&content)
-                .map_err(|e| SchemaValidationError::JsonError(e))?
+            let content =
+                std::fs::read_to_string(path).map_err(|e| SchemaValidationError::IoError(e))?;
+            serde_json::from_str(&content).map_err(|e| SchemaValidationError::JsonError(e))?
         } else {
             // Use embedded default schema
             Self::default_schema()
@@ -57,9 +56,9 @@ impl SchemaValidator {
         let compiled = JSONSchema::options()
             .with_draft(Draft::Draft7)
             .compile(&schema)
-            .map_err(|e| SchemaValidationError::ValidationFailed(
-                format!("Failed to compile schema: {}", e)
-            ))?;
+            .map_err(|e| {
+                SchemaValidationError::ValidationFailed(format!("Failed to compile schema: {}", e))
+            })?;
 
         Ok(Self { schema, compiled })
     }
@@ -98,11 +97,7 @@ impl SchemaValidator {
         if let Err(validation_errors) = self.compiled.validate(&config_value) {
             let errors: Vec<SchemaValidationError> = validation_errors
                 .map(|e| {
-                    SchemaValidationError::ValidationFailed(format!(
-                        "{} at {}",
-                        e,
-                        e.instance_path
-                    ))
+                    SchemaValidationError::ValidationFailed(format!("{} at {}", e, e.instance_path))
                 })
                 .collect();
 
@@ -244,14 +239,12 @@ pub enum SchemaValidationError {
 impl std::fmt::Display for SchemaValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SchemaValidationError::IoError(e) =>
-                write!(f, "Schema file I/O error: {}", e),
-            SchemaValidationError::JsonError(e) =>
-                write!(f, "Schema JSON parse error: {}", e),
-            SchemaValidationError::TomlParse(msg) =>
-                write!(f, "Config TOML parse error: {}", msg),
-            SchemaValidationError::ValidationFailed(msg) =>
-                write!(f, "Schema validation failed: {}", msg),
+            SchemaValidationError::IoError(e) => write!(f, "Schema file I/O error: {}", e),
+            SchemaValidationError::JsonError(e) => write!(f, "Schema JSON parse error: {}", e),
+            SchemaValidationError::TomlParse(msg) => write!(f, "Config TOML parse error: {}", msg),
+            SchemaValidationError::ValidationFailed(msg) => {
+                write!(f, "Schema validation failed: {}", msg)
+            }
         }
     }
 }
@@ -315,7 +308,10 @@ unlock = ["gemini", "claude"]
         "#;
 
         let result = validator.validate(config);
-        assert!(result.is_ok(), "Valid quality_gates config should pass validation");
+        assert!(
+            result.is_ok(),
+            "Valid quality_gates config should pass validation"
+        );
     }
 
     #[test]
@@ -329,7 +325,10 @@ watch_paths = ["config.toml", "custom.toml"]
         "#;
 
         let result = validator.validate(config);
-        assert!(result.is_ok(), "Valid hot_reload config should pass validation");
+        assert!(
+            result.is_ok(),
+            "Valid hot_reload config should pass validation"
+        );
     }
 
     #[test]
@@ -345,7 +344,10 @@ unlock = ["gemini"]
         "#;
 
         let result = validator.validate(config);
-        assert!(result.is_err(), "Empty plan array should violate minItems constraint");
+        assert!(
+            result.is_err(),
+            "Empty plan array should violate minItems constraint"
+        );
 
         if let Err(errors) = result {
             assert!(!errors.is_empty());
@@ -367,7 +369,10 @@ unlock = ["gemini"]
         "#;
 
         let result = validator.validate(config);
-        assert!(result.is_err(), "Plan array with >5 items should violate maxItems constraint");
+        assert!(
+            result.is_err(),
+            "Plan array with >5 items should violate maxItems constraint"
+        );
     }
 
     #[test]
@@ -380,7 +385,10 @@ debounce_ms = 100
         "#;
 
         let result = validator.validate(config);
-        assert!(result.is_err(), "debounce_ms < 500 should violate minimum constraint");
+        assert!(
+            result.is_err(),
+            "debounce_ms < 500 should violate minimum constraint"
+        );
     }
 
     #[test]
@@ -392,7 +400,10 @@ enabled = "yes"
         "#;
 
         let result = validator.validate(config);
-        assert!(result.is_err(), "String value for boolean field should fail validation");
+        assert!(
+            result.is_err(),
+            "String value for boolean field should fail validation"
+        );
     }
 
     #[test]
@@ -407,7 +418,10 @@ audit = ["gemini"]
         "#;
 
         let result = validator.validate(config);
-        assert!(result.is_err(), "Missing required 'unlock' field should fail validation");
+        assert!(
+            result.is_err(),
+            "Missing required 'unlock' field should fail validation"
+        );
     }
 
     #[test]
@@ -447,6 +461,9 @@ strict_schema = true
         "#;
 
         let result = validator.validate(config);
-        assert!(result.is_ok(), "Full SPEC-939 config should pass validation");
+        assert!(
+            result.is_ok(),
+            "Full SPEC-939 config should pass validation"
+        );
     }
 }
