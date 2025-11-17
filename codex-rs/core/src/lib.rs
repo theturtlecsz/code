@@ -89,7 +89,6 @@ pub mod shell;
 pub mod spawn;
 pub mod terminal;
 pub mod timing; // SPEC-940: Performance timing infrastructure
-pub mod tmux; // Observable agent execution (SPEC-KIT-923)
 mod tool_apply_patch;
 pub mod turn_diff_tracker;
 mod workflow_validation;
