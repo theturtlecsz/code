@@ -44,6 +44,7 @@ pub mod native_quality_gate_orchestrator; // SPEC-KIT-900, I-003: Native quality
 pub mod new_native; // SPEC-KIT-072: Native SPEC creation (eliminates 2 agents, $0.15 → $0)
 pub mod pipeline_coordinator;
 pub mod pipeline_config; // SPEC-948: Modular pipeline logic - stage filtering and configuration
+pub mod pipeline_configurator; // SPEC-947: Pipeline UI configurator - interactive stage selection
 pub mod spec_directory; // SPEC-KIT-900 Session 3: ACID-compliant SPEC directory resolution // MAINT-3 Phase 5: Pipeline state machine (extracted from handler.rs)
 // FORK-SPECIFIC (just-every/code): local_memory_client.rs deleted 2025-10-18
 // Replaced by native MCP integration in consensus.rs
