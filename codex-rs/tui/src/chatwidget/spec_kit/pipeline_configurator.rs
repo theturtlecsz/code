@@ -280,11 +280,11 @@ impl PipelineConfiguratorWidget {
             .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
             .split(inner_area);
 
-        // Left pane: Stage selector (checkbox list) - Phase 3 Task 3.1
+        // Left pane: Stage selector (checkbox list) - Phase 3 Task 3.1 ✅
         super::stage_selector::render_stage_selector(frame, chunks[0], state);
 
-        // Right pane: Stage details + warnings - Phase 3 Task 3.2
-        render_stage_details(frame, chunks[1], state);
+        // Right pane: Stage details + warnings - Phase 3 Task 3.2 ✅
+        super::stage_details::render_stage_details(frame, chunks[1], state);
 
         // Bottom: Help bar - Phase 3
         // Note: Help bar will be rendered in a separate bottom section in Phase 3
@@ -323,20 +323,6 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 // ============================================================================
 // Placeholder Render Functions (Phase 3 Implementation)
 // ============================================================================
-
-/// Render stage details (right pane) - Phase 3 Task 3.2
-///
-/// Will render:
-/// - Selected stage name and description
-/// - Agents used (if multi-agent stage)
-/// - Cost and duration estimates
-/// - Quality gate information
-/// - Dependencies with status (✓/✗)
-/// - Warnings section (errors in red, warnings in yellow)
-fn render_stage_details(_frame: &mut Frame, _area: Rect, _state: &PipelineConfiguratorState) {
-    // TODO: Phase 3 Task 3.2 - Implement stage details widget
-    // See implementation plan lines 461-578 for details
-}
 
 /// Render help bar (bottom of modal) - Phase 3 Task 3.3
 ///

@@ -46,6 +46,7 @@ pub mod pipeline_coordinator;
 pub mod pipeline_config; // SPEC-948: Modular pipeline logic - stage filtering and configuration
 pub mod pipeline_configurator; // SPEC-947: Pipeline UI configurator - interactive stage selection
 pub mod stage_selector; // SPEC-947 Phase 3: Stage selector widget (checkbox list)
+pub mod stage_details; // SPEC-947 Phase 3: Stage details widget (right pane)
 pub mod spec_directory; // SPEC-KIT-900 Session 3: ACID-compliant SPEC directory resolution // MAINT-3 Phase 5: Pipeline state machine (extracted from handler.rs)
 // FORK-SPECIFIC (just-every/code): local_memory_client.rs deleted 2025-10-18
 // Replaced by native MCP integration in consensus.rs
