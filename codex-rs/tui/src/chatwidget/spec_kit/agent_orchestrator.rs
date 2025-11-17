@@ -281,35 +281,6 @@ async fn spawn_and_wait_for_agent(
         &prompt.chars().take(300).collect::<String>()
     );
 
-    // SPEC-KIT-927: Enable observable agents by default for file stability protection
-    // Set SPEC_KIT_OBSERVABLE_AGENTS=0 to disable if needed
-    let tmux_enabled = std::env::var("SPEC_KIT_OBSERVABLE_AGENTS")
-        .map(|v| v != "0" && v.to_lowercase() != "false")
-        .unwrap_or(true);
-
-    if tmux_enabled {
-        tracing::info!("{}   🔍 Observable agents ENABLED (tmux mode)", run_tag);
-
-        // SPEC-KIT-927: Check for and cleanup zombie processes before spawning new agents
-        // This prevents orphaned agents from previous runs from interfering
-        let session_name = format!("agents-{}", config_name);
-        if let Ok(zombie_count) = codex_core::tmux::check_zombie_panes(&session_name).await {
-            if zombie_count > 0 {
-                tracing::warn!(
-                    "{}   ⚠️ Found {} zombie panes in session {}, cleaning up...",
-                    run_tag,
-                    zombie_count,
-                    session_name
-                );
-                if let Err(e) = codex_core::tmux::cleanup_zombie_panes(&session_name).await {
-                    tracing::warn!("{}   ⚠️ Failed to cleanup zombie panes: {}", run_tag, e);
-                } else {
-                    tracing::info!("{}   ✅ Cleaned up {} zombie panes", run_tag, zombie_count);
-                }
-            }
-        }
-    }
-
     // SPEC-938: Wrap spawn+wait operation with retry logic
     // Closure captures all necessary context for retryable operation
     let prompt_clone = prompt.clone();
@@ -344,7 +315,6 @@ async fn spawn_and_wait_for_agent(
                         prompt,
                         false,
                         Some(batch_id),
-                        tmux_enabled,
                     )
                     .await
                     .map_err(|e| {
@@ -615,15 +585,6 @@ async fn spawn_regular_stage_agents_parallel(
 
     let batch_id = uuid::Uuid::new_v4().to_string();
 
-    // SPEC-KIT-923: Check for observable agents flag
-    let tmux_enabled = std::env::var("SPEC_KIT_OBSERVABLE_AGENTS")
-        .map(|v| v == "1" || v.to_lowercase() == "true")
-        .unwrap_or(false);
-
-    if tmux_enabled {
-        tracing::info!("{} 🔍 Observable agents ENABLED (tmux mode)", run_tag);
-    }
-
     let agent_config_map: std::collections::HashMap<&str, &str> = [
         ("gemini", "gemini_flash"),
         ("claude", "claude_haiku"),
@@ -647,7 +608,6 @@ async fn spawn_regular_stage_agents_parallel(
         let run_id = run_id.clone();
         let batch_id = batch_id.clone();
         let agent_configs = agent_configs.to_vec();
-        let tmux_enabled = tmux_enabled;
 
         let config_name = agent_config_map
             .get(agent_name.as_str())
@@ -671,7 +631,6 @@ async fn spawn_regular_stage_agents_parallel(
                         prompt,
                         false,
                         Some(batch_id.clone()),
-                        tmux_enabled,
                     )
                     .await
                     .map_err(|e| format!("Failed to spawn {}: {}", agent_name, e))?

@@ -55,9 +55,6 @@ pub struct Agent {
     #[serde(skip)]
     #[allow(dead_code)]
     pub config: Option<AgentConfig>,
-    /// Enable tmux pane execution for observable agent runs (SPEC-KIT-923)
-    #[serde(default)]
-    pub tmux_enabled: bool,
 }
 
 // Global agent manager
@@ -162,7 +159,6 @@ impl AgentManager {
             read_only,
             batch_id,
             None,
-            false, // tmux_enabled defaults to false
         )
         .await
     }
@@ -177,7 +173,6 @@ impl AgentManager {
     /// * `prompt` - Task prompt
     /// * `read_only` - Whether agent runs read-only
     /// * `batch_id` - Optional batch identifier
-    /// * `tmux_enabled` - Enable tmux pane execution for observability (SPEC-KIT-923)
     ///
     /// # Returns
     /// Agent ID if spawned successfully, error if config not found
@@ -188,7 +183,6 @@ impl AgentManager {
         prompt: String,
         read_only: bool,
         batch_id: Option<String>,
-        tmux_enabled: bool,
     ) -> Result<String, String> {
         // Look up agent config by name
         let agent_config = agent_configs
@@ -219,7 +213,6 @@ impl AgentManager {
                 read_only,
                 batch_id,
                 Some(agent_config.clone()),
-                tmux_enabled,
             )
             .await;
 
@@ -246,7 +239,6 @@ impl AgentManager {
             read_only,
             batch_id,
             Some(config),
-            false, // tmux_enabled defaults to false
         )
         .await
     }
@@ -261,7 +253,6 @@ impl AgentManager {
         read_only: bool,
         batch_id: Option<String>,
         config: Option<AgentConfig>,
-        tmux_enabled: bool,
     ) -> String {
         let agent_id = Uuid::new_v4().to_string();
 
@@ -284,7 +275,6 @@ impl AgentManager {
             worktree_path: None,
             branch_name: None,
             config: config.clone(),
-            tmux_enabled,
         };
 
         self.agents.insert(agent_id.clone(), agent.clone());
@@ -699,17 +689,15 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
     let context = agent.context.clone();
     let output_goal = agent.output_goal.clone();
     let files = agent.files.clone();
-    let tmux_enabled = agent.tmux_enabled;
 
     drop(manager); // Release the lock before executing
 
     // SPEC-KIT-928: Log execution parameters for debugging
     tracing::warn!(
-        "🔍 AGENT EXEC START: agent_id={}, model={}, read_only={}, tmux={}",
+        "🔍 AGENT EXEC START: agent_id={}, model={}, read_only={}",
         agent_id,
         model,
-        read_only,
-        tmux_enabled
+        read_only
     );
 
     // SPEC-KIT-927: Track execution duration for suspicious completion detection
@@ -773,7 +761,6 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
                             false,
                             Some(worktree_path),
                             config.clone(),
-                            tmux_enabled,
                         )
                         .await
                     }
@@ -788,7 +775,7 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
             "{}\n\n[Running in read-only mode - no modifications allowed]",
             full_prompt
         );
-        execute_model_with_permissions(&model, &full_prompt, true, None, config, tmux_enabled).await
+        execute_model_with_permissions(&model, &full_prompt, true, None, config).await
     };
 
     // SPEC-KIT-927: Calculate execution duration for suspicious completion detection
@@ -1089,7 +1076,6 @@ async fn execute_model_with_permissions(
     read_only: bool,
     working_dir: Option<PathBuf>,
     config: Option<AgentConfig>,
-    _use_tmux: bool, // Kept for backward compatibility, now unused (SPEC-936)
 ) -> Result<String, String> {
     // Helper: cross‑platform check whether an executable is available in PATH
     // and is directly spawnable by std::process::Command (no shell wrappers).

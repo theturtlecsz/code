@@ -125,7 +125,6 @@ pub async fn spawn_quality_gate_agents_native(
                 prompt,
                 true, // read_only
                 Some(batch_id.clone()),
-                true, // tmux_enabled - needed for output capture and debugging (SPEC-KIT-928)
             )
             .await
             .map_err(|e| format!("Failed to spawn {}: {}", config_name, e))?;

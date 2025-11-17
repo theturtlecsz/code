@@ -953,7 +953,6 @@ fn submit_gpt5_validations(
                     combined_prompt,
                     true, // read_only
                     Some(batch_id),
-                    false, // No tmux for single validation agent
                 )
                 .await
             {
