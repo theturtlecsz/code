@@ -1,0 +1,65 @@
+# Workflow Pattern 1: Rapid Prototyping
+#
+# Use Case: Proof-of-concept development, exploration, throwaway code
+# Strategy: Skip validation stages to iterate quickly, focus on implementation
+#
+# Benefits:
+# - Fast iteration cycles (implement → test manually → iterate)
+# - Low cost for experimental features
+# - No formal validation overhead for prototypes
+#
+# Trade-offs:
+# - No automated test coverage (validate skipped)
+# - No compliance checks (audit skipped)
+# - No production readiness validation (unlock skipped)
+# - Quality gates still active (plan + tasks checkpoints)
+
+[pipeline]
+spec_id = "SPEC-XXX"  # Replace with your SPEC ID
+
+# Enabled stages (5 of 8 total)
+enabled_stages = ["new", "specify", "plan", "tasks", "implement"]
+
+# Quality gate configuration
+[quality_gates]
+enabled = true  # Keep quality gates for plan/tasks validation
+auto_resolve = true  # Auto-resolve unanimous agent agreement
+
+# Optional: Skip reasons for documentation
+[skip_reasons]
+validate = "Prototype: no automated tests needed yet"
+audit = "Low-risk experimental feature, skip compliance checks"
+unlock = "Not ready for production deployment"
+
+# Cost Analysis (Post-SPEC-949 pricing)
+# ==========================================
+# Full pipeline:        $2.71  (~50 min)
+# This workflow:        $0.66  (~20 min)
+# Savings:             $2.05  (~30 min)
+# Reduction:              76%      60%
+#
+# Cost Breakdown:
+# - new:      $0.00 (native, instant)
+# - specify:  $0.10 (1 agent, gpt5-low, ~3-5 min)
+# - plan:     $0.35 (3 agents, multi-agent consensus, ~10-12 min)
+# - tasks:    $0.10 (1 agent, gpt5-low, ~3-5 min)
+# - implement: $0.11 (2 agents, gpt-5-codex + validator, ~8-12 min)
+
+# Time Breakdown:
+# - new:      <1 min (native SPEC-ID generation)
+# - specify:  ~4 min (PRD refinement)
+# - plan:     ~11 min (work breakdown)
+# - tasks:    ~4 min (task decomposition)
+# - implement: ~10 min (code generation)
+# Total: ~20 min (vs ~50 min full pipeline)
+
+# Example Usage:
+# ==============
+# 1. Create this config:
+#    cp docs/spec-kit/workflow-examples/rapid-prototyping.toml docs/SPEC-947/pipeline.toml
+#
+# 2. Run pipeline:
+#    /speckit.auto SPEC-947
+#
+# 3. Or use CLI override (one-time):
+#    /speckit.auto SPEC-947 --skip-validate --skip-audit --skip-unlock

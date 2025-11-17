@@ -1,0 +1,77 @@
+# Workflow Pattern 2: Documentation-Only
+#
+# Use Case: README updates, architecture docs, planning refinement, spec improvements
+# Strategy: Skip code implementation stages, focus on documentation quality
+#
+# Benefits:
+# - Fast documentation updates without code generation overhead
+# - Strategic planning without implementation commitment
+# - Architecture exploration and design iteration
+# - Low cost for documentation-heavy SPECs
+#
+# Trade-offs:
+# - No task decomposition (tasks skipped)
+# - No code generation (implement skipped)
+# - No automated testing (validate skipped)
+# - No compliance checks (audit skipped)
+# - Unlock stage still validates final documentation quality
+
+[pipeline]
+spec_id = "SPEC-XXX"  # Replace with your SPEC ID
+
+# Enabled stages (3 of 8 total)
+enabled_stages = ["specify", "plan", "unlock"]
+
+# Quality gate configuration
+[quality_gates]
+enabled = true  # Keep quality gates for plan validation
+auto_resolve = true  # Auto-resolve unanimous agent agreement
+
+# Optional: Skip reasons for documentation
+[skip_reasons]
+new = "Using existing SPEC directory"
+tasks = "Documentation-only: no task breakdown needed"
+implement = "No code changes required"
+validate = "Documentation-only: no tests to validate"
+audit = "Documentation updates: skip compliance checks"
+
+# Cost Analysis (Post-SPEC-949 pricing)
+# ==========================================
+# Full pipeline:        $2.71  (~50 min)
+# This workflow:        $1.15  (~15 min)
+# Savings:             $1.56  (~35 min)
+# Reduction:              58%      70%
+#
+# Cost Breakdown:
+# - specify:  $0.10 (1 agent, gpt5-low, ~3-5 min)
+# - plan:     $0.35 (3 agents, multi-agent consensus, ~10-12 min)
+# - unlock:   $0.80 (3 agents, premium tier, ship decision, ~10-12 min)
+
+# Time Breakdown:
+# - specify:  ~4 min (PRD refinement)
+# - plan:     ~11 min (documentation structure planning)
+# - unlock:   ~11 min (final documentation review and approval)
+# Total: ~15 min (vs ~50 min full pipeline)
+
+# When to Use:
+# ============
+# ✅ Architecture documentation updates
+# ✅ README or user guide improvements
+# ✅ Planning without implementation commitment
+# ✅ Design exploration and iteration
+# ✅ Specification refinement
+#
+# ❌ Features requiring code changes
+# ❌ Bug fixes or performance optimization
+# ❌ Test coverage improvements
+
+# Example Usage:
+# ==============
+# 1. Create this config:
+#    cp docs/spec-kit/workflow-examples/docs-only.toml docs/SPEC-950/pipeline.toml
+#
+# 2. Run pipeline:
+#    /speckit.auto SPEC-950
+#
+# 3. Or use CLI override (one-time):
+#    /speckit.auto SPEC-950 --stages=specify,plan,unlock

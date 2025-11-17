@@ -1,0 +1,130 @@
+# Workflow Pattern 4: Debug Single Stage
+#
+# Use Case: Test individual stage quality, debug consensus issues, verify agent output
+# Strategy: Run only one stage in isolation for testing and debugging
+#
+# Benefits:
+# - Extremely fast iteration (<15 min per test)
+# - Minimal cost for debugging ($0.10-$0.80 per run)
+# - Isolate stage behavior for troubleshooting
+# - Test agent prompt changes without full pipeline
+# - Verify consensus quality for specific stages
+#
+# Trade-offs:
+# - No artifact carryover (stage runs in isolation)
+# - May require manual setup of prerequisite artifacts
+# - No end-to-end validation (single stage only)
+# - No quality gates (unless testing plan or tasks stage specifically)
+
+[pipeline]
+spec_id = "SPEC-XXX"  # Replace with your SPEC ID
+
+# Enabled stages (1 of 8 total - modify as needed)
+enabled_stages = ["plan"]  # Change to any single stage for testing
+
+# Quality gate configuration
+[quality_gates]
+enabled = false  # Usually disabled for debugging (unless testing quality gates specifically)
+
+# Alternative Single-Stage Configurations:
+# =========================================
+# Test SPEC creation:
+# enabled_stages = ["new"]
+# Cost: $0.00, Time: <1 min
+#
+# Test PRD refinement:
+# enabled_stages = ["specify"]
+# Cost: $0.10, Time: ~4 min
+#
+# Test planning consensus:
+# enabled_stages = ["plan"]
+# Cost: $0.35, Time: ~11 min
+#
+# Test task decomposition:
+# enabled_stages = ["tasks"]
+# Cost: $0.10, Time: ~4 min
+#
+# Test code generation:
+# enabled_stages = ["implement"]
+# Cost: $0.11, Time: ~10 min
+#
+# Test validation strategy:
+# enabled_stages = ["validate"]
+# Cost: $0.35, Time: ~11 min
+#
+# Test compliance checking:
+# enabled_stages = ["audit"]
+# Cost: $0.80, Time: ~11 min
+#
+# Test ship decision:
+# enabled_stages = ["unlock"]
+# Cost: $0.80, Time: ~11 min
+
+# Cost Analysis (Example: plan stage)
+# ====================================
+# Full pipeline:        $2.71  (~50 min)
+# Single stage (plan):  $0.35  (~11 min)
+# Savings:             $2.36  (~39 min)
+# Reduction:              87%      78%
+#
+# Cost varies by stage (see alternatives above)
+
+# When to Use:
+# ============
+# ✅ Debugging consensus failures (e.g., agents disagree on plan)
+# ✅ Testing agent prompt modifications (verify changes work)
+# ✅ Verifying stage quality before full pipeline run
+# ✅ Reproducing stage-specific issues (e.g., implement generates bad code)
+# ✅ Performance benchmarking individual stages
+# ✅ Agent model comparison (test different models on same stage)
+#
+# ❌ Production workflows (use full or partial pipelines instead)
+# ❌ When artifact carryover is needed (stages depend on each other)
+
+# Common Debug Scenarios:
+# =======================
+# 1. Plan consensus disagrees:
+#    enabled_stages = ["plan"]
+#    Run 3-5 times, compare consensus results, identify prompt issues
+#
+# 2. Code generation produces errors:
+#    enabled_stages = ["implement"]
+#    Requires: docs/SPEC-XXX/tasks.md exists
+#    Verify gpt-5-codex output, test validator agent
+#
+# 3. Quality gate threshold tuning:
+#    enabled_stages = ["plan"]
+#    quality_gates.enabled = true
+#    quality_gates.thresholds.High = 15  # Adjust and test
+#
+# 4. New agent model testing:
+#    enabled_stages = ["validate"]
+#    stage_models.validate = ["gemini-2.0-flash", "claude-3-5-haiku", "gpt-5-mini"]
+
+# Example Usage:
+# ==============
+# 1. Create this config:
+#    cp docs/spec-kit/workflow-examples/debug-single-stage.toml docs/SPEC-TEST/pipeline.toml
+#
+# 2. Modify enabled_stages to target stage:
+#    vim docs/SPEC-TEST/pipeline.toml
+#    # Change enabled_stages = ["plan"] to your target stage
+#
+# 3. Run single stage:
+#    /speckit.auto SPEC-TEST
+#
+# 4. Or use CLI override (one-time, fastest):
+#    /speckit.auto SPEC-TEST --stages=plan
+#    /speckit.auto SPEC-TEST --stages=implement
+#    /speckit.auto SPEC-TEST --stages=validate
+
+# Advanced: Multi-Stage Debugging
+# ================================
+# Test specific stage sequence without full pipeline:
+# enabled_stages = ["plan", "tasks"]
+# Cost: $0.35 + $0.10 = $0.45, Time: ~15 min
+#
+# Test validation + unlock workflow:
+# enabled_stages = ["validate", "unlock"]
+# Cost: $0.35 + $0.80 = $1.15, Time: ~22 min
+# Requires: docs/SPEC-XXX/implement.md exists

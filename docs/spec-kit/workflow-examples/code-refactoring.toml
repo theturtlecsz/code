@@ -1,0 +1,90 @@
+# Workflow Pattern 3: Code Refactoring
+#
+# Use Case: Bug fixes, performance optimization, technical debt reduction
+# Strategy: Skip planning stages, use existing tasks.md for direct implementation
+#
+# Prerequisites:
+# - REQUIRED: Pre-existing docs/SPEC-*/tasks.md (from previous run or manual creation)
+# - REQUIRED: Clear understanding of changes needed (no planning required)
+#
+# Benefits:
+# - Fast iteration on known changes
+# - Skip redundant planning when scope is clear
+# - Automated testing validation still enforced
+# - Production readiness check via unlock stage
+#
+# Trade-offs:
+# - No AI-powered planning (relies on existing tasks.md)
+# - No PRD refinement (assumes clear requirements)
+# - No quality gate checkpoints (plan/tasks gates skipped)
+# - Must have existing tasks.md artifact
+
+[pipeline]
+spec_id = "SPEC-XXX"  # Replace with your SPEC ID
+
+# Enabled stages (3 of 8 total)
+enabled_stages = ["implement", "validate", "unlock"]
+
+# Quality gate configuration
+[quality_gates]
+enabled = false  # No quality gates (plan/tasks skipped, no checkpoints available)
+
+# Optional: Skip reasons for documentation
+[skip_reasons]
+new = "Using existing SPEC directory"
+specify = "Requirements already clear, no PRD refinement needed"
+plan = "Using pre-existing plan.md from previous work"
+tasks = "Using pre-existing tasks.md from previous work"
+audit = "Low-risk refactoring: skip compliance checks"
+
+# Cost Analysis (Post-SPEC-949 pricing)
+# ==========================================
+# Full pipeline:        $2.71  (~50 min)
+# This workflow:        $1.06  (~25 min)
+# Savings:             $1.65  (~25 min)
+# Reduction:              61%      50%
+#
+# Cost Breakdown:
+# - implement: $0.11 (2 agents, gpt-5-codex + validator, ~8-12 min)
+# - validate:  $0.35 (3 agents, multi-agent consensus, ~10-12 min)
+# - unlock:    $0.80 (3 agents, premium tier, ship decision, ~10-12 min)
+
+# Time Breakdown:
+# - implement: ~10 min (code generation from existing tasks.md)
+# - validate:  ~11 min (test strategy consensus)
+# - unlock:    ~11 min (final approval)
+# Total: ~25 min (vs ~50 min full pipeline)
+
+# When to Use:
+# ============
+# ✅ Bug fixes with clear reproduction steps
+# ✅ Performance optimization with known bottlenecks
+# ✅ Technical debt reduction with defined scope
+# ✅ Refactoring with existing task breakdown
+# ✅ Changes where requirements are already documented
+#
+# ❌ New features (requires planning)
+# ❌ Exploratory work (needs PRD + plan)
+# ❌ When tasks.md doesn't exist (hard dependency violation)
+
+# Artifact Requirements:
+# ======================
+# MUST exist before running this workflow:
+# - docs/SPEC-XXX/tasks.md (from previous /speckit.tasks or manual creation)
+#
+# Optional (will be created if missing):
+# - docs/SPEC-XXX/spec.md (implement stage will reference existing or prompt for details)
+
+# Example Usage:
+# ==============
+# 1. Verify tasks.md exists:
+#    ls docs/SPEC-945/tasks.md
+#
+# 2. Create this config:
+#    cp docs/spec-kit/workflow-examples/code-refactoring.toml docs/SPEC-945/pipeline.toml
+#
+# 3. Run pipeline:
+#    /speckit.auto SPEC-945
+#
+# 4. Or use CLI override (one-time):
+#    /speckit.auto SPEC-945 --only-implement --only-validate --only-unlock
