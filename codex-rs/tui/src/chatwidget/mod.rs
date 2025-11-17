@@ -16599,8 +16599,17 @@ impl ChatWidget<'_> {
             goal,
             resume_from,
             hal_mode,
+            cli_args,
         } = invocation;
-        spec_kit::handle_spec_auto(self, spec_id, goal, resume_from, hal_mode, None /* cli_overrides */);
+
+        // SPEC-948: Parse CLI flags into PipelineOverrides
+        let cli_overrides = if !cli_args.is_empty() {
+            Some(spec_kit::PipelineOverrides::from_cli_args(&cli_args))
+        } else {
+            None
+        };
+
+        spec_kit::handle_spec_auto(self, spec_id, goal, resume_from, hal_mode, cli_overrides);
     }
 
     fn advance_spec_auto(&mut self) {

@@ -105,6 +105,9 @@ pub use handler::{
     on_spec_auto_task_complete, on_spec_auto_task_started,
 };
 
+// Re-export pipeline configuration types (SPEC-948)
+pub use pipeline_config::PipelineOverrides;
+
 // Re-export agent orchestrator functions
 pub use agent_orchestrator::{
     on_spec_auto_agents_complete_with_ids, on_spec_auto_agents_complete_with_results,
