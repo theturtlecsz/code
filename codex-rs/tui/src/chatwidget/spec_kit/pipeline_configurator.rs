@@ -1,6 +1,6 @@
 //! Pipeline configurator widget for interactive stage selection
 //!
-//! SPEC-947: Pipeline UI Configurator - Phase 2 Task 2.1
+//! SPEC-947: Pipeline UI Configurator - Phase 2 Tasks 2.1 & 2.3
 //!
 //! Provides an interactive TUI modal for visually selecting which pipeline stages
 //! to execute, with real-time cost/time estimates, dependency validation, and
@@ -9,6 +9,12 @@
 
 use super::pipeline_config::{PipelineConfig, StageType, ValidationResult};
 use crossterm::event::{KeyCode, KeyEvent};
+use ratatui::{
+    buffer::Buffer,
+    layout::{Constraint, Direction, Layout, Margin, Rect},
+    widgets::{Block, Borders, Clear, Widget},
+    Frame,
+};
 
 /// Pipeline configurator state machine
 pub struct PipelineConfiguratorState {
@@ -228,4 +234,131 @@ impl PipelineConfiguratorState {
             _ => ConfigAction::Continue,
         }
     }
+}
+
+// ============================================================================
+// Widget Rendering (Phase 2 Task 2.3)
+// ============================================================================
+
+/// Pipeline configurator widget
+///
+/// Renders interactive modal for stage selection with centered overlay
+pub struct PipelineConfiguratorWidget;
+
+impl PipelineConfiguratorWidget {
+    /// Render configurator modal
+    ///
+    /// # Arguments
+    /// * `frame` - Ratatui frame for rendering
+    /// * `state` - Configurator state (mutable for future interactivity)
+    ///
+    /// # Layout
+    /// - Centered overlay (80% width, 70% height)
+    /// - Main border block with SPEC ID title
+    /// - Split into left pane (40%) and right pane (60%)
+    /// - Left: Stage selector (Phase 3)
+    /// - Right: Stage details + warnings (Phase 3)
+    /// - Bottom: Help bar (Phase 3)
+    pub fn render(frame: &mut Frame, state: &mut PipelineConfiguratorState) {
+        // Create centered overlay (80% width, 70% height)
+        let area = centered_rect(80, 70, frame.size());
+
+        // Clear background for modal overlay
+        frame.render_widget(Clear, area);
+
+        // Main border block with title
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(format!(" Pipeline Configuration: {} ", state.spec_id));
+
+        let inner_area = block.inner(area);
+        frame.render_widget(block, area);
+
+        // Split into left (40%) and right (60%) panes
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+            .split(inner_area);
+
+        // Left pane: Stage selector (checkbox list) - Phase 3
+        render_stage_selector(frame, chunks[0], state);
+
+        // Right pane: Stage details + warnings - Phase 3
+        render_stage_details(frame, chunks[1], state);
+
+        // Bottom: Help bar - Phase 3
+        // Note: Help bar will be rendered in a separate bottom section in Phase 3
+    }
+}
+
+/// Create centered rectangle
+///
+/// # Arguments
+/// * `percent_x` - Width percentage (0-100)
+/// * `percent_y` - Height percentage (0-100)
+/// * `r` - Available area
+///
+/// # Returns
+/// Centered rectangle with specified dimensions
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
+}
+
+// ============================================================================
+// Placeholder Render Functions (Phase 3 Implementation)
+// ============================================================================
+
+/// Render stage selector (checkbox list) - Phase 3 Task 3.1
+///
+/// Will render:
+/// - Checkbox list with stage names
+/// - [✓] or [ ] indicators
+/// - Cost per stage
+/// - Visual indicators ($, ⚠, 🔒)
+/// - Highlight selected row
+/// - Total cost/duration footer
+fn render_stage_selector(_frame: &mut Frame, _area: Rect, _state: &PipelineConfiguratorState) {
+    // TODO: Phase 3 Task 3.1 - Implement checkbox list widget
+    // See implementation plan lines 363-459 for details
+}
+
+/// Render stage details (right pane) - Phase 3 Task 3.2
+///
+/// Will render:
+/// - Selected stage name and description
+/// - Agents used (if multi-agent stage)
+/// - Cost and duration estimates
+/// - Quality gate information
+/// - Dependencies with status (✓/✗)
+/// - Warnings section (errors in red, warnings in yellow)
+fn render_stage_details(_frame: &mut Frame, _area: Rect, _state: &PipelineConfiguratorState) {
+    // TODO: Phase 3 Task 3.2 - Implement stage details widget
+    // See implementation plan lines 461-578 for details
+}
+
+/// Render help bar (bottom of modal) - Phase 3 Task 3.3
+///
+/// Will render:
+/// - Key bindings: [↑↓] Navigate, [Space] Toggle, [Enter] Details, [q] Save & Run, [Esc] Cancel
+/// - Conditional error message if save blocked
+#[allow(dead_code)]
+fn render_help_bar(_frame: &mut Frame, _area: Rect, _state: &PipelineConfiguratorState) {
+    // TODO: Phase 3 Task 3.3 - Implement help bar widget
+    // See implementation plan lines 580-590 for details
 }
