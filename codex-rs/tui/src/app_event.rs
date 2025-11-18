@@ -127,6 +127,26 @@ pub(crate) enum AppEvent {
         broker_result: QualityGateValidationResult,
     },
 
+    /// Pipeline configurator: configuration saved successfully
+    PipelineConfigurationSaved {
+        spec_id: String,
+        config_path: String,
+        enabled_count: usize,
+        total_cost: f64,
+        total_duration: u32,
+    },
+
+    /// Pipeline configurator: error occurred during save
+    PipelineConfigurationError {
+        spec_id: String,
+        error: String,
+    },
+
+    /// Pipeline configurator: user cancelled configuration
+    PipelineConfigurationCancelled {
+        spec_id: String,
+    },
+
     /// Dispatch a recognized slash command from the UI (composer) to the app
     /// layer so it can be handled centrally. Includes the full command text.
     DispatchCommand(SlashCommand, String),

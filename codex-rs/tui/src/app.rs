@@ -1109,6 +1109,41 @@ impl App<'_> {
                         spec_kit::handler::on_quality_gate_validation_result(widget, broker_result);
                     }
                 }
+                AppEvent::PipelineConfigurationSaved {
+                    spec_id,
+                    config_path,
+                    enabled_count,
+                    total_cost,
+                    total_duration,
+                } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        // Show success message
+                        widget.history_push(history_cell::new_background_event(format!(
+                            "✅ Pipeline configuration saved: {}\n\
+                             Enabled stages: {}/8\n\
+                             Total cost: ~${:.2}\n\
+                             Total duration: ~{} min\n\n\
+                             Run `/speckit.auto {}` to execute pipeline.",
+                            config_path, enabled_count, total_cost, total_duration, spec_id
+                        )));
+                    }
+                }
+                AppEvent::PipelineConfigurationError { spec_id, error } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.history_push(history_cell::new_error_event(format!(
+                            "Failed to save configuration for {}: {}",
+                            spec_id, error
+                        )));
+                    }
+                }
+                AppEvent::PipelineConfigurationCancelled { spec_id } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.history_push(history_cell::new_background_event(format!(
+                            "Configuration cancelled for {}",
+                            spec_id
+                        )));
+                    }
+                }
                 AppEvent::InsertHistory(mut lines) => match &mut self.app_state {
                     AppState::Chat { widget } => {
                         // Coalesce consecutive InsertHistory events to reduce redraw churn.

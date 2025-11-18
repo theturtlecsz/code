@@ -28,6 +28,7 @@ pub mod list_selection_view;
 mod live_ring_widget;
 mod model_selection_view;
 mod paste_burst;
+mod pipeline_configurator_view;
 mod popup_consts;
 mod quality_gate_modal;
 mod scroll_state;
@@ -69,6 +70,7 @@ use codex_core::config_types::TextVerbosity;
 use codex_core::config_types::ThemeName;
 use codex_core::protocol::Op;
 use model_selection_view::ModelSelectionView;
+use pipeline_configurator_view::PipelineConfiguratorView;
 use quality_gate_modal::QualityGateModal;
 use theme_selection_view::ThemeSelectionView;
 pub(crate) use undo_restore_view::UndoRestoreView;
@@ -594,6 +596,18 @@ impl BottomPane<'_> {
         self.active_view = Some(Box::new(modal));
         self.status_view_active = false;
         self.request_redraw()
+    }
+
+    /// Show pipeline configurator modal for stage selection (SPEC-947)
+    pub fn show_pipeline_configurator(
+        &mut self,
+        spec_id: String,
+        initial_config: crate::chatwidget::spec_kit::pipeline_config::PipelineConfig,
+    ) {
+        let view = PipelineConfiguratorView::new(spec_id, initial_config, self.app_event_tx.clone());
+        self.active_view = Some(Box::new(view));
+        self.status_view_active = false;
+        self.request_redraw();
     }
     // === END FORK-SPECIFIC ===
 

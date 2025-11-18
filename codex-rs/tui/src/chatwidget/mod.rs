@@ -22010,3 +22010,15 @@ impl spec_kit::SpecKitContext for ChatWidget<'_> {
     }
 }
 // === END FORK-SPECIFIC ===
+
+impl ChatWidget<'_> {
+    /// Show pipeline configurator modal for stage selection (SPEC-947 Phase 4)
+    pub(crate) fn show_pipeline_configurator(
+        &mut self,
+        spec_id: String,
+        initial_config: spec_kit::pipeline_config::PipelineConfig,
+    ) {
+        self.bottom_pane
+            .show_pipeline_configurator(spec_id, initial_config);
+    }
+}
