@@ -85,13 +85,7 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
             return;
         }
 
-        // Handle special case: Escape key for cancel
-        if key_event.code == KeyCode::Esc {
-            self.handle_cancel();
-            return;
-        }
-
-        // Delegate to state machine
+        // Delegate to state machine (handles ESC at appropriate level)
         match self.state.handle_key_event(key_event) {
             ConfigAction::SaveAndExit => {
                 self.handle_save();
@@ -242,9 +236,11 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
                         };
 
                         let tier = stage_details::get_model_tier_public(model);
+                        let role = stage_details::get_model_role(selected_stage, model);
                         detail_lines.push(Line::from(vec![
                             Span::styled(format!("  {} ", checkbox), checkbox_style),
                             Span::styled(model.clone(), model_style),
+                            Span::styled(format!(" - {}", role), Style::default().fg(Color::Yellow)),
                             Span::styled(format!(" ({})", tier), Style::default().fg(Color::DarkGray)),
                         ]));
                     }
@@ -257,9 +253,11 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
 
                     for model in &selected_models {
                         let tier = stage_details::get_model_tier_public(model);
+                        let role = stage_details::get_model_role(selected_stage, model);
                         detail_lines.push(Line::from(vec![
                             Span::raw("  • "),
                             Span::styled(model.clone(), Style::default().fg(Color::Cyan)),
+                            Span::styled(format!(" - {}", role), Style::default().fg(Color::Yellow)),
                             Span::styled(format!(" ({})", tier), Style::default().fg(Color::DarkGray)),
                         ]));
                     }

@@ -292,3 +292,55 @@ pub fn get_model_tier_public(model: &str) -> &'static str {
         _ => "unknown",
     }
 }
+
+/// Get model role description
+///
+/// Returns role label describing what the model does in this stage
+///
+/// # Arguments
+/// * `stage` - Stage type
+/// * `model` - Model name
+///
+/// # Returns
+/// Role description string
+pub fn get_model_role(stage: &StageType, model: &str) -> &'static str {
+    match (stage, model) {
+        // New stage (native + multi-agent)
+        (StageType::New, "gemini") => "consensus agent 1",
+        (StageType::New, "claude") => "consensus agent 2",
+        (StageType::New, "code") => "consensus agent 3",
+
+        // Specify stage (single agent)
+        (StageType::Specify, "gpt5_1_mini") => "PRD elaboration",
+
+        // Plan stage (3-agent consensus)
+        (StageType::Plan, "gemini-flash") => "consensus agent 1",
+        (StageType::Plan, "claude-haiku") => "consensus agent 2",
+        (StageType::Plan, "gpt5_1") => "consensus agent 3",
+
+        // Tasks stage (single agent)
+        (StageType::Tasks, "gpt5_1_mini") => "task decomposition",
+
+        // Implement stage (code + validator)
+        (StageType::Implement, "gpt5_1_codex") => "code generation",
+        (StageType::Implement, "claude-haiku") => "validation",
+
+        // Validate stage (3-agent consensus)
+        (StageType::Validate, "gemini-flash") => "consensus agent 1",
+        (StageType::Validate, "claude-haiku") => "consensus agent 2",
+        (StageType::Validate, "gpt5_1") => "consensus agent 3",
+
+        // Audit stage (3 premium agents)
+        (StageType::Audit, "gpt5_codex") => "compliance check 1",
+        (StageType::Audit, "claude-sonnet") => "compliance check 2",
+        (StageType::Audit, "gemini-pro") => "compliance check 3",
+
+        // Unlock stage (3 premium agents)
+        (StageType::Unlock, "gpt5_codex") => "ship decision 1",
+        (StageType::Unlock, "claude-sonnet") => "ship decision 2",
+        (StageType::Unlock, "gemini-pro") => "ship decision 3",
+
+        // Unknown combination
+        _ => "unknown role",
+    }
+}
