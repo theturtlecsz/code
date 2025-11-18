@@ -316,6 +316,12 @@ impl PipelineConfig {
         let toml_str =
             toml::to_string_pretty(self).map_err(|e| format!("Failed to serialize: {}", e))?;
 
+        // Create parent directory if it doesn't exist
+        if let Some(parent) = std::path::Path::new(path).parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create directory: {}", e))?;
+        }
+
         fs::write(path, toml_str).map_err(|e| format!("Failed to write file: {}", e))?;
 
         Ok(())
