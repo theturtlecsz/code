@@ -1971,6 +1971,7 @@ impl App<'_> {
                         | SlashCommand::SpecKitChecklist
                         | SlashCommand::SpecKitAuto
                         | SlashCommand::SpecKitStatus
+                        | SlashCommand::SpecKitConfigure
                         | SlashCommand::SpecKitConstitution
                         | SlashCommand::SpecKitAceStatus => {
                             // ALWAYS redirect to registry (native execution)
