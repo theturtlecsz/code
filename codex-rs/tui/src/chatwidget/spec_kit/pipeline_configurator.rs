@@ -38,6 +38,12 @@ pub struct PipelineConfiguratorState {
 
     /// Validation warnings (updated on every toggle)
     pub warnings: Vec<String>,
+
+    /// Model selection mode (when in StageDetails view)
+    pub model_selection_mode: bool,
+
+    /// Currently selected model index (for navigation in model selection)
+    pub selected_model_index: usize,
 }
 
 /// View mode for configurator
@@ -95,6 +101,8 @@ impl PipelineConfiguratorState {
             pending_config: initial_config,
             view_mode: ViewMode::StageList,
             warnings: Vec::new(),
+            model_selection_mode: false,
+            selected_model_index: 0,
         };
 
         // Initial validation
@@ -185,6 +193,77 @@ impl PipelineConfiguratorState {
             .any(|w| w.starts_with("⚠") || w.starts_with("Warning:"))
     }
 
+    /// Get available models for a stage
+    ///
+    /// Returns default agent lineup from subagent_defaults.rs
+    ///
+    /// # Arguments
+    /// * `stage` - Stage type to get models for
+    ///
+    /// # Returns
+    /// Vector of model names (e.g., ["gemini-flash", "claude-haiku", "gpt5_1"])
+    pub fn get_available_models(stage: &StageType) -> Vec<String> {
+        match stage {
+            StageType::New => vec!["gemini".to_string(), "claude".to_string(), "code".to_string()],
+            StageType::Specify => vec!["gpt5_1_mini".to_string()],
+            StageType::Plan => vec!["gemini-flash".to_string(), "claude-haiku".to_string(), "gpt5_1".to_string()],
+            StageType::Tasks => vec!["gpt5_1_mini".to_string()],
+            StageType::Implement => vec!["gpt5_1_codex".to_string(), "claude-haiku".to_string()],
+            StageType::Validate => vec!["gemini-flash".to_string(), "claude-haiku".to_string(), "gpt5_1".to_string()],
+            StageType::Audit => vec!["gpt5_codex".to_string(), "claude-sonnet".to_string(), "gemini-pro".to_string()],
+            StageType::Unlock => vec!["gpt5_codex".to_string(), "claude-sonnet".to_string(), "gemini-pro".to_string()],
+        }
+    }
+
+    /// Get selected models for a stage
+    ///
+    /// Returns models from pending_config.stage_models or defaults
+    ///
+    /// # Arguments
+    /// * `stage` - Stage type to get selected models for
+    ///
+    /// # Returns
+    /// Vector of selected model names
+    pub fn get_selected_models(&self, stage: &StageType) -> Vec<String> {
+        self.pending_config
+            .stage_models
+            .get(stage)
+            .cloned()
+            .unwrap_or_else(|| Self::get_available_models(stage))
+    }
+
+    /// Toggle model selection for current stage
+    ///
+    /// # Arguments
+    /// * `model_index` - Index of model to toggle
+    ///
+    /// # Effects
+    /// - Adds or removes model from pending_config.stage_models
+    /// - Ensures at least one model remains selected
+    pub fn toggle_model(&mut self, model_index: usize) {
+        let stage = self.all_stages[self.selected_index];
+        let available = Self::get_available_models(&stage);
+
+        if model_index >= available.len() {
+            return;
+        }
+
+        let model = &available[model_index];
+        let selected = self.pending_config
+            .stage_models
+            .entry(stage)
+            .or_insert_with(|| available.clone());
+
+        if selected.contains(model) {
+            // Don't allow removing the last model
+            if selected.len() > 1 {
+                selected.retain(|m| m != model);
+            }
+        } else {
+            selected.push(model.clone());
+        }
+    }
+
     /// Handle keyboard event
     ///
     /// # Arguments
@@ -193,6 +272,17 @@ impl PipelineConfiguratorState {
     /// # Returns
     /// ConfigAction indicating what to do next
     pub fn handle_key_event(&mut self, key: KeyEvent) -> ConfigAction {
+        // Model selection mode (when in StageDetails view)
+        if self.model_selection_mode {
+            return self.handle_model_selection_key(key);
+        }
+
+        // Stage details view mode
+        if self.view_mode == ViewMode::StageDetails {
+            return self.handle_stage_details_key(key);
+        }
+
+        // Stage list view mode (default)
         match key.code {
             KeyCode::Up => {
                 if self.selected_index > 0 {
@@ -212,7 +302,7 @@ impl PipelineConfiguratorState {
                 ConfigAction::Continue
             }
             KeyCode::Enter => {
-                // Future: Switch to StageDetails view
+                // Switch to StageDetails view
                 self.view_mode = ViewMode::StageDetails;
                 ConfigAction::Continue
             }
@@ -230,6 +320,67 @@ impl PipelineConfiguratorState {
             KeyCode::Esc => {
                 // Cancel (discard changes)
                 ConfigAction::CancelAndExit
+            }
+            _ => ConfigAction::Continue,
+        }
+    }
+
+    /// Handle keyboard events in StageDetails view
+    fn handle_stage_details_key(&mut self, key: KeyEvent) -> ConfigAction {
+        match key.code {
+            KeyCode::Char('m') | KeyCode::Enter => {
+                // Activate model selection mode
+                self.model_selection_mode = true;
+                self.selected_model_index = 0;
+                ConfigAction::Continue
+            }
+            KeyCode::Esc => {
+                // Go back to StageList view
+                self.view_mode = ViewMode::StageList;
+                ConfigAction::Continue
+            }
+            KeyCode::Char('q') | KeyCode::Char('Q') => {
+                // Save and exit
+                if self.has_errors() {
+                    ConfigAction::Continue
+                } else if self.has_warnings() {
+                    ConfigAction::ShowConfirmation
+                } else {
+                    ConfigAction::SaveAndExit
+                }
+            }
+            _ => ConfigAction::Continue,
+        }
+    }
+
+    /// Handle keyboard events in model selection mode
+    fn handle_model_selection_key(&mut self, key: KeyEvent) -> ConfigAction {
+        let stage = self.all_stages[self.selected_index];
+        let available = Self::get_available_models(&stage);
+
+        match key.code {
+            KeyCode::Up => {
+                if self.selected_model_index > 0 {
+                    self.selected_model_index -= 1;
+                }
+                ConfigAction::Continue
+            }
+            KeyCode::Down => {
+                if self.selected_model_index < available.len().saturating_sub(1) {
+                    self.selected_model_index += 1;
+                }
+                ConfigAction::Continue
+            }
+            KeyCode::Char(' ') => {
+                // Toggle model selection
+                self.toggle_model(self.selected_model_index);
+                ConfigAction::Continue
+            }
+            KeyCode::Char('m') | KeyCode::Enter | KeyCode::Esc => {
+                // Exit model selection mode
+                self.model_selection_mode = false;
+                self.selected_model_index = 0;
+                ConfigAction::Continue
             }
             _ => ConfigAction::Continue,
         }

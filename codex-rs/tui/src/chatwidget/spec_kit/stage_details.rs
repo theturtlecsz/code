@@ -109,6 +109,73 @@ pub fn render_stage_details(frame: &mut Frame, area: Rect, state: &PipelineConfi
         lines.push(Line::raw(""));
     }
 
+    // Models section
+    let available_models = PipelineConfiguratorState::get_available_models(selected_stage);
+    let selected_models = state.get_selected_models(selected_stage);
+
+    if !available_models.is_empty() {
+        lines.push(Line::from(vec![Span::styled(
+            "Models:",
+            Style::default().fg(Color::Magenta),
+        )]));
+
+        if state.model_selection_mode {
+            // Model selection mode: show checkboxes
+            lines.push(Line::from(vec![
+                Span::styled(
+                    "  [Press Space to toggle, Enter/m/Esc to exit]",
+                    Style::default().fg(Color::DarkGray),
+                )
+            ]));
+
+            for (i, model) in available_models.iter().enumerate() {
+                let is_selected = selected_models.contains(model);
+                let checkbox = if is_selected { "[✓]" } else { "[ ]" };
+                let is_current = i == state.selected_model_index;
+
+                let checkbox_style = if is_current {
+                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                } else if is_selected {
+                    Style::default().fg(Color::Green)
+                } else {
+                    Style::default().fg(Color::Gray)
+                };
+
+                let model_style = if is_current {
+                    Style::default().add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                };
+
+                let tier = get_model_tier(model);
+                lines.push(Line::from(vec![
+                    Span::styled(format!("  {} ", checkbox), checkbox_style),
+                    Span::styled(model, model_style),
+                    Span::styled(format!(" ({})", tier), Style::default().fg(Color::DarkGray)),
+                ]));
+            }
+        } else {
+            // View mode: show current selection (non-interactive)
+            lines.push(Line::from(vec![
+                Span::styled(
+                    "  [Press Enter or 'm' to configure]",
+                    Style::default().fg(Color::DarkGray),
+                )
+            ]));
+
+            for model in &selected_models {
+                let tier = get_model_tier(model);
+                lines.push(Line::from(vec![
+                    Span::raw("  • "),
+                    Span::styled(model, Style::default().fg(Color::Cyan)),
+                    Span::styled(format!(" ({})", tier), Style::default().fg(Color::DarkGray)),
+                ]));
+            }
+        }
+
+        lines.push(Line::raw(""));
+    }
+
     // Warnings section
     if !state.warnings.is_empty() {
         lines.push(Line::from(vec![Span::styled(
@@ -198,5 +265,30 @@ fn capitalize_stage_name(s: &str) -> String {
     match chars.next() {
         None => String::new(),
         Some(first) => first.to_uppercase().chain(chars).collect(),
+    }
+}
+
+/// Get model tier classification
+///
+/// Returns tier label for display (cheap/medium/premium)
+///
+/// # Arguments
+/// * `model` - Model name
+///
+/// # Returns
+/// Tier label string
+fn get_model_tier(model: &str) -> &'static str {
+    match model {
+        // Cheap models (Tier 0-1)
+        "gemini" | "claude" | "code" => "native/cheap",
+        "gpt5_1_mini" => "cheap",
+        "gemini-flash" | "claude-haiku" | "gpt5_1" => "cheap/medium",
+
+        // Premium models (Tier 3)
+        "gpt5_codex" | "claude-sonnet" | "gemini-pro" => "premium",
+        "gpt5_1_codex" => "codex (premium)",
+
+        // Unknown - assume expensive for safety
+        _ => "unknown",
     }
 }
