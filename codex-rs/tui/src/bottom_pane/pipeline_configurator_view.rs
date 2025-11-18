@@ -200,46 +200,71 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
 
         // Models section (if in StageDetails mode)
         if self.state.view_mode == ViewMode::StageDetails {
-            let available_models = PipelineConfiguratorState::get_available_models(selected_stage);
             let selected_models = self.state.get_selected_models(selected_stage);
 
-            if !available_models.is_empty() {
+            if !selected_models.is_empty() {
                 detail_lines.push(Line::from(vec![Span::styled(
                     "Models:",
                     Style::default().fg(Color::Magenta),
                 )]));
 
-                if self.state.model_selection_mode {
-                    // Model selection mode: show checkboxes
+                if self.state.model_picker_mode {
+                    // Model picker mode: show ALL available models for current slot
+                    let all_models = PipelineConfiguratorState::get_all_available_models();
+                    let slot_index = self.state.selected_model_index;
+                    let role = stage_details::get_model_role(
+                        selected_stage,
+                        &selected_models[slot_index]
+                    );
+
                     detail_lines.push(Line::from(vec![Span::styled(
-                        "  [Press Space to toggle, Enter/m/Esc to exit]",
+                        format!("  Choose model for {} (slot {}):", role, slot_index + 1),
+                        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                    )]));
+                    detail_lines.push(Line::from(vec![Span::styled(
+                        "  [↑↓ Navigate | Enter Select | Esc Cancel]",
                         Style::default().fg(Color::DarkGray),
                     )]));
 
-                    for (i, model) in available_models.iter().enumerate() {
-                        let is_selected = selected_models.contains(model);
-                        let checkbox = if is_selected { "[✓]" } else { "[ ]" };
-                        let is_current = i == self.state.selected_model_index;
+                    for (i, model) in all_models.iter().enumerate() {
+                        let is_current = i == self.state.picker_selected_index;
+                        let tier = stage_details::get_model_tier_public(model);
 
-                        let checkbox_style = if is_current {
+                        let style = if is_current {
                             Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
-                        } else if is_selected {
-                            Style::default().fg(Color::Green)
-                        } else {
-                            Style::default().fg(Color::Gray)
-                        };
-
-                        let model_style = if is_current {
-                            Style::default().add_modifier(Modifier::BOLD)
                         } else {
                             Style::default()
                         };
 
+                        let marker = if is_current { ">" } else { " " };
+                        detail_lines.push(Line::from(vec![
+                            Span::raw(format!("  {} ", marker)),
+                            Span::styled(model.clone(), style),
+                            Span::styled(format!(" ({})", tier), Style::default().fg(Color::DarkGray)),
+                        ]));
+                    }
+                } else if self.state.model_selection_mode {
+                    // Model selection mode: show slots with assigned models
+                    detail_lines.push(Line::from(vec![Span::styled(
+                        "  [↑↓ Navigate Slots | Enter Change Model | m/Esc Exit]",
+                        Style::default().fg(Color::DarkGray),
+                    )]));
+
+                    for (i, model) in selected_models.iter().enumerate() {
+                        let is_current = i == self.state.selected_model_index;
                         let tier = stage_details::get_model_tier_public(model);
                         let role = stage_details::get_model_role(selected_stage, model);
+
+                        let style = if is_current {
+                            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                        } else {
+                            Style::default()
+                        };
+
+                        let marker = if is_current { ">" } else { " " };
                         detail_lines.push(Line::from(vec![
-                            Span::styled(format!("  {} ", checkbox), checkbox_style),
-                            Span::styled(model.clone(), model_style),
+                            Span::styled(format!("  {} [{}] ", marker, i + 1), style),
+                            Span::styled(model.clone(), style),
                             Span::styled(format!(" - {}", role), Style::default().fg(Color::Yellow)),
                             Span::styled(format!(" ({})", tier), Style::default().fg(Color::DarkGray)),
                         ]));
@@ -251,11 +276,11 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
                         Style::default().fg(Color::DarkGray),
                     )]));
 
-                    for model in &selected_models {
+                    for (i, model) in selected_models.iter().enumerate() {
                         let tier = stage_details::get_model_tier_public(model);
                         let role = stage_details::get_model_role(selected_stage, model);
                         detail_lines.push(Line::from(vec![
-                            Span::raw("  • "),
+                            Span::styled(format!("  [{}] ", i + 1), Style::default().fg(Color::DarkGray)),
                             Span::styled(model.clone(), Style::default().fg(Color::Cyan)),
                             Span::styled(format!(" - {}", role), Style::default().fg(Color::Yellow)),
                             Span::styled(format!(" ({})", tier), Style::default().fg(Color::DarkGray)),
@@ -286,8 +311,10 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
 
         // Help text (context-sensitive)
         detail_lines.push(Line::raw(""));
-        let help_text = if self.state.model_selection_mode {
-            "Keys: ↑↓ Navigate Models | Space Toggle | Enter/m/Esc Exit Selection"
+        let help_text = if self.state.model_picker_mode {
+            "Keys: ↑↓ Navigate ALL Models | Enter Select | Esc Cancel"
+        } else if self.state.model_selection_mode {
+            "Keys: ↑↓ Navigate Slots | Enter Change Model | m/Esc Exit"
         } else if self.state.view_mode == ViewMode::StageDetails {
             "Keys: m/Enter Configure Models | Esc Back to List | q Save"
         } else {

@@ -110,10 +110,9 @@ pub fn render_stage_details(frame: &mut Frame, area: Rect, state: &PipelineConfi
     }
 
     // Models section
-    let available_models = PipelineConfiguratorState::get_available_models(selected_stage);
     let selected_models = state.get_selected_models(selected_stage);
 
-    if !available_models.is_empty() {
+    if !selected_models.is_empty() {
         lines.push(Line::from(vec![Span::styled(
             "Models:",
             Style::default().fg(Color::Magenta),
@@ -128,7 +127,7 @@ pub fn render_stage_details(frame: &mut Frame, area: Rect, state: &PipelineConfi
                 )
             ]));
 
-            for (i, model) in available_models.iter().enumerate() {
+            for (i, model) in selected_models.iter().enumerate() {
                 let is_selected = selected_models.contains(model);
                 let checkbox = if is_selected { "[✓]" } else { "[ ]" };
                 let is_current = i == state.selected_model_index;

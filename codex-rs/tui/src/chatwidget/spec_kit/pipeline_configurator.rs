@@ -42,8 +42,14 @@ pub struct PipelineConfiguratorState {
     /// Model selection mode (when in StageDetails view)
     pub model_selection_mode: bool,
 
-    /// Currently selected model index (for navigation in model selection)
+    /// Currently selected slot index (for navigation in model selection)
     pub selected_model_index: usize,
+
+    /// Model picker mode (when choosing model for a specific slot)
+    pub model_picker_mode: bool,
+
+    /// Currently selected model in picker
+    pub picker_selected_index: usize,
 }
 
 /// View mode for configurator
@@ -103,6 +109,8 @@ impl PipelineConfiguratorState {
             warnings: Vec::new(),
             model_selection_mode: false,
             selected_model_index: 0,
+            model_picker_mode: false,
+            picker_selected_index: 0,
         };
 
         // Initial validation
@@ -193,7 +201,37 @@ impl PipelineConfiguratorState {
             .any(|w| w.starts_with("⚠") || w.starts_with("Warning:"))
     }
 
-    /// Get available models for a stage
+    /// Get ALL available models (complete registry)
+    ///
+    /// Returns complete list of all models that can be used for any role
+    ///
+    /// # Returns
+    /// Vector of all model names (cheap to expensive)
+    pub fn get_all_available_models() -> Vec<String> {
+        vec![
+            // Cheap models (Tier 0-1)
+            "gemini".to_string(),
+            "claude".to_string(),
+            "code".to_string(),
+            "gpt5_1_mini".to_string(),
+            "gemini-flash".to_string(),
+            "claude-haiku".to_string(),
+            "gpt5_1".to_string(),
+            "gpt-4o-mini".to_string(),
+            // Medium models (Tier 2)
+            "gpt-4o".to_string(),
+            // Premium models (Tier 3)
+            "claude-sonnet".to_string(),
+            "gemini-pro".to_string(),
+            "gpt5_codex".to_string(),
+            "gpt5_1_codex".to_string(),
+            "gpt-4".to_string(),
+            "gpt-4-turbo".to_string(),
+            "claude-opus".to_string(),
+        ]
+    }
+
+    /// Get default models for a stage (for initialization)
     ///
     /// Returns default agent lineup from subagent_defaults.rs
     ///
@@ -202,7 +240,7 @@ impl PipelineConfiguratorState {
     ///
     /// # Returns
     /// Vector of model names (e.g., ["gemini-flash", "claude-haiku", "gpt5_1"])
-    pub fn get_available_models(stage: &StageType) -> Vec<String> {
+    pub fn get_default_models(stage: &StageType) -> Vec<String> {
         match stage {
             StageType::New => vec!["gemini".to_string(), "claude".to_string(), "code".to_string()],
             StageType::Specify => vec!["gpt5_1_mini".to_string()],
@@ -213,6 +251,17 @@ impl PipelineConfiguratorState {
             StageType::Audit => vec!["gpt5_codex".to_string(), "claude-sonnet".to_string(), "gemini-pro".to_string()],
             StageType::Unlock => vec!["gpt5_codex".to_string(), "claude-sonnet".to_string(), "gemini-pro".to_string()],
         }
+    }
+
+    /// Get number of model slots for a stage
+    ///
+    /// # Arguments
+    /// * `stage` - Stage type
+    ///
+    /// # Returns
+    /// Number of model slots/roles for this stage
+    pub fn get_stage_slot_count(stage: &StageType) -> usize {
+        Self::get_default_models(stage).len()
     }
 
     /// Get selected models for a stage
@@ -229,39 +278,37 @@ impl PipelineConfiguratorState {
             .stage_models
             .get(stage)
             .cloned()
-            .unwrap_or_else(|| Self::get_available_models(stage))
+            .unwrap_or_else(|| Self::get_default_models(stage))
     }
 
-    /// Toggle model selection for current stage
+    /// Assign model to a specific slot
     ///
     /// # Arguments
-    /// * `model_index` - Index of model to toggle
+    /// * `slot_index` - Index of the slot/role (0, 1, 2 for 3-agent stages)
+    /// * `model` - Model name to assign to this slot
     ///
     /// # Effects
-    /// - Adds or removes model from pending_config.stage_models
-    /// - Ensures at least one model remains selected
-    pub fn toggle_model(&mut self, model_index: usize) {
+    /// - Updates pending_config.stage_models[stage][slot_index] = model
+    pub fn assign_model_to_slot(&mut self, slot_index: usize, model: String) {
         let stage = self.all_stages[self.selected_index];
-        let available = Self::get_available_models(&stage);
+        let slot_count = Self::get_stage_slot_count(&stage);
 
-        if model_index >= available.len() {
+        if slot_index >= slot_count {
             return;
         }
 
-        let model = &available[model_index];
-        let selected = self.pending_config
+        let models = self.pending_config
             .stage_models
             .entry(stage)
-            .or_insert_with(|| available.clone());
+            .or_insert_with(|| Self::get_default_models(&stage));
 
-        if selected.contains(model) {
-            // Don't allow removing the last model
-            if selected.len() > 1 {
-                selected.retain(|m| m != model);
-            }
-        } else {
-            selected.push(model.clone());
+        // Ensure models vec has enough slots
+        while models.len() < slot_count {
+            models.push(Self::get_default_models(&stage)[models.len()].clone());
         }
+
+        // Assign model to specific slot
+        models[slot_index] = model;
     }
 
     /// Handle keyboard event
@@ -272,6 +319,11 @@ impl PipelineConfiguratorState {
     /// # Returns
     /// ConfigAction indicating what to do next
     pub fn handle_key_event(&mut self, key: KeyEvent) -> ConfigAction {
+        // Model picker mode (when choosing model for a specific slot)
+        if self.model_picker_mode {
+            return self.handle_model_picker_key(key);
+        }
+
         // Model selection mode (when in StageDetails view)
         if self.model_selection_mode {
             return self.handle_model_selection_key(key);
@@ -353,10 +405,10 @@ impl PipelineConfiguratorState {
         }
     }
 
-    /// Handle keyboard events in model selection mode
+    /// Handle keyboard events in model selection mode (slot navigation)
     fn handle_model_selection_key(&mut self, key: KeyEvent) -> ConfigAction {
         let stage = self.all_stages[self.selected_index];
-        let available = Self::get_available_models(&stage);
+        let slot_count = Self::get_stage_slot_count(&stage);
 
         match key.code {
             KeyCode::Up => {
@@ -366,20 +418,64 @@ impl PipelineConfiguratorState {
                 ConfigAction::Continue
             }
             KeyCode::Down => {
-                if self.selected_model_index < available.len().saturating_sub(1) {
+                if self.selected_model_index < slot_count.saturating_sub(1) {
                     self.selected_model_index += 1;
                 }
                 ConfigAction::Continue
             }
-            KeyCode::Char(' ') => {
-                // Toggle model selection
-                self.toggle_model(self.selected_model_index);
+            KeyCode::Enter => {
+                // Open model picker for current slot
+                self.model_picker_mode = true;
+                // Find current model in all_available_models to set picker index
+                let current_models = self.get_selected_models(&stage);
+                let current_model = &current_models[self.selected_model_index];
+                let all_models = Self::get_all_available_models();
+                self.picker_selected_index = all_models
+                    .iter()
+                    .position(|m| m == current_model)
+                    .unwrap_or(0);
                 ConfigAction::Continue
             }
-            KeyCode::Char('m') | KeyCode::Enter | KeyCode::Esc => {
+            KeyCode::Char('m') | KeyCode::Esc => {
                 // Exit model selection mode
                 self.model_selection_mode = false;
                 self.selected_model_index = 0;
+                ConfigAction::Continue
+            }
+            _ => ConfigAction::Continue,
+        }
+    }
+
+    /// Handle keyboard events in model picker mode
+    fn handle_model_picker_key(&mut self, key: KeyEvent) -> ConfigAction {
+        let all_models = Self::get_all_available_models();
+
+        match key.code {
+            KeyCode::Up => {
+                if self.picker_selected_index > 0 {
+                    self.picker_selected_index -= 1;
+                }
+                ConfigAction::Continue
+            }
+            KeyCode::Down => {
+                if self.picker_selected_index < all_models.len().saturating_sub(1) {
+                    self.picker_selected_index += 1;
+                }
+                ConfigAction::Continue
+            }
+            KeyCode::Enter => {
+                // Assign selected model to current slot
+                let model = all_models[self.picker_selected_index].clone();
+                self.assign_model_to_slot(self.selected_model_index, model);
+                // Exit picker mode
+                self.model_picker_mode = false;
+                self.picker_selected_index = 0;
+                ConfigAction::Continue
+            }
+            KeyCode::Esc => {
+                // Cancel picker without changing
+                self.model_picker_mode = false;
+                self.picker_selected_index = 0;
                 ConfigAction::Continue
             }
             _ => ConfigAction::Continue,
