@@ -11,8 +11,9 @@ use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
 use crate::chatwidget::spec_kit::pipeline_config::PipelineConfig;
 use crate::chatwidget::spec_kit::pipeline_configurator::{
-    ConfigAction, PipelineConfiguratorState, PipelineConfiguratorWidget,
+    ConfigAction, PipelineConfiguratorState, PipelineConfiguratorWidget, ViewMode,
 };
+use crate::chatwidget::spec_kit::stage_details;
 
 use super::{BottomPane, BottomPaneView, CancellationEvent};
 
@@ -203,6 +204,71 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
         ]));
         detail_lines.push(Line::raw(""));
 
+        // Models section (if in StageDetails mode)
+        if self.state.view_mode == ViewMode::StageDetails {
+            let available_models = PipelineConfiguratorState::get_available_models(selected_stage);
+            let selected_models = self.state.get_selected_models(selected_stage);
+
+            if !available_models.is_empty() {
+                detail_lines.push(Line::from(vec![Span::styled(
+                    "Models:",
+                    Style::default().fg(Color::Magenta),
+                )]));
+
+                if self.state.model_selection_mode {
+                    // Model selection mode: show checkboxes
+                    detail_lines.push(Line::from(vec![Span::styled(
+                        "  [Press Space to toggle, Enter/m/Esc to exit]",
+                        Style::default().fg(Color::DarkGray),
+                    )]));
+
+                    for (i, model) in available_models.iter().enumerate() {
+                        let is_selected = selected_models.contains(model);
+                        let checkbox = if is_selected { "[✓]" } else { "[ ]" };
+                        let is_current = i == self.state.selected_model_index;
+
+                        let checkbox_style = if is_current {
+                            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                        } else if is_selected {
+                            Style::default().fg(Color::Green)
+                        } else {
+                            Style::default().fg(Color::Gray)
+                        };
+
+                        let model_style = if is_current {
+                            Style::default().add_modifier(Modifier::BOLD)
+                        } else {
+                            Style::default()
+                        };
+
+                        let tier = stage_details::get_model_tier_public(model);
+                        detail_lines.push(Line::from(vec![
+                            Span::styled(format!("  {} ", checkbox), checkbox_style),
+                            Span::styled(model.clone(), model_style),
+                            Span::styled(format!(" ({})", tier), Style::default().fg(Color::DarkGray)),
+                        ]));
+                    }
+                } else {
+                    // View mode: show current selection
+                    detail_lines.push(Line::from(vec![Span::styled(
+                        "  [Press Enter or 'm' to configure]",
+                        Style::default().fg(Color::DarkGray),
+                    )]));
+
+                    for model in &selected_models {
+                        let tier = stage_details::get_model_tier_public(model);
+                        detail_lines.push(Line::from(vec![
+                            Span::raw("  • "),
+                            Span::styled(model.clone(), Style::default().fg(Color::Cyan)),
+                            Span::styled(format!(" ({})", tier), Style::default().fg(Color::DarkGray)),
+                        ]));
+                    }
+                }
+
+                detail_lines.push(Line::raw(""));
+            }
+        }
+
         // Warnings section
         if !self.state.warnings.is_empty() {
             detail_lines.push(Line::from(vec![Span::styled(
@@ -220,10 +286,17 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
             detail_lines.push(Line::raw(""));
         }
 
-        // Help text
+        // Help text (context-sensitive)
         detail_lines.push(Line::raw(""));
+        let help_text = if self.state.model_selection_mode {
+            "Keys: ↑↓ Navigate Models | Space Toggle | Enter/m/Esc Exit Selection"
+        } else if self.state.view_mode == ViewMode::StageDetails {
+            "Keys: m/Enter Configure Models | Esc Back to List | q Save"
+        } else {
+            "Keys: ↑↓ Navigate | Space Toggle | Enter Details | q Save | Esc Cancel"
+        };
         detail_lines.push(Line::from(vec![Span::styled(
-            "Keys: ↑↓ Navigate | Space Toggle | q Save | Esc Cancel",
+            help_text,
             Style::default().fg(Color::Gray),
         )]));
 

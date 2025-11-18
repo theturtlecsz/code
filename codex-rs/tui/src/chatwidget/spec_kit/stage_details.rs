@@ -147,7 +147,7 @@ pub fn render_stage_details(frame: &mut Frame, area: Rect, state: &PipelineConfi
                     Style::default()
                 };
 
-                let tier = get_model_tier(model);
+                let tier = get_model_tier_public(model);
                 lines.push(Line::from(vec![
                     Span::styled(format!("  {} ", checkbox), checkbox_style),
                     Span::styled(model, model_style),
@@ -164,7 +164,7 @@ pub fn render_stage_details(frame: &mut Frame, area: Rect, state: &PipelineConfi
             ]));
 
             for model in &selected_models {
-                let tier = get_model_tier(model);
+                let tier = get_model_tier_public(model);
                 lines.push(Line::from(vec![
                     Span::raw("  • "),
                     Span::styled(model, Style::default().fg(Color::Cyan)),
@@ -277,7 +277,7 @@ fn capitalize_stage_name(s: &str) -> String {
 ///
 /// # Returns
 /// Tier label string
-fn get_model_tier(model: &str) -> &'static str {
+pub fn get_model_tier_public(model: &str) -> &'static str {
     match model {
         // Cheap models (Tier 0-1)
         "gemini" | "claude" | "code" => "native/cheap",
