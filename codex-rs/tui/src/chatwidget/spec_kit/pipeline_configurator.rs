@@ -283,6 +283,13 @@ impl PipelineConfiguratorState {
 
     /// Assign model to a specific slot
     ///
+    /// TODO: Add reasoning level support (see MODEL_ASSESSMENT_SPEC_PROMPT.md Phase 3)
+    /// - Add reasoning_level parameter (e.g., "high", "medium", "low", "auto")
+    /// - Store as "model:reasoning" in stage_models (e.g., "gpt5_1:high")
+    /// - Or add separate stage_reasoning_levels HashMap
+    /// - Update UI to show reasoning level in slot display
+    /// - Add reasoning level picker after model selection
+    ///
     /// # Arguments
     /// * `slot_index` - Index of the slot/role (0, 1, 2 for 3-agent stages)
     /// * `model` - Model name to assign to this slot

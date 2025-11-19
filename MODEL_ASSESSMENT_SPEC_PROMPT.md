@@ -66,43 +66,109 @@ Create comprehensive SPEC for validating and updating the spec-kit model registr
 - Update `cost_tracker.rs` with accurate rates
 - Add data source comments and last-updated dates
 
-### Phase 3: Architecture Clarification
+### Phase 3: Reasoning Level Integration
 
-**Task 3.1: Document Orchestrator Model**
-- Find default orchestrator model in code
-- Add to UI as separate role (e.g., "[Orchestrator] claude-sonnet - synthesis")
-- Allow user to configure orchestrator separately from consensus agents
-- Update role descriptions to clarify: "consensus agent 1 (input)" vs "orchestrator (synthesis)"
+**Task 3.1: Research Reasoning Level Support**
+- Document which models support reasoning levels:
+  - GPT-5 family: `--reasoning high/medium/low` (confirmed in config.md:218)
+  - O1 models: thinking budget tokens (if available)
+  - Claude: extended thinking mode (if available)
+  - Gemini: deep research mode (if available)
+- Validate reasoning level effectiveness per model
+- Document performance vs cost tradeoffs per level
 
-**Task 3.2: Update Model Role Descriptions**
-- Clarify which models generate outputs vs which synthesize
-- Add tooltips/help text explaining consensus workflow:
+**Task 3.2: Extend PipelineConfig Schema**
+- Add `stage_reasoning_levels: HashMap<StageType, Vec<String>>` to PipelineConfig
+- Format: `["high", "medium", "low"]` parallel to agent list
+- Or: Encode in agent string: `"gpt5_1:high"` (model:reasoning)
+- Update TOML serialization to include reasoning levels
+- Example:
+  ```toml
+  [stage_models.plan]
+  agents = ["gemini-flash", "claude-haiku", "gpt5_1"]
+  reasoning = ["auto", "auto", "high"]  # reasoning level per slot
   ```
-  Plan Stage (4 models total):
-    [1] gemini-flash - consensus agent 1 (generates plan)
-    [2] claude-haiku - consensus agent 2 (generates plan)
-    [3] gpt5_1 - consensus agent 3 (generates plan)
-    [Orchestrator] claude-sonnet - synthesizes consensus
+
+**Task 3.3: Extend Model Selection UI**
+- Add reasoning level picker AFTER model selection:
   ```
+  Stage: plan → Slot: [3] executor & QA (aggregator)
+
+  Step 1: Choose Model
+    > gpt5_1 (cheap/medium)      ← selected
+
+  Step 2: Choose Reasoning Level (for gpt5_1)
+    > auto (default, fastest)
+      low (faster, cheaper)
+      medium (balanced)
+      high (slower, more thorough)  ← select this
+  ```
+- Show reasoning level in slot display:
+  ```
+  [1] gemini-flash - researcher (cheap/medium) [auto]
+  [2] claude-haiku - synthesizer (cheap/medium) [auto]
+  [3] gpt5_1:high - executor & QA (aggregator) (cheap/medium) [HIGH]
+  ```
+- Update cost calculation to include reasoning level multipliers
+
+**Task 3.4: Implement Reasoning Level Configuration**
+- Modify assign_model_to_slot() to accept optional reasoning level
+- Add get_reasoning_levels(model) -> Vec<String> helper
+- Add reasoning level to keyboard handler workflow:
+  * Select slot → Enter → Choose model → Enter → Choose reasoning (if applicable) → Enter
+  * Or: Select slot → Enter → Choose "model + reasoning" combined
+- Default to "auto" for models without reasoning support
 
 ### Phase 4: Validation & Testing
 
-**Task 4.1: Integration Testing**
-- Test each model in registry is callable
-- Verify pricing calculations accurate
-- Ensure orchestrator model configurable
-- Validate TOML serialization with new models
+**Task 4.1: UI Integration - Reasoning Level Picker**
+- Extend pipeline configurator TUI with reasoning level selection:
+  ```
+  Workflow: Stage → Slot → Model → Reasoning Level (if applicable)
 
-**Task 4.2: Cost Impact Analysis**
+  After selecting model in picker:
+    If model supports reasoning (GPT-5.x, o1, etc.):
+      Show: "Choose reasoning level for {model}:"
+      Options: auto, low, medium, high
+      Navigate: Up/Down
+      Select: Enter
+      Cancel: Esc (keeps current/default)
+  ```
+- Files to modify:
+  - `pipeline_configurator.rs`: Add reasoning_level_picker_mode state
+  - `pipeline_configurator_view.rs`: Add reasoning picker rendering
+  - `stage_details.rs`: Show reasoning level in role display
+  - `pipeline_config.rs`: Add stage_reasoning_levels field
+- Display format in slot view:
+  ```
+  [1] gemini-flash - researcher (cheap/medium)
+  [2] claude-haiku - synthesizer (cheap/medium)
+  [3] gpt5_1 [HIGH] - executor & QA (aggregator) (cheap/medium)
+      ^^^^^^ reasoning level badge
+  ```
+
+**Task 4.2: Integration Testing**
+- Test each model in registry is callable
+- Verify reasoning level parameter works per model
+- Test cost calculation with reasoning multipliers
+- Validate TOML serialization includes reasoning levels
+- Test UI workflow: slot → model → reasoning → save
+
+**Task 4.3: Cost Impact Analysis**
 - Calculate cost difference with Gemini 3 models
+- Document reasoning level cost multipliers:
+  - auto: 1.0× (baseline)
+  - low: 0.8× (faster, cheaper)
+  - medium: 1.2× (balanced)
+  - high: 2.0-3.0× (slower, more thorough)
 - Identify cost optimization opportunities
 - Document recommended configurations by budget
 
-**Task 4.3: Documentation Updates**
-- Update `docs/spec-kit/model-strategy.md`
-- Add model compatibility matrix
-- Document orchestrator architecture
-- Create model selection best practices guide
+**Task 4.4: Documentation Updates**
+- Update `docs/spec-kit/model-strategy.md` with reasoning levels
+- Add model compatibility matrix (which models support reasoning)
+- Update MODEL_ASSESSMENT_SPEC_PROMPT.md with findings
+- Create reasoning level best practices guide
 
 ## Success Criteria
 
