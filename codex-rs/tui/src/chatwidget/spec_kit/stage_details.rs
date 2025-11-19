@@ -283,8 +283,9 @@ pub fn get_model_tier_public(model: &str) -> &'static str {
         "gpt5_1_mini" => "cheap",
         "gemini-flash" | "claude-haiku" | "gpt5_1" => "cheap/medium",
 
-        // Premium models (Tier 3)
+        // Premium models (Tier 2-3)
         "claude-sonnet" | "gemini-pro" => "premium",
+        "gemini-3-pro" => "premium (LMArena #1)",  // NEW: Top LMArena (1501 Elo)
         "gpt5_1_codex" => "codex (premium)",
         "claude-opus" => "opus (premium)",
 

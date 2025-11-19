@@ -12,7 +12,8 @@ use std::sync::{Arc, Mutex};
 use crate::spec_prompts::SpecStage;
 
 /// Model pricing rates (USD per 1M tokens)
-/// Updated: 2025-10-24 from official pricing pages
+/// Updated: 2025-11-19 from official pricing pages
+/// Sources: ai.google.dev/pricing, claude.com/pricing, platform.openai.com/docs/pricing
 #[derive(Debug, Clone)]
 pub struct ModelPricing {
     pub input_per_million: f64,
@@ -23,28 +24,38 @@ impl ModelPricing {
     /// Get pricing for a model by name
     pub fn for_model(model: &str) -> Self {
         match model {
-            // Claude models
-            "claude-haiku" | "claude-haiku-3.5" | "haiku" => Self {
-                input_per_million: 0.25,
-                output_per_million: 1.25,
+            // Claude models (Updated 2025-11-19)
+            // Source: claude.com/pricing
+            "claude-haiku" | "claude-haiku-4.5" | "claude-haiku-3.5" | "haiku" => Self {
+                input_per_million: 1.0,  // Was 0.25 (4x increase!)
+                output_per_million: 5.0,  // Was 1.25 (4x increase!)
             },
-            "claude-sonnet" | "claude-sonnet-4" | "sonnet" => Self {
+            "claude-sonnet" | "claude-sonnet-4.5" | "claude-sonnet-4" | "sonnet" => Self {
                 input_per_million: 3.0,
                 output_per_million: 15.0,
             },
-            "claude-opus" | "claude-opus-4" | "opus" => Self {
+            "claude-opus" | "claude-opus-4.1" | "claude-opus-4" | "opus" => Self {
                 input_per_million: 15.0,
                 output_per_million: 75.0,
             },
 
-            // Gemini models
+            // Gemini models (Updated 2025-11-19)
+            // Source: ai.google.dev/pricing
+            // Gemini 3 family (Released 2025-11-18)
+            "gemini-3-pro" | "gemini-3.0-pro" => Self {
+                input_per_million: 2.0,   // Standard pricing (≤200k tokens)
+                output_per_million: 12.0, // Top LMArena model (1501 Elo)
+            },
+            // Note: Gemini 3 Deep Think not yet publicly priced, rolling out to AI Ultra
+
+            // Gemini 2.5 family
             "gemini-2.5-flash" | "gemini-flash-2.5" | "flash-2.5" => Self {
-                input_per_million: 0.10,
-                output_per_million: 0.40,
+                input_per_million: 0.30,   // Was 0.10 (3x increase!)
+                output_per_million: 2.50,  // Was 0.40 (6.25x increase!)
             },
             "gemini-2.0-flash" | "flash-2.0" => Self {
-                input_per_million: 0.10,
-                output_per_million: 0.40,
+                input_per_million: 0.30,
+                output_per_million: 2.50,
             },
             "gemini-1.5-flash" | "flash-1.5" | "flash" => Self {
                 input_per_million: 0.075,
@@ -56,14 +67,31 @@ impl ModelPricing {
             },
             "gemini-2.5-pro" | "gemini-pro-2.5" => Self {
                 input_per_million: 1.25,
-                output_per_million: 5.0,
+                output_per_million: 10.0,  // Was 5.0 (2x increase!)
             },
             "gemini-1.5-pro" | "gemini-pro-1.5" | "gemini-pro" => Self {
                 input_per_million: 1.25,
-                output_per_million: 5.0,
+                output_per_million: 10.0,  // Updated to match 2.5-pro
             },
 
-            // OpenAI models
+            // OpenAI models (Updated 2025-11-19)
+            // Source: platform.openai.com/docs/pricing
+
+            // GPT-5 family (Released Aug 2025, GPT-5.1 Nov 2025)
+            "gpt-5" | "gpt-5.1" | "gpt5_1" | "gpt-5.1-instant" => Self {
+                input_per_million: 1.25,   // Was 10.0 (estimate)
+                output_per_million: 10.0,  // Was 30.0 (estimate)
+            },
+            "gpt-5-mini" | "gpt5_1_mini" | "gpt-5.1-mini" => Self {
+                input_per_million: 0.25,
+                output_per_million: 2.0,
+            },
+            "gpt-5-codex" | "gpt5_1_codex" | "gpt-5.1-codex" => Self {
+                input_per_million: 1.25,   // Same as GPT-5 (codex variant)
+                output_per_million: 10.0,
+            },
+
+            // GPT-4 family (legacy/deprecated - kept for compatibility)
             "gpt-4o" => Self {
                 input_per_million: 2.50,
                 output_per_million: 10.0,
@@ -80,13 +108,6 @@ impl ModelPricing {
                 input_per_million: 0.50,
                 output_per_million: 1.50,
             },
-            "gpt-5" | "gpt-5-codex" => {
-                // Estimated - not public pricing yet
-                Self {
-                    input_per_million: 10.0,
-                    output_per_million: 30.0,
-                }
-            }
 
             // Unknown model - use expensive default for safety
             _ => Self {

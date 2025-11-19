@@ -217,8 +217,7 @@ impl PipelineConfiguratorState {
     ///
     /// Returns complete list of all models that can be used for any role
     /// VALIDATED: Only models available through our MCP integrations
-    /// REMOVED: GPT-4, GPT-5 (no OpenAI API keys in this project)
-    /// TODO: Add Gemini 3 models (released 2025-11-18) - see MODEL_ASSESSMENT_SPEC_PROMPT.md
+    /// Updated: 2025-11-19 - Added Gemini 3 Pro (top LMArena model, 1501 Elo)
     ///
     /// # Returns
     /// Vector of all model names (cheap to expensive)
@@ -235,9 +234,10 @@ impl PipelineConfiguratorState {
             "claude-haiku".to_string(),
             "gpt5_1".to_string(),
 
-            // Premium models (Tier 3) - High-capability
+            // Premium models (Tier 2-3) - High-capability
             "claude-sonnet".to_string(),
             "gemini-pro".to_string(),
+            "gemini-3-pro".to_string(),     // NEW: Top LMArena (1501 Elo), released 2025-11-18
             "gpt5_1_codex".to_string(),
             "claude-opus".to_string(),
         ]
