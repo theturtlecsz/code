@@ -146,10 +146,11 @@ pub fn render_stage_details(frame: &mut Frame, area: Rect, state: &PipelineConfi
                     Style::default()
                 };
 
+                let display_name = get_model_display_name(model);
                 let tier = get_model_tier_public(model);
                 lines.push(Line::from(vec![
                     Span::styled(format!("  {} ", checkbox), checkbox_style),
-                    Span::styled(model, model_style),
+                    Span::styled(display_name, model_style),
                     Span::styled(format!(" ({})", tier), Style::default().fg(Color::DarkGray)),
                 ]));
             }
@@ -163,10 +164,11 @@ pub fn render_stage_details(frame: &mut Frame, area: Rect, state: &PipelineConfi
             ]));
 
             for model in &selected_models {
+                let display_name = get_model_display_name(model);
                 let tier = get_model_tier_public(model);
                 lines.push(Line::from(vec![
                     Span::raw("  • "),
-                    Span::styled(model, Style::default().fg(Color::Cyan)),
+                    Span::styled(display_name, Style::default().fg(Color::Cyan)),
                     Span::styled(format!(" ({})", tier), Style::default().fg(Color::DarkGray)),
                 ]));
             }
@@ -240,13 +242,13 @@ fn get_stage_description(stage: &StageType) -> &'static str {
 fn get_stage_agents(stage: &StageType) -> &'static str {
     match stage {
         StageType::New => "Native (0 agents, instant)",
-        StageType::Specify => "1 agent (gpt5_1_mini)",
-        StageType::Plan => "3 agents (gemini-flash, claude-haiku, gpt5-medium)",
-        StageType::Tasks => "1 agent (gpt5_1_mini)",
-        StageType::Implement => "2 agents (gpt5_1_codex, claude-haiku validator)",
-        StageType::Validate => "3 agents (gemini-flash, claude-haiku, gpt5-medium)",
-        StageType::Audit => "3 premium (gemini-pro, claude-sonnet, gpt5-high)",
-        StageType::Unlock => "3 premium (gemini-pro, claude-sonnet, gpt5-high)",
+        StageType::Specify => "1 agent (GPT-5 Mini)",
+        StageType::Plan => "3 agents (Gemini 2.5 Flash, Claude Haiku 4.5, GPT-5.1)",
+        StageType::Tasks => "1 agent (GPT-5 Mini)",
+        StageType::Implement => "2 agents (GPT-5.1 Codex, Claude Haiku 4.5 validator)",
+        StageType::Validate => "3 agents (Gemini 2.5 Flash, Claude Haiku 4.5, GPT-5.1)",
+        StageType::Audit => "3 premium (Gemini 2.5 Pro, Claude Sonnet 4.5, GPT-5.1)",
+        StageType::Unlock => "3 premium (Gemini 2.5 Pro, Claude Sonnet 4.5, GPT-5.1)",
     }
 }
 
@@ -264,6 +266,42 @@ fn capitalize_stage_name(s: &str) -> String {
     match chars.next() {
         None => String::new(),
         Some(first) => first.to_uppercase().chain(chars).collect(),
+    }
+}
+
+/// Get model display name (user-friendly with version)
+///
+/// Returns clear, descriptive name showing actual model and version
+///
+/// # Arguments
+/// * `model` - Internal model name
+///
+/// # Returns
+/// Display-friendly name with version
+pub fn get_model_display_name(model: &str) -> &'static str {
+    match model {
+        // Aliases (native/shortcuts)
+        "gemini" => "Gemini 2.5 Flash (alias)",
+        "claude" => "Claude Haiku 4.5 (alias)",
+        "code" => "Native Rust (codex-rs)",
+
+        // GPT-5 family
+        "gpt5_1_mini" => "GPT-5 Mini",
+        "gpt5_1" => "GPT-5.1",
+        "gpt5_1_codex" => "GPT-5.1 Codex (code specialist)",
+
+        // Gemini family
+        "gemini-flash" => "Gemini 2.5 Flash",
+        "gemini-pro" => "Gemini 2.5 Pro",
+        "gemini-3-pro" => "Gemini 3 Pro (LMArena #1)",
+
+        // Claude family
+        "claude-haiku" => "Claude Haiku 4.5",
+        "claude-sonnet" => "Claude Sonnet 4.5",
+        "claude-opus" => "Claude Opus 4.1",
+
+        // Unknown - should not happen if registry is complete
+        _ => "(unknown model)",
     }
 }
 
