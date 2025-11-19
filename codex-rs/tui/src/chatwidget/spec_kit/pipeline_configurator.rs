@@ -204,29 +204,29 @@ impl PipelineConfiguratorState {
     /// Get ALL available models (complete registry)
     ///
     /// Returns complete list of all models that can be used for any role
+    /// VALIDATED: Only models available through our MCP integrations
+    /// REMOVED: GPT-4, GPT-5 (no OpenAI API keys in this project)
+    /// TODO: Add Gemini 3 models (released 2025-11-18) - see MODEL_ASSESSMENT_SPEC_PROMPT.md
     ///
     /// # Returns
     /// Vector of all model names (cheap to expensive)
     pub fn get_all_available_models() -> Vec<String> {
         vec![
-            // Cheap models (Tier 0-1)
+            // Cheap models (Tier 0-1) - Native/Fast
             "gemini".to_string(),
             "claude".to_string(),
             "code".to_string(),
+
+            // Cheap models (Tier 1) - Cost-optimized
             "gpt5_1_mini".to_string(),
             "gemini-flash".to_string(),
             "claude-haiku".to_string(),
             "gpt5_1".to_string(),
-            "gpt-4o-mini".to_string(),
-            // Medium models (Tier 2)
-            "gpt-4o".to_string(),
-            // Premium models (Tier 3)
+
+            // Premium models (Tier 3) - High-capability
             "claude-sonnet".to_string(),
             "gemini-pro".to_string(),
-            "gpt5_codex".to_string(),
             "gpt5_1_codex".to_string(),
-            "gpt-4".to_string(),
-            "gpt-4-turbo".to_string(),
             "claude-opus".to_string(),
         ]
     }

@@ -284,8 +284,9 @@ pub fn get_model_tier_public(model: &str) -> &'static str {
         "gemini-flash" | "claude-haiku" | "gpt5_1" => "cheap/medium",
 
         // Premium models (Tier 3)
-        "gpt5_codex" | "claude-sonnet" | "gemini-pro" => "premium",
+        "claude-sonnet" | "gemini-pro" => "premium",
         "gpt5_1_codex" => "codex (premium)",
+        "claude-opus" => "opus (premium)",
 
         // Unknown - assume expensive for safety
         _ => "unknown",
@@ -295,6 +296,7 @@ pub fn get_model_tier_public(model: &str) -> &'static str {
 /// Get model role description
 ///
 /// Returns role label describing what the model does in this stage
+/// Based on prompts.json role definitions - shows sequential workflow
 ///
 /// # Arguments
 /// * `stage` - Stage type
@@ -303,43 +305,65 @@ pub fn get_model_tier_public(model: &str) -> &'static str {
 /// # Returns
 /// Role description string
 pub fn get_model_role(stage: &StageType, model: &str) -> &'static str {
-    match (stage, model) {
-        // New stage (native + multi-agent)
-        (StageType::New, "gemini") => "consensus agent 1",
-        (StageType::New, "claude") => "consensus agent 2",
-        (StageType::New, "code") => "consensus agent 3",
+    // Note: Multi-agent stages use SEQUENTIAL workflow (not parallel consensus):
+    // Slot 1 → Researcher, Slot 2 → Synthesizer, Slot 3 → Executor & QA (aggregator)
+
+    // Get slot index by checking defaults
+    let defaults = super::pipeline_configurator::PipelineConfiguratorState::get_default_models(stage);
+    let slot = defaults.iter().position(|m| m == model).unwrap_or(0);
+
+    match stage {
+        // New stage (3-agent sequential)
+        StageType::New => match slot {
+            0 => "researcher",
+            1 => "synthesizer",
+            2 => "executor & QA (aggregator)",
+            _ => "agent",
+        },
 
         // Specify stage (single agent)
-        (StageType::Specify, "gpt5_1_mini") => "PRD elaboration",
+        StageType::Specify => "PRD elaboration",
 
-        // Plan stage (3-agent consensus)
-        (StageType::Plan, "gemini-flash") => "consensus agent 1",
-        (StageType::Plan, "claude-haiku") => "consensus agent 2",
-        (StageType::Plan, "gpt5_1") => "consensus agent 3",
+        // Plan stage (3-agent sequential: research → synthesize → validate)
+        StageType::Plan => match slot {
+            0 => "researcher",
+            1 => "synthesizer",
+            2 => "executor & QA (aggregator)",
+            _ => "agent",
+        },
 
         // Tasks stage (single agent)
-        (StageType::Tasks, "gpt5_1_mini") => "task decomposition",
+        StageType::Tasks => "task decomposition",
 
-        // Implement stage (code + validator)
-        (StageType::Implement, "gpt5_1_codex") => "code generation",
-        (StageType::Implement, "claude-haiku") => "validation",
+        // Implement stage (code + validator sequential)
+        StageType::Implement => match slot {
+            0 => "code generation specialist",
+            1 => "validation & QA (aggregator)",
+            _ => "agent",
+        },
 
-        // Validate stage (3-agent consensus)
-        (StageType::Validate, "gemini-flash") => "consensus agent 1",
-        (StageType::Validate, "claude-haiku") => "consensus agent 2",
-        (StageType::Validate, "gpt5_1") => "consensus agent 3",
+        // Validate stage (3-agent sequential)
+        StageType::Validate => match slot {
+            0 => "test researcher",
+            1 => "test synthesizer",
+            2 => "test validator & QA (aggregator)",
+            _ => "agent",
+        },
 
-        // Audit stage (3 premium agents)
-        (StageType::Audit, "gpt5_codex") => "compliance check 1",
-        (StageType::Audit, "claude-sonnet") => "compliance check 2",
-        (StageType::Audit, "gemini-pro") => "compliance check 3",
+        // Audit stage (3-agent sequential)
+        StageType::Audit => match slot {
+            0 => "security researcher",
+            1 => "compliance synthesizer",
+            2 => "audit validator & QA (aggregator)",
+            _ => "agent",
+        },
 
-        // Unlock stage (3 premium agents)
-        (StageType::Unlock, "gpt5_codex") => "ship decision 1",
-        (StageType::Unlock, "claude-sonnet") => "ship decision 2",
-        (StageType::Unlock, "gemini-pro") => "ship decision 3",
-
-        // Unknown combination
-        _ => "unknown role",
+        // Unlock stage (3-agent sequential)
+        StageType::Unlock => match slot {
+            0 => "readiness researcher",
+            1 => "decision synthesizer",
+            2 => "ship validator & QA (aggregator)",
+            _ => "agent",
+        },
     }
 }
