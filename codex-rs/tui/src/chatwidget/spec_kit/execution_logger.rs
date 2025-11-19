@@ -676,13 +676,14 @@ pub fn tier_from_agent_count(count: usize) -> u8 {
 }
 
 /// Get agent model display name from canonical name
+/// Updated: 2025-11-19 - "code" now defaults to GPT-5.1, all GPT-5 → GPT-5.1
 pub fn get_agent_model_name(agent: &str) -> &str {
     match agent.to_lowercase().as_str() {
-        "gemini" => "Gemini Flash",
-        "claude" => "Claude Haiku",
-        "code" => "Claude Sonnet",
-        "gpt_pro" => "GPT-5 Medium",
-        "gpt_codex" => "GPT-5 Codex",
+        "gemini" => "Gemini 2.5 Flash",
+        "claude" => "Claude Haiku 4.5",
+        "code" => "GPT-5.1 (TUI default)",
+        "gpt_pro" => "GPT-5.1 Medium",
+        "gpt_codex" => "GPT-5.1 Codex",
         _ => agent,
     }
 }

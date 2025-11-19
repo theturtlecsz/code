@@ -388,7 +388,7 @@ fn process_quality_gate_agent_results(
 
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
         vec![ratatui::text::Line::from(format!(
-            "Quality Gate: {} - {} auto-resolvable, {} need GPT-5 validation, {} escalated",
+            "Quality Gate: {} - {} auto-resolvable, {} need GPT-5.1 validation, {} escalated",
             checkpoint.name(),
             auto_resolvable.len(),
             needs_validation.len(),
@@ -447,7 +447,7 @@ fn process_quality_gate_agent_results(
     if !needs_validation.is_empty() {
         widget.history_push(crate::history_cell::PlainHistoryCell::new(
             vec![ratatui::text::Line::from(format!(
-                "Submitting {} medium-confidence issues to GPT-5 for validation...",
+                "Submitting {} medium-confidence issues to GPT-5.1 for validation...",
                 needs_validation.len()
             ))],
             crate::history_cell::HistoryCellType::Notice,
@@ -645,7 +645,7 @@ pub fn on_quality_gate_answers(
     super::handler::advance_spec_auto(widget);
 }
 
-/// Handle GPT-5 validation artefacts delivered by the broker.
+/// Handle GPT-5.1 validation artefacts delivered by the broker.
 pub fn on_quality_gate_validation_result(
     widget: &mut ChatWidget,
     broker_result: QualityGateValidationResult,
@@ -688,7 +688,7 @@ pub fn on_quality_gate_validation_result(
     if !info_lines.is_empty() {
         let mut lines = Vec::with_capacity(info_lines.len() + 1);
         lines.push(ratatui::text::Line::from(format!(
-            "GPT-5 validation broker attempts: {}",
+            "GPT-5.1 validation broker attempts: {}",
             attempts
         )));
         for entry in info_lines {
@@ -704,13 +704,13 @@ pub fn on_quality_gate_validation_result(
         Ok(value) => value,
         Err(err) => {
             widget.history_push(crate::history_cell::new_error_event(format!(
-                "GPT-5 validation broker error: {}",
+                "GPT-5.1 validation broker error: {}",
                 err
             )));
             super::handler::halt_spec_auto_with_error(
                 widget,
                 format!(
-                    "Quality gate {} failed to retrieve GPT-5 validation artefact",
+                    "Quality gate {} failed to retrieve GPT-5.1 validation artefact",
                     checkpoint.name()
                 ),
             );
@@ -745,7 +745,7 @@ fn process_validation_response(
         Some(arr) => arr,
         None => {
             widget.history_push(crate::history_cell::new_error_event(
-                "GPT-5 validation response was not an array".to_string(),
+                "GPT-5.1 validation response was not an array".to_string(),
             ));
             return;
         }
@@ -787,7 +787,7 @@ fn process_validation_response(
                 Ok(outcome) => {
                     widget.history_push(crate::history_cell::PlainHistoryCell::new(
                         vec![ratatui::text::Line::from(format!(
-                            "✅ GPT-5 validated: {} → {}",
+                            "✅ GPT-5.1 validated: {} → {}",
                             issue.description, majority_answer
                         ))],
                         crate::history_cell::HistoryCellType::Notice,
@@ -809,7 +809,7 @@ fn process_validation_response(
                 }
                 Err(err) => {
                     widget.history_push(crate::history_cell::new_error_event(format!(
-                        "Failed to apply GPT-5 validated resolution: {}",
+                        "Failed to apply GPT-5.1 validated resolution: {}",
                         err
                     )));
                 }
@@ -957,11 +957,11 @@ fn submit_gpt5_validations(
                 .await
             {
                 Ok(id) => {
-                    info!("✅ Spawned GPT-5 validation agent: {}", &id[..8]);
+                    info!("✅ Spawned GPT-5.1 validation agent: {}", &id[..8]);
                     id
                 }
                 Err(e) => {
-                    warn!("❌ Failed to spawn GPT-5 validation: {}", e);
+                    warn!("❌ Failed to spawn GPT-5.1 validation: {}", e);
                     return;
                 }
             }
@@ -973,7 +973,7 @@ fn submit_gpt5_validations(
 
         loop {
             if start.elapsed() > timeout {
-                warn!("❌ GPT-5 validation timeout after 5 minutes");
+                warn!("❌ GPT-5.1 validation timeout after 5 minutes");
                 break;
             }
 
@@ -982,10 +982,10 @@ fn submit_gpt5_validations(
             let manager = AGENT_MANAGER.read().await;
             if let Some(agent) = manager.get_agent(&agent_id) {
                 if agent.status == codex_core::agent_tool::AgentStatus::Completed {
-                    info!("✅ GPT-5 validation completed");
+                    info!("✅ GPT-5.1 validation completed");
                     break;
                 } else if agent.status == codex_core::agent_tool::AgentStatus::Failed {
-                    warn!("❌ GPT-5 validation failed");
+                    warn!("❌ GPT-5.1 validation failed");
                     break;
                 }
             }

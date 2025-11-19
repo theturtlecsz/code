@@ -295,7 +295,7 @@ pub fn advance_spec_auto(widget: &mut ChatWidget) {
                         return; // Processing results
                     }
                     SpecAutoPhase::QualityGateValidating { .. } => {
-                        return; // Waiting for GPT-5 validation responses
+                        return; // Waiting for GPT-5.1 validation responses
                     }
                     SpecAutoPhase::QualityGateAwaitingHuman { .. } => {
                         return; // Waiting for human input

@@ -41,7 +41,7 @@ pub(crate) struct QualityGateBrokerResult {
     pub payload: Result<Vec<QualityGateAgentPayload>, String>,
 }
 
-/// Result metadata for GPT-5 validation artefacts.
+/// Result metadata for GPT-5.1 validation artefacts.
 #[derive(Debug, Clone)]
 pub(crate) struct QualityGateValidationResult {
     pub spec_id: String,
@@ -188,7 +188,7 @@ impl QualityGateBroker {
         }
     }
 
-    /// Request asynchronous retrieval of GPT-5 validation artefacts.
+    /// Request asynchronous retrieval of GPT-5.1 validation artefacts.
     pub(crate) fn fetch_validation_payload(
         &self,
         spec_id: impl Into<String>,
@@ -639,14 +639,14 @@ async fn fetch_validation_payload(
                                     }
                                     Err(err) => {
                                         last_error = Some(format!(
-                                            "failed to decode GPT-5 validation JSON: {}",
+                                            "failed to decode GPT-5.1 validation JSON: {}",
                                             err
                                         ));
                                     }
                                 }
                             } else {
                                 last_error =
-                                    Some("No GPT-5 validation artefacts found".to_string());
+                                    Some("No GPT-5.1 validation artefacts found".to_string());
                             }
                         }
                         Err(err) => {
@@ -678,7 +678,7 @@ async fn fetch_validation_payload(
     let payload = validation_json.ok_or_else(|| {
         last_error.unwrap_or_else(|| {
             format!(
-                "GPT-5 validation artefact not available for checkpoint {}",
+                "GPT-5.1 validation artefact not available for checkpoint {}",
                 checkpoint.name()
             )
         })

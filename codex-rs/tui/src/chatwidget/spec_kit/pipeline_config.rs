@@ -107,7 +107,7 @@ impl StageType {
         }
     }
 
-    /// Get cost estimate for this stage (baseline: GPT-5 era per SPEC-949)
+    /// Get cost estimate for this stage (baseline: GPT-5.1 era per SPEC-949/950)
     pub fn cost_estimate(&self) -> f64 {
         match self {
             Self::New => 0.0,       // Native
@@ -413,7 +413,7 @@ impl PipelineConfig {
 
         // Check cost implications
         let total_cost: f64 = self.enabled_stages.iter().map(|s| s.cost_estimate()).sum();
-        let full_cost = 2.46; // All stages (GPT-5 baseline per SPEC-949)
+        let full_cost = 2.46; // All stages (GPT-5.1 baseline per SPEC-949/950)
         if total_cost < full_cost * 0.5 {
             warnings.push(format!(
                 "ℹ️ Partial pipeline: ${:.2} vs ${:.2} full (saving ${:.2})",

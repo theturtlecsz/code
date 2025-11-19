@@ -239,12 +239,13 @@ fn get_stage_description(stage: &StageType) -> &'static str {
 /// Get agents information for a stage
 ///
 /// Returns string describing number and tier of agents used
+/// Updated: 2025-11-19 - All GPT-5 → GPT-5.1 (latest version)
 fn get_stage_agents(stage: &StageType) -> &'static str {
     match stage {
         StageType::New => "Native (0 agents, instant)",
-        StageType::Specify => "1 agent (GPT-5 Mini)",
+        StageType::Specify => "1 agent (GPT-5.1 Mini)",
         StageType::Plan => "3 agents (Gemini 2.5 Flash, Claude Haiku 4.5, GPT-5.1)",
-        StageType::Tasks => "1 agent (GPT-5 Mini)",
+        StageType::Tasks => "1 agent (GPT-5.1 Mini)",
         StageType::Implement => "2 agents (GPT-5.1 Codex, Claude Haiku 4.5 validator)",
         StageType::Validate => "3 agents (Gemini 2.5 Flash, Claude Haiku 4.5, GPT-5.1)",
         StageType::Audit => "3 premium (Gemini 2.5 Pro, Claude Sonnet 4.5, GPT-5.1)",
@@ -280,15 +281,15 @@ fn capitalize_stage_name(s: &str) -> String {
 /// Display-friendly name with version
 pub fn get_model_display_name(model: &str) -> &'static str {
     match model {
-        // Aliases (native/shortcuts)
+        // Aliases (shortcuts to specific models)
         "gemini" => "Gemini 2.5 Flash (alias)",
         "claude" => "Claude Haiku 4.5 (alias)",
-        "code" => "Native Rust (codex-rs)",
+        "code" => "GPT-5.1 (TUI default)",  // Updated: was Claude Sonnet, now GPT-5.1
 
-        // GPT-5 family
-        "gpt5_1_mini" => "GPT-5 Mini",
-        "gpt5_1" => "GPT-5.1",
-        "gpt5_1_codex" => "GPT-5.1 Codex (code specialist)",
+        // GPT-5.1 family (Latest: Nov 13, 2025)
+        "gpt5_1_mini" | "gpt-5-mini" => "GPT-5.1 Mini",
+        "gpt5_1" | "gpt-5" => "GPT-5.1",
+        "gpt5_1_codex" | "gpt-5-codex" => "GPT-5.1 Codex",
 
         // Gemini family
         "gemini-flash" => "Gemini 2.5 Flash",

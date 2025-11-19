@@ -1819,7 +1819,7 @@ pub fn on_spec_auto_agents_complete_with_ids(
                 "quality_gate"
             }
             SpecAutoPhase::QualityGateValidating { .. } => {
-                // GPT-5 validation phase - single agent (GPT-5)
+                // GPT-5.1 validation phase - single agent (GPT-5.1)
                 tracing::warn!(
                     "{} DEBUG: Phase match → QualityGateValidating, routing to 'gpt5_validation'",
                     run_tag

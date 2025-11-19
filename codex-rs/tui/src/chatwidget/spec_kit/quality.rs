@@ -152,7 +152,7 @@ pub fn find_dissent(agent_answers: &HashMap<String, String>) -> Option<String> {
     dissent
 }
 
-/// Resolve a quality issue using classification + optional GPT-5 validation
+/// Resolve a quality issue using classification + optional GPT-5.1 validation
 pub fn resolve_quality_issue(issue: &QualityIssue) -> Resolution {
     let (confidence, majority_answer_opt, _dissent_opt) =
         classify_issue_agreement(&issue.agent_answers);
@@ -170,14 +170,14 @@ pub fn resolve_quality_issue(issue: &QualityIssue) -> Resolution {
         }
 
         Confidence::Medium => {
-            // 2/3 majority - needs GPT-5 validation
+            // 2/3 majority - needs GPT-5.1 validation
             // For now, return placeholder - will be replaced with actual GPT-5 call
             let majority = majority_answer_opt.expect("Medium confidence should have majority");
 
             // Placeholder: In real implementation, this calls GPT-5
             // For now, we'll mark for validation
             Resolution::Escalate {
-                reason: "Majority (2/3) - GPT-5 validation needed".to_string(),
+                reason: "Majority (2/3) - GPT-5.1 validation needed".to_string(),
                 all_answers: issue.agent_answers.clone(),
                 gpt5_reasoning: None,
                 recommended: Some(majority),
@@ -558,8 +558,8 @@ pub fn build_quality_gate_commit_message(
     }
 
     message.push_str(&format!("\nTelemetry: quality-gate-*_{}.json\n", spec_id));
-    message.push_str("\n🤖 Generated with GPT-5 Codex\n\n");
-    message.push_str("Co-Authored-By: GPT-5 Codex <noreply@openai.com>\n");
+    message.push_str("\n🤖 Generated with GPT-5.1 Codex\n\n");
+    message.push_str("Co-Authored-By: GPT-5.1 Codex <noreply@openai.com>\n");
 
     message
 }
@@ -820,7 +820,7 @@ mod tests {
                 recommended,
                 ..
             } => {
-                assert!(reason.contains("GPT-5 validation needed"));
+                assert!(reason.contains("GPT-5.1 validation needed"));
                 assert_eq!(recommended, Some("yes".to_string()));
             }
             _ => panic!("Expected Escalate for majority without validation"),

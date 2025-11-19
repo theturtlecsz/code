@@ -87,7 +87,7 @@ impl ModelPricing {
                 output_per_million: 2.0,
             },
             "gpt-5-codex" | "gpt5_1_codex" | "gpt-5.1-codex" => Self {
-                input_per_million: 1.25,   // Same as GPT-5 (codex variant)
+                input_per_million: 1.25,   // Same as GPT-5.1 (codex variant)
                 output_per_million: 10.0,
             },
 

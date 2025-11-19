@@ -41,7 +41,7 @@ pub enum SpecAutoPhase {
         escalated: Vec<QualityIssue>,
     },
 
-    /// Validating 2/3 majority answers with GPT-5 (async via agent system)
+    /// Validating 2/3 majority answers with GPT-5.1 (async via agent system)
     QualityGateValidating {
         checkpoint: QualityCheckpoint,
         auto_resolved: Vec<QualityIssue>, // Unanimous issues already resolved
@@ -771,7 +771,7 @@ pub struct QualityIssue {
     pub agent_reasoning: HashMap<String, String>,
 }
 
-/// GPT-5 validation result for majority answers
+/// GPT-5.1 validation result for majority answers
 #[derive(Debug, Clone)]
 pub struct GPT5ValidationResult {
     pub agrees_with_majority: bool,
