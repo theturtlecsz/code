@@ -23,7 +23,7 @@ impl SpecKitCommand for SpecKitAutoCommand {
     }
 
     fn description(&self) -> &'static str {
-        "full 6-stage pipeline with auto-advancement"
+        "full 6-stage pipeline with auto-advancement (supports --configure for interactive modal)"
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
@@ -35,7 +35,7 @@ impl SpecKitCommand for SpecKitAutoCommand {
             Err(err) => {
                 let error_msg = match err {
                     crate::slash_command::SpecAutoParseError::MissingSpecId => {
-                        "Missing SPEC ID. Usage: /speckit.auto SPEC-KIT-### [--from stage]"
+                        "Missing SPEC ID. Usage: /speckit.auto SPEC-KIT-### [--configure] [--from stage]"
                             .to_string()
                     }
                     crate::slash_command::SpecAutoParseError::MissingFromStage => {

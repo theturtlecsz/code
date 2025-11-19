@@ -16602,6 +16602,31 @@ impl ChatWidget<'_> {
             cli_args,
         } = invocation;
 
+        // SPEC-947: Check for --configure flag (interactive modal before automation)
+        if cli_args.contains(&"--configure".to_string()) {
+            // Load configuration and launch interactive modal
+            match spec_kit::pipeline_config::PipelineConfig::load(&spec_id, None) {
+                Ok(config) => {
+                    self.show_pipeline_configurator(spec_id.clone(), config);
+                    // Display instruction to run automation after configuration
+                    self.history_push(crate::history_cell::new_background_event(format!(
+                        "Configure pipeline for {}. After saving, run: /speckit.auto {} (without --configure)",
+                        spec_id, spec_id
+                    )));
+                    self.request_redraw();
+                    return; // Don't start automation - user will run manually after configuring
+                }
+                Err(err) => {
+                    self.history_push(crate::history_cell::new_error_event(format!(
+                        "Failed to load configuration: {}",
+                        err
+                    )));
+                    self.request_redraw();
+                    return;
+                }
+            }
+        }
+
         // SPEC-948: Parse CLI flags into PipelineOverrides
         let cli_overrides = if !cli_args.is_empty() {
             Some(spec_kit::PipelineOverrides::from_cli_args(&cli_args))

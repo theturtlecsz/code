@@ -685,7 +685,8 @@ pub fn parse_spec_auto_args(args: &str) -> Result<SpecAutoInvocation, SpecAutoPa
                 pending_hal = true;
             }
             // SPEC-948: Collect --skip-* and --only-* pipeline flags
-            t if t.starts_with("--skip-") || t.starts_with("--only-") => {
+            // SPEC-947: Collect --configure flag for interactive modal
+            t if t.starts_with("--skip-") || t.starts_with("--only-") || t == "--configure" => {
                 cli_args.push(t.to_string());
             }
             _ => goal_tokens.push(token.to_string()),
