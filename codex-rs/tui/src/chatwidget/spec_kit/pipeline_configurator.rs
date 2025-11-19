@@ -50,6 +50,15 @@ pub struct PipelineConfiguratorState {
 
     /// Currently selected model in picker
     pub picker_selected_index: usize,
+
+    /// Reasoning level picker mode (after model selection, if model supports reasoning)
+    pub reasoning_picker_mode: bool,
+
+    /// Currently selected reasoning level in picker
+    pub reasoning_selected_index: usize,
+
+    /// Temporarily selected model (before reasoning level chosen)
+    pub temp_selected_model: Option<String>,
 }
 
 /// View mode for configurator
@@ -111,6 +120,9 @@ impl PipelineConfiguratorState {
             selected_model_index: 0,
             model_picker_mode: false,
             picker_selected_index: 0,
+            reasoning_picker_mode: false,
+            reasoning_selected_index: 1, // Default to "auto" (index 1)
+            temp_selected_model: None,
         };
 
         // Initial validation
@@ -264,6 +276,38 @@ impl PipelineConfiguratorState {
         Self::get_default_models(stage).len()
     }
 
+    /// Check if model supports reasoning levels
+    ///
+    /// # Arguments
+    /// * `model` - Model name
+    ///
+    /// # Returns
+    /// True if model supports configurable reasoning levels
+    pub fn model_supports_reasoning(model: &str) -> bool {
+        model.starts_with("gpt5") || model.starts_with("gpt-5") || model.contains("codex")
+    }
+
+    /// Get available reasoning levels for a model
+    ///
+    /// # Arguments
+    /// * `model` - Model name
+    ///
+    /// # Returns
+    /// Vector of reasoning level names
+    pub fn get_reasoning_levels(model: &str) -> Vec<String> {
+        if Self::model_supports_reasoning(model) {
+            vec![
+                "none".to_string(),
+                "auto".to_string(),
+                "low".to_string(),
+                "medium".to_string(),
+                "high".to_string(),
+            ]
+        } else {
+            vec!["auto".to_string()] // Default for models without reasoning
+        }
+    }
+
     /// Get selected models for a stage
     ///
     /// Returns models from pending_config.stage_models or defaults
@@ -326,6 +370,11 @@ impl PipelineConfiguratorState {
     /// # Returns
     /// ConfigAction indicating what to do next
     pub fn handle_key_event(&mut self, key: KeyEvent) -> ConfigAction {
+        // Reasoning level picker mode (when choosing reasoning for a model)
+        if self.reasoning_picker_mode {
+            return self.handle_reasoning_picker_key(key);
+        }
+
         // Model picker mode (when choosing model for a specific slot)
         if self.model_picker_mode {
             return self.handle_model_picker_key(key);
@@ -471,18 +520,72 @@ impl PipelineConfiguratorState {
                 ConfigAction::Continue
             }
             KeyCode::Enter => {
-                // Assign selected model to current slot
                 let model = all_models[self.picker_selected_index].clone();
-                self.assign_model_to_slot(self.selected_model_index, model);
-                // Exit picker mode
-                self.model_picker_mode = false;
-                self.picker_selected_index = 0;
+
+                // Check if model supports reasoning
+                if Self::model_supports_reasoning(&model) {
+                    // Transition to reasoning level picker
+                    self.temp_selected_model = Some(model);
+                    self.model_picker_mode = false;
+                    self.reasoning_picker_mode = true;
+                    self.reasoning_selected_index = 1; // Default to "auto"
+                } else {
+                    // Assign model directly (no reasoning support)
+                    self.assign_model_to_slot(self.selected_model_index, model);
+                    self.model_picker_mode = false;
+                    self.picker_selected_index = 0;
+                }
                 ConfigAction::Continue
             }
             KeyCode::Esc => {
                 // Cancel picker without changing
                 self.model_picker_mode = false;
                 self.picker_selected_index = 0;
+                ConfigAction::Continue
+            }
+            _ => ConfigAction::Continue,
+        }
+    }
+
+    /// Handle keyboard events in reasoning level picker mode
+    fn handle_reasoning_picker_key(&mut self, key: KeyEvent) -> ConfigAction {
+        let model = self.temp_selected_model.as_ref().unwrap();
+        let reasoning_levels = Self::get_reasoning_levels(model);
+
+        match key.code {
+            KeyCode::Up => {
+                if self.reasoning_selected_index > 0 {
+                    self.reasoning_selected_index -= 1;
+                }
+                ConfigAction::Continue
+            }
+            KeyCode::Down => {
+                if self.reasoning_selected_index < reasoning_levels.len().saturating_sub(1) {
+                    self.reasoning_selected_index += 1;
+                }
+                ConfigAction::Continue
+            }
+            KeyCode::Enter => {
+                // Assign model with reasoning level
+                let reasoning = &reasoning_levels[self.reasoning_selected_index];
+                let model_with_reasoning = if reasoning == "auto" || reasoning == "none" {
+                    model.clone()
+                } else {
+                    format!("{}:{}", model, reasoning)
+                };
+                self.assign_model_to_slot(self.selected_model_index, model_with_reasoning);
+
+                // Exit reasoning picker
+                self.reasoning_picker_mode = false;
+                self.reasoning_selected_index = 1;
+                self.temp_selected_model = None;
+                ConfigAction::Continue
+            }
+            KeyCode::Esc => {
+                // Cancel reasoning selection, go back to model picker
+                self.reasoning_picker_mode = false;
+                self.model_picker_mode = true;
+                self.temp_selected_model = None;
                 ConfigAction::Continue
             }
             _ => ConfigAction::Continue,
