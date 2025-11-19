@@ -15,6 +15,7 @@ enabled = true
 auto_resolve = true
 
 [stage_models]
+specify = ["code"]
 
 [skip_conditions]
 
