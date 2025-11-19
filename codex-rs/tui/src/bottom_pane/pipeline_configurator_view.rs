@@ -273,6 +273,7 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
 
                     for (i, model) in all_models.iter().enumerate() {
                         let is_current = i == self.state.picker_selected_index;
+                        let display_name = stage_details::get_model_display_name(model);
                         let tier = stage_details::get_model_tier_public(model);
 
                         let style = if is_current {
@@ -284,7 +285,7 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
                         let marker = if is_current { ">" } else { " " };
                         detail_lines.push(Line::from(vec![
                             Span::raw(format!("  {} ", marker)),
-                            Span::styled(model.clone(), style),
+                            Span::styled(display_name, style),
                             Span::styled(format!(" ({})", tier), Style::default().fg(Color::DarkGray)),
                         ]));
                     }
@@ -306,6 +307,7 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
                             (model_str.clone(), None)
                         };
 
+                        let display_name = stage_details::get_model_display_name(&model);
                         let tier = stage_details::get_model_tier_public(&model);
                         let role = stage_details::get_model_role(selected_stage, &model);
 
@@ -320,7 +322,7 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
                         // Build slot line with optional reasoning badge
                         let mut spans = vec![
                             Span::styled(format!("  {} [{}] ", marker, i + 1), style),
-                            Span::styled(model.clone(), style),
+                            Span::styled(display_name, style),
                         ];
 
                         // Add reasoning badge if present
@@ -352,12 +354,13 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
                             (model_str.clone(), None)
                         };
 
+                        let display_name = stage_details::get_model_display_name(&model);
                         let tier = stage_details::get_model_tier_public(&model);
                         let role = stage_details::get_model_role(selected_stage, &model);
 
                         let mut spans = vec![
                             Span::styled(format!("  [{}] ", i + 1), Style::default().fg(Color::DarkGray)),
-                            Span::styled(model.clone(), Style::default().fg(Color::Cyan)),
+                            Span::styled(display_name, Style::default().fg(Color::Cyan)),
                         ];
 
                         // Add reasoning badge if present
