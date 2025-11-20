@@ -22,6 +22,42 @@ This playbook gives Claude Code everything it needs to operate safely inside thi
 - **Cargo workspace location:** run Rust commands from `codex-rs/` (for example `cd codex-rs && cargo test -p codex-tui spec_auto`). Guardrail scripts set `SPEC_OPS_CARGO_MANIFEST` when needed, but manual commands must honour the workspace root.
 - **HAL secrets:** full validation requires `HAL_SECRET_KAVEDARR_API_KEY`. If unavailable, set `SPEC_OPS_HAL_SKIP=1` (decision on default behaviour pending) and document the skip in results.
 - **Evidence footprint:** keep evidence under the 25 MB per-SPEC soft limit; use `/spec-evidence-stats` after large runs. Current: All SPECs within limit ✅ (per MAINT-4 evidence automation, 2025-10-18).
+- **Multi-provider model support (SPEC-KIT-952):** Claude models route through native CLI with streaming support. Gemini support pending (SPEC-952-B). See setup instructions below.
+
+### Multi-Provider CLI Setup (SPEC-KIT-952)
+
+The TUI supports three model providers with different authentication methods:
+
+| Provider | Models | Auth Method | Status |
+|----------|--------|-------------|--------|
+| **ChatGPT** | gpt-5, gpt-5.1-*, gpt-5-codex | Native OAuth (existing) | ✅ Working |
+| **Claude** | claude-opus-4.1, claude-sonnet-4.5, claude-haiku-4.5 | CLI routing (SPEC-952) | ✅ Working |
+| **Gemini** | gemini-3-pro, gemini-2.5-*, gemini-2.0-flash | Not yet supported | ⏸️ SPEC-952-B |
+
+**Claude CLI Setup (Working)**:
+```bash
+# Install from https://claude.ai/download
+# Then authenticate:
+claude
+# Follow prompts to complete login
+```
+
+**Using Claude Models:**
+```bash
+# Select model via /model command
+/model claude-sonnet-4.5
+/model claude-opus-4.1
+/model claude-haiku-4.5
+
+# Or use model selector
+/model
+```
+
+**Multi-turn conversations**: ✅ Fully supported with CLI routing
+
+**Known Limitations (SPEC-KIT-952)**:
+- Gemini CLI routing not yet implemented (requires history management layer - see SPEC-952-B)
+- When selecting a Claude model without the CLI installed, you'll see installation instructions in chat history
 
 ## 1. Load These References Every Session
 - `MEMORY-POLICY.md` – **mandatory** memory system policy (local-memory only)
@@ -258,6 +294,30 @@ If any slash command or CLI is unavailable, degrade gracefully and record which 
 - Pre-push (mirrors CI): `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo build --workspace --all-features` (+ optional targeted test-compiles, skip with `PREPUSH_FAST=0`).
 - Always invoke guardrail scripts through `scripts/spec_ops_004/*` using `scripts/env_run.sh` when `.env` exists.
 - No secrets, ever. If HAL secrets are required (`HAL_SECRET_KAVEDARR_API_KEY`), ask the user to supply them.
+
+### Building the TUI Binary
+
+**ALWAYS use the build script instead of raw cargo commands:**
+
+```bash
+# Default fast build (dev-fast profile)
+~/code/build-fast.sh
+
+# Build and run
+~/code/build-fast.sh run
+
+# Release build
+PROFILE=release ~/code/build-fast.sh
+
+# With build tracing
+TRACE_BUILD=1 ~/code/build-fast.sh
+```
+
+**DO NOT use:**
+- `cargo build -p codex-tui`
+- `cargo run -p codex-tui`
+
+The build script handles profile optimization, environment sanitization, and proper target directory configuration. Always direct users to run `~/code/build-fast.sh` for building.
 
 **Workspace reminder:** run Rust commands from `codex-rs/` (example: `cd codex-rs && cargo test -p codex-tui spec_kit`). Update `SPEC_OPS_CARGO_MANIFEST` in guardrail helpers if workspace layout changes.
 

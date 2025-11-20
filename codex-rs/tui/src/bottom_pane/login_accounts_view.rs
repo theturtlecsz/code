@@ -95,6 +95,32 @@ enum ViewMode {
     ConfirmRemove { account_id: String },
 }
 
+/// Login provider options for OAuth authentication.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LoginProvider {
+    ChatGpt,
+    Claude,
+    Gemini,
+}
+
+impl LoginProvider {
+    /// Display name for the provider.
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::ChatGpt => "ChatGPT sign-in",
+            Self::Claude => "Claude sign-in",
+            Self::Gemini => "Gemini sign-in",
+        }
+    }
+
+    /// All available providers in selection order.
+    pub const ALL: &'static [LoginProvider] = &[
+        LoginProvider::ChatGpt,
+        LoginProvider::Claude,
+        LoginProvider::Gemini,
+    ];
+}
+
 pub(crate) struct LoginAccountsState {
     codex_home: PathBuf,
     app_event_tx: AppEventSender,
@@ -658,22 +684,49 @@ impl LoginAddAccountState {
                 KeyCode::Esc => {
                     self.finish_and_show_accounts();
                 }
-                KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right => {
-                    *selected = if *selected == 0 { 1 } else { 0 };
+                KeyCode::Up => {
+                    // 4 options: ChatGPT, Claude, Gemini, API key
+                    *selected = if *selected == 0 { 3 } else { *selected - 1 };
+                }
+                KeyCode::Down => {
+                    *selected = (*selected + 1) % 4;
                 }
                 KeyCode::Enter => {
-                    if *selected == 0 {
-                        self.feedback = Some(Feedback {
-                            message: "Opening browser for ChatGPT sign-in…".to_string(),
-                            is_error: false,
-                        });
-                        self.step = AddStep::Waiting { auth_url: None };
-                        self.app_event_tx.send(AppEvent::LoginStartChatGpt);
-                    } else {
-                        self.feedback = None;
-                        self.step = AddStep::ApiKey {
-                            field: FormTextField::new_single_line(),
-                        };
+                    match *selected {
+                        0 => {
+                            // ChatGPT
+                            self.feedback = Some(Feedback {
+                                message: "Opening browser for ChatGPT sign-in…".to_string(),
+                                is_error: false,
+                            });
+                            self.step = AddStep::Waiting { auth_url: None };
+                            self.app_event_tx.send(AppEvent::LoginStartChatGpt);
+                        }
+                        1 => {
+                            // Claude - uses CLI-based auth (SPEC-KIT-952)
+                            self.feedback = Some(Feedback {
+                                message: "Checking Claude CLI authentication status…".to_string(),
+                                is_error: false,
+                            });
+                            // Stay in Choose step - async result will update feedback
+                            self.app_event_tx.send(AppEvent::LoginStartClaude);
+                        }
+                        2 => {
+                            // Gemini - uses CLI-based auth (SPEC-KIT-952)
+                            self.feedback = Some(Feedback {
+                                message: "Checking Gemini CLI authentication status…".to_string(),
+                                is_error: false,
+                            });
+                            // Stay in Choose step - async result will update feedback
+                            self.app_event_tx.send(AppEvent::LoginStartGemini);
+                        }
+                        3 | _ => {
+                            // API key
+                            self.feedback = None;
+                            self.step = AddStep::ApiKey {
+                                field: FormTextField::new_single_line(),
+                            };
+                        }
                     }
                 }
                 _ => {}
@@ -741,7 +794,7 @@ impl LoginAddAccountState {
 
         match &self.step {
             AddStep::Choose { .. } => {
-                lines += 4; // options + spacing
+                lines += 6; // 4 options + spacing
             }
             AddStep::ApiKey { .. } => {
                 lines += 4; // instructions + input + spacing
@@ -792,9 +845,14 @@ impl LoginAddAccountState {
 
         match &self.step {
             AddStep::Choose { selected } => {
-                lines.push(Line::from("Choose how you’d like to add an account:"));
+                lines.push(Line::from("Choose how you'd like to add an account:"));
                 lines.push(Line::from(""));
-                let options = ["ChatGPT sign-in", "API key"];
+                let options = [
+                    "ChatGPT sign-in",
+                    "Claude sign-in",
+                    "Gemini sign-in",
+                    "API key",
+                ];
                 for (idx, option) in options.iter().enumerate() {
                     let mut spans = Vec::new();
                     if idx == *selected {
@@ -941,6 +999,84 @@ impl LoginAddAccountState {
         self.step = AddStep::Choose { selected: 0 };
         self.feedback = Some(Feedback {
             message: "Cancelled ChatGPT login".to_string(),
+            is_error: false,
+        });
+    }
+
+    // Claude OAuth handlers (SPEC-KIT-954)
+    pub fn on_claude_failed(&mut self, error: String) {
+        self.step = AddStep::Choose { selected: 1 }; // Return to Claude option
+        self.feedback = Some(Feedback {
+            message: error,
+            is_error: true,
+        });
+    }
+
+    pub fn on_claude_complete(&mut self, result: Result<(), String>) {
+        match result {
+            Ok(()) => {
+                self.feedback = Some(Feedback {
+                    message: "Claude account connected".to_string(),
+                    is_error: false,
+                });
+                self.app_event_tx
+                    .send_background_event("Claude account connected");
+                // Note: Claude doesn't change using_chatgpt_auth
+                self.finish_and_show_accounts();
+            }
+            Err(err) => {
+                self.step = AddStep::Choose { selected: 1 };
+                self.feedback = Some(Feedback {
+                    message: err,
+                    is_error: true,
+                });
+            }
+        }
+    }
+
+    pub fn on_claude_cancelled(&mut self) {
+        self.step = AddStep::Choose { selected: 1 };
+        self.feedback = Some(Feedback {
+            message: "Cancelled Claude login".to_string(),
+            is_error: false,
+        });
+    }
+
+    // Gemini OAuth handlers (SPEC-KIT-954)
+    pub fn on_gemini_failed(&mut self, error: String) {
+        self.step = AddStep::Choose { selected: 2 }; // Return to Gemini option
+        self.feedback = Some(Feedback {
+            message: error,
+            is_error: true,
+        });
+    }
+
+    pub fn on_gemini_complete(&mut self, result: Result<(), String>) {
+        match result {
+            Ok(()) => {
+                self.feedback = Some(Feedback {
+                    message: "Gemini account connected".to_string(),
+                    is_error: false,
+                });
+                self.app_event_tx
+                    .send_background_event("Gemini account connected");
+                // Note: Gemini doesn't change using_chatgpt_auth
+                self.finish_and_show_accounts();
+            }
+            Err(err) => {
+                self.step = AddStep::Choose { selected: 2 };
+                self.feedback = Some(Feedback {
+                    message: err,
+                    is_error: true,
+                });
+            }
+        }
+    }
+
+    pub fn on_gemini_cancelled(&mut self) {
+        self.step = AddStep::Choose { selected: 2 };
+        self.feedback = Some(Feedback {
+            message: "Cancelled Gemini login".to_string(),
             is_error: false,
         });
     }

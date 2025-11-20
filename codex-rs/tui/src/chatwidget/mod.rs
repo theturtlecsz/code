@@ -27,6 +27,7 @@ use ratatui::style::Style;
 use crate::slash_command::HalMode;
 use crate::slash_command::SlashCommand;
 use crate::slash_command::SpecAutoInvocation;
+use crate::model_router::ModelRouter;
 use crate::spec_prompts::SpecStage;
 use spec_kit::consensus::{
     ConsensusEvidenceHandle, ConsensusSynthesisRaw, ConsensusSynthesisSummary,
@@ -581,6 +582,19 @@ pub(crate) struct ChatWidget<'a> {
     config_watcher: Option<ConfigWatcher>,
     /// Pending config reload paths (deferred if quality gate active)
     pending_config_reload: Option<Vec<PathBuf>>,
+    // === END FORK-SPECIFIC ===
+
+    // === FORK-SPECIFIC (just-every/code): SPEC-KIT-953 Native Multi-Provider Integration ===
+    /// Current streaming provider name (Claude/Gemini)
+    native_stream_provider: Option<String>,
+    /// Current streaming model name
+    native_stream_model: Option<String>,
+    /// Current streaming message ID
+    native_stream_id: Option<String>,
+    /// Accumulated streaming content for history
+    native_stream_content: String,
+    /// Per-provider conversation history (maps provider name to message history)
+    native_provider_history: std::collections::HashMap<String, Vec<codex_core::context_manager::Message>>,
     // === END FORK-SPECIFIC ===
 
     // Stable synthetic request bucket for pre‑turn system notices (set on first use)
@@ -2825,6 +2839,12 @@ impl ChatWidget<'_> {
             // SPEC-939: Config hot-reload support (initialized below based on config.hot_reload)
             config_watcher: None,
             pending_config_reload: None,
+            // SPEC-KIT-953: Native multi-provider streaming state
+            native_stream_provider: None,
+            native_stream_model: None,
+            native_stream_id: None,
+            native_stream_content: String::new(),
+            native_provider_history: std::collections::HashMap::new(),
         };
         if let Ok(Some(active_id)) = auth_accounts::get_active_account_id(&config.codex_home) {
             if let Ok(records) = account_usage::list_rate_limit_snapshots(&config.codex_home) {
@@ -3079,6 +3099,12 @@ impl ChatWidget<'_> {
             // SPEC-939: Config hot-reload support (initialized below based on config.hot_reload)
             config_watcher: None, // Initialized after struct creation
             pending_config_reload: None,
+            // SPEC-KIT-953: Native multi-provider streaming state
+            native_stream_provider: None,
+            native_stream_model: None,
+            native_stream_id: None,
+            native_stream_content: String::new(),
+            native_provider_history: std::collections::HashMap::new(),
         };
         if let Ok(Some(active_id)) = auth_accounts::get_active_account_id(&config.codex_home) {
             if let Ok(records) = account_usage::list_rate_limit_snapshots(&config.codex_home) {
@@ -5063,29 +5089,39 @@ impl ChatWidget<'_> {
                 "Queuing user input while turn is active (queued: {})",
                 self.queued_user_messages.len() + 1
             );
+
+            // SPEC-KIT-952: Skip codex-core queue for CLI-routed models
+            // CLI models (Claude/Gemini) process queued messages locally via CLI routing
+            let is_cli_model = crate::model_router::supports_native_streaming(&self.config.model);
+
             self.queued_user_messages.push_back(message);
             self.refresh_queued_user_messages();
 
-            let queue_items = self
-                .queued_user_messages
-                .back()
-                .map(|msg| msg.ordered_items.clone())
-                .unwrap_or_default();
+            if !is_cli_model {
+                // ChatGPT: Send to codex-core queue (native OAuth flow)
+                let queue_items = self
+                    .queued_user_messages
+                    .back()
+                    .map(|msg| msg.ordered_items.clone())
+                    .unwrap_or_default();
 
-            match self
-                .codex_op_tx
-                .send(Op::QueueUserInput { items: queue_items })
-            {
-                Ok(()) => {
-                    if let Some(sent_message) = self.queued_user_messages.pop_back() {
-                        self.refresh_queued_user_messages();
-                        self.finalize_sent_user_message(sent_message);
+                match self
+                    .codex_op_tx
+                    .send(Op::QueueUserInput { items: queue_items })
+                {
+                    Ok(()) => {
+                        if let Some(sent_message) = self.queued_user_messages.pop_back() {
+                            self.refresh_queued_user_messages();
+                            self.finalize_sent_user_message(sent_message);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("failed to send QueueUserInput op: {e}");
                     }
                 }
-                Err(e) => {
-                    tracing::error!("failed to send QueueUserInput op: {e}");
-                }
             }
+            // CLI models: Just queued locally, will process via CLI routing when turn completes
+            // (no immediate finalize needed - will happen when message is processed)
 
             return;
         }
@@ -5630,6 +5666,82 @@ impl ChatWidget<'_> {
 
         self.flush_pending_agent_notes();
 
+        // SPEC-KIT-952: Check if CLI routing should be used for this model (Claude/Gemini)
+        if crate::model_router::supports_native_streaming(&self.config.model) {
+            // Extract prompt text from combined items
+            let prompt_text: String = combined_items
+                .iter()
+                .filter_map(|item| match item {
+                    InputItem::Text { text } => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            if prompt_text.is_empty() {
+                // Empty prompt - log warning and return early to prevent fallthrough to OAuth
+                tracing::warn!("Empty prompt_text for CLI-routed model {}, skipping", self.config.model);
+                return;
+            }
+
+            // Non-empty prompt - proceed with CLI routing
+            {
+                // 1. Add user message to TUI history display
+                for text in history_texts {
+                    if let Err(e) = self.codex_op_tx.send(Op::AddToHistory { text }) {
+                        tracing::error!("failed to send AddHistory op: {e}");
+                    }
+                }
+
+                // 2. Get provider name for history key
+                let provider_name = crate::model_router::provider_display_name(&self.config.model).to_string();
+
+                // 3. Build conversation history for the provider
+                use codex_core::context_manager::Message;
+
+                // Initialize provider history if not exists
+                if !self.native_provider_history.contains_key(&provider_name) {
+                    self.native_provider_history.insert(provider_name.clone(), Vec::new());
+                }
+
+                // Add user message to conversation history
+                if let Some(history) = self.native_provider_history.get_mut(&provider_name) {
+                    history.push(Message::user(&prompt_text));
+                }
+
+                // Clone history for async task
+                let messages: Vec<Message> = self.native_provider_history
+                    .get(&provider_name)
+                    .cloned()
+                    .unwrap_or_default();
+
+                // 4. Set task running to block input
+                self.bottom_pane.set_task_running(true);
+
+                // 5. Clone data for async task
+                let model = self.config.model.clone();
+                let tx = self.app_event_tx.clone();
+
+                // 6. Spawn async CLI streaming task (SPEC-KIT-952)
+                tokio::spawn(async move {
+                    let result = crate::model_router::execute_with_cli_streaming(
+                        &model,
+                        &messages,
+                        tx.clone(),
+                    ).await;
+
+                    // Log any errors (streaming events already sent)
+                    if let Err(e) = result {
+                        tracing::error!("CLI streaming failed: {}", e);
+                    }
+                });
+
+                // Don't send to codex-core for CLI-routed models
+                return;
+            } // End of non-empty prompt block
+        } // End of CLI routing check
+
+        // Native path: send to codex-core
         if let Err(e) = self.codex_op_tx.send(Op::UserInput {
             items: combined_items,
         }) {
@@ -8032,6 +8144,44 @@ impl ChatWidget<'_> {
         }
     }
 
+    // Claude OAuth notification methods (SPEC-KIT-954)
+    pub(crate) fn notify_login_claude_failed(&mut self, error: String) {
+        if self.with_login_add_view(|state| state.on_claude_failed(error.clone())) {
+            return;
+        }
+    }
+
+    pub(crate) fn notify_login_claude_complete(&mut self, result: Result<(), String>) {
+        if self.with_login_add_view(|state| state.on_claude_complete(result.clone())) {
+            return;
+        }
+    }
+
+    pub(crate) fn notify_login_claude_cancelled(&mut self) {
+        if self.with_login_add_view(|state| state.on_claude_cancelled()) {
+            return;
+        }
+    }
+
+    // Gemini OAuth notification methods (SPEC-KIT-954)
+    pub(crate) fn notify_login_gemini_failed(&mut self, error: String) {
+        if self.with_login_add_view(|state| state.on_gemini_failed(error.clone())) {
+            return;
+        }
+    }
+
+    pub(crate) fn notify_login_gemini_complete(&mut self, result: Result<(), String>) {
+        if self.with_login_add_view(|state| state.on_gemini_complete(result.clone())) {
+            return;
+        }
+    }
+
+    pub(crate) fn notify_login_gemini_cancelled(&mut self) {
+        if self.with_login_add_view(|state| state.on_gemini_cancelled()) {
+            return;
+        }
+    }
+
     pub(crate) fn login_add_view_active(&self) -> bool {
         self.login_add_view_state
             .as_ref()
@@ -9806,6 +9956,34 @@ impl ChatWidget<'_> {
         candidate_collapsed == collapsed_input
     }
 
+    /// SPEC-KIT-946: Infer the appropriate provider and auth method for a given model
+    /// Returns (provider_id, auth_method) tuple for OAuth-based multi-provider support
+    /// Maps model names to their provider IDs and corresponding OAuth auth methods
+    fn infer_provider_for_model(model: &str) -> Option<(&'static str, &'static str)> {
+        let model_lower = model.to_ascii_lowercase();
+
+        // Claude models → Anthropic provider with claude OAuth
+        if model_lower.contains("claude") || model_lower.contains("opus")
+            || model_lower.contains("sonnet") || model_lower.contains("haiku") {
+            return Some(("anthropic", "claude"));
+        }
+
+        // Gemini models → Google provider with gemini OAuth
+        if model_lower.contains("gemini") || model_lower.contains("flash")
+            || model_lower.starts_with("bison") {
+            return Some(("google", "gemini"));
+        }
+
+        // GPT models → OpenAI provider with chatgpt OAuth
+        if model_lower.contains("gpt") || model_lower.starts_with("o1")
+            || model_lower.starts_with("o3") {
+            return Some(("openai", "chatgpt"));
+        }
+
+        // Unknown model → keep current provider (return None)
+        None
+    }
+
     pub(crate) fn handle_model_command(&mut self, command_args: String) {
         if self.is_task_running() {
             let message = "'/model' is disabled while a task is in progress.".to_string();
@@ -9856,6 +10034,17 @@ impl ChatWidget<'_> {
             let family = find_family_for_model(&self.config.model)
                 .unwrap_or_else(|| derive_default_model_family(&self.config.model));
             self.config.model_family = family;
+
+            // SPEC-KIT-946/952: Auto-switch provider based on model selection
+            // Claude/Gemini use CLI routing (not OAuth), ChatGPT uses native OAuth
+            if let Some((provider, _auth_method)) = Self::infer_provider_for_model(&self.config.model) {
+                // Update provider if it changed
+                if self.config.model_provider_id != provider {
+                    self.config.model_provider_id = provider.to_string();
+                }
+                // Note: Auth method switching removed - CLI routing handles auth independently
+            }
+
             updated = true;
         }
 
@@ -9893,6 +10082,25 @@ impl ChatWidget<'_> {
             None,
             "system",
         );
+
+        // SPEC-KIT-952: Check CLI availability for CLI-routed providers
+        if ModelRouter::should_use_cli(&self.config.model) {
+            if let Err(msg) = ModelRouter::check_cli_availability(&self.config.model) {
+                // Show warning about CLI not being available
+                let provider_name = crate::model_router::provider_display_name(&self.config.model);
+                self.history_push(history_cell::PlainHistoryCell::new(
+                    vec![
+                        ratatui::text::Line::from(format!(
+                            "⚠️  {} CLI Required",
+                            provider_name
+                        )),
+                        ratatui::text::Line::from(""),
+                        ratatui::text::Line::from(msg),
+                    ],
+                    history_cell::HistoryCellType::Notice,
+                ));
+            }
+        }
 
         self.request_redraw();
     }
@@ -10798,6 +11006,172 @@ impl ChatWidget<'_> {
             self.bottom_pane.clear_ctrl_c_quit_hint();
             self.mark_needs_redraw();
         }
+    }
+
+    /// Handle CLI routing completion (SPEC-KIT-952)
+    ///
+    /// Called when a CLI-routed prompt (Claude/Gemini) completes execution.
+    /// Displays the response and clears the task running state.
+    pub(crate) fn on_cli_route_complete(
+        &mut self,
+        provider_name: String,
+        model_name: String,
+        content: String,
+        is_error: bool,
+    ) {
+        // Format the response
+        let cell_type = if is_error {
+            history_cell::HistoryCellType::Error
+        } else {
+            history_cell::HistoryCellType::Assistant
+        };
+
+        // Create response text with provider header
+        let response_text = if is_error {
+            format!("❌ {} Error: {}", provider_name, content)
+        } else {
+            format!("**{}** ({})\n\n{}", provider_name, model_name, content)
+        };
+
+        // Render as markdown lines
+        let lines = crate::markdown_renderer::MarkdownRenderer::render(&response_text);
+
+        // Add to history
+        self.history_push(history_cell::PlainHistoryCell::new(lines, cell_type));
+
+        // Clear task running state
+        self.bottom_pane.set_task_running(false);
+        self.bottom_pane.update_status_text(String::new());
+        self.bottom_pane.clear_ctrl_c_quit_hint();
+
+        // Auto-scroll and redraw
+        self.autoscroll_if_near_bottom();
+        self.mark_needs_redraw();
+    }
+
+    /// Handle native provider stream start (SPEC-KIT-953)
+    ///
+    /// Called when streaming begins for a native provider (Claude/Gemini).
+    pub(crate) fn on_native_stream_start(
+        &mut self,
+        provider_name: String,
+        model_name: String,
+        message_id: String,
+    ) {
+        // Store provider info for later use
+        self.native_stream_provider = Some(provider_name.clone());
+        self.native_stream_model = Some(model_name.clone());
+        self.native_stream_id = Some(message_id.clone());
+        self.native_stream_content = String::new();
+
+        // Show loading indicator with provider name
+        let header_line = ratatui::text::Line::from(format!(
+            "**{}** ({})",
+            provider_name, model_name
+        ));
+        let header_lines = crate::markdown_renderer::MarkdownRenderer::render(&header_line.to_string());
+
+        // Insert header as a cell
+        self.history_push(history_cell::PlainHistoryCell::new(
+            header_lines,
+            history_cell::HistoryCellType::Assistant,
+        ));
+
+        // Begin streaming with answer kind
+        streaming::begin(self, StreamKind::Answer, Some(message_id));
+
+        // Ensure task is running
+        self.bottom_pane.set_task_running(true);
+        self.autoscroll_if_near_bottom();
+        self.mark_needs_redraw();
+    }
+
+    /// Handle native provider stream delta (SPEC-KIT-953)
+    ///
+    /// Called when a text chunk is received from a native provider.
+    pub(crate) fn on_native_stream_delta(&mut self, text: String) {
+        // Accumulate content for history
+        self.native_stream_content.push_str(&text);
+
+        // Push to streaming display
+        let id = self.native_stream_id.clone().unwrap_or_default();
+        streaming::delta_text(self, StreamKind::Answer, id, text, None);
+
+        self.autoscroll_if_near_bottom();
+    }
+
+    /// Handle native provider stream complete (SPEC-KIT-953)
+    ///
+    /// Called when streaming finishes for a native provider.
+    pub(crate) fn on_native_stream_complete(
+        &mut self,
+        _provider_name: String,
+        input_tokens: Option<u32>,
+        output_tokens: Option<u32>,
+    ) {
+        // Finalize the stream
+        streaming::finalize(self, StreamKind::Answer, true);
+
+        // Update conversation history with the accumulated response
+        if let (Some(provider), Some(_model)) =
+            (self.native_stream_provider.take(), self.native_stream_model.take())
+        {
+            let content = std::mem::take(&mut self.native_stream_content);
+
+            // Add assistant response to conversation history
+            if let Some(history) = self.native_provider_history.get_mut(&provider) {
+                use codex_core::context_manager::Message;
+                history.push(Message::assistant(&content));
+            }
+
+            // Log token usage if available
+            if let (Some(input), Some(output)) = (input_tokens, output_tokens) {
+                tracing::info!(
+                    "Native provider token usage: input={}, output={}",
+                    input, output
+                );
+            }
+        }
+
+        // Clear stream state
+        self.native_stream_id = None;
+
+        // Clear task running state
+        self.bottom_pane.set_task_running(false);
+        self.bottom_pane.update_status_text(String::new());
+        self.bottom_pane.clear_ctrl_c_quit_hint();
+
+        self.autoscroll_if_near_bottom();
+        self.mark_needs_redraw();
+    }
+
+    /// Handle native provider stream error (SPEC-KIT-953)
+    ///
+    /// Called when an error occurs during streaming.
+    pub(crate) fn on_native_stream_error(&mut self, provider_name: String, error: String) {
+        // Finalize any active stream
+        streaming::finalize_active_stream(self);
+
+        // Clear stream state
+        self.native_stream_provider = None;
+        self.native_stream_model = None;
+        self.native_stream_id = None;
+        self.native_stream_content = String::new();
+
+        // Display error
+        let error_text = format!("❌ {} Error: {}", provider_name, error);
+        let lines = crate::markdown_renderer::MarkdownRenderer::render(&error_text);
+        self.history_push(history_cell::PlainHistoryCell::new(
+            lines,
+            history_cell::HistoryCellType::Error,
+        ));
+
+        // Clear task running state
+        self.bottom_pane.set_task_running(false);
+        self.bottom_pane.update_status_text(String::new());
+
+        self.autoscroll_if_near_bottom();
+        self.mark_needs_redraw();
     }
 
     pub(crate) fn insert_history_lines(&mut self, lines: Vec<ratatui::text::Line<'static>>) {
@@ -17015,7 +17389,6 @@ mod tests {
             None,
             Arc::new(tokio::sync::Mutex::new(None)), // Test: no MCP manager needed
             None,                                    // initial_command (SPEC-KIT-920)
-            None,                                    // config_watcher (SPEC-945D)
         )
     }
 

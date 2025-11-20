@@ -1,6 +1,6 @@
 # Docs Health Report
 
-Generated: 2025-11-09T18:14:43.518Z
+Generated: 2025-11-19T20:27:47.373Z
 
 ## Top risky docs (score < 70)
 - **README.md** — score 65, staleDays 0, orphan yes, broken links: ../docs/config.md, ../docs/config.md, core…

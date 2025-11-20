@@ -224,6 +224,7 @@ mod tests {
     fn make_agent(name: &str, enabled: bool) -> AgentConfig {
         AgentConfig {
             name: name.to_string(),
+            canonical_name: None,
             command: name.to_string(),
             args: vec![],
             args_read_only: None,
@@ -233,6 +234,7 @@ mod tests {
             description: None,
             env: None,
             instructions: None,
+            model: None,
         }
     }
 

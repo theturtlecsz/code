@@ -82,4 +82,67 @@ impl AppEventSender {
     pub(crate) fn send_background_event_before_next_output(&self, message: impl Into<String>) {
         self.send_background_event_with_placement(message, BackgroundPlacement::BeforeNextOutput);
     }
+
+    /// Signal CLI routing completion with response (SPEC-KIT-952)
+    pub(crate) fn send_cli_route_complete(
+        &self,
+        provider_name: impl Into<String>,
+        model_name: impl Into<String>,
+        content: impl Into<String>,
+        is_error: bool,
+    ) {
+        self.send(AppEvent::CliRouteComplete {
+            provider_name: provider_name.into(),
+            model_name: model_name.into(),
+            content: content.into(),
+            is_error,
+        });
+    }
+
+    /// Signal native provider streaming started (SPEC-KIT-953)
+    pub(crate) fn send_native_stream_start(
+        &self,
+        provider_name: impl Into<String>,
+        model_name: impl Into<String>,
+        message_id: impl Into<String>,
+    ) {
+        self.send(AppEvent::NativeProviderStreamStart {
+            provider_name: provider_name.into(),
+            model_name: model_name.into(),
+            message_id: message_id.into(),
+        });
+    }
+
+    /// Signal native provider streaming text delta (SPEC-KIT-953)
+    pub(crate) fn send_native_stream_delta(&self, text: impl Into<String>) {
+        self.send(AppEvent::NativeProviderStreamDelta {
+            text: text.into(),
+        });
+    }
+
+    /// Signal native provider streaming completed (SPEC-KIT-953)
+    pub(crate) fn send_native_stream_complete(
+        &self,
+        provider_name: impl Into<String>,
+        input_tokens: Option<u32>,
+        output_tokens: Option<u32>,
+    ) {
+        self.send(AppEvent::NativeProviderStreamComplete {
+            provider_name: provider_name.into(),
+            input_tokens,
+            output_tokens,
+        });
+    }
+
+    /// Signal native provider streaming error (SPEC-KIT-953)
+    pub(crate) fn send_native_stream_error(
+        &self,
+        provider_name: impl Into<String>,
+        error: impl Into<String>,
+    ) {
+        self.send(AppEvent::NativeProviderStreamError {
+            provider_name: provider_name.into(),
+            error: error.into(),
+        });
+    }
 }

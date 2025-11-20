@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-11-09T18:14:43.502Z",
+  "generatedAt": "2025-11-19T20:27:47.356Z",
   "docs": [
     {
       "path": "ACE_ACTIVATION_GUIDE.md",
@@ -54,13 +54,58 @@
       "updated": 1761700210000
     },
     {
+      "path": "SPEC-920-VALIDATION-COMPLETE.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1762744917000
+    },
+    {
+      "path": "SPEC-923-FIX-SUMMARY.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1762816423000
+    },
+    {
+      "path": "SPEC-923-IMPLEMENTATION-SUMMARY.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1762810890000
+    },
+    {
+      "path": "SPEC-923-TESTING-CHECKLIST.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1762816423000
+    },
+    {
+      "path": "SPEC-923-TMUX-FIX.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1762810890000
+    },
+    {
       "path": "TMUX-AUTOMATION-SUMMARY.md",
       "score": 85,
       "orphan": true,
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1762744917000
     },
     {
       "path": "ansi-escape/README.md",
@@ -182,6 +227,87 @@
       "updated": 1757707630000
     },
     {
+      "path": "core/tests/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 0
+    },
+    {
+      "path": "docs/SPEC-923-DATA-FLOW.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1762816423000
+    },
+    {
+      "path": "docs/SPEC-947-pipeline-ui-configurator/README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1763504505000
+    },
+    {
+      "path": "docs/SPEC-KIT-922-AUTO-COMMIT.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1762748714000
+    },
+    {
+      "path": "docs/SPEC-KIT-923-OUTPUT-FIX.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1762816423000
+    },
+    {
+      "path": "docs/SPEC-KIT-933-database-integrity-hygiene/COMPONENT-3-COMPLETE.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1763146795000
+    },
+    {
+      "path": "docs/SPEC-KIT-933-database-integrity-hygiene/COMPONENT-4-HANDOFF.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1763146795000
+    },
+    {
+      "path": "docs/SPEC-KIT-933-database-integrity-hygiene/CONTEXT.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1763166839000
+    },
+    {
+      "path": "docs/SPEC-KIT-933-database-integrity-hygiene/PRD.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1763146795000
+    },
+    {
       "path": "docs/SPEC-KIT-DEMO/plan.md",
       "score": 85,
       "orphan": true,
@@ -228,7 +354,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1762744917000
     },
     {
       "path": "docs/report/verification.md",
@@ -237,7 +363,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 0
+      "updated": 1762744917000
     },
     {
       "path": "execpolicy/README.md",
@@ -298,6 +424,15 @@
     },
     {
       "path": "scripts/TMUX-AUTOMATION-README.md",
+      "score": 85,
+      "orphan": true,
+      "broken": [],
+      "missingRefs": [],
+      "staleDays": 0,
+      "updated": 1762744917000
+    },
+    {
+      "path": "target/doc/static.files/SourceSerif4-LICENSE-a2cfd9d5.md",
       "score": 85,
       "orphan": true,
       "broken": [],

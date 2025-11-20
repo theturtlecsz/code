@@ -1237,6 +1237,82 @@ impl App<'_> {
                     }
                     AppState::Onboarding { .. } => {}
                 },
+                AppEvent::CliRouteComplete {
+                    provider_name,
+                    model_name,
+                    content,
+                    is_error,
+                } => match &mut self.app_state {
+                    AppState::Chat { widget } => {
+                        tracing::debug!(
+                            "app: CliRouteComplete provider={} model={} is_error={} len={}",
+                            provider_name,
+                            model_name,
+                            is_error,
+                            content.len()
+                        );
+                        widget.on_cli_route_complete(provider_name, model_name, content, is_error);
+                        self.schedule_redraw();
+                    }
+                    AppState::Onboarding { .. } => {}
+                },
+                // Native provider streaming events (SPEC-KIT-953)
+                AppEvent::NativeProviderStreamStart {
+                    provider_name,
+                    model_name,
+                    message_id,
+                } => match &mut self.app_state {
+                    AppState::Chat { widget } => {
+                        tracing::debug!(
+                            "app: NativeProviderStreamStart provider={} model={} id={}",
+                            provider_name,
+                            model_name,
+                            message_id
+                        );
+                        widget.on_native_stream_start(provider_name, model_name, message_id);
+                        self.schedule_redraw();
+                    }
+                    AppState::Onboarding { .. } => {}
+                },
+                AppEvent::NativeProviderStreamDelta { text } => match &mut self.app_state {
+                    AppState::Chat { widget } => {
+                        widget.on_native_stream_delta(text);
+                        self.schedule_redraw();
+                    }
+                    AppState::Onboarding { .. } => {}
+                },
+                AppEvent::NativeProviderStreamComplete {
+                    provider_name,
+                    input_tokens,
+                    output_tokens,
+                } => match &mut self.app_state {
+                    AppState::Chat { widget } => {
+                        tracing::debug!(
+                            "app: NativeProviderStreamComplete provider={} input={:?} output={:?}",
+                            provider_name,
+                            input_tokens,
+                            output_tokens
+                        );
+                        widget.on_native_stream_complete(provider_name, input_tokens, output_tokens);
+                        self.schedule_redraw();
+                    }
+                    AppState::Onboarding { .. } => {}
+                },
+                AppEvent::NativeProviderStreamError {
+                    provider_name,
+                    error,
+                } => match &mut self.app_state {
+                    AppState::Chat { widget } => {
+                        tracing::error!(
+                            "app: NativeProviderStreamError provider={} error={}",
+                            provider_name,
+                            error
+                        );
+                        widget.on_native_stream_error(provider_name, error);
+                        self.schedule_redraw();
+                    }
+                    AppState::Onboarding { .. } => {}
+                },
                 AppEvent::AutoUpgradeCompleted { version } => match &mut self.app_state {
                     AppState::Chat { widget } => widget.on_auto_upgrade_completed(version),
                     AppState::Onboarding { .. } => {}
@@ -2681,6 +2757,153 @@ impl App<'_> {
                 AppEvent::LoginUsingChatGptChanged { using_chatgpt_auth } => {
                     self.handle_login_mode_change(using_chatgpt_auth);
                 }
+
+                // Claude OAuth login flow (SPEC-KIT-954)
+                // Uses CLI-based authentication (5-ALT approach) aligned with SPEC-KIT-952
+                AppEvent::LoginStartClaude => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        if !widget.login_add_view_active() {
+                            continue 'main;
+                        }
+
+                        // Check Claude CLI status asynchronously
+                        let tx = self.app_event_tx.clone();
+                        tokio::spawn(async move {
+                            use crate::provider_login::{check_provider_login_status, ProviderLoginStatus};
+                            use crate::providers::ProviderType;
+
+                            let status = check_provider_login_status(ProviderType::Claude).await;
+
+                            match status {
+                                ProviderLoginStatus::Authenticated { provider_name } => {
+                                    tx.send(AppEvent::LoginClaudeComplete {
+                                        result: Ok(()),
+                                    });
+                                    tx.send(AppEvent::InsertBackgroundEvent {
+                                        message: format!(
+                                            "{} is authenticated. You can now use Claude models.",
+                                            provider_name
+                                        ),
+                                        placement: crate::app_event::BackgroundPlacement::Tail,
+                                    });
+                                }
+                                ProviderLoginStatus::CliNotInstalled { install_instructions } => {
+                                    tx.send(AppEvent::LoginClaudeComplete {
+                                        result: Err(format!(
+                                            "Claude CLI not installed.\n\n{}",
+                                            install_instructions
+                                        )),
+                                    });
+                                }
+                                ProviderLoginStatus::NotAuthenticated {
+                                    auth_command,
+                                    auth_instructions,
+                                } => {
+                                    tx.send(AppEvent::LoginClaudeComplete {
+                                        result: Err(format!(
+                                            "Claude CLI not authenticated.\n\n\
+                                             Run in your terminal:\n  {}\n\n{}",
+                                            auth_command, auth_instructions
+                                        )),
+                                    });
+                                }
+                                ProviderLoginStatus::Error(msg) => {
+                                    tx.send(AppEvent::LoginClaudeComplete {
+                                        result: Err(msg),
+                                    });
+                                }
+                            }
+                        });
+
+                        widget.push_background_tail(
+                            "Checking Claude CLI authentication status...".to_string(),
+                        );
+                    }
+                }
+                AppEvent::LoginCancelClaude => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.notify_login_claude_cancelled();
+                    }
+                }
+                AppEvent::LoginClaudeComplete { result } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.notify_login_claude_complete(result);
+                    }
+                }
+
+                // Gemini OAuth login flow (SPEC-KIT-954)
+                // Uses CLI-based authentication (5-ALT approach) aligned with SPEC-KIT-952
+                AppEvent::LoginStartGemini => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        if !widget.login_add_view_active() {
+                            continue 'main;
+                        }
+
+                        // Check Gemini CLI status asynchronously
+                        let tx = self.app_event_tx.clone();
+                        tokio::spawn(async move {
+                            use crate::provider_login::{check_provider_login_status, ProviderLoginStatus};
+                            use crate::providers::ProviderType;
+
+                            let status = check_provider_login_status(ProviderType::Gemini).await;
+
+                            match status {
+                                ProviderLoginStatus::Authenticated { provider_name } => {
+                                    tx.send(AppEvent::LoginGeminiComplete {
+                                        result: Ok(()),
+                                    });
+                                    tx.send(AppEvent::InsertBackgroundEvent {
+                                        message: format!(
+                                            "{} is authenticated. You can now use Gemini models.",
+                                            provider_name
+                                        ),
+                                        placement: crate::app_event::BackgroundPlacement::Tail,
+                                    });
+                                }
+                                ProviderLoginStatus::CliNotInstalled { install_instructions } => {
+                                    tx.send(AppEvent::LoginGeminiComplete {
+                                        result: Err(format!(
+                                            "Gemini CLI not installed.\n\n{}",
+                                            install_instructions
+                                        )),
+                                    });
+                                }
+                                ProviderLoginStatus::NotAuthenticated {
+                                    auth_command,
+                                    auth_instructions,
+                                } => {
+                                    tx.send(AppEvent::LoginGeminiComplete {
+                                        result: Err(format!(
+                                            "Gemini CLI not authenticated.\n\n\
+                                             Run in your terminal:\n  {}\n\n{}",
+                                            auth_command, auth_instructions
+                                        )),
+                                    });
+                                }
+                                ProviderLoginStatus::Error(msg) => {
+                                    tx.send(AppEvent::LoginGeminiComplete {
+                                        result: Err(msg),
+                                    });
+                                }
+                            }
+                        });
+
+                        widget.push_background_tail(
+                            "Checking Gemini CLI authentication status...".to_string(),
+                        );
+                    }
+                }
+                AppEvent::LoginCancelGemini => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.notify_login_gemini_cancelled();
+                    }
+                }
+                AppEvent::LoginGeminiComplete { result } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.notify_login_gemini_complete(result);
+                    }
+                }
+
                 AppEvent::OnboardingAuthComplete(result) => {
                     if let AppState::Onboarding { screen } = &mut self.app_state {
                         screen.on_auth_complete(result);

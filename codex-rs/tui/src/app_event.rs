@@ -318,6 +318,54 @@ pub(crate) enum AppEvent {
         placement: BackgroundPlacement,
     },
 
+    /// CLI routing completed with response (SPEC-KIT-952)
+    /// Used when prompts are routed through CLI providers (Claude, Gemini)
+    CliRouteComplete {
+        /// Provider display name (e.g., "Claude", "Gemini")
+        provider_name: String,
+        /// Model identifier used
+        model_name: String,
+        /// Response content (may contain markdown)
+        content: String,
+        /// Whether this is an error response
+        is_error: bool,
+    },
+
+    /// Native provider streaming started (SPEC-KIT-953)
+    /// Used when prompts are routed through native API clients (Claude, Gemini)
+    NativeProviderStreamStart {
+        /// Provider display name (e.g., "Claude", "Gemini")
+        provider_name: String,
+        /// Model identifier used
+        model_name: String,
+        /// Message ID from provider
+        message_id: String,
+    },
+
+    /// Native provider streaming delta (SPEC-KIT-953)
+    NativeProviderStreamDelta {
+        /// Text content delta
+        text: String,
+    },
+
+    /// Native provider streaming completed (SPEC-KIT-953)
+    NativeProviderStreamComplete {
+        /// Provider display name
+        provider_name: String,
+        /// Input tokens consumed (if available)
+        input_tokens: Option<u32>,
+        /// Output tokens generated (if available)
+        output_tokens: Option<u32>,
+    },
+
+    /// Native provider streaming error (SPEC-KIT-953)
+    NativeProviderStreamError {
+        /// Provider display name
+        provider_name: String,
+        /// Error message
+        error: String,
+    },
+
     AutoUpgradeCompleted {
         version: String,
     },
@@ -348,6 +396,24 @@ pub(crate) enum AppEvent {
     /// The active authentication mode changed (e.g., switched accounts).
     LoginUsingChatGptChanged {
         using_chatgpt_auth: bool,
+    },
+
+    /// Begin Claude OAuth login flow from the in-app login manager.
+    LoginStartClaude,
+    /// Cancel an in-progress Claude login flow triggered via `/login`.
+    LoginCancelClaude,
+    /// Claude login flow has completed (success or failure).
+    LoginClaudeComplete {
+        result: Result<(), String>,
+    },
+
+    /// Begin Gemini OAuth login flow from the in-app login manager.
+    LoginStartGemini,
+    /// Cancel an in-progress Gemini login flow triggered via `/login`.
+    LoginCancelGemini,
+    /// Gemini login flow has completed (success or failure).
+    LoginGeminiComplete {
+        result: Result<(), String>,
     },
 
     /// Show Chrome launch options dialog

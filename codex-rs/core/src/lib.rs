@@ -13,6 +13,7 @@ pub mod bash;
 mod chat_completions;
 mod client;
 mod client_common;
+pub mod cli_executor; // SPEC-KIT-952: CLI wrapper support for Claude/Gemini
 pub mod codex;
 mod codex_conversation;
 pub mod token_data;
@@ -20,6 +21,7 @@ pub use codex_conversation::CodexConversation;
 pub mod acp;
 pub mod agent_defaults;
 pub mod agent_tool; // Made public for native consensus orchestration
+pub mod api_clients; // SPEC-KIT-953-F/G: Native provider API clients
 pub mod async_agent_executor; // SPEC-936: Async agent execution without tmux
 mod command_safety;
 pub mod config;
@@ -28,6 +30,7 @@ pub mod config_loader;
 pub mod config_profile;
 pub mod config_types;
 pub mod config_watcher;
+pub mod context_manager; // SPEC-KIT-953-E: Multi-provider context management
 mod conversation_history;
 pub mod custom_prompts;
 pub mod db; // SPEC-945B: Database layer (SQLite optimization, transactions, vacuum)
@@ -79,6 +82,8 @@ mod openai_tools;
 mod patch_harness;
 pub mod plan_tool;
 mod pro_observer;
+pub mod provider_auth; // SPEC-KIT-953-D: Multi-provider OAuth 2.0 PKCE framework
+pub mod providers; // SPEC-KIT-953: Provider implementations (OpenAI, Anthropic, Google)
 mod pro_supervisor;
 pub mod project_doc;
 pub mod project_features;
