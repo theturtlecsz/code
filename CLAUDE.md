@@ -22,7 +22,7 @@ This playbook gives Claude Code everything it needs to operate safely inside thi
 - **Cargo workspace location:** run Rust commands from `codex-rs/` (for example `cd codex-rs && cargo test -p codex-tui spec_auto`). Guardrail scripts set `SPEC_OPS_CARGO_MANIFEST` when needed, but manual commands must honour the workspace root.
 - **HAL secrets:** full validation requires `HAL_SECRET_KAVEDARR_API_KEY`. If unavailable, set `SPEC_OPS_HAL_SKIP=1` (decision on default behaviour pending) and document the skip in results.
 - **Evidence footprint:** keep evidence under the 25 MB per-SPEC soft limit; use `/spec-evidence-stats` after large runs. Current: All SPECs within limit ✅ (per MAINT-4 evidence automation, 2025-10-18).
-- **Multi-provider model support (SPEC-KIT-952):** Claude models route through native CLI with streaming support. Gemini support pending (SPEC-952-B). See setup instructions below.
+- **Multi-provider model support (SPEC-KIT-952):** Claude models route through native CLI with streaming support. Gemini CLI routing disabled (see Known Limitations).
 
 ### Multi-Provider CLI Setup (SPEC-KIT-952)
 
@@ -32,7 +32,7 @@ The TUI supports three model providers with different authentication methods:
 |----------|--------|-------------|--------|
 | **ChatGPT** | gpt-5, gpt-5.1-*, gpt-5-codex | Native OAuth (existing) | ✅ Working |
 | **Claude** | claude-opus-4.1, claude-sonnet-4.5, claude-haiku-4.5 | CLI routing (SPEC-952) | ✅ Working |
-| **Gemini** | gemini-3-pro, gemini-2.5-*, gemini-2.0-flash | Not yet supported | ⏸️ SPEC-952-B |
+| **Gemini** | gemini-3-pro, gemini-2.5-*, gemini-2.0-flash | CLI routing disabled | ❌ Not Supported |
 
 **Claude CLI Setup (Working)**:
 ```bash
@@ -53,11 +53,12 @@ claude
 /model
 ```
 
-**Multi-turn conversations**: ✅ Fully supported with CLI routing
+**Multi-turn conversations**: ✅ Fully supported with Claude CLI routing
 
 **Known Limitations (SPEC-KIT-952)**:
-- Gemini CLI routing not yet implemented (requires history management layer - see SPEC-952-B)
+- **Gemini CLI routing disabled**: Gemini CLI headless mode has reliability issues with multi-turn conversations (timeouts after 2+ messages). Use ChatGPT account for Gemini model access instead.
 - When selecting a Claude model without the CLI installed, you'll see installation instructions in chat history
+- Claude CLI responses may take 2-25s (variability in CLI performance)
 
 ## 1. Load These References Every Session
 - `MEMORY-POLICY.md` – **mandatory** memory system policy (local-memory only)

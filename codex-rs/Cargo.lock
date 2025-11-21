@@ -1080,6 +1080,7 @@ dependencies = [
  "portable-pty",
  "predicates",
  "pretty_assertions",
+ "pty-process",
  "r2d2",
  "r2d2_sqlite",
  "rand 0.9.2",
@@ -1096,6 +1097,7 @@ dependencies = [
  "sha2",
  "shlex",
  "similar",
+ "strip-ansi-escapes 0.2.1",
  "strum_macros 0.27.2",
  "tempfile",
  "thiserror 2.0.16",
@@ -1106,6 +1108,7 @@ dependencies = [
  "toml 0.9.5",
  "toml_edit 0.23.4",
  "tracing",
+ "tracing-subscriber",
  "tree-sitter",
  "tree-sitter-bash",
  "url",
@@ -1400,7 +1403,7 @@ dependencies = [
  "serial_test",
  "sha2",
  "shlex",
- "strip-ansi-escapes",
+ "strip-ansi-escapes 0.1.1",
  "strum 0.27.2",
  "strum_macros 0.27.2",
  "supports-color",
@@ -4931,6 +4934,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "pty-process"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8749b545e244c90bf74a5767764cc2194f1888bb42f84015486a64c82bea5cc0"
+dependencies = [
+ "libc",
+ "rustix 0.38.44",
+ "tokio",
+]
+
+[[package]]
 name = "pulldown-cmark"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5584,6 +5598,7 @@ checksum = "fdb5bc1ae2baa591800df16c9ca78619bf65c0488b41b96ccec5d11220d8c154"
 dependencies = [
  "bitflags 2.9.1",
  "errno",
+ "itoa",
  "libc",
  "linux-raw-sys 0.4.15",
  "windows-sys 0.59.0",
@@ -6359,6 +6374,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "011cbb39cf7c1f62871aea3cc46e5817b0937b49e9447370c93cacbe93a766d8"
 dependencies = [
  "vte 0.10.1",
+]
+
+[[package]]
+name = "strip-ansi-escapes"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a8f8038e7e7969abb3f1b7c2a811225e9296da208539e0f79c5251d6cac0025"
+dependencies = [
+ "vte 0.14.1",
 ]
 
 [[package]]
@@ -7440,6 +7464,15 @@ dependencies = [
  "arrayvec 0.7.6",
  "utf8parse",
  "vte_generate_state_changes",
+]
+
+[[package]]
+name = "vte"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "231fdcd7ef3037e8330d8e17e61011a2c244126acc0a982f4040ac3f9f0bc077"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]

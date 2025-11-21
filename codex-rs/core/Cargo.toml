@@ -32,6 +32,8 @@ libc = "0.2.175"
 mcp-types = { path = "../mcp-types" }
 os_info = "3.12.0"
 portable-pty = "0.9.0"
+pty-process = { version = "0.4", features = ["async"] }
+strip-ansi-escapes = "0.2"
 rand = "0.9"
 regex-lite = "0.1.7"
 reqwest = { version = "0.12", features = ["json", "stream"] }
@@ -107,6 +109,7 @@ predicates = "3"
 pretty_assertions = "1.4.1"
 tempfile = "3"
 tokio-test = "0.4"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 walkdir = "2.5.0"
 wiremock = "0.6"
 

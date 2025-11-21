@@ -65,6 +65,9 @@ impl GeminiStreamingProvider {
         model: &str,
         tx: AppEventSender,
     ) -> ProviderResult<String> {
+        // NOTE: Gemini CLI routing DISABLED in production (reliability issues)
+        // This code kept for reference only - not actively used
+
         // Convert messages to cli_executor format
         let conversation = Self::convert_messages(messages, model);
 
