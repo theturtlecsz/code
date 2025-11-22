@@ -581,6 +581,10 @@ pub(crate) enum AppEvent {
     ConfigReload {
         event: codex_spec_kit::config::ConfigReloadEvent,
     },
+
+    /// Sessions command result (Process Management)
+    /// Triggered when /sessions command async work completes
+    SessionsCommandResult(String),
     // === END FORK-SPECIFIC ===
 }
 

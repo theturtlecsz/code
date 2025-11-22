@@ -1,26 +1,46 @@
-//! Gemini CLI Provider with Streaming Support (SPEC-KIT-952 Phase 1)
+//! Gemini CLI Provider with Pipes Streaming (SPEC-KIT-952-F)
 //!
-//! Uses codex_core::cli_executor for streaming CLI routing.
-//! Provides fallback/alternative to native API approach.
+//! Uses GeminiPipesProvider for session-based multi-turn conversations.
+//! Replaces PTY mode with one-shot + resume pattern.
+//! Uses global provider instance to maintain sessions across messages.
 
 use codex_core::cli_executor::{
-    CliError, CliExecutor, Conversation, GeminiCliConfig, GeminiCliExecutor, Message, Role,
-    StreamEvent,
+    CliError, ConversationId, GeminiPipesProvider, StreamEvent,
 };
-use futures::StreamExt;
-use std::time::Duration;
-use tokio::sync::mpsc;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::sync::OnceLock;
 
 use crate::app_event_sender::AppEventSender;
 use crate::providers::{ProviderError, ProviderResult};
 
-/// Gemini CLI provider with streaming support
+/// Global Gemini provider instance (shared across all messages)
+static GEMINI_PROVIDER: OnceLock<GeminiPipesProvider> = OnceLock::new();
+
+/// Get or create the global Gemini provider
+fn get_gemini_provider() -> &'static GeminiPipesProvider {
+    GEMINI_PROVIDER.get_or_init(|| {
+        // Get actual working directory for project context
+        let cwd = std::env::current_dir()
+            .ok()
+            .and_then(|p| p.to_str().map(String::from))
+            .unwrap_or_else(|| {
+                tracing::warn!("Failed to get current directory, using '.'");
+                String::from(".")
+            });
+
+        tracing::info!("Initializing global Gemini pipes provider with cwd={}", cwd);
+        GeminiPipesProvider::with_cwd("gemini-2.5-flash", &cwd)
+    })
+}
+
+/// Gemini CLI provider with pipes streaming support (session-based)
 pub struct GeminiStreamingProvider {
-    executor: GeminiCliExecutor,
+    // No longer stores provider - uses global instance
 }
 
 impl GeminiStreamingProvider {
-    /// Create a new Gemini streaming provider
+    /// Create a new Gemini pipes streaming provider (uses global instance)
     pub fn new() -> ProviderResult<Self> {
         // Check if gemini CLI is available
         if !Self::is_available() {
@@ -31,45 +51,32 @@ impl GeminiStreamingProvider {
             });
         }
 
-        let config = GeminiCliConfig::default();
-        let executor = GeminiCliExecutor::new(config);
+        // Initialize global provider (happens once)
+        let _ = get_gemini_provider();
 
-        Ok(Self { executor })
+        Ok(Self {})
     }
 
-    /// Create provider with custom timeout
-    pub fn with_timeout(timeout_secs: u64) -> ProviderResult<Self> {
-        if !Self::is_available() {
-            return Err(ProviderError::Provider {
-                provider: "Gemini".to_string(),
-                message: "Gemini CLI not found".to_string(),
-            });
-        }
-
-        let config = GeminiCliConfig {
-            timeout_secs,
-            ..Default::default()
-        };
-        let executor = GeminiCliExecutor::new(config);
-
-        Ok(Self { executor })
+    /// Create provider with specific model
+    pub fn with_model(_model: &str) -> ProviderResult<Self> {
+        // Note: Global provider uses default model (gemini-2.5-flash)
+        // Model-specific configuration not currently supported with global instance
+        Self::new()
     }
 
     /// Execute prompt with streaming to AppEventSender
     ///
     /// Streams response deltas in real-time to the TUI via event sender.
     /// Accumulates full response text for conversation history.
+    /// Uses session-based API for O(1) data transfer per turn.
     pub async fn execute_streaming(
         &self,
         messages: &[codex_core::context_manager::Message],
         model: &str,
         tx: AppEventSender,
     ) -> ProviderResult<String> {
-        // NOTE: Gemini CLI routing DISABLED in production (reliability issues)
-        // This code kept for reference only - not actively used
-
-        // Convert messages to cli_executor format
-        let conversation = Self::convert_messages(messages, model);
+        // Derive conversation ID from message history (hash of conversation)
+        let conv_id = Self::derive_conversation_id(messages);
 
         // Get last message as current user message (extract text from ContentBlocks)
         let user_message = messages
@@ -89,19 +96,18 @@ impl GeminiStreamingProvider {
             })
             .unwrap_or_default();
 
-        // Execute with streaming
-        let mut rx = self
-            .executor
-            .execute(&conversation, &user_message)
+        // Send message via global session-based provider (creates/reuses session)
+        let provider = get_gemini_provider();
+        let mut rx = provider
+            .send_message(conv_id, user_message)
             .await
             .map_err(|e| Self::map_cli_error(e))?;
 
         // Stream events to TUI and accumulate response
         let mut accumulated = String::new();
-        let mut input_tokens = None;
-        let mut output_tokens = None;
+        let mut received_done = false;
 
-        tx.send_native_stream_start("Gemini CLI", model.to_string(), "cli".to_string());
+        tx.send_native_stream_start("Gemini Pipes", model.to_string(), "pipes".to_string());
 
         while let Some(event) = rx.recv().await {
             match event {
@@ -109,81 +115,72 @@ impl GeminiStreamingProvider {
                     accumulated.push_str(&text);
                     tx.send_native_stream_delta(text);
                 }
-                StreamEvent::Metadata(metadata) => {
-                    input_tokens = metadata.input_tokens;
-                    output_tokens = metadata.output_tokens;
-                }
                 StreamEvent::Done => {
+                    received_done = true;
                     break;
                 }
                 StreamEvent::Error(e) => {
                     let error_msg = format!("{}", e);
-                    tx.send_native_stream_error("Gemini CLI", &error_msg);
+                    tx.send_native_stream_error("Gemini Pipes", &error_msg);
                     return Err(Self::map_cli_error(e));
+                }
+                _ => {
+                    // Ignore other events (metadata if added in future)
                 }
             }
         }
 
-        tx.send_native_stream_complete(
-            "Gemini CLI",
-            input_tokens.map(|n| n as u32),
-            output_tokens.map(|n| n as u32),
-        );
+        // If channel closed without Done event, something went wrong
+        if !received_done && accumulated.is_empty() {
+            let error_msg = "Gemini CLI process died without sending response";
+            tx.send_native_stream_error("Gemini Pipes", error_msg);
+            return Err(ProviderError::Provider {
+                provider: "Gemini".to_string(),
+                message: error_msg.to_string(),
+            });
+        }
+
+        tx.send_native_stream_complete("Gemini Pipes", None, None);
 
         Ok(accumulated)
     }
 
-    /// Convert context_manager messages to cli_executor format
-    fn convert_messages(
-        messages: &[codex_core::context_manager::Message],
-        model: &str,
-    ) -> Conversation {
-        let mut conversation_messages = Vec::new();
-        let mut system_prompt = None;
-
-        for msg in messages {
-            // Extract text content from ContentBlocks
-            let content_text = msg
-                .content
-                .iter()
-                .filter_map(|block| {
+    /// Derive a conversation ID from message history
+    ///
+    /// FIXED: Uses stable ID based on FIRST user message only.
+    /// This ensures the same conversation reuses the same session.
+    fn derive_conversation_id(messages: &[codex_core::context_manager::Message]) -> ConversationId {
+        // Find first user message to use as stable anchor
+        let first_user_msg = messages
+            .iter()
+            .find(|msg| matches!(msg.role, codex_core::context_manager::MessageRole::User))
+            .and_then(|msg| {
+                msg.content.iter().find_map(|block| {
                     if let codex_core::context_manager::ContentBlock::Text { text } = block {
                         Some(text.clone())
                     } else {
                         None
                     }
                 })
-                .collect::<Vec<_>>()
-                .join("\n");
-
-            let role = match msg.role {
-                codex_core::context_manager::MessageRole::System => {
-                    // Extract first system message as system prompt
-                    if system_prompt.is_none() {
-                        system_prompt = Some(content_text);
-                    }
-                    continue; // Don't add to message history
-                }
-                codex_core::context_manager::MessageRole::User => Role::User,
-                codex_core::context_manager::MessageRole::Assistant => Role::Assistant,
-            };
-
-            conversation_messages.push(Message {
-                role,
-                content: content_text,
-                timestamp: None, // Will be added by context manager
             });
+
+        // Hash only the first user message to create stable ID
+        let mut hasher = DefaultHasher::new();
+        if let Some(first_msg) = first_user_msg {
+            first_msg.hash(&mut hasher);
+        } else {
+            // Fallback: use current timestamp (new conversation each time)
+            use std::time::{SystemTime, UNIX_EPOCH};
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            timestamp.hash(&mut hasher);
         }
 
-        // Map preset model name to actual API model name
-        let api_model = Self::map_model_name(model);
-
-        Conversation {
-            messages: conversation_messages,
-            system_prompt,
-            model: api_model.to_string(),
-        }
+        format!("gemini-conv-{:x}", hasher.finish())
     }
+
 
     /// Map preset model name to actual Gemini API model name
     fn map_model_name(preset: &str) -> &str {
@@ -247,6 +244,11 @@ impl GeminiStreamingProvider {
          Then authenticate by running:\n  \
          gemini\n\n\
          Follow the OAuth prompts to complete authentication."
+    }
+
+    /// Get access to the global Gemini provider (for session management)
+    pub fn global_provider() -> &'static GeminiPipesProvider {
+        get_gemini_provider()
     }
 }
 

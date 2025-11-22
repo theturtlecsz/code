@@ -2,25 +2,47 @@
 //!
 //! Uses codex_core::cli_executor for streaming CLI routing.
 //! Provides fallback/alternative to native API approach.
+//!
+//! UPDATED: Now uses ClaudePipesProvider for session-based multi-turn conversations.
+//! Uses global provider instance to maintain sessions across messages.
 
 use codex_core::cli_executor::{
-    ClaudeCliConfig, ClaudeCliExecutor, CliError, CliExecutor, Conversation, Message, Role,
-    StreamEvent,
+    ClaudePipesProvider, ConversationId, CliError, StreamEvent,
 };
-use futures::StreamExt;
-use std::time::Duration;
-use tokio::sync::mpsc;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::sync::OnceLock;
 
 use crate::app_event_sender::AppEventSender;
 use crate::providers::{ProviderError, ProviderResult};
 
-/// Claude CLI provider with streaming support
+/// Global Claude provider instance (shared across all messages)
+static CLAUDE_PROVIDER: OnceLock<ClaudePipesProvider> = OnceLock::new();
+
+/// Get or create the global Claude provider
+fn get_claude_provider() -> &'static ClaudePipesProvider {
+    CLAUDE_PROVIDER.get_or_init(|| {
+        // Get actual working directory for CLAUDE.md context
+        let cwd = std::env::current_dir()
+            .ok()
+            .and_then(|p| p.to_str().map(String::from))
+            .unwrap_or_else(|| {
+                tracing::warn!("Failed to get current directory, using '.'");
+                String::from(".")
+            });
+
+        tracing::info!("Initializing global Claude pipes provider with cwd={}", cwd);
+        ClaudePipesProvider::with_cwd("", &cwd)
+    })
+}
+
+/// Claude CLI provider with streaming support (session-based)
 pub struct ClaudeStreamingProvider {
-    executor: ClaudeCliExecutor,
+    // No longer stores provider - uses global instance
 }
 
 impl ClaudeStreamingProvider {
-    /// Create a new Claude streaming provider
+    /// Create a new Claude streaming provider (uses global instance)
     pub fn new() -> ProviderResult<Self> {
         // Check if claude CLI is available
         if !Self::is_available() {
@@ -31,42 +53,32 @@ impl ClaudeStreamingProvider {
             });
         }
 
-        let config = ClaudeCliConfig::default();
-        let executor = ClaudeCliExecutor::new(config);
+        // Initialize global provider (happens once)
+        let _ = get_claude_provider();
 
-        Ok(Self { executor })
+        Ok(Self {})
     }
 
-    /// Create provider with custom timeout
-    pub fn with_timeout(timeout_secs: u64) -> ProviderResult<Self> {
-        if !Self::is_available() {
-            return Err(ProviderError::Provider {
-                provider: "Claude".to_string(),
-                message: "Claude CLI not found".to_string(),
-            });
-        }
-
-        let config = ClaudeCliConfig {
-            timeout_secs,
-            ..Default::default()
-        };
-        let executor = ClaudeCliExecutor::new(config);
-
-        Ok(Self { executor })
+    /// Create provider with specific model
+    pub fn with_model(_model: &str) -> ProviderResult<Self> {
+        // Note: Global provider uses empty model (CLI default)
+        // Model-specific configuration not currently supported with global instance
+        Self::new()
     }
 
     /// Execute prompt with streaming to AppEventSender
     ///
     /// Streams response deltas in real-time to the TUI via event sender.
     /// Accumulates full response text for conversation history.
+    /// Uses session-based API for O(1) data transfer per turn.
     pub async fn execute_streaming(
         &self,
         messages: &[codex_core::context_manager::Message],
         model: &str,
         tx: AppEventSender,
     ) -> ProviderResult<String> {
-        // Convert messages to cli_executor format
-        let conversation = Self::convert_messages(messages, model);
+        // Derive conversation ID from message history (hash of conversation)
+        let conv_id = Self::derive_conversation_id(messages);
 
         // Get last message as current user message (extract text from ContentBlocks)
         let user_message = messages
@@ -86,10 +98,10 @@ impl ClaudeStreamingProvider {
             })
             .unwrap_or_default();
 
-        // Execute with streaming
-        let mut rx = self
-            .executor
-            .execute(&conversation, &user_message)
+        // Send message via global session-based provider (creates/reuses session)
+        let provider = get_claude_provider();
+        let mut rx = provider
+            .send_message(conv_id, user_message)
             .await
             .map_err(|e| Self::map_cli_error(e))?;
 
@@ -97,8 +109,9 @@ impl ClaudeStreamingProvider {
         let mut accumulated = String::new();
         let mut input_tokens = None;
         let mut output_tokens = None;
+        let mut received_done = false;
 
-        tx.send_native_stream_start("Claude CLI", model.to_string(), "cli".to_string());
+        tx.send_native_stream_start("Claude Pipes", model.to_string(), "pipes".to_string());
 
         while let Some(event) = rx.recv().await {
             match event {
@@ -111,18 +124,29 @@ impl ClaudeStreamingProvider {
                     output_tokens = metadata.output_tokens;
                 }
                 StreamEvent::Done => {
+                    received_done = true;
                     break;
                 }
                 StreamEvent::Error(e) => {
                     let error_msg = format!("{}", e);
-                    tx.send_native_stream_error("Claude CLI", &error_msg);
+                    tx.send_native_stream_error("Claude Pipes", &error_msg);
                     return Err(Self::map_cli_error(e));
                 }
             }
         }
 
+        // If channel closed without Done event, something went wrong
+        if !received_done && accumulated.is_empty() {
+            let error_msg = "Claude CLI process died without sending response";
+            tx.send_native_stream_error("Claude Pipes", error_msg);
+            return Err(ProviderError::Provider {
+                provider: "Claude".to_string(),
+                message: error_msg.to_string(),
+            });
+        }
+
         tx.send_native_stream_complete(
-            "Claude CLI",
+            "Claude Pipes",
             input_tokens.map(|n| n as u32),
             output_tokens.map(|n| n as u32),
         );
@@ -130,72 +154,40 @@ impl ClaudeStreamingProvider {
         Ok(accumulated)
     }
 
-    /// Convert context_manager messages to cli_executor format
-    fn convert_messages(
-        messages: &[codex_core::context_manager::Message],
-        model: &str,
-    ) -> Conversation {
-        let mut conversation_messages = Vec::new();
-        let mut system_prompt = None;
-
-        for msg in messages {
-            // Extract text content from ContentBlocks
-            let content_text = msg
-                .content
-                .iter()
-                .filter_map(|block| {
+    /// Derive a conversation ID from message history
+    ///
+    /// FIXED: Uses stable ID based on FIRST user message only.
+    /// This ensures the same conversation reuses the same session.
+    fn derive_conversation_id(messages: &[codex_core::context_manager::Message]) -> ConversationId {
+        // Find first user message to use as stable anchor
+        let first_user_msg = messages
+            .iter()
+            .find(|msg| matches!(msg.role, codex_core::context_manager::MessageRole::User))
+            .and_then(|msg| {
+                msg.content.iter().find_map(|block| {
                     if let codex_core::context_manager::ContentBlock::Text { text } = block {
                         Some(text.clone())
                     } else {
                         None
                     }
                 })
-                .collect::<Vec<_>>()
-                .join("\n");
-
-            let role = match msg.role {
-                codex_core::context_manager::MessageRole::System => {
-                    // Extract first system message as system prompt
-                    if system_prompt.is_none() {
-                        system_prompt = Some(content_text);
-                    }
-                    continue; // Don't add to message history
-                }
-                codex_core::context_manager::MessageRole::User => Role::User,
-                codex_core::context_manager::MessageRole::Assistant => Role::Assistant,
-            };
-
-            conversation_messages.push(Message {
-                role,
-                content: content_text,
-                timestamp: None, // Will be added by context manager
             });
-        }
 
-        // Map preset model name to actual API model name
-        let api_model = Self::map_model_name(model);
-
-        Conversation {
-            messages: conversation_messages,
-            system_prompt,
-            model: api_model.to_string(),
-        }
-    }
-
-    /// Map preset model name to actual Claude API model name
-    fn map_model_name(preset: &str) -> &str {
-        let preset_lower = preset.to_ascii_lowercase();
-
-        if preset_lower.contains("opus") {
-            "claude-opus-4-1-20250805"
-        } else if preset_lower.contains("sonnet") {
-            "claude-sonnet-4-5-20250929"
-        } else if preset_lower.contains("haiku") {
-            "claude-haiku-4-5-20251001"
+        // Hash only the first user message to create stable ID
+        let mut hasher = DefaultHasher::new();
+        if let Some(first_msg) = first_user_msg {
+            first_msg.hash(&mut hasher);
         } else {
-            // Default to sonnet if unknown
-            "claude-sonnet-4-5-20250929"
+            // Fallback: use current timestamp (new conversation each time)
+            use std::time::{SystemTime, UNIX_EPOCH};
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            timestamp.hash(&mut hasher);
         }
+
+        format!("claude-conv-{:x}", hasher.finish())
     }
 
     /// Map CliError to ProviderError
@@ -241,6 +233,11 @@ impl ClaudeStreamingProvider {
          Then authenticate by running:\n  \
          claude\n\n\
          Follow the prompts to complete authentication."
+    }
+
+    /// Get access to the global Claude provider (for session management)
+    pub fn global_provider() -> &'static ClaudePipesProvider {
+        get_claude_provider()
     }
 }
 

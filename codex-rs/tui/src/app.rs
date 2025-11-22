@@ -2211,6 +2211,11 @@ impl App<'_> {
                                 widget.add_limits_output();
                             }
                         }
+                        SlashCommand::Sessions => {
+                            if let AppState::Chat { widget } = &mut self.app_state {
+                                widget.handle_sessions_command(command_args);
+                            }
+                        }
                         SlashCommand::Update => {
                             if let AppState::Chat { widget } = &mut self.app_state {
                                 widget.handle_update_command();
@@ -3312,6 +3317,17 @@ impl App<'_> {
                             // The watcher automatically preserves the previous valid config
                             // on validation failures, so the app continues with stable config.
                         }
+                    }
+                }
+                AppEvent::SessionsCommandResult(output) => {
+                    // Sessions command completed - display result
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                            output.lines()
+                                .map(|line| ratatui::text::Line::from(line.to_string()))
+                                .collect::<Vec<_>>(),
+                            crate::history_cell::HistoryCellType::Plain,
+                        ));
                     }
                 } // === END FORK-SPECIFIC ===
             }

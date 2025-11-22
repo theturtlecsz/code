@@ -8,13 +8,17 @@ pub mod claude;
 pub mod gemini;
 pub mod prompt_detector;
 pub mod gemini_pty;
+pub mod gemini_pipes;
+pub mod claude_pipes;
 
 pub use types::*;
 pub use claude::{ClaudeCliExecutor, ClaudeCliConfig};
 pub use gemini::{GeminiCliExecutor, GeminiCliConfig};
 pub use context::CliContextManager;
 pub use prompt_detector::PromptDetector;
-pub use gemini_pty::{GeminiPtySession, GeminiPtyConfig, SessionStats};
+pub use gemini_pty::{GeminiPtySession, GeminiPtyConfig, GeminiPtyProvider, SessionStats, ConversationId};
+pub use gemini_pipes::{GeminiPipesSession, GeminiPipesConfig, GeminiPipesProvider};
+pub use claude_pipes::{ClaudePipesSession, ClaudePipesConfig, ClaudePipesProvider, SessionInfo};
 
 /// Core trait for CLI-based model executors
 ///

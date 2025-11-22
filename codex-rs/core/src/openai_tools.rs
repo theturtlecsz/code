@@ -689,6 +689,10 @@ pub(crate) fn get_openai_tools(
     // Always include web_fetch tool
     tools.push(create_web_fetch_tool());
 
+    // Add search tools
+    tools.push(create_search_tool());
+    tools.push(create_history_search_alias_tool());
+
     if let Some(mcp_tools) = mcp_tools {
         // Ensure deterministic ordering to maximize prompt cache hits.
         // HashMap iteration order is non-deterministic, so sort by fully-qualified tool name.
@@ -822,6 +826,8 @@ mod tests {
                 "kill",
                 "web_search",
                 "web_fetch",
+                "search",
+                "history.search",
             ],
         );
     }
@@ -859,6 +865,8 @@ mod tests {
                 "kill",
                 "web_search",
                 "web_fetch",
+                "search",
+                "history.search",
             ],
         );
     }
@@ -890,6 +898,8 @@ mod tests {
                 "kill",
                 "web_search",
                 "web_fetch",
+                "search",
+                "history.search",
             ],
         );
     }
@@ -1831,6 +1841,65 @@ fn create_web_fetch_tool() -> OpenAiTool {
         parameters: JsonSchema::Object {
             properties,
             required: Some(vec!["url".to_string()]),
+            additional_properties: Some(false),
+        },
+    })
+}
+
+fn create_search_tool() -> OpenAiTool {
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "query".to_string(),
+        JsonSchema::String {
+            description: Some("The query string to search for in conversation history.".to_string()),
+        },
+    );
+    properties.insert(
+        "agent".to_string(),
+        JsonSchema::String {
+            description: Some(
+                "Optional: Filter by agent (e.g., 'user', 'assistant', 'tool').".to_string(),
+            ),
+        },
+    );
+
+    OpenAiTool::Function(ResponsesApiTool {
+        name: "search".to_string(),
+        description: "Search previous turns in the conversation history.".to_string(),
+        strict: false,
+        parameters: JsonSchema::Object {
+            properties,
+            required: Some(vec!["query".to_string()]),
+            additional_properties: Some(false),
+        },
+    })
+}
+
+fn create_history_search_alias_tool() -> OpenAiTool {
+    // This is an alias for the search tool, so it shares the same definition.
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "query".to_string(),
+        JsonSchema::String {
+            description: Some("The query string to search for in conversation history.".to_string()),
+        },
+    );
+    properties.insert(
+        "agent".to_string(),
+        JsonSchema::String {
+            description: Some(
+                "Optional: Filter by agent (e.g., 'user', 'assistant', 'tool').".to_string(),
+            ),
+        },
+    );
+
+    OpenAiTool::Function(ResponsesApiTool {
+        name: "history.search".to_string(),
+        description: "Search previous turns in the conversation history.".to_string(),
+        strict: false,
+        parameters: JsonSchema::Object {
+            properties,
+            required: Some(vec!["query".to_string()]),
             additional_properties: Some(false),
         },
     })

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-11-19T20:27:47.356Z",
+  "generatedAt": "2025-11-22T00:14:36.335Z",
   "docs": [
     {
       "path": "ACE_ACTIVATION_GUIDE.md",
@@ -354,7 +354,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1762744917000
+      "updated": 1763682445000
     },
     {
       "path": "docs/report/verification.md",
@@ -363,7 +363,7 @@
       "broken": [],
       "missingRefs": [],
       "staleDays": 0,
-      "updated": 1762744917000
+      "updated": 1763682445000
     },
     {
       "path": "execpolicy/README.md",
@@ -430,15 +430,6 @@
       "missingRefs": [],
       "staleDays": 0,
       "updated": 1762744917000
-    },
-    {
-      "path": "target/doc/static.files/SourceSerif4-LICENSE-a2cfd9d5.md",
-      "score": 85,
-      "orphan": true,
-      "broken": [],
-      "missingRefs": [],
-      "staleDays": 0,
-      "updated": 0
     },
     {
       "path": "tui/ACE_LEARNING_USAGE.md",

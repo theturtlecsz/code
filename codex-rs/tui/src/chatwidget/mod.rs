@@ -4386,6 +4386,10 @@ impl ChatWidget<'_> {
         }
 
         let key = self.next_internal_key();
+        tracing::debug!(
+            "📝 HISTORY_PUSH: kind={:?} | tag=epilogue | key={:?}",
+            cell.kind(), key
+        );
         let _ = self.history_insert_with_key_global_tagged(Box::new(cell), key, "epilogue");
 
         // SPEC-KIT QUALITY GATE: Trigger handler if in QualityGateExecuting AND not already processing
@@ -4460,6 +4464,10 @@ impl ChatWidget<'_> {
     /// Push a user prompt so it appears right under banners and above model output for the next request.
     fn history_push_prompt_next_req(&mut self, cell: impl HistoryCell + 'static) {
         let key = self.next_req_key_prompt();
+        tracing::debug!(
+            "📝 HISTORY_PUSH_PROMPT: kind={:?} | tag=prompt | key={:?}",
+            cell.kind(), key
+        );
         let _ = self.history_insert_with_key_global_tagged(Box::new(cell), key, "prompt");
     }
 
@@ -5592,6 +5600,10 @@ impl ChatWidget<'_> {
         let UserMessage { display_text, .. } = message;
 
         if !display_text.is_empty() {
+            tracing::debug!(
+                "🔵 USER_MSG_PUSH: Adding user prompt to history | preview: {}...",
+                &display_text.chars().take(50).collect::<String>()
+            );
             self.history_push_prompt_next_req(history_cell::new_user_prompt(display_text.clone()));
             self.pending_user_prompts_for_next_turn =
                 self.pending_user_prompts_for_next_turn.saturating_add(1);
@@ -7792,6 +7804,161 @@ impl ChatWidget<'_> {
         if needs_refresh {
             self.request_latest_rate_limits(snapshot.is_none());
         }
+    }
+
+    /// Handle /sessions command - list and manage CLI sessions
+    pub(crate) fn handle_sessions_command(&mut self, args: String) {
+        let args = args.trim().to_string();
+
+        // Clone what we need for the async task
+        let app_tx = self.app_event_tx.clone();
+
+        // Parse subcommand and spawn appropriate task
+        if args.starts_with("kill ") {
+            let conv_id = args.strip_prefix("kill ").unwrap().trim().to_string();
+            tokio::spawn(async move {
+                let output = Self::kill_cli_session_impl(&conv_id).await;
+                let _ = app_tx.send(crate::app_event::AppEvent::SessionsCommandResult(output));
+            });
+        } else if args == "kill-all" || args == "cleanup" {
+            tokio::spawn(async move {
+                let output = Self::kill_all_cli_sessions_impl().await;
+                let _ = app_tx.send(crate::app_event::AppEvent::SessionsCommandResult(output));
+            });
+        } else {
+            // Default: list sessions
+            tokio::spawn(async move {
+                let output = Self::list_cli_sessions_impl().await;
+                let _ = app_tx.send(crate::app_event::AppEvent::SessionsCommandResult(output));
+            });
+        }
+    }
+
+    /// List all active CLI sessions (implementation)
+    async fn list_cli_sessions_impl() -> String {
+        use crate::providers::claude_streaming::ClaudeStreamingProvider;
+        use crate::providers::gemini_streaming::GeminiStreamingProvider;
+
+        let mut all_sessions = Vec::new();
+
+        // Get Claude sessions from global provider
+        all_sessions.extend(ClaudeStreamingProvider::global_provider().list_sessions().await);
+
+        // Get Gemini sessions from global provider
+        all_sessions.extend(GeminiStreamingProvider::global_provider().list_sessions().await);
+
+        // Format output
+        let output = if all_sessions.is_empty() {
+            "# Active CLI Sessions\n\nNo active sessions.".to_string()
+        } else {
+            let mut lines = vec!["# Active CLI Sessions\n".to_string()];
+            lines.push(format!("{} active session(s)\n", all_sessions.len()));
+            lines.push("```".to_string());
+            lines.push(format!(
+                "{:<20} {:<12} {:<40} {:<8} {:<8} {}",
+                "CONV-ID", "PROVIDER", "SESSION-ID", "TURNS", "PID", "AGE"
+            ));
+            lines.push("-".repeat(100));
+
+            for session in all_sessions {
+                let age = session
+                    .created_at
+                    .elapsed()
+                    .map(|d| format!("{}s", d.as_secs()))
+                    .unwrap_or_else(|_| "?".to_string());
+
+                let session_id_short = session
+                    .session_id
+                    .as_ref()
+                    .map(|s| {
+                        if s.len() > 36 {
+                            format!("{}...", &s[..36])
+                        } else {
+                            s.clone()
+                        }
+                    })
+                    .unwrap_or_else(|| "none".to_string());
+
+                let pid_str = session
+                    .current_pid
+                    .map(|p| p.to_string())
+                    .unwrap_or_else(|| "-".to_string());
+
+                let conv_id_short = if session.conv_id.len() > 18 {
+                    format!("{}...", &session.conv_id[..18])
+                } else {
+                    session.conv_id.clone()
+                };
+
+                lines.push(format!(
+                    "{:<20} {:<12} {:<40} {:<8} {:<8} {}",
+                    conv_id_short, session.provider, session_id_short, session.turn_count, pid_str, age
+                ));
+            }
+
+            lines.push("```".to_string());
+            lines.push("\nCommands:".to_string());
+            lines.push("- `/sessions kill <conv-id>` - Kill specific session".to_string());
+            lines.push("- `/sessions kill-all` - Kill all sessions".to_string());
+
+            lines.join("\n")
+        };
+
+        output
+    }
+
+    /// Kill a specific CLI session (implementation)
+    async fn kill_cli_session_impl(conv_id: &str) -> String {
+        use crate::providers::claude_streaming::ClaudeStreamingProvider;
+        use crate::providers::gemini_streaming::GeminiStreamingProvider;
+
+        let mut killed = false;
+
+        // Try Claude provider
+        if let Ok(_) = ClaudeStreamingProvider::global_provider()
+            .kill_session(&conv_id.to_string())
+            .await
+        {
+            killed = true;
+        }
+
+        // Try Gemini provider
+        if let Ok(_) = GeminiStreamingProvider::global_provider()
+            .kill_session(&conv_id.to_string())
+            .await
+        {
+            killed = true;
+        }
+
+        if killed {
+            format!("# Session Kill\n\n✅ Killed session: {}", conv_id)
+        } else {
+            format!("# Session Kill\n\n⚠️  Session not found: {}", conv_id)
+        }
+    }
+
+    /// Kill all CLI sessions (implementation)
+    async fn kill_all_cli_sessions_impl() -> String {
+        use crate::providers::claude_streaming::ClaudeStreamingProvider;
+        use crate::providers::gemini_streaming::GeminiStreamingProvider;
+
+        // Get counts before killing
+        let claude_count = ClaudeStreamingProvider::global_provider()
+            .active_session_count()
+            .await;
+        let gemini_count = GeminiStreamingProvider::global_provider()
+            .active_session_count()
+            .await;
+        let total = claude_count + gemini_count;
+
+        // Kill all sessions
+        let _ = ClaudeStreamingProvider::global_provider().shutdown_all().await;
+        let _ = GeminiStreamingProvider::global_provider().shutdown_all().await;
+
+        format!(
+            "# Kill All Sessions\n\n✅ Killed {} session(s):\n- Claude: {}\n- Gemini: {}",
+            total, claude_count, gemini_count
+        )
     }
 
     fn request_latest_rate_limits(&mut self, show_loading: bool) {
@@ -11090,6 +11257,14 @@ impl ChatWidget<'_> {
     ///
     /// Called when a text chunk is received from a native provider.
     pub(crate) fn on_native_stream_delta(&mut self, text: String) {
+        // Log first delta only (to avoid spam)
+        if self.native_stream_content.is_empty() {
+            tracing::debug!(
+                "🟢 STREAM_START: First delta received | preview: {}...",
+                &text.chars().take(50).collect::<String>()
+            );
+        }
+
         // Accumulate content for history
         self.native_stream_content.push_str(&text);
 
@@ -11109,6 +11284,11 @@ impl ChatWidget<'_> {
         input_tokens: Option<u32>,
         output_tokens: Option<u32>,
     ) {
+        tracing::debug!(
+            "🟡 STREAM_COMPLETE: Finalizing stream | content_len: {} chars",
+            self.native_stream_content.len()
+        );
+
         // Finalize the stream
         streaming::finalize(self, StreamKind::Answer, true);
 
@@ -11117,6 +11297,11 @@ impl ChatWidget<'_> {
             (self.native_stream_provider.take(), self.native_stream_model.take())
         {
             let content = std::mem::take(&mut self.native_stream_content);
+
+            tracing::debug!(
+                "🟠 ASSISTANT_MSG_PUSH: Adding assistant response to conversation history | preview: {}...",
+                &content.chars().take(50).collect::<String>()
+            );
 
             // Add assistant response to conversation history
             if let Some(history) = self.native_provider_history.get_mut(&provider) {

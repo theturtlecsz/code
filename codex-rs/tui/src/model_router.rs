@@ -446,20 +446,25 @@ pub async fn execute_with_cli_streaming(
                 .map_err(|e| format!("{}", e))
         }
         ProviderType::Gemini => {
-            // Gemini CLI routing DISABLED (timeouts/reliability issues)
-            // Gemini models should use native API flow instead
-            Err("Gemini CLI routing disabled. Use ChatGPT account for Gemini models.".to_string())
+            // Gemini PTY routing (SPEC-KIT-952-F)
+            use crate::providers::gemini_streaming::GeminiStreamingProvider;
+
+            let provider = GeminiStreamingProvider::new()
+                .map_err(|e| format!("Failed to create Gemini provider: {}", e))?;
+
+            provider.execute_streaming(messages, model, tx).await
+                .map_err(|e| format!("{}", e))
         }
     }
 }
 
 /// Check if native streaming is available for a model (SPEC-KIT-952)
 ///
-/// Returns true for Claude models only (CLI routing working).
-/// Gemini CLI routing DISABLED - use native API instead.
+/// Returns true for Claude and Gemini models (both use CLI routing).
+/// ChatGPT uses native OAuth flow.
 pub fn supports_native_streaming(model: &str) -> bool {
     let provider_type = ProviderType::from_model_name(model);
-    matches!(provider_type, ProviderType::Claude)  // Only Claude
+    matches!(provider_type, ProviderType::Claude | ProviderType::Gemini)
 }
 
 /// Execute a prompt with CLI routing (DEPRECATED - legacy non-streaming version)

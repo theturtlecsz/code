@@ -93,6 +93,7 @@ pub enum SlashCommand {
     Cmd,
     Status,
     Limits,
+    Sessions,
     #[strum(serialize = "update", serialize = "upgrade")]
     Update,
     Theme,
@@ -233,6 +234,7 @@ impl SlashCommand {
             SlashCommand::Cmd => "run a project command",
             SlashCommand::Status => "show current session configuration and token usage",
             SlashCommand::Limits => "visualize weekly and hourly rate limits",
+            SlashCommand::Sessions => "list and manage active CLI sessions (Claude/Gemini)",
             SlashCommand::Update => "check for updates and optionally upgrade",
             SlashCommand::Theme => "switch between color themes",
             SlashCommand::Prompts => "show example prompts",
