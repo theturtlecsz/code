@@ -94,11 +94,12 @@ fn main() {
         .join("src")
         .join("assets")
         .join("spinners.json");
-    if let Ok(text) = fs::read_to_string(&path) {
-        if let Ok(src) = serde_json::from_str::<BTreeMap<String, serde_json::Value>>(&text) {
-            let mut changed = false;
-            let mut out: BTreeMap<String, Dest> = BTreeMap::new();
-            for (name, v) in src.into_iter() {
+    if let Ok(text) = fs::read_to_string(&path)
+        && let Ok(src) = serde_json::from_str::<BTreeMap<String, serde_json::Value>>(&text)
+    {
+        let mut changed = false;
+        let mut out: BTreeMap<String, Dest> = BTreeMap::new();
+        for (name, v) in src.into_iter() {
                 if let Ok(d) = serde_json::from_value::<Dest>(v.clone()) {
                     out.insert(name, d);
                     continue;
@@ -116,12 +117,9 @@ fn main() {
                     changed = true;
                 }
             }
-            if changed {
-                if let Ok(pretty) = serde_json::to_string_pretty(&out) {
-                    let _ = fs::write(&path, pretty);
-                    println!("cargo:rerun-if-changed={}", path.display());
-                }
-            }
+        if changed && let Ok(pretty) = serde_json::to_string_pretty(&out) {
+            let _ = fs::write(&path, pretty);
+            println!("cargo:rerun-if-changed={}", path.display());
         }
     }
 }
