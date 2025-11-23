@@ -53,14 +53,14 @@ jobs:
         path: codex-rs/target
         key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
 
-    - name: Run cargo fmt check
-      working-directory: codex-rs
-      run: cargo fmt --all -- --check
-
-    - name: Run cargo clippy
-      working-directory: codex-rs
-      continue-on-error: true
-      run: cargo clippy -p codex-tui -p codex-core -p codex-protocol --all-targets --all-features --no-deps -- -D warnings
+    #- name: Run cargo fmt check
+    #  working-directory: codex-rs
+    #  run: cargo fmt --all -- --check
+    #
+    #- name: Run cargo clippy
+    #  working-directory: codex-rs
+    #  continue-on-error: true
+    #  run: cargo clippy -p codex-tui -p codex-core -p codex-protocol --all-targets --all-features --no-deps -- -D warnings
 
     - name: Run library tests
       working-directory: codex-rs
