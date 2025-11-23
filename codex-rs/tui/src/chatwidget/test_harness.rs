@@ -775,6 +775,25 @@ mod tests {
 
         harness.drain_app_events();
 
+        // STRUCTURAL ASSERTIONS: Verify expected cell structure before snapshot
+        let mut user_count = 0;
+        let mut assistant_count = 0;
+        for cell in &harness.widget.history_cells {
+            match cell.kind() {
+                HistoryCellType::User => user_count += 1,
+                HistoryCellType::Assistant => assistant_count += 1,
+                _ => {}
+            }
+        }
+
+        assert_eq!(user_count, 2, "Should have 2 user messages before snapshot");
+        assert!(assistant_count >= 2, "Should have at least 2 assistant messages before snapshot");
+
+        // Verify cell ordering
+        let (user_groups, assistant_groups) = harness.cells_by_turn();
+        assert_eq!(user_groups.len(), 2, "Should have 2 user turn groups");
+        assert_eq!(assistant_groups.len(), 2, "Should have 2 assistant turn groups");
+
         // Render to a TestBackend with fixed size (80x24)
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
@@ -816,6 +835,22 @@ mod tests {
 
         let harness = TestHarness::new();
 
+        // STRUCTURAL ASSERTIONS: Verify empty/initial state
+        // ChatWidget may have initial cells (welcome message, etc.)
+        // Just verify no user or assistant messages yet
+        let mut user_count = 0;
+        let mut assistant_count = 0;
+        for cell in &harness.widget.history_cells {
+            match cell.kind() {
+                HistoryCellType::User => user_count += 1,
+                HistoryCellType::Assistant => assistant_count += 1,
+                _ => {}
+            }
+        }
+
+        assert_eq!(user_count, 0, "Should have no user messages in empty state");
+        assert_eq!(assistant_count, 0, "Should have no assistant messages in empty state");
+
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
 
@@ -854,6 +889,25 @@ mod tests {
         );
 
         harness.drain_app_events();
+
+        // STRUCTURAL ASSERTIONS: Verify single exchange structure
+        let mut user_count = 0;
+        let mut assistant_count = 0;
+        for cell in &harness.widget.history_cells {
+            match cell.kind() {
+                HistoryCellType::User => user_count += 1,
+                HistoryCellType::Assistant => assistant_count += 1,
+                _ => {}
+            }
+        }
+
+        assert_eq!(user_count, 1, "Should have 1 user message");
+        assert!(assistant_count >= 1, "Should have at least 1 assistant message");
+
+        // Verify cell ordering
+        let (user_groups, assistant_groups) = harness.cells_by_turn();
+        assert_eq!(user_groups.len(), 1, "Should have 1 user turn group");
+        assert_eq!(assistant_groups.len(), 1, "Should have 1 assistant turn group");
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
