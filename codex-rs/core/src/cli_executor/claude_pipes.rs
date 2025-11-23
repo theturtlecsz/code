@@ -49,6 +49,7 @@ use super::types::{CliError, StreamEvent};
 
 /// Parse a single stream-json event line
 /// Extracted for testability - processes one JSON event and returns StreamEvents
+#[allow(dead_code)]
 pub(crate) fn parse_stream_json_event(
     line: &str,
     current_session_id: &mut Option<String>,

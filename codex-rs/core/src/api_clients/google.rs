@@ -95,6 +95,7 @@ struct Candidate {
     content: Option<CandidateContent>,
     finish_reason: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     safety_ratings: Vec<SafetyRating>,
 }
 
@@ -102,6 +103,7 @@ struct Candidate {
 #[derive(Debug, Deserialize)]
 struct CandidateContent {
     parts: Vec<Part>,
+    #[allow(dead_code)]
     role: Option<String>,
 }
 
@@ -117,6 +119,7 @@ struct Part {
 struct UsageMetadata {
     prompt_token_count: Option<u32>,
     candidates_token_count: Option<u32>,
+    #[allow(dead_code)]
     total_token_count: Option<u32>,
 }
 

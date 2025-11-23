@@ -484,6 +484,7 @@ impl GeminiPtySession {
     /// Cancel current generation (send Ctrl+C)
     ///
     /// **BLOCKING**: Must be called from `spawn_blocking`
+    #[allow(dead_code)]
     fn cancel_internal(&mut self) -> Result<(), CliError> {
         tracing::info!("Cancelling current generation");
 
