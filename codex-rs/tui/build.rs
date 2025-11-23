@@ -100,23 +100,23 @@ fn main() {
         let mut changed = false;
         let mut out: BTreeMap<String, Dest> = BTreeMap::new();
         for (name, v) in src.into_iter() {
-                if let Ok(d) = serde_json::from_value::<Dest>(v.clone()) {
-                    out.insert(name, d);
-                    continue;
-                }
-                if let Ok(s) = serde_json::from_value::<Src>(v.clone()) {
-                    out.insert(
-                        name.clone(),
-                        Dest {
-                            interval: s.interval,
-                            frames: s.frames,
-                            label: humanize(&name),
-                            group: group_for(&name),
-                        },
-                    );
-                    changed = true;
-                }
+            if let Ok(d) = serde_json::from_value::<Dest>(v.clone()) {
+                out.insert(name, d);
+                continue;
             }
+            if let Ok(s) = serde_json::from_value::<Src>(v.clone()) {
+                out.insert(
+                    name.clone(),
+                    Dest {
+                        interval: s.interval,
+                        frames: s.frames,
+                        label: humanize(&name),
+                        group: group_for(&name),
+                    },
+                );
+                changed = true;
+            }
+        }
         if changed && let Ok(pretty) = serde_json::to_string_pretty(&out) {
             let _ = fs::write(&path, pretty);
             println!("cargo:rerun-if-changed={}", path.display());
