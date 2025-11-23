@@ -51,26 +51,34 @@
 - ✅ Integration test templates
 
 **Improvements Completed** (2025-11-23):
+- ✅ **Item 1**: Test layout refactoring (extracted 14 tests to dedicated modules) - Commit 41fcbbf67
+- ✅ **Item 2**: Strengthen interleaving invariants (contiguity checks, cells_by_turn helper) - Commits c639126a3, c0f8f8eeb
 - ✅ **Item 3**: Enhanced parsing tests (+12 tests, real CLI samples, property tests) - Commit b382f484d
 - ✅ **Item 4**: CLI integration tests (6 tests, stdin/stdout validation) - Commit 7f18d88a4
-- ✅ **Item 1**: Test layout refactoring (extracted 14 tests to dedicated modules) - Commit 41fcbbf67
+- ✅ **Item 5**: Tighten snapshot tests (structural assertions on 3 tests) - Commit 6f1a88d38
+- ✅ **Item 6**: CI/coverage integration (GitHub Actions workflows + badges) - Commit 9872d571d
 
-**Remaining Improvements** (from TESTING-CRITIQUE.md):
-- ⏸️ **Item 2**: Strengthen interleaving invariants (per-request contiguity) - BLOCKED (test_harness.rs has 28 compilation errors)
-- ⏸️ **Item 5**: Tighten snapshot tests (structural assertions) - BLOCKED (same)
-- ⏳ **Item 6**: CI/coverage integration (GitHub Actions) - Ready to implement
+**Implementation Details**:
+- Fixed test_harness.rs compilation errors (28 errors): InputItem, OrderMeta, render(), cell.symbol()
+- Added cells_by_turn() helper for turn-based grouping and contiguity verification
+- Enhanced all 3 snapshot tests with pre-snapshot structural assertions
+- Created .github/workflows/tui-tests.yml (fmt, clippy, tests, snapshots)
+- Created .github/workflows/coverage.yml (tarpaulin coverage generation)
+- Added CI badges to README.md
 
 **Files**:
-- `tui/src/chatwidget/mod.rs` (OrderKey system, now 22,570 lines)
-- `tui/src/chatwidget/test_harness.rs` (734 lines, needs compilation fixes)
+- `tui/src/chatwidget/mod.rs` (OrderKey system, 22,570 lines)
+- `tui/src/chatwidget/test_harness.rs` (889 lines, all tests passing ✅)
 - `tui/src/chatwidget/orderkey_tests.rs` (355 lines, 14 tests)
 - `tui/src/chatwidget/test_support.rs` (60 lines, helpers)
 - `core/src/cli_executor/claude_pipes.rs` (25 tests)
 - `tui/tests/cli_basic_integration.rs` (6 tests)
+- `.github/workflows/tui-tests.yml` (automated testing)
+- `.github/workflows/coverage.yml` (coverage tracking)
 
 **Debug Logging**: Emoji-tagged logs ready (🔵 user, 🟢 stream, 🟡 complete, 🟠 assistant, 📝 history)
 
-**Total Effort**: ~6 hours (original 4h + improvements 2h)
+**Total Effort**: ~10 hours (original 4h + session 1: 2h + session 2: 4h)
 
 ---
 
