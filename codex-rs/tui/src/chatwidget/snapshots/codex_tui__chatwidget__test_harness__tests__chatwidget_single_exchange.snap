@@ -1,6 +1,5 @@
 ---
 source: tui/src/chatwidget/test_harness.rs
-assertion_line: 1068
 expression: snapshot_output
 ---
  ┌────────────────────────────────────────────────────────────────────────────┐ 
@@ -23,6 +22,6 @@ expression: snapshot_output
  › Hello!                                                                       
                                                                                 
  ┌────────────────────────────────────────────────────────────────────────────┐ 
- │ What can I code for you this evening?                                      │ 
+ │ What can I code for you tonight?                                           │ 
  └────────────────────────────────────────────────────────────────────────────┘ 
    Read Only  (Shift+Tab change)                                   Ctrl+H help

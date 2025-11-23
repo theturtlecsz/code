@@ -633,7 +633,7 @@ impl GeminiPipesProvider {
     pub async fn kill_session(&self, conv_id: &ConversationId) -> Result<(), CliError> {
         let mut sessions = self.sessions.lock().await;
 
-        if let Some(mut session) = sessions.get_mut(conv_id) {
+        if let Some(session) = sessions.get_mut(conv_id) {
             session.kill_process()?;
             tracing::info!("Killed session: {}", conv_id);
         }

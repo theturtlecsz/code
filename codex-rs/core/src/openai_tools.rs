@@ -48,8 +48,7 @@ pub struct FreeformToolFormat {
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(tag = "type")]
-#[allow(dead_code)]
-pub(crate) enum OpenAiTool {
+pub enum OpenAiTool {
     #[serde(rename = "function")]
     Function(ResponsesApiTool),
     #[serde(rename = "local_shell")]

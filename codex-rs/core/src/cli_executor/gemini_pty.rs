@@ -24,7 +24,7 @@
 //! Uses plain stdin/stdout pipes with careful output filtering.
 
 use std::io::{BufRead, BufReader, Write};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStdin, ChildStdout};
 use std::time::{Duration, Instant};
 
 use tokio::sync::mpsc;
