@@ -1096,4 +1096,55 @@ mod tests {
             }
         }
     }
+
+    /// Task 3: Long conversation stability test (SPEC-954)
+    #[tokio::test]
+    async fn test_long_conversation_stability() {
+        let mut harness = TestHarness::new();
+
+        // Send 25 message pairs (50 total messages)
+        for i in 1..=25 {
+            // User message
+            harness.send_user_message(&format!("Turn {} question", i));
+
+            // Assistant response with multiple deltas
+            for j in 0..5 {
+                harness.send_codex_event(Event {
+                    id: format!("turn-{}", i),
+                    event_seq: j,
+                    msg: EventMsg::AgentMessageDelta(AgentMessageDeltaEvent {
+                        delta: format!("Turn {} response part {} ", i, j),
+                    }),
+                    order: Some(OrderMeta {
+                        request_ordinal: i as u64,
+                        output_index: Some(j as u32),
+                        sequence_number: None,
+                    }),
+                });
+            }
+        }
+
+        harness.drain_app_events();
+
+        // Verify conversation integrity
+        let cell_count = harness.history_cell_count();
+        assert!(cell_count > 0, "Should have conversation history");
+
+        // Verify no interleaving
+        let (user_groups, assistant_groups) = harness.cells_by_turn();
+        assert_eq!(user_groups.len(), 25, "Should have 25 user messages");
+        assert_eq!(assistant_groups.len(), 25, "Should have 25 assistant responses");
+
+        // Verify all groups are contiguous
+        for group in user_groups.iter().chain(assistant_groups.iter()) {
+            for window in group.windows(2) {
+                assert_eq!(
+                    window[1], window[0] + 1,
+                    "Groups should be contiguous"
+                );
+            }
+        }
+
+        println!("✅ Long conversation (25 turns, 50 messages) stable - no interleaving");
+    }
 }
