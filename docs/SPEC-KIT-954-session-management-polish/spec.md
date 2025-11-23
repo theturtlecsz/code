@@ -148,8 +148,8 @@ done
 
 ---
 
-### Task 4: Model-Switching Limitation Documentation ⏳
-**Status**: Known limitation, not documented
+### Task 4: Model-Switching Limitation Documentation ✅
+**Status**: COMPLETE - Documentation created (2025-11-23)
 
 **Problem**: Global providers use single model, can't switch between opus/sonnet/haiku in session mode
 
@@ -161,12 +161,19 @@ CLAUDE_PROVIDER.get_or_init(|| ClaudePipesProvider::with_cwd("", &cwd))
 ```
 
 **Acceptance Criteria**:
-- [ ] Document limitation in SPEC-952 notes or README
-- [ ] Describe workaround (use ChatGPT for model variety)
-- [ ] Note fix requires multi-instance providers (keyed by model)
-- [ ] Estimate effort for future fix (~2-3 hours)
+- [x] Document limitation in SPEC-952 notes or README
+- [x] Describe workaround (use ChatGPT for model variety)
+- [x] Note fix requires multi-instance providers (keyed by model)
+- [x] Estimate effort for future fix (~2-3 hours)
 
-**Estimated Effort**: 15 minutes
+**Deliverables** (Commit d70d05cb1):
+- ✅ Created KNOWN-LIMITATIONS.md in SPEC-952 docs
+- ✅ Documented root cause (global OnceLock provider singleton)
+- ✅ Workaround documented (use ChatGPT account for model switching)
+- ✅ Fix estimate (2-3 hours, HashMap<String, Provider> refactor)
+- ✅ Linked from SPEC-952 README.md Known Limitations section
+
+**Actual Effort**: 6 minutes (vs 15 estimated)
 
 ---
 
