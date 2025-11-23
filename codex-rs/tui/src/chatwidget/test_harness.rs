@@ -1014,4 +1014,86 @@ mod tests {
         insta::assert_snapshot!("chatwidget_single_exchange", snapshot_output);
         println!("✅ Single exchange snapshot test passed");
     }
+
+    /// Property-based tests for message interleaving
+    #[cfg(test)]
+    mod property_tests {
+        use super::*;
+        use proptest::prelude::*;
+        use codex_core::protocol::{AgentMessageDeltaEvent, Event, EventMsg, OrderMeta};
+
+        // Strategy for generating random event orderings
+        prop_compose! {
+            fn arbitrary_event_ordering()
+                (num_requests in 1usize..5,
+                 events_per_request in 2usize..6)
+                -> Vec<(usize, usize, String)> // (request, seq, delta)
+            {
+                let mut events = Vec::new();
+                for req in 0..num_requests {
+                    for seq in 0..events_per_request {
+                        events.push((req, seq, format!("req{}-seq{}", req, seq)));
+                    }
+                }
+                events
+            }
+        }
+
+        proptest! {
+            #[test]
+            fn prop_events_never_interleave(
+                event_ordering in arbitrary_event_ordering()
+            ) {
+                // Property: Regardless of event arrival order,
+                // messages are grouped by request in history
+
+                let runtime = tokio::runtime::Runtime::new().unwrap();
+                runtime.block_on(async {
+                    let mut harness = TestHarness::new();
+
+                    // Send user messages
+                    let num_requests = event_ordering.iter()
+                        .map(|(req, _, _)| req)
+                        .max()
+                        .unwrap_or(&0) + 1;
+
+                    for i in 0..num_requests {
+                        harness.send_user_message(&format!("Request {}", i));
+                    }
+
+                    // Send events in scrambled order
+                    for (req, seq, delta) in event_ordering {
+                        harness.send_codex_event(Event {
+                            id: format!("req-{}", req),
+                            event_seq: seq as u64,
+                            msg: EventMsg::AgentMessageDelta(AgentMessageDeltaEvent {
+                                delta: delta.clone(),
+                            }),
+                            order: Some(OrderMeta {
+                                request_ordinal: (req + 1) as u64,
+                                output_index: Some(seq as u32),
+                                sequence_number: None,
+                            }),
+                        });
+                    }
+
+                    harness.drain_app_events();
+
+                    // Verify contiguity
+                    let (user_groups, assistant_groups) = harness.cells_by_turn();
+
+                    // Each request should form contiguous groups
+                    for group in user_groups.iter().chain(assistant_groups.iter()) {
+                        for window in group.windows(2) {
+                            assert_eq!(
+                                window[1], window[0] + 1,
+                                "Group should be contiguous but found gap: {} -> {}",
+                                window[0], window[1]
+                            );
+                        }
+                    }
+                });
+            }
+        }
+    }
 }
