@@ -6,9 +6,7 @@
 //! UPDATED: Now uses ClaudePipesProvider for session-based multi-turn conversations.
 //! Uses global provider instance to maintain sessions across messages.
 
-use codex_core::cli_executor::{
-    ClaudePipesProvider, ConversationId, CliError, StreamEvent,
-};
+use codex_core::cli_executor::{ClaudePipesProvider, CliError, ConversationId, StreamEvent};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::OnceLock;
@@ -193,7 +191,10 @@ impl ClaudeStreamingProvider {
     /// Map CliError to ProviderError
     fn map_cli_error(e: CliError) -> ProviderError {
         match e {
-            CliError::BinaryNotFound { binary, install_hint } => ProviderError::Provider {
+            CliError::BinaryNotFound {
+                binary,
+                install_hint,
+            } => ProviderError::Provider {
                 provider: "Claude".to_string(),
                 message: format!("{} not found. {}", binary, install_hint),
             },

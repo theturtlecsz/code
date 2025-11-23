@@ -9,12 +9,12 @@ use tokio::sync::mpsc::unbounded_channel;
 
 /// Create a minimal ChatWidget for testing
 fn make_test_widget() -> ChatWidget<'static> {
+    use codex_core::config::Config;
+    use codex_core::config::ConfigOverrides;
+    use codex_core::config::ConfigToml;
     use codex_tui::app_event_sender::AppEventSender;
     use codex_tui::bottom_pane::{BottomPane, BottomPaneParams};
     use codex_tui::streaming::StreamController;
-    use codex_core::config::Config;
-    use codex_core::config::ConfigToml;
-    use codex_core::config::ConfigOverrides;
     use std::collections::HashMap;
 
     let (tx_raw, _rx) = channel();

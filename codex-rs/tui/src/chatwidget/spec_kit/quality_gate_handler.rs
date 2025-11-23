@@ -1925,9 +1925,9 @@ async fn store_artifact_async(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::pipeline_config::{PipelineConfig, StageType};
     use super::super::state::QualityCheckpoint;
+    use super::*;
 
     #[test]
     fn test_active_quality_gates_all_stages_enabled() {

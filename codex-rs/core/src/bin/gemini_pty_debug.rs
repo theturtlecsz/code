@@ -12,11 +12,11 @@
 //!   /restart  - Restart the PTY session
 //!   anything else - Send as message to Gemini
 
-use codex_core::cli_executor::gemini_pty::{GeminiPtySession, GeminiPtyConfig};
 use codex_core::cli_executor::StreamEvent;
+use codex_core::cli_executor::gemini_pty::{GeminiPtyConfig, GeminiPtySession};
+use std::io::{self, Write};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use std::io::{self, Write};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

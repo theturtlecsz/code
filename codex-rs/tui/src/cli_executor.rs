@@ -27,24 +27,13 @@ pub enum CliError {
         auth_instructions: String,
     },
     /// Command execution timed out
-    Timeout {
-        cli_name: String,
-        timeout_secs: u64,
-    },
+    Timeout { cli_name: String, timeout_secs: u64 },
     /// Command execution failed
-    ExecutionFailed {
-        cli_name: String,
-        message: String,
-    },
+    ExecutionFailed { cli_name: String, message: String },
     /// Failed to parse CLI output
-    ParseError {
-        cli_name: String,
-        message: String,
-    },
+    ParseError { cli_name: String, message: String },
     /// Invalid UTF-8 in output
-    InvalidUtf8 {
-        cli_name: String,
-    },
+    InvalidUtf8 { cli_name: String },
 }
 
 impl std::fmt::Display for CliError {

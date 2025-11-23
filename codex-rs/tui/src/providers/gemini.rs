@@ -100,7 +100,12 @@ impl GeminiProvider {
         }
 
         // Map approval policy to approval mode (if not already set by sandbox)
-        if settings.sandbox_policy.is_none() || !matches!(settings.sandbox_policy, Some(codex_core::protocol::SandboxPolicy::DangerFullAccess)) {
+        if settings.sandbox_policy.is_none()
+            || !matches!(
+                settings.sandbox_policy,
+                Some(codex_core::protocol::SandboxPolicy::DangerFullAccess)
+            )
+        {
             if let Some(ref approval) = settings.approval_policy {
                 match approval {
                     codex_core::protocol::AskForApproval::Never => {

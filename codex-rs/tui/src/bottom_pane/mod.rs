@@ -604,7 +604,8 @@ impl BottomPane<'_> {
         spec_id: String,
         initial_config: crate::chatwidget::spec_kit::pipeline_config::PipelineConfig,
     ) {
-        let view = PipelineConfiguratorView::new(spec_id, initial_config, self.app_event_tx.clone());
+        let view =
+            PipelineConfiguratorView::new(spec_id, initial_config, self.app_event_tx.clone());
         self.active_view = Some(Box::new(view));
         self.status_view_active = false;
         self.request_redraw();

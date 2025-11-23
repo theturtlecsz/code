@@ -1293,7 +1293,11 @@ impl App<'_> {
                             input_tokens,
                             output_tokens
                         );
-                        widget.on_native_stream_complete(provider_name, input_tokens, output_tokens);
+                        widget.on_native_stream_complete(
+                            provider_name,
+                            input_tokens,
+                            output_tokens,
+                        );
                         self.schedule_redraw();
                     }
                     AppState::Onboarding { .. } => {}
@@ -2774,16 +2778,16 @@ impl App<'_> {
                         // Check Claude CLI status asynchronously
                         let tx = self.app_event_tx.clone();
                         tokio::spawn(async move {
-                            use crate::provider_login::{check_provider_login_status, ProviderLoginStatus};
+                            use crate::provider_login::{
+                                ProviderLoginStatus, check_provider_login_status,
+                            };
                             use crate::providers::ProviderType;
 
                             let status = check_provider_login_status(ProviderType::Claude).await;
 
                             match status {
                                 ProviderLoginStatus::Authenticated { provider_name } => {
-                                    tx.send(AppEvent::LoginClaudeComplete {
-                                        result: Ok(()),
-                                    });
+                                    tx.send(AppEvent::LoginClaudeComplete { result: Ok(()) });
                                     tx.send(AppEvent::InsertBackgroundEvent {
                                         message: format!(
                                             "{} is authenticated. You can now use Claude models.",
@@ -2792,7 +2796,9 @@ impl App<'_> {
                                         placement: crate::app_event::BackgroundPlacement::Tail,
                                     });
                                 }
-                                ProviderLoginStatus::CliNotInstalled { install_instructions } => {
+                                ProviderLoginStatus::CliNotInstalled {
+                                    install_instructions,
+                                } => {
                                     tx.send(AppEvent::LoginClaudeComplete {
                                         result: Err(format!(
                                             "Claude CLI not installed.\n\n{}",
@@ -2813,9 +2819,7 @@ impl App<'_> {
                                     });
                                 }
                                 ProviderLoginStatus::Error(msg) => {
-                                    tx.send(AppEvent::LoginClaudeComplete {
-                                        result: Err(msg),
-                                    });
+                                    tx.send(AppEvent::LoginClaudeComplete { result: Err(msg) });
                                 }
                             }
                         });
@@ -2847,16 +2851,16 @@ impl App<'_> {
                         // Check Gemini CLI status asynchronously
                         let tx = self.app_event_tx.clone();
                         tokio::spawn(async move {
-                            use crate::provider_login::{check_provider_login_status, ProviderLoginStatus};
+                            use crate::provider_login::{
+                                ProviderLoginStatus, check_provider_login_status,
+                            };
                             use crate::providers::ProviderType;
 
                             let status = check_provider_login_status(ProviderType::Gemini).await;
 
                             match status {
                                 ProviderLoginStatus::Authenticated { provider_name } => {
-                                    tx.send(AppEvent::LoginGeminiComplete {
-                                        result: Ok(()),
-                                    });
+                                    tx.send(AppEvent::LoginGeminiComplete { result: Ok(()) });
                                     tx.send(AppEvent::InsertBackgroundEvent {
                                         message: format!(
                                             "{} is authenticated. You can now use Gemini models.",
@@ -2865,7 +2869,9 @@ impl App<'_> {
                                         placement: crate::app_event::BackgroundPlacement::Tail,
                                     });
                                 }
-                                ProviderLoginStatus::CliNotInstalled { install_instructions } => {
+                                ProviderLoginStatus::CliNotInstalled {
+                                    install_instructions,
+                                } => {
                                     tx.send(AppEvent::LoginGeminiComplete {
                                         result: Err(format!(
                                             "Gemini CLI not installed.\n\n{}",
@@ -2886,9 +2892,7 @@ impl App<'_> {
                                     });
                                 }
                                 ProviderLoginStatus::Error(msg) => {
-                                    tx.send(AppEvent::LoginGeminiComplete {
-                                        result: Err(msg),
-                                    });
+                                    tx.send(AppEvent::LoginGeminiComplete { result: Err(msg) });
                                 }
                             }
                         });
@@ -3323,7 +3327,8 @@ impl App<'_> {
                     // Sessions command completed - display result
                     if let AppState::Chat { widget } = &mut self.app_state {
                         widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                            output.lines()
+                            output
+                                .lines()
                                 .map(|line| ratatui::text::Line::from(line.to_string()))
                                 .collect::<Vec<_>>(),
                             crate::history_cell::HistoryCellType::Plain,

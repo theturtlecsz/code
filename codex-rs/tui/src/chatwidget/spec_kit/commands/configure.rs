@@ -59,4 +59,3 @@ impl SpecKitCommand for SpecKitConfigureCommand {
         false
     }
 }
-

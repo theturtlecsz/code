@@ -2006,7 +2006,10 @@ mod tests {
         assert_eq!(config.model, Some("gpt-5.1-mini".to_string()));
         assert_eq!(config.enabled, true);
         assert_eq!(config.read_only, false);
-        assert_eq!(config.description, Some("Cost-optimized GPT-5 variant for simple tasks".to_string()));
+        assert_eq!(
+            config.description,
+            Some("Cost-optimized GPT-5 variant for simple tasks".to_string())
+        );
         assert_eq!(config.args, vec!["--model", "gpt-5.1-mini"]);
         // Note: args_read_only and args_write would be Some(...) if parsed from TOML
         // but TOML syntax for nested arrays varies, so testing model field is sufficient

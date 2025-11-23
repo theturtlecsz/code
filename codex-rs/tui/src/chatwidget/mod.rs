@@ -24,10 +24,10 @@ use std::time::{Duration, Instant, SystemTime};
 use ratatui::style::Modifier;
 use ratatui::style::Style;
 
+use crate::model_router::ModelRouter;
 use crate::slash_command::HalMode;
 use crate::slash_command::SlashCommand;
 use crate::slash_command::SpecAutoInvocation;
-use crate::model_router::ModelRouter;
 use crate::spec_prompts::SpecStage;
 use spec_kit::consensus::{
     ConsensusEvidenceHandle, ConsensusSynthesisRaw, ConsensusSynthesisSummary,
@@ -84,11 +84,11 @@ mod terminal_handlers;
 mod tools;
 
 #[cfg(test)]
+mod orderkey_tests;
+#[cfg(test)]
 mod test_harness;
 #[cfg(test)]
 mod test_support;
-#[cfg(test)]
-mod orderkey_tests;
 use self::agent_install::{
     start_agent_install_session, start_direct_terminal_session, start_prompt_terminal_session,
     wrap_command,
@@ -601,7 +601,8 @@ pub(crate) struct ChatWidget<'a> {
     /// Accumulated streaming content for history
     native_stream_content: String,
     /// Per-provider conversation history (maps provider name to message history)
-    native_provider_history: std::collections::HashMap<String, Vec<codex_core::context_manager::Message>>,
+    native_provider_history:
+        std::collections::HashMap<String, Vec<codex_core::context_manager::Message>>,
     // === END FORK-SPECIFIC ===
 
     // Stable synthetic request bucket for pre‑turn system notices (set on first use)
@@ -4395,7 +4396,8 @@ impl ChatWidget<'_> {
         let key = self.next_internal_key();
         tracing::debug!(
             "📝 HISTORY_PUSH: kind={:?} | tag=epilogue | key={:?}",
-            cell.kind(), key
+            cell.kind(),
+            key
         );
         let _ = self.history_insert_with_key_global_tagged(Box::new(cell), key, "epilogue");
 
@@ -4473,7 +4475,8 @@ impl ChatWidget<'_> {
         let key = self.next_req_key_prompt();
         tracing::debug!(
             "📝 HISTORY_PUSH_PROMPT: kind={:?} | tag=prompt | key={:?}",
-            cell.kind(), key
+            cell.kind(),
+            key
         );
         let _ = self.history_insert_with_key_global_tagged(Box::new(cell), key, "prompt");
     }
@@ -5699,7 +5702,10 @@ impl ChatWidget<'_> {
 
             if prompt_text.is_empty() {
                 // Empty prompt - log warning and return early to prevent fallthrough to OAuth
-                tracing::warn!("Empty prompt_text for CLI-routed model {}, skipping", self.config.model);
+                tracing::warn!(
+                    "Empty prompt_text for CLI-routed model {}, skipping",
+                    self.config.model
+                );
                 return;
             }
 
@@ -5713,14 +5719,16 @@ impl ChatWidget<'_> {
                 }
 
                 // 2. Get provider name for history key
-                let provider_name = crate::model_router::provider_display_name(&self.config.model).to_string();
+                let provider_name =
+                    crate::model_router::provider_display_name(&self.config.model).to_string();
 
                 // 3. Build conversation history for the provider
                 use codex_core::context_manager::Message;
 
                 // Initialize provider history if not exists
                 if !self.native_provider_history.contains_key(&provider_name) {
-                    self.native_provider_history.insert(provider_name.clone(), Vec::new());
+                    self.native_provider_history
+                        .insert(provider_name.clone(), Vec::new());
                 }
 
                 // Add user message to conversation history
@@ -5729,7 +5737,8 @@ impl ChatWidget<'_> {
                 }
 
                 // Clone history for async task
-                let messages: Vec<Message> = self.native_provider_history
+                let messages: Vec<Message> = self
+                    .native_provider_history
                     .get(&provider_name)
                     .cloned()
                     .unwrap_or_default();
@@ -5747,7 +5756,8 @@ impl ChatWidget<'_> {
                         &model,
                         &messages,
                         tx.clone(),
-                    ).await;
+                    )
+                    .await;
 
                     // Log any errors (streaming events already sent)
                     if let Err(e) = result {
@@ -7849,10 +7859,18 @@ impl ChatWidget<'_> {
         let mut all_sessions = Vec::new();
 
         // Get Claude sessions from global provider
-        all_sessions.extend(ClaudeStreamingProvider::global_provider().list_sessions().await);
+        all_sessions.extend(
+            ClaudeStreamingProvider::global_provider()
+                .list_sessions()
+                .await,
+        );
 
         // Get Gemini sessions from global provider
-        all_sessions.extend(GeminiStreamingProvider::global_provider().list_sessions().await);
+        all_sessions.extend(
+            GeminiStreamingProvider::global_provider()
+                .list_sessions()
+                .await,
+        );
 
         // Format output
         let output = if all_sessions.is_empty() {
@@ -7899,7 +7917,12 @@ impl ChatWidget<'_> {
 
                 lines.push(format!(
                     "{:<20} {:<12} {:<40} {:<8} {:<8} {}",
-                    conv_id_short, session.provider, session_id_short, session.turn_count, pid_str, age
+                    conv_id_short,
+                    session.provider,
+                    session_id_short,
+                    session.turn_count,
+                    pid_str,
+                    age
                 ));
             }
 
@@ -7959,8 +7982,12 @@ impl ChatWidget<'_> {
         let total = claude_count + gemini_count;
 
         // Kill all sessions
-        let _ = ClaudeStreamingProvider::global_provider().shutdown_all().await;
-        let _ = GeminiStreamingProvider::global_provider().shutdown_all().await;
+        let _ = ClaudeStreamingProvider::global_provider()
+            .shutdown_all()
+            .await;
+        let _ = GeminiStreamingProvider::global_provider()
+            .shutdown_all()
+            .await;
 
         format!(
             "# Kill All Sessions\n\n✅ Killed {} session(s):\n- Claude: {}\n- Gemini: {}",
@@ -10137,20 +10164,27 @@ impl ChatWidget<'_> {
         let model_lower = model.to_ascii_lowercase();
 
         // Claude models → Anthropic provider with claude OAuth
-        if model_lower.contains("claude") || model_lower.contains("opus")
-            || model_lower.contains("sonnet") || model_lower.contains("haiku") {
+        if model_lower.contains("claude")
+            || model_lower.contains("opus")
+            || model_lower.contains("sonnet")
+            || model_lower.contains("haiku")
+        {
             return Some(("anthropic", "claude"));
         }
 
         // Gemini models → Google provider with gemini OAuth
-        if model_lower.contains("gemini") || model_lower.contains("flash")
-            || model_lower.starts_with("bison") {
+        if model_lower.contains("gemini")
+            || model_lower.contains("flash")
+            || model_lower.starts_with("bison")
+        {
             return Some(("google", "gemini"));
         }
 
         // GPT models → OpenAI provider with chatgpt OAuth
-        if model_lower.contains("gpt") || model_lower.starts_with("o1")
-            || model_lower.starts_with("o3") {
+        if model_lower.contains("gpt")
+            || model_lower.starts_with("o1")
+            || model_lower.starts_with("o3")
+        {
             return Some(("openai", "chatgpt"));
         }
 
@@ -10211,7 +10245,9 @@ impl ChatWidget<'_> {
 
             // SPEC-KIT-946/952: Auto-switch provider based on model selection
             // Claude/Gemini use CLI routing (not OAuth), ChatGPT uses native OAuth
-            if let Some((provider, _auth_method)) = Self::infer_provider_for_model(&self.config.model) {
+            if let Some((provider, _auth_method)) =
+                Self::infer_provider_for_model(&self.config.model)
+            {
                 // Update provider if it changed
                 if self.config.model_provider_id != provider {
                     self.config.model_provider_id = provider.to_string();
@@ -10264,10 +10300,7 @@ impl ChatWidget<'_> {
                 let provider_name = crate::model_router::provider_display_name(&self.config.model);
                 self.history_push(history_cell::PlainHistoryCell::new(
                     vec![
-                        ratatui::text::Line::from(format!(
-                            "⚠️  {} CLI Required",
-                            provider_name
-                        )),
+                        ratatui::text::Line::from(format!("⚠️  {} CLI Required", provider_name)),
                         ratatui::text::Line::from(""),
                         ratatui::text::Line::from(msg),
                     ],
@@ -11239,11 +11272,10 @@ impl ChatWidget<'_> {
         self.native_stream_content = String::new();
 
         // Show loading indicator with provider name
-        let header_line = ratatui::text::Line::from(format!(
-            "**{}** ({})",
-            provider_name, model_name
-        ));
-        let header_lines = crate::markdown_renderer::MarkdownRenderer::render(&header_line.to_string());
+        let header_line =
+            ratatui::text::Line::from(format!("**{}** ({})", provider_name, model_name));
+        let header_lines =
+            crate::markdown_renderer::MarkdownRenderer::render(&header_line.to_string());
 
         // Insert header as a cell
         self.history_push(history_cell::PlainHistoryCell::new(
@@ -11300,9 +11332,10 @@ impl ChatWidget<'_> {
         streaming::finalize(self, StreamKind::Answer, true);
 
         // Update conversation history with the accumulated response
-        if let (Some(provider), Some(_model)) =
-            (self.native_stream_provider.take(), self.native_stream_model.take())
-        {
+        if let (Some(provider), Some(_model)) = (
+            self.native_stream_provider.take(),
+            self.native_stream_model.take(),
+        ) {
             let content = std::mem::take(&mut self.native_stream_content);
 
             tracing::debug!(
@@ -11320,7 +11353,8 @@ impl ChatWidget<'_> {
             if let (Some(input), Some(output)) = (input_tokens, output_tokens) {
                 tracing::info!(
                     "Native provider token usage: input={}, output={}",
-                    input, output
+                    input,
+                    output
                 );
             }
         }
@@ -17545,7 +17579,9 @@ mod tests {
 
     // Test helper functions moved to test_support.rs module
     // Re-export for backwards compatibility with existing tests in this module
-    use crate::chatwidget::test_support::{make_widget, make_widget_with_dir, test_config, test_config_with_cwd};
+    use crate::chatwidget::test_support::{
+        make_widget, make_widget_with_dir, test_config, test_config_with_cwd,
+    };
 
     #[test]
     fn terminal_overlay_sanitizes_terminal_output() {

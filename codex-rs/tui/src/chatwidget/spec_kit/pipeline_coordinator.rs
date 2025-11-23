@@ -1570,11 +1570,7 @@ fn spec_stage_to_stage_type(stage: SpecStage) -> super::pipeline_config::StageTy
 }
 
 /// SPEC-948 Task 2.3: Record skip telemetry for disabled stages
-fn record_stage_skip(
-    spec_id: &str,
-    stage: SpecStage,
-    reason: &str,
-) -> Result<(), String> {
+fn record_stage_skip(spec_id: &str, stage: SpecStage, reason: &str) -> Result<(), String> {
     use serde_json::json;
     use std::fs;
 

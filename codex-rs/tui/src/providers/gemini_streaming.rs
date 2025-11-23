@@ -4,9 +4,7 @@
 //! Replaces PTY mode with one-shot + resume pattern.
 //! Uses global provider instance to maintain sessions across messages.
 
-use codex_core::cli_executor::{
-    CliError, ConversationId, GeminiPipesProvider, StreamEvent,
-};
+use codex_core::cli_executor::{CliError, ConversationId, GeminiPipesProvider, StreamEvent};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::OnceLock;
@@ -181,7 +179,6 @@ impl GeminiStreamingProvider {
         format!("gemini-conv-{:x}", hasher.finish())
     }
 
-
     /// Map preset model name to actual Gemini API model name
     fn map_model_name(preset: &str) -> &str {
         let preset_lower = preset.to_ascii_lowercase();
@@ -204,7 +201,10 @@ impl GeminiStreamingProvider {
     /// Map CliError to ProviderError
     fn map_cli_error(e: CliError) -> ProviderError {
         match e {
-            CliError::BinaryNotFound { binary, install_hint } => ProviderError::Provider {
+            CliError::BinaryNotFound {
+                binary,
+                install_hint,
+            } => ProviderError::Provider {
                 provider: "Gemini".to_string(),
                 message: format!("{} not found. {}", binary, install_hint),
             },

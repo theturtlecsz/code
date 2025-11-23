@@ -11,9 +11,9 @@ pub mod auth;
 pub mod auth_accounts;
 pub mod bash;
 mod chat_completions;
+pub mod cli_executor; // SPEC-KIT-952: CLI wrapper support for Claude/Gemini
 mod client;
 mod client_common;
-pub mod cli_executor; // SPEC-KIT-952: CLI wrapper support for Claude/Gemini
 pub mod codex;
 mod codex_conversation;
 pub mod token_data;
@@ -82,11 +82,11 @@ mod openai_tools;
 mod patch_harness;
 pub mod plan_tool;
 mod pro_observer;
-pub mod provider_auth; // SPEC-KIT-953-D: Multi-provider OAuth 2.0 PKCE framework
-pub mod providers; // SPEC-KIT-953: Provider implementations (OpenAI, Anthropic, Google)
 mod pro_supervisor;
 pub mod project_doc;
 pub mod project_features;
+pub mod provider_auth; // SPEC-KIT-953-D: Multi-provider OAuth 2.0 PKCE framework
+pub mod providers; // SPEC-KIT-953: Provider implementations (OpenAI, Anthropic, Google)
 mod rollout;
 pub(crate) mod safety;
 pub mod seatbelt;

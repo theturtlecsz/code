@@ -28,7 +28,7 @@ impl ModelPricing {
             // Source: claude.com/pricing
             "claude-haiku" | "claude-haiku-4.5" | "claude-haiku-3.5" | "haiku" => Self {
                 input_per_million: 1.0,  // Was 0.25 (4x increase!)
-                output_per_million: 5.0,  // Was 1.25 (4x increase!)
+                output_per_million: 5.0, // Was 1.25 (4x increase!)
             },
             "claude-sonnet" | "claude-sonnet-4.5" | "claude-sonnet-4" | "sonnet" => Self {
                 input_per_million: 3.0,
@@ -50,8 +50,8 @@ impl ModelPricing {
 
             // Gemini 2.5 family
             "gemini-2.5-flash" | "gemini-flash-2.5" | "flash-2.5" => Self {
-                input_per_million: 0.30,   // Was 0.10 (3x increase!)
-                output_per_million: 2.50,  // Was 0.40 (6.25x increase!)
+                input_per_million: 0.30,  // Was 0.10 (3x increase!)
+                output_per_million: 2.50, // Was 0.40 (6.25x increase!)
             },
             "gemini-2.0-flash" | "flash-2.0" => Self {
                 input_per_million: 0.30,
@@ -67,11 +67,11 @@ impl ModelPricing {
             },
             "gemini-2.5-pro" | "gemini-pro-2.5" => Self {
                 input_per_million: 1.25,
-                output_per_million: 10.0,  // Was 5.0 (2x increase!)
+                output_per_million: 10.0, // Was 5.0 (2x increase!)
             },
             "gemini-1.5-pro" | "gemini-pro-1.5" | "gemini-pro" => Self {
                 input_per_million: 1.25,
-                output_per_million: 10.0,  // Updated to match 2.5-pro
+                output_per_million: 10.0, // Updated to match 2.5-pro
             },
 
             // OpenAI models (Updated 2025-11-19)
@@ -79,15 +79,15 @@ impl ModelPricing {
 
             // GPT-5 family (Released Aug 2025, GPT-5.1 Nov 2025)
             "gpt-5" | "gpt-5.1" | "gpt5_1" | "gpt-5.1-instant" => Self {
-                input_per_million: 1.25,   // Was 10.0 (estimate)
-                output_per_million: 10.0,  // Was 30.0 (estimate)
+                input_per_million: 1.25,  // Was 10.0 (estimate)
+                output_per_million: 10.0, // Was 30.0 (estimate)
             },
             "gpt-5-mini" | "gpt5_1_mini" | "gpt-5.1-mini" => Self {
                 input_per_million: 0.25,
                 output_per_million: 2.0,
             },
             "gpt-5-codex" | "gpt5_1_codex" | "gpt-5.1-codex" => Self {
-                input_per_million: 1.25,   // Same as GPT-5.1 (codex variant)
+                input_per_million: 1.25, // Same as GPT-5.1 (codex variant)
                 output_per_million: 10.0,
             },
 

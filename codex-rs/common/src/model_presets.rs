@@ -41,7 +41,6 @@ const PRESETS: &[ModelPreset] = &[
         model: "gemini-2.5-flash",
         effort: None,
     },
-
     // ═══════════════════════════════════════════════════════════════
     // Claude Family (Anthropic)
     // ═══════════════════════════════════════════════════════════════
@@ -66,7 +65,6 @@ const PRESETS: &[ModelPreset] = &[
         model: "claude-haiku-4.5",
         effort: None,
     },
-
     // ═══════════════════════════════════════════════════════════════
     // GPT-5.1 Family (OpenAI) - with reasoning levels
     // ═══════════════════════════════════════════════════════════════
@@ -79,7 +77,6 @@ const PRESETS: &[ModelPreset] = &[
         model: "gpt-5-mini",
         effort: None,
     },
-
     // GPT-5.1 Standard (with reasoning variants)
     ModelPreset {
         id: "gpt-5.1-minimal",
@@ -109,7 +106,6 @@ const PRESETS: &[ModelPreset] = &[
         model: "gpt-5",
         effort: Some(ReasoningEffort::High),
     },
-
     // GPT-5.1 Codex (code specialist with reasoning variants)
     ModelPreset {
         id: "gpt-5.1-codex-low",

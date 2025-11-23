@@ -20,9 +20,9 @@
 //! 5. User runs CLI command in their terminal to authenticate
 //! 6. Once authenticated, tokens are available for native streaming (SPEC-KIT-953)
 
+use crate::providers::ProviderType;
 use crate::providers::claude;
 use crate::providers::gemini;
-use crate::providers::ProviderType;
 
 /// Status of provider login/authentication
 #[derive(Debug, Clone)]
@@ -62,7 +62,9 @@ impl ProviderLoginStatus {
     /// Get a user-friendly message describing the status
     pub fn display_message(&self) -> String {
         match self {
-            Self::CliNotInstalled { install_instructions } => {
+            Self::CliNotInstalled {
+                install_instructions,
+            } => {
                 format!("CLI not installed.\n\n{}", install_instructions)
             }
             Self::NotAuthenticated {

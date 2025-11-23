@@ -10,10 +10,10 @@
 use super::pipeline_config::{PipelineConfig, StageType, ValidationResult};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
+    Frame,
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Margin, Rect},
     widgets::{Block, Borders, Clear, Widget},
-    Frame,
 };
 
 /// Pipeline configurator state machine
@@ -227,17 +227,15 @@ impl PipelineConfiguratorState {
             "gemini".to_string(),
             "claude".to_string(),
             "code".to_string(),
-
             // Cheap models (Tier 1) - Cost-optimized
             "gpt5_1_mini".to_string(),
             "gemini-flash".to_string(),
             "claude-haiku".to_string(),
             "gpt5_1".to_string(),
-
             // Premium models (Tier 2-3) - High-capability
             "claude-sonnet".to_string(),
             "gemini-pro".to_string(),
-            "gemini-3-pro".to_string(),     // NEW: Top LMArena (1501 Elo), released 2025-11-18
+            "gemini-3-pro".to_string(), // NEW: Top LMArena (1501 Elo), released 2025-11-18
             "gpt5_1_codex".to_string(),
             "claude-opus".to_string(),
         ]
@@ -254,14 +252,34 @@ impl PipelineConfiguratorState {
     /// Vector of model names (e.g., ["gemini-flash", "claude-haiku", "gpt5_1"])
     pub fn get_default_models(stage: &StageType) -> Vec<String> {
         match stage {
-            StageType::New => vec!["gemini".to_string(), "claude".to_string(), "code".to_string()],
+            StageType::New => vec![
+                "gemini".to_string(),
+                "claude".to_string(),
+                "code".to_string(),
+            ],
             StageType::Specify => vec!["gpt5_1_mini".to_string()],
-            StageType::Plan => vec!["gemini-flash".to_string(), "claude-haiku".to_string(), "gpt5_1".to_string()],
+            StageType::Plan => vec![
+                "gemini-flash".to_string(),
+                "claude-haiku".to_string(),
+                "gpt5_1".to_string(),
+            ],
             StageType::Tasks => vec!["gpt5_1_mini".to_string()],
             StageType::Implement => vec!["gpt5_1_codex".to_string(), "claude-haiku".to_string()],
-            StageType::Validate => vec!["gemini-flash".to_string(), "claude-haiku".to_string(), "gpt5_1".to_string()],
-            StageType::Audit => vec!["gpt5_codex".to_string(), "claude-sonnet".to_string(), "gemini-pro".to_string()],
-            StageType::Unlock => vec!["gpt5_codex".to_string(), "claude-sonnet".to_string(), "gemini-pro".to_string()],
+            StageType::Validate => vec![
+                "gemini-flash".to_string(),
+                "claude-haiku".to_string(),
+                "gpt5_1".to_string(),
+            ],
+            StageType::Audit => vec![
+                "gpt5_codex".to_string(),
+                "claude-sonnet".to_string(),
+                "gemini-pro".to_string(),
+            ],
+            StageType::Unlock => vec![
+                "gpt5_codex".to_string(),
+                "claude-sonnet".to_string(),
+                "gemini-pro".to_string(),
+            ],
         }
     }
 
@@ -348,7 +366,8 @@ impl PipelineConfiguratorState {
             return;
         }
 
-        let models = self.pending_config
+        let models = self
+            .pending_config
             .stage_models
             .entry(stage)
             .or_insert_with(|| Self::get_default_models(&stage));

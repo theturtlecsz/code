@@ -16,7 +16,9 @@ use crate::providers::claude::ClaudeProvider;
 use crate::providers::gemini::GeminiProvider;
 use crate::providers::{CliRoutingSettings, ProviderError, ProviderResponse, ProviderType};
 
-use codex_core::api_clients::{AnthropicClient, AnthropicConfig, GeminiClient, GeminiConfig, StreamEvent, map_gemini_model};
+use codex_core::api_clients::{
+    AnthropicClient, AnthropicConfig, GeminiClient, GeminiConfig, StreamEvent, map_gemini_model,
+};
 use codex_core::context_manager::Message;
 
 /// Result of a CLI-routed prompt execution
@@ -97,7 +99,11 @@ impl ModelRouter {
     /// - `RouterResult::CliResponse` - Response from CLI provider
     /// - `RouterResult::UseNative` - Should fall through to native ChatGPT handling
     /// - `RouterResult::Error` - Error during execution
-    pub async fn execute_prompt(model: &str, prompt: &str, settings: &CliRoutingSettings) -> RouterResult {
+    pub async fn execute_prompt(
+        model: &str,
+        prompt: &str,
+        settings: &CliRoutingSettings,
+    ) -> RouterResult {
         let provider_type = ProviderType::from_model_name(model);
 
         match provider_type {
@@ -105,12 +111,8 @@ impl ModelRouter {
                 // Fall through to native handling
                 RouterResult::UseNative
             }
-            ProviderType::Claude => {
-                Self::execute_claude_prompt(prompt, settings).await
-            }
-            ProviderType::Gemini => {
-                Self::execute_gemini_prompt(prompt, model, settings).await
-            }
+            ProviderType::Claude => Self::execute_claude_prompt(prompt, settings).await,
+            ProviderType::Gemini => Self::execute_gemini_prompt(prompt, model, settings).await,
         }
     }
 
@@ -126,7 +128,10 @@ impl ModelRouter {
 
         // Create provider and execute with settings
         match ClaudeProvider::new() {
-            Ok(provider) => match provider.execute_prompt_with_settings(prompt, settings).await {
+            Ok(provider) => match provider
+                .execute_prompt_with_settings(prompt, settings)
+                .await
+            {
                 Ok(response) => RouterResult::CliResponse(response),
                 Err(e) => RouterResult::Error(e.into()),
             },
@@ -135,7 +140,11 @@ impl ModelRouter {
     }
 
     /// Execute prompt via Gemini CLI
-    async fn execute_gemini_prompt(prompt: &str, model: &str, settings: &CliRoutingSettings) -> RouterResult {
+    async fn execute_gemini_prompt(
+        prompt: &str,
+        model: &str,
+        settings: &CliRoutingSettings,
+    ) -> RouterResult {
         // Check if CLI is available
         if !crate::providers::gemini::is_available() {
             return RouterResult::Error(RouterError::CliNotAvailable {
@@ -149,7 +158,10 @@ impl ModelRouter {
 
         // Create provider and execute with settings
         match GeminiProvider::new() {
-            Ok(provider) => match provider.execute_prompt_with_settings(prompt, gemini_model, settings).await {
+            Ok(provider) => match provider
+                .execute_prompt_with_settings(prompt, gemini_model, settings)
+                .await
+            {
                 Ok(response) => RouterResult::CliResponse(response),
                 Err(e) => RouterResult::Error(e.into()),
             },
@@ -442,7 +454,9 @@ pub async fn execute_with_cli_streaming(
             let provider = ClaudeStreamingProvider::new()
                 .map_err(|e| format!("Failed to create Claude provider: {}", e))?;
 
-            provider.execute_streaming(messages, model, tx).await
+            provider
+                .execute_streaming(messages, model, tx)
+                .await
                 .map_err(|e| format!("{}", e))
         }
         ProviderType::Gemini => {
@@ -452,7 +466,9 @@ pub async fn execute_with_cli_streaming(
             let provider = GeminiStreamingProvider::new()
                 .map_err(|e| format!("Failed to create Gemini provider: {}", e))?;
 
-            provider.execute_streaming(messages, model, tx).await
+            provider
+                .execute_streaming(messages, model, tx)
+                .await
                 .map_err(|e| format!("{}", e))
         }
     }
@@ -474,7 +490,11 @@ pub fn supports_native_streaming(model: &str) -> bool {
 ///
 /// Retained for backward compatibility only.
 #[deprecated(note = "Use execute_with_cli_streaming for Claude/Gemini (SPEC-KIT-952)")]
-pub async fn execute_with_routing(model: &str, prompt: &str, settings: &CliRoutingSettings) -> RouterResult {
+pub async fn execute_with_routing(
+    model: &str,
+    prompt: &str,
+    settings: &CliRoutingSettings,
+) -> RouterResult {
     ModelRouter::execute_prompt(model, prompt, settings).await
 }
 

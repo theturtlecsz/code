@@ -115,9 +115,7 @@ impl AppEventSender {
 
     /// Signal native provider streaming text delta (SPEC-KIT-953)
     pub(crate) fn send_native_stream_delta(&self, text: impl Into<String>) {
-        self.send(AppEvent::NativeProviderStreamDelta {
-            text: text.into(),
-        });
+        self.send(AppEvent::NativeProviderStreamDelta { text: text.into() });
     }
 
     /// Signal native provider streaming completed (SPEC-KIT-953)

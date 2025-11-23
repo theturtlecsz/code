@@ -1851,7 +1851,9 @@ fn create_search_tool() -> OpenAiTool {
     properties.insert(
         "query".to_string(),
         JsonSchema::String {
-            description: Some("The query string to search for in conversation history.".to_string()),
+            description: Some(
+                "The query string to search for in conversation history.".to_string(),
+            ),
         },
     );
     properties.insert(
@@ -1881,7 +1883,9 @@ fn create_history_search_alias_tool() -> OpenAiTool {
     properties.insert(
         "query".to_string(),
         JsonSchema::String {
-            description: Some("The query string to search for in conversation history.".to_string()),
+            description: Some(
+                "The query string to search for in conversation history.".to_string(),
+            ),
         },
     );
     properties.insert(

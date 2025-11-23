@@ -3,9 +3,9 @@
 //! SPEC-947 Phase 4 Task 4.1: Interactive TUI modal for pipeline stage selection
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
+use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::Frame;
 
 use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
@@ -216,8 +216,14 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
                     let role = stage_details::get_model_role(selected_stage, model);
 
                     detail_lines.push(Line::from(vec![Span::styled(
-                        format!("  Choose reasoning level for {} (slot {}):", role, slot_index + 1),
-                        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                        format!(
+                            "  Choose reasoning level for {} (slot {}):",
+                            role,
+                            slot_index + 1
+                        ),
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD),
                     )]));
                     detail_lines.push(Line::from(vec![Span::styled(
                         format!("  Model: {} - now select reasoning effort:", model),
@@ -232,7 +238,9 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
                         let is_current = i == self.state.reasoning_selected_index;
 
                         let style = if is_current {
-                            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .add_modifier(Modifier::BOLD)
                         } else {
                             Style::default()
                         };
@@ -250,21 +258,24 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
                         detail_lines.push(Line::from(vec![
                             Span::raw(format!("  {} ", marker)),
                             Span::styled(level.clone(), style),
-                            Span::styled(format!(" - {}", description), Style::default().fg(Color::DarkGray)),
+                            Span::styled(
+                                format!(" - {}", description),
+                                Style::default().fg(Color::DarkGray),
+                            ),
                         ]));
                     }
                 } else if self.state.model_picker_mode {
                     // Model picker mode: show ALL available models for current slot
                     let all_models = PipelineConfiguratorState::get_all_available_models();
                     let slot_index = self.state.selected_model_index;
-                    let role = stage_details::get_model_role(
-                        selected_stage,
-                        &selected_models[slot_index]
-                    );
+                    let role =
+                        stage_details::get_model_role(selected_stage, &selected_models[slot_index]);
 
                     detail_lines.push(Line::from(vec![Span::styled(
                         format!("  Choose model for {} (slot {}):", role, slot_index + 1),
-                        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD),
                     )]));
                     detail_lines.push(Line::from(vec![Span::styled(
                         "  [↑↓ Navigate | Enter Select | Esc Cancel]",
@@ -277,7 +288,9 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
                         let tier = stage_details::get_model_tier_public(model);
 
                         let style = if is_current {
-                            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .add_modifier(Modifier::BOLD)
                         } else {
                             Style::default()
                         };
@@ -286,7 +299,10 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
                         detail_lines.push(Line::from(vec![
                             Span::raw(format!("  {} ", marker)),
                             Span::styled(display_name, style),
-                            Span::styled(format!(" ({})", tier), Style::default().fg(Color::DarkGray)),
+                            Span::styled(
+                                format!(" ({})", tier),
+                                Style::default().fg(Color::DarkGray),
+                            ),
                         ]));
                     }
                 } else if self.state.model_selection_mode {
@@ -312,7 +328,9 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
                         let role = stage_details::get_model_role(selected_stage, &model);
 
                         let style = if is_current {
-                            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .add_modifier(Modifier::BOLD)
                         } else {
                             Style::default()
                         };
@@ -329,12 +347,20 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
                         if let Some(reasoning_level) = reasoning {
                             spans.push(Span::styled(
                                 format!(" [{}]", reasoning_level),
-                                Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD),
+                                Style::default()
+                                    .fg(Color::Magenta)
+                                    .add_modifier(Modifier::BOLD),
                             ));
                         }
 
-                        spans.push(Span::styled(format!(" - {}", role), Style::default().fg(Color::Yellow)));
-                        spans.push(Span::styled(format!(" ({})", tier), Style::default().fg(Color::DarkGray)));
+                        spans.push(Span::styled(
+                            format!(" - {}", role),
+                            Style::default().fg(Color::Yellow),
+                        ));
+                        spans.push(Span::styled(
+                            format!(" ({})", tier),
+                            Style::default().fg(Color::DarkGray),
+                        ));
 
                         detail_lines.push(Line::from(spans));
                     }
@@ -359,7 +385,10 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
                         let role = stage_details::get_model_role(selected_stage, &model);
 
                         let mut spans = vec![
-                            Span::styled(format!("  [{}] ", i + 1), Style::default().fg(Color::DarkGray)),
+                            Span::styled(
+                                format!("  [{}] ", i + 1),
+                                Style::default().fg(Color::DarkGray),
+                            ),
                             Span::styled(display_name, Style::default().fg(Color::Cyan)),
                         ];
 
@@ -367,12 +396,20 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
                         if let Some(reasoning_level) = reasoning {
                             spans.push(Span::styled(
                                 format!(" [{}]", reasoning_level),
-                                Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD),
+                                Style::default()
+                                    .fg(Color::Magenta)
+                                    .add_modifier(Modifier::BOLD),
                             ));
                         }
 
-                        spans.push(Span::styled(format!(" - {}", role), Style::default().fg(Color::Yellow)));
-                        spans.push(Span::styled(format!(" ({})", tier), Style::default().fg(Color::DarkGray)));
+                        spans.push(Span::styled(
+                            format!(" - {}", role),
+                            Style::default().fg(Color::Yellow),
+                        ));
+                        spans.push(Span::styled(
+                            format!(" ({})", tier),
+                            Style::default().fg(Color::DarkGray),
+                        ));
 
                         detail_lines.push(Line::from(spans));
                     }
@@ -427,4 +464,3 @@ impl<'a> BottomPaneView<'a> for PipelineConfiguratorView {
         details_paragraph.render(chunks[1], buf);
     }
 }
-

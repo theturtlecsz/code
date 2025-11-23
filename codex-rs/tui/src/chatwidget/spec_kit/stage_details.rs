@@ -7,11 +7,11 @@
 //! dependencies, and validation warnings.
 
 use ratatui::{
+    Frame,
     layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
-    Frame,
 };
 
 use super::pipeline_config::StageType;
@@ -102,7 +102,10 @@ pub fn render_stage_details(frame: &mut Frame, area: Rect, state: &PipelineConfi
 
             let dep_name = capitalize_stage_name(&dep.to_string());
             lines.push(Line::from(vec![
-                Span::styled(format!("  • {} ", status), Style::default().fg(status_color)),
+                Span::styled(
+                    format!("  • {} ", status),
+                    Style::default().fg(status_color),
+                ),
                 Span::raw(dep_name),
             ]));
         }
@@ -120,12 +123,10 @@ pub fn render_stage_details(frame: &mut Frame, area: Rect, state: &PipelineConfi
 
         if state.model_selection_mode {
             // Model selection mode: show checkboxes
-            lines.push(Line::from(vec![
-                Span::styled(
-                    "  [Press Space to toggle, Enter/m/Esc to exit]",
-                    Style::default().fg(Color::DarkGray),
-                )
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                "  [Press Space to toggle, Enter/m/Esc to exit]",
+                Style::default().fg(Color::DarkGray),
+            )]));
 
             for (i, model) in selected_models.iter().enumerate() {
                 let is_selected = selected_models.contains(model);
@@ -133,7 +134,9 @@ pub fn render_stage_details(frame: &mut Frame, area: Rect, state: &PipelineConfi
                 let is_current = i == state.selected_model_index;
 
                 let checkbox_style = if is_current {
-                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD)
                 } else if is_selected {
                     Style::default().fg(Color::Green)
                 } else {
@@ -156,12 +159,10 @@ pub fn render_stage_details(frame: &mut Frame, area: Rect, state: &PipelineConfi
             }
         } else {
             // View mode: show current selection (non-interactive)
-            lines.push(Line::from(vec![
-                Span::styled(
-                    "  [Press Enter or 'm' to configure]",
-                    Style::default().fg(Color::DarkGray),
-                )
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                "  [Press Enter or 'm' to configure]",
+                Style::default().fg(Color::DarkGray),
+            )]));
 
             for model in &selected_models {
                 let display_name = get_model_display_name(model);
@@ -181,9 +182,7 @@ pub fn render_stage_details(frame: &mut Frame, area: Rect, state: &PipelineConfi
     if !state.warnings.is_empty() {
         lines.push(Line::from(vec![Span::styled(
             "Warnings:",
-            Style::default()
-                .fg(Color::Red)
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
         )]));
 
         for warning in &state.warnings {
@@ -284,7 +283,7 @@ pub fn get_model_display_name(model: &str) -> &'static str {
         // Aliases (shortcuts to specific models)
         "gemini" => "Gemini 2.5 Flash (alias)",
         "claude" => "Claude Haiku 4.5 (alias)",
-        "code" => "GPT-5.1 (TUI default)",  // Updated: was Claude Sonnet, now GPT-5.1
+        "code" => "GPT-5.1 (TUI default)", // Updated: was Claude Sonnet, now GPT-5.1
 
         // GPT-5.1 family (Latest: Nov 13, 2025)
         "gpt5_1_mini" | "gpt-5-mini" => "GPT-5.1 Mini",
@@ -324,7 +323,7 @@ pub fn get_model_tier_public(model: &str) -> &'static str {
 
         // Premium models (Tier 2-3)
         "claude-sonnet" | "gemini-pro" => "premium",
-        "gemini-3-pro" => "premium (LMArena #1)",  // NEW: Top LMArena (1501 Elo)
+        "gemini-3-pro" => "premium (LMArena #1)", // NEW: Top LMArena (1501 Elo)
         "gpt5_1_codex" => "codex (premium)",
         "claude-opus" => "opus (premium)",
 
@@ -349,7 +348,8 @@ pub fn get_model_role(stage: &StageType, model: &str) -> &'static str {
     // Slot 1 → Researcher, Slot 2 → Synthesizer, Slot 3 → Executor & QA (aggregator)
 
     // Get slot index by checking defaults
-    let defaults = super::pipeline_configurator::PipelineConfiguratorState::get_default_models(stage);
+    let defaults =
+        super::pipeline_configurator::PipelineConfiguratorState::get_default_models(stage);
     let slot = defaults.iter().position(|m| m == model).unwrap_or(0);
 
     match stage {

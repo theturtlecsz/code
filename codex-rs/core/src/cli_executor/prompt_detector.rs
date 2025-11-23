@@ -18,9 +18,9 @@ pub enum Confidence {
 
 /// Prompt markers used by Gemini CLI
 const PROMPT_MARKERS: &[&str] = &[
-    "\n> ",      // Standard prompt
+    "\n> ",       // Standard prompt
     "\ngemini> ", // Alternative prompt format
-    "> ",        // Start of line (fresh session)
+    "> ",         // Start of line (fresh session)
 ];
 
 /// Minimum time before allowing completion detection (prevents false positives)
@@ -78,7 +78,10 @@ impl PromptDetector {
         for marker in PROMPT_MARKERS {
             if output.ends_with(marker) {
                 self.confidence = Confidence::High;
-                tracing::debug!("Prompt detected (HIGH confidence): marker '{}'", marker.escape_debug());
+                tracing::debug!(
+                    "Prompt detected (HIGH confidence): marker '{}'",
+                    marker.escape_debug()
+                );
                 return true;
             }
         }
@@ -87,8 +90,10 @@ impl PromptDetector {
         if now.duration_since(self.last_output_time) > self.idle_threshold {
             if self.looks_complete(output) {
                 self.confidence = Confidence::Medium;
-                tracing::debug!("Prompt detected (MEDIUM confidence): idle {}ms + looks complete",
-                    self.idle_threshold.as_millis());
+                tracing::debug!(
+                    "Prompt detected (MEDIUM confidence): idle {}ms + looks complete",
+                    self.idle_threshold.as_millis()
+                );
                 return true;
             }
         }
@@ -139,7 +144,8 @@ impl PromptDetector {
         if last_line.ends_with("...")
             || last_line.ends_with(",")
             || last_line.ends_with("and")
-            || last_line.ends_with("or") {
+            || last_line.ends_with("or")
+        {
             return false;
         }
 

@@ -4,8 +4,8 @@
 //! native CLIs instead of direct API calls (Claude, Gemini).
 
 pub mod claude;
-pub mod gemini;
 pub mod claude_streaming; // SPEC-KIT-952 Phase 1: Streaming CLI support
+pub mod gemini;
 pub mod gemini_streaming; // SPEC-KIT-952 Phase 1: Streaming CLI support
 
 use crate::cli_executor::CliError;
@@ -46,10 +46,7 @@ pub enum ProviderError {
     /// Underlying CLI error
     Cli(CliError),
     /// Provider-specific error
-    Provider {
-        provider: String,
-        message: String,
-    },
+    Provider { provider: String, message: String },
 }
 
 impl std::fmt::Display for ProviderError {

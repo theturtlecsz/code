@@ -7,9 +7,9 @@
 //! Tests are marked with #[ignore] to avoid failures in environments without the binary.
 //! Run with: cargo test --test cli_basic_integration -- --ignored
 
-use std::process::{Command, Stdio};
-use std::io::Write;
 use std::env;
+use std::io::Write;
+use std::process::{Command, Stdio};
 
 /// Helper to get the path to the code binary
 fn binary_path() -> String {

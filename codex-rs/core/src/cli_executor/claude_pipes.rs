@@ -63,8 +63,7 @@ pub(crate) fn parse_stream_json_event(
                 Some("system") => {
                     // Capture session_id if not already set
                     if current_session_id.is_none() {
-                        if let Some(session_id) = event.get("session_id").and_then(|s| s.as_str())
-                        {
+                        if let Some(session_id) = event.get("session_id").and_then(|s| s.as_str()) {
                             *current_session_id = Some(session_id.to_string());
                         }
                     }
@@ -284,12 +283,9 @@ impl ClaudePipesSession {
             self.turn_count
         );
 
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| CliError::Internal {
-                message: "Stdout not available".to_string(),
-            })?;
+        let stdout = child.stdout.take().ok_or_else(|| CliError::Internal {
+            message: "Stdout not available".to_string(),
+        })?;
 
         // Spawn stderr logger
         if let Some(stderr) = child.stderr.take() {
@@ -390,8 +386,9 @@ impl ClaudePipesSession {
                                                     item.get("type").and_then(|t| t.as_str())
                                                 {
                                                     if text_type == "text" {
-                                                        if let Some(text) =
-                                                            item.get("text").and_then(|t| t.as_str())
+                                                        if let Some(text) = item
+                                                            .get("text")
+                                                            .and_then(|t| t.as_str())
                                                         {
                                                             let _ = tx
                                                                 .send(StreamEvent::Delta(
@@ -767,7 +764,10 @@ mod tests {
         let events = parse_stream_json_event(json, &mut session_id);
 
         assert_eq!(session_id, Some("test-session-123".to_string()));
-        assert!(events.is_empty(), "System events should not produce StreamEvents");
+        assert!(
+            events.is_empty(),
+            "System events should not produce StreamEvents"
+        );
     }
 
     #[test]
@@ -789,7 +789,8 @@ mod tests {
 
     #[test]
     fn test_parse_assistant_message_extracts_text() {
-        let json = r#"{"type":"assistant","message":{"content":[{"type":"text","text":"Hello world"}]}}"#;
+        let json =
+            r#"{"type":"assistant","message":{"content":[{"type":"text","text":"Hello world"}]}}"#;
         let mut session_id = None;
 
         let events = parse_stream_json_event(json, &mut session_id);
@@ -840,7 +841,10 @@ mod tests {
 
         let events = parse_stream_json_event(json, &mut session_id);
 
-        assert!(events.is_empty(), "Malformed JSON should return empty events");
+        assert!(
+            events.is_empty(),
+            "Malformed JSON should return empty events"
+        );
     }
 
     #[test]
@@ -1002,7 +1006,9 @@ mod tests {
         assert!(session_id.is_some(), "Should capture session_id");
 
         // Verify structure: system event, assistant events, result event
-        let has_deltas = all_events.iter().any(|e| matches!(e, StreamEvent::Delta(_)));
+        let has_deltas = all_events
+            .iter()
+            .any(|e| matches!(e, StreamEvent::Delta(_)));
         let has_done = all_events.iter().any(|e| matches!(e, StreamEvent::Done));
 
         assert!(has_deltas, "Should have delta events");
@@ -1042,7 +1048,10 @@ mod tests {
         assert_eq!(events.len(), 1);
         match &events[0] {
             StreamEvent::Delta(text) => {
-                assert_eq!(text, r#"{"nested": "json"}"#, "Should preserve nested JSON text");
+                assert_eq!(
+                    text, r#"{"nested": "json"}"#,
+                    "Should preserve nested JSON text"
+                );
             }
             _ => panic!("Expected Delta"),
         }
@@ -1055,7 +1064,10 @@ mod tests {
 
         let events = parse_stream_json_event(json, &mut session_id);
 
-        assert!(events.is_empty(), "Empty content array should produce no events");
+        assert!(
+            events.is_empty(),
+            "Empty content array should produce no events"
+        );
     }
 
     #[test]
@@ -1076,7 +1088,8 @@ mod tests {
     #[test]
     fn test_parse_edge_case_fragmented_unicode() {
         // Unicode characters that might be split across events
-        let json1 = r#"{"type":"assistant","message":{"content":[{"type":"text","text":"Hello 世"}]}}"#;
+        let json1 =
+            r#"{"type":"assistant","message":{"content":[{"type":"text","text":"Hello 世"}]}}"#;
         let json2 = r#"{"type":"assistant","message":{"content":[{"type":"text","text":"界"}]}}"#;
         let json3 = r#"{"type":"assistant","message":{"content":[{"type":"text","text":" 🌍"}]}}"#;
 
@@ -1099,7 +1112,10 @@ mod tests {
             })
             .collect();
 
-        assert_eq!(full_text, "Hello 世界 🌍", "Should correctly handle fragmented unicode");
+        assert_eq!(
+            full_text, "Hello 世界 🌍",
+            "Should correctly handle fragmented unicode"
+        );
     }
 
     // ===================================================================
@@ -1299,7 +1315,10 @@ mod tests {
         }
 
         println!("Response: {}", response);
-        assert!(response.contains("Alice"), "Should remember name from turn 1");
+        assert!(
+            response.contains("Alice"),
+            "Should remember name from turn 1"
+        );
 
         session.shutdown().await.ok();
     }

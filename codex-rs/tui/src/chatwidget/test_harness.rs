@@ -44,9 +44,9 @@ impl TestHarness {
         let widget = ChatWidget::new(
             config,
             app_event_tx.clone(),
-            None,                                    // initial_prompt
-            Vec::new(),                              // initial_images
-            false,                                   // enhanced_keys_supported
+            None,       // initial_prompt
+            Vec::new(), // initial_images
+            false,      // enhanced_keys_supported
             term,
             false,                                   // show_order_overlay
             None,                                    // latest_upgrade_version
@@ -195,11 +195,7 @@ impl TestHarness {
 
     /// Simulate a complete streaming response from the Codex engine
     /// This is a helper that sends AgentMessageDelta events for streaming chunks
-    pub fn simulate_streaming_response(
-        &mut self,
-        request_id: String,
-        chunks: Vec<&str>,
-    ) {
+    pub fn simulate_streaming_response(&mut self, request_id: String, chunks: Vec<&str>) {
         use codex_core::protocol::{AgentMessageDeltaEvent, AgentMessageEvent};
 
         // Send TaskStarted
@@ -252,8 +248,8 @@ impl TestHarness {
 
 /// Render widget to snapshot string with default dimensions (80x24)
 pub(crate) fn render_widget_to_snapshot(widget: &ChatWidget) -> String {
-    use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
 
     let backend = TestBackend::new(80, 24);
     let mut terminal = Terminal::new(backend).expect("Failed to create test terminal");
@@ -305,7 +301,10 @@ mod tests {
 
         // The widget processes messages internally
         // We can verify the history was updated
-        assert!(harness.history_cell_count() > 0, "Should have history cells after sending message");
+        assert!(
+            harness.history_cell_count() > 0,
+            "Should have history cells after sending message"
+        );
     }
 
     #[tokio::test]
@@ -323,7 +322,10 @@ mod tests {
         let debug = harness.history_cells_debug();
 
         // Should have at least one cell (the streamed response)
-        assert!(!debug.is_empty(), "Should have history cells after streaming");
+        assert!(
+            !debug.is_empty(),
+            "Should have history cells after streaming"
+        );
     }
 
     #[tokio::test]
@@ -331,10 +333,7 @@ mod tests {
         // Verify history_cells_debug returns useful information
         let mut harness = TestHarness::new();
 
-        harness.simulate_streaming_response(
-            "test-req-1".to_string(),
-            vec!["Test", " response"],
-        );
+        harness.simulate_streaming_response("test-req-1".to_string(), vec!["Test", " response"]);
 
         let debug = harness.history_cells_debug();
 
@@ -343,7 +342,11 @@ mod tests {
 
         // Each line should have the format: "idx | type | preview"
         for line in debug {
-            assert!(line.contains(" | "), "Debug line should contain separators: {}", line);
+            assert!(
+                line.contains(" | "),
+                "Debug line should contain separators: {}",
+                line
+            );
         }
     }
 
@@ -556,27 +559,63 @@ mod tests {
         let events = vec![
             // Turn 3 starts first (!)
             (3, 0, EventMsg::TaskStarted),
-            (3, 1, EventMsg::AgentMessageDelta(AgentMessageDeltaEvent { delta: "third".to_string() })),
-
+            (
+                3,
+                1,
+                EventMsg::AgentMessageDelta(AgentMessageDeltaEvent {
+                    delta: "third".to_string(),
+                }),
+            ),
             // Turn 1 starts
             (1, 0, EventMsg::TaskStarted),
-            (1, 1, EventMsg::AgentMessageDelta(AgentMessageDeltaEvent { delta: "first".to_string() })),
-
+            (
+                1,
+                1,
+                EventMsg::AgentMessageDelta(AgentMessageDeltaEvent {
+                    delta: "first".to_string(),
+                }),
+            ),
             // Turn 2 starts
             (2, 0, EventMsg::TaskStarted),
-            (2, 1, EventMsg::AgentMessageDelta(AgentMessageDeltaEvent { delta: "second".to_string() })),
-
+            (
+                2,
+                1,
+                EventMsg::AgentMessageDelta(AgentMessageDeltaEvent {
+                    delta: "second".to_string(),
+                }),
+            ),
             // Turn 1 completes
-            (1, 2, EventMsg::AgentMessage(AgentMessageEvent { message: "first".to_string() })),
-
+            (
+                1,
+                2,
+                EventMsg::AgentMessage(AgentMessageEvent {
+                    message: "first".to_string(),
+                }),
+            ),
             // Turn 3 continues
-            (3, 2, EventMsg::AgentMessageDelta(AgentMessageDeltaEvent { delta: " response".to_string() })),
-
+            (
+                3,
+                2,
+                EventMsg::AgentMessageDelta(AgentMessageDeltaEvent {
+                    delta: " response".to_string(),
+                }),
+            ),
             // Turn 2 completes
-            (2, 2, EventMsg::AgentMessage(AgentMessageEvent { message: "second".to_string() })),
-
+            (
+                2,
+                2,
+                EventMsg::AgentMessage(AgentMessageEvent {
+                    message: "second".to_string(),
+                }),
+            ),
             // Turn 3 completes
-            (3, 3, EventMsg::AgentMessage(AgentMessageEvent { message: "third response".to_string() })),
+            (
+                3,
+                3,
+                EventMsg::AgentMessage(AgentMessageEvent {
+                    message: "third response".to_string(),
+                }),
+            ),
         ];
 
         for (req_num, seq, msg) in events {
@@ -614,7 +653,10 @@ mod tests {
         }
 
         assert_eq!(user_count, 3, "Should have 3 user messages");
-        assert!(assistant_count >= 3, "Should have at least 3 assistant messages");
+        assert!(
+            assistant_count >= 3,
+            "Should have at least 3 assistant messages"
+        );
 
         // CONTIGUITY CHECK: Verify cells are grouped by turn with no interleaving
         let (user_groups, assistant_groups) = harness.cells_by_turn();
@@ -625,28 +667,50 @@ mod tests {
         println!("=== End Analysis ===\n");
 
         // Verify we have 3 distinct user groups and 3 distinct assistant groups
-        assert_eq!(user_groups.len(), 3, "Should have 3 distinct user message groups");
-        assert_eq!(assistant_groups.len(), 3, "Should have 3 distinct assistant message groups");
+        assert_eq!(
+            user_groups.len(),
+            3,
+            "Should have 3 distinct user message groups"
+        );
+        assert_eq!(
+            assistant_groups.len(),
+            3,
+            "Should have 3 distinct assistant message groups"
+        );
 
         // Verify each group contains contiguous indices (indices form an unbroken sequence)
         for (turn_idx, user_group) in user_groups.iter().enumerate() {
-            assert!(!user_group.is_empty(), "User group {} should not be empty", turn_idx);
+            assert!(
+                !user_group.is_empty(),
+                "User group {} should not be empty",
+                turn_idx
+            );
             for window in user_group.windows(2) {
                 assert_eq!(
-                    window[1], window[0] + 1,
+                    window[1],
+                    window[0] + 1,
                     "User turn {} indices should be contiguous, but found gap: {} -> {}",
-                    turn_idx, window[0], window[1]
+                    turn_idx,
+                    window[0],
+                    window[1]
                 );
             }
         }
 
         for (turn_idx, asst_group) in assistant_groups.iter().enumerate() {
-            assert!(!asst_group.is_empty(), "Assistant group {} should not be empty", turn_idx);
+            assert!(
+                !asst_group.is_empty(),
+                "Assistant group {} should not be empty",
+                turn_idx
+            );
             for window in asst_group.windows(2) {
                 assert_eq!(
-                    window[1], window[0] + 1,
+                    window[1],
+                    window[0] + 1,
                     "Assistant turn {} indices should be contiguous, but found gap: {} -> {}",
-                    turn_idx, window[0], window[1]
+                    turn_idx,
+                    window[0],
+                    window[1]
                 );
             }
         }
@@ -658,12 +722,16 @@ mod tests {
             assert!(
                 user_last < asst_first,
                 "Turn {} user message (ending at {}) should come before assistant response (starting at {})",
-                turn_idx + 1, user_last, asst_first
+                turn_idx + 1,
+                user_last,
+                asst_first
             );
         }
 
-        println!("✅ Three-turn extreme test passed: {} user cells, {} assistant cells",
-                 user_count, assistant_count);
+        println!(
+            "✅ Three-turn extreme test passed: {} user cells, {} assistant cells",
+            user_count, assistant_count
+        );
         println!("✅ Contiguity verified: All cells properly grouped by turn with no interleaving");
     }
 
@@ -674,8 +742,8 @@ mod tests {
     #[tokio::test]
     async fn test_chatwidget_two_turns_snapshot() {
         // Snapshot test: captures the rendered TUI output for visual regression testing
-        use ratatui::backend::TestBackend;
         use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
 
         let mut harness = TestHarness::new();
 
@@ -787,12 +855,19 @@ mod tests {
         }
 
         assert_eq!(user_count, 2, "Should have 2 user messages before snapshot");
-        assert!(assistant_count >= 2, "Should have at least 2 assistant messages before snapshot");
+        assert!(
+            assistant_count >= 2,
+            "Should have at least 2 assistant messages before snapshot"
+        );
 
         // Verify cell ordering
         let (user_groups, assistant_groups) = harness.cells_by_turn();
         assert_eq!(user_groups.len(), 2, "Should have 2 user turn groups");
-        assert_eq!(assistant_groups.len(), 2, "Should have 2 assistant turn groups");
+        assert_eq!(
+            assistant_groups.len(),
+            2,
+            "Should have 2 assistant turn groups"
+        );
 
         // Render to a TestBackend with fixed size (80x24)
         let backend = TestBackend::new(80, 24);
@@ -830,8 +905,8 @@ mod tests {
     #[tokio::test]
     async fn test_chatwidget_empty_state_snapshot() {
         // Snapshot test for initial empty state
-        use ratatui::backend::TestBackend;
         use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
 
         let harness = TestHarness::new();
 
@@ -849,7 +924,10 @@ mod tests {
         }
 
         assert_eq!(user_count, 0, "Should have no user messages in empty state");
-        assert_eq!(assistant_count, 0, "Should have no assistant messages in empty state");
+        assert_eq!(
+            assistant_count, 0,
+            "Should have no assistant messages in empty state"
+        );
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
@@ -877,16 +955,13 @@ mod tests {
     #[tokio::test]
     async fn test_chatwidget_single_exchange_snapshot() {
         // Snapshot test for a simple single user/assistant exchange
-        use ratatui::backend::TestBackend;
         use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
 
         let mut harness = TestHarness::new();
 
         harness.send_user_message("Hello!");
-        harness.simulate_streaming_response(
-            "req-1".to_string(),
-            vec!["Hi", " there", "!"],
-        );
+        harness.simulate_streaming_response("req-1".to_string(), vec!["Hi", " there", "!"]);
 
         harness.drain_app_events();
 
@@ -902,12 +977,19 @@ mod tests {
         }
 
         assert_eq!(user_count, 1, "Should have 1 user message");
-        assert!(assistant_count >= 1, "Should have at least 1 assistant message");
+        assert!(
+            assistant_count >= 1,
+            "Should have at least 1 assistant message"
+        );
 
         // Verify cell ordering
         let (user_groups, assistant_groups) = harness.cells_by_turn();
         assert_eq!(user_groups.len(), 1, "Should have 1 user turn group");
-        assert_eq!(assistant_groups.len(), 1, "Should have 1 assistant turn group");
+        assert_eq!(
+            assistant_groups.len(),
+            1,
+            "Should have 1 assistant turn group"
+        );
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();

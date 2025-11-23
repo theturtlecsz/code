@@ -28,9 +28,21 @@ async fn test_next_internal_key_monotonic() {
     assert!(key2.seq < key3.seq, "internal_key seq should be monotonic");
 
     // All internal keys should use i32::MAX for out
-    assert_eq!(key1.out, i32::MAX, "internal_key should use i32::MAX for out");
-    assert_eq!(key2.out, i32::MAX, "internal_key should use i32::MAX for out");
-    assert_eq!(key3.out, i32::MAX, "internal_key should use i32::MAX for out");
+    assert_eq!(
+        key1.out,
+        i32::MAX,
+        "internal_key should use i32::MAX for out"
+    );
+    assert_eq!(
+        key2.out,
+        i32::MAX,
+        "internal_key should use i32::MAX for out"
+    );
+    assert_eq!(
+        key3.out,
+        i32::MAX,
+        "internal_key should use i32::MAX for out"
+    );
 
     // Keys should be properly ordered
     assert!(key1 < key2);
@@ -70,13 +82,31 @@ async fn test_next_req_key_prompt_monotonic() {
     let key3 = widget.next_req_key_prompt();
 
     // Sequence numbers should increase
-    assert!(key1.seq < key2.seq, "req_key_prompt seq should be monotonic");
-    assert!(key2.seq < key3.seq, "req_key_prompt seq should be monotonic");
+    assert!(
+        key1.seq < key2.seq,
+        "req_key_prompt seq should be monotonic"
+    );
+    assert!(
+        key2.seq < key3.seq,
+        "req_key_prompt seq should be monotonic"
+    );
 
     // All should use i32::MIN + 1 for out (prompts after banners)
-    assert_eq!(key1.out, i32::MIN + 1, "req_key_prompt should use i32::MIN + 1");
-    assert_eq!(key2.out, i32::MIN + 1, "req_key_prompt should use i32::MIN + 1");
-    assert_eq!(key3.out, i32::MIN + 1, "req_key_prompt should use i32::MIN + 1");
+    assert_eq!(
+        key1.out,
+        i32::MIN + 1,
+        "req_key_prompt should use i32::MIN + 1"
+    );
+    assert_eq!(
+        key2.out,
+        i32::MIN + 1,
+        "req_key_prompt should use i32::MIN + 1"
+    );
+    assert_eq!(
+        key3.out,
+        i32::MIN + 1,
+        "req_key_prompt should use i32::MIN + 1"
+    );
 
     // Keys should be properly ordered
     assert!(key1 < key2);
@@ -93,13 +123,31 @@ async fn test_next_req_key_after_prompt_monotonic() {
     let key3 = widget.next_req_key_after_prompt();
 
     // Sequence numbers should increase
-    assert!(key1.seq < key2.seq, "req_key_after_prompt seq should be monotonic");
-    assert!(key2.seq < key3.seq, "req_key_after_prompt seq should be monotonic");
+    assert!(
+        key1.seq < key2.seq,
+        "req_key_after_prompt seq should be monotonic"
+    );
+    assert!(
+        key2.seq < key3.seq,
+        "req_key_after_prompt seq should be monotonic"
+    );
 
     // All should use i32::MIN + 2 for out (notices after prompts)
-    assert_eq!(key1.out, i32::MIN + 2, "req_key_after_prompt should use i32::MIN + 2");
-    assert_eq!(key2.out, i32::MIN + 2, "req_key_after_prompt should use i32::MIN + 2");
-    assert_eq!(key3.out, i32::MIN + 2, "req_key_after_prompt should use i32::MIN + 2");
+    assert_eq!(
+        key1.out,
+        i32::MIN + 2,
+        "req_key_after_prompt should use i32::MIN + 2"
+    );
+    assert_eq!(
+        key2.out,
+        i32::MIN + 2,
+        "req_key_after_prompt should use i32::MIN + 2"
+    );
+    assert_eq!(
+        key3.out,
+        i32::MIN + 2,
+        "req_key_after_prompt should use i32::MIN + 2"
+    );
 
     // Keys should be properly ordered
     assert!(key1 < key2);
@@ -154,7 +202,10 @@ async fn test_key_ordering_within_request() {
 
     // Verify ordering
     assert!(banner < prompt, "banner should come before prompt");
-    assert!(prompt < after_prompt, "prompt should come before after_prompt");
+    assert!(
+        prompt < after_prompt,
+        "prompt should come before after_prompt"
+    );
 
     // Internal key uses current request (5) not next (6), and i32::MAX for out
     // So it depends on req value - if same req, it comes last; if different, depends on req
@@ -206,20 +257,52 @@ fn test_orderkey_lexicographic_ordering() {
     // Test that OrderKey::cmp implements correct lexicographic ordering
     // (req, out, seq) where req is primary, out is secondary, seq is tertiary
 
-    let key1 = OrderKey { req: 1, out: 0, seq: 0 };
-    let key2 = OrderKey { req: 2, out: -100, seq: 0 };
+    let key1 = OrderKey {
+        req: 1,
+        out: 0,
+        seq: 0,
+    };
+    let key2 = OrderKey {
+        req: 2,
+        out: -100,
+        seq: 0,
+    };
     assert!(key1 < key2, "lower req should always sort first");
 
-    let key3 = OrderKey { req: 5, out: i32::MIN, seq: 0 };
-    let key4 = OrderKey { req: 5, out: i32::MAX, seq: 0 };
+    let key3 = OrderKey {
+        req: 5,
+        out: i32::MIN,
+        seq: 0,
+    };
+    let key4 = OrderKey {
+        req: 5,
+        out: i32::MAX,
+        seq: 0,
+    };
     assert!(key3 < key4, "same req, lower out should sort first");
 
-    let key5 = OrderKey { req: 7, out: 0, seq: 1 };
-    let key6 = OrderKey { req: 7, out: 0, seq: 2 };
+    let key5 = OrderKey {
+        req: 7,
+        out: 0,
+        seq: 1,
+    };
+    let key6 = OrderKey {
+        req: 7,
+        out: 0,
+        seq: 2,
+    };
     assert!(key5 < key6, "same req and out, lower seq should sort first");
 
-    let key7 = OrderKey { req: 3, out: i32::MAX, seq: 999 };
-    let key8 = OrderKey { req: 4, out: i32::MIN, seq: 0 };
+    let key7 = OrderKey {
+        req: 3,
+        out: i32::MAX,
+        seq: 999,
+    };
+    let key8 = OrderKey {
+        req: 4,
+        out: i32::MIN,
+        seq: 0,
+    };
     assert!(key7 < key8, "req takes precedence over out and seq");
 }
 
@@ -257,7 +340,10 @@ async fn test_key_generation_with_pending_user_prompts() {
 
     // Internal key should use req = 11 (next turn) when pending prompts exist
     let internal = widget.next_internal_key();
-    assert_eq!(internal.req, 11, "internal_key should advance to next req when pending prompts");
+    assert_eq!(
+        internal.req, 11,
+        "internal_key should advance to next req when pending prompts"
+    );
 
     // Verify current_request_index was updated
     assert!(widget.current_request_index >= 11);
@@ -269,8 +355,11 @@ async fn test_key_generation_with_pending_user_prompts() {
 
 // Strategy: Generate arbitrary OrderKeys
 fn arbitrary_orderkey() -> impl Strategy<Value = OrderKey> {
-    (any::<u64>(), any::<i32>(), any::<u64>())
-        .prop_map(|(req, out, seq)| OrderKey { req, out, seq })
+    (any::<u64>(), any::<i32>(), any::<u64>()).prop_map(|(req, out, seq)| OrderKey {
+        req,
+        out,
+        seq,
+    })
 }
 
 proptest! {

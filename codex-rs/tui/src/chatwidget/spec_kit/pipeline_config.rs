@@ -110,14 +110,14 @@ impl StageType {
     /// Get cost estimate for this stage (baseline: GPT-5.1 era per SPEC-949/950)
     pub fn cost_estimate(&self) -> f64 {
         match self {
-            Self::New => 0.0,       // Native
-            Self::Specify => 0.08,  // 1 agent (gpt5_1_mini)
-            Self::Plan => 0.30,     // 3 agents (gpt5_1 + cheap)
-            Self::Tasks => 0.08,    // 1 agent (gpt5_1_mini)
+            Self::New => 0.0,        // Native
+            Self::Specify => 0.08,   // 1 agent (gpt5_1_mini)
+            Self::Plan => 0.30,      // 3 agents (gpt5_1 + cheap)
+            Self::Tasks => 0.08,     // 1 agent (gpt5_1_mini)
             Self::Implement => 0.10, // 2 agents (gpt5_1_codex + cheap)
-            Self::Validate => 0.30, // 3 agents (gpt5_1 + cheap)
-            Self::Audit => 0.80,    // 3 premium (gpt5_codex + premium)
-            Self::Unlock => 0.80,   // 3 premium (gpt5_codex + premium)
+            Self::Validate => 0.30,  // 3 agents (gpt5_1 + cheap)
+            Self::Audit => 0.80,     // 3 premium (gpt5_codex + premium)
+            Self::Unlock => 0.80,    // 3 premium (gpt5_codex + premium)
         }
     }
 
@@ -143,7 +143,7 @@ impl StageType {
     /// Check if dependency is hard requirement (must exist or execute)
     pub fn is_hard_dependency(&self, dep: StageType) -> bool {
         match (self, dep) {
-            (Self::Tasks, Self::Plan) => true,     // Tasks needs plan
+            (Self::Tasks, Self::Plan) => true,      // Tasks needs plan
             (Self::Implement, Self::Tasks) => true, // Implement needs tasks
             _ => false,
         }
@@ -283,8 +283,8 @@ impl PipelineConfig {
             .map_err(|e| format!("Failed to read global config: {}", e))?;
 
         // Parse TOML as generic value to extract nested section
-        let toml_value: toml::Value = toml::from_str(&content)
-            .map_err(|e| format!("Failed to parse global TOML: {}", e))?;
+        let toml_value: toml::Value =
+            toml::from_str(&content).map_err(|e| format!("Failed to parse global TOML: {}", e))?;
 
         // Extract [pipeline.defaults] section
         let defaults_section = toml_value
@@ -320,8 +320,7 @@ impl PipelineConfig {
 
         // Create parent directory if it doesn't exist
         if let Some(parent) = std::path::Path::new(path).parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create directory: {}", e))?;
+            fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
         }
 
         fs::write(path, toml_str).map_err(|e| format!("Failed to write file: {}", e))?;
@@ -375,7 +374,9 @@ impl PipelineConfig {
 
     /// Get skip reason for a stage (if available)
     pub fn skip_reason(&self, stage: StageType) -> Option<&str> {
-        self.skip_reasons.get(&stage.to_string()).map(|s| s.as_str())
+        self.skip_reasons
+            .get(&stage.to_string())
+            .map(|s| s.as_str())
     }
 
     /// Validate configuration for errors and warnings
@@ -389,10 +390,7 @@ impl PipelineConfig {
                 if !self.is_enabled(dep) {
                     // Check if dependency is hard requirement
                     if stage.is_hard_dependency(dep) {
-                        errors.push(format!(
-                            "Error: {} requires {} to be enabled",
-                            stage, dep
-                        ));
+                        errors.push(format!("Error: {} requires {} to be enabled", stage, dep));
                     } else {
                         warnings.push(format!(
                             "Warning: {} without {}: will use existing artifacts",
@@ -492,9 +490,7 @@ impl PipelineOverrides {
             // Handle --only-{stage}
             else if let Some(stage_name) = arg.strip_prefix("--only-") {
                 if let Ok(stage) = stage_name.parse::<StageType>() {
-                    only_stages
-                        .get_or_insert_with(Vec::new)
-                        .push(stage);
+                    only_stages.get_or_insert_with(Vec::new).push(stage);
                 }
             }
             // Handle --stages=plan,tasks,implement
@@ -548,16 +544,16 @@ mod tests {
     #[test]
     fn test_stage_from_str() {
         assert_eq!("plan".parse::<StageType>().unwrap(), StageType::Plan);
-        assert_eq!("VALIDATE".parse::<StageType>().unwrap(), StageType::Validate);
+        assert_eq!(
+            "VALIDATE".parse::<StageType>().unwrap(),
+            StageType::Validate
+        );
         assert!("invalid".parse::<StageType>().is_err());
     }
 
     #[test]
     fn test_cli_overrides_skip() {
-        let args = vec![
-            "--skip-validate".to_string(),
-            "--skip-audit".to_string(),
-        ];
+        let args = vec!["--skip-validate".to_string(), "--skip-audit".to_string()];
         let overrides = PipelineOverrides::from_cli_args(&args);
 
         assert_eq!(overrides.skip_stages.len(), 2);
@@ -568,10 +564,7 @@ mod tests {
 
     #[test]
     fn test_cli_overrides_only() {
-        let args = vec![
-            "--only-plan".to_string(),
-            "--only-tasks".to_string(),
-        ];
+        let args = vec!["--only-plan".to_string(), "--only-tasks".to_string()];
         let overrides = PipelineOverrides::from_cli_args(&args);
 
         assert!(overrides.skip_stages.is_empty());
@@ -641,7 +634,14 @@ mod tests {
 
         // Allow validation to pass even though dependencies are missing
         // (soft dependencies only generate warnings, not errors)
-        config.enabled_stages = vec![StageType::New, StageType::Specify, StageType::Plan, StageType::Tasks, StageType::Implement, StageType::Validate];
+        config.enabled_stages = vec![
+            StageType::New,
+            StageType::Specify,
+            StageType::Plan,
+            StageType::Tasks,
+            StageType::Implement,
+            StageType::Validate,
+        ];
 
         // Now test with plan disabled (should warn about quality gates)
         config.enabled_stages.retain(|s| s != &StageType::Plan);

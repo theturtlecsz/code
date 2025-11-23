@@ -136,10 +136,13 @@ impl GeminiPtySession {
     ///
     /// **BLOCKING**: Must be called from `spawn_blocking`
     pub fn start(&mut self) -> Result<(), CliError> {
-        tracing::info!("Starting Gemini CLI with pipes (model: {})", self.config.model);
+        tracing::info!(
+            "Starting Gemini CLI with pipes (model: {})",
+            self.config.model
+        );
 
-        use std::process::{Command, Stdio};
         use std::io::BufReader;
+        use std::process::{Command, Stdio};
 
         // Spawn with piped stdin/stdout, CAPTURE stderr to see errors
         let mut child = Command::new(&self.config.binary_path)
@@ -147,14 +150,15 @@ impl GeminiPtySession {
             .arg(&self.config.model)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())  // ✅ CAPTURE stderr instead of null
+            .stderr(Stdio::piped()) // ✅ CAPTURE stderr instead of null
             .spawn()
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::NotFound {
                     CliError::BinaryNotFound {
                         binary: self.config.binary_path.clone(),
-                        install_hint: "Run: npm install -g @google/gemini-cli && gemini (to authenticate)"
-                            .to_string(),
+                        install_hint:
+                            "Run: npm install -g @google/gemini-cli && gemini (to authenticate)"
+                                .to_string(),
                     }
                 } else {
                     CliError::Internal {
@@ -193,8 +197,10 @@ impl GeminiPtySession {
         // ✅ Consume initial startup output and wait for first prompt
         self.consume_until_prompt("startup")?;
 
-        tracing::info!("Gemini CLI process ready (PID: {:?})",
-                     self.child.as_ref().map(|c| c.id()));
+        tracing::info!(
+            "Gemini CLI process ready (PID: {:?})",
+            self.child.as_ref().map(|c| c.id())
+        );
         Ok(())
     }
 
@@ -240,12 +246,17 @@ impl GeminiPtySession {
                     accumulated.push_str(&clean);
 
                     // Check for prompt markers
-                    if clean.trim().ends_with('>') ||
-                       accumulated.contains("\n> ") ||
-                       accumulated.contains("\ngemini> ") ||
-                       clean.trim() == ">" ||
-                       clean.trim() == "gemini>" {
-                        tracing::debug!("Prompt detected after {} bytes in {}", accumulated.len(), context);
+                    if clean.trim().ends_with('>')
+                        || accumulated.contains("\n> ")
+                        || accumulated.contains("\ngemini> ")
+                        || clean.trim() == ">"
+                        || clean.trim() == "gemini>"
+                    {
+                        tracing::debug!(
+                            "Prompt detected after {} bytes in {}",
+                            accumulated.len(),
+                            context
+                        );
                         return Ok(());
                     }
                 }
@@ -260,7 +271,6 @@ impl GeminiPtySession {
             std::thread::sleep(Duration::from_millis(10));
         }
     }
-
 
     /// Send user message and stream response
     ///
@@ -349,10 +359,7 @@ impl GeminiPtySession {
 
             // Check timeout
             if Instant::now() > deadline {
-                tracing::error!(
-                    "Response timeout after {:?}",
-                    self.config.max_response_time
-                );
+                tracing::error!("Response timeout after {:?}", self.config.max_response_time);
                 return Err(CliError::Timeout {
                     elapsed: self.config.max_response_time,
                 });
@@ -391,9 +398,9 @@ impl GeminiPtySession {
                     self.prompt_detector.update(&clean_text);
 
                     // ✅ Check if this line contains a prompt marker
-                    let is_prompt_line = clean_text.trim().ends_with('>') ||
-                                         clean_text.trim() == ">" ||
-                                         clean_text.trim() == "gemini>";
+                    let is_prompt_line = clean_text.trim().ends_with('>')
+                        || clean_text.trim() == ">"
+                        || clean_text.trim() == "gemini>";
 
                     // Only add to accumulated if NOT a prompt-only line
                     if !is_prompt_line {
@@ -487,7 +494,6 @@ impl GeminiPtySession {
         Ok(())
     }
 
-
     /// Ensure process is alive, restart if needed
     ///
     /// **BLOCKING**: Must be called from `spawn_blocking`
@@ -516,7 +522,7 @@ impl GeminiPtySession {
     pub fn is_alive(&mut self) -> bool {
         if let Some(child) = &mut self.child {
             match child.try_wait() {
-                Ok(None) => true, // Still running
+                Ok(None) => true,              // Still running
                 Ok(Some(_)) | Err(_) => false, // Exited or error
             }
         } else {
@@ -776,9 +782,12 @@ impl GeminiPtyProvider {
         tokio::task::spawn(async move {
             // Get session with mut access
             let mut sessions = sessions_clone.lock().await;
-            let mut session = sessions.remove(&conv_id_clone).ok_or_else(|| CliError::Internal {
-                message: "Session disappeared".to_string(),
-            })?;
+            let mut session =
+                sessions
+                    .remove(&conv_id_clone)
+                    .ok_or_else(|| CliError::Internal {
+                        message: "Session disappeared".to_string(),
+                    })?;
             drop(sessions); // Release lock before blocking operation
 
             // Run send_message in blocking task

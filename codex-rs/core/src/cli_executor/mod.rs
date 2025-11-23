@@ -1,24 +1,26 @@
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 
-pub mod types;
-pub mod context;
-pub mod stream;
 pub mod claude;
-pub mod gemini;
-pub mod prompt_detector;
-pub mod gemini_pty;
-pub mod gemini_pipes;
 pub mod claude_pipes;
+pub mod context;
+pub mod gemini;
+pub mod gemini_pipes;
+pub mod gemini_pty;
+pub mod prompt_detector;
+pub mod stream;
+pub mod types;
 
-pub use types::*;
-pub use claude::{ClaudeCliExecutor, ClaudeCliConfig};
-pub use gemini::{GeminiCliExecutor, GeminiCliConfig};
+pub use claude::{ClaudeCliConfig, ClaudeCliExecutor};
+pub use claude_pipes::{ClaudePipesConfig, ClaudePipesProvider, ClaudePipesSession, SessionInfo};
 pub use context::CliContextManager;
+pub use gemini::{GeminiCliConfig, GeminiCliExecutor};
+pub use gemini_pipes::{GeminiPipesConfig, GeminiPipesProvider, GeminiPipesSession};
+pub use gemini_pty::{
+    ConversationId, GeminiPtyConfig, GeminiPtyProvider, GeminiPtySession, SessionStats,
+};
 pub use prompt_detector::PromptDetector;
-pub use gemini_pty::{GeminiPtySession, GeminiPtyConfig, GeminiPtyProvider, SessionStats, ConversationId};
-pub use gemini_pipes::{GeminiPipesSession, GeminiPipesConfig, GeminiPipesProvider};
-pub use claude_pipes::{ClaudePipesSession, ClaudePipesConfig, ClaudePipesProvider, SessionInfo};
+pub use types::*;
 
 /// Core trait for CLI-based model executors
 ///
