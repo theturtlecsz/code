@@ -32,7 +32,7 @@ pub(crate) fn make_widget() -> ChatWidget<'static> {
 
 /// Create a minimal ChatWidget for testing with a specific directory
 pub(crate) fn make_widget_with_dir(cwd: &Path) -> ChatWidget<'static> {
-    let (tx_raw, _rx) = std::sync::mpsc::channel::<AppEvent>();
+    let (tx_raw, _rx) = tokio::sync::mpsc::unbounded_channel::<AppEvent>();
     let app_event_tx = AppEventSender::new(tx_raw);
     let cfg = test_config_with_cwd(cwd);
     let term = crate::tui::TerminalInfo {

@@ -40,7 +40,8 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use std::sync::mpsc::{Receiver, Sender as StdSender, channel};
+use std::sync::mpsc::{Sender as StdSender, channel as std_channel};
+use tokio::sync::mpsc::UnboundedReceiver;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -90,8 +91,8 @@ pub(crate) struct App<'a> {
     _server: Arc<ConversationManager>,
     app_event_tx: AppEventSender,
     // Split event receivers: high‑priority (input) and bulk (streaming)
-    app_event_rx_high: Receiver<AppEvent>,
-    app_event_rx_bulk: Receiver<AppEvent>,
+    app_event_rx_high: UnboundedReceiver<AppEvent>,
+    app_event_rx_bulk: UnboundedReceiver<AppEvent>,
     app_state: AppState<'a>,
 
     /// Config is stored here so we can recreate ChatWidgets as needed.
@@ -262,8 +263,8 @@ impl App<'_> {
         )));
 
         // Split queues so interactive input never waits behind bulk updates.
-        let (high_tx, app_event_rx_high) = channel();
-        let (bulk_tx, app_event_rx_bulk) = channel();
+        let (high_tx, app_event_rx_high) = tokio::sync::mpsc::unbounded_channel();
+        let (bulk_tx, app_event_rx_bulk) = tokio::sync::mpsc::unbounded_channel();
         let app_event_tx = AppEventSender::new_dual(high_tx.clone(), bulk_tx.clone());
         let pending_redraw = Arc::new(AtomicBool::new(false));
         let redraw_inflight = Arc::new(AtomicBool::new(false));
@@ -726,7 +727,7 @@ impl App<'_> {
 
         let stored_command = command.clone();
         let (cancel_tx, cancel_rx) = oneshot::channel();
-        let (writer_tx_raw, writer_rx) = channel::<Vec<u8>>();
+        let (writer_tx_raw, writer_rx) = std_channel::<Vec<u8>>();
         let writer_tx_shared = Arc::new(Mutex::new(Some(writer_tx_raw)));
         let controller_clone = controller.clone();
         let cwd = self.config.cwd.clone();
@@ -3346,26 +3347,34 @@ impl App<'_> {
 
     /// Pull the next event with priority for interactive input.
     /// Never returns None due to idleness; only returns None if both channels disconnect.
-    fn next_event_priority(&self) -> Option<AppEvent> {
-        use std::sync::mpsc::RecvTimeoutError::{Disconnected, Timeout};
+    fn next_event_priority(&mut self) -> Option<AppEvent> {
+        use tokio::sync::mpsc::error::TryRecvError;
         loop {
-            if let Ok(ev) = self.app_event_rx_high.try_recv() {
-                return Some(ev);
-            }
-            if let Ok(ev) = self.app_event_rx_bulk.try_recv() {
-                return Some(ev);
-            }
-            match self
-                .app_event_rx_high
-                .recv_timeout(Duration::from_millis(10))
-            {
+            // Try high-priority channel first
+            match self.app_event_rx_high.try_recv() {
                 Ok(ev) => return Some(ev),
-                Err(Timeout) => continue,
-                Err(Disconnected) => break,
+                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Disconnected) => break,
+            }
+            // Try bulk channel
+            match self.app_event_rx_bulk.try_recv() {
+                Ok(ev) => return Some(ev),
+                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Disconnected) => {
+                    // Bulk disconnected but high still alive, continue checking high
+                }
+            }
+            // Both channels empty, sleep briefly before retry
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        // High channel disconnected; try bulk as a last resort
+        loop {
+            match self.app_event_rx_bulk.try_recv() {
+                Ok(ev) => return Some(ev),
+                Err(TryRecvError::Empty) => std::thread::sleep(Duration::from_millis(10)),
+                Err(TryRecvError::Disconnected) => return None,
             }
         }
-        // High channel disconnected; try blocking on bulk as a last resort
-        self.app_event_rx_bulk.recv().ok()
     }
 
     #[cfg(unix)]

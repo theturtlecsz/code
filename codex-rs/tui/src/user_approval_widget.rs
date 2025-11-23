@@ -571,7 +571,7 @@ mod tests {
     use crossterm::event::KeyCode;
     use crossterm::event::KeyEvent;
     use crossterm::event::KeyModifiers;
-    use std::sync::mpsc::channel;
+    use tokio::sync::mpsc::unbounded_channel as channel;
 
     #[test]
     fn lowercase_shortcut_is_accepted() {

@@ -143,4 +143,117 @@ let debug = harness.history_cells_debug(); // ← Never reaches here
 
 ---
 
+---
+
+## Session 1 Progress (2025-11-23, 5 hours)
+
+### ✅ Major Achievement: Deadlock FIXED
+
+**Primary Objective Achieved:**
+- 0/9 tests hanging (was 5/9 hanging 60+ seconds) ✅
+- All tests complete in 0.19-0.21s ✅
+- Root cause identified and partially resolved ✅
+
+### Root Cause Analysis
+
+**THE BUG:**
+```rust
+// TestHarness (BEFORE):
+use std::sync::mpsc;  // Blocking channel
+let (app_tx_raw, app_rx) = mpsc::channel();  // In tokio context!
+
+#[tokio::test]  // Async runtime
+async fn test_send_user_message() {
+    let harness = TestHarness::new();  // Creates std::sync::mpsc
+    harness.drain_app_events();  // try_recv() blocks tokio → DEADLOCK
+}
+```
+
+**WHY IT DEADLOCKS:**
+1. std::sync::mpsc is designed for thread-to-thread communication
+2. In tokio runtime, try_recv() can block the scheduler
+3. ChatWidget spawns tokio tasks that send to the channel
+4. Main test thread blocks waiting for events
+5. Tokio runtime can't schedule the tasks → deadlock
+
+**THE FIX:**
+```rust
+// TestHarness (AFTER):
+use tokio::sync::mpsc;  // Async channel
+let (app_tx_raw, app_rx) = mpsc::unbounded_channel();  // Tokio-safe!
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]  // Multi-thread
+async fn test_send_user_message() {
+    let harness = TestHarness::new();  // Creates tokio::sync::mpsc
+    harness.drain_app_events();  // tokio try_recv() - no deadlock ✅
+}
+```
+
+### Files Refactored (14 files)
+
+**Core Event System:**
+1. `tui/src/app_event_sender.rs` - tokio::sync::mpsc::UnboundedSender
+2. `tui/src/app.rs` - UnboundedReceiver, event loop refactored
+3. `tui/src/chatwidget/test_harness.rs` - unbounded_channel, multi_thread tests
+4. `tui/src/chatwidget/mod.rs` - 4 browser check deadlocks fixed (tokio::oneshot)
+
+**Test Infrastructure:**
+5-14. Multiple test files migrated to tokio channels
+
+### Test Results
+
+**Before:** 3/9 passing, 5/9 hanging, 1/9 failing
+**After Session 1:** 4/9 passing, 0/9 hanging, 5/9 failing
+**Progress:** +1 passing, -5 hanging, +4 failing (tests fail fast instead of hang)
+
+### Critical Discovery
+
+**UNEXPECTED:** Even "passing" test has 0 assistant cells!
+
+```bash
+$ cargo test test_simulate_streaming_response -- --nocapture
+
+Assistant cells: 0
+test ... ok  # Passes because it only checks !debug.is_empty()
+```
+
+**Implication:** handle_codex_event() not creating history cells at all
+**Next Session Focus:** Debug event processing logic
+
+### Session 1 Deliverables
+
+- ✅ Comprehensive audit: 58 std::sync::mpsc uses across 15 files
+- ✅ 7 integration tests added (AppEventSender baseline validation)
+- ✅ Core refactor complete (AppEventSender, App, TestHarness)
+- ✅ ChatWidget deadlocks eliminated (tokio::oneshot pattern)
+- ✅ Test infrastructure 90% migrated
+- ✅ All changes compile successfully
+- ⚠️ Test failures require Session 2 investigation
+
+### Remaining Work (Session 2)
+
+**Phase 2 (Complete Refactoring):**
+- theme_selection_view.rs (14 uses)
+- file_search.rs (1 use, evaluation needed)
+
+**Phase 3 (Debug Test Failures):**
+- Investigate why handle_codex_event() doesn't create history cells
+- Test 6 hypotheses (Op channel, async init, session state, etc.)
+- Fix all 5 failing tests
+
+**Phase 4 (Validation):**
+- 9/9 tests passing
+- Full workspace test suite
+- Manual TUI smoke testing
+- Performance + memory validation
+
+**Phase 5 (Completion):**
+- Documentation
+- Single comprehensive commit
+- Local-memory storage
+
+**Estimated Time:** 8-10 hours
+
+---
+
 **SPEC-KIT-955: TUI Test Deadlock - Critical Infrastructure Bug**

@@ -4,7 +4,7 @@
 //! the order in which history cells are added.
 
 use codex_tui::chatwidget::ChatWidget;
-use std::sync::mpsc::channel;
+// SPEC-955: Migrated to tokio channels
 use tokio::sync::mpsc::unbounded_channel;
 
 /// Create a minimal ChatWidget for testing
@@ -17,7 +17,7 @@ fn make_test_widget() -> ChatWidget<'static> {
     use codex_tui::streaming::StreamController;
     use std::collections::HashMap;
 
-    let (tx_raw, _rx) = channel();
+    let (tx_raw, _rx) = unbounded_channel();
     let app_event_tx = AppEventSender::new(tx_raw);
     let (op_tx, _op_rx) = unbounded_channel();
 

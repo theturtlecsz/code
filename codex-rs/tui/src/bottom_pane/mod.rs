@@ -943,7 +943,7 @@ mod tests_removed {
     use crate::app_event::AppEvent;
     use ratatui::buffer::Buffer;
     use ratatui::layout::Rect;
-    use std::sync::mpsc::channel;
+    use tokio::sync::mpsc::unbounded_channel as channel;
 
     fn exec_request() -> ApprovalRequest {
         ApprovalRequest::Exec {

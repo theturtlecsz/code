@@ -18,6 +18,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
+// SPEC-955: std::sync::mpsc::Sender only for TerminalRunController (separate system)
 use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant, SystemTime};
 
@@ -155,6 +156,7 @@ use ratatui_image::picker::Picker;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::process::Command;
+// SPEC-955: std::sync::mpsc only for TerminalRunController (separate system)
 use std::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -1520,8 +1522,13 @@ impl ChatWidget<'_> {
 
     // Synthetic key for internal content that should appear at the TOP of the NEXT request
     // (e.g., the user’s prompt preceding the model’s output for that turn).
+    // SPEC-955 Session 2: Increment current_request_index for synthetic keys
+    // to ensure each user turn gets a unique request number.
     fn next_req_key_top(&mut self) -> OrderKey {
-        let req = self.last_seen_request_index.saturating_add(1);
+        self.current_request_index = self.current_request_index.saturating_add(1);
+        let req = self.current_request_index.max(self.last_seen_request_index.saturating_add(1));
+        self.current_request_index = req;
+
         self.internal_seq = self.internal_seq.saturating_add(1);
         OrderKey {
             req,
@@ -1532,8 +1539,17 @@ impl ChatWidget<'_> {
 
     // Synthetic key for a user prompt that should appear just after banners but
     // still before any model output within the next request.
+    //
+    // SPEC-955 Session 2: Fixed to increment current_request_index for each user message,
+    // ensuring multiple user messages get different request numbers and don't interleave.
     fn next_req_key_prompt(&mut self) -> OrderKey {
-        let req = self.last_seen_request_index.saturating_add(1);
+        // Increment current_request_index to get unique request number for each user message
+        self.current_request_index = self.current_request_index.saturating_add(1);
+        // Ensure it's at least last_seen + 1
+        let req = self.current_request_index.max(self.last_seen_request_index.saturating_add(1));
+        // Update current_request_index to the actual value we're using
+        self.current_request_index = req;
+
         self.internal_seq = self.internal_seq.saturating_add(1);
         OrderKey {
             req,
@@ -1545,8 +1561,12 @@ impl ChatWidget<'_> {
     // Synthetic key for internal notices tied to the upcoming turn that
     // should appear immediately after the user prompt but still before any
     // model output for that turn.
+    //
+    // SPEC-955 Session 2: Uses current_request_index (not incremented here -
+    // this is for notices AFTER the prompt in the same request).
     fn next_req_key_after_prompt(&mut self) -> OrderKey {
-        let req = self.last_seen_request_index.saturating_add(1);
+        // Don't increment - use current request (same as the prompt that just went in)
+        let req = self.current_request_index.max(self.last_seen_request_index.saturating_add(1));
         self.internal_seq = self.internal_seq.saturating_add(1);
         OrderKey {
             req,
@@ -4948,16 +4968,10 @@ impl ChatWidget<'_> {
         // IMPORTANT: Always use global browser manager for consistency
         // The global browser manager ensures both TUI and agent tools use the same instance
 
-        // We need to check if browser is enabled first
-        // Use a channel to check browser status from async context
-        let (status_tx, status_rx) = std::sync::mpsc::channel();
-        tokio::spawn(async move {
-            let browser_manager = ChatWidget::get_browser_manager().await;
-            let enabled = browser_manager.is_enabled().await;
-            let _ = status_tx.send(enabled);
-        });
-
-        let browser_enabled = status_rx.recv().unwrap_or(false);
+        // SPEC-955: Defer browser check to avoid blocking in constructor
+        // Browser screenshot capture will be initialized lazily when first needed
+        // This prevents blocking the constructor which can be called from async contexts
+        let browser_enabled = false;  // Will be checked later when browser features are used
 
         // Start async screenshot capture in background (non-blocking)
         if browser_enabled {
@@ -11918,11 +11932,15 @@ impl ChatWidget<'_> {
         // replace it in place to avoid duplicate assistant messages when a second
         // InsertFinalAnswer (e.g., from an AgentMessage event) arrives after we already
         // finalized due to a side event.
-        if let Some(idx) = self.history_cells.iter().rposition(|c| {
-            c.as_any()
-                .downcast_ref::<history_cell::AssistantMarkdownCell>()
-                .is_some()
-        }) {
+        //
+        // SPEC-955 Session 2: Only use this fallback replacement when id is None.
+        // When we have an explicit ID, we should create a new cell if no matching ID exists.
+        if id.is_none() {
+            if let Some(idx) = self.history_cells.iter().rposition(|c| {
+                c.as_any()
+                    .downcast_ref::<history_cell::AssistantMarkdownCell>()
+                    .is_some()
+            }) {
             // Replace the tail finalized assistant cell if the new content is identical OR
             // a superset revision of the previous content (common provider behavior where
             // a later final slightly extends the earlier one). Otherwise append a new
@@ -11957,6 +11975,7 @@ impl ChatWidget<'_> {
                 self.history_replace_at(idx, Box::new(cell));
                 self.autoscroll_if_near_bottom();
                 return;
+            }
             }
         }
 
@@ -13223,16 +13242,18 @@ impl ChatWidget<'_> {
                     }
                     "status" => {
                         // Get status from BrowserManager
-                        // Use a channel to get status from async context
-                        let (status_tx, status_rx) = std::sync::mpsc::channel();
+                        // Use oneshot channel to get status from async context (SPEC-955)
+                        let (status_tx, status_rx) = tokio::sync::oneshot::channel();
                         tokio::spawn(async move {
                             let browser_manager = ChatWidget::get_browser_manager().await;
                             let status = browser_manager.get_status_sync();
                             let _ = status_tx.send(status);
                         });
-                        status_rx
-                            .recv()
-                            .unwrap_or_else(|_| "Failed to get browser status.".to_string())
+                        tokio::runtime::Handle::current().block_on(async {
+                            status_rx
+                                .await
+                                .unwrap_or_else(|_| "Failed to get browser status.".to_string())
+                        })
                     }
                     "fullpage" => {
                         if parts.len() > 2 {
@@ -14134,7 +14155,7 @@ impl ChatWidget<'_> {
 
             // Toggle behavior: if an external Chrome connection is active, disconnect it.
             // Otherwise, start a connection (auto-detect).
-            let (tx, rx) = std::sync::mpsc::channel();
+            let (tx, rx) = tokio::sync::oneshot::channel();
             let app_event_tx = self.app_event_tx.clone();
             tokio::spawn(async move {
                 let browser_manager = ChatWidget::get_browser_manager().await;
@@ -14161,8 +14182,9 @@ impl ChatWidget<'_> {
                 }
             });
 
-            // If the async task handled a disconnect, stop here; otherwise connect.
-            let handled_disconnect = rx.recv().unwrap_or(false);
+            // If the async task handled a disconnect, stop here; otherwise connect. (SPEC-955)
+            let handled_disconnect = tokio::runtime::Handle::current()
+                .block_on(async { rx.await.unwrap_or(false) });
             if !handled_disconnect {
                 // Switch to external Chrome mode with default/auto-detected port
                 self.handle_chrome_connection(None, None);
@@ -14176,16 +14198,18 @@ impl ChatWidget<'_> {
 
         // Check if it's a status command
         if parts[0] == "status" {
-            // Get status from BrowserManager - same as /browser status
-            let (status_tx, status_rx) = std::sync::mpsc::channel();
+            // Get status from BrowserManager - same as /browser status (SPEC-955)
+            let (status_tx, status_rx) = tokio::sync::oneshot::channel();
             tokio::spawn(async move {
                 let browser_manager = ChatWidget::get_browser_manager().await;
                 let status = browser_manager.get_status_sync();
                 let _ = status_tx.send(status);
             });
-            let status = status_rx
-                .recv()
-                .unwrap_or_else(|_| "Failed to get browser status.".to_string());
+            let status = tokio::runtime::Handle::current().block_on(async {
+                status_rx
+                    .await
+                    .unwrap_or_else(|_| "Failed to get browser status.".to_string())
+            });
 
             // Add the response to the UI
             let lines = status

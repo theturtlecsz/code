@@ -76,7 +76,7 @@ impl<'a> BottomPaneView<'a> for ApprovalModalView<'a> {
 mod tests {
     use super::*;
     use crate::app_event::AppEvent;
-    use std::sync::mpsc::channel;
+    use tokio::sync::mpsc::unbounded_channel as channel;
 
     fn make_exec_request() -> ApprovalRequest {
         ApprovalRequest::Exec {

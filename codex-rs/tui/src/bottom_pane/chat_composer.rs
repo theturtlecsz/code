@@ -2215,7 +2215,7 @@ mod tests {
         use crossterm::event::KeyEvent;
         use crossterm::event::KeyModifiers;
 
-        let (tx, _rx) = std::sync::mpsc::channel();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
         let mut composer = ChatComposer::new(true, sender, false);
 
@@ -2238,7 +2238,7 @@ mod tests {
         use crossterm::event::KeyEvent;
         use crossterm::event::KeyModifiers;
 
-        let (tx, _rx) = std::sync::mpsc::channel();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
         let mut composer = ChatComposer::new(true, sender, false);
 
@@ -2267,7 +2267,7 @@ mod tests {
         use crossterm::event::KeyModifiers;
 
         let large = "y".repeat(LARGE_PASTE_CHAR_THRESHOLD + 1);
-        let (tx, _rx) = std::sync::mpsc::channel();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
         let mut composer = ChatComposer::new(true, sender, false);
 
@@ -2288,7 +2288,7 @@ mod tests {
         use ratatui::Terminal;
         use ratatui::backend::TestBackend;
 
-        let (tx, _rx) = std::sync::mpsc::channel();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
         let mut terminal = match Terminal::new(TestBackend::new(100, 10)) {
             Ok(t) => t,
@@ -2351,9 +2351,9 @@ mod tests {
         use crossterm::event::KeyCode;
         use crossterm::event::KeyEvent;
         use crossterm::event::KeyModifiers;
-        use std::sync::mpsc::TryRecvError;
+        use tokio::sync::mpsc::error::TryRecvError;
 
-        let (tx, rx) = std::sync::mpsc::channel();
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
         let mut composer = ChatComposer::new(true, sender, false);
 
@@ -2393,7 +2393,7 @@ mod tests {
         use crossterm::event::KeyEvent;
         use crossterm::event::KeyModifiers;
 
-        let (tx, _rx) = std::sync::mpsc::channel();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
         let mut composer = ChatComposer::new(
             true,
@@ -2417,9 +2417,9 @@ mod tests {
         use crossterm::event::KeyCode;
         use crossterm::event::KeyEvent;
         use crossterm::event::KeyModifiers;
-        use std::sync::mpsc::TryRecvError;
+        use tokio::sync::mpsc::error::TryRecvError;
 
-        let (tx, rx) = std::sync::mpsc::channel();
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
         let mut composer = ChatComposer::new(true, sender, false);
 
@@ -2457,7 +2457,7 @@ mod tests {
         use crossterm::event::KeyEvent;
         use crossterm::event::KeyModifiers;
 
-        let (tx, _rx) = std::sync::mpsc::channel();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
         let mut composer = ChatComposer::new(true, sender, false);
 
@@ -2530,7 +2530,7 @@ mod tests {
         use crossterm::event::KeyEvent;
         use crossterm::event::KeyModifiers;
 
-        let (tx, _rx) = std::sync::mpsc::channel();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
         let mut composer = ChatComposer::new(true, sender, false);
 
@@ -2596,7 +2596,7 @@ mod tests {
         use crossterm::event::KeyEvent;
         use crossterm::event::KeyModifiers;
 
-        let (tx, _rx) = std::sync::mpsc::channel();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
         let mut composer = ChatComposer::new(true, sender, false);
 
@@ -2637,7 +2637,7 @@ mod tests {
 
     #[test]
     fn test_typed_anything_on_paste() {
-        let (tx, _rx) = std::sync::mpsc::channel();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
         let mut composer = ChatComposer::new(true, sender, false);
 
@@ -2657,7 +2657,7 @@ mod tests {
 
     #[test]
     fn test_typed_anything_on_large_paste() {
-        let (tx, _rx) = std::sync::mpsc::channel();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
         let mut composer = ChatComposer::new(true, sender, false);
 
@@ -2676,7 +2676,7 @@ mod tests {
 
     #[test]
     fn test_typed_anything_on_insert_str() {
-        let (tx, _rx) = std::sync::mpsc::channel();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
         let mut composer = ChatComposer::new(true, sender, false);
 
@@ -2700,7 +2700,7 @@ mod tests {
         use ratatui::backend::TestBackend;
         use ratatui::buffer::Buffer;
 
-        let (tx, _rx) = std::sync::mpsc::channel();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
         let mut composer = ChatComposer::new(true, sender, false);
 
@@ -2749,7 +2749,7 @@ mod tests {
 
     #[test]
     fn test_new_session_resets_typed_anything() {
-        let (tx, _rx) = std::sync::mpsc::channel();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
         let mut composer = ChatComposer::new(true, sender.clone(), false);
 

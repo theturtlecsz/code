@@ -41,7 +41,7 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Read;
 use std::path::PathBuf;
-use std::sync::mpsc::channel;
+// SPEC-955: Migrated to tokio channels
 use tokio::sync::mpsc::unbounded_channel;
 use strip_ansi_escapes::strip as strip_ansi_bytes;
 
@@ -281,10 +281,10 @@ async fn helpers_are_available_and_do_not_panic() {
 // --- Helpers for tests that need direct construction and event draining ---
 fn make_chatwidget_manual() -> (
     ChatWidget<'static>,
-    std::sync::mpsc::Receiver<AppEvent>,
+    tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
     tokio::sync::mpsc::UnboundedReceiver<Op>,
 ) {
-    let (tx_raw, rx) = channel::<AppEvent>();
+    let (tx_raw, rx) = unbounded_channel::<AppEvent>();
     let app_event_tx = AppEventSender::new(tx_raw);
     let (op_tx, op_rx) = unbounded_channel::<Op>();
     let cfg = test_config();
@@ -430,7 +430,7 @@ fn spec_plan_honours_hal_flag() {
 }
 
 fn drain_insert_history(
-    rx: &std::sync::mpsc::Receiver<AppEvent>,
+    rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
 ) -> Vec<Vec<ratatui::text::Line<'static>>> {
     let mut out = Vec::new();
     while let Ok(ev) = rx.try_recv() {
@@ -467,7 +467,7 @@ impl ScriptStep {
     }
 }
 
-fn run_script(chat: &mut ChatWidget<'_>, steps: &[ScriptStep], rx: &std::sync::mpsc::Receiver<AppEvent>) {
+fn run_script(chat: &mut ChatWidget<'_>, steps: &[ScriptStep], rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>) {
     for step in steps {
         if let ScriptStep::Key(code, modifiers) = step {
             chat.handle_key_event(KeyEvent::new(*code, *modifiers));
@@ -677,7 +677,7 @@ fn agents_terminal_esc_closes_from_sidebar() {
     assert!(!chat.agents_terminal.active, "Esc should close from sidebar focus");
 }
 
-fn pump_app_events(chat: &mut ChatWidget<'_>, rx: &std::sync::mpsc::Receiver<AppEvent>) {
+fn pump_app_events(chat: &mut ChatWidget<'_>, rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>) {
     while let Ok(event) = rx.try_recv() {
         match event {
             AppEvent::PrepareAgents => chat.prepare_agents(),

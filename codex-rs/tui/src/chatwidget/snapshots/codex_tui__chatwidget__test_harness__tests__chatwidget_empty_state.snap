@@ -1,0 +1,28 @@
+---
+source: tui/src/chatwidget/test_harness.rs
+assertion_line: 1006
+expression: snapshot_output
+---
+ ┌────────────────────────────────────────────────────────────────────────────┐ 
+ │    Code  •  Model: GPT-5-Codex  •  Reasoning: medium  •  Directory: /tmp   │ 
+ └────────────────────────────────────────────────────────────────────────────┘ 
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ ★ Popular commands:                                                            
+   /agents - create and configure agents                                        
+   /model - choose model & reasoning effort NEW with GPT-5-Codex!               
+   /chrome - connect to Chrome                                                  
+   /plan - create a comprehensive plan (multiple agents)                        
+   /code - perform a coding task (multiple agents)                              
+   /branch - work in an isolated /branch then /merge when done (great for       
+   parallel work)                                                               
+   /limits - visualize weekly and hourly rate limits NEW                        
+   /undo - restore the workspace to the last Code snapshot NEW                  
+   /review - review your changes for potential issues NEW                       
+                                                                                
+ ┌────────────────────────────────────────────────────────────────────────────┐ 
+ │ What can I code for you this evening?                                      │ 
+ └────────────────────────────────────────────────────────────────────────────┘ 
+   Read Only  (Shift+Tab change)                                   Ctrl+H help

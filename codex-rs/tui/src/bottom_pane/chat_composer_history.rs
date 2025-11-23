@@ -241,7 +241,7 @@ mod tests {
     use super::*;
     use crate::app_event::AppEvent;
     use codex_core::protocol::Op;
-    use std::sync::mpsc::channel;
+    use tokio::sync::mpsc::unbounded_channel as channel;
 
     #[test]
     fn navigation_with_async_fetch() {

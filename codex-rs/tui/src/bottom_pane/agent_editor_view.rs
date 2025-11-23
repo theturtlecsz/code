@@ -645,12 +645,12 @@ impl<'a> BottomPaneView<'a> for AgentEditorView {
 mod tests {
     use super::*;
     use ratatui::{buffer::Buffer, layout::Rect};
-    use std::sync::mpsc::channel;
+    use tokio::sync::mpsc::unbounded_channel;
 
     #[test]
     fn write_params_margin_stays_clear() {
-        let (high_tx, _high_rx) = channel();
-        let (bulk_tx, _bulk_rx) = channel();
+        let (high_tx, _high_rx) = unbounded_channel();
+        let (bulk_tx, _bulk_rx) = unbounded_channel();
         let sender = AppEventSender::new_dual(high_tx, bulk_tx);
         let view = AgentEditorView::new(
             "claude".into(),
