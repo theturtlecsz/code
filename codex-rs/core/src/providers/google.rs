@@ -308,9 +308,13 @@ mod tests {
     #[test]
     fn test_google_client_id_from_env() {
         // Test that client_id() uses env var if set
-        std::env::set_var("GOOGLE_OAUTH_CLIENT_ID", "test-client-id");
+        unsafe {
+            std::env::set_var("GOOGLE_OAUTH_CLIENT_ID", "test-client-id");
+        }
         assert_eq!(GoogleAuth::client_id(), "test-client-id");
-        std::env::remove_var("GOOGLE_OAUTH_CLIENT_ID");
+        unsafe {
+            std::env::remove_var("GOOGLE_OAUTH_CLIENT_ID");
+        }
 
         // Test fallback to default
         assert_eq!(GoogleAuth::client_id(), GoogleAuth::DEFAULT_CLIENT_ID);
@@ -320,7 +324,9 @@ mod tests {
     #[should_panic(expected = "GOOGLE_OAUTH_CLIENT_SECRET environment variable must be set")]
     fn test_google_client_secret_missing() {
         // Ensure no env var is set
-        std::env::remove_var("GOOGLE_OAUTH_CLIENT_SECRET");
+        unsafe {
+            std::env::remove_var("GOOGLE_OAUTH_CLIENT_SECRET");
+        }
         // This should panic
         let _ = GoogleAuth::client_secret();
     }
@@ -336,7 +342,9 @@ mod tests {
     #[test]
     fn test_google_oauth_config() {
         // Set required env var for test
-        std::env::set_var("GOOGLE_OAUTH_CLIENT_SECRET", "test-secret");
+        unsafe {
+            std::env::set_var("GOOGLE_OAUTH_CLIENT_SECRET", "test-secret");
+        }
 
         let client = reqwest::Client::new();
         let auth = GoogleAuth::new(client, 8080);
@@ -349,7 +357,9 @@ mod tests {
         assert!(config.use_pkce);
         assert_eq!(config.scopes.len(), 4);
 
-        std::env::remove_var("GOOGLE_OAUTH_CLIENT_SECRET");
+        unsafe {
+            std::env::remove_var("GOOGLE_OAUTH_CLIENT_SECRET");
+        }
     }
 
     #[test]

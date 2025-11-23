@@ -286,9 +286,13 @@ mod tests {
     #[test]
     fn test_openai_client_id_from_env() {
         // Test that client_id() uses env var if set
-        std::env::set_var("OPENAI_OAUTH_CLIENT_ID", "test-client-id");
+        unsafe {
+            std::env::set_var("OPENAI_OAUTH_CLIENT_ID", "test-client-id");
+        }
         assert_eq!(OpenAIAuth::client_id(), "test-client-id");
-        std::env::remove_var("OPENAI_OAUTH_CLIENT_ID");
+        unsafe {
+            std::env::remove_var("OPENAI_OAUTH_CLIENT_ID");
+        }
 
         // Test fallback to default
         assert_eq!(OpenAIAuth::client_id(), OpenAIAuth::DEFAULT_CLIENT_ID);

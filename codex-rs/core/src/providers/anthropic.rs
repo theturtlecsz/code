@@ -236,9 +236,13 @@ mod tests {
     #[test]
     fn test_anthropic_client_id_from_env() {
         // Test that client_id() uses env var if set
-        std::env::set_var("ANTHROPIC_OAUTH_CLIENT_ID", "test-client-id");
+        unsafe {
+            std::env::set_var("ANTHROPIC_OAUTH_CLIENT_ID", "test-client-id");
+        }
         assert_eq!(AnthropicAuth::client_id(), "test-client-id");
-        std::env::remove_var("ANTHROPIC_OAUTH_CLIENT_ID");
+        unsafe {
+            std::env::remove_var("ANTHROPIC_OAUTH_CLIENT_ID");
+        }
 
         // Test fallback to default
         assert_eq!(AnthropicAuth::client_id(), AnthropicAuth::DEFAULT_CLIENT_ID);

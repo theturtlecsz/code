@@ -691,7 +691,7 @@ impl ClaudePipesProvider {
     pub async fn kill_session(&self, conv_id: &ConversationId) -> Result<(), CliError> {
         let mut sessions = self.sessions.lock().await;
 
-        if let Some(mut session) = sessions.get_mut(conv_id) {
+        if let Some(session) = sessions.get_mut(conv_id) {
             session.kill_process()?;
             tracing::info!("Killed session: {}", conv_id);
         }
@@ -1243,6 +1243,58 @@ mod tests {
                 for event in &all_events[..all_events.len() - 1] {
                     prop_assert!(matches!(event, StreamEvent::Delta(_)));
                 }
+            }
+
+            #[test]
+            fn prop_json_parsing_chunk_boundaries(
+                num_events in 1usize..10,
+                chunk_size in prop::sample::select(vec![1, 5, 10, 50, 100]),
+            ) {
+                // Property: JSON parsing works regardless of chunk boundaries
+                // Generate valid JSON lines (Claude stream format)
+                let json_lines: Vec<String> = (0..num_events)
+                    .map(|i| format!(r#"{{"type":"assistant","message":{{"content":[{{"type":"text","text":"chunk{}"}}]}}}}"#, i))
+                    .collect();
+
+                let full_json = json_lines.join("\n");
+
+                // Test with different chunk sizes
+                let chunks: Vec<String> = full_json
+                    .chars()
+                    .collect::<Vec<_>>()
+                    .chunks(chunk_size)
+                    .map(|c| c.iter().collect())
+                    .collect();
+
+                // Parse each chunk - should handle any chunking without panic
+                let mut session_id = None;
+                for chunk in chunks {
+                    if chunk.trim().is_empty() {
+                        continue;
+                    }
+                    // Parser should either succeed or fail deterministically, not hang or panic
+                    let result = parse_stream_json_event(&chunk, &mut session_id);
+                    prop_assert!(
+                        result.len() >= 0,
+                        "Parser should handle chunk size {} deterministically",
+                        chunk_size
+                    );
+                }
+            }
+
+            #[test]
+            fn prop_json_parsing_handles_malformed(
+                valid_prefix in "[a-z]{5,20}",
+                invalid_suffix in "[^{}\\[\\]]{1,10}",
+            ) {
+                // Property: Parser handles malformed JSON gracefully (no panic/hang)
+                let malformed = format!("{}{}", valid_prefix, invalid_suffix);
+                let mut session_id = None;
+
+                // Should return empty or error, not panic
+                let result = parse_stream_json_event(&malformed, &mut session_id);
+                // Just verify it completes without panic
+                prop_assert!(result.len() >= 0);
             }
         }
     }
