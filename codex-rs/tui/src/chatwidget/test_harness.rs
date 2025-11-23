@@ -127,6 +127,60 @@ impl TestHarness {
         self.widget.history_cells.get(idx)
     }
 
+    /// Group history cell indices by request/turn
+    /// Returns: (user_indices, assistant_indices) where each Vec contains indices for that turn
+    /// Example: user_indices[0] = [2, 3] means user turn 1 occupies indices 2-3
+    ///          assistant_indices[0] = [4, 5, 6] means assistant turn 1 occupies indices 4-6
+    pub fn cells_by_turn(&self) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
+        let mut user_groups: Vec<Vec<usize>> = Vec::new();
+        let mut assistant_groups: Vec<Vec<usize>> = Vec::new();
+        let mut current_user_group: Option<Vec<usize>> = None;
+        let mut current_assistant_group: Option<Vec<usize>> = None;
+
+        for (idx, cell) in self.widget.history_cells.iter().enumerate() {
+            match cell.kind() {
+                HistoryCellType::User => {
+                    // Finish previous assistant group if any
+                    if let Some(group) = current_assistant_group.take() {
+                        assistant_groups.push(group);
+                    }
+                    // Start or continue user group
+                    if let Some(ref mut group) = current_user_group {
+                        group.push(idx);
+                    } else {
+                        current_user_group = Some(vec![idx]);
+                    }
+                }
+                HistoryCellType::Assistant => {
+                    // Finish previous user group if any
+                    if let Some(group) = current_user_group.take() {
+                        user_groups.push(group);
+                    }
+                    // Start or continue assistant group
+                    if let Some(ref mut group) = current_assistant_group {
+                        group.push(idx);
+                    } else {
+                        current_assistant_group = Some(vec![idx]);
+                    }
+                }
+                _ => {
+                    // Other cell types (loading, error, etc.) can appear between turns
+                    // They don't break contiguity, just ignore them for grouping purposes
+                }
+            }
+        }
+
+        // Finish any remaining groups
+        if let Some(group) = current_user_group {
+            user_groups.push(group);
+        }
+        if let Some(group) = current_assistant_group {
+            assistant_groups.push(group);
+        }
+
+        (user_groups, assistant_groups)
+    }
+
     /// Helper: Create minimal test configuration
     fn test_config() -> Config {
         let mut overrides = ConfigOverrides::default();
@@ -562,8 +616,55 @@ mod tests {
         assert_eq!(user_count, 3, "Should have 3 user messages");
         assert!(assistant_count >= 3, "Should have at least 3 assistant messages");
 
+        // CONTIGUITY CHECK: Verify cells are grouped by turn with no interleaving
+        let (user_groups, assistant_groups) = harness.cells_by_turn();
+
+        println!("\n=== Contiguity Analysis ===");
+        println!("User groups: {:?}", user_groups);
+        println!("Assistant groups: {:?}", assistant_groups);
+        println!("=== End Analysis ===\n");
+
+        // Verify we have 3 distinct user groups and 3 distinct assistant groups
+        assert_eq!(user_groups.len(), 3, "Should have 3 distinct user message groups");
+        assert_eq!(assistant_groups.len(), 3, "Should have 3 distinct assistant message groups");
+
+        // Verify each group contains contiguous indices (indices form an unbroken sequence)
+        for (turn_idx, user_group) in user_groups.iter().enumerate() {
+            assert!(!user_group.is_empty(), "User group {} should not be empty", turn_idx);
+            for window in user_group.windows(2) {
+                assert_eq!(
+                    window[1], window[0] + 1,
+                    "User turn {} indices should be contiguous, but found gap: {} -> {}",
+                    turn_idx, window[0], window[1]
+                );
+            }
+        }
+
+        for (turn_idx, asst_group) in assistant_groups.iter().enumerate() {
+            assert!(!asst_group.is_empty(), "Assistant group {} should not be empty", turn_idx);
+            for window in asst_group.windows(2) {
+                assert_eq!(
+                    window[1], window[0] + 1,
+                    "Assistant turn {} indices should be contiguous, but found gap: {} -> {}",
+                    turn_idx, window[0], window[1]
+                );
+            }
+        }
+
+        // Verify ordering: user group i should come before assistant group i
+        for turn_idx in 0..3 {
+            let user_last = user_groups[turn_idx].last().unwrap();
+            let asst_first = assistant_groups[turn_idx].first().unwrap();
+            assert!(
+                user_last < asst_first,
+                "Turn {} user message (ending at {}) should come before assistant response (starting at {})",
+                turn_idx + 1, user_last, asst_first
+            );
+        }
+
         println!("✅ Three-turn extreme test passed: {} user cells, {} assistant cells",
                  user_count, assistant_count);
+        println!("✅ Contiguity verified: All cells properly grouped by turn with no interleaving");
     }
 
     // ===================================================================
