@@ -86,6 +86,8 @@ mod tools;
 #[cfg(test)]
 mod orderkey_tests;
 #[cfg(test)]
+mod orderkey_property_tests;
+#[cfg(test)]
 mod test_harness;
 #[cfg(test)]
 mod test_support;
