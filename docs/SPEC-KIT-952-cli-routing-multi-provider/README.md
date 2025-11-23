@@ -222,6 +222,7 @@ User sees response appear incrementally ✨
 2. **Higher latency than expected** - 2-25s vs expected 4-6s (functional but slower)
 3. **Model indicator UX** - No persistent model display (tracked in ENHANCEMENTS.md)
 4. **Input parsing bug** - `/model foo` on same line as message gets confused (pre-existing bug)
+5. **Model switching within session** - Cannot switch between Claude models mid-session (see [KNOWN-LIMITATIONS.md](./KNOWN-LIMITATIONS.md))
 
 ---
 
