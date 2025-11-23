@@ -150,9 +150,11 @@ branches/
 release-notes/prompt.expanded.txt
 release-notes/context.md
 
-# Core dumps (crash files)
-core
-core.*
+# Core dumps (crash files) - scoped to avoid matching codex-rs/core/
+/core
+/core.*
+**/core.dump
+**/core.[0-9]*
 
 # MCP side effects
 codex-rs/.serena/
