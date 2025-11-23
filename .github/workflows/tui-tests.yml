@@ -1,0 +1,87 @@
+name: TUI Tests
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'codex-rs/tui/**'
+      - 'codex-rs/core/**'
+      - 'codex-rs/protocol/**'
+      - '.github/workflows/tui-tests.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'codex-rs/tui/**'
+      - 'codex-rs/core/**'
+      - 'codex-rs/protocol/**'
+      - '.github/workflows/tui-tests.yml'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  test:
+    name: Run TUI Tests
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+        components: rustfmt, clippy
+
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: ~/.cargo/registry
+        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Cache cargo index
+      uses: actions/cache@v3
+      with:
+        path: ~/.cargo/git
+        key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Cache cargo build
+      uses: actions/cache@v3
+      with:
+        path: codex-rs/target
+        key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Run cargo fmt check
+      working-directory: codex-rs
+      run: cargo fmt --all -- --check
+
+    - name: Run cargo clippy
+      working-directory: codex-rs
+      run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+    - name: Run library tests
+      working-directory: codex-rs
+      run: cargo test --lib --workspace --all-features
+
+    - name: Run TUI-specific tests
+      working-directory: codex-rs
+      run: cargo test -p codex-tui --lib --all-features -- --nocapture
+
+    - name: Install cargo-insta
+      run: cargo install cargo-insta --locked
+
+    - name: Run snapshot tests
+      working-directory: codex-rs
+      run: cargo insta test --lib -p codex-tui --all-features
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results
+        path: |
+          codex-rs/target/debug/deps/*.log
+          codex-rs/tui/src/**/*.snap.new
+        retention-days: 7

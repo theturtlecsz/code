@@ -8,6 +8,9 @@
 
 &ensp;
 
+[![TUI Tests](https://github.com/theturtlecsz/code/workflows/TUI%20Tests/badge.svg)](https://github.com/theturtlecsz/code/actions/workflows/tui-tests.yml)
+[![Code Coverage](https://github.com/theturtlecsz/code/workflows/Code%20Coverage/badge.svg)](https://github.com/theturtlecsz/code/actions/workflows/coverage.yml)
+
 **Code** is a fast, local coding agent for your terminal. It's a community-driven fork of `openai/codex` focused on real developer ergonomics: Browser integration, multi-agents, theming, and reasoning control — all while staying compatible with upstream.
 
 ## ✨ Recent Updates (October 2025)

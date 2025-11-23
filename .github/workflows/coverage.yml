@@ -1,0 +1,92 @@
+name: Code Coverage
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'codex-rs/**/*.rs'
+      - 'codex-rs/**/Cargo.toml'
+      - '.github/workflows/coverage.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'codex-rs/**/*.rs'
+      - 'codex-rs/**/Cargo.toml'
+      - '.github/workflows/coverage.yml'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  coverage:
+    name: Generate Code Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+        components: llvm-tools-preview
+
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: ~/.cargo/registry
+        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Cache cargo index
+      uses: actions/cache@v3
+      with:
+        path: ~/.cargo/git
+        key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Cache cargo build
+      uses: actions/cache@v3
+      with:
+        path: codex-rs/target
+        key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install cargo-tarpaulin
+      run: cargo install cargo-tarpaulin --locked
+
+    - name: Generate coverage
+      working-directory: codex-rs
+      run: |
+        cargo tarpaulin \
+          --lib \
+          --workspace \
+          --all-features \
+          --out Html \
+          --out Json \
+          --output-dir ../coverage \
+          --timeout 600 \
+          --exclude-files "**/tests/**" "**/benches/**" \
+          --ignore-tests
+
+    - name: Upload coverage report (HTML)
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-html
+        path: coverage/tarpaulin-report.html
+        retention-days: 30
+
+    - name: Upload coverage report (JSON)
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-json
+        path: coverage/tarpaulin-report.json
+        retention-days: 30
+
+    - name: Display coverage summary
+      working-directory: coverage
+      run: |
+        echo "## Code Coverage Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        jq -r '"\(.files | length) files analyzed"' tarpaulin-report.json >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        jq -r '"**Overall Coverage:** \(.coverage)%"' tarpaulin-report.json >> $GITHUB_STEP_SUMMARY
