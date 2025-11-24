@@ -78,11 +78,11 @@ impl ModelPricing {
             // Source: platform.openai.com/docs/pricing
 
             // GPT-5 family (Released Aug 2025, GPT-5.1 Nov 2025)
-            "gpt-5" | "gpt-5.1" | "gpt5_1" | "gpt-5.1-instant" => Self {
+            "gpt-5" | "gpt-5.1" | "gpt5_1" | "gpt5_1_minimal" | "gpt-5.1-minimal" | "gpt-5.1-instant" => Self {
                 input_per_million: 1.25,  // Was 10.0 (estimate)
                 output_per_million: 10.0, // Was 30.0 (estimate)
             },
-            "gpt-5-mini" | "gpt5_1_mini" | "gpt-5.1-mini" => Self {
+            "gpt-5-mini" | "gpt5_1_mini" => Self {
                 input_per_million: 0.25,
                 output_per_million: 2.0,
             },

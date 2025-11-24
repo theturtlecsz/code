@@ -197,7 +197,7 @@ impl AgentManager {
         // SPEC-949 Phase 2: Per-agent model override
         // If agent_config.model is set, use it; otherwise use base command
         // This enables cost/performance optimization by using different models per agent
-        // (e.g., gpt-5.1-mini for simple tasks, gpt-5-codex for code generation)
+        // (e.g., gpt-5.1-minimal for simple tasks, gpt-5-codex for code generation)
         let model = agent_config
             .model
             .clone()

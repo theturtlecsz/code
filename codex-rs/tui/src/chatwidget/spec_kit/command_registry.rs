@@ -184,6 +184,9 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
     // Evidence/stats command
     registry.register(Box::new(SpecEvidenceStatsCommand));
 
+    // Search commands
+    registry.register(Box::new(SearchCommand));
+
     Mutex::new(registry)
 });
 

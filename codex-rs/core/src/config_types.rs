@@ -246,7 +246,7 @@ pub struct AgentConfig {
 
     /// Optional model override for this agent. When set, this model will be
     /// used instead of the global config.model setting. Enables cost/performance
-    /// optimization by using different models per agent (e.g., gpt-5.1-mini for
+    /// optimization by using different models per agent (e.g., gpt-5.1-minimal for
     /// simple tasks, gpt-5-codex for code generation).
     #[serde(default)]
     pub model: Option<String>,
@@ -1988,29 +1988,29 @@ mod tests {
     fn test_agent_config_model_override_with_full_config() {
         // Test complete AgentConfig with model override and all optional fields
         let toml = r#"
-            name = "gpt5_1_mini"
+            name = "gpt5_1_minimal"
             command = "chatgpt"
-            model = "gpt-5.1-mini"
+            model = "gpt-5.1-minimal"
             enabled = true
             read_only = false
             description = "Cost-optimized GPT-5 variant for simple tasks"
-            args = ["--model", "gpt-5.1-mini"]
-            args_read_only = ["--model", "gpt-5.1-mini", "-s", "read-only"]
-            args_write = ["--model", "gpt-5.1-mini", "-s", "workspace-write"]
+            args = ["--model", "gpt-5.1-minimal"]
+            args_read_only = ["--model", "gpt-5.1-minimal", "-s", "read-only"]
+            args_write = ["--model", "gpt-5.1-minimal", "-s", "workspace-write"]
         "#;
 
         let config: AgentConfig = toml::from_str(toml).unwrap();
 
-        assert_eq!(config.name, "gpt5_1_mini");
+        assert_eq!(config.name, "gpt5_1_minimal");
         assert_eq!(config.command, "chatgpt");
-        assert_eq!(config.model, Some("gpt-5.1-mini".to_string()));
+        assert_eq!(config.model, Some("gpt-5.1-minimal".to_string()));
         assert_eq!(config.enabled, true);
         assert_eq!(config.read_only, false);
         assert_eq!(
             config.description,
             Some("Cost-optimized GPT-5 variant for simple tasks".to_string())
         );
-        assert_eq!(config.args, vec!["--model", "gpt-5.1-mini"]);
+        assert_eq!(config.args, vec!["--model", "gpt-5.1-minimal"]);
         // Note: args_read_only and args_write would be Some(...) if parsed from TOML
         // but TOML syntax for nested arrays varies, so testing model field is sufficient
     }
@@ -2033,7 +2033,7 @@ mod tests {
             [[agents]]
             name = "gpt5_simple"
             command = "chatgpt"
-            model = "gpt-5.1-mini"
+            model = "gpt-5.1-minimal"
 
             [[agents]]
             name = "gpt5_codex"
@@ -2056,7 +2056,7 @@ mod tests {
 
         // First agent: gpt5_simple with model override
         assert_eq!(config.agents[0].name, "gpt5_simple");
-        assert_eq!(config.agents[0].model, Some("gpt-5.1-mini".to_string()));
+        assert_eq!(config.agents[0].model, Some("gpt-5.1-minimal".to_string()));
 
         // Second agent: gpt5_codex with different model override
         assert_eq!(config.agents[1].name, "gpt5_codex");

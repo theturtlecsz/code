@@ -12,12 +12,14 @@ mod quality;
 mod special;
 mod status;
 pub mod verify;
+pub mod search;
 
 // Re-export all commands
 pub use configure::*;
 pub use guardrail::*;
 pub use plan::*;
 pub use quality::*;
+pub use search::*;
 pub use special::*;
 pub use status::*;
 pub use verify::*;

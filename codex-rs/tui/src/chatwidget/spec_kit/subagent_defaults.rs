@@ -39,8 +39,8 @@ pub fn default_for(name: &str) -> Option<SubagentCommandConfig> {
         "speckit.specify" => Some(make_config(
             name,
             true,
-            &["gpt5_1_mini"],
-            "Use tier-1 routing (single agent, gpt-5.1-mini cost-optimized) for specification elaboration. Limit context to the provided spec_id artefacts and any prior clarify outputs. Write JSON update to local-memory with tags `spec:<spec_id>` and `stage:specify` (importance >= 8).",
+            &["gpt5_1_minimal"],
+            "Use tier-1 routing (single agent, gpt-5.1-minimal cost-optimized) for specification elaboration. Limit context to the provided spec_id artefacts and any prior clarify outputs. Write JSON update to local-memory with tags `spec:<spec_id>` and `stage:specify` (importance >= 8).",
             "Follow the `speckit.specify` JSON schema in docs/spec-kit/prompts.json. Reference prior clarify artifacts when needed and store the final JSON via `local-memory store_memory` with tags `spec:<spec_id>`, `stage:specify`, `consensus-artifact`.",
         )),
         "speckit.clarify" => None, // Native execution - no orchestrator defaults needed
@@ -56,8 +56,8 @@ pub fn default_for(name: &str) -> Option<SubagentCommandConfig> {
         "speckit.tasks" => Some(make_config(
             name,
             true,
-            &["gpt5_1_mini"],
-            "Use tier-1 routing (single agent, gpt-5.1-mini cost-optimized) to build the task list for the given spec_id. Feed in SPEC, plan outputs, and relevant evidence. Persist artifact to local-memory tagged `spec:<spec_id>` and `stage:tasks`.",
+            &["gpt5_1_minimal"],
+            "Use tier-1 routing (single agent, gpt-5.1-minimal cost-optimized) to build the task list for the given spec_id. Feed in SPEC, plan outputs, and relevant evidence. Persist artifact to local-memory tagged `spec:<spec_id>` and `stage:tasks`.",
             "Use the `spec-tasks` JSON schema in docs/spec-kit/prompts.json (tasks array, acceptance coverage, followups). Store the JSON via `local-memory store_memory` tags `spec:<spec_id>`, `stage:tasks`, `consensus-artifact`.",
         )),
         "speckit.implement" => Some(make_config(

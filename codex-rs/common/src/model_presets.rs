@@ -69,14 +69,6 @@ const PRESETS: &[ModelPreset] = &[
     // GPT-5.1 Family (OpenAI) - with reasoning levels
     // ═══════════════════════════════════════════════════════════════
 
-    // GPT-5.1 Mini (cheapest OpenAI option)
-    ModelPreset {
-        id: "gpt-5.1-mini",
-        label: "GPT-5.1 Mini",
-        description: "— cheapest OpenAI model, good for high-volume tasks ($0.25/$2)",
-        model: "gpt-5-mini",
-        effort: None,
-    },
     // GPT-5.1 Standard (with reasoning variants)
     ModelPreset {
         id: "gpt-5.1-minimal",

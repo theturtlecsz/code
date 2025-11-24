@@ -827,7 +827,7 @@ mod tests {
                 "web_search",
                 "web_fetch",
                 "search",
-                "history.search",
+                "history_search",
             ],
         );
     }
@@ -866,7 +866,7 @@ mod tests {
                 "web_search",
                 "web_fetch",
                 "search",
-                "history.search",
+                "history_search",
             ],
         );
     }
@@ -899,7 +899,7 @@ mod tests {
                 "web_search",
                 "web_fetch",
                 "search",
-                "history.search",
+                "history_search",
             ],
         );
     }
@@ -1898,8 +1898,8 @@ fn create_history_search_alias_tool() -> OpenAiTool {
     );
 
     OpenAiTool::Function(ResponsesApiTool {
-        name: "history.search".to_string(),
-        description: "Search previous turns in the conversation history.".to_string(),
+        name: "history_search".to_string(),
+        description: "Search previous turns in the conversation history (alias for search tool).".to_string(),
         strict: false,
         parameters: JsonSchema::Object {
             properties,
