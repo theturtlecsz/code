@@ -105,7 +105,11 @@ impl GeminiStreamingProvider {
         let mut accumulated = String::new();
         let mut received_done = false;
 
-        tx.send_native_stream_start("Gemini Pipes", model.to_string(), "pipes".to_string());
+        // SPEC-954-FIX: Generate unique message ID per turn (not hardcoded "pipes")
+        // Use message count to ensure uniqueness
+        let message_id = format!("gemini-msg{}", messages.len());
+
+        tx.send_native_stream_start("Gemini Pipes", model.to_string(), message_id);
 
         while let Some(event) = rx.recv().await {
             match event {

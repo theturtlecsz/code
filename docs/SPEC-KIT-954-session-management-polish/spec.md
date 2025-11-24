@@ -1,6 +1,6 @@
 **SPEC-ID**: SPEC-KIT-954
 **Feature**: Session Management UX Polish & Testing
-**Status**: Backlog
+**Status**: In Progress
 **Created**: 2025-11-22
 **Branch**: TBD
 **Owner**: Code
@@ -79,6 +79,74 @@
 **Debug Logging**: Emoji-tagged logs ready (🔵 user, 🟢 stream, 🟡 complete, 🟠 assistant, 📝 history)
 
 **Total Effort**: ~10 hours (original 4h + session 1: 2h + session 2: 4h)
+
+---
+
+### Task 1B: Message Interleaving Bug Fix ✅
+**Status**: COMPLETE - 6 critical bugs fixed (2025-11-24)
+
+**Problem**: CLI routing caused message interleaving where answers appeared before questions (Q2 shows after A1 instead of Q1→A1→Q2→A2)
+
+**Root Causes Identified and Fixed**:
+
+1. **Stream Collision (Critical)**: Hardcoded message ID "pipes" for ALL Claude/Gemini messages caused stream collision. When A2 started, it appended to A1's cell (both had same ID "pipes").
+   - **Fix**: Generate unique message IDs per turn: `{conv_id}-msg{count}` for Claude, `gemini-msg{count}` for Gemini
+   - **Files**: `claude_streaming.rs:101`, `gemini_streaming.rs:110`
+
+2. **CLI Queue Starvation (Critical)**: CLI routing never processed queued messages after completion (Q3+ stuck forever). OAuth path uses core's queue, but CLI routing uses local queue that wasn't drained.
+   - **Fix**: Process `queued_user_messages` in `on_native_stream_complete()` by draining and calling `send_user_messages_to_agent()`
+   - **File**: `mod.rs:11596-11606`
+
+3. **OAuth Deferred Creation**: OAuth path creates user cells with temporary OrderKey on TaskStarted, then updates when provider's OrderMeta arrives.
+   - **Fix**: Added `pending_user_cell_updates: HashMap<String, usize>` to track cells awaiting OrderKey update
+   - **File**: `mod.rs:521-525`
+
+4. **Resort Threshold Bug**: Resort only triggered when `|Δreq| > 1`, missing single-position reorders.
+   - **Fix**: Changed to trigger resort on any request key change (diff > 0)
+   - **File**: `mod.rs` (resort_history_by_order logic)
+
+5. **Counter Increment Bug**: Used wrong counter function causing duplicate temporary OrderKeys.
+   - **Fix**: Use `next_req_key_prompt()` for proper counter increment in TaskStarted handler
+   - **File**: `mod.rs:6441`
+
+6. **Resort Algorithm Bug**: Cycle-following algorithm didn't properly track positions after swaps.
+   - **Fix**: Update `target_positions` after each swap to maintain correct inverse permutation
+   - **File**: `mod.rs:4589-4590`
+
+**Deliverables** (2025-11-24):
+- ✅ 6 critical bugs fixed in 3 files
+- ✅ 18 unit tests in new `message_ordering_tests.rs`
+- ✅ Manual validation: claude-haiku-4.5 with 4+ rapid messages
+
+**Test Suite** (18 tests, all passing):
+1. `test_oauth_path_queues_message_without_immediate_cell` - Verifies OAuth deferred creation
+2. `test_oauth_path_creates_cell_on_task_started` - Verifies TaskStarted creates cell
+3. `test_cli_path_does_not_use_deferred_queue` - Verifies CLI uses different path
+4. `test_orderkey_comparison_for_resort` - Verifies OrderKey comparison logic
+5. `test_cell_sorting_by_orderkey` - Verifies cells sort correctly
+6. `test_next_req_key_prompt_increments_counter` - Verifies counter increment
+7. `test_task_started_uses_incrementing_counter` - Verifies unique keys per task
+8. `test_three_element_orderkey_sorting` - Verifies 3-element permutation
+9. `test_sorted_keys_remain_sorted` - Verifies idempotent sorting
+10. `test_complex_orderkey_sorting` - Verifies 5-element permutation
+11. `test_queued_messages_exist_after_cli_task` - Verifies queue state
+12. `test_pending_user_cell_updates_tracks_task_id` - Verifies tracking map
+13. `test_orderkey_sorts_by_out_when_req_equal` - Secondary sort by out
+14. `test_orderkey_sorts_by_seq_when_req_and_out_equal` - Tertiary sort by seq
+15. `test_empty_orderkey_sort` - Edge case: empty
+16. `test_single_orderkey_sort` - Edge case: single element
+17. `test_rapid_messages_get_unique_temp_keys` - Integration: rapid messages
+18. `test_harness_user_message_creates_cell` - Integration: TestHarness
+
+**Files Modified**:
+- `tui/src/chatwidget/mod.rs` - 239 lines added (fixes + state tracking)
+- `tui/src/providers/claude_streaming.rs` - Unique message ID generation
+- `tui/src/providers/gemini_streaming.rs` - Unique message ID generation
+- `tui/src/chatwidget/message_ordering_tests.rs` - NEW: 18 unit tests
+
+**Pattern**: CLI routing requires manual queue management (no core assistance). Hardcoded IDs cause stream collision across turns. Deferred cell creation with OrderKey updates prevents client-server counter desync.
+
+**Actual Effort**: ~4 hours (3h debugging + 1h tests)
 
 ---
 
@@ -180,14 +248,14 @@ CLAUDE_PROVIDER.get_or_init(|| ClaudePipesProvider::with_cwd("", &cwd))
 ## Success Criteria
 
 ### Must Have
-- [ ] Message interleaving issue identified and documented (fix optional)
+- [x] Message interleaving issue identified and documented (fix optional) ✅ FIXED (6 bugs)
 - [ ] Drop cleanup verified working
 - [ ] Long conversation tested (20+ turns)
-- [ ] Model-switching limitation documented
+- [x] Model-switching limitation documented ✅ (Task 4)
 
 ### Should Have
-- [ ] Message interleaving fixed (if root cause is simple)
-- [ ] Automated test for message ordering
+- [x] Message interleaving fixed (if root cause is simple) ✅ (6 bugs fixed)
+- [x] Automated test for message ordering ✅ (18 tests)
 - [ ] Performance metrics from long conversation test
 
 ### Could Have

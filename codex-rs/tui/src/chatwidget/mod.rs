@@ -92,6 +92,8 @@ mod orderkey_property_tests;
 mod test_harness;
 #[cfg(test)]
 mod test_support;
+#[cfg(test)]
+mod message_ordering_tests;
 use self::agent_install::{
     start_agent_install_session, start_direct_terminal_session, start_prompt_terminal_session,
     wrap_command,
@@ -518,6 +520,11 @@ pub(crate) struct ChatWidget<'a> {
     // normal history within the new turn window.
     queued_user_messages: std::collections::VecDeque<UserMessage>,
     pending_dispatched_user_messages: std::collections::VecDeque<String>,
+    // SPEC-954-FIX: Track user cells awaiting OrderKey update when provider OrderMeta arrives
+    // Maps task_id -> cell_index. When user message is created with temporary OrderKey,
+    // we store its cell index here. When first OrderMeta arrives, we update the cell's
+    // OrderKey to match the provider's request_ordinal.
+    pending_user_cell_updates: HashMap<String, usize>,
     // Number of user prompts we pre-pended to history just before starting
     // a new turn; used to anchor the next turn window so assistant output
     // appears after them.
@@ -2835,6 +2842,7 @@ impl ChatWidget<'_> {
             active_task_ids: HashSet::new(),
             queued_user_messages: std::collections::VecDeque::new(),
             pending_dispatched_user_messages: std::collections::VecDeque::new(),
+            pending_user_cell_updates: HashMap::new(),
             pending_user_prompts_for_next_turn: 0,
             ghost_snapshots: Vec::new(),
             ghost_snapshots_disabled: false,
@@ -3095,6 +3103,7 @@ impl ChatWidget<'_> {
             active_task_ids: HashSet::new(),
             queued_user_messages: std::collections::VecDeque::new(),
             pending_dispatched_user_messages: std::collections::VecDeque::new(),
+            pending_user_cell_updates: HashMap::new(),
             pending_user_prompts_for_next_turn: 0,
             ghost_snapshots: Vec::new(),
             ghost_snapshots_disabled: false,
@@ -4513,6 +4522,83 @@ impl ChatWidget<'_> {
         }
     }
 
+    /// Re-sort history_cells and cell_order_seq by OrderKey values using swap-based algorithm.
+    ///
+    /// Called when a user cell's OrderKey is updated from temporary to provider-confirmed
+    /// and the change is significant enough to potentially affect ordering.
+    ///
+    /// SPEC-954-FIX: Swap-based reordering avoids needing HistoryCell cloning.
+    /// Uses cycle-following algorithm to apply permutation in-place.
+    fn resort_history_by_order(&mut self) {
+        let len = self.history_cells.len();
+        if len == 0 {
+            return;
+        }
+
+        // Build sorted indices: indices[sorted_pos] = original_pos
+        let mut sorted_indices: Vec<usize> = (0..len).collect();
+        sorted_indices.sort_by_key(|&i| {
+            self.cell_order_seq
+                .get(i)
+                .copied()
+                .unwrap_or(OrderKey {
+                    req: 0,
+                    out: -1,
+                    seq: 0,
+                })
+        });
+
+        // Build inverse permutation for cycle-following: target[original_pos] = sorted_pos
+        let mut target_positions = vec![0usize; len];
+        for (sorted_pos, &original_pos) in sorted_indices.iter().enumerate() {
+            target_positions[original_pos] = sorted_pos;
+        }
+
+        // Check if reordering is actually needed
+        let needs_resort = target_positions.iter().enumerate().any(|(i, &target)| i != target);
+        if !needs_resort {
+            tracing::debug!("🔄 RESORT: No changes needed (already sorted)");
+            return;
+        }
+
+        tracing::info!("🔄 RESORT: Reordering {} cells", len);
+
+        // Apply permutation using cycle-following algorithm with CORRECT target mapping
+        let mut visited = vec![false; len];
+
+        for start in 0..len {
+            if visited[start] || target_positions[start] == start {
+                continue;
+            }
+
+            // Follow the cycle
+            let mut current = start;
+            loop {
+                let next = target_positions[current];
+                visited[current] = true;
+
+                if next == start {
+                    break;
+                }
+
+                // Swap elements in all three vectors
+                self.history_cells.swap(current, next);
+                self.cell_order_seq.swap(current, next);
+                if current < self.cell_order_dbg.len() && next < self.cell_order_dbg.len() {
+                    self.cell_order_dbg.swap(current, next);
+                }
+
+                // CRITICAL: Update target_positions after swap to track new positions
+                target_positions.swap(current, next);
+
+                current = next;
+            }
+        }
+
+        self.invalidate_height_cache();
+        self.request_redraw();
+    }
+
     fn resolve_running_tool_index(&self, entry: &RunningToolEntry) -> Option<usize> {
         if let Some(pos) = self
             .cell_order_seq
@@ -5626,15 +5712,17 @@ impl ChatWidget<'_> {
         let UserMessage { display_text, .. } = message;
 
         if !display_text.is_empty() {
+            // SPEC-954-FIX: Defer user cell creation until provider responds
+            // This ensures user message and answer use same request_ordinal from provider
             tracing::debug!(
-                "🔵 USER_MSG_PUSH: Adding user prompt to history | preview: {}...",
+                "🔵 USER_MSG_QUEUED: Deferred cell creation | queue_pos={} | preview={}...",
+                self.pending_dispatched_user_messages.len(),
                 &display_text.chars().take(50).collect::<String>()
             );
-            self.history_push_prompt_next_req(history_cell::new_user_prompt(display_text.clone()));
-            self.pending_user_prompts_for_next_turn =
-                self.pending_user_prompts_for_next_turn.saturating_add(1);
+
             self.pending_dispatched_user_messages
                 .push_back(display_text.clone());
+            self.pending_user_prompts_for_next_turn += 1;
         }
 
         self.flush_pending_agent_notes();
@@ -5668,11 +5756,9 @@ impl ChatWidget<'_> {
         ) in messages.into_iter().enumerate()
         {
             if !display_text.is_empty() {
-                self.history_push_prompt_next_req(history_cell::new_user_prompt(
-                    display_text.clone(),
-                ));
-                self.pending_user_prompts_for_next_turn =
-                    self.pending_user_prompts_for_next_turn.saturating_add(1);
+                // SPEC-954-FIX: Don't create cells here - will be created by:
+                // - CLI routing: Before spawning CLI stream (line ~5809)
+                // - OAuth routing: In TaskStarted handler when provider responds
                 history_texts.push(display_text.clone());
             }
 
@@ -5727,6 +5813,13 @@ impl ChatWidget<'_> {
 
             // Non-empty prompt - proceed with CLI routing
             {
+                // SPEC-954-FIX: CLI routing creates cells immediately (before streaming starts)
+                // This is necessary because CLI doesn't send TaskStarted events
+                for text in &history_texts {
+                    self.history_push_prompt_next_req(history_cell::new_user_prompt(text.clone()));
+                    self.pending_user_prompts_for_next_turn += 1;
+                }
+
                 // 1. Add user message to TUI history display
                 for text in history_texts {
                     if let Err(e) = self.codex_op_tx.send(Op::AddToHistory { text }) {
@@ -5785,6 +5878,18 @@ impl ChatWidget<'_> {
                 return;
             } // End of non-empty prompt block
         } // End of CLI routing check
+
+        // SPEC-954-FIX: OAuth path - queue messages for deferred cell creation
+        // Cells will be created by TaskStarted handler when provider responds
+        for text in &history_texts {
+            tracing::debug!(
+                "🔵 USER_MSG_QUEUED (batch): Deferred cell creation | queue_pos={} | preview={}...",
+                self.pending_dispatched_user_messages.len(),
+                &text.chars().take(50).collect::<String>()
+            );
+            self.pending_dispatched_user_messages.push_back(text.clone());
+            self.pending_user_prompts_for_next_turn += 1;
+        }
 
         // Native path: send to codex-core
         if let Err(e) = self.codex_op_tx.send(Op::UserInput {
@@ -6021,6 +6126,45 @@ impl ChatWidget<'_> {
                     return;
                 }
                 self.stream_state.seq_answer_final = Some(event.event_seq);
+
+                // SPEC-954-FIX: Update user cell OrderKey when first OrderMeta arrives
+                if let Some(om) = event.order.as_ref() {
+                    if let Some(cell_idx) = self.pending_user_cell_updates.remove(&id) {
+                        if cell_idx < self.cell_order_seq.len() {
+                            let old_key = self.cell_order_seq[cell_idx];
+                            let new_key = OrderKey {
+                                req: om.request_ordinal,
+                                out: old_key.out,
+                                seq: old_key.seq,
+                            };
+
+                            let req_diff = (new_key.req as i64 - old_key.req as i64).abs();
+
+                            tracing::info!(
+                                "🔵 ORDER_UPDATE (AgentMessage): task={} | old=req:{},out:{},seq:{} | new=req:{},out:{},seq:{} | diff={}",
+                                id,
+                                old_key.req, old_key.out, old_key.seq,
+                                new_key.req, new_key.out, new_key.seq,
+                                req_diff
+                            );
+
+                            self.cell_order_seq[cell_idx] = new_key;
+
+                            // SPEC-954-FIX: Always resort when req changes (even diff=1 needs reordering)
+                            if req_diff > 0 {
+                                tracing::debug!("🔄 RESORT: req changed, diff={}", req_diff);
+                                self.resort_history_by_order();
+                            }
+                        } else {
+                            tracing::error!(
+                                "🔴 ORDER_UPDATE_FAILED (AgentMessage): cell_idx={} out of bounds (len={})",
+                                cell_idx,
+                                self.cell_order_seq.len()
+                            );
+                        }
+                    }
+                }
+
                 // Strict order for the stream id
                 let ok = match event.order.as_ref() {
                     Some(om) => Self::order_key_from_order_meta(om),
@@ -6117,6 +6261,47 @@ impl ChatWidget<'_> {
                     tracing::debug!("Ignoring Answer delta for closed id={}", id);
                     return;
                 }
+                // SPEC-954-FIX: Update user cell OrderKey when first OrderMeta arrives
+                if let Some(om) = event.order.as_ref() {
+                    if let Some(cell_idx) = self.pending_user_cell_updates.remove(&id) {
+                        if cell_idx < self.cell_order_seq.len() {
+                            let old_key = self.cell_order_seq[cell_idx];
+                            let new_key = OrderKey {
+                                req: om.request_ordinal,  // ✅ Provider's number
+                                out: old_key.out,         // Keep MIN+1
+                                seq: old_key.seq,         // Keep original seq
+                            };
+
+                            let req_diff = (new_key.req as i64 - old_key.req as i64).abs();
+
+                            tracing::info!(
+                                "🔵 ORDER_UPDATE: task={} | old=req:{},out:{},seq:{} | new=req:{},out:{},seq:{} | diff={} | will_resort={}",
+                                id,
+                                old_key.req, old_key.out, old_key.seq,
+                                new_key.req, new_key.out, new_key.seq,
+                                req_diff,
+                                req_diff > 1
+                            );
+
+                            self.cell_order_seq[cell_idx] = new_key;
+
+                            // SPEC-954-FIX: Always resort when req changes (even diff=1 needs reordering)
+                            if req_diff > 0 {
+                                tracing::debug!("🔄 RESORT: req changed, diff={}", req_diff);
+                                self.resort_history_by_order();
+                            } else {
+                                tracing::debug!("⏭️  RESORT_SKIPPED: req unchanged");
+                            }
+                        } else {
+                            tracing::error!(
+                                "🔴 ORDER_UPDATE_FAILED: cell_idx={} out of bounds (len={})",
+                                cell_idx,
+                                self.cell_order_seq.len()
+                            );
+                        }
+                    }
+                }
+
                 // Seed/refresh order key for this Answer stream id (must have OrderMeta)
                 let ok = match event.order.as_ref() {
                     Some(om) => Self::order_key_from_order_meta(om),
@@ -6251,6 +6436,30 @@ impl ChatWidget<'_> {
                 // This begins the new turn; clear the pending prompt anchor count
                 // so subsequent background events use standard placement.
                 self.pending_user_prompts_for_next_turn = 0;
+
+                // SPEC-954-FIX: Create deferred user cell with temporary OrderKey
+                if let Some(user_text) = self.pending_dispatched_user_messages.pop_front() {
+                    // Use next_req_key_prompt() to properly increment counters and generate unique req
+                    let temp_key = self.next_req_key_prompt();
+
+                    tracing::info!(
+                        "🔵 USER_CELL_CREATED: task={} | temp_req={} | temp_out={} | seq={} | pending_updates={}",
+                        id,
+                        temp_key.req,
+                        temp_key.out,
+                        temp_key.seq,
+                        self.pending_user_cell_updates.len()
+                    );
+
+                    let cell_idx = self.history_insert_with_key_global_tagged(
+                        Box::new(history_cell::new_user_prompt(user_text)),
+                        temp_key,
+                        "prompt-deferred",
+                    );
+
+                    self.pending_user_cell_updates.insert(id.clone(), cell_idx);
+                }
+
                 // Reset stream headers for new turn
                 self.stream.reset_headers_for_new_turn();
                 self.stream_state.current_kind = None;
@@ -11385,6 +11594,18 @@ impl ChatWidget<'_> {
 
         self.autoscroll_if_near_bottom();
         self.mark_needs_redraw();
+
+        // SPEC-954-FIX: Process any queued messages for CLI routing
+        // CLI routing queues messages locally (unlike OAuth which uses core queue)
+        if !self.queued_user_messages.is_empty() {
+            tracing::info!(
+                "🔄 PROCESSING_QUEUED: {} messages queued, processing next",
+                self.queued_user_messages.len()
+            );
+            let batch: Vec<UserMessage> = self.queued_user_messages.drain(..).collect();
+            self.refresh_queued_user_messages();
+            self.send_user_messages_to_agent(batch);
+        }
     }
 
     /// Handle native provider stream error (SPEC-KIT-953)

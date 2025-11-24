@@ -96,6 +96,10 @@ impl ClaudeStreamingProvider {
             })
             .unwrap_or_default();
 
+        // SPEC-954-FIX: Generate unique message ID per turn (not hardcoded "pipes")
+        // Use conversation ID + message count to ensure uniqueness
+        let message_id = format!("{}-msg{}", conv_id, messages.len());
+
         // Send message via global session-based provider (creates/reuses session)
         let provider = get_claude_provider();
         let mut rx = provider
@@ -109,7 +113,7 @@ impl ClaudeStreamingProvider {
         let mut output_tokens = None;
         let mut received_done = false;
 
-        tx.send_native_stream_start("Claude Pipes", model.to_string(), "pipes".to_string());
+        tx.send_native_stream_start("Claude Pipes", model.to_string(), message_id);
 
         while let Some(event) = rx.recv().await {
             match event {
