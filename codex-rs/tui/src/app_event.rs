@@ -366,6 +366,15 @@ pub(crate) enum AppEvent {
         error: String,
     },
 
+    /// Timeout for user message that never received TaskStarted (SPEC-954)
+    /// Fires when a queued message hasn't been acknowledged within timeout window
+    UserMessageTimeout {
+        /// Identifier for the message that timed out
+        message_id: String,
+        /// Time elapsed before timeout (milliseconds)
+        elapsed_ms: u64,
+    },
+
     AutoUpgradeCompleted {
         version: String,
     },

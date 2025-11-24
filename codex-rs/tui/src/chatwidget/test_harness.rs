@@ -98,10 +98,15 @@ impl TestHarness {
                     self.widget.insert_history_lines(lines.clone());
                 }
                 AppEvent::InsertHistoryWithKind { id, kind, lines } => {
-                    self.widget.insert_history_lines_with_kind(*kind, id.clone(), lines.clone());
+                    self.widget
+                        .insert_history_lines_with_kind(*kind, id.clone(), lines.clone());
                 }
                 AppEvent::InsertFinalAnswer { id, lines, source } => {
-                    self.widget.insert_final_answer_with_id(id.clone(), lines.clone(), source.clone());
+                    self.widget.insert_final_answer_with_id(
+                        id.clone(),
+                        lines.clone(),
+                        source.clone(),
+                    );
                 }
                 _ => {
                     // Other events just captured for inspection
@@ -361,7 +366,10 @@ mod tests {
         }
         println!("=== End ===\n");
 
-        let assistant_count = harness.widget.history_cells.iter()
+        let assistant_count = harness
+            .widget
+            .history_cells
+            .iter()
             .filter(|c| matches!(c.kind(), HistoryCellType::Assistant))
             .count();
         println!("Assistant cells: {}", assistant_count);

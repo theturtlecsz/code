@@ -41,11 +41,11 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::{Sender as StdSender, channel as std_channel};
-use tokio::sync::mpsc::UnboundedReceiver;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use std::time::Instant;
+use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::oneshot;
 use tracing::{info, warn};
 
@@ -2911,6 +2911,16 @@ impl App<'_> {
                 AppEvent::LoginGeminiComplete { result } => {
                     if let AppState::Chat { widget } = &mut self.app_state {
                         widget.notify_login_gemini_complete(result);
+                    }
+                }
+
+                // SPEC-954: Handle user message timeout
+                AppEvent::UserMessageTimeout {
+                    message_id,
+                    elapsed_ms,
+                } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.handle_user_message_timeout(&message_id, elapsed_ms);
                     }
                 }
 

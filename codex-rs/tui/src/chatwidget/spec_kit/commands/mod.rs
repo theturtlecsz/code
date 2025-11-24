@@ -9,10 +9,10 @@ mod configure; // SPEC-947 Phase 4: Pipeline configurator command
 mod guardrail;
 mod plan;
 mod quality;
+pub mod search;
 mod special;
 mod status;
 pub mod verify;
-pub mod search;
 
 // Re-export all commands
 pub use configure::*;

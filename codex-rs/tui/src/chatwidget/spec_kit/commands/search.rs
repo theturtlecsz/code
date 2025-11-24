@@ -5,9 +5,9 @@
 //! This module implements the `/search` command, allowing users to find text
 //! within the conversation history.
 
+use super::super::command_registry::SpecKitCommand;
 use crate::chatwidget::ChatWidget;
 use crate::history_cell::{HistoryCellType, PlainHistoryCell};
-use super::super::command_registry::SpecKitCommand;
 use ratatui::text::Line;
 use shlex::Shlex;
 
@@ -72,7 +72,9 @@ impl SpecKitCommand for SearchCommand {
             Some(q) => q,
             None => {
                 widget.history_push(PlainHistoryCell::new(
-                    vec![Line::from("Error: Search query cannot be empty. Use /search --help for usage.")],
+                    vec![Line::from(
+                        "Error: Search query cannot be empty. Use /search --help for usage.",
+                    )],
                     HistoryCellType::Error,
                 ));
                 widget.request_redraw();
@@ -90,7 +92,7 @@ impl SpecKitCommand for SearchCommand {
         results.push(Line::from(""));
         results.push(Line::from("--- Search Results (placeholder) ---"));
         results.push(Line::from("No matches found."));
-        
+
         widget.history_push(PlainHistoryCell::new(results, HistoryCellType::Notice));
         widget.request_redraw();
     }

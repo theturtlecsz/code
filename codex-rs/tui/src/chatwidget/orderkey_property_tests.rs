@@ -1,5 +1,5 @@
-use proptest::prelude::*;
 use super::OrderKey;
+use proptest::prelude::*;
 
 // Strategy for generating arbitrary OrderKeys
 prop_compose! {

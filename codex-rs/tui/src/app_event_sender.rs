@@ -13,7 +13,10 @@ pub(crate) struct AppEventSender {
 
 impl AppEventSender {
     /// Create a sender that splits events by priority across two channels.
-    pub(crate) fn new_dual(high_tx: UnboundedSender<AppEvent>, bulk_tx: UnboundedSender<AppEvent>) -> Self {
+    pub(crate) fn new_dual(
+        high_tx: UnboundedSender<AppEvent>,
+        bulk_tx: UnboundedSender<AppEvent>,
+    ) -> Self {
         Self { high_tx, bulk_tx }
     }
     /// Backward‑compatible constructor for tests/fixtures that expect a single
@@ -260,7 +263,9 @@ mod tests {
                 // Success - channel is empty as expected
             }
             Ok(_) => panic!("Should not receive event when none sent"),
-            Err(mpsc::error::TryRecvError::Disconnected) => panic!("Channel should not be disconnected"),
+            Err(mpsc::error::TryRecvError::Disconnected) => {
+                panic!("Channel should not be disconnected")
+            }
         }
     }
 

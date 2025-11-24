@@ -85,15 +85,15 @@ mod terminal_handlers;
 mod tools;
 
 #[cfg(test)]
-mod orderkey_tests;
+mod message_ordering_tests;
 #[cfg(test)]
 mod orderkey_property_tests;
+#[cfg(test)]
+mod orderkey_tests;
 #[cfg(test)]
 mod test_harness;
 #[cfg(test)]
 mod test_support;
-#[cfg(test)]
-mod message_ordering_tests;
 use self::agent_install::{
     start_agent_install_session, start_direct_terminal_session, start_prompt_terminal_session,
     wrap_command,
@@ -525,6 +525,10 @@ pub(crate) struct ChatWidget<'a> {
     // we store its cell index here. When first OrderMeta arrives, we update the cell's
     // OrderKey to match the provider's request_ordinal.
     pending_user_cell_updates: HashMap<String, usize>,
+    // SPEC-954: Track timestamps for pending messages to detect silent failures
+    // Maps message_id -> timestamp when message was queued. If TaskStarted isn't
+    // received within timeout window (10s), we show error to user.
+    pending_message_timestamps: HashMap<String, std::time::Instant>,
     // Number of user prompts we pre-pended to history just before starting
     // a new turn; used to anchor the next turn window so assistant output
     // appears after them.
@@ -1533,7 +1537,9 @@ impl ChatWidget<'_> {
     // to ensure each user turn gets a unique request number.
     fn next_req_key_top(&mut self) -> OrderKey {
         self.current_request_index = self.current_request_index.saturating_add(1);
-        let req = self.current_request_index.max(self.last_seen_request_index.saturating_add(1));
+        let req = self
+            .current_request_index
+            .max(self.last_seen_request_index.saturating_add(1));
         self.current_request_index = req;
 
         self.internal_seq = self.internal_seq.saturating_add(1);
@@ -1553,7 +1559,9 @@ impl ChatWidget<'_> {
         // Increment current_request_index to get unique request number for each user message
         self.current_request_index = self.current_request_index.saturating_add(1);
         // Ensure it's at least last_seen + 1
-        let req = self.current_request_index.max(self.last_seen_request_index.saturating_add(1));
+        let req = self
+            .current_request_index
+            .max(self.last_seen_request_index.saturating_add(1));
         // Update current_request_index to the actual value we're using
         self.current_request_index = req;
 
@@ -1573,7 +1581,9 @@ impl ChatWidget<'_> {
     // this is for notices AFTER the prompt in the same request).
     fn next_req_key_after_prompt(&mut self) -> OrderKey {
         // Don't increment - use current request (same as the prompt that just went in)
-        let req = self.current_request_index.max(self.last_seen_request_index.saturating_add(1));
+        let req = self
+            .current_request_index
+            .max(self.last_seen_request_index.saturating_add(1));
         self.internal_seq = self.internal_seq.saturating_add(1);
         OrderKey {
             req,
@@ -2843,6 +2853,7 @@ impl ChatWidget<'_> {
             queued_user_messages: std::collections::VecDeque::new(),
             pending_dispatched_user_messages: std::collections::VecDeque::new(),
             pending_user_cell_updates: HashMap::new(),
+            pending_message_timestamps: HashMap::new(),
             pending_user_prompts_for_next_turn: 0,
             ghost_snapshots: Vec::new(),
             ghost_snapshots_disabled: false,
@@ -3104,6 +3115,7 @@ impl ChatWidget<'_> {
             queued_user_messages: std::collections::VecDeque::new(),
             pending_dispatched_user_messages: std::collections::VecDeque::new(),
             pending_user_cell_updates: HashMap::new(),
+            pending_message_timestamps: HashMap::new(),
             pending_user_prompts_for_next_turn: 0,
             ghost_snapshots: Vec::new(),
             ghost_snapshots_disabled: false,
@@ -4538,14 +4550,11 @@ impl ChatWidget<'_> {
         // Build sorted indices: indices[sorted_pos] = original_pos
         let mut sorted_indices: Vec<usize> = (0..len).collect();
         sorted_indices.sort_by_key(|&i| {
-            self.cell_order_seq
-                .get(i)
-                .copied()
-                .unwrap_or(OrderKey {
-                    req: 0,
-                    out: -1,
-                    seq: 0,
-                })
+            self.cell_order_seq.get(i).copied().unwrap_or(OrderKey {
+                req: 0,
+                out: -1,
+                seq: 0,
+            })
         });
 
         // Build inverse permutation for cycle-following: target[original_pos] = sorted_pos
@@ -4555,7 +4564,10 @@ impl ChatWidget<'_> {
         }
 
         // Check if reordering is actually needed
-        let needs_resort = target_positions.iter().enumerate().any(|(i, &target)| i != target);
+        let needs_resort = target_positions
+            .iter()
+            .enumerate()
+            .any(|(i, &target)| i != target);
         if !needs_resort {
             tracing::debug!("🔄 RESORT: No changes needed (already sorted)");
             return;
@@ -5057,7 +5069,7 @@ impl ChatWidget<'_> {
         // SPEC-955: Defer browser check to avoid blocking in constructor
         // Browser screenshot capture will be initialized lazily when first needed
         // This prevents blocking the constructor which can be called from async contexts
-        let browser_enabled = false;  // Will be checked later when browser features are used
+        let browser_enabled = false; // Will be checked later when browser features are used
 
         // Start async screenshot capture in background (non-blocking)
         if browser_enabled {
@@ -5723,6 +5735,20 @@ impl ChatWidget<'_> {
             self.pending_dispatched_user_messages
                 .push_back(display_text.clone());
             self.pending_user_prompts_for_next_turn += 1;
+
+            // SPEC-954: Start timeout timer for this message
+            let msg_id = format!("msg-{}", self.internal_seq);
+            self.pending_message_timestamps
+                .insert(msg_id.clone(), std::time::Instant::now());
+
+            let tx = self.app_event_tx.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                let _ = tx.send(AppEvent::UserMessageTimeout {
+                    message_id: msg_id,
+                    elapsed_ms: 10000,
+                });
+            });
         }
 
         self.flush_pending_agent_notes();
@@ -5887,8 +5913,23 @@ impl ChatWidget<'_> {
                 self.pending_dispatched_user_messages.len(),
                 &text.chars().take(50).collect::<String>()
             );
-            self.pending_dispatched_user_messages.push_back(text.clone());
+            self.pending_dispatched_user_messages
+                .push_back(text.clone());
             self.pending_user_prompts_for_next_turn += 1;
+
+            // SPEC-954: Start timeout timer for this message
+            let msg_id = format!("msg-{}", self.internal_seq);
+            self.pending_message_timestamps
+                .insert(msg_id.clone(), std::time::Instant::now());
+
+            let tx = self.app_event_tx.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                let _ = tx.send(AppEvent::UserMessageTimeout {
+                    message_id: msg_id,
+                    elapsed_ms: 10000,
+                });
+            });
         }
 
         // Native path: send to codex-core
@@ -6143,8 +6184,12 @@ impl ChatWidget<'_> {
                             tracing::info!(
                                 "🔵 ORDER_UPDATE (AgentMessage): task={} | old=req:{},out:{},seq:{} | new=req:{},out:{},seq:{} | diff={}",
                                 id,
-                                old_key.req, old_key.out, old_key.seq,
-                                new_key.req, new_key.out, new_key.seq,
+                                old_key.req,
+                                old_key.out,
+                                old_key.seq,
+                                new_key.req,
+                                new_key.out,
+                                new_key.seq,
                                 req_diff
                             );
 
@@ -6267,9 +6312,9 @@ impl ChatWidget<'_> {
                         if cell_idx < self.cell_order_seq.len() {
                             let old_key = self.cell_order_seq[cell_idx];
                             let new_key = OrderKey {
-                                req: om.request_ordinal,  // ✅ Provider's number
-                                out: old_key.out,         // Keep MIN+1
-                                seq: old_key.seq,         // Keep original seq
+                                req: om.request_ordinal, // ✅ Provider's number
+                                out: old_key.out,        // Keep MIN+1
+                                seq: old_key.seq,        // Keep original seq
                             };
 
                             let req_diff = (new_key.req as i64 - old_key.req as i64).abs();
@@ -6277,8 +6322,12 @@ impl ChatWidget<'_> {
                             tracing::info!(
                                 "🔵 ORDER_UPDATE: task={} | old=req:{},out:{},seq:{} | new=req:{},out:{},seq:{} | diff={} | will_resort={}",
                                 id,
-                                old_key.req, old_key.out, old_key.seq,
-                                new_key.req, new_key.out, new_key.seq,
+                                old_key.req,
+                                old_key.out,
+                                old_key.seq,
+                                new_key.req,
+                                new_key.out,
+                                new_key.seq,
                                 req_diff,
                                 req_diff > 1
                             );
@@ -6436,6 +6485,9 @@ impl ChatWidget<'_> {
                 // This begins the new turn; clear the pending prompt anchor count
                 // so subsequent background events use standard placement.
                 self.pending_user_prompts_for_next_turn = 0;
+
+                // SPEC-954: Clear timeout tracking - provider has responded
+                self.pending_message_timestamps.clear();
 
                 // SPEC-954-FIX: Create deferred user cell with temporary OrderKey
                 if let Some(user_text) = self.pending_dispatched_user_messages.pop_front() {
@@ -8606,6 +8658,37 @@ impl ChatWidget<'_> {
         if self.with_login_add_view(|state| state.on_gemini_cancelled()) {
             return;
         }
+    }
+
+    /// Handle user message timeout (SPEC-954)
+    /// Called when a queued message hasn't received TaskStarted within 10 seconds
+    pub(crate) fn handle_user_message_timeout(&mut self, message_id: &str, elapsed_ms: u64) {
+        // Check if this message is still pending (not cleared by TaskStarted)
+        if self.pending_message_timestamps.remove(message_id).is_some() {
+            tracing::warn!(
+                "⏰ USER_MSG_TIMEOUT: message_id={} | elapsed={}ms | pending_queue_len={}",
+                message_id,
+                elapsed_ms,
+                self.pending_dispatched_user_messages.len()
+            );
+
+            // Show error to user
+            let error_text = format!(
+                "⚠️ Message timed out after {}s - provider may have failed silently. \
+                Try again or check authentication with /login.",
+                elapsed_ms / 1000
+            );
+
+            // Insert error into history
+            self.push_background_tail(error_text);
+
+            // Clear task running state so user can retry
+            self.bottom_pane.set_task_running(false);
+            self.bottom_pane.update_status_text(String::new());
+
+            self.mark_needs_redraw();
+        }
+        // If message_id not found, TaskStarted already handled it - ignore
     }
 
     pub(crate) fn login_add_view_active(&self) -> bool {
@@ -12162,41 +12245,41 @@ impl ChatWidget<'_> {
                     .downcast_ref::<history_cell::AssistantMarkdownCell>()
                     .is_some()
             }) {
-            // Replace the tail finalized assistant cell if the new content is identical OR
-            // a superset revision of the previous content (common provider behavior where
-            // a later final slightly extends the earlier one). Otherwise append a new
-            // assistant message so distinct messages remain separate.
-            let (should_replace, _prev_len, _new_len) = self.history_cells[idx]
-                .as_any()
-                .downcast_ref::<history_cell::AssistantMarkdownCell>()
-                .map(|amc| {
-                    let prev = Self::normalize_text(&amc.raw);
-                    let newn = Self::normalize_text(&source);
-                    let identical = prev == newn;
-                    let is_superset = !identical && newn.contains(&prev);
-                    // Heuristic: treat as revision when previous is reasonably long to
-                    // avoid collapsing very short replies unintentionally.
-                    let long_enough = prev.len() >= 80;
-                    (
-                        identical || (is_superset && long_enough),
-                        prev.len(),
-                        newn.len(),
-                    )
-                })
-                .unwrap_or((false, 0, 0));
-            if should_replace {
-                tracing::debug!(
-                    "final-answer: replacing tail AssistantMarkdownCell via heuristic identical/superset"
-                );
-                let cell = history_cell::AssistantMarkdownCell::new_with_id(
-                    source,
-                    id.clone(),
-                    &self.config,
-                );
-                self.history_replace_at(idx, Box::new(cell));
-                self.autoscroll_if_near_bottom();
-                return;
-            }
+                // Replace the tail finalized assistant cell if the new content is identical OR
+                // a superset revision of the previous content (common provider behavior where
+                // a later final slightly extends the earlier one). Otherwise append a new
+                // assistant message so distinct messages remain separate.
+                let (should_replace, _prev_len, _new_len) = self.history_cells[idx]
+                    .as_any()
+                    .downcast_ref::<history_cell::AssistantMarkdownCell>()
+                    .map(|amc| {
+                        let prev = Self::normalize_text(&amc.raw);
+                        let newn = Self::normalize_text(&source);
+                        let identical = prev == newn;
+                        let is_superset = !identical && newn.contains(&prev);
+                        // Heuristic: treat as revision when previous is reasonably long to
+                        // avoid collapsing very short replies unintentionally.
+                        let long_enough = prev.len() >= 80;
+                        (
+                            identical || (is_superset && long_enough),
+                            prev.len(),
+                            newn.len(),
+                        )
+                    })
+                    .unwrap_or((false, 0, 0));
+                if should_replace {
+                    tracing::debug!(
+                        "final-answer: replacing tail AssistantMarkdownCell via heuristic identical/superset"
+                    );
+                    let cell = history_cell::AssistantMarkdownCell::new_with_id(
+                        source,
+                        id.clone(),
+                        &self.config,
+                    );
+                    self.history_replace_at(idx, Box::new(cell));
+                    self.autoscroll_if_near_bottom();
+                    return;
+                }
             }
         }
 
@@ -14404,8 +14487,8 @@ impl ChatWidget<'_> {
             });
 
             // If the async task handled a disconnect, stop here; otherwise connect. (SPEC-955)
-            let handled_disconnect = tokio::runtime::Handle::current()
-                .block_on(async { rx.await.unwrap_or(false) });
+            let handled_disconnect =
+                tokio::runtime::Handle::current().block_on(async { rx.await.unwrap_or(false) });
             if !handled_disconnect {
                 // Switch to external Chrome mode with default/auto-detected port
                 self.handle_chrome_connection(None, None);

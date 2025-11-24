@@ -26,7 +26,9 @@ async fn test_oauth_path_queues_message_without_immediate_cell() {
     let initial_cell_count = widget.history_cells.len();
 
     // Queue a message as OAuth path would (via pending_dispatched_user_messages)
-    widget.pending_dispatched_user_messages.push_back("Test OAuth message".to_string());
+    widget
+        .pending_dispatched_user_messages
+        .push_back("Test OAuth message".to_string());
 
     // Verify: message queued but NO cell created yet
     assert_eq!(widget.pending_dispatched_user_messages.len(), 1);
@@ -42,7 +44,9 @@ async fn test_oauth_path_creates_cell_on_task_started() {
     let mut widget = make_widget();
 
     // Queue a message (OAuth path)
-    widget.pending_dispatched_user_messages.push_back("OAuth deferred message".to_string());
+    widget
+        .pending_dispatched_user_messages
+        .push_back("OAuth deferred message".to_string());
     let initial_count = widget.history_cells.len();
 
     // Simulate TaskStarted event
@@ -99,21 +103,54 @@ async fn test_cli_path_does_not_use_deferred_queue() {
 #[tokio::test]
 async fn test_orderkey_comparison_for_resort() {
     // Test OrderKey ordering directly
-    let key_low = OrderKey { req: 0, out: i32::MIN + 1, seq: 1 };
-    let key_high = OrderKey { req: 2, out: i32::MIN + 1, seq: 2 };
+    let key_low = OrderKey {
+        req: 0,
+        out: i32::MIN + 1,
+        seq: 1,
+    };
+    let key_high = OrderKey {
+        req: 2,
+        out: i32::MIN + 1,
+        seq: 2,
+    };
 
     // Lower req should sort before higher req
-    assert!(key_low < key_high, "Lower req OrderKey should sort before higher req");
+    assert!(
+        key_low < key_high,
+        "Lower req OrderKey should sort before higher req"
+    );
 
     // Same req, lower out should sort first
-    let key_out_low = OrderKey { req: 0, out: -100, seq: 1 };
-    let key_out_high = OrderKey { req: 0, out: 100, seq: 2 };
-    assert!(key_out_low < key_out_high, "Lower out should sort first when req equal");
+    let key_out_low = OrderKey {
+        req: 0,
+        out: -100,
+        seq: 1,
+    };
+    let key_out_high = OrderKey {
+        req: 0,
+        out: 100,
+        seq: 2,
+    };
+    assert!(
+        key_out_low < key_out_high,
+        "Lower out should sort first when req equal"
+    );
 
     // Same req and out, lower seq should sort first
-    let key_seq_low = OrderKey { req: 0, out: 0, seq: 5 };
-    let key_seq_high = OrderKey { req: 0, out: 0, seq: 10 };
-    assert!(key_seq_low < key_seq_high, "Lower seq should sort first when req and out equal");
+    let key_seq_low = OrderKey {
+        req: 0,
+        out: 0,
+        seq: 5,
+    };
+    let key_seq_high = OrderKey {
+        req: 0,
+        out: 0,
+        seq: 10,
+    };
+    assert!(
+        key_seq_low < key_seq_high,
+        "Lower seq should sort first when req and out equal"
+    );
 }
 
 /// Test that cells can be manually sorted by OrderKey.
@@ -127,11 +164,27 @@ async fn test_cell_sorting_by_orderkey() {
     widget.cell_order_seq.clear();
 
     // Create cells with req values: [1, 0]
-    widget.history_cells.push(Box::new(history_cell::new_user_prompt("Cell req=1".to_string())));
-    widget.cell_order_seq.push(OrderKey { req: 1, out: 0, seq: 1 });
+    widget
+        .history_cells
+        .push(Box::new(history_cell::new_user_prompt(
+            "Cell req=1".to_string(),
+        )));
+    widget.cell_order_seq.push(OrderKey {
+        req: 1,
+        out: 0,
+        seq: 1,
+    });
 
-    widget.history_cells.push(Box::new(history_cell::new_user_prompt("Cell req=0".to_string())));
-    widget.cell_order_seq.push(OrderKey { req: 0, out: 0, seq: 2 });
+    widget
+        .history_cells
+        .push(Box::new(history_cell::new_user_prompt(
+            "Cell req=0".to_string(),
+        )));
+    widget.cell_order_seq.push(OrderKey {
+        req: 0,
+        out: 0,
+        seq: 2,
+    });
 
     // Verify the keys can be sorted correctly (without calling resort)
     let mut sorted_keys = widget.cell_order_seq.clone();
@@ -176,7 +229,9 @@ async fn test_task_started_uses_incrementing_counter() {
     let initial_cells = widget.history_cells.len();
 
     // Queue first message
-    widget.pending_dispatched_user_messages.push_back("Message 1".to_string());
+    widget
+        .pending_dispatched_user_messages
+        .push_back("Message 1".to_string());
 
     // First TaskStarted
     widget.handle_codex_event(Event {
@@ -197,11 +252,17 @@ async fn test_task_started_uses_incrementing_counter() {
     );
 
     // Get the key from the tracked cell
-    let first_cell_idx = widget.pending_user_cell_updates.get("task-1").copied().unwrap();
+    let first_cell_idx = widget
+        .pending_user_cell_updates
+        .get("task-1")
+        .copied()
+        .unwrap();
     let first_key = widget.cell_order_seq[first_cell_idx];
 
     // Queue and trigger second TaskStarted
-    widget.pending_dispatched_user_messages.push_back("Message 2".to_string());
+    widget
+        .pending_dispatched_user_messages
+        .push_back("Message 2".to_string());
     widget.handle_codex_event(Event {
         id: "task-2".into(),
         event_seq: 1,
@@ -220,7 +281,11 @@ async fn test_task_started_uses_incrementing_counter() {
     );
 
     // Get the key from the second tracked cell
-    let second_cell_idx = widget.pending_user_cell_updates.get("task-2").copied().unwrap();
+    let second_cell_idx = widget
+        .pending_user_cell_updates
+        .get("task-2")
+        .copied()
+        .unwrap();
     let second_key = widget.cell_order_seq[second_cell_idx];
 
     // Second key should have higher req or seq (not same value)
@@ -242,9 +307,21 @@ async fn test_task_started_uses_incrementing_counter() {
 async fn test_three_element_orderkey_sorting() {
     // Create keys with OrderKeys: [req=2, req=0, req=1]
     let keys = vec![
-        OrderKey { req: 2, out: 0, seq: 1 },
-        OrderKey { req: 0, out: 0, seq: 2 },
-        OrderKey { req: 1, out: 0, seq: 3 },
+        OrderKey {
+            req: 2,
+            out: 0,
+            seq: 1,
+        },
+        OrderKey {
+            req: 0,
+            out: 0,
+            seq: 2,
+        },
+        OrderKey {
+            req: 1,
+            out: 0,
+            seq: 3,
+        },
     ];
 
     // Sort by OrderKey
@@ -262,9 +339,21 @@ async fn test_three_element_orderkey_sorting() {
 async fn test_sorted_keys_remain_sorted() {
     // Create already-sorted keys
     let keys = vec![
-        OrderKey { req: 0, out: 0, seq: 1 },
-        OrderKey { req: 1, out: 0, seq: 2 },
-        OrderKey { req: 2, out: 0, seq: 3 },
+        OrderKey {
+            req: 0,
+            out: 0,
+            seq: 1,
+        },
+        OrderKey {
+            req: 1,
+            out: 0,
+            seq: 2,
+        },
+        OrderKey {
+            req: 2,
+            out: 0,
+            seq: 3,
+        },
     ];
 
     let mut sorted_keys = keys.clone();
@@ -282,7 +371,11 @@ async fn test_complex_orderkey_sorting() {
     // Create 5 keys with scrambled order: [4, 2, 0, 3, 1]
     let mut keys = vec![];
     for req in [4, 2, 0, 3, 1] {
-        keys.push(OrderKey { req, out: 0, seq: req as u64 });
+        keys.push(OrderKey {
+            req,
+            out: 0,
+            seq: req as u64,
+        });
     }
 
     let mut sorted_keys = keys.clone();
@@ -291,11 +384,9 @@ async fn test_complex_orderkey_sorting() {
     // Verify sorted: [0, 1, 2, 3, 4]
     for i in 0..5 {
         assert_eq!(
-            sorted_keys[i].req as usize,
-            i,
+            sorted_keys[i].req as usize, i,
             "Position {} should have req={}",
-            i,
-            i
+            i, i
         );
     }
 }
@@ -322,7 +413,11 @@ async fn test_queued_messages_exist_after_cli_task() {
         }],
     });
 
-    assert_eq!(widget.queued_user_messages.len(), 2, "Should have 2 queued messages");
+    assert_eq!(
+        widget.queued_user_messages.len(),
+        2,
+        "Should have 2 queued messages"
+    );
 }
 
 // ============================================================================
@@ -334,7 +429,9 @@ async fn test_pending_user_cell_updates_tracks_task_id() {
     let mut widget = make_widget();
 
     // Queue a message
-    widget.pending_dispatched_user_messages.push_back("Track me".to_string());
+    widget
+        .pending_dispatched_user_messages
+        .push_back("Track me".to_string());
 
     // TaskStarted should create tracking entry
     widget.handle_codex_event(Event {
@@ -350,12 +447,18 @@ async fn test_pending_user_cell_updates_tracks_task_id() {
 
     // Verify tracking
     assert!(
-        widget.pending_user_cell_updates.contains_key("track-task-123"),
+        widget
+            .pending_user_cell_updates
+            .contains_key("track-task-123"),
         "Task ID should be tracked in pending_user_cell_updates"
     );
 
     // Get the tracked cell index
-    let cell_idx = widget.pending_user_cell_updates.get("track-task-123").copied().unwrap();
+    let cell_idx = widget
+        .pending_user_cell_updates
+        .get("track-task-123")
+        .copied()
+        .unwrap();
     assert!(
         cell_idx < widget.history_cells.len(),
         "Tracked index should be valid"
@@ -370,8 +473,16 @@ async fn test_pending_user_cell_updates_tracks_task_id() {
 #[tokio::test]
 async fn test_orderkey_sorts_by_out_when_req_equal() {
     // Same req, different out values
-    let key_high = OrderKey { req: 0, out: 100, seq: 1 };
-    let key_low = OrderKey { req: 0, out: -100, seq: 2 };
+    let key_high = OrderKey {
+        req: 0,
+        out: 100,
+        seq: 1,
+    };
+    let key_low = OrderKey {
+        req: 0,
+        out: -100,
+        seq: 2,
+    };
 
     // Lower out should sort first
     let mut keys = vec![key_high, key_low];
@@ -385,8 +496,16 @@ async fn test_orderkey_sorts_by_out_when_req_equal() {
 #[tokio::test]
 async fn test_orderkey_sorts_by_seq_when_req_and_out_equal() {
     // Same req and out, different seq
-    let key_high = OrderKey { req: 0, out: 0, seq: 10 };
-    let key_low = OrderKey { req: 0, out: 0, seq: 5 };
+    let key_high = OrderKey {
+        req: 0,
+        out: 0,
+        seq: 10,
+    };
+    let key_low = OrderKey {
+        req: 0,
+        out: 0,
+        seq: 5,
+    };
 
     let mut keys = vec![key_high, key_low];
     keys.sort();
@@ -411,7 +530,11 @@ async fn test_empty_orderkey_sort() {
 /// Test that sorting single element doesn't change it.
 #[tokio::test]
 async fn test_single_orderkey_sort() {
-    let mut keys = vec![OrderKey { req: 42, out: 0, seq: 1 }];
+    let mut keys = vec![OrderKey {
+        req: 42,
+        out: 0,
+        seq: 1,
+    }];
     keys.sort();
 
     // Should remain unchanged
@@ -431,7 +554,9 @@ async fn test_rapid_messages_get_unique_temp_keys() {
     let initial_count = widget.history_cells.len();
 
     // Queue first message and trigger TaskStarted
-    widget.pending_dispatched_user_messages.push_back("Rapid Q1".to_string());
+    widget
+        .pending_dispatched_user_messages
+        .push_back("Rapid Q1".to_string());
     widget.handle_codex_event(Event {
         id: "rapid-1".into(),
         event_seq: 0,
@@ -444,11 +569,17 @@ async fn test_rapid_messages_get_unique_temp_keys() {
     });
 
     // Get the key from the tracked cell
-    let cell1_idx = widget.pending_user_cell_updates.get("rapid-1").copied().unwrap();
+    let cell1_idx = widget
+        .pending_user_cell_updates
+        .get("rapid-1")
+        .copied()
+        .unwrap();
     let key1 = widget.cell_order_seq[cell1_idx];
 
     // Queue and trigger second message
-    widget.pending_dispatched_user_messages.push_back("Rapid Q2".to_string());
+    widget
+        .pending_dispatched_user_messages
+        .push_back("Rapid Q2".to_string());
     widget.handle_codex_event(Event {
         id: "rapid-2".into(),
         event_seq: 1,
@@ -461,7 +592,11 @@ async fn test_rapid_messages_get_unique_temp_keys() {
     });
 
     // Get the key from the second tracked cell
-    let cell2_idx = widget.pending_user_cell_updates.get("rapid-2").copied().unwrap();
+    let cell2_idx = widget
+        .pending_user_cell_updates
+        .get("rapid-2")
+        .copied()
+        .unwrap();
     let key2 = widget.cell_order_seq[cell2_idx];
 
     // Verify both cells were created
@@ -475,7 +610,8 @@ async fn test_rapid_messages_get_unique_temp_keys() {
         (key1.req, key1.seq),
         (key2.req, key2.seq),
         "Each rapid message should get unique OrderKey: key1={:?}, key2={:?}",
-        key1, key2
+        key1,
+        key2
     );
 }
 
@@ -495,5 +631,90 @@ async fn test_harness_user_message_creates_cell() {
     assert!(
         harness.history_cell_count() >= 1,
         "User message should create at least one history cell"
+    );
+}
+
+// ============================================================================
+// Test 12: SPEC-954 Timeout mechanism tests
+// ============================================================================
+
+/// Test that TaskStarted clears pending message timestamps (cancels timeout)
+#[tokio::test]
+async fn test_task_started_clears_timeout_tracking() {
+    let mut widget = make_widget();
+
+    // Simulate queuing a message with timeout tracking
+    let msg_id = "msg-test-1".to_string();
+    widget
+        .pending_message_timestamps
+        .insert(msg_id.clone(), std::time::Instant::now());
+    widget
+        .pending_dispatched_user_messages
+        .push_back("Test message".to_string());
+
+    assert!(
+        !widget.pending_message_timestamps.is_empty(),
+        "Should have pending timestamp before TaskStarted"
+    );
+
+    // Simulate TaskStarted event
+    widget.handle_codex_event(Event {
+        id: "task-timeout-test".into(),
+        event_seq: 0,
+        msg: EventMsg::TaskStarted,
+        order: Some(OrderMeta {
+            request_ordinal: 1,
+            output_index: Some(0),
+            sequence_number: None,
+        }),
+    });
+
+    // Verify timestamps cleared
+    assert!(
+        widget.pending_message_timestamps.is_empty(),
+        "TaskStarted should clear all pending timeout timestamps"
+    );
+}
+
+/// Test that timeout handler only acts when message is still pending
+#[tokio::test]
+async fn test_timeout_handler_ignores_already_processed_messages() {
+    let mut widget = make_widget();
+    let initial_history_len = widget.history_cells.len();
+
+    // Call timeout handler for a message that was never tracked (already processed)
+    widget.handle_user_message_timeout("msg-nonexistent", 10000);
+
+    // Should have no effect - no error message added
+    assert_eq!(
+        widget.history_cells.len(),
+        initial_history_len,
+        "Timeout handler should ignore already-processed messages"
+    );
+}
+
+/// Test that timeout handler shows error for pending message
+#[tokio::test]
+async fn test_timeout_handler_shows_error_for_pending_message() {
+    let mut widget = make_widget();
+    let initial_history_len = widget.history_cells.len();
+
+    // Add a pending timestamp
+    let msg_id = "msg-pending-timeout".to_string();
+    widget
+        .pending_message_timestamps
+        .insert(msg_id.clone(), std::time::Instant::now());
+
+    // Call timeout handler
+    widget.handle_user_message_timeout(&msg_id, 10000);
+
+    // Verify: timestamp removed, error message added to history
+    assert!(
+        widget.pending_message_timestamps.is_empty(),
+        "Timeout handler should remove the timestamp"
+    );
+    assert!(
+        widget.history_cells.len() > initial_history_len,
+        "Timeout handler should add error message to history"
     );
 }
