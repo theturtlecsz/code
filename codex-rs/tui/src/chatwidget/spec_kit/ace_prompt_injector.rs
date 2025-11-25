@@ -2,6 +2,10 @@
 //!
 //! Fetches playbook heuristics from ACE and injects them into prompts
 //! before submission to the orchestrator.
+//!
+//! Note: Core injection active, full heuristic features pending.
+
+#![allow(dead_code)] // Full heuristic features pending
 
 use super::ace_client::PlaybookBullet;
 use codex_core::config_types::{AceConfig, AceMode};

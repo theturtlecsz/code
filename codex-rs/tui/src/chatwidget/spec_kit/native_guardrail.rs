@@ -8,6 +8,8 @@
 //! Quality gates (clarify/analyze/checklist) provide comprehensive validation.
 //! Guardrails provide fast (<1s) sanity checks.
 
+#![allow(dead_code)] // Guardrail helpers pending full integration
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 

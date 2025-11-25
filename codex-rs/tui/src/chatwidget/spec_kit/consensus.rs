@@ -15,7 +15,7 @@ use std::path::PathBuf;
 // ============================================================================
 
 #[derive(Debug, Clone)]
-pub(in super::super) struct ConsensusArtifactData {
+pub(crate) struct ConsensusArtifactData {
     pub memory_id: Option<String>,
     pub agent: String,
     pub version: Option<String>,
@@ -23,19 +23,21 @@ pub(in super::super) struct ConsensusArtifactData {
 }
 
 #[derive(Clone)]
-pub(in super::super) struct ConsensusEvidenceHandle {
+#[allow(dead_code)] // Used for evidence tracking, fields may be used in future
+pub(crate) struct ConsensusEvidenceHandle {
     pub path: PathBuf,
     pub sha256: String,
 }
 
-pub(in super::super) struct ConsensusTelemetryPaths {
+#[allow(dead_code)] // Used for telemetry path tracking, fields consumed externally
+pub(crate) struct ConsensusTelemetryPaths {
     pub agent_paths: Vec<PathBuf>,
     pub telemetry_path: PathBuf,
     pub synthesis_path: PathBuf,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub(in super::super) struct ConsensusArtifactVerdict {
+pub(crate) struct ConsensusArtifactVerdict {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memory_id: Option<String>,
     pub agent: String,
@@ -45,7 +47,7 @@ pub(in super::super) struct ConsensusArtifactVerdict {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub(in super::super) struct ConsensusVerdict {
+pub(crate) struct ConsensusVerdict {
     pub spec_id: String,
     pub stage: String,
     pub recorded_at: String,
@@ -69,7 +71,7 @@ pub(in super::super) struct ConsensusVerdict {
 }
 
 #[derive(Debug)]
-pub(in super::super) struct ConsensusSynthesisSummary {
+pub(crate) struct ConsensusSynthesisSummary {
     pub status: String,
     pub missing_agents: Vec<String>,
     pub agreements: Vec<String>,
@@ -79,7 +81,7 @@ pub(in super::super) struct ConsensusSynthesisSummary {
 }
 
 #[derive(Debug, Deserialize)]
-pub(in super::super) struct ConsensusSynthesisRaw {
+pub(crate) struct ConsensusSynthesisRaw {
     pub stage: Option<String>,
     #[serde(rename = "specId")]
     pub spec_id: Option<String>,
@@ -92,7 +94,7 @@ pub(in super::super) struct ConsensusSynthesisRaw {
 }
 
 #[derive(Debug, Default, Deserialize)]
-pub(in super::super) struct ConsensusSynthesisConsensusRaw {
+pub(crate) struct ConsensusSynthesisConsensusRaw {
     #[serde(default)]
     pub agreements: Vec<String>,
     #[serde(default)]
@@ -217,6 +219,7 @@ use std::fs;
 use std::path::Path;
 
 /// Build consensus artifacts from cached agent responses (bypasses memory/file lookup)
+#[allow(dead_code)] // Reserved for caching optimization path
 pub(crate) fn artifacts_from_cached_responses(
     cached_responses: &[(String, String)],
     stage: SpecStage,
@@ -522,9 +525,9 @@ async fn fetch_memory_entries(
 
     let query = format!("{} {}", spec_id, stage.command_name());
     // Note: Agents may tag with either "stage:plan" or "stage:spec-plan"
-    // Search for both variations to handle inconsistent tagging
-    let stage_tag_1 = format!("stage:{}", stage.display_name().to_lowercase()); // "stage:plan"
-    let stage_tag_2 = format!("stage:{}", stage.command_name()); // "stage:spec-plan"
+    // Currently using query-based search; tag filtering available if needed:
+    // - format!("stage:{}", stage.display_name().to_lowercase()) e.g., "stage:plan"
+    // - format!("stage:{}", stage.command_name()) e.g., "stage:spec-plan"
 
     let args = json!({
         "query": query,

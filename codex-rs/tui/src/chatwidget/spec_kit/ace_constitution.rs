@@ -3,6 +3,8 @@
 //! Extracts imperative bullets from constitution documents and pins them
 //! to ACE playbook (global and phase-specific scopes).
 
+#![allow(dead_code)] // ACE integration pending
+
 use super::ace_client::{self, AceResult};
 use codex_core::config_types::AceConfig;
 use regex_lite::Regex;

@@ -6,6 +6,8 @@
 //! testing with mock implementations. File locking (ARCH-007) prevents
 //! concurrent write corruption.
 
+#![allow(dead_code)] // Extended evidence features pending integration
+
 use super::error::{Result, SpecKitError};
 use crate::spec_prompts::SpecStage;
 use codex_spec_kit::retry::strategy::{RetryConfig, execute_with_backoff_sync};

@@ -25,6 +25,8 @@
 //! - Meta-agent spawning ("fetch results", "get result", etc.)
 //! - Unpredictable agent count (now exactly N agents, no more)
 
+#![allow(dead_code, unused_variables)] // Legacy module kept for reference
+
 use super::super::ChatWidget;
 use super::consensus_coordinator::block_on_sync;
 use super::error::{Result, SpecKitError};

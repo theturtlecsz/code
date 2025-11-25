@@ -5,6 +5,8 @@
 //! This module implements the `/search` command, allowing users to find text
 //! within the conversation history.
 
+#![allow(dead_code)] // Search helpers pending integration
+
 use super::super::command_registry::SpecKitCommand;
 use crate::chatwidget::ChatWidget;
 use crate::history_cell::{HistoryCellType, PlainHistoryCell};

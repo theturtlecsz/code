@@ -7,6 +7,10 @@
 //! - ace.playbook.slice: Retrieve relevant playbook heuristics (data retrieval)
 //! - ace.learn: Store outcomes for future learning (data storage)
 //! - ace.playbook.pin: Pin constitution bullets globally (data storage)
+//!
+//! Note: MCP client infrastructure ready, full error handling features pending.
+
+#![allow(dead_code)] // Full error handling features pending
 
 use anyhow::{Context, Result, anyhow};
 use codex_mcp_client::McpClient;

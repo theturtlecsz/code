@@ -168,8 +168,8 @@ impl ConsensusDb {
         stage: SpecStage,
         agent_name: &str,
         content_json: &str,
-        response_text: Option<&str>,
-        run_id: Option<&str>,
+        _response_text: Option<&str>,  // Reserved for future raw response storage
+        _run_id: Option<&str>,         // Reserved for pipeline run correlation
     ) -> SqlResult<i64> {
         // Ensure connection pool is available
         let pool = self
@@ -210,7 +210,7 @@ impl ConsensusDb {
                         None,  // synthesis_json (not available at artifact stage)
                     )
                     .await
-                    .map_err(|e| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
+                    .map_err(|_| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
 
                     // 2. Store agent output
                     let output_id = store_agent_output(
@@ -221,7 +221,7 @@ impl ConsensusDb {
                         &content_json,
                     )
                     .await
-                    .map_err(|e| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
+                    .map_err(|_| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
 
                     Ok::<i64, DbError>(output_id)
                 },
@@ -410,7 +410,7 @@ impl ConsensusDb {
 
         // Query new schema
         self.query_artifacts_new_schema(spec_id, stage_name)
-            .map_err(|e| rusqlite::Error::InvalidQuery)
+            .map_err(|_| rusqlite::Error::InvalidQuery)
     }
 
     /// Store consensus synthesis output
@@ -433,7 +433,7 @@ impl ConsensusDb {
         agreements: Option<&str>,
         conflicts: Option<&str>,
         degraded: bool,
-        run_id: Option<&str>,
+        _run_id: Option<&str>,  // Reserved for pipeline run correlation
     ) -> SqlResult<i64> {
         // Ensure connection pool is available
         let pool = self
@@ -486,7 +486,7 @@ impl ConsensusDb {
                         Some(&synthesis_json),
                     )
                     .await
-                    .map_err(|e| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
+                    .map_err(|_| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
 
                     Ok::<i64, DbError>(run_id)
                 },
@@ -510,7 +510,7 @@ impl ConsensusDb {
 
         // Query new schema
         self.query_synthesis_new_schema(spec_id, stage_name)
-            .map_err(|e| rusqlite::Error::InvalidQuery)
+            .map_err(|_| rusqlite::Error::InvalidQuery)
     }
 
     // === Agent Execution Tracking (for definitive routing) ===
@@ -828,7 +828,7 @@ impl ConsensusDb {
         stage_name: &str,
         agent_name: &str,
         content_json: &str,
-        run_id: Option<&str>,
+        _run_id: Option<&str>,  // Reserved for pipeline run correlation
     ) -> SqlResult<i64> {
         // Ensure connection pool is available
         let pool = self
@@ -872,7 +872,7 @@ impl ConsensusDb {
                         None,  // synthesis_json (not available at artifact stage)
                     )
                     .await
-                    .map_err(|e| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
+                    .map_err(|_| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
 
                     // 2. Store agent output
                     let output_id = store_agent_output(
@@ -883,7 +883,7 @@ impl ConsensusDb {
                         &content_json,
                     )
                     .await
-                    .map_err(|e| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
+                    .map_err(|_| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
 
                     Ok::<i64, DbError>(output_id)
                 },

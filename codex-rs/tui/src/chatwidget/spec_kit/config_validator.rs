@@ -9,6 +9,8 @@
 //!
 //! REBASE-SAFE: New file, 100% isolation, no upstream changes
 
+#![allow(dead_code)] // Validation helpers pending integration
+
 use super::error::{Result, SpecKitError};
 use codex_core::config::Config;
 use codex_core::config_types::{AgentConfig, SubagentCommandConfig};

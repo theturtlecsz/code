@@ -6,6 +6,8 @@
 //! Principle: Agents for reasoning, NOT transactions. Ambiguity detection is
 //! pattern-matching (FREE) not reasoning ($0.80).
 
+#![allow(dead_code)] // Extended heuristics pending
+
 use super::error::{Result, SpecKitError};
 use regex_lite::Regex;
 use std::collections::HashSet;

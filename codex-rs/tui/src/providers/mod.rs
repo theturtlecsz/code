@@ -22,6 +22,7 @@ pub struct CliRoutingSettings {
 
 /// Common response type for all CLI providers
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Fields used when constructing, consumed via streaming
 pub struct ProviderResponse {
     /// The generated text content
     pub content: String,
@@ -33,6 +34,7 @@ pub struct ProviderResponse {
 
 /// Token usage information from providers
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)] // Fields populated by CLI parsers, consumed downstream
 pub struct TokenUsage {
     /// Number of tokens in the input/prompt
     pub input_tokens: Option<u32>,

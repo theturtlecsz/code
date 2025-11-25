@@ -7,6 +7,8 @@
 //! - Cost tracking per agent
 //! - Degraded follow-up scheduling
 
+#![allow(dead_code, unused_variables)] // Some coordination helpers unused
+
 use super::super::ChatWidget;
 use super::command_handlers::halt_spec_auto_with_error;
 use super::consensus::expected_agents_for_stage;

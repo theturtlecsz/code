@@ -7,6 +7,8 @@
 //! warning display. Supports keyboard navigation and saves configuration to
 //! per-SPEC `pipeline.toml`.
 
+#![allow(dead_code)] // Extended configurator features pending
+
 use super::pipeline_config::{PipelineConfig, StageType};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{

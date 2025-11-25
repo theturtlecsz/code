@@ -9,6 +9,8 @@
 //! - SQLite data validation
 //! - Quality gate results
 
+#![allow(dead_code)] // Verification helpers pending
+
 use crate::chatwidget::ChatWidget;
 use crate::chatwidget::spec_kit::command_registry::SpecKitCommand;
 use crate::history_cell::{HistoryCellType, PlainHistoryCell};

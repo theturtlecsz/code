@@ -2,6 +2,10 @@
 //!
 //! Collects execution outcomes (compile, tests, lints) and sends
 //! feedback to ACE for learning.
+//!
+//! Note: Learning infrastructure ready, post-execution integration pending.
+
+#![allow(dead_code)] // Post-execution integration pending
 
 use super::ace_client::{self, AceResult};
 use super::ace_route_selector::DiffStat;

@@ -7,6 +7,8 @@
 //!
 //! Created for SPEC-KIT-070 validation and debugging.
 
+#![allow(dead_code)] // Extended logging features pending integration
+
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
 use std::io::Write;

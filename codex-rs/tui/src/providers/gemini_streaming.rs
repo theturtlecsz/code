@@ -4,6 +4,8 @@
 //! Replaces PTY mode with one-shot + resume pattern.
 //! Uses global provider instance to maintain sessions across messages.
 
+#![allow(dead_code)] // Streaming provider helpers
+
 use codex_core::cli_executor::{CliError, ConversationId, GeminiPipesProvider, StreamEvent};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};

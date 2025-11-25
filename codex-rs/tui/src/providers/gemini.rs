@@ -3,6 +3,8 @@
 //! Routes prompts through the `gemini` CLI for Google models.
 //! Uses plain text output format.
 
+#![allow(dead_code)] // CLI provider helpers pending integration
+
 use crate::cli_executor::{CliError, CliExecutor};
 use crate::providers::{ProviderResponse, ProviderResult};
 use std::time::Duration;

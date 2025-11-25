@@ -3,6 +3,8 @@
 //! Tracks model usage costs, enforces budgets, and provides cost telemetry
 //! for multi-agent automation workflows.
 
+#![allow(dead_code)] // Extended cost tracking features pending
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

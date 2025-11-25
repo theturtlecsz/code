@@ -3,6 +3,10 @@
 //! This module provides the infrastructure for handling config file changes
 //! in the TUI without requiring a restart.
 //!
+//! Note: Hot-reload watcher infrastructure ready, TUI integration pending.
+
+#![allow(dead_code, unused_imports)] // TUI integration pending
+
 //! # Integration Points
 //!
 //! To fully integrate config hot-reload into the TUI:

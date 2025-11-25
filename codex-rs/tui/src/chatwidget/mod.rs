@@ -595,6 +595,7 @@ pub(crate) struct ChatWidget<'a> {
     // === FORK-SPECIFIC (just-every/code): SPEC-KIT-920 TUI automation ===
     /// Initial slash command to auto-submit after TUI is ready (for automation).
     /// Consumed (taken) on first successful auto-submit.
+    #[allow(dead_code)] // Read via TUI automation integration pending
     initial_command: Option<String>,
     // === END FORK-SPECIFIC ===
 
@@ -8623,6 +8624,7 @@ impl ChatWidget<'_> {
     }
 
     // Claude OAuth notification methods (SPEC-KIT-954)
+    #[allow(dead_code)] // Used by event handler when OAuth flow fails
     pub(crate) fn notify_login_claude_failed(&mut self, error: String) {
         if self.with_login_add_view(|state| state.on_claude_failed(error.clone())) {
             return;
@@ -8642,6 +8644,7 @@ impl ChatWidget<'_> {
     }
 
     // Gemini OAuth notification methods (SPEC-KIT-954)
+    #[allow(dead_code)] // Used by event handler when OAuth flow fails
     pub(crate) fn notify_login_gemini_failed(&mut self, error: String) {
         if self.with_login_add_view(|state| state.on_gemini_failed(error.clone())) {
             return;
@@ -15970,10 +15973,12 @@ impl ChatWidget<'_> {
     }
 
     // Implementation method (called by spec_kit::handle_spec_consensus)
+    #[allow(dead_code)] // Called via spec_kit handler
     fn handle_spec_consensus_impl(&mut self, raw_args: String) {
         spec_kit::handler::handle_spec_consensus_impl(self, raw_args);
     }
 
+    #[allow(dead_code)] // Consensus synthesis loading for validation
     fn load_latest_consensus_synthesis(
         &self,
         spec_id: &str,
@@ -16074,8 +16079,8 @@ impl ChatWidget<'_> {
     #[allow(dead_code)]
     fn run_spec_consensus(
         &mut self,
-        spec_id: &str,
-        stage: SpecStage,
+        _spec_id: &str,
+        _stage: SpecStage,
     ) -> spec_kit::Result<(Vec<ratatui::text::Line<'static>>, bool)> {
         // Temporarily return error - will be replaced with async version
         Err("run_spec_consensus migrated to async - use async version".into())
@@ -16369,6 +16374,7 @@ impl ChatWidget<'_> {
         */
     }
 
+    #[allow(dead_code)] // Consensus persistence infrastructure
     fn persist_consensus_verdict(
         &self,
         spec_id: &str,
@@ -16408,6 +16414,7 @@ impl ChatWidget<'_> {
         Ok(ConsensusEvidenceHandle { path, sha256 })
     }
 
+    #[allow(dead_code)] // Consensus persistence infrastructure
     fn persist_consensus_telemetry_bundle(
         &self,
         spec_id: &str,
@@ -16601,6 +16608,7 @@ impl ChatWidget<'_> {
         })
     }
 
+    #[allow(dead_code)] // Consensus memory storage
     fn remember_consensus_verdict(
         &self,
         spec_id: &str,
@@ -17567,10 +17575,12 @@ impl ChatWidget<'_> {
         spec_kit::handle_spec_auto(self, spec_id, goal, resume_from, hal_mode, cli_overrides);
     }
 
+    #[allow(dead_code)] // Pipeline advancement via spec_kit
     fn advance_spec_auto(&mut self) {
         spec_kit::advance_spec_auto(self);
     }
 
+    #[allow(dead_code)] // Pipeline error handling via spec_kit
     fn halt_spec_auto_with_error(&mut self, reason: String) {
         spec_kit::halt_spec_auto_with_error(self, reason);
     }

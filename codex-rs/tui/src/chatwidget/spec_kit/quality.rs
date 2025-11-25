@@ -4,6 +4,8 @@
 //!
 //! Implements agent-driven auto-resolution with intelligent escalation
 
+#![allow(dead_code)] // Quality resolution helpers pending integration
+
 use super::error::{Result, SpecKitError};
 use super::file_modifier::{
     InsertPosition, ModificationOutcome, SpecModification, apply_modification,

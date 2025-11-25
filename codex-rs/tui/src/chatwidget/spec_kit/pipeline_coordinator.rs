@@ -7,6 +7,8 @@
 //! - Consensus checking and stage progression
 //! - Quality gate checkpoint integration
 
+#![allow(dead_code, unused_variables)] // Pipeline helpers pending integration
+
 use super::super::ChatWidget;
 use super::agent_orchestrator::auto_submit_spec_stage_prompt;
 use super::command_handlers::halt_spec_auto_with_error;

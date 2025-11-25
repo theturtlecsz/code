@@ -9,6 +9,8 @@
 //! - Native broker collects results from filesystem
 //! - No Python scripts, no orchestrator LLM
 
+#![allow(dead_code)] // Native orchestration pending full integration
+
 use super::state::{QualityCheckpoint, QualityGateType};
 use codex_core::agent_tool::AGENT_MANAGER;
 use codex_core::config_types::AgentConfig;

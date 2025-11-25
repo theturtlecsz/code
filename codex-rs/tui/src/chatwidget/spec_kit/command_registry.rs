@@ -8,6 +8,8 @@
 //!
 //! Design: docs/spec-kit/COMMAND_REGISTRY_DESIGN.md
 
+#![allow(dead_code)] // Registry infrastructure, some helpers pending integration
+
 use super::super::ChatWidget;
 use super::commands::*;
 use once_cell::sync::Lazy;

@@ -6,6 +6,8 @@
 //! description, agents, cost, duration, quality gate info,
 //! dependencies, and validation warnings.
 
+#![allow(dead_code)] // Extended widget features pending
+
 use ratatui::{
     Frame,
     layout::Rect,

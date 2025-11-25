@@ -7,6 +7,10 @@
 //! - p95 spawn latency
 //!
 //! Target: 150ms → 50ms (3× speedup) via parallel initialization
+//!
+//! Note: Metrics collection infrastructure ready, dashboard integration pending.
+
+#![allow(dead_code)] // Infrastructure ready, dashboard integration pending
 
 use once_cell::sync::Lazy;
 use std::sync::Mutex;

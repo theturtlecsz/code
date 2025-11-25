@@ -11,6 +11,10 @@
 //! device flows or manual code entry, we leverage the official CLIs which handle OAuth
 //! correctly for their respective services.
 //!
+//! Note: Core login flow active, full CLI status checking pending.
+
+#![allow(dead_code)] // Full CLI status checking features pending
+
 //! ## Flow
 //!
 //! 1. User selects provider in /login → Add Account

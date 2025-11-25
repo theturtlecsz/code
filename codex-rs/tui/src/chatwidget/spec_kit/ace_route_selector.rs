@@ -2,6 +2,11 @@
 //!
 //! Decides whether to use direct LLM or route through ace.generate
 //! based on task complexity, rerun detection, and other heuristics.
+//!
+//! Note: This module is planned infrastructure for intelligent routing
+//! decisions. Integration pending ACE framework completion.
+
+#![allow(dead_code)] // Planned infrastructure, integration pending
 
 use blake3::Hasher;
 use codex_core::config_types::AceConfig;

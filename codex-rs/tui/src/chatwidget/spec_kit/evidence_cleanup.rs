@@ -12,6 +12,10 @@
 //! - Completed SPECs: Archive after 30d, purge after 180d
 //! - Abandoned SPECs: Archive immediately (>90d inactive)
 //! - Size limits: 25MB per-SPEC soft, 50MB hard, 500MB total
+//!
+//! Note: Startup integration pending - currently invoked via shell scripts.
+
+#![allow(dead_code)] // Infrastructure ready, startup integration pending
 
 use super::error::{Result, SpecKitError};
 use chrono::{DateTime, Duration, Utc};

@@ -3,6 +3,8 @@
 //! Routes prompts through the `claude` CLI for Anthropic models.
 //! Uses `--output-format json` for structured responses.
 
+#![allow(dead_code)] // CLI provider helpers pending integration
+
 use crate::cli_executor::{CliError, CliExecutor};
 use crate::providers::{ProviderError, ProviderResponse, ProviderResult, TokenUsage};
 use serde::Deserialize;

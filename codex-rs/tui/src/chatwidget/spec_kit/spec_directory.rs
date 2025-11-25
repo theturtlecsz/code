@@ -11,7 +11,9 @@
 //! - MUST contain spec.md (validation requirement)
 //! - Pattern: SPEC-{AREA}-{NUM}-{slug} or exact SPEC-ID match
 //! - Examples: SPEC-KIT-900-generic-smoke, SPEC-OPS-004-integrated-coder-hooks
-//!
+
+#![allow(dead_code)] // Directory resolution helpers, some pending integration
+
 //! **Error Handling**:
 //! - Returns Result with descriptive errors (never panics)
 //! - Logs ambiguities (multiple matches → uses precedence rules)

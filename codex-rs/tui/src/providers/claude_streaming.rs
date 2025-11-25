@@ -6,6 +6,8 @@
 //! UPDATED: Now uses ClaudePipesProvider for session-based multi-turn conversations.
 //! Uses global provider instance to maintain sessions across messages.
 
+#![allow(dead_code)] // Streaming provider helpers
+
 use codex_core::cli_executor::{ClaudePipesProvider, CliError, ConversationId, StreamEvent};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};

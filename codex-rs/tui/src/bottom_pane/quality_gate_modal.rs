@@ -3,6 +3,8 @@
 //! Displays questions from quality gates that need human input,
 //! batched by checkpoint with progress indicators and context.
 
+#![allow(dead_code)] // Modal helpers pending
+
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;

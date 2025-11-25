@@ -6,6 +6,8 @@
 //!
 //! All local-memory access now via McpConnectionManager::call_tool()
 
+#![allow(dead_code)] // Response types used by MCP parsing
+
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Clone)]

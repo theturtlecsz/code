@@ -5,6 +5,8 @@
 //! This module handles guardrail script validation, telemetry parsing,
 //! schema compliance checking, and outcome evaluation.
 
+#![allow(dead_code)] // Guardrail validation helpers pending integration
+
 use super::super::ChatWidget;
 use super::super::agent_install::wrap_command;
 use super::error::{Result, SpecKitError};

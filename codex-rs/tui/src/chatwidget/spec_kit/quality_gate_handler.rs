@@ -5,6 +5,8 @@
 //!
 //! MAINT-2: Extracted from handler.rs (925 LOC) for maintainability
 
+#![allow(dead_code, unused_variables)] // Extended QA features pending
+
 use super::super::ChatWidget;
 use super::ace_learning::{ExecutionFeedback, send_learning_feedback_sync};
 use super::ace_orchestrator;

@@ -3,6 +3,8 @@
 //! This module provides infrastructure for executing CLI commands for non-OpenAI
 //! providers (Claude, Gemini) that don't support third-party OAuth.
 
+#![allow(dead_code)] // CLI execution infrastructure, some helpers pending integration
+
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::process::Command;

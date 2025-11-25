@@ -6,6 +6,8 @@
 //! Principle: Agents for reasoning, NOT transactions. Consistency checking is
 //! pattern-matching (FREE) not reasoning ($0.80).
 
+#![allow(dead_code)] // Extended analysis helpers pending
+
 use super::clarify_native::Severity;
 use super::error::{Result, SpecKitError};
 use regex_lite::Regex;

@@ -4,6 +4,8 @@
 //! and discover new heuristics. This is the intelligence layer that makes ACE
 //! more than just simple +/- scoring.
 
+#![allow(dead_code)] // ACE reflection pending full integration
+
 use super::ace_learning::ExecutionFeedback;
 use serde::{Deserialize, Serialize};
 

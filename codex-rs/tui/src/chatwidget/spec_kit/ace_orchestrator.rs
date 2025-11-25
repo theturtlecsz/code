@@ -6,6 +6,10 @@
 //! 3. Apply: Update playbook via MCP
 //!
 //! This is the intelligence layer that makes ACE more than simple scoring.
+//!
+//! Note: ACE integration is enabled but full orchestration pending validation.
+
+#![allow(dead_code, unused_variables, unreachable_patterns)] // ACE integration in progress
 
 use super::ace_client::{self, AceResult};
 use super::ace_curator::{self, CurationDecision, CurationPromptBuilder};

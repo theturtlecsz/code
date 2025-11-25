@@ -6,6 +6,10 @@
 //! - Gemini models → CLI routing with streaming (SPEC-KIT-952) **PRIMARY**
 //!
 //! Native API clients (SPEC-KIT-953) are deprecated - CLI routing is production path.
+//!
+//! Note: Contains native fallback infrastructure that may be activated if CLI routing fails.
+
+#![allow(dead_code)] // Native fallback functions preserved for potential future use
 
 use std::path::PathBuf;
 

@@ -5,6 +5,8 @@
 //! Replaces 2-agent consensus ($0.15) with instant native implementation ($0).
 //! Pure template filling and file operations - no AI reasoning required.
 
+#![allow(dead_code)] // Template helpers pending full integration
+
 use chrono::Local;
 use std::fs;
 use std::path::{Path, PathBuf};

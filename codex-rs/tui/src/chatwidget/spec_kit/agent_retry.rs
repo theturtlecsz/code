@@ -8,6 +8,8 @@
 //! - Classifies agent spawn errors as retryable vs permanent
 //! - Logs retry attempts with telemetry
 
+#![allow(dead_code)] // Retry integration via agent_orchestrator, some helpers unused
+
 use codex_spec_kit::retry::classifier::{
     ErrorClass, PermanentError, RetryClassifiable, RetryableError,
 };

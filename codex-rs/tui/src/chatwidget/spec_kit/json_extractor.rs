@@ -9,6 +9,8 @@
 //! Research shows prompts alone achieve 60% compliance; defensive extraction
 //! achieves 95%+ without expensive LLM retry loops.
 
+#![allow(dead_code)] // Extraction helpers for edge cases
+
 use serde_json::Value;
 use tracing::{debug, warn};
 

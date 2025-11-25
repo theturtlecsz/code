@@ -5,6 +5,8 @@
 //! This trait decouples spec-kit from ChatWidget, enabling independent testing
 //! and reuse.
 
+#![allow(dead_code, private_interfaces)] // Test helpers and visibility constraints
+
 use super::error::Result;
 use super::state::{EscalatedQuestion, GuardrailOutcome, QualityCheckpoint, SpecAutoState};
 use crate::app_event::BackgroundPlacement;

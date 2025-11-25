@@ -6,6 +6,8 @@
 //! Principle: Agents for reasoning, NOT transactions. Quality scoring is
 //! pattern-matching (FREE) not reasoning ($0.35).
 
+#![allow(dead_code)] // Extended scoring helpers pending
+
 use super::analyze_native::check_consistency;
 use super::clarify_native::Severity;
 use super::error::{Result, SpecKitError};

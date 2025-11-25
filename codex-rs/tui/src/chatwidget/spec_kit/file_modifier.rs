@@ -3,6 +3,10 @@
 //! FORK-SPECIFIC (just-every/code): Spec-kit multi-agent automation framework
 //!
 //! Provides safe, auditable file modifications with backup and validation
+//!
+//! Note: Full integration pending - currently used for basic modifications only.
+
+#![allow(dead_code)] // Full feature set pending integration
 
 use super::error::{Result, SpecKitError};
 use std::fs;
