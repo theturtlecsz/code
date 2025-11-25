@@ -195,7 +195,7 @@ pub async fn spawn_quality_gate_agents_native(
 /// Build quality gate prompt with SPEC context
 async fn build_quality_gate_prompt(
     spec_id: &str,
-    gate: QualityGateType,
+    _gate: QualityGateType,
     prompt_template: &str,
     cwd: &Path,
 ) -> Result<String, String> {

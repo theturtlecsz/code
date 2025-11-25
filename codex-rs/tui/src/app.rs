@@ -2366,12 +2366,6 @@ impl App<'_> {
                         }
                     }
                 }
-                AppEvent::SubmitPreparedPrompt { display, prompt } => {
-                    // ACE-enhanced prompt ready for submission
-                    if let AppState::Chat { widget } = &mut self.app_state {
-                        widget.submit_prompt_with_display(display, prompt);
-                    }
-                }
                 AppEvent::SwitchCwd(new_cwd, initial_prompt) => {
                     let target = new_cwd.clone();
                     self.config.cwd = target.clone();
@@ -2941,7 +2935,7 @@ impl App<'_> {
                     latest_upgrade_version,
                     mcp_manager,
                     initial_command, // SPEC-KIT-920
-                    config_watcher,  // SPEC-945D
+                    config_watcher: _config_watcher,  // SPEC-945D
                 }) => {
                     let mut w = ChatWidget::new(
                         config,

@@ -87,6 +87,7 @@ impl AppEventSender {
     }
 
     /// Signal CLI routing completion with response (SPEC-KIT-952)
+    #[allow(dead_code)]
     pub(crate) fn send_cli_route_complete(
         &self,
         provider_name: impl Into<String>,

@@ -124,7 +124,7 @@ pub fn score_quality(spec_id: &str, cwd: &Path) -> Result<QualityReport> {
 /// Score completeness dimension (0-100%)
 fn score_completeness(prd_content: &str, issues: &mut Vec<QualityIssue>) -> f32 {
     let mut score = 0.0;
-    let max_score = 100.0;
+    let _max_score = 100.0; // Reserved for future capping logic
 
     // Required sections (20% each)
     let required_sections = vec![

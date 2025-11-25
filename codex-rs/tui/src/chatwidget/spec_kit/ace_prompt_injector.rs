@@ -168,7 +168,7 @@ pub fn inject_ace_section(
     }
 
     // Get scope for this command
-    let Some(scope) = command_to_scope(command_name) else {
+    let Some(_scope) = command_to_scope(command_name) else {
         debug!(
             "ACE injection skipped: no scope mapping for {}",
             command_name
@@ -177,14 +177,14 @@ pub fn inject_ace_section(
     };
 
     // Get repo_root and branch (with fallbacks)
-    let repo_root = repo_root.unwrap_or_else(|| {
+    let _repo_root = repo_root.unwrap_or_else(|| {
         std::env::current_dir()
             .ok()
             .and_then(|p| p.to_str().map(|s| s.to_string()))
             .unwrap_or_else(|| ".".to_string())
     });
 
-    let branch = branch.unwrap_or_else(|| "main".to_string());
+    let _branch = branch.unwrap_or_else(|| "main".to_string());
 
     // Note: Cannot use block_on when already on tokio runtime (TUI context)
     // For now, skip ACE injection in sync contexts

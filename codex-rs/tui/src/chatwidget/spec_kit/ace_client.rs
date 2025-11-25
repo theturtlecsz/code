@@ -266,7 +266,6 @@ pub async fn playbook_slice(
         }
         AceResult::Disabled => AceResult::Disabled,
         AceResult::Error(e) => AceResult::Error(e),
-        AceResult::Ok(_) => unreachable!(),
     }
 }
 
@@ -323,7 +322,6 @@ pub async fn learn(
         },
         AceResult::Disabled => AceResult::Disabled,
         AceResult::Error(e) => AceResult::Error(e),
-        AceResult::Ok(_) => unreachable!(),
     }
 }
 
@@ -371,7 +369,6 @@ pub async fn pin(
         },
         AceResult::Disabled => AceResult::Disabled,
         AceResult::Error(e) => AceResult::Error(e),
-        AceResult::Ok(_) => unreachable!(),
     }
 }
 

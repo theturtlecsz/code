@@ -117,7 +117,6 @@ impl FilesystemEvidence {
     fn write_with_lock(&self, spec_id: &str, target_path: &PathBuf, content: &str) -> Result<()> {
         use fs2::FileExt;
         use std::fs::OpenOptions;
-        use std::io::Write;
 
         let lock_dir = self.cwd.join(&self.base_path).join(".locks");
         std::fs::create_dir_all(&lock_dir).map_err(|e| SpecKitError::DirectoryCreate {

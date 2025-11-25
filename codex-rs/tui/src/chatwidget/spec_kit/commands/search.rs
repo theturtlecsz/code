@@ -33,7 +33,7 @@ impl SpecKitCommand for SearchCommand {
         let parsed_args: Vec<String> = Shlex::new(&args).collect();
 
         let mut query: Option<String> = None;
-        let mut agent_filter: Option<String> = None;
+        let mut _agent_filter: Option<String> = None;
         let mut parse_agent_next = false;
         let mut help_requested = false;
 
@@ -44,7 +44,7 @@ impl SpecKitCommand for SearchCommand {
                 help_requested = true;
                 break;
             } else if parse_agent_next {
-                agent_filter = Some(arg.to_lowercase());
+                _agent_filter = Some(arg.to_lowercase());
                 parse_agent_next = false;
             } else {
                 query = Some(arg);

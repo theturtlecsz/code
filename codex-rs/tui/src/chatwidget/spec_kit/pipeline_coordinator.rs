@@ -134,7 +134,7 @@ pub fn handle_spec_auto(
 }
 
 /// Advance spec-auto pipeline to next stage
-pub fn advance_spec_auto(widget: &mut ChatWidget) {
+pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
     if widget.spec_auto_state.is_none() {
         return;
     }
@@ -603,7 +603,7 @@ pub fn on_spec_auto_task_complete(widget: &mut ChatWidget, task_id: &str) {
 /// but doesn't require a task_id since native guardrails don't have one.
 ///
 /// Takes the guardrail result directly to avoid blocking file I/O re-reading telemetry.
-pub fn advance_spec_auto_after_native_guardrail(
+pub(crate) fn advance_spec_auto_after_native_guardrail(
     widget: &mut ChatWidget,
     stage: SpecStage,
     spec_id: &str,

@@ -62,11 +62,11 @@ pub mod subagent_defaults;
 pub mod validation_lifecycle; // Validation lifecycle tracking and telemetry
 
 // Re-export context types
-pub use context::SpecKitContext;
+pub(crate) use context::SpecKitContext;
 
 // MAINT-3 Phase 2: Re-export test utilities
 #[cfg(any(test, feature = "test-utils"))]
-pub use context::test_mock::MockSpecKitContext;
+pub(crate) use context::test_mock::MockSpecKitContext;
 
 // Re-export error types
 pub(crate) use error::Result;
@@ -101,7 +101,7 @@ pub use state::{
 };
 
 // Re-export handler functions
-pub use handler::{
+pub(crate) use handler::{
     advance_spec_auto, auto_submit_spec_stage_prompt, halt_spec_auto_with_error, handle_guardrail,
     handle_spec_auto, handle_spec_consensus, handle_spec_status, on_quality_gate_agents_complete,
     on_quality_gate_answers, on_quality_gate_cancelled, on_spec_auto_agents_complete,

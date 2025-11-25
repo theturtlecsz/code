@@ -213,7 +213,7 @@ where
 
                 // Apply backoff with jitter
                 let jitter_range = (backoff_ms as f64 * config.jitter_factor) as u64;
-                let jitter = rand::thread_rng().gen_range(0..=jitter_range);
+                let jitter = rand::rng().random_range(0..=jitter_range);
                 let actual_backoff = backoff_ms + jitter;
 
                 tracing::info!(

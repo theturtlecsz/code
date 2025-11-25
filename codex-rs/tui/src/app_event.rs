@@ -320,6 +320,7 @@ pub(crate) enum AppEvent {
 
     /// CLI routing completed with response (SPEC-KIT-952)
     /// Used when prompts are routed through CLI providers (Claude, Gemini)
+    #[allow(dead_code)]
     CliRouteComplete {
         /// Provider display name (e.g., "Claude", "Gemini")
         provider_name: String,
@@ -410,6 +411,7 @@ pub(crate) enum AppEvent {
     /// Begin Claude OAuth login flow from the in-app login manager.
     LoginStartClaude,
     /// Cancel an in-progress Claude login flow triggered via `/login`.
+    #[allow(dead_code)]
     LoginCancelClaude,
     /// Claude login flow has completed (success or failure).
     LoginClaudeComplete {
@@ -419,6 +421,7 @@ pub(crate) enum AppEvent {
     /// Begin Gemini OAuth login flow from the in-app login manager.
     LoginStartGemini,
     /// Cancel an in-progress Gemini login flow triggered via `/login`.
+    #[allow(dead_code)]
     LoginCancelGemini,
     /// Gemini login flow has completed (success or failure).
     LoginGeminiComplete {

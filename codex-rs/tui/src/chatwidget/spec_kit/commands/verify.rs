@@ -218,7 +218,7 @@ pub fn generate_verification_report(
 
             // Check for output file
             let output_file = format!("{}.md", stage_name);
-            let output_path = cwd
+            let _output_path = cwd
                 .join("docs")
                 .join(format!("{}-*", spec_id))
                 .join(&output_file);

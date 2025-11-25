@@ -46,7 +46,7 @@ pub fn check_consistency(spec_id: &str, cwd: &Path) -> Result<Vec<InconsistencyI
 
     // Load all artifacts
     let prd_path = spec_dir.join("PRD.md");
-    let spec_path = spec_dir.join("spec.md");
+    let _spec_path = spec_dir.join("spec.md");
     let plan_path = spec_dir.join("plan.md");
     let tasks_path = spec_dir.join("tasks.md");
     let constitution_path = cwd.join("memory/constitution.md");
@@ -401,7 +401,8 @@ fn check_constitution_compliance(
     issues: &mut Vec<InconsistencyIssue>,
 ) {
     // Extract rules from constitution (simple heuristic: "MUST", "MUST NOT")
-    let must_rules: Vec<&str> = constitution_content
+    // Note: must_rules reserved for future MUST compliance checking
+    let _must_rules: Vec<&str> = constitution_content
         .lines()
         .filter(|line| {
             line.to_uppercase().contains("MUST") && !line.to_uppercase().contains("MUST NOT")

@@ -79,9 +79,7 @@ pub use chatwidget::spec_kit::{
 };
 
 // MAINT-3 Phase 2: Re-export testing utilities
-pub use chatwidget::spec_kit::context::{SpecKitContext, test_mock::MockSpecKitContext};
 pub use chatwidget::spec_kit::state::SpecAutoPhase;
-pub use chatwidget::spec_kit::{advance_spec_auto, halt_spec_auto_with_error};
 pub use spec_prompts::SpecAgent;
 
 // SPEC-945B Week 2 Day 5: Re-export consensus_db for read-path migration tests

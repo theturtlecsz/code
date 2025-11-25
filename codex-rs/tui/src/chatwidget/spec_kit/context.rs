@@ -21,7 +21,7 @@ use std::path::Path;
 ///
 /// This trait abstracts away ChatWidget dependencies, allowing spec-kit
 /// to work with any UI context that provides these essential operations.
-pub trait SpecKitContext {
+pub(crate) trait SpecKitContext {
     // === History Operations ===
 
     /// Add a cell to the conversation history

@@ -2123,7 +2123,9 @@ pub fn on_spec_auto_agents_complete_with_ids(
 
 pub fn record_agent_costs(widget: &mut ChatWidget, agents: &[AgentInfo]) {
     let tracker = widget.spec_cost_tracker();
+    #[allow(unused_assignments)]
     let mut spec_id: Option<String> = None;
+    #[allow(unused_assignments)]
     let mut stage_slot: Option<SpecStage> = None;
     let mut to_record: Vec<&AgentInfo> = Vec::new();
 

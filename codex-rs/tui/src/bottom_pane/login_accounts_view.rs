@@ -96,6 +96,7 @@ enum ViewMode {
 }
 
 /// Login provider options for OAuth authentication.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LoginProvider {
     ChatGpt,
@@ -105,6 +106,7 @@ pub(crate) enum LoginProvider {
 
 impl LoginProvider {
     /// Display name for the provider.
+    #[allow(dead_code)]
     pub fn display_name(&self) -> &'static str {
         match self {
             Self::ChatGpt => "ChatGPT sign-in",
@@ -114,6 +116,7 @@ impl LoginProvider {
     }
 
     /// All available providers in selection order.
+    #[allow(dead_code)]
     pub const ALL: &'static [LoginProvider] = &[
         LoginProvider::ChatGpt,
         LoginProvider::Claude,

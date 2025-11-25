@@ -19,7 +19,7 @@ pub use super::agent_orchestrator::{
 
 // Re-export pipeline coordination functions (MAINT-3 Phase 5: Extracted to pipeline_coordinator.rs)
 pub(crate) use super::pipeline_coordinator::check_consensus_and_advance_spec_auto;
-pub use super::pipeline_coordinator::{
+pub(crate) use super::pipeline_coordinator::{
     advance_spec_auto, handle_spec_auto, on_spec_auto_task_complete, on_spec_auto_task_started,
 };
 
