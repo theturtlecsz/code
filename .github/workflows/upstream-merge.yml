@@ -1,9 +1,9 @@
 name: Upstream Merge
 
 on:
-  # Poll upstream regularly; also allow manual and external triggers
-  schedule:
-    - cron: '*/30 * * * *'
+  # DISABLED: Schedule requires OPENAI_API_KEY (fork uses subscriptions, not API keys)
+  # schedule:
+  #   - cron: '*/30 * * * *'
   workflow_dispatch:
     inputs:
       upstream_repo:

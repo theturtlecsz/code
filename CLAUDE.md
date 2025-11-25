@@ -31,8 +31,8 @@ The TUI supports three model providers with different authentication methods:
 | Provider | Models | Auth Method | Status |
 |----------|--------|-------------|--------|
 | **ChatGPT** | gpt-5, gpt-5.1-*, gpt-5-codex | Native OAuth (existing) | ✅ Working |
-| **Claude** | claude-opus-4.1, claude-sonnet-4.5, claude-haiku-4.5 | CLI routing (SPEC-952) | ✅ Working |
-| **Gemini** | gemini-3-pro, gemini-2.5-*, gemini-2.0-flash | CLI routing disabled | ❌ Not Supported |
+| **Claude** | claude-opus-4.5, claude-sonnet-4.5, claude-haiku-4.5 | CLI routing (SPEC-952) | ✅ Working |
+| **Gemini** | gemini-3-pro, gemini-2.5-*, gemini-2.0-flash | CLI routing (SPEC-952) | ✅ Working |
 
 **Claude CLI Setup (Working)**:
 ```bash
@@ -46,7 +46,7 @@ claude
 ```bash
 # Select model via /model command
 /model claude-sonnet-4.5
-/model claude-opus-4.1
+/model claude-opus-4.5
 /model claude-haiku-4.5
 
 # Or use model selector
@@ -56,9 +56,8 @@ claude
 **Multi-turn conversations**: ✅ Fully supported with Claude CLI routing
 
 **Known Limitations (SPEC-KIT-952)**:
-- **Gemini CLI routing disabled**: Gemini CLI headless mode has reliability issues with multi-turn conversations (timeouts after 2+ messages). Use ChatGPT account for Gemini model access instead.
 - When selecting a Claude model without the CLI installed, you'll see installation instructions in chat history
-- Claude CLI responses may take 2-25s (variability in CLI performance)
+- CLI responses may take 2-25s (variability in CLI performance)
 
 ## 1. Load These References Every Session
 - `MEMORY-POLICY.md` – **mandatory** memory system policy (local-memory only)

@@ -113,7 +113,7 @@ pub struct ClaudePipesConfig {
     /// Path to claude binary
     pub binary_path: String,
 
-    /// Model to use (e.g., "claude-sonnet-4.5", "claude-opus-4.1")
+    /// Model to use (e.g., "claude-sonnet-4.5", "claude-opus-4.5")
     pub model: String,
 
     /// Working directory (for CLAUDE.md project memory)

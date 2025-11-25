@@ -238,7 +238,7 @@ mod tests {
             200_000
         );
         assert_eq!(
-            get_context_window(ProviderId::Anthropic, "claude-opus-4.1"),
+            get_context_window(ProviderId::Anthropic, "claude-opus-4.5"),
             200_000
         );
         assert_eq!(

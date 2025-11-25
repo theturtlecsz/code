@@ -216,7 +216,7 @@ mod tests {
     #[test]
     fn test_get_context_limit() {
         assert_eq!(
-            CliContextManager::get_context_limit("claude-opus-4.1"),
+            CliContextManager::get_context_limit("claude-opus-4.5"),
             (CLAUDE_OPUS_LIMIT as f32 * CONTEXT_SAFETY_MARGIN) as usize
         );
         assert_eq!(

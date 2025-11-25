@@ -516,7 +516,7 @@ mod tests {
     fn test_should_use_cli() {
         // Claude models should use CLI
         assert!(ModelRouter::should_use_cli("claude-sonnet-4.5"));
-        assert!(ModelRouter::should_use_cli("claude-opus-4.1"));
+        assert!(ModelRouter::should_use_cli("claude-opus-4.5"));
         assert!(ModelRouter::should_use_cli("claude-haiku-4.5"));
 
         // Gemini models should use CLI
@@ -554,7 +554,7 @@ mod tests {
 
     #[test]
     fn test_uses_cli_routing() {
-        assert!(uses_cli_routing("claude-opus-4.1"));
+        assert!(uses_cli_routing("claude-opus-4.5"));
         assert!(uses_cli_routing("gemini-2.5-pro"));
         assert!(!uses_cli_routing("gpt-5-mini"));
     }

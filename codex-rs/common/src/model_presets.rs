@@ -45,10 +45,10 @@ const PRESETS: &[ModelPreset] = &[
     // Claude Family (Anthropic)
     // ═══════════════════════════════════════════════════════════════
     ModelPreset {
-        id: "claude-opus-4.1",
-        label: "Claude Opus 4.1",
+        id: "claude-opus-4.5",
+        label: "Claude Opus 4.5",
         description: "— most capable Claude, best for complex/creative tasks, ultra premium ($15/$75)",
-        model: "claude-opus-4.1",
+        model: "claude-opus-4.5",
         effort: None,
     },
     ModelPreset {

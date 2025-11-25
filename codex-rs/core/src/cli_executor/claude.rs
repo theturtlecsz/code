@@ -14,7 +14,7 @@ use super::types::{CliError, Conversation, StreamEvent};
 pub struct ClaudeCliConfig {
     /// Path to claude binary (default: "claude")
     pub binary_path: String,
-    /// Model to use (e.g., "claude-opus-4.1", "claude-sonnet-4.5")
+    /// Model to use (e.g., "claude-opus-4.5", "claude-sonnet-4.5")
     pub model: Option<String>,
     /// Timeout for requests (default: 120 seconds)
     pub timeout_secs: u64,

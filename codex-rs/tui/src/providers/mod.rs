@@ -150,7 +150,7 @@ mod tests {
             ProviderType::Claude
         );
         assert_eq!(
-            ProviderType::from_model_name("claude-opus-4.1"),
+            ProviderType::from_model_name("claude-opus-4.5"),
             ProviderType::Claude
         );
         assert_eq!(
