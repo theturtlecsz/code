@@ -97,9 +97,18 @@ pub use chatwidget::spec_kit::{
     parse_quality_issue_from_agent, resolve_quality_issue, should_auto_resolve,
 };
 
+// SPEC-957 Phase 2: Re-export PipelineConfig for test suite
+pub use chatwidget::spec_kit::pipeline_config::PipelineConfig;
+
 // MAINT-3 Phase 2: Re-export testing utilities
 pub use chatwidget::spec_kit::state::SpecAutoPhase;
 pub use spec_prompts::SpecAgent;
+
+// SPEC-957 Phase 2: Re-export test utilities for integration tests
+// Note: SpecKitContext and related functions are internal APIs,
+// tests requiring them should be moved to lib.rs or disabled
+#[cfg(any(test, feature = "test-utils"))]
+pub use chatwidget::spec_kit::context::test_mock::MockSpecKitContext;
 
 // SPEC-945B Week 2 Day 5: Re-export consensus_db for read-path migration tests
 pub use chatwidget::spec_kit::consensus_db::ConsensusDb;

@@ -168,8 +168,14 @@ impl StateBuilder {
     }
 
     pub fn build(self) -> SpecAutoState {
-        let mut state =
-            SpecAutoState::new(self.spec_id, self.goal, self.start_stage, self.hal_mode);
+        use codex_tui::PipelineConfig;
+        let mut state = SpecAutoState::new(
+            self.spec_id,
+            self.goal,
+            self.start_stage,
+            self.hal_mode,
+            PipelineConfig::defaults(),
+        );
         state.quality_gates_enabled = self.quality_gates_enabled;
         state
     }

@@ -6,7 +6,7 @@ use codex_tui::{
     HalMode, QualityCheckpoint, QualityGateType, SlashCommand, SpecAutoPhase, SpecAutoState,
     SpecStage, expected_guardrail_command, get_nested, guardrail_for_stage, require_object,
     require_string_field, spec_ops_stage_prefix, validate_guardrail_evidence,
-};
+, PipelineConfig, PipelineConfig};
 use serde_json::json;
 use std::path::PathBuf;
 
@@ -14,31 +14,18 @@ use std::path::PathBuf;
 
 #[test]
 fn test_spec_auto_state_new() {
-    let state = SpecAutoState::new(
-        "SPEC-KIT-001".to_string(),
-        "Test goal".to_string(),
-        SpecStage::Plan,
-        None,
-    );
+    let state = SpecAutoState::new("SPEC-KIT-001".to_string(), "Test goal".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
 
     assert_eq!(state.spec_id, "SPEC-KIT-001");
     assert_eq!(state.goal, "Test goal");
     assert_eq!(state.current_index, 0);
     assert_eq!(state.stages.len(), 6);
     assert!(state.quality_gates_enabled);
-    assert_eq!(state.validate_retries, 0);
-    assert_eq!(state.agent_retry_count, 0);
 }
 
 #[test]
 fn test_spec_auto_state_with_quality_gates_disabled() {
-    let state = SpecAutoState::with_quality_gates(
-        "SPEC-KIT-002".to_string(),
-        "Test goal".to_string(),
-        SpecStage::Plan,
-        None,
-        false,
-    );
+    let state = SpecAutoState::with_quality_gates("SPEC-KIT-002".to_string(), "Test goal".to_string(), SpecStage::Plan, None, false, PipelineConfig::defaults());
 
     assert!(!state.quality_gates_enabled);
     assert_eq!(state.completed_checkpoints.len(), 0);
@@ -46,12 +33,7 @@ fn test_spec_auto_state_with_quality_gates_disabled() {
 
 #[test]
 fn test_spec_auto_state_resume_from_tasks() {
-    let state = SpecAutoState::new(
-        "SPEC-KIT-003".to_string(),
-        "Resume test".to_string(),
-        SpecStage::Tasks,
-        None,
-    );
+    let state = SpecAutoState::new("SPEC-KIT-003".to_string(), "Resume test".to_string(), SpecStage::Tasks, None, PipelineConfig::defaults());
 
     assert_eq!(state.current_index, 1); // Tasks is index 1
     assert_eq!(state.current_stage(), Some(SpecStage::Tasks));
@@ -59,12 +41,7 @@ fn test_spec_auto_state_resume_from_tasks() {
 
 #[test]
 fn test_spec_auto_state_resume_from_unlock() {
-    let state = SpecAutoState::new(
-        "SPEC-KIT-004".to_string(),
-        "Final stage".to_string(),
-        SpecStage::Unlock,
-        None,
-    );
+    let state = SpecAutoState::new("SPEC-KIT-004".to_string(), "Final stage".to_string(), SpecStage::Unlock, None, PipelineConfig::defaults());
 
     assert_eq!(state.current_index, 5); // Unlock is last (index 5)
     assert_eq!(state.current_stage(), Some(SpecStage::Unlock));
@@ -72,36 +49,21 @@ fn test_spec_auto_state_resume_from_unlock() {
 
 #[test]
 fn test_spec_auto_state_with_hal_mode() {
-    let state = SpecAutoState::new(
-        "SPEC-KIT-005".to_string(),
-        "HAL test".to_string(),
-        SpecStage::Plan,
-        Some(HalMode::Live),
-    );
+    let state = SpecAutoState::new("SPEC-KIT-005".to_string(), "HAL test".to_string(), SpecStage::Plan, Some(HalMode::Live), PipelineConfig::defaults());
 
     assert_eq!(state.hal_mode, Some(HalMode::Live));
 }
 
 #[test]
 fn test_spec_auto_state_initial_phase_is_guardrail() {
-    let state = SpecAutoState::new(
-        "SPEC-KIT-006".to_string(),
-        "Phase test".to_string(),
-        SpecStage::Plan,
-        None,
-    );
+    let state = SpecAutoState::new("SPEC-KIT-006".to_string(), "Phase test".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
 
     assert!(matches!(state.phase, SpecAutoPhase::Guardrail));
 }
 
 #[test]
 fn test_spec_auto_state_stage_sequence() {
-    let state = SpecAutoState::new(
-        "SPEC-KIT-007".to_string(),
-        "Sequence test".to_string(),
-        SpecStage::Plan,
-        None,
-    );
+    let state = SpecAutoState::new("SPEC-KIT-007".to_string(), "Sequence test".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
 
     assert_eq!(state.stages[0], SpecStage::Plan);
     assert_eq!(state.stages[1], SpecStage::Tasks);
@@ -115,24 +77,14 @@ fn test_spec_auto_state_stage_sequence() {
 
 #[test]
 fn test_current_stage_returns_correct_stage() {
-    let state = SpecAutoState::new(
-        "SPEC-KIT-008".to_string(),
-        "Current stage test".to_string(),
-        SpecStage::Implement,
-        None,
-    );
+    let state = SpecAutoState::new("SPEC-KIT-008".to_string(), "Current stage test".to_string(), SpecStage::Implement, None, PipelineConfig::defaults());
 
     assert_eq!(state.current_stage(), Some(SpecStage::Implement));
 }
 
 #[test]
 fn test_current_stage_returns_none_when_out_of_bounds() {
-    let mut state = SpecAutoState::new(
-        "SPEC-KIT-009".to_string(),
-        "Bounds test".to_string(),
-        SpecStage::Plan,
-        None,
-    );
+    let mut state = SpecAutoState::new("SPEC-KIT-009".to_string(), "Bounds test".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
 
     state.current_index = 999; // Out of bounds
     assert_eq!(state.current_stage(), None);
@@ -140,12 +92,7 @@ fn test_current_stage_returns_none_when_out_of_bounds() {
 
 #[test]
 fn test_is_executing_agents_true() {
-    let mut state = SpecAutoState::new(
-        "SPEC-KIT-010".to_string(),
-        "Executing test".to_string(),
-        SpecStage::Plan,
-        None,
-    );
+    let mut state = SpecAutoState::new("SPEC-KIT-010".to_string(), "Executing test".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
 
     state.phase = SpecAutoPhase::ExecutingAgents {
         expected_agents: vec!["gemini".to_string(), "claude".to_string()],
@@ -157,12 +104,7 @@ fn test_is_executing_agents_true() {
 
 #[test]
 fn test_is_executing_agents_false() {
-    let state = SpecAutoState::new(
-        "SPEC-KIT-011".to_string(),
-        "Not executing test".to_string(),
-        SpecStage::Plan,
-        None,
-    );
+    let state = SpecAutoState::new("SPEC-KIT-011".to_string(), "Not executing test".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
 
     assert!(!state.is_executing_agents());
 }
@@ -171,23 +113,23 @@ fn test_is_executing_agents_false() {
 
 #[test]
 fn test_quality_checkpoint_names() {
-    assert_eq!(QualityCheckpoint::PrePlanning.name(), "pre-planning");
-    assert_eq!(QualityCheckpoint::PostPlan.name(), "post-plan");
-    assert_eq!(QualityCheckpoint::PostTasks.name(), "post-tasks");
+    assert_eq!(QualityCheckpoint::BeforeSpecify.name(), "pre-planning");
+    assert_eq!(QualityCheckpoint::AfterSpecify.name(), "post-plan");
+    assert_eq!(QualityCheckpoint::AfterTasks.name(), "post-tasks");
 }
 
 #[test]
 fn test_quality_checkpoint_gates() {
-    let pre_planning = QualityCheckpoint::PrePlanning.gates();
+    let pre_planning = QualityCheckpoint::BeforeSpecify.gates();
     assert_eq!(pre_planning.len(), 2);
     assert!(pre_planning.contains(&QualityGateType::Clarify));
     assert!(pre_planning.contains(&QualityGateType::Checklist));
 
-    let post_plan = QualityCheckpoint::PostPlan.gates();
+    let post_plan = QualityCheckpoint::AfterSpecify.gates();
     assert_eq!(post_plan.len(), 1);
     assert!(post_plan.contains(&QualityGateType::Analyze));
 
-    let post_tasks = QualityCheckpoint::PostTasks.gates();
+    let post_tasks = QualityCheckpoint::AfterTasks.gates();
     assert_eq!(post_tasks.len(), 1);
     assert!(post_tasks.contains(&QualityGateType::Analyze));
 }

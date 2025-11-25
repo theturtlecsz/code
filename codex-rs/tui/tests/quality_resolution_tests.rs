@@ -80,19 +80,19 @@ fn test_resolvability_need_human() {
 
 #[test]
 fn test_quality_checkpoint_pre_planning() {
-    let checkpoint = QualityCheckpoint::PrePlanning;
+    let checkpoint = QualityCheckpoint::BeforeSpecify;
     assert_eq!(checkpoint.name(), "pre-planning");
 }
 
 #[test]
 fn test_quality_checkpoint_post_plan() {
-    let checkpoint = QualityCheckpoint::PostPlan;
+    let checkpoint = QualityCheckpoint::AfterSpecify;
     assert_eq!(checkpoint.name(), "post-plan");
 }
 
 #[test]
 fn test_quality_checkpoint_post_tasks() {
-    let checkpoint = QualityCheckpoint::PostTasks;
+    let checkpoint = QualityCheckpoint::AfterTasks;
     assert_eq!(checkpoint.name(), "post-tasks");
 }
 
@@ -309,9 +309,9 @@ fn test_all_checkpoints_have_unique_names() {
     use std::collections::HashSet;
 
     let checkpoints = vec![
-        QualityCheckpoint::PrePlanning,
-        QualityCheckpoint::PostPlan,
-        QualityCheckpoint::PostTasks,
+        QualityCheckpoint::BeforeSpecify,
+        QualityCheckpoint::AfterSpecify,
+        QualityCheckpoint::AfterTasks,
     ];
 
     let names: HashSet<_> = checkpoints.iter().map(|c| c.name()).collect();

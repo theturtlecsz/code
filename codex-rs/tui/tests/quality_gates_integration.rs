@@ -22,27 +22,27 @@ use std::collections::HashMap;
 #[test]
 fn test_checkpoint_gates_correct() {
     // PrePlanning should run clarify + checklist
-    let gates = QualityCheckpoint::PrePlanning.gates();
+    let gates = QualityCheckpoint::BeforeSpecify.gates();
     assert_eq!(gates.len(), 2);
     assert!(gates.contains(&QualityGateType::Clarify));
     assert!(gates.contains(&QualityGateType::Checklist));
 
     // PostPlan should run analyze
-    let gates = QualityCheckpoint::PostPlan.gates();
+    let gates = QualityCheckpoint::AfterSpecify.gates();
     assert_eq!(gates.len(), 1);
     assert!(gates.contains(&QualityGateType::Analyze));
 
     // PostTasks should run analyze
-    let gates = QualityCheckpoint::PostTasks.gates();
+    let gates = QualityCheckpoint::AfterTasks.gates();
     assert_eq!(gates.len(), 1);
     assert!(gates.contains(&QualityGateType::Analyze));
 }
 
 #[test]
 fn test_checkpoint_naming() {
-    assert_eq!(QualityCheckpoint::PrePlanning.name(), "pre-planning");
-    assert_eq!(QualityCheckpoint::PostPlan.name(), "post-plan");
-    assert_eq!(QualityCheckpoint::PostTasks.name(), "post-tasks");
+    assert_eq!(QualityCheckpoint::BeforeSpecify.name(), "pre-planning");
+    assert_eq!(QualityCheckpoint::AfterSpecify.name(), "post-plan");
+    assert_eq!(QualityCheckpoint::AfterTasks.name(), "post-tasks");
 }
 
 #[test]
