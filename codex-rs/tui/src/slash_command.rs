@@ -20,11 +20,10 @@ fn demo_command_enabled() -> bool {
             normalized == "perf" || normalized.starts_with("dev")
         };
 
-        if let Some(profile) = BUILD_PROFILE.or(option_env!("PROFILE")) {
-            if profile_matches(profile) {
+        if let Some(profile) = BUILD_PROFILE.or(option_env!("PROFILE"))
+            && profile_matches(profile) {
                 return true;
             }
-        }
 
         if let Ok(exe_path) = std::env::current_exe() {
             let path = exe_path.to_string_lossy().to_ascii_lowercase();
@@ -48,11 +47,10 @@ fn pro_command_enabled() -> bool {
             normalized.starts_with("dev") || normalized == "pref" || normalized == "perf"
         };
 
-        if let Some(profile) = BUILD_PROFILE.or(option_env!("PROFILE")) {
-            if profile_matches(profile) {
+        if let Some(profile) = BUILD_PROFILE.or(option_env!("PROFILE"))
+            && profile_matches(profile) {
                 return true;
             }
-        }
 
         if let Ok(exe_path) = std::env::current_exe() {
             let path = exe_path.to_string_lossy().to_ascii_lowercase();
@@ -635,7 +633,7 @@ pub enum SpecAutoParseError {
 }
 
 pub fn parse_spec_auto_args(args: &str) -> Result<SpecAutoInvocation, SpecAutoParseError> {
-    let mut tokens = args.trim().split_whitespace();
+    let mut tokens = args.split_whitespace();
     let Some(spec_token) = tokens.next() else {
         return Err(SpecAutoParseError::MissingSpecId);
     };

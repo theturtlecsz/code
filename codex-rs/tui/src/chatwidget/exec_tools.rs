@@ -50,8 +50,7 @@ pub(super) fn finalize_exec_cell_at(
     if let Some(exec) = chat.history_cells[idx]
         .as_any()
         .downcast_ref::<history_cell::ExecCell>()
-    {
-        if exec.output.is_none() {
+        && exec.output.is_none() {
             let completed = history_cell::new_completed_exec_command(
                 exec.command.clone(),
                 exec.parsed.clone(),
@@ -63,7 +62,6 @@ pub(super) fn finalize_exec_cell_at(
             );
             chat.history_replace_at(idx, Box::new(completed));
         }
-    }
 }
 
 pub(super) fn finalize_all_running_as_interrupted(chat: &mut ChatWidget<'_>) {
@@ -85,9 +83,9 @@ pub(super) fn finalize_all_running_as_interrupted(chat: &mut ChatWidget<'_>) {
                 interrupted_msg.clone(),
             );
         }
-        if let Some((agg_idx, entry_idx)) = explore_entry {
-            if *agg_idx < chat.history_cells.len() {
-                if let Some(agg) = chat.history_cells[*agg_idx]
+        if let Some((agg_idx, entry_idx)) = explore_entry
+            && *agg_idx < chat.history_cells.len()
+                && let Some(agg) = chat.history_cells[*agg_idx]
                     .as_any_mut()
                     .downcast_mut::<history_cell::ExploreAggregationCell>()
                 {
@@ -96,8 +94,6 @@ pub(super) fn finalize_all_running_as_interrupted(chat: &mut ChatWidget<'_>) {
                         history_cell::ExploreEntryStatus::Error { exit_code: None },
                     );
                 }
-            }
-        }
         chat.canceled_exec_call_ids.insert(call_id.clone());
     }
     let agg_was_updated = running.iter().any(|(_, _, entry)| entry.is_some());
@@ -116,8 +112,8 @@ pub(super) fn finalize_all_running_as_interrupted(chat: &mut ChatWidget<'_>) {
             .map(|(k, entry)| (k.clone(), *entry))
             .collect();
         for (_k, entry) in entries {
-            if let Some(idx) = chat.resolve_running_tool_index(&entry) {
-                if idx < chat.history_cells.len() {
+            if let Some(idx) = chat.resolve_running_tool_index(&entry)
+                && idx < chat.history_cells.len() {
                     let wait_cancel_cell = Box::new(history_cell::PlainHistoryCell::new(
                         vec![Line::styled(
                             "Wait cancelled",
@@ -147,7 +143,6 @@ pub(super) fn finalize_all_running_as_interrupted(chat: &mut ChatWidget<'_>) {
                         chat.history_replace_at(idx, Box::new(completed));
                     }
                 }
-            }
         }
         chat.tools_state.running_custom_tools.clear();
         chat.invalidate_height_cache();
@@ -177,23 +172,20 @@ pub(super) fn finalize_all_running_as_interrupted(chat: &mut ChatWidget<'_>) {
                     if let Some(rt) = chat.history_cells[i]
                         .as_any()
                         .downcast_ref::<history_cell::RunningToolCallCell>()
-                    {
-                        if rt.has_title("Web Search...") {
+                        && rt.has_title("Web Search...") {
                             target_idx = Some(i);
                             break;
                         }
-                    }
                 }
             }
-            if let Some(i) = target_idx {
-                if let Some(rt) = chat.history_cells[i]
+            if let Some(i) = target_idx
+                && let Some(rt) = chat.history_cells[i]
                     .as_any()
                     .downcast_ref::<history_cell::RunningToolCallCell>()
                 {
                     let completed = rt.finalize_web_search(false, query_opt);
                     chat.history_replace_at(i, Box::new(completed));
                 }
-            }
             chat.tools_state.running_web_search.remove(&call_id);
         }
     }
@@ -229,17 +221,15 @@ pub(super) fn finalize_all_running_due_to_answer(chat: &mut ChatWidget<'_>) {
             continue;
         }
 
-        if let Some((agg_idx, entry_idx)) = explore_entry {
-            if *agg_idx < chat.history_cells.len() {
-                if let Some(agg) = chat.history_cells[*agg_idx]
+        if let Some((agg_idx, entry_idx)) = explore_entry
+            && *agg_idx < chat.history_cells.len()
+                && let Some(agg) = chat.history_cells[*agg_idx]
                     .as_any_mut()
                     .downcast_mut::<history_cell::ExploreAggregationCell>()
                 {
                     agg.update_status(*entry_idx, history_cell::ExploreEntryStatus::Success);
                     agg_was_updated = true;
                 }
-            }
-        }
 
         remove_after_finalize.push(call_id.clone());
     }
@@ -262,8 +252,8 @@ pub(super) fn finalize_all_running_due_to_answer(chat: &mut ChatWidget<'_>) {
             .map(|(k, entry)| (k.clone(), *entry))
             .collect();
         for (_k, entry) in entries {
-            if let Some(idx) = chat.resolve_running_tool_index(&entry) {
-                if idx < chat.history_cells.len() {
+            if let Some(idx) = chat.resolve_running_tool_index(&entry)
+                && idx < chat.history_cells.len() {
                     let completed = history_cell::new_completed_custom_tool_call(
                         "custom".to_string(),
                         None,
@@ -273,7 +263,6 @@ pub(super) fn finalize_all_running_due_to_answer(chat: &mut ChatWidget<'_>) {
                     );
                     chat.history_replace_at(idx, Box::new(completed));
                 }
-            }
         }
         chat.tools_state.running_custom_tools.clear();
         chat.invalidate_height_cache();
@@ -303,23 +292,20 @@ pub(super) fn finalize_all_running_due_to_answer(chat: &mut ChatWidget<'_>) {
                     if let Some(rt) = chat.history_cells[i]
                         .as_any()
                         .downcast_ref::<history_cell::RunningToolCallCell>()
-                    {
-                        if rt.has_title("Web Search...") {
+                        && rt.has_title("Web Search...") {
                             target_idx = Some(i);
                             break;
                         }
-                    }
                 }
             }
-            if let Some(i) = target_idx {
-                if let Some(rt) = chat.history_cells[i]
+            if let Some(i) = target_idx
+                && let Some(rt) = chat.history_cells[i]
                     .as_any()
                     .downcast_ref::<history_cell::RunningToolCallCell>()
                 {
                     let completed = rt.finalize_web_search(true, query_opt);
                     chat.history_replace_at(i, Box::new(completed));
                 }
-            }
             chat.tools_state.running_web_search.remove(&call_id);
         }
     }
@@ -353,9 +339,8 @@ pub(super) fn try_merge_completed_exec_at(chat: &mut ChatWidget<'_>, idx: usize)
     if let Some(prev_exec) = chat.history_cells[idx - 1]
         .as_any()
         .downcast_ref::<history_cell::ExecCell>()
-    {
-        if prev_exec.output.is_some() {
-            if to_kind(prev_exec) == new_kind {
+        && prev_exec.output.is_some()
+            && to_kind(prev_exec) == new_kind {
                 let mut merged = history_cell::MergedExecCell::from_exec(prev_exec);
                 if let Some(current_exec) = chat.history_cells[idx]
                     .as_any()
@@ -372,8 +357,6 @@ pub(super) fn try_merge_completed_exec_at(chat: &mut ChatWidget<'_>, idx: usize)
                 chat.app_event_tx.send(AppEvent::RequestRedraw);
                 return;
             }
-        }
-    }
 
     let mut did_merge_into_prev = false;
     if idx < chat.history_cells.len() {
@@ -381,16 +364,13 @@ pub(super) fn try_merge_completed_exec_at(chat: &mut ChatWidget<'_>, idx: usize)
         if let Some(prev_merged) = left[idx - 1]
             .as_any_mut()
             .downcast_mut::<history_cell::MergedExecCell>()
-        {
-            if prev_merged.exec_kind() == new_kind {
-                if let Some(current_exec) =
+            && prev_merged.exec_kind() == new_kind
+                && let Some(current_exec) =
                     right[0].as_any().downcast_ref::<history_cell::ExecCell>()
                 {
                     prev_merged.push_exec(current_exec);
                     did_merge_into_prev = true;
                 }
-            }
-        }
     }
     if did_merge_into_prev {
         chat.history_remove_at(idx);
@@ -644,14 +624,13 @@ pub(super) fn handle_exec_end_now(
                 exit_code: Some(exit_code),
             },
         };
-        if agg_idx < chat.history_cells.len() {
-            if let Some(agg) = chat.history_cells[agg_idx]
+        if agg_idx < chat.history_cells.len()
+            && let Some(agg) = chat.history_cells[agg_idx]
                 .as_any_mut()
                 .downcast_mut::<history_cell::ExploreAggregationCell>()
             {
                 agg.update_status(entry_idx, status.clone());
             }
-        }
         if !chat
             .exec
             .running_commands
@@ -755,14 +734,13 @@ pub(super) fn handle_exec_end_now(
         }
     }
 
-    if !replaced {
-        if let Some(c) = completed_opt.take() {
+    if !replaced
+        && let Some(c) = completed_opt.take() {
             let key = ChatWidget::order_key_from_order_meta(order);
             let idx = chat.history_insert_with_key_global(Box::new(c), key);
             // Attempt standard merge with previous Exec if applicable.
             crate::chatwidget::exec_tools::try_merge_completed_exec_at(chat, idx);
         }
-    }
 
     if exit_code == 0 {
         chat.bottom_pane
@@ -780,8 +758,8 @@ pub(super) fn handle_exec_end_now(
 
     // === FORK-SPECIFIC: spec-auto guardrail completion handler ===
     // Check if this exec completion is for a spec-auto guardrail command
-    if let Some(ref state) = chat.spec_auto_state {
-        if let Some(ref wait) = state.waiting_guardrail {
+    if let Some(ref state) = chat.spec_auto_state
+        && let Some(ref wait) = state.waiting_guardrail {
             // Check if this is the guardrail we're waiting for
             // Project commands have call_id pattern: "project_cmd_spec_ops_*"
             if call_id.starts_with("project_cmd_spec_ops") {
@@ -810,7 +788,6 @@ pub(super) fn handle_exec_end_now(
                 }
             }
         }
-    }
     // === END FORK-SPECIFIC ===
 
     chat.maybe_hide_spinner();

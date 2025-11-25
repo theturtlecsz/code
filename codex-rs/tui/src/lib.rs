@@ -597,8 +597,8 @@ fn maybe_apply_terminal_theme_detection(config: &mut Config, theme_configured_ex
         .ok()
         .filter(|value| !value.is_empty());
 
-    if let Some(cached) = config.tui.cached_terminal_background.as_ref() {
-        if cached_background_matches_env(
+    if let Some(cached) = config.tui.cached_terminal_background.as_ref()
+        && cached_background_matches_env(
             cached,
             &term,
             &term_program,
@@ -612,7 +612,6 @@ fn maybe_apply_terminal_theme_detection(config: &mut Config, theme_configured_ex
             apply_detected_theme(theme, cached.is_dark);
             return;
         }
-    }
 
     match crate::terminal_info::detect_dark_terminal_background() {
         Some(detection) => {

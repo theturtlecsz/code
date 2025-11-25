@@ -68,8 +68,8 @@ pub fn handle_spec_status(widget: &mut ChatWidget, raw_args: String) {
 /// with ChatWidget (which has MCP manager access).
 pub fn halt_spec_auto_with_error(widget: &mut impl SpecKitContext, reason: String) {
     // Clean up active validate lifecycle state if present
-    if let Some(state) = widget.spec_auto_state().as_ref() {
-        if state.validate_lifecycle.active().is_some() {
+    if let Some(state) = widget.spec_auto_state().as_ref()
+        && state.validate_lifecycle.active().is_some() {
             // Clean up the validate lifecycle state (mark as cancelled)
             let _ = state
                 .validate_lifecycle
@@ -78,7 +78,6 @@ pub fn halt_spec_auto_with_error(widget: &mut impl SpecKitContext, reason: Strin
             // when called directly with ChatWidget. When called through trait, telemetry
             // is skipped since trait doesn't expose MCP manager access.
         }
-    }
 
     let resume_hint = widget
         .spec_auto_state()

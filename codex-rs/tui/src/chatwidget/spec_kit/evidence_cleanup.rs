@@ -259,7 +259,7 @@ fn archive_artifacts(
     for artifact in artifacts {
         by_spec
             .entry(artifact.spec_id.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(artifact);
     }
 

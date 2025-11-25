@@ -350,8 +350,8 @@ impl PagerView {
             .take(end.saturating_sub(start))
         {
             let mut line = src_line.clone();
-            if let Some(src) = src_idx.get(row).copied() {
-                if src >= hi_start && src < hi_end {
+            if let Some(src) = src_idx.get(row).copied()
+                && src >= hi_start && src < hi_end {
                     for (i, s) in line.spans.iter_mut().enumerate() {
                         s.style.add_modifier |= Modifier::REVERSED;
                         if !bold_done && i == 0 {
@@ -360,7 +360,6 @@ impl PagerView {
                         }
                     }
                 }
-            }
             out.push(line);
         }
         std::borrow::Cow::Owned(out)
@@ -400,11 +399,10 @@ impl TranscriptOverlay {
         let line2 = Rect::new(area.x, area.y.saturating_add(1), area.width, 1);
         render_key_hints(line1, buf, PAGER_KEY_HINTS);
         let mut pairs: Vec<(&str, &str)> = vec![("q", "quit"), ("Esc", "edit prev")];
-        if let Some((start, end)) = self.highlight_range {
-            if end > start {
+        if let Some((start, end)) = self.highlight_range
+            && end > start {
                 pairs.push(("⏎", "edit message"));
             }
-        }
         render_key_hints(line2, buf, &pairs);
     }
 

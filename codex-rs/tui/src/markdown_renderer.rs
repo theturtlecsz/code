@@ -225,7 +225,7 @@ impl MarkdownRenderer {
         }
 
         // Must have space after #
-        if !trimmed.chars().nth(level).map_or(false, |c| c == ' ') {
+        if (trimmed.chars().nth(level) != Some(' ')) {
             return None;
         }
 
@@ -308,11 +308,11 @@ impl MarkdownRenderer {
                             st.fg = Some(crate::colors::mix_toward(fg, content_fg, 0.30));
                             return Span::styled(s.content, st);
                         }
-                        return s;
+                        s
                     } else {
                         let mut st = s.style;
                         st.fg = Some(content_fg);
-                        return Span::styled(s.content, st);
+                        Span::styled(s.content, st)
                     }
                 })
                 .collect();
@@ -355,11 +355,11 @@ impl MarkdownRenderer {
                                 st.fg = Some(crate::colors::mix_toward(fg, content_fg, 0.30));
                                 return Span::styled(s.content, st);
                             }
-                            return s;
+                            s
                         } else {
                             let mut st = s.style;
                             st.fg = Some(content_fg);
-                            return Span::styled(s.content, st);
+                            Span::styled(s.content, st)
                         }
                     })
                     .collect();
@@ -505,8 +505,8 @@ impl MarkdownRenderer {
                         i += 5 + end + 6; // <sub> + content + </sub>
                         continue;
                     }
-                } else if let Some(inner) = rest.strip_prefix("<sup>") {
-                    if let Some(end) = inner.find("</sup>") {
+                } else if let Some(inner) = rest.strip_prefix("<sup>")
+                    && let Some(end) = inner.find("</sup>") {
                         if !current_text.is_empty() {
                             spans.push(Span::raw(current_text.clone()));
                             current_text.clear();
@@ -516,7 +516,6 @@ impl MarkdownRenderer {
                         i += 5 + end + 6; // <sup> + content + </sup>
                         continue;
                     }
-                }
             }
 
             // Check for inline code
@@ -649,11 +648,10 @@ impl MarkdownRenderer {
             // Autolink URLs and markdown links inside the accumulated spans.
             let mut linked = autolink_spans(std::mem::take(&mut self.current_line));
             // Apply first-sentence styling to the first rendered line.
-            if self.bold_first_sentence && !self.first_sentence_done {
-                if apply_first_sentence_style(&mut linked) {
+            if self.bold_first_sentence && !self.first_sentence_done
+                && apply_first_sentence_style(&mut linked) {
                     self.first_sentence_done = true;
                 }
-            }
             // If requested, gently tint inline code spans toward the provided
             // context text color so they blend better with the surrounding text.
             if let Some(target) = self.inline_code_tint_target {
@@ -992,8 +990,8 @@ fn parse_blockquotes(lines: &[&str]) -> Option<(usize, Vec<Line<'static>>)> {
         let content = t[idx..].to_string();
         if !first_content_seen {
             let trimmed = content.trim();
-            if let Some(inner) = trimmed.strip_prefix("[!") {
-                if let Some(end) = inner.find(']') {
+            if let Some(inner) = trimmed.strip_prefix("[!")
+                && let Some(end) = inner.find(']') {
                     let kind = inner[..end].to_ascii_uppercase();
                     match kind.as_str() {
                         "NOTE" => {
@@ -1018,7 +1016,7 @@ fn parse_blockquotes(lines: &[&str]) -> Option<(usize, Vec<Line<'static>>)> {
                         // Eagerly emit the label so the block never returns None
                         // even if there are no subsequent quoted lines.
                         if out.is_empty() {
-                            let label = format!("{}", k);
+                            let label = k.to_string();
                             out.push(Line::from(vec![Span::styled(
                                 label,
                                 Style::default()
@@ -1030,14 +1028,13 @@ fn parse_blockquotes(lines: &[&str]) -> Option<(usize, Vec<Line<'static>>)> {
                         continue;
                     }
                 }
-            }
             first_content_seen = true;
         }
 
         // For callouts, render a label line once
-        if let Some(ref kind) = callout_kind {
-            if out.is_empty() {
-                let label = format!("{}", kind);
+        if let Some(ref kind) = callout_kind
+            && out.is_empty() {
+                let label = kind.to_string();
                 out.push(Line::from(vec![Span::styled(
                     label,
                     Style::default()
@@ -1045,7 +1042,6 @@ fn parse_blockquotes(lines: &[&str]) -> Option<(usize, Vec<Line<'static>>)> {
                         .add_modifier(Modifier::BOLD),
                 )]));
             }
-        }
 
         // Render the quote content as raw literal text without interpreting
         // Markdown syntax inside the blockquote. This preserves the exact

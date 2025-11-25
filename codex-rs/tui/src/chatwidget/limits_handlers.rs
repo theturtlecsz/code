@@ -56,41 +56,36 @@ pub(super) fn handle_limits_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent) 
             true
         }
         KeyCode::Left | KeyCode::Char('[') => {
-            if let Some(overlay) = chat.limits.overlay.as_ref() {
-                if overlay.select_prev_tab() {
+            if let Some(overlay) = chat.limits.overlay.as_ref()
+                && overlay.select_prev_tab() {
                     chat.request_redraw();
                 }
-            }
             true
         }
         KeyCode::Right | KeyCode::Char(']') => {
-            if let Some(overlay) = chat.limits.overlay.as_ref() {
-                if overlay.select_next_tab() {
+            if let Some(overlay) = chat.limits.overlay.as_ref()
+                && overlay.select_next_tab() {
                     chat.request_redraw();
                 }
-            }
             true
         }
         KeyCode::Tab => {
             if key_event.modifiers.contains(KeyModifiers::SHIFT) {
-                if let Some(overlay) = chat.limits.overlay.as_ref() {
-                    if overlay.select_prev_tab() {
+                if let Some(overlay) = chat.limits.overlay.as_ref()
+                    && overlay.select_prev_tab() {
                         chat.request_redraw();
                     }
-                }
-            } else if let Some(overlay) = chat.limits.overlay.as_ref() {
-                if overlay.select_next_tab() {
+            } else if let Some(overlay) = chat.limits.overlay.as_ref()
+                && overlay.select_next_tab() {
                     chat.request_redraw();
                 }
-            }
             true
         }
         KeyCode::BackTab => {
-            if let Some(overlay) = chat.limits.overlay.as_ref() {
-                if overlay.select_prev_tab() {
+            if let Some(overlay) = chat.limits.overlay.as_ref()
+                && overlay.select_prev_tab() {
                     chat.request_redraw();
                 }
-            }
             true
         }
         KeyCode::Home => {

@@ -28,7 +28,7 @@ impl SpecKitCommand for SpecKitClarifyCommand {
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
-        let spec_id = args.trim().split_whitespace().next().unwrap_or("");
+        let spec_id = args.split_whitespace().next().unwrap_or("");
         if spec_id.is_empty() {
             widget.history_push(history_cell::new_error_event(
                 "Usage: /speckit.clarify SPEC-ID".to_string(),
@@ -73,7 +73,7 @@ impl SpecKitCommand for SpecKitAnalyzeCommand {
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
-        let spec_id = args.trim().split_whitespace().next().unwrap_or("");
+        let spec_id = args.split_whitespace().next().unwrap_or("");
         if spec_id.is_empty() {
             widget.history_push(history_cell::new_error_event(
                 "Usage: /speckit.analyze SPEC-ID".to_string(),
@@ -118,7 +118,7 @@ impl SpecKitCommand for SpecKitChecklistCommand {
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
-        let spec_id = args.trim().split_whitespace().next().unwrap_or("");
+        let spec_id = args.split_whitespace().next().unwrap_or("");
         if spec_id.is_empty() {
             widget.history_push(history_cell::new_error_event(
                 "Usage: /speckit.checklist SPEC-ID".to_string(),
@@ -404,9 +404,7 @@ fn display_analyze_results(
     }
 
     widget.history_push(history_cell::PlainHistoryCell::new(
-        vec![ratatui::text::Line::from(format!(
-            "\n💡 Cost savings: $0.80 (zero agents used)"
-        ))],
+        vec![ratatui::text::Line::from("\n💡 Cost savings: $0.80 (zero agents used)".to_string())],
         history_cell::HistoryCellType::Notice,
     ));
 }

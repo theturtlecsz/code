@@ -207,7 +207,6 @@ async fn call_ace_tool(
         "input": Value::Object(
             arguments
                 .into_iter()
-                .map(|(k, v)| (k, v))
                 .collect(),
         )
     });

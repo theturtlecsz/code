@@ -263,9 +263,8 @@ pub async fn wait_for_quality_gate_agents(
                         // SPEC-KIT-928: Record BOTH Completed and Failed (Failed agents now store output)
                         if (matches!(agent.status, AgentStatus::Completed | AgentStatus::Failed))
                             && !recorded_completions.contains(agent_id)
-                        {
-                            if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
-                                if let Some(result) = &agent.result {
+                            && let Ok(db) = super::consensus_db::ConsensusDb::init_default()
+                                && let Some(result) = &agent.result {
                                     let _ = db.record_agent_completion(agent_id, result);
                                     let status_str = match agent.status {
                                         AgentStatus::Completed => "completion",
@@ -280,8 +279,6 @@ pub async fn wait_for_quality_gate_agents(
                                     );
                                     recorded_completions.insert(agent_id.clone());
                                 }
-                            }
-                        }
                     }
                     _ => {
                         all_done = false;
@@ -295,7 +292,7 @@ pub async fn wait_for_quality_gate_agents(
         }
 
         // SPEC-KIT-928: Log which agents are still running (every 10 seconds)
-        if !still_running.is_empty() && start.elapsed().as_secs() % 10 == 0 {
+        if !still_running.is_empty() && start.elapsed().as_secs().is_multiple_of(10) {
             let running_summary: Vec<String> = still_running
                 .iter()
                 .map(|(id, status)| format!("{}... ({})", &id[..8], status))

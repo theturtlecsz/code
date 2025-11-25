@@ -122,7 +122,7 @@ TASK: Analyze this spec-kit execution and extract reusable patterns.
             prompt.push_str("\n### Error Traces\n```\n");
             for trace in &self.feedback.stack_traces {
                 prompt.push_str(trace);
-                prompt.push_str("\n");
+                prompt.push('\n');
             }
             prompt.push_str("```\n");
         }
@@ -206,11 +206,10 @@ pub fn should_reflect(feedback: &ExecutionFeedback) -> bool {
     }
 
     // Reflect on large changes (likely interesting patterns)
-    if let Some(diff) = &feedback.diff_stat {
-        if diff.files > 5 || diff.insertions > 200 {
+    if let Some(diff) = &feedback.diff_stat
+        && (diff.files > 5 || diff.insertions > 200) {
             return true;
         }
-    }
 
     // Skip routine successes (no patterns to extract)
     false

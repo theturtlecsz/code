@@ -187,7 +187,7 @@ fn mask_to_outline_fill_lines(
             else if border[y][x] && xi <= reveal_x_outline.max(reveal_x_fill) {
                 let base = gradient_multi(x as f32 / (w.max(1) as f32));
                 // marching ants along diagonals
-                let period = (2 * scale_or(scale, 4)) as usize; // ~scale-based speed/size
+                let period = 2 * scale_or(scale, 4); // ~scale-based speed/size
                 let on = ((x + y + (frame as usize)) % period) < (period / 2);
                 let c = if on { bump_rgb(base, 0.22) } else { base };
                 // Make outline very light in final state
@@ -249,7 +249,7 @@ fn mask_to_outline_fill_lines_with_alpha(
             else if border[y][x] && xi <= reveal_x_outline.max(reveal_x_fill) {
                 let base = gradient_multi(x as f32 / (w.max(1) as f32));
                 // marching ants along diagonals
-                let period = (2 * scale_or(scale, 4)) as usize; // ~scale-based speed/size
+                let period = 2 * scale_or(scale, 4); // ~scale-based speed/size
                 let on = ((x + y + (frame as usize)) % period) < (period / 2);
                 let c = if on { bump_rgb(base, 0.22) } else { base };
                 // Make outline very light in final state

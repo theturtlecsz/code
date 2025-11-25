@@ -77,7 +77,7 @@ impl PlainHistoryCell {
 
     fn ensure_layout(&self, requested_width: u16, effective_width: u16) {
         let mut cache = self.cached_layout.borrow_mut();
-        let needs_rebuild = cache.as_ref().map_or(true, |cached| {
+        let needs_rebuild = cache.as_ref().is_none_or(|cached| {
             cached.requested_width != requested_width || cached.effective_width != effective_width
         });
         if needs_rebuild {
@@ -127,7 +127,7 @@ impl PlainHistoryCell {
         if matches!(self.state.kind, HistoryCellType::User) {
             let block = Block::default().style(bg_style).padding(Padding {
                 left: 0,
-                right: crate::layout_consts::USER_HISTORY_RIGHT_PAD.into(),
+                right: crate::layout_consts::USER_HISTORY_RIGHT_PAD,
                 top: 0,
                 bottom: 0,
             });
@@ -187,11 +187,10 @@ impl HistoryCell for PlainHistoryCell {
         let theme = current_theme();
         let mut lines: Vec<Line<'static>> = Vec::new();
 
-        if !self.hide_header() {
-            if let Some(header) = self.header_line(&theme) {
+        if !self.hide_header()
+            && let Some(header) = self.header_line(&theme) {
                 lines.push(header);
             }
-        }
 
         lines.extend(message_lines_to_ratatui(self.state.body(), &theme));
         lines
@@ -203,7 +202,7 @@ impl HistoryCell for PlainHistoryCell {
 
     fn desired_height(&self, width: u16) -> u16 {
         let effective_width = if matches!(self.state.kind, HistoryCellType::User) {
-            width.saturating_sub(crate::layout_consts::USER_HISTORY_RIGHT_PAD.into())
+            width.saturating_sub(crate::layout_consts::USER_HISTORY_RIGHT_PAD)
         } else {
             width
         };
@@ -219,7 +218,7 @@ impl HistoryCell for PlainHistoryCell {
     fn render_with_skip(&self, area: Rect, buf: &mut Buffer, skip_rows: u16) {
         let requested_width = area.width;
         let effective_width = if matches!(self.state.kind, HistoryCellType::User) {
-            requested_width.saturating_sub(crate::layout_consts::USER_HISTORY_RIGHT_PAD.into())
+            requested_width.saturating_sub(crate::layout_consts::USER_HISTORY_RIGHT_PAD)
         } else {
             requested_width
         };

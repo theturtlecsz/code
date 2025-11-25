@@ -331,9 +331,7 @@ async fn fetch_agent_payloads_from_memory(
                                     db_err
                                 );
                             } else {
-                                info_lines.push(format!(
-                                    "  Stored raw output to DB (extraction_error column)"
-                                ));
+                                info_lines.push("  Stored raw output to DB (extraction_error column)".to_string());
                             }
                         }
                     }
@@ -449,15 +447,12 @@ async fn fetch_agent_payloads_from_filesystem(
                 let result_path = entry.path().join("result.txt");
 
                 // Only check recent result files (last 1 hour)
-                if let Ok(metadata) = std::fs::metadata(&result_path) {
-                    if let Ok(modified) = metadata.modified() {
-                        if let Ok(elapsed) = modified.elapsed() {
-                            if elapsed.as_secs() > 3600 {
+                if let Ok(metadata) = std::fs::metadata(&result_path)
+                    && let Ok(modified) = metadata.modified()
+                        && let Ok(elapsed) = modified.elapsed()
+                            && elapsed.as_secs() > 3600 {
                                 continue; // Skip old agents
                             }
-                        }
-                    }
-                }
 
                 scanned += 1;
 
@@ -470,9 +465,9 @@ async fn fetch_agent_payloads_from_filesystem(
                         Ok(extraction_result) => {
                             let json_val = extraction_result.json;
 
-                            if let Some(stage) = json_val.get("stage").and_then(|v| v.as_str()) {
-                                if stage.starts_with("quality-gate-") {
-                                    if let Some(agent) =
+                            if let Some(stage) = json_val.get("stage").and_then(|v| v.as_str())
+                                && stage.starts_with("quality-gate-")
+                                    && let Some(agent) =
                                         json_val.get("agent").and_then(|v| v.as_str())
                                     {
                                         // Match against expected_agents
@@ -497,8 +492,6 @@ async fn fetch_agent_payloads_from_filesystem(
                                             );
                                         }
                                     }
-                                }
-                            }
                         }
                         Err(e) => {
                             // SPEC-KIT-927: Store raw output on extraction failure
@@ -513,14 +506,12 @@ async fn fetch_agent_payloads_from_filesystem(
                                 .parent()
                                 .and_then(|p| p.file_name())
                                 .and_then(|n| n.to_str())
-                            {
-                                if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+                                && let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
                                     let error_msg = format!("{}", e);
                                     let _ = db
                                         .record_extraction_failure(agent_id, &content, &error_msg);
                                     tracing::debug!("Stored raw output to DB for {}", agent_id);
                                 }
-                            }
                         }
                     }
                 }

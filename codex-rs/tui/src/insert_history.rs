@@ -440,7 +440,7 @@ fn word_wrap_line(line: &Line, width: usize) -> Vec<Line<'static>> {
             || (only('_') && count('_') >= 3)
         {
             let hr = Line::from(Span::styled(
-                std::iter::repeat('─').take(width).collect::<String>(),
+                std::iter::repeat_n('─', width).collect::<String>(),
                 ratatui::style::Style::default().fg(crate::colors::assistant_hr()),
             ));
             return vec![hr];

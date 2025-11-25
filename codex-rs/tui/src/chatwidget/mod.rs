@@ -985,8 +985,8 @@ impl From<&str> for ExecCallId {
 }
 
 fn wait_target_from_params(params: Option<&String>, call_id: &str) -> String {
-    if let Some(raw) = params {
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(raw) {
+    if let Some(raw) = params
+        && let Ok(json) = serde_json::from_str::<serde_json::Value>(raw) {
             if let Some(for_value) = json.get("for").and_then(|v| v.as_str()) {
                 let cleaned = clean_wait_command(for_value);
                 if !cleaned.is_empty() {
@@ -997,7 +997,6 @@ fn wait_target_from_params(params: Option<&String>, call_id: &str) -> String {
                 return format!("call {}", cid);
             }
         }
-    }
     format!("call {}", call_id)
 }
 
@@ -1103,15 +1102,13 @@ impl ChatWidget<'_> {
 
         let mut completions: Vec<(String, ValidateRunCompletion)> = Vec::new();
         for (spec_id, lifecycle) in self.validate_lifecycles.clone() {
-            if let Some(info) = lifecycle.active() {
-                if info.mode == ValidateMode::Manual {
-                    if let Some(completion) =
+            if let Some(info) = lifecycle.active()
+                && info.mode == ValidateMode::Manual
+                    && let Some(completion) =
                         lifecycle.complete(&info.run_id, ValidateCompletionReason::Completed)
                     {
                         completions.push((spec_id.clone(), completion));
                     }
-                }
-            }
         }
 
         for (spec_id, completion) in completions {
@@ -1290,12 +1287,11 @@ impl ChatWidget<'_> {
         order: Option<&codex_core::protocol::OrderMeta>,
         tag: &'static str,
     ) {
-        if let Some(id) = id_for_replace.as_ref() {
-            if let Some(&idx) = self.system_cell_by_id.get(id) {
+        if let Some(id) = id_for_replace.as_ref()
+            && let Some(&idx) = self.system_cell_by_id.get(id) {
                 self.history_replace_at(idx, Box::new(cell));
                 return;
             }
-        }
         let key = self.system_order_key(placement, order);
         let pos = self.history_insert_with_key_global_tagged(Box::new(cell), key, tag);
         if let Some(id) = id_for_replace {
@@ -1470,14 +1466,13 @@ impl ChatWidget<'_> {
             c.as_any()
                 .downcast_ref::<crate::history_cell::CollapsibleReasoningCell>()
                 .is_some()
-        }) {
-            if let Some(rc) = self.history_cells[idx]
+        })
+            && let Some(rc) = self.history_cells[idx]
                 .as_any()
                 .downcast_ref::<crate::history_cell::CollapsibleReasoningCell>()
             {
                 rc.set_in_progress(true);
             }
-        }
     }
 
     fn apply_plan_terminal_title(&mut self, title: Option<String>) {
@@ -1810,14 +1805,12 @@ impl ChatWidget<'_> {
                 if text.is_empty() {
                     return;
                 }
-                if role == "user" {
-                    if let Some(expected) = self.pending_dispatched_user_messages.front() {
-                        if expected.trim() == text {
+                if role == "user"
+                    && let Some(expected) = self.pending_dispatched_user_messages.front()
+                        && expected.trim() == text {
                             self.pending_dispatched_user_messages.pop_front();
                             return;
                         }
-                    }
-                }
                 if text.starts_with("== System Status ==") {
                     return;
                 }
@@ -1834,12 +1827,11 @@ impl ChatWidget<'_> {
                         key,
                     );
 
-                    if let Some(front) = self.queued_user_messages.front() {
-                        if front.display_text.trim() == text.trim() {
+                    if let Some(front) = self.queued_user_messages.front()
+                        && front.display_text.trim() == text.trim() {
                             self.queued_user_messages.pop_front();
                             self.refresh_queued_user_messages();
                         }
-                    }
                 } else {
                     use crate::history_cell::HistoryCellType;
                     use crate::history_cell::PlainHistoryCell;
@@ -1863,7 +1855,7 @@ impl ChatWidget<'_> {
                     .unwrap_or_else(|_| arguments.clone());
                 let mut message = format!("🔧 Tool call: {}", name);
                 if !pretty_args.trim().is_empty() {
-                    message.push_str("\n");
+                    message.push('\n');
                     message.push_str(&pretty_args);
                 }
                 if !call_id.is_empty() {
@@ -1927,7 +1919,7 @@ impl ChatWidget<'_> {
                 }
                 if !call_id.is_empty() {
                     if !message.is_empty() {
-                        message.push_str("\n");
+                        message.push('\n');
                     }
                     message.push_str(&format!("call_id: {}", call_id));
                 }
@@ -2455,10 +2447,10 @@ impl ChatWidget<'_> {
             .lines()
             .map(|l| l.trim_end().to_string())
             .collect();
-        while _lines_tmp.first().map_or(false, |s| s.trim().is_empty()) {
+        while _lines_tmp.first().is_some_and(|s| s.trim().is_empty()) {
             _lines_tmp.remove(0);
         }
-        while _lines_tmp.last().map_or(false, |s| s.trim().is_empty()) {
+        while _lines_tmp.last().is_some_and(|s| s.trim().is_empty()) {
             _lines_tmp.pop();
         }
         display_text = _lines_tmp.join("\n");
@@ -2535,17 +2527,15 @@ impl ChatWidget<'_> {
 
         let mut has_wait_running = false;
         for entry in self.tools_state.running_custom_tools.values() {
-            if let Some(idx) = self.resolve_running_tool_index(entry) {
-                if let Some(cell) = self.history_cells.get(idx).and_then(|c| {
+            if let Some(idx) = self.resolve_running_tool_index(entry)
+                && let Some(cell) = self.history_cells.get(idx).and_then(|c| {
                     c.as_any()
                         .downcast_ref::<history_cell::RunningToolCallCell>()
-                }) {
-                    if cell.has_title("Waiting") {
+                })
+                    && cell.has_title("Waiting") {
                         has_wait_running = true;
                         break;
                     }
-                }
-            }
         }
 
         self.active_exec_cell = None;
@@ -2896,14 +2886,12 @@ impl ChatWidget<'_> {
             native_stream_content: String::new(),
             native_provider_history: std::collections::HashMap::new(),
         };
-        if let Ok(Some(active_id)) = auth_accounts::get_active_account_id(&config.codex_home) {
-            if let Ok(records) = account_usage::list_rate_limit_snapshots(&config.codex_home) {
-                if let Some(record) = records.into_iter().find(|r| r.account_id == active_id) {
+        if let Ok(Some(active_id)) = auth_accounts::get_active_account_id(&config.codex_home)
+            && let Ok(records) = account_usage::list_rate_limit_snapshots(&config.codex_home)
+                && let Some(record) = records.into_iter().find(|r| r.account_id == active_id) {
                     new_widget.rate_limit_primary_next_reset_at = record.primary_next_reset_at;
                     new_widget.rate_limit_secondary_next_reset_at = record.secondary_next_reset_at;
                 }
-            }
-        }
         // Seed footer access indicator based on current config
         new_widget.apply_access_mode_indicator_from_config();
         // Insert the welcome cell as top-of-first-request so future model output
@@ -2914,13 +2902,12 @@ impl ChatWidget<'_> {
         if config.experimental_resume.is_none() {
             w.history_push_top_next_req(history_cell::new_animated_welcome()); // tag: prelude
             let connecting_mcp = !w.config.mcp_servers.is_empty();
-            if !w.config.auto_upgrade_enabled {
-                if let Some(upgrade_cell) =
+            if !w.config.auto_upgrade_enabled
+                && let Some(upgrade_cell) =
                     history_cell::new_upgrade_prelude(w.latest_upgrade_version.as_deref())
                 {
                     w.history_push_top_next_req(upgrade_cell);
                 }
-            }
             w.history_push_top_next_req(history_cell::new_popular_commands_notice(
                 false,
                 w.latest_upgrade_version.as_deref(),
@@ -3158,14 +3145,12 @@ impl ChatWidget<'_> {
             native_stream_content: String::new(),
             native_provider_history: std::collections::HashMap::new(),
         };
-        if let Ok(Some(active_id)) = auth_accounts::get_active_account_id(&config.codex_home) {
-            if let Ok(records) = account_usage::list_rate_limit_snapshots(&config.codex_home) {
-                if let Some(record) = records.into_iter().find(|r| r.account_id == active_id) {
+        if let Ok(Some(active_id)) = auth_accounts::get_active_account_id(&config.codex_home)
+            && let Ok(records) = account_usage::list_rate_limit_snapshots(&config.codex_home)
+                && let Some(record) = records.into_iter().find(|r| r.account_id == active_id) {
                     w.rate_limit_primary_next_reset_at = record.primary_next_reset_at;
                     w.rate_limit_secondary_next_reset_at = record.secondary_next_reset_at;
                 }
-            }
-        }
         w.set_standard_terminal_mode(!config.tui.alternate_screen);
         if show_welcome {
             w.history_push_top_next_req(history_cell::new_animated_welcome());
@@ -3336,8 +3321,8 @@ impl ChatWidget<'_> {
     /// Defers reload if quality gate is active.
     pub(crate) fn poll_config_watcher(&mut self) {
         // SPEC-939: Poll config watcher for file changes
-        if let Some(ref mut watcher) = self.config_watcher {
-            if let Some(changed_paths) = watcher.check_for_changes() {
+        if let Some(ref mut watcher) = self.config_watcher
+            && let Some(changed_paths) = watcher.check_for_changes() {
                 // Defer reload if quality gate is active (SPEC-939 requirement)
                 if self.is_quality_gate_active() {
                     self.pending_config_reload = Some(changed_paths);
@@ -3346,7 +3331,6 @@ impl ChatWidget<'_> {
                     self.show_reload_prompt(changed_paths);
                 }
             }
-        }
     }
 
     /// Check for pending config reload after quality gate completes (SPEC-939 Component 1a).
@@ -3374,7 +3358,7 @@ impl ChatWidget<'_> {
         );
 
         // Use existing notification system to show prompt
-        let _ = self.app_event_tx.send_background_event(prompt);
+        self.app_event_tx.send_background_event(prompt);
 
         // TODO: Wire up Y/n input handler in future iteration
         // For now, auto-reload after notification
@@ -3386,7 +3370,7 @@ impl ChatWidget<'_> {
         match self.config.reload_from_file() {
             Ok(new_config) => {
                 self.config = new_config;
-                let _ = self
+                self
                     .app_event_tx
                     .send_background_event("✅ Config reloaded successfully".to_string());
                 tracing::info!("Config reloaded from disk");
@@ -3398,7 +3382,7 @@ impl ChatWidget<'_> {
             }
             Err(e) => {
                 let error_msg = format!("❌ Config reload failed: {}", e);
-                let _ = self.app_event_tx.send_background_event(error_msg.clone());
+                self.app_event_tx.send_background_event(error_msg.clone());
                 tracing::error!("Config reload failed: {}", e);
                 // Old config is preserved (automatic rollback behavior)
             }
@@ -3642,23 +3626,19 @@ impl ChatWidget<'_> {
             kind: KeyEventKind::Press | KeyEventKind::Repeat,
             ..
         } = key_event
-        {
-            if self.composer_is_empty() {
+            && self.composer_is_empty() {
                 layout_scroll::to_top(self);
                 return;
             }
-        }
         if let crossterm::event::KeyEvent {
             code: crossterm::event::KeyCode::End,
             kind: KeyEventKind::Press | KeyEventKind::Repeat,
             ..
         } = key_event
-        {
-            if self.composer_is_empty() {
+            && self.composer_is_empty() {
                 layout_scroll::to_bottom(self);
                 return;
             }
-        }
 
         match self.bottom_pane.handle_key_event(key_event) {
             InputResult::Submitted(text) => {
@@ -3679,11 +3659,10 @@ impl ChatWidget<'_> {
             InputResult::ScrollUp => {
                 // Only allow Up to navigate command history when the top view
                 // cannot be scrolled at all (no scrollback available).
-                if self.layout.last_max_scroll.get() == 0 {
-                    if self.bottom_pane.try_history_up() {
+                if self.layout.last_max_scroll.get() == 0
+                    && self.bottom_pane.try_history_up() {
                         return;
                     }
-                }
                 // Scroll up in chat history (increase offset, towards older content)
                 // Use last_max_scroll computed during the previous render to avoid overshoot
                 let new_offset = self
@@ -3712,11 +3691,9 @@ impl ChatWidget<'_> {
                 // Only allow Down to navigate command history when the top view
                 // cannot be scrolled at all (no scrollback available).
                 if self.layout.last_max_scroll.get() == 0 && self.bottom_pane.history_is_browsing()
-                {
-                    if self.bottom_pane.try_history_down() {
+                    && self.bottom_pane.try_history_down() {
                         return;
                     }
-                }
                 // Scroll down in chat history (decrease offset, towards bottom)
                 if self.layout.scroll_offset == 0 {
                     // Already at bottom: ensure spacer above input is enabled.
@@ -4048,10 +4025,10 @@ impl ChatWidget<'_> {
     fn bar_segment(value: u64, max: u64, width: usize) -> String {
         const FILL: &str = "▇";
         if max == 0 {
-            return format!("{}{}", FILL.repeat(1), " ".repeat(width.saturating_sub(1)));
+            return format!("{}{}", FILL, " ".repeat(width.saturating_sub(1)));
         }
         if value == 0 {
-            return format!("{}{}", FILL.repeat(1), " ".repeat(width.saturating_sub(1)));
+            return format!("{}{}", FILL, " ".repeat(width.saturating_sub(1)));
         }
         let ratio = value as f64 / max as f64;
         let filled = (ratio * width as f64).ceil().clamp(1.0, width as f64) as usize;
@@ -4288,12 +4265,11 @@ impl ChatWidget<'_> {
         // Determine insertion position across the entire history
         let mut pos = self.history_cells.len();
         for i in 0..self.history_cells.len() {
-            if let Some(existing) = self.cell_order_seq.get(i) {
-                if *existing > key {
+            if let Some(existing) = self.cell_order_seq.get(i)
+                && *existing > key {
                     pos = i;
                     break;
                 }
-            }
         }
 
         // Keep auxiliary order vector in lockstep with history before inserting
@@ -4446,8 +4422,8 @@ impl ChatWidget<'_> {
         let _ = self.history_insert_with_key_global_tagged(Box::new(cell), key, "epilogue");
 
         // SPEC-KIT QUALITY GATE: Trigger handler if in QualityGateExecuting AND not already processing
-        if let Some(state) = &self.spec_auto_state {
-            if let spec_kit::state::SpecAutoPhase::QualityGateExecuting { checkpoint, .. } =
+        if let Some(state) = &self.spec_auto_state
+            && let spec_kit::state::SpecAutoPhase::QualityGateExecuting { checkpoint, .. } =
                 state.phase
             {
                 // Only trigger if:
@@ -4461,7 +4437,6 @@ impl ChatWidget<'_> {
                     self.check_pending_config_reload();
                 }
             }
-        }
     }
     /// Insert a background event near the top of the current request so it appears
     /// before imminent provider output (e.g. Exec begin).
@@ -4656,7 +4631,7 @@ impl ChatWidget<'_> {
         let new_lines = self.history_cells[idx].display_lines();
         let new_header = new_lines
             .first()
-            .and_then(|l| l.spans.get(0))
+            .and_then(|l| l.spans.first())
             .map(|s| s.content.clone().to_string())
             .unwrap_or_default();
         if new_header.is_empty() {
@@ -4665,7 +4640,7 @@ impl ChatWidget<'_> {
         let prev_lines = self.history_cells[idx - 1].display_lines();
         let prev_header = prev_lines
             .first()
-            .and_then(|l| l.spans.get(0))
+            .and_then(|l| l.spans.first())
             .map(|s| s.content.clone().to_string())
             .unwrap_or_default();
         if new_header != prev_header {
@@ -4694,13 +4669,11 @@ impl ChatWidget<'_> {
         {
             body.pop();
         }
-        if let Some(first_line) = body.first_mut() {
-            if let Some(first_span) = first_line.spans.get_mut(0) {
-                if first_span.content == "  └ " || first_span.content == "└ " {
+        if let Some(first_line) = body.first_mut()
+            && let Some(first_span) = first_line.spans.get_mut(0)
+                && (first_span.content == "  └ " || first_span.content == "└ ") {
                     first_span.content = "  ".into();
                 }
-            }
-        }
         combined.extend(body);
         self.history_replace_at(
             idx - 1,
@@ -4909,8 +4882,8 @@ impl ChatWidget<'_> {
         }
 
         let stage_invocation = parse_spec_stage_invocation(original_trimmed);
-        if let Some(inv) = &stage_invocation {
-            if inv.consensus {
+        if let Some(inv) = &stage_invocation
+            && inv.consensus {
                 let mut sanitized = format!("/{} {}", inv.stage.command_name(), inv.spec_id);
                 if !inv.remainder.trim().is_empty() {
                     sanitized.push(' ');
@@ -4918,7 +4891,6 @@ impl ChatWidget<'_> {
                 }
                 text_only = sanitized;
             }
-        }
 
         let processed = crate::slash_command::process_slash_command_message(&text_only);
         match processed {
@@ -5034,7 +5006,7 @@ impl ChatWidget<'_> {
             }
             crate::slash_command::ProcessedCommand::SpecAuto(invocation) => {
                 // Delegate to spec-auto orchestrator (runs in visible conversation)
-                let prompt = format!("{}", invocation.spec_id);
+                let prompt = invocation.spec_id.to_string();
                 let expanded = codex_core::slash_commands::format_subagent_command(
                     "spec-auto",
                     &prompt,
@@ -5143,13 +5115,12 @@ impl ChatWidget<'_> {
                             );
 
                             // Save the first screenshot path and URL for display in the TUI
-                            if let Some(first_path) = screenshot_paths.first() {
-                                if let Ok(mut latest) = latest_browser_screenshot_clone.lock() {
+                            if let Some(first_path) = screenshot_paths.first()
+                                && let Ok(mut latest) = latest_browser_screenshot_clone.lock() {
                                     let url_string =
                                         url.clone().unwrap_or_else(|| "Browser".to_string());
                                     *latest = Some((first_path.clone(), url_string));
                                 }
-                            }
 
                             // Create screenshot items
                             let mut screenshot_items = Vec::new();
@@ -5746,7 +5717,7 @@ impl ChatWidget<'_> {
             let tx = self.app_event_tx.clone();
             tokio::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-                let _ = tx.send(AppEvent::UserMessageTimeout {
+                tx.send(AppEvent::UserMessageTimeout {
                     message_id: msg_id,
                     elapsed_ms: 10000,
                 });
@@ -5755,14 +5726,13 @@ impl ChatWidget<'_> {
 
         self.flush_pending_agent_notes();
 
-        if !display_text.is_empty() {
-            if let Err(e) = self
+        if !display_text.is_empty()
+            && let Err(e) = self
                 .codex_op_tx
                 .send(Op::AddToHistory { text: display_text })
             {
                 tracing::error!("failed to send AddHistory op: {e}");
             }
-        }
 
         self.request_redraw();
     }
@@ -5927,7 +5897,7 @@ impl ChatWidget<'_> {
             let tx = self.app_event_tx.clone();
             tokio::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-                let _ = tx.send(AppEvent::UserMessageTimeout {
+                tx.send(AppEvent::UserMessageTimeout {
                     message_id: msg_id,
                     elapsed_ms: 10000,
                 });
@@ -6056,11 +6026,10 @@ impl ChatWidget<'_> {
                     status
                 );
                 let mut body_lines = Vec::new();
-                if let Some(note) = note {
-                    if !note.is_empty() {
+                if let Some(note) = note
+                    && !note.is_empty() {
                         body_lines.push(note);
                     }
-                }
                 for artifact in artifacts {
                     if !artifact.summary.is_empty() {
                         body_lines.push(format!("{}: {}", artifact.kind, artifact.summary));
@@ -6171,8 +6140,8 @@ impl ChatWidget<'_> {
                 self.stream_state.seq_answer_final = Some(event.event_seq);
 
                 // SPEC-954-FIX: Update user cell OrderKey when first OrderMeta arrives
-                if let Some(om) = event.order.as_ref() {
-                    if let Some(cell_idx) = self.pending_user_cell_updates.remove(&id) {
+                if let Some(om) = event.order.as_ref()
+                    && let Some(cell_idx) = self.pending_user_cell_updates.remove(&id) {
                         if cell_idx < self.cell_order_seq.len() {
                             let old_key = self.cell_order_seq[cell_idx];
                             let new_key = OrderKey {
@@ -6210,7 +6179,6 @@ impl ChatWidget<'_> {
                             );
                         }
                     }
-                }
 
                 // Strict order for the stream id
                 let ok = match event.order.as_ref() {
@@ -6309,8 +6277,8 @@ impl ChatWidget<'_> {
                     return;
                 }
                 // SPEC-954-FIX: Update user cell OrderKey when first OrderMeta arrives
-                if let Some(om) = event.order.as_ref() {
-                    if let Some(cell_idx) = self.pending_user_cell_updates.remove(&id) {
+                if let Some(om) = event.order.as_ref()
+                    && let Some(cell_idx) = self.pending_user_cell_updates.remove(&id) {
                         if cell_idx < self.cell_order_seq.len() {
                             let old_key = self.cell_order_seq[cell_idx];
                             let new_key = OrderKey {
@@ -6351,7 +6319,6 @@ impl ChatWidget<'_> {
                             );
                         }
                     }
-                }
 
                 // Seed/refresh order key for this Answer stream id (must have OrderMeta)
                 let ok = match event.order.as_ref() {
@@ -6424,14 +6391,13 @@ impl ChatWidget<'_> {
                     c.as_any()
                         .downcast_ref::<history_cell::CollapsibleReasoningCell>()
                         .is_some()
-                }) {
-                    if let Some(reason) = self.history_cells[last]
+                })
+                    && let Some(reason) = self.history_cells[last]
                         .as_any()
                         .downcast_ref::<history_cell::CollapsibleReasoningCell>()
                     {
                         reason.set_in_progress(false);
                     }
-                }
                 self.mark_needs_redraw();
             }
             EventMsg::AgentReasoningDelta(AgentReasoningDeltaEvent { delta }) => {
@@ -6583,23 +6549,21 @@ impl ChatWidget<'_> {
                                 if let Some(rt) = self.history_cells[i]
                                     .as_any()
                                     .downcast_ref::<history_cell::RunningToolCallCell>(
-                                ) {
-                                    if rt.has_title("Web Search...") {
+                                )
+                                    && rt.has_title("Web Search...") {
                                         target_idx = Some(i);
                                         break;
                                     }
-                                }
                             }
                         }
-                        if let Some(i) = target_idx {
-                            if let Some(rt) = self.history_cells[i]
+                        if let Some(i) = target_idx
+                            && let Some(rt) = self.history_cells[i]
                                 .as_any()
                                 .downcast_ref::<history_cell::RunningToolCallCell>()
                             {
                                 let completed = rt.finalize_web_search(true, query_opt);
                                 self.history_replace_at(i, Box::new(completed));
                             }
-                        }
                         // Remove from running set
                         self.tools_state.running_web_search.remove(&call_id);
                     }
@@ -6704,14 +6668,13 @@ impl ChatWidget<'_> {
                     c.as_any()
                         .downcast_ref::<history_cell::CollapsibleReasoningCell>()
                         .is_some()
-                }) {
-                    if let Some(reason) = self.history_cells[last]
+                })
+                    && let Some(reason) = self.history_cells[last]
                         .as_any()
                         .downcast_ref::<history_cell::CollapsibleReasoningCell>()
                     {
                         reason.set_in_progress(false);
                     }
-                }
                 self.mark_needs_redraw();
             }
             EventMsg::TokenCount(event) => {
@@ -6859,16 +6822,14 @@ impl ChatWidget<'_> {
                         ExecOutputStream::Stdout => running.stdout.push_str(&chunk),
                         ExecOutputStream::Stderr => running.stderr.push_str(&chunk),
                     }
-                    if let Some(idx) = running.history_index {
-                        if idx < self.history_cells.len() {
-                            if let Some(exec) = self.history_cells[idx]
+                    if let Some(idx) = running.history_index
+                        && idx < self.history_cells.len()
+                            && let Some(exec) = self.history_cells[idx]
                                 .as_any_mut()
                                 .downcast_mut::<history_cell::ExecCell>()
                             {
                                 exec.update_stream_preview(&running.stdout, &running.stderr);
                             }
-                        }
-                    }
                     self.invalidate_height_cache();
                     self.autoscroll_if_near_bottom();
                     self.request_redraw();
@@ -7044,8 +7005,8 @@ impl ChatWidget<'_> {
                 self.flush_interrupt_queue();
                 // Show an active entry immediately for all custom tools so the user sees progress
                 let params_string = parameters.map(|p| p.to_string());
-                if tool_name == "wait" {
-                    if let Some(exec_call_id) =
+                if tool_name == "wait"
+                    && let Some(exec_call_id) =
                         wait_exec_call_id_from_params(params_string.as_ref())
                     {
                         self.tools_state
@@ -7056,17 +7017,15 @@ impl ChatWidget<'_> {
                             running.wait_active = true;
                             running.wait_notes.clear();
                             let history_index = running.history_index;
-                            if let Some(idx) = history_index {
-                                if idx < self.history_cells.len() {
-                                    if let Some(exec_cell) = self.history_cells[idx]
+                            if let Some(idx) = history_index
+                                && idx < self.history_cells.len()
+                                    && let Some(exec_cell) = self.history_cells[idx]
                                         .as_any_mut()
                                         .downcast_mut::<history_cell::ExecCell>(
                                     ) {
                                         exec_cell.set_waiting(true);
                                         exec_cell.clear_wait_notes();
                                     }
-                                }
-                            }
                         }
                         self.bottom_pane
                             .update_status_text("waiting for command".to_string());
@@ -7074,9 +7033,8 @@ impl ChatWidget<'_> {
                         self.request_redraw();
                         return;
                     }
-                }
-                if tool_name == "kill" {
-                    if let Some(exec_call_id) =
+                if tool_name == "kill"
+                    && let Some(exec_call_id) =
                         wait_exec_call_id_from_params(params_string.as_ref())
                     {
                         self.tools_state
@@ -7088,7 +7046,6 @@ impl ChatWidget<'_> {
                         self.request_redraw();
                         return;
                     }
-                }
                 // Animated running cell with live timer and formatted args
                 let cell = if tool_name.starts_with("browser_") {
                     history_cell::new_running_browser_tool_call(
@@ -7160,8 +7117,8 @@ impl ChatWidget<'_> {
                     Ok(content) => (true, content),
                     Err(error) => (false, error),
                 };
-                if tool_name == "wait" {
-                    if let Some(exec_call_id) = self
+                if tool_name == "wait"
+                    && let Some(exec_call_id) = self
                         .tools_state
                         .running_wait_tools
                         .remove(&ToolCallId(call_id.clone()))
@@ -7211,9 +7168,9 @@ impl ChatWidget<'_> {
                         }
 
                         let mut updated = false;
-                        if let Some(idx) = history_index {
-                            if idx < self.history_cells.len() {
-                                if let Some(exec_cell) = self.history_cells[idx]
+                        if let Some(idx) = history_index
+                            && idx < self.history_cells.len()
+                                && let Some(exec_cell) = self.history_cells[idx]
                                     .as_any_mut()
                                     .downcast_mut::<history_cell::ExecCell>()
                                 {
@@ -7232,10 +7189,8 @@ impl ChatWidget<'_> {
                                     }
                                     updated = true;
                                 }
-                            }
-                        }
-                        if !updated {
-                            if let Some(exec_cell) =
+                        if !updated
+                            && let Some(exec_cell) =
                                 self.history_cells.iter_mut().rev().find_map(|cell| {
                                     cell.as_any_mut().downcast_mut::<history_cell::ExecCell>()
                                 })
@@ -7254,7 +7209,6 @@ impl ChatWidget<'_> {
                                     exec_cell.push_wait_note(text, *is_error_note);
                                 }
                             }
-                        }
 
                         if success {
                             self.remove_background_completion_message(&call_id);
@@ -7272,7 +7226,6 @@ impl ChatWidget<'_> {
                         self.request_redraw();
                         return;
                     }
-                }
                 let running_entry = self
                     .tools_state
                     .running_custom_tools
@@ -7282,8 +7235,8 @@ impl ChatWidget<'_> {
                     .and_then(|entry| self.resolve_running_tool_index(entry));
 
                 if tool_name == "apply_patch" && success {
-                    if let Some(idx) = resolved_idx {
-                        if idx < self.history_cells.len() {
+                    if let Some(idx) = resolved_idx
+                        && idx < self.history_cells.len() {
                             let is_running_tool = self.history_cells[idx]
                                 .as_any()
                                 .downcast_ref::<history_cell::RunningToolCallCell>()
@@ -7292,7 +7245,6 @@ impl ChatWidget<'_> {
                                 self.history_remove_at(idx);
                             }
                         }
-                    }
                     self.bottom_pane
                         .update_status_text("responding".to_string());
                     self.maybe_hide_spinner();
@@ -7461,7 +7413,7 @@ impl ChatWidget<'_> {
                     let entry = self
                         .agent_runtime
                         .entry(agent.id.clone())
-                        .or_insert_with(AgentRuntime::default);
+                        .or_default();
                     entry.last_update = Some(now);
                     match parsed_status {
                         AgentStatus::Running => {
@@ -7526,9 +7478,9 @@ impl ChatWidget<'_> {
                         );
 
                         // Log completion check for spec-auto observability
-                        if let Some(state) = self.spec_auto_state.as_ref() {
-                            if let Some(run_id) = &state.run_id {
-                                if let Some(stage) = state.current_stage() {
+                        if let Some(state) = self.spec_auto_state.as_ref()
+                            && let Some(run_id) = &state.run_id
+                                && let Some(stage) = state.current_stage() {
                                     let completed_count = self
                                         .active_agents
                                         .iter()
@@ -7554,8 +7506,6 @@ impl ChatWidget<'_> {
                                         }
                                     );
                                 }
-                            }
-                        }
 
                         if !(any_tools_running || any_streaming) {
                             tracing::warn!(
@@ -8114,18 +8064,18 @@ impl ChatWidget<'_> {
             let conv_id = args.strip_prefix("kill ").unwrap().trim().to_string();
             tokio::spawn(async move {
                 let output = Self::kill_cli_session_impl(&conv_id).await;
-                let _ = app_tx.send(crate::app_event::AppEvent::SessionsCommandResult(output));
+                app_tx.send(crate::app_event::AppEvent::SessionsCommandResult(output));
             });
         } else if args == "kill-all" || args == "cleanup" {
             tokio::spawn(async move {
                 let output = Self::kill_all_cli_sessions_impl().await;
-                let _ = app_tx.send(crate::app_event::AppEvent::SessionsCommandResult(output));
+                app_tx.send(crate::app_event::AppEvent::SessionsCommandResult(output));
             });
         } else {
             // Default: list sessions
             tokio::spawn(async move {
                 let output = Self::list_cli_sessions_impl().await;
-                let _ = app_tx.send(crate::app_event::AppEvent::SessionsCommandResult(output));
+                app_tx.send(crate::app_event::AppEvent::SessionsCommandResult(output));
             });
         }
     }
@@ -8152,7 +8102,9 @@ impl ChatWidget<'_> {
         );
 
         // Format output
-        let output = if all_sessions.is_empty() {
+        
+
+        if all_sessions.is_empty() {
             "# Active CLI Sessions\n\nNo active sessions.".to_string()
         } else {
             let mut lines = vec!["# Active CLI Sessions\n".to_string()];
@@ -8211,9 +8163,7 @@ impl ChatWidget<'_> {
             lines.push("- `/sessions kill-all` - Kill all sessions".to_string());
 
             lines.join("\n")
-        };
-
-        output
+        }
     }
 
     /// Kill a specific CLI session (implementation)
@@ -8590,37 +8540,32 @@ impl ChatWidget<'_> {
     where
         F: FnOnce(&mut LoginAddAccountState),
     {
-        if let Some(weak) = &self.login_add_view_state {
-            if let Some(state_rc) = weak.upgrade() {
+        if let Some(weak) = &self.login_add_view_state
+            && let Some(state_rc) = weak.upgrade() {
                 f(&mut state_rc.borrow_mut());
                 self.request_redraw();
                 return true;
             }
-        }
         false
     }
 
     pub(crate) fn notify_login_chatgpt_started(&mut self, auth_url: String) {
         if self.with_login_add_view(|state| state.acknowledge_chatgpt_started(auth_url.clone())) {
-            return;
         }
     }
 
     pub(crate) fn notify_login_chatgpt_failed(&mut self, error: String) {
         if self.with_login_add_view(|state| state.acknowledge_chatgpt_failed(error.clone())) {
-            return;
         }
     }
 
     pub(crate) fn notify_login_chatgpt_complete(&mut self, result: Result<(), String>) {
         if self.with_login_add_view(|state| state.on_chatgpt_complete(result.clone())) {
-            return;
         }
     }
 
     pub(crate) fn notify_login_chatgpt_cancelled(&mut self) {
         if self.with_login_add_view(|state| state.cancel_chatgpt_wait()) {
-            return;
         }
     }
 
@@ -8628,19 +8573,16 @@ impl ChatWidget<'_> {
     #[allow(dead_code)] // Used by event handler when OAuth flow fails
     pub(crate) fn notify_login_claude_failed(&mut self, error: String) {
         if self.with_login_add_view(|state| state.on_claude_failed(error.clone())) {
-            return;
         }
     }
 
     pub(crate) fn notify_login_claude_complete(&mut self, result: Result<(), String>) {
         if self.with_login_add_view(|state| state.on_claude_complete(result.clone())) {
-            return;
         }
     }
 
     pub(crate) fn notify_login_claude_cancelled(&mut self) {
         if self.with_login_add_view(|state| state.on_claude_cancelled()) {
-            return;
         }
     }
 
@@ -8648,19 +8590,16 @@ impl ChatWidget<'_> {
     #[allow(dead_code)] // Used by event handler when OAuth flow fails
     pub(crate) fn notify_login_gemini_failed(&mut self, error: String) {
         if self.with_login_add_view(|state| state.on_gemini_failed(error.clone())) {
-            return;
         }
     }
 
     pub(crate) fn notify_login_gemini_complete(&mut self, result: Result<(), String>) {
         if self.with_login_add_view(|state| state.on_gemini_complete(result.clone())) {
-            return;
         }
     }
 
     pub(crate) fn notify_login_gemini_cancelled(&mut self) {
         if self.with_login_add_view(|state| state.on_gemini_cancelled()) {
-            return;
         }
     }
 
@@ -8764,7 +8703,7 @@ impl ChatWidget<'_> {
                 }
             }
             drop(state);
-            let _ = tx.send(AppEvent::RequestRedraw);
+            tx.send(AppEvent::RequestRedraw);
         });
     }
 
@@ -8795,11 +8734,10 @@ impl ChatWidget<'_> {
                         continue;
                     }
                     let candidate = dir.join(cmd);
-                    if let Ok(meta) = std::fs::metadata(&candidate) {
-                        if meta.is_file() && (meta.permissions().mode() & 0o111 != 0) {
+                    if let Ok(meta) = std::fs::metadata(&candidate)
+                        && meta.is_file() && (meta.permissions().mode() & 0o111 != 0) {
                             return true;
                         }
-                    }
                 }
                 false
             }
@@ -8925,26 +8863,23 @@ impl ChatWidget<'_> {
                 );
             }
 
-            if let Some(progress) = info.last_progress.as_ref() {
-                if entry.last_progress.as_ref() != Some(progress) {
+            if let Some(progress) = info.last_progress.as_ref()
+                && entry.last_progress.as_ref() != Some(progress) {
                     entry.last_progress = Some(progress.clone());
                     entry.push_log(AgentLogKind::Progress, progress.clone());
                 }
-            }
 
-            if let Some(result) = info.result.as_ref() {
-                if entry.result.as_ref() != Some(result) {
+            if let Some(result) = info.result.as_ref()
+                && entry.result.as_ref() != Some(result) {
                     entry.result = Some(result.clone());
                     entry.push_log(AgentLogKind::Result, result.clone());
                 }
-            }
 
-            if let Some(error) = info.error.as_ref() {
-                if entry.error.as_ref() != Some(error) {
+            if let Some(error) = info.error.as_ref()
+                && entry.error.as_ref() != Some(error) {
                     entry.error = Some(error.clone());
                     entry.push_log(AgentLogKind::Error, error.clone());
                 }
-            }
         }
 
         if self.agents_terminal.selected_index >= self.agents_terminal.order.len()
@@ -9357,8 +9292,8 @@ impl ChatWidget<'_> {
         let mut needs_redraw = false;
         let visible = self.terminal.last_visible_rows.get();
         let visible_cols = self.terminal.last_visible_cols.get();
-        if let Some(overlay) = self.terminal.overlay_mut() {
-            if overlay.id == id {
+        if let Some(overlay) = self.terminal.overlay_mut()
+            && overlay.id == id {
                 if visible > 0 {
                     overlay.pty_rows = visible;
                 }
@@ -9372,7 +9307,6 @@ impl ChatWidget<'_> {
                 overlay.append_chunk(chunk, is_stderr);
                 needs_redraw = true;
             }
-        }
         if needs_redraw {
             self.request_redraw();
         }
@@ -9389,24 +9323,22 @@ impl ChatWidget<'_> {
     }
 
     pub(crate) fn terminal_apply_resize(&mut self, id: u64, rows: u16, cols: u16) {
-        if let Some(overlay) = self.terminal.overlay_mut() {
-            if overlay.id == id && overlay.update_pty_dimensions(rows, cols) {
+        if let Some(overlay) = self.terminal.overlay_mut()
+            && overlay.id == id && overlay.update_pty_dimensions(rows, cols) {
                 self.request_redraw();
             }
-        }
     }
 
     pub(crate) fn request_terminal_cancel(&mut self, id: u64) {
         let mut needs_redraw = false;
-        if let Some(overlay) = self.terminal.overlay_mut() {
-            if overlay.id == id {
+        if let Some(overlay) = self.terminal.overlay_mut()
+            && overlay.id == id {
                 overlay.push_info_message("Cancel requested…");
                 if overlay.running {
                     overlay.running = false;
                     needs_redraw = true;
                 }
             }
-        }
         if needs_redraw {
             self.request_redraw();
         }
@@ -9414,30 +9346,27 @@ impl ChatWidget<'_> {
     }
 
     pub(crate) fn terminal_update_message(&mut self, id: u64, message: String) {
-        if let Some(overlay) = self.terminal.overlay_mut() {
-            if overlay.id == id {
+        if let Some(overlay) = self.terminal.overlay_mut()
+            && overlay.id == id {
                 overlay.push_info_message(&message);
                 self.request_redraw();
             }
-        }
     }
 
     pub(crate) fn terminal_set_assistant_message(&mut self, id: u64, message: String) {
-        if let Some(overlay) = self.terminal.overlay_mut() {
-            if overlay.id == id {
+        if let Some(overlay) = self.terminal.overlay_mut()
+            && overlay.id == id {
                 overlay.push_assistant_message(&message);
                 self.request_redraw();
             }
-        }
     }
 
     pub(crate) fn terminal_set_command_display(&mut self, id: u64, command: String) {
-        if let Some(overlay) = self.terminal.overlay_mut() {
-            if overlay.id == id {
+        if let Some(overlay) = self.terminal.overlay_mut()
+            && overlay.id == id {
                 overlay.command_display = command;
                 self.request_redraw();
             }
-        }
     }
 
     pub(crate) fn terminal_prepare_command(
@@ -9447,12 +9376,11 @@ impl ChatWidget<'_> {
         ack: Sender<TerminalCommandGate>,
     ) {
         let mut updated = false;
-        if let Some(overlay) = self.terminal.overlay_mut() {
-            if overlay.id == id {
+        if let Some(overlay) = self.terminal.overlay_mut()
+            && overlay.id == id {
                 overlay.set_pending_command(suggestion, ack);
                 updated = true;
             }
-        }
         if updated {
             self.request_redraw();
         }
@@ -9631,15 +9559,14 @@ impl ChatWidget<'_> {
     }
 
     pub(crate) fn terminal_mark_running(&mut self, id: u64) {
-        if let Some(overlay) = self.terminal.overlay_mut() {
-            if overlay.id == id {
+        if let Some(overlay) = self.terminal.overlay_mut()
+            && overlay.id == id {
                 overlay.running = true;
                 overlay.exit_code = None;
                 overlay.duration = None;
                 overlay.start_time = Some(Instant::now());
                 self.request_redraw();
             }
-        }
     }
 
     pub(crate) fn terminal_finalize(
@@ -9654,8 +9581,8 @@ impl ChatWidget<'_> {
         let mut should_close = false;
         let mut take_after = false;
         let visible = self.terminal.last_visible_rows.get();
-        if let Some(overlay) = self.terminal.overlay_mut() {
-            if overlay.id == id {
+        if let Some(overlay) = self.terminal.overlay_mut()
+            && overlay.id == id {
                 overlay.cancel_pending_command();
                 if visible != overlay.visible_rows {
                     overlay.visible_rows = visible;
@@ -9674,7 +9601,6 @@ impl ChatWidget<'_> {
                 }
                 overlay.ensure_pending_command();
             }
-        }
         if take_after {
             after = self.terminal.after.take();
         }
@@ -9685,8 +9611,8 @@ impl ChatWidget<'_> {
             self.request_redraw();
         }
         if success {
-            if crate::updates::upgrade_ui_enabled() {
-                if let Some((pending_id, version)) = self.pending_upgrade_notice.take() {
+            if crate::updates::upgrade_ui_enabled()
+                && let Some((pending_id, version)) = self.pending_upgrade_notice.take() {
                     if pending_id == id {
                         self.bottom_pane
                             .flash_footer_notice(format!("Upgraded to {version}"));
@@ -9694,7 +9620,6 @@ impl ChatWidget<'_> {
                         self.pending_upgrade_notice = Some((pending_id, version));
                     }
                 }
-            }
             after
         } else {
             None
@@ -9704,15 +9629,14 @@ impl ChatWidget<'_> {
     pub(crate) fn terminal_prepare_rerun(&mut self, id: u64) -> bool {
         let mut reset = false;
         let visible = self.terminal.last_visible_rows.get();
-        if let Some(overlay) = self.terminal.overlay_mut() {
-            if overlay.id == id && !overlay.running {
+        if let Some(overlay) = self.terminal.overlay_mut()
+            && overlay.id == id && !overlay.running {
                 overlay.reset_for_rerun();
                 overlay.visible_rows = visible;
                 overlay.clamp_scroll();
                 overlay.ensure_pending_command();
                 reset = true;
             }
-        }
         if reset {
             self.request_redraw();
         }
@@ -9722,8 +9646,8 @@ impl ChatWidget<'_> {
     pub(crate) fn handle_terminal_approval_decision(&mut self, id: u64, approved: bool) {
         let pending = self.pending_manual_terminal.remove(&id);
         if approved {
-            if let Some(entry) = pending {
-                if self
+            if let Some(entry) = pending
+                && self
                     .terminal
                     .overlay()
                     .map(|overlay| overlay.id == id)
@@ -9740,7 +9664,6 @@ impl ChatWidget<'_> {
                     }
                     self.request_redraw();
                 }
-            }
             return;
         }
 
@@ -9819,8 +9742,8 @@ impl ChatWidget<'_> {
         let mut needs_redraw = false;
         let mut handled = false;
 
-        if let Some(overlay) = self.terminal.overlay_mut() {
-            if let Some(pending) = overlay.pending_command.as_mut() {
+        if let Some(overlay) = self.terminal.overlay_mut()
+            && let Some(pending) = overlay.pending_command.as_mut() {
                 match key_event.code {
                     KeyCode::Char(ch) => {
                         if key_event.modifiers.intersects(
@@ -9876,7 +9799,6 @@ impl ChatWidget<'_> {
                     _ => {}
                 }
             }
-        }
 
         if needs_redraw {
             self.request_redraw();
@@ -9926,12 +9848,11 @@ impl ChatWidget<'_> {
 
     pub(crate) fn terminal_scroll_to_top(&mut self) {
         let mut updated = false;
-        if let Some(overlay) = self.terminal.overlay_mut() {
-            if overlay.scroll != 0 {
+        if let Some(overlay) = self.terminal.overlay_mut()
+            && overlay.scroll != 0 {
                 overlay.scroll = 0;
                 updated = true;
             }
-        }
         if updated {
             self.request_redraw();
         }
@@ -10570,12 +10491,11 @@ impl ChatWidget<'_> {
             updated = true;
         }
 
-        if let Some(new_effort) = effort {
-            if self.config.model_reasoning_effort != new_effort {
+        if let Some(new_effort) = effort
+            && self.config.model_reasoning_effort != new_effort {
                 self.config.model_reasoning_effort = new_effort;
                 updated = true;
             }
-        }
 
         if updated {
             let op = Op::ConfigureSession {
@@ -10586,7 +10506,7 @@ impl ChatWidget<'_> {
                 model_text_verbosity: self.config.model_text_verbosity,
                 user_instructions: self.config.user_instructions.clone(),
                 base_instructions: self.config.base_instructions.clone(),
-                approval_policy: self.config.approval_policy.clone(),
+                approval_policy: self.config.approval_policy,
                 sandbox_policy: self.config.sandbox_policy.clone(),
                 disable_response_storage: self.config.disable_response_storage,
                 notify: self.config.notify.clone(),
@@ -10606,8 +10526,8 @@ impl ChatWidget<'_> {
         );
 
         // SPEC-KIT-952: Check CLI availability for CLI-routed providers
-        if ModelRouter::should_use_cli(&self.config.model) {
-            if let Err(msg) = ModelRouter::check_cli_availability(&self.config.model) {
+        if ModelRouter::should_use_cli(&self.config.model)
+            && let Err(msg) = ModelRouter::check_cli_availability(&self.config.model) {
                 // Show warning about CLI not being available
                 let provider_name = crate::model_router::provider_display_name(&self.config.model);
                 self.history_push(history_cell::PlainHistoryCell::new(
@@ -10619,7 +10539,6 @@ impl ChatWidget<'_> {
                     history_cell::HistoryCellType::Notice,
                 ));
             }
-        }
 
         self.request_redraw();
     }
@@ -10663,7 +10582,6 @@ impl ChatWidget<'_> {
                 self.config.model.clone(),
                 self.config.model_reasoning_effort,
             );
-            return;
         }
     }
 
@@ -10724,7 +10642,6 @@ impl ChatWidget<'_> {
             // No parameter specified, show interactive UI
             self.bottom_pane
                 .show_verbosity_selection(self.config.model_text_verbosity);
-            return;
         }
     }
 
@@ -10810,9 +10727,9 @@ impl ChatWidget<'_> {
 
         let variation_range = variation_percent * 2; // e.g., 100 for +/- 50%
         let variation = ((random_seed % variation_range) as i32 - variation_percent as i32)
-            * base_height as i32
+            * base_height
             / 100;
-        let height = ((base_height as i32 + variation).max(1) as u64).min(20);
+        let height = ((base_height + variation).max(1) as u64).min(20);
 
         // Check if any agents are completed
         let has_completed = self
@@ -10841,7 +10758,7 @@ impl ChatWidget<'_> {
             model_text_verbosity: self.config.model_text_verbosity,
             user_instructions: self.config.user_instructions.clone(),
             base_instructions: self.config.base_instructions.clone(),
-            approval_policy: self.config.approval_policy.clone(),
+            approval_policy: self.config.approval_policy,
             sandbox_policy: self.config.sandbox_policy.clone(),
             disable_response_storage: self.config.disable_response_storage,
             notify: self.config.notify.clone(),
@@ -10875,7 +10792,7 @@ impl ChatWidget<'_> {
             model_text_verbosity: new_verbosity,
             user_instructions: self.config.user_instructions.clone(),
             base_instructions: self.config.base_instructions.clone(),
-            approval_policy: self.config.approval_policy.clone(),
+            approval_policy: self.config.approval_policy,
             sandbox_policy: self.config.sandbox_policy.clone(),
             disable_response_storage: self.config.disable_response_storage,
             notify: self.config.notify.clone(),
@@ -11142,7 +11059,7 @@ impl ChatWidget<'_> {
             model_text_verbosity: self.config.model_text_verbosity,
             user_instructions: self.config.user_instructions.clone(),
             base_instructions: self.config.base_instructions.clone(),
-            approval_policy: self.config.approval_policy.clone(),
+            approval_policy: self.config.approval_policy,
             sandbox_policy: self.config.sandbox_policy.clone(),
             disable_response_storage: self.config.disable_response_storage,
             notify: self.config.notify.clone(),
@@ -11207,8 +11124,8 @@ impl ChatWidget<'_> {
     /// key so it appears above any imminent Exec/Tool cells in this request.
     fn set_access_status_message(&mut self, message: String) {
         let cell = crate::history_cell::new_background_event(message);
-        if let Some(idx) = self.access_status_idx {
-            if idx < self.history_cells.len()
+        if let Some(idx) = self.access_status_idx
+            && idx < self.history_cells.len()
                 && matches!(
                     self.history_cells[idx].kind(),
                     crate::history_cell::HistoryCellType::BackgroundEvent
@@ -11218,7 +11135,6 @@ impl ChatWidget<'_> {
                 self.request_redraw();
                 return;
             }
-        }
         // Insert new status near the top of this request window
         let key = self.near_time_key(None);
         let pos = self.history_insert_with_key_global_tagged(Box::new(cell), key, "background");
@@ -11440,7 +11356,7 @@ impl ChatWidget<'_> {
     pub(crate) fn undo_jump_back(&mut self) {
         if let Some(mut st) = self.pending_jump_back.take() {
             // Restore removed cells in original order
-            self.history_cells.extend(st.removed_cells.drain(..));
+            self.history_cells.append(&mut st.removed_cells);
             // Clear composer (no reliable way to restore prior text)
             self.insert_str("");
             self.request_redraw();
@@ -11761,10 +11677,10 @@ impl ChatWidget<'_> {
                     .set_reasoning_state(self.is_reasoning_shown());
                 // Route by id when provided to avoid splitting reasoning across cells.
                 // Be defensive: the cached index may be stale after inserts/removals; validate it.
-                if let Some(ref rid) = id {
-                    if let Some(&idx) = self.reasoning_index.get(rid) {
-                        if idx < self.history_cells.len() {
-                            if let Some(reasoning_cell) = self.history_cells[idx]
+                if let Some(ref rid) = id
+                    && let Some(&idx) = self.reasoning_index.get(rid) {
+                        if idx < self.history_cells.len()
+                            && let Some(reasoning_cell) = self.history_cells[idx]
                                 .as_any_mut()
                                 .downcast_mut::<history_cell::CollapsibleReasoningCell>(
                             ) {
@@ -11781,7 +11697,6 @@ impl ChatWidget<'_> {
                                 self.refresh_reasoning_collapsed_visibility();
                                 return;
                             }
-                        }
                         // Cached index was stale or wrong type — try to locate by scanning.
                         if let Some(found_idx) = self.history_cells.iter().rposition(|c| {
                             c.as_any()
@@ -11813,7 +11728,6 @@ impl ChatWidget<'_> {
                             self.reasoning_index.remove(rid);
                         }
                     }
-                }
 
                 tracing::debug!("Creating new CollapsibleReasoningCell id={:?}", id);
                 let cell = history_cell::CollapsibleReasoningCell::new_with_id(lines, id.clone());
@@ -11857,8 +11771,8 @@ impl ChatWidget<'_> {
                 // Any incoming Answer means reasoning is no longer bottom-most
                 self.clear_reasoning_in_progress();
                 // Keep a single StreamingContentCell and append to it
-                if let Some(last) = self.history_cells.last_mut() {
-                    if let Some(stream_cell) = last
+                if let Some(last) = self.history_cells.last_mut()
+                    && let Some(stream_cell) = last
                         .as_any_mut()
                         .downcast_mut::<history_cell::StreamingContentCell>()
                     {
@@ -11927,17 +11841,16 @@ impl ChatWidget<'_> {
                             return;
                         }
                     }
-                }
 
                 // If id is specified, try to locate an existing streaming cell with that id
-                if let Some(ref want) = id {
-                    if let Some(idx) = self.history_cells.iter().rposition(|c| {
+                if let Some(ref want) = id
+                    && let Some(idx) = self.history_cells.iter().rposition(|c| {
                         c.as_any()
                             .downcast_ref::<history_cell::StreamingContentCell>()
                             .map(|sc| sc.id.as_ref() == Some(want))
                             .unwrap_or(false)
-                    }) {
-                        if let Some(stream_cell) = self.history_cells[idx]
+                    })
+                        && let Some(stream_cell) = self.history_cells[idx]
                             .as_any_mut()
                             .downcast_mut::<history_cell::StreamingContentCell>(
                         ) {
@@ -11970,8 +11883,6 @@ impl ChatWidget<'_> {
                             self.request_redraw();
                             return;
                         }
-                    }
-                }
 
                 // Ensure a hidden 'codex' header is present
                 let has_header = lines
@@ -12118,19 +12029,18 @@ impl ChatWidget<'_> {
         }
         // If we already finalized this id in the current turn with identical content,
         // drop this event to avoid duplicates (belt-and-suspenders against upstream repeats).
-        if let Some(ref want) = id {
-            if self
+        if let Some(ref want) = id
+            && self
                 .stream_state
                 .closed_answer_ids
                 .contains(&StreamId(want.clone()))
-            {
-                if let Some(existing_idx) = self.history_cells.iter().rposition(|c| {
+                && let Some(existing_idx) = self.history_cells.iter().rposition(|c| {
                     c.as_any()
                         .downcast_ref::<history_cell::AssistantMarkdownCell>()
                         .map(|amc| amc.id.as_ref() == Some(want))
                         .unwrap_or(false)
-                }) {
-                    if let Some(amc) = self.history_cells[existing_idx]
+                })
+                    && let Some(amc) = self.history_cells[existing_idx]
                         .as_any()
                         .downcast_ref::<history_cell::AssistantMarkdownCell>()
                     {
@@ -12144,9 +12054,6 @@ impl ChatWidget<'_> {
                             return;
                         }
                     }
-                }
-            }
-        }
         // Ensure a hidden 'codex' header is present
         let has_header = lines
             .first()
@@ -12205,8 +12112,8 @@ impl ChatWidget<'_> {
         // No streaming cell found. First, try to replace a finalized assistant cell
         // that was created for the same stream id (e.g., we already finalized due to
         // a lifecycle event and this InsertFinalAnswer arrived slightly later).
-        if let Some(ref want) = id {
-            if let Some(idx) = self.history_cells.iter().rposition(|c| {
+        if let Some(ref want) = id
+            && let Some(idx) = self.history_cells.iter().rposition(|c| {
                 if let Some(amc) = c
                     .as_any()
                     .downcast_ref::<history_cell::AssistantMarkdownCell>()
@@ -12234,7 +12141,6 @@ impl ChatWidget<'_> {
                 self.autoscroll_if_near_bottom();
                 return;
             }
-        }
 
         // Otherwise, if a finalized assistant cell exists at the tail,
         // replace it in place to avoid duplicate assistant messages when a second
@@ -12243,8 +12149,8 @@ impl ChatWidget<'_> {
         //
         // SPEC-955 Session 2: Only use this fallback replacement when id is None.
         // When we have an explicit ID, we should create a new cell if no matching ID exists.
-        if id.is_none() {
-            if let Some(idx) = self.history_cells.iter().rposition(|c| {
+        if id.is_none()
+            && let Some(idx) = self.history_cells.iter().rposition(|c| {
                 c.as_any()
                     .downcast_ref::<history_cell::AssistantMarkdownCell>()
                     .is_some()
@@ -12285,7 +12191,6 @@ impl ChatWidget<'_> {
                     return;
                 }
             }
-        }
 
         // Fallback: no prior assistant cell found; insert at stable sequence position.
         tracing::debug!(
@@ -12335,9 +12240,7 @@ impl ChatWidget<'_> {
         for line in s.lines() {
             // Replace common Unicode bullets with ASCII to stabilize equality checks
             let line = line
-                .replace('\u{2022}', "-") // •
-                .replace('\u{25E6}', "-") // ◦
-                .replace('\u{2219}', "-"); // ∙
+                .replace(['\u{2022}', '\u{25E6}', '\u{2219}'], "-"); // ∙
             let trimmed = line.trim_end();
             if trimmed.chars().all(|c| c.is_whitespace()) {
                 if !saw_blank {
@@ -12686,7 +12589,6 @@ impl ChatWidget<'_> {
                 ));
                 // Offer launch options popup to help recover quickly
                 app_event_tx.send(AppEvent::ShowChromeOptions(port));
-                return;
             }
             Ok(result) => match result {
                 Ok(_) => {
@@ -12697,20 +12599,16 @@ impl ChatWidget<'_> {
                         codex_browser::global::get_last_connection().await;
                     // Prefer explicit port; otherwise try to parse from ws URL
                     let mut port_num: Option<u16> = detected_port;
-                    if port_num.is_none() {
-                        if let Some(ws) = &detected_ws {
+                    if port_num.is_none()
+                        && let Some(ws) = &detected_ws {
                             // crude parse: ws://host:port/...
-                            if let Some(after_scheme) = ws.split("//").nth(1) {
-                                if let Some(hostport) = after_scheme.split('/').next() {
-                                    if let Some(pstr) = hostport.split(':').nth(1) {
-                                        if let Ok(p) = pstr.parse::<u16>() {
+                            if let Some(after_scheme) = ws.split("//").nth(1)
+                                && let Some(hostport) = after_scheme.split('/').next()
+                                    && let Some(pstr) = hostport.split(':').nth(1)
+                                        && let Ok(p) = pstr.parse::<u16>() {
                                             port_num = Some(p);
                                         }
-                                    }
-                                }
-                            }
                         }
-                    }
 
                     // Try to capture current page URL (best-effort)
                     let current_url = browser_manager.get_current_url().await;
@@ -12774,7 +12672,7 @@ impl ChatWidget<'_> {
                                                 use codex_core::protocol::{
                                                     BrowserScreenshotUpdateEvent, Event, EventMsg,
                                                 };
-                                                let _ = app_event_tx_inner.send(
+                                                app_event_tx_inner.send(
                                                     AppEvent::CodexEvent(Event {
                                                         id: uuid::Uuid::new_v4().to_string(),
                                                         event_seq: 0,
@@ -12845,8 +12743,7 @@ impl ChatWidget<'_> {
                                             use codex_core::protocol::BrowserScreenshotUpdateEvent;
                                             use codex_core::protocol::Event;
                                             use codex_core::protocol::EventMsg;
-                                            let _ =
-                                                app_event_tx_bg.send(AppEvent::CodexEvent(Event {
+                                            app_event_tx_bg.send(AppEvent::CodexEvent(Event {
                                                     id: uuid::Uuid::new_v4().to_string(),
                                                     event_seq: 0,
                                                     msg: EventMsg::BrowserScreenshotUpdate(
@@ -12917,19 +12814,14 @@ impl ChatWidget<'_> {
                                 let (detected_port, detected_ws) =
                                     codex_browser::global::get_last_connection().await;
                                 let mut port_num: Option<u16> = detected_port;
-                                if port_num.is_none() {
-                                    if let Some(ws) = &detected_ws {
-                                        if let Some(after_scheme) = ws.split("//").nth(1) {
-                                            if let Some(hostport) = after_scheme.split('/').next() {
-                                                if let Some(pstr) = hostport.split(':').nth(1) {
-                                                    if let Ok(p) = pstr.parse::<u16>() {
+                                if port_num.is_none()
+                                    && let Some(ws) = &detected_ws
+                                        && let Some(after_scheme) = ws.split("//").nth(1)
+                                            && let Some(hostport) = after_scheme.split('/').next()
+                                                && let Some(pstr) = hostport.split(':').nth(1)
+                                                    && let Ok(p) = pstr.parse::<u16>() {
                                                         port_num = Some(p);
                                                     }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
                                 let current_url = browser_manager.get_current_url().await;
                                 let success_msg = match (port_num, current_url) {
                                     (Some(p), Some(url)) if !url.is_empty() => {
@@ -12979,7 +12871,7 @@ impl ChatWidget<'_> {
                                                                 *latest = Some((first_path.clone(), url_inner.clone()));
                                                             }
                                                             use codex_core::protocol::{BrowserScreenshotUpdateEvent, Event, EventMsg};
-                                                            let _ = app_event_tx_inner.send(AppEvent::CodexEvent(Event {
+                                                            app_event_tx_inner.send(AppEvent::CodexEvent(Event {
                                                                 id: uuid::Uuid::new_v4().to_string(),
                                                                 event_seq: 0,
                                                                 msg: EventMsg::BrowserScreenshotUpdate(BrowserScreenshotUpdateEvent {
@@ -13043,7 +12935,7 @@ impl ChatWidget<'_> {
                                                         use codex_core::protocol::BrowserScreenshotUpdateEvent;
                                                         use codex_core::protocol::Event;
                                                         use codex_core::protocol::EventMsg;
-                                                        let _ = app_event_tx_bg.send(AppEvent::CodexEvent(Event {
+                                                        app_event_tx_bg.send(AppEvent::CodexEvent(Event {
                                                             id: uuid::Uuid::new_v4().to_string(),
                                                             event_seq: 0,
                                                             msg: EventMsg::BrowserScreenshotUpdate(BrowserScreenshotUpdateEvent {
@@ -13073,7 +12965,6 @@ impl ChatWidget<'_> {
                                         }
                                     });
                                 }
-                                return;
                             }
                             Ok(Err(e2)) => {
                                 tracing::error!("[cdp] Fallback connect failed: {}", e2);
@@ -13083,7 +12974,6 @@ impl ChatWidget<'_> {
                                 ));
                                 // Also surface the Chrome launch options UI to assist the user
                                 app_event_tx.send(AppEvent::ShowChromeOptions(port));
-                                return;
                             }
                             Err(_) => {
                                 tracing::error!(
@@ -13096,7 +12986,6 @@ impl ChatWidget<'_> {
                                 ));
                                 // Also surface the Chrome launch options UI to assist the user
                                 app_event_tx.send(AppEvent::ShowChromeOptions(port));
-                                return;
                             }
                         }
                     } else {
@@ -13110,7 +12999,6 @@ impl ChatWidget<'_> {
                         ));
                         // Offer launch options popup to help recover quickly
                         app_event_tx.send(AppEvent::ShowChromeOptions(port));
-                        return;
                     }
                 }
             },
@@ -13390,7 +13278,7 @@ impl ChatWidget<'_> {
                                                 use codex_core::protocol::{
                                                     BrowserScreenshotUpdateEvent, EventMsg,
                                                 };
-                                                let _ = app_event_tx_inner.send(
+                                                app_event_tx_inner.send(
                                                     AppEvent::CodexEvent(Event {
                                                         id: uuid::Uuid::new_v4().to_string(),
                                                         event_seq: 0,
@@ -13452,7 +13340,7 @@ impl ChatWidget<'_> {
 
                                                 // Send update event
                                                 use codex_core::protocol::{BrowserScreenshotUpdateEvent, EventMsg};
-                                                let _ = app_event_tx_inner.send(AppEvent::CodexEvent(Event { id: uuid::Uuid::new_v4().to_string(), event_seq: 0, msg: EventMsg::BrowserScreenshotUpdate(BrowserScreenshotUpdateEvent {
+                                                app_event_tx_inner.send(AppEvent::CodexEvent(Event { id: uuid::Uuid::new_v4().to_string(), event_seq: 0, msg: EventMsg::BrowserScreenshotUpdate(BrowserScreenshotUpdateEvent {
                                                         screenshot_path: first_path.clone(),
                                                         url: url_inner,
                                                     }), order: None }));
@@ -13503,7 +13391,7 @@ impl ChatWidget<'_> {
                                         // Send update event
                                         use codex_core::protocol::BrowserScreenshotUpdateEvent;
                                         use codex_core::protocol::EventMsg;
-                                        let _ = app_event_tx.send(AppEvent::CodexEvent(Event {
+                                        app_event_tx.send(AppEvent::CodexEvent(Event {
                                             id: uuid::Uuid::new_v4().to_string(),
                                             event_seq: 0,
                                             msg: EventMsg::BrowserScreenshotUpdate(
@@ -14141,15 +14029,13 @@ impl ChatWidget<'_> {
                                         // If enabling, try to load its config from disk and add to in-memory map.
                                         if let Ok((enabled, _)) =
                                             codex_core::config::list_mcp_servers(&home)
-                                        {
-                                            if let Some((_, cfg)) =
+                                            && let Some((_, cfg)) =
                                                 enabled.into_iter().find(|(n, _)| n == name)
                                             {
                                                 self.config
                                                     .mcp_servers
                                                     .insert(name.to_string(), cfg);
                                             }
-                                        }
                                     }
                                     let msg = format!(
                                         "{} MCP server '{}'",
@@ -14394,7 +14280,7 @@ impl ChatWidget<'_> {
                         }
                         use codex_core::protocol::BrowserScreenshotUpdateEvent;
                         use codex_core::protocol::EventMsg;
-                        let _ = app_event_tx.send(AppEvent::CodexEvent(Event {
+                        app_event_tx.send(AppEvent::CodexEvent(Event {
                             id: uuid::Uuid::new_v4().to_string(),
                             event_seq: 0,
                             msg: EventMsg::BrowserScreenshotUpdate(BrowserScreenshotUpdateEvent {
@@ -14455,7 +14341,7 @@ impl ChatWidget<'_> {
     pub(crate) fn handle_chrome_command(&mut self, command_text: String) {
         tracing::info!("[cdp] handle_chrome_command start: '{}'", command_text);
         // Parse the chrome command arguments
-        let parts: Vec<&str> = command_text.trim().split_whitespace().collect();
+        let parts: Vec<&str> = command_text.split_whitespace().collect();
 
         // Handle empty command - just "/chrome"
         if parts.is_empty() || command_text.trim().is_empty() {
@@ -14580,7 +14466,7 @@ impl ChatWidget<'_> {
                             }
                             use codex_core::protocol::BrowserScreenshotUpdateEvent;
                             use codex_core::protocol::EventMsg;
-                            let _ = app_event_tx.send(AppEvent::CodexEvent(Event {
+                            app_event_tx.send(AppEvent::CodexEvent(Event {
                                 id: uuid::Uuid::new_v4().to_string(),
                                 event_seq: 0,
                                 msg: EventMsg::BrowserScreenshotUpdate(
@@ -14604,21 +14490,19 @@ impl ChatWidget<'_> {
             return;
         }
 
-        if let Some((h, p)) = first.rsplit_once(':') {
-            if let Ok(pn) = p.parse::<u16>() {
+        if let Some((h, p)) = first.rsplit_once(':')
+            && let Ok(pn) = p.parse::<u16>() {
                 host = Some(h.to_string());
                 port = Some(pn);
             }
-        }
         if host.is_none() && port.is_none() {
             if let Ok(pn) = first.parse::<u16>() {
                 port = Some(pn);
-            } else if parts.len() >= 2 {
-                if let Ok(pn) = parts[1].parse::<u16>() {
+            } else if parts.len() >= 2
+                && let Ok(pn) = parts[1].parse::<u16>() {
                     host = Some(first.to_string());
                     port = Some(pn);
                 }
-            }
         }
         tracing::info!("[cdp] parsed host={:?}, port={:?}", host, port);
         self.handle_chrome_connection(host, port);
@@ -14717,8 +14601,8 @@ impl ChatWidget<'_> {
         };
         self.submit_user_message(msg);
 
-        if let Some((spec_id, lifecycle, info, payload_hash)) = manual_validate_context {
-            if let Some(updated) = lifecycle.mark_dispatched(&info.run_id) {
+        if let Some((spec_id, lifecycle, info, payload_hash)) = manual_validate_context
+            && let Some(updated) = lifecycle.mark_dispatched(&info.run_id) {
                 spec_kit::record_validate_lifecycle_event(
                     self,
                     &spec_id,
@@ -14730,7 +14614,6 @@ impl ChatWidget<'_> {
                     ValidateLifecycleEvent::Dispatched,
                 );
             }
-        }
     }
 
     /// Submit prompt with ACE bullet injection (async)
@@ -14809,7 +14692,7 @@ impl ChatWidget<'_> {
             };
 
             // Submit via event
-            let _ = tx.send(crate::app_event::AppEvent::SubmitPreparedPrompt {
+            tx.send(crate::app_event::AppEvent::SubmitPreparedPrompt {
                 display,
                 prompt: enhanced_prompt,
             });
@@ -15124,8 +15007,8 @@ impl ChatWidget<'_> {
                 ));
             }
 
-            if include_branch {
-                if let Some(branch) = &branch_opt {
+            if include_branch
+                && let Some(branch) = &branch_opt {
                     spans.push(Span::styled(
                         "  •  ",
                         Style::default().fg(crate::colors::text_dim()),
@@ -15139,7 +15022,6 @@ impl ChatWidget<'_> {
                         Style::default().fg(crate::colors::success_green()),
                     ));
                 }
-            }
 
             // Footer already shows the Ctrl+R hint; avoid duplicating it here.
 
@@ -15945,7 +15827,7 @@ impl ChatWidget<'_> {
             // Switch cwd and optionally submit the task
             // Prefix the auto-submitted task so it's obvious it started in the new branch
             let initial_prompt = task_opt.map(|s| format!("[branch created] {}", s));
-            let _ = tx.send(AppEvent::SwitchCwd(worktree, initial_prompt));
+            tx.send(AppEvent::SwitchCwd(worktree, initial_prompt));
         });
     }
 
@@ -16043,26 +15925,22 @@ impl ChatWidget<'_> {
             )
         })?;
 
-        if let Some(raw_stage) = raw.stage.as_deref() {
-            if raw_stage != stage.command_name() {
+        if let Some(raw_stage) = raw.stage.as_deref()
+            && raw_stage != stage.command_name() {
                 return Err(format!(
                     "Consensus synthesis stage mismatch: expected {}, found {}",
                     stage.command_name(),
                     raw_stage
-                )
-                .into());
+                ));
             }
-        }
 
-        if let Some(raw_spec) = raw.spec_id.as_deref() {
-            if !raw_spec.eq_ignore_ascii_case(spec_id) {
+        if let Some(raw_spec) = raw.spec_id.as_deref()
+            && !raw_spec.eq_ignore_ascii_case(spec_id) {
                 return Err(format!(
                     "Consensus synthesis spec mismatch: expected {}, found {}",
                     spec_id, raw_spec
-                )
-                .into());
+                ));
             }
-        }
 
         Ok(Some(ConsensusSynthesisSummary {
             status: raw.status,
@@ -16473,8 +16351,8 @@ impl ChatWidget<'_> {
         let synthesis_filename = format!("{}_{}_synthesis.json", stage_name, slug);
         let synthesis_path = base.join(&synthesis_filename);
         let mut synthesis_written = false;
-        if let Some(existing) = verdict.synthesis_path.as_ref().map(|p| PathBuf::from(p)) {
-            if existing.exists() {
+        if let Some(existing) = verdict.synthesis_path.as_ref().map(|p| PathBuf::from(p))
+            && existing.exists() {
                 match fs::copy(&existing, &synthesis_path) {
                     Ok(_) => synthesis_written = true,
                     Err(err) => {
@@ -16487,7 +16365,6 @@ impl ChatWidget<'_> {
                     }
                 }
             }
-        }
 
         if !synthesis_written {
             let synthesis_payload = serde_json::json!({
@@ -16633,23 +16510,21 @@ impl ChatWidget<'_> {
             "recordedAt": verdict.recorded_at,
         });
 
-        if let Some(version) = verdict.prompt_version.as_ref() {
-            if let serde_json::Value::Object(obj) = &mut summary_value {
+        if let Some(version) = verdict.prompt_version.as_ref()
+            && let serde_json::Value::Object(obj) = &mut summary_value {
                 obj.insert(
                     "promptVersion".to_string(),
                     serde_json::Value::String(version.clone()),
                 );
             }
-        }
 
-        if let Some(path) = verdict.synthesis_path.as_ref() {
-            if let serde_json::Value::Object(obj) = &mut summary_value {
+        if let Some(path) = verdict.synthesis_path.as_ref()
+            && let serde_json::Value::Object(obj) = &mut summary_value {
                 obj.insert(
                     "synthesisPath".to_string(),
                     serde_json::Value::String(path.clone()),
                 );
             }
-        }
 
         let summary = serde_json::to_string(&summary_value)
             .map_err(|e| format!("failed to serialize consensus summary: {e}"))?;
@@ -16782,7 +16657,7 @@ impl ChatWidget<'_> {
             model_text_verbosity: self.config.model_text_verbosity,
             user_instructions: self.config.user_instructions.clone(),
             base_instructions: self.config.base_instructions.clone(),
-            approval_policy: self.config.approval_policy.clone(),
+            approval_policy: self.config.approval_policy,
             sandbox_policy: self.config.sandbox_policy.clone(),
             disable_response_storage: self.config.disable_response_storage,
             notify: self.config.notify.clone(),
@@ -16791,12 +16666,11 @@ impl ChatWidget<'_> {
         };
         self.submit_op(op);
 
-        if let Some(prompt) = initial_prompt {
-            if !prompt.is_empty() {
+        if let Some(prompt) = initial_prompt
+            && !prompt.is_empty() {
                 let preface = "[internal] When you finish this task, ask the user if they want any changes. If they are happy, offer to merge the branch back into the repository's default branch and delete the worktree. Use '/merge' (or an equivalent git worktree remove + switch) rather than deleting the folder directly so the UI can switch back cleanly. Wait for explicit confirmation before merging.".to_string();
                 self.submit_text_message_with_preface(prompt, preface);
             }
-        }
 
         self.request_redraw();
     }
@@ -16905,7 +16779,7 @@ impl ChatWidget<'_> {
                 handoff_reasons.push("could not determine default branch".to_string());
             }
 
-            let branch_label = format!("{}", branch_name);
+            let branch_label = branch_name.to_string();
             let root_display = git_root.display().to_string();
             let worktree_display = work_cwd.display().to_string();
             let tx_for_switch = tx.clone();
@@ -16959,9 +16833,8 @@ impl ChatWidget<'_> {
                         "Finalize branch '{}' via /merge (agent handoff)",
                         branch_label
                     );
-                    let _ =
-                        tx_for_switch.send(AppEvent::SwitchCwd(git_root_for_switch.clone(), None));
-                    let _ = tx.send(AppEvent::SubmitTextWithPreface { visible, preface });
+                    tx_for_switch.send(AppEvent::SwitchCwd(git_root_for_switch.clone(), None));
+                    tx.send(AppEvent::SubmitTextWithPreface { visible, preface });
                 };
 
             if !handoff_reasons.is_empty() {
@@ -16987,8 +16860,8 @@ impl ChatWidget<'_> {
                 .args(["commit", "-m", &format!("merge {branch_label} via /merge")])
                 .output()
                 .await;
-            if let Ok(o) = &commit_out {
-                if !o.status.success() {
+            if let Ok(o) = &commit_out
+                && !o.status.success() {
                     let stderr_s = String::from_utf8_lossy(&o.stderr);
                     let stdout_s = String::from_utf8_lossy(&o.stdout);
                     let benign = stdout_s.contains("nothing to commit")
@@ -17010,7 +16883,6 @@ impl ChatWidget<'_> {
                         return;
                     }
                 }
-            }
 
             let _ = Command::new("git")
                 .current_dir(&git_root)
@@ -17253,8 +17125,7 @@ impl ChatWidget<'_> {
                         .args(["worktree", "list", "--porcelain"])
                         .output()
                         .await
-                    {
-                        if wt.status.success() {
+                        && wt.status.success() {
                             let s = String::from_utf8_lossy(&wt.stdout);
                             let mut cur_path: Option<String> = None;
                             let mut cur_branch: Option<String> = None;
@@ -17267,17 +17138,15 @@ impl ChatWidget<'_> {
                                 if let Some(rest) = line.strip_prefix("branch ") {
                                     cur_branch = Some(rest.trim().to_string());
                                 }
-                                if let (Some(p), Some(b)) = (&cur_path, &cur_branch) {
-                                    if b == &format!("refs/heads/{}", default_branch)
+                                if let (Some(p), Some(b)) = (&cur_path, &cur_branch)
+                                    && b == &format!("refs/heads/{}", default_branch)
                                         && std::path::Path::new(p) != git_root.as_path()
                                     {
                                         hint = Some(p.clone());
                                         break;
                                     }
-                                }
                             }
                         }
-                    }
 
                     if let Some(h) = hint {
                         if note.is_empty() {
@@ -17400,14 +17269,14 @@ fn parse_spec_stage_invocation(input: &str) -> Option<SpecStageInvocation> {
             return None;
         }
 
-        let mut tokens = rest.split_whitespace();
+        let tokens = rest.split_whitespace();
         let mut consensus = false;
         let mut execute_consensus = false;
         let mut allow_conflict = false;
         let mut spec_id: Option<String> = None;
         let mut remainder_tokens: Vec<String> = Vec::new();
 
-        while let Some(token) = tokens.next() {
+        for token in tokens {
             if spec_id.is_none() && token.starts_with("--") {
                 match token {
                     "--consensus" => consensus = true,
@@ -18832,8 +18701,8 @@ impl ChatWidget<'_> {
         use ratatui::widgets::Borders;
         use ratatui::widgets::Widget;
 
-        if let Ok(screenshot_lock) = self.latest_browser_screenshot.lock() {
-            if let Some((screenshot_path, url)) = &*screenshot_lock {
+        if let Ok(screenshot_lock) = self.latest_browser_screenshot.lock()
+            && let Some((screenshot_path, url)) = &*screenshot_lock {
                 use ratatui::layout::Margin;
                 use ratatui::text::Line as RLine;
                 use ratatui::text::Span;
@@ -18895,7 +18764,6 @@ impl ChatWidget<'_> {
                 };
                 self.render_screenshot_highlevel(screenshot_path, body, buf);
             }
-        }
     }
 
     /// Render a collapsed header for the browser HUD with status (1 line + border)
@@ -18919,7 +18787,7 @@ impl ChatWidget<'_> {
         let title = format!(" {} ", self.browser_title());
         let is_active = url_opt.is_some();
         let summary = match url_opt {
-            Some(u) if !u.is_empty() => format!("{}", u),
+            Some(u) if !u.is_empty() => u.to_string(),
             _ => status_str,
         };
 
@@ -19281,8 +19149,8 @@ impl ChatWidget<'_> {
             (None, body)
         };
 
-        if let Some(area) = tabs_area {
-            if let Some(tabs) = overlay.tabs() {
+        if let Some(area) = tabs_area
+            && let Some(tabs) = overlay.tabs() {
                 let labels: Vec<String> = tabs
                     .iter()
                     .map(|tab| format!("  {}  ", tab.title))
@@ -19357,7 +19225,6 @@ impl ChatWidget<'_> {
                     }
                 }
             }
-        }
 
         let text_area = content_area;
 
@@ -19577,8 +19444,8 @@ impl ChatWidget<'_> {
                     AgentStatus::Failed => "failed".to_string(),
                 };
                 let mut label = format!("{} ({})", a.name, state);
-                if matches!(a.status, AgentStatus::Running) {
-                    if let Some(lp) = &a.last_progress {
+                if matches!(a.status, AgentStatus::Running)
+                    && let Some(lp) = &a.last_progress {
                         let mut lp_trim = lp.trim().to_string();
                         if lp_trim.len() > 60 {
                             lp_trim.truncate(60);
@@ -19586,7 +19453,6 @@ impl ChatWidget<'_> {
                         }
                         label.push_str(&format!(" — {}", lp_trim));
                     }
-                }
                 parts.push(label);
             }
             let extra = if count > 3 {
@@ -19840,14 +19706,13 @@ impl ChatWidget<'_> {
                 .agents_terminal
                 .selected_index
                 .min(self.agents_terminal.order.len().saturating_sub(1));
-            if let Some(selected_id) = self.agents_terminal.order.get(idx) {
-                if let Some(list_idx) = display_ids
+            if let Some(selected_id) = self.agents_terminal.order.get(idx)
+                && let Some(list_idx) = display_ids
                     .iter()
                     .position(|maybe_id| maybe_id.as_ref() == Some(selected_id))
                 {
                     list_state.select(Some(list_idx));
                 }
-            }
         }
 
         let sidebar_has_focus = self.agents_terminal.focus() == AgentsTerminalFocus::Sidebar;
@@ -20338,26 +20203,25 @@ impl ChatWidget<'_> {
                 let mut line_spans: Vec<Span> = Vec::new();
                 line_spans.push(Span::from(" "));
                 line_spans.push(Span::styled(
-                    format!("{}", agent.name),
+                    agent.name.to_string(),
                     Style::default()
                         .fg(crate::colors::text())
                         .add_modifier(Modifier::BOLD),
                 ));
-                if let Some(ref model) = agent.model {
-                    if !model.is_empty() {
+                if let Some(ref model) = agent.model
+                    && !model.is_empty() {
                         line_spans.push(Span::styled(
                             format!(" ({})", model),
                             Style::default().fg(crate::colors::text_dim()),
                         ));
                     }
-                }
                 line_spans.push(Span::from(": "));
                 line_spans.push(Span::styled(status_text, Style::default().fg(status_color)));
                 text_content.push(RLine::from(line_spans));
 
                 // For running agents, show latest progress hint if available
-                if matches!(agent.status, AgentStatus::Running) {
-                    if let Some(ref lp) = agent.last_progress {
+                if matches!(agent.status, AgentStatus::Running)
+                    && let Some(ref lp) = agent.last_progress {
                         let mut lp_trim = lp.trim().to_string();
                         if lp_trim.len() > 120 {
                             lp_trim.truncate(120);
@@ -20368,7 +20232,6 @@ impl ChatWidget<'_> {
                             Span::styled(lp_trim, Style::default().fg(crate::colors::text_dim())),
                         ]));
                     }
-                }
 
                 // For completed/failed agents, show their final message or error
                 match agent.status {
@@ -20723,8 +20586,8 @@ impl WidgetRef for &ChatWidget<'_> {
                             p.height_hits_total = p.height_hits_total.saturating_add(1);
                         }
                     }
-                    if layout_ref.freshly_computed {
-                        if let (true, Some(begin)) = (perf_enabled, start) {
+                    if layout_ref.freshly_computed
+                        && let (true, Some(begin)) = (perf_enabled, start) {
                             let dt = begin.elapsed().as_nanos();
                             let mut p = self.perf_state.stats.borrow_mut();
                             p.record_total(
@@ -20733,7 +20596,6 @@ impl WidgetRef for &ChatWidget<'_> {
                                 dt,
                             );
                         }
-                    }
                     let height = layout_ref.line_count().min(u16::MAX as usize) as u16;
                     default_layouts[idx] = Some(layout_ref.layout());
                     height
@@ -20765,8 +20627,8 @@ impl WidgetRef for &ChatWidget<'_> {
                         .downcast_ref::<crate::history_cell::CollapsibleReasoningCell>()
                         .map(|rc| rc.is_collapsed())
                         .unwrap_or(false);
-                    if this_is_collapsed_reasoning {
-                        if let Some(next_item) = all_content.get(idx + 1) {
+                    if this_is_collapsed_reasoning
+                        && let Some(next_item) = all_content.get(idx + 1) {
                             let next_is_collapsed_reasoning = next_item
                                 .as_any()
                                 .downcast_ref::<crate::history_cell::CollapsibleReasoningCell>()
@@ -20776,7 +20638,6 @@ impl WidgetRef for &ChatWidget<'_> {
                                 should_add_spacing = false;
                             }
                         }
-                    }
                 }
                 if should_add_spacing {
                     acc = acc.saturating_add(spacing);
@@ -20785,13 +20646,12 @@ impl WidgetRef for &ChatWidget<'_> {
             }
 
             let total = *ps.last().unwrap_or(&0);
-            if let Some(start) = total_start {
-                if self.perf_state.enabled {
+            if let Some(start) = total_start
+                && self.perf_state.enabled {
                     let mut p = self.perf_state.stats.borrow_mut();
                     p.ns_total_height =
                         p.ns_total_height.saturating_add(start.elapsed().as_nanos());
                 }
-            }
             // Update cache keys
             self.history_render
                 .last_prefix_width
@@ -20967,8 +20827,8 @@ impl WidgetRef for &ChatWidget<'_> {
                         p.height_hits_render = p.height_hits_render.saturating_add(1);
                     }
                 }
-                if layout_ref.freshly_computed {
-                    if let (true, Some(t0)) = (self.perf_state.enabled, timing) {
+                if layout_ref.freshly_computed
+                    && let (true, Some(t0)) = (self.perf_state.enabled, timing) {
                         let dt = t0.elapsed().as_nanos();
                         let mut p = self.perf_state.stats.borrow_mut();
                         p.record_render(
@@ -20977,7 +20837,6 @@ impl WidgetRef for &ChatWidget<'_> {
                             dt,
                         );
                     }
-                }
                 layout_for_render = Some(layout_ref.layout());
                 layout_ref.line_count().min(u16::MAX as usize) as u16
             } else {
@@ -21022,11 +20881,7 @@ impl WidgetRef for &ChatWidget<'_> {
                 }
             }
 
-            let skip_top = if content_y < scroll_pos {
-                scroll_pos - content_y
-            } else {
-                0
-            };
+            let skip_top = scroll_pos.saturating_sub(content_y);
 
             // Stop if we've gone past the bottom of the screen
             if screen_y >= content_area.y + content_area.height {
@@ -21186,7 +21041,7 @@ impl WidgetRef for &ChatWidget<'_> {
                         && item
                             .as_any()
                             .downcast_ref::<crate::history_cell::RunningToolCallCell>()
-                            .map_or(false, |cell| cell.has_title("Waiting"))
+                            .is_some_and(|cell| cell.has_title("Waiting"))
                     {
                         crate::colors::text_bright()
                     } else if matches!(symbol, "○" | "◔" | "◑" | "◕" | "●") {
@@ -21292,8 +21147,8 @@ impl WidgetRef for &ChatWidget<'_> {
                 }
 
                 // Debug: overlay order info on the spacing row below (or above if needed).
-                if self.show_order_overlay {
-                    if let Some(Some(info)) = self.cell_order_dbg.get(idx) {
+                if self.show_order_overlay
+                    && let Some(Some(info)) = self.cell_order_dbg.get(idx) {
                         let mut text = format!("⟦{}⟧", info);
                         // Live reasoning diagnostics: append current title detection snapshot
                         if let Some(rc) = item
@@ -21330,7 +21185,6 @@ impl WidgetRef for &ChatWidget<'_> {
                             }
                         }
                     }
-                }
                 screen_y += visible_height;
             }
 
@@ -21345,8 +21199,8 @@ impl WidgetRef for &ChatWidget<'_> {
                     .downcast_ref::<crate::history_cell::CollapsibleReasoningCell>()
                     .map(|rc| rc.is_collapsed())
                     .unwrap_or(false);
-                if this_is_collapsed_reasoning {
-                    if let Some(next_item) = all_content.get(idx + 1) {
+                if this_is_collapsed_reasoning
+                    && let Some(next_item) = all_content.get(idx + 1) {
                         let next_is_collapsed_reasoning = next_item
                             .as_any()
                             .downcast_ref::<crate::history_cell::CollapsibleReasoningCell>()
@@ -21356,21 +21210,18 @@ impl WidgetRef for &ChatWidget<'_> {
                             should_add_spacing = false;
                         }
                     }
-                }
             }
-            if should_add_spacing {
-                if screen_y < content_area.y + content_area.height {
+            if should_add_spacing
+                && screen_y < content_area.y + content_area.height {
                     screen_y += spacing
                         .min((content_area.y + content_area.height).saturating_sub(screen_y));
                 }
-            }
         }
-        if let Some(start) = render_loop_start {
-            if self.perf_state.enabled {
+        if let Some(start) = render_loop_start
+            && self.perf_state.enabled {
                 let mut p = self.perf_state.stats.borrow_mut();
                 p.ns_render_loop = p.ns_render_loop.saturating_add(start.elapsed().as_nanos());
             }
-        }
 
         // Clear any bottom gap inside the content area that wasn’t covered by items
         if screen_y < content_area.y + content_area.height {
@@ -21643,11 +21494,10 @@ impl WidgetRef for &ChatWidget<'_> {
 
                 let mut pending_visible = false;
                 let mut pending_box: Option<(Rect, Vec<RtLine<'static>>)> = None;
-                if let Some(pending) = overlay.pending_command.as_ref() {
-                    if let Some((pending_lines, pending_height)) =
+                if let Some(pending) = overlay.pending_command.as_ref()
+                    && let Some((pending_lines, pending_height)) =
                         pending_command_box_lines(pending, content.width)
-                    {
-                        if pending_height <= body_space && pending_height > 0 {
+                        && pending_height <= body_space && pending_height > 0 {
                             bottom_cursor = bottom_cursor.saturating_sub(pending_height);
                             let pending_area = Rect {
                                 x: content.x,
@@ -21659,8 +21509,6 @@ impl WidgetRef for &ChatWidget<'_> {
                             pending_box = Some((pending_area, pending_lines));
                             pending_visible = true;
                         }
-                    }
-                }
 
                 let body_area = Rect {
                     x: content.x,
@@ -22251,13 +22099,12 @@ fn coalesce_read_ranges_in_lines(lines: &mut Vec<ratatui::text::Line<'static>>) 
             let tail = &rest[idx + 1..];
             if tail.starts_with("(lines ") && tail.ends_with(")") {
                 let inner = &tail[7..tail.len() - 1];
-                if let Some((s1, s2)) = inner.split_once(" to ") {
-                    if let (Ok(start), Ok(end)) =
+                if let Some((s1, s2)) = inner.split_once(" to ")
+                    && let (Ok(start), Ok(end)) =
                         (s1.trim().parse::<u32>(), s2.trim().parse::<u32>())
                     {
                         return Some((fname, start, end, prefix));
                     }
-                }
             }
         }
         None
@@ -22272,8 +22119,8 @@ fn coalesce_read_ranges_in_lines(lines: &mut Vec<ratatui::text::Line<'static>>) 
         };
         let mut k = i + 1;
         while k < lines.len() {
-            if let Some((fname_b, b1, b2, _prefix_b)) = parse_read_line(&lines[k]) {
-                if fname_b == fname_a {
+            if let Some((fname_b, b1, b2, _prefix_b)) = parse_read_line(&lines[k])
+                && fname_b == fname_a {
                     let touch_or_overlap = b1 <= a2.saturating_add(1) && b2.saturating_add(1) >= a1;
                     if touch_or_overlap {
                         a1 = a1.min(b1);
@@ -22297,7 +22144,6 @@ fn coalesce_read_ranges_in_lines(lines: &mut Vec<ratatui::text::Line<'static>>) 
                         continue;
                     }
                 }
-            }
             k += 1;
         }
         i += 1;
@@ -22327,11 +22173,10 @@ impl ExecState {
         if self.suppressed_exec_end_call_ids.insert(call_id.clone()) {
             self.suppressed_exec_end_order.push_back(call_id);
             const MAX_TRACKED_SUPPRESSED_IDS: usize = 64;
-            if self.suppressed_exec_end_order.len() > MAX_TRACKED_SUPPRESSED_IDS {
-                if let Some(old) = self.suppressed_exec_end_order.pop_front() {
+            if self.suppressed_exec_end_order.len() > MAX_TRACKED_SUPPRESSED_IDS
+                && let Some(old) = self.suppressed_exec_end_order.pop_front() {
                     self.suppressed_exec_end_call_ids.remove(&old);
                 }
-            }
         }
     }
 
@@ -22665,11 +22510,10 @@ fn pending_command_box_lines(
                 Some(token) => spans.push(ratatui::text::Span::styled(token, cursor_style)),
                 None => spans.push(ratatui::text::Span::styled(" ", cursor_style)),
             }
-            if let Some(after_text) = after {
-                if !after_text.is_empty() {
+            if let Some(after_text) = after
+                && !after_text.is_empty() {
                     spans.push(ratatui::text::Span::styled(after_text, text_style));
                 }
-            }
         } else {
             spans.push(ratatui::text::Span::styled(line.text.clone(), text_style));
         }
@@ -22804,12 +22648,11 @@ impl ChatWidget<'_> {
                 Ok(changed) => {
                     if changed {
                         if enable {
-                            if let Ok((enabled, _)) = codex_core::config::list_mcp_servers(&home) {
-                                if let Some((_, cfg)) = enabled.into_iter().find(|(n, _)| n == name)
+                            if let Ok((enabled, _)) = codex_core::config::list_mcp_servers(&home)
+                                && let Some((_, cfg)) = enabled.into_iter().find(|(n, _)| n == name)
                                 {
                                     self.config.mcp_servers.insert(name.to_string(), cfg);
                                 }
-                            }
                         } else {
                             self.config.mcp_servers.remove(name);
                         }

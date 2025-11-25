@@ -218,8 +218,8 @@ impl LoginAccountsState {
             return;
         }
 
-        if let Some(api_key) = auth_json.openai_api_key.as_ref() {
-            if let Err(err) =
+        if let Some(api_key) = auth_json.openai_api_key.as_ref()
+            && let Err(err) =
                 auth_accounts::upsert_api_key_account(&self.codex_home, api_key.clone(), None, true)
             {
                 self.feedback = Some(Feedback {
@@ -227,7 +227,6 @@ impl LoginAccountsState {
                     is_error: true,
                 });
             }
-        }
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) {
@@ -270,13 +269,12 @@ impl LoginAccountsState {
                 }
             }
             KeyCode::Char('d') => {
-                if self.selected < account_count {
-                    if let Some(account) = self.accounts.get(self.selected) {
+                if self.selected < account_count
+                    && let Some(account) = self.accounts.get(self.selected) {
                         self.mode = ViewMode::ConfirmRemove {
                             account_id: account.id.clone(),
                         };
                     }
-                }
             }
             KeyCode::Char('r') => {
                 self.reload_accounts();
@@ -782,7 +780,7 @@ impl LoginAddAccountState {
 
     fn handle_paste(&mut self, text: String) -> ConditionalUpdate {
         if let AddStep::ApiKey { field } = &mut self.step {
-            let _ = field.handle_paste(text);
+            field.handle_paste(text);
             ConditionalUpdate::NeedsRedraw
         } else {
             ConditionalUpdate::NoRedraw
@@ -898,7 +896,7 @@ impl LoginAddAccountState {
             }
             AddStep::ApiKey { field } => {
                 lines.push(Line::from("Paste your OpenAI API key:"));
-                lines.push(Line::from(field.render_line()));
+                lines.push(field.render_line());
                 lines.push(Line::from(""));
                 lines.push(Line::from(vec![
                     Span::styled("Enter", Style::default().fg(crate::colors::success())),
@@ -1112,15 +1110,14 @@ impl AccountRow {
 
         let mut detail_parts: Vec<String> = Vec::new();
 
-        if let AuthMode::ChatGPT = account.mode {
-            if let Some(plan) = account
+        if let AuthMode::ChatGPT = account.mode
+            && let Some(plan) = account
                 .tokens
                 .as_ref()
                 .and_then(|t| t.id_token.get_chatgpt_plan_type())
             {
                 detail_parts.push(format!("{plan} Plan"));
             }
-        }
 
         if let Some(created_at) = account.created_at {
             detail_parts.push(format!("connected {}", format_timestamp(created_at)));

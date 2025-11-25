@@ -1360,12 +1360,11 @@ impl App<'_> {
                     // SPEC-KIT-920: Auto-submit initial command after first successful redraw
                     // This ensures the UI is fully initialized before commands execute,
                     // preventing output routing issues where build output gets piped into the input box.
-                    if !self.initial_command_dispatched {
-                        if let Some(cmd_text) = &self.initial_command {
+                    if !self.initial_command_dispatched
+                        && let Some(cmd_text) = &self.initial_command {
                             Self::dispatch_initial_command(&self.app_event_tx, cmd_text);
                             self.initial_command_dispatched = true;
                         }
-                    }
                 }
                 AppEvent::StartCommitAnimation => {
                     if self
@@ -1416,7 +1415,7 @@ impl App<'_> {
                     // releases can be dropped, and synthesize a press when a release arrives
                     // without a prior press.
                     if !self.enhanced_keys_supported {
-                        let key_code = key_event.code.clone();
+                        let key_code = key_event.code;
                         match key_event.kind {
                             KeyEventKind::Press | KeyEventKind::Repeat => {
                                 self.non_enhanced_pressed_keys.insert(key_code);
@@ -1504,8 +1503,8 @@ impl App<'_> {
                                     }
 
                                     // Step 3: backtrack via double‑Esc.
-                                    if let Some(prev) = self.last_esc_time {
-                                        if now.duration_since(prev) <= THRESHOLD {
+                                    if let Some(prev) = self.last_esc_time
+                                        && now.duration_since(prev) <= THRESHOLD {
                                             self.last_esc_time = None;
                                             if widget.has_pending_jump_back() {
                                                 widget.undo_jump_back();
@@ -1514,7 +1513,6 @@ impl App<'_> {
                                             }
                                             continue;
                                         }
-                                    }
                                     // First Esc in empty/idle state: show hint and arm timer.
                                     self.last_esc_time = Some(now);
                                     widget.show_esc_backtrack_hint();
@@ -1707,7 +1705,7 @@ impl App<'_> {
                     if let AppState::Chat { widget } = &mut self.app_state {
                         widget.register_approved_command(
                             command.clone(),
-                            match_kind.clone(),
+                            match_kind,
                             semantic_prefix.clone(),
                         );
                         if persist {
@@ -1715,7 +1713,7 @@ impl App<'_> {
                                 &self.config.codex_home,
                                 &self.config.cwd,
                                 &command,
-                                match_kind.clone(),
+                                match_kind,
                             ) {
                                 widget.history_push(history_cell::new_error_event(format!(
                                     "Failed to persist always-allow command: {err:#}",
@@ -1804,11 +1802,10 @@ impl App<'_> {
                     let mut remove_entry = false;
                     if let Some(run) = self.terminal_runs.get_mut(&id) {
                         let had_controller = run.controller.is_some();
-                        if let Some(tx) = run.cancel_tx.take() {
-                            if !tx.is_closed() {
+                        if let Some(tx) = run.cancel_tx.take()
+                            && !tx.is_closed() {
                                 let _ = tx.send(());
                             }
-                        }
                         run.running = false;
                         run.controller = None;
                         if let Some(writer_shared) = run.writer_tx.take() {
@@ -1852,16 +1849,14 @@ impl App<'_> {
                     self.start_terminal_run(id, command, Some(command_display), controller);
                 }
                 AppEvent::TerminalSendInput { id, data } => {
-                    if let Some(run) = self.terminal_runs.get_mut(&id) {
-                        if let Some(writer_shared) = run.writer_tx.as_ref() {
+                    if let Some(run) = self.terminal_runs.get_mut(&id)
+                        && let Some(writer_shared) = run.writer_tx.as_ref() {
                             let mut guard = writer_shared.lock().unwrap();
-                            if let Some(tx) = guard.as_ref() {
-                                if tx.send(data).is_err() {
+                            if let Some(tx) = guard.as_ref()
+                                && tx.send(data).is_err() {
                                     guard.take();
                                 }
-                            }
                         }
-                    }
                 }
                 AppEvent::TerminalResize { id, rows, cols } => {
                     if rows == 0 || cols == 0 {
@@ -1870,9 +1865,9 @@ impl App<'_> {
                     if let AppState::Chat { widget } = &mut self.app_state {
                         widget.terminal_apply_resize(id, rows, cols);
                     }
-                    if let Some(run) = self.terminal_runs.get(&id) {
-                        if let Some(pty) = run.pty.as_ref() {
-                            if let Ok(guard) = pty.lock() {
+                    if let Some(run) = self.terminal_runs.get(&id)
+                        && let Some(pty) = run.pty.as_ref()
+                            && let Ok(guard) = pty.lock() {
                                 let _ = guard.resize(PtySize {
                                     rows,
                                     cols,
@@ -1880,8 +1875,6 @@ impl App<'_> {
                                     pixel_height: 0,
                                 });
                             }
-                        }
-                    }
                 }
                 AppEvent::TerminalUpdateMessage { id, message } => {
                     if let AppState::Chat { widget } = &mut self.app_state {
@@ -1919,27 +1912,24 @@ impl App<'_> {
                     }
                 }
                 AppEvent::RequestValidationToolInstall { name, command } => {
-                    if let AppState::Chat { widget } = &mut self.app_state {
-                        if let Some(launch) = widget.launch_validation_tool_install(&name, &command)
+                    if let AppState::Chat { widget } = &mut self.app_state
+                        && let Some(launch) = widget.launch_validation_tool_install(&name, &command)
                         {
                             self.app_event_tx.send(AppEvent::OpenTerminal(launch));
                         }
-                    }
                 }
                 AppEvent::RunUpdateCommand {
                     command,
                     display,
                     latest_version,
                 } => {
-                    if crate::updates::upgrade_ui_enabled() {
-                        if let AppState::Chat { widget } = &mut self.app_state {
-                            if let Some(launch) =
+                    if crate::updates::upgrade_ui_enabled()
+                        && let AppState::Chat { widget } = &mut self.app_state
+                            && let Some(launch) =
                                 widget.launch_update_command(command, display, latest_version)
                             {
                                 self.app_event_tx.send(AppEvent::OpenTerminal(launch));
                             }
-                        }
-                    }
                 }
                 AppEvent::SetAutoUpgradeEnabled(enabled) => {
                     if crate::updates::upgrade_ui_enabled() {
@@ -1953,11 +1943,10 @@ impl App<'_> {
                     name,
                     selected_index,
                 } => {
-                    if let AppState::Chat { widget } = &mut self.app_state {
-                        if let Some(launch) = widget.launch_agent_install(name, selected_index) {
+                    if let AppState::Chat { widget } = &mut self.app_state
+                        && let Some(launch) = widget.launch_agent_install(name, selected_index) {
                             self.app_event_tx.send(AppEvent::OpenTerminal(launch));
                         }
-                    }
                 }
                 AppEvent::AgentsOverviewSelectionChanged { index } => {
                     if let AppState::Chat { widget } = &mut self.app_state {
@@ -1985,22 +1974,21 @@ impl App<'_> {
                 }
                 AppEvent::DispatchCommand(command, command_text) => {
                     // === FORK-SPECIFIC: Try spec-kit registry first ===
-                    if let AppState::Chat { widget } = &mut self.app_state {
-                        if spec_kit::try_dispatch_spec_kit_command(
+                    if let AppState::Chat { widget } = &mut self.app_state
+                        && spec_kit::try_dispatch_spec_kit_command(
                             widget,
                             &command_text,
                             &self.app_event_tx,
                         ) {
                             continue; // Command handled by spec-kit registry
                         }
-                    }
                     // === END FORK-SPECIFIC ===
 
                     // Persist UI-only slash commands to cross-session history.
                     // For prompt-expanding commands (/plan, /solve, /code) we let the
                     // expanded prompt be recorded by the normal submission path.
                     if !command.is_prompt_expanding() {
-                        let _ = self.app_event_tx.send(AppEvent::CodexOp(Op::AddToHistory {
+                        self.app_event_tx.send(AppEvent::CodexOp(Op::AddToHistory {
                             text: command_text.clone(),
                         }));
                     }
@@ -2235,7 +2223,7 @@ impl App<'_> {
                             if let AppState::Chat { widget } = &mut self.app_state {
                                 match widget.parse_pro_action(&command_args) {
                                     Ok(action) => {
-                                        let _ = self
+                                        self
                                             .app_event_tx
                                             .send(AppEvent::CodexOp(Op::Pro { action }));
                                     }
@@ -2993,15 +2981,13 @@ impl App<'_> {
                                 if let codex_protocol::models::ResponseItem::Message {
                                     role, ..
                                 } = it
-                                {
-                                    if role == "user" {
+                                    && role == "user" {
                                         user_seen += 1;
                                         if user_seen == nth {
                                             cut = idx;
                                             break;
                                         }
                                     }
-                                }
                             }
                             items.iter().take(cut).cloned().collect::<Vec<_>>()
                         };
@@ -3123,11 +3109,10 @@ impl App<'_> {
                     self.app_event_tx.send(AppEvent::CodexEvent(ev));
 
                     // Prefill composer with the edited text
-                    if let AppState::Chat { widget } = &mut self.app_state {
-                        if !prefill.is_empty() {
+                    if let AppState::Chat { widget } = &mut self.app_state
+                        && !prefill.is_empty() {
                             widget.insert_str(&prefill);
                         }
-                    }
                     self.app_event_tx.send(AppEvent::RequestRedraw);
                 }
                 AppEvent::ScheduleFrameIn(duration) => {
@@ -3618,8 +3603,8 @@ impl BufferDiffProfiler {
         let current_buffer = frame.buffer.clone();
         self.frame_seq = self.frame_seq.saturating_add(1);
 
-        if let Some(prev_buffer) = &self.prev {
-            if self.should_log_frame() {
+        if let Some(prev_buffer) = &self.prev
+            && self.should_log_frame() {
                 if prev_buffer.area != current_buffer.area {
                     tracing::info!(
                         target: "codex_tui::buffer_diff",
@@ -3724,14 +3709,13 @@ impl BufferDiffProfiler {
                     );
                 }
             }
-        }
 
         self.prev = Some(current_buffer);
     }
 
     fn should_log_frame(&self) -> bool {
         let interval = self.log_every.max(1) as u64;
-        interval == 1 || self.frame_seq % interval == 0
+        interval == 1 || self.frame_seq.is_multiple_of(interval)
     }
 }
 

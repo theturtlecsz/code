@@ -203,7 +203,7 @@ impl ThemeSelectionView {
         if matches!(self.mode, Mode::Themes) {
             let options = Self::get_theme_options();
             // Allow moving onto the extra pseudo-row
-            if self.selected_theme_index + 1 <= options.len() {
+            if self.selected_theme_index < options.len() {
                 self.selected_theme_index += 1;
                 if self.selected_theme_index < options.len() {
                     self.current_theme = options[self.selected_theme_index].0;
@@ -214,7 +214,7 @@ impl ThemeSelectionView {
         } else {
             let names = crate::spinner::spinner_names();
             // Allow moving onto the extra pseudo-row (Generate your own…)
-            if self.selected_spinner_index + 1 <= names.len() {
+            if self.selected_spinner_index < names.len() {
                 self.selected_spinner_index += 1;
                 if self.selected_spinner_index < names.len() {
                     if let Some(name) = names.get(self.selected_spinner_index) {
@@ -287,7 +287,7 @@ impl ThemeSelectionView {
                     return;
                 }
             };
-            let _ = rt.block_on(async move {
+            rt.block_on(async move {
                 // Load current config (CLI-style) and construct a one-off ModelClient
                 let cfg = match codex_core::config::Config::load_with_cli_overrides(vec![], codex_core::config::ConfigOverrides::default()) {
                     Ok(c) => c,
@@ -594,7 +594,7 @@ impl ThemeSelectionView {
                     return;
                 }
             };
-            let _ = rt.block_on(async move {
+            rt.block_on(async move {
                 let cfg = match codex_core::config::Config::load_with_cli_overrides(vec![], codex_core::config::ConfigOverrides::default()) {
                     Ok(c) => c,
                     Err(e) => { tx.send_background_event_before_next_output(format!("Config error: {}", e)); return; }
@@ -618,7 +618,7 @@ impl ThemeSelectionView {
                 // Prompt with example and detailed field usage to help the model choose appropriate colors
                 let developer = format!(
                     "You are designing a TUI color theme for a terminal UI.\n\nOutput: Strict JSON only. Include fields: `name` (string), `is_dark` (boolean), and `colors` (object of hex strings #RRGGBB).\n\nImportant rules:\n- Include EVERY `colors` key below. If you are not changing a value, copy it from the Current example.\n- Ensure strong contrast and readability for text vs background and for dim/bright variants.\n- Favor accessible color contrast (WCAG-ish) where possible.\n\nColor semantics (how the UI uses them):\n- background: main screen background.\n- foreground: primary foreground accents for widgets.\n- text: normal body text; must be readable on background.\n- text_dim: secondary/description text; slightly lower contrast than text.\n- text_bright: headings/emphasis; higher contrast than text.\n- primary: primary action/highlight color for selected items/buttons.\n- secondary: secondary accents (less prominent than primary).\n- border: container borders/dividers; should be visible but subtle against background.\n- border_focused: border when focused/active; slightly stronger than border.\n- selection: background for selected list rows; must contrast with text.\n- cursor: text caret color in input fields; must contrast with background.\n- success/warning/error/info: status badges and notices.\n- keyword/string/comment/function: syntax highlight accents in code blocks.\n- spinner: glyph color for loading animations; should be visible on background.\n- progress: progress-bar foreground color.\n\nCurrent theme example (copy unchanged values from here):\n{}",
-                    example.to_string()
+                    example
                 );
                 let mut input: Vec<codex_protocol::models::ResponseItem> = Vec::new();
                 input.push(codex_protocol::models::ResponseItem::Message { id: None, role: "developer".to_string(), content: vec![codex_protocol::models::ContentItem::InputText { text: developer }] });
@@ -1492,7 +1492,6 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                             s.prompt.pop();
                         }
                         CreateStep::Action | CreateStep::Review => {
-                            return;
                         }
                     }
                 } else if let Mode::CreateTheme(ref mut s) = self.mode {
@@ -1504,7 +1503,6 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                             s.prompt.pop();
                         }
                         CreateStep::Action | CreateStep::Review => {
-                            return;
                         }
                     }
                 }
@@ -2095,8 +2093,8 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                 // Exactly one blank line above Description
                 form_lines.push(Line::default());
                 // Show error above description if any
-                if let Some(last) = s.thinking_lines.borrow().last().cloned() {
-                    if last.starts_with("Error:") {
+                if let Some(last) = s.thinking_lines.borrow().last().cloned()
+                    && last.starts_with("Error:") {
                         form_lines.push(Line::from(Span::styled(
                             last,
                             Style::default().fg(crate::colors::error()),
@@ -2115,7 +2113,6 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                         }
                         form_lines.push(Line::default());
                     }
-                }
                 let caret = Span::styled("▏", Style::default().fg(theme.info));
                 let mut desc_spans: Vec<Span> = Vec::new();
                 desc_spans.push(Span::styled(
@@ -2349,8 +2346,8 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                 )));
                 form_lines.push(Line::default());
                 // If there was a recent error, show it once above description (with full raw output)
-                if let Some(last) = s.thinking_lines.borrow().last().cloned() {
-                    if last.starts_with("Error:") {
+                if let Some(last) = s.thinking_lines.borrow().last().cloned()
+                    && last.starts_with("Error:") {
                         form_lines.push(Line::from(Span::styled(
                             last,
                             Style::default().fg(crate::colors::error()),
@@ -2369,7 +2366,6 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                         }
                         form_lines.push(Line::default());
                     }
-                }
                 form_lines.push(Line::from(Span::styled(
                     "Code can generate a custom theme just for you!",
                     Style::default().fg(theme.text),

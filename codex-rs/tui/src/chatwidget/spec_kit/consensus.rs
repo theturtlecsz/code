@@ -648,8 +648,8 @@ pub(crate) fn load_latest_consensus_synthesis(
         )
     })?;
 
-    if let Some(raw_stage) = raw.stage.as_deref() {
-        if raw_stage != stage.command_name() {
+    if let Some(raw_stage) = raw.stage.as_deref()
+        && raw_stage != stage.command_name() {
             return Err(format!(
                 "Consensus synthesis stage mismatch: expected {}, found {}",
                 stage.command_name(),
@@ -657,17 +657,15 @@ pub(crate) fn load_latest_consensus_synthesis(
             )
             .into());
         }
-    }
 
-    if let Some(raw_spec) = raw.spec_id.as_deref() {
-        if !raw_spec.eq_ignore_ascii_case(spec_id) {
+    if let Some(raw_spec) = raw.spec_id.as_deref()
+        && !raw_spec.eq_ignore_ascii_case(spec_id) {
             return Err(format!(
                 "Consensus synthesis spec mismatch: expected {}, found {}",
                 spec_id, raw_spec
             )
             .into());
         }
-    }
 
     Ok(Some(ConsensusSynthesisSummary {
         status: raw.status,
@@ -765,11 +763,10 @@ pub async fn run_spec_consensus(
 
     if let Some(summary) = &synthesis_summary {
         synthesis_evidence_path = Some(summary.path.clone());
-        if let Some(version) = &summary.prompt_version {
-            if !version.trim().is_empty() {
+        if let Some(version) = &summary.prompt_version
+            && !version.trim().is_empty() {
                 prompt_version = version.clone();
             }
-        }
         agreements = summary.agreements.clone();
         conflicts = summary.conflicts.clone();
         missing_agents = summary.missing_agents.clone();
@@ -780,13 +777,13 @@ pub async fn run_spec_consensus(
     } else {
         has_conflict = !conflicts.is_empty();
         degraded = aggregator_summary.is_none() || !missing_agents.is_empty();
-        consensus_ok = !aggregator_summary.is_none()
+        consensus_ok = aggregator_summary.is_some()
             && conflicts.is_empty()
             && missing_agents.is_empty()
             && required_fields_ok;
     }
 
-    let consensus_ok = if consensus_ok { true } else { false };
+    let consensus_ok = consensus_ok;
     let has_conflict = if consensus_ok { false } else { has_conflict };
     let degraded = if consensus_ok { false } else { degraded };
 
@@ -1112,23 +1109,21 @@ pub(crate) async fn remember_consensus_verdict(
         "conflicts": verdict.conflicts,
     });
 
-    if let Some(version) = &verdict.prompt_version {
-        if let serde_json::Value::Object(obj) = &mut summary_value {
+    if let Some(version) = &verdict.prompt_version
+        && let serde_json::Value::Object(obj) = &mut summary_value {
             obj.insert(
                 "promptVersion".to_string(),
                 serde_json::Value::String(version.clone()),
             );
         }
-    }
 
-    if let Some(path) = &verdict.synthesis_path {
-        if let serde_json::Value::Object(obj) = &mut summary_value {
+    if let Some(path) = &verdict.synthesis_path
+        && let serde_json::Value::Object(obj) = &mut summary_value {
             obj.insert(
                 "synthesisPath".to_string(),
                 serde_json::Value::String(path.clone()),
             );
         }
-    }
 
     let summary = serde_json::to_string(&summary_value)
         .map_err(|e| SpecKitError::JsonSerialize { source: e })?;

@@ -126,15 +126,13 @@ impl SpecKitConfigValidator {
             if let Some(agent) = agents
                 .iter()
                 .find(|a| a.name.eq_ignore_ascii_case(critical))
-            {
-                if !agent.enabled {
+                && !agent.enabled {
                     warnings.push(ValidationError {
                         field: format!("agents.{}", critical),
                         issue: format!("Critical agent '{}' is disabled. Multi-agent consensus requires 3 agents.", critical),
                         severity: ValidationSeverity::Warning,
                     });
                 }
-            }
         }
     }
 

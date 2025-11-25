@@ -30,7 +30,7 @@ impl SpecKitCommand for VerifyCommand {
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
-        let parts: Vec<&str> = args.trim().split_whitespace().collect();
+        let parts: Vec<&str> = args.split_whitespace().collect();
 
         if parts.is_empty() {
             let error_msg = vec![Line::from("Usage: /speckit.verify SPEC-ID [--run-id UUID]")];
@@ -106,22 +106,18 @@ pub fn generate_verification_report(
     let mut lines = Vec::new();
 
     // Header
-    lines.push(format!(
-        "╔═══════════════════════════════════════════════════════════════╗"
-    ));
+    lines.push("╔═══════════════════════════════════════════════════════════════╗".to_string());
     lines.push(format!(
         "║ SPEC-KIT VERIFICATION REPORT: {}                          ║",
         spec_id
     ));
-    lines.push(format!(
-        "╚═══════════════════════════════════════════════════════════════╝"
-    ));
+    lines.push("╚═══════════════════════════════════════════════════════════════╝".to_string());
     lines.push(String::new());
 
     if let Some(rid) = run_id {
         lines.push(format!("Run ID: {} (full: {})", &rid[..8], rid));
     } else {
-        lines.push(format!("Run ID: Not specified (showing all runs)"));
+        lines.push("Run ID: Not specified (showing all runs)".to_string());
     }
     lines.push(String::new());
 
@@ -179,7 +175,7 @@ pub fn generate_verification_report(
 
         let status = if completed.is_some() { "✓" } else { "⏳" };
 
-        stage_data.entry(stage).or_insert_with(Vec::new).push((
+        stage_data.entry(stage).or_default().push((
             agent_name,
             phase_type,
             duration,
@@ -188,7 +184,7 @@ pub fn generate_verification_report(
     }
 
     // Display stage execution
-    lines.push(format!("═══ Stage Execution ═══"));
+    lines.push("═══ Stage Execution ═══".to_string());
     lines.push(String::new());
 
     let stage_order = vec![
@@ -233,7 +229,7 @@ pub fn generate_verification_report(
                 lines.push(format!("│  Output: {} (not found)", output_file));
             }
 
-            lines.push(format!("│"));
+            lines.push("│".to_string());
         }
     }
 
@@ -267,7 +263,7 @@ pub fn generate_verification_report(
         .query([])
         .map_err(|e| format!("Failed to execute synthesis query: {}", e))?;
 
-    lines.push(format!("═══ Synthesis Records ═══"));
+    lines.push("═══ Synthesis Records ═══".to_string());
     lines.push(String::new());
 
     let mut synthesis_count = 0;
@@ -289,13 +285,13 @@ pub fn generate_verification_report(
     }
 
     if synthesis_count == 0 {
-        lines.push(format!("  (No synthesis records found)"));
+        lines.push("  (No synthesis records found)".to_string());
     }
 
     lines.push(String::new());
 
     // Summary
-    lines.push(format!("═══ Summary ═══"));
+    lines.push("═══ Summary ═══".to_string());
     lines.push(String::new());
     lines.push(format!("Total Agents: {}", total_agents));
     lines.push(format!(
@@ -316,11 +312,9 @@ pub fn generate_verification_report(
     let has_synthesis = synthesis_count > 0;
 
     if all_complete && has_synthesis {
-        lines.push(format!("✅ PASS: Pipeline completed successfully"));
+        lines.push("✅ PASS: Pipeline completed successfully".to_string());
     } else if total_agents == 0 {
-        lines.push(format!(
-            "⚠️  WARNING: No agent executions found for this SPEC/run"
-        ));
+        lines.push("⚠️  WARNING: No agent executions found for this SPEC/run".to_string());
     } else {
         lines.push(format!(
             "⚠️  IN PROGRESS: {}/{} agents complete",
@@ -329,9 +323,7 @@ pub fn generate_verification_report(
     }
 
     lines.push(String::new());
-    lines.push(format!(
-        "═══════════════════════════════════════════════════════════════"
-    ));
+    lines.push("═══════════════════════════════════════════════════════════════".to_string());
 
     Ok(lines)
 }
@@ -376,14 +368,13 @@ fn get_file_size_fuzzy(cwd: &PathBuf, spec_id: &str, filename: &str) -> Option<u
 
     if let Ok(entries) = std::fs::read_dir(&docs_dir) {
         for entry in entries.flatten() {
-            if let Ok(file_name) = entry.file_name().into_string() {
-                if file_name.starts_with(spec_id) {
+            if let Ok(file_name) = entry.file_name().into_string()
+                && file_name.starts_with(spec_id) {
                     let file_path = entry.path().join(filename);
                     if let Ok(metadata) = std::fs::metadata(&file_path) {
                         return Some(metadata.len());
                     }
                 }
-            }
         }
     }
 

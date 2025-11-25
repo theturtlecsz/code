@@ -328,8 +328,8 @@ fn check_version_drift(
         .map_err(|e| SpecKitError::file_read(plan_path, e))?;
 
     // If PRD is newer than plan by more than 1 minute, flag it
-    if let Ok(duration) = prd_modified.duration_since(plan_modified) {
-        if duration.as_secs() > 60 {
+    if let Ok(duration) = prd_modified.duration_since(plan_modified)
+        && duration.as_secs() > 60 {
             issues.push(InconsistencyIssue {
                 id: format!("INC-{:03}", issues.len() + 1),
                 issue_type: "version_drift".to_string(),
@@ -347,7 +347,6 @@ fn check_version_drift(
                 ),
             });
         }
-    }
 
     Ok(())
 }

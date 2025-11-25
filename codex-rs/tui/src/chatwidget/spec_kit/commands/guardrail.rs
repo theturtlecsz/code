@@ -242,8 +242,8 @@ impl SpecKitCommand for GuardrailAutoCommand {
         let spec_id = parts.first().map(|s| s.to_string()).unwrap_or_default();
 
         let mut resume_from = crate::spec_prompts::SpecStage::Plan;
-        if let Some(pos) = parts.iter().position(|&p| p == "--from") {
-            if let Some(stage_str) = parts.get(pos + 1) {
+        if let Some(pos) = parts.iter().position(|&p| p == "--from")
+            && let Some(stage_str) = parts.get(pos + 1) {
                 resume_from = match *stage_str {
                     "tasks" => crate::spec_prompts::SpecStage::Tasks,
                     "implement" => crate::spec_prompts::SpecStage::Implement,
@@ -253,7 +253,6 @@ impl SpecKitCommand for GuardrailAutoCommand {
                     _ => crate::spec_prompts::SpecStage::Plan,
                 };
             }
-        }
 
         // Call native /speckit.auto implementation
         super::super::handler::handle_spec_auto(

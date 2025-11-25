@@ -115,7 +115,7 @@ impl PatternDetector {
                 severity: Severity::Critical,
                 pattern: "incomplete_marker".to_string(),
                 context: truncate_context(content, 80),
-                suggestion: Some(format!("Complete this requirement before implementation")),
+                suggestion: Some("Complete this requirement before implementation".to_string()),
             });
         }
     }
@@ -128,8 +128,8 @@ impl PatternDetector {
         issues: &mut Vec<Ambiguity>,
     ) {
         // Only flag if no metrics present in same line
-        if self.quantifier_ambiguity.is_match(content) && !has_metrics(content) {
-            if let Some(mat) = self.quantifier_ambiguity.find(content) {
+        if self.quantifier_ambiguity.is_match(content) && !has_metrics(content)
+            && let Some(mat) = self.quantifier_ambiguity.find(content) {
                 let word = mat.as_str();
                 issues.push(Ambiguity {
                     id: format!("AMB-{:03}", issues.len() + 1),
@@ -138,12 +138,9 @@ impl PatternDetector {
                     severity: Severity::Important,
                     pattern: "quantifier_ambiguity".to_string(),
                     context: truncate_context(content, 80),
-                    suggestion: Some(format!(
-                        "Add specific metric (e.g., '<100ms', '>1000 RPS', '<1MB memory')"
-                    )),
+                    suggestion: Some("Add specific metric (e.g., '<100ms', '>1000 RPS', '<1MB memory')".to_string()),
                 });
             }
-        }
     }
 
     /// Check for scope gaps

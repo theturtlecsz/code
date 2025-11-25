@@ -209,15 +209,14 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
                 }
 
                 // Check if we should run a quality checkpoint before this stage
-                if state.quality_gates_enabled {
-                    if let Some(checkpoint) =
+                if state.quality_gates_enabled
+                    && let Some(checkpoint) =
                         determine_quality_checkpoint(stage, &state.completed_checkpoints)
                     {
                         // Execute quality checkpoint instead of proceeding to guardrail
                         execute_quality_checkpoint(widget, checkpoint);
                         return;
                     }
-                }
 
                 match &state.phase {
                     SpecAutoPhase::Guardrail => {
@@ -243,8 +242,7 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
                             );
 
                             // Add visual boundary marker to TUI
-                            let marker_lines = vec![
-                                ratatui::text::Line::from(
+                            let marker_lines = [ratatui::text::Line::from(
                                     "════════════════════════════════════════",
                                 ),
                                 ratatui::text::Line::from(format!(
@@ -258,8 +256,7 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
                                 )),
                                 ratatui::text::Line::from(
                                     "════════════════════════════════════════",
-                                ),
-                            ];
+                                )];
                             // Store marker for display after this function returns
                             state.pending_prompt_summary = Some(
                                 marker_lines
@@ -322,8 +319,8 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
                 }
 
                 // Log run complete event
-                if let Some(state) = widget.spec_auto_state.as_ref() {
-                    if let Some(run_id) = &state.run_id {
+                if let Some(state) = widget.spec_auto_state.as_ref()
+                    && let Some(run_id) = &state.run_id {
                         let total_duration = state.execution_logger.elapsed_sec();
                         // TODO: Calculate actual total cost from tracker
                         let total_cost = 0.0;
@@ -345,7 +342,6 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
                         // Finalize logger
                         state.execution_logger.finalize();
                     }
-                }
 
                 widget.history_push(crate::history_cell::PlainHistoryCell::new(
                     vec![ratatui::text::Line::from("/spec-auto pipeline complete")],
@@ -392,8 +388,8 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
                 hal_mode,
             } => {
                 // Display stage boundary marker before starting guardrail
-                if let Some(state) = widget.spec_auto_state.as_ref() {
-                    if let Some(summary) = &state.pending_prompt_summary {
+                if let Some(state) = widget.spec_auto_state.as_ref()
+                    && let Some(summary) = &state.pending_prompt_summary {
                         widget.history_push(crate::history_cell::PlainHistoryCell::new(
                             summary
                                 .lines()
@@ -402,7 +398,6 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
                             HistoryCellType::Notice,
                         ));
                     }
-                }
 
                 widget.handle_spec_ops_command(command, args, hal_mode);
                 return;
@@ -413,13 +408,11 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
 
 /// Handle spec-auto task started event
 pub fn on_spec_auto_task_started(widget: &mut ChatWidget, task_id: &str) {
-    if let Some(state) = widget.spec_auto_state.as_mut() {
-        if let Some(wait) = state.waiting_guardrail.as_mut() {
-            if wait.task_id.is_none() {
+    if let Some(state) = widget.spec_auto_state.as_mut()
+        && let Some(wait) = state.waiting_guardrail.as_mut()
+            && wait.task_id.is_none() {
                 wait.task_id = Some(task_id.to_string());
             }
-        }
-    }
 }
 
 /// Handle spec-auto task completion (guardrail finished)
@@ -903,13 +896,12 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                 ));
 
                 // Schedule checklist for degraded follow-up
-                if let Some(state) = widget.spec_auto_state.as_ref() {
-                    if let Some(stage) = state.current_stage() {
+                if let Some(state) = widget.spec_auto_state.as_ref()
+                    && let Some(stage) = state.current_stage() {
                         super::agent_orchestrator::schedule_degraded_follow_up(
                             widget, stage, &spec_id,
                         );
                     }
-                }
             }
 
             // Show consensus result
@@ -931,10 +923,10 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                     HistoryCellType::Notice,
                 ));
 
-                if current_stage == SpecStage::Validate {
-                    if let Some(state_ref) = widget.spec_auto_state.as_ref() {
-                        if let Some(info) = active_validate_info.as_ref() {
-                            if let Some(completion) = state_ref.complete_validate_run(
+                if current_stage == SpecStage::Validate
+                    && let Some(state_ref) = widget.spec_auto_state.as_ref()
+                        && let Some(info) = active_validate_info.as_ref()
+                            && let Some(completion) = state_ref.complete_validate_run(
                                 &info.run_id,
                                 ValidateCompletionReason::Completed,
                             ) {
@@ -949,9 +941,6 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                                     ValidateLifecycleEvent::Completed,
                                 );
                             }
-                        }
-                    }
-                }
 
                 persist_cost_summary(widget, &spec_id);
 
@@ -983,8 +972,8 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                 }
 
                 // Log stage complete event
-                if let Some(state) = widget.spec_auto_state.as_ref() {
-                    if let Some(run_id) = &state.run_id {
+                if let Some(state) = widget.spec_auto_state.as_ref()
+                    && let Some(run_id) = &state.run_id {
                         let stage_duration = 0.0; // TODO: Track stage start time
                         let stage_cost = None; // TODO: Get from cost tracker
                         let evidence_written = true; // TODO: Check actual evidence status
@@ -1000,12 +989,11 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                             },
                         );
                     }
-                }
 
                 // ACE Framework Integration (2025-10-29): Send learning feedback on success
-                if let Some(state) = widget.spec_auto_state.as_ref() {
-                    if let Some(bullet_ids) = &state.ace_bullet_ids_used {
-                        if !bullet_ids.is_empty() {
+                if let Some(state) = widget.spec_auto_state.as_ref()
+                    && let Some(bullet_ids) = &state.ace_bullet_ids_used
+                        && !bullet_ids.is_empty() {
                             use super::ace_learning::send_learning_feedback_sync;
                             use super::routing::{get_current_branch, get_repo_root};
 
@@ -1048,8 +1036,6 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                                 );
                             }
                         }
-                    }
-                }
 
                 // Advance to next stage
                 if let Some(state) = widget.spec_auto_state.as_mut() {
@@ -1064,9 +1050,9 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                 // Trigger next stage
                 advance_spec_auto(widget);
             } else {
-                if current_stage == SpecStage::Validate {
-                    if let Some(state_ref) = widget.spec_auto_state.as_ref() {
-                        if let Some(completion) =
+                if current_stage == SpecStage::Validate
+                    && let Some(state_ref) = widget.spec_auto_state.as_ref()
+                        && let Some(completion) =
                             state_ref.reset_validate_run(ValidateCompletionReason::Failed)
                         {
                             record_validate_lifecycle_event(
@@ -1080,8 +1066,6 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                                 ValidateLifecycleEvent::Failed,
                             );
                         }
-                    }
-                }
                 // Consensus failed - halt (no retries)
                 halt_spec_auto_with_error(
                     widget,
@@ -1091,9 +1075,9 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
         }
         Err(err) => {
             // Consensus error - halt (no retries)
-            if current_stage == SpecStage::Validate {
-                if let Some(state_ref) = widget.spec_auto_state.as_ref() {
-                    if let Some(completion) =
+            if current_stage == SpecStage::Validate
+                && let Some(state_ref) = widget.spec_auto_state.as_ref()
+                    && let Some(completion) =
                         state_ref.reset_validate_run(ValidateCompletionReason::Failed)
                     {
                         record_validate_lifecycle_event(
@@ -1107,8 +1091,6 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                             ValidateLifecycleEvent::Failed,
                         );
                     }
-                }
-            }
 
             halt_spec_auto_with_error(
                 widget,
@@ -1292,7 +1274,7 @@ fn synthesize_from_cached_responses(
                     }
                 }
             }
-            output.push_str("\n");
+            output.push('\n');
             structured_content_found = true;
         }
 
@@ -1306,7 +1288,7 @@ fn synthesize_from_cached_responses(
                     }
                 }
             }
-            output.push_str("\n");
+            output.push('\n');
             structured_content_found = true;
         }
 
@@ -1317,8 +1299,8 @@ fn synthesize_from_cached_responses(
             for task in tasks {
                 if let Some(task_str) = task.as_str() {
                     output.push_str(&format!("- {}\n", task_str));
-                } else if let Some(obj) = task.as_object() {
-                    if let Some(name) = obj
+                } else if let Some(obj) = task.as_object()
+                    && let Some(name) = obj
                         .get("name")
                         .or_else(|| obj.get("task"))
                         .and_then(|v| v.as_str())
@@ -1332,9 +1314,8 @@ fn synthesize_from_cached_responses(
                             output.push_str(&format!("  {}\n", desc));
                         }
                     }
-                }
             }
-            output.push_str("\n");
+            output.push('\n');
             structured_content_found = true;
         }
 
@@ -1345,19 +1326,18 @@ fn synthesize_from_cached_responses(
                     output.push_str(&format!("- {}\n", s));
                 }
             }
-            output.push_str("\n");
+            output.push('\n');
             structured_content_found = true;
         }
 
         // Plain text content fallback
-        if let Some(content) = data.get("content").and_then(|v| v.as_str()) {
-            if !content.is_empty() {
+        if let Some(content) = data.get("content").and_then(|v| v.as_str())
+            && !content.is_empty() {
                 output.push_str(&format!("## Response from {}\n\n", agent_name));
                 output.push_str(content);
                 output.push_str("\n\n");
                 structured_content_found = true;
             }
-        }
     }
 
     // Ultimate fallback: if no structured content extracted, pretty-print raw JSON
@@ -1384,7 +1364,7 @@ fn synthesize_from_cached_responses(
                                             .unwrap_or_else(|_| item.to_string())
                                     ));
                                 }
-                                output.push_str("\n");
+                                output.push('\n');
                             }
                             _ => output.push_str(&format!(
                                 "```json\n{}\n```\n\n",
@@ -1395,7 +1375,7 @@ fn synthesize_from_cached_responses(
                     }
                 }
             }
-            output.push_str("\n");
+            output.push('\n');
         }
     }
 
@@ -1503,11 +1483,10 @@ fn synthesize_from_cached_responses(
 /// Extract JSON from agent response (handles code blocks, tool output, etc.)
 pub(super) fn extract_json_from_agent_response(text: &str) -> Option<String> {
     // Look for JSON in markdown code blocks
-    if let Some(start) = text.find("```json\n") {
-        if let Some(end) = text[start + 8..].find("\n```") {
+    if let Some(start) = text.find("```json\n")
+        && let Some(end) = text[start + 8..].find("\n```") {
             return Some(text[start + 8..start + 8 + end].to_string());
         }
-    }
 
     // Look for JSON in plain code blocks (agents use this format)
     if let Some(start) = text.find("│ {\n│   \"stage\"") {

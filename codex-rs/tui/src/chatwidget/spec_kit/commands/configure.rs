@@ -28,7 +28,7 @@ impl SpecKitCommand for SpecKitConfigureCommand {
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
-        let spec_id = args.trim().split_whitespace().next().unwrap_or("");
+        let spec_id = args.split_whitespace().next().unwrap_or("");
         if spec_id.is_empty() {
             widget.history_push(history_cell::new_error_event(
                 "Usage: /speckit.configure SPEC-ID".to_string(),

@@ -101,7 +101,7 @@ impl SpecKitCommand for SpecKitNewCommand {
                             "   Files created: {}",
                             result.files_created.join(", ")
                         )),
-                        Line::from(format!("   Updated: SPEC.md tracker")),
+                        Line::from("   Updated: SPEC.md tracker".to_string()),
                         Line::from(""),
                         Line::from("Next steps:"),
                         Line::from(format!(

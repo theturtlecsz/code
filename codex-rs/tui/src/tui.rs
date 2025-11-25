@@ -159,8 +159,8 @@ pub fn init(config: &Config) -> Result<(Tui, TerminalInfo)> {
             .unwrap_or(false)
     };
 
-    if should_paint_bg {
-        if let Ok((cols, rows)) = crossterm::terminal::size() {
+    if should_paint_bg
+        && let Ok((cols, rows)) = crossterm::terminal::size() {
             // Build a single line of spaces once to reduce allocations.
             let blank = " ".repeat(cols as usize);
             // Set explicit fg/bg to the theme's colors while painting.
@@ -184,7 +184,6 @@ pub fn init(config: &Config) -> Result<(Tui, TerminalInfo)> {
                 ))
             )?;
         }
-    }
 
     // Wrap stdout in a larger BufWriter to reduce syscalls and flushes.
     // A larger buffer significantly helps during heavy scrolling where many cells change.

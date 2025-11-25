@@ -336,7 +336,7 @@ impl UserApprovalWidget<'_> {
             } => {
                 self.app_event_tx.send(AppEvent::RegisterApprovedCommand {
                     command: command.clone(),
-                    match_kind: match_kind.clone(),
+                    match_kind,
                     persist,
                     semantic_prefix: semantic_prefix.clone(),
                 });
@@ -438,8 +438,8 @@ fn build_exec_select_options(command: &[String]) -> Vec<SelectOption> {
     });
 
     let normalized_tokens = normalized_command_tokens(command);
-    if let Some(tokens) = normalized_tokens.as_ref() {
-        if let Some(prefix) = prefix_candidate(tokens) {
+    if let Some(tokens) = normalized_tokens.as_ref()
+        && let Some(prefix) = prefix_candidate(tokens) {
             let prefix_display = strip_bash_lc_and_escape(&prefix);
             let prefix_with_wildcard = format!("{prefix_display} *");
             options.push(SelectOption {
@@ -454,7 +454,6 @@ fn build_exec_select_options(command: &[String]) -> Vec<SelectOption> {
                 },
             });
         }
-    }
 
     options.push(SelectOption {
         label: "No, provide feedback".to_string(),

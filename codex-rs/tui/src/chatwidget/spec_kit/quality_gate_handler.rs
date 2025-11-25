@@ -1205,8 +1205,8 @@ pub(super) fn execute_quality_checkpoint(
     let checkpoint_clone = checkpoint;
 
     // Log quality gate start event
-    if let Some(state) = widget.spec_auto_state.as_ref() {
-        if let Some(run_id) = &state.run_id {
+    if let Some(state) = widget.spec_auto_state.as_ref()
+        && let Some(run_id) = &state.run_id {
             state.execution_logger.log_event(
                 super::execution_logger::ExecutionEvent::QualityGateStart {
                     run_id: run_id.clone(),
@@ -1216,7 +1216,6 @@ pub(super) fn execute_quality_checkpoint(
                 },
             );
         }
-    }
 
     // Get execution logger, agent configs, and event sender for spawning
     let logger = widget
@@ -1328,7 +1327,7 @@ pub(super) fn execute_quality_checkpoint(
                     Ok(()) => {
                         info!("Quality gate agents completed successfully");
                         // Send completion event to trigger broker collection
-                        let _ = event_tx.send(
+                        event_tx.send(
                             crate::app_event::AppEvent::QualityGateNativeAgentsComplete {
                                 checkpoint: checkpoint_clone,
                                 agent_ids: agent_ids.clone(),
@@ -1378,14 +1377,13 @@ pub(super) fn execute_quality_checkpoint(
 
 /// Update phase with native agent IDs when event arrives
 pub fn set_native_agent_ids(widget: &mut ChatWidget, agent_ids: Vec<String>) {
-    if let Some(state) = widget.spec_auto_state.as_mut() {
-        if let SpecAutoPhase::QualityGateExecuting {
+    if let Some(state) = widget.spec_auto_state.as_mut()
+        && let SpecAutoPhase::QualityGateExecuting {
             native_agent_ids, ..
         } = &mut state.phase
         {
             *native_agent_ids = Some(agent_ids);
         }
-    }
 }
 
 /// Build quality gate prompt for a specific gate
@@ -1502,8 +1500,8 @@ pub(super) fn finalize_quality_gates(widget: &mut ChatWidget) {
         }
 
         // Log quality gate complete event
-        if let Some(state) = widget.spec_auto_state.as_ref() {
-            if let Some(run_id) = &state.run_id {
+        if let Some(state) = widget.spec_auto_state.as_ref()
+            && let Some(run_id) = &state.run_id {
                 let degraded_agent_vec = degraded_agents
                     .map(|agents| agents.to_vec())
                     .unwrap_or_default();
@@ -1520,10 +1518,9 @@ pub(super) fn finalize_quality_gates(widget: &mut ChatWidget) {
                     },
                 );
             }
-        }
 
-        if let Some(missing) = degradations.get(checkpoint) {
-            if !missing.is_empty() {
+        if let Some(missing) = degradations.get(checkpoint)
+            && !missing.is_empty() {
                 widget.history_push(crate::history_cell::PlainHistoryCell::new(
                     vec![ratatui::text::Line::from(format!(
                         "Quality Gate: {} ran in degraded mode (missing agents: {})",
@@ -1533,7 +1530,6 @@ pub(super) fn finalize_quality_gates(widget: &mut ChatWidget) {
                     HistoryCellType::Notice,
                 ));
             }
-        }
     }
 
     // Step 2: Create git commit if there are modifications
@@ -1547,14 +1543,14 @@ pub(super) fn finalize_quality_gates(widget: &mut ChatWidget) {
         // Execute git commit
         let git_result = std::process::Command::new("git")
             .current_dir(&cwd)
-            .args(&["add", "docs/"])
+            .args(["add", "docs/"])
             .output();
 
-        if let Ok(add_output) = git_result {
-            if add_output.status.success() {
+        if let Ok(add_output) = git_result
+            && add_output.status.success() {
                 let commit_result = std::process::Command::new("git")
                     .current_dir(&cwd)
-                    .args(&["commit", "-m", &commit_msg])
+                    .args(["commit", "-m", &commit_msg])
                     .output();
 
                 match commit_result {
@@ -1581,7 +1577,6 @@ pub(super) fn finalize_quality_gates(widget: &mut ChatWidget) {
                     }
                 }
             }
-        }
     }
 
     // Step 3: Show review summary
@@ -1781,7 +1776,9 @@ fn store_quality_gate_artifacts_sync(
     }
 
     // Wait for all storage tasks to complete (with timeout)
-    let stored_count = tokio::task::block_in_place(|| {
+    
+
+    tokio::task::block_in_place(|| {
         tokio::runtime::Handle::current().block_on(async {
             let mut count = 0;
             for (agent_name, handle) in handles {
@@ -1803,9 +1800,7 @@ fn store_quality_gate_artifacts_sync(
             }
             count
         })
-    });
-
-    stored_count
+    })
 }
 
 /// Get completed quality gate agents by scanning .code/agents/ directory

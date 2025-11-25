@@ -377,8 +377,8 @@ pub fn select_route(
     }
 
     // Heuristic 3: High file count (complexity)
-    if let Some(stat) = diff_stat {
-        if stat.files_changed > config.complex_task_files_threshold {
+    if let Some(stat) = diff_stat
+        && stat.files_changed > config.complex_task_files_threshold {
             return RouteDecision::EnhancedContext {
                 reason: format!(
                     "high file count ({} > {})",
@@ -386,7 +386,6 @@ pub fn select_route(
                 ),
             };
         }
-    }
 
     // Heuristic 4: Cross-cutting keywords
     if has_cross_cutting_keywords(spec_or_title) {

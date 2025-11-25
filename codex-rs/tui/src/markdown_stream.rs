@@ -423,8 +423,8 @@ impl MarkdownStreamCollector {
             source.push('\n');
         }
         let source = unwrap_markdown_language_fence_if_enabled(source);
-        let source = strip_empty_fenced_code_blocks(&source);
-        source
+        
+        strip_empty_fenced_code_blocks(&source)
     }
 
     /// Returns true if the internal buffer currently ends with a newline.

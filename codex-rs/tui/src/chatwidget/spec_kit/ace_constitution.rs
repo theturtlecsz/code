@@ -67,11 +67,10 @@ fn detect_scopes_and_tags(text: &str) -> (Vec<String>, Vec<String>) {
 
     // Detect phase keywords
     for (keyword, scope) in PHASE_KEYWORDS {
-        if lower.contains(keyword) {
-            if !scopes.contains(&scope.to_string()) {
+        if lower.contains(keyword)
+            && !scopes.contains(&scope.to_string()) {
                 scopes.push(scope.to_string());
             }
-        }
     }
 
     // Detect common tags
@@ -197,7 +196,7 @@ pub async fn pin_constitution_to_ace(
         for scope in &bullet.scopes {
             scope_bullets
                 .entry(scope.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push((bullet.text.clone(), kind.to_string()));
         }
     }

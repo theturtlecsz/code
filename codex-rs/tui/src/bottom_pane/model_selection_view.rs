@@ -150,7 +150,7 @@ impl ModelSelectionView {
     fn confirm_selection(&mut self) {
         if let Some(preset) = self.presets.get(self.selected_index) {
             let effort = Self::preset_effort(preset);
-            let _ = self.app_event_tx.send(AppEvent::UpdateModelSelection {
+            self.app_event_tx.send(AppEvent::UpdateModelSelection {
                 model: preset.model.to_string(),
                 effort: Some(effort),
             });

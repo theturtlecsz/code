@@ -390,11 +390,10 @@ impl<'a> BottomPaneView<'a> for ValidationSettingsView {
                     match kind {
                         SelectionKind::Group(idx) => self.toggle_group(idx),
                         SelectionKind::Tool(idx) => {
-                            if let Some(tool) = self.tools.get(idx) {
-                                if tool.status.installed {
+                            if let Some(tool) = self.tools.get(idx)
+                                && tool.status.installed {
                                     self.toggle_tool(idx);
                                 }
-                            }
                         }
                     }
                 }
@@ -643,7 +642,7 @@ fn which(exe: &str) -> Option<std::path::PathBuf> {
     let name = std::ffi::OsStr::new(exe);
     let paths: Vec<std::path::PathBuf> = std::env::var_os("PATH")
         .map(|paths| std::env::split_paths(&paths).collect())
-        .unwrap_or_else(Vec::new);
+        .unwrap_or_default();
     for dir in paths {
         let candidate = dir.join(name);
         if candidate.is_file() {

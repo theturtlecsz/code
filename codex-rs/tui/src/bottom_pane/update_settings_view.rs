@@ -141,7 +141,7 @@ impl UpdateSettingsView {
         } else if let Some(latest) = &state.latest_version {
             format!("{} → {}", self.current_version, latest)
         } else {
-            format!("{}", self.current_version)
+            self.current_version.to_string()
         };
 
         let run_prefix = if run_selected { "› " } else { "  " };

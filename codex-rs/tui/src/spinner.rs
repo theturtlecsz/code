@@ -43,36 +43,30 @@ lazy_static! {
     static ref ALL_SPINNERS: Vec<Spinner> = {
         let mut list: Vec<Spinner> = Vec::new();
         let val: Value = serde_json::from_str(SPINNERS_JSON).unwrap_or(Value::Object(Default::default()));
-        match val {
-            Value::Object(map) => {
-                // Mixed-mode tolerant parse: for each top-level entry
-                for (k, v) in map.into_iter() {
-                    // If this is the pointer entry (Default: "name"), skip it;
-                    // but allow a group actually named "Default" (object).
-                    if k == "Default" {
-                        if !v.is_string() { /* fall through to parse group */ } else { continue; }
-                    }
-                    match v {
-                        Value::Object(inner) => {
-                            if inner.get("interval").is_some() {
-                                // Flat entry
-                                if let Ok(sj) = serde_json::from_value::<SpinnerJson>(Value::Object(inner)) {
-                                    vpush(&mut list, &k, sj, None);
-                                }
-                            } else {
-                                // Group container
-                                for (name, val_entry) in inner.into_iter() {
-                                    if let Ok(sj) = serde_json::from_value::<SpinnerJson>(val_entry) {
-                                        vpush(&mut list, &name, sj, Some(k.clone()));
-                                    }
-                                }
+        if let Value::Object(map) = val {
+            // Mixed-mode tolerant parse: for each top-level entry
+            for (k, v) in map.into_iter() {
+                // If this is the pointer entry (Default: "name"), skip it;
+                // but allow a group actually named "Default" (object).
+                if k == "Default" {
+                    if !v.is_string() { /* fall through to parse group */ } else { continue; }
+                }
+                if let Value::Object(inner) = v {
+                    if inner.get("interval").is_some() {
+                        // Flat entry
+                        if let Ok(sj) = serde_json::from_value::<SpinnerJson>(Value::Object(inner)) {
+                            vpush(&mut list, &k, sj, None);
+                        }
+                    } else {
+                        // Group container
+                        for (name, val_entry) in inner.into_iter() {
+                            if let Ok(sj) = serde_json::from_value::<SpinnerJson>(val_entry) {
+                                vpush(&mut list, &name, sj, Some(k.clone()));
                             }
                         }
-                        _ => {}
                     }
                 }
             }
-            _ => {}
         }
         // Preserve JSON order: no reordering here
         list
@@ -80,13 +74,11 @@ lazy_static! {
     static ref DEFAULT_INDEX: usize = {
         let val: Value = serde_json::from_str(SPINNERS_JSON).unwrap_or(Value::Object(Default::default()));
         let mut idx = 0usize;
-        if let Value::Object(map) = val {
-            if let Some(Value::String(def)) = map.get("Default") {
-                if let Some(found) = ALL_SPINNERS.iter().position(|s| s.name == *def) {
+        if let Value::Object(map) = val
+            && let Some(Value::String(def)) = map.get("Default")
+                && let Some(found) = ALL_SPINNERS.iter().position(|s| s.name == *def) {
                     idx = found;
                 }
-            }
-        }
         idx
     };
     static ref CURRENT_INDEX: RwLock<usize> = RwLock::new(*DEFAULT_INDEX);

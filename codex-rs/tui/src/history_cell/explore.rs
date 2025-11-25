@@ -60,14 +60,13 @@ impl ExploreEntry {
         match &self.summary {
             ExploreSummary::Search { query, path } => {
                 let mut spans = Vec::new();
-                if let Some(q) = query {
-                    if !q.is_empty() {
+                if let Some(q) = query
+                    && !q.is_empty() {
                         spans.push(Span::styled(
                             q.clone(),
                             Style::default().fg(crate::colors::text()),
                         ));
                     }
-                }
                 if let Some(p) = path {
                     spans.push(Span::styled(
                         format!(" in {}", p),
@@ -255,8 +254,7 @@ impl ExploreAggregationCell {
                     annotation: existing_ann,
                     range: existing_range,
                 } = &mut self.state.entries[idx].summary
-                {
-                    if *existing_path == path_key {
+                    && *existing_path == path_key {
                         let reuse = match (*existing_range, range_val) {
                             (Some((es, ee)), Some((ns, ne))) => {
                                 if ns <= es && ne >= ee {
@@ -303,7 +301,6 @@ impl ExploreAggregationCell {
                             return Some(idx);
                         }
                     }
-                }
             }
         }
 
@@ -311,14 +308,12 @@ impl ExploreAggregationCell {
             for idx in (0..self.state.entries.len()).rev() {
                 if let ExploreSummary::Command { command: existing } =
                     &mut self.state.entries[idx].summary
-                {
-                    if existing.display == new_cmd.display
+                    && existing.display == new_cmd.display
                         && existing.annotation == new_cmd.annotation
                     {
                         self.state.entries[idx].status = status;
                         return Some(idx);
                     }
-                }
             }
         }
 
@@ -402,7 +397,7 @@ impl HistoryCell for ExploreAggregationCell {
             let padding = max_label_len.saturating_sub(label_len) + 1;
             let mut padded_label = String::with_capacity(label.len() + padding);
             padded_label.push_str(label);
-            padded_label.extend(std::iter::repeat(' ').take(padding));
+            padded_label.extend(std::iter::repeat_n(' ', padding));
             spans.push(Span::styled(
                 padded_label,
                 Style::default().fg(crate::colors::text_dim()),

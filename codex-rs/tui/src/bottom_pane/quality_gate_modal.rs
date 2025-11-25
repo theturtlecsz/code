@@ -60,8 +60,8 @@ impl QualityGateModal {
     }
 
     fn submit_current_answer(&mut self) {
-        if let Some(question) = self.current_question() {
-            if !self.current_input.trim().is_empty() {
+        if let Some(question) = self.current_question()
+            && !self.current_input.trim().is_empty() {
                 self.answers
                     .insert(question.id.clone(), self.current_input.trim().to_string());
 
@@ -75,11 +75,10 @@ impl QualityGateModal {
                     self.current_input.clear();
                 }
             }
-        }
     }
 
     fn send_completion_event(&self) {
-        let _ = self
+        self
             .app_event_tx
             .send(AppEvent::QualityGateAnswersSubmitted {
                 checkpoint: self.checkpoint,
@@ -133,7 +132,7 @@ impl QualityGateModal {
     fn handle_escape(&mut self) {
         // Cancel entire quality gate
         self.done = true;
-        let _ = self.app_event_tx.send(AppEvent::QualityGateCancelled {
+        self.app_event_tx.send(AppEvent::QualityGateCancelled {
             checkpoint: self.checkpoint,
         });
     }

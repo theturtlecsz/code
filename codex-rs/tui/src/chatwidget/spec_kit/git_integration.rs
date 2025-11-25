@@ -141,7 +141,7 @@ fn stage_files(paths: &[PathBuf], cwd: &Path) -> Result<()> {
         })?;
 
         let output = Command::new("git")
-            .args(&["add", "--"])
+            .args(["add", "--"])
             .arg(relative_path)
             .current_dir(cwd)
             .output()
@@ -163,7 +163,7 @@ fn stage_files(paths: &[PathBuf], cwd: &Path) -> Result<()> {
 /// Check if there are staged changes ready to commit
 fn has_staged_changes(cwd: &Path) -> Result<bool> {
     let status = Command::new("git")
-        .args(&["diff", "--cached", "--quiet"])
+        .args(["diff", "--cached", "--quiet"])
         .current_dir(cwd)
         .status()
         .map_err(|e| SpecKitError::from_string(format!("Git diff failed: {}", e)))?;
@@ -176,7 +176,7 @@ fn has_staged_changes(cwd: &Path) -> Result<bool> {
 /// Commit staged files with descriptive message
 fn commit_staged_files(message: &str, cwd: &Path) -> Result<()> {
     let output = Command::new("git")
-        .args(&["commit", "-m", message])
+        .args(["commit", "-m", message])
         .current_dir(cwd)
         .output()
         .map_err(|e| SpecKitError::from_string(format!("Git commit failed: {}", e)))?;

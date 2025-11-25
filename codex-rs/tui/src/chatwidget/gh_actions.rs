@@ -15,25 +15,22 @@ pub(super) enum TokenSource {
 /// Obtain a GitHub token, preferring environment variables and falling back to `gh`.
 /// Returns the token string and its source if available.
 pub(super) fn get_github_token() -> Option<(String, TokenSource)> {
-    if let Ok(t) = std::env::var("GITHUB_TOKEN") {
-        if !t.is_empty() {
+    if let Ok(t) = std::env::var("GITHUB_TOKEN")
+        && !t.is_empty() {
             return Some((t, TokenSource::Env));
         }
-    }
-    if let Ok(t) = std::env::var("GH_TOKEN") {
-        if !t.is_empty() {
+    if let Ok(t) = std::env::var("GH_TOKEN")
+        && !t.is_empty() {
             return Some((t, TokenSource::Env));
         }
-    }
     // Fallback: use GitHub CLI if installed and logged in.
-    if let Ok(out) = Command::new("gh").args(["auth", "token"]).output() {
-        if out.status.success() {
+    if let Ok(out) = Command::new("gh").args(["auth", "token"]).output()
+        && out.status.success() {
             let token = String::from_utf8_lossy(&out.stdout).trim().to_string();
             if !token.is_empty() {
                 return Some((token, TokenSource::GhCli));
             }
         }
-    }
     None
 }
 
@@ -139,8 +136,8 @@ pub(super) fn maybe_watch_after_push(
                 if run_sha.eq_ignore_ascii_case(&head_sha) {
                     found_run_id = run.get("id").and_then(|v| v.as_u64());
                     // If it is already completed, check outcome now; otherwise continue polling below.
-                    if let Some(status) = run.get("status").and_then(|v| v.as_str()) {
-                        if status == "completed" {
+                    if let Some(status) = run.get("status").and_then(|v| v.as_str())
+                        && status == "completed" {
                             let conclusion = run
                                 .get("conclusion")
                                 .and_then(|v| v.as_str())
@@ -154,7 +151,6 @@ pub(super) fn maybe_watch_after_push(
                             }
                             return;
                         }
-                    }
                 }
             }
 

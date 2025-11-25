@@ -170,7 +170,7 @@ impl StreamController {
             None => return,
         };
         // Parse trailing #s<idx>
-        let idx = id.split('#').last().and_then(|frag| frag.strip_prefix('s'));
+        let idx = id.split('#').next_back().and_then(|frag| frag.strip_prefix('s'));
         if let Some(sidx) = idx {
             let seq_part = self
                 .state(kind)
@@ -666,10 +666,10 @@ impl StreamController {
                     Ok(val) => !val.is_empty() && val != "0",
                     Err(_) => false,
                 };
-                if enabled {
-                    if let Some(id) = self.current_stream_id() {
-                        if let Some(sidx) =
-                            id.split('#').last().and_then(|frag| frag.strip_prefix('s'))
+                if enabled
+                    && let Some(id) = self.current_stream_id()
+                        && let Some(sidx) =
+                            id.split('#').next_back().and_then(|frag| frag.strip_prefix('s'))
                         {
                             let marker = format!("[s{} final]", sidx);
                             let dim = crate::colors::text_dim();
@@ -678,8 +678,6 @@ impl StreamController {
                                 ratatui::style::Style::default().fg(dim),
                             )));
                         }
-                    }
-                }
             }
             lines_with_header.extend(out_lines);
             // Don't add extra blank line - markdown renderer handles spacing

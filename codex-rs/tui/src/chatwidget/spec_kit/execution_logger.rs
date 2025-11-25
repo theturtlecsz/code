@@ -30,7 +30,7 @@ pub fn generate_run_id(spec_id: &str) -> RunId {
         "run_{}_{}_{}",
         spec_id,
         timestamp,
-        uuid::Uuid::new_v4().to_string()[..8].to_string()
+        &uuid::Uuid::new_v4().to_string()[..8]
     )
 }
 
@@ -264,12 +264,11 @@ impl ExecutionLogger {
     /// Log an execution event
     pub fn log_event(&self, event: ExecutionEvent) {
         // Write to JSONL file
-        if let Some(file) = self.log_file.lock().unwrap().as_mut() {
-            if let Ok(json) = serde_json::to_string(&event) {
+        if let Some(file) = self.log_file.lock().unwrap().as_mut()
+            && let Ok(json) = serde_json::to_string(&event) {
                 let _ = writeln!(file, "{}", json);
                 let _ = file.flush();
             }
-        }
 
         // Update status file (async to avoid blocking)
         self.update_status_from_event(&event);
@@ -396,11 +395,10 @@ impl ExecutionLogger {
 
         // Write updated status atomically (temp file + rename)
         let temp_path = status_path.with_extension("tmp");
-        if let Ok(json) = serde_json::to_string_pretty(&status) {
-            if std::fs::write(&temp_path, json).is_ok() {
+        if let Ok(json) = serde_json::to_string_pretty(&status)
+            && std::fs::write(&temp_path, json).is_ok() {
                 let _ = std::fs::rename(&temp_path, &status_path);
             }
-        }
     }
 
     /// Get current run ID

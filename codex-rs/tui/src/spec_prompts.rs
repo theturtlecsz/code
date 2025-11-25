@@ -79,7 +79,7 @@ impl SpecAgent {
 
     /// Parse from various string representations (case-insensitive)
     pub fn from_string(s: &str) -> Option<Self> {
-        let normalized = s.to_ascii_lowercase().replace('-', "_").replace(' ', "_");
+        let normalized = s.to_ascii_lowercase().replace(['-', ' '], "_");
         let trimmed = normalized.trim_matches('_');
 
         if trimmed.is_empty() {
@@ -543,7 +543,7 @@ pub fn build_stage_prompt_with_mcp(
             .unwrap_or(prompt.prompt);
         bundle.push_str("## GPT-5 — Arbiter & QA\n");
         bundle.push_str(&rendered);
-        bundle.push_str("\n");
+        bundle.push('\n');
     }
 
     Ok(bundle)
@@ -601,7 +601,7 @@ fn gather_local_memory_context(
         }
         if snippet.len() > 160 {
             snippet.truncate(160);
-            snippet.push_str("…");
+            snippet.push('…');
         }
 
         if let Some(id) = result.memory.id.as_ref() {

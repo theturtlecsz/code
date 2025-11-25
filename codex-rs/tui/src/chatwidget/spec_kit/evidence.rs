@@ -151,7 +151,10 @@ impl FilesystemEvidence {
             jitter_factor: 0.5,
         };
 
-        let result = execute_with_backoff_sync(
+        
+
+        // Lock auto-released when lock_file drops (RAII)
+        execute_with_backoff_sync(
             || {
                 std::fs::write(target_path, content).map_err(|e| SpecKitError::FileWrite {
                     path: target_path.clone(),
@@ -160,10 +163,7 @@ impl FilesystemEvidence {
             },
             &retry_config,
         )
-        .map_err(|_| SpecKitError::from_string("Evidence write failed after retries"));
-
-        // Lock auto-released when lock_file drops (RAII)
-        result
+        .map_err(|_| SpecKitError::from_string("Evidence write failed after retries"))
     }
 
     /// Get category subdirectory name
@@ -413,11 +413,10 @@ impl EvidenceRepository for FilesystemEvidence {
             let Ok(entry) = entry_res else { continue };
             let path = entry.path();
 
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if name.contains(pattern) {
+            if let Some(name) = path.file_name().and_then(|n| n.to_str())
+                && name.contains(pattern) {
                     files.push(path);
                 }
-            }
         }
 
         Ok(files)

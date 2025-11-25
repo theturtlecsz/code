@@ -128,11 +128,9 @@ pub fn try_dispatch_spec_kit_command(
         if !merged_commands
             .iter()
             .any(|cfg| cfg.name.eq_ignore_ascii_case(config_name))
-        {
-            if let Some(default_cfg) = subagent_defaults::default_for(config_name) {
+            && let Some(default_cfg) = subagent_defaults::default_for(config_name) {
                 merged_commands.push(default_cfg);
             }
-        }
 
         // Format with the resolved configuration to get orchestrator instructions
         let formatted = codex_core::slash_commands::format_subagent_command(
@@ -146,7 +144,7 @@ pub fn try_dispatch_spec_kit_command(
         widget.submit_prompt_with_ace(command_text.to_string(), formatted.prompt, config_name);
     } else {
         // Direct execution: persist to history then execute
-        let _ = app_event_tx.send(AppEvent::CodexOp(Op::AddToHistory {
+        app_event_tx.send(AppEvent::CodexOp(Op::AddToHistory {
             text: command_text.to_string(),
         }));
         spec_cmd.execute(widget, args);

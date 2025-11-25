@@ -82,7 +82,7 @@ fn format_with_thousands(n: u64) -> String {
     let mut out = String::with_capacity(s.len() + s.len() / 3);
     let mut count = 0usize;
     for ch in s.chars().rev() {
-        if count != 0 && count % 3 == 0 {
+        if count != 0 && count.is_multiple_of(3) {
             out.push(',');
         }
         out.push(ch);
@@ -479,7 +479,7 @@ impl ChatComposer {
 
         // Apply the same inner padding as in render (horizontal only).
         let padded_textarea_rect = textarea_rect.inner(Margin::new(
-            crate::layout_consts::COMPOSER_INNER_HPAD.into(),
+            crate::layout_consts::COMPOSER_INNER_HPAD,
             0,
         ));
 
@@ -624,7 +624,7 @@ impl ChatComposer {
     }
 
     fn maybe_start_post_paste_space_guard(&mut self, pasted: &str) {
-        if pasted.chars().last() != Some(' ') {
+        if !pasted.ends_with(' ') {
             return;
         }
         let cursor_pos = self.textarea.cursor();
@@ -632,14 +632,13 @@ impl ChatComposer {
         if cursor_pos == 0 {
             return;
         }
-        if let Some(slice) = self.textarea.text().as_bytes().get(cursor_pos - 1) {
-            if *slice == b' ' {
+        if let Some(slice) = self.textarea.text().as_bytes().get(cursor_pos - 1)
+            && *slice == b' ' {
                 self.post_paste_space_guard = Some(PostPasteSpaceGuard {
                     expires_at: Instant::now() + Duration::from_secs(2),
                     cursor_pos,
                 });
             }
-        }
     }
 
     fn should_suppress_post_paste_space(&mut self, event: &KeyEvent) -> bool {
@@ -1345,8 +1344,8 @@ impl ChatComposer {
                 }
 
                 // Use the generic token under cursor for a one-off search.
-                if let Some(tok) = Self::current_generic_token(&self.textarea) {
-                    if !tok.is_empty() {
+                if let Some(tok) = Self::current_generic_token(&self.textarea)
+                    && !tok.is_empty() {
                         self.pending_tab_file_query = Some(tok.clone());
                         self.app_event_tx
                             .send(crate::app_event::AppEvent::StartFileSearch(tok));
@@ -1354,7 +1353,6 @@ impl ChatComposer {
                         // show if there are matches to avoid flicker.
                         return (InputResult::None, true);
                     }
-                }
                 (InputResult::None, false)
             }
             // -------------------------------------------------------------
@@ -1492,13 +1490,11 @@ impl ChatComposer {
             code: KeyCode::Backspace,
             ..
         } = input
-        {
-            if self.try_remove_placeholder_at_cursor() {
+            && self.try_remove_placeholder_at_cursor() {
                 // Text was modified, reset history navigation
                 self.history.reset_navigation();
                 return (InputResult::None, true);
             }
-        }
 
         // Normal input handling
         self.textarea.input(input);
@@ -1768,8 +1764,8 @@ impl WidgetRef for ChatComposer {
                 } else {
                     true
                 };
-                if show_access_label {
-                    if let Some(label) = &self.access_mode_label {
+                if show_access_label
+                    && let Some(label) = &self.access_mode_label {
                         // Access label without bold per design
                         left_spans.push(Span::from(label.clone()).style(label_style));
                         // Show the hint suffix while the hint timer is active; if the whole label
@@ -1786,11 +1782,10 @@ impl WidgetRef for ChatComposer {
                             left_spans.push(Span::from(" change)").style(label_style));
                         }
                     }
-                }
 
                 if self.ctrl_c_quit_hint {
                     // Treat as a notice; keep on the left
-                    if !self.access_mode_label.is_none() {
+                    if self.access_mode_label.is_some() {
                         left_spans.push(Span::from("   "));
                     }
                     left_spans.push(Span::from("Ctrl+C").style(key_hint_style));
@@ -1811,8 +1806,8 @@ impl WidgetRef for ChatComposer {
                 }
 
                 // Append ephemeral footer notice if present and not expired
-                if let Some((msg, until)) = &self.footer_notice {
-                    if std::time::Instant::now() <= *until {
+                if let Some((msg, until)) = &self.footer_notice
+                    && std::time::Instant::now() <= *until {
                         if left_spans.len() > 1 {
                             left_spans.push(Span::from("   "));
                         }
@@ -1821,7 +1816,6 @@ impl WidgetRef for ChatComposer {
                                 .style(Style::default().add_modifier(Modifier::DIM)),
                         );
                     }
-                }
 
                 // Right side: command key hints (Ctrl+R/D/H), token usage, and a small auth notice
                 // when using an API key instead of ChatGPT auth. We elide hints first if space is tight.
@@ -1836,8 +1830,8 @@ impl WidgetRef for ChatComposer {
                     token_spans
                         .push(Span::from(used_str).style(label_style.add_modifier(Modifier::BOLD)));
                     token_spans.push(Span::from(" tokens").style(label_style));
-                    if let Some(context_window) = token_usage_info.model_context_window {
-                        if context_window > 0 {
+                    if let Some(context_window) = token_usage_info.model_context_window
+                        && context_window > 0 {
                             let percent_remaining = {
                                 let percent =
                                     100.0 - (tokens_used as f32 / context_window as f32 * 100.0);
@@ -1850,7 +1844,6 @@ impl WidgetRef for ChatComposer {
                             );
                             token_spans.push(Span::from("% left)").style(label_style));
                         }
-                    }
                 }
 
                 // Helper to build hint spans based on inclusion flags

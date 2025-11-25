@@ -42,7 +42,7 @@ impl PipelineConfiguratorView {
         match self.state.pending_config.save(&config_path) {
             Ok(()) => {
                 // Send success event with configuration summary
-                let _ = self
+                self
                     .app_event_tx
                     .send(AppEvent::PipelineConfigurationSaved {
                         spec_id: self.state.spec_id.clone(),
@@ -55,7 +55,7 @@ impl PipelineConfiguratorView {
             }
             Err(err) => {
                 // Send error event
-                let _ = self
+                self
                     .app_event_tx
                     .send(AppEvent::PipelineConfigurationError {
                         spec_id: self.state.spec_id.clone(),
@@ -68,7 +68,7 @@ impl PipelineConfiguratorView {
 
     fn handle_cancel(&mut self) {
         // Send cancellation event
-        let _ = self
+        self
             .app_event_tx
             .send(AppEvent::PipelineConfigurationCancelled {
                 spec_id: self.state.spec_id.clone(),

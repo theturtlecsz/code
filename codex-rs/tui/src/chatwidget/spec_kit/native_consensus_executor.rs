@@ -138,20 +138,18 @@ fn read_context_files(_widget: &ChatWidget, spec_id: &str, stage: SpecStage) -> 
 
     // Read spec.md
     let spec_path = PathBuf::from(format!("docs/SPEC-{}/spec.md", spec_id));
-    if spec_path.exists() {
-        if let Ok(content) = fs::read_to_string(&spec_path) {
+    if spec_path.exists()
+        && let Ok(content) = fs::read_to_string(&spec_path) {
             context_parts.push(format!("# spec.md\n{}", content));
         }
-    }
 
     // Read plan.md for tasks/implement/validate/audit/unlock
     if stage != SpecStage::Plan {
         let plan_path = PathBuf::from(format!("docs/SPEC-{}/plan.md", spec_id));
-        if plan_path.exists() {
-            if let Ok(content) = fs::read_to_string(&plan_path) {
+        if plan_path.exists()
+            && let Ok(content) = fs::read_to_string(&plan_path) {
                 context_parts.push(format!("# plan.md\n{}", content));
             }
-        }
     }
 
     // Read tasks.md for implement/validate/audit/unlock
@@ -160,20 +158,18 @@ fn read_context_files(_widget: &ChatWidget, spec_id: &str, stage: SpecStage) -> 
         SpecStage::Implement | SpecStage::Validate | SpecStage::Audit | SpecStage::Unlock
     ) {
         let tasks_path = PathBuf::from(format!("docs/SPEC-{}/tasks.md", spec_id));
-        if tasks_path.exists() {
-            if let Ok(content) = fs::read_to_string(&tasks_path) {
+        if tasks_path.exists()
+            && let Ok(content) = fs::read_to_string(&tasks_path) {
                 context_parts.push(format!("# tasks.md\n{}", content));
             }
-        }
     }
 
     // Read constitution
     let constitution_path = PathBuf::from("memory/constitution.md");
-    if constitution_path.exists() {
-        if let Ok(content) = fs::read_to_string(&constitution_path) {
+    if constitution_path.exists()
+        && let Ok(content) = fs::read_to_string(&constitution_path) {
             context_parts.push(format!("# constitution.md\n{}", content));
         }
-    }
 
     Ok(context_parts.join("\n\n---\n\n"))
 }

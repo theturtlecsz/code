@@ -195,7 +195,7 @@ fn validate_spec_files(cwd: &Path, spec_id: &str) -> GuardrailCheck {
 fn validate_clean_tree(cwd: &Path) -> GuardrailCheck {
     // Check git status
     let output = Command::new("git")
-        .args(&["status", "--porcelain"])
+        .args(["status", "--porcelain"])
         .current_dir(cwd)
         .output();
 

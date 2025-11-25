@@ -402,15 +402,14 @@ impl BottomPane<'_> {
     /// to allow continued input while processing.
     pub(crate) fn update_status_text(&mut self, text: String) {
         // If there's an active modal view that can handle status updates, let it
-        if let Some(view) = self.active_view.as_mut() {
-            if matches!(
+        if let Some(view) = self.active_view.as_mut()
+            && matches!(
                 view.update_status_text(text.clone()),
                 bottom_pane_view::ConditionalUpdate::NeedsRedraw
             ) {
                 self.request_redraw();
                 return;
             }
-        }
 
         // Pass status message to composer for dynamic title display
         self.composer.update_status_message(text);
@@ -889,8 +888,8 @@ impl WidgetRef for &BottomPane<'_> {
                 // Modal finished—render composer instead on this frame.
                 // We intentionally avoid mutating state here; key handling will
                 // clear the view on the next interaction. This keeps render pure.
-            } else if y_offset < area.height {
-                if y_offset < area.height {
+            } else if y_offset < area.height
+                && y_offset < area.height {
                     // Reserve bottom padding lines; keep at least 1 line for the view.
                     let avail = area.height - y_offset;
                     let pad = if self.active_view.is_some() {
@@ -911,8 +910,6 @@ impl WidgetRef for &BottomPane<'_> {
                     fill_rect(buf, view_rect, None, view_bg);
                     view.render(view_rect, buf);
                 }
-                return;
-            }
         } else if y_offset < area.height {
             // Optionally add an empty line above the input box
             if self.top_spacer_enabled {

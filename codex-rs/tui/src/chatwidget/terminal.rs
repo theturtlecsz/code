@@ -208,11 +208,10 @@ impl TerminalOverlay {
     }
 
     pub(crate) fn cancel_pending_command(&mut self) {
-        if let Some(mut pending) = self.pending_command.take() {
-            if let Some(tx) = pending.ack.take() {
+        if let Some(mut pending) = self.pending_command.take()
+            && let Some(tx) = pending.ack.take() {
                 let _ = tx.send(TerminalCommandGate::Cancel);
             }
-        }
     }
 
     pub(crate) fn push_info_message(&mut self, message: &str) {
@@ -331,9 +330,7 @@ impl TerminalOverlay {
                     idx += consumed;
                 }
                 0x08 => {
-                    if col > 0 {
-                        col -= 1;
-                    }
+                    col = col.saturating_sub(1);
                     idx += 1;
                 }
                 byte if byte & 0xC0 == 0x80 => {
@@ -361,7 +358,7 @@ impl TerminalOverlay {
             match chunk[idx] {
                 b'\t' => {
                     let spaces = TERMINAL_TABSTOP - (col % TERMINAL_TABSTOP);
-                    out.extend(std::iter::repeat(b' ').take(spaces));
+                    out.extend(std::iter::repeat_n(b' ', spaces));
                     col += spaces;
                     idx += 1;
                 }
@@ -384,9 +381,7 @@ impl TerminalOverlay {
                 }
                 0x08 => {
                     out.push(0x08);
-                    if col > 0 {
-                        col -= 1;
-                    }
+                    col = col.saturating_sub(1);
                     idx += 1;
                 }
                 byte => {
@@ -709,7 +704,7 @@ fn strip_non_sgr_csi(input: &str) -> String {
             if matches!(chars.peek(), Some('[')) {
                 chars.next();
                 let mut seq = String::from("\u{001B}[");
-                while let Some(next) = chars.next() {
+                for next in chars.by_ref() {
                     seq.push(next);
                     let final_byte = next as u32;
                     if (0x40..=0x7E).contains(&final_byte) {

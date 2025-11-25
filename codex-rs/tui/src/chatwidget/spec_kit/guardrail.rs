@@ -42,11 +42,10 @@ pub fn validate_guardrail_schema(stage: SpecStage, telemetry: &Value) -> Vec<Str
 
     match stage {
         SpecStage::Validate | SpecStage::Audit => {
-            if let Some(value) = telemetry.get("artifacts") {
-                if !value.is_array() {
+            if let Some(value) = telemetry.get("artifacts")
+                && !value.is_array() {
                     failures.push("Field artifacts must be an array when present".to_string());
                 }
-            }
         }
         _ => match telemetry.get("artifacts") {
             Some(Value::Array(arr)) => {
@@ -292,11 +291,10 @@ pub fn evaluate_guardrail_value(stage: SpecStage, value: &Value) -> GuardrailEva
                 .get("hal")
                 .and_then(|hal| hal.get("summary"))
                 .and_then(|summary| summary.as_object())
-            {
-                if let Some(status) = hal_summary.get("status").and_then(|s| s.as_str()) {
+                && let Some(status) = hal_summary.get("status").and_then(|s| s.as_str()) {
                     summary = format!("{summary}; HAL {status}");
-                    if status == "failed" {
-                        if let Some(checks) = hal_summary
+                    if status == "failed"
+                        && let Some(checks) = hal_summary
                             .get("failed_checks")
                             .and_then(|list| list.as_array())
                         {
@@ -310,9 +308,7 @@ pub fn evaluate_guardrail_value(stage: SpecStage, value: &Value) -> GuardrailEva
                                 failures.push(format!("HAL failed checks: {joined}"));
                             }
                         }
-                    }
                 }
-            }
 
             GuardrailEvaluation {
                 success,
@@ -528,8 +524,8 @@ pub fn handle_guardrail_impl(
                 continue;
             }
 
-            if let Some((flag, value)) = token.split_once('=') {
-                if flag == "--hal" || flag == "--hal-mode" {
+            if let Some((flag, value)) = token.split_once('=')
+                && (flag == "--hal" || flag == "--hal-mode") {
                     hal_from_args = match HalMode::from_str(value) {
                         Some(mode) => Some(mode),
                         None => {
@@ -542,7 +538,6 @@ pub fn handle_guardrail_impl(
                     };
                     continue;
                 }
-            }
 
             remainder_tokens.push(token.to_string());
         }
@@ -614,8 +609,8 @@ pub fn handle_guardrail_impl(
                 stage.command_name()
             ));
         }
-        if let Some(notes) = spec_prompts::orchestrator_notes(stage.key()) {
-            if !notes.is_empty() {
+        if let Some(notes) = spec_prompts::orchestrator_notes(stage.key())
+            && !notes.is_empty() {
                 banner.push_str("  Notes:\n");
                 for note in notes {
                     banner.push_str("    - ");
@@ -623,7 +618,6 @@ pub fn handle_guardrail_impl(
                     banner.push('\n');
                 }
             }
-        }
     }
 
     if !is_stats {
@@ -773,7 +767,7 @@ fn handle_native_guardrail(widget: &mut ChatWidget, command: SlashCommand, raw_a
         let success = result.success;
 
         // Send completion event
-        let _ = event_tx.send(crate::app_event::AppEvent::GuardrailComplete {
+        event_tx.send(crate::app_event::AppEvent::GuardrailComplete {
             spec_id: spec_id_clone,
             stage,
             success,
@@ -859,11 +853,11 @@ pub fn display_guardrail_result_and_advance(
     // CRITICAL: Native guardrails are synchronous and don't emit TaskComplete events.
     // After successful completion, manually trigger pipeline advancement for /speckit.auto.
     // This replaces the task-based completion mechanism used by bash guardrails.
-    if result.success {
-        if let Some(state) = widget.spec_auto_state.as_ref() {
+    if result.success
+        && let Some(state) = widget.spec_auto_state.as_ref() {
             // Check if we're waiting for this guardrail stage
-            if let Some(wait) = &state.waiting_guardrail {
-                if wait.stage == stage {
+            if let Some(wait) = &state.waiting_guardrail
+                && wait.stage == stage {
                     tracing::warn!(
                         "DEBUG: Native guardrail {:?} complete, manually advancing pipeline",
                         stage
@@ -877,7 +871,5 @@ pub fn display_guardrail_result_and_advance(
                         result.clone(), // Pass the result we just computed
                     );
                 }
-            }
         }
-    }
 }

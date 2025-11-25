@@ -472,11 +472,10 @@ fn find_next_order_number(lines: &[&str]) -> usize {
         if line.starts_with('|') && line.contains("SPEC-KIT-") {
             // Parse order number (first column)
             let parts: Vec<&str> = line.split('|').collect();
-            if parts.len() > 1 {
-                if let Ok(order) = parts[1].trim().parse::<usize>() {
+            if parts.len() > 1
+                && let Ok(order) = parts[1].trim().parse::<usize>() {
                     max_order = max_order.max(order);
                 }
-            }
         }
     }
 

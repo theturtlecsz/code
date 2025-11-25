@@ -37,7 +37,7 @@ async fn call_llm_for_ace(prompt: String) -> Result<String, String> {
 
     // Call Gemini Flash via subprocess (using existing gemini command)
     let mut child = tokio::process::Command::new("gemini")
-        .args(&["-y", "-m", "gemini-2.5-flash"])
+        .args(["-y", "-m", "gemini-2.5-flash"])
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())

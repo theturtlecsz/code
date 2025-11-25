@@ -389,7 +389,7 @@ impl CostTracker {
         escalation_reason: Option<&str>,
     ) {
         let mut guard = self.stage_notes.lock().unwrap();
-        let entry = guard.entry(spec_id.to_string()).or_insert_with(Vec::new);
+        let entry = guard.entry(spec_id.to_string()).or_default();
         let note = StageRoutingNote {
             stage: stage.command_name().to_string(),
             aggregator_effort: aggregator_effort.map(|s| s.to_string()),

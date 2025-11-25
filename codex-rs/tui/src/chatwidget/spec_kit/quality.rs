@@ -99,7 +99,7 @@ pub fn should_auto_resolve_with_ace(
 
         // Check for keyword overlap
         bullet_lower.contains(&issue_type_lower)
-            || issue_lower.contains(&bullet_lower.split_whitespace().next().unwrap_or(""))
+            || issue_lower.contains(bullet_lower.split_whitespace().next().unwrap_or(""))
             || bullet.text.len() > 20
                 && issue.description.len() > 20
                 && similar_topics(&bullet_lower, &issue_lower)
@@ -435,11 +435,10 @@ pub fn apply_auto_resolution(
 /// Extract requirement ID from question text
 fn extract_requirement_id(text: &str) -> Option<String> {
     // Look for patterns like "R1:", "R2:", etc.
-    if let Some(start) = text.find('R') {
-        if let Some(end) = text[start..].find(':') {
+    if let Some(start) = text.find('R')
+        && let Some(end) = text[start..].find(':') {
             return Some(text[start..start + end].to_string());
         }
-    }
     None
 }
 

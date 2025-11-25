@@ -209,13 +209,12 @@ fn count_model_changes(old: &AppConfig, new: &AppConfig) -> usize {
 
     // Models modified (simplified check)
     for (key, new_model) in &new.models {
-        if let Some(old_model) = old.models.get(key) {
-            if old_model.model != new_model.model
-                || (old_model.temperature - new_model.temperature).abs() > f32::EPSILON
+        if let Some(old_model) = old.models.get(key)
+            && (old_model.model != new_model.model
+                || (old_model.temperature - new_model.temperature).abs() > f32::EPSILON)
             {
                 changes += 1;
             }
-        }
     }
 
     changes

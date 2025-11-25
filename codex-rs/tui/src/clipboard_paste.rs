@@ -195,11 +195,10 @@ pub fn normalize_pasted_path(pasted: &str) -> Option<PathBuf> {
     let pasted = pasted.trim();
 
     // file:// URL → filesystem path
-    if let Ok(url) = url::Url::parse(pasted) {
-        if url.scheme() == "file" {
+    if let Ok(url) = url::Url::parse(pasted)
+        && url.scheme() == "file" {
             return url.to_file_path().ok();
         }
-    }
 
     // TODO: We'll improve the implementation/unit tests over time, as appropriate.
     // Possibly use typed-path: https://github.com/openai/codex/pull/2567/commits/3cc92b78e0a1f94e857cf4674d3a9db918ed352e

@@ -68,16 +68,14 @@ impl CurationPromptBuilder {
 
     /// Build curation prompt for LLM
     pub fn build(&self) -> String {
-        let mut prompt = format!(
-            r#"ROLE: ACE Curator - Strategic playbook management
+        let mut prompt = r#"ROLE: ACE Curator - Strategic playbook management
 
 TASK: Decide how to update the playbook based on reflection insights.
 
 ## Reflection Insights
 
 ### Patterns Discovered
-"#
-        );
+"#.to_string();
 
         for pattern in &self.reflection.patterns {
             prompt.push_str(&format!(
