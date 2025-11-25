@@ -24,15 +24,57 @@ This playbook gives Claude Code everything it needs to operate safely inside thi
 - **Evidence footprint:** keep evidence under the 25 MB per-SPEC soft limit; use `/spec-evidence-stats` after large runs. Current: All SPECs within limit ✅ (per MAINT-4 evidence automation, 2025-10-18).
 - **Multi-provider model support (SPEC-KIT-952):** Claude models route through native CLI with streaming support. Gemini CLI routing disabled (see Known Limitations).
 
+## 0.1 Model Guidance (Opus 4.5)
+
+**Primary Model**: Claude Opus 4.5 (`claude-opus-4-5-20251101`)
+
+### Extended Thinking
+
+Use deep reasoning (`ultrathink`) for:
+- Architecture decisions affecting >3 files
+- Multi-agent consensus synthesis and conflict resolution
+- Complex debugging with multiple hypotheses
+- Security audit and compliance review
+- Refactors touching shared interfaces
+
+Use standard reasoning for:
+- Single-file changes and bug fixes
+- Documentation updates
+- Status queries and diagnostics
+- Direct tool operations
+
+### Judgment Trust
+
+Opus 4.5 has improved instruction following and nuanced decision-making. Guidelines in this document are **principles, not absolute rules**. When context clearly warrants deviation:
+1. Document your reasoning briefly
+2. Proceed with the appropriate action
+3. The goal is quality outcomes, not mechanical compliance
+
+### Context Efficiency
+
+With 200K tokens available:
+- Prefer loading full files over incremental reads when understanding is needed
+- Agent spawning for "context preservation" is less critical than with previous models
+- Focus on expertise isolation (specialized prompts) rather than context savings
+
+### Validation Tiers
+
+Match validation effort to change scope:
+- **<50 lines**: Trust model self-check, validate after completion
+- **50-200 lines**: Run fmt + clippy after completion
+- **>200 lines or cross-module**: Full validation harness (fmt, clippy, build, tests)
+
 ### Multi-Provider CLI Setup (SPEC-KIT-952)
 
 The TUI supports three model providers with different authentication methods:
 
-| Provider | Models | Auth Method | Status |
-|----------|--------|-------------|--------|
-| **ChatGPT** | gpt-5, gpt-5.1-*, gpt-5-codex | Native OAuth (existing) | ✅ Working |
-| **Claude** | claude-opus-4.5, claude-sonnet-4.5, claude-haiku-4.5 | CLI routing (SPEC-952) | ✅ Working |
-| **Gemini** | gemini-3-pro, gemini-2.5-*, gemini-2.0-flash | CLI routing (SPEC-952) | ✅ Working |
+| Provider | TUI Display Names | Auth Method | Status |
+|----------|-------------------|-------------|--------|
+| **ChatGPT** | gpt-5, gpt-5-codex | Native OAuth | ✅ Working |
+| **Claude** | claude-opus-4-5, claude-sonnet-4-5, claude-haiku-4-5 | CLI routing | ✅ Working |
+| **Gemini** | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash | CLI routing | ✅ Working |
+
+**Note**: Display names are TUI shortcuts. Actual API model IDs (e.g., `claude-opus-4-5-20251101`) are resolved at runtime.
 
 **Claude CLI Setup (Working)**:
 ```bash
@@ -45,9 +87,9 @@ claude
 **Using Claude Models:**
 ```bash
 # Select model via /model command
-/model claude-sonnet-4.5
-/model claude-opus-4.5
-/model claude-haiku-4.5
+/model claude-sonnet-4-5
+/model claude-opus-4-5
+/model claude-haiku-4-5
 
 # Or use model selector
 /model
@@ -125,19 +167,6 @@ See `MEMORY-POLICY.md` for complete policy. Local-memory is the **only** knowled
 
 - `/spec-evidence-stats [--spec SPEC-ID]` – Evidence footprint monitoring. Wraps `scripts/spec_ops_004/evidence_stats.sh`. Use after large runs to monitor repo footprint.
 - `/spec-consensus SPEC-ID STAGE` – Inspect local-memory consensus artifacts for a given stage.
-
-### Legacy Commands (Backward Compatible)
-
-**Deprecated but still functional (will be removed in future release):**
-- `/new-spec` → use `/speckit.new`
-- `/spec-plan` → use `/speckit.plan`
-- `/spec-tasks` → use `/speckit.tasks`
-- `/spec-implement` → use `/speckit.implement`
-- `/spec-validate` → use `/speckit.validate`
-- `/spec-audit` → use `/speckit.audit`
-- `/spec-unlock` → use `/speckit.unlock`
-- `/spec-auto` → use `/speckit.auto`
-- `/spec-status` → use `/speckit.status`
 
 ### Command Usage Examples
 
@@ -323,93 +352,13 @@ The build script handles profile optimization, environment sanitization, and pro
 
 ### Cargo Cleanup & Disk Space Management
 
-**CRITICAL**: Rust build artifacts accumulate rapidly and can consume hundreds of gigabytes. Proactive cleanup is **mandatory**.
+Rust build artifacts can consume significant disk space. For cleanup triggers, monitoring commands, and emergency procedures, see **[scripts/CLEANUP.md](scripts/CLEANUP.md)**.
 
-**Automatic Cleanup (Built into build-fast.sh)**:
-The build script automatically cleans when switching profiles or on explicit request:
+**Quick reference**:
 ```bash
-# Force clean before build
-CLEAN=1 ~/code/build-fast.sh
-
-# Clean specific profile
-PROFILE=release CLEAN=1 ~/code/build-fast.sh
-```
-
-**Manual Cleanup Commands**:
-```bash
-# Full cleanup (removes ALL build artifacts - use when disk space critical)
-cd ~/code/codex-rs && cargo clean
-
-# Profile-specific cleanup (preserves other profiles)
-cd ~/code/codex-rs && cargo clean --profile dev-fast
-cd ~/code/codex-rs && cargo clean --release
-
-# Check target directory size
-du -sh ~/code/codex-rs/target
-```
-
-**MANDATORY Cleanup Triggers** (Claude MUST execute):
-1. **After completing major SPECs** - Run `cargo clean` after `/speckit.unlock` succeeds
-2. **Before long sessions** - Clean at session start if target/ > 20GB
-3. **After branch switches** - Clean when switching between feature branches with dependency changes
-4. **On build errors** - Try `cargo clean` if encountering mysterious build failures
-5. **End of day** - Run `cargo clean` before signing off
-
-**Monitoring Commands**:
-```bash
-# Check current disk usage
-du -sh ~/code/codex-rs/target
-df -h ~/code/codex-rs
-
-# List largest directories in target/
-du -h ~/code/codex-rs/target | sort -rh | head -20
-
-# Check for old build artifacts (older than 7 days)
-find ~/code/codex-rs/target -type f -mtime +7 -ls
-```
-
-**Expected Sizes**:
-- Clean workspace: ~500MB (dependencies only)
-- After dev build: ~5-10GB
-- After multiple profiles: ~15-30GB
-- **WARNING threshold**: >50GB → immediate cleanup required
-- **CRITICAL threshold**: >100GB → full `cargo clean` mandatory
-
-**Cleanup Protocol** (for Claude):
-```bash
-# Start of session check
-if [ $(du -s ~/code/codex-rs/target | cut -f1) -gt 20000000 ]; then
-  echo "⚠️  Target directory exceeds 20GB, running cleanup..."
-  cd ~/code/codex-rs && cargo clean
-fi
-
-# After completing SPEC
-cd ~/code/codex-rs && cargo clean
-echo "✅ Cleaned build artifacts after SPEC completion"
-```
-
-**What NOT to clean**:
-- DO NOT delete `~/.cargo/` (shared dependency cache)
-- DO NOT clean during active development (only between major tasks)
-- DO NOT clean if builds are in progress
-
-**Emergency Cleanup** (disk full):
-```bash
-# Nuclear option - removes everything
-cd ~/code/codex-rs && cargo clean
-rm -rf ~/.cargo/registry/cache/*
-rm -rf ~/.cargo/git/checkouts/*
-```
-
-**Integration with build-fast.sh**:
-The build script should check disk usage and warn/clean automatically:
-```bash
-# Add to build-fast.sh (future enhancement)
-TARGET_SIZE=$(du -s codex-rs/target 2>/dev/null | cut -f1)
-if [ "$TARGET_SIZE" -gt 50000000 ]; then  # >50GB
-  echo "⚠️  WARNING: target/ is ${TARGET_SIZE}KB (>50GB)"
-  echo "Consider running: CLEAN=1 $0"
-fi
+du -sh ~/code/codex-rs/target          # Check size
+cd ~/code/codex-rs && cargo clean      # Full cleanup
+CLEAN=1 ~/code/build-fast.sh           # Clean + build
 ```
 
 ## 7. Branch & Git Discipline
@@ -428,243 +377,59 @@ fi
 - Large refactor emerges unexpectedly.
 - Required reference documents (`product-requirements.md`, `PLANNING.md`, relevant spec files) are absent.
 
-## 9. Memory Workflow - Curated Knowledge Base
+## 9. Memory Workflow
 
-**POLICY**: Use **local-memory MCP exclusively** for high-value knowledge. See `MEMORY-POLICY.md` for complete details.
+**Policy**: Use **local-memory MCP exclusively** for high-value knowledge. See `MEMORY-POLICY.md` for complete details.
 
-**Purpose**: Build a curated knowledge base of reusable patterns and living project handbook, NOT a complete history archive.
+**Purpose**: Build a curated knowledge base of reusable patterns, NOT a complete history archive.
 
-**Note**: Consensus artifacts (agent outputs, structured data) will migrate to separate database (SPEC-KIT-072). Local-memory is for **human-curated insights only**.
+### Core Principle
 
----
+Store **high-value insights only** (importance ≥8). Quality over quantity.
 
-### Session Workflow
+**Store**:
+- Architecture decisions with rationale (WHY, not just what)
+- Reusable patterns and non-obvious solutions
+- Critical discoveries (rate limits, breaking changes)
+- Major milestones with outcomes
 
-**1. Session Start** (REQUIRED):
-```
-Use mcp__local-memory__search:
-- query: "project architecture recent changes"
-- limit: 10
-- search_type: "semantic"
-```
-Retrieves recent architecture decisions, bug fixes, patterns.
+**Don't Store**:
+- Session summaries (use git commits)
+- Progress updates (use SPEC.md)
+- Information already in documentation
+- Routine operations or transient status
 
-**2. Before Major Tasks** (REQUIRED):
-```
-Use mcp__local-memory__search:
-- query: "test coverage phase 3 integration"
-- tags: ["testing", "spec-kit"]
-- limit: 5
-```
-Search for relevant prior work to avoid repeating research.
+### Quick Reference
 
-**3. During Work** (Store importance ≥8 ONLY):
-```
-Use mcp__local-memory__store_memory:
-- content: "Routing bug fixed: SpecKitCommand wasn't passing config. Root cause: routing.rs line 45 passed None instead of actual config. Solution: Pass widget.config to format_subagent_command(). Pattern: Always verify config propagation in command chains."
-- domain: "debugging"
-- tags: ["type:bug-fix", "spec:SPEC-KIT-066", "component:routing"]
-- importance: 9
+```bash
+# Session start - retrieve context
+mcp__local-memory__search(query="project architecture", limit=10)
+
+# Store high-value insight
+mcp__local-memory__store_memory(
+  content="Pattern: Use native Rust for deterministic tasks - 10,000x faster than AI consensus",
+  domain="infrastructure",
+  tags=["type:pattern", "spec:SPEC-KIT-070"],
+  importance=9
+)
 ```
 
-**What to Store** (importance ≥8):
-- 🏗️ Architecture decisions with rationale (why, not just what)
-- 🔧 Reusable patterns and code examples
-- 🚨 Critical discoveries (rate limits, cost crisis, system-breaking)
-- 🐛 Non-obvious bug fixes with context
-- ⚠️ Important limitations and workarounds
-- ✅ Major milestones with outcomes
+### Tags
 
-**What NOT to Store**:
-- ❌ Session summaries (use git commits + SPEC.md instead)
-- ❌ Progress updates (use SPEC.md task tracker)
-- ❌ Information already in documentation (link to it instead)
-- ❌ Routine operations (normal workflow)
-- ❌ Transient status ("in progress", "blocked")
-- ❌ Low-value observations (importance <8)
-- ❌ Consensus artifacts (will use separate DB, SPEC-KIT-072)
+Use namespaced format: `spec:SPEC-KIT-071`, `type:bug-fix`, `component:routing`
 
-**4. After Milestones** (Store importance ≥8):
-```
-Use mcp__local-memory__store_memory:
-- content: "Test coverage Phase 3 complete: Added 60 integration tests (workflow, error recovery, state persistence, quality gates, concurrent ops). Total: 555 tests, 100% pass rate. Estimated coverage: 38-42% (exceeded 40% target). Pattern: IntegrationTestContext harness enables complex multi-module testing. Files: workflow_integration_tests.rs, error_recovery_integration_tests.rs"
-- domain: "infrastructure"
-- tags: ["type:milestone", "testing", "phase-3"]
-- importance: 8
-```
+**Domains**: spec-kit, infrastructure, rust, documentation, debugging
 
-**5. Session End** (OPTIONAL - only if exceptional):
+**Avoid**: date tags, task IDs, status values (ephemeral, not reusable)
 
-Store session summary ONLY if:
-- Major breakthrough or discovery (rate limits, architectural insight)
-- Multi-day work requiring detailed handoff context
-- Critical decisions NOT captured in individual memories
+### Importance Scale
 
-Otherwise: Individual memories + git commits + SPEC.md are sufficient.
-
-**If storing** (rare):
-```
-Use mcp__local-memory__store_memory:
-- content: "Discovered OpenAI rate limit crisis validates SPEC-KIT-070 urgency. Hit limits during testing (1d 1h block). Changed strategy to prioritize provider diversity and aggressive cost reduction. Deployed Claude Haiku (12x cheaper), Gemini Flash (12.5x cheaper), native SPEC-ID ($0). Impact: 40-50% cost reduction ready for validation."
-- domain: "infrastructure"
-- tags: ["type:discovery", "spec:SPEC-KIT-070", "priority:critical"]
-- importance: 10
-```
-
----
-
-### Tag Schema (Guided, Flexible)
-
-**Namespaced Format** (use when applicable):
-```
-spec:<SPEC-ID>          Example: spec:SPEC-KIT-071
-type:<category>         Example: type:bug-fix, type:pattern, type:discovery
-project:<name>          Example: project:codex-rs, project:kavedarr
-component:<area>        Example: component:routing, component:consensus
-```
-
-**Domain Structure** (5 primary domains):
-```
-spec-kit        Spec-kit automation, consensus, multi-agent workflows
-infrastructure  Cost, testing, architecture, CI/CD, performance
-rust            Language patterns, borrow checker, cargo, performance
-documentation   Doc strategy, templates, writing, guides
-debugging       Bug fixes, error patterns, workarounds, troubleshooting
-```
-
-**General Tags** (~30-50 approved, can add new if justified):
-```
-Core: testing, mcp, consensus, evidence, telemetry
-Concepts: cost-optimization, quality-gates, rebase-safety
-Tools: borrow-checker, native-tools
-```
-
-**FORBIDDEN Tags** (auto-reject):
-```
-❌ Specific dates: 2025-10-20, 2025-10-14 (use date filters instead)
-❌ Task IDs: t84, T12, t21 (ephemeral, not useful long-term)
-❌ Status values: in-progress, blocked, done, complete (changes over time)
-❌ Overly specific: 52-lines-removed, policy-final-check (not reusable)
-```
-
-**Tag Reuse**: Check existing tags before creating new. Consolidate duplicates quarterly.
-
----
-
-### Importance Calibration (CRITICAL)
-
-**Use this guide STRICTLY** to prevent inflation:
-
-```
-10: Crisis events, system-breaking discoveries
-    - Rate limit discovery blocking operations
-    - Critical architecture flaws found
-    - Security vulnerabilities discovered
-    - USE SPARINGLY: <5% of stores
-
-9:  Major architectural decisions, critical patterns
-    - Borrow checker workarounds for complex scenarios
-    - Cost optimization strategies ($6,500/year savings)
-    - Significant refactors (handler.rs extraction)
-    - ~10-15% of stores
-
-8:  Important milestones, valuable solutions
-    - Phase completions with evidence
-    - Non-obvious bug fixes with context
-    - Reusable code patterns
-    - ~15-20% of stores
-
-7:  Useful context, good reference
-    - Configuration changes with rationale
-    - Minor optimizations
-    - RARELY STORE (use docs/git instead)
-    - ~10-15% of stores
-
-6 and below:
-    - DON'T STORE to local-memory
-    - Use git commits, SPEC.md, or documentation instead
-```
-
-**Threshold**: Store ONLY importance ≥8 (not ≥7)
-**Target Average**: 8.5-9.0 (quality-focused)
-**Current Average**: 7.88 (too low, indicates over-storage at 7)
-
----
-
-### Storage Examples
-
-**GOOD Example ✅** (importance: 9):
-```
-content: "Native SPEC-ID generation eliminates $2.40 consensus cost per /speckit.new. Implementation: spec_id_generator.rs scans docs/, finds max ID, increments. Pattern: Use native Rust for deterministic tasks - 10,000x faster, FREE, more reliable than AI consensus. Applies to: file operations, ID generation, formatting, validation."
-
-domain: "infrastructure"
-tags: ["type:pattern", "spec:SPEC-KIT-070", "cost-optimization", "native-tools"]
-importance: 9
-
-Why Good:
-- Captures WHY (pattern: native > AI for deterministic)
-- Includes HOW (implementation detail)
-- Generalizable (applies beyond this case)
-- Proper tags (namespaced, meaningful, no dates)
-- Justified importance (major pattern = 9)
-```
-
-**BAD Example ❌** (DON'T STORE):
-```
-content: "Session 2025-10-24: Did work on SPEC-069 and SPEC-070. Made progress. Tests passing."
-
-domain: "session-summary"
-tags: ["2025-10-24", "session-complete", "done"]
-importance: 9
-
-Why Bad:
-- Redundant (git commits already capture this)
-- Vague (no actionable insights)
-- Date tag (useless for retrieval)
-- Status tags (ephemeral)
-- Wrong importance (routine session ≠ 9)
-- Wrong domain (session-summary will be deprecated)
-- No WHY (doesn't explain decisions)
-```
-
-**BETTER** (if session truly exceptional):
-```
-content: "Discovered CLAUDE.md documentation causing memory bloat through flawed guidance. Root cause: Requires session summaries (redundant), threshold ≥7 too low (inflation), date tags in examples (proliferation). Fixed by updating to ≥8 threshold, optional summaries, tag schema. Pattern: Question the documentation itself when system exhibits emergent problems."
-
-domain: "infrastructure"
-tags: ["type:discovery", "spec:SPEC-KIT-071", "priority:critical", "meta-learning"]
-importance: 10
-
-Why Better:
-- Captures specific insight (docs drive bloat)
-- Includes solution (how we fixed it)
-- Meta-pattern (question documentation)
-- No date tags (timeless insight)
-- Justified importance (critical discovery = 10)
-```
-
----
-
-### Why This Matters
-
-**Curated Knowledge Base**:
-- ✅ High-value patterns and decisions ONLY
-- ✅ Reusable insights (not one-time info)
-- ✅ Findable (clean tags, proper domains)
-- ✅ Scalable (quality > quantity)
-
-**Living Project Handbook**:
-- ✅ Current understanding of architecture
-- ✅ Active SPEC knowledge
-- ✅ Critical context for contributors
-- ✅ Evolves with project (outdated info removed)
-
-**Sustainable Growth**:
-- ~40-60 stores/month (≥8 threshold)
-- Quarterly cleanup (stay at 120-150 target)
-- Consensus artifacts separate (SPEC-KIT-072)
-
-**Deprecated**: byterover-mcp is no longer used (migration complete 2025-10-18).
+| Level | Use For | Frequency |
+|-------|---------|-----------|
+| 10 | Crisis events, system-breaking discoveries | <5% |
+| 9 | Major architecture decisions, critical patterns | 10-15% |
+| 8 | Important milestones, valuable solutions | 15-20% |
+| <8 | Don't store (use git/docs instead) | - |
 
 ## 10. Evidence & Validation Ritual
 - Guardrail runs must have a clean tree unless specifically allowed (`SPEC_OPS_ALLOW_DIRTY=1`).
