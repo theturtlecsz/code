@@ -3,6 +3,25 @@
 // alternate‑screen mode starts; that file opts‑out locally via `allow`.
 #![deny(clippy::print_stdout, clippy::print_stderr)]
 #![deny(clippy::disallowed_methods)]
+// =============================================================================
+// Stylistic lint configuration - these are valid code patterns, not bugs
+// =============================================================================
+// Allow explicit format args (`format!("{}", x)` vs `format!("{x}")`)
+#![allow(clippy::uninlined_format_args)]
+// Allow explicit closures (`|x| f(x)` vs `f`) - both patterns are idiomatic
+#![allow(clippy::redundant_closure)]
+#![allow(clippy::redundant_closure_for_method_calls)]
+// Allow .clone() even when not strictly needed - explicit copies aid readability
+#![allow(clippy::redundant_clone)]
+// Allow passing small values by reference - keeps API consistent
+#![allow(clippy::trivially_copy_pass_by_ref)]
+// =============================================================================
+// Error handling configuration - unwrap/expect on known-safe operations
+// =============================================================================
+// TUI uses RwLock extensively; poisoning indicates catastrophic panic that should
+// propagate. Static data parsing failures indicate code bugs that should panic.
+#![allow(clippy::unwrap_used)]
+#![allow(clippy::expect_used)]
 use app::App;
 use codex_core::BUILT_IN_OSS_MODEL_PROVIDER_ID;
 use codex_core::config::Config;

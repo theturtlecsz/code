@@ -320,14 +320,14 @@ fn strip_codex_wrapper(content: &str) -> String {
     if let Some(footer_pos) = result.rfind("] tokens used:") {
         // Find start of timestamp (look backwards for [)
         if let Some(bracket_pos) = result[..footer_pos].rfind('[') {
-            result = &result[..bracket_pos].trim_end();
+            result = result[..bracket_pos].trim_end();
         }
     }
 
     // Strip trailing "thinking" sections ([timestamp] thinking ...)
     if let Some(thinking_pos) = result.rfind("] thinking") {
         if let Some(bracket_pos) = result[..thinking_pos].rfind('[') {
-            result = &result[..bracket_pos].trim_end();
+            result = result[..bracket_pos].trim_end();
         }
     }
 

@@ -1652,7 +1652,7 @@ impl ChatWidget<'_> {
             }
         }
         for key in &ready {
-            if let Some((ev, order, _t0)) = self.exec.pending_exec_ends.remove(&key) {
+            if let Some((ev, order, _t0)) = self.exec.pending_exec_ends.remove(key) {
                 // Regardless of whether a Begin has arrived by now, handle the End;
                 // handle_exec_end_now pairs with a running Exec if present, or falls back.
                 self.handle_exec_end_now(ev, &order);
@@ -5118,6 +5118,7 @@ impl ChatWidget<'_> {
                 let mut attempts = 0;
                 let max_attempts = 1;
 
+                #[allow(clippy::never_loop)] // Intentional single-iteration for lightweight capture
                 loop {
                     attempts += 1;
                     tracing::info!(
@@ -14249,7 +14250,7 @@ impl ChatWidget<'_> {
                     // If the presumed command looks like a flag, assume name was omitted.
                     if second.starts_with('-') {
                         let cmd = first.clone();
-                        let name = derive_server_name(&cmd, &tail_tokens[1..].to_vec());
+                        let name = derive_server_name(&cmd, &tail_tokens[1..]);
                         (name, cmd, tail_tokens[1..].to_vec())
                     } else {
                         (first.clone(), second.clone(), tail_tokens[2..].to_vec())
@@ -22044,6 +22045,7 @@ impl WidgetRef for &ChatWidget<'_> {
                     };
                     // Fill body background with a slightly lighter paper-like background
                     let bg = crate::colors::background();
+                    #[allow(clippy::disallowed_methods)] // Color blending requires RGB manipulation
                     let paper_color = match bg {
                         ratatui::style::Color::Rgb(r, g, b) => {
                             let alpha = 0.06f32; // subtle lightening toward white

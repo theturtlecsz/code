@@ -83,6 +83,7 @@ pub fn select_bullets(mut bullets: Vec<PlaybookBullet>, slice_size: usize) -> Ve
     bullets = dedupe_bullets(bullets);
 
     // Separate by type
+    #[allow(clippy::needless_collect)] // Collected for len() calculation later
     let helpful: Vec<_> = bullets
         .iter()
         .filter(|b| b.helpful && !b.harmful)

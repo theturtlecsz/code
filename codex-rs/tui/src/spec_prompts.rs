@@ -501,7 +501,7 @@ pub fn build_stage_prompt_with_mcp(
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
         let rendered = render_prompt(stage.key(), SpecAgent::Gemini, &gemini_refs)
-            .unwrap_or_else(|| prompt.prompt);
+            .unwrap_or(prompt.prompt);
         bundle.push_str("## Gemini Ultra — Research\n");
         bundle.push_str(&rendered);
         bundle.push_str("\n\n");
@@ -514,7 +514,7 @@ pub fn build_stage_prompt_with_mcp(
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
         let rendered = render_prompt(stage.key(), SpecAgent::Claude, &claude_refs)
-            .unwrap_or_else(|| prompt.prompt);
+            .unwrap_or(prompt.prompt);
         bundle.push_str("## Claude Sonnet 4.5 — Synthesis\n");
         bundle.push_str(&rendered);
         bundle.push_str("\n\n");
@@ -527,7 +527,7 @@ pub fn build_stage_prompt_with_mcp(
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
         let rendered = render_prompt(stage.key(), SpecAgent::GptCodex, &codex_refs)
-            .unwrap_or_else(|| prompt.prompt);
+            .unwrap_or(prompt.prompt);
         bundle.push_str("## GPT-5 Codex — Code Diff Proposal\n");
         bundle.push_str(&rendered);
         bundle.push_str("\n\n");
@@ -540,7 +540,7 @@ pub fn build_stage_prompt_with_mcp(
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
         let rendered = render_prompt(stage.key(), SpecAgent::GptPro, &gpt_refs)
-            .unwrap_or_else(|| prompt.prompt);
+            .unwrap_or(prompt.prompt);
         bundle.push_str("## GPT-5 — Arbiter & QA\n");
         bundle.push_str(&rendered);
         bundle.push_str("\n");

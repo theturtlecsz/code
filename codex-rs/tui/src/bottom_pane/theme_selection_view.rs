@@ -1690,7 +1690,7 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
             )));
             // Compute anchored window: top until middle, then center; bottom shows end
             let count = options.len() + 1; // include pseudo-row for Generate your own…
-            let visible = available_height.saturating_sub(1).min(9).max(1);
+            let visible = available_height.saturating_sub(1).clamp(1, 9);
             let (start, _vis, _mid) = crate::util::list_window::anchored_window(
                 self.selected_theme_index,
                 count,
@@ -2432,7 +2432,7 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
             // Include an extra pseudo-row for "Generate your own…"
             let count = names.len() + 1;
             // Reserve two rows (header + spacer)
-            let visible = available_height.saturating_sub(2).min(9).max(1);
+            let visible = available_height.saturating_sub(2).clamp(1, 9);
             let (start, _vis, _mid) = crate::util::list_window::anchored_window(
                 self.selected_spinner_index,
                 count,

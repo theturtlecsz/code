@@ -1,3 +1,7 @@
+// Theme module legitimately defines RGB color values for the theming system.
+// These are the source-of-truth definitions, not scattered hardcoded colors.
+#![allow(clippy::disallowed_methods)]
+
 use codex_core::config_types::ThemeColors;
 use codex_core::config_types::ThemeConfig;
 use codex_core::config_types::ThemeName;

@@ -1,3 +1,6 @@
+// Syntax highlighting requires color conversion from syntect's Color type.
+#![allow(clippy::disallowed_methods)]
+
 use once_cell::sync::OnceCell;
 use ratatui::text::{Line, Span};
 

@@ -86,8 +86,8 @@ impl SpecKitConfigValidator {
         }
 
         // Check for enabled agents
-        let enabled_agents: Vec<_> = agents.iter().filter(|a| a.enabled).collect();
-        if enabled_agents.is_empty() {
+        let has_enabled_agents = agents.iter().any(|a| a.enabled);
+        if !has_enabled_agents {
             errors.push(ValidationError {
                 field: "agents".to_string(),
                 issue: "No agents are enabled. Spec-kit requires at least 1 enabled agent."

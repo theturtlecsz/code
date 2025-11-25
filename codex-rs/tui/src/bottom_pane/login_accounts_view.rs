@@ -1142,6 +1142,7 @@ impl AccountRow {
     }
 }
 
+#[allow(clippy::needless_collect)] // Intermediate Vec needed for double-reverse
 fn suffix(text: &str) -> String {
     let tail = text
         .char_indices()

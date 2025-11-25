@@ -22,6 +22,7 @@ use codex_spec_kit::retry::strategy::{
     RetryConfig, execute_with_backoff, execute_with_backoff_sync,
 };
 use r2d2::Pool;
+use tracing::warn;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{Connection, Result as SqlResult, params};
 use std::path::{Path, PathBuf};
@@ -135,19 +136,19 @@ impl ConsensusDb {
                 match pool.get() {
                     Ok(mut conn) => {
                         if let Err(e) = codex_core::db::migrations::migrate_to_latest(&mut conn) {
-                            eprintln!("Warning: Failed to migrate new schema: {}", e);
+                            warn!("Failed to migrate new schema: {}", e);
                             return None;
                         }
                         Some(pool)
                     }
                     Err(e) => {
-                        eprintln!("Warning: Failed to get connection from pool: {}", e);
+                        warn!("Failed to get connection from pool: {}", e);
                         None
                     }
                 }
             }
             Err(e) => {
-                eprintln!("Warning: Failed to initialize new schema pool: {}", e);
+                warn!("Failed to initialize new schema pool: {}", e);
                 None
             }
         }

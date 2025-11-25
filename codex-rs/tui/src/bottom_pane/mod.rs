@@ -932,7 +932,7 @@ impl WidgetRef for &BottomPane<'_> {
             // Paint the composer area background before rendering widgets
             let comp_bg = ratatui::style::Style::default().bg(crate::colors::background());
             fill_rect(buf, composer_rect, None, comp_bg);
-            (&self.composer).render_ref(composer_rect, buf);
+            self.composer.render_ref(composer_rect, buf);
         }
     }
 }

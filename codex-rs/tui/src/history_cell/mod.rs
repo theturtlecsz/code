@@ -7137,7 +7137,7 @@ fn build_web_fetch_sectioned_preview(md: &str, cfg: &Config) -> Vec<Line<'static
                     break;
                 }
             }
-            if level >= 1 && level <= 6 {
+            if (1..=6).contains(&level) {
                 if trimmed.chars().nth(level).map_or(false, |c| c == ' ') {
                     section_heads.push(i);
                 }

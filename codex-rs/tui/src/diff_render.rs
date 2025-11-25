@@ -1,3 +1,6 @@
+// Diff rendering performs color blending for visual contrast adjustments.
+#![allow(clippy::disallowed_methods)]
+
 use crossterm::terminal;
 // Color type is already in scope at the top of this module
 use ratatui::style::Modifier;

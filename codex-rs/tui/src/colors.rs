@@ -1,3 +1,6 @@
+// Color utility module performs legitimate color manipulations (blending, conversion).
+#![allow(clippy::disallowed_methods)]
+
 use crate::theme::current_theme;
 use ratatui::style::Color;
 

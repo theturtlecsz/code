@@ -166,7 +166,7 @@ impl ModelSelectionView {
         for idx in self.sorted_indices() {
             let preset = &self.presets[idx];
             let is_new_model = previous_model
-                .map(|prev| !prev.eq_ignore_ascii_case(&preset.model))
+                .map(|prev| !prev.eq_ignore_ascii_case(preset.model))
                 .unwrap_or(true);
 
             if is_new_model {
@@ -358,14 +358,14 @@ impl<'a> BottomPaneView<'a> for ModelSelectionView {
         for preset_index in sorted_indices {
             let preset = &self.presets[preset_index];
             if previous_model
-                .map(|m| !m.eq_ignore_ascii_case(&preset.model))
+                .map(|m| !m.eq_ignore_ascii_case(preset.model))
                 .unwrap_or(true)
             {
                 if previous_model.is_some() {
                     lines.push(Line::from(""));
                 }
                 lines.push(Line::from(vec![Span::styled(
-                    Self::format_model_header(&preset.model),
+                    Self::format_model_header(preset.model),
                     Style::default()
                         .fg(crate::colors::text_bright())
                         .add_modifier(Modifier::BOLD),

@@ -746,13 +746,9 @@ pub async fn run_spec_consensus(
 
     // ARCH-006: Use SpecAgent enum for expected agents
     let expected_agents = expected_agents_for_stage(stage);
-    let expected_agent_names: Vec<String> = expected_agents
+    let mut missing_agents: Vec<String> = expected_agents
         .iter()
         .map(|agent| agent.canonical_name().to_string())
-        .collect();
-
-    let mut missing_agents: Vec<String> = expected_agent_names
-        .into_iter()
         .filter(|agent| !present_agents.contains(agent))
         .collect();
 

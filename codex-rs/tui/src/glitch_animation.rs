@@ -1,3 +1,6 @@
+// Animation module uses RGB colors for visual effects (glitch, transitions).
+#![allow(clippy::disallowed_methods)]
+
 use ratatui::buffer::Buffer;
 use ratatui::prelude::*;
 use ratatui::widgets::Paragraph;

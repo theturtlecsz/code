@@ -94,10 +94,10 @@ fn run_refresh(app_event_tx: AppEventSender, config: Config, debug_enabled: bool
 }
 
 fn build_runtime() -> Result<Runtime> {
-    Ok(tokio::runtime::Builder::new_multi_thread()
+    tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
-        .context("building rate limit refresh runtime")?)
+        .context("building rate limit refresh runtime")
 }
 
 fn build_model_client(
