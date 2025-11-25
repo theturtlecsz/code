@@ -297,8 +297,8 @@ mod tests {
         // Test that the global registry has all expected commands
         let registry = SPEC_KIT_REGISTRY.lock().unwrap();
 
-        // Should have all 23 commands (added speckit.constitution)
-        assert_eq!(registry.len(), 23, "Registry should have 23 commands");
+        // 27 commands: 9 special + 6 stage + 3 quality + 7 guardrail + 1 evidence + 1 search
+        assert_eq!(registry.len(), 27, "Registry should have 27 commands");
 
         // Verify key commands are registered
         assert!(registry.find("speckit.status").is_some());
@@ -314,11 +314,11 @@ mod tests {
         // Test that all legacy command names still work
         let registry = SPEC_KIT_REGISTRY.lock().unwrap();
 
-        // Legacy spec-* commands
+        // Legacy spec-* commands (note: spec-auto intentionally removed per special.rs)
         assert!(registry.find("spec-plan").is_some());
         assert!(registry.find("spec-tasks").is_some());
         assert!(registry.find("spec-implement").is_some());
-        assert!(registry.find("spec-auto").is_some());
+        // spec-auto removed to prevent confusion with subagent routing
         assert!(registry.find("new-spec").is_some());
 
         // Legacy spec-ops-* commands
@@ -514,12 +514,12 @@ mod tests {
     fn test_all_names_count() {
         let registry = SPEC_KIT_REGISTRY.lock().unwrap();
 
-        // 23 primary names + 18 aliases = 41 total names (added quality stage aliases)
+        // 27 primary names + 17 aliases = 44 total names
         let all_names = registry.all_names();
         assert_eq!(
             all_names.len(),
-            41,
-            "Should have 41 total command names (23 primary + 18 aliases)"
+            44,
+            "Should have 44 total command names (27 primary + 17 aliases)"
         );
     }
 

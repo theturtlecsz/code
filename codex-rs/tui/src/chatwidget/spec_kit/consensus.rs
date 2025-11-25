@@ -1096,7 +1096,7 @@ pub(crate) async fn remember_consensus_verdict(
     verdict: &ConsensusVerdict,
     _mcp_manager: &codex_core::mcp_connection_manager::McpConnectionManager,
 ) -> Result<()> {
-    use serde_json::json;
+    
 
     let mut summary_value = serde_json::json!({
         "spec_id": spec_id,

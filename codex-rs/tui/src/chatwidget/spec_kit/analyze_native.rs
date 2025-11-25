@@ -9,9 +9,9 @@
 use super::clarify_native::Severity;
 use super::error::{Result, SpecKitError};
 use regex_lite::Regex;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Inconsistency issue detected across artifacts
 #[derive(Debug, Clone)]

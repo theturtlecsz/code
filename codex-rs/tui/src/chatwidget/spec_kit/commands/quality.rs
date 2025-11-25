@@ -255,7 +255,7 @@ fn display_clarify_results(
         ));
         for amb in minor.iter().take(5) {
             // Limit minor display
-            let mut lines = vec![
+            let lines = vec![
                 ratatui::text::Line::from(format!("  {} [{}]", amb.id, amb.pattern)),
                 ratatui::text::Line::from(format!("  Question: {}", amb.question)),
                 ratatui::text::Line::from(format!("  Location: {}", amb.location)),

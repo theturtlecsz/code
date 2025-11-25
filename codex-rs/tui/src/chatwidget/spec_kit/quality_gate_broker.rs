@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use codex_core::mcp_connection_manager::McpConnectionManager;
-use serde_json::{Value, json};
+use serde_json::json;
 use tokio::sync::{Mutex, mpsc};
 use tokio::time::{Duration, sleep};
 

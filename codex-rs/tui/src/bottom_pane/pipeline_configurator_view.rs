@@ -2,8 +2,7 @@
 //!
 //! SPEC-947 Phase 4 Task 4.1: Interactive TUI modal for pipeline stage selection
 
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
-use ratatui::Frame;
+use crossterm::event::{KeyEvent, KeyEventKind};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
@@ -11,7 +10,7 @@ use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
 use crate::chatwidget::spec_kit::pipeline_config::PipelineConfig;
 use crate::chatwidget::spec_kit::pipeline_configurator::{
-    ConfigAction, PipelineConfiguratorState, PipelineConfiguratorWidget, ViewMode,
+    ConfigAction, PipelineConfiguratorState, ViewMode,
 };
 use crate::chatwidget::spec_kit::stage_details;
 

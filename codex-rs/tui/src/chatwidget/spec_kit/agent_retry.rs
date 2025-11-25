@@ -11,7 +11,7 @@
 use codex_spec_kit::retry::classifier::{
     ErrorClass, PermanentError, RetryClassifiable, RetryableError,
 };
-use codex_spec_kit::retry::strategy::{RetryConfig, execute_with_backoff};
+use codex_spec_kit::retry::strategy::RetryConfig;
 use rand::Rng;
 use std::time::Duration;
 use thiserror::Error;

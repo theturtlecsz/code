@@ -24,10 +24,8 @@ use codex_spec_kit::retry::strategy::{
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{Connection, Result as SqlResult, params};
-use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use crate::spec_prompts::SpecStage;
 
@@ -320,7 +318,7 @@ impl ConsensusDb {
 
     /// Format Unix timestamp to ISO 8601 string for backward compatibility
     fn format_timestamp(timestamp: i64) -> String {
-        use std::time::{SystemTime, UNIX_EPOCH};
+        use std::time::UNIX_EPOCH;
         let duration = std::time::Duration::from_secs(timestamp as u64);
         let system_time = UNIX_EPOCH + duration;
 

@@ -7,13 +7,12 @@
 //! warning display. Supports keyboard navigation and saves configuration to
 //! per-SPEC `pipeline.toml`.
 
-use super::pipeline_config::{PipelineConfig, StageType, ValidationResult};
+use super::pipeline_config::{PipelineConfig, StageType};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     Frame,
-    buffer::Buffer,
-    layout::{Constraint, Direction, Layout, Margin, Rect},
-    widgets::{Block, Borders, Clear, Widget},
+    layout::{Constraint, Direction, Layout, Rect},
+    widgets::{Block, Borders, Clear},
 };
 
 /// Pipeline configurator state machine
@@ -637,7 +636,7 @@ impl PipelineConfiguratorWidget {
     /// - Bottom: Help bar (Phase 3)
     pub fn render(frame: &mut Frame, state: &mut PipelineConfiguratorState) {
         // Create centered overlay (80% width, 70% height)
-        let area = centered_rect(80, 70, frame.size());
+        let area = centered_rect(80, 70, frame.area());
 
         // Clear background for modal overlay
         frame.render_widget(Clear, area);

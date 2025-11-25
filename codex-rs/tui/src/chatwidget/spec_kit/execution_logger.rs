@@ -14,7 +14,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::spec_prompts::SpecStage;
 
 /// Unique identifier for a pipeline run
 pub type RunId = String;

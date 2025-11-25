@@ -10,7 +10,6 @@
 //! - No Python scripts, no orchestrator LLM
 
 use super::state::{QualityCheckpoint, QualityGateType};
-use crate::spec_prompts::SpecStage;
 use codex_core::agent_tool::AGENT_MANAGER;
 use codex_core::config_types::AgentConfig;
 use serde_json::Value;

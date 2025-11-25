@@ -4,7 +4,7 @@
 //! Uses plain text output format.
 
 use crate::cli_executor::{CliError, CliExecutor};
-use crate::providers::{ProviderResponse, ProviderResult, TokenUsage};
+use crate::providers::{ProviderResponse, ProviderResult};
 use std::time::Duration;
 
 /// Gemini CLI provider for executing prompts

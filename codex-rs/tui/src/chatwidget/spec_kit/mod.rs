@@ -119,7 +119,6 @@ pub use quality_gate_handler::set_native_agent_ids;
 
 // Re-export validation lifecycle functions
 pub use validation_lifecycle::{
-    ValidateLifecycleEvent, ValidateMode, cleanup_spec_auto_with_cancel,
     compute_validate_payload_hash, record_validate_lifecycle_event,
 };
 

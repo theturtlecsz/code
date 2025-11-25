@@ -30,7 +30,7 @@ use super::consensus_coordinator::block_on_sync;
 use super::error::{Result, SpecKitError};
 use crate::history_cell::HistoryCellType;
 use crate::spec_prompts::{SpecAgent, SpecStage};
-use codex_core::agent_tool::{AGENT_MANAGER, AgentManager, AgentStatus};
+use codex_core::agent_tool::{AGENT_MANAGER, AgentStatus};
 use std::sync::Arc;
 use std::time::Duration;
 

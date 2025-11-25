@@ -488,9 +488,10 @@ mod tests {
 
     #[test]
     fn test_model_pricing_claude() {
+        // Haiku pricing updated 2025-11-19 (4x increase)
         let haiku = ModelPricing::for_model("haiku");
-        assert_eq!(haiku.input_per_million, 0.25);
-        assert_eq!(haiku.output_per_million, 1.25);
+        assert_eq!(haiku.input_per_million, 1.0);
+        assert_eq!(haiku.output_per_million, 5.0);
 
         let sonnet = ModelPricing::for_model("sonnet");
         assert_eq!(sonnet.input_per_million, 3.0);
@@ -499,8 +500,9 @@ mod tests {
 
     #[test]
     fn test_model_pricing_gemini() {
+        // Gemini 2.5 flash pricing updated 2025-11-19 (3x increase)
         let flash_25 = ModelPricing::for_model("gemini-2.5-flash");
-        assert_eq!(flash_25.input_per_million, 0.10);
+        assert_eq!(flash_25.input_per_million, 0.30);
 
         let flash_15 = ModelPricing::for_model("gemini-1.5-flash");
         assert_eq!(flash_15.input_per_million, 0.075);
@@ -514,9 +516,9 @@ mod tests {
         let haiku = ModelPricing::for_model("haiku");
         // 10k input, 2k output
         let cost = haiku.calculate(10_000, 2_000);
-        // (10k / 1M) * 0.25 + (2k / 1M) * 1.25
-        // = 0.0025 + 0.0025 = 0.005
-        assert!((cost - 0.005).abs() < 0.0001);
+        // (10k / 1M) * 1.0 + (2k / 1M) * 5.0
+        // = 0.01 + 0.01 = 0.02 (4x increase from old pricing)
+        assert!((cost - 0.02).abs() < 0.0001);
     }
 
     #[test]

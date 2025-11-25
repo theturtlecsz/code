@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Pipeline configuration (TOML schema)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,6 +21,7 @@ pub struct PipelineConfig {
     pub enabled_stages: Vec<StageType>,
 
     /// Quality gate configuration
+    #[serde(default)]
     pub quality_gates: QualityGateConfig,
 
     /// Model overrides per stage (optional)
@@ -711,8 +712,8 @@ key = "value"
     #[test]
     fn test_precedence_global_to_per_spec() {
         // Test that per-SPEC config overrides global defaults via merge
+        // Note: Direct PipelineConfig parse expects flat structure, not [pipeline] section
         let per_spec_toml = r#"
-[pipeline]
 spec_id = "SPEC-TEST"
 enabled_stages = ["implement", "validate", "unlock"]
 "#;

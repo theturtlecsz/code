@@ -692,7 +692,7 @@ pub fn handle_guardrail_impl(
 
 /// Handle native guardrail validation (SPEC-KIT-066, SPEC-KIT-902)
 fn handle_native_guardrail(widget: &mut ChatWidget, command: SlashCommand, raw_args: String) {
-    use crate::history_cell::HistoryCellType;
+    
 
     // Parse arguments
     let trimmed = raw_args.trim();

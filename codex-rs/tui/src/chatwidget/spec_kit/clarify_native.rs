@@ -10,7 +10,7 @@ use super::error::{Result, SpecKitError};
 use regex_lite::Regex;
 use std::collections::HashSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Severity levels for ambiguity issues
 #[derive(Debug, Clone, PartialEq, Eq)]

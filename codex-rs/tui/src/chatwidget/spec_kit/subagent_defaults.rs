@@ -97,19 +97,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn clarify_defaults_match_expected_agents() {
-        let clarify = default_for("speckit.clarify").expect("clarify default");
-        assert!(clarify.read_only);
-        assert_eq!(clarify.agents, vec!["gemini", "claude", "code"]);
+    fn clarify_is_native_execution() {
+        // speckit.clarify uses native Rust execution (zero agents, $0)
+        // Returns None because no orchestrator defaults are needed
+        assert!(default_for("speckit.clarify").is_none());
     }
 
     #[test]
-    fn implement_defaults_are_write_enabled_and_quad_agent() {
+    fn implement_defaults_are_write_enabled_and_dual_agent() {
+        // Tier-2 routing: gpt-5.1-codex (code gen) + claude-haiku (validation)
         let implement = default_for("speckit.implement").expect("implement default");
         assert!(!implement.read_only);
-        assert_eq!(
-            implement.agents,
-            vec!["gemini", "claude", "gpt_codex", "gpt_pro"]
-        );
+        assert_eq!(implement.agents, vec!["gpt5_1_codex", "claude-haiku"]);
     }
 }

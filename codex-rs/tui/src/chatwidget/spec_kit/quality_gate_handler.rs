@@ -15,11 +15,9 @@ use super::quality_gate_broker::{
 };
 use super::routing::{get_current_branch, get_repo_root};
 use super::state::SpecAutoPhase;
-use crate::chatwidget::AgentStatus;
 use crate::history_cell::HistoryCellType;
 use crate::spec_prompts::SpecStage;
 use codex_core::mcp_connection_manager::McpConnectionManager;
-use serde_json::json;
 use std::fs;
 use std::sync::Arc;
 use tokio::sync::Mutex;
