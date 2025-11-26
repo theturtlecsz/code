@@ -2832,6 +2832,14 @@ model = "gpt-5-codex"
         }
     }
 
+    /// Sets CODEX_HOME env var to prevent legacy fallback race conditions.
+    /// SAFETY: Tests that use this should be aware of env var mutation.
+    fn set_codex_home_env(codex_home: &std::path::Path) {
+        // SAFETY: While env vars are shared state, setting CODEX_HOME here prevents
+        // the OnceLock in legacy_codex_home_dir() from caching a stale path.
+        unsafe { std::env::set_var("CODEX_HOME", codex_home) };
+    }
+
     fn create_test_fixture() -> std::io::Result<PrecedenceTestFixture> {
         let toml = r#"
 model = "o3"
@@ -2888,6 +2896,10 @@ model_text_verbosity = "high"
         std::fs::write(cwd.join(".git"), "gitdir: nowhere")?;
 
         let codex_home_temp_dir = TempDir::new().unwrap();
+
+        // Set CODEX_HOME to prevent legacy_codex_home_dir() OnceLock race conditions
+        // when tests run in parallel. This ensures env_overrides_present() returns true.
+        set_codex_home_env(codex_home_temp_dir.path());
 
         // Write config.toml to prevent fallback to legacy ~/.codex directory
         let config_path = codex_home_temp_dir.path().join(CONFIG_TOML_FILE);

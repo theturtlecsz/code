@@ -208,10 +208,10 @@ pub(crate) async fn stream_chat_completions(
                     // Skip duplicate assistant messages (can happen when both
                     // partial and aggregated messages are recorded).
                     if role == "assistant" {
-                        if let Some(ref last) = last_assistant_text {
-                            if last == &text {
-                                continue;
-                            }
+                        if let Some(ref last) = last_assistant_text
+                            && last == &text
+                        {
+                            continue;
                         }
                         last_assistant_text = Some(text.clone());
                     }
@@ -950,6 +950,9 @@ where
                                 this.cumulative.push_str(text);
                             }
                         }
+                        // Do NOT emit assistant messages here; we'll emit a combined
+                        // OutputItemDone when Completed arrives.
+                        continue;
                     }
 
                     // Also capture item_id from Reasoning items
