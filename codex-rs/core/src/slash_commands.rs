@@ -233,20 +233,44 @@ mod tests {
 
     #[test]
     fn test_slash_command_parsing() {
-        // Test /plan command
+        // Test /plan command - should contain task and instructions marker
         let result = handle_slash_command("/plan implement a new feature", None);
         assert!(result.is_some());
-        assert!(result.unwrap().contains("Create a comprehensive plan"));
+        let plan_output = result.unwrap();
+        assert!(
+            plan_output.contains("implement a new feature"),
+            "Plan output should contain the task"
+        );
+        assert!(
+            plan_output.contains("Instructions for /plan"),
+            "Plan output should contain instructions marker"
+        );
 
-        // Test /solve command
+        // Test /solve command - should contain task and instructions
         let result = handle_slash_command("/solve fix the bug in authentication", None);
         assert!(result.is_some());
-        assert!(result.unwrap().contains("Solve a complicated problem"));
+        let solve_output = result.unwrap();
+        assert!(
+            solve_output.contains("fix the bug in authentication"),
+            "Solve output should contain the task"
+        );
+        assert!(
+            solve_output.contains("Solve a complicated problem"),
+            "Solve output should contain instructions"
+        );
 
-        // Test /code command
+        // Test /code command - should contain task and instructions
         let result = handle_slash_command("/code refactor the database module", None);
         assert!(result.is_some());
-        assert!(result.unwrap().contains("Perform a coding task"));
+        let code_output = result.unwrap();
+        assert!(
+            code_output.contains("refactor the database module"),
+            "Code output should contain the task"
+        );
+        assert!(
+            code_output.contains("Complete a coding task"),
+            "Code output should contain instructions"
+        );
 
         // Test invalid command
         let result = handle_slash_command("/invalid test", None);

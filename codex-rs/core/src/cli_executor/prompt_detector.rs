@@ -263,17 +263,25 @@ mod tests {
     #[test]
     fn test_update_resets_idle_timer() {
         let mut detector = PromptDetector::new();
-        sleep(Duration::from_millis(250));
+        // Use longer sleep to ensure measurable time difference
+        sleep(Duration::from_millis(500));
 
         detector.update("Some text");
         let time1 = detector.time_since_last_output();
 
-        sleep(Duration::from_millis(100));
+        // Shorter sleep after reset
+        sleep(Duration::from_millis(50));
         detector.update("More text");
         let time2 = detector.time_since_last_output();
 
-        // time2 should be less than time1 (timer reset)
-        assert!(time2 < time1);
+        // time2 should be significantly less than time1 (timer was reset)
+        // Allow some tolerance for system timing variations
+        assert!(
+            time2 < time1,
+            "Expected time2 ({:?}) < time1 ({:?}): timer should reset on update",
+            time2,
+            time1
+        );
     }
 
     #[test]

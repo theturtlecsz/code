@@ -1730,13 +1730,15 @@ mod tests {
 
     // ============================================================================
     // AgentConfig with canonical_name Tests
+    // Note: AgentConfig uses #[serde(rename_all = "kebab-case")], so TOML keys
+    // must use kebab-case (e.g., canonical-name, read-only) not snake_case.
     // ============================================================================
 
     #[test]
     fn test_agent_config_with_canonical_name() {
         let toml = r#"
             name = "gemini"
-            canonical_name = "gemini"
+            canonical-name = "gemini"
             command = "gemini"
         "#;
 
@@ -1765,7 +1767,7 @@ mod tests {
     fn test_agent_config_canonical_name_differs_from_name() {
         let toml = r#"
             name = "claude-sonnet"
-            canonical_name = "claude"
+            canonical-name = "claude"
             command = "anthropic"
         "#;
 
@@ -1780,10 +1782,10 @@ mod tests {
     fn test_agent_config_full_configuration() {
         let toml = r#"
             name = "gpt-5"
-            canonical_name = "gpt_pro"
+            canonical-name = "gpt_pro"
             command = "openai"
             args = ["--model", "gpt-5-turbo"]
-            read_only = false
+            read-only = false
             enabled = true
             description = "OpenAI GPT-5 model"
         "#;

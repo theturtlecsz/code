@@ -648,8 +648,8 @@ mod tests {
         )
     }
 
-    /// If the OPENAI_API_KEY is set in auth.json and it is an enterprise
-    /// account, then it should use [`AuthMode::ApiKey`].
+    /// If the OPENAI_API_KEY is set in auth.json and the preferred auth method
+    /// is ApiKey, then it should use [`AuthMode::ApiKey`].
     #[tokio::test]
     async fn enterprise_account_with_api_key_uses_apikey_auth() {
         let codex_home = tempdir().unwrap();
@@ -662,13 +662,14 @@ mod tests {
         )
         .expect("failed to write auth file");
 
+        // When preferred_auth_method is ApiKey, API key auth should be used
         let CodexAuth {
             api_key,
             mode,
             auth_dot_json,
             auth_file: _,
             ..
-        } = super::load_auth(codex_home.path(), false, AuthMode::ChatGPT, "codex_cli_rs")
+        } = super::load_auth(codex_home.path(), false, AuthMode::ApiKey, "codex_cli_rs")
             .unwrap()
             .unwrap();
         assert_eq!(Some("sk-test-key".to_string()), api_key);

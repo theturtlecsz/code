@@ -162,12 +162,13 @@ mod tests {
 
         // Build a policy that only includes the two test roots as writable and
         // does not automatically include defaults TMPDIR or /tmp.
+        // Set allow_git_writes: false to test .git protection (read-only subpath).
         let policy = SandboxPolicy::WorkspaceWrite {
             writable_roots: vec![root_with_git, root_without_git],
             network_access: false,
             exclude_tmpdir_env_var: true,
             exclude_slash_tmp: true,
-            allow_git_writes: true,
+            allow_git_writes: false,
         };
 
         let args = create_seatbelt_command_args(
@@ -238,12 +239,13 @@ mod tests {
         // Build a policy that does not specify any writable_roots, but does
         // use the default ones (cwd and TMPDIR) and verifies the `.git` check
         // is done properly for cwd.
+        // Set allow_git_writes: false to test .git protection.
         let policy = SandboxPolicy::WorkspaceWrite {
             writable_roots: vec![],
             network_access: false,
             exclude_tmpdir_env_var: false,
             exclude_slash_tmp: false,
-            allow_git_writes: true,
+            allow_git_writes: false,
         };
 
         let args = create_seatbelt_command_args(

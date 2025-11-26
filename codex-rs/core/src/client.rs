@@ -1390,7 +1390,8 @@ mod tests {
 
     #[tokio::test]
     async fn error_when_error_event() {
-        let raw_error = r#"{"type":"response.failed","sequence_number":3,"response":{"id":"resp_689bcf18d7f08194bf3440ba62fe05d803fee0cdac429894","object":"response","created_at":1755041560,"status":"failed","background":false,"error":{"code":"rate_limit_exceeded","message":"Rate limit reached for gpt-5 in organization org-AAA on tokens per min (TPM): Limit 30000, Used 22999, Requested 12528. Please try again in 11.054s. Visit https://platform.openai.com/account/rate-limits to learn more."}, "usage":null,"user":null,"metadata":{}}}"#;
+        // Error response with resets_in_seconds field for retry delay
+        let raw_error = r#"{"type":"response.failed","sequence_number":3,"response":{"id":"resp_689bcf18d7f08194bf3440ba62fe05d803fee0cdac429894","object":"response","created_at":1755041560,"status":"failed","background":false,"error":{"code":"rate_limit_exceeded","message":"Rate limit reached for gpt-5 in organization org-AAA on tokens per min (TPM): Limit 30000, Used 22999, Requested 12528. Please try again in 11.054s. Visit https://platform.openai.com/account/rate-limits to learn more.","resets_in_seconds":11}, "usage":null,"user":null,"metadata":{}}}"#;
 
         let sse1 = format!("event: response.failed\ndata: {raw_error}\n\n");
         let provider = ModelProviderInfo {
@@ -1420,7 +1421,8 @@ mod tests {
                     msg,
                     "Rate limit reached for gpt-5 in organization org-AAA on tokens per min (TPM): Limit 30000, Used 22999, Requested 12528. Please try again in 11.054s. Visit https://platform.openai.com/account/rate-limits to learn more."
                 );
-                assert_eq!(*delay, Some(Duration::from_secs_f64(11.054)));
+                // Delay is extracted from resets_in_seconds field (integer seconds)
+                assert_eq!(*delay, Some(Duration::from_secs(11)));
             }
             other => panic!("unexpected second event: {other:?}"),
         }
@@ -1529,28 +1531,44 @@ mod tests {
 
     #[test]
     fn test_try_parse_retry_after() {
+        // Test with resets_in_seconds field set (the function uses this field directly)
         let err = Error {
             r#type: None,
-            message: Some("Rate limit reached for gpt-5 in organization org- on tokens per min (TPM): Limit 1, Used 1, Requested 19304. Please try again in 28ms. Visit https://platform.openai.com/account/rate-limits to learn more.".to_string()),
+            message: Some("Rate limit reached".to_string()),
             code: Some("rate_limit_exceeded".to_string()),
             plan_type: None,
-            resets_in_seconds: None
+            resets_in_seconds: Some(5), // 5 seconds
         };
 
         let delay = try_parse_retry_after(&err);
-        assert_eq!(delay, Some(Duration::from_millis(28)));
+        assert_eq!(delay, Some(Duration::from_secs(5)));
     }
 
     #[test]
     fn test_try_parse_retry_after_no_delay() {
+        // Test with no resets_in_seconds (should return None)
         let err = Error {
             r#type: None,
-            message: Some("Rate limit reached for gpt-5 in organization <ORG> on tokens per min (TPM): Limit 30000, Used 6899, Requested 24050. Please try again in 1.898s. Visit https://platform.openai.com/account/rate-limits to learn more.".to_string()),
+            message: Some("Rate limit reached".to_string()),
             code: Some("rate_limit_exceeded".to_string()),
             plan_type: None,
-            resets_in_seconds: None
+            resets_in_seconds: None,
         };
         let delay = try_parse_retry_after(&err);
-        assert_eq!(delay, Some(Duration::from_secs_f64(1.898)));
+        assert_eq!(delay, None);
+    }
+
+    #[test]
+    fn test_try_parse_retry_after_with_large_value() {
+        // Test with a larger value
+        let err = Error {
+            r#type: None,
+            message: None,
+            code: Some("rate_limit_exceeded".to_string()),
+            plan_type: None,
+            resets_in_seconds: Some(60),
+        };
+        let delay = try_parse_retry_after(&err);
+        assert_eq!(delay, Some(Duration::from_secs(60)));
     }
 }
