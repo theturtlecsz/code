@@ -1491,8 +1491,7 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                         CreateStep::Prompt => {
                             s.prompt.pop();
                         }
-                        CreateStep::Action | CreateStep::Review => {
-                        }
+                        CreateStep::Action | CreateStep::Review => {}
                     }
                 } else if let Mode::CreateTheme(ref mut s) = self.mode {
                     if s.is_loading.get() {
@@ -1502,8 +1501,7 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                         CreateStep::Prompt => {
                             s.prompt.pop();
                         }
-                        CreateStep::Action | CreateStep::Review => {
-                        }
+                        CreateStep::Action | CreateStep::Review => {}
                     }
                 }
             }
@@ -2094,25 +2092,26 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                 form_lines.push(Line::default());
                 // Show error above description if any
                 if let Some(last) = s.thinking_lines.borrow().last().cloned()
-                    && last.starts_with("Error:") {
+                    && last.starts_with("Error:")
+                {
+                    form_lines.push(Line::from(Span::styled(
+                        last,
+                        Style::default().fg(crate::colors::error()),
+                    )));
+                    if let Some(raw) = s.last_raw_output.borrow().as_ref() {
                         form_lines.push(Line::from(Span::styled(
-                            last,
-                            Style::default().fg(crate::colors::error()),
+                            "Model output (raw):",
+                            Style::default().fg(theme.text_dim),
                         )));
-                        if let Some(raw) = s.last_raw_output.borrow().as_ref() {
+                        for ln in raw.split('\n') {
                             form_lines.push(Line::from(Span::styled(
-                                "Model output (raw):",
-                                Style::default().fg(theme.text_dim),
+                                ln.to_string(),
+                                Style::default().fg(theme.text),
                             )));
-                            for ln in raw.split('\n') {
-                                form_lines.push(Line::from(Span::styled(
-                                    ln.to_string(),
-                                    Style::default().fg(theme.text),
-                                )));
-                            }
                         }
-                        form_lines.push(Line::default());
                     }
+                    form_lines.push(Line::default());
+                }
                 let caret = Span::styled("▏", Style::default().fg(theme.info));
                 let mut desc_spans: Vec<Span> = Vec::new();
                 desc_spans.push(Span::styled(
@@ -2347,25 +2346,26 @@ impl<'a> BottomPaneView<'a> for ThemeSelectionView {
                 form_lines.push(Line::default());
                 // If there was a recent error, show it once above description (with full raw output)
                 if let Some(last) = s.thinking_lines.borrow().last().cloned()
-                    && last.starts_with("Error:") {
+                    && last.starts_with("Error:")
+                {
+                    form_lines.push(Line::from(Span::styled(
+                        last,
+                        Style::default().fg(crate::colors::error()),
+                    )));
+                    if let Some(raw) = s.last_raw_output.borrow().as_ref() {
                         form_lines.push(Line::from(Span::styled(
-                            last,
-                            Style::default().fg(crate::colors::error()),
+                            "Model output (raw):",
+                            Style::default().fg(theme.text_dim),
                         )));
-                        if let Some(raw) = s.last_raw_output.borrow().as_ref() {
+                        for ln in raw.split('\n') {
                             form_lines.push(Line::from(Span::styled(
-                                "Model output (raw):",
-                                Style::default().fg(theme.text_dim),
+                                ln.to_string(),
+                                Style::default().fg(theme.text),
                             )));
-                            for ln in raw.split('\n') {
-                                form_lines.push(Line::from(Span::styled(
-                                    ln.to_string(),
-                                    Style::default().fg(theme.text),
-                                )));
-                            }
                         }
-                        form_lines.push(Line::default());
                     }
+                    form_lines.push(Line::default());
+                }
                 form_lines.push(Line::from(Span::styled(
                     "Code can generate a custom theme just for you!",
                     Style::default().fg(theme.text),

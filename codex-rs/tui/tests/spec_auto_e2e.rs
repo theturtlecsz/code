@@ -18,7 +18,13 @@ use std::collections::HashSet;
 
 #[test]
 fn test_spec_auto_state_initialization() {
-    let state = SpecAutoState::new("SPEC-TEST-001".to_string(), "Test automation".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
+    let state = SpecAutoState::new(
+        "SPEC-TEST-001".to_string(),
+        "Test automation".to_string(),
+        SpecStage::Plan,
+        None,
+        PipelineConfig::defaults(),
+    );
 
     assert_eq!(state.spec_id, "SPEC-TEST-001");
     assert_eq!(state.goal, "Test automation");
@@ -31,7 +37,13 @@ fn test_spec_auto_state_initialization() {
 
 #[test]
 fn test_pipeline_stages_order() {
-    let state = SpecAutoState::new("SPEC-TEST-002".to_string(), "".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
+    let state = SpecAutoState::new(
+        "SPEC-TEST-002".to_string(),
+        "".to_string(),
+        SpecStage::Plan,
+        None,
+        PipelineConfig::defaults(),
+    );
 
     let expected = vec![
         SpecStage::Plan,
@@ -47,7 +59,13 @@ fn test_pipeline_stages_order() {
 
 #[test]
 fn test_resume_from_tasks_stage() {
-    let state = SpecAutoState::new("SPEC-TEST-003".to_string(), "".to_string(), SpecStage::Tasks, None, PipelineConfig::defaults());
+    let state = SpecAutoState::new(
+        "SPEC-TEST-003".to_string(),
+        "".to_string(),
+        SpecStage::Tasks,
+        None,
+        PipelineConfig::defaults(),
+    );
 
     assert_eq!(state.current_index, 1); // Tasks is index 1
     assert_eq!(state.current_stage(), Some(SpecStage::Tasks));
@@ -55,7 +73,13 @@ fn test_resume_from_tasks_stage() {
 
 #[test]
 fn test_quality_gates_enabled_by_default() {
-    let state = SpecAutoState::new("SPEC-TEST-004".to_string(), "".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
+    let state = SpecAutoState::new(
+        "SPEC-TEST-004".to_string(),
+        "".to_string(),
+        SpecStage::Plan,
+        None,
+        PipelineConfig::defaults(),
+    );
 
     assert!(state.quality_gates_enabled);
 }
@@ -80,7 +104,13 @@ fn test_quality_gates_can_be_disabled() {
 
 #[test]
 fn test_quality_checkpoints_track_completion() {
-    let mut state = SpecAutoState::new("SPEC-TEST-006".to_string(), "".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
+    let mut state = SpecAutoState::new(
+        "SPEC-TEST-006".to_string(),
+        "".to_string(),
+        SpecStage::Plan,
+        None,
+        PipelineConfig::defaults(),
+    );
 
     // Initially no checkpoints completed
     assert!(state.completed_checkpoints.is_empty());
@@ -109,7 +139,13 @@ fn test_quality_checkpoints_track_completion() {
 
 #[test]
 fn test_quality_modifications_tracked() {
-    let mut state = SpecAutoState::new("SPEC-TEST-007".to_string(), "".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
+    let mut state = SpecAutoState::new(
+        "SPEC-TEST-007".to_string(),
+        "".to_string(),
+        SpecStage::Plan,
+        None,
+        PipelineConfig::defaults(),
+    );
 
     // Initially no modifications
     assert!(state.quality_modifications.is_empty());
@@ -124,7 +160,13 @@ fn test_quality_modifications_tracked() {
 
 #[test]
 fn test_validate_lifecycle_prevents_duplicates() {
-    let state = SpecAutoState::new("SPEC-TEST-VAL".to_string(), "".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
+    let state = SpecAutoState::new(
+        "SPEC-TEST-VAL".to_string(),
+        "".to_string(),
+        SpecStage::Plan,
+        None,
+        PipelineConfig::defaults(),
+    );
 
     let started = state.begin_validate_run("hash-1");
     match started {
@@ -141,10 +183,18 @@ fn test_validate_lifecycle_prevents_duplicates() {
 
 #[test]
 fn test_auto_resolutions_tracked() {
-    use codex_tui::{Confidence, Magnitude, QualityGateType, QualityIssue, Resolvability, PipelineConfig};
+    use codex_tui::{
+        Confidence, Magnitude, PipelineConfig, QualityGateType, QualityIssue, Resolvability,
+    };
     use std::collections::HashMap;
 
-    let mut state = SpecAutoState::new("SPEC-TEST-008".to_string(), "".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
+    let mut state = SpecAutoState::new(
+        "SPEC-TEST-008".to_string(),
+        "".to_string(),
+        SpecStage::Plan,
+        None,
+        PipelineConfig::defaults(),
+    );
 
     // Create a test issue
     let issue = QualityIssue {
@@ -173,7 +223,13 @@ fn test_auto_resolutions_tracked() {
 
 #[test]
 fn test_checkpoint_outcomes_recorded() {
-    let mut state = SpecAutoState::new("SPEC-TEST-009".to_string(), "".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
+    let mut state = SpecAutoState::new(
+        "SPEC-TEST-009".to_string(),
+        "".to_string(),
+        SpecStage::Plan,
+        None,
+        PipelineConfig::defaults(),
+    );
 
     // Record checkpoint outcomes
     state.quality_checkpoint_outcomes.push((
@@ -202,7 +258,13 @@ fn test_checkpoint_outcomes_recorded() {
 
 #[test]
 fn test_current_stage_progression() {
-    let mut state = SpecAutoState::new("SPEC-TEST-010".to_string(), "".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
+    let mut state = SpecAutoState::new(
+        "SPEC-TEST-010".to_string(),
+        "".to_string(),
+        SpecStage::Plan,
+        None,
+        PipelineConfig::defaults(),
+    );
 
     // Start at Plan
     assert_eq!(state.current_stage(), Some(SpecStage::Plan));
@@ -234,7 +296,13 @@ fn test_current_stage_progression() {
 
 #[test]
 fn test_validate_retry_tracking() {
-    let mut state = SpecAutoState::new("SPEC-TEST-011".to_string(), "".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
+    let mut state = SpecAutoState::new(
+        "SPEC-TEST-011".to_string(),
+        "".to_string(),
+        SpecStage::Plan,
+        None,
+        PipelineConfig::defaults(),
+    );
 
     // SPEC-957: assert_eq!(state.validate_retries, 0); // validate_retries field removed
 
@@ -297,7 +365,13 @@ fn test_quality_checkpoints_at_correct_stages() {
 
 #[test]
 fn test_checkpoint_runs_once_per_pipeline() {
-    let mut state = SpecAutoState::new("SPEC-TEST-012".to_string(), "".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
+    let mut state = SpecAutoState::new(
+        "SPEC-TEST-012".to_string(),
+        "".to_string(),
+        SpecStage::Plan,
+        None,
+        PipelineConfig::defaults(),
+    );
 
     // First time: should run PrePlanning
     let should_run = !state
@@ -337,10 +411,18 @@ fn test_pipeline_with_quality_gates_disabled() {
 
 #[test]
 fn test_escalated_issues_tracked_separately_from_auto_resolved() {
-    use codex_tui::{Confidence, Magnitude, QualityGateType, QualityIssue, Resolvability, PipelineConfig};
+    use codex_tui::{
+        Confidence, Magnitude, PipelineConfig, QualityGateType, QualityIssue, Resolvability,
+    };
     use std::collections::HashMap;
 
-    let mut state = SpecAutoState::new("SPEC-TEST-014".to_string(), "".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
+    let mut state = SpecAutoState::new(
+        "SPEC-TEST-014".to_string(),
+        "".to_string(),
+        SpecStage::Plan,
+        None,
+        PipelineConfig::defaults(),
+    );
 
     let auto_issue = QualityIssue {
         id: "Q1".to_string(),
@@ -380,7 +462,13 @@ fn test_escalated_issues_tracked_separately_from_auto_resolved() {
 
 #[test]
 fn test_pipeline_state_survives_checkpoint_completion() {
-    let mut state = SpecAutoState::new("SPEC-TEST-015".to_string(), "".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
+    let mut state = SpecAutoState::new(
+        "SPEC-TEST-015".to_string(),
+        "".to_string(),
+        SpecStage::Plan,
+        None,
+        PipelineConfig::defaults(),
+    );
 
     let spec_id_before = state.spec_id.clone();
     let goal_before = state.goal.clone();
@@ -398,7 +486,13 @@ fn test_pipeline_state_survives_checkpoint_completion() {
 
 #[test]
 fn test_multiple_checkpoints_can_complete_in_sequence() {
-    let mut state = SpecAutoState::new("SPEC-TEST-016".to_string(), "".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
+    let mut state = SpecAutoState::new(
+        "SPEC-TEST-016".to_string(),
+        "".to_string(),
+        SpecStage::Plan,
+        None,
+        PipelineConfig::defaults(),
+    );
 
     // Complete checkpoints in order
     state
@@ -433,7 +527,13 @@ fn test_multiple_checkpoints_can_complete_in_sequence() {
 
 #[test]
 fn test_quality_outcomes_accumulate_across_checkpoints() {
-    let mut state = SpecAutoState::new("SPEC-TEST-017".to_string(), "".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
+    let mut state = SpecAutoState::new(
+        "SPEC-TEST-017".to_string(),
+        "".to_string(),
+        SpecStage::Plan,
+        None,
+        PipelineConfig::defaults(),
+    );
 
     // Record outcomes from multiple checkpoints
     state
@@ -466,14 +566,26 @@ fn test_quality_outcomes_accumulate_across_checkpoints() {
 
 #[test]
 fn test_hal_mode_preserved_throughout_pipeline() {
-    let state = SpecAutoState::new("SPEC-TEST-018".to_string(), "".to_string(), SpecStage::Plan, Some(HalMode::Live), PipelineConfig::defaults());
+    let state = SpecAutoState::new(
+        "SPEC-TEST-018".to_string(),
+        "".to_string(),
+        SpecStage::Plan,
+        Some(HalMode::Live),
+        PipelineConfig::defaults(),
+    );
 
     assert_eq!(state.hal_mode, Some(HalMode::Live));
 }
 
 #[test]
 fn test_pending_prompt_summary_for_next_stage() {
-    let mut state = SpecAutoState::new("SPEC-TEST-019".to_string(), "".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
+    let mut state = SpecAutoState::new(
+        "SPEC-TEST-019".to_string(),
+        "".to_string(),
+        SpecStage::Plan,
+        None,
+        PipelineConfig::defaults(),
+    );
 
     assert!(state.pending_prompt_summary.is_none());
 
@@ -492,7 +604,13 @@ fn test_pending_prompt_summary_for_next_stage() {
 
 #[test]
 fn test_simulated_pipeline_flow_with_quality_gates() {
-    let mut state = SpecAutoState::new("SPEC-TEST-020".to_string(), "Full pipeline simulation".to_string(), SpecStage::Plan, None, PipelineConfig::defaults());
+    let mut state = SpecAutoState::new(
+        "SPEC-TEST-020".to_string(),
+        "Full pipeline simulation".to_string(),
+        SpecStage::Plan,
+        None,
+        PipelineConfig::defaults(),
+    );
 
     // Stage 0: Plan
     assert_eq!(state.current_stage(), Some(SpecStage::Plan));
@@ -586,7 +704,13 @@ fn test_simulated_pipeline_flow_with_quality_gates() {
 #[test]
 fn test_validate_duplicate_storm_prevention() {
     // Simulate rapid repeated validation triggers to ensure <0.1% duplicates
-    let state = SpecAutoState::new("SPEC-KIT-069".to_string(), "".to_string(), SpecStage::Validate, None, PipelineConfig::defaults());
+    let state = SpecAutoState::new(
+        "SPEC-KIT-069".to_string(),
+        "".to_string(),
+        SpecStage::Validate,
+        None,
+        PipelineConfig::defaults(),
+    );
 
     // First trigger should start
     let result1 = state.begin_validate_run("payload-hash-1");
@@ -628,7 +752,13 @@ fn test_validate_duplicate_storm_prevention() {
 
 #[test]
 fn test_validate_retry_cycle() {
-    let mut state = SpecAutoState::new("SPEC-KIT-069".to_string(), "".to_string(), SpecStage::Implement, None, PipelineConfig::defaults());
+    let mut state = SpecAutoState::new(
+        "SPEC-KIT-069".to_string(),
+        "".to_string(),
+        SpecStage::Implement,
+        None,
+        PipelineConfig::defaults(),
+    );
 
     // Initial validate fails
     // SPEC-957: state.validate_retries = 0; // validate_retries field removed
@@ -663,7 +793,13 @@ fn test_validate_retry_cycle() {
 
 #[test]
 fn test_validate_cancel_cleanup() {
-    let state = SpecAutoState::new("SPEC-KIT-069".to_string(), "".to_string(), SpecStage::Validate, None, PipelineConfig::defaults());
+    let state = SpecAutoState::new(
+        "SPEC-KIT-069".to_string(),
+        "".to_string(),
+        SpecStage::Validate,
+        None,
+        PipelineConfig::defaults(),
+    );
 
     // Start a run
     let result = state.begin_validate_run("payload-1");

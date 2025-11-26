@@ -57,9 +57,10 @@ where
     }
 
     if let Some(home_dir) = std::env::var_os("HOME").map(PathBuf::from)
-        && let Ok(rel) = path.strip_prefix(&home_dir) {
-            return Some(rel.to_path_buf());
-        }
+        && let Ok(rel) = path.strip_prefix(&home_dir)
+    {
+        return Some(rel.to_path_buf());
+    }
 
     None
 }

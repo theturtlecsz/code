@@ -221,12 +221,12 @@ impl LoginAccountsState {
         if let Some(api_key) = auth_json.openai_api_key.as_ref()
             && let Err(err) =
                 auth_accounts::upsert_api_key_account(&self.codex_home, api_key.clone(), None, true)
-            {
-                self.feedback = Some(Feedback {
-                    message: format!("Failed to record API key login: {err}"),
-                    is_error: true,
-                });
-            }
+        {
+            self.feedback = Some(Feedback {
+                message: format!("Failed to record API key login: {err}"),
+                is_error: true,
+            });
+        }
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) {
@@ -270,11 +270,12 @@ impl LoginAccountsState {
             }
             KeyCode::Char('d') => {
                 if self.selected < account_count
-                    && let Some(account) = self.accounts.get(self.selected) {
-                        self.mode = ViewMode::ConfirmRemove {
-                            account_id: account.id.clone(),
-                        };
-                    }
+                    && let Some(account) = self.accounts.get(self.selected)
+                {
+                    self.mode = ViewMode::ConfirmRemove {
+                        account_id: account.id.clone(),
+                    };
+                }
             }
             KeyCode::Char('r') => {
                 self.reload_accounts();
@@ -1115,9 +1116,9 @@ impl AccountRow {
                 .tokens
                 .as_ref()
                 .and_then(|t| t.id_token.get_chatgpt_plan_type())
-            {
-                detail_parts.push(format!("{plan} Plan"));
-            }
+        {
+            detail_parts.push(format!("{plan} Plan"));
+        }
 
         if let Some(created_at) = account.created_at {
             detail_parts.push(format!("connected {}", format_timestamp(created_at)));

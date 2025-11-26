@@ -100,12 +100,13 @@ impl FormTextField {
 
         // If an input filter is active and this is a Char, validate and insert
         if let KeyCode::Char(c) = key.code
-            && matches!(self.filter, InputFilter::Id) {
-                if Self::id_char_allowed(c) {
-                    self.textarea.insert_str(&c.to_string());
-                }
-                return true; // consumed either way
+            && matches!(self.filter, InputFilter::Id)
+        {
+            if Self::id_char_allowed(c) {
+                self.textarea.insert_str(&c.to_string());
             }
+            return true; // consumed either way
+        }
 
         // Delegate remaining keys to TextArea which already handles:
         // - Shift-modified chars
@@ -161,20 +162,16 @@ impl FormTextField {
             && let Some((cx, cy)) = self
                 .textarea
                 .cursor_pos_with_state(area, *self.state.borrow())
-            {
-                let max_x = area.x.saturating_add(area.width.saturating_sub(1));
-                let x = cx.min(max_x);
-                if cy >= area.y
-                    && cy < area.y + area.height
-                    && x >= area.x
-                    && x < area.x + area.width
-                {
-                    let style = Style::default()
-                        .bg(crate::colors::text())
-                        .fg(crate::colors::background());
-                    buf[(x, cy)].set_style(style);
-                }
+        {
+            let max_x = area.x.saturating_add(area.width.saturating_sub(1));
+            let x = cx.min(max_x);
+            if cy >= area.y && cy < area.y + area.height && x >= area.x && x < area.x + area.width {
+                let style = Style::default()
+                    .bg(crate::colors::text())
+                    .fg(crate::colors::background());
+                buf[(x, cy)].set_style(style);
             }
+        }
         // Note: We intentionally do not persist state.scroll changes from a
         // read-only &self; form owns a &mut when calling this in practice.
     }

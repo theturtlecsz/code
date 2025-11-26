@@ -5,8 +5,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// Root application configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
     /// Model configurations (provider → model settings)
     #[serde(default)]
@@ -246,7 +245,6 @@ impl Default for ConsensusConfig {
         }
     }
 }
-
 
 /// Configuration loader with layered merging support
 pub struct ConfigLoader {

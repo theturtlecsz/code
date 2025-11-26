@@ -23,68 +23,6 @@ pub(crate) struct MarkdownStreamCollector {
     leading_bullet_state: Option<bool>,
 }
 
-#[cfg(test)]
-mod bullet_strip_tests {
-    use super::*;
-    use codex_core::config::{Config, ConfigOverrides, ConfigToml};
-
-    fn test_config() -> Config {
-        codex_core::config::Config::load_from_base_config_with_overrides(
-            ConfigToml::default(),
-            ConfigOverrides::default(),
-            std::env::temp_dir(),
-        )
-        .expect("config")
-    }
-
-    fn lines_to_plain_strings(lines: &[ratatui::text::Line<'_>]) -> Vec<String> {
-        lines
-            .iter()
-            .map(|line| {
-                line.spans
-                    .iter()
-                    .map(|span| span.content.clone())
-                    .collect::<Vec<_>>()
-                    .join("")
-            })
-            .collect()
-    }
-
-    #[test]
-    fn streaming_delta_strips_leading_bullet_first_line() {
-        let cfg = test_config();
-        let mut collector = MarkdownStreamCollector::new_with_bold_first();
-
-        collector.push_delta("- Leading summary\n");
-        let lines = collector.commit_complete_lines(&cfg);
-        let rendered = lines_to_plain_strings(&lines);
-
-        let first = rendered.first().expect("streamed line");
-        assert!(
-            !first.trim_start().starts_with('-'),
-            "expected leading bullet to be stripped, got {first:?}"
-        );
-        assert!(first.contains("Leading summary"));
-    }
-
-    #[test]
-    fn replace_with_strips_leading_bullet_first_line() {
-        let cfg = test_config();
-        let mut collector = MarkdownStreamCollector::new();
-
-        collector.replace_with_and_mark_committed("- Final note\nContinues here\n", 0);
-        let lines = collector.commit_complete_lines(&cfg);
-        let rendered = lines_to_plain_strings(&lines);
-
-        let first = rendered.first().expect("final line");
-        assert!(
-            !first.trim_start().starts_with('-'),
-            "expected leading bullet to be stripped, got {first:?}"
-        );
-        assert!(first.contains("Final note"));
-    }
-}
-
 impl MarkdownStreamCollector {
     pub fn new() -> Self {
         Self {
@@ -423,7 +361,7 @@ impl MarkdownStreamCollector {
             source.push('\n');
         }
         let source = unwrap_markdown_language_fence_if_enabled(source);
-        
+
         strip_empty_fenced_code_blocks(&source)
     }
 
@@ -643,6 +581,68 @@ impl AnimatedLineStreamer {
 
     pub fn is_idle(&self) -> bool {
         self.queue.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod bullet_strip_tests {
+    use super::*;
+    use codex_core::config::{Config, ConfigOverrides, ConfigToml};
+
+    fn test_config() -> Config {
+        codex_core::config::Config::load_from_base_config_with_overrides(
+            ConfigToml::default(),
+            ConfigOverrides::default(),
+            std::env::temp_dir(),
+        )
+        .expect("config")
+    }
+
+    fn lines_to_plain_strings(lines: &[ratatui::text::Line<'_>]) -> Vec<String> {
+        lines
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| span.content.clone())
+                    .collect::<Vec<_>>()
+                    .join("")
+            })
+            .collect()
+    }
+
+    #[test]
+    fn streaming_delta_strips_leading_bullet_first_line() {
+        let cfg = test_config();
+        let mut collector = MarkdownStreamCollector::new_with_bold_first();
+
+        collector.push_delta("- Leading summary\n");
+        let lines = collector.commit_complete_lines(&cfg);
+        let rendered = lines_to_plain_strings(&lines);
+
+        let first = rendered.first().expect("streamed line");
+        assert!(
+            !first.trim_start().starts_with('-'),
+            "expected leading bullet to be stripped, got {first:?}"
+        );
+        assert!(first.contains("Leading summary"));
+    }
+
+    #[test]
+    fn replace_with_strips_leading_bullet_first_line() {
+        let cfg = test_config();
+        let mut collector = MarkdownStreamCollector::new();
+
+        collector.replace_with_and_mark_committed("- Final note\nContinues here\n", 0);
+        let lines = collector.commit_complete_lines(&cfg);
+        let rendered = lines_to_plain_strings(&lines);
+
+        let first = rendered.first().expect("final line");
+        assert!(
+            !first.trim_start().starts_with('-'),
+            "expected leading bullet to be stripped, got {first:?}"
+        );
+        assert!(first.contains("Final note"));
     }
 }
 

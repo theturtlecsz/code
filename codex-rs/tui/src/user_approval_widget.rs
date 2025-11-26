@@ -439,21 +439,22 @@ fn build_exec_select_options(command: &[String]) -> Vec<SelectOption> {
 
     let normalized_tokens = normalized_command_tokens(command);
     if let Some(tokens) = normalized_tokens.as_ref()
-        && let Some(prefix) = prefix_candidate(tokens) {
-            let prefix_display = strip_bash_lc_and_escape(&prefix);
-            let prefix_with_wildcard = format!("{prefix_display} *");
-            options.push(SelectOption {
-                label: format!("Always allow '{prefix_with_wildcard}' for this project"),
-                description: "Approve any command starting with this prefix".to_string(),
-                hotkey: KeyCode::Char('p'),
-                action: SelectAction::ApproveForSession {
-                    command: prefix.clone(),
-                    match_kind: ApprovedCommandMatchKind::Prefix,
-                    persist: true,
-                    semantic_prefix: Some(prefix),
-                },
-            });
-        }
+        && let Some(prefix) = prefix_candidate(tokens)
+    {
+        let prefix_display = strip_bash_lc_and_escape(&prefix);
+        let prefix_with_wildcard = format!("{prefix_display} *");
+        options.push(SelectOption {
+            label: format!("Always allow '{prefix_with_wildcard}' for this project"),
+            description: "Approve any command starting with this prefix".to_string(),
+            hotkey: KeyCode::Char('p'),
+            action: SelectAction::ApproveForSession {
+                command: prefix.clone(),
+                match_kind: ApprovedCommandMatchKind::Prefix,
+                persist: true,
+                semantic_prefix: Some(prefix),
+            },
+        });
+    }
 
     options.push(SelectOption {
         label: "No, provide feedback".to_string(),

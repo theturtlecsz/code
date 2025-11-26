@@ -44,8 +44,7 @@ impl SchemaValidator {
     pub fn new(schema_path: Option<&Path>) -> Result<Self, SchemaValidationError> {
         let schema = if let Some(path) = schema_path {
             // Load schema from external file
-            let content =
-                std::fs::read_to_string(path).map_err(SchemaValidationError::IoError)?;
+            let content = std::fs::read_to_string(path).map_err(SchemaValidationError::IoError)?;
             serde_json::from_str(&content).map_err(SchemaValidationError::JsonError)?
         } else {
             // Use embedded default schema

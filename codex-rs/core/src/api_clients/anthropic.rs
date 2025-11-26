@@ -324,9 +324,10 @@ impl AnthropicClient {
         if let Some(ref system) = config.system {
             body["system"] = json!(system);
         } else if let Some(system) = serialized.get("system")
-            && !system.is_null() {
-                body["system"] = system.clone();
-            }
+            && !system.is_null()
+        {
+            body["system"] = system.clone();
+        }
 
         // Add temperature if specified
         if let Some(temp) = config.temperature {
@@ -350,10 +351,11 @@ impl AnthropicClient {
             // Process complete SSE events
             while let Some(event) = Self::extract_sse_event(&mut buffer) {
                 if let Some(stream_event) = Self::parse_sse_event(&event)?
-                    && tx.send(Ok(stream_event)).await.is_err() {
-                        // Receiver dropped, stop processing
-                        return Ok(());
-                    }
+                    && tx.send(Ok(stream_event)).await.is_err()
+                {
+                    // Receiver dropped, stop processing
+                    return Ok(());
+                }
             }
         }
 
@@ -626,7 +628,7 @@ mod tests {
             message: "Invalid request".to_string(),
             error_type: Some("invalid_request_error".to_string()),
         };
-        let display = format!("{}", err);
+        let display = format!("{err}");
         assert!(display.contains("400"));
         assert!(display.contains("Invalid request"));
     }

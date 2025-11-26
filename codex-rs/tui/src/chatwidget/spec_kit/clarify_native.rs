@@ -128,19 +128,23 @@ impl PatternDetector {
         issues: &mut Vec<Ambiguity>,
     ) {
         // Only flag if no metrics present in same line
-        if self.quantifier_ambiguity.is_match(content) && !has_metrics(content)
-            && let Some(mat) = self.quantifier_ambiguity.find(content) {
-                let word = mat.as_str();
-                issues.push(Ambiguity {
-                    id: format!("AMB-{:03}", issues.len() + 1),
-                    question: format!("'{}' lacks quantifiable metrics", word),
-                    location: format!("line {}", line_num),
-                    severity: Severity::Important,
-                    pattern: "quantifier_ambiguity".to_string(),
-                    context: truncate_context(content, 80),
-                    suggestion: Some("Add specific metric (e.g., '<100ms', '>1000 RPS', '<1MB memory')".to_string()),
-                });
-            }
+        if self.quantifier_ambiguity.is_match(content)
+            && !has_metrics(content)
+            && let Some(mat) = self.quantifier_ambiguity.find(content)
+        {
+            let word = mat.as_str();
+            issues.push(Ambiguity {
+                id: format!("AMB-{:03}", issues.len() + 1),
+                question: format!("'{}' lacks quantifiable metrics", word),
+                location: format!("line {}", line_num),
+                severity: Severity::Important,
+                pattern: "quantifier_ambiguity".to_string(),
+                context: truncate_context(content, 80),
+                suggestion: Some(
+                    "Add specific metric (e.g., '<100ms', '>1000 RPS', '<1MB memory')".to_string(),
+                ),
+            });
+        }
     }
 
     /// Check for scope gaps

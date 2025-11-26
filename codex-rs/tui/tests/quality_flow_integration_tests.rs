@@ -6,8 +6,7 @@
 
 mod common;
 
-use codex_tui::SpecStage;
-use common::{IntegrationTestContext, StateBuilder};
+use common::IntegrationTestContext;
 use serde_json::json;
 
 #[test]
@@ -184,7 +183,7 @@ fn q09_multiple_checkpoints_all_outcomes_tracked() {
     for checkpoint in &["plan", "tasks", "implement"] {
         let file = ctx
             .commands_dir()
-            .join(format!("checkpoint_{}.json", checkpoint));
+            .join(format!("checkpoint_{checkpoint}.json"));
         std::fs::write(
             &file,
             json!({

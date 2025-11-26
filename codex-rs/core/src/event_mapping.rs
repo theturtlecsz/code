@@ -88,10 +88,9 @@ pub(crate) fn map_response_item_to_event_messages(
 #[cfg(test)]
 mod tests {
     use super::map_response_item_to_event_messages;
-    use crate::protocol::EventMsg;
+
     use codex_protocol::models::ContentItem;
     use codex_protocol::models::ResponseItem;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn maps_user_message_with_text_and_two_images() {
@@ -105,12 +104,8 @@ mod tests {
                 ContentItem::InputText {
                     text: "Hello world".to_string(),
                 },
-                ContentItem::InputImage {
-                    image_url: img1.clone(),
-                },
-                ContentItem::InputImage {
-                    image_url: img2.clone(),
-                },
+                ContentItem::InputImage { image_url: img1 },
+                ContentItem::InputImage { image_url: img2 },
             ],
         };
 

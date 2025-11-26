@@ -639,9 +639,7 @@ fn order_replay_main(args: OrderReplayArgs) -> anyhow::Result<()> {
     let pos_out2 = actual
         .iter()
         .position(|l| l.ordered && l.req == 1 && l.out == 2);
-    println!(
-        "\nCheck (req=1): first out=1 at {pos_out1:?}, first out=2 at {pos_out2:?}"
-    );
+    println!("\nCheck (req=1): first out=1 at {pos_out1:?}, first out=2 at {pos_out2:?}");
     if let (Some(p1), Some(p2)) = (pos_out1, pos_out2) {
         if p1 < p2 {
             println!("Result: OK (assistant precedes tool)");
@@ -765,9 +763,10 @@ async fn preview_main(args: PreviewArgs) -> anyhow::Result<()> {
         for entry in fs::read_dir(dir).ok()? {
             let p = entry.ok()?.path();
             if let Some(name) = p.file_name().and_then(|s| s.to_str())
-                && name.starts_with(pat) {
-                    return Some(p);
-                }
+                && name.starts_with(pat)
+            {
+                return Some(p);
+            }
         }
         None
     }

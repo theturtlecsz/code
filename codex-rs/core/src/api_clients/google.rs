@@ -275,9 +275,10 @@ impl GeminiClient {
                 "parts": [{ "text": system }]
             });
         } else if let Some(sys) = serialized.get("system_instruction")
-            && !sys.is_null() {
-                body["systemInstruction"] = sys.clone();
-            }
+            && !sys.is_null()
+        {
+            body["systemInstruction"] = sys.clone();
+        }
 
         // Add generation config
         let mut gen_config = json!({
@@ -346,13 +347,14 @@ impl GeminiClient {
 
                 // Handle prompt blocked
                 if let Some(feedback) = &parsed.prompt_feedback
-                    && let Some(reason) = &feedback.block_reason {
-                        return Err(ApiError::ApiResponse {
-                            status: 400,
-                            message: format!("Prompt blocked: {reason}"),
-                            error_type: Some("PROMPT_BLOCKED".to_string()),
-                        });
-                    }
+                    && let Some(reason) = &feedback.block_reason
+                {
+                    return Err(ApiError::ApiResponse {
+                        status: 400,
+                        message: format!("Prompt blocked: {reason}"),
+                        error_type: Some("PROMPT_BLOCKED".to_string()),
+                    });
+                }
 
                 // Send message start on first chunk
                 if !started {
@@ -377,59 +379,61 @@ impl GeminiClient {
                     for candidate in candidates {
                         // Check for safety block
                         if let Some(reason) = &candidate.finish_reason
-                            && reason == "SAFETY" {
-                                return Err(ApiError::ApiResponse {
-                                    status: 400,
-                                    message: "Response blocked due to safety concerns".to_string(),
-                                    error_type: Some("SAFETY_BLOCK".to_string()),
-                                });
-                            }
+                            && reason == "SAFETY"
+                        {
+                            return Err(ApiError::ApiResponse {
+                                status: 400,
+                                message: "Response blocked due to safety concerns".to_string(),
+                                error_type: Some("SAFETY_BLOCK".to_string()),
+                            });
+                        }
 
                         if let Some(content) = &candidate.content {
                             for part in &content.parts {
                                 if let Some(text) = &part.text
                                     && !text.is_empty()
-                                        && tx
-                                            .send(Ok(StreamEvent::TextDelta {
-                                                index: content_index,
-                                                text: text.clone(),
-                                            }))
-                                            .await
-                                            .is_err()
-                                        {
-                                            return Ok(());
-                                        }
+                                    && tx
+                                        .send(Ok(StreamEvent::TextDelta {
+                                            index: content_index,
+                                            text: text.clone(),
+                                        }))
+                                        .await
+                                        .is_err()
+                                {
+                                    return Ok(());
+                                }
                             }
                         }
 
                         // Check for completion
                         if let Some(reason) = &candidate.finish_reason
-                            && (reason == "STOP" || reason == "MAX_TOKENS") {
-                                // Send content block stop
-                                let _ = tx
-                                    .send(Ok(StreamEvent::ContentBlockStop {
-                                        index: content_index,
-                                    }))
-                                    .await;
+                            && (reason == "STOP" || reason == "MAX_TOKENS")
+                        {
+                            // Send content block stop
+                            let _ = tx
+                                .send(Ok(StreamEvent::ContentBlockStop {
+                                    index: content_index,
+                                }))
+                                .await;
 
-                                // Send message delta with stop reason and usage
-                                let usage = parsed.usage_metadata.as_ref().map(|u| TokenUsage {
-                                    input_tokens: u.prompt_token_count.unwrap_or(0),
-                                    output_tokens: u.candidates_token_count.unwrap_or(0),
-                                    cache_creation_input_tokens: 0,
-                                    cache_read_input_tokens: 0,
-                                });
+                            // Send message delta with stop reason and usage
+                            let usage = parsed.usage_metadata.as_ref().map(|u| TokenUsage {
+                                input_tokens: u.prompt_token_count.unwrap_or(0),
+                                output_tokens: u.candidates_token_count.unwrap_or(0),
+                                cache_creation_input_tokens: 0,
+                                cache_read_input_tokens: 0,
+                            });
 
-                                let _ = tx
-                                    .send(Ok(StreamEvent::MessageDelta {
-                                        stop_reason: Some(reason.to_lowercase()),
-                                        usage,
-                                    }))
-                                    .await;
+                            let _ = tx
+                                .send(Ok(StreamEvent::MessageDelta {
+                                    stop_reason: Some(reason.to_lowercase()),
+                                    usage,
+                                }))
+                                .await;
 
-                                // Send message stop
-                                let _ = tx.send(Ok(StreamEvent::MessageStop)).await;
-                            }
+                            // Send message stop
+                            let _ = tx.send(Ok(StreamEvent::MessageStop)).await;
+                        }
                     }
                 }
             }
@@ -651,7 +655,7 @@ mod tests {
             message: "Invalid request".to_string(),
             error_type: Some("INVALID_ARGUMENT".to_string()),
         };
-        let display = format!("{}", err);
+        let display = format!("{err}");
         assert!(display.contains("400"));
         assert!(display.contains("Invalid request"));
     }

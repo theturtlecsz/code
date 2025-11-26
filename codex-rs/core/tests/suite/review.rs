@@ -1,13 +1,10 @@
 use codex_core::CodexAuth;
 use codex_core::CodexConversation;
-use codex_core::ContentItem;
 use codex_core::ConversationManager;
 use codex_core::ModelProviderInfo;
 use codex_core::REVIEW_PROMPT;
-use codex_core::ResponseItem;
 use codex_core::built_in_model_providers;
 use codex_core::config::Config;
-use codex_core::protocol::ConversationPathResponseEvent;
 use codex_core::protocol::ENVIRONMENT_CONTEXT_OPEN_TAG;
 use codex_core::protocol::EventMsg;
 // ExitedReviewModeEvent removed - now using Option<ReviewOutputEvent> directly
@@ -18,8 +15,6 @@ use codex_core::protocol::ReviewFinding;
 use codex_core::protocol::ReviewLineRange;
 use codex_core::protocol::ReviewOutputEvent;
 use codex_core::protocol::ReviewRequest;
-use codex_core::protocol::RolloutItem;
-use codex_core::protocol::RolloutLine;
 use core_test_support::load_default_config_for_test;
 use core_test_support::load_sse_fixture_with_id_from_str;
 use core_test_support::non_sandbox_test;
@@ -94,8 +89,9 @@ async fn review_op_emits_lifecycle_and_review_output() {
     let _entered = wait_for_event(&codex, |ev| matches!(ev, EventMsg::EnteredReviewMode(_))).await;
     let closed = wait_for_event(&codex, |ev| matches!(ev, EventMsg::ExitedReviewMode(_))).await;
     let review = match closed {
-        EventMsg::ExitedReviewMode(opt_review) => opt_review
-            .expect("expected ExitedReviewMode with Some(review_output)"),
+        EventMsg::ExitedReviewMode(opt_review) => {
+            opt_review.expect("expected ExitedReviewMode with Some(review_output)")
+        }
         other => panic!("expected ExitedReviewMode(..), got {other:?}"),
     };
 
@@ -162,8 +158,9 @@ async fn review_op_with_plain_text_emits_review_fallback() {
     let _entered = wait_for_event(&codex, |ev| matches!(ev, EventMsg::EnteredReviewMode(_))).await;
     let closed = wait_for_event(&codex, |ev| matches!(ev, EventMsg::ExitedReviewMode(_))).await;
     let review = match closed {
-        EventMsg::ExitedReviewMode(opt_review) => opt_review
-            .expect("expected ExitedReviewMode with Some(review_output)"),
+        EventMsg::ExitedReviewMode(opt_review) => {
+            opt_review.expect("expected ExitedReviewMode with Some(review_output)")
+        }
         other => panic!("expected ExitedReviewMode(..), got {other:?}"),
     };
 
@@ -285,10 +282,7 @@ async fn review_uses_custom_review_model_from_config() {
 
     // Wait for completion
     let _entered = wait_for_event(&codex, |ev| matches!(ev, EventMsg::EnteredReviewMode(_))).await;
-    let _closed = wait_for_event(&codex, |ev| {
-        matches!(ev, EventMsg::ExitedReviewMode(None))
-    })
-    .await;
+    let _closed = wait_for_event(&codex, |ev| matches!(ev, EventMsg::ExitedReviewMode(None))).await;
     let _complete = wait_for_event(&codex, |ev| matches!(ev, EventMsg::TaskComplete(_))).await;
 
     // Assert the request body model equals the configured review model
@@ -397,10 +391,7 @@ async fn review_input_isolated_from_parent_history() {
         .unwrap();
 
     let _entered = wait_for_event(&codex, |ev| matches!(ev, EventMsg::EnteredReviewMode(_))).await;
-    let _closed = wait_for_event(&codex, |ev| {
-        matches!(ev, EventMsg::ExitedReviewMode(None))
-    })
-    .await;
+    let _closed = wait_for_event(&codex, |ev| matches!(ev, EventMsg::ExitedReviewMode(None))).await;
     let _complete = wait_for_event(&codex, |ev| matches!(ev, EventMsg::TaskComplete(_))).await;
 
     // Assert the request `input` contains the environment context followed by the review prompt.
@@ -476,8 +467,10 @@ async fn review_history_does_not_leak_into_parent_session() {
         .await
         .unwrap();
     let _entered = wait_for_event(&codex, |ev| matches!(ev, EventMsg::EnteredReviewMode(_))).await;
-    let _closed = wait_for_event(&codex, |ev| matches!(ev, EventMsg::ExitedReviewMode(Some(_))))
-        .await;
+    let _closed = wait_for_event(&codex, |ev| {
+        matches!(ev, EventMsg::ExitedReviewMode(Some(_)))
+    })
+    .await;
     let _complete = wait_for_event(&codex, |ev| matches!(ev, EventMsg::TaskComplete(_))).await;
 
     // 2) Continue in the parent session; request input must not include any review items.

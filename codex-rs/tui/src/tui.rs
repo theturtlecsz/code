@@ -159,31 +159,30 @@ pub fn init(config: &Config) -> Result<(Tui, TerminalInfo)> {
             .unwrap_or(false)
     };
 
-    if should_paint_bg
-        && let Ok((cols, rows)) = crossterm::terminal::size() {
-            // Build a single line of spaces once to reduce allocations.
-            let blank = " ".repeat(cols as usize);
-            // Set explicit fg/bg to the theme's colors while painting.
-            execute!(
-                stdout(),
-                SetForegroundColor(CtColor::from(theme_fg)),
-                SetBackgroundColor(CtColor::from(theme_bg))
-            )?;
-            for y in 0..rows {
-                execute!(stdout(), MoveTo(0, y), Print(&blank))?;
-            }
-            // Restore cursor to home and keep our colors configured for subsequent drawing.
-            // Avoid ResetColor here to prevent some terminals from flashing to their
-            // profile default background (e.g., white) between frames.
-            execute!(
-                stdout(),
-                MoveTo(0, 0),
-                SetColors(crossterm::style::Colors::new(
-                    theme_fg.into(),
-                    theme_bg.into()
-                ))
-            )?;
+    if should_paint_bg && let Ok((cols, rows)) = crossterm::terminal::size() {
+        // Build a single line of spaces once to reduce allocations.
+        let blank = " ".repeat(cols as usize);
+        // Set explicit fg/bg to the theme's colors while painting.
+        execute!(
+            stdout(),
+            SetForegroundColor(CtColor::from(theme_fg)),
+            SetBackgroundColor(CtColor::from(theme_bg))
+        )?;
+        for y in 0..rows {
+            execute!(stdout(), MoveTo(0, y), Print(&blank))?;
         }
+        // Restore cursor to home and keep our colors configured for subsequent drawing.
+        // Avoid ResetColor here to prevent some terminals from flashing to their
+        // profile default background (e.g., white) between frames.
+        execute!(
+            stdout(),
+            MoveTo(0, 0),
+            SetColors(crossterm::style::Colors::new(
+                theme_fg.into(),
+                theme_bg.into()
+            ))
+        )?;
+    }
 
     // Wrap stdout in a larger BufWriter to reduce syscalls and flushes.
     // A larger buffer significantly helps during heavy scrolling where many cells change.

@@ -295,7 +295,7 @@ mod tests {
 
         // Add many messages to trigger truncation
         for i in 0..20 {
-            history.add_message(Message::user(format!("Message {}", i)));
+            history.add_message(Message::user(format!("Message {i}")));
         }
 
         // Should have truncated oldest messages

@@ -207,9 +207,10 @@ pub fn should_reflect(feedback: &ExecutionFeedback) -> bool {
 
     // Reflect on large changes (likely interesting patterns)
     if let Some(diff) = &feedback.diff_stat
-        && (diff.files > 5 || diff.insertions > 200) {
-            return true;
-        }
+        && (diff.files > 5 || diff.insertions > 200)
+    {
+        return true;
+    }
 
     // Skip routine successes (no patterns to extract)
     false

@@ -82,7 +82,7 @@ impl IntegrationTestContext {
     /// Verify consensus artifact exists
     pub fn assert_consensus_exists(&self, stage: SpecStage, agent: &str) -> bool {
         let consensus_dir = self.consensus_dir();
-        let pattern = format!("spec-{:?}_*_{}.json", stage, agent).to_lowercase();
+        let pattern = format!("spec-{stage:?}_*_{agent}.json").to_lowercase();
 
         if let Ok(entries) = std::fs::read_dir(&consensus_dir) {
             for entry in entries.flatten() {
@@ -97,12 +97,12 @@ impl IntegrationTestContext {
     /// Verify guardrail telemetry exists
     pub fn assert_guardrail_telemetry_exists(&self, stage: SpecStage) -> bool {
         let commands_dir = self.commands_dir();
-        let pattern = format!("spec-{:?}_*.json", stage).to_lowercase();
+        let pattern = format!("spec-{stage:?}_*.json").to_lowercase();
 
         if let Ok(entries) = std::fs::read_dir(&commands_dir) {
             for entry in entries.flatten() {
                 let filename = entry.file_name().to_string_lossy().to_lowercase();
-                if filename.starts_with(&format!("spec-{:?}", stage).to_lowercase()) {
+                if filename.starts_with(&format!("spec-{stage:?}").to_lowercase()) {
                     return true;
                 }
             }
@@ -201,7 +201,7 @@ impl<'a> EvidenceVerifier<'a> {
     /// Verify guardrail telemetry exists and is valid JSON
     pub fn assert_guardrail_valid(&self, stage: SpecStage) -> Result<(), String> {
         if !self.context.assert_guardrail_telemetry_exists(stage) {
-            return Err(format!("Guardrail telemetry not found for {:?}", stage));
+            return Err(format!("Guardrail telemetry not found for {stage:?}"));
         }
 
         // TODO: Add JSON schema validation once we have the telemetry file path

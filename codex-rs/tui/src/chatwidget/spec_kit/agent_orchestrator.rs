@@ -379,7 +379,8 @@ async fn spawn_and_wait_for_agent(
                             let error_detail = agent
                                 .error
                                 .as_ref()
-                                .or(agent.result.as_ref()).cloned()
+                                .or(agent.result.as_ref())
+                                .cloned()
                                 .unwrap_or_else(|| "no error message available".to_string());
 
                             tracing::error!(
@@ -930,9 +931,10 @@ async fn wait_for_regular_stage_agents(
                 for (agent_id, status, _) in &status_summary {
                     if matches!(status, AgentStatus::Completed)
                         && let Some(agent) = manager.get_agent(agent_id)
-                            && let Some(result_text) = &agent.result {
-                                let _ = db.record_agent_completion(agent_id, result_text);
-                            }
+                        && let Some(result_text) = &agent.result
+                    {
+                        let _ = db.record_agent_completion(agent_id, result_text);
+                    }
                 }
                 tracing::debug!(
                     "  ✓ Recorded {} agent completions to SQLite",
@@ -1054,20 +1056,21 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
         Ok(mut prompt) => {
             // ACE Framework Integration (2025-10-29): Inject cached bullets
             if let Some(state) = widget.spec_auto_state.as_mut()
-                && let Some(bullets) = &state.ace_bullets_cache {
-                    use super::ace_prompt_injector::format_ace_section;
-                    let (ace_section, bullet_ids) = format_ace_section(bullets);
-                    if !ace_section.is_empty() {
-                        prompt.push_str("\n\n");
-                        prompt.push_str(&ace_section);
-                        state.ace_bullet_ids_used = Some(bullet_ids);
-                        tracing::info!(
-                            "ACE: Injected {} bullets into {} prompt",
-                            bullets.len(),
-                            stage.display_name()
-                        );
-                    }
+                && let Some(bullets) = &state.ace_bullets_cache
+            {
+                use super::ace_prompt_injector::format_ace_section;
+                let (ace_section, bullet_ids) = format_ace_section(bullets);
+                if !ace_section.is_empty() {
+                    prompt.push_str("\n\n");
+                    prompt.push_str(&ace_section);
+                    state.ace_bullet_ids_used = Some(bullet_ids);
+                    tracing::info!(
+                        "ACE: Injected {} bullets into {} prompt",
+                        bullets.len(),
+                        stage.display_name()
+                    );
                 }
+            }
 
             // SPEC-KIT-070: ACE-aligned routing — set aggregator effort per stage
             // Estimate tokens ~ chars/4
@@ -1212,19 +1215,20 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
 
                 if stage == SpecStage::Validate
                     && let Some((info, payload_hash)) = validate_context.as_mut()
-                        && let Some(updated) = state.mark_validate_dispatched(&info.run_id) {
-                            *info = updated.clone();
-                            record_validate_lifecycle_event(
-                                widget,
-                                spec_id,
-                                &updated.run_id,
-                                updated.attempt,
-                                updated.dedupe_count,
-                                payload_hash.as_str(),
-                                updated.mode,
-                                ValidateLifecycleEvent::Dispatched,
-                            );
-                        }
+                    && let Some(updated) = state.mark_validate_dispatched(&info.run_id)
+                {
+                    *info = updated.clone();
+                    record_validate_lifecycle_event(
+                        widget,
+                        spec_id,
+                        &updated.run_id,
+                        updated.attempt,
+                        updated.dedupe_count,
+                        payload_hash.as_str(),
+                        updated.mode,
+                        ValidateLifecycleEvent::Dispatched,
+                    );
+                }
             }
 
             // Log agent spawn events for each expected agent (before consuming prompt)
@@ -1236,23 +1240,23 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                         expected_agents, ..
                     },
                 ) = (&state.run_id, &state.phase)
-                {
-                    for agent_name in expected_agents {
-                        // Note: Agent IDs not yet available at submission time
-                        // Log with placeholder ID - will be updated when agents actually spawn
-                        state.execution_logger.log_event(
-                            super::execution_logger::ExecutionEvent::AgentSpawn {
-                                run_id: run_id.clone(),
-                                stage: stage.display_name().to_string(),
-                                agent_name: agent_name.clone(),
-                                agent_id: format!("pending-{}", agent_name), // Placeholder
-                                model: agent_name.clone(), // Best guess at this point
-                                prompt_preview: prompt_preview.clone(),
-                                timestamp: super::execution_logger::ExecutionEvent::now(),
-                            },
-                        );
-                    }
+            {
+                for agent_name in expected_agents {
+                    // Note: Agent IDs not yet available at submission time
+                    // Log with placeholder ID - will be updated when agents actually spawn
+                    state.execution_logger.log_event(
+                        super::execution_logger::ExecutionEvent::AgentSpawn {
+                            run_id: run_id.clone(),
+                            stage: stage.display_name().to_string(),
+                            agent_name: agent_name.clone(),
+                            agent_id: format!("pending-{}", agent_name), // Placeholder
+                            model: agent_name.clone(),                   // Best guess at this point
+                            prompt_preview: prompt_preview.clone(),
+                            timestamp: super::execution_logger::ExecutionEvent::now(),
+                        },
+                    );
                 }
+            }
 
             // SPEC-KIT-900 FIX: Spawn agents directly (like quality gates) instead of via text prompt
             // This ensures AgentStatusUpdate events are sent, enabling SQLite tracking
@@ -1511,9 +1515,10 @@ pub(crate) fn schedule_degraded_follow_up(
     spec_id: &str,
 ) {
     if let Some(state) = widget.spec_auto_state.as_mut()
-        && !state.degraded_followups.insert(stage) {
-            return;
-        }
+        && !state.degraded_followups.insert(stage)
+    {
+        return;
+    }
 
     let formatted = format_subagent_command(
         "speckit.checklist",
@@ -1566,38 +1571,28 @@ pub fn on_spec_auto_agents_complete_with_results(
     // SPEC-KIT-072: Store to SQLite for persistent consensus artifacts
     if let Some(state) = widget.spec_auto_state.as_ref()
         && let Some(current_stage) = state.current_stage()
-            && let Some(run_id) = &state.run_id
-                && let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
-                    for (agent_name, response_text) in &agent_results {
-                        let json_str =
-                            super::pipeline_coordinator::extract_json_from_agent_response(
-                                response_text,
-                            )
-                            .unwrap_or_else(|| response_text.clone());
+        && let Some(run_id) = &state.run_id
+        && let Ok(db) = super::consensus_db::ConsensusDb::init_default()
+    {
+        for (agent_name, response_text) in &agent_results {
+            let json_str =
+                super::pipeline_coordinator::extract_json_from_agent_response(response_text)
+                    .unwrap_or_else(|| response_text.clone());
 
-                        if let Err(e) = db.store_artifact(
-                            &state.spec_id,
-                            current_stage,
-                            agent_name,
-                            &json_str,
-                            Some(response_text),
-                            Some(run_id),
-                        ) {
-                            tracing::warn!(
-                                "{} Failed to store {} artifact: {}",
-                                run_tag,
-                                agent_name,
-                                e
-                            );
-                        } else {
-                            tracing::warn!(
-                                "{} ✓ Stored {} artifact to SQLite",
-                                run_tag,
-                                agent_name
-                            );
-                        }
-                    }
-                }
+            if let Err(e) = db.store_artifact(
+                &state.spec_id,
+                current_stage,
+                agent_name,
+                &json_str,
+                Some(response_text),
+                Some(run_id),
+            ) {
+                tracing::warn!("{} Failed to store {} artifact: {}", run_tag, agent_name, e);
+            } else {
+                tracing::warn!("{} ✓ Stored {} artifact to SQLite", run_tag, agent_name);
+            }
+        }
+    }
 
     // Store responses in state cache for synthesis
     if let Some(state) = widget.spec_auto_state.as_mut() {
@@ -1685,49 +1680,50 @@ pub fn on_spec_auto_agents_complete_with_ids(
 
             // Check if this agent was spawned as a quality gate agent
             if let Some(ref database) = db
-                && let Ok(Some((phase_type, _))) = database.get_agent_spawn_info(&agent_info.id) {
-                    tracing::warn!(
-                        "{}   DEBUG: Agent {} ({}) was spawned as phase_type={}",
-                        run_tag,
-                        agent_info.name,
-                        agent_info.id,
-                        phase_type
-                    );
-                    if phase_type == "quality_gate" {
-                        quality_gate_agent_ids.insert(agent_info.id.clone());
-                    }
+                && let Ok(Some((phase_type, _))) = database.get_agent_spawn_info(&agent_info.id)
+            {
+                tracing::warn!(
+                    "{}   DEBUG: Agent {} ({}) was spawned as phase_type={}",
+                    run_tag,
+                    agent_info.name,
+                    agent_info.id,
+                    phase_type
+                );
+                if phase_type == "quality_gate" {
+                    quality_gate_agent_ids.insert(agent_info.id.clone());
                 }
+            }
 
             // Log agent complete event
             if let Some(state) = widget.spec_auto_state.as_ref()
                 && let Some(run_id) = &state.run_id
-                    && let Some(current_stage) = state.current_stage() {
-                        // Calculate output lines from agent result (if available)
-                        let output_lines = agent_info
-                            .result
-                            .as_ref()
-                            .map(|r| r.lines().count())
-                            .unwrap_or(0);
+                && let Some(current_stage) = state.current_stage()
+            {
+                // Calculate output lines from agent result (if available)
+                let output_lines = agent_info
+                    .result
+                    .as_ref()
+                    .map(|r| r.lines().count())
+                    .unwrap_or(0);
 
-                        state.execution_logger.log_event(
-                            super::execution_logger::ExecutionEvent::AgentComplete {
-                                run_id: run_id.clone(),
-                                stage: current_stage.display_name().to_string(),
-                                agent_name: agent_info.name.clone(),
-                                agent_id: agent_info.id.clone(),
-                                duration_sec: 0.0, // TODO: Calculate from agent start time if available
-                                status: "completed".to_string(),
-                                output_lines,
-                                timestamp: super::execution_logger::ExecutionEvent::now(),
-                            },
-                        );
-                    }
+                state.execution_logger.log_event(
+                    super::execution_logger::ExecutionEvent::AgentComplete {
+                        run_id: run_id.clone(),
+                        stage: current_stage.display_name().to_string(),
+                        agent_name: agent_info.name.clone(),
+                        agent_id: agent_info.id.clone(),
+                        duration_sec: 0.0, // TODO: Calculate from agent start time if available
+                        status: "completed".to_string(),
+                        output_lines,
+                        timestamp: super::execution_logger::ExecutionEvent::now(),
+                    },
+                );
+            }
         }
     }
 
     // Update completed agents in state and determine phase type
     let phase_type = if let Some(state) = widget.spec_auto_state.as_mut() {
-        
         match &mut state.phase {
             SpecAutoPhase::ExecutingAgents {
                 completed_agents,
@@ -1755,9 +1751,9 @@ pub fn on_spec_auto_agents_complete_with_ids(
                             if let Some(ref database) = db
                                 && let Ok(Some((phase_type, _))) =
                                     database.get_agent_spawn_info(&a.id)
-                                {
-                                    return phase_type == "regular_stage";
-                                }
+                            {
+                                return phase_type == "regular_stage";
+                            }
                             false
                         })
                         .count();
@@ -1845,11 +1841,12 @@ pub fn on_spec_auto_agents_complete_with_ids(
         }
         "gpt5_validation" => {
             if let Some(state) = widget.spec_auto_state.as_ref()
-                && let SpecAutoPhase::QualityGateValidating { checkpoint, .. } = state.phase {
-                    widget
-                        .quality_gate_broker
-                        .fetch_validation_payload(state.spec_id.clone(), checkpoint);
-                }
+                && let SpecAutoPhase::QualityGateValidating { checkpoint, .. } = state.phase
+            {
+                widget
+                    .quality_gate_broker
+                    .fetch_validation_payload(state.spec_id.clone(), checkpoint);
+            }
         }
         "regular" => {
             // Regular stage agents
@@ -2005,38 +2002,39 @@ pub fn on_spec_auto_agents_complete_with_ids(
                 // SPEC-KIT-072: Store to SQLite for persistent consensus artifacts
                 if let Some(state) = widget.spec_auto_state.as_ref()
                     && let Some(current_stage) = state.current_stage()
-                        && let Some(run_id) = &state.run_id {
-                            // Initialize SQLite database
-                            if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
-                                for (agent_name, response_text) in &agent_responses {
-                                    // Try to extract JSON content for structured storage
-                                    let json_str = super::pipeline_coordinator::extract_json_from_agent_response(response_text)
-                                        .unwrap_or_else(|| response_text.clone());
+                    && let Some(run_id) = &state.run_id
+                {
+                    // Initialize SQLite database
+                    if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
+                        for (agent_name, response_text) in &agent_responses {
+                            // Try to extract JSON content for structured storage
+                            let json_str =
+                                super::pipeline_coordinator::extract_json_from_agent_response(
+                                    response_text,
+                                )
+                                .unwrap_or_else(|| response_text.clone());
 
-                                    if let Err(e) = db.store_artifact(
-                                        &state.spec_id,
-                                        current_stage,
-                                        agent_name,
-                                        &json_str,
-                                        Some(response_text),
-                                        Some(run_id),
-                                    ) {
-                                        tracing::warn!(
-                                            "Failed to store {} artifact to SQLite: {}",
-                                            agent_name,
-                                            e
-                                        );
-                                    } else {
-                                        tracing::warn!(
-                                            "DEBUG: Stored {} artifact to SQLite",
-                                            agent_name
-                                        );
+                            if let Err(e) = db.store_artifact(
+                                &state.spec_id,
+                                current_stage,
+                                agent_name,
+                                &json_str,
+                                Some(response_text),
+                                Some(run_id),
+                            ) {
+                                tracing::warn!(
+                                    "Failed to store {} artifact to SQLite: {}",
+                                    agent_name,
+                                    e
+                                );
+                            } else {
+                                tracing::warn!("DEBUG: Stored {} artifact to SQLite", agent_name);
 
-                                        // Note: Memory cleanup removed - SQLite-based consensus doesn't use local-memory
-                                    }
-                                }
+                                // Note: Memory cleanup removed - SQLite-based consensus doesn't use local-memory
                             }
                         }
+                    }
+                }
 
                 // Store responses in state for consensus to use (REGULAR stages only, not quality gates)
                 if let Some(state) = widget.spec_auto_state.as_mut() {

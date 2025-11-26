@@ -237,15 +237,16 @@ fn error_lines(message: &str) -> Vec<RtLine<'static>> {
 
 fn strip_header(lines: &mut Vec<RtLine<'static>>) {
     if let Some(first) = lines.first()
-        && line_text(first).trim() == "/limits" {
+        && line_text(first).trim() == "/limits"
+    {
+        lines.remove(0);
+        while lines
+            .first()
+            .is_some_and(|line| line_text(line).trim().is_empty())
+        {
             lines.remove(0);
-            while lines
-                .first()
-                .is_some_and(|line| line_text(line).trim().is_empty())
-            {
-                lines.remove(0);
-            }
         }
+    }
 }
 
 fn strip_status_line(lines: &mut Vec<RtLine<'static>>) {

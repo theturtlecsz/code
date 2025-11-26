@@ -120,9 +120,7 @@ impl CallbackServer {
 
         let mut reader = BufReader::new(&stream);
         let mut request_line = String::new();
-        reader
-            .read_line(&mut request_line)
-            .map_err(AuthError::Io)?;
+        reader.read_line(&mut request_line).map_err(AuthError::Io)?;
 
         // Parse the callback parameters
         let (code, state, error) = parse_callback_params(&request_line)?;

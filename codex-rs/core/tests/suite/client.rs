@@ -777,7 +777,9 @@ async fn azure_responses_request_includes_store_and_reasoning_ids() {
         summary,
         verbosity,
         Uuid::new_v4(),
-        Arc::new(std::sync::Mutex::new(codex_core::debug_logger::DebugLogger::new(false).unwrap())),
+        Arc::new(std::sync::Mutex::new(
+            codex_core::debug_logger::DebugLogger::new(false).unwrap(),
+        )),
     );
 
     let mut prompt = Prompt::default();
@@ -1435,7 +1437,9 @@ async fn openrouter_metadata_is_forwarded_in_responses_payload() {
         summary,
         verbosity,
         Uuid::new_v4(),
-        Arc::new(std::sync::Mutex::new(codex_core::debug_logger::DebugLogger::new(false).unwrap())),
+        Arc::new(std::sync::Mutex::new(
+            codex_core::debug_logger::DebugLogger::new(false).unwrap(),
+        )),
     );
 
     let mut prompt = Prompt::default();

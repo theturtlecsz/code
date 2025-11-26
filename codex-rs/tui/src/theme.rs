@@ -135,13 +135,14 @@ pub fn switch_theme(theme_name: ThemeName) {
 fn parse_color(color_str: &str) -> Option<Color> {
     if let Some(hex) = color_str.strip_prefix('#')
         && hex.len() == 6
-            && let (Ok(r), Ok(g), Ok(b)) = (
-                u8::from_str_radix(&hex[0..2], 16),
-                u8::from_str_radix(&hex[2..4], 16),
-                u8::from_str_radix(&hex[4..6], 16),
-            ) {
-                return Some(Color::Rgb(r, g, b));
-            }
+        && let (Ok(r), Ok(g), Ok(b)) = (
+            u8::from_str_radix(&hex[0..2], 16),
+            u8::from_str_radix(&hex[2..4], 16),
+            u8::from_str_radix(&hex[4..6], 16),
+        )
+    {
+        return Some(Color::Rgb(r, g, b));
+    }
 
     // Named colors
     match color_str.to_lowercase().as_str() {
@@ -168,89 +169,110 @@ fn parse_color(color_str: &str) -> Option<Color> {
 /// Apply custom color overrides to a theme
 fn apply_custom_colors(theme: &mut Theme, colors: &ThemeColors) {
     if let Some(ref c) = colors.primary
-        && let Some(color) = parse_color(c) {
-            theme.primary = color;
-        }
+        && let Some(color) = parse_color(c)
+    {
+        theme.primary = color;
+    }
     if let Some(ref c) = colors.secondary
-        && let Some(color) = parse_color(c) {
-            theme.secondary = color;
-        }
+        && let Some(color) = parse_color(c)
+    {
+        theme.secondary = color;
+    }
     if let Some(ref c) = colors.background
-        && let Some(color) = parse_color(c) {
-            theme.background = color;
-        }
+        && let Some(color) = parse_color(c)
+    {
+        theme.background = color;
+    }
     if let Some(ref c) = colors.foreground
-        && let Some(color) = parse_color(c) {
-            theme.foreground = color;
-        }
+        && let Some(color) = parse_color(c)
+    {
+        theme.foreground = color;
+    }
     if let Some(ref c) = colors.border
-        && let Some(color) = parse_color(c) {
-            theme.border = color;
-        }
+        && let Some(color) = parse_color(c)
+    {
+        theme.border = color;
+    }
     if let Some(ref c) = colors.border_focused
-        && let Some(color) = parse_color(c) {
-            theme.border_focused = color;
-        }
+        && let Some(color) = parse_color(c)
+    {
+        theme.border_focused = color;
+    }
     if let Some(ref c) = colors.selection
-        && let Some(color) = parse_color(c) {
-            theme.selection = color;
-        }
+        && let Some(color) = parse_color(c)
+    {
+        theme.selection = color;
+    }
     if let Some(ref c) = colors.cursor
-        && let Some(color) = parse_color(c) {
-            theme.cursor = color;
-        }
+        && let Some(color) = parse_color(c)
+    {
+        theme.cursor = color;
+    }
     if let Some(ref c) = colors.success
-        && let Some(color) = parse_color(c) {
-            theme.success = color;
-        }
+        && let Some(color) = parse_color(c)
+    {
+        theme.success = color;
+    }
     if let Some(ref c) = colors.warning
-        && let Some(color) = parse_color(c) {
-            theme.warning = color;
-        }
+        && let Some(color) = parse_color(c)
+    {
+        theme.warning = color;
+    }
     if let Some(ref c) = colors.error
-        && let Some(color) = parse_color(c) {
-            theme.error = color;
-        }
+        && let Some(color) = parse_color(c)
+    {
+        theme.error = color;
+    }
     if let Some(ref c) = colors.info
-        && let Some(color) = parse_color(c) {
-            theme.info = color;
-        }
+        && let Some(color) = parse_color(c)
+    {
+        theme.info = color;
+    }
     if let Some(ref c) = colors.text
-        && let Some(color) = parse_color(c) {
-            theme.text = color;
-        }
+        && let Some(color) = parse_color(c)
+    {
+        theme.text = color;
+    }
     if let Some(ref c) = colors.text_dim
-        && let Some(color) = parse_color(c) {
-            theme.text_dim = color;
-        }
+        && let Some(color) = parse_color(c)
+    {
+        theme.text_dim = color;
+    }
     if let Some(ref c) = colors.text_bright
-        && let Some(color) = parse_color(c) {
-            theme.text_bright = color;
-        }
+        && let Some(color) = parse_color(c)
+    {
+        theme.text_bright = color;
+    }
     if let Some(ref c) = colors.keyword
-        && let Some(color) = parse_color(c) {
-            theme.keyword = color;
-        }
+        && let Some(color) = parse_color(c)
+    {
+        theme.keyword = color;
+    }
     if let Some(ref c) = colors.string
-        && let Some(color) = parse_color(c) {
-            theme.string = color;
-        }
+        && let Some(color) = parse_color(c)
+    {
+        theme.string = color;
+    }
     if let Some(ref c) = colors.comment
-        && let Some(color) = parse_color(c) {
-            theme.comment = color;
-        }
+        && let Some(color) = parse_color(c)
+    {
+        theme.comment = color;
+    }
     if let Some(ref c) = colors.function
-        && let Some(color) = parse_color(c) {
-            theme.function = color;
-        }
+        && let Some(color) = parse_color(c)
+    {
+        theme.function = color;
+    }
     if let Some(ref c) = colors.spinner
-        && let Some(color) = parse_color(c) {
-            theme.spinner = color;
-        }
+        && let Some(color) = parse_color(c)
+    {
+        theme.spinner = color;
+    }
     if let Some(ref c) = colors.progress
-        && let Some(color) = parse_color(c) {
-            theme.progress = color;
-        }
+        && let Some(color) = parse_color(c)
+    {
+        theme.progress = color;
+    }
 }
 
 /// Return true when we should prefer ANSI-256 over truecolor for safety.
@@ -323,12 +345,15 @@ fn quantize_theme_to_ansi256(theme: &mut Theme) {
             return None;
         }
         if let Color::Rgb(r, g, b) = c
-            && r >= 245 && g >= 245 && b >= 245 {
-                // On limited-color terminals we want a strong white for light themes.
-                // Use ANSI bright white (index 15), which maps to the profile's
-                // bright white and is reliably high‑contrast (unlike grayscale 231).
-                return Some(Color::Indexed(15));
-            }
+            && r >= 245
+            && g >= 245
+            && b >= 245
+        {
+            // On limited-color terminals we want a strong white for light themes.
+            // Use ANSI bright white (index 15), which maps to the profile's
+            // bright white and is reliably high‑contrast (unlike grayscale 231).
+            return Some(Color::Indexed(15));
+        }
         None
     }
 

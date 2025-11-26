@@ -436,9 +436,10 @@ pub fn apply_auto_resolution(
 fn extract_requirement_id(text: &str) -> Option<String> {
     // Look for patterns like "R1:", "R2:", etc.
     if let Some(start) = text.find('R')
-        && let Some(end) = text[start..].find(':') {
-            return Some(text[start..start + end].to_string());
-        }
+        && let Some(end) = text[start..].find(':')
+    {
+        return Some(text[start..start + end].to_string());
+    }
     None
 }
 

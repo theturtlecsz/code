@@ -251,9 +251,10 @@ fn is_write_patch_constrained_to_writable_paths(
                     return false;
                 }
                 if let Some(dest) = move_path
-                    && !is_path_writable(dest) {
-                        return false;
-                    }
+                    && !is_path_writable(dest)
+                {
+                    return false;
+                }
             }
         }
     }
@@ -305,7 +306,7 @@ mod tests {
         // With the parent dir explicitly added as a writable root, the
         // outside write should be permitted.
         let policy_with_parent = SandboxPolicy::WorkspaceWrite {
-            writable_roots: vec![parent.clone()],
+            writable_roots: vec![parent],
             network_access: false,
             exclude_tmpdir_env_var: true,
             exclude_slash_tmp: true,
@@ -355,7 +356,7 @@ mod tests {
                 );
             }
             other => {
-                panic!("expected rejection, got {:?}", other);
+                panic!("expected rejection, got {other:?}");
             }
         }
     }

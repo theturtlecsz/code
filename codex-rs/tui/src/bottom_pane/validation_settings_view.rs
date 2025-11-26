@@ -391,9 +391,10 @@ impl<'a> BottomPaneView<'a> for ValidationSettingsView {
                         SelectionKind::Group(idx) => self.toggle_group(idx),
                         SelectionKind::Tool(idx) => {
                             if let Some(tool) = self.tools.get(idx)
-                                && tool.status.installed {
-                                    self.toggle_tool(idx);
-                                }
+                                && tool.status.installed
+                            {
+                                self.toggle_tool(idx);
+                            }
                         }
                     }
                 }

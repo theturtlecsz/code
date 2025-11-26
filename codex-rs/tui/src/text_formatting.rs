@@ -56,9 +56,11 @@ pub(crate) fn format_json_compact(text: &str) -> Option<String> {
                 // Add a space after : and , but only when not in a string
                 if let Some(&next_ch) = chars.peek()
                     && let Some(last_ch) = result.chars().last()
-                        && (last_ch == ':' || last_ch == ',') && !matches!(next_ch, '}' | ']') {
-                            result.push(' ');
-                        }
+                    && (last_ch == ':' || last_ch == ',')
+                    && !matches!(next_ch, '}' | ']')
+                {
+                    result.push(' ');
+                }
             }
             _ => {
                 if escape_next && in_string {

@@ -604,14 +604,15 @@ fn maybe_apply_terminal_theme_detection(config: &mut Config, theme_configured_ex
             &term_program,
             &term_program_version,
             &colorfgbg,
-        ) {
-            tracing::debug!(
-                source = cached.source.as_deref().unwrap_or("cached"),
-                "Using cached terminal background detection result",
-            );
-            apply_detected_theme(theme, cached.is_dark);
-            return;
-        }
+        )
+    {
+        tracing::debug!(
+            source = cached.source.as_deref().unwrap_or("cached"),
+            "Using cached terminal background detection result",
+        );
+        apply_detected_theme(theme, cached.is_dark);
+        return;
+    }
 
     match crate::terminal_info::detect_dark_terminal_background() {
         Some(detection) => {

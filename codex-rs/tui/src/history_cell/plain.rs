@@ -188,9 +188,10 @@ impl HistoryCell for PlainHistoryCell {
         let mut lines: Vec<Line<'static>> = Vec::new();
 
         if !self.hide_header()
-            && let Some(header) = self.header_line(&theme) {
-                lines.push(header);
-            }
+            && let Some(header) = self.header_line(&theme)
+        {
+            lines.push(header);
+        }
 
         lines.extend(message_lines_to_ratatui(self.state.body(), &theme));
         lines

@@ -1,3 +1,6 @@
+// SPEC-957: Allow expect/unwrap in test code
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+
 //! Phase 3 Integration Tests: Full Stage Workflows (W01-W15)
 //!
 //! FORK-SPECIFIC (just-every/code): Spec-kit Phase 3 integration testing

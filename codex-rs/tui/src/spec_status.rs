@@ -292,26 +292,28 @@ pub fn collect_report(repo_root: &Path, args: SpecStatusArgs) -> Result<SpecStat
         if matches!(snap.cue, StageCue::Warn) {
             if let Some(guardrail) = &snap.guardrail {
                 if let Some(status) = &guardrail.policy_final_status
-                    && status.eq_ignore_ascii_case("failed") {
-                        warnings.push(format!(
-                            "{} policy final check failed for {}",
-                            snap.stage.display(),
-                            args.spec_id
-                        ));
-                    }
+                    && status.eq_ignore_ascii_case("failed")
+                {
+                    warnings.push(format!(
+                        "{} policy final check failed for {}",
+                        snap.stage.display(),
+                        args.spec_id
+                    ));
+                }
                 if let Some(status) = &guardrail.hal_status
-                    && status.eq_ignore_ascii_case("failed") {
-                        let details = if guardrail.hal_failed_checks.is_empty() {
-                            String::from("failed checks not reported")
-                        } else {
-                            guardrail.hal_failed_checks.join(", ")
-                        };
-                        warnings.push(format!(
-                            "HAL telemetry reported failure for {} stage: {}",
-                            snap.stage.display(),
-                            details
-                        ));
-                    }
+                    && status.eq_ignore_ascii_case("failed")
+                {
+                    let details = if guardrail.hal_failed_checks.is_empty() {
+                        String::from("failed checks not reported")
+                    } else {
+                        guardrail.hal_failed_checks.join(", ")
+                    };
+                    warnings.push(format!(
+                        "HAL telemetry reported failure for {} stage: {}",
+                        snap.stage.display(),
+                        details
+                    ));
+                }
             }
             if snap.consensus.disagreement {
                 warnings.push(format!(
@@ -504,9 +506,10 @@ fn render_stage_details(report: &SpecStatusReport, snapshot: &StageSnapshot) -> 
     let mut details = Vec::new();
 
     if let Some(guardrail) = &snapshot.guardrail
-        && guardrail.has_failures() {
-            details.push("  - Guardrail reported non-passing status".into());
-        }
+        && guardrail.has_failures()
+    {
+        details.push("  - Guardrail reported non-passing status".into());
+    }
 
     if snapshot.is_stale {
         let last = snapshot
@@ -622,13 +625,15 @@ fn format_agent_outcome(outcome: &AgentOutcome) -> String {
     );
 
     if let Some(model) = &outcome.model
-        && !model.is_empty() {
-            chunk.push_str(&format!("•{}", model));
-        }
+        && !model.is_empty()
+    {
+        chunk.push_str(&format!("•{}", model));
+    }
     if let Some(reasoning) = &outcome.reasoning_mode
-        && !reasoning.is_empty() {
-            chunk.push_str(&format!("•{}", reasoning));
-        }
+        && !reasoning.is_empty()
+    {
+        chunk.push_str(&format!("•{}", reasoning));
+    }
     chunk
 }
 
@@ -784,30 +789,38 @@ fn collect_stage_snapshot(
     if let Some(record) = &guardrail {
         cue = StageCue::Pass;
         if let Some(status) = &record.policy_final_status
-            && !status.eq_ignore_ascii_case("passed") {
-                cue = StageCue::Warn;
-                notes.push(format!("policy final status: {}", status));
-            }
+            && !status.eq_ignore_ascii_case("passed")
+        {
+            cue = StageCue::Warn;
+            notes.push(format!("policy final status: {}", status));
+        }
         if let Some(status) = &record.baseline_status
-            && !status.eq_ignore_ascii_case("passed") {
-                cue = StageCue::Warn;
-                notes.push(format!("baseline status: {}", status));
-            }
+            && !status.eq_ignore_ascii_case("passed")
+        {
+            cue = StageCue::Warn;
+            notes.push(format!("baseline status: {}", status));
+        }
         if let Some(status) = &record.tool_status
-            && !status.eq_ignore_ascii_case("passed") && !status.eq_ignore_ascii_case("ok") {
-                cue = StageCue::Warn;
-                notes.push(format!("tool status: {}", status));
-            }
+            && !status.eq_ignore_ascii_case("passed")
+            && !status.eq_ignore_ascii_case("ok")
+        {
+            cue = StageCue::Warn;
+            notes.push(format!("tool status: {}", status));
+        }
         if let Some(status) = &record.lock_status
-            && !status.eq_ignore_ascii_case("passed") && !status.eq_ignore_ascii_case("ok") {
-                cue = StageCue::Warn;
-                notes.push(format!("lock status: {}", status));
-            }
+            && !status.eq_ignore_ascii_case("passed")
+            && !status.eq_ignore_ascii_case("ok")
+        {
+            cue = StageCue::Warn;
+            notes.push(format!("lock status: {}", status));
+        }
         if let Some(status) = &record.hook_status
-            && !status.eq_ignore_ascii_case("passed") && !status.eq_ignore_ascii_case("ok") {
-                cue = StageCue::Warn;
-                notes.push(format!("hook status: {}", status));
-            }
+            && !status.eq_ignore_ascii_case("passed")
+            && !status.eq_ignore_ascii_case("ok")
+        {
+            cue = StageCue::Warn;
+            notes.push(format!("hook status: {}", status));
+        }
         if let Some(status) = &record.hal_status {
             if status.eq_ignore_ascii_case("failed") {
                 cue = StageCue::Warn;
@@ -995,9 +1008,10 @@ fn collect_consensus(repo_root: &Path, spec_id: &str, stage: StageKind) -> Resul
             .with_context(|| format!("parsing consensus file {}", entry.path().display()))?;
 
         if let Some(consensus) = data.consensus.as_ref()
-            && synthesis_status.is_none() {
-                synthesis_status = consensus.synthesis_status.clone();
-            }
+            && synthesis_status.is_none()
+        {
+            synthesis_status = consensus.synthesis_status.clone();
+        }
 
         let agent_name = data
             .agent
@@ -1020,11 +1034,12 @@ fn collect_consensus(repo_root: &Path, spec_id: &str, stage: StageKind) -> Resul
 
         let mut notes = Vec::new();
         if let Some(consensus) = data.consensus.as_ref()
-            && let Some(conflicts) = consensus.conflicts.as_ref() {
-                for conflict in conflicts {
-                    notes.push(conflict.clone());
-                }
+            && let Some(conflicts) = consensus.conflicts.as_ref()
+        {
+            for conflict in conflicts {
+                notes.push(conflict.clone());
             }
+        }
         if let Some(err) = data.error.as_ref() {
             notes.push(err.clone());
         }
@@ -1163,25 +1178,26 @@ fn sanitize_json_notes(raw: &str) -> String {
     let mut output = String::with_capacity(raw.len());
     for line in raw.lines() {
         if line.contains("\"note\"")
-            && let Some(colon_idx) = line.find(':') {
-                let after_colon = &line[colon_idx + 1..];
-                if let Some(first_quote_offset) = after_colon.find('"') {
-                    let value_start = colon_idx + 1 + first_quote_offset;
-                    let remaining = &line[value_start + 1..];
-                    if let Some(last_quote_rel) = remaining.rfind('"') {
-                        let value_end = value_start + 1 + last_quote_rel;
-                        let value = &line[value_start + 1..value_end];
-                        let escaped = value.replace("\\", "\\\\").replace("\"", "\\\"");
-                        let mut sanitized = String::new();
-                        sanitized.push_str(&line[..value_start + 1]);
-                        sanitized.push_str(&escaped);
-                        sanitized.push_str(&line[value_end..]);
-                        output.push_str(&sanitized);
-                        output.push('\n');
-                        continue;
-                    }
+            && let Some(colon_idx) = line.find(':')
+        {
+            let after_colon = &line[colon_idx + 1..];
+            if let Some(first_quote_offset) = after_colon.find('"') {
+                let value_start = colon_idx + 1 + first_quote_offset;
+                let remaining = &line[value_start + 1..];
+                if let Some(last_quote_rel) = remaining.rfind('"') {
+                    let value_end = value_start + 1 + last_quote_rel;
+                    let value = &line[value_start + 1..value_end];
+                    let escaped = value.replace("\\", "\\\\").replace("\"", "\\\"");
+                    let mut sanitized = String::new();
+                    sanitized.push_str(&line[..value_start + 1]);
+                    sanitized.push_str(&escaped);
+                    sanitized.push_str(&line[value_end..]);
+                    output.push_str(&sanitized);
+                    output.push('\n');
+                    continue;
                 }
             }
+        }
         output.push_str(line);
         output.push('\n');
     }

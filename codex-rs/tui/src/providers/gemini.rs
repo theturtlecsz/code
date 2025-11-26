@@ -107,22 +107,23 @@ impl GeminiProvider {
                 settings.sandbox_policy,
                 Some(codex_core::protocol::SandboxPolicy::DangerFullAccess)
             ))
-            && let Some(ref approval) = settings.approval_policy {
-                match approval {
-                    codex_core::protocol::AskForApproval::Never => {
-                        args.push("--approval-mode");
-                        args.push("yolo");
-                    }
-                    codex_core::protocol::AskForApproval::OnFailure => {
-                        args.push("--approval-mode");
-                        args.push("auto_edit");
-                    }
-                    codex_core::protocol::AskForApproval::OnRequest
-                    | codex_core::protocol::AskForApproval::UnlessTrusted => {
-                        // Default behavior, no flag needed
-                    }
+            && let Some(ref approval) = settings.approval_policy
+        {
+            match approval {
+                codex_core::protocol::AskForApproval::Never => {
+                    args.push("--approval-mode");
+                    args.push("yolo");
+                }
+                codex_core::protocol::AskForApproval::OnFailure => {
+                    args.push("--approval-mode");
+                    args.push("auto_edit");
+                }
+                codex_core::protocol::AskForApproval::OnRequest
+                | codex_core::protocol::AskForApproval::UnlessTrusted => {
+                    // Default behavior, no flag needed
                 }
             }
+        }
 
         // Execute CLI command
         let stdout = self.executor.execute_for_stdout(&args).await?;

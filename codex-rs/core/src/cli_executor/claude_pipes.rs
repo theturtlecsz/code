@@ -64,26 +64,26 @@ pub(crate) fn parse_stream_json_event(
                 Some("system") => {
                     // Capture session_id if not already set
                     if current_session_id.is_none()
-                        && let Some(session_id) = event.get("session_id").and_then(|s| s.as_str()) {
-                            *current_session_id = Some(session_id.to_string());
-                        }
+                        && let Some(session_id) = event.get("session_id").and_then(|s| s.as_str())
+                    {
+                        *current_session_id = Some(session_id.to_string());
+                    }
                 }
                 Some("assistant") => {
                     // Extract text content from assistant message
                     if let Some(message) = event.get("message")
                         && let Some(content) = message.get("content")
-                            && let Some(content_array) = content.as_array() {
-                                for item in content_array {
-                                    if let Some(text_type) =
-                                        item.get("type").and_then(|t| t.as_str())
-                                        && text_type == "text"
-                                            && let Some(text) =
-                                                item.get("text").and_then(|t| t.as_str())
-                                            {
-                                                events.push(StreamEvent::Delta(text.to_string()));
-                                            }
-                                }
+                        && let Some(content_array) = content.as_array()
+                    {
+                        for item in content_array {
+                            if let Some(text_type) = item.get("type").and_then(|t| t.as_str())
+                                && text_type == "text"
+                                && let Some(text) = item.get("text").and_then(|t| t.as_str())
+                            {
+                                events.push(StreamEvent::Delta(text.to_string()));
                             }
+                        }
+                    }
                 }
                 Some("result") => {
                     events.push(StreamEvent::Done);
@@ -365,32 +365,29 @@ impl ClaudePipesSession {
                                 if self.session_id.is_none()
                                     && let Some(session_id) =
                                         event.get("session_id").and_then(|s| s.as_str())
-                                    {
-                                        self.session_id = Some(session_id.to_string());
-                                        tracing::info!("Captured session_id: {}", session_id);
-                                    }
+                                {
+                                    self.session_id = Some(session_id.to_string());
+                                    tracing::info!("Captured session_id: {}", session_id);
+                                }
                             }
                             Some("assistant") => {
                                 // Assistant message event
                                 if let Some(message) = event.get("message")
                                     && let Some(content) = message.get("content")
-                                        && let Some(content_array) = content.as_array() {
-                                            for item in content_array {
-                                                if let Some(text_type) =
-                                                    item.get("type").and_then(|t| t.as_str())
-                                                    && text_type == "text"
-                                                        && let Some(text) = item
-                                                            .get("text")
-                                                            .and_then(|t| t.as_str())
-                                                        {
-                                                            let _ = tx
-                                                                .send(StreamEvent::Delta(
-                                                                    text.to_string(),
-                                                                ))
-                                                                .await;
-                                                        }
-                                            }
+                                    && let Some(content_array) = content.as_array()
+                                {
+                                    for item in content_array {
+                                        if let Some(text_type) =
+                                            item.get("type").and_then(|t| t.as_str())
+                                            && text_type == "text"
+                                            && let Some(text) =
+                                                item.get("text").and_then(|t| t.as_str())
+                                        {
+                                            let _ =
+                                                tx.send(StreamEvent::Delta(text.to_string())).await;
                                         }
+                                    }
+                                }
                             }
                             Some("result") => {
                                 // Turn complete - result event indicates end
@@ -1009,8 +1006,7 @@ mod tests {
         // Large text content (1000+ characters)
         let large_text = "A".repeat(2000);
         let json = format!(
-            r#"{{"type":"assistant","message":{{"content":[{{"type":"text","text":"{}"}}]}}}}"#,
-            large_text
+            r#"{{"type":"assistant","message":{{"content":[{{"type":"text","text":"{large_text}"}}]}}}}"#
         );
 
         let mut session_id = None;
@@ -1151,7 +1147,7 @@ mod tests {
                 let json = if let Some(evt) = event_type {
                     format!(r#"{{"type":"{}","data":"{}"}}"#, evt, text.replace('"', "\\\""))
                 } else {
-                    text.clone()
+                    text
                 };
 
                 let mut session_id = None;
@@ -1164,8 +1160,8 @@ mod tests {
                 id1 in "[a-zA-Z0-9-]{10,50}",
                 id2 in "[a-zA-Z0-9-]{10,50}",
             ) {
-                let json1 = format!(r#"{{"type":"system","session_id":"{}"}}"#, id1);
-                let json2 = format!(r#"{{"type":"system","session_id":"{}"}}"#, id2);
+                let json1 = format!(r#"{{"type":"system","session_id":"{id1}"}}"#);
+                let json2 = format!(r#"{{"type":"system","session_id":"{id2}"}}"#);
 
                 let mut session_id = None;
                 parse_stream_json_event(&json1, &mut session_id);
@@ -1190,11 +1186,8 @@ mod tests {
                 let events = parse_stream_json_event(&json, &mut session_id);
 
                 if !events.is_empty() {
-                    match &events[0] {
-                        StreamEvent::Delta(parsed_text) => {
-                            prop_assert_eq!(parsed_text, &text, "Text content should be preserved exactly");
-                        }
-                        _ => {}
+                    if let StreamEvent::Delta(parsed_text) = &events[0] {
+                        prop_assert_eq!(parsed_text, &text, "Text content should be preserved exactly");
                     }
                 }
             }
@@ -1209,8 +1202,7 @@ mod tests {
                 // Generate sequence of assistant messages
                 for i in 0..count {
                     let json = format!(
-                        r#"{{"type":"assistant","message":{{"content":[{{"type":"text","text":"{}"}}]}}}}"#,
-                        i
+                        r#"{{"type":"assistant","message":{{"content":[{{"type":"text","text":"{i}"}}]}}}}"#
                     );
                     let events = parse_stream_json_event(&json, &mut session_id);
                     all_events.extend(events);
@@ -1241,7 +1233,7 @@ mod tests {
                 // Property: JSON parsing works regardless of chunk boundaries
                 // Generate valid JSON lines (Claude stream format)
                 let json_lines: Vec<String> = (0..num_events)
-                    .map(|i| format!(r#"{{"type":"assistant","message":{{"content":[{{"type":"text","text":"chunk{}"}}]}}}}"#, i))
+                    .map(|i| format!(r#"{{"type":"assistant","message":{{"content":[{{"type":"text","text":"chunk{i}"}}]}}}}"#))
                     .collect();
 
                 let full_json = json_lines.join("\n");
@@ -1276,7 +1268,7 @@ mod tests {
                 invalid_suffix in "[^{}\\[\\]]{1,10}",
             ) {
                 // Property: Parser handles malformed JSON gracefully (no panic/hang)
-                let malformed = format!("{}{}", valid_prefix, invalid_suffix);
+                let malformed = format!("{valid_prefix}{invalid_suffix}");
                 let mut session_id = None;
 
                 // Should return empty or error, not panic
@@ -1315,7 +1307,7 @@ mod tests {
             }
         }
 
-        println!("Response: {}", response);
+        println!("Response: {response}");
         assert!(
             response.contains("Hello") || response.contains("World"),
             "Response should contain greeting"
@@ -1355,7 +1347,7 @@ mod tests {
             }
         }
 
-        println!("Response: {}", response);
+        println!("Response: {response}");
         assert!(
             response.contains("Alice"),
             "Should remember name from turn 1"

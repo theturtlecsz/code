@@ -1,21 +1,11 @@
 use codex_core::CodexAuth;
 use codex_core::ConversationManager;
-use codex_core::InitialHistory;
 use codex_core::ModelProviderInfo;
-use codex_core::NewConversation;
-use codex_core::ResponseItem;
-use codex_core::RolloutRecorder;
-use codex_core::SessionMeta;
 use codex_core::built_in_model_providers;
-use codex_core::models::ContentItem;
 use codex_core::protocol::ErrorEvent;
 use codex_core::protocol::EventMsg;
 use codex_core::protocol::InputItem;
 use codex_core::protocol::Op;
-use codex_core::protocol::RolloutItem;
-use codex_core::protocol::RolloutLine;
-use codex_protocol::protocol::CompactedItem;
-use codex_protocol::protocol::SessionMetaLine;
 use core_test_support::load_default_config_for_test;
 use core_test_support::wait_for_event;
 use tempfile::TempDir;
@@ -26,21 +16,15 @@ use wiremock::ResponseTemplate;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
-use chrono::Utc;
 use codex_core::codex::compact::SUMMARIZATION_PROMPT;
-use codex_protocol::mcp_protocol::ConversationId;
 use core_test_support::non_sandbox_test;
 use core_test_support::responses::ev_assistant_message;
-use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_completed_with_tokens;
 use core_test_support::responses::ev_function_call;
-use core_test_support::responses::mount_sse_once;
 use core_test_support::responses::sse;
 use core_test_support::responses::sse_response;
 use core_test_support::responses::start_mock_server;
 use pretty_assertions::assert_eq;
-use std::io::Write;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicUsize;
@@ -470,10 +454,7 @@ async fn auto_compact_allows_multiple_attempts_when_interleaved_with_other_turn_
     loop {
         let event = codex.next_event().await.unwrap();
         if event.id.starts_with("auto-compact-")
-            && matches!(
-                event.msg,
-                EventMsg::TaskStarted | EventMsg::TaskComplete(_)
-            )
+            && matches!(event.msg, EventMsg::TaskStarted | EventMsg::TaskComplete(_))
         {
             auto_compact_lifecycle_events.push(event);
             continue;

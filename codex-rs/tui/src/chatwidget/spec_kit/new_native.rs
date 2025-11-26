@@ -473,9 +473,10 @@ fn find_next_order_number(lines: &[&str]) -> usize {
             // Parse order number (first column)
             let parts: Vec<&str> = line.split('|').collect();
             if parts.len() > 1
-                && let Ok(order) = parts[1].trim().parse::<usize>() {
-                    max_order = max_order.max(order);
-                }
+                && let Ok(order) = parts[1].trim().parse::<usize>()
+            {
+                max_order = max_order.max(order);
+            }
         }
     }
 

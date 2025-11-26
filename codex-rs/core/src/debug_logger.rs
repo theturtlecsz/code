@@ -110,15 +110,16 @@ impl DebugLogger {
         }
 
         if let Ok(mut streams) = self.active_streams.lock()
-            && let Some(stream_info) = streams.get_mut(request_id) {
-                let timestamp = Local::now();
-                let event_entry = serde_json::json!({
-                    "timestamp": timestamp.to_rfc3339(),
-                    "type": event_type,
-                    "data": data
-                });
-                stream_info.events.push(event_entry);
-            }
+            && let Some(stream_info) = streams.get_mut(request_id)
+        {
+            let timestamp = Local::now();
+            let event_entry = serde_json::json!({
+                "timestamp": timestamp.to_rfc3339(),
+                "type": event_type,
+                "data": data
+            });
+            stream_info.events.push(event_entry);
+        }
 
         Ok(())
     }
@@ -130,18 +131,19 @@ impl DebugLogger {
         }
 
         if let Ok(mut streams) = self.active_streams.lock()
-            && let Some(stream_info) = streams.remove(request_id) {
-                // Create the response object with all events as an array
-                let response_data = serde_json::json!({
-                    "request_id": request_id,
-                    "completed_at": Local::now().to_rfc3339(),
-                    "events": stream_info.events
-                });
+            && let Some(stream_info) = streams.remove(request_id)
+        {
+            // Create the response object with all events as an array
+            let response_data = serde_json::json!({
+                "request_id": request_id,
+                "completed_at": Local::now().to_rfc3339(),
+                "events": stream_info.events
+            });
 
-                // Write pretty-printed JSON to response file
-                let formatted_response = serde_json::to_string_pretty(&response_data)?;
-                fs::write(&stream_info.response_file, formatted_response)?;
-            }
+            // Write pretty-printed JSON to response file
+            let formatted_response = serde_json::to_string_pretty(&response_data)?;
+            fs::write(&stream_info.response_file, formatted_response)?;
+        }
 
         Ok(())
     }

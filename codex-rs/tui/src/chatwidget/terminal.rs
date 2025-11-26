@@ -209,9 +209,10 @@ impl TerminalOverlay {
 
     pub(crate) fn cancel_pending_command(&mut self) {
         if let Some(mut pending) = self.pending_command.take()
-            && let Some(tx) = pending.ack.take() {
-                let _ = tx.send(TerminalCommandGate::Cancel);
-            }
+            && let Some(tx) = pending.ack.take()
+        {
+            let _ = tx.send(TerminalCommandGate::Cancel);
+        }
     }
 
     pub(crate) fn push_info_message(&mut self, message: &str) {

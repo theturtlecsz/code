@@ -1,3 +1,6 @@
+// SPEC-957: Allow expect/unwrap in test code
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+
 //! Performance regression tests for SPEC-945B
 //!
 //! These tests validate that database performance remains within acceptable
@@ -93,12 +96,11 @@ fn test_wal_mode_read_performance() {
     // Validation: Average read time should be <50µs (with 20% margin)
     // Target: ~10µs from benchmarks, allowing 5× margin for CI variability
     let avg_read_time = duration.as_micros() / 1000;
-    println!("Average read time: {}µs", avg_read_time);
+    println!("Average read time: {avg_read_time}µs");
 
     assert!(
         avg_read_time < 50,
-        "Read performance regression detected: {}µs (expected <50µs)",
-        avg_read_time
+        "Read performance regression detected: {avg_read_time}µs (expected <50µs)"
     );
 }
 
@@ -114,7 +116,7 @@ fn test_wal_mode_write_performance() {
         let conn = pool.get().expect("Failed to get connection");
         conn.execute(
             "INSERT INTO consensus_runs (spec_id, stage, consensus_ok, created_at) VALUES (?1, ?2, ?3, ?4)",
-            (format!("SPEC-PERF-{}", i), "implement", 1, 2000000 + i),
+            (format!("SPEC-PERF-{i}"), "implement", 1, 2000000 + i),
         )
         .expect("Failed to insert");
     }
@@ -123,12 +125,11 @@ fn test_wal_mode_write_performance() {
     // Validation: Average write time should be <100µs (with margin)
     // Target: ~17µs from benchmarks, allowing 6× margin for CI variability
     let avg_write_time = duration.as_micros() / 100;
-    println!("Average write time: {}µs", avg_write_time);
+    println!("Average write time: {avg_write_time}µs");
 
     assert!(
         avg_write_time < 100,
-        "Write performance regression detected: {}µs (expected <100µs)",
-        avg_write_time
+        "Write performance regression detected: {avg_write_time}µs (expected <100µs)"
     );
 }
 
@@ -149,7 +150,7 @@ fn test_transaction_batch_performance() {
         for i in 0..100 {
             tx.execute(
                 "INSERT INTO consensus_runs (spec_id, stage, consensus_ok, created_at) VALUES (?1, ?2, ?3, ?4)",
-                (format!("SPEC-BATCH-{}", i), "validate", 1, 3000000 + i),
+                (format!("SPEC-BATCH-{i}"), "validate", 1, 3000000 + i),
             )
             .expect("Failed to insert");
         }
@@ -161,12 +162,11 @@ fn test_transaction_batch_performance() {
     // Validation: Transaction batch should be <2ms (with margin)
     // Target: ~890µs from benchmarks, allowing 2× margin
     let batch_time_ms = duration.as_micros() as f64 / 1000.0;
-    println!("Transaction batch time: {:.2}ms", batch_time_ms);
+    println!("Transaction batch time: {batch_time_ms:.2}ms");
 
     assert!(
         batch_time_ms < 2.0,
-        "Transaction batch performance regression: {:.2}ms (expected <2.0ms)",
-        batch_time_ms
+        "Transaction batch performance regression: {batch_time_ms:.2}ms (expected <2.0ms)"
     );
 }
 
@@ -198,12 +198,11 @@ fn test_connection_pool_overhead() {
     // Validation: Average pooled operation should be <100µs
     // Target: ~10µs query + pool overhead, allowing 10× margin
     let avg_time = duration.as_micros() / 100;
-    println!("Average pooled operation time: {}µs", avg_time);
+    println!("Average pooled operation time: {avg_time}µs");
 
     assert!(
         avg_time < 100,
-        "Connection pool overhead regression: {}µs (expected <100µs)",
-        avg_time
+        "Connection pool overhead regression: {avg_time}µs (expected <100µs)"
     );
 }
 
@@ -225,7 +224,7 @@ fn test_dual_write_overhead_bounds() {
             conn1
                 .execute(
                     "INSERT INTO consensus_runs (spec_id, stage, consensus_ok, created_at) VALUES (?1, ?2, ?3, ?4)",
-                    (format!("SPEC-DUAL-{}", i), "audit", 1, 4000000 + i),
+                    (format!("SPEC-DUAL-{i}"), "audit", 1, 4000000 + i),
                 )
                 .expect("Failed to insert to db1");
         }
@@ -236,7 +235,7 @@ fn test_dual_write_overhead_bounds() {
             conn2
                 .execute(
                     "INSERT INTO consensus_runs (spec_id, stage, consensus_ok, created_at) VALUES (?1, ?2, ?3, ?4)",
-                    (format!("SPEC-DUAL-{}", i), "audit", 1, 4000000 + i),
+                    (format!("SPEC-DUAL-{i}"), "audit", 1, 4000000 + i),
                 )
                 .expect("Failed to insert to db2");
         }
@@ -248,12 +247,11 @@ fn test_dual_write_overhead_bounds() {
     // Average dual write: ~35µs from benchmarks (release mode), so 100 operations ~3.5ms
     // In test mode (debug build): 4-6× slower, so allowing <30ms
     let total_time_ms = duration.as_micros() as f64 / 1000.0;
-    println!("Dual write total time (100 ops): {:.2}ms", total_time_ms);
+    println!("Dual write total time (100 ops): {total_time_ms:.2}ms");
 
     assert!(
         total_time_ms < 30.0,
-        "Dual write performance regression: {:.2}ms (expected <30ms for 100 operations in debug mode)",
-        total_time_ms
+        "Dual write performance regression: {total_time_ms:.2}ms (expected <30ms for 100 operations in debug mode)"
     );
 }
 
@@ -302,14 +300,10 @@ fn test_concurrent_read_performance() {
     // Sequential: ~10µs × 1000 = 10ms
     // Parallel (10 threads): Should be closer to 10ms / 10 = 1ms, allowing 5× margin
     let total_time_ms = duration.as_micros() as f64 / 1000.0;
-    println!(
-        "Concurrent read time (1000 reads, 10 threads): {:.2}ms",
-        total_time_ms
-    );
+    println!("Concurrent read time (1000 reads, 10 threads): {total_time_ms:.2}ms");
 
     assert!(
         total_time_ms < 50.0,
-        "Concurrent read performance regression: {:.2}ms (expected <50ms)",
-        total_time_ms
+        "Concurrent read performance regression: {total_time_ms:.2}ms (expected <50ms)"
     );
 }

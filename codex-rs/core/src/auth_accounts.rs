@@ -80,9 +80,10 @@ fn read_accounts_file(path: &Path) -> io::Result<AccountsFile> {
 
 fn write_accounts_file(path: &Path, data: &AccountsFile) -> io::Result<()> {
     if let Some(parent) = path.parent()
-        && !parent.exists() {
-            std::fs::create_dir_all(parent)?;
-        }
+        && !parent.exists()
+    {
+        std::fs::create_dir_all(parent)?;
+    }
 
     let json = serde_json::to_string_pretty(data)?;
     let mut options = OpenOptions::new();
@@ -341,13 +342,13 @@ mod tests {
     fn make_chatgpt_tokens(account_id: Option<&str>, email: Option<&str>) -> TokenData {
         TokenData {
             id_token: IdTokenInfo {
-                email: email.map(|s| s.to_string()),
+                email: email.map(std::string::ToString::to_string),
                 chatgpt_plan_type: None,
                 raw_jwt: "header.payload.signature".to_string(),
             },
             access_token: "access".to_string(),
             refresh_token: "refresh".to_string(),
-            account_id: account_id.map(|s| s.to_string()),
+            account_id: account_id.map(std::string::ToString::to_string),
         }
     }
 
@@ -374,7 +375,7 @@ mod tests {
     fn upsert_chatgpt_dedupes_by_account_id() {
         let home = tempdir().expect("tempdir");
         let tokens = make_chatgpt_tokens(Some("acct-1"), Some("user@example.com"));
-        let stored = upsert_chatgpt_account(home.path(), tokens.clone(), Utc::now(), None, true)
+        let stored = upsert_chatgpt_account(home.path(), tokens, Utc::now(), None, true)
             .expect("insert chatgpt");
 
         let tokens_updated = make_chatgpt_tokens(Some("acct-1"), Some("user@example.com"));

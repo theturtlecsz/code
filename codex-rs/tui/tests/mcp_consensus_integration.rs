@@ -43,7 +43,7 @@ async fn test_mcp_connection_initialization() {
     match McpConnectionManager::new(config, HashSet::new()).await {
         Ok((manager, errors)) => {
             if !errors.is_empty() {
-                eprintln!("⚠ MCP initialization had errors: {:?}", errors);
+                eprintln!("⚠ MCP initialization had errors: {errors:?}");
                 eprintln!("  This test requires local-memory MCP server to be available");
                 eprintln!("  Skipping remainder of test");
                 return;
@@ -67,7 +67,7 @@ async fn test_mcp_connection_initialization() {
             println!("  Found {} tools", tools.len());
         }
         Err(e) => {
-            eprintln!("⚠ MCP initialization failed: {}", e);
+            eprintln!("⚠ MCP initialization failed: {e}");
             eprintln!("  This test requires local-memory MCP server to be available");
             eprintln!("  Skipping test");
             return;
@@ -181,7 +181,7 @@ async fn test_mcp_tool_call_format() {
         }
         Err(e) => {
             // Tool call failing is OK (might be no data), we're testing the call path
-            println!("⚠ MCP tool call failed (expected if no data): {}", e);
+            println!("⚠ MCP tool call failed (expected if no data): {e}");
             println!("  This validates the call path works even if data is missing");
         }
     }
@@ -230,17 +230,14 @@ async fn test_full_consensus_workflow_with_mcp() {
         Ok((lines, consensus_ok)) => {
             println!("✓ Consensus check completed");
             println!("  Lines returned: {}", lines.len());
-            println!("  Consensus OK: {}", consensus_ok);
+            println!("  Consensus OK: {consensus_ok}");
 
             // Validate response structure
             assert!(!lines.is_empty(), "Should return at least one line");
         }
         Err(e) => {
             // Error is expected if no test data exists in local-memory
-            eprintln!(
-                "⚠ Consensus check failed (expected without test data): {}",
-                e
-            );
+            eprintln!("⚠ Consensus check failed (expected without test data): {e}");
             eprintln!("  Error validates proper error handling path");
         }
     }

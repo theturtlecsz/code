@@ -107,9 +107,10 @@ fn read_dir_index(codex_home: &Path, cwd: &Path) -> Option<Vec<ResumeCandidate>>
         e.modified = v.modified_ts.clone().or(e.modified.take());
         e.count = e.count.saturating_add(v.message_count_delta.unwrap_or(0));
         if let Some(s) = v.last_user_snippet
-            && !s.is_empty() {
-                e.snippet = Some(s);
-            }
+            && !s.is_empty()
+        {
+            e.snippet = Some(s);
+        }
         if e.model.is_none() {
             e.model = v.model.clone();
         }
@@ -267,10 +268,11 @@ fn parse_rollout_candidate(path: &Path, target_cwd: &Path) -> Option<ResumeCandi
                 instructions = instructions.or_else(|| meta_line.meta.instructions.clone());
                 if branch.is_none()
                     && let Some(git) = &meta_line.git
-                        && let Some(b) = &git.branch
-                            && !b.is_empty() {
-                                branch = Some(b.clone());
-                            }
+                    && let Some(b) = &git.branch
+                    && !b.is_empty()
+                {
+                    branch = Some(b.clone());
+                }
             }
             RolloutItem::ResponseItem(response_item) => {
                 message_count = message_count.saturating_add(1);
@@ -280,9 +282,10 @@ fn parse_rollout_candidate(path: &Path, target_cwd: &Path) -> Option<ResumeCandi
             }
             RolloutItem::Event(recorded) => {
                 if let Some(event) = codex_core::protocol::event_msg_from_protocol(&recorded.msg)
-                    && let Some(snippet) = extract_user_snippet_from_event(&event) {
-                        last_user_snippet = Some(snippet);
-                    }
+                    && let Some(snippet) = extract_user_snippet_from_event(&event)
+                {
+                    last_user_snippet = Some(snippet);
+                }
             }
             RolloutItem::Compacted(_) | RolloutItem::TurnContext(_) => {}
         }

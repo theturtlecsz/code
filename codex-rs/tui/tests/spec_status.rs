@@ -109,10 +109,10 @@ fn collect_fixture_report(
     collect_report(repo_root, args).expect("collect report")
 }
 
-fn find_stage<'a>(
-    report: &'a codex_tui::spec_status::SpecStatusReport,
+fn find_stage(
+    report: &codex_tui::spec_status::SpecStatusReport,
     stage: StageKind,
-) -> &'a codex_tui::spec_status::StageSnapshot {
+) -> &codex_tui::spec_status::StageSnapshot {
     report
         .stage_snapshots
         .iter()

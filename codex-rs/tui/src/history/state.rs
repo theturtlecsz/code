@@ -96,8 +96,7 @@ pub enum TextTone {
     Info,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct TextEmphasis {
     pub bold: bool,
     pub italic: bool,
@@ -105,7 +104,6 @@ pub struct TextEmphasis {
     pub strike: bool,
     pub underline: bool,
 }
-
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TextEntity {

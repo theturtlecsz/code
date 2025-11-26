@@ -21,9 +21,10 @@ fn demo_command_enabled() -> bool {
         };
 
         if let Some(profile) = BUILD_PROFILE.or(option_env!("PROFILE"))
-            && profile_matches(profile) {
-                return true;
-            }
+            && profile_matches(profile)
+        {
+            return true;
+        }
 
         if let Ok(exe_path) = std::env::current_exe() {
             let path = exe_path.to_string_lossy().to_ascii_lowercase();
@@ -48,9 +49,10 @@ fn pro_command_enabled() -> bool {
         };
 
         if let Some(profile) = BUILD_PROFILE.or(option_env!("PROFILE"))
-            && profile_matches(profile) {
-                return true;
-            }
+            && profile_matches(profile)
+        {
+            return true;
+        }
 
         if let Ok(exe_path) = std::env::current_exe() {
             let path = exe_path.to_string_lossy().to_ascii_lowercase();

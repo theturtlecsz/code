@@ -296,7 +296,7 @@ fn benchmark_transaction_performance(c: &mut Criterion) {
             for i in 0..100 {
                 tx.execute(
                     "INSERT INTO consensus_runs (spec_id, stage, consensus_ok, created_at) VALUES (?1, ?2, ?3, ?4)",
-                    (format!("SPEC-BATCH-{}", i), "validate", 1, 4000000 + i),
+                    (format!("SPEC-BATCH-{i}"), "validate", 1, 4000000 + i),
                 )
                 .expect("Failed to insert");
             }
@@ -316,7 +316,7 @@ fn benchmark_transaction_performance(c: &mut Criterion) {
             for i in 0..100 {
                 tx.execute(
                     "INSERT INTO consensus_runs (spec_id, stage, consensus_ok, created_at) VALUES (?1, ?2, ?3, ?4)",
-                    (format!("SPEC-BATCH-{}", i), "validate", 1, 5000000 + i),
+                    (format!("SPEC-BATCH-{i}"), "validate", 1, 5000000 + i),
                 )
                 .expect("Failed to insert");
             }
@@ -332,7 +332,7 @@ fn benchmark_transaction_performance(c: &mut Criterion) {
             for i in 0..100 {
                 conn.execute(
                     "INSERT INTO consensus_runs (spec_id, stage, consensus_ok, created_at) VALUES (?1, ?2, ?3, ?4)",
-                    (format!("SPEC-NOTX-{}", i), "audit", 1, 6000000 + i),
+                    (format!("SPEC-NOTX-{i}"), "audit", 1, 6000000 + i),
                 )
                 .expect("Failed to insert");
             }

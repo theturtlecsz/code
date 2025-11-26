@@ -323,17 +323,20 @@ impl AgentManager {
             .values()
             .filter(|agent| {
                 if let Some(ref filter) = status_filter
-                    && agent.status != *filter {
-                        return false;
-                    }
+                    && agent.status != *filter
+                {
+                    return false;
+                }
                 if let Some(ref batch) = batch_id
-                    && agent.batch_id.as_ref() != Some(batch) {
-                        return false;
-                    }
+                    && agent.batch_id.as_ref() != Some(batch)
+                {
+                    return false;
+                }
                 if let Some(cutoff) = cutoff
-                    && agent.created_at < cutoff {
-                        return false;
-                    }
+                    && agent.created_at < cutoff
+                {
+                    return false;
+                }
                 true
             })
             .cloned()
@@ -711,9 +714,10 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
     // Prepend any per-agent instructions from config when available
     if let Some(cfg) = config.as_ref()
         && let Some(instr) = cfg.instructions.as_ref()
-            && !instr.trim().is_empty() {
-                full_prompt = format!("{}\n\n{}", instr.trim(), full_prompt);
-            }
+        && !instr.trim().is_empty()
+    {
+        full_prompt = format!("{}\n\n{}", instr.trim(), full_prompt);
+    }
     if let Some(context) = &context {
         full_prompt = format!("Context: {context}\n\nAgent: {full_prompt}");
     }
@@ -772,9 +776,8 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
         }
     } else {
         // Execute in read-only mode
-        full_prompt = format!(
-            "{full_prompt}\n\n[Running in read-only mode - no modifications allowed]"
-        );
+        full_prompt =
+            format!("{full_prompt}\n\n[Running in read-only mode - no modifications allowed]");
         execute_model_with_permissions(&model, &full_prompt, true, None, config).await
     };
 
@@ -896,7 +899,10 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
                     "Corrupted output sample: {}",
                     &cleaned_output.chars().take(500).collect::<String>()
                 );
-                Err("Agent output polluted with TUI conversation text. Stdout redirection broken.".to_string())
+                Err(
+                    "Agent output polluted with TUI conversation text. Stdout redirection broken."
+                        .to_string(),
+                )
             }
             // Check for headers-only output (codex initialization without actual response)
             else if cleaned_output.contains("OpenAI Codex v")
@@ -1113,12 +1119,13 @@ async fn execute_model_with_permissions(
                 }
                 let candidate = dir.join(cmd);
                 if let Ok(meta) = std::fs::metadata(&candidate)
-                    && meta.is_file() {
-                        let mode = meta.permissions().mode();
-                        if mode & 0o111 != 0 {
-                            return true;
-                        }
+                    && meta.is_file()
+                {
+                    let mode = meta.permissions().mode();
+                    if mode & 0o111 != 0 {
+                        return true;
                     }
+                }
             }
             false
         }
@@ -1252,11 +1259,12 @@ async fn execute_model_with_permissions(
 
     // Overlay config-provided env vars
     if let Some(ref cfg) = config
-        && let Some(ref e) = cfg.env {
-            for (k, v) in e {
-                env.insert(k.clone(), v.clone());
-            }
+        && let Some(ref e) = cfg.env
+    {
+        for (k, v) in e {
+            env.insert(k.clone(), v.clone());
         }
+    }
 
     // Convenience: map common API key names so external CLIs "just work"
     if let Some(google_key) = env.get("GOOGLE_API_KEY").cloned() {

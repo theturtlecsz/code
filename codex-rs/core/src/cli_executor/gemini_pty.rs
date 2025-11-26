@@ -169,16 +169,19 @@ impl GeminiPtySession {
 
         // Capture stderr in a thread so we can log it
         let Some(stderr) = child.stderr.take() else {
-            return Err(CliError::Internal { message: "Failed to capture stderr".to_string() });
+            return Err(CliError::Internal {
+                message: "Failed to capture stderr".to_string(),
+            });
         };
         std::thread::spawn(move || {
             let reader = BufReader::new(stderr);
             use std::io::BufRead;
             for line in reader.lines() {
                 if let Ok(line) = line
-                    && !line.is_empty() {
-                        tracing::warn!("Gemini CLI stderr: {}", line);
-                    }
+                    && !line.is_empty()
+                {
+                    tracing::warn!("Gemini CLI stderr: {}", line);
+                }
             }
         });
 
@@ -320,9 +323,10 @@ impl GeminiPtySession {
 
         // Auto-checkpoint if configured
         if let Some(interval) = self.config.auto_checkpoint_interval
-            && self.turn_count.is_multiple_of(interval) {
-                self.auto_checkpoint()?;
-            }
+            && self.turn_count.is_multiple_of(interval)
+        {
+            self.auto_checkpoint()?;
+        }
 
         Ok(response)
     }
@@ -367,10 +371,11 @@ impl GeminiPtySession {
 
             // Check idle timeout (no new data for idle_threshold duration)
             if Instant::now().duration_since(last_activity) > idle_threshold
-                && !accumulated.is_empty() {
-                    tracing::debug!("Idle timeout reached, treating as complete");
-                    break;
-                }
+                && !accumulated.is_empty()
+            {
+                tracing::debug!("Idle timeout reached, treating as complete");
+                break;
+            }
 
             // Try to read a line (non-blocking via peek check)
             let mut line = String::new();
@@ -547,11 +552,12 @@ impl GeminiPtySession {
 
         // Force kill if still alive
         if let Some(mut child) = self.child
-            && let Ok(None) = child.try_wait() {
-                tracing::debug!("Force killing Gemini CLI process");
-                let _ = child.kill();
-                let _ = child.wait();
-            }
+            && let Ok(None) = child.try_wait()
+        {
+            tracing::debug!("Force killing Gemini CLI process");
+            let _ = child.kill();
+            let _ = child.wait();
+        }
 
         Ok(())
     }
@@ -614,7 +620,7 @@ mod tests {
             let mut session = GeminiPtySession::new("gemini-2.5-flash");
             session.start()?;
 
-            let (tx, mut rx) = mpsc::channel(32);
+            let (tx, rx) = mpsc::channel(32);
             let cancel = CancellationToken::new();
 
             let response = session.send_message("Say exactly: Hello World", tx, cancel)?;
@@ -626,15 +632,14 @@ mod tests {
 
         match result {
             Ok(response) => {
-                println!("Response: {}", response);
+                println!("Response: {response}");
                 assert!(
                     response.contains("Hello World") || response.contains("Hello"),
-                    "Expected response to contain 'Hello World' or 'Hello', got: {}",
-                    response
+                    "Expected response to contain 'Hello World' or 'Hello', got: {response}"
                 );
             }
             Err(e) => {
-                panic!("Test failed: {:?}", e);
+                panic!("Test failed: {e:?}");
             }
         }
     }
@@ -663,15 +668,14 @@ mod tests {
 
         match result {
             Ok(response) => {
-                println!("Response: {}", response);
+                println!("Response: {response}");
                 assert!(
                     response.contains("Alice"),
-                    "Expected response to contain 'Alice', got: {}",
-                    response
+                    "Expected response to contain 'Alice', got: {response}"
                 );
             }
             Err(e) => {
-                panic!("Test failed: {:?}", e);
+                panic!("Test failed: {e:?}");
             }
         }
     }
@@ -924,7 +928,7 @@ mod provider_tests {
             }
         }
 
-        println!("Response: {}", response);
+        println!("Response: {response}");
         assert!(!response.is_empty());
 
         // Cleanup
@@ -966,7 +970,7 @@ mod provider_tests {
             }
         }
 
-        println!("Response: {}", response);
+        println!("Response: {response}");
         assert!(response.contains("Bob"));
 
         // Cleanup

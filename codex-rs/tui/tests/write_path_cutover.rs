@@ -167,8 +167,8 @@ fn test_write_path_cutover_multiple_artifacts_new_schema() {
         db.store_artifact(
             "SPEC-TEST-006",
             SpecStage::Plan,
-            &format!("agent-{}", i),
-            &format!(r#"{{"id": {}}}"#, i),
+            &format!("agent-{i}"),
+            &format!(r#"{{"id": {i}}}"#),
             None,
             None,
         )
@@ -234,7 +234,7 @@ fn test_write_path_cutover_consistency_under_load() {
 
     // Store 20 artifacts rapidly
     for i in 1..=20 {
-        let spec_id = format!("SPEC-TEST-{:03}", i);
+        let spec_id = format!("SPEC-TEST-{i:03}");
         db.store_artifact(
             &spec_id,
             SpecStage::Plan,
@@ -252,8 +252,8 @@ fn test_write_path_cutover_consistency_under_load() {
 
     // Verify all 20 specs readable
     for i in 1..=20 {
-        let spec_id = format!("SPEC-TEST-{:03}", i);
+        let spec_id = format!("SPEC-TEST-{i:03}");
         let artifacts = db.query_artifacts(&spec_id, SpecStage::Plan).unwrap();
-        assert_eq!(artifacts.len(), 1, "Spec {} artifact accessible", spec_id);
+        assert_eq!(artifacts.len(), 1, "Spec {spec_id} artifact accessible");
     }
 }

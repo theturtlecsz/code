@@ -191,7 +191,6 @@ fn test_pool_size_limit() {
     let elapsed = handle.join().unwrap();
     assert!(
         elapsed < 1000,
-        "Connection acquisition took too long: {}ms",
-        elapsed
+        "Connection acquisition took too long: {elapsed}ms"
     );
 }

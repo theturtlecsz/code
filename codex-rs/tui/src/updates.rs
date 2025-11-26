@@ -284,12 +284,13 @@ impl AutoUpgradeLock {
 impl Drop for AutoUpgradeLock {
     fn drop(&mut self) {
         if let Err(err) = fs::remove_file(&self.path)
-            && err.kind() != ErrorKind::NotFound {
-                warn!(
-                    "auto-upgrade: failed to remove lock file {}: {err}",
-                    self.path.display()
-                );
-            }
+            && err.kind() != ErrorKind::NotFound
+        {
+            warn!(
+                "auto-upgrade: failed to remove lock file {}: {err}",
+                self.path.display()
+            );
+        }
     }
 }
 

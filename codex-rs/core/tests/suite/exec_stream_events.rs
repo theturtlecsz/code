@@ -9,7 +9,6 @@ use codex_core::error::CodexErr;
 use codex_core::error::SandboxErr;
 use codex_core::exec::ExecParams;
 use codex_core::exec::SandboxType;
-use codex_core::exec::StdoutStream;
 use codex_core::exec::process_exec_tool_call;
 use codex_core::protocol::Event;
 use codex_core::protocol::EventMsg;

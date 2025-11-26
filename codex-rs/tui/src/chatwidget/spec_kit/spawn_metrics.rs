@@ -213,7 +213,7 @@ mod tests {
         record_batch_spawn(3, 3, Duration::from_millis(450), &durations);
 
         let metrics = BATCH_METRICS.lock().unwrap();
-        assert!(metrics.len() >= 1);
+        assert!(!metrics.is_empty());
         let last = &metrics[metrics.len() - 1];
         assert_eq!(last.total_agents, 3);
         assert_eq!(last.successful_agents, 3);
@@ -238,7 +238,7 @@ mod tests {
 
         // p95 of [0, 10, 20, ..., 240] should be around 228
         let p95_ms = p95.unwrap().as_millis();
-        assert!(p95_ms >= 200 && p95_ms <= 240);
+        assert!((200..=240).contains(&p95_ms));
     }
 
     #[test]

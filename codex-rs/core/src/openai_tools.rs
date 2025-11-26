@@ -196,9 +196,7 @@ impl ToolsConfig {
             ConfigShellToolType::DefaultShell
         };
         if matches!(approval_policy, AskForApproval::OnRequest) && !use_streamable_shell_tool {
-            shell_type = ConfigShellToolType::ShellWithRequest {
-                sandbox_policy,
-            }
+            shell_type = ConfigShellToolType::ShellWithRequest { sandbox_policy }
         }
 
         let apply_patch_tool_type = if include_apply_patch_tool {
@@ -504,11 +502,12 @@ fn sanitize_json_schema(value: &mut JsonValue) {
         JsonValue::Object(map) => {
             // First, recursively sanitize known nested schema holders
             if let Some(props) = map.get_mut("properties")
-                && let Some(props_map) = props.as_object_mut() {
-                    for (_k, v) in props_map.iter_mut() {
-                        sanitize_json_schema(v);
-                    }
+                && let Some(props_map) = props.as_object_mut()
+            {
+                for (_k, v) in props_map.iter_mut() {
+                    sanitize_json_schema(v);
                 }
+            }
             if let Some(items) = map.get_mut("items") {
                 sanitize_json_schema(items);
             }
@@ -524,18 +523,20 @@ fn sanitize_json_schema(value: &mut JsonValue) {
 
             // If type is an array (union), pick first supported; else leave to inference
             if ty.is_none()
-                && let Some(JsonValue::Array(types)) = map.get("type") {
-                    for t in types {
-                        if let Some(tt) = t.as_str()
-                            && matches!(
-                                tt,
-                                "object" | "array" | "string" | "number" | "integer" | "boolean"
-                            ) {
-                                ty = Some(tt.to_string());
-                                break;
-                            }
+                && let Some(JsonValue::Array(types)) = map.get("type")
+            {
+                for t in types {
+                    if let Some(tt) = t.as_str()
+                        && matches!(
+                            tt,
+                            "object" | "array" | "string" | "number" | "integer" | "boolean"
+                        )
+                    {
+                        ty = Some(tt.to_string());
+                        break;
                     }
                 }
+            }
 
             // Infer type if still missing
             if ty.is_none() {
@@ -756,6 +757,459 @@ pub fn create_kill_tool() -> OpenAiTool {
         parameters: JsonSchema::Object {
             properties,
             required: Some(vec!["call_id".to_string()]),
+            additional_properties: Some(false),
+        },
+    })
+}
+
+fn create_browser_open_tool() -> OpenAiTool {
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "url".to_string(),
+        JsonSchema::String {
+            description: Some("The URL to navigate to (e.g., https://example.com)".to_string()),
+        },
+    );
+
+    OpenAiTool::Function(ResponsesApiTool {
+        name: "browser_open".to_string(),
+        description: "Opens a browser window and navigates to the specified URL. Screenshots will be automatically attached to subsequent messages. Once open, enables: browser_close, browser_click, browser_move, browser_type, browser_key, browser_javascript, browser_scroll, browser_history, browser_inspect, browser_console, browser_cleanup, browser_cdp.".to_string(),
+        strict: false,
+        parameters: JsonSchema::Object {
+            properties,
+            required: Some(vec!["url".to_string()]),
+            additional_properties: Some(false),
+        },
+    })
+}
+
+fn create_browser_close_tool() -> OpenAiTool {
+    let properties = BTreeMap::new();
+
+    OpenAiTool::Function(ResponsesApiTool {
+        name: "browser_close".to_string(),
+        description: "Closes the browser window and disables screenshot capture.".to_string(),
+        strict: false,
+        parameters: JsonSchema::Object {
+            properties,
+            required: Some(vec![]),
+            additional_properties: Some(false),
+        },
+    })
+}
+
+fn create_browser_status_tool() -> OpenAiTool {
+    let properties = BTreeMap::new();
+
+    OpenAiTool::Function(ResponsesApiTool {
+        name: "browser_status".to_string(),
+        description: "Gets the current browser status including whether it's enabled, current URL, and viewport settings.".to_string(),
+        strict: false,
+        parameters: JsonSchema::Object {
+            properties,
+            required: Some(vec![]),
+            additional_properties: Some(false),
+        },
+    })
+}
+
+fn create_browser_click_tool() -> OpenAiTool {
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "type".to_string(),
+        JsonSchema::String {
+            description: Some("Optional type of mouse event: 'click' (default), 'mousedown', or 'mouseup'. Use mousedown, browser_move, mouseup sequence to drag.".to_string()),
+        },
+    );
+    properties.insert(
+        "x".to_string(),
+        JsonSchema::Number {
+            description: Some("Optional absolute X coordinate to click. If provided (with y), the cursor will first move to (x,y).".to_string()),
+        },
+    );
+    properties.insert(
+        "y".to_string(),
+        JsonSchema::Number {
+            description: Some("Optional absolute Y coordinate to click. If provided (with x), the cursor will first move to (x,y).".to_string()),
+        },
+    );
+
+    OpenAiTool::Function(ResponsesApiTool {
+        name: "browser_click".to_string(),
+        description: "Performs a mouse action. By default acts at the current cursor; if x,y are provided, moves there (briefly waits for animation) then clicks.".to_string(),
+        strict: false,
+        parameters: JsonSchema::Object {
+            properties,
+            required: Some(vec![]),
+            additional_properties: Some(false),
+        },
+    })
+}
+
+fn create_browser_move_tool() -> OpenAiTool {
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "x".to_string(),
+        JsonSchema::Number {
+            description: Some(
+                "The absolute X coordinate to move the mouse to (use with y)".to_string(),
+            ),
+        },
+    );
+    properties.insert(
+        "y".to_string(),
+        JsonSchema::Number {
+            description: Some(
+                "The absolute Y coordinate to move the mouse to (use with x)".to_string(),
+            ),
+        },
+    );
+    properties.insert(
+        "dx".to_string(),
+        JsonSchema::Number {
+            description: Some(
+                "Relative (+/-) X movement in CSS pixels from current mouse position (use with dy)"
+                    .to_string(),
+            ),
+        },
+    );
+    properties.insert(
+        "dy".to_string(),
+        JsonSchema::Number {
+            description: Some(
+                "Relative (+/-) Y movement in CSS pixels from current mouse position (use with dx)"
+                    .to_string(),
+            ),
+        },
+    );
+
+    OpenAiTool::Function(ResponsesApiTool {
+        name: "browser_move".to_string(),
+        description: "Move your mouse [as shown as a blue cursor in your screenshot] to new coordinates in the browser window (x,y - top left origin) or by relative offset to your current mouse position (dx,dy). If the mouse is close to where it should be then dx,dy may be easier to judge. Always confirm your mouse is where you expected it to be in the next screenshot after a move, otherwise try again.".to_string(),
+        strict: false,
+        parameters: JsonSchema::Object {
+            properties,
+            required: Some(vec![]),
+            additional_properties: Some(false),
+        },
+    })
+}
+
+fn create_browser_type_tool() -> OpenAiTool {
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "text".to_string(),
+        JsonSchema::String {
+            description: Some("The text to type into the currently focused element".to_string()),
+        },
+    );
+
+    OpenAiTool::Function(ResponsesApiTool {
+        name: "browser_type".to_string(),
+        description: "Types text into the currently focused element in the browser.".to_string(),
+        strict: false,
+        parameters: JsonSchema::Object {
+            properties,
+            required: Some(vec!["text".to_string()]),
+            additional_properties: Some(false),
+        },
+    })
+}
+
+fn create_browser_key_tool() -> OpenAiTool {
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "key".to_string(),
+        JsonSchema::String {
+            description: Some("The key to press (e.g., 'Enter', 'Tab', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Backspace', 'Delete')".to_string()),
+        },
+    );
+
+    OpenAiTool::Function(ResponsesApiTool {
+        name: "browser_key".to_string(),
+        description:
+            "Presses a keyboard key in the browser (e.g., Enter, Tab, Escape, arrow keys)."
+                .to_string(),
+        strict: false,
+        parameters: JsonSchema::Object {
+            properties,
+            required: Some(vec!["key".to_string()]),
+            additional_properties: Some(false),
+        },
+    })
+}
+
+fn create_browser_javascript_tool() -> OpenAiTool {
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "code".to_string(),
+        JsonSchema::String {
+            description: Some("The JavaScript code to execute in the browser context".to_string()),
+        },
+    );
+
+    OpenAiTool::Function(ResponsesApiTool {
+        name: "browser_javascript".to_string(),
+        description: "Executes JavaScript code in the browser and returns the result. The code is wrapped to automatically capture return values and console.log output.".to_string(),
+        strict: false,
+        parameters: JsonSchema::Object {
+            properties,
+            required: Some(vec!["code".to_string()]),
+            additional_properties: Some(false),
+        },
+    })
+}
+
+fn create_browser_scroll_tool() -> OpenAiTool {
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "dx".to_string(),
+        JsonSchema::Number {
+            description: Some("Horizontal scroll delta in pixels (positive = right)".to_string()),
+        },
+    );
+    properties.insert(
+        "dy".to_string(),
+        JsonSchema::Number {
+            description: Some("Vertical scroll delta in pixels (positive = down)".to_string()),
+        },
+    );
+
+    OpenAiTool::Function(ResponsesApiTool {
+        name: "browser_scroll".to_string(),
+        description: "Scrolls the page by the specified CSS pixel deltas.".to_string(),
+        strict: false,
+        parameters: JsonSchema::Object {
+            properties,
+            required: Some(vec![]),
+            additional_properties: Some(false),
+        },
+    })
+}
+
+fn create_browser_history_tool() -> OpenAiTool {
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "direction".to_string(),
+        JsonSchema::String {
+            description: Some("History direction: 'back' or 'forward'".to_string()),
+        },
+    );
+
+    OpenAiTool::Function(ResponsesApiTool {
+        name: "browser_history".to_string(),
+        description: "Navigates browser history backward or forward.".to_string(),
+        strict: false,
+        parameters: JsonSchema::Object {
+            properties,
+            required: Some(vec!["direction".to_string()]),
+            additional_properties: Some(false),
+        },
+    })
+}
+
+fn create_browser_inspect_tool() -> OpenAiTool {
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "x".to_string(),
+        JsonSchema::Number {
+            description: Some("Optional absolute X coordinate to inspect.".to_string()),
+        },
+    );
+    properties.insert(
+        "y".to_string(),
+        JsonSchema::Number {
+            description: Some("Optional absolute Y coordinate to inspect.".to_string()),
+        },
+    );
+    properties.insert(
+        "id".to_string(),
+        JsonSchema::String {
+            description: Some("Optional element id attribute value. If provided, looks up '#id' and inspects that element.".to_string()),
+        },
+    );
+
+    OpenAiTool::Function(ResponsesApiTool {
+        name: "browser_inspect".to_string(),
+        description: "Inspects a DOM element by coordinates or id, returns attributes, outerHTML, box model, and matched styles.".to_string(),
+        strict: false,
+        parameters: JsonSchema::Object {
+            properties,
+            required: Some(vec![]),
+            additional_properties: Some(false),
+        },
+    })
+}
+
+fn create_browser_console_tool() -> OpenAiTool {
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "lines".to_string(),
+        JsonSchema::Number {
+            description: Some(
+                "Optional: Number of recent console lines to return (default: all available)"
+                    .to_string(),
+            ),
+        },
+    );
+
+    OpenAiTool::Function(ResponsesApiTool {
+        name: "browser_console".to_string(),
+        description: "Captures and returns the console output from the browser, including logs, warnings, and errors.".to_string(),
+        strict: false,
+        parameters: JsonSchema::Object {
+            properties,
+            required: Some(vec![]),
+            additional_properties: Some(false),
+        },
+    })
+}
+
+fn create_browser_cleanup_tool() -> OpenAiTool {
+    OpenAiTool::Function(ResponsesApiTool {
+        name: "browser_cleanup".to_string(),
+        description: "Cleans up injected artifacts (cursor overlays, highlights) and resets viewport metrics without closing the browser.".to_string(),
+        strict: false,
+        parameters: JsonSchema::Object {
+            properties: BTreeMap::new(),
+            required: Some(vec![]),
+            additional_properties: Some(false),
+        },
+    })
+}
+
+fn create_browser_cdp_tool() -> OpenAiTool {
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "method".to_string(),
+        JsonSchema::String {
+            description: Some(
+                "CDP method name, e.g. 'Page.navigate' or 'Input.dispatchKeyEvent'".to_string(),
+            ),
+        },
+    );
+    properties.insert(
+        "params".to_string(),
+        JsonSchema::Object {
+            properties: BTreeMap::new(),
+            required: None,
+            additional_properties: Some(true),
+        },
+    );
+    properties.insert(
+        "target".to_string(),
+        JsonSchema::String {
+            description: Some("Target for the command: 'page' (default) or 'browser'".to_string()),
+        },
+    );
+
+    OpenAiTool::Function(ResponsesApiTool {
+        name: "browser_cdp".to_string(),
+        description: "Executes an arbitrary Chrome DevTools Protocol command with a JSON payload against the active page session.".to_string(),
+        strict: false,
+        parameters: JsonSchema::Object {
+            properties,
+            required: Some(vec!["method".to_string()]),
+            additional_properties: Some(false),
+        },
+    })
+}
+
+fn create_web_fetch_tool() -> OpenAiTool {
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "url".to_string(),
+        JsonSchema::String {
+            description: Some("The URL to fetch (e.g., https://example.com)".to_string()),
+        },
+    );
+    properties.insert(
+        "timeout_ms".to_string(),
+        JsonSchema::Number {
+            description: Some("Optional timeout in milliseconds for the HTTP request".to_string()),
+        },
+    );
+
+    // Optional mode: auto (default), browser (use internal browser/CDP), http (raw HTTP only)
+    properties.insert(
+        "mode".to_string(),
+        JsonSchema::String {
+            description: Some("Optional: 'auto' (default) falls back to the internal browser on challenges; 'browser' forces CDP-based fetch; 'http' disables browser fallback.".to_string()),
+        },
+    );
+
+    OpenAiTool::Function(ResponsesApiTool {
+        name: "web_fetch".to_string(),
+        description: "Fetches a webpage over HTTP(S) and converts the HTML to Markdown using htmd."
+            .to_string(),
+        strict: false,
+        parameters: JsonSchema::Object {
+            properties,
+            required: Some(vec!["url".to_string()]),
+            additional_properties: Some(false),
+        },
+    })
+}
+
+fn create_search_tool() -> OpenAiTool {
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "query".to_string(),
+        JsonSchema::String {
+            description: Some(
+                "The query string to search for in conversation history.".to_string(),
+            ),
+        },
+    );
+    properties.insert(
+        "agent".to_string(),
+        JsonSchema::String {
+            description: Some(
+                "Optional: Filter by agent (e.g., 'user', 'assistant', 'tool').".to_string(),
+            ),
+        },
+    );
+
+    OpenAiTool::Function(ResponsesApiTool {
+        name: "search".to_string(),
+        description: "Search previous turns in the conversation history.".to_string(),
+        strict: false,
+        parameters: JsonSchema::Object {
+            properties,
+            required: Some(vec!["query".to_string()]),
+            additional_properties: Some(false),
+        },
+    })
+}
+
+fn create_history_search_alias_tool() -> OpenAiTool {
+    // This is an alias for the search tool, so it shares the same definition.
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "query".to_string(),
+        JsonSchema::String {
+            description: Some(
+                "The query string to search for in conversation history.".to_string(),
+            ),
+        },
+    );
+    properties.insert(
+        "agent".to_string(),
+        JsonSchema::String {
+            description: Some(
+                "Optional: Filter by agent (e.g., 'user', 'assistant', 'tool').".to_string(),
+            ),
+        },
+    );
+
+    OpenAiTool::Function(ResponsesApiTool {
+        name: "history_search".to_string(),
+        description: "Search previous turns in the conversation history (alias for search tool)."
+            .to_string(),
+        strict: false,
+        parameters: JsonSchema::Object {
+            properties,
+            required: Some(vec!["query".to_string()]),
             additional_properties: Some(false),
         },
     })
@@ -1452,456 +1906,4 @@ Default timeout: 120000 ms (120s). Override via the `timeout` parameter."#;
 
         assert_eq!(description, "Runs a shell command and returns its output.");
     }
-}
-
-fn create_browser_open_tool() -> OpenAiTool {
-    let mut properties = BTreeMap::new();
-    properties.insert(
-        "url".to_string(),
-        JsonSchema::String {
-            description: Some("The URL to navigate to (e.g., https://example.com)".to_string()),
-        },
-    );
-
-    OpenAiTool::Function(ResponsesApiTool {
-        name: "browser_open".to_string(),
-        description: "Opens a browser window and navigates to the specified URL. Screenshots will be automatically attached to subsequent messages. Once open, enables: browser_close, browser_click, browser_move, browser_type, browser_key, browser_javascript, browser_scroll, browser_history, browser_inspect, browser_console, browser_cleanup, browser_cdp.".to_string(),
-        strict: false,
-        parameters: JsonSchema::Object {
-            properties,
-            required: Some(vec!["url".to_string()]),
-            additional_properties: Some(false),
-        },
-    })
-}
-
-fn create_browser_close_tool() -> OpenAiTool {
-    let properties = BTreeMap::new();
-
-    OpenAiTool::Function(ResponsesApiTool {
-        name: "browser_close".to_string(),
-        description: "Closes the browser window and disables screenshot capture.".to_string(),
-        strict: false,
-        parameters: JsonSchema::Object {
-            properties,
-            required: Some(vec![]),
-            additional_properties: Some(false),
-        },
-    })
-}
-
-fn create_browser_status_tool() -> OpenAiTool {
-    let properties = BTreeMap::new();
-
-    OpenAiTool::Function(ResponsesApiTool {
-        name: "browser_status".to_string(),
-        description: "Gets the current browser status including whether it's enabled, current URL, and viewport settings.".to_string(),
-        strict: false,
-        parameters: JsonSchema::Object {
-            properties,
-            required: Some(vec![]),
-            additional_properties: Some(false),
-        },
-    })
-}
-
-fn create_browser_click_tool() -> OpenAiTool {
-    let mut properties = BTreeMap::new();
-    properties.insert(
-        "type".to_string(),
-        JsonSchema::String {
-            description: Some("Optional type of mouse event: 'click' (default), 'mousedown', or 'mouseup'. Use mousedown, browser_move, mouseup sequence to drag.".to_string()),
-        },
-    );
-    properties.insert(
-        "x".to_string(),
-        JsonSchema::Number {
-            description: Some("Optional absolute X coordinate to click. If provided (with y), the cursor will first move to (x,y).".to_string()),
-        },
-    );
-    properties.insert(
-        "y".to_string(),
-        JsonSchema::Number {
-            description: Some("Optional absolute Y coordinate to click. If provided (with x), the cursor will first move to (x,y).".to_string()),
-        },
-    );
-
-    OpenAiTool::Function(ResponsesApiTool {
-        name: "browser_click".to_string(),
-        description: "Performs a mouse action. By default acts at the current cursor; if x,y are provided, moves there (briefly waits for animation) then clicks.".to_string(),
-        strict: false,
-        parameters: JsonSchema::Object {
-            properties,
-            required: Some(vec![]),
-            additional_properties: Some(false),
-        },
-    })
-}
-
-fn create_browser_move_tool() -> OpenAiTool {
-    let mut properties = BTreeMap::new();
-    properties.insert(
-        "x".to_string(),
-        JsonSchema::Number {
-            description: Some(
-                "The absolute X coordinate to move the mouse to (use with y)".to_string(),
-            ),
-        },
-    );
-    properties.insert(
-        "y".to_string(),
-        JsonSchema::Number {
-            description: Some(
-                "The absolute Y coordinate to move the mouse to (use with x)".to_string(),
-            ),
-        },
-    );
-    properties.insert(
-        "dx".to_string(),
-        JsonSchema::Number {
-            description: Some(
-                "Relative (+/-) X movement in CSS pixels from current mouse position (use with dy)"
-                    .to_string(),
-            ),
-        },
-    );
-    properties.insert(
-        "dy".to_string(),
-        JsonSchema::Number {
-            description: Some(
-                "Relative (+/-) Y movement in CSS pixels from current mouse position (use with dx)"
-                    .to_string(),
-            ),
-        },
-    );
-
-    OpenAiTool::Function(ResponsesApiTool {
-        name: "browser_move".to_string(),
-        description: "Move your mouse [as shown as a blue cursor in your screenshot] to new coordinates in the browser window (x,y - top left origin) or by relative offset to your current mouse position (dx,dy). If the mouse is close to where it should be then dx,dy may be easier to judge. Always confirm your mouse is where you expected it to be in the next screenshot after a move, otherwise try again.".to_string(),
-        strict: false,
-        parameters: JsonSchema::Object {
-            properties,
-            required: Some(vec![]),
-            additional_properties: Some(false),
-        },
-    })
-}
-
-fn create_browser_type_tool() -> OpenAiTool {
-    let mut properties = BTreeMap::new();
-    properties.insert(
-        "text".to_string(),
-        JsonSchema::String {
-            description: Some("The text to type into the currently focused element".to_string()),
-        },
-    );
-
-    OpenAiTool::Function(ResponsesApiTool {
-        name: "browser_type".to_string(),
-        description: "Types text into the currently focused element in the browser.".to_string(),
-        strict: false,
-        parameters: JsonSchema::Object {
-            properties,
-            required: Some(vec!["text".to_string()]),
-            additional_properties: Some(false),
-        },
-    })
-}
-
-fn create_browser_key_tool() -> OpenAiTool {
-    let mut properties = BTreeMap::new();
-    properties.insert(
-        "key".to_string(),
-        JsonSchema::String {
-            description: Some("The key to press (e.g., 'Enter', 'Tab', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Backspace', 'Delete')".to_string()),
-        },
-    );
-
-    OpenAiTool::Function(ResponsesApiTool {
-        name: "browser_key".to_string(),
-        description:
-            "Presses a keyboard key in the browser (e.g., Enter, Tab, Escape, arrow keys)."
-                .to_string(),
-        strict: false,
-        parameters: JsonSchema::Object {
-            properties,
-            required: Some(vec!["key".to_string()]),
-            additional_properties: Some(false),
-        },
-    })
-}
-
-fn create_browser_javascript_tool() -> OpenAiTool {
-    let mut properties = BTreeMap::new();
-    properties.insert(
-        "code".to_string(),
-        JsonSchema::String {
-            description: Some("The JavaScript code to execute in the browser context".to_string()),
-        },
-    );
-
-    OpenAiTool::Function(ResponsesApiTool {
-        name: "browser_javascript".to_string(),
-        description: "Executes JavaScript code in the browser and returns the result. The code is wrapped to automatically capture return values and console.log output.".to_string(),
-        strict: false,
-        parameters: JsonSchema::Object {
-            properties,
-            required: Some(vec!["code".to_string()]),
-            additional_properties: Some(false),
-        },
-    })
-}
-
-fn create_browser_scroll_tool() -> OpenAiTool {
-    let mut properties = BTreeMap::new();
-    properties.insert(
-        "dx".to_string(),
-        JsonSchema::Number {
-            description: Some("Horizontal scroll delta in pixels (positive = right)".to_string()),
-        },
-    );
-    properties.insert(
-        "dy".to_string(),
-        JsonSchema::Number {
-            description: Some("Vertical scroll delta in pixels (positive = down)".to_string()),
-        },
-    );
-
-    OpenAiTool::Function(ResponsesApiTool {
-        name: "browser_scroll".to_string(),
-        description: "Scrolls the page by the specified CSS pixel deltas.".to_string(),
-        strict: false,
-        parameters: JsonSchema::Object {
-            properties,
-            required: Some(vec![]),
-            additional_properties: Some(false),
-        },
-    })
-}
-
-fn create_browser_history_tool() -> OpenAiTool {
-    let mut properties = BTreeMap::new();
-    properties.insert(
-        "direction".to_string(),
-        JsonSchema::String {
-            description: Some("History direction: 'back' or 'forward'".to_string()),
-        },
-    );
-
-    OpenAiTool::Function(ResponsesApiTool {
-        name: "browser_history".to_string(),
-        description: "Navigates browser history backward or forward.".to_string(),
-        strict: false,
-        parameters: JsonSchema::Object {
-            properties,
-            required: Some(vec!["direction".to_string()]),
-            additional_properties: Some(false),
-        },
-    })
-}
-
-fn create_browser_inspect_tool() -> OpenAiTool {
-    let mut properties = BTreeMap::new();
-    properties.insert(
-        "x".to_string(),
-        JsonSchema::Number {
-            description: Some("Optional absolute X coordinate to inspect.".to_string()),
-        },
-    );
-    properties.insert(
-        "y".to_string(),
-        JsonSchema::Number {
-            description: Some("Optional absolute Y coordinate to inspect.".to_string()),
-        },
-    );
-    properties.insert(
-        "id".to_string(),
-        JsonSchema::String {
-            description: Some("Optional element id attribute value. If provided, looks up '#id' and inspects that element.".to_string()),
-        },
-    );
-
-    OpenAiTool::Function(ResponsesApiTool {
-        name: "browser_inspect".to_string(),
-        description: "Inspects a DOM element by coordinates or id, returns attributes, outerHTML, box model, and matched styles.".to_string(),
-        strict: false,
-        parameters: JsonSchema::Object {
-            properties,
-            required: Some(vec![]),
-            additional_properties: Some(false),
-        },
-    })
-}
-
-fn create_browser_console_tool() -> OpenAiTool {
-    let mut properties = BTreeMap::new();
-    properties.insert(
-        "lines".to_string(),
-        JsonSchema::Number {
-            description: Some(
-                "Optional: Number of recent console lines to return (default: all available)"
-                    .to_string(),
-            ),
-        },
-    );
-
-    OpenAiTool::Function(ResponsesApiTool {
-        name: "browser_console".to_string(),
-        description: "Captures and returns the console output from the browser, including logs, warnings, and errors.".to_string(),
-        strict: false,
-        parameters: JsonSchema::Object {
-            properties,
-            required: Some(vec![]),
-            additional_properties: Some(false),
-        },
-    })
-}
-
-fn create_browser_cleanup_tool() -> OpenAiTool {
-    OpenAiTool::Function(ResponsesApiTool {
-        name: "browser_cleanup".to_string(),
-        description: "Cleans up injected artifacts (cursor overlays, highlights) and resets viewport metrics without closing the browser.".to_string(),
-        strict: false,
-        parameters: JsonSchema::Object {
-            properties: BTreeMap::new(),
-            required: Some(vec![]),
-            additional_properties: Some(false),
-        },
-    })
-}
-
-fn create_browser_cdp_tool() -> OpenAiTool {
-    let mut properties = BTreeMap::new();
-    properties.insert(
-        "method".to_string(),
-        JsonSchema::String {
-            description: Some(
-                "CDP method name, e.g. 'Page.navigate' or 'Input.dispatchKeyEvent'".to_string(),
-            ),
-        },
-    );
-    properties.insert(
-        "params".to_string(),
-        JsonSchema::Object {
-            properties: BTreeMap::new(),
-            required: None,
-            additional_properties: Some(true),
-        },
-    );
-    properties.insert(
-        "target".to_string(),
-        JsonSchema::String {
-            description: Some("Target for the command: 'page' (default) or 'browser'".to_string()),
-        },
-    );
-
-    OpenAiTool::Function(ResponsesApiTool {
-        name: "browser_cdp".to_string(),
-        description: "Executes an arbitrary Chrome DevTools Protocol command with a JSON payload against the active page session.".to_string(),
-        strict: false,
-        parameters: JsonSchema::Object {
-            properties,
-            required: Some(vec!["method".to_string()]),
-            additional_properties: Some(false),
-        },
-    })
-}
-
-fn create_web_fetch_tool() -> OpenAiTool {
-    let mut properties = BTreeMap::new();
-    properties.insert(
-        "url".to_string(),
-        JsonSchema::String {
-            description: Some("The URL to fetch (e.g., https://example.com)".to_string()),
-        },
-    );
-    properties.insert(
-        "timeout_ms".to_string(),
-        JsonSchema::Number {
-            description: Some("Optional timeout in milliseconds for the HTTP request".to_string()),
-        },
-    );
-
-    // Optional mode: auto (default), browser (use internal browser/CDP), http (raw HTTP only)
-    properties.insert(
-        "mode".to_string(),
-        JsonSchema::String {
-            description: Some("Optional: 'auto' (default) falls back to the internal browser on challenges; 'browser' forces CDP-based fetch; 'http' disables browser fallback.".to_string()),
-        },
-    );
-
-    OpenAiTool::Function(ResponsesApiTool {
-        name: "web_fetch".to_string(),
-        description: "Fetches a webpage over HTTP(S) and converts the HTML to Markdown using htmd."
-            .to_string(),
-        strict: false,
-        parameters: JsonSchema::Object {
-            properties,
-            required: Some(vec!["url".to_string()]),
-            additional_properties: Some(false),
-        },
-    })
-}
-
-fn create_search_tool() -> OpenAiTool {
-    let mut properties = BTreeMap::new();
-    properties.insert(
-        "query".to_string(),
-        JsonSchema::String {
-            description: Some(
-                "The query string to search for in conversation history.".to_string(),
-            ),
-        },
-    );
-    properties.insert(
-        "agent".to_string(),
-        JsonSchema::String {
-            description: Some(
-                "Optional: Filter by agent (e.g., 'user', 'assistant', 'tool').".to_string(),
-            ),
-        },
-    );
-
-    OpenAiTool::Function(ResponsesApiTool {
-        name: "search".to_string(),
-        description: "Search previous turns in the conversation history.".to_string(),
-        strict: false,
-        parameters: JsonSchema::Object {
-            properties,
-            required: Some(vec!["query".to_string()]),
-            additional_properties: Some(false),
-        },
-    })
-}
-
-fn create_history_search_alias_tool() -> OpenAiTool {
-    // This is an alias for the search tool, so it shares the same definition.
-    let mut properties = BTreeMap::new();
-    properties.insert(
-        "query".to_string(),
-        JsonSchema::String {
-            description: Some(
-                "The query string to search for in conversation history.".to_string(),
-            ),
-        },
-    );
-    properties.insert(
-        "agent".to_string(),
-        JsonSchema::String {
-            description: Some(
-                "Optional: Filter by agent (e.g., 'user', 'assistant', 'tool').".to_string(),
-            ),
-        },
-    );
-
-    OpenAiTool::Function(ResponsesApiTool {
-        name: "history_search".to_string(),
-        description: "Search previous turns in the conversation history (alias for search tool).".to_string(),
-        strict: false,
-        parameters: JsonSchema::Object {
-            properties,
-            required: Some(vec!["query".to_string()]),
-            additional_properties: Some(false),
-        },
-    })
 }

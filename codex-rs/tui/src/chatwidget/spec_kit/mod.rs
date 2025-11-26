@@ -65,8 +65,6 @@ pub mod validation_lifecycle; // Validation lifecycle tracking and telemetry
 pub(crate) use context::SpecKitContext;
 
 // MAINT-3 Phase 2: Re-export test utilities
-#[cfg(any(test, feature = "test-utils"))]
-pub(crate) use context::test_mock::MockSpecKitContext;
 
 // Re-export error types
 pub(crate) use error::Result;
@@ -118,9 +116,7 @@ pub use agent_orchestrator::{
 pub use quality_gate_handler::set_native_agent_ids;
 
 // Re-export validation lifecycle functions
-pub use validation_lifecycle::{
-    compute_validate_payload_hash, record_validate_lifecycle_event,
-};
+pub use validation_lifecycle::{compute_validate_payload_hash, record_validate_lifecycle_event};
 
 // Re-export quality gate functions
 pub use quality::{

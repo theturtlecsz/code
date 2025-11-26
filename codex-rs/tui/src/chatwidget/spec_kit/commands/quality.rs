@@ -404,7 +404,9 @@ fn display_analyze_results(
     }
 
     widget.history_push(history_cell::PlainHistoryCell::new(
-        vec![ratatui::text::Line::from("\n💡 Cost savings: $0.80 (zero agents used)".to_string())],
+        vec![ratatui::text::Line::from(
+            "\n💡 Cost savings: $0.80 (zero agents used)".to_string(),
+        )],
         history_cell::HistoryCellType::Notice,
     ));
 }

@@ -102,22 +102,25 @@ impl ChatComposerHistory {
         // continue handling navigation (allows continued browsing)
         if self.history_cursor.is_some()
             && let Some(ref last) = self.last_history_text
-                && last == text {
-                    return true;
-                }
+            && last == text
+        {
+            return true;
+        }
 
         // If cursor at start and text is either original or a history entry, handle navigation
         if cursor == 0 {
             // Check if it's the original text we saved
             if let Some(ref orig) = self.original_text
-                && orig == text {
-                    return true;
-                }
+                && orig == text
+            {
+                return true;
+            }
             // Check if it matches last history text
             if let Some(ref last) = self.last_history_text
-                && last == text {
-                    return true;
-                }
+                && last == text
+            {
+                return true;
+            }
         }
 
         false

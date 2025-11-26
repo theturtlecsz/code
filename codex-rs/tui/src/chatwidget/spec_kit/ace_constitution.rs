@@ -67,10 +67,9 @@ fn detect_scopes_and_tags(text: &str) -> (Vec<String>, Vec<String>) {
 
     // Detect phase keywords
     for (keyword, scope) in PHASE_KEYWORDS {
-        if lower.contains(keyword)
-            && !scopes.contains(&scope.to_string()) {
-                scopes.push(scope.to_string());
-            }
+        if lower.contains(keyword) && !scopes.contains(&scope.to_string()) {
+            scopes.push(scope.to_string());
+        }
     }
 
     // Detect common tags

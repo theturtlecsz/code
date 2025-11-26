@@ -170,7 +170,10 @@ impl StreamController {
             None => return,
         };
         // Parse trailing #s<idx>
-        let idx = id.split('#').next_back().and_then(|frag| frag.strip_prefix('s'));
+        let idx = id
+            .split('#')
+            .next_back()
+            .and_then(|frag| frag.strip_prefix('s'));
         if let Some(sidx) = idx {
             let seq_part = self
                 .state(kind)
@@ -668,16 +671,18 @@ impl StreamController {
                 };
                 if enabled
                     && let Some(id) = self.current_stream_id()
-                        && let Some(sidx) =
-                            id.split('#').next_back().and_then(|frag| frag.strip_prefix('s'))
-                        {
-                            let marker = format!("[s{} final]", sidx);
-                            let dim = crate::colors::text_dim();
-                            out_lines.push(Line::from(ratatui::text::Span::styled(
-                                marker,
-                                ratatui::style::Style::default().fg(dim),
-                            )));
-                        }
+                    && let Some(sidx) = id
+                        .split('#')
+                        .next_back()
+                        .and_then(|frag| frag.strip_prefix('s'))
+                {
+                    let marker = format!("[s{} final]", sidx);
+                    let dim = crate::colors::text_dim();
+                    out_lines.push(Line::from(ratatui::text::Span::styled(
+                        marker,
+                        ratatui::style::Style::default().fg(dim),
+                    )));
+                }
             }
             lines_with_header.extend(out_lines);
             // Don't add extra blank line - markdown renderer handles spacing

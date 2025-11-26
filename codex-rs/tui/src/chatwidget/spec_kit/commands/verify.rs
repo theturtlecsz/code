@@ -369,12 +369,13 @@ fn get_file_size_fuzzy(cwd: &PathBuf, spec_id: &str, filename: &str) -> Option<u
     if let Ok(entries) = std::fs::read_dir(&docs_dir) {
         for entry in entries.flatten() {
             if let Ok(file_name) = entry.file_name().into_string()
-                && file_name.starts_with(spec_id) {
-                    let file_path = entry.path().join(filename);
-                    if let Ok(metadata) = std::fs::metadata(&file_path) {
-                        return Some(metadata.len());
-                    }
+                && file_name.starts_with(spec_id)
+            {
+                let file_path = entry.path().join(filename);
+                if let Ok(metadata) = std::fs::metadata(&file_path) {
+                    return Some(metadata.len());
                 }
+            }
         }
     }
 

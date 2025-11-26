@@ -478,10 +478,8 @@ impl ChatComposer {
         let textarea_rect = input_block.inner(input_area);
 
         // Apply the same inner padding as in render (horizontal only).
-        let padded_textarea_rect = textarea_rect.inner(Margin::new(
-            crate::layout_consts::COMPOSER_INNER_HPAD,
-            0,
-        ));
+        let padded_textarea_rect =
+            textarea_rect.inner(Margin::new(crate::layout_consts::COMPOSER_INNER_HPAD, 0));
 
         let state = self.textarea_state.borrow();
         self.textarea
@@ -633,12 +631,13 @@ impl ChatComposer {
             return;
         }
         if let Some(slice) = self.textarea.text().as_bytes().get(cursor_pos - 1)
-            && *slice == b' ' {
-                self.post_paste_space_guard = Some(PostPasteSpaceGuard {
-                    expires_at: Instant::now() + Duration::from_secs(2),
-                    cursor_pos,
-                });
-            }
+            && *slice == b' '
+        {
+            self.post_paste_space_guard = Some(PostPasteSpaceGuard {
+                expires_at: Instant::now() + Duration::from_secs(2),
+                cursor_pos,
+            });
+        }
     }
 
     fn should_suppress_post_paste_space(&mut self, event: &KeyEvent) -> bool {
@@ -1345,14 +1344,15 @@ impl ChatComposer {
 
                 // Use the generic token under cursor for a one-off search.
                 if let Some(tok) = Self::current_generic_token(&self.textarea)
-                    && !tok.is_empty() {
-                        self.pending_tab_file_query = Some(tok.clone());
-                        self.app_event_tx
-                            .send(crate::app_event::AppEvent::StartFileSearch(tok));
-                        // Do not show a popup yet; wait for results and only
-                        // show if there are matches to avoid flicker.
-                        return (InputResult::None, true);
-                    }
+                    && !tok.is_empty()
+                {
+                    self.pending_tab_file_query = Some(tok.clone());
+                    self.app_event_tx
+                        .send(crate::app_event::AppEvent::StartFileSearch(tok));
+                    // Do not show a popup yet; wait for results and only
+                    // show if there are matches to avoid flicker.
+                    return (InputResult::None, true);
+                }
                 (InputResult::None, false)
             }
             // -------------------------------------------------------------
@@ -1490,11 +1490,12 @@ impl ChatComposer {
             code: KeyCode::Backspace,
             ..
         } = input
-            && self.try_remove_placeholder_at_cursor() {
-                // Text was modified, reset history navigation
-                self.history.reset_navigation();
-                return (InputResult::None, true);
-            }
+            && self.try_remove_placeholder_at_cursor()
+        {
+            // Text was modified, reset history navigation
+            self.history.reset_navigation();
+            return (InputResult::None, true);
+        }
 
         // Normal input handling
         self.textarea.input(input);
@@ -1764,24 +1765,23 @@ impl WidgetRef for ChatComposer {
                 } else {
                     true
                 };
-                if show_access_label
-                    && let Some(label) = &self.access_mode_label {
-                        // Access label without bold per design
-                        left_spans.push(Span::from(label.clone()).style(label_style));
-                        // Show the hint suffix while the hint timer is active; if the whole label
-                        // is ephemeral, keep the suffix visible for the same duration.
-                        let show_suffix = if let Some(until) = self.access_mode_hint_expiry {
-                            std::time::Instant::now() <= until
-                        } else {
-                            // If label itself is ephemeral, mirror its lifetime for the suffix
-                            self.access_mode_label_expiry.is_some()
-                        };
-                        if show_suffix {
-                            left_spans.push(Span::from("  (").style(label_style));
-                            left_spans.push(Span::from("Shift+Tab").style(key_hint_style));
-                            left_spans.push(Span::from(" change)").style(label_style));
-                        }
+                if show_access_label && let Some(label) = &self.access_mode_label {
+                    // Access label without bold per design
+                    left_spans.push(Span::from(label.clone()).style(label_style));
+                    // Show the hint suffix while the hint timer is active; if the whole label
+                    // is ephemeral, keep the suffix visible for the same duration.
+                    let show_suffix = if let Some(until) = self.access_mode_hint_expiry {
+                        std::time::Instant::now() <= until
+                    } else {
+                        // If label itself is ephemeral, mirror its lifetime for the suffix
+                        self.access_mode_label_expiry.is_some()
+                    };
+                    if show_suffix {
+                        left_spans.push(Span::from("  (").style(label_style));
+                        left_spans.push(Span::from("Shift+Tab").style(key_hint_style));
+                        left_spans.push(Span::from(" change)").style(label_style));
                     }
+                }
 
                 if self.ctrl_c_quit_hint {
                     // Treat as a notice; keep on the left
@@ -1807,15 +1807,15 @@ impl WidgetRef for ChatComposer {
 
                 // Append ephemeral footer notice if present and not expired
                 if let Some((msg, until)) = &self.footer_notice
-                    && std::time::Instant::now() <= *until {
-                        if left_spans.len() > 1 {
-                            left_spans.push(Span::from("   "));
-                        }
-                        left_spans.push(
-                            Span::from(msg.clone())
-                                .style(Style::default().add_modifier(Modifier::DIM)),
-                        );
+                    && std::time::Instant::now() <= *until
+                {
+                    if left_spans.len() > 1 {
+                        left_spans.push(Span::from("   "));
                     }
+                    left_spans.push(
+                        Span::from(msg.clone()).style(Style::default().add_modifier(Modifier::DIM)),
+                    );
+                }
 
                 // Right side: command key hints (Ctrl+R/D/H), token usage, and a small auth notice
                 // when using an API key instead of ChatGPT auth. We elide hints first if space is tight.
@@ -1831,19 +1831,20 @@ impl WidgetRef for ChatComposer {
                         .push(Span::from(used_str).style(label_style.add_modifier(Modifier::BOLD)));
                     token_spans.push(Span::from(" tokens").style(label_style));
                     if let Some(context_window) = token_usage_info.model_context_window
-                        && context_window > 0 {
-                            let percent_remaining = {
-                                let percent =
-                                    100.0 - (tokens_used as f32 / context_window as f32 * 100.0);
-                                percent.clamp(0.0, 100.0) as u8
-                            };
-                            token_spans.push(Span::from(" (").style(label_style));
-                            token_spans.push(
-                                Span::from(percent_remaining.to_string())
-                                    .style(label_style.add_modifier(Modifier::BOLD)),
-                            );
-                            token_spans.push(Span::from("% left)").style(label_style));
-                        }
+                        && context_window > 0
+                    {
+                        let percent_remaining = {
+                            let percent =
+                                100.0 - (tokens_used as f32 / context_window as f32 * 100.0);
+                            percent.clamp(0.0, 100.0) as u8
+                        };
+                        token_spans.push(Span::from(" (").style(label_style));
+                        token_spans.push(
+                            Span::from(percent_remaining.to_string())
+                                .style(label_style.add_modifier(Modifier::BOLD)),
+                        );
+                        token_spans.push(Span::from("% left)").style(label_style));
+                    }
                 }
 
                 // Helper to build hint spans based on inclusion flags

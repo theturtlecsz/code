@@ -91,12 +91,14 @@ impl ConfigWatcher {
 
         // Check if debounce period has elapsed
         if let Some(last_time) = self.last_event_time
-            && !self.pending_changes.is_empty() && last_time.elapsed() >= self.debounce_duration {
-                // Debounce period elapsed - return changes and reset
-                let changes: Vec<PathBuf> = self.pending_changes.drain().collect();
-                self.last_event_time = None;
-                return Some(changes);
-            }
+            && !self.pending_changes.is_empty()
+            && last_time.elapsed() >= self.debounce_duration
+        {
+            // Debounce period elapsed - return changes and reset
+            let changes: Vec<PathBuf> = self.pending_changes.drain().collect();
+            self.last_event_time = None;
+            return Some(changes);
+        }
 
         None
     }
@@ -128,7 +130,7 @@ mod tests {
         let config_path = temp_dir.path().join("config.toml");
         fs::write(&config_path, "test").unwrap();
 
-        let watcher = ConfigWatcher::new(&[config_path.clone()], 500);
+        let watcher = ConfigWatcher::new(&[config_path], 500);
         assert!(watcher.is_ok());
 
         let watcher = watcher.unwrap();
@@ -208,7 +210,7 @@ mod tests {
         );
         let changes = changes.unwrap();
         assert!(
-            changes.len() >= 1,
+            !changes.is_empty(),
             "Expected at least 1 changed file, got {}",
             changes.len()
         );

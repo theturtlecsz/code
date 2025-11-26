@@ -142,10 +142,7 @@ impl PerfStats {
         let e = self.hot_total.entry(key).or_default();
         e.calls = e.calls.saturating_add(1);
         e.ns = e.ns.saturating_add(ns);
-        let ek = self
-            .per_kind_total
-            .entry(kind.to_string())
-            .or_default();
+        let ek = self.per_kind_total.entry(kind.to_string()).or_default();
         ek.calls = ek.calls.saturating_add(1);
         ek.ns = ek.ns.saturating_add(ns);
     }
@@ -154,10 +151,7 @@ impl PerfStats {
         let e = self.hot_render.entry(key).or_default();
         e.calls = e.calls.saturating_add(1);
         e.ns = e.ns.saturating_add(ns);
-        let ek = self
-            .per_kind_render
-            .entry(kind.to_string())
-            .or_default();
+        let ek = self.per_kind_render.entry(kind.to_string()).or_default();
         ek.calls = ek.calls.saturating_add(1);
         ek.ns = ek.ns.saturating_add(ns);
     }

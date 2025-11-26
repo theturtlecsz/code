@@ -331,7 +331,10 @@ async fn fetch_agent_payloads_from_memory(
                                     db_err
                                 );
                             } else {
-                                info_lines.push("  Stored raw output to DB (extraction_error column)".to_string());
+                                info_lines.push(
+                                    "  Stored raw output to DB (extraction_error column)"
+                                        .to_string(),
+                                );
                             }
                         }
                     }
@@ -449,10 +452,11 @@ async fn fetch_agent_payloads_from_filesystem(
                 // Only check recent result files (last 1 hour)
                 if let Ok(metadata) = std::fs::metadata(&result_path)
                     && let Ok(modified) = metadata.modified()
-                        && let Ok(elapsed) = modified.elapsed()
-                            && elapsed.as_secs() > 3600 {
-                                continue; // Skip old agents
-                            }
+                    && let Ok(elapsed) = modified.elapsed()
+                    && elapsed.as_secs() > 3600
+                {
+                    continue; // Skip old agents
+                }
 
                 scanned += 1;
 
@@ -467,31 +471,30 @@ async fn fetch_agent_payloads_from_filesystem(
 
                             if let Some(stage) = json_val.get("stage").and_then(|v| v.as_str())
                                 && stage.starts_with("quality-gate-")
-                                    && let Some(agent) =
-                                        json_val.get("agent").and_then(|v| v.as_str())
-                                    {
-                                        // Match against expected_agents
-                                        if expected_agents
-                                            .iter()
-                                            .any(|a| a.to_lowercase() == agent.to_lowercase())
-                                        {
-                                            info_lines.push(format!(
-                                                "Found {} from {} via {:?}",
-                                                agent,
-                                                result_path.display(),
-                                                extraction_result.method
-                                            ));
+                                && let Some(agent) = json_val.get("agent").and_then(|v| v.as_str())
+                            {
+                                // Match against expected_agents
+                                if expected_agents
+                                    .iter()
+                                    .any(|a| a.to_lowercase() == agent.to_lowercase())
+                                {
+                                    info_lines.push(format!(
+                                        "Found {} from {} via {:?}",
+                                        agent,
+                                        result_path.display(),
+                                        extraction_result.method
+                                    ));
 
-                                            results_map.insert(
-                                                agent.to_lowercase(),
-                                                QualityGateAgentPayload {
-                                                    agent: agent.to_string(),
-                                                    gate: Some(stage.to_string()),
-                                                    content: json_val,
-                                                },
-                                            );
-                                        }
-                                    }
+                                    results_map.insert(
+                                        agent.to_lowercase(),
+                                        QualityGateAgentPayload {
+                                            agent: agent.to_string(),
+                                            gate: Some(stage.to_string()),
+                                            content: json_val,
+                                        },
+                                    );
+                                }
+                            }
                         }
                         Err(e) => {
                             // SPEC-KIT-927: Store raw output on extraction failure
@@ -506,12 +509,13 @@ async fn fetch_agent_payloads_from_filesystem(
                                 .parent()
                                 .and_then(|p| p.file_name())
                                 .and_then(|n| n.to_str())
-                                && let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
-                                    let error_msg = format!("{}", e);
-                                    let _ = db
-                                        .record_extraction_failure(agent_id, &content, &error_msg);
-                                    tracing::debug!("Stored raw output to DB for {}", agent_id);
-                                }
+                                && let Ok(db) = super::consensus_db::ConsensusDb::init_default()
+                            {
+                                let error_msg = format!("{}", e);
+                                let _ =
+                                    db.record_extraction_failure(agent_id, &content, &error_msg);
+                                tracing::debug!("Stored raw output to DB for {}", agent_id);
+                            }
                         }
                     }
                 }

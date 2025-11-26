@@ -61,12 +61,13 @@ impl ExploreEntry {
             ExploreSummary::Search { query, path } => {
                 let mut spans = Vec::new();
                 if let Some(q) = query
-                    && !q.is_empty() {
-                        spans.push(Span::styled(
-                            q.clone(),
-                            Style::default().fg(crate::colors::text()),
-                        ));
-                    }
+                    && !q.is_empty()
+                {
+                    spans.push(Span::styled(
+                        q.clone(),
+                        Style::default().fg(crate::colors::text()),
+                    ));
+                }
                 if let Some(p) = path {
                     spans.push(Span::styled(
                         format!(" in {}", p),
@@ -254,53 +255,53 @@ impl ExploreAggregationCell {
                     annotation: existing_ann,
                     range: existing_range,
                 } = &mut self.state.entries[idx].summary
-                    && *existing_path == path_key {
-                        let reuse = match (*existing_range, range_val) {
-                            (Some((es, ee)), Some((ns, ne))) => {
-                                if ns <= es && ne >= ee {
-                                    *existing_range = Some((ns, ne));
-                                    *existing_ann =
-                                        annot.clone().or_else(|| annotation_for_range(ns, ne));
-                                    true
-                                } else if es <= ns && ee >= ne {
-                                    true
-                                } else {
-                                    let start = es.min(ns);
-                                    let end = if ee == u32::MAX || ne == u32::MAX {
-                                        u32::MAX
-                                    } else {
-                                        ee.max(ne)
-                                    };
-                                    *existing_range = Some((start, end));
-                                    *existing_ann = annotation_for_range(start, end);
-                                    true
-                                }
-                            }
-                            (None, Some((ns, ne))) => {
+                    && *existing_path == path_key
+                {
+                    let reuse = match (*existing_range, range_val) {
+                        (Some((es, ee)), Some((ns, ne))) => {
+                            if ns <= es && ne >= ee {
                                 *existing_range = Some((ns, ne));
                                 *existing_ann =
                                     annot.clone().or_else(|| annotation_for_range(ns, ne));
                                 true
-                            }
-                            (Some(_), None) => {
-                                if annot.is_some() {
-                                    *existing_ann = annot.clone();
-                                }
+                            } else if es <= ns && ee >= ne {
+                                true
+                            } else {
+                                let start = es.min(ns);
+                                let end = if ee == u32::MAX || ne == u32::MAX {
+                                    u32::MAX
+                                } else {
+                                    ee.max(ne)
+                                };
+                                *existing_range = Some((start, end));
+                                *existing_ann = annotation_for_range(start, end);
                                 true
                             }
-                            (None, None) => {
-                                if annot.is_some() {
-                                    *existing_ann = annot.clone();
-                                }
-                                true
-                            }
-                        };
-
-                        if reuse {
-                            self.state.entries[idx].status = status;
-                            return Some(idx);
                         }
+                        (None, Some((ns, ne))) => {
+                            *existing_range = Some((ns, ne));
+                            *existing_ann = annot.clone().or_else(|| annotation_for_range(ns, ne));
+                            true
+                        }
+                        (Some(_), None) => {
+                            if annot.is_some() {
+                                *existing_ann = annot.clone();
+                            }
+                            true
+                        }
+                        (None, None) => {
+                            if annot.is_some() {
+                                *existing_ann = annot.clone();
+                            }
+                            true
+                        }
+                    };
+
+                    if reuse {
+                        self.state.entries[idx].status = status;
+                        return Some(idx);
                     }
+                }
             }
         }
 
@@ -309,11 +310,11 @@ impl ExploreAggregationCell {
                 if let ExploreSummary::Command { command: existing } =
                     &mut self.state.entries[idx].summary
                     && existing.display == new_cmd.display
-                        && existing.annotation == new_cmd.annotation
-                    {
-                        self.state.entries[idx].status = status;
-                        return Some(idx);
-                    }
+                    && existing.annotation == new_cmd.annotation
+                {
+                    self.state.entries[idx].status = status;
+                    return Some(idx);
+                }
             }
         }
 

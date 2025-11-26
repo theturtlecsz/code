@@ -61,25 +61,25 @@ impl QualityGateModal {
 
     fn submit_current_answer(&mut self) {
         if let Some(question) = self.current_question()
-            && !self.current_input.trim().is_empty() {
-                self.answers
-                    .insert(question.id.clone(), self.current_input.trim().to_string());
+            && !self.current_input.trim().is_empty()
+        {
+            self.answers
+                .insert(question.id.clone(), self.current_input.trim().to_string());
 
-                if self.is_last_question() {
-                    // All questions answered - send completion event
-                    self.send_completion_event();
-                    self.done = true;
-                } else {
-                    // Move to next question
-                    self.current_index += 1;
-                    self.current_input.clear();
-                }
+            if self.is_last_question() {
+                // All questions answered - send completion event
+                self.send_completion_event();
+                self.done = true;
+            } else {
+                // Move to next question
+                self.current_index += 1;
+                self.current_input.clear();
             }
+        }
     }
 
     fn send_completion_event(&self) {
-        self
-            .app_event_tx
+        self.app_event_tx
             .send(AppEvent::QualityGateAnswersSubmitted {
                 checkpoint: self.checkpoint,
                 answers: self.answers.clone(),

@@ -43,9 +43,10 @@ pub fn validate_guardrail_schema(stage: SpecStage, telemetry: &Value) -> Vec<Str
     match stage {
         SpecStage::Validate | SpecStage::Audit => {
             if let Some(value) = telemetry.get("artifacts")
-                && !value.is_array() {
-                    failures.push("Field artifacts must be an array when present".to_string());
-                }
+                && !value.is_array()
+            {
+                failures.push("Field artifacts must be an array when present".to_string());
+            }
         }
         _ => match telemetry.get("artifacts") {
             Some(Value::Array(arr)) => {
@@ -291,24 +292,25 @@ pub fn evaluate_guardrail_value(stage: SpecStage, value: &Value) -> GuardrailEva
                 .get("hal")
                 .and_then(|hal| hal.get("summary"))
                 .and_then(|summary| summary.as_object())
-                && let Some(status) = hal_summary.get("status").and_then(|s| s.as_str()) {
-                    summary = format!("{summary}; HAL {status}");
-                    if status == "failed"
-                        && let Some(checks) = hal_summary
-                            .get("failed_checks")
-                            .and_then(|list| list.as_array())
-                        {
-                            let joined = checks
-                                .iter()
-                                .filter_map(|v| v.as_str())
-                                .filter(|text| !text.trim().is_empty())
-                                .collect::<Vec<_>>()
-                                .join(", ");
-                            if !joined.is_empty() {
-                                failures.push(format!("HAL failed checks: {joined}"));
-                            }
-                        }
+                && let Some(status) = hal_summary.get("status").and_then(|s| s.as_str())
+            {
+                summary = format!("{summary}; HAL {status}");
+                if status == "failed"
+                    && let Some(checks) = hal_summary
+                        .get("failed_checks")
+                        .and_then(|list| list.as_array())
+                {
+                    let joined = checks
+                        .iter()
+                        .filter_map(|v| v.as_str())
+                        .filter(|text| !text.trim().is_empty())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    if !joined.is_empty() {
+                        failures.push(format!("HAL failed checks: {joined}"));
+                    }
                 }
+            }
 
             GuardrailEvaluation {
                 success,
@@ -525,19 +527,20 @@ pub fn handle_guardrail_impl(
             }
 
             if let Some((flag, value)) = token.split_once('=')
-                && (flag == "--hal" || flag == "--hal-mode") {
-                    hal_from_args = match HalMode::from_str(value) {
-                        Some(mode) => Some(mode),
-                        None => {
-                            widget.history_push(crate::history_cell::new_error_event(format!(
-                                "Unknown HAL mode '{value}'. Expected 'mock' or 'live'."
-                            )));
-                            widget.request_redraw();
-                            return;
-                        }
-                    };
-                    continue;
-                }
+                && (flag == "--hal" || flag == "--hal-mode")
+            {
+                hal_from_args = match HalMode::from_str(value) {
+                    Some(mode) => Some(mode),
+                    None => {
+                        widget.history_push(crate::history_cell::new_error_event(format!(
+                            "Unknown HAL mode '{value}'. Expected 'mock' or 'live'."
+                        )));
+                        widget.request_redraw();
+                        return;
+                    }
+                };
+                continue;
+            }
 
             remainder_tokens.push(token.to_string());
         }
@@ -610,14 +613,15 @@ pub fn handle_guardrail_impl(
             ));
         }
         if let Some(notes) = spec_prompts::orchestrator_notes(stage.key())
-            && !notes.is_empty() {
-                banner.push_str("  Notes:\n");
-                for note in notes {
-                    banner.push_str("    - ");
-                    banner.push_str(&note);
-                    banner.push('\n');
-                }
+            && !notes.is_empty()
+        {
+            banner.push_str("  Notes:\n");
+            for note in notes {
+                banner.push_str("    - ");
+                banner.push_str(&note);
+                banner.push('\n');
             }
+        }
     }
 
     if !is_stats {
@@ -688,8 +692,6 @@ pub fn handle_guardrail_impl(
 
 /// Handle native guardrail validation (SPEC-KIT-066, SPEC-KIT-902)
 fn handle_native_guardrail(widget: &mut ChatWidget, command: SlashCommand, raw_args: String) {
-    
-
     // Parse arguments
     let trimmed = raw_args.trim();
     if trimmed.is_empty() {
@@ -854,22 +856,24 @@ pub fn display_guardrail_result_and_advance(
     // After successful completion, manually trigger pipeline advancement for /speckit.auto.
     // This replaces the task-based completion mechanism used by bash guardrails.
     if result.success
-        && let Some(state) = widget.spec_auto_state.as_ref() {
-            // Check if we're waiting for this guardrail stage
-            if let Some(wait) = &state.waiting_guardrail
-                && wait.stage == stage {
-                    tracing::warn!(
-                        "DEBUG: Native guardrail {:?} complete, manually advancing pipeline",
-                        stage
-                    );
-                    // Pass the guardrail result directly to avoid blocking file I/O
-                    // The result is already in memory from run_native_guardrail above
-                    super::pipeline_coordinator::advance_spec_auto_after_native_guardrail(
-                        widget,
-                        stage,
-                        &spec_id,
-                        result.clone(), // Pass the result we just computed
-                    );
-                }
+        && let Some(state) = widget.spec_auto_state.as_ref()
+    {
+        // Check if we're waiting for this guardrail stage
+        if let Some(wait) = &state.waiting_guardrail
+            && wait.stage == stage
+        {
+            tracing::warn!(
+                "DEBUG: Native guardrail {:?} complete, manually advancing pipeline",
+                stage
+            );
+            // Pass the guardrail result directly to avoid blocking file I/O
+            // The result is already in memory from run_native_guardrail above
+            super::pipeline_coordinator::advance_spec_auto_after_native_guardrail(
+                widget,
+                stage,
+                &spec_id,
+                result.clone(), // Pass the result we just computed
+            );
         }
+    }
 }

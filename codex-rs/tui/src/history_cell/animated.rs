@@ -141,12 +141,13 @@ impl HistoryCell for AnimatedWelcomeCell {
         }
 
         if let Some(fade_time) = self.fade_start()
-            && !self.faded_out.get() {
-                if fade_time.elapsed() < Duration::from_millis(800) {
-                    return true;
-                }
-                self.faded_out.set(true);
+            && !self.faded_out.get()
+        {
+            if fade_time.elapsed() < Duration::from_millis(800) {
+                return true;
             }
+            self.faded_out.set(true);
+        }
 
         false
     }

@@ -308,8 +308,7 @@ pub struct GithubConfig {
     pub actionlint_strict: bool,
 }
 
-#[derive(Deserialize, Debug, Clone, PartialEq)]
-#[derive(Default)]
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct ValidationConfig {
     /// Legacy master toggle for the validation harness (kept for config compatibility).
     /// `run_patch_harness` now relies solely on the functional/stylistic group toggles.
@@ -333,9 +332,7 @@ pub struct ValidationConfig {
     pub tools: ValidationTools,
 }
 
-
-#[derive(Deserialize, Debug, Clone, PartialEq)]
-#[derive(Default)]
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct ValidationGroups {
     /// Functional checks catch correctness regressions.
     #[serde(default = "default_true")]
@@ -345,7 +342,6 @@ pub struct ValidationGroups {
     #[serde(default)]
     pub stylistic: bool,
 }
-
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct ValidationTools {
@@ -621,8 +617,7 @@ pub enum ReasoningSummaryFormat {
 }
 
 /// Theme configuration for the TUI
-#[derive(Deserialize, Debug, Clone, PartialEq)]
-#[derive(Default)]
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct ThemeConfig {
     /// Name of the predefined theme to use
     #[serde(default)]
@@ -644,7 +639,6 @@ pub struct ThemeConfig {
     #[serde(default)]
     pub is_dark: Option<bool>,
 }
-
 
 /// Selected loading spinner style.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
@@ -1370,14 +1364,14 @@ mod tests {
 
         assert_eq!(config.plan.agents, vec!["gemini", "claude", "code"]);
         assert_eq!(config.plan.threshold, 0.67);
-        assert_eq!(config.plan.enabled, true);
+        assert!(config.plan.enabled);
 
         assert_eq!(config.tasks.agents, vec!["gemini"]);
         assert_eq!(config.tasks.threshold, 1.0);
 
         assert_eq!(config.validate.agents, vec!["gemini", "claude", "code"]);
         assert_eq!(config.validate.threshold, 0.67);
-        assert_eq!(config.validate.enabled, true); // Default
+        assert!(config.validate.enabled); // Default
 
         assert_eq!(config.audit.agents.len(), 3);
         assert_eq!(config.unlock.agents.len(), 2);
@@ -1407,7 +1401,7 @@ mod tests {
         assert_eq!(config.plan.agents.len(), 1);
         assert_eq!(config.tasks.agents, vec!["gemini"]);
         assert_eq!(config.plan.threshold, 0.67); // Default
-        assert_eq!(config.plan.enabled, true); // Default
+        assert!(config.plan.enabled); // Default
     }
 
     #[test]
@@ -1468,7 +1462,7 @@ mod tests {
 
         assert_eq!(config.agents, vec!["gemini", "claude", "code"]);
         assert_eq!(config.threshold, 0.67);
-        assert_eq!(config.enabled, true);
+        assert!(config.enabled);
     }
 
     #[test]
@@ -1483,7 +1477,7 @@ mod tests {
 
         assert_eq!(config.agents, vec!["agent1", "agent2"]);
         assert_eq!(config.threshold, 0.5);
-        assert_eq!(config.enabled, false);
+        assert!(!config.enabled);
     }
 
     #[test]
@@ -1519,8 +1513,8 @@ mod tests {
 
         let config: QualityGateConfig = toml::from_str(toml).unwrap();
 
-        assert_eq!(config.plan.enabled, false);
-        assert_eq!(config.tasks.enabled, true); // Other checkpoints use defaults
+        assert!(!config.plan.enabled);
+        assert!(config.tasks.enabled); // Other checkpoints use defaults
     }
 
     #[test]
@@ -1579,11 +1573,11 @@ mod tests {
         assert_eq!(config.plan.threshold, 0.5);
 
         // Audit is disabled to save cost (agents value doesn't matter when disabled)
-        assert_eq!(config.audit.enabled, false);
+        assert!(!config.audit.enabled);
 
         // Other checkpoints use defaults
-        assert_eq!(config.tasks.enabled, true);
-        assert_eq!(config.validate.enabled, true);
+        assert!(config.tasks.enabled);
+        assert!(config.validate.enabled);
     }
 
     #[test]
@@ -1638,7 +1632,7 @@ mod tests {
 
         let config: HotReloadConfig = toml::from_str(toml).unwrap();
 
-        assert_eq!(config.enabled, true);
+        assert!(config.enabled);
         assert_eq!(config.debounce_ms, 2000);
         assert_eq!(config.watch_paths.len(), 0);
     }
@@ -1653,7 +1647,7 @@ mod tests {
 
         let config: HotReloadConfig = toml::from_str(toml).unwrap();
 
-        assert_eq!(config.enabled, false);
+        assert!(!config.enabled);
         assert_eq!(config.debounce_ms, 5000);
         assert_eq!(
             config.watch_paths,
@@ -1670,7 +1664,7 @@ mod tests {
         let config: HotReloadConfig = toml::from_str(toml).unwrap();
 
         // enabled should default to true
-        assert_eq!(config.enabled, true);
+        assert!(config.enabled);
         // debounce_ms should be overridden
         assert_eq!(config.debounce_ms, 3000);
         // watch_paths should default to empty
@@ -1700,9 +1694,9 @@ mod tests {
 
         let config: ValidationConfigExt = toml::from_str(toml).unwrap();
 
-        assert_eq!(config.check_api_keys, true);
-        assert_eq!(config.check_commands, true);
-        assert_eq!(config.strict_schema, true);
+        assert!(config.check_api_keys);
+        assert!(config.check_commands);
+        assert!(config.strict_schema);
     }
 
     #[test]
@@ -1715,9 +1709,9 @@ mod tests {
 
         let config: ValidationConfigExt = toml::from_str(toml).unwrap();
 
-        assert_eq!(config.check_api_keys, false);
-        assert_eq!(config.check_commands, false);
-        assert_eq!(config.strict_schema, false);
+        assert!(!config.check_api_keys);
+        assert!(!config.check_commands);
+        assert!(!config.strict_schema);
     }
 
     #[test]
@@ -1729,9 +1723,9 @@ mod tests {
 
         let config: ValidationConfigExt = toml::from_str(toml).unwrap();
 
-        assert_eq!(config.check_api_keys, false);
-        assert_eq!(config.check_commands, true); // Default
-        assert_eq!(config.strict_schema, true);
+        assert!(!config.check_api_keys);
+        assert!(config.check_commands); // Default
+        assert!(config.strict_schema);
     }
 
     // ============================================================================
@@ -1800,8 +1794,8 @@ mod tests {
         assert_eq!(config.canonical_name, Some("gpt_pro".to_string()));
         assert_eq!(config.command, "openai");
         assert_eq!(config.args, vec!["--model", "gpt-5-turbo"]);
-        assert_eq!(config.read_only, false);
-        assert_eq!(config.enabled, true);
+        assert!(!config.read_only);
+        assert!(config.enabled);
         assert_eq!(config.description, Some("OpenAI GPT-5 model".to_string()));
     }
 
@@ -1853,12 +1847,12 @@ mod tests {
         assert_eq!(config.quality_gates.tasks.agents, vec!["gemini"]);
 
         // Hot reload
-        assert_eq!(config.hot_reload.enabled, true);
+        assert!(config.hot_reload.enabled);
         assert_eq!(config.hot_reload.debounce_ms, 2000);
 
         // Validation
-        assert_eq!(config.validation.check_api_keys, true);
-        assert_eq!(config.validation.strict_schema, true);
+        assert!(config.validation.check_api_keys);
+        assert!(config.validation.strict_schema);
     }
 
     #[test]
@@ -1938,7 +1932,7 @@ mod tests {
         assert_eq!(config.name, "gpt5_codex");
         assert_eq!(config.command, "chatgpt");
         assert_eq!(config.model, Some("gpt-5-codex".to_string()));
-        assert_eq!(config.enabled, true);
+        assert!(config.enabled);
     }
 
     #[test]
@@ -1955,7 +1949,7 @@ mod tests {
         assert_eq!(config.name, "gemini");
         assert_eq!(config.command, "gemini");
         assert_eq!(config.model, None);
-        assert_eq!(config.enabled, true);
+        assert!(config.enabled);
     }
 
     #[test]
@@ -1978,8 +1972,8 @@ mod tests {
         assert_eq!(config.name, "gpt5_1_minimal");
         assert_eq!(config.command, "chatgpt");
         assert_eq!(config.model, Some("gpt-5.1-minimal".to_string()));
-        assert_eq!(config.enabled, true);
-        assert_eq!(config.read_only, false);
+        assert!(config.enabled);
+        assert!(!config.read_only);
         assert_eq!(
             config.description,
             Some("Cost-optimized GPT-5 variant for simple tasks".to_string())
@@ -1997,7 +1991,7 @@ mod tests {
         assert_eq!(config.model, None);
         assert_eq!(config.name, "");
         assert_eq!(config.command, "");
-        assert_eq!(config.enabled, true);
+        assert!(config.enabled);
     }
 
     #[test]

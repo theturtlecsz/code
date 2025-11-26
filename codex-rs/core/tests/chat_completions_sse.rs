@@ -1,3 +1,6 @@
+// SPEC-957: Allow expect/unwrap in test code
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+
 use std::sync::{Arc, Mutex};
 
 use codex_core::ContentItem;

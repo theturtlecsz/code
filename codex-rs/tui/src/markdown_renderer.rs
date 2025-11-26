@@ -506,16 +506,17 @@ impl MarkdownRenderer {
                         continue;
                     }
                 } else if let Some(inner) = rest.strip_prefix("<sup>")
-                    && let Some(end) = inner.find("</sup>") {
-                        if !current_text.is_empty() {
-                            spans.push(Span::raw(current_text.clone()));
-                            current_text.clear();
-                        }
-                        let content = inner[..end].to_string();
-                        spans.push(Span::raw(to_superscript(&content)));
-                        i += 5 + end + 6; // <sup> + content + </sup>
-                        continue;
+                    && let Some(end) = inner.find("</sup>")
+                {
+                    if !current_text.is_empty() {
+                        spans.push(Span::raw(current_text.clone()));
+                        current_text.clear();
                     }
+                    let content = inner[..end].to_string();
+                    spans.push(Span::raw(to_superscript(&content)));
+                    i += 5 + end + 6; // <sup> + content + </sup>
+                    continue;
+                }
             }
 
             // Check for inline code
@@ -648,10 +649,12 @@ impl MarkdownRenderer {
             // Autolink URLs and markdown links inside the accumulated spans.
             let mut linked = autolink_spans(std::mem::take(&mut self.current_line));
             // Apply first-sentence styling to the first rendered line.
-            if self.bold_first_sentence && !self.first_sentence_done
-                && apply_first_sentence_style(&mut linked) {
-                    self.first_sentence_done = true;
-                }
+            if self.bold_first_sentence
+                && !self.first_sentence_done
+                && apply_first_sentence_style(&mut linked)
+            {
+                self.first_sentence_done = true;
+            }
             // If requested, gently tint inline code spans toward the provided
             // context text color so they blend better with the surrounding text.
             if let Some(target) = self.inline_code_tint_target {
@@ -991,57 +994,59 @@ fn parse_blockquotes(lines: &[&str]) -> Option<(usize, Vec<Line<'static>>)> {
         if !first_content_seen {
             let trimmed = content.trim();
             if let Some(inner) = trimmed.strip_prefix("[!")
-                && let Some(end) = inner.find(']') {
-                    let kind = inner[..end].to_ascii_uppercase();
-                    match kind.as_str() {
-                        "NOTE" => {
-                            callout_kind = Some("NOTE".into());
-                            callout_color = crate::colors::info();
-                        }
-                        "TIP" => {
-                            callout_kind = Some("TIP".into());
-                            callout_color = crate::colors::success();
-                        }
-                        "WARNING" => {
-                            callout_kind = Some("WARNING".into());
-                            callout_color = crate::colors::warning();
-                        }
-                        "IMPORTANT" => {
-                            callout_kind = Some("IMPORTANT".into());
-                            callout_color = crate::colors::info();
-                        }
-                        _ => {}
+                && let Some(end) = inner.find(']')
+            {
+                let kind = inner[..end].to_ascii_uppercase();
+                match kind.as_str() {
+                    "NOTE" => {
+                        callout_kind = Some("NOTE".into());
+                        callout_color = crate::colors::info();
                     }
-                    if let Some(ref k) = callout_kind {
-                        // Eagerly emit the label so the block never returns None
-                        // even if there are no subsequent quoted lines.
-                        if out.is_empty() {
-                            let label = k.to_string();
-                            out.push(Line::from(vec![Span::styled(
-                                label,
-                                Style::default()
-                                    .fg(callout_color)
-                                    .add_modifier(Modifier::BOLD),
-                            )]));
-                        }
-                        i += 1; // consume marker line and continue scanning quoted content
-                        continue;
+                    "TIP" => {
+                        callout_kind = Some("TIP".into());
+                        callout_color = crate::colors::success();
                     }
+                    "WARNING" => {
+                        callout_kind = Some("WARNING".into());
+                        callout_color = crate::colors::warning();
+                    }
+                    "IMPORTANT" => {
+                        callout_kind = Some("IMPORTANT".into());
+                        callout_color = crate::colors::info();
+                    }
+                    _ => {}
                 }
+                if let Some(ref k) = callout_kind {
+                    // Eagerly emit the label so the block never returns None
+                    // even if there are no subsequent quoted lines.
+                    if out.is_empty() {
+                        let label = k.to_string();
+                        out.push(Line::from(vec![Span::styled(
+                            label,
+                            Style::default()
+                                .fg(callout_color)
+                                .add_modifier(Modifier::BOLD),
+                        )]));
+                    }
+                    i += 1; // consume marker line and continue scanning quoted content
+                    continue;
+                }
+            }
             first_content_seen = true;
         }
 
         // For callouts, render a label line once
         if let Some(ref kind) = callout_kind
-            && out.is_empty() {
-                let label = kind.to_string();
-                out.push(Line::from(vec![Span::styled(
-                    label,
-                    Style::default()
-                        .fg(callout_color)
-                        .add_modifier(Modifier::BOLD),
-                )]));
-            }
+            && out.is_empty()
+        {
+            let label = kind.to_string();
+            out.push(Line::from(vec![Span::styled(
+                label,
+                Style::default()
+                    .fg(callout_color)
+                    .add_modifier(Modifier::BOLD),
+            )]));
+        }
 
         // Render the quote content as raw literal text without interpreting
         // Markdown syntax inside the blockquote. This preserves the exact

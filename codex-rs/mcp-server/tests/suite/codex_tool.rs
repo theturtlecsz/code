@@ -76,8 +76,7 @@ async fn tools_list_exposes_acp_entries() -> anyhow::Result<()> {
     ] {
         assert!(
             tool_names.contains(required),
-            "expected tools/list to include {required}, got {:?}",
-            tool_names
+            "expected tools/list to include {required}, got {tool_names:?}"
         );
     }
 

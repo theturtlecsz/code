@@ -332,41 +332,43 @@ impl ConfigLoader {
         if let TomlValue::Table(table) = value {
             // Extract known top-level fields
             if let Some(ace_value) = table.get("ace") {
-                let ace_str = toml::to_string(ace_value)
-                    .map_err(|e| ConfigLoadError::ValidationError(format!("ace serialization: {e}")))?;
-                config.ace = Some(
-                    toml::from_str(&ace_str).map_err(ConfigLoadError::TomlParseError)?,
-                );
+                let ace_str = toml::to_string(ace_value).map_err(|e| {
+                    ConfigLoadError::ValidationError(format!("ace serialization: {e}"))
+                })?;
+                config.ace =
+                    Some(toml::from_str(&ace_str).map_err(ConfigLoadError::TomlParseError)?);
             }
 
             if let Some(agents_value) = table.get("agents") {
-                let agents_str = toml::to_string(agents_value)
-                    .map_err(|e| ConfigLoadError::ValidationError(format!("agents serialization: {e}")))?;
-                config.agents = toml::from_str(&agents_str).map_err(ConfigLoadError::TomlParseError)?;
+                let agents_str = toml::to_string(agents_value).map_err(|e| {
+                    ConfigLoadError::ValidationError(format!("agents serialization: {e}"))
+                })?;
+                config.agents =
+                    toml::from_str(&agents_str).map_err(ConfigLoadError::TomlParseError)?;
             }
 
             if let Some(quality_gates_value) = table.get("quality_gates") {
-                let qg_str = toml::to_string(quality_gates_value)
-                    .map_err(|e| ConfigLoadError::ValidationError(format!("quality_gates serialization: {e}")))?;
-                config.quality_gates = Some(
-                    toml::from_str(&qg_str).map_err(ConfigLoadError::TomlParseError)?,
-                );
+                let qg_str = toml::to_string(quality_gates_value).map_err(|e| {
+                    ConfigLoadError::ValidationError(format!("quality_gates serialization: {e}"))
+                })?;
+                config.quality_gates =
+                    Some(toml::from_str(&qg_str).map_err(ConfigLoadError::TomlParseError)?);
             }
 
             if let Some(hot_reload_value) = table.get("hot_reload") {
-                let hr_str = toml::to_string(hot_reload_value)
-                    .map_err(|e| ConfigLoadError::ValidationError(format!("hot_reload serialization: {e}")))?;
-                config.hot_reload = Some(
-                    toml::from_str(&hr_str).map_err(ConfigLoadError::TomlParseError)?,
-                );
+                let hr_str = toml::to_string(hot_reload_value).map_err(|e| {
+                    ConfigLoadError::ValidationError(format!("hot_reload serialization: {e}"))
+                })?;
+                config.hot_reload =
+                    Some(toml::from_str(&hr_str).map_err(ConfigLoadError::TomlParseError)?);
             }
 
             if let Some(validation_value) = table.get("validation") {
-                let val_str = toml::to_string(validation_value)
-                    .map_err(|e| ConfigLoadError::ValidationError(format!("validation serialization: {e}")))?;
-                config.validation = Some(
-                    toml::from_str(&val_str).map_err(ConfigLoadError::TomlParseError)?,
-                );
+                let val_str = toml::to_string(validation_value).map_err(|e| {
+                    ConfigLoadError::ValidationError(format!("validation serialization: {e}"))
+                })?;
+                config.validation =
+                    Some(toml::from_str(&val_str).map_err(ConfigLoadError::TomlParseError)?);
             }
 
             if let Some(TomlValue::String(s)) = table.get("model_provider") {
@@ -488,18 +490,20 @@ impl ConfigLoader {
         // MODEL override
         let model_var = format!("{prefix}_MODEL");
         if let Ok(value) = env::var(&model_var)
-            && !value.trim().is_empty() {
-                tracing::debug!("Applying env override: {}={}", model_var, value);
-                config.model = Some(value);
-            }
+            && !value.trim().is_empty()
+        {
+            tracing::debug!("Applying env override: {}={}", model_var, value);
+            config.model = Some(value);
+        }
 
         // PROVIDER override
         let provider_var = format!("{prefix}_PROVIDER");
         if let Ok(value) = env::var(&provider_var)
-            && !value.trim().is_empty() {
-                tracing::debug!("Applying env override: {}={}", provider_var, value);
-                config.model_provider = Some(value);
-            }
+            && !value.trim().is_empty()
+        {
+            tracing::debug!("Applying env override: {}={}", provider_var, value);
+            config.model_provider = Some(value);
+        }
 
         // AUTO_UPGRADE override
         let upgrade_var = format!("{prefix}_AUTO_UPGRADE");
@@ -652,8 +656,7 @@ mod tests {
             assert_eq!(
                 config.auto_upgrade_enabled,
                 Some(expected),
-                "Failed for input: {}",
-                input
+                "Failed for input: {input}"
             );
 
             unsafe {
@@ -734,7 +737,7 @@ mod tests {
             context: "quality_gates.plan".to_string(),
         };
 
-        let msg = format!("{}", err);
+        let msg = format!("{err}");
         assert!(msg.contains("model"));
         assert!(msg.contains("quality_gates.plan"));
     }

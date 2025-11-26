@@ -121,10 +121,7 @@ impl ContextManager {
 
     /// Save current session (auto-generate ID if not set)
     pub fn save(&mut self) -> std::io::Result<String> {
-        let id = self
-            .session_id
-            .clone()
-            .unwrap_or_else(generate_session_id);
+        let id = self.session_id.clone().unwrap_or_else(generate_session_id);
         self.save_session(&id)?;
         self.session_id = Some(id.clone());
         Ok(id)

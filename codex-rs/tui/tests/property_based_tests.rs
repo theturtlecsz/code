@@ -7,7 +7,7 @@
 
 mod common;
 
-use codex_tui::{SpecAutoState, SpecStage};
+use codex_tui::SpecStage;
 use common::{IntegrationTestContext, StateBuilder};
 use proptest::prelude::*;
 use serde_json::json;
@@ -46,14 +46,12 @@ proptest! {
         prop_assert!(state.current_stage().is_some());
 
         // Verify correct stage mapping
-        let expected_stages = vec![
-            SpecStage::Plan,
+        let expected_stages = [SpecStage::Plan,
             SpecStage::Tasks,
             SpecStage::Implement,
             SpecStage::Validate,
             SpecStage::Audit,
-            SpecStage::Unlock,
-        ];
+            SpecStage::Unlock];
 
         prop_assert_eq!(state.current_stage(), Some(expected_stages[index]));
     }
@@ -121,11 +119,11 @@ proptest! {
         // Property: Generated timestamps always valid ISO8601 format
         let ctx = IntegrationTestContext::new("SPEC-PB05-TEST").unwrap();
 
-        let timestamp = format!("{:04}-{:02}-{:02}T00:00:00Z", year, month, day);
+        let timestamp = format!("{year:04}-{month:02}-{day:02}T00:00:00Z");
 
         let file = ctx.consensus_dir().join("timestamp.json");
         std::fs::write(&file, json!({
-            "timestamp": timestamp.clone()
+            "timestamp": timestamp
         }).to_string()).unwrap();
 
         let content = std::fs::read_to_string(&file).unwrap();
@@ -133,7 +131,7 @@ proptest! {
 
         // Invariant: Timestamp string always valid ISO8601
         let ts = data["timestamp"].as_str().unwrap();
-        let year_str = format!("{:04}", year);
+        let year_str = format!("{year:04}");
         prop_assert!(ts.contains(&year_str), "Timestamp {} should contain year {}", ts, year_str);
         prop_assert!(ts.contains("T00:00:00Z"), "Timestamp {} should contain T00:00:00Z", ts);
     }
@@ -167,12 +165,12 @@ proptest! {
 
         let ctx = IntegrationTestContext::new("SPEC-PB07-TEST").unwrap();
 
-        let agents = vec!["gemini", "claude", "gpt_pro", "code", "gpt_codex"];
+        let agents = ["gemini", "claude", "gpt_pro", "code", "gpt_codex"];
         let participating = &agents[0..n.min(agents.len())];
 
         // Write consensus from N agents
         for (i, agent) in participating.iter().enumerate() {
-            let file = ctx.consensus_dir().join(format!("agent_{}.json", i));
+            let file = ctx.consensus_dir().join(format!("agent_{i}.json"));
             std::fs::write(&file, json!({
                 "agent": agent,
                 "index": i
@@ -219,7 +217,7 @@ proptest! {
 
         // Simulate N retries
         for attempt in 1..=retry_count {
-            let retry_file = ctx.commands_dir().join(format!("retry_{}.json", attempt));
+            let retry_file = ctx.commands_dir().join(format!("retry_{attempt}.json"));
             std::fs::write(&retry_file, json!({
                 "attempt": attempt,
                 "final_result": "success", // Idempotent - same result
@@ -229,7 +227,7 @@ proptest! {
 
         // Invariant: All retries produce same final_result
         for attempt in 1..=retry_count {
-            let retry_file = ctx.commands_dir().join(format!("retry_{}.json", attempt));
+            let retry_file = ctx.commands_dir().join(format!("retry_{attempt}.json"));
             let content = std::fs::read_to_string(&retry_file).unwrap();
             let data: serde_json::Value = serde_json::from_str(&content).unwrap();
             prop_assert_eq!(data["final_result"].as_str(), Some("success"));
@@ -243,7 +241,7 @@ proptest! {
 
         // Simulate M failures
         for attempt in 1..=failures {
-            let failure_file = ctx.commands_dir().join(format!("failure_{}.json", attempt));
+            let failure_file = ctx.commands_dir().join(format!("failure_{attempt}.json"));
             std::fs::write(&failure_file, json!({
                 "attempt": attempt,
                 "status": "failed",

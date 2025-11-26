@@ -66,7 +66,7 @@ impl MockMcpManager {
         };
 
         let mut fixtures = self.fixtures.lock().unwrap();
-        fixtures.entry(key).or_insert_with(Vec::new).push(fixture);
+        fixtures.entry(key).or_default().push(fixture);
     }
 
     /// Add multiple fixtures from array

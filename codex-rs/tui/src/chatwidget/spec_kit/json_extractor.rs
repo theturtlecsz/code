@@ -326,9 +326,10 @@ fn strip_codex_wrapper(content: &str) -> String {
 
     // Strip trailing "thinking" sections ([timestamp] thinking ...)
     if let Some(thinking_pos) = result.rfind("] thinking")
-        && let Some(bracket_pos) = result[..thinking_pos].rfind('[') {
-            result = result[..bracket_pos].trim_end();
-        }
+        && let Some(bracket_pos) = result[..thinking_pos].rfind('[')
+    {
+        result = result[..bracket_pos].trim_end();
+    }
 
     result.to_string()
 }
@@ -463,19 +464,21 @@ fn extract_by_schema_marker(content: &str, marker_field: &str) -> Option<String>
 
                 // Validate it parses and has substantial content
                 if candidate.len() > 100
-                    && let Ok(json_val) = serde_json::from_str::<Value>(candidate) {
-                        // Verify this is actual response (has the marker field with real value)
-                        if let Some(field_value) = json_val.get(marker_field)
-                            && let Some(s) = field_value.as_str() {
-                                // Skip if it's a placeholder/template
-                                if !s.contains("${") && !s.is_empty() {
-                                    // Additional check: skip if this looks like a schema template
-                                    if !is_schema_template(candidate) {
-                                        candidates.push((candidate.to_string(), relative_pos));
-                                    }
-                                }
+                    && let Ok(json_val) = serde_json::from_str::<Value>(candidate)
+                {
+                    // Verify this is actual response (has the marker field with real value)
+                    if let Some(field_value) = json_val.get(marker_field)
+                        && let Some(s) = field_value.as_str()
+                    {
+                        // Skip if it's a placeholder/template
+                        if !s.contains("${") && !s.is_empty() {
+                            // Additional check: skip if this looks like a schema template
+                            if !is_schema_template(candidate) {
+                                candidates.push((candidate.to_string(), relative_pos));
                             }
+                        }
                     }
+                }
             }
         }
 

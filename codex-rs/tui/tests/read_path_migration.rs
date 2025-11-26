@@ -4,6 +4,9 @@
 //! 1. Data not found (empty result case)
 //! 2. Write operations succeed and data is persisted
 //! 3. Queries return correct data after writes
+//!
+// SPEC-957: Allow expect/unwrap in test code
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use codex_tui::{ConsensusDb, SpecStage};
 use tempfile::NamedTempFile;
@@ -148,7 +151,7 @@ fn test_multiple_artifacts_dual_write() {
         db.store_artifact(
             spec_id,
             stage,
-            &format!("agent-{}", i),
+            &format!("agent-{i}"),
             &format!(r#"{{"data": "artifact {i}"}}"#),
             None,
             None,
@@ -165,9 +168,8 @@ fn test_multiple_artifacts_dual_write() {
     let agent_names: Vec<String> = artifacts.iter().map(|a| a.agent_name.clone()).collect();
     for i in 1..=5 {
         assert!(
-            agent_names.contains(&format!("agent-{}", i)),
-            "Should find agent-{}",
-            i
+            agent_names.contains(&format!("agent-{i}")),
+            "Should find agent-{i}"
         );
     }
 }
@@ -232,7 +234,7 @@ fn test_dual_schema_reader_consistency() {
         db.store_artifact(
             spec_id,
             stage,
-            &format!("agent-{:02}", i),
+            &format!("agent-{i:02}"),
             &format!(r#"{{"iteration": {i}}}"#),
             None,
             None,
@@ -251,8 +253,7 @@ fn test_dual_schema_reader_consistency() {
             artifacts
                 .iter()
                 .any(|a| a.content_json.contains(&format!(r#""iteration": {i}"#))),
-            "Should find iteration {}",
-            i
+            "Should find iteration {i}"
         );
     }
 }

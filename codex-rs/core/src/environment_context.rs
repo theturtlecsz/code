@@ -397,13 +397,14 @@ impl EnvironmentContext {
             lines.push("  </operating_system>".to_string());
         }
         if let Some(common_tools) = self.common_tools
-            && !common_tools.is_empty() {
-                lines.push("  <common_tools>".to_string());
-                for tool in common_tools {
-                    lines.push(format!("    <tool>{tool}</tool>"));
-                }
-                lines.push("  </common_tools>".to_string());
+            && !common_tools.is_empty()
+        {
+            lines.push("  <common_tools>".to_string());
+            for tool in common_tools {
+                lines.push(format!("    <tool>{tool}</tool>"));
             }
+            lines.push("  </common_tools>".to_string());
+        }
         if let Some(shell) = self.shell
             && let Some(shell_name) = shell.name()
         {

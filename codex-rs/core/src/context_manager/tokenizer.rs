@@ -264,6 +264,6 @@ mod tests {
         // 100 chars should be ~25 tokens
         let text = "a".repeat(100);
         let estimate = estimate_tokens(&text);
-        assert!(estimate >= 20 && estimate <= 30);
+        assert!((20..=30).contains(&estimate));
     }
 }

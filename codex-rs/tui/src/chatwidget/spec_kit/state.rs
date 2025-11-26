@@ -982,14 +982,16 @@ use codex_core::config_types::ShellEnvironmentPolicy;
 /// Check if spec-kit telemetry is enabled via env or config
 pub fn spec_kit_telemetry_enabled(env_policy: &ShellEnvironmentPolicy) -> bool {
     if let Ok(value) = std::env::var("SPEC_KIT_TELEMETRY_ENABLED")
-        && super::consensus::telemetry_value_truthy(&value) {
-            return true;
-        }
+        && super::consensus::telemetry_value_truthy(&value)
+    {
+        return true;
+    }
 
     if let Some(value) = env_policy.r#set.get("SPEC_KIT_TELEMETRY_ENABLED")
-        && super::consensus::telemetry_value_truthy(value) {
-            return true;
-        }
+        && super::consensus::telemetry_value_truthy(value)
+    {
+        return true;
+    }
 
     false
 }

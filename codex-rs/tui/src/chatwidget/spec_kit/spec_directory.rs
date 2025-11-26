@@ -203,8 +203,6 @@ pub fn find_spec_directory_opt(cwd: &Path, spec_id: &str) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::path::PathBuf;
 
     #[test]
     fn test_find_spec_directory_filters_files() {

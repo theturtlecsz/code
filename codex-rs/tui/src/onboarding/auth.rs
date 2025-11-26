@@ -130,19 +130,20 @@ impl AuthModeWidget {
         // If the user is already authenticated but the method differs from their
         // preferred auth method, show a brief explanation.
         if let LoginStatus::AuthMode(current) = self.login_status
-            && current != self.preferred_auth_method {
-                let to_label = |mode: AuthMode| match mode {
-                    AuthMode::ApiKey => "API key",
-                    AuthMode::ChatGPT => "ChatGPT",
-                };
-                let msg = format!(
-                    "  You’re currently using {} while your preferred method is {}.",
-                    to_label(current),
-                    to_label(self.preferred_auth_method)
-                );
-                lines.push(Line::from(msg).style(Style::default().fg(crate::colors::text_dim())));
-                lines.push(Line::from(""));
-            }
+            && current != self.preferred_auth_method
+        {
+            let to_label = |mode: AuthMode| match mode {
+                AuthMode::ApiKey => "API key",
+                AuthMode::ChatGPT => "ChatGPT",
+            };
+            let msg = format!(
+                "  You’re currently using {} while your preferred method is {}.",
+                to_label(current),
+                to_label(self.preferred_auth_method)
+            );
+            lines.push(Line::from(msg).style(Style::default().fg(crate::colors::text_dim())));
+            lines.push(Line::from(""));
+        }
 
         let create_mode_item = |idx: usize,
                                 selected_mode: AuthMode,
@@ -230,18 +231,19 @@ impl AuthModeWidget {
         spans.extend(shimmer_spans("Finish signing in via your browser"));
         let mut lines = vec![Line::from(spans), Line::from("")];
         if let SignInState::ChatGptContinueInBrowser(state) = &self.sign_in_state
-            && !state.auth_url.is_empty() {
-                lines.push(Line::from("  If the link doesn't open automatically, open the following link to authenticate:"));
-                lines.push(Line::from(vec![
-                    Span::raw("  "),
-                    state
-                        .auth_url
-                        .as_str()
-                        .fg(crate::colors::info())
-                        .underlined(),
-                ]));
-                lines.push(Line::from(""));
-            }
+            && !state.auth_url.is_empty()
+        {
+            lines.push(Line::from("  If the link doesn't open automatically, open the following link to authenticate:"));
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                state
+                    .auth_url
+                    .as_str()
+                    .fg(crate::colors::info())
+                    .underlined(),
+            ]));
+            lines.push(Line::from(""));
+        }
 
         lines.push(
             Line::from("  Press Esc to cancel").style(Style::default().add_modifier(Modifier::DIM)),

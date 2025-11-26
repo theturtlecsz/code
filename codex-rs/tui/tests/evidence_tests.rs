@@ -5,6 +5,9 @@
 //! Tests evidence.rs file locking, path construction, and safety.
 //! Policy: docs/spec-kit/testing-policy.md
 //! Target: evidence.rs 1.2%→40% coverage
+//!
+// SPEC-957: Allow expect/unwrap in test code
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use std::path::PathBuf;
 

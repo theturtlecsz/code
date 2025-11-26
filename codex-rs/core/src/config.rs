@@ -635,10 +635,11 @@ pub fn set_tui_theme_name(codex_home: &Path, theme: ThemeName) -> anyhow::Result
     // When switching away from the Custom theme, clear any lingering custom
     // overrides so built-in themes render true to spec on next startup.
     if theme != ThemeName::Custom
-        && let Some(tbl) = doc["tui"]["theme"].as_table_mut() {
-            tbl.remove("label");
-            tbl.remove("colors");
-        }
+        && let Some(tbl) = doc["tui"]["theme"].as_table_mut()
+    {
+        tbl.remove("label");
+        tbl.remove("colors");
+    }
 
     // ensure codex_home exists
     std::fs::create_dir_all(codex_home)?;
@@ -1306,7 +1307,10 @@ pub fn set_mcp_server_enabled(
     };
 
     // Helper to ensure table exists - returns Option since we just inserted a table
-    fn ensure_table<'a>(doc: &'a mut DocumentMut, key: &'a str) -> Option<&'a mut toml_edit::Table> {
+    fn ensure_table<'a>(
+        doc: &'a mut DocumentMut,
+        key: &'a str,
+    ) -> Option<&'a mut toml_edit::Table> {
         if !doc.as_table().contains_key(key) {
             doc[key] = TomlItem::Table(toml_edit::Table::new());
         }
@@ -1873,27 +1877,28 @@ impl Config {
 
         let mut always_allow_commands: Vec<ApprovedCommandPattern> = Vec::new();
         if let Some(project_cfg) = project_override
-            && let Some(commands) = &project_cfg.always_allow_commands {
-                for cmd in commands {
-                    if cmd.argv.is_empty() {
-                        continue;
-                    }
-                    let kind = match cmd.match_kind {
-                        AllowedCommandMatchKind::Exact => ApprovedCommandMatchKind::Exact,
-                        AllowedCommandMatchKind::Prefix => ApprovedCommandMatchKind::Prefix,
-                    };
-                    let semantic = if matches!(kind, ApprovedCommandMatchKind::Prefix) {
-                        Some(cmd.argv.clone())
-                    } else {
-                        None
-                    };
-                    always_allow_commands.push(ApprovedCommandPattern::new(
-                        cmd.argv.clone(),
-                        kind,
-                        semantic,
-                    ));
+            && let Some(commands) = &project_cfg.always_allow_commands
+        {
+            for cmd in commands {
+                if cmd.argv.is_empty() {
+                    continue;
                 }
+                let kind = match cmd.match_kind {
+                    AllowedCommandMatchKind::Exact => ApprovedCommandMatchKind::Exact,
+                    AllowedCommandMatchKind::Prefix => ApprovedCommandMatchKind::Prefix,
+                };
+                let semantic = if matches!(kind, ApprovedCommandMatchKind::Prefix) {
+                    Some(cmd.argv.clone())
+                } else {
+                    None
+                };
+                always_allow_commands.push(ApprovedCommandPattern::new(
+                    cmd.argv.clone(),
+                    kind,
+                    semantic,
+                ));
             }
+        }
 
         let project_hooks = project_override
             .map(|cfg| ProjectHooks::from_configs(&cfg.hooks, &resolved_cwd))
@@ -2232,26 +2237,28 @@ impl Config {
         // === Hot-Reload Validation ===
         // Validate hot-reload debounce_ms is in reasonable range
         if let Some(hr) = &config.hot_reload
-            && (hr.debounce_ms < 100 || hr.debounce_ms > 10000) {
-                tracing::warn!(
-                    "Hot-reload debounce_ms ({}) outside recommended range (100-10000ms). \
+            && (hr.debounce_ms < 100 || hr.debounce_ms > 10000)
+        {
+            tracing::warn!(
+                "Hot-reload debounce_ms ({}) outside recommended range (100-10000ms). \
                      Hint: Adjust hot_reload.debounce_ms in config.toml",
-                    hr.debounce_ms
-                );
-            }
+                hr.debounce_ms
+            );
+        }
 
         // === Canonical Names Validation ===
         // Validate no duplicate canonical_names
         let mut canonical_names = std::collections::HashSet::new();
         for agent in &config.agents {
             if let Some(canonical) = &agent.canonical_name
-                && !canonical_names.insert(canonical) {
-                    tracing::warn!(
-                        "Duplicate canonical_name '{}' found in agent configs. \
+                && !canonical_names.insert(canonical)
+            {
+                tracing::warn!(
+                    "Duplicate canonical_name '{}' found in agent configs. \
                          Hint: Each agent must have a unique canonical_name",
-                        canonical
-                    );
-                }
+                    canonical
+                );
+            }
         }
 
         // === Canonical Name Migration Warnings ===
@@ -3001,7 +3008,7 @@ model_text_verbosity = "high"
                 model_reasoning_summary: ReasoningSummary::Detailed,
                 model_text_verbosity: TextVerbosity::default(),
                 chatgpt_base_url: "https://chatgpt.com/backend-api/".to_string(),
-                base_instructions: expected_base_instructions.clone(),
+                base_instructions: expected_base_instructions,
                 include_plan_tool: false,
                 include_apply_patch_tool: false,
                 tools_web_search_request: false,
@@ -3082,7 +3089,7 @@ model_text_verbosity = "high"
             model_reasoning_summary: ReasoningSummary::default(),
             model_text_verbosity: TextVerbosity::default(),
             chatgpt_base_url: "https://chatgpt.com/backend-api/".to_string(),
-            base_instructions: expected_base_instructions.clone(),
+            base_instructions: expected_base_instructions,
             include_plan_tool: false,
             include_apply_patch_tool: false,
             tools_web_search_request: false,
@@ -3178,7 +3185,7 @@ model_text_verbosity = "high"
             model_reasoning_summary: ReasoningSummary::default(),
             model_text_verbosity: TextVerbosity::default(),
             chatgpt_base_url: "https://chatgpt.com/backend-api/".to_string(),
-            base_instructions: expected_base_instructions.clone(),
+            base_instructions: expected_base_instructions,
             include_plan_tool: false,
             include_apply_patch_tool: false,
             tools_web_search_request: false,
@@ -3260,7 +3267,7 @@ model_text_verbosity = "high"
             model_reasoning_summary: ReasoningSummary::Detailed,
             model_text_verbosity: TextVerbosity::High,
             chatgpt_base_url: "https://chatgpt.com/backend-api/".to_string(),
-            base_instructions: expected_base_instructions.clone(),
+            base_instructions: expected_base_instructions,
             include_plan_tool: false,
             include_apply_patch_tool: false,
             tools_web_search_request: false,

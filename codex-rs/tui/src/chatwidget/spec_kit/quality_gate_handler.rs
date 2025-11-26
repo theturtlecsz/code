@@ -1206,16 +1206,17 @@ pub(super) fn execute_quality_checkpoint(
 
     // Log quality gate start event
     if let Some(state) = widget.spec_auto_state.as_ref()
-        && let Some(run_id) = &state.run_id {
-            state.execution_logger.log_event(
-                super::execution_logger::ExecutionEvent::QualityGateStart {
-                    run_id: run_id.clone(),
-                    checkpoint: checkpoint.name().to_string(),
-                    gates: gate_names.clone(),
-                    timestamp: super::execution_logger::ExecutionEvent::now(),
-                },
-            );
-        }
+        && let Some(run_id) = &state.run_id
+    {
+        state.execution_logger.log_event(
+            super::execution_logger::ExecutionEvent::QualityGateStart {
+                run_id: run_id.clone(),
+                checkpoint: checkpoint.name().to_string(),
+                gates: gate_names.clone(),
+                timestamp: super::execution_logger::ExecutionEvent::now(),
+            },
+        );
+    }
 
     // Get execution logger, agent configs, and event sender for spawning
     let logger = widget
@@ -1381,9 +1382,9 @@ pub fn set_native_agent_ids(widget: &mut ChatWidget, agent_ids: Vec<String>) {
         && let SpecAutoPhase::QualityGateExecuting {
             native_agent_ids, ..
         } = &mut state.phase
-        {
-            *native_agent_ids = Some(agent_ids);
-        }
+    {
+        *native_agent_ids = Some(agent_ids);
+    }
 }
 
 /// Build quality gate prompt for a specific gate
@@ -1501,35 +1502,37 @@ pub(super) fn finalize_quality_gates(widget: &mut ChatWidget) {
 
         // Log quality gate complete event
         if let Some(state) = widget.spec_auto_state.as_ref()
-            && let Some(run_id) = &state.run_id {
-                let degraded_agent_vec = degraded_agents
-                    .map(|agents| agents.to_vec())
-                    .unwrap_or_default();
+            && let Some(run_id) = &state.run_id
+        {
+            let degraded_agent_vec = degraded_agents
+                .map(|agents| agents.to_vec())
+                .unwrap_or_default();
 
-                state.execution_logger.log_event(
-                    super::execution_logger::ExecutionEvent::QualityGateComplete {
-                        run_id: run_id.clone(),
-                        checkpoint: checkpoint.name().to_string(),
-                        status: "passed".to_string(),
-                        auto_resolved: *auto_count,
-                        escalated: *esc_count,
-                        degraded_agents: degraded_agent_vec,
-                        timestamp: super::execution_logger::ExecutionEvent::now(),
-                    },
-                );
-            }
+            state.execution_logger.log_event(
+                super::execution_logger::ExecutionEvent::QualityGateComplete {
+                    run_id: run_id.clone(),
+                    checkpoint: checkpoint.name().to_string(),
+                    status: "passed".to_string(),
+                    auto_resolved: *auto_count,
+                    escalated: *esc_count,
+                    degraded_agents: degraded_agent_vec,
+                    timestamp: super::execution_logger::ExecutionEvent::now(),
+                },
+            );
+        }
 
         if let Some(missing) = degradations.get(checkpoint)
-            && !missing.is_empty() {
-                widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                    vec![ratatui::text::Line::from(format!(
-                        "Quality Gate: {} ran in degraded mode (missing agents: {})",
-                        checkpoint.name(),
-                        missing.join(", ")
-                    ))],
-                    HistoryCellType::Notice,
-                ));
-            }
+            && !missing.is_empty()
+        {
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![ratatui::text::Line::from(format!(
+                    "Quality Gate: {} ran in degraded mode (missing agents: {})",
+                    checkpoint.name(),
+                    missing.join(", ")
+                ))],
+                HistoryCellType::Notice,
+            ));
+        }
     }
 
     // Step 2: Create git commit if there are modifications
@@ -1547,36 +1550,37 @@ pub(super) fn finalize_quality_gates(widget: &mut ChatWidget) {
             .output();
 
         if let Ok(add_output) = git_result
-            && add_output.status.success() {
-                let commit_result = std::process::Command::new("git")
-                    .current_dir(&cwd)
-                    .args(["commit", "-m", &commit_msg])
-                    .output();
+            && add_output.status.success()
+        {
+            let commit_result = std::process::Command::new("git")
+                .current_dir(&cwd)
+                .args(["commit", "-m", &commit_msg])
+                .output();
 
-                match commit_result {
-                    Ok(output) if output.status.success() => {
-                        widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                            vec![ratatui::text::Line::from(
-                                "✅ Quality gate changes committed",
-                            )],
-                            HistoryCellType::Notice,
-                        ));
-                    }
-                    Ok(output) => {
-                        let stderr = String::from_utf8_lossy(&output.stderr);
-                        widget.history_push(crate::history_cell::new_error_event(format!(
-                            "Git commit failed: {}",
-                            stderr
-                        )));
-                    }
-                    Err(err) => {
-                        widget.history_push(crate::history_cell::new_error_event(format!(
-                            "Failed to run git commit: {}",
-                            err
-                        )));
-                    }
+            match commit_result {
+                Ok(output) if output.status.success() => {
+                    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                        vec![ratatui::text::Line::from(
+                            "✅ Quality gate changes committed",
+                        )],
+                        HistoryCellType::Notice,
+                    ));
+                }
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    widget.history_push(crate::history_cell::new_error_event(format!(
+                        "Git commit failed: {}",
+                        stderr
+                    )));
+                }
+                Err(err) => {
+                    widget.history_push(crate::history_cell::new_error_event(format!(
+                        "Failed to run git commit: {}",
+                        err
+                    )));
                 }
             }
+        }
     }
 
     // Step 3: Show review summary
@@ -1776,7 +1780,6 @@ fn store_quality_gate_artifacts_sync(
     }
 
     // Wait for all storage tasks to complete (with timeout)
-    
 
     tokio::task::block_in_place(|| {
         tokio::runtime::Handle::current().block_on(async {

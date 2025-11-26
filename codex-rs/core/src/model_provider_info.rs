@@ -152,7 +152,6 @@ pub enum OpenRouterDataCollectionPolicy {
     Deny,
 }
 
-
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 #[derive(Default)]
@@ -162,7 +161,6 @@ pub enum OpenRouterProviderSort {
     Throughput,
     Latency,
 }
-
 
 /// `max_price` envelope for OpenRouter provider routing controls.
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
@@ -216,15 +214,16 @@ impl ModelProviderInfo {
         // Host to the authority derived from the final URL here, we ensure
         // the proxy sees the correct host and can forward/SNI appropriately.
         if let Ok(parsed) = url::Url::parse(&url)
-            && let Some(host) = parsed.host_str() {
-                let authority = match parsed.port() {
-                    Some(port) => format!("{host}:{port}"),
-                    None => host.to_string(),
-                };
-                if let Ok(hv) = reqwest::header::HeaderValue::from_str(&authority) {
-                    builder = builder.header(reqwest::header::HOST, hv);
-                }
+            && let Some(host) = parsed.host_str()
+        {
+            let authority = match parsed.port() {
+                Some(port) => format!("{host}:{port}"),
+                None => host.to_string(),
+            };
+            if let Ok(hv) = reqwest::header::HeaderValue::from_str(&authority) {
+                builder = builder.header(reqwest::header::HOST, hv);
             }
+        }
 
         if let Some(auth) = effective_auth.as_ref() {
             builder = builder.bearer_auth(auth.get_token().await?);
@@ -303,9 +302,10 @@ impl ModelProviderInfo {
         if let Some(env_headers) = &self.env_http_headers {
             for (header, env_var) in env_headers {
                 if let Ok(val) = std::env::var(env_var)
-                    && !val.trim().is_empty() {
-                        builder = builder.header(header, val);
-                    }
+                    && !val.trim().is_empty()
+                {
+                    builder = builder.header(header, val);
+                }
             }
         }
         builder

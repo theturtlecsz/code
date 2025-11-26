@@ -160,33 +160,30 @@ impl CliExecutor for GeminiCliExecutor {
 
             // Wait for process to exit and check status
             if let Ok(status) = child.wait().await
-                && !status.success() {
-                    let code = status.code().unwrap_or(-1);
-                    tracing::error!("Gemini CLI exited with code: {}", code);
+                && !status.success()
+            {
+                let code = status.code().unwrap_or(-1);
+                tracing::error!("Gemini CLI exited with code: {}", code);
 
-                    // Try to read stderr for error details
-                    if let Some(mut stderr) = child.stderr {
-                        let mut stderr_content = String::new();
-                        use tokio::io::AsyncReadExt;
-                        if (stderr.read_to_string(&mut stderr_content).await).is_ok() {
-                            // Check for rate limit errors (CLI may have already retried)
-                            if stderr_content.contains("exhausted")
-                                || stderr_content.contains("429")
-                            {
-                                tracing::warn!(
-                                    "Gemini rate limit encountered (CLI should auto-retry)"
-                                );
-                            }
-
-                            let _ = tx
-                                .send(StreamEvent::Error(CliError::ProcessFailed {
-                                    code,
-                                    stderr: stderr_content,
-                                }))
-                                .await;
+                // Try to read stderr for error details
+                if let Some(mut stderr) = child.stderr {
+                    let mut stderr_content = String::new();
+                    use tokio::io::AsyncReadExt;
+                    if (stderr.read_to_string(&mut stderr_content).await).is_ok() {
+                        // Check for rate limit errors (CLI may have already retried)
+                        if stderr_content.contains("exhausted") || stderr_content.contains("429") {
+                            tracing::warn!("Gemini rate limit encountered (CLI should auto-retry)");
                         }
+
+                        let _ = tx
+                            .send(StreamEvent::Error(CliError::ProcessFailed {
+                                code,
+                                stderr: stderr_content,
+                            }))
+                            .await;
                     }
                 }
+            }
         });
 
         Ok(rx)
@@ -263,7 +260,7 @@ mod tests {
             Err(CliError::BinaryNotFound { .. }) => {
                 println!("Gemini CLI not found (expected in CI)")
             }
-            Err(e) => panic!("Unexpected error: {:?}", e),
+            Err(e) => panic!("Unexpected error: {e:?}"),
         }
     }
 

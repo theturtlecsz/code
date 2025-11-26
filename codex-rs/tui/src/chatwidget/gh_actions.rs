@@ -16,21 +16,24 @@ pub(super) enum TokenSource {
 /// Returns the token string and its source if available.
 pub(super) fn get_github_token() -> Option<(String, TokenSource)> {
     if let Ok(t) = std::env::var("GITHUB_TOKEN")
-        && !t.is_empty() {
-            return Some((t, TokenSource::Env));
-        }
+        && !t.is_empty()
+    {
+        return Some((t, TokenSource::Env));
+    }
     if let Ok(t) = std::env::var("GH_TOKEN")
-        && !t.is_empty() {
-            return Some((t, TokenSource::Env));
-        }
+        && !t.is_empty()
+    {
+        return Some((t, TokenSource::Env));
+    }
     // Fallback: use GitHub CLI if installed and logged in.
     if let Ok(out) = Command::new("gh").args(["auth", "token"]).output()
-        && out.status.success() {
-            let token = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            if !token.is_empty() {
-                return Some((token, TokenSource::GhCli));
-            }
+        && out.status.success()
+    {
+        let token = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if !token.is_empty() {
+            return Some((token, TokenSource::GhCli));
         }
+    }
     None
 }
 
@@ -137,20 +140,20 @@ pub(super) fn maybe_watch_after_push(
                     found_run_id = run.get("id").and_then(|v| v.as_u64());
                     // If it is already completed, check outcome now; otherwise continue polling below.
                     if let Some(status) = run.get("status").and_then(|v| v.as_str())
-                        && status == "completed" {
-                            let conclusion = run
-                                .get("conclusion")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("unknown");
-                            if conclusion != "success" {
-                                let html =
-                                    run.get("html_url").and_then(|v| v.as_str()).unwrap_or("");
-                                surface_failure(
-                                    &tx, &owner, &repo, &branch, &head_sha, html, conclusion,
-                                );
-                            }
-                            return;
+                        && status == "completed"
+                    {
+                        let conclusion = run
+                            .get("conclusion")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+                        if conclusion != "success" {
+                            let html = run.get("html_url").and_then(|v| v.as_str()).unwrap_or("");
+                            surface_failure(
+                                &tx, &owner, &repo, &branch, &head_sha, html, conclusion,
+                            );
                         }
+                        return;
+                    }
                 }
             }
 

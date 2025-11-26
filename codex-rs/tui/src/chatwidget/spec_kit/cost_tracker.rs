@@ -36,10 +36,12 @@ impl ModelPricing {
                 input_per_million: 3.0,
                 output_per_million: 15.0,
             },
-            "claude-opus" | "claude-opus-4.5" | "claude-opus-4.1" | "claude-opus-4" | "opus" => Self {
-                input_per_million: 15.0,
-                output_per_million: 75.0,
-            },
+            "claude-opus" | "claude-opus-4.5" | "claude-opus-4.1" | "claude-opus-4" | "opus" => {
+                Self {
+                    input_per_million: 15.0,
+                    output_per_million: 75.0,
+                }
+            }
 
             // Gemini models (Updated 2025-11-19)
             // Source: ai.google.dev/pricing

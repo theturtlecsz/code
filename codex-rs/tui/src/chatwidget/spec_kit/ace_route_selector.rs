@@ -378,14 +378,15 @@ pub fn select_route(
 
     // Heuristic 3: High file count (complexity)
     if let Some(stat) = diff_stat
-        && stat.files_changed > config.complex_task_files_threshold {
-            return RouteDecision::EnhancedContext {
-                reason: format!(
-                    "high file count ({} > {})",
-                    stat.files_changed, config.complex_task_files_threshold
-                ),
-            };
-        }
+        && stat.files_changed > config.complex_task_files_threshold
+    {
+        return RouteDecision::EnhancedContext {
+            reason: format!(
+                "high file count ({} > {})",
+                stat.files_changed, config.complex_task_files_threshold
+            ),
+        };
+    }
 
     // Heuristic 4: Cross-cutting keywords
     if has_cross_cutting_keywords(spec_or_title) {
@@ -662,7 +663,7 @@ mod tests {
 
     #[test]
     fn test_route_selection_ace_disabled() {
-        let mut config = AceConfig {
+        let config = AceConfig {
             enabled: false, // Disabled
             mode: codex_core::config_types::AceMode::Auto,
             slice_size: 8,

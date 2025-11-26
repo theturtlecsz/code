@@ -586,9 +586,10 @@ enum AssistantSeg {
 impl AssistantMarkdownCell {
     pub(crate) fn ensure_layout(&self, width: u16) -> AssistantLayoutCache {
         if let Some(cache) = self.cached_layout.borrow().as_ref()
-            && cache.width == width {
-                return cache.clone();
-            }
+            && cache.width == width
+        {
+            return cache.clone();
+        }
 
         let text_wrap_width = width;
         let mut segs: Vec<AssistantSeg> = Vec::new();
@@ -626,10 +627,11 @@ impl AssistantMarkdownCell {
                         let flat: String =
                             candidate.spans.iter().map(|s| s.content.as_ref()).collect();
                         if let Some(s) = flat.strip_prefix("⟦LANG:")
-                            && let Some(end) = s.find('⟧') {
-                                lang_label = Some(s[..end].to_string());
-                                continue;
-                            }
+                            && let Some(end) = s.find('⟧')
+                        {
+                            lang_label = Some(s[..end].to_string());
+                            continue;
+                        }
                     }
                     content_lines.push(candidate);
                 }
@@ -672,8 +674,7 @@ impl AssistantMarkdownCell {
                     text_buf.clear();
                 }
                 let hr = Line::from(Span::styled(
-                    std::iter::repeat_n('─', text_wrap_width as usize)
-                        .collect::<String>(),
+                    std::iter::repeat_n('─', text_wrap_width as usize).collect::<String>(),
                     Style::default().fg(crate::colors::assistant_hr()),
                 ));
                 segs.push(AssistantSeg::Bullet(vec![hr]));
@@ -681,20 +682,21 @@ impl AssistantMarkdownCell {
             }
 
             if text_wrap_width > 4
-                && let Some((indent_spaces, bullet_char)) = detect_bullet_prefix(&line) {
-                    if !text_buf.is_empty() {
-                        let wrapped = word_wrap_lines(&text_buf, text_wrap_width);
-                        segs.push(AssistantSeg::Text(wrapped));
-                        text_buf.clear();
-                    }
-                    segs.push(AssistantSeg::Bullet(wrap_bullet_line(
-                        line,
-                        indent_spaces,
-                        &bullet_char,
-                        text_wrap_width,
-                    )));
-                    continue;
+                && let Some((indent_spaces, bullet_char)) = detect_bullet_prefix(&line)
+            {
+                if !text_buf.is_empty() {
+                    let wrapped = word_wrap_lines(&text_buf, text_wrap_width);
+                    segs.push(AssistantSeg::Text(wrapped));
+                    text_buf.clear();
                 }
+                segs.push(AssistantSeg::Bullet(wrap_bullet_line(
+                    line,
+                    indent_spaces,
+                    &bullet_char,
+                    text_wrap_width,
+                )));
+                continue;
+            }
 
             text_buf.push(line);
         }
@@ -997,7 +999,11 @@ impl HistoryCell for ExecCell {
             } else {
                 None
             };
-        let status_height = if status_line_to_render.is_some() { 1 } else { 0 };
+        let status_height = if status_line_to_render.is_some() {
+            1
+        } else {
+            0
+        };
 
         let mut cur_y = area.y;
 
@@ -1075,24 +1081,25 @@ impl HistoryCell for ExecCell {
         }
 
         if let Some(line) = status_line_to_render
-            && status_height > 0 {
-                let status_area = Rect {
-                    x: area.x,
-                    y: cur_y,
-                    width: area.width,
-                    height: status_height,
-                };
-                let bg_style = Style::default().bg(crate::colors::background());
-                fill_rect(buf, status_area, Some(' '), bg_style);
-                write_line(
-                    buf,
-                    status_area.x,
-                    status_area.y,
-                    status_area.width,
-                    &line,
-                    bg_style,
-                );
-            }
+            && status_height > 0
+        {
+            let status_area = Rect {
+                x: area.x,
+                y: cur_y,
+                width: area.width,
+                height: status_height,
+            };
+            let bg_style = Style::default().bg(crate::colors::background());
+            fill_rect(buf, status_area, Some(' '), bg_style);
+            write_line(
+                buf,
+                status_area.x,
+                status_area.y,
+                status_area.width,
+                &line,
+                bg_style,
+            );
+        }
     }
 }
 
@@ -1305,9 +1312,10 @@ impl ExecCell {
 
     fn ensure_layout(&self, width: u16) -> Rc<ExecLayoutCache> {
         if let Some(layout) = self.cached_layout.borrow().as_ref()
-            && layout.width == width {
-                return layout.clone();
-            }
+            && layout.width == width
+        {
+            return layout.clone();
+        }
 
         let (pre_lines_raw, out_lines_raw, _status_line_opt) = self.exec_render_parts();
         let pre_trimmed = trim_empty_lines(pre_lines_raw);
@@ -1394,9 +1402,10 @@ impl ExecCell {
                 && let (Some(pre_cached), Some(out_cached)) = (
                     self.cached_pre_lines.borrow().as_ref(),
                     self.cached_out_lines.borrow().as_ref(),
-                ) {
-                    return (pre_cached.clone(), out_cached.clone(), None);
-                }
+                )
+            {
+                return (pre_cached.clone(), out_cached.clone(), None);
+            }
 
             match self.parsed_meta.as_ref() {
                 Some(meta) => exec_render_parts_parsed_with_meta(
@@ -1490,27 +1499,30 @@ impl ExecCell {
         let mut out = output_lines(display_output, false, false);
         let has_output = !trim_empty_lines(out.clone()).is_empty();
 
-        if self.output.is_none() && has_output
-            && let Some(last) = pre.last_mut() {
-                last.spans.insert(
-                    0,
-                    Span::styled("┌ ", Style::default().fg(crate::colors::text_dim())),
-                );
-            }
+        if self.output.is_none()
+            && has_output
+            && let Some(last) = pre.last_mut()
+        {
+            last.spans.insert(
+                0,
+                Span::styled("┌ ", Style::default().fg(crate::colors::text_dim())),
+            );
+        }
 
         let mut status = None;
         if self.output.is_none() {
             let status_line = self.streaming_status_line_for_label(status_label);
             if status_line.is_some()
-                && let Some(last) = out.last() {
-                    let is_blank = last
-                        .spans
-                        .iter()
-                        .all(|sp| sp.content.as_ref().trim().is_empty());
-                    if is_blank {
-                        out.pop();
-                    }
+                && let Some(last) = out.last()
+            {
+                let is_blank = last
+                    .spans
+                    .iter()
+                    .all(|sp| sp.content.as_ref().trim().is_empty());
+                if is_blank {
+                    out.pop();
                 }
+            }
             status = status_line;
         }
 
@@ -1711,15 +1723,17 @@ impl HistoryCell for DiffCell {
             // Draw marker on the first visible visual row of this logical line
             let (marker, _content_line2, _) = classify(line);
             if let Some(m) = marker
-                && local_skip == 0 && area.width >= 1 {
-                    let color = if m == '+' {
-                        crate::colors::success()
-                    } else {
-                        crate::colors::error()
-                    };
-                    let style = Style::default().fg(color).bg(crate::colors::background());
-                    buf.set_string(marker_col_x, cur_y, m.to_string(), style);
-                }
+                && local_skip == 0
+                && area.width >= 1
+            {
+                let color = if m == '+' {
+                    crate::colors::success()
+                } else {
+                    crate::colors::error()
+                };
+                let style = Style::default().fg(color).bg(crate::colors::background());
+                buf.set_string(marker_col_x, cur_y, m.to_string(), style);
+            }
 
             cur_y = cur_y.saturating_add(draw_h);
             if cur_y >= area.y.saturating_add(area.height) {
@@ -1797,9 +1811,10 @@ impl MergedExecCell {
                 if tail.starts_with("(lines ") && tail.ends_with(")") {
                     let inner = &tail[7..tail.len().saturating_sub(1)];
                     if let Some((a, b)) = inner.split_once(" to ")
-                        && let (Ok(s), Ok(e)) = (a.trim().parse::<u32>(), b.trim().parse::<u32>()) {
-                            return Some((fname, s, e));
-                        }
+                        && let (Ok(s), Ok(e)) = (a.trim().parse::<u32>(), b.trim().parse::<u32>())
+                    {
+                        return Some((fname, s, e));
+                    }
                 }
             }
             None
@@ -1853,11 +1868,12 @@ impl MergedExecCell {
         }
         for l in kept.iter_mut().skip(1) {
             if let Some(sp0) = l.spans.get_mut(0)
-                && sp0.content.as_ref() == "└ " {
-                    sp0.content = "  ".into();
-                    // Keep dim styling for alignment consistency
-                    sp0.style = sp0.style.add_modifier(Modifier::DIM);
-                }
+                && sp0.content.as_ref() == "└ "
+            {
+                sp0.content = "  ".into();
+                // Keep dim styling for alignment consistency
+                sp0.style = sp0.style.add_modifier(Modifier::DIM);
+            }
         }
 
         // Merge adjacent/overlapping ranges in-place
@@ -2248,27 +2264,29 @@ impl HistoryCell for MergedExecCell {
                 pre.remove(0);
             }
             if self.kind != ExecKind::Run
-                && let Some(first) = pre.first_mut() {
-                    let flat: String = first.spans.iter().map(|s| s.content.as_ref()).collect();
-                    let has_corner = flat.trim_start().starts_with("└ ");
-                    let has_spaced_corner = flat.trim_start().starts_with("  └ ");
-                    if !added_corner {
-                        if !(has_corner || has_spaced_corner) {
-                            first.spans.insert(
-                                0,
-                                Span::styled("└ ", Style::default().fg(crate::colors::text_dim())),
-                            );
-                        }
-                        added_corner = true;
-                    } else {
-                        // For subsequent segments, ensure no leading corner; use two spaces instead.
-                        if let Some(sp0) = first.spans.get_mut(0)
-                            && sp0.content.as_ref() == "└ " {
-                                sp0.content = "  ".into();
-                                sp0.style = sp0.style.add_modifier(Modifier::DIM);
-                            }
+                && let Some(first) = pre.first_mut()
+            {
+                let flat: String = first.spans.iter().map(|s| s.content.as_ref()).collect();
+                let has_corner = flat.trim_start().starts_with("└ ");
+                let has_spaced_corner = flat.trim_start().starts_with("  └ ");
+                if !added_corner {
+                    if !(has_corner || has_spaced_corner) {
+                        first.spans.insert(
+                            0,
+                            Span::styled("└ ", Style::default().fg(crate::colors::text_dim())),
+                        );
+                    }
+                    added_corner = true;
+                } else {
+                    // For subsequent segments, ensure no leading corner; use two spaces instead.
+                    if let Some(sp0) = first.spans.get_mut(0)
+                        && sp0.content.as_ref() == "└ "
+                    {
+                        sp0.content = "  ".into();
+                        sp0.style = sp0.style.add_modifier(Modifier::DIM);
                     }
                 }
+            }
             let out = trim_empty_lines(out_raw.clone());
             let pre_rows: u16 = Paragraph::new(Text::from(pre))
                 .wrap(Wrap { trim: false })
@@ -2373,10 +2391,11 @@ impl HistoryCell for MergedExecCell {
                 } else {
                     // For subsequent segments, replace any leading corner with two spaces
                     if let Some(sp0) = first.spans.get_mut(0)
-                        && sp0.content.as_ref() == "└ " {
-                            sp0.content = "  ".into();
-                            sp0.style = sp0.style.add_modifier(Modifier::DIM);
-                        }
+                        && sp0.content.as_ref() == "└ "
+                    {
+                        sp0.content = "  ".into();
+                        sp0.style = sp0.style.add_modifier(Modifier::DIM);
+                    }
                 }
             }
         };
@@ -3017,15 +3036,16 @@ fn exec_render_parts_parsed_with_meta(
     coalesce_read_ranges_in_lines_local(&mut pre);
 
     if running_status.is_some()
-        && let Some(last) = out.last() {
-            let is_blank = last
-                .spans
-                .iter()
-                .all(|sp| sp.content.as_ref().trim().is_empty());
-            if is_blank {
-                out.pop();
-            }
+        && let Some(last) = out.last()
+    {
+        let is_blank = last
+            .spans
+            .iter()
+            .all(|sp| sp.content.as_ref().trim().is_empty());
+        if is_blank {
+            out.pop();
         }
+    }
 
     (pre, out, running_status)
 }
@@ -3088,9 +3108,10 @@ fn coalesce_read_ranges_in_lines_local(lines: &mut Vec<Line<'static>>) {
             if tail.starts_with("(lines ") && tail.ends_with(")") {
                 let inner = &tail[7..tail.len() - 1];
                 if let Some((s1, s2)) = inner.split_once(" to ")
-                    && let (Ok(a), Ok(b)) = (s1.trim().parse::<u32>(), s2.trim().parse::<u32>()) {
-                        return Some((fname, a, b, prefix, idx));
-                    }
+                    && let (Ok(a), Ok(b)) = (s1.trim().parse::<u32>(), s2.trim().parse::<u32>())
+                {
+                    return Some((fname, a, b, prefix, idx));
+                }
             }
         }
         None
@@ -3168,9 +3189,9 @@ fn coalesce_read_ranges_in_lines_local(lines: &mut Vec<Line<'static>>) {
             .first()
             .map(|s| s.content.as_ref() != "└ " && s.content.as_ref() != "  ")
             .unwrap_or(false)
-        {
-            rebuilt.push(lines[0].clone());
-        }
+    {
+        rebuilt.push(lines[0].clone());
+    }
 
     // Sort files by their first appearance index to keep stable ordering with other files.
     files.sort_by_key(|(_n, fr)| fr.first_index);
@@ -3419,10 +3440,11 @@ impl HistoryCell for StreamingContentCell {
                     if let Some(first) = lines.first() {
                         let flat: String = first.spans.iter().map(|s| s.content.as_ref()).collect();
                         if let Some(s) = flat.strip_prefix("⟦LANG:")
-                            && let Some(end) = s.find('⟧') {
-                                lang_label = Some(s[..end].to_string());
-                                lines.remove(0);
-                            }
+                            && let Some(end) = s.find('⟧')
+                        {
+                            lang_label = Some(s[..end].to_string());
+                            lines.remove(0);
+                        }
                     }
                     if lines.is_empty() {
                         return;
@@ -3581,9 +3603,10 @@ impl StreamingContentCell {
 
     fn ensure_stream_layout(&self, width: u16) -> AssistantLayoutCache {
         if let Some(cache) = self.cached_layout.borrow().as_ref()
-            && cache.width == width {
-                return cache.clone();
-            }
+            && cache.width == width
+        {
+            return cache.clone();
+        }
         // Reuse the same segmentation logic as Assistant, operating on current
         // lines. IMPORTANT: AssistantMarkdownCell::display_lines() hides the
         // first line as a synthetic header (e.g., "codex"). When we borrow its
@@ -4764,12 +4787,12 @@ fn parse_read_line_annotation_with_range(cmd: &str) -> (Option<String>, Option<(
                 let core = &token[..token.len().saturating_sub(1)];
                 if let Some((a, b)) = core.split_once(',')
                     && let (Ok(start), Ok(end)) = (a.trim().parse::<u32>(), b.trim().parse::<u32>())
-                    {
-                        return (
-                            Some(format!("(lines {} to {})", start, end)),
-                            Some((start, end)),
-                        );
-                    }
+                {
+                    return (
+                        Some(format!("(lines {} to {})", start, end)),
+                        Some((start, end)),
+                    );
+                }
             }
         }
     }
@@ -4777,21 +4800,23 @@ fn parse_read_line_annotation_with_range(cmd: &str) -> (Option<String>, Option<(
     if lower.contains("head") && lower.contains("-n") {
         let parts: Vec<&str> = cmd.split_whitespace().collect();
         for i in 0..parts.len() {
-            if parts[i] == "-n" && i + 1 < parts.len()
+            if parts[i] == "-n"
+                && i + 1 < parts.len()
                 && let Ok(n) = parts[i + 1]
                     .trim_matches('"')
                     .trim_matches('\'')
                     .parse::<u32>()
-                {
-                    return (Some(format!("(lines 1 to {})", n)), Some((1, n)));
-                }
+            {
+                return (Some(format!("(lines 1 to {})", n)), Some((1, n)));
+            }
         }
     }
     // bare `head` => default 10 lines
-    if lower.contains("head") && !lower.contains("-n") {
-        if cmd.split_whitespace().any(|x| x == "head") {
-            return (Some("(lines 1 to 10)".to_string()), Some((1, 10)));
-        }
+    if lower.contains("head")
+        && !lower.contains("-n")
+        && cmd.split_whitespace().any(|x| x == "head")
+    {
+        return (Some("(lines 1 to 10)".to_string()), Some((1, 10)));
     }
     // tail -n +K => from K to end; tail -n N => last N lines
     if lower.contains("tail") && lower.contains("-n") {
@@ -4810,10 +4835,11 @@ fn parse_read_line_annotation_with_range(cmd: &str) -> (Option<String>, Option<(
         }
     }
     // bare `tail` => default 10 lines
-    if lower.contains("tail") && !lower.contains("-n") {
-        if cmd.split_whitespace().any(|x| x == "tail") {
-            return (Some("(last 10 lines)".to_string()), None);
-        }
+    if lower.contains("tail")
+        && !lower.contains("-n")
+        && cmd.split_whitespace().any(|x| x == "tail")
+    {
+        return (Some("(last 10 lines)".to_string()), None);
     }
     (None, None)
 }
@@ -4886,23 +4912,24 @@ fn insert_line_breaks_after_double_ampersand(cmd: &str) -> String {
                 let next_idx = i + ch_len;
                 if next_idx < cmd.len()
                     && let Some(next_ch) = cmd[next_idx..].chars().next()
-                        && next_ch == '&' {
-                            result.push('&');
-                            result.push('&');
-                            i = next_idx + next_ch.len_utf8();
-                            while i < cmd.len() {
-                                let ahead = cmd[i..].chars().next().expect("valid char boundary");
-                                if ahead.is_whitespace() {
-                                    i += ahead.len_utf8();
-                                    continue;
-                                }
-                                break;
-                            }
-                            if i < cmd.len() {
-                                result.push('\n');
-                            }
+                    && next_ch == '&'
+                {
+                    result.push('&');
+                    result.push('&');
+                    i = next_idx + next_ch.len_utf8();
+                    while i < cmd.len() {
+                        let ahead = cmd[i..].chars().next().expect("valid char boundary");
+                        if ahead.is_whitespace() {
+                            i += ahead.len_utf8();
                             continue;
                         }
+                        break;
+                    }
+                    if i < cmd.len() {
+                        result.push('\n');
+                    }
+                    continue;
+                }
             }
             _ => {}
         }
@@ -6553,13 +6580,14 @@ pub(crate) fn new_running_browser_tool_call(
     // Parse args JSON and use compact humanized form when possible
     let mut arg_lines: Vec<Line<'static>> = Vec::new();
     if let Some(args_str) = args
-        && let Ok(json) = serde_json::from_str::<serde_json::Value>(&args_str) {
-            if let Some(lines) = format_browser_args_humanized(&tool_name, &json) {
-                arg_lines.extend(lines);
-            } else {
-                arg_lines.extend(format_browser_args_line(&json));
-            }
+        && let Ok(json) = serde_json::from_str::<serde_json::Value>(&args_str)
+    {
+        if let Some(lines) = format_browser_args_humanized(&tool_name, &json) {
+            arg_lines.extend(lines);
+        } else {
+            arg_lines.extend(format_browser_args_line(&json));
         }
+    }
     let arg_lines = semantic::lines_from_ratatui(arg_lines);
     RunningToolCallCell::new(RunningToolCallState::new(
         browser_running_title(&tool_name).to_string(),
@@ -6805,13 +6833,14 @@ pub(crate) fn new_completed_web_fetch_tool_call(
     let mut body_lines: Vec<Line<'static>> = Vec::new();
     if !result.is_empty()
         && let Ok(value) = serde_json::from_str::<serde_json::Value>(&result)
-            && let Some(md) = value.get("markdown").and_then(|v| v.as_str()) {
-                // Build a smarter sectioned preview from the raw markdown.
-                let mut sect = build_web_fetch_sectioned_preview(md, cfg);
-                dim_webfetch_emphasis_and_links(&mut sect);
-                body_lines.extend(sect);
-                appended_markdown = true;
-            }
+        && let Some(md) = value.get("markdown").and_then(|v| v.as_str())
+    {
+        // Build a smarter sectioned preview from the raw markdown.
+        let mut sect = build_web_fetch_sectioned_preview(md, cfg);
+        dim_webfetch_emphasis_and_links(&mut sect);
+        body_lines.extend(sect);
+        appended_markdown = true;
+    }
 
     // Fallback: compact preview if JSON parse failed or no markdown present
     if !appended_markdown && !result.is_empty() {
@@ -7099,10 +7128,9 @@ fn build_web_fetch_sectioned_preview(md: &str, cfg: &Config) -> Vec<Line<'static
                     break;
                 }
             }
-            if (1..=6).contains(&level)
-                && trimmed.chars().nth(level) == Some(' ') {
-                    section_heads.push(i);
-                }
+            if (1..=6).contains(&level) && trimmed.chars().nth(level) == Some(' ') {
+                section_heads.push(i);
+            }
         }
         i += 1;
     }
@@ -7379,13 +7407,14 @@ fn new_completed_browser_tool_call(
     // Parse args JSON (if provided)
     let mut arg_lines: Vec<Line<'static>> = Vec::new();
     if let Some(args_str) = args
-        && let Ok(json) = serde_json::from_str::<serde_json::Value>(&args_str) {
-            if let Some(lines) = format_browser_args_humanized(&tool_name, &json) {
-                arg_lines.extend(lines);
-            } else {
-                arg_lines.extend(format_browser_args_line(&json));
-            }
+        && let Ok(json) = serde_json::from_str::<serde_json::Value>(&args_str)
+    {
+        if let Some(lines) = format_browser_args_humanized(&tool_name, &json) {
+            arg_lines.extend(lines);
+        } else {
+            arg_lines.extend(format_browser_args_line(&json));
         }
+    }
 
     // Result lines (preview format)
     let mut result_lines: Vec<Line<'static>> = Vec::new();
@@ -7484,9 +7513,10 @@ fn new_completed_agent_tool_call(
     // Parse args JSON (if provided)
     let mut arg_lines: Vec<Line<'static>> = Vec::new();
     if let Some(args_str) = args
-        && let Ok(json) = serde_json::from_str::<serde_json::Value>(&args_str) {
-            arg_lines.extend(format_browser_args_line(&json));
-        }
+        && let Ok(json) = serde_json::from_str::<serde_json::Value>(&args_str)
+    {
+        arg_lines.extend(format_browser_args_line(&json));
+    }
 
     // Result lines (preview format)
     let mut result_lines: Vec<Line<'static>> = Vec::new();
@@ -8152,9 +8182,10 @@ struct PatchLayoutCache {
 impl PatchSummaryCell {
     fn ensure_lines(&self, width: u16) -> Vec<Line<'static>> {
         if let Some(c) = self.cached.borrow().as_ref()
-            && c.width == width {
-                return c.lines.clone();
-            }
+            && c.width == width
+        {
+            return c.lines.clone();
+        }
         let lines: Vec<Line<'static>> = create_diff_summary_with_width(
             &self.title,
             &self.changes,

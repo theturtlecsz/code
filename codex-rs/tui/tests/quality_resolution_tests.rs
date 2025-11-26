@@ -308,13 +308,16 @@ fn test_single_agent_answer() {
 fn test_all_checkpoints_have_unique_names() {
     use std::collections::HashSet;
 
-    let checkpoints = vec![
+    let checkpoints = [
         QualityCheckpoint::BeforeSpecify,
         QualityCheckpoint::AfterSpecify,
         QualityCheckpoint::AfterTasks,
     ];
 
-    let names: HashSet<_> = checkpoints.iter().map(|c| c.name()).collect();
+    let names: HashSet<_> = checkpoints
+        .iter()
+        .map(codex_tui::QualityCheckpoint::name)
+        .collect();
     assert_eq!(names.len(), checkpoints.len());
 }
 

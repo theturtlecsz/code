@@ -53,7 +53,8 @@ pub async fn run_vacuum_cycle(pool: &Pool<SqliteConnectionManager>) -> Result<Va
             let size_before = get_db_size(&conn)?;
 
             // Incremental vacuum (20 pages per cycle)
-            conn.execute("PRAGMA incremental_vacuum(20)", [])?;
+            // Use execute_batch since PRAGMA statements may return results
+            conn.execute_batch("PRAGMA incremental_vacuum(20)")?;
 
             let size_after = get_db_size(&conn)?;
             let reclaimed = size_before.saturating_sub(size_after);
@@ -248,7 +249,9 @@ mod tests {
         // Setup database with auto_vacuum and insert data
         {
             let conn = pool.get().unwrap();
-            conn.execute("PRAGMA auto_vacuum=INCREMENTAL", []).unwrap();
+            // Use execute_batch for PRAGMA statements that may return results
+            conn.execute_batch("PRAGMA auto_vacuum=INCREMENTAL")
+                .unwrap();
             conn.execute(
                 "CREATE TABLE test_data (id INTEGER PRIMARY KEY, data TEXT)",
                 [],

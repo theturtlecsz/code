@@ -406,10 +406,11 @@ impl BottomPane<'_> {
             && matches!(
                 view.update_status_text(text.clone()),
                 bottom_pane_view::ConditionalUpdate::NeedsRedraw
-            ) {
-                self.request_redraw();
-                return;
-            }
+            )
+        {
+            self.request_redraw();
+            return;
+        }
 
         // Pass status message to composer for dynamic title display
         self.composer.update_status_message(text);
@@ -889,26 +890,26 @@ impl WidgetRef for &BottomPane<'_> {
                 // We intentionally avoid mutating state here; key handling will
                 // clear the view on the next interaction. This keeps render pure.
             } else if y_offset < area.height {
-                    // Reserve bottom padding lines; keep at least 1 line for the view.
-                    let avail = area.height - y_offset;
-                    let pad = if self.active_view.is_some() {
-                        0
-                    } else {
-                        BottomPane::BOTTOM_PAD_LINES.min(avail.saturating_sub(1))
-                    };
-                    // Add horizontal padding (2 chars on each side) for views
-                    let horizontal_padding = 1u16;
-                    let view_rect = Rect {
-                        x: area.x + horizontal_padding,
-                        y: area.y + y_offset,
-                        width: area.width.saturating_sub(horizontal_padding * 2),
-                        height: avail - pad,
-                    };
-                    // Ensure view background is painted under its content
-                    let view_bg = ratatui::style::Style::default().bg(crate::colors::background());
-                    fill_rect(buf, view_rect, None, view_bg);
-                    view.render(view_rect, buf);
-                }
+                // Reserve bottom padding lines; keep at least 1 line for the view.
+                let avail = area.height - y_offset;
+                let pad = if self.active_view.is_some() {
+                    0
+                } else {
+                    BottomPane::BOTTOM_PAD_LINES.min(avail.saturating_sub(1))
+                };
+                // Add horizontal padding (2 chars on each side) for views
+                let horizontal_padding = 1u16;
+                let view_rect = Rect {
+                    x: area.x + horizontal_padding,
+                    y: area.y + y_offset,
+                    width: area.width.saturating_sub(horizontal_padding * 2),
+                    height: avail - pad,
+                };
+                // Ensure view background is painted under its content
+                let view_bg = ratatui::style::Style::default().bg(crate::colors::background());
+                fill_rect(buf, view_rect, None, view_bg);
+                view.render(view_rect, buf);
+            }
         } else if y_offset < area.height {
             // Optionally add an empty line above the input box
             if self.top_spacer_enabled {

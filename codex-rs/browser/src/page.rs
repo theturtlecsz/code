@@ -520,7 +520,10 @@ impl Page {
             match eval {
                 Ok(v) => {
                     let obj = v.value().cloned().unwrap_or(serde_json::Value::Null);
-                    let hidden = obj.get("hidden").and_then(serde_json::Value::as_bool).unwrap_or(false);
+                    let hidden = obj
+                        .get("hidden")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(false);
                     let vs = obj.get("vs").and_then(|x| x.as_str()).unwrap_or("visible");
                     !(hidden || vs != "visible")
                 }
@@ -1013,7 +1016,10 @@ impl Page {
         );
 
         let result = self.cdp_page.evaluate(script).await?;
-        let focused = result.value().and_then(serde_json::Value::as_bool).unwrap_or(false);
+        let focused = result
+            .value()
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
         Ok(focused)
     }
 
@@ -1052,19 +1058,20 @@ impl Page {
 
                         // Check if the page actually navigated despite the timeout
                         if let Ok(cur_opt) = self.cdp_page.url().await
-                            && let Some(cur) = cur_opt {
-                                let looks_loaded =
-                                    cur.starts_with("http://") || cur.starts_with("https://");
-                                if looks_loaded && cur != "about:blank" {
-                                    info!(
-                                        "Navigation reported timeout, but page URL is now {} — treating as success",
-                                        cur
-                                    );
-                                    fallback_navigated = true;
-                                    last_error = None;
-                                    break;
-                                }
+                            && let Some(cur) = cur_opt
+                        {
+                            let looks_loaded =
+                                cur.starts_with("http://") || cur.starts_with("https://");
+                            if looks_loaded && cur != "about:blank" {
+                                info!(
+                                    "Navigation reported timeout, but page URL is now {} — treating as success",
+                                    cur
+                                );
+                                fallback_navigated = true;
+                                last_error = None;
+                                break;
                             }
+                        }
 
                         if attempt < max_retries {
                             // Wait before retry, increasing delay each time
@@ -1086,19 +1093,20 @@ impl Page {
                     );
                     // Check if the page actually navigated despite the timeout
                     if let Ok(cur_opt) = self.cdp_page.url().await
-                        && let Some(cur) = cur_opt {
-                            let looks_loaded =
-                                cur.starts_with("http://") || cur.starts_with("https://");
-                            if looks_loaded && cur != "about:blank" {
-                                info!(
-                                    "Navigation exceeded timeout, but page URL is now {} — treating as success",
-                                    cur
-                                );
-                                fallback_navigated = true;
-                                last_error = None;
-                                break;
-                            }
+                        && let Some(cur) = cur_opt
+                    {
+                        let looks_loaded =
+                            cur.starts_with("http://") || cur.starts_with("https://");
+                        if looks_loaded && cur != "about:blank" {
+                            info!(
+                                "Navigation exceeded timeout, but page URL is now {} — treating as success",
+                                cur
+                            );
+                            fallback_navigated = true;
+                            last_error = None;
+                            break;
                         }
+                    }
 
                     if attempt < max_retries {
                         let delay_ms = 1000 * attempt as u64;
@@ -1129,7 +1137,8 @@ impl Page {
                         let start = std::time::Instant::now();
                         loop {
                             let state = self.cdp_page.evaluate(script).await.ok().and_then(|r| {
-                                r.value().and_then(|v| v.as_str().map(std::string::ToString::to_string))
+                                r.value()
+                                    .and_then(|v| v.as_str().map(std::string::ToString::to_string))
                             });
                             if matches!(state.as_deref(), Some("interactive") | Some("complete")) {
                                 break;
@@ -1159,7 +1168,8 @@ impl Page {
                         let start = std::time::Instant::now();
                         loop {
                             let state = self.cdp_page.evaluate(script).await.ok().and_then(|r| {
-                                r.value().and_then(|v| v.as_str().map(std::string::ToString::to_string))
+                                r.value()
+                                    .and_then(|v| v.as_str().map(std::string::ToString::to_string))
                             });
                             if matches!(state.as_deref(), Some("complete")) {
                                 break;
@@ -1271,8 +1281,14 @@ impl Page {
             .await
             .unwrap_or(serde_json::Value::Null);
 
-        let doc_w = probe.get("w").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
-        let doc_h = probe.get("h").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
+        let doc_w = probe
+            .get("w")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0) as u32;
+        let doc_h = probe
+            .get("h")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0) as u32;
 
         // Fall back to configured viewport if probe failed
         let vw = if doc_w > 0 {
@@ -1354,9 +1370,7 @@ impl Page {
             let data_b64: &str = resp.data.as_ref();
             let data = base64::engine::general_purpose::STANDARD
                 .decode(data_b64.as_bytes())
-                .map_err(|e| {
-                    BrowserError::ScreenshotError(format!("base64 decode failed: {e}"))
-                })?;
+                .map_err(|e| BrowserError::ScreenshotError(format!("base64 decode failed: {e}")))?;
             shots.push(Screenshot {
                 data,
                 width: vw,
@@ -1424,9 +1438,7 @@ impl Page {
             .device_scale_factor(viewport.device_scale_factor.unwrap_or(1.0))
             .mobile(viewport.mobile.unwrap_or(false))
             .build()
-            .map_err(|e| {
-                BrowserError::CdpError(format!("Failed to build viewport params: {e}"))
-            })?;
+            .map_err(|e| BrowserError::CdpError(format!("Failed to build viewport params: {e}")))?;
         self.cdp_page.execute(params).await?;
 
         Ok(ViewportResult {
@@ -2145,8 +2157,9 @@ impl Page {
     console.debug = __orig.debug;
   }}
 }})()"#,
-            serde_json::to_string(&user_code_with_source)
-                .map_err(|e| BrowserError::CdpError(format!("Failed to serialize user code: {e}")))?
+            serde_json::to_string(&user_code_with_source).map_err(|e| BrowserError::CdpError(
+                format!("Failed to serialize user code: {e}")
+            ))?
         );
 
         tracing::debug!("Executing JavaScript code: {}", code);

@@ -462,9 +462,10 @@ async fn persist_tokens_async(
     tokio::task::spawn_blocking(move || {
         let auth_file = get_auth_file(&codex_home);
         if let Some(parent) = auth_file.parent()
-            && !parent.exists() {
-                std::fs::create_dir_all(parent).map_err(io::Error::other)?;
-            }
+            && !parent.exists()
+        {
+            std::fs::create_dir_all(parent).map_err(io::Error::other)?;
+        }
 
         let mut tokens = TokenData {
             id_token: parse_id_token(&id_token).map_err(io::Error::other)?,

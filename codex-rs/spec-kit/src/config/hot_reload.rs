@@ -421,9 +421,7 @@ impl HotReloadWatcher {
         match result {
             Ok(events) => {
                 // Filter for relevant events (WRITE, MODIFY, METADATA_CHANGE)
-                let has_relevant = events
-                    .iter()
-                    .any(|e| Self::is_relevant_event(&e.event));
+                let has_relevant = events.iter().any(|e| Self::is_relevant_event(&e.event));
 
                 if !has_relevant {
                     return Ok(());

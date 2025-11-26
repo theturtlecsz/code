@@ -450,42 +450,45 @@ async fn read_capped<R: AsyncRead + Unpin + Send + 'static>(
         }
 
         if let Some(stream) = &stream
-            && emitted_deltas < MAX_EXEC_OUTPUT_DELTAS_PER_CALL {
-                let chunk = tmp[..n].to_vec();
-                let msg = EventMsg::ExecCommandOutputDelta(ExecCommandOutputDeltaEvent {
-                    call_id: stream.call_id.clone(),
-                    stream: if is_stderr {
-                        ExecOutputStream::Stderr
-                    } else {
-                        ExecOutputStream::Stdout
-                    },
-                    chunk: ByteBuf::from(chunk),
-                });
-                let event = if let Some(sess) = &stream.session {
-                    sess.make_event(&stream.sub_id, msg)
+            && emitted_deltas < MAX_EXEC_OUTPUT_DELTAS_PER_CALL
+        {
+            let chunk = tmp[..n].to_vec();
+            let msg = EventMsg::ExecCommandOutputDelta(ExecCommandOutputDeltaEvent {
+                call_id: stream.call_id.clone(),
+                stream: if is_stderr {
+                    ExecOutputStream::Stderr
                 } else {
-                    Event {
-                        id: stream.sub_id.clone(),
-                        event_seq: 0,
-                        msg,
-                        order: stream.order.clone(),
-                    }
-                };
-                #[allow(clippy::let_unit_value)]
-                let _ = stream.tx_event.send(event).await;
-                emitted_deltas += 1;
+                    ExecOutputStream::Stdout
+                },
+                chunk: ByteBuf::from(chunk),
+            });
+            let event = if let Some(sess) = &stream.session {
+                sess.make_event(&stream.sub_id, msg)
+            } else {
+                Event {
+                    id: stream.sub_id.clone(),
+                    event_seq: 0,
+                    msg,
+                    order: stream.order.clone(),
+                }
+            };
+            #[allow(clippy::let_unit_value)]
+            let _ = stream.tx_event.send(event).await;
+            emitted_deltas += 1;
 
-                // Update tail buffer if present (keep last ~8 KiB)
-                if let Some(buf_arc) = &stream.tail_buf {
-                    let mut b = buf_arc.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-                    const MAX_TAIL: usize = 8 * 1024;
-                    b.extend_from_slice(&tmp[..n]);
-                    if b.len() > MAX_TAIL {
-                        let drop_len = b.len() - MAX_TAIL;
-                        b.drain(..drop_len);
-                    }
+            // Update tail buffer if present (keep last ~8 KiB)
+            if let Some(buf_arc) = &stream.tail_buf {
+                let mut b = buf_arc
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                const MAX_TAIL: usize = 8 * 1024;
+                b.extend_from_slice(&tmp[..n]);
+                if b.len() > MAX_TAIL {
+                    let drop_len = b.len() - MAX_TAIL;
+                    b.drain(..drop_len);
                 }
             }
+        }
 
         if let Some(tx) = &aggregate_tx {
             let _ = tx.send(tmp[..n].to_vec()).await;

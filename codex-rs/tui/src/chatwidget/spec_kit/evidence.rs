@@ -151,8 +151,6 @@ impl FilesystemEvidence {
             jitter_factor: 0.5,
         };
 
-        
-
         // Lock auto-released when lock_file drops (RAII)
         execute_with_backoff_sync(
             || {
@@ -414,9 +412,10 @@ impl EvidenceRepository for FilesystemEvidence {
             let path = entry.path();
 
             if let Some(name) = path.file_name().and_then(|n| n.to_str())
-                && name.contains(pattern) {
-                    files.push(path);
-                }
+                && name.contains(pattern)
+            {
+                files.push(path);
+            }
         }
 
         Ok(files)
@@ -479,6 +478,217 @@ impl Default for FilesystemEvidence {
             None,
         )
     }
+}
+
+// === AUTOMATIC EVIDENCE EXPORT (SPEC-KIT-900 Session 3) ===
+
+/// Automatically export stage evidence after synthesis completes
+///
+/// CRITICAL: Called immediately after db.store_synthesis() to ensure evidence
+/// directory is ALWAYS populated for checklist compliance.
+///
+/// Exports:
+/// - <stage>_synthesis.json (from consensus_runs.synthesis_json column)
+/// - <stage>_verdict.json (from agent_outputs table)
+///
+/// Does NOT fail pipeline if export fails (logs warning instead).
+pub fn auto_export_stage_evidence(
+    cwd: &Path,
+    spec_id: &str,
+    stage: SpecStage,
+    run_id: Option<&str>,
+) {
+    let evidence_root = cwd.join(DEFAULT_EVIDENCE_BASE);
+    let consensus_dir = evidence_root.join("consensus").join(spec_id);
+
+    // Create directory if it doesn't exist
+    if let Err(e) = std::fs::create_dir_all(&consensus_dir) {
+        tracing::warn!("Failed to create consensus directory: {}", e);
+        return;
+    }
+
+    let stage_name = stage.display_name().to_lowercase();
+    let stage_command = stage.command_name();
+
+    tracing::info!("📤 Auto-exporting evidence for {} stage", stage_name);
+
+    // Export synthesis record
+    match export_synthesis_record(&consensus_dir, spec_id, stage_command, &stage_name) {
+        Ok(path) => {
+            let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+            tracing::info!("  ✓ {}_synthesis.json ({} bytes)", stage_name, size);
+        }
+        Err(e) => {
+            tracing::warn!("  ✗ Failed to export synthesis for {}: {}", stage_name, e);
+        }
+    }
+
+    // Export verdict (agent proposals)
+    match export_verdict_record(&consensus_dir, spec_id, stage_command, &stage_name, run_id) {
+        Ok(path) => {
+            let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+            tracing::info!("  ✓ {}_verdict.json ({} bytes)", stage_name, size);
+        }
+        Err(e) => {
+            tracing::warn!("  ✗ Failed to export verdict for {}: {}", stage_name, e);
+        }
+    }
+}
+
+fn export_synthesis_record(
+    consensus_dir: &Path,
+    spec_id: &str,
+    stage_command: &str,
+    stage_name: &str,
+) -> Result<PathBuf> {
+    let db_path = dirs::home_dir()
+        .ok_or_else(|| SpecKitError::from_string("Cannot determine home directory"))?
+        .join(".code")
+        .join("consensus_artifacts.db");
+
+    let conn = rusqlite::Connection::open(&db_path)
+        .map_err(|e| SpecKitError::from_string(format!("Failed to open database: {}", e)))?;
+
+    // Query new schema (consensus_runs.synthesis_json column)
+    let synthesis_json_str: String = conn
+        .query_row(
+            "SELECT synthesis_json FROM consensus_runs
+             WHERE spec_id = ?1 AND stage = ?2 AND synthesis_json IS NOT NULL
+             ORDER BY run_timestamp DESC
+             LIMIT 1",
+            rusqlite::params![spec_id, stage_command],
+            |row| row.get(0),
+        )
+        .map_err(|e| SpecKitError::from_string(format!("Query failed: {}", e)))?;
+
+    // Parse synthesis JSON and add metadata
+    let mut synthesis_data: serde_json::Value = serde_json::from_str(&synthesis_json_str)
+        .map_err(|e| SpecKitError::from_string(format!("JSON parse failed: {}", e)))?;
+
+    // Add spec_id and stage metadata if not present
+    if let Some(obj) = synthesis_data.as_object_mut() {
+        obj.insert(
+            "spec_id".to_string(),
+            serde_json::Value::String(spec_id.to_string()),
+        );
+        obj.insert(
+            "stage".to_string(),
+            serde_json::Value::String(stage_command.to_string()),
+        );
+    }
+
+    let synthesis_file = consensus_dir.join(format!("{}_synthesis.json", stage_name));
+    let json_str = serde_json::to_string_pretty(&synthesis_data)
+        .map_err(|e| SpecKitError::from_string(format!("JSON serialization failed: {}", e)))?;
+
+    std::fs::write(&synthesis_file, json_str)
+        .map_err(|e| SpecKitError::from_string(format!("Write failed: {}", e)))?;
+
+    Ok(synthesis_file)
+}
+
+fn export_verdict_record(
+    consensus_dir: &Path,
+    spec_id: &str,
+    stage_command: &str,
+    stage_name: &str,
+    run_id: Option<&str>,
+) -> Result<PathBuf> {
+    let db_path = dirs::home_dir()
+        .ok_or_else(|| SpecKitError::from_string("Cannot determine home directory"))?
+        .join(".code")
+        .join("consensus_artifacts.db");
+
+    let conn = rusqlite::Connection::open(&db_path)
+        .map_err(|e| SpecKitError::from_string(format!("Failed to open database: {}", e)))?;
+
+    // Get agent proposals for this stage from new schema
+    let proposals: Vec<Value> = if let Some(rid) = run_id {
+        // Query with run_id filter - join agent_outputs with consensus_runs
+        let mut stmt = conn
+            .prepare(
+                "SELECT ao.agent_name, ao.content, ao.output_timestamp
+             FROM agent_outputs ao
+             JOIN consensus_runs cr ON ao.run_id = cr.id
+             WHERE cr.spec_id = ?1 AND cr.stage = ?2 AND ao.run_id = ?3
+             ORDER BY ao.output_timestamp",
+            )
+            .map_err(|e| SpecKitError::from_string(format!("Prepare failed: {}", e)))?;
+
+        stmt.query_map(rusqlite::params![spec_id, stage_command, rid], |row| {
+            let agent_name: String = row.get(0)?;
+            let content_json: String = row.get(1)?;
+            let timestamp: i64 = row.get(2)?;
+
+            let content = serde_json::from_str::<Value>(&content_json)
+                .unwrap_or_else(|_| Value::String(content_json));
+
+            // Format timestamp as ISO 8601
+            let datetime =
+                chrono::DateTime::<chrono::Utc>::from_timestamp(timestamp, 0).unwrap_or_default();
+            let created_at = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
+
+            Ok(serde_json::json!({
+                "agent_name": agent_name,
+                "content": content,
+                "created_at": created_at,
+            }))
+        })
+        .map_err(|e| SpecKitError::from_string(format!("Query failed: {}", e)))?
+        .filter_map(std::result::Result::ok)
+        .collect()
+    } else {
+        // Query without run_id filter
+        let mut stmt = conn
+            .prepare(
+                "SELECT ao.agent_name, ao.content, ao.output_timestamp
+             FROM agent_outputs ao
+             JOIN consensus_runs cr ON ao.run_id = cr.id
+             WHERE cr.spec_id = ?1 AND cr.stage = ?2
+             ORDER BY ao.output_timestamp",
+            )
+            .map_err(|e| SpecKitError::from_string(format!("Prepare failed: {}", e)))?;
+
+        stmt.query_map(rusqlite::params![spec_id, stage_command], |row| {
+            let agent_name: String = row.get(0)?;
+            let content_json: String = row.get(1)?;
+            let timestamp: i64 = row.get(2)?;
+
+            let content = serde_json::from_str::<Value>(&content_json)
+                .unwrap_or_else(|_| Value::String(content_json));
+
+            // Format timestamp as ISO 8601
+            let datetime =
+                chrono::DateTime::<chrono::Utc>::from_timestamp(timestamp, 0).unwrap_or_default();
+            let created_at = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
+
+            Ok(serde_json::json!({
+                "agent_name": agent_name,
+                "content": content,
+                "created_at": created_at,
+            }))
+        })
+        .map_err(|e| SpecKitError::from_string(format!("Query failed: {}", e)))?
+        .filter_map(std::result::Result::ok)
+        .collect()
+    };
+
+    let verdict_data = serde_json::json!({
+        "spec_id": spec_id,
+        "stage": stage_name,
+        "proposals": proposals,
+        "run_id": run_id,
+        "exported_at": chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+    });
+
+    let verdict_file = consensus_dir.join(format!("{}_verdict.json", stage_name));
+    let json_str = serde_json::to_string_pretty(&verdict_data)
+        .map_err(|e| SpecKitError::from_string(format!("JSON serialization failed: {}", e)))?;
+
+    std::fs::write(&verdict_file, json_str)
+        .map_err(|e| SpecKitError::from_string(format!("Write failed: {}", e)))?;
+
+    Ok(verdict_file)
 }
 
 #[cfg(test)]
@@ -703,215 +913,4 @@ mod tests {
         assert_eq!(repo.category_dir(EvidenceCategory::Commands), "commands");
         assert_eq!(repo.category_dir(EvidenceCategory::Consensus), "consensus");
     }
-}
-
-// === AUTOMATIC EVIDENCE EXPORT (SPEC-KIT-900 Session 3) ===
-
-/// Automatically export stage evidence after synthesis completes
-///
-/// CRITICAL: Called immediately after db.store_synthesis() to ensure evidence
-/// directory is ALWAYS populated for checklist compliance.
-///
-/// Exports:
-/// - <stage>_synthesis.json (from consensus_runs.synthesis_json column)
-/// - <stage>_verdict.json (from agent_outputs table)
-///
-/// Does NOT fail pipeline if export fails (logs warning instead).
-pub fn auto_export_stage_evidence(
-    cwd: &Path,
-    spec_id: &str,
-    stage: SpecStage,
-    run_id: Option<&str>,
-) {
-    let evidence_root = cwd.join(DEFAULT_EVIDENCE_BASE);
-    let consensus_dir = evidence_root.join("consensus").join(spec_id);
-
-    // Create directory if it doesn't exist
-    if let Err(e) = std::fs::create_dir_all(&consensus_dir) {
-        tracing::warn!("Failed to create consensus directory: {}", e);
-        return;
-    }
-
-    let stage_name = stage.display_name().to_lowercase();
-    let stage_command = stage.command_name();
-
-    tracing::info!("📤 Auto-exporting evidence for {} stage", stage_name);
-
-    // Export synthesis record
-    match export_synthesis_record(&consensus_dir, spec_id, stage_command, &stage_name) {
-        Ok(path) => {
-            let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-            tracing::info!("  ✓ {}_synthesis.json ({} bytes)", stage_name, size);
-        }
-        Err(e) => {
-            tracing::warn!("  ✗ Failed to export synthesis for {}: {}", stage_name, e);
-        }
-    }
-
-    // Export verdict (agent proposals)
-    match export_verdict_record(&consensus_dir, spec_id, stage_command, &stage_name, run_id) {
-        Ok(path) => {
-            let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-            tracing::info!("  ✓ {}_verdict.json ({} bytes)", stage_name, size);
-        }
-        Err(e) => {
-            tracing::warn!("  ✗ Failed to export verdict for {}: {}", stage_name, e);
-        }
-    }
-}
-
-fn export_synthesis_record(
-    consensus_dir: &Path,
-    spec_id: &str,
-    stage_command: &str,
-    stage_name: &str,
-) -> Result<PathBuf> {
-    let db_path = dirs::home_dir()
-        .ok_or_else(|| SpecKitError::from_string("Cannot determine home directory"))?
-        .join(".code")
-        .join("consensus_artifacts.db");
-
-    let conn = rusqlite::Connection::open(&db_path)
-        .map_err(|e| SpecKitError::from_string(format!("Failed to open database: {}", e)))?;
-
-    // Query new schema (consensus_runs.synthesis_json column)
-    let synthesis_json_str: String = conn
-        .query_row(
-            "SELECT synthesis_json FROM consensus_runs
-             WHERE spec_id = ?1 AND stage = ?2 AND synthesis_json IS NOT NULL
-             ORDER BY run_timestamp DESC
-             LIMIT 1",
-            rusqlite::params![spec_id, stage_command],
-            |row| row.get(0),
-        )
-        .map_err(|e| SpecKitError::from_string(format!("Query failed: {}", e)))?;
-
-    // Parse synthesis JSON and add metadata
-    let mut synthesis_data: serde_json::Value = serde_json::from_str(&synthesis_json_str)
-        .map_err(|e| SpecKitError::from_string(format!("JSON parse failed: {}", e)))?;
-
-    // Add spec_id and stage metadata if not present
-    if let Some(obj) = synthesis_data.as_object_mut() {
-        obj.insert(
-            "spec_id".to_string(),
-            serde_json::Value::String(spec_id.to_string()),
-        );
-        obj.insert(
-            "stage".to_string(),
-            serde_json::Value::String(stage_command.to_string()),
-        );
-    }
-
-    let synthesis_file = consensus_dir.join(format!("{}_synthesis.json", stage_name));
-    let json_str = serde_json::to_string_pretty(&synthesis_data)
-        .map_err(|e| SpecKitError::from_string(format!("JSON serialization failed: {}", e)))?;
-
-    std::fs::write(&synthesis_file, json_str)
-        .map_err(|e| SpecKitError::from_string(format!("Write failed: {}", e)))?;
-
-    Ok(synthesis_file)
-}
-
-fn export_verdict_record(
-    consensus_dir: &Path,
-    spec_id: &str,
-    stage_command: &str,
-    stage_name: &str,
-    run_id: Option<&str>,
-) -> Result<PathBuf> {
-    let db_path = dirs::home_dir()
-        .ok_or_else(|| SpecKitError::from_string("Cannot determine home directory"))?
-        .join(".code")
-        .join("consensus_artifacts.db");
-
-    let conn = rusqlite::Connection::open(&db_path)
-        .map_err(|e| SpecKitError::from_string(format!("Failed to open database: {}", e)))?;
-
-    // Get agent proposals for this stage from new schema
-    let proposals: Vec<Value> = if let Some(rid) = run_id {
-        // Query with run_id filter - join agent_outputs with consensus_runs
-        let mut stmt = conn
-            .prepare(
-                "SELECT ao.agent_name, ao.content, ao.output_timestamp
-             FROM agent_outputs ao
-             JOIN consensus_runs cr ON ao.run_id = cr.id
-             WHERE cr.spec_id = ?1 AND cr.stage = ?2 AND ao.run_id = ?3
-             ORDER BY ao.output_timestamp",
-            )
-            .map_err(|e| SpecKitError::from_string(format!("Prepare failed: {}", e)))?;
-
-        stmt.query_map(rusqlite::params![spec_id, stage_command, rid], |row| {
-            let agent_name: String = row.get(0)?;
-            let content_json: String = row.get(1)?;
-            let timestamp: i64 = row.get(2)?;
-
-            let content = serde_json::from_str::<Value>(&content_json)
-                .unwrap_or_else(|_| Value::String(content_json));
-
-            // Format timestamp as ISO 8601
-            let datetime =
-                chrono::DateTime::<chrono::Utc>::from_timestamp(timestamp, 0).unwrap_or_default();
-            let created_at = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
-
-            Ok(serde_json::json!({
-                "agent_name": agent_name,
-                "content": content,
-                "created_at": created_at,
-            }))
-        })
-        .map_err(|e| SpecKitError::from_string(format!("Query failed: {}", e)))?
-        .filter_map(std::result::Result::ok)
-        .collect()
-    } else {
-        // Query without run_id filter
-        let mut stmt = conn
-            .prepare(
-                "SELECT ao.agent_name, ao.content, ao.output_timestamp
-             FROM agent_outputs ao
-             JOIN consensus_runs cr ON ao.run_id = cr.id
-             WHERE cr.spec_id = ?1 AND cr.stage = ?2
-             ORDER BY ao.output_timestamp",
-            )
-            .map_err(|e| SpecKitError::from_string(format!("Prepare failed: {}", e)))?;
-
-        stmt.query_map(rusqlite::params![spec_id, stage_command], |row| {
-            let agent_name: String = row.get(0)?;
-            let content_json: String = row.get(1)?;
-            let timestamp: i64 = row.get(2)?;
-
-            let content = serde_json::from_str::<Value>(&content_json)
-                .unwrap_or_else(|_| Value::String(content_json));
-
-            // Format timestamp as ISO 8601
-            let datetime =
-                chrono::DateTime::<chrono::Utc>::from_timestamp(timestamp, 0).unwrap_or_default();
-            let created_at = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
-
-            Ok(serde_json::json!({
-                "agent_name": agent_name,
-                "content": content,
-                "created_at": created_at,
-            }))
-        })
-        .map_err(|e| SpecKitError::from_string(format!("Query failed: {}", e)))?
-        .filter_map(std::result::Result::ok)
-        .collect()
-    };
-
-    let verdict_data = serde_json::json!({
-        "spec_id": spec_id,
-        "stage": stage_name,
-        "proposals": proposals,
-        "run_id": run_id,
-        "exported_at": chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
-    });
-
-    let verdict_file = consensus_dir.join(format!("{}_verdict.json", stage_name));
-    let json_str = serde_json::to_string_pretty(&verdict_data)
-        .map_err(|e| SpecKitError::from_string(format!("JSON serialization failed: {}", e)))?;
-
-    std::fs::write(&verdict_file, json_str)
-        .map_err(|e| SpecKitError::from_string(format!("Write failed: {}", e)))?;
-
-    Ok(verdict_file)
 }

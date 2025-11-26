@@ -306,11 +306,13 @@ mod tests {
     use super::*;
     use crate::db::initialize_pool;
     use crate::db::migrations::migrate_to_latest;
-    use std::path::Path;
+    use tempfile::TempDir;
 
     #[tokio::test]
     async fn test_with_connection_basic() {
-        let pool = initialize_pool(Path::new(":memory:"), 1).expect("Pool creation failed");
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test.db");
+        let pool = initialize_pool(&db_path, 1).expect("Pool creation failed");
 
         // Migrate to create tables
         {
@@ -336,7 +338,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_with_connection_error_propagation() {
-        let pool = initialize_pool(Path::new(":memory:"), 1).expect("Pool creation failed");
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test.db");
+        let pool = initialize_pool(&db_path, 1).expect("Pool creation failed");
 
         // Test error propagation
         let result: Result<()> = with_connection(&pool, |conn| {
@@ -350,7 +354,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_store_consensus_run() {
-        let pool = initialize_pool(Path::new(":memory:"), 1).expect("Pool creation failed");
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test.db");
+        let pool = initialize_pool(&db_path, 1).expect("Pool creation failed");
 
         // Migrate to create tables
         {
@@ -379,13 +385,15 @@ mod tests {
 
         assert_eq!(runs.len(), 1);
         assert_eq!(runs[0].0, run_id);
-        assert_eq!(runs[0].2, true); // consensus_ok
-        assert_eq!(runs[0].3, false); // degraded
+        assert!(runs[0].2); // consensus_ok
+        assert!(!runs[0].3); // degraded
     }
 
     #[tokio::test]
     async fn test_store_agent_output() {
-        let pool = initialize_pool(Path::new(":memory:"), 1).expect("Pool creation failed");
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test.db");
+        let pool = initialize_pool(&db_path, 1).expect("Pool creation failed");
 
         // Migrate and create run
         {
@@ -424,7 +432,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_concurrent_operations() {
-        let pool = initialize_pool(Path::new(":memory:"), 1).expect("Pool creation failed");
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test.db");
+        let pool = initialize_pool(&db_path, 2).expect("Pool creation failed"); // Pool size 2 for concurrent ops
 
         // Migrate
         {
@@ -439,7 +449,7 @@ mod tests {
             let handle = tokio::spawn(async move {
                 store_consensus_run(
                     &pool_clone,
-                    &format!("SPEC-KIT-{:03}", i),
+                    &format!("SPEC-KIT-{i:03}"),
                     "plan",
                     true,
                     false,

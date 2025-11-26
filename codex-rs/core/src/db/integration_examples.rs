@@ -321,11 +321,13 @@ mod tests {
     use super::*;
     use crate::db::initialize_pool;
     use crate::db::migrations::migrate_to_latest;
-    use std::path::Path;
+    use tempfile::TempDir;
 
     #[tokio::test]
     async fn test_store_consensus_with_agents() {
-        let pool = initialize_pool(Path::new(":memory:"), 1).expect("Pool creation failed");
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test.db");
+        let pool = initialize_pool(&db_path, 1).expect("Pool creation failed");
 
         // Migrate to create tables
         {
@@ -369,7 +371,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_agent_state() {
-        let pool = initialize_pool(Path::new(":memory:"), 1).expect("Pool creation failed");
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test.db");
+        let pool = initialize_pool(&db_path, 1).expect("Pool creation failed");
 
         // Update agent state
         update_agent_state(
@@ -396,7 +400,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_batch_store_agent_outputs() {
-        let pool = initialize_pool(Path::new(":memory:"), 1).expect("Pool creation failed");
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test.db");
+        let pool = initialize_pool(&db_path, 1).expect("Pool creation failed");
 
         // Migrate to create tables
         {
@@ -426,7 +432,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_concurrent_agent_updates() {
-        let pool = initialize_pool(Path::new(":memory:"), 1).expect("Pool creation failed");
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let db_path = temp_dir.path().join("test.db");
+        let pool = initialize_pool(&db_path, 2).expect("Pool creation failed"); // Pool size 2 for concurrent ops
 
         // Spawn 5 concurrent agent state updates
         let mut handles = Vec::new();
@@ -437,7 +445,7 @@ mod tests {
                     &pool_clone,
                     "SPEC-KIT-070",
                     "plan",
-                    &format!("agent-{}", i),
+                    &format!("agent-{i}"),
                     "completed",
                     None,
                 )

@@ -105,10 +105,7 @@ mod tests {
         let validator = SchemaValidator::new().expect("Failed to create validator");
 
         let result = validator.validate(&config);
-        assert!(
-            result.is_ok(),
-            "Default config should be valid: {result:?}"
-        );
+        assert!(result.is_ok(), "Default config should be valid: {result:?}");
     }
 
     #[test]

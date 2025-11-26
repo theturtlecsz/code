@@ -107,16 +107,17 @@ pub(crate) fn persist_cost_summary(widget: &mut ChatWidget, spec_id: &str) {
     let dir = widget.cost_summary_dir();
     // Attach routing notes for the just-finished stage (if available)
     if let Some(state) = widget.spec_auto_state.as_ref()
-        && let Some(stage) = state.current_stage() {
-            let effort = state.aggregator_effort_notes.get(&stage).cloned();
-            let reason = state.escalation_reason_notes.get(&stage).cloned();
-            widget.spec_cost_tracker().set_stage_routing_note(
-                spec_id,
-                stage,
-                effort.as_deref(),
-                reason.as_deref(),
-            );
-        }
+        && let Some(stage) = state.current_stage()
+    {
+        let effort = state.aggregator_effort_notes.get(&stage).cloned();
+        let reason = state.escalation_reason_notes.get(&stage).cloned();
+        widget.spec_cost_tracker().set_stage_routing_note(
+            spec_id,
+            stage,
+            effort.as_deref(),
+            reason.as_deref(),
+        );
+    }
     if let Err(err) = widget.spec_cost_tracker().write_summary(spec_id, &dir) {
         widget.history_push(crate::history_cell::new_warning_event(format!(
             "Failed to write cost summary for {}: {}",

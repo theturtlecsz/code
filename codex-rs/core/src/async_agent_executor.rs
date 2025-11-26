@@ -913,14 +913,15 @@ impl AsyncAgentExecutor for DirectProcessExecutor {
 
         // Send large input via stdin if provided
         if let Some(input) = large_input
-            && let Some(mut stdin) = child.stdin.take() {
-                stdin
-                    .write_all(input.as_bytes())
-                    .await
-                    .map_err(AgentExecutionError::IoError)?;
-                // Explicit drop to signal EOF
-                drop(stdin);
-            }
+            && let Some(mut stdin) = child.stdin.take()
+        {
+            stdin
+                .write_all(input.as_bytes())
+                .await
+                .map_err(AgentExecutionError::IoError)?;
+            // Explicit drop to signal EOF
+            drop(stdin);
+        }
 
         // Spawn streaming tasks for stdout and stderr
         let stdout_handle = tokio::spawn({
@@ -1012,7 +1013,7 @@ mod tests {
         let output = executor
             .execute(
                 "echo",
-                &vec!["hello world".to_string()],
+                &["hello world".to_string()],
                 &HashMap::new(),
                 None,
                 600,
@@ -1048,7 +1049,7 @@ mod tests {
         let result = executor
             .execute(
                 "nonexistent_command_xyz_12345",
-                &vec![],
+                &[],
                 &HashMap::new(),
                 None,
                 600,
@@ -1061,11 +1062,10 @@ mod tests {
             Err(AgentExecutionError::CommandNotFound(cmd)) => {
                 assert!(
                     cmd.contains("nonexistent_command_xyz"),
-                    "error should contain command name, got: {}",
-                    cmd
+                    "error should contain command name, got: {cmd}"
                 );
             }
-            _ => panic!("expected CommandNotFound error, got: {:?}", result),
+            _ => panic!("expected CommandNotFound error, got: {result:?}"),
         }
     }
 
@@ -1083,7 +1083,7 @@ mod tests {
         let result = executor
             .execute(
                 "sleep",
-                &vec!["10".to_string()],
+                &["10".to_string()],
                 &HashMap::new(),
                 None,
                 1, // 1 second timeout
@@ -1098,11 +1098,10 @@ mod tests {
                 assert_eq!(secs, 1, "timeout should be 1 second");
                 assert!(
                     elapsed.as_secs() <= 2,
-                    "should timeout within 2s, took: {:?}",
-                    elapsed
+                    "should timeout within 2s, took: {elapsed:?}"
                 );
             }
-            _ => panic!("expected Timeout error, got: {:?}", result),
+            _ => panic!("expected Timeout error, got: {result:?}"),
         }
     }
 
@@ -1121,7 +1120,7 @@ mod tests {
         let output = executor
             .execute(
                 "cat",
-                &vec!["-".to_string()], // Read from stdin
+                &["-".to_string()], // Read from stdin
                 &HashMap::new(),
                 None,
                 600,
@@ -1157,7 +1156,7 @@ mod tests {
         let result = executor
             .execute(
                 "sh",
-                &vec![
+                &[
                     "-c".to_string(),
                     "echo 'Error: ANTHROPIC_API_KEY environment variable required' >&2; exit 1"
                         .to_string(),
@@ -1174,11 +1173,10 @@ mod tests {
             Err(AgentExecutionError::OAuth2Required(msg)) => {
                 assert!(
                     msg.contains("ANTHROPIC_API_KEY"),
-                    "error should contain 'ANTHROPIC_API_KEY', got: {}",
-                    msg
+                    "error should contain 'ANTHROPIC_API_KEY', got: {msg}"
                 );
             }
-            _ => panic!("expected OAuth2Required error, got: {:?}", result),
+            _ => panic!("expected OAuth2Required error, got: {result:?}"),
         }
     }
 
@@ -1195,7 +1193,7 @@ mod tests {
         let output = executor
             .execute(
                 "sh",
-                &vec![
+                &[
                     "-c".to_string(),
                     "echo 'stdout message'; echo 'stderr message' >&2".to_string(),
                 ],
@@ -1239,7 +1237,7 @@ mod tests {
         let result = executor
             .execute(
                 "sleep",
-                &vec!["100".to_string()],
+                &["100".to_string()],
                 &HashMap::new(),
                 None,
                 1, // 1 second timeout
@@ -1251,8 +1249,7 @@ mod tests {
         // Verify timeout error (implies cleanup happened)
         assert!(
             matches!(result, Err(AgentExecutionError::Timeout(_))),
-            "expected Timeout error, got: {:?}",
-            result
+            "expected Timeout error, got: {result:?}"
         );
 
         // Give OS time to clean up process

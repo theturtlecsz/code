@@ -27,9 +27,9 @@ fn test_generate_next_spec_id_real_repo() {
     // Verify it's >= 071 (since we know 070 exists)
     let num_part = next_id.strip_prefix("SPEC-KIT-").unwrap();
     let num: u32 = num_part.parse().expect("Should be valid number");
-    assert!(num >= 71, "Next ID should be at least 071, got {}", num);
+    assert!(num >= 71, "Next ID should be at least 071, got {num}");
 
-    println!("✅ Generated next SPEC-ID: {}", next_id);
+    println!("✅ Generated next SPEC-ID: {next_id}");
 }
 
 #[test]
@@ -47,7 +47,7 @@ fn test_create_full_spec_name_real_repo() {
     assert!(spec_name.starts_with("SPEC-KIT-"));
     assert!(spec_name.contains("-test-native-id-generation"));
 
-    println!("✅ Generated full SPEC name: {}", spec_name);
+    println!("✅ Generated full SPEC name: {spec_name}");
 }
 
 #[test]

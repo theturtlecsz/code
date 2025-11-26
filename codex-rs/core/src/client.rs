@@ -310,17 +310,18 @@ impl ModelClient {
             attach_item_ids(&mut payload_json, &input_with_instructions);
         }
         if let Some(openrouter_cfg) = self.provider.openrouter_config()
-            && let Some(obj) = payload_json.as_object_mut() {
-                if let Some(provider) = &openrouter_cfg.provider {
-                    obj.insert("provider".to_string(), serde_json::to_value(provider)?);
-                }
-                if let Some(route) = &openrouter_cfg.route {
-                    obj.insert("route".to_string(), route.clone());
-                }
-                for (key, value) in &openrouter_cfg.extra {
-                    obj.entry(key.clone()).or_insert(value.clone());
-                }
+            && let Some(obj) = payload_json.as_object_mut()
+        {
+            if let Some(provider) = &openrouter_cfg.provider {
+                obj.insert("provider".to_string(), serde_json::to_value(provider)?);
             }
+            if let Some(route) = &openrouter_cfg.route {
+                obj.insert("route".to_string(), route.clone());
+            }
+            for (key, value) in &openrouter_cfg.extra {
+                obj.entry(key.clone()).or_insert(value.clone());
+            }
+        }
         let payload_body = serde_json::to_string(&payload_json)?;
 
         let mut attempt = 0;
@@ -370,9 +371,10 @@ impl ModelClient {
             // Avoid unstable `let` chains: expand into nested conditionals.
             if let Some(auth) = auth.as_ref()
                 && auth.mode == AuthMode::ChatGPT
-                    && let Some(account_id) = auth.get_account_id() {
-                        req_builder = req_builder.header("chatgpt-account-id", account_id);
-                    }
+                && let Some(account_id) = auth.get_account_id()
+            {
+                req_builder = req_builder.header("chatgpt-account-id", account_id);
+            }
 
             let res = req_builder.send().await;
             if let Ok(resp) = &res {
@@ -480,9 +482,10 @@ impl ModelClient {
                         .and_then(|s| s.parse::<u64>().ok());
 
                     if status == StatusCode::UNAUTHORIZED
-                        && let Some(a) = auth.as_ref() {
-                            let _ = a.refresh_token().await;
-                        }
+                        && let Some(a) = auth.as_ref()
+                    {
+                        let _ = a.refresh_token().await;
+                    }
 
                     // Read the response body once for diagnostics across error branches.
                     let body_text = res.text().await.unwrap_or_default();
@@ -861,9 +864,10 @@ async fn process_sse<S>(
 
         // Log the raw SSE event data
         if let Ok(logger) = debug_logger.lock()
-            && let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&sse.data) {
-                let _ = logger.append_response_event(&request_id, "sse_event", &json_value);
-            }
+            && let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&sse.data)
+        {
+            let _ = logger.append_response_event(&request_id, "sse_event", &json_value);
+        }
 
         let event: SseEvent = match serde_json::from_str(&sse.data) {
             Ok(event) => event,

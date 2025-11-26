@@ -88,14 +88,15 @@ impl PromptDetector {
 
         // Signal 2: Idle timeout + looks complete (medium confidence)
         if now.duration_since(self.last_output_time) > self.idle_threshold
-            && self.looks_complete(output) {
-                self.confidence = Confidence::Medium;
-                tracing::debug!(
-                    "Prompt detected (MEDIUM confidence): idle {}ms + looks complete",
-                    self.idle_threshold.as_millis()
-                );
-                return true;
-            }
+            && self.looks_complete(output)
+        {
+            self.confidence = Confidence::Medium;
+            tracing::debug!(
+                "Prompt detected (MEDIUM confidence): idle {}ms + looks complete",
+                self.idle_threshold.as_millis()
+            );
+            return true;
+        }
 
         // Signal 3: Still responding
         self.confidence = Confidence::Low;
@@ -245,7 +246,7 @@ mod tests {
 
     #[test]
     fn test_complete_with_period() {
-        let mut detector = PromptDetector::new();
+        let detector = PromptDetector::new();
         sleep(Duration::from_millis(250));
 
         assert!(detector.looks_complete("This is a complete sentence."));

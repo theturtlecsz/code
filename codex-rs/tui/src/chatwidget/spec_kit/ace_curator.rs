@@ -75,7 +75,8 @@ TASK: Decide how to update the playbook based on reflection insights.
 ## Reflection Insights
 
 ### Patterns Discovered
-"#.to_string();
+"#
+        .to_string();
 
         for pattern in &self.reflection.patterns {
             prompt.push_str(&format!(
@@ -211,7 +212,7 @@ pub fn should_curate(reflection: &ReflectionResult) -> bool {
 #[cfg(test)]
 mod tests {
     use super::super::ace_reflector::ReflectedPattern;
-    use super::super::ace_route_selector::DiffStat;
+
     use super::*;
 
     #[test]

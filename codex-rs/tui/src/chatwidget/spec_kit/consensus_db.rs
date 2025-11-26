@@ -22,11 +22,11 @@ use codex_spec_kit::retry::strategy::{
     RetryConfig, execute_with_backoff, execute_with_backoff_sync,
 };
 use r2d2::Pool;
-use tracing::warn;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{Connection, Result as SqlResult, params};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use tracing::warn;
 
 use crate::spec_prompts::SpecStage;
 
@@ -169,8 +169,8 @@ impl ConsensusDb {
         stage: SpecStage,
         agent_name: &str,
         content_json: &str,
-        _response_text: Option<&str>,  // Reserved for future raw response storage
-        _run_id: Option<&str>,         // Reserved for pipeline run correlation
+        _response_text: Option<&str>, // Reserved for future raw response storage
+        _run_id: Option<&str>,        // Reserved for pipeline run correlation
     ) -> SqlResult<i64> {
         // Ensure connection pool is available
         let pool = self
@@ -434,7 +434,7 @@ impl ConsensusDb {
         agreements: Option<&str>,
         conflicts: Option<&str>,
         degraded: bool,
-        _run_id: Option<&str>,  // Reserved for pipeline run correlation
+        _run_id: Option<&str>, // Reserved for pipeline run correlation
     ) -> SqlResult<i64> {
         // Ensure connection pool is available
         let pool = self
@@ -829,7 +829,7 @@ impl ConsensusDb {
         stage_name: &str,
         agent_name: &str,
         content_json: &str,
-        _run_id: Option<&str>,  // Reserved for pipeline run correlation
+        _run_id: Option<&str>, // Reserved for pipeline run correlation
     ) -> SqlResult<i64> {
         // Ensure connection pool is available
         let pool = self

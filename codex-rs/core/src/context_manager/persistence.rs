@@ -138,9 +138,10 @@ impl SessionManager {
             let entry = entry?;
             let path = entry.path();
             if path.extension().map(|e| e == "json").unwrap_or(false)
-                && let Some(name) = path.file_stem() {
-                    sessions.push(name.to_string_lossy().to_string());
-                }
+                && let Some(name) = path.file_stem()
+            {
+                sessions.push(name.to_string_lossy().to_string());
+            }
         }
 
         // Sort by name (which often includes timestamp)
@@ -251,7 +252,7 @@ mod tests {
             provider: history.provider,
             system_prompt: history.system_prompt.clone(),
             messages: history.messages.clone(),
-            budget: history.budget.clone().into(),
+            budget: history.budget.into(),
             truncation_strategy: "SlidingWindow".to_string(),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),

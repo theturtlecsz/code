@@ -50,18 +50,19 @@ pub(super) fn finalize_exec_cell_at(
     if let Some(exec) = chat.history_cells[idx]
         .as_any()
         .downcast_ref::<history_cell::ExecCell>()
-        && exec.output.is_none() {
-            let completed = history_cell::new_completed_exec_command(
-                exec.command.clone(),
-                exec.parsed.clone(),
-                CommandOutput {
-                    exit_code,
-                    stdout,
-                    stderr,
-                },
-            );
-            chat.history_replace_at(idx, Box::new(completed));
-        }
+        && exec.output.is_none()
+    {
+        let completed = history_cell::new_completed_exec_command(
+            exec.command.clone(),
+            exec.parsed.clone(),
+            CommandOutput {
+                exit_code,
+                stdout,
+                stderr,
+            },
+        );
+        chat.history_replace_at(idx, Box::new(completed));
+    }
 }
 
 pub(super) fn finalize_all_running_as_interrupted(chat: &mut ChatWidget<'_>) {
@@ -85,15 +86,15 @@ pub(super) fn finalize_all_running_as_interrupted(chat: &mut ChatWidget<'_>) {
         }
         if let Some((agg_idx, entry_idx)) = explore_entry
             && *agg_idx < chat.history_cells.len()
-                && let Some(agg) = chat.history_cells[*agg_idx]
-                    .as_any_mut()
-                    .downcast_mut::<history_cell::ExploreAggregationCell>()
-                {
-                    agg.update_status(
-                        *entry_idx,
-                        history_cell::ExploreEntryStatus::Error { exit_code: None },
-                    );
-                }
+            && let Some(agg) = chat.history_cells[*agg_idx]
+                .as_any_mut()
+                .downcast_mut::<history_cell::ExploreAggregationCell>()
+        {
+            agg.update_status(
+                *entry_idx,
+                history_cell::ExploreEntryStatus::Error { exit_code: None },
+            );
+        }
         chat.canceled_exec_call_ids.insert(call_id.clone());
     }
     let agg_was_updated = running.iter().any(|(_, _, entry)| entry.is_some());
@@ -113,36 +114,37 @@ pub(super) fn finalize_all_running_as_interrupted(chat: &mut ChatWidget<'_>) {
             .collect();
         for (_k, entry) in entries {
             if let Some(idx) = chat.resolve_running_tool_index(&entry)
-                && idx < chat.history_cells.len() {
-                    let wait_cancel_cell = Box::new(history_cell::PlainHistoryCell::new(
-                        vec![Line::styled(
-                            "Wait cancelled",
-                            Style::default()
-                                .fg(crate::colors::error())
-                                .add_modifier(Modifier::BOLD),
-                        )],
-                        history_cell::HistoryCellType::Error,
-                    ));
+                && idx < chat.history_cells.len()
+            {
+                let wait_cancel_cell = Box::new(history_cell::PlainHistoryCell::new(
+                    vec![Line::styled(
+                        "Wait cancelled",
+                        Style::default()
+                            .fg(crate::colors::error())
+                            .add_modifier(Modifier::BOLD),
+                    )],
+                    history_cell::HistoryCellType::Error,
+                ));
 
-                    let replaced = chat.history_cells[idx]
-                        .as_any()
-                        .downcast_ref::<history_cell::RunningToolCallCell>()
-                        .map(|cell| cell.has_title("Waiting"))
-                        .unwrap_or(false);
+                let replaced = chat.history_cells[idx]
+                    .as_any()
+                    .downcast_ref::<history_cell::RunningToolCallCell>()
+                    .map(|cell| cell.has_title("Waiting"))
+                    .unwrap_or(false);
 
-                    if replaced {
-                        chat.history_replace_at(idx, wait_cancel_cell);
-                    } else {
-                        let completed = history_cell::new_completed_custom_tool_call(
-                            "custom".to_string(),
-                            None,
-                            std::time::Duration::from_millis(0),
-                            false,
-                            "Cancelled by user.".to_string(),
-                        );
-                        chat.history_replace_at(idx, Box::new(completed));
-                    }
+                if replaced {
+                    chat.history_replace_at(idx, wait_cancel_cell);
+                } else {
+                    let completed = history_cell::new_completed_custom_tool_call(
+                        "custom".to_string(),
+                        None,
+                        std::time::Duration::from_millis(0),
+                        false,
+                        "Cancelled by user.".to_string(),
+                    );
+                    chat.history_replace_at(idx, Box::new(completed));
                 }
+            }
         }
         chat.tools_state.running_custom_tools.clear();
         chat.invalidate_height_cache();
@@ -172,20 +174,21 @@ pub(super) fn finalize_all_running_as_interrupted(chat: &mut ChatWidget<'_>) {
                     if let Some(rt) = chat.history_cells[i]
                         .as_any()
                         .downcast_ref::<history_cell::RunningToolCallCell>()
-                        && rt.has_title("Web Search...") {
-                            target_idx = Some(i);
-                            break;
-                        }
+                        && rt.has_title("Web Search...")
+                    {
+                        target_idx = Some(i);
+                        break;
+                    }
                 }
             }
             if let Some(i) = target_idx
                 && let Some(rt) = chat.history_cells[i]
                     .as_any()
                     .downcast_ref::<history_cell::RunningToolCallCell>()
-                {
-                    let completed = rt.finalize_web_search(false, query_opt);
-                    chat.history_replace_at(i, Box::new(completed));
-                }
+            {
+                let completed = rt.finalize_web_search(false, query_opt);
+                chat.history_replace_at(i, Box::new(completed));
+            }
             chat.tools_state.running_web_search.remove(&call_id);
         }
     }
@@ -223,13 +226,13 @@ pub(super) fn finalize_all_running_due_to_answer(chat: &mut ChatWidget<'_>) {
 
         if let Some((agg_idx, entry_idx)) = explore_entry
             && *agg_idx < chat.history_cells.len()
-                && let Some(agg) = chat.history_cells[*agg_idx]
-                    .as_any_mut()
-                    .downcast_mut::<history_cell::ExploreAggregationCell>()
-                {
-                    agg.update_status(*entry_idx, history_cell::ExploreEntryStatus::Success);
-                    agg_was_updated = true;
-                }
+            && let Some(agg) = chat.history_cells[*agg_idx]
+                .as_any_mut()
+                .downcast_mut::<history_cell::ExploreAggregationCell>()
+        {
+            agg.update_status(*entry_idx, history_cell::ExploreEntryStatus::Success);
+            agg_was_updated = true;
+        }
 
         remove_after_finalize.push(call_id.clone());
     }
@@ -253,16 +256,17 @@ pub(super) fn finalize_all_running_due_to_answer(chat: &mut ChatWidget<'_>) {
             .collect();
         for (_k, entry) in entries {
             if let Some(idx) = chat.resolve_running_tool_index(&entry)
-                && idx < chat.history_cells.len() {
-                    let completed = history_cell::new_completed_custom_tool_call(
-                        "custom".to_string(),
-                        None,
-                        std::time::Duration::from_millis(0),
-                        true,
-                        "Final answer received".to_string(),
-                    );
-                    chat.history_replace_at(idx, Box::new(completed));
-                }
+                && idx < chat.history_cells.len()
+            {
+                let completed = history_cell::new_completed_custom_tool_call(
+                    "custom".to_string(),
+                    None,
+                    std::time::Duration::from_millis(0),
+                    true,
+                    "Final answer received".to_string(),
+                );
+                chat.history_replace_at(idx, Box::new(completed));
+            }
         }
         chat.tools_state.running_custom_tools.clear();
         chat.invalidate_height_cache();
@@ -292,20 +296,21 @@ pub(super) fn finalize_all_running_due_to_answer(chat: &mut ChatWidget<'_>) {
                     if let Some(rt) = chat.history_cells[i]
                         .as_any()
                         .downcast_ref::<history_cell::RunningToolCallCell>()
-                        && rt.has_title("Web Search...") {
-                            target_idx = Some(i);
-                            break;
-                        }
+                        && rt.has_title("Web Search...")
+                    {
+                        target_idx = Some(i);
+                        break;
+                    }
                 }
             }
             if let Some(i) = target_idx
                 && let Some(rt) = chat.history_cells[i]
                     .as_any()
                     .downcast_ref::<history_cell::RunningToolCallCell>()
-                {
-                    let completed = rt.finalize_web_search(true, query_opt);
-                    chat.history_replace_at(i, Box::new(completed));
-                }
+            {
+                let completed = rt.finalize_web_search(true, query_opt);
+                chat.history_replace_at(i, Box::new(completed));
+            }
             chat.tools_state.running_web_search.remove(&call_id);
         }
     }
@@ -340,23 +345,24 @@ pub(super) fn try_merge_completed_exec_at(chat: &mut ChatWidget<'_>, idx: usize)
         .as_any()
         .downcast_ref::<history_cell::ExecCell>()
         && prev_exec.output.is_some()
-            && to_kind(prev_exec) == new_kind {
-                let mut merged = history_cell::MergedExecCell::from_exec(prev_exec);
-                if let Some(current_exec) = chat.history_cells[idx]
-                    .as_any()
-                    .downcast_ref::<history_cell::ExecCell>()
-                {
-                    merged.push_exec(current_exec);
-                }
-                chat.history_replace_at(idx - 1, Box::new(merged));
-                chat.history_remove_at(idx);
-                chat.invalidate_height_cache();
-                chat.autoscroll_if_near_bottom();
-                chat.bottom_pane.set_has_chat_history(true);
-                chat.process_animation_cleanup();
-                chat.app_event_tx.send(AppEvent::RequestRedraw);
-                return;
-            }
+        && to_kind(prev_exec) == new_kind
+    {
+        let mut merged = history_cell::MergedExecCell::from_exec(prev_exec);
+        if let Some(current_exec) = chat.history_cells[idx]
+            .as_any()
+            .downcast_ref::<history_cell::ExecCell>()
+        {
+            merged.push_exec(current_exec);
+        }
+        chat.history_replace_at(idx - 1, Box::new(merged));
+        chat.history_remove_at(idx);
+        chat.invalidate_height_cache();
+        chat.autoscroll_if_near_bottom();
+        chat.bottom_pane.set_has_chat_history(true);
+        chat.process_animation_cleanup();
+        chat.app_event_tx.send(AppEvent::RequestRedraw);
+        return;
+    }
 
     let mut did_merge_into_prev = false;
     if idx < chat.history_cells.len() {
@@ -365,12 +371,11 @@ pub(super) fn try_merge_completed_exec_at(chat: &mut ChatWidget<'_>, idx: usize)
             .as_any_mut()
             .downcast_mut::<history_cell::MergedExecCell>()
             && prev_merged.exec_kind() == new_kind
-                && let Some(current_exec) =
-                    right[0].as_any().downcast_ref::<history_cell::ExecCell>()
-                {
-                    prev_merged.push_exec(current_exec);
-                    did_merge_into_prev = true;
-                }
+            && let Some(current_exec) = right[0].as_any().downcast_ref::<history_cell::ExecCell>()
+        {
+            prev_merged.push_exec(current_exec);
+            did_merge_into_prev = true;
+        }
     }
     if did_merge_into_prev {
         chat.history_remove_at(idx);
@@ -628,9 +633,9 @@ pub(super) fn handle_exec_end_now(
             && let Some(agg) = chat.history_cells[agg_idx]
                 .as_any_mut()
                 .downcast_mut::<history_cell::ExploreAggregationCell>()
-            {
-                agg.update_status(entry_idx, status.clone());
-            }
+        {
+            agg.update_status(entry_idx, status.clone());
+        }
         if !chat
             .exec
             .running_commands
@@ -734,13 +739,12 @@ pub(super) fn handle_exec_end_now(
         }
     }
 
-    if !replaced
-        && let Some(c) = completed_opt.take() {
-            let key = ChatWidget::order_key_from_order_meta(order);
-            let idx = chat.history_insert_with_key_global(Box::new(c), key);
-            // Attempt standard merge with previous Exec if applicable.
-            crate::chatwidget::exec_tools::try_merge_completed_exec_at(chat, idx);
-        }
+    if !replaced && let Some(c) = completed_opt.take() {
+        let key = ChatWidget::order_key_from_order_meta(order);
+        let idx = chat.history_insert_with_key_global(Box::new(c), key);
+        // Attempt standard merge with previous Exec if applicable.
+        crate::chatwidget::exec_tools::try_merge_completed_exec_at(chat, idx);
+    }
 
     if exit_code == 0 {
         chat.bottom_pane
@@ -759,35 +763,36 @@ pub(super) fn handle_exec_end_now(
     // === FORK-SPECIFIC: spec-auto guardrail completion handler ===
     // Check if this exec completion is for a spec-auto guardrail command
     if let Some(ref state) = chat.spec_auto_state
-        && let Some(ref wait) = state.waiting_guardrail {
-            // Check if this is the guardrail we're waiting for
-            // Project commands have call_id pattern: "project_cmd_spec_ops_*"
-            if call_id.starts_with("project_cmd_spec_ops") {
-                if exit_code == 0 {
-                    // Guardrail succeeded - transition to agent execution phase
-                    let stage = wait.stage;
-                    let spec_id = state.spec_id.clone();
+        && let Some(ref wait) = state.waiting_guardrail
+    {
+        // Check if this is the guardrail we're waiting for
+        // Project commands have call_id pattern: "project_cmd_spec_ops_*"
+        if call_id.starts_with("project_cmd_spec_ops") {
+            if exit_code == 0 {
+                // Guardrail succeeded - transition to agent execution phase
+                let stage = wait.stage;
+                let spec_id = state.spec_id.clone();
 
-                    // Clear waiting state
-                    if let Some(state_mut) = chat.spec_auto_state.as_mut() {
-                        state_mut.waiting_guardrail = None;
-                    }
-
-                    // Spawn agents for this stage
-                    spec_kit::auto_submit_spec_stage_prompt(chat, stage, &spec_id);
-                } else {
-                    // Guardrail failed - halt pipeline
-                    spec_kit::halt_spec_auto_with_error(
-                        chat,
-                        format!(
-                            "Guardrail {} failed with exit code {}",
-                            wait.stage.display_name(),
-                            exit_code
-                        ),
-                    );
+                // Clear waiting state
+                if let Some(state_mut) = chat.spec_auto_state.as_mut() {
+                    state_mut.waiting_guardrail = None;
                 }
+
+                // Spawn agents for this stage
+                spec_kit::auto_submit_spec_stage_prompt(chat, stage, &spec_id);
+            } else {
+                // Guardrail failed - halt pipeline
+                spec_kit::halt_spec_auto_with_error(
+                    chat,
+                    format!(
+                        "Guardrail {} failed with exit code {}",
+                        wait.stage.display_name(),
+                        exit_code
+                    ),
+                );
             }
         }
+    }
     // === END FORK-SPECIFIC ===
 
     chat.maybe_hide_spinner();

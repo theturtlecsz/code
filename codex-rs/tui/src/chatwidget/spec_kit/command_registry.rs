@@ -353,7 +353,7 @@ mod tests {
         for stage in stages {
             let cmd = registry
                 .find(stage)
-                .expect(&format!("{} should be registered", stage));
+                .unwrap_or_else(|| panic!("{} should be registered", stage));
             assert_eq!(cmd.name(), stage);
         }
     }
@@ -387,7 +387,7 @@ mod tests {
 
             let cmd = registry
                 .find(guardrail)
-                .expect(&format!("{} should be registered", guardrail));
+                .unwrap_or_else(|| panic!("{} should be registered", guardrail));
             assert_eq!(cmd.name(), guardrail);
             assert!(
                 cmd.is_guardrail(),

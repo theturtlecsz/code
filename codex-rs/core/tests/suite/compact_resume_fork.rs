@@ -17,7 +17,6 @@ use codex_core::NewConversation;
 use codex_core::built_in_model_providers;
 use codex_core::codex::compact::SUMMARIZATION_PROMPT;
 use codex_core::config::Config;
-use codex_core::protocol::ConversationPathResponseEvent;
 use codex_core::protocol::EventMsg;
 use codex_core::protocol::InputItem;
 use codex_core::protocol::Op;

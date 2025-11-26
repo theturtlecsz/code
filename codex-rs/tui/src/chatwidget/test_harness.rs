@@ -7,9 +7,8 @@
 
 use super::*;
 use crate::app_event::AppEvent;
-use crate::streaming::StreamKind;
 use codex_core::config::{Config, ConfigOverrides, ConfigToml};
-use codex_core::protocol::{Event, EventMsg, Op, OrderMeta};
+use codex_core::protocol::{Event, EventMsg, OrderMeta};
 use tokio::sync::mpsc;
 
 /// Test harness for exercising ChatWidget with a fake Codex engine

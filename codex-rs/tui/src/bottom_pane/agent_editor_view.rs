@@ -101,9 +101,10 @@ impl AgentEditorView {
                     let candidate = dir.join(cmd);
                     if let Ok(meta) = std::fs::metadata(&candidate)
                         && meta.is_file()
-                            && meta.permissions().mode() & 0o111 != 0 {
-                                return true;
-                            }
+                        && meta.permissions().mode() & 0o111 != 0
+                    {
+                        return true;
+                    }
                 }
                 false
             }

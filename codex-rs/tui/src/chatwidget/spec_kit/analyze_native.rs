@@ -329,24 +329,25 @@ fn check_version_drift(
 
     // If PRD is newer than plan by more than 1 minute, flag it
     if let Ok(duration) = prd_modified.duration_since(plan_modified)
-        && duration.as_secs() > 60 {
-            issues.push(InconsistencyIssue {
-                id: format!("INC-{:03}", issues.len() + 1),
-                issue_type: "version_drift".to_string(),
-                severity: Severity::Important,
-                source_file: "PRD.md".to_string(),
-                target_file: "plan.md".to_string(),
-                source_location: "metadata".to_string(),
-                target_location: "metadata".to_string(),
-                description: format!(
-                    "PRD modified {} seconds after plan - plan may be stale",
-                    duration.as_secs()
-                ),
-                suggested_fix: Some(
-                    "Regenerate plan with /speckit.plan if PRD changed significantly".to_string(),
-                ),
-            });
-        }
+        && duration.as_secs() > 60
+    {
+        issues.push(InconsistencyIssue {
+            id: format!("INC-{:03}", issues.len() + 1),
+            issue_type: "version_drift".to_string(),
+            severity: Severity::Important,
+            source_file: "PRD.md".to_string(),
+            target_file: "plan.md".to_string(),
+            source_location: "metadata".to_string(),
+            target_location: "metadata".to_string(),
+            description: format!(
+                "PRD modified {} seconds after plan - plan may be stale",
+                duration.as_secs()
+            ),
+            suggested_fix: Some(
+                "Regenerate plan with /speckit.plan if PRD changed significantly".to_string(),
+            ),
+        });
+    }
 
     Ok(())
 }

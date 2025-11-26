@@ -252,27 +252,28 @@ fn build_hourly_window_line(
     }
 
     if let Some(next) = next_reset
-        && let Some(timing) = compute_window_timing(metrics.primary_window_minutes, next) {
-            let window_secs = timing.window.as_secs_f64();
-            if window_secs > 0.0 {
-                let elapsed = timing.elapsed();
-                let percent = ((elapsed.as_secs_f64() / window_secs) * 100.0).clamp(0.0, 100.0);
-                let mut spans: Vec<Span<'static>> = Vec::new();
-                spans.push(Span::raw(prefix.clone()));
-                spans.extend(render_percent_bar(percent));
-                spans.push(Span::styled(
-                    format!(" {}", format_percent(percent)),
-                    Style::default().fg(colors::text()),
-                ));
-                let elapsed_display = format_duration(elapsed);
-                let total_display = format_minutes_round_units(metrics.primary_window_minutes);
-                spans.push(Span::styled(
-                    format!(" ({elapsed_display} / {total_display})"),
-                    Style::default().fg(colors::dim()),
-                ));
-                return Line::from(spans);
-            }
+        && let Some(timing) = compute_window_timing(metrics.primary_window_minutes, next)
+    {
+        let window_secs = timing.window.as_secs_f64();
+        if window_secs > 0.0 {
+            let elapsed = timing.elapsed();
+            let percent = ((elapsed.as_secs_f64() / window_secs) * 100.0).clamp(0.0, 100.0);
+            let mut spans: Vec<Span<'static>> = Vec::new();
+            spans.push(Span::raw(prefix.clone()));
+            spans.extend(render_percent_bar(percent));
+            spans.push(Span::styled(
+                format!(" {}", format_percent(percent)),
+                Style::default().fg(colors::text()),
+            ));
+            let elapsed_display = format_duration(elapsed);
+            let total_display = format_minutes_round_units(metrics.primary_window_minutes);
+            spans.push(Span::styled(
+                format!(" ({elapsed_display} / {total_display})"),
+                Style::default().fg(colors::dim()),
+            ));
+            return Line::from(spans);
         }
+    }
 
     let mut spans: Vec<Span<'static>> = Vec::new();
     spans.push(Span::raw(prefix));
@@ -338,27 +339,28 @@ fn build_weekly_window_line(
     }
 
     if let Some(next) = next_reset
-        && let Some(timing) = compute_window_timing(weekly_minutes, next) {
-            let window_secs = timing.window.as_secs_f64();
-            if window_secs > 0.0 {
-                let elapsed = timing.elapsed();
-                let percent = ((elapsed.as_secs_f64() / window_secs) * 100.0).clamp(0.0, 100.0);
-                let mut spans: Vec<Span<'static>> = Vec::new();
-                spans.push(Span::raw(prefix.clone()));
-                spans.extend(render_percent_bar(percent));
-                spans.push(Span::styled(
-                    format!(" {}", format_percent(percent)),
-                    Style::default().fg(colors::text()),
-                ));
-                let elapsed_display = format_duration(elapsed);
-                let total_display = format_minutes_round_units(weekly_minutes);
-                spans.push(Span::styled(
-                    format!(" ({elapsed_display} / {total_display})"),
-                    Style::default().fg(colors::dim()),
-                ));
-                return Line::from(spans);
-            }
+        && let Some(timing) = compute_window_timing(weekly_minutes, next)
+    {
+        let window_secs = timing.window.as_secs_f64();
+        if window_secs > 0.0 {
+            let elapsed = timing.elapsed();
+            let percent = ((elapsed.as_secs_f64() / window_secs) * 100.0).clamp(0.0, 100.0);
+            let mut spans: Vec<Span<'static>> = Vec::new();
+            spans.push(Span::raw(prefix.clone()));
+            spans.extend(render_percent_bar(percent));
+            spans.push(Span::styled(
+                format!(" {}", format_percent(percent)),
+                Style::default().fg(colors::text()),
+            ));
+            let elapsed_display = format_duration(elapsed);
+            let total_display = format_minutes_round_units(weekly_minutes);
+            spans.push(Span::styled(
+                format!(" ({elapsed_display} / {total_display})"),
+                Style::default().fg(colors::dim()),
+            ));
+            return Line::from(spans);
         }
+    }
 
     Line::from(vec![
         Span::raw(prefix),

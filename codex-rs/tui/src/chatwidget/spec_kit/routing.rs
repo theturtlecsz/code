@@ -128,9 +128,10 @@ pub fn try_dispatch_spec_kit_command(
         if !merged_commands
             .iter()
             .any(|cfg| cfg.name.eq_ignore_ascii_case(config_name))
-            && let Some(default_cfg) = subagent_defaults::default_for(config_name) {
-                merged_commands.push(default_cfg);
-            }
+            && let Some(default_cfg) = subagent_defaults::default_for(config_name)
+        {
+            merged_commands.push(default_cfg);
+        }
 
         // Format with the resolved configuration to get orchestrator instructions
         let formatted = codex_core::slash_commands::format_subagent_command(

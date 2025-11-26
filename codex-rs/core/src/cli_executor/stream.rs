@@ -37,13 +37,14 @@ pub async fn parse_claude_stream(
                 if let Some(content) = json["message"]["content"].as_array() {
                     for item in content {
                         if item["type"] == "text"
-                            && let Some(text) = item["text"].as_str() {
-                                tx.send(StreamEvent::Delta(text.to_string()))
-                                    .await
-                                    .map_err(|e| CliError::Internal {
-                                        message: format!("Channel send failed: {e}"),
-                                    })?;
-                            }
+                            && let Some(text) = item["text"].as_str()
+                        {
+                            tx.send(StreamEvent::Delta(text.to_string()))
+                                .await
+                                .map_err(|e| CliError::Internal {
+                                    message: format!("Channel send failed: {e}"),
+                                })?;
+                        }
                     }
                 }
 
@@ -115,29 +116,32 @@ pub async fn parse_gemini_stream(
             }
 
             // Handle Gemini message format: {"type":"message","role":"assistant","content":"...","delta":true}
-            if json["type"] == "message" && json["role"] == "assistant"
-                && let Some(content) = json["content"].as_str() {
-                    accumulated_text.push_str(content);
-                    tx.send(StreamEvent::Delta(content.to_string()))
-                        .await
-                        .map_err(|e| CliError::Internal {
-                            message: format!("Channel send failed: {e}"),
-                        })?;
-                }
-
-            // Handle result/stats
-            if json["type"] == "result"
-                && let Some(stats) = json["stats"].as_object() {
-                    tx.send(StreamEvent::Metadata(ResponseMetadata {
-                        model: "gemini".to_string(),
-                        input_tokens: stats["input_tokens"].as_u64().map(|n| n as usize),
-                        output_tokens: stats["output_tokens"].as_u64().map(|n| n as usize),
-                    }))
+            if json["type"] == "message"
+                && json["role"] == "assistant"
+                && let Some(content) = json["content"].as_str()
+            {
+                accumulated_text.push_str(content);
+                tx.send(StreamEvent::Delta(content.to_string()))
                     .await
                     .map_err(|e| CliError::Internal {
                         message: format!("Channel send failed: {e}"),
                     })?;
-                }
+            }
+
+            // Handle result/stats
+            if json["type"] == "result"
+                && let Some(stats) = json["stats"].as_object()
+            {
+                tx.send(StreamEvent::Metadata(ResponseMetadata {
+                    model: "gemini".to_string(),
+                    input_tokens: stats["input_tokens"].as_u64().map(|n| n as usize),
+                    output_tokens: stats["output_tokens"].as_u64().map(|n| n as usize),
+                }))
+                .await
+                .map_err(|e| CliError::Internal {
+                    message: format!("Channel send failed: {e}"),
+                })?;
+            }
         } else {
             // Fallback: treat as plain text response
             // Gemini may output plain text after retries succeed
@@ -176,7 +180,6 @@ pub async fn parse_gemini_stream(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     #[tokio::test]
     async fn test_parse_claude_stream() {

@@ -129,15 +129,17 @@ fn encode_key_for_pty(key_event: KeyEvent) -> Option<Vec<u8>> {
     let mods = key_event.modifiers;
     match key_event.code {
         KeyCode::Char(ch) => {
-            if mods.contains(KeyModifiers::CONTROL) && !mods.contains(KeyModifiers::SUPER)
-                && let Some(ctrl) = control_byte(ch) {
-                    let mut out = Vec::new();
-                    if mods.contains(KeyModifiers::ALT) {
-                        out.push(0x1b);
-                    }
-                    out.push(ctrl);
-                    return Some(out);
+            if mods.contains(KeyModifiers::CONTROL)
+                && !mods.contains(KeyModifiers::SUPER)
+                && let Some(ctrl) = control_byte(ch)
+            {
+                let mut out = Vec::new();
+                if mods.contains(KeyModifiers::ALT) {
+                    out.push(0x1b);
                 }
+                out.push(ctrl);
+                return Some(out);
+            }
             let mut out = Vec::new();
             if mods.contains(KeyModifiers::ALT) {
                 out.push(0x1b);

@@ -51,23 +51,24 @@ pub(super) fn web_search_complete(
                 if let Some(rt) = chat.history_cells[i]
                     .as_any()
                     .downcast_ref::<history_cell::RunningToolCallCell>()
-                    && rt.has_title("Web Search...") {
-                        target_idx = Some(i);
-                        break;
-                    }
+                    && rt.has_title("Web Search...")
+                {
+                    target_idx = Some(i);
+                    break;
+                }
             }
         }
         if let Some(i) = target_idx
             && let Some(rt) = chat.history_cells[i]
                 .as_any()
                 .downcast_ref::<history_cell::RunningToolCallCell>()
-            {
-                let final_query = query.or(maybe_query);
-                let completed = rt.finalize_web_search(true, final_query);
-                chat.history_replace_at(i, Box::new(completed));
-                chat.history_maybe_merge_tool_with_previous(i);
-                tracing::info!("[order] WebSearchEnd replace at idx={}", i);
-            }
+        {
+            let final_query = query.or(maybe_query);
+            let completed = rt.finalize_web_search(true, final_query);
+            chat.history_replace_at(i, Box::new(completed));
+            chat.history_maybe_merge_tool_with_previous(i);
+            tracing::info!("[order] WebSearchEnd replace at idx={}", i);
+        }
     }
     chat.bottom_pane
         .update_status_text("responding".to_string());
@@ -108,9 +109,10 @@ pub(super) fn mcp_end(chat: &mut ChatWidget<'_>, ev: McpToolCallEndEvent, key: O
         .running_custom_tools
         .remove(&super::ToolCallId(call_id))
         && let Some(idx) = chat.resolve_running_tool_index(&entry)
-            && idx < chat.history_cells.len() {
-                chat.history_replace_at(idx, completed);
-                return;
-            }
+        && idx < chat.history_cells.len()
+    {
+        chat.history_replace_at(idx, completed);
+        return;
+    }
     let _ = chat.history_insert_with_key_global(Box::new(completed), key);
 }

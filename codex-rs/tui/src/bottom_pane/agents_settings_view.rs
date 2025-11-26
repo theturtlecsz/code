@@ -184,10 +184,9 @@ impl<'a> BottomPaneView<'a> for SubagentEditorView {
                         modifiers,
                         ..key_event
                     });
-                    if at_start
-                        && self.field > 0 {
-                            self.field -= 1;
-                        }
+                    if at_start && self.field > 0 {
+                        self.field -= 1;
+                    }
                 } else if self.field > 0 {
                     self.field -= 1;
                 }

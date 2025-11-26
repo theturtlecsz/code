@@ -302,20 +302,19 @@ impl GeminiPipesSession {
                                 if self.session_id.is_none()
                                     && let Some(session_id) =
                                         event.get("session_id").and_then(|s| s.as_str())
-                                    {
-                                        self.session_id = Some(session_id.to_string());
-                                        tracing::info!("Captured session_id: {}", session_id);
-                                    }
+                                {
+                                    self.session_id = Some(session_id.to_string());
+                                    tracing::info!("Captured session_id: {}", session_id);
+                                }
                             }
                             Some("message") => {
                                 // Assistant message with content
                                 if let Some(content) = event.get("content").and_then(|c| c.as_str())
                                     && event.get("role").and_then(|r| r.as_str())
                                         == Some("assistant")
-                                    {
-                                        let _ =
-                                            tx.send(StreamEvent::Delta(content.to_string())).await;
-                                    }
+                                {
+                                    let _ = tx.send(StreamEvent::Delta(content.to_string())).await;
+                                }
                             }
                             Some("result") => {
                                 // Turn complete - result event indicates end
@@ -716,7 +715,7 @@ mod tests {
             }
         }
 
-        println!("Response: {}", response);
+        println!("Response: {response}");
         assert!(
             response.contains("Hello") || response.contains("World"),
             "Response should contain greeting"
@@ -756,7 +755,7 @@ mod tests {
             }
         }
 
-        println!("Response: {}", response);
+        println!("Response: {response}");
         assert!(
             response.contains("Alice"),
             "Should remember name from turn 1"

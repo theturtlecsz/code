@@ -212,11 +212,11 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
                 if state.quality_gates_enabled
                     && let Some(checkpoint) =
                         determine_quality_checkpoint(stage, &state.completed_checkpoints)
-                    {
-                        // Execute quality checkpoint instead of proceeding to guardrail
-                        execute_quality_checkpoint(widget, checkpoint);
-                        return;
-                    }
+                {
+                    // Execute quality checkpoint instead of proceeding to guardrail
+                    execute_quality_checkpoint(widget, checkpoint);
+                    return;
+                }
 
                 match &state.phase {
                     SpecAutoPhase::Guardrail => {
@@ -242,7 +242,8 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
                             );
 
                             // Add visual boundary marker to TUI
-                            let marker_lines = [ratatui::text::Line::from(
+                            let marker_lines = [
+                                ratatui::text::Line::from(
                                     "════════════════════════════════════════",
                                 ),
                                 ratatui::text::Line::from(format!(
@@ -256,7 +257,8 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
                                 )),
                                 ratatui::text::Line::from(
                                     "════════════════════════════════════════",
-                                )];
+                                ),
+                            ];
                             // Store marker for display after this function returns
                             state.pending_prompt_summary = Some(
                                 marker_lines
@@ -320,28 +322,29 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
 
                 // Log run complete event
                 if let Some(state) = widget.spec_auto_state.as_ref()
-                    && let Some(run_id) = &state.run_id {
-                        let total_duration = state.execution_logger.elapsed_sec();
-                        // TODO: Calculate actual total cost from tracker
-                        let total_cost = 0.0;
-                        let stages_completed = state.stages.len() - state.current_index;
-                        let quality_gates_passed = state.completed_checkpoints.len();
+                    && let Some(run_id) = &state.run_id
+                {
+                    let total_duration = state.execution_logger.elapsed_sec();
+                    // TODO: Calculate actual total cost from tracker
+                    let total_cost = 0.0;
+                    let stages_completed = state.stages.len() - state.current_index;
+                    let quality_gates_passed = state.completed_checkpoints.len();
 
-                        state.execution_logger.log_event(
-                            super::execution_logger::ExecutionEvent::RunComplete {
-                                run_id: run_id.clone(),
-                                spec_id: state.spec_id.clone(),
-                                total_duration_sec: total_duration,
-                                total_cost_usd: total_cost,
-                                stages_completed,
-                                quality_gates_passed,
-                                timestamp: super::execution_logger::ExecutionEvent::now(),
-                            },
-                        );
+                    state.execution_logger.log_event(
+                        super::execution_logger::ExecutionEvent::RunComplete {
+                            run_id: run_id.clone(),
+                            spec_id: state.spec_id.clone(),
+                            total_duration_sec: total_duration,
+                            total_cost_usd: total_cost,
+                            stages_completed,
+                            quality_gates_passed,
+                            timestamp: super::execution_logger::ExecutionEvent::now(),
+                        },
+                    );
 
-                        // Finalize logger
-                        state.execution_logger.finalize();
-                    }
+                    // Finalize logger
+                    state.execution_logger.finalize();
+                }
 
                 widget.history_push(crate::history_cell::PlainHistoryCell::new(
                     vec![ratatui::text::Line::from("/spec-auto pipeline complete")],
@@ -389,15 +392,16 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
             } => {
                 // Display stage boundary marker before starting guardrail
                 if let Some(state) = widget.spec_auto_state.as_ref()
-                    && let Some(summary) = &state.pending_prompt_summary {
-                        widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                            summary
-                                .lines()
-                                .map(|l| ratatui::text::Line::from(l.to_string()))
-                                .collect(),
-                            HistoryCellType::Notice,
-                        ));
-                    }
+                    && let Some(summary) = &state.pending_prompt_summary
+                {
+                    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                        summary
+                            .lines()
+                            .map(|l| ratatui::text::Line::from(l.to_string()))
+                            .collect(),
+                        HistoryCellType::Notice,
+                    ));
+                }
 
                 widget.handle_spec_ops_command(command, args, hal_mode);
                 return;
@@ -410,9 +414,10 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
 pub fn on_spec_auto_task_started(widget: &mut ChatWidget, task_id: &str) {
     if let Some(state) = widget.spec_auto_state.as_mut()
         && let Some(wait) = state.waiting_guardrail.as_mut()
-            && wait.task_id.is_none() {
-                wait.task_id = Some(task_id.to_string());
-            }
+        && wait.task_id.is_none()
+    {
+        wait.task_id = Some(task_id.to_string());
+    }
 }
 
 /// Handle spec-auto task completion (guardrail finished)
@@ -897,11 +902,10 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
 
                 // Schedule checklist for degraded follow-up
                 if let Some(state) = widget.spec_auto_state.as_ref()
-                    && let Some(stage) = state.current_stage() {
-                        super::agent_orchestrator::schedule_degraded_follow_up(
-                            widget, stage, &spec_id,
-                        );
-                    }
+                    && let Some(stage) = state.current_stage()
+                {
+                    super::agent_orchestrator::schedule_degraded_follow_up(widget, stage, &spec_id);
+                }
             }
 
             // Show consensus result
@@ -925,22 +929,21 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
 
                 if current_stage == SpecStage::Validate
                     && let Some(state_ref) = widget.spec_auto_state.as_ref()
-                        && let Some(info) = active_validate_info.as_ref()
-                            && let Some(completion) = state_ref.complete_validate_run(
-                                &info.run_id,
-                                ValidateCompletionReason::Completed,
-                            ) {
-                                record_validate_lifecycle_event(
-                                    widget,
-                                    &spec_id,
-                                    &completion.run_id,
-                                    completion.attempt,
-                                    completion.dedupe_count,
-                                    completion.payload_hash.as_str(),
-                                    completion.mode,
-                                    ValidateLifecycleEvent::Completed,
-                                );
-                            }
+                    && let Some(info) = active_validate_info.as_ref()
+                    && let Some(completion) = state_ref
+                        .complete_validate_run(&info.run_id, ValidateCompletionReason::Completed)
+                {
+                    record_validate_lifecycle_event(
+                        widget,
+                        &spec_id,
+                        &completion.run_id,
+                        completion.attempt,
+                        completion.dedupe_count,
+                        completion.payload_hash.as_str(),
+                        completion.mode,
+                        ValidateLifecycleEvent::Completed,
+                    );
+                }
 
                 persist_cost_summary(widget, &spec_id);
 
@@ -973,69 +976,68 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
 
                 // Log stage complete event
                 if let Some(state) = widget.spec_auto_state.as_ref()
-                    && let Some(run_id) = &state.run_id {
-                        let stage_duration = 0.0; // TODO: Track stage start time
-                        let stage_cost = None; // TODO: Get from cost tracker
-                        let evidence_written = true; // TODO: Check actual evidence status
+                    && let Some(run_id) = &state.run_id
+                {
+                    let stage_duration = 0.0; // TODO: Track stage start time
+                    let stage_cost = None; // TODO: Get from cost tracker
+                    let evidence_written = true; // TODO: Check actual evidence status
 
-                        state.execution_logger.log_event(
-                            super::execution_logger::ExecutionEvent::StageComplete {
-                                run_id: run_id.clone(),
-                                stage: current_stage.display_name().to_string(),
-                                duration_sec: stage_duration,
-                                cost_usd: stage_cost,
-                                evidence_written,
-                                timestamp: super::execution_logger::ExecutionEvent::now(),
-                            },
-                        );
-                    }
+                    state.execution_logger.log_event(
+                        super::execution_logger::ExecutionEvent::StageComplete {
+                            run_id: run_id.clone(),
+                            stage: current_stage.display_name().to_string(),
+                            duration_sec: stage_duration,
+                            cost_usd: stage_cost,
+                            evidence_written,
+                            timestamp: super::execution_logger::ExecutionEvent::now(),
+                        },
+                    );
+                }
 
                 // ACE Framework Integration (2025-10-29): Send learning feedback on success
                 if let Some(state) = widget.spec_auto_state.as_ref()
                     && let Some(bullet_ids) = &state.ace_bullet_ids_used
-                        && !bullet_ids.is_empty() {
-                            use super::ace_learning::send_learning_feedback_sync;
-                            use super::routing::{get_current_branch, get_repo_root};
+                    && !bullet_ids.is_empty()
+                {
+                    use super::ace_learning::send_learning_feedback_sync;
+                    use super::routing::{get_current_branch, get_repo_root};
 
-                            let feedback = super::ace_learning::ExecutionFeedback {
-                                compile_ok: true,
-                                tests_passed: true, // Consensus = success
-                                failing_tests: Vec::new(),
-                                lint_issues: 0,
-                                stack_traces: Vec::new(),
-                                diff_stat: None, // Consensus doesn't produce diffs
-                            };
+                    let feedback = super::ace_learning::ExecutionFeedback {
+                        compile_ok: true,
+                        tests_passed: true, // Consensus = success
+                        failing_tests: Vec::new(),
+                        lint_issues: 0,
+                        stack_traces: Vec::new(),
+                        diff_stat: None, // Consensus doesn't produce diffs
+                    };
 
-                            let ace_config = &widget.config.ace;
-                            if ace_config.enabled {
-                                let repo_root = get_repo_root(&widget.config.cwd)
-                                    .unwrap_or_else(|| widget.config.cwd.display().to_string());
-                                let branch = get_current_branch(&widget.config.cwd)
-                                    .unwrap_or_else(|| "main".to_string());
-                                let scope = format!("speckit.{}", current_stage.command_name());
-                                let task_title = format!(
-                                    "{} stage for {}",
-                                    current_stage.display_name(),
-                                    spec_id
-                                );
+                    let ace_config = &widget.config.ace;
+                    if ace_config.enabled {
+                        let repo_root = get_repo_root(&widget.config.cwd)
+                            .unwrap_or_else(|| widget.config.cwd.display().to_string());
+                        let branch = get_current_branch(&widget.config.cwd)
+                            .unwrap_or_else(|| "main".to_string());
+                        let scope = format!("speckit.{}", current_stage.command_name());
+                        let task_title =
+                            format!("{} stage for {}", current_stage.display_name(), spec_id);
 
-                                send_learning_feedback_sync(
-                                    ace_config,
-                                    repo_root,
-                                    branch,
-                                    &scope,
-                                    &task_title,
-                                    feedback,
-                                    None, // No diff_stat for consensus stages
-                                );
+                        send_learning_feedback_sync(
+                            ace_config,
+                            repo_root,
+                            branch,
+                            &scope,
+                            &task_title,
+                            feedback,
+                            None, // No diff_stat for consensus stages
+                        );
 
-                                tracing::info!(
-                                    "ACE: Sent learning feedback for {} ({} bullets)",
-                                    current_stage.display_name(),
-                                    bullet_ids.len()
-                                );
-                            }
-                        }
+                        tracing::info!(
+                            "ACE: Sent learning feedback for {} ({} bullets)",
+                            current_stage.display_name(),
+                            bullet_ids.len()
+                        );
+                    }
+                }
 
                 // Advance to next stage
                 if let Some(state) = widget.spec_auto_state.as_mut() {
@@ -1052,20 +1054,20 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
             } else {
                 if current_stage == SpecStage::Validate
                     && let Some(state_ref) = widget.spec_auto_state.as_ref()
-                        && let Some(completion) =
-                            state_ref.reset_validate_run(ValidateCompletionReason::Failed)
-                        {
-                            record_validate_lifecycle_event(
-                                widget,
-                                &spec_id,
-                                &completion.run_id,
-                                completion.attempt,
-                                completion.dedupe_count,
-                                completion.payload_hash.as_str(),
-                                completion.mode,
-                                ValidateLifecycleEvent::Failed,
-                            );
-                        }
+                    && let Some(completion) =
+                        state_ref.reset_validate_run(ValidateCompletionReason::Failed)
+                {
+                    record_validate_lifecycle_event(
+                        widget,
+                        &spec_id,
+                        &completion.run_id,
+                        completion.attempt,
+                        completion.dedupe_count,
+                        completion.payload_hash.as_str(),
+                        completion.mode,
+                        ValidateLifecycleEvent::Failed,
+                    );
+                }
                 // Consensus failed - halt (no retries)
                 halt_spec_auto_with_error(
                     widget,
@@ -1077,20 +1079,20 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
             // Consensus error - halt (no retries)
             if current_stage == SpecStage::Validate
                 && let Some(state_ref) = widget.spec_auto_state.as_ref()
-                    && let Some(completion) =
-                        state_ref.reset_validate_run(ValidateCompletionReason::Failed)
-                    {
-                        record_validate_lifecycle_event(
-                            widget,
-                            &spec_id,
-                            &completion.run_id,
-                            completion.attempt,
-                            completion.dedupe_count,
-                            completion.payload_hash.as_str(),
-                            completion.mode,
-                            ValidateLifecycleEvent::Failed,
-                        );
-                    }
+                && let Some(completion) =
+                    state_ref.reset_validate_run(ValidateCompletionReason::Failed)
+            {
+                record_validate_lifecycle_event(
+                    widget,
+                    &spec_id,
+                    &completion.run_id,
+                    completion.attempt,
+                    completion.dedupe_count,
+                    completion.payload_hash.as_str(),
+                    completion.mode,
+                    ValidateLifecycleEvent::Failed,
+                );
+            }
 
             halt_spec_auto_with_error(
                 widget,
@@ -1304,16 +1306,16 @@ fn synthesize_from_cached_responses(
                         .get("name")
                         .or_else(|| obj.get("task"))
                         .and_then(|v| v.as_str())
+                {
+                    output.push_str(&format!("- {}\n", name));
+                    if let Some(desc) = obj
+                        .get("description")
+                        .or_else(|| obj.get("details"))
+                        .and_then(|v| v.as_str())
                     {
-                        output.push_str(&format!("- {}\n", name));
-                        if let Some(desc) = obj
-                            .get("description")
-                            .or_else(|| obj.get("details"))
-                            .and_then(|v| v.as_str())
-                        {
-                            output.push_str(&format!("  {}\n", desc));
-                        }
+                        output.push_str(&format!("  {}\n", desc));
                     }
+                }
             }
             output.push('\n');
             structured_content_found = true;
@@ -1332,12 +1334,13 @@ fn synthesize_from_cached_responses(
 
         // Plain text content fallback
         if let Some(content) = data.get("content").and_then(|v| v.as_str())
-            && !content.is_empty() {
-                output.push_str(&format!("## Response from {}\n\n", agent_name));
-                output.push_str(content);
-                output.push_str("\n\n");
-                structured_content_found = true;
-            }
+            && !content.is_empty()
+        {
+            output.push_str(&format!("## Response from {}\n\n", agent_name));
+            output.push_str(content);
+            output.push_str("\n\n");
+            structured_content_found = true;
+        }
     }
 
     // Ultimate fallback: if no structured content extracted, pretty-print raw JSON
@@ -1484,9 +1487,10 @@ fn synthesize_from_cached_responses(
 pub(super) fn extract_json_from_agent_response(text: &str) -> Option<String> {
     // Look for JSON in markdown code blocks
     if let Some(start) = text.find("```json\n")
-        && let Some(end) = text[start + 8..].find("\n```") {
-            return Some(text[start + 8..start + 8 + end].to_string());
-        }
+        && let Some(end) = text[start + 8..].find("\n```")
+    {
+        return Some(text[start + 8..start + 8 + end].to_string());
+    }
 
     // Look for JSON in plain code blocks (agents use this format)
     if let Some(start) = text.find("│ {\n│   \"stage\"") {

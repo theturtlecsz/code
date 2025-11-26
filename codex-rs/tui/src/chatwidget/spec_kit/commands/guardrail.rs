@@ -243,16 +243,17 @@ impl SpecKitCommand for GuardrailAutoCommand {
 
         let mut resume_from = crate::spec_prompts::SpecStage::Plan;
         if let Some(pos) = parts.iter().position(|&p| p == "--from")
-            && let Some(stage_str) = parts.get(pos + 1) {
-                resume_from = match *stage_str {
-                    "tasks" => crate::spec_prompts::SpecStage::Tasks,
-                    "implement" => crate::spec_prompts::SpecStage::Implement,
-                    "validate" => crate::spec_prompts::SpecStage::Validate,
-                    "audit" => crate::spec_prompts::SpecStage::Audit,
-                    "unlock" => crate::spec_prompts::SpecStage::Unlock,
-                    _ => crate::spec_prompts::SpecStage::Plan,
-                };
-            }
+            && let Some(stage_str) = parts.get(pos + 1)
+        {
+            resume_from = match *stage_str {
+                "tasks" => crate::spec_prompts::SpecStage::Tasks,
+                "implement" => crate::spec_prompts::SpecStage::Implement,
+                "validate" => crate::spec_prompts::SpecStage::Validate,
+                "audit" => crate::spec_prompts::SpecStage::Audit,
+                "unlock" => crate::spec_prompts::SpecStage::Unlock,
+                _ => crate::spec_prompts::SpecStage::Plan,
+            };
+        }
 
         // Call native /speckit.auto implementation
         super::super::handler::handle_spec_auto(

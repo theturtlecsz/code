@@ -41,7 +41,7 @@ pub fn initialize_pool(db_path: &Path, pool_size: u32) -> Result<Pool<SqliteConn
 
     let pool = Pool::builder()
         .max_size(pool_size)
-        .min_idle(Some(2)) // Keep 2 warm connections
+        .min_idle(Some(pool_size.min(2))) // Keep up to 2 warm connections, but not more than pool_size
         .connection_customizer(Box::new(ConnectionCustomizer))
         .test_on_check_out(true) // Health check before returning
         .build(manager)

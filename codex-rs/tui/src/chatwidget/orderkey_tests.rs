@@ -411,8 +411,8 @@ proptest! {
         let mut seen_reqs = std::collections::HashSet::new();
 
         for key in sorted {
-            if let Some(prev) = last_req {
-                if key.req != prev {
+            if let Some(prev) = last_req
+                && key.req != prev {
                     // Transitioning to new req - should never see it again
                     prop_assert!(
                         !seen_reqs.contains(&key.req),
@@ -420,7 +420,6 @@ proptest! {
                     );
                     seen_reqs.insert(prev);
                 }
-            }
             last_req = Some(key.req);
         }
     }

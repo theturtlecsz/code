@@ -113,9 +113,8 @@ async fn test_claude_large_prompt() {
 
     // Create 2KB prompt to verify stdin piping (exceeds some OS command-line limits)
     let large_prompt = create_large_prompt(2);
-    let prompt_with_question = format!(
-        "{large_prompt}\n\nBased on the above text, answer: What is this a test of?"
-    );
+    let prompt_with_question =
+        format!("{large_prompt}\n\nBased on the above text, answer: What is this a test of?");
 
     let output = executor
         .execute(
@@ -183,9 +182,7 @@ async fn test_claude_oauth2_error() {
             );
         }
         Ok(_) => panic!("claude should fail without API key (OAuth2Required expected)"),
-        Err(e) => panic!(
-            "Expected OAuth2Required error, got different error: {e:?}"
-        ),
+        Err(e) => panic!("Expected OAuth2Required error, got different error: {e:?}"),
     }
 }
 
@@ -218,9 +215,11 @@ async fn test_gemini_small_prompt() {
     let output = executor
         .execute(
             "gemini",
-            &["generate".to_string(),
+            &[
+                "generate".to_string(),
                 "--prompt".to_string(),
-                "Say 'hello' and nothing else".to_string()],
+                "Say 'hello' and nothing else".to_string(),
+            ],
             &env,
             None,
             600, // 10 minute timeout
@@ -271,11 +270,13 @@ async fn test_openai_timeout() {
     let result = executor
         .execute(
             "openai",
-            &["chat".to_string(),
+            &[
+                "chat".to_string(),
                 "completions".to_string(),
                 "create".to_string(),
                 "--message".to_string(),
-                "hello".to_string()],
+                "hello".to_string(),
+            ],
             &env,
             None,
             1, // 1ms timeout (intentionally too short to force timeout)
@@ -343,9 +344,7 @@ async fn test_nonexistent_cli() {
             println!("CommandNotFound error correctly detected: {cmd}");
         }
         Ok(_) => panic!("non-existent CLI should fail with CommandNotFound"),
-        Err(e) => panic!(
-            "Expected CommandNotFound error, got different error: {e:?}"
-        ),
+        Err(e) => panic!("Expected CommandNotFound error, got different error: {e:?}"),
     }
 }
 
@@ -378,9 +377,11 @@ async fn test_claude_stderr() {
     let output = executor
         .execute(
             "claude",
-            &["--verbose".to_string(),
+            &[
+                "--verbose".to_string(),
                 "-p".to_string(),
-                "hello".to_string()],
+                "hello".to_string(),
+            ],
             &env,
             None,
             600,
@@ -425,8 +426,7 @@ async fn test_concurrent_execution() {
                 let output = executor
                     .execute(
                         "claude",
-                        &["-p".to_string(),
-                            format!("Say 'Task {}' and nothing else", i)],
+                        &["-p".to_string(), format!("Say 'Task {i}' and nothing else")],
                         &env,
                         None,
                         600,
@@ -439,10 +439,7 @@ async fn test_concurrent_execution() {
                 assert_eq!(output.exit_code, 0, "Task {i} should exit successfully");
                 assert!(
                     output.stdout.contains(&format!("Task {i}"))
-                        || output
-                            .stdout
-                            .to_lowercase()
-                            .contains(&format!("task {i}")),
+                        || output.stdout.to_lowercase().contains(&format!("task {i}")),
                     "Task {i} output should contain task number"
                 );
             })

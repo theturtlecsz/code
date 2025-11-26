@@ -150,17 +150,19 @@ fn resolve_database_path(explicit: Option<&PathBuf>) -> Result<PathBuf> {
         }
         let config_path = home_path.join("config.yaml");
         if config_path.exists()
-            && let Some(path) = parse_database_from_config(&config_path) {
-                return Ok(path);
-            }
+            && let Some(path) = parse_database_from_config(&config_path)
+        {
+            return Ok(path);
+        }
     }
 
     let default_home = default_local_memory_home()?;
     let config_path = default_home.join("config.yaml");
     if config_path.exists()
-        && let Some(path) = parse_database_from_config(&config_path) {
-            return Ok(path);
-        }
+        && let Some(path) = parse_database_from_config(&config_path)
+    {
+        return Ok(path);
+    }
 
     let fallback = default_home.join("unified-memories.db");
     if fallback.exists() {

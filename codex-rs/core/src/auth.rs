@@ -137,13 +137,16 @@ impl CodexAuth {
     }
 
     pub fn get_account_id(&self) -> Option<String> {
-        self.get_current_token_data()
-            .and_then(|t| t.account_id)
+        self.get_current_token_data().and_then(|t| t.account_id)
     }
 
     pub fn get_plan_type(&self) -> Option<String> {
-        self.get_current_token_data()
-            .and_then(|t| t.id_token.chatgpt_plan_type.as_ref().map(super::token_data::PlanType::as_string))
+        self.get_current_token_data().and_then(|t| {
+            t.id_token
+                .chatgpt_plan_type
+                .as_ref()
+                .map(super::token_data::PlanType::as_string)
+        })
     }
 
     fn get_current_auth_json(&self) -> Option<AuthDotJson> {
@@ -395,17 +398,18 @@ async fn update_tokens(
     write_auth_json(auth_file, &auth_dot_json)?;
 
     if let Some(codex_home) = auth_file.parent()
-        && let Some(tokens) = auth_dot_json.tokens.clone() {
-            let last_refresh = auth_dot_json.last_refresh.unwrap_or_else(Utc::now);
-            let email = tokens.id_token.email.clone();
-            let _ = crate::auth_accounts::upsert_chatgpt_account(
-                codex_home,
-                tokens,
-                last_refresh,
-                email,
-                true,
-            )?;
-        }
+        && let Some(tokens) = auth_dot_json.tokens.clone()
+    {
+        let last_refresh = auth_dot_json.last_refresh.unwrap_or_else(Utc::now);
+        let email = tokens.id_token.email.clone();
+        let _ = crate::auth_accounts::upsert_chatgpt_account(
+            codex_home,
+            tokens,
+            last_refresh,
+            email,
+            true,
+        )?;
+    }
     Ok(auth_dot_json)
 }
 

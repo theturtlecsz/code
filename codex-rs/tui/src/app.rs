@@ -1361,10 +1361,11 @@ impl App<'_> {
                     // This ensures the UI is fully initialized before commands execute,
                     // preventing output routing issues where build output gets piped into the input box.
                     if !self.initial_command_dispatched
-                        && let Some(cmd_text) = &self.initial_command {
-                            Self::dispatch_initial_command(&self.app_event_tx, cmd_text);
-                            self.initial_command_dispatched = true;
-                        }
+                        && let Some(cmd_text) = &self.initial_command
+                    {
+                        Self::dispatch_initial_command(&self.app_event_tx, cmd_text);
+                        self.initial_command_dispatched = true;
+                    }
                 }
                 AppEvent::StartCommitAnimation => {
                     if self
@@ -1504,15 +1505,16 @@ impl App<'_> {
 
                                     // Step 3: backtrack via double‑Esc.
                                     if let Some(prev) = self.last_esc_time
-                                        && now.duration_since(prev) <= THRESHOLD {
-                                            self.last_esc_time = None;
-                                            if widget.has_pending_jump_back() {
-                                                widget.undo_jump_back();
-                                            } else {
-                                                widget.show_edit_previous_picker();
-                                            }
-                                            continue;
+                                        && now.duration_since(prev) <= THRESHOLD
+                                    {
+                                        self.last_esc_time = None;
+                                        if widget.has_pending_jump_back() {
+                                            widget.undo_jump_back();
+                                        } else {
+                                            widget.show_edit_previous_picker();
                                         }
+                                        continue;
+                                    }
                                     // First Esc in empty/idle state: show hint and arm timer.
                                     self.last_esc_time = Some(now);
                                     widget.show_esc_backtrack_hint();
@@ -1803,9 +1805,10 @@ impl App<'_> {
                     if let Some(run) = self.terminal_runs.get_mut(&id) {
                         let had_controller = run.controller.is_some();
                         if let Some(tx) = run.cancel_tx.take()
-                            && !tx.is_closed() {
-                                let _ = tx.send(());
-                            }
+                            && !tx.is_closed()
+                        {
+                            let _ = tx.send(());
+                        }
                         run.running = false;
                         run.controller = None;
                         if let Some(writer_shared) = run.writer_tx.take() {
@@ -1850,13 +1853,15 @@ impl App<'_> {
                 }
                 AppEvent::TerminalSendInput { id, data } => {
                     if let Some(run) = self.terminal_runs.get_mut(&id)
-                        && let Some(writer_shared) = run.writer_tx.as_ref() {
-                            let mut guard = writer_shared.lock().unwrap();
-                            if let Some(tx) = guard.as_ref()
-                                && tx.send(data).is_err() {
-                                    guard.take();
-                                }
+                        && let Some(writer_shared) = run.writer_tx.as_ref()
+                    {
+                        let mut guard = writer_shared.lock().unwrap();
+                        if let Some(tx) = guard.as_ref()
+                            && tx.send(data).is_err()
+                        {
+                            guard.take();
                         }
+                    }
                 }
                 AppEvent::TerminalResize { id, rows, cols } => {
                     if rows == 0 || cols == 0 {
@@ -1867,14 +1872,15 @@ impl App<'_> {
                     }
                     if let Some(run) = self.terminal_runs.get(&id)
                         && let Some(pty) = run.pty.as_ref()
-                            && let Ok(guard) = pty.lock() {
-                                let _ = guard.resize(PtySize {
-                                    rows,
-                                    cols,
-                                    pixel_width: 0,
-                                    pixel_height: 0,
-                                });
-                            }
+                        && let Ok(guard) = pty.lock()
+                    {
+                        let _ = guard.resize(PtySize {
+                            rows,
+                            cols,
+                            pixel_width: 0,
+                            pixel_height: 0,
+                        });
+                    }
                 }
                 AppEvent::TerminalUpdateMessage { id, message } => {
                     if let AppState::Chat { widget } = &mut self.app_state {
@@ -1914,9 +1920,9 @@ impl App<'_> {
                 AppEvent::RequestValidationToolInstall { name, command } => {
                     if let AppState::Chat { widget } = &mut self.app_state
                         && let Some(launch) = widget.launch_validation_tool_install(&name, &command)
-                        {
-                            self.app_event_tx.send(AppEvent::OpenTerminal(launch));
-                        }
+                    {
+                        self.app_event_tx.send(AppEvent::OpenTerminal(launch));
+                    }
                 }
                 AppEvent::RunUpdateCommand {
                     command,
@@ -1925,11 +1931,11 @@ impl App<'_> {
                 } => {
                     if crate::updates::upgrade_ui_enabled()
                         && let AppState::Chat { widget } = &mut self.app_state
-                            && let Some(launch) =
-                                widget.launch_update_command(command, display, latest_version)
-                            {
-                                self.app_event_tx.send(AppEvent::OpenTerminal(launch));
-                            }
+                        && let Some(launch) =
+                            widget.launch_update_command(command, display, latest_version)
+                    {
+                        self.app_event_tx.send(AppEvent::OpenTerminal(launch));
+                    }
                 }
                 AppEvent::SetAutoUpgradeEnabled(enabled) => {
                     if crate::updates::upgrade_ui_enabled() {
@@ -1944,9 +1950,10 @@ impl App<'_> {
                     selected_index,
                 } => {
                     if let AppState::Chat { widget } = &mut self.app_state
-                        && let Some(launch) = widget.launch_agent_install(name, selected_index) {
-                            self.app_event_tx.send(AppEvent::OpenTerminal(launch));
-                        }
+                        && let Some(launch) = widget.launch_agent_install(name, selected_index)
+                    {
+                        self.app_event_tx.send(AppEvent::OpenTerminal(launch));
+                    }
                 }
                 AppEvent::AgentsOverviewSelectionChanged { index } => {
                     if let AppState::Chat { widget } = &mut self.app_state {
@@ -1979,9 +1986,10 @@ impl App<'_> {
                             widget,
                             &command_text,
                             &self.app_event_tx,
-                        ) {
-                            continue; // Command handled by spec-kit registry
-                        }
+                        )
+                    {
+                        continue; // Command handled by spec-kit registry
+                    }
                     // === END FORK-SPECIFIC ===
 
                     // Persist UI-only slash commands to cross-session history.
@@ -2223,8 +2231,7 @@ impl App<'_> {
                             if let AppState::Chat { widget } = &mut self.app_state {
                                 match widget.parse_pro_action(&command_args) {
                                     Ok(action) => {
-                                        self
-                                            .app_event_tx
+                                        self.app_event_tx
                                             .send(AppEvent::CodexOp(Op::Pro { action }));
                                     }
                                     Err(err) => {
@@ -2922,8 +2929,8 @@ impl App<'_> {
                     resume_picker,
                     latest_upgrade_version,
                     mcp_manager,
-                    initial_command, // SPEC-KIT-920
-                    config_watcher: _config_watcher,  // SPEC-945D
+                    initial_command,                 // SPEC-KIT-920
+                    config_watcher: _config_watcher, // SPEC-945D
                 }) => {
                     let mut w = ChatWidget::new(
                         config,
@@ -2981,13 +2988,14 @@ impl App<'_> {
                                 if let codex_protocol::models::ResponseItem::Message {
                                     role, ..
                                 } = it
-                                    && role == "user" {
-                                        user_seen += 1;
-                                        if user_seen == nth {
-                                            cut = idx;
-                                            break;
-                                        }
+                                    && role == "user"
+                                {
+                                    user_seen += 1;
+                                    if user_seen == nth {
+                                        cut = idx;
+                                        break;
                                     }
+                                }
                             }
                             items.iter().take(cut).cloned().collect::<Vec<_>>()
                         };
@@ -3110,9 +3118,10 @@ impl App<'_> {
 
                     // Prefill composer with the edited text
                     if let AppState::Chat { widget } = &mut self.app_state
-                        && !prefill.is_empty() {
-                            widget.insert_str(&prefill);
-                        }
+                        && !prefill.is_empty()
+                    {
+                        widget.insert_str(&prefill);
+                    }
                     self.app_event_tx.send(AppEvent::RequestRedraw);
                 }
                 AppEvent::ScheduleFrameIn(duration) => {
@@ -3604,111 +3613,112 @@ impl BufferDiffProfiler {
         self.frame_seq = self.frame_seq.saturating_add(1);
 
         if let Some(prev_buffer) = &self.prev
-            && self.should_log_frame() {
-                if prev_buffer.area != current_buffer.area {
-                    tracing::info!(
-                        target: "codex_tui::buffer_diff",
-                        frame = self.frame_seq,
-                        prev_width = prev_buffer.area.width,
-                        prev_height = prev_buffer.area.height,
-                        width = current_buffer.area.width,
-                        height = current_buffer.area.height,
-                        "Buffer area changed; skipping diff metrics for this frame"
-                    );
+            && self.should_log_frame()
+        {
+            if prev_buffer.area != current_buffer.area {
+                tracing::info!(
+                    target: "codex_tui::buffer_diff",
+                    frame = self.frame_seq,
+                    prev_width = prev_buffer.area.width,
+                    prev_height = prev_buffer.area.height,
+                    width = current_buffer.area.width,
+                    height = current_buffer.area.height,
+                    "Buffer area changed; skipping diff metrics for this frame"
+                );
+            } else {
+                let inspected = prev_buffer.content.len().min(current_buffer.content.len());
+                let updates = prev_buffer.diff(&current_buffer);
+                let changed = updates.len();
+                if changed == 0 {
+                    self.prev = Some(current_buffer);
+                    return;
+                }
+                let percent = if inspected > 0 {
+                    (changed as f64 / inspected as f64) * 100.0
                 } else {
-                    let inspected = prev_buffer.content.len().min(current_buffer.content.len());
-                    let updates = prev_buffer.diff(&current_buffer);
-                    let changed = updates.len();
-                    if changed == 0 {
-                        self.prev = Some(current_buffer);
-                        return;
-                    }
-                    let percent = if inspected > 0 {
-                        (changed as f64 / inspected as f64) * 100.0
-                    } else {
-                        0.0
-                    };
-                    if changed < self.min_changed && percent < self.min_percent {
-                        self.prev = Some(current_buffer);
-                        return;
-                    }
-                    let mut min_col = u16::MAX;
-                    let mut max_col = 0u16;
-                    let mut rows = BTreeSet::new();
-                    let mut longest_run = 0usize;
-                    let mut current_run = 0usize;
-                    let mut last_cell = None;
-                    for (x, y, _) in &updates {
-                        min_col = min_col.min(*x);
-                        max_col = max_col.max(*x);
-                        rows.insert(*y);
-                        match last_cell {
-                            Some((last_x, last_y)) if *y == last_y && *x == last_x + 1 => {
-                                current_run += 1;
-                            }
-                            _ => {
-                                current_run = 1;
-                            }
+                    0.0
+                };
+                if changed < self.min_changed && percent < self.min_percent {
+                    self.prev = Some(current_buffer);
+                    return;
+                }
+                let mut min_col = u16::MAX;
+                let mut max_col = 0u16;
+                let mut rows = BTreeSet::new();
+                let mut longest_run = 0usize;
+                let mut current_run = 0usize;
+                let mut last_cell = None;
+                for (x, y, _) in &updates {
+                    min_col = min_col.min(*x);
+                    max_col = max_col.max(*x);
+                    rows.insert(*y);
+                    match last_cell {
+                        Some((last_x, last_y)) if *y == last_y && *x == last_x + 1 => {
+                            current_run += 1;
                         }
-                        if current_run > longest_run {
-                            longest_run = current_run;
+                        _ => {
+                            current_run = 1;
                         }
-                        last_cell = Some((*x, *y));
                     }
-                    let row_min = rows.iter().copied().min().unwrap_or(0);
-                    let row_max = rows.iter().copied().max().unwrap_or(0);
-                    let mut spans: Vec<(u16, u16)> = Vec::new();
-                    if !rows.is_empty() {
-                        let mut iter = rows.iter();
-                        let mut start = *iter.next().unwrap();
-                        let mut prev = start;
-                        for &row in iter {
-                            if row == prev + 1 {
-                                prev = row;
-                                continue;
-                            }
-                            spans.push((start, prev));
-                            start = row;
+                    if current_run > longest_run {
+                        longest_run = current_run;
+                    }
+                    last_cell = Some((*x, *y));
+                }
+                let row_min = rows.iter().copied().min().unwrap_or(0);
+                let row_max = rows.iter().copied().max().unwrap_or(0);
+                let mut spans: Vec<(u16, u16)> = Vec::new();
+                if !rows.is_empty() {
+                    let mut iter = rows.iter();
+                    let mut start = *iter.next().unwrap();
+                    let mut prev = start;
+                    for &row in iter {
+                        if row == prev + 1 {
                             prev = row;
+                            continue;
                         }
                         spans.push((start, prev));
+                        start = row;
+                        prev = row;
                     }
-                    spans.sort_by(|(a_start, a_end), (b_start, b_end)| {
-                        let a_len = usize::from(*a_end) - usize::from(*a_start) + 1;
-                        let b_len = usize::from(*b_end) - usize::from(*b_start) + 1;
-                        b_len.cmp(&a_len)
-                    });
-                    let top_spans: Vec<(u16, u16)> = spans.into_iter().take(3).collect();
-                    let (col_min, col_max) = if min_col == u16::MAX {
-                        (0u16, 0u16)
-                    } else {
-                        (min_col, max_col)
-                    };
-                    let skipped_cells = current_buffer
-                        .content
-                        .iter()
-                        .filter(|cell| cell.skip)
-                        .count();
-                    tracing::info!(
-                        target: "codex_tui::buffer_diff",
-                        frame = self.frame_seq,
-                        inspected,
-                        changed,
-                        percent = format!("{percent:.2}"),
-                        width = current_buffer.area.width,
-                        height = current_buffer.area.height,
-                        dirty_rows = rows.len(),
-                        longest_run,
-                        row_min,
-                        row_max,
-                        col_min,
-                        col_max,
-                        row_spans = ?top_spans,
-                        skipped_cells,
-                        "Buffer diff metrics"
-                    );
+                    spans.push((start, prev));
                 }
+                spans.sort_by(|(a_start, a_end), (b_start, b_end)| {
+                    let a_len = usize::from(*a_end) - usize::from(*a_start) + 1;
+                    let b_len = usize::from(*b_end) - usize::from(*b_start) + 1;
+                    b_len.cmp(&a_len)
+                });
+                let top_spans: Vec<(u16, u16)> = spans.into_iter().take(3).collect();
+                let (col_min, col_max) = if min_col == u16::MAX {
+                    (0u16, 0u16)
+                } else {
+                    (min_col, max_col)
+                };
+                let skipped_cells = current_buffer
+                    .content
+                    .iter()
+                    .filter(|cell| cell.skip)
+                    .count();
+                tracing::info!(
+                    target: "codex_tui::buffer_diff",
+                    frame = self.frame_seq,
+                    inspected,
+                    changed,
+                    percent = format!("{percent:.2}"),
+                    width = current_buffer.area.width,
+                    height = current_buffer.area.height,
+                    dirty_rows = rows.len(),
+                    longest_run,
+                    row_min,
+                    row_max,
+                    col_min,
+                    col_max,
+                    row_spans = ?top_spans,
+                    skipped_cells,
+                    "Buffer diff metrics"
+                );
             }
+        }
 
         self.prev = Some(current_buffer);
     }

@@ -477,7 +477,7 @@ mod tests {
         let header = URL_SAFE_NO_PAD.encode(r#"{"alg":"none"}"#);
         let payload = URL_SAFE_NO_PAD
             .encode(r#"{"email":"test@gmail.com","name":"Test User","sub":"12345"}"#);
-        let token = format!("{}.{}.signature", header, payload);
+        let token = format!("{header}.{payload}.signature");
 
         let decoded = decode_jwt_payload(&token);
         assert!(decoded.is_some());

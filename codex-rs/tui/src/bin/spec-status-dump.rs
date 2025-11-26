@@ -10,7 +10,9 @@ use serde::Serialize;
 fn main() -> Result<()> {
     let args = env::args().skip(1).collect::<Vec<_>>();
     if args.is_empty() {
-        return Err(anyhow!("Usage: spec-status-dump <SPEC-ID> [--stale-hours <n>]"));
+        return Err(anyhow!(
+            "Usage: spec-status-dump <SPEC-ID> [--stale-hours <n>]"
+        ));
     }
 
     let repo_root = env::current_dir().context("determining current directory")?;

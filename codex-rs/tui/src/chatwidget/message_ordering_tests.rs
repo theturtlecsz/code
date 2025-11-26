@@ -374,7 +374,7 @@ async fn test_complex_orderkey_sorting() {
         keys.push(OrderKey {
             req,
             out: 0,
-            seq: req as u64,
+            seq: req,
         });
     }
 
@@ -485,7 +485,7 @@ async fn test_orderkey_sorts_by_out_when_req_equal() {
     };
 
     // Lower out should sort first
-    let mut keys = vec![key_high, key_low];
+    let mut keys = [key_high, key_low];
     keys.sort();
 
     assert_eq!(keys[0].out, -100, "Lower out should come first");
@@ -507,7 +507,7 @@ async fn test_orderkey_sorts_by_seq_when_req_and_out_equal() {
         seq: 5,
     };
 
-    let mut keys = vec![key_high, key_low];
+    let mut keys = [key_high, key_low];
     keys.sort();
 
     // Lower seq should come first
@@ -530,7 +530,7 @@ async fn test_empty_orderkey_sort() {
 /// Test that sorting single element doesn't change it.
 #[tokio::test]
 async fn test_single_orderkey_sort() {
-    let mut keys = vec![OrderKey {
+    let mut keys = [OrderKey {
         req: 42,
         out: 0,
         seq: 1,
