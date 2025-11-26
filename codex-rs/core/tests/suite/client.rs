@@ -18,7 +18,7 @@ use codex_core::built_in_model_providers;
 use codex_core::protocol::EventMsg;
 use codex_core::protocol::InputItem;
 use codex_core::protocol::Op;
-use codex_protocol::mcp_protocol::ConversationId;
+// ConversationId no longer used - using Uuid directly for ModelClient::new
 use codex_protocol::models::ReasoningItemReasoningSummary;
 use codex_protocol::models::WebSearchAction;
 use core_test_support::load_default_config_for_test;
@@ -254,14 +254,11 @@ async fn resume_includes_initial_messages_and_sends_prior_items() {
         .await
         .expect("resume conversation");
 
-    // 1) Assert initial_messages only includes existing EventMsg entries; response items are not converted
-    let initial_msgs = session_configured
-        .initial_messages
-        .clone()
-        .expect("expected initial messages option for resumed session");
-    let initial_json = serde_json::to_value(&initial_msgs).unwrap();
-    let expected_initial_json = json!([]);
-    assert_eq!(initial_json, expected_initial_json);
+    // Verify session was configured (initial_messages are not exposed via core API)
+    assert!(
+        session_configured.history_entry_count > 0,
+        "expected history entries for resumed session"
+    );
 
     // 2) Submit new input; the request body must include the prior item followed by the new user input.
     codex
@@ -535,7 +532,11 @@ async fn prefers_apikey_when_config_prefers_apikey_even_with_chatgpt_tokens() {
     let mut config = load_default_config_for_test(&codex_home);
     config.model_provider = model_provider;
 
-    let auth_manager = match CodexAuth::from_codex_home(codex_home.path()) {
+    let auth_manager = match CodexAuth::from_codex_home(
+        codex_home.path(),
+        codex_protocol::mcp_protocol::AuthMode::ApiKey,
+        "codex_cli_rs",
+    ) {
         Ok(Some(auth)) => codex_core::AuthManager::from_auth_for_testing(auth),
         Ok(None) => panic!("No CodexAuth found in codex_home"),
         Err(e) => panic!("Failed to load CodexAuth: {e}"),
@@ -754,6 +755,7 @@ async fn azure_responses_request_includes_store_and_reasoning_ids() {
         request_max_retries: Some(0),
         stream_max_retries: Some(0),
         stream_idle_timeout_ms: Some(5_000),
+        agent_total_timeout_ms: None,
         requires_openai_auth: false,
         openrouter: None,
     };
@@ -764,6 +766,7 @@ async fn azure_responses_request_includes_store_and_reasoning_ids() {
     config.model_provider = provider.clone();
     let effort = config.model_reasoning_effort;
     let summary = config.model_reasoning_summary;
+    let verbosity = config.model_text_verbosity;
     let config = Arc::new(config);
 
     let client = ModelClient::new(
@@ -772,7 +775,9 @@ async fn azure_responses_request_includes_store_and_reasoning_ids() {
         provider,
         effort,
         summary,
-        ConversationId::new(),
+        verbosity,
+        Uuid::new_v4(),
+        Arc::new(std::sync::Mutex::new(codex_core::debug_logger::DebugLogger::new(false).unwrap())),
     );
 
     let mut prompt = Prompt::default();
@@ -983,20 +988,8 @@ async fn token_count_includes_rate_limits_snapshot() {
     let final_snapshot = final_payload
         .rate_limits
         .expect("latest rate limit snapshot should be retained");
-    assert_eq!(
-        final_snapshot
-            .primary
-            .as_ref()
-            .map(|window| window.used_percent),
-        Some(12.5)
-    );
-    assert_eq!(
-        final_snapshot
-            .primary
-            .as_ref()
-            .and_then(|window| window.resets_in_seconds),
-        Some(1800)
-    );
+    assert_eq!(final_snapshot.primary_used_percent, 12.5);
+    assert_eq!(final_snapshot.primary_reset_after_seconds, Some(1800));
 
     wait_for_event(&codex, |msg| matches!(msg, EventMsg::TaskComplete(_))).await;
 }
@@ -1129,6 +1122,7 @@ async fn azure_overrides_assign_properties_used_for_responses_url() {
         request_max_retries: None,
         stream_max_retries: None,
         stream_idle_timeout_ms: None,
+        agent_total_timeout_ms: None,
         requires_openai_auth: false,
         openrouter: None,
     };
@@ -1206,6 +1200,7 @@ async fn env_var_overrides_loaded_auth() {
         request_max_retries: None,
         stream_max_retries: None,
         stream_idle_timeout_ms: None,
+        agent_total_timeout_ms: None,
         requires_openai_auth: false,
         openrouter: None,
     };
@@ -1398,7 +1393,7 @@ async fn openrouter_metadata_is_forwarded_in_responses_payload() {
     let mut extra = BTreeMap::new();
     extra.insert("dry_run".to_string(), Value::Bool(true));
 
-    let mut provider = ModelProviderInfo {
+    let provider = ModelProviderInfo {
         name: "openrouter".into(),
         base_url: Some(format!("{}/v1", server.uri())),
         env_key: None,
@@ -1410,6 +1405,7 @@ async fn openrouter_metadata_is_forwarded_in_responses_payload() {
         request_max_retries: Some(0),
         stream_max_retries: Some(0),
         stream_idle_timeout_ms: Some(5_000),
+        agent_total_timeout_ms: None,
         requires_openai_auth: false,
         openrouter: Some(OpenRouterConfig {
             provider: Some(OpenRouterProviderConfig {
@@ -1428,6 +1424,7 @@ async fn openrouter_metadata_is_forwarded_in_responses_payload() {
     config.model_provider = provider.clone();
     let effort = config.model_reasoning_effort;
     let summary = config.model_reasoning_summary;
+    let verbosity = config.model_text_verbosity;
     let config = Arc::new(config);
 
     let client = ModelClient::new(
@@ -1436,7 +1433,9 @@ async fn openrouter_metadata_is_forwarded_in_responses_payload() {
         provider,
         effort,
         summary,
-        ConversationId::new(),
+        verbosity,
+        Uuid::new_v4(),
+        Arc::new(std::sync::Mutex::new(codex_core::debug_logger::DebugLogger::new(false).unwrap())),
     );
 
     let mut prompt = Prompt::default();

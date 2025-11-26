@@ -99,8 +99,8 @@ impl MessageProcessor {
     }
 
     pub(crate) async fn process_request(&mut self, request: JSONRPCRequest) {
-        if let Ok(request_json) = serde_json::to_value(request.clone()) {
-            if let Ok(codex_request) = serde_json::from_value::<ClientRequest>(request_json) {
+        if let Ok(request_json) = serde_json::to_value(request.clone())
+            && let Ok(codex_request) = serde_json::from_value::<ClientRequest>(request_json) {
                 // If the request is a Codex request, handle it with the Codex
                 // message processor.
                 self.codex_message_processor
@@ -108,7 +108,6 @@ impl MessageProcessor {
                     .await;
                 return;
             }
-        }
 
         tracing::trace!("processing JSON-RPC request: {}", request.method);
         // Hold on to the ID so we can respond.
@@ -172,8 +171,8 @@ impl MessageProcessor {
 
         let mut request = request;
 
-        if request.method == mcp_types::InitializeRequest::METHOD {
-            if let Some(params) = request.params.as_mut() {
+        if request.method == mcp_types::InitializeRequest::METHOD
+            && let Some(params) = request.params.as_mut() {
                 if let Some(protocol_version) = params.get_mut("protocolVersion") {
                     if let Some(num) = protocol_version.as_i64() {
                         *protocol_version = serde_json::Value::String(num.to_string());
@@ -212,7 +211,6 @@ impl MessageProcessor {
                     });
                 }
             }
-        }
 
         let client_request = match McpClientRequest::try_from(request) {
             Ok(client_request) => client_request,
@@ -962,7 +960,7 @@ impl MessageProcessor {
         let Some(session) = session else {
             let error = JSONRPCErrorError {
                 code: INVALID_REQUEST_ERROR_CODE,
-                message: format!("unknown session id: {}", acp_session_id),
+                message: format!("unknown session id: {acp_session_id}"),
                 data: None,
             };
             self.outgoing.send_error(request_id, error).await;
@@ -1261,7 +1259,7 @@ impl MessageProcessor {
 
         let missing_agents: Vec<String> = expected_agents
             .iter()
-            .map(|agent| agent.to_string())
+            .map(std::string::ToString::to_string)
             .filter(|agent| !present_agents.contains(agent))
             .collect();
 

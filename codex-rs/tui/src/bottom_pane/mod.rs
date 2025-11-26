@@ -888,8 +888,7 @@ impl WidgetRef for &BottomPane<'_> {
                 // Modal finished—render composer instead on this frame.
                 // We intentionally avoid mutating state here; key handling will
                 // clear the view on the next interaction. This keeps render pure.
-            } else if y_offset < area.height
-                && y_offset < area.height {
+            } else if y_offset < area.height {
                     // Reserve bottom padding lines; keep at least 1 line for the view.
                     let avail = area.height - y_offset;
                     let pad = if self.active_view.is_some() {

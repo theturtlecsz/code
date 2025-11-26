@@ -185,6 +185,6 @@ async fn run_llm_request(
         }
     }
 
-    println!("{}", final_text);
+    println!("{final_text}");
     Ok(())
 }

@@ -172,6 +172,7 @@ impl CliContextManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
 
     #[test]
     fn test_format_history_empty() {

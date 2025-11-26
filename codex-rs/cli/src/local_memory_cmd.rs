@@ -80,7 +80,7 @@ async fn run_export(args: ExportArgs) -> Result<()> {
         "SELECT id, content, source, importance, tags, session_id, domain, created_at, updated_at, agent_type, agent_context, access_scope, slug FROM memories ORDER BY created_at",
     )?;
 
-    let records = stmt.query_map([], |row| row_to_export(row))?;
+    let records = stmt.query_map([], row_to_export)?;
 
     let output_path = args.output.clone();
     let mut writer: Box<dyn Write> = match &args.output {
@@ -149,20 +149,18 @@ fn resolve_database_path(explicit: Option<&PathBuf>) -> Result<PathBuf> {
             return Ok(candidate);
         }
         let config_path = home_path.join("config.yaml");
-        if config_path.exists() {
-            if let Some(path) = parse_database_from_config(&config_path) {
+        if config_path.exists()
+            && let Some(path) = parse_database_from_config(&config_path) {
                 return Ok(path);
             }
-        }
     }
 
     let default_home = default_local_memory_home()?;
     let config_path = default_home.join("config.yaml");
-    if config_path.exists() {
-        if let Some(path) = parse_database_from_config(&config_path) {
+    if config_path.exists()
+        && let Some(path) = parse_database_from_config(&config_path) {
             return Ok(path);
         }
-    }
 
     let fallback = default_home.join("unified-memories.db");
     if fallback.exists() {

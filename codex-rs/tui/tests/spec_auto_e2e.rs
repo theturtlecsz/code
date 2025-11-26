@@ -7,9 +7,9 @@
 //! - Error handling and recovery
 
 use codex_tui::{
-    HalMode, QualityCheckpoint, SpecAutoState, SpecStage, ValidateBeginOutcome,
+    HalMode, PipelineConfig, QualityCheckpoint, SpecAutoState, SpecStage, ValidateBeginOutcome,
     ValidateCompletionReason,
-, PipelineConfig};
+};
 use std::collections::HashSet;
 
 // ============================================================================
@@ -68,6 +68,7 @@ fn test_quality_gates_can_be_disabled() {
         SpecStage::Plan,
         None,
         false, // Disable quality gates
+        PipelineConfig::defaults(),
     );
 
     assert!(!state.quality_gates_enabled);
@@ -324,6 +325,7 @@ fn test_pipeline_with_quality_gates_disabled() {
         SpecStage::Plan,
         None,
         false, // Disable
+        PipelineConfig::defaults(),
     );
 
     // Should still have stages but no quality gate execution

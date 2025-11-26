@@ -385,7 +385,7 @@ fn finalize_resume_interactive(
     merge_resume_cli_flags(&mut interactive, resume_cli);
 
     if let Err(err) = apply_resume_directives(&mut interactive, session_id, last) {
-        eprintln!("{}", err);
+        eprintln!("{err}");
         process::exit(1);
     }
 
@@ -491,7 +491,7 @@ fn resolve_resume_path(session_id: Option<&str>, last: bool) -> anyhow::Result<O
     // Build the async work once, then execute it either on the existing
     // runtime (from a helper thread) or a fresh current-thread runtime.
     // Clone borrowed inputs so the async task can be 'static when spawned.
-    let sess = session_id.map(|s| s.to_string());
+    let sess = session_id.map(std::string::ToString::to_string);
     let fetch = async move {
         if let Some(id) = sess.as_deref() {
             let maybe = find_conversation_path_by_id_str(&codex_home, id)
@@ -510,7 +510,7 @@ fn resolve_resume_path(session_id: Option<&str>, last: bool) -> anyhow::Result<O
 
     match TokioHandle::try_current() {
         Ok(handle) => {
-            let handle = handle.clone();
+            let handle = handle;
             std::thread::spawn(move || handle.block_on(fetch))
                 .join()
                 .map_err(|_| anyhow!("resume lookup thread panicked"))?
@@ -559,8 +559,8 @@ fn order_replay_main(args: OrderReplayArgs) -> anyhow::Result<()> {
         for ev in events {
             let data = ev.get("data");
             if let Some(d) = data {
-                let out = d.get("output_index").and_then(|x| x.as_u64());
-                let seq = d.get("sequence_number").and_then(|x| x.as_u64());
+                let out = d.get("output_index").and_then(serde_json::Value::as_u64);
+                let seq = d.get("sequence_number").and_then(serde_json::Value::as_u64);
                 if let (Some(out), Some(seq)) = (out, seq) {
                     items.push((out, seq));
                 }
@@ -579,6 +579,7 @@ fn order_replay_main(args: OrderReplayArgs) -> anyhow::Result<()> {
         raw: u64,
     }
 
+    #[allow(clippy::unwrap_used)]
     fn parse_tui_inserts(path: &std::path::Path) -> Result<Vec<InsertLog>> {
         let text = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
         let re = Regex::new(r"insert window: seq=(?P<seq>\d+) \((?P<kind>[OU]):(?:req=(?P<req>\d+) out=(?P<out>\d+) seq=(?P<iseq>\d+)|(?P<uval>\d+))\)").unwrap();
@@ -616,7 +617,7 @@ fn order_replay_main(args: OrderReplayArgs) -> anyhow::Result<()> {
 
     println!("Expected (first 20 sorted by out,seq):");
     for (i, (out, seq)) in expected.iter().take(20).enumerate() {
-        println!("  {:>3}: out={} seq={}", i, out, seq);
+        println!("  {i:>3}: out={out} seq={seq}");
     }
 
     println!("\nActual inserts (first 40):");
@@ -639,8 +640,7 @@ fn order_replay_main(args: OrderReplayArgs) -> anyhow::Result<()> {
         .iter()
         .position(|l| l.ordered && l.req == 1 && l.out == 2);
     println!(
-        "\nCheck (req=1): first out=1 at {:?}, first out=2 at {:?}",
-        pos_out1, pos_out2
+        "\nCheck (req=1): first out=1 at {pos_out1:?}, first out=2 at {pos_out2:?}"
     );
     if let (Some(p1), Some(p2)) = (pos_out1, pos_out2) {
         if p1 < p2 {
@@ -697,13 +697,14 @@ async fn preview_main(args: PreviewArgs) -> anyhow::Result<()> {
         }
         Ok(serde_json::from_str(&t).unwrap_or(serde_json::Value::Null))
     }
+    #[allow(clippy::unwrap_used)]
     async fn latest_tag_for_slug(
         client: &reqwest::Client,
         owner: &str,
         name: &str,
         slug: &str,
     ) -> anyhow::Result<String> {
-        let base = format!("preview-{}", slug);
+        let base = format!("preview-{slug}");
         let url = format!("https://api.github.com/repos/{owner}/{name}/releases?per_page=100");
         let v = fetch_json(client, &url).await?;
         let mut latest = base.clone();
@@ -750,7 +751,7 @@ async fn preview_main(args: PreviewArgs) -> anyhow::Result<()> {
         let resp = client.get(u).send().await?;
         if resp.status().is_success() {
             let data = resp.bytes().await?;
-            let filename = u.split('/').last().unwrap_or("download.bin");
+            let filename = u.split('/').next_back().unwrap_or("download.bin");
             let p = tmp.path().join(filename);
             fs::write(&p, &data)?;
             downloaded = Some((p, u.clone()));
@@ -763,11 +764,10 @@ async fn preview_main(args: PreviewArgs) -> anyhow::Result<()> {
     fn first_match(dir: &Path, pat: &str) -> Option<std::path::PathBuf> {
         for entry in fs::read_dir(dir).ok()? {
             let p = entry.ok()?.path();
-            if let Some(name) = p.file_name().and_then(|s| s.to_str()) {
-                if name.starts_with(pat) {
+            if let Some(name) = p.file_name().and_then(|s| s.to_str())
+                && name.starts_with(pat) {
                     return Some(p);
                 }
-            }
         }
         None
     }
@@ -800,7 +800,7 @@ async fn preview_main(args: PreviewArgs) -> anyhow::Result<()> {
     if os != "windows" {
         // If we downloaded a tar.gz, extract
         if path.extension().and_then(|e| e.to_str()) == Some("gz") {
-            let tgz = path.clone();
+            let tgz = path;
             let file = fs::File::open(&tgz)?;
             let gz = GzDecoder::new(file);
             let mut ar = tar::Archive::new(gz);
@@ -835,7 +835,7 @@ async fn preview_main(args: PreviewArgs) -> anyhow::Result<()> {
             let dest = match exe.extension().and_then(|e| e.to_str()) {
                 Some(ext) => {
                     let stem = exe.file_stem().and_then(|s| s.to_str()).unwrap_or("code");
-                    out_dir.join(format!("{}-{}.{}", stem, slug, ext))
+                    out_dir.join(format!("{stem}-{slug}.{ext}"))
                 }
                 None => out_dir.join(format!(
                     "{}-{}",
@@ -866,9 +866,9 @@ async fn preview_main(args: PreviewArgs) -> anyhow::Result<()> {
             // Derive base name from archive (e.g., code-aarch64-apple-darwin.zst -> code-aarch64-apple-darwin-<slug>.{exe?})
             let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("code");
             let dest = if cfg!(windows) {
-                out_dir.join(format!("{}-{}.exe", stem, slug))
+                out_dir.join(format!("{stem}-{slug}.exe"))
             } else {
-                out_dir.join(format!("{}-{}", stem, slug))
+                out_dir.join(format!("{stem}-{slug}"))
             };
             let status = std::process::Command::new("zstd")
                 .arg("-d")
@@ -917,11 +917,11 @@ async fn doctor_main() -> anyhow::Result<()> {
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| "<unknown>".to_string());
     println!("code version: {}", codex_version::version());
-    println!("current_exe: {}", exe);
+    println!("current_exe: {exe}");
 
     // PATH
     let path = env::var("PATH").unwrap_or_default();
-    println!("PATH: {}", path);
+    println!("PATH: {path}");
 
     // Helper to run a shell command and capture stdout (best-effort)
     async fn run_cmd(cmd: &str, args: &[&str]) -> String {
@@ -939,12 +939,12 @@ async fn doctor_main() -> anyhow::Result<()> {
         async move {
             let out = run_cmd(
                 "/bin/bash",
-                &["-lc", &format!("which -a {} 2>/dev/null || true", name)],
+                &["-lc", &format!("which -a {name} 2>/dev/null || true")],
             )
             .await;
             out.split('\n')
                 .filter(|s| !s.is_empty())
-                .map(|s| s.to_string())
+                .map(std::string::ToString::to_string)
                 .collect::<Vec<_>>()
         }
     };
@@ -969,7 +969,7 @@ async fn doctor_main() -> anyhow::Result<()> {
         println!("  <none>");
     } else {
         for p in &code_paths {
-            println!("  {}", p);
+            println!("  {p}");
         }
     }
     println!("\nFound 'coder' on PATH (in order):");
@@ -977,19 +977,19 @@ async fn doctor_main() -> anyhow::Result<()> {
         println!("  <none>");
     } else {
         for p in &coder_paths {
-            println!("  {}", p);
+            println!("  {p}");
         }
     }
 
     // Try to run --version for each resolved binary to show where mismatches come from
     async fn show_versions(caption: &str, paths: &[String]) {
-        println!("\n{}:", caption);
+        println!("\n{caption}:");
         for p in paths {
             let out = run_cmd(p, &["--version"]).await;
             if out.is_empty() {
-                println!("  {} -> (no output)", p);
+                println!("  {p} -> (no output)");
             } else {
-                println!("  {} -> {}", p, out);
+                println!("  {p} -> {out}");
             }
         }
     }
@@ -999,17 +999,17 @@ async fn doctor_main() -> anyhow::Result<()> {
     // Detect Bun shims
     let bun_home = env::var("BUN_INSTALL")
         .ok()
-        .or_else(|| env::var("HOME").ok().map(|h| format!("{}/.bun", h)));
+        .or_else(|| env::var("HOME").ok().map(|h| format!("{h}/.bun")));
     if let Some(bun) = bun_home {
-        let bun_bin = format!("{}/bin", bun);
-        let bun_coder = format!("{}/coder", bun_bin);
+        let bun_bin = format!("{bun}/bin");
+        let bun_coder = format!("{bun_bin}/coder");
         if coder_paths.iter().any(|p| p == &bun_coder) {
-            println!("\nBun shim detected for 'coder': {}", bun_coder);
+            println!("\nBun shim detected for 'coder': {bun_coder}");
             println!("Suggestion: remove old Bun global with: bun remove -g @just-every/code");
         }
-        let bun_code = format!("{}/code", bun_bin);
+        let bun_code = format!("{bun_bin}/code");
         if code_paths.iter().any(|p| p == &bun_code) {
-            println!("Bun shim detected for 'code': {}", bun_code);
+            println!("Bun shim detected for 'code': {bun_code}");
             println!("Suggestion: prefer 'coder' or remove Bun shim if it conflicts.");
         }
     }
@@ -1035,10 +1035,10 @@ async fn doctor_main() -> anyhow::Result<()> {
     let npm_root = run_cmd("npm", &["root", "-g"]).await;
     let npm_prefix = run_cmd("npm", &["prefix", "-g"]).await;
     if !npm_root.is_empty() {
-        println!("\nnpm root -g: {}", npm_root);
+        println!("\nnpm root -g: {npm_root}");
     }
     if !npm_prefix.is_empty() {
-        println!("npm prefix -g: {}", npm_prefix);
+        println!("npm prefix -g: {npm_prefix}");
     }
 
     println!("\nIf versions differ, remove older installs and keep one package manager:");

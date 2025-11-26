@@ -4789,8 +4789,7 @@ fn parse_read_line_annotation_with_range(cmd: &str) -> (Option<String>, Option<(
     }
     // bare `head` => default 10 lines
     if lower.contains("head") && !lower.contains("-n") {
-        let parts: Vec<&str> = cmd.split_whitespace().collect();
-        if parts.contains(&"head") {
+        if cmd.split_whitespace().any(|x| x == "head") {
             return (Some("(lines 1 to 10)".to_string()), Some((1, 10)));
         }
     }
@@ -4812,8 +4811,7 @@ fn parse_read_line_annotation_with_range(cmd: &str) -> (Option<String>, Option<(
     }
     // bare `tail` => default 10 lines
     if lower.contains("tail") && !lower.contains("-n") {
-        let parts: Vec<&str> = cmd.split_whitespace().collect();
-        if parts.contains(&"tail") {
+        if cmd.split_whitespace().any(|x| x == "tail") {
             return (Some("(last 10 lines)".to_string()), None);
         }
     }

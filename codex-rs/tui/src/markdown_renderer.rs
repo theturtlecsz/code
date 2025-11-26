@@ -225,7 +225,7 @@ impl MarkdownRenderer {
         }
 
         // Must have space after #
-        if (trimmed.chars().nth(level) != Some(' ')) {
+        if trimmed.chars().nth(level) != Some(' ') {
             return None;
         }
 

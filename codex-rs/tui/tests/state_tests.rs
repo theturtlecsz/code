@@ -3,10 +3,10 @@
 //! Covers SpecAutoState, phase management, quality gates, and helper functions.
 
 use codex_tui::{
-    HalMode, QualityCheckpoint, QualityGateType, SlashCommand, SpecAutoPhase, SpecAutoState,
-    SpecStage, expected_guardrail_command, get_nested, guardrail_for_stage, require_object,
-    require_string_field, spec_ops_stage_prefix, validate_guardrail_evidence,
-, PipelineConfig, PipelineConfig};
+    HalMode, PipelineConfig, QualityCheckpoint, QualityGateType, SlashCommand, SpecAutoPhase,
+    SpecAutoState, SpecStage, expected_guardrail_command, get_nested, guardrail_for_stage,
+    require_object, require_string_field, spec_ops_stage_prefix, validate_guardrail_evidence,
+};
 use serde_json::json;
 use std::path::PathBuf;
 
