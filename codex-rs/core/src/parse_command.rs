@@ -993,6 +993,18 @@ pub fn parse_command_impl(command: &[String]) -> Vec<ParsedCommand> {
         return commands;
     }
 
+    // If we have a bash -lc command with redirects that couldn't be parsed,
+    // preserve the original script string to avoid quoting special chars via shlex_join.
+    if let [bash, flag, script] = command
+        && is_bash_executable(bash)
+        && flag == "-lc"
+        && (script.contains(" > ") || script.contains(" >> ") || script.contains(" < "))
+    {
+        return vec![ParsedCommand::Unknown {
+            cmd: script.clone(),
+        }];
+    }
+
     let normalized = normalize_tokens(command);
 
     let parts = if contains_connectors(&normalized) {
@@ -1408,10 +1420,8 @@ fn parse_bash_lc_commands(original: &[String]) -> Option<Vec<ParsedCommand>> {
         // Strip small formatting helpers (e.g., head/tail/awk/wc/etc) so we
         // bias toward the primary command when pipelines are present.
         let had_multiple_commands = all_commands.len() > 1;
-        // The bash AST walker yields commands in right-to-left order for
-        // connector/pipeline sequences. Reverse to reflect actual execution order.
-        let mut filtered_commands = drop_small_formatting_commands(all_commands);
-        filtered_commands.reverse();
+        // The bash AST walker now sorts commands by source position (left-to-right).
+        let filtered_commands = drop_small_formatting_commands(all_commands);
         if filtered_commands.is_empty() {
             return None;
         }

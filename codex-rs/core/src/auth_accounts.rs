@@ -340,11 +340,29 @@ mod tests {
     use tempfile::tempdir;
 
     fn make_chatgpt_tokens(account_id: Option<&str>, email: Option<&str>) -> TokenData {
+        use base64::Engine;
+
+        // Create a properly base64-encoded fake JWT
+        fn b64url_no_pad(bytes: &[u8]) -> String {
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+        }
+
+        let header = serde_json::json!({"alg": "none", "typ": "JWT"});
+        let payload = serde_json::json!({
+            "email": email,
+            "sub": "test-sub"
+        });
+
+        let header_b64 = b64url_no_pad(&serde_json::to_vec(&header).unwrap());
+        let payload_b64 = b64url_no_pad(&serde_json::to_vec(&payload).unwrap());
+        let signature_b64 = b64url_no_pad(b"sig");
+        let fake_jwt = format!("{header_b64}.{payload_b64}.{signature_b64}");
+
         TokenData {
             id_token: IdTokenInfo {
                 email: email.map(std::string::ToString::to_string),
                 chatgpt_plan_type: None,
-                raw_jwt: "header.payload.signature".to_string(),
+                raw_jwt: fake_jwt,
             },
             access_token: "access".to_string(),
             refresh_token: "refresh".to_string(),

@@ -496,11 +496,21 @@ mod tests {
     use pretty_assertions::assert_eq;
     use tempfile::tempdir;
 
+    /// Helper to set CODEX_HOME env var for test isolation.
+    /// This prevents `resolve_codex_path_for_read` from falling back to legacy locations.
+    /// SAFETY: Tests run with --test-threads=1 or handle race conditions acceptably.
+    fn set_test_codex_home(codex_home: &Path) {
+        // SAFETY: While env vars are shared state, test isolation here only
+        // affects the current test's behavior and doesn't cause UB.
+        unsafe { std::env::set_var("CODEX_HOME", codex_home) };
+    }
+
     /// Verifies model and effort are written at top-level when no profile is set.
     #[tokio::test]
     async fn set_default_model_and_effort_top_level_when_no_profile() {
         let tmpdir = tempdir().expect("tmp");
         let codex_home = tmpdir.path();
+        set_test_codex_home(codex_home);
 
         persist_overrides(
             codex_home,
@@ -619,6 +629,7 @@ model_reasoning_effort = "high"
     async fn persist_overrides_creates_nested_tables() {
         let tmpdir = tempdir().expect("tmp");
         let codex_home = tmpdir.path();
+        set_test_codex_home(codex_home);
 
         persist_overrides(
             codex_home,
@@ -904,6 +915,7 @@ model_reasoning_effort = "minimal"
     async fn persist_non_null_skips_none_top_level() {
         let tmpdir = tempdir().expect("tmp");
         let codex_home = tmpdir.path();
+        set_test_codex_home(codex_home);
 
         persist_non_null_overrides(
             codex_home,
@@ -926,6 +938,7 @@ model_reasoning_effort = "minimal"
     async fn persist_non_null_noop_when_all_none() {
         let tmpdir = tempdir().expect("tmp");
         let codex_home = tmpdir.path();
+        set_test_codex_home(codex_home);
 
         persist_non_null_overrides(
             codex_home,
@@ -944,6 +957,7 @@ model_reasoning_effort = "minimal"
     async fn persist_non_null_respects_profile_override() {
         let tmpdir = tempdir().expect("tmp");
         let codex_home = tmpdir.path();
+        set_test_codex_home(codex_home);
 
         persist_non_null_overrides(
             codex_home,
@@ -1030,6 +1044,7 @@ model_reasoning_effort = "high"
     async fn persist_clear_none_noop_when_file_missing() {
         let tmpdir = tempdir().expect("tmp");
         let codex_home = tmpdir.path();
+        set_test_codex_home(codex_home);
 
         persist_overrides_and_clear_if_none(codex_home, None, &[(&[CONFIG_KEY_MODEL], None)])
             .await

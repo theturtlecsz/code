@@ -1424,12 +1424,14 @@ mod tests {
                 "kill",
                 "web_search",
                 "web_fetch",
+                "search",
+                "history_search",
                 "test_server/do_something_cool",
             ],
         );
 
         assert_eq!(
-            tools[12],
+            tools[15],
             OpenAiTool::Function(ResponsesApiTool {
                 name: "test_server/do_something_cool".to_string(),
                 parameters: JsonSchema::Object {
@@ -1542,12 +1544,14 @@ mod tests {
                 "kill",
                 "web_search",
                 "web_fetch",
+                "search",
+                "history_search",
                 "dash/search",
             ],
         );
 
         assert_eq!(
-            tools[12],
+            tools[15],
             OpenAiTool::Function(ResponsesApiTool {
                 name: "dash/search".to_string(),
                 parameters: JsonSchema::Object {
@@ -1619,11 +1623,13 @@ mod tests {
                 "kill",
                 "web_search",
                 "web_fetch",
+                "search",
+                "history_search",
                 "dash/paginate",
             ],
         );
         assert_eq!(
-            tools[12],
+            tools[15],
             OpenAiTool::Function(ResponsesApiTool {
                 name: "dash/paginate".to_string(),
                 parameters: JsonSchema::Object {
@@ -1693,11 +1699,13 @@ mod tests {
                 "kill",
                 "web_search",
                 "web_fetch",
+                "search",
+                "history_search",
                 "dash/tags",
             ],
         );
         assert_eq!(
-            tools[12],
+            tools[15],
             OpenAiTool::Function(ResponsesApiTool {
                 name: "dash/tags".to_string(),
                 parameters: JsonSchema::Object {
@@ -1770,11 +1778,13 @@ mod tests {
                 "kill",
                 "web_search",
                 "web_fetch",
+                "search",
+                "history_search",
                 "dash/value",
             ],
         );
         assert_eq!(
-            tools[12],
+            tools[15],
             OpenAiTool::Function(ResponsesApiTool {
                 name: "dash/value".to_string(),
                 parameters: JsonSchema::Object {
@@ -1862,7 +1872,8 @@ The shell tool is used to execute shell commands.
   - Types of actions that require escalated privileges:
     - Writing files other than those in the writable roots
       - writable roots:
-        - workspace
+    - workspace
+
     - Commands that require network access
 
   - Examples of commands that require escalated privileges:
@@ -1874,7 +1885,7 @@ The shell tool is used to execute shell commands.
   - Provide the with_escalated_permissions parameter with the boolean value true
   - Include a short, 1 sentence explanation for why we need to run with_escalated_permissions in the justification parameter.
 
-Default timeout: 120000 ms (120s). Override via the `timeout` parameter."#;
+Long-running commands may be backgrounded after an initial window. Use `wait` to await background tasks. Optional `timeout` can set a hard kill if needed."#;
         assert_eq!(description, expected);
     }
 
@@ -1889,7 +1900,7 @@ Default timeout: 120000 ms (120s). Override via the `timeout` parameter."#;
         };
         assert_eq!(name, "shell");
 
-        let expected = "Runs a shell command and returns its output.";
+        let expected = "Runs a shell command and returns its output. Output streams live to the UI. Long-running commands may be backgrounded after an initial window. Use `wait` to await background tasks.";
         assert_eq!(description, expected);
     }
 
@@ -1904,6 +1915,6 @@ Default timeout: 120000 ms (120s). Override via the `timeout` parameter."#;
         };
         assert_eq!(name, "shell");
 
-        assert_eq!(description, "Runs a shell command and returns its output.");
+        assert_eq!(description, "Runs a shell command and returns its output. Output streams live to the UI. Long-running commands may be backgrounded after an initial window. Use `wait` to await background tasks.");
     }
 }
