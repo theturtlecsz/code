@@ -101,8 +101,10 @@ pub struct GeminiPtySession {
 impl GeminiPtySession {
     /// Create new session (doesn't start process yet)
     pub fn new(model: &str) -> Self {
-        let mut config = GeminiPtyConfig::default();
-        config.model = model.to_string();
+        let config = GeminiPtyConfig {
+            model: model.to_string(),
+            ..Default::default()
+        };
         let idle_threshold = config.idle_threshold;
 
         Self {

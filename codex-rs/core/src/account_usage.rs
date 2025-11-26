@@ -188,6 +188,7 @@ where
         .read(true)
         .write(true)
         .create(true)
+        .truncate(false) // preserve existing content for read-modify-write
         .open(&path)?;
 
     file.lock_exclusive()?;

@@ -145,7 +145,7 @@ pub enum HalMode {
 
 impl HalMode {
     /// Parse from string (case-insensitive)
-    pub fn from_str(value: &str) -> Option<Self> {
+    pub fn parse(value: &str) -> Option<Self> {
         match value.to_ascii_lowercase().as_str() {
             "mock" | "skip" => Some(Self::Mock),
             "live" | "real" => Some(Self::Live),

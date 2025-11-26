@@ -128,18 +128,24 @@ async fn test_list_conversations_latest_first() {
     assert_eq!(page.items[2].path, p3);
 
     // Verify head contains the session ID
-    assert!(page.items[0].head[0]["id"]
-        .as_str()
-        .unwrap()
-        .contains(&u3.to_string()));
-    assert!(page.items[1].head[0]["id"]
-        .as_str()
-        .unwrap()
-        .contains(&u2.to_string()));
-    assert!(page.items[2].head[0]["id"]
-        .as_str()
-        .unwrap()
-        .contains(&u1.to_string()));
+    assert!(
+        page.items[0].head[0]["id"]
+            .as_str()
+            .unwrap()
+            .contains(&u3.to_string())
+    );
+    assert!(
+        page.items[1].head[0]["id"]
+            .as_str()
+            .unwrap()
+            .contains(&u2.to_string())
+    );
+    assert!(
+        page.items[2].head[0]["id"]
+            .as_str()
+            .unwrap()
+            .contains(&u1.to_string())
+    );
 
     // Verify cursor and counts
     let expected_cursor: Cursor =
@@ -186,10 +192,12 @@ async fn test_pagination_cursor() {
     assert_eq!(page1.items.len(), 2);
     assert_eq!(page1.items[0].path, p5);
     assert_eq!(page1.items[1].path, p4);
-    assert!(page1.items[0].head[0]["id"]
-        .as_str()
-        .unwrap()
-        .contains(&u5.to_string()));
+    assert!(
+        page1.items[0].head[0]["id"]
+            .as_str()
+            .unwrap()
+            .contains(&u5.to_string())
+    );
 
     let expected_cursor1: Cursor =
         serde_json::from_str(&format!("\"2025-03-04T09-00-00|{u4}\"")).unwrap();
@@ -271,10 +279,12 @@ async fn test_get_conversation_contents() {
     assert_eq!(page.items[0].path, expected_path);
 
     // Verify head contains session ID
-    assert!(page.items[0].head[0]["id"]
-        .as_str()
-        .unwrap()
-        .contains(&uuid.to_string()));
+    assert!(
+        page.items[0].head[0]["id"]
+            .as_str()
+            .unwrap()
+            .contains(&uuid.to_string())
+    );
 
     // Verify cursor
     let expected_cursor: Cursor = serde_json::from_str(&format!("\"{ts}|{uuid}\"")).unwrap();
@@ -328,14 +338,18 @@ async fn test_stable_ordering_same_second_pagination() {
     assert_eq!(page1.items[1].path, p2);
 
     // Verify heads contain correct session IDs
-    assert!(page1.items[0].head[0]["id"]
-        .as_str()
-        .unwrap()
-        .contains(&u3.to_string()));
-    assert!(page1.items[1].head[0]["id"]
-        .as_str()
-        .unwrap()
-        .contains(&u2.to_string()));
+    assert!(
+        page1.items[0].head[0]["id"]
+            .as_str()
+            .unwrap()
+            .contains(&u3.to_string())
+    );
+    assert!(
+        page1.items[1].head[0]["id"]
+            .as_str()
+            .unwrap()
+            .contains(&u2.to_string())
+    );
 
     let expected_cursor1: Cursor = serde_json::from_str(&format!("\"{ts}|{u2}\"")).unwrap();
     assert_eq!(page1.next_cursor, Some(expected_cursor1));
@@ -355,10 +369,12 @@ async fn test_stable_ordering_same_second_pagination() {
 
     assert_eq!(page2.items.len(), 1);
     assert_eq!(page2.items[0].path, p1);
-    assert!(page2.items[0].head[0]["id"]
-        .as_str()
-        .unwrap()
-        .contains(&u1.to_string()));
+    assert!(
+        page2.items[0].head[0]["id"]
+            .as_str()
+            .unwrap()
+            .contains(&u1.to_string())
+    );
 
     let expected_cursor2: Cursor = serde_json::from_str(&format!("\"{ts}|{u1}\"")).unwrap();
     assert_eq!(page2.next_cursor, Some(expected_cursor2));

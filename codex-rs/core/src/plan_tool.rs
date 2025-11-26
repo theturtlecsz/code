@@ -110,9 +110,7 @@ fn parse_update_plan_arguments(
 }
 
 fn normalize_plan_name(name: Option<String>) -> Option<String> {
-    let Some(name) = name.map(|value| value.trim().to_string()) else {
-        return None;
-    };
+    let name = name.map(|value| value.trim().to_string())?;
 
     if name.is_empty() {
         return None;
@@ -156,12 +154,13 @@ fn canonicalize_word_boundaries(input: &str) -> String {
         if !current.is_empty()
             && let Some(prev) = prev_char
         {
-            if prev.is_ascii_lowercase() && ch.is_ascii_uppercase() {
-                split = true;
-            } else if prev.is_ascii_uppercase()
-                && ch.is_ascii_uppercase()
-                && uppercase_run > 0
-                && next_char.is_some_and(|c| c.is_ascii_lowercase())
+            // Split on camelCase boundary (lowercase->uppercase)
+            // or acronym boundary (uppercase run followed by lowercase)
+            if (prev.is_ascii_lowercase() && ch.is_ascii_uppercase())
+                || (prev.is_ascii_uppercase()
+                    && ch.is_ascii_uppercase()
+                    && uppercase_run > 0
+                    && next_char.is_some_and(|c| c.is_ascii_lowercase()))
             {
                 split = true;
             }

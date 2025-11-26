@@ -437,8 +437,6 @@ fn score_consistency(spec_id: &str, cwd: &Path, issues: &mut Vec<QualityIssue>) 
     Ok(score)
 }
 
-/// Find SPEC directory from SPEC-ID
-
 /// Simple regex escape (regex_lite doesn't have escape function)
 fn regex_escape(s: &str) -> String {
     s.chars()

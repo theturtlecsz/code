@@ -1190,6 +1190,8 @@ impl MessageProcessor {
         struct ConsensusArtifact {
             agent: String,
             #[serde(default)]
+            #[allow(dead_code)]
+            // Deserialized for schema compatibility, may be used in future
             version: Option<String>,
             #[serde(default)]
             content: Value,

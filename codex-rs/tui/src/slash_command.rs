@@ -472,7 +472,7 @@ pub enum HalMode {
 }
 
 impl HalMode {
-    pub fn from_str(value: &str) -> Option<Self> {
+    pub fn parse(value: &str) -> Option<Self> {
         match value.to_ascii_lowercase().as_str() {
             "mock" | "skip" => Some(Self::Mock),
             "live" | "real" => Some(Self::Live),
@@ -657,7 +657,7 @@ pub fn parse_spec_auto_args(args: &str) -> Result<SpecAutoInvocation, SpecAutoPa
 
         if pending_hal {
             hal_mode = Some(
-                HalMode::from_str(token)
+                HalMode::parse(token)
                     .ok_or_else(|| SpecAutoParseError::UnknownHalMode(token.to_string()))?,
             );
             pending_hal = false;
@@ -667,7 +667,7 @@ pub fn parse_spec_auto_args(args: &str) -> Result<SpecAutoInvocation, SpecAutoPa
         if let Some((flag, value)) = token.split_once('=') {
             if matches!(flag, "--hal" | "--hal-mode") {
                 hal_mode = Some(
-                    HalMode::from_str(value)
+                    HalMode::parse(value)
                         .ok_or_else(|| SpecAutoParseError::UnknownHalMode(value.to_string()))?,
                 );
                 continue;

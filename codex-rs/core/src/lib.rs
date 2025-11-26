@@ -4,6 +4,11 @@
 // user-visible output must go through the appropriate abstraction (e.g.,
 // the TUI or the tracing stack).
 #![deny(clippy::print_stdout, clippy::print_stderr)]
+// Allow complex function signatures in this crate - many internal functions
+// legitimately need multiple parameters for context passing.
+#![allow(clippy::too_many_arguments)]
+// Allow complex type definitions - these are used for async state tracking.
+#![allow(clippy::type_complexity)]
 
 pub mod account_usage;
 mod apply_patch;

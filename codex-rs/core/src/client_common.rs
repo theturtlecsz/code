@@ -328,7 +328,7 @@ pub struct TextFormat {
 /// Limits the number of screenshots in the input to a maximum of 5.
 /// Keeps the first screenshot and the last 4 screenshots.
 /// Replaces removed screenshots with a placeholder message.
-fn limit_screenshots_in_input(input: &mut Vec<ResponseItem>) {
+fn limit_screenshots_in_input(input: &mut [ResponseItem]) {
     // Find all screenshot positions
     let mut screenshot_positions = Vec::new();
 

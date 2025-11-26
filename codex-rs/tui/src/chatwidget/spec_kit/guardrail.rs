@@ -513,7 +513,7 @@ pub fn handle_guardrail_impl(
                     widget.request_redraw();
                     return;
                 };
-                hal_from_args = match HalMode::from_str(value) {
+                hal_from_args = match HalMode::parse(value) {
                     Some(mode) => Some(mode),
                     None => {
                         widget.history_push(crate::history_cell::new_error_event(format!(
@@ -529,7 +529,7 @@ pub fn handle_guardrail_impl(
             if let Some((flag, value)) = token.split_once('=')
                 && (flag == "--hal" || flag == "--hal-mode")
             {
-                hal_from_args = match HalMode::from_str(value) {
+                hal_from_args = match HalMode::parse(value) {
                     Some(mode) => Some(mode),
                     None => {
                         widget.history_push(crate::history_cell::new_error_event(format!(

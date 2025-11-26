@@ -840,7 +840,8 @@ fn spawn_usage_task<F>(task: F)
 where
     F: FnOnce() + Send + 'static,
 {
-    let _ = tokio::task::spawn_blocking(task);
+    // Fire-and-forget task - we don't need the result
+    drop(tokio::task::spawn_blocking(task));
 }
 
 #[derive(Debug)]
@@ -4133,7 +4134,7 @@ async fn run_agent(
             review_history.push(response_item.clone());
         } else {
             // Record to history but we'll handle ephemeral images separately
-            sess.record_conversation_items(&[response_item.clone()])
+            sess.record_conversation_items(std::slice::from_ref(&response_item))
                 .await;
         }
         initial_response_item = Some(response_item);
@@ -4164,7 +4165,7 @@ async fn run_agent(
                 if is_review_mode {
                     review_history.push(first_pending.clone());
                 } else {
-                    sess.record_conversation_items(&[first_pending.clone()])
+                    sess.record_conversation_items(std::slice::from_ref(&first_pending))
                         .await;
                 }
                 initial_response_item = Some(first_pending);
@@ -5187,8 +5188,9 @@ async fn handle_response_item(
                 );
                 sess.tx_event.send(stamped).await.ok();
             }
-            if sess.show_raw_agent_reasoning && content.is_some() {
-                let content = content.unwrap();
+            if sess.show_raw_agent_reasoning
+                && let Some(content) = content
+            {
                 for item in content.into_iter() {
                     let text = match item {
                         ReasoningItemContent::ReasoningText { text } => text,
@@ -5593,13 +5595,15 @@ async fn handle_web_fetch(
                 url: &str,
                 timeout: Duration,
             ) -> Result<BrowserFetchOutcome, String> {
-                let mut config = CodexBrowserConfig::default();
-                config.enabled = true;
-                config.headless = true;
-                config.fullpage = false;
-                config.segments_max = 2;
-                config.persist_profile = false;
-                config.idle_timeout_ms = 10_000;
+                let config = CodexBrowserConfig {
+                    enabled: true,
+                    headless: true,
+                    fullpage: false,
+                    segments_max: 2,
+                    persist_profile: false,
+                    idle_timeout_ms: 10_000,
+                    ..Default::default()
+                };
 
                 let manager = BrowserManager::new(config);
                 manager.set_enabled_sync(true);
@@ -8484,9 +8488,8 @@ async fn handle_container_exec_with_params(
                             } else if args
                                 .iter()
                                 .any(|a| matches!(*a, "-b" | "-B" | "--orphan" | "--detach"))
+                                || args.first().copied() == Some("-")
                             {
-                                Some(SensitiveGitKind::BranchChange)
-                            } else if args.first().copied() == Some("-") {
                                 Some(SensitiveGitKind::BranchChange)
                             } else if let Some(first_arg) = args.first() {
                                 let a = *first_arg;
@@ -9758,7 +9761,7 @@ async fn handle_browser_click(
                         Ok((x, y)) => Ok((x, y, "Mouse up".to_string())),
                         Err(e) => Err(e),
                     },
-                    "click" | _ => match browser_manager.click_at_current().await {
+                    _ => match browser_manager.click_at_current().await {
                         Ok((x, y)) => Ok((x, y, "Clicked".to_string())),
                         Err(e) => Err(e),
                     },

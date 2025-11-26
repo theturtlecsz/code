@@ -4,13 +4,18 @@ use once_cell::sync::Lazy;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+/// Type alias for the global browser manager storage
+type GlobalBrowserManagerStorage = Lazy<Arc<RwLock<Option<Arc<BrowserManager>>>>>;
+
+/// Type alias for the last connection cache (port, websocket URL)
+type LastConnectionCache = Lazy<Arc<RwLock<(Option<u16>, Option<String>)>>>;
+
 /// Global browser manager instance shared between TUI and Session
-static GLOBAL_BROWSER_MANAGER: Lazy<Arc<RwLock<Option<Arc<BrowserManager>>>>> =
+static GLOBAL_BROWSER_MANAGER: GlobalBrowserManagerStorage =
     Lazy::new(|| Arc::new(RwLock::new(None)));
 
 /// Cache of the last successful external Chrome connection (port/ws)
-static LAST_CONNECTION: Lazy<Arc<RwLock<(Option<u16>, Option<String>)>>> =
-    Lazy::new(|| Arc::new(RwLock::new((None, None))));
+static LAST_CONNECTION: LastConnectionCache = Lazy::new(|| Arc::new(RwLock::new((None, None))));
 
 /// Get or create the global browser manager
 pub async fn get_or_create_browser_manager() -> Arc<BrowserManager> {

@@ -2114,7 +2114,6 @@ impl ChatWidget<'_> {
         }
     }
 
-    /// Handle streaming delta for both answer and reasoning
     // Legacy helper removed: streaming now requires explicit sequence numbers.
     // Call sites should invoke `streaming::delta_text(self, kind, id, delta, seq)` directly.
 
@@ -2254,9 +2253,6 @@ impl ChatWidget<'_> {
     ) {
         exec_tools::handle_exec_end_now(self, ev, order);
     }
-
-    /// If a completed exec cell sits at `idx`, attempt to merge it into the
-    /// previous cell when they represent the same action header (e.g., Search, Read).
 
     // MCP tool call handlers now live in chatwidget::tools
 
@@ -14838,9 +14834,6 @@ impl ChatWidget<'_> {
     pub(crate) fn desired_bottom_height(&self, width: u16) -> u16 {
         self.bottom_pane.desired_height(width)
     }
-
-    /// The last bottom pane height (rows) that the layout actually used.
-    /// If not yet set, fall back to a conservative estimate from BottomPane.
 
     // (Removed) Legacy in-place reset method. The /new command now creates a fresh
     // ChatWidget (new core session) to ensure the agent context is fully reset.

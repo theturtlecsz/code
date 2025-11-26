@@ -580,7 +580,11 @@ mod tests {
         // On dev machines with CLI credentials, this may not be empty
         // Just verify the storage layer is empty
         let storage = AuthAccountsStorage::load(dir.path()).unwrap();
-        for provider in &[ProviderId::OpenAI, ProviderId::Anthropic, ProviderId::Google] {
+        for provider in &[
+            ProviderId::OpenAI,
+            ProviderId::Anthropic,
+            ProviderId::Google,
+        ] {
             assert!(storage.get_credentials(*provider).is_none());
         }
     }

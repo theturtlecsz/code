@@ -3234,12 +3234,6 @@ impl WidgetRef for &ExecCell {
     }
 }
 
-/// Return the emoji followed by a hair space (U+200A) and a normal space.
-/// This creates a reasonable gap across different terminals,
-/// in particular Terminal.app and iTerm, which render too tightly with just a single normal space.
-///
-/// Improvements here could be to condition this behavior on terminal,
-/// or possibly on emoji.
 // Removed unused helpers padded_emoji and padded_emoji_with.
 
 pub(crate) fn new_completed_wait_tool_call(target: String, duration: Duration) -> WaitStatusCell {
@@ -4642,10 +4636,6 @@ pub(crate) fn new_queued_user_prompt(message: String) -> PlainHistoryCell {
     PlainHistoryCell::new(lines, HistoryCellType::User)
 }
 
-/// Expand horizontal tabs to spaces using a fixed tab stop.
-/// This prevents terminals from applying their own tab expansion after
-/// ratatui has computed layout, which can otherwise cause glyphs to appear
-/// to "hang" or smear until overwritten.
 // Tab expansion and control stripping are centralized in crate::sanitize
 
 #[allow(dead_code)]

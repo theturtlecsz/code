@@ -23,7 +23,7 @@ impl SchemaValidator {
     /// # Arguments
     ///
     /// * `schema_path` - Optional path to external JSON Schema file.
-    ///                   If None, uses embedded default schema.
+    ///   If None, uses embedded default schema.
     ///
     /// # Returns
     ///

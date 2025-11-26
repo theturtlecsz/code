@@ -1915,6 +1915,9 @@ Long-running commands may be backgrounded after an initial window. Use `wait` to
         };
         assert_eq!(name, "shell");
 
-        assert_eq!(description, "Runs a shell command and returns its output. Output streams live to the UI. Long-running commands may be backgrounded after an initial window. Use `wait` to await background tasks.");
+        assert_eq!(
+            description,
+            "Runs a shell command and returns its output. Output streams live to the UI. Long-running commands may be backgrounded after an initial window. Use `wait` to await background tasks."
+        );
     }
 }

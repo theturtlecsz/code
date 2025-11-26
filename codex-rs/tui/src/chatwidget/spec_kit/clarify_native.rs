@@ -331,8 +331,6 @@ pub fn find_ambiguities(spec_id: &str, cwd: &Path) -> Result<Vec<Ambiguity>> {
     Ok(all_issues)
 }
 
-/// Find SPEC directory from SPEC-ID
-
 /// Truncate context to reasonable length
 fn truncate_context(text: &str, max_len: usize) -> String {
     if text.len() <= max_len {

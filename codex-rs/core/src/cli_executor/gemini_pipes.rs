@@ -92,11 +92,11 @@ impl GeminiPipesSession {
     /// No process is spawned here. Each message will spawn its own
     /// one-shot process using Gemini CLI's session management.
     pub async fn spawn(model: &str, cwd: Option<&Path>) -> Result<Self, CliError> {
-        let mut config = GeminiPipesConfig::default();
-        config.model = model.to_string();
-        if let Some(dir) = cwd {
-            config.cwd = Some(dir.to_string_lossy().to_string());
-        }
+        let config = GeminiPipesConfig {
+            model: model.to_string(),
+            cwd: cwd.map(|dir| dir.to_string_lossy().to_string()),
+            ..Default::default()
+        };
 
         Self::spawn_with_config(config).await
     }

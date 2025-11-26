@@ -2375,9 +2375,7 @@ fn legacy_codex_home_dir() -> Option<PathBuf> {
             if env_overrides_present() {
                 return None;
             }
-            let Some(home) = home_dir() else {
-                return None;
-            };
+            let home = home_dir()?;
             let candidate = home.join(".codex");
             if path_exists(&candidate) {
                 Some(candidate)
