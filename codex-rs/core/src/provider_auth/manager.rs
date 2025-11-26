@@ -576,7 +576,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let manager = ProviderAuthManager::new(dir.path().to_path_buf());
 
-        let providers = manager.authenticated_providers().unwrap();
+        let _providers = manager.authenticated_providers().unwrap();
         // On dev machines with CLI credentials, this may not be empty
         // Just verify the storage layer is empty
         let storage = AuthAccountsStorage::load(dir.path()).unwrap();

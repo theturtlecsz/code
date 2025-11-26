@@ -462,30 +462,30 @@ async fn prefixes_context_and_instructions_once_and_consistently_across_requests
     assert_eq!(body2["input"], expected_body2);
 }
 
-/// SPEC-957: Op::OverrideTurnContext was removed - test stubbed for compilation.
+/// SPEC-957: Op::OverrideTurnContext not exposed in codex_core::protocol::Op - test stubbed for compilation.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-957: Op::OverrideTurnContext was removed"]
+#[ignore = "SPEC-957: Op::OverrideTurnContext not exposed in codex_core::protocol::Op"]
 async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() {
-    unimplemented!("SPEC-957: Op::OverrideTurnContext was removed from the protocol");
+    unimplemented!("SPEC-957: Op::OverrideTurnContext not exposed in codex_core::protocol::Op from the protocol");
 }
 
-/// SPEC-957: Op::UserTurn was removed - test stubbed for compilation.
+/// SPEC-957: Op::UserTurn not exposed in codex_core::protocol::Op - test stubbed for compilation.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-957: Op::UserTurn was removed"]
+#[ignore = "SPEC-957: Op::UserTurn not exposed in codex_core::protocol::Op"]
 async fn per_turn_overrides_keep_cached_prefix_and_key_constant() {
-    unimplemented!("SPEC-957: Op::UserTurn was removed from the protocol");
+    unimplemented!("SPEC-957: Op::UserTurn not exposed in codex_core::protocol::Op from the protocol");
 }
 
-/// SPEC-957: Op::UserTurn was removed - test stubbed for compilation.
+/// SPEC-957: Op::UserTurn not exposed in codex_core::protocol::Op - test stubbed for compilation.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-957: Op::UserTurn was removed"]
+#[ignore = "SPEC-957: Op::UserTurn not exposed in codex_core::protocol::Op"]
 async fn send_user_turn_with_no_changes_does_not_send_environment_context() {
-    unimplemented!("SPEC-957: Op::UserTurn was removed from the protocol");
+    unimplemented!("SPEC-957: Op::UserTurn not exposed in codex_core::protocol::Op from the protocol");
 }
 
-/// SPEC-957: Op::UserTurn was removed - test stubbed for compilation.
+/// SPEC-957: Op::UserTurn not exposed in codex_core::protocol::Op - test stubbed for compilation.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-957: Op::UserTurn was removed"]
+#[ignore = "SPEC-957: Op::UserTurn not exposed in codex_core::protocol::Op"]
 async fn send_user_turn_with_changes_sends_environment_context() {
-    unimplemented!("SPEC-957: Op::UserTurn was removed from the protocol");
+    unimplemented!("SPEC-957: Op::UserTurn not exposed in codex_core::protocol::Op from the protocol");
 }

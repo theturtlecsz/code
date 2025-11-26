@@ -32,10 +32,10 @@ fn sse_completed(id: &str) -> String {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-957: Op::GetPath was removed"]
+#[ignore = "SPEC-957: Op::GetPath not exposed in codex_core::protocol::Op"]
 async fn fork_conversation_twice_drops_to_first_message() {
     // SPEC-957: This test relied heavily on Op::GetPath which was removed from the API.
     // The test is marked #[ignore] and the body is stubbed to allow compilation.
     // When rollout path access is restored via a new API, this test should be updated.
-    unimplemented!("SPEC-957: Test disabled - Op::GetPath was removed from the protocol");
+    unimplemented!("SPEC-957: Test disabled - Op::GetPath not exposed in codex_core::protocol::Op from the protocol");
 }

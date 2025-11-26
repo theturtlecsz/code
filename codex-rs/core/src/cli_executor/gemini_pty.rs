@@ -625,7 +625,7 @@ mod tests {
             let mut session = GeminiPtySession::new("gemini-2.5-flash");
             session.start()?;
 
-            let (tx, rx) = mpsc::channel(32);
+            let (tx, _rx) = mpsc::channel(32);
             let cancel = CancellationToken::new();
 
             let response = session.send_message("Say exactly: Hello World", tx, cancel)?;

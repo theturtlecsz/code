@@ -14,6 +14,7 @@ members = [
     "login",
     "mcp-client",
     "mcp-server",
+    "mcp-test-server",
     "mcp-types",
     "ollama",
     "protocol",

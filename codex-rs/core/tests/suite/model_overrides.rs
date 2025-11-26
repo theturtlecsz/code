@@ -1,27 +1,17 @@
-// SPEC-957: These tests relied on Op::OverrideTurnContext which was removed.
-// The tests are marked #[ignore] and stubbed to allow compilation.
-#![allow(unused_imports)]
-
-use codex_core::CodexAuth;
-use codex_core::ConversationManager;
-use codex_core::protocol::EventMsg;
-use codex_core::protocol::Op;
-use codex_core::protocol_config_types::ReasoningEffort;
-use core_test_support::load_default_config_for_test;
-use core_test_support::wait_for_event;
-use pretty_assertions::assert_eq;
-use tempfile::TempDir;
-
-const CONFIG_TOML: &str = "config.toml";
+// SPEC-957: These tests require Op::OverrideTurnContext which exists in codex_protocol::protocol::Op
+// but is NOT exposed in codex_core::protocol::Op. The core crate has a different Op enum subset.
+// Tests cannot be restored without API changes to expose these variants.
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-957: Op::OverrideTurnContext was removed"]
+#[ignore = "SPEC-957: Op::OverrideTurnContext not exposed in codex_core::protocol::Op"]
 async fn override_turn_context_does_not_persist_when_config_exists() {
-    unimplemented!("SPEC-957: Op::OverrideTurnContext was removed from the protocol");
+    // Original test verified Op::OverrideTurnContext doesn't persist model changes to config.toml
+    // Requires codex_protocol::protocol::Op::OverrideTurnContext which is not in codex_core
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-957: Op::OverrideTurnContext was removed"]
+#[ignore = "SPEC-957: Op::OverrideTurnContext not exposed in codex_core::protocol::Op"]
 async fn override_turn_context_does_not_create_config_file() {
-    unimplemented!("SPEC-957: Op::OverrideTurnContext was removed from the protocol");
+    // Original test verified Op::OverrideTurnContext doesn't create config.toml
+    // Requires codex_protocol::protocol::Op::OverrideTurnContext which is not in codex_core
 }

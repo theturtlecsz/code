@@ -1477,7 +1477,7 @@ mod tests {
     #[test]
     fn test_get_openai_tools_mcp_tools_sorted_by_name() {
         let model_family = find_family_for_model("o3").expect("o3 should be a valid model family");
-        let config = ToolsConfig::new(
+        let _config = ToolsConfig::new(
             &model_family,
             AskForApproval::Never,
             SandboxPolicy::ReadOnly,

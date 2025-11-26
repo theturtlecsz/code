@@ -12,7 +12,10 @@ use time::format_description::FormatItem;
 use time::macros::format_description;
 use uuid::Uuid;
 
+// ConversationItem and ConversationsPage are referenced in test assertions below
+#[allow(unused_imports)]
 use crate::rollout::list::ConversationItem;
+#[allow(unused_imports)]
 use crate::rollout::list::ConversationsPage;
 use crate::rollout::list::Cursor;
 use crate::rollout::list::get_conversation;

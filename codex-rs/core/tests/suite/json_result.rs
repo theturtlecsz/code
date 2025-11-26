@@ -32,20 +32,20 @@ const SCHEMA: &str = r#"
 "#;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-957: Op::UserTurn was removed"]
+#[ignore = "SPEC-957: Op::UserTurn not exposed in codex_core::protocol::Op"]
 async fn codex_returns_json_result_for_gpt5() -> anyhow::Result<()> {
     codex_returns_json_result("gpt-5".to_string()).await
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-957: Op::UserTurn was removed"]
+#[ignore = "SPEC-957: Op::UserTurn not exposed in codex_core::protocol::Op"]
 async fn codex_returns_json_result_for_gpt5_codex() -> anyhow::Result<()> {
     codex_returns_json_result("gpt-5-codex".to_string()).await
 }
 
-/// SPEC-957: Op::UserTurn was removed - this helper is stubbed out.
+/// SPEC-957: Op::UserTurn not exposed in codex_core::protocol::Op - this helper is stubbed out.
 /// The tests that call this are marked #[ignore], so this stub allows compilation.
 #[allow(unused_variables)]
 async fn codex_returns_json_result(model: String) -> anyhow::Result<()> {
-    anyhow::bail!("SPEC-957: Op::UserTurn was removed from the protocol");
+    anyhow::bail!("SPEC-957: Op::UserTurn not exposed in codex_core::protocol::Op from the protocol");
 }

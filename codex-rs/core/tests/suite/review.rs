@@ -35,7 +35,6 @@ use wiremock::matchers::path;
 /// EnteredReviewMode -> ExitedReviewMode(None) -> TaskComplete
 /// in that order when the model returns a structured review JSON payload.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-957: Op::GetPath was removed"]
 async fn review_op_emits_lifecycle_and_review_output() {
     // Skip under Codex sandbox network restrictions.
     non_sandbox_test!();
@@ -114,13 +113,6 @@ async fn review_op_emits_lifecycle_and_review_output() {
     assert_eq!(expected, review);
     let _complete = wait_for_event(&codex, |ev| matches!(ev, EventMsg::TaskComplete(_))).await;
 
-    // SPEC-957: Op::GetPath was removed - rollout verification disabled
-    // The rollout verification below requires Op::GetPath which no longer exists.
-    // This test is already marked #[ignore] so this code path won't execute.
-    if false {
-        unreachable!("SPEC-957: Op::GetPath rollout verification disabled");
-    }
-
     server.verify().await;
 }
 
@@ -181,7 +173,7 @@ async fn review_op_with_plain_text_emits_review_fallback() {
 /// SPEC-957: Test times out waiting for ReviewResult event.
 #[cfg_attr(windows, tokio::test(flavor = "multi_thread", worker_threads = 4))]
 #[cfg_attr(not(windows), tokio::test(flavor = "multi_thread", worker_threads = 2))]
-#[ignore = "SPEC-957: timeout waiting for ReviewResult event on structured output"]
+#[ignore = "SPEC-957: AgentMessage now emitted during structured review (behavior change)"]
 async fn review_does_not_emit_agent_message_on_structured_output() {
     non_sandbox_test!();
 
@@ -256,7 +248,7 @@ async fn review_does_not_emit_agent_message_on_structured_output() {
 /// request uses that model (and not the main chat model).
 /// SPEC-957: Test times out or fails waiting for review model usage.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-957: timeout waiting for custom review model request"]
+#[ignore = "SPEC-957: review_model config not applied - uses main model instead"]
 async fn review_uses_custom_review_model_from_config() {
     non_sandbox_test!();
 
@@ -303,7 +295,7 @@ async fn review_uses_custom_review_model_from_config() {
 // Windows CI only: bump to 4 workers to prevent SSE/event starvation and test timeouts.
 #[cfg_attr(windows, tokio::test(flavor = "multi_thread", worker_threads = 4))]
 #[cfg_attr(not(windows), tokio::test(flavor = "multi_thread", worker_threads = 2))]
-#[ignore = "SPEC-957: Op::GetPath was removed"]
+#[ignore = "SPEC-957: input array size changed from 2 to 4 (environment context handling)"]
 async fn review_input_isolated_from_parent_history() {
     non_sandbox_test!();
 
@@ -429,7 +421,7 @@ async fn review_input_isolated_from_parent_history() {
         format!("{REVIEW_PROMPT}\n\n---\n\nNow, here's your task: Please review only this",)
     );
 
-    // SPEC-957: Op::GetPath was removed - rollout verification disabled
+    // SPEC-957: Op::GetPath not exposed in codex_core::protocol::Op - rollout verification disabled
     // The interruption message verification requires Op::GetPath which no longer exists.
     // This test is already marked #[ignore] so this code path won't execute.
     if false {
@@ -443,7 +435,6 @@ async fn review_input_isolated_from_parent_history() {
 /// parent session. A subsequent parent turn must not include any review
 /// messages in its request `input`.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-957: Op::GetPath was removed"]
 async fn review_history_does_not_leak_into_parent_session() {
     non_sandbox_test!();
 

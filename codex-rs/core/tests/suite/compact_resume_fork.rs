@@ -41,7 +41,7 @@ fn network_disabled() -> bool {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-957: Op::GetPath was removed"]
+#[ignore = "SPEC-957: Op::GetPath not exposed in codex_core::protocol::Op"]
 /// Scenario: compact an initial conversation, resume it, fork one turn back, and
 /// ensure the model-visible history matches expectations at each request.
 async fn compact_resume_and_fork_preserve_model_history_view() {
@@ -497,7 +497,7 @@ SUMMARY_ONLY_CONTEXT"
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-957: Op::GetPath was removed"]
+#[ignore = "SPEC-957: Op::GetPath not exposed in codex_core::protocol::Op"]
 /// Scenario: after the forked branch is compacted, resuming again should reuse
 /// the compacted history and only append the new user message.
 async fn compact_resume_after_second_compaction_preserves_history() {
@@ -791,13 +791,13 @@ async fn compact_conversation(conversation: &Arc<CodexConversation>) {
     wait_for_event(conversation, |ev| matches!(ev, EventMsg::TaskComplete(_))).await;
 }
 
-/// SPEC-957: Op::GetPath was removed - this helper is stubbed out
+/// SPEC-957: Op::GetPath not exposed in codex_core::protocol::Op - this helper is stubbed out
 #[allow(dead_code, unused_variables)]
 async fn fetch_conversation_path(
     conversation: &Arc<CodexConversation>,
     context: &str,
 ) -> std::path::PathBuf {
-    unimplemented!("SPEC-957: Op::GetPath was removed from the API")
+    unimplemented!("SPEC-957: Op::GetPath not exposed in codex_core::protocol::Op from the API")
 }
 
 async fn resume_conversation(
