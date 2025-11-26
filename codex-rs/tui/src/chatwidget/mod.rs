@@ -4724,7 +4724,8 @@ impl ChatWidget<'_> {
             return;
         }
 
-        // Build sorted indices: indices[sorted_pos] = original_pos
+        // Build sorted indices: sorted_indices[sorted_pos] = original_pos
+        // After sorting, sorted_indices[i] tells us which original position should be at slot i
         let mut sorted_indices: Vec<usize> = (0..len).collect();
         sorted_indices.sort_by_key(|&i| {
             self.cell_order_seq.get(i).copied().unwrap_or(OrderKey {
@@ -4734,17 +4735,11 @@ impl ChatWidget<'_> {
             })
         });
 
-        // Build inverse permutation for cycle-following: target[original_pos] = sorted_pos
-        let mut target_positions = vec![0usize; len];
-        for (sorted_pos, &original_pos) in sorted_indices.iter().enumerate() {
-            target_positions[original_pos] = sorted_pos;
-        }
-
         // Check if reordering is actually needed
-        let needs_resort = target_positions
+        let needs_resort = sorted_indices
             .iter()
             .enumerate()
-            .any(|(i, &target)| i != target);
+            .any(|(sorted_pos, &original_pos)| sorted_pos != original_pos);
         if !needs_resort {
             tracing::debug!("🔄 RESORT: No changes needed (already sorted)");
             return;
@@ -4752,35 +4747,44 @@ impl ChatWidget<'_> {
 
         tracing::info!("🔄 RESORT: Reordering {} cells", len);
 
-        // Apply permutation using cycle-following algorithm with CORRECT target mapping
-        let mut visited = vec![false; len];
+        // SPEC-958 FIX: Track where each "original position element" currently lives.
+        // position_of[original] = current_slot
+        // Initially, element from original position i is at slot i.
+        let mut position_of: Vec<usize> = (0..len).collect();
 
-        for start in 0..len {
-            if visited[start] || target_positions[start] == start {
-                continue;
-            }
+        // For each target slot, place the correct element there
+        for target_slot in 0..len {
+            // We want the element that was originally at sorted_indices[target_slot]
+            let wanted_original = sorted_indices[target_slot];
 
-            // Follow the cycle
-            let mut current = start;
-            loop {
-                let next = target_positions[current];
-                visited[current] = true;
+            // Where is that element now?
+            let current_slot = position_of[wanted_original];
 
-                if next == start {
-                    break;
+            if current_slot != target_slot {
+                // Swap into place
+                self.history_cells.swap(target_slot, current_slot);
+                self.cell_order_seq.swap(target_slot, current_slot);
+                if target_slot < self.cell_order_dbg.len()
+                    && current_slot < self.cell_order_dbg.len()
+                {
+                    self.cell_order_dbg.swap(target_slot, current_slot);
                 }
 
-                // Swap elements in all three vectors
-                self.history_cells.swap(current, next);
-                self.cell_order_seq.swap(current, next);
-                if current < self.cell_order_dbg.len() && next < self.cell_order_dbg.len() {
-                    self.cell_order_dbg.swap(current, next);
+                // Update position_of: the element that WAS at target_slot is now at current_slot
+                // Find what was at target_slot before the swap
+                // Since position_of[x] = target_slot for some x, we need to find that x
+                // But we can get it from sorted_indices - at this point:
+                // - target_slot used to contain whatever was there before our swaps
+                // - We need to update the position tracker
+                let evicted_original = sorted_indices
+                    .iter()
+                    .position(|&orig| position_of[orig] == target_slot)
+                    .unwrap_or(wanted_original);
+
+                if evicted_original != wanted_original {
+                    position_of[evicted_original] = current_slot;
                 }
-
-                // CRITICAL: Update target_positions after swap to track new positions
-                target_positions.swap(current, next);
-
-                current = next;
+                position_of[wanted_original] = target_slot;
             }
         }
 

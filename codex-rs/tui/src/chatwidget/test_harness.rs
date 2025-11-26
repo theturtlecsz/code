@@ -322,6 +322,74 @@ mod tests {
         assert_eq!(harness.captured_events.len(), 0);
     }
 
+    /// SPEC-958: Regression test for infinite loop fix in resort_history_by_order
+    ///
+    /// This test combines send_user_message with streaming events to verify
+    /// that the OrderKey update + resort path doesn't cause infinite loops.
+    /// Before SPEC-958 fix, this test would hang indefinitely.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_user_message_then_streaming_no_hang() {
+        use codex_core::protocol::{AgentMessageDeltaEvent, AgentMessageEvent};
+
+        let mut harness = TestHarness::new();
+
+        // Give async tasks time to initialize
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        // Step 1: Send user message
+        harness.send_user_message("Hello!");
+
+        // Step 2: Send TaskStarted event
+        harness.send_codex_event(Event {
+            id: "req-1".to_string(),
+            event_seq: 0,
+            msg: EventMsg::TaskStarted,
+            order: Some(OrderMeta {
+                request_ordinal: 1,
+                output_index: Some(0),
+                sequence_number: None,
+            }),
+        });
+
+        // Step 3: Send AgentMessageDelta - this triggers resort_history_by_order
+        // which was causing infinite loops before SPEC-958 fix
+        harness.send_codex_event(Event {
+            id: "req-1".to_string(),
+            event_seq: 1,
+            msg: EventMsg::AgentMessageDelta(AgentMessageDeltaEvent {
+                delta: "Hello!".to_string(),
+            }),
+            order: Some(OrderMeta {
+                request_ordinal: 1,
+                output_index: Some(0),
+                sequence_number: None,
+            }),
+        });
+
+        // Step 4: Send final message
+        harness.send_codex_event(Event {
+            id: "req-1".to_string(),
+            event_seq: 2,
+            msg: EventMsg::AgentMessage(AgentMessageEvent {
+                message: "Hello!".to_string(),
+            }),
+            order: Some(OrderMeta {
+                request_ordinal: 1,
+                output_index: Some(1),
+                sequence_number: None,
+            }),
+        });
+
+        // Step 5: Drain events
+        harness.drain_app_events();
+
+        // Verify we have history cells (test completes = no infinite loop)
+        assert!(
+            !harness.history_cells_debug().is_empty(),
+            "Should have history cells after user message + streaming"
+        );
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_send_user_message() {
         // Verify we can send user messages
@@ -407,14 +475,12 @@ mod tests {
 
     /// Test message ordering with two overlapping turns arriving in adversarial order
     ///
-    /// SPEC-955 Session 2: This test passes with sequential turn processing.
-    /// More complex overlapping scenarios (3+ concurrent streams) reveal a
-    /// StreamController architectural limitation (see tests below).
+    /// SPEC-958: Fixed! The infinite loop bug in resort_history_by_order was causing
+    /// this test to hang. With the fix, this test passes and verifies that messages
+    /// are properly ordered even when events arrive out of order.
     ///
-    /// SPEC-955: Ignored - this test requires the full event processing pipeline
-    /// including user message dispatch which causes blocking when combined with
-    /// streaming events. The core functionality is tested in simpler tests.
-    #[ignore = "SPEC-955: send_user_message + streaming causes blocking - requires event loop refactor"]
+    /// Note: More complex overlapping scenarios (3+ concurrent streams) reveal a
+    /// StreamController architectural limitation - see ignored tests below.
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_overlapping_turns_no_interleaving() {
         // This is the critical test for message interleaving bugs.
@@ -604,7 +670,11 @@ mod tests {
         println!("✅ Test passed: Messages are properly ordered and do not interleave");
     }
 
-    /// SPEC-955 Session 2: IGNORED due to StreamController architectural limitation
+    /// SPEC-958: IGNORED - StreamController architectural limitation (NOT blocking)
+    ///
+    /// **Note**: SPEC-958 fixed the infinite loop bug in resort_history_by_order that
+    /// was causing tests to hang. This test no longer hangs but still fails due to
+    /// the separate StreamController limitation below.
     ///
     /// **Issue**: StreamController maintains ONE buffer per StreamKind (Answer/Reasoning),
     /// not per stream ID. When 3+ Answer streams are active concurrently, their deltas
@@ -617,10 +687,9 @@ mod tests {
     /// **Fix Required**: Refactor StreamController to use `HashMap<String, StreamState>`
     /// per kind, indexed by stream ID. Estimated: 4-8 hours.
     ///
-    /// **FIXME(SPEC-955)**: Implement per-ID stream buffers in StreamController
-    /// **Tracked In**: docs/SPEC-955-tui-test-deadlock/spec.md (Session 2 findings)
+    /// **FIXME(SPEC-958)**: Implement per-ID stream buffers in StreamController
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    #[ignore = "StreamController doesn't support 3+ concurrent Answer streams - see SPEC-955 Session 2"]
+    #[ignore = "StreamController per-ID buffer needed - concurrent streams merge content (not blocking)"]
     async fn test_three_overlapping_turns_extreme_adversarial() {
         // Even more aggressive test: THREE overlapping turns with completely scrambled event order
         let mut harness = TestHarness::new();
@@ -816,11 +885,12 @@ mod tests {
     // TASK 4: TUI RENDERING SNAPSHOT TESTS - Visual Regression Testing
     // ===================================================================
 
-    /// SPEC-955 Session 2: IGNORED - StreamController limitation (shared buffer per kind)
+    /// SPEC-958: IGNORED - StreamController architectural limitation (NOT blocking)
     ///
     /// See test_three_overlapping_turns_extreme_adversarial for full explanation.
+    /// SPEC-958 fixed the infinite loop bug, but this test still needs per-ID stream buffers.
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    #[ignore = "StreamController doesn't support 2+ concurrent Answer streams - see SPEC-955 Session 2"]
+    #[ignore = "StreamController per-ID buffer needed - concurrent streams merge content (not blocking)"]
     async fn test_chatwidget_two_turns_snapshot() {
         // Snapshot test: captures the rendered TUI output for visual regression testing
         use ratatui::Terminal;
