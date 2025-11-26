@@ -974,6 +974,7 @@ struct GridCellCounts {
 }
 
 #[cfg(test)]
+#[allow(clippy::print_stderr)]
 mod tests {
     use super::*;
 

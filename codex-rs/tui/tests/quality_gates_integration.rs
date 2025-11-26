@@ -7,6 +7,10 @@
 //! - Escalation modal and human answers
 //! - File modifications and git commits
 
+// SPEC-957: Allow test code flexibility
+#![allow(dead_code, unused_variables, unused_mut)]
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+
 use codex_tui::{
     Confidence, Magnitude, QualityCheckpoint, QualityGateType, QualityIssue, Resolution,
     Resolvability, classify_issue_agreement, merge_agent_issues, parse_quality_issue_from_agent,

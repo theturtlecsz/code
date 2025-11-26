@@ -27,7 +27,7 @@ use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_mai
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::Connection;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 // ============================================================================
@@ -56,12 +56,12 @@ fn setup_temp_db() -> (TempDir, PathBuf) {
 }
 
 /// Create connection pool with WAL mode
-fn setup_pool(db_path: &PathBuf) -> Pool<SqliteConnectionManager> {
+fn setup_pool(db_path: &Path) -> Pool<SqliteConnectionManager> {
     initialize_pool(db_path, 10).expect("Failed to initialize pool")
 }
 
 /// Create single connection with WAL mode
-fn setup_single_connection_wal(db_path: &PathBuf) -> Connection {
+fn setup_single_connection_wal(db_path: &Path) -> Connection {
     let conn = Connection::open(db_path).expect("Failed to open connection");
     conn.execute_batch(
         "PRAGMA journal_mode = WAL;

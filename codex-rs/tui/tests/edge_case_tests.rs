@@ -4,6 +4,10 @@
 //!
 //! Tests boundary conditions, null inputs, malformed data, extreme states
 
+// SPEC-957: Allow test code flexibility
+#![allow(dead_code, unused_variables, unused_mut, unused_imports)]
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::redundant_clone)]
+
 mod common;
 
 use codex_tui::{SpecAutoState, SpecStage};

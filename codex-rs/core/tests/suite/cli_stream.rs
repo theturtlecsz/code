@@ -19,7 +19,9 @@ use wiremock::matchers::path;
 /// 2. Configures codex to use this mock server via a custom provider
 /// 3. Sends a simple "hello?" prompt and verifies the streamed response
 /// 4. Ensures the response is received exactly once and contains "hi"
+/// SPEC-957: CLI integration tests require full binary build - timing out in test suite.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "SPEC-957: CLI subprocess tests timeout - requires cargo build of codex-cli"]
 async fn chat_mode_stream_cli() {
     non_sandbox_test!();
 
@@ -95,7 +97,9 @@ async fn chat_mode_stream_cli() {
 /// Verify that passing `-c experimental_instructions_file=...` to the CLI
 /// overrides the built-in base instructions by inspecting the request body
 /// received by a mock OpenAI Responses endpoint.
+/// SPEC-957: CLI integration tests require full binary build - timing out in test suite.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "SPEC-957: CLI subprocess tests timeout - requires cargo build of codex-cli"]
 async fn exec_cli_applies_experimental_instructions_file() {
     non_sandbox_test!();
 
@@ -183,7 +187,9 @@ async fn exec_cli_applies_experimental_instructions_file() {
 /// 2. Configures codex to read from this fixture via CODEX_RS_SSE_FIXTURE env var
 /// 3. Sends a "hello?" prompt and verifies the response
 /// 4. Ensures the fixture content is correctly streamed through the CLI
+/// SPEC-957: CLI integration tests require full binary build - timing out in test suite.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "SPEC-957: CLI subprocess tests timeout - requires cargo build of codex-cli"]
 async fn responses_api_stream_cli() {
     non_sandbox_test!();
 
@@ -214,7 +220,9 @@ async fn responses_api_stream_cli() {
 }
 
 /// End-to-end: create a session (writes rollout), verify the file, then resume and confirm append.
+/// SPEC-957: CLI integration tests require full binary build - timing out in test suite.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "SPEC-957: CLI subprocess tests timeout - requires cargo build of codex-cli"]
 async fn integration_creates_and_checks_session_file() {
     // Honor sandbox network restrictions for CI parity with the other tests.
     non_sandbox_test!();

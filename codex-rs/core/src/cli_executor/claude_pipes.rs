@@ -1254,11 +1254,8 @@ mod tests {
                     }
                     // Parser should either succeed or fail deterministically, not hang or panic
                     let result = parse_stream_json_event(&chunk, &mut session_id);
-                    prop_assert!(
-                        result.len() >= 0,
-                        "Parser should handle chunk size {} deterministically",
-                        chunk_size
-                    );
+                    // Just verify the parser returns without panicking - any result is valid
+                    let _ = result.len();
                 }
             }
 
@@ -1273,8 +1270,8 @@ mod tests {
 
                 // Should return empty or error, not panic
                 let result = parse_stream_json_event(&malformed, &mut session_id);
-                // Just verify it completes without panic
-                prop_assert!(result.len() >= 0);
+                // Just verify it completes without panic - any result is valid
+                let _ = result.len();
             }
         }
     }

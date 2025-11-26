@@ -5,6 +5,10 @@
 //! 2. Reads return correct data
 //! 3. Multiple operations maintain consistency
 
+// SPEC-957: Allow test code flexibility
+#![allow(dead_code, unused_variables, unused_mut)]
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+
 use codex_tui::{ConsensusDb, SpecStage};
 use rusqlite::Connection;
 use std::path::PathBuf;

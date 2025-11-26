@@ -249,6 +249,7 @@ impl ClaudeStreamingProvider {
 }
 
 #[cfg(test)]
+#[allow(clippy::print_stdout)]
 mod tests {
     use super::*;
 

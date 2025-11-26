@@ -8,6 +8,10 @@
 //!
 // SPEC-957: Allow expect/unwrap in test code
 #![allow(clippy::expect_used, clippy::unwrap_used)]
+// SPEC-957: Allow dead code for test utilities
+#![allow(dead_code)]
+// SPEC-957: Allow unused variables in test code
+#![allow(unused_variables, unused_mut)]
 
 use std::path::PathBuf;
 

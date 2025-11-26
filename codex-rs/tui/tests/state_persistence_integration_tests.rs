@@ -1,5 +1,6 @@
-// SPEC-957: Allow expect/unwrap in test code
+// SPEC-957: Allow test code flexibility
 #![allow(clippy::expect_used, clippy::unwrap_used)]
+#![allow(dead_code, unused_variables, unused_mut)]
 
 //! Phase 3 Integration Tests: State Persistence Integration (S01-S10)
 //!

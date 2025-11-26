@@ -6,6 +6,11 @@
 //! Policy: docs/spec-kit/testing-policy.md
 //! Target: guardrail.rs 1.4%→35% coverage
 
+// SPEC-957: Allow test code flexibility
+#![allow(dead_code, unused_variables, unused_mut)]
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::vec_init_then_push)]
+#![allow(clippy::uninlined_format_args, clippy::useless_vec)]
+
 use serde_json::json;
 
 // ============================================================================

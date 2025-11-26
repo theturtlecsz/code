@@ -1,5 +1,5 @@
-// SPEC-957: Most imports are unused because tests were stubbed out.
-#![allow(unused_imports)]
+// SPEC-957: Most imports and helpers unused because tests were stubbed out.
+#![allow(unused_imports, dead_code)]
 
 use std::collections::HashMap;
 use std::path::Path;

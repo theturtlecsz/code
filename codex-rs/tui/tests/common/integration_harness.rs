@@ -8,6 +8,9 @@
 //! - Evidence verification helpers
 //! - State builders for complex scenarios
 
+// SPEC-957: Allow unused code in test harness - not all helpers used in all test files
+#![allow(dead_code, unused_variables)]
+
 use codex_tui::{HalMode, SpecAutoState, SpecStage};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;

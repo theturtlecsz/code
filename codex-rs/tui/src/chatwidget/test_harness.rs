@@ -319,7 +319,7 @@ mod tests {
         let harness = TestHarness::new();
         // ChatWidget now creates initial cells (welcome/intro message)
         // Just verify we can create it and access properties
-        assert!(harness.history_cell_count() >= 0);
+        let _ = harness.history_cell_count();
         assert_eq!(harness.captured_events.len(), 0);
     }
 

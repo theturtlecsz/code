@@ -6,6 +6,11 @@
 //! - Pipeline state transitions
 //! - Error handling and recovery
 
+// SPEC-957: Allow test code flexibility
+#![allow(dead_code, unused_variables, unused_mut, clippy::vec_init_then_push)]
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+#![allow(clippy::redundant_clone, clippy::useless_vec)]
+
 use codex_tui::{
     HalMode, PipelineConfig, QualityCheckpoint, SpecAutoState, SpecStage, ValidateBeginOutcome,
     ValidateCompletionReason,

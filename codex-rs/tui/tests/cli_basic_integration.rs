@@ -7,6 +7,11 @@
 //! Tests are marked with #[ignore] to avoid failures in environments without the binary.
 //! Run with: cargo test --test cli_basic_integration -- --ignored
 
+// SPEC-957: Allow test code flexibility
+#![allow(dead_code, unused_variables, unused_mut)]
+#![allow(clippy::uninlined_format_args, clippy::assertions_on_constants)]
+#![allow(unexpected_cfgs)]
+
 use std::env;
 use std::io::Write;
 use std::process::{Command, Stdio};

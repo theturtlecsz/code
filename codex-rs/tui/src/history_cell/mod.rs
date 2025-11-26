@@ -1883,6 +1883,7 @@ impl MergedExecCell {
 }
 
 #[cfg(test)]
+#[allow(clippy::print_stderr)]
 mod tests {
     use super::*;
     use codex_core::parse_command::ParsedCommand;

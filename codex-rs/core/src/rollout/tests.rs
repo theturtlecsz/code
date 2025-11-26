@@ -295,7 +295,7 @@ async fn test_get_conversation_contents() {
     // Verify file contains valid JSONL (each line parses as JSON)
     for line in content.lines() {
         let parsed: Result<serde_json::Value, _> = serde_json::from_str(line);
-        assert!(parsed.is_ok(), "Failed to parse line as JSON: {}", line);
+        assert!(parsed.is_ok(), "Failed to parse line as JSON: {line}");
     }
 
     // Verify file contains the session ID

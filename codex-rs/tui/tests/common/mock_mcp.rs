@@ -5,6 +5,9 @@
 //! Provides fixture-based MockMcpManager for testing MCP-dependent code
 //! without requiring actual local-memory MCP server.
 
+// SPEC-957: Allow unused code in mock - not all helpers used in all test files
+#![allow(dead_code, unused_variables)]
+
 use anyhow::{Result, anyhow};
 use mcp_types::{CallToolResult, ContentBlock, TextContent};
 use serde_json::Value;
