@@ -248,6 +248,9 @@ impl CliExecutor for GeminiCliExecutor {
 
 #[cfg(test)]
 mod tests {
+    // SPEC-957: Allow test code flexibility
+    #![allow(clippy::print_stdout, clippy::print_stderr)]
+
     use super::*;
 
     #[tokio::test]

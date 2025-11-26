@@ -5,6 +5,9 @@
 //! - Event capture for inspection
 //! - Helper methods for simulating user interactions and streaming responses
 
+// SPEC-957: Allow print statements in test harness for debugging
+#![allow(clippy::print_stdout, clippy::print_stderr)]
+
 use super::*;
 use crate::app_event::AppEvent;
 use codex_core::config::{Config, ConfigOverrides, ConfigToml};

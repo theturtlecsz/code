@@ -17582,6 +17582,9 @@ impl ChatWidget<'_> {
 
 #[cfg(test)]
 mod tests {
+    // SPEC-957: Allow print statements in test code for debugging
+    #![allow(clippy::print_stdout, clippy::print_stderr)]
+
     use super::*;
 
     use codex_core::protocol::AgentStatusUpdateEvent;

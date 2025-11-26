@@ -4,7 +4,7 @@
 
 // SPEC-957: Allow test code flexibility
 #![allow(dead_code, unused_variables)]
-#![allow(clippy::unwrap_used_on_ok_val, clippy::unwrap_err_used_on_err_val)]
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use codex_tui::{SpecKitError, SpecKitResult, SpecStage};
 use std::path::PathBuf;

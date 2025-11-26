@@ -7,6 +7,7 @@
 // SPEC-957: Allow test code flexibility
 #![allow(dead_code, unused_variables, unused_mut, unused_imports)]
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::redundant_clone)]
+#![allow(clippy::uninlined_format_args)]
 
 mod common;
 

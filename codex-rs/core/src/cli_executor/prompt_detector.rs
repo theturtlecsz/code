@@ -186,6 +186,9 @@ impl Default for PromptDetector {
 
 #[cfg(test)]
 mod tests {
+    // SPEC-957: Allow test code flexibility
+    #![allow(clippy::uninlined_format_args)]
+
     use super::*;
     use std::thread::sleep;
 
@@ -263,24 +266,27 @@ mod tests {
     #[test]
     fn test_update_resets_idle_timer() {
         let mut detector = PromptDetector::new();
-        // Use longer sleep to ensure measurable time difference
-        sleep(Duration::from_millis(500));
 
+        // Sleep to accumulate time
+        sleep(Duration::from_millis(100));
+        let time_before_update = detector.time_since_last_output();
+
+        // Update should reset the timer
         detector.update("Some text");
-        let time1 = detector.time_since_last_output();
+        let time_after_update = detector.time_since_last_output();
 
-        // Shorter sleep after reset
-        sleep(Duration::from_millis(50));
-        detector.update("More text");
-        let time2 = detector.time_since_last_output();
-
-        // time2 should be significantly less than time1 (timer was reset)
-        // Allow some tolerance for system timing variations
+        // Before update: should be >= 100ms (we slept that long)
         assert!(
-            time2 < time1,
-            "Expected time2 ({:?}) < time1 ({:?}): timer should reset on update",
-            time2,
-            time1
+            time_before_update >= Duration::from_millis(90),
+            "Expected time_before_update ({:?}) >= 90ms",
+            time_before_update
+        );
+
+        // After update: timer was reset, should be very small (< 50ms allows for system jitter)
+        assert!(
+            time_after_update < Duration::from_millis(50),
+            "Expected time_after_update ({:?}) < 50ms: timer should reset on update",
+            time_after_update
         );
     }
 

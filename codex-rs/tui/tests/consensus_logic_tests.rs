@@ -9,6 +9,9 @@
 // SPEC-957: Allow test code flexibility
 #![allow(dead_code, unused_variables, unused_mut)]
 #![allow(clippy::expect_used, clippy::unwrap_used)]
+#![allow(clippy::uninlined_format_args, clippy::useless_vec)]
+#![allow(clippy::redundant_closure, clippy::redundant_closure_for_method_calls)]
+#![allow(clippy::unnecessary_to_owned)]
 
 mod common;
 

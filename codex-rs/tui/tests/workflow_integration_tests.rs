@@ -1,5 +1,8 @@
-// SPEC-957: Allow expect/unwrap in test code
+// SPEC-957: Allow test code flexibility
 #![allow(clippy::expect_used, clippy::unwrap_used)]
+#![allow(clippy::uninlined_format_args, dead_code, unused_imports)]
+#![allow(clippy::print_stdout, clippy::print_stderr)]
+#![allow(clippy::unnecessary_to_owned)]
 
 //! Phase 3 Integration Tests: Full Stage Workflows (W01-W15)
 //!

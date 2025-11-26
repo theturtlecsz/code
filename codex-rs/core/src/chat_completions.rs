@@ -154,7 +154,7 @@ pub(crate) async fn stream_chat_completions(
     // Track last assistant text we emitted to avoid duplicate assistant messages
     // in the outbound Chat Completions payload (can happen if a final
     // aggregated assistant message was recorded alongside an earlier partial).
-    let _last_assistant_text: Option<String> = None;
+    let mut last_assistant_text: Option<String> = None;
 
     for (idx, item) in input.iter().enumerate() {
         match item {
@@ -181,7 +181,15 @@ pub(crate) async fn stream_chat_completions(
                             }
                         }
                     }
-                    messages.push(json!({"role": role, "content": parts}));
+                    let mut msg = json!({"role": role, "content": parts});
+                    // Attach reasoning if present for this assistant message
+                    if role == "assistant"
+                        && let Some(reasoning) = reasoning_by_anchor_index.get(&idx)
+                        && let Some(obj) = msg.as_object_mut()
+                    {
+                        obj.insert("reasoning".to_string(), json!(reasoning));
+                    }
+                    messages.push(msg);
                 } else {
                     // Text-only messages can be sent as a single string for
                     // maximal compatibility with providers that only accept
@@ -196,7 +204,27 @@ pub(crate) async fn stream_chat_completions(
                             _ => {}
                         }
                     }
-                    messages.push(json!({"role": role, "content": text}));
+
+                    // Skip duplicate assistant messages (can happen when both
+                    // partial and aggregated messages are recorded).
+                    if role == "assistant" {
+                        if let Some(ref last) = last_assistant_text {
+                            if last == &text {
+                                continue;
+                            }
+                        }
+                        last_assistant_text = Some(text.clone());
+                    }
+
+                    let mut msg = json!({"role": role, "content": text});
+                    // Attach reasoning if present for this assistant message
+                    if role == "assistant"
+                        && let Some(reasoning) = reasoning_by_anchor_index.get(&idx)
+                        && let Some(obj) = msg.as_object_mut()
+                    {
+                        obj.insert("reasoning".to_string(), json!(reasoning));
+                    }
+                    messages.push(msg);
                 }
             }
             ResponseItem::FunctionCall {

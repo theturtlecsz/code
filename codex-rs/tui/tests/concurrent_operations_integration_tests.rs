@@ -4,6 +4,9 @@
 //!
 //! Tests parallel operations and synchronization
 
+// SPEC-957: Allow test code flexibility
+#![allow(clippy::uninlined_format_args, dead_code, unused_imports)]
+
 mod common;
 
 use codex_tui::SpecStage;

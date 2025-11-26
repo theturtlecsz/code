@@ -1,6 +1,7 @@
 // SPEC-957: Allow test code flexibility
 #![allow(clippy::expect_used, clippy::unwrap_used)]
-#![allow(dead_code, unused_variables, unused_mut)]
+#![allow(dead_code, unused_variables, unused_mut, unused_imports)]
+#![allow(clippy::uninlined_format_args, clippy::redundant_clone)]
 
 //! Phase 3 Integration Tests: State Persistence Integration (S01-S10)
 //!

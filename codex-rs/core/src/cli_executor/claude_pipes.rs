@@ -729,6 +729,10 @@ impl Drop for ClaudePipesProvider {
 
 #[cfg(test)]
 mod tests {
+    // SPEC-957: Allow test code flexibility
+    #![allow(clippy::print_stdout, clippy::print_stderr)]
+    #![allow(clippy::needless_collect)]
+
     use super::*;
 
     #[tokio::test]
@@ -1109,6 +1113,9 @@ mod tests {
 
     #[cfg(test)]
     mod property_tests {
+        // SPEC-957: Allow test code flexibility
+        #![allow(dead_code)]
+
         use super::*;
         use proptest::prelude::*;
 

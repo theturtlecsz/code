@@ -6,12 +6,11 @@
 //! Policy: docs/spec-kit/testing-policy.md
 //! Target: evidence.rs 1.2%→40% coverage
 //!
-// SPEC-957: Allow expect/unwrap in test code
+// SPEC-957: Allow test code flexibility
 #![allow(clippy::expect_used, clippy::unwrap_used)]
-// SPEC-957: Allow dead code for test utilities
-#![allow(dead_code)]
-// SPEC-957: Allow unused variables in test code
-#![allow(unused_variables, unused_mut)]
+#![allow(dead_code, unused_variables, unused_mut, unused_imports)]
+#![allow(clippy::uninlined_format_args, clippy::redundant_clone)]
+#![allow(clippy::needless_collect)]
 
 use std::path::PathBuf;
 

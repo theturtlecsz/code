@@ -1,3 +1,7 @@
+// SPEC-957: Allow test code flexibility
+#![allow(clippy::uninlined_format_args, clippy::expect_used, clippy::unwrap_used)]
+#![allow(clippy::redundant_closure)]
+
 use std::fs;
 use std::path::Path;
 

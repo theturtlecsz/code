@@ -586,6 +586,9 @@ pub struct SessionStats {
 
 #[cfg(test)]
 mod tests {
+    // SPEC-957: Allow test code flexibility
+    #![allow(clippy::print_stdout, clippy::print_stderr)]
+
     use super::*;
 
     #[test]
@@ -894,6 +897,10 @@ impl Default for GeminiPtyProvider {
 
 #[cfg(test)]
 mod provider_tests {
+    // SPEC-957: Allow test code flexibility
+    #![allow(clippy::print_stdout, clippy::print_stderr)]
+    #![allow(clippy::uninlined_format_args)]
+
     use super::*;
 
     #[tokio::test]

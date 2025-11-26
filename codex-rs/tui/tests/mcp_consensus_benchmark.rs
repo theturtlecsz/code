@@ -4,8 +4,13 @@
 //!
 //! Run with: cargo test --test mcp_consensus_benchmark --release -- --ignored --nocapture
 
+// SPEC-957: Allow test code flexibility
+#![allow(clippy::uninlined_format_args, dead_code, unused_imports)]
+#![allow(clippy::redundant_closure)]
+
 use codex_core::config_types::McpServerConfig;
 use codex_core::mcp_connection_manager::McpConnectionManager;
+#[allow(unused_imports)]
 use codex_tui::SpecStage;
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
