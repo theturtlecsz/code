@@ -2928,6 +2928,201 @@ impl ChatWidget<'_> {
         w
     }
 
+    /// Test-only constructor that skips the conversation loop.
+    ///
+    /// SPEC-955: The main `new()` constructor spawns a background task that
+    /// calls ConversationManager::new_conversation(), which requires network/API
+    /// access. This causes tests to hang indefinitely waiting for a response
+    /// that never comes.
+    ///
+    /// This constructor creates a fully functional ChatWidget for testing
+    /// handle_codex_event(), history rendering, and UI logic without requiring
+    /// the Codex backend.
+    #[cfg(test)]
+    pub(crate) fn new_for_testing(
+        config: Config,
+        app_event_tx: AppEventSender,
+        terminal_info: crate::tui::TerminalInfo,
+    ) -> Self {
+        // AuthMode is already imported at module level from codex_login
+
+        // Create channels but DON'T spawn a consumer - tests will inject events directly
+        let (codex_op_tx, _codex_op_rx) = unbounded_channel::<Op>();
+
+        let auth_manager = AuthManager::shared(
+            config.codex_home.clone(),
+            AuthMode::ApiKey,
+            config.responses_originator_header.clone(),
+        );
+
+        let history_cells: Vec<Box<dyn HistoryCell>> = Vec::new();
+
+        let broker_event_tx = app_event_tx.clone();
+        let mcp_manager = Arc::new(tokio::sync::Mutex::new(None));
+        let broker_mcp = mcp_manager.clone();
+        let quality_gate_broker = QualityGateBroker::new(broker_event_tx, broker_mcp);
+
+        Self {
+            app_event_tx: app_event_tx.clone(),
+            codex_op_tx,
+            bottom_pane: BottomPane::new(BottomPaneParams {
+                app_event_tx,
+                has_input_focus: true,
+                enhanced_keys_supported: false,
+                using_chatgpt_auth: config.using_chatgpt_auth,
+            }),
+            auth_manager: auth_manager.clone(),
+            login_view_state: None,
+            login_add_view_state: None,
+            active_exec_cell: None,
+            history_cells,
+            config: config.clone(),
+            latest_upgrade_version: None,
+            initial_user_message: None,
+            total_token_usage: TokenUsage::default(),
+            last_token_usage: TokenUsage::default(),
+            cost_tracker: Arc::new(spec_kit::cost_tracker::CostTracker::new(
+                SPEC_KIT_DEFAULT_BUDGET_USD,
+            )),
+            rate_limit_snapshot: None,
+            rate_limit_warnings: RateLimitWarningState::default(),
+            rate_limit_fetch_inflight: false,
+            rate_limit_last_fetch_at: None,
+            rate_limit_primary_next_reset_at: None,
+            rate_limit_secondary_next_reset_at: None,
+            content_buffer: String::new(),
+            last_assistant_message: None,
+            exec: ExecState {
+                running_commands: HashMap::new(),
+                running_explore_agg_index: None,
+                pending_exec_ends: HashMap::new(),
+                suppressed_exec_end_call_ids: HashSet::new(),
+                suppressed_exec_end_order: VecDeque::new(),
+            },
+            canceled_exec_call_ids: HashSet::new(),
+            tools_state: ToolState {
+                running_custom_tools: HashMap::new(),
+                running_web_search: HashMap::new(),
+                running_wait_tools: HashMap::new(),
+                running_kill_tools: HashMap::new(),
+            },
+            live_builder: RowBuilder::new(usize::MAX),
+            pending_images: HashMap::new(),
+            welcome_shown: false,
+            latest_browser_screenshot: Arc::new(Mutex::new(None)),
+            cached_image_protocol: RefCell::new(None),
+            cached_picker: RefCell::new(terminal_info.picker.clone()),
+            cached_cell_size: std::cell::OnceCell::new(),
+            git_branch_cache: RefCell::new(GitBranchCache::default()),
+            terminal_info,
+            active_agents: Vec::new(),
+            agents_ready_to_start: false,
+            last_agent_prompt: None,
+            agent_context: None,
+            agent_task: None,
+            active_review_hint: None,
+            active_review_prompt: None,
+            overall_task_status: "preparing".to_string(),
+            active_plan_title: None,
+            agent_runtime: HashMap::new(),
+            pro: ProState::default(),
+            sparkline_data: std::cell::RefCell::new(Vec::new()),
+            last_sparkline_update: std::cell::RefCell::new(std::time::Instant::now()),
+            stream: crate::streaming::controller::StreamController::new(config.clone()),
+            stream_state: StreamState {
+                current_kind: None,
+                closed_answer_ids: HashSet::new(),
+                closed_reasoning_ids: HashSet::new(),
+                seq_answer_final: None,
+                drop_streaming: false,
+            },
+            interrupts: interrupts::InterruptManager::new(),
+            ended_call_ids: HashSet::new(),
+            diffs: DiffsState {
+                session_patch_sets: Vec::new(),
+                baseline_file_contents: HashMap::new(),
+                overlay: None,
+                confirm: None,
+                body_visible_rows: std::cell::Cell::new(0),
+            },
+            help: HelpState {
+                overlay: None,
+                body_visible_rows: std::cell::Cell::new(0),
+            },
+            limits: LimitsState::default(),
+            terminal: TerminalState::default(),
+            pending_manual_terminal: HashMap::new(),
+            agents_overview_selected_index: 0,
+            agents_terminal: AgentsTerminalState::new(),
+            pending_upgrade_notice: None,
+            history_render: HistoryRenderState::new(),
+            height_manager: RefCell::new(HeightManager::new(
+                crate::height_manager::HeightManagerConfig::default(),
+            )),
+            layout: LayoutState {
+                scroll_offset: 0,
+                last_max_scroll: std::cell::Cell::new(0),
+                last_history_viewport_height: std::cell::Cell::new(0),
+                vertical_scrollbar_state: std::cell::RefCell::new(ScrollbarState::default()),
+                scrollbar_visible_until: std::cell::Cell::new(None),
+                last_bottom_reserved_rows: std::cell::Cell::new(0),
+                last_hud_present: std::cell::Cell::new(false),
+                browser_hud_expanded: false,
+                agents_hud_expanded: false,
+                pro_hud_expanded: false,
+                last_frame_height: std::cell::Cell::new(0),
+                last_frame_width: std::cell::Cell::new(0),
+            },
+            last_theme: crate::theme::current_theme(),
+            perf_state: PerfState {
+                enabled: false,
+                stats: std::cell::RefCell::new(PerfStats::default()),
+            },
+            session_id: None,
+            pending_jump_back: None,
+            active_task_ids: HashSet::new(),
+            queued_user_messages: std::collections::VecDeque::new(),
+            pending_dispatched_user_messages: std::collections::VecDeque::new(),
+            pending_user_cell_updates: HashMap::new(),
+            pending_message_timestamps: HashMap::new(),
+            pending_user_prompts_for_next_turn: 0,
+            ghost_snapshots: Vec::new(),
+            ghost_snapshots_disabled: false,
+            ghost_snapshots_disabled_reason: None,
+            browser_is_external: false,
+            cell_order_seq: vec![OrderKey {
+                req: 0,
+                out: -1,
+                seq: 0,
+            }],
+            cell_order_dbg: vec![None; 1],
+            reasoning_index: HashMap::new(),
+            stream_order_seq: HashMap::new(),
+            last_seen_request_index: 0,
+            current_request_index: 0,
+            internal_seq: 0,
+            show_order_overlay: false,
+            scroll_history_hint_shown: false,
+            access_status_idx: None,
+            pending_agent_notes: Vec::new(),
+            synthetic_system_req: None,
+            system_cell_by_id: HashMap::new(),
+            standard_terminal_mode: !config.tui.alternate_screen,
+            spec_auto_state: None,
+            validate_lifecycles: HashMap::new(),
+            mcp_manager,
+            quality_gate_broker,
+            initial_command: None,
+            config_watcher: None,
+            pending_config_reload: None,
+            native_stream_provider: None,
+            native_stream_model: None,
+            native_stream_id: None,
+            native_stream_content: String::new(),
+            native_provider_history: std::collections::HashMap::new(),
+        }
+    }
+
     /// Construct a ChatWidget from an existing conversation (forked session).
     pub(crate) fn new_from_existing(
         config: Config,
