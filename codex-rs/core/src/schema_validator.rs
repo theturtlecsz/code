@@ -45,8 +45,8 @@ impl SchemaValidator {
         let schema = if let Some(path) = schema_path {
             // Load schema from external file
             let content =
-                std::fs::read_to_string(path).map_err(|e| SchemaValidationError::IoError(e))?;
-            serde_json::from_str(&content).map_err(|e| SchemaValidationError::JsonError(e))?
+                std::fs::read_to_string(path).map_err(SchemaValidationError::IoError)?;
+            serde_json::from_str(&content).map_err(SchemaValidationError::JsonError)?
         } else {
             // Use embedded default schema
             Self::default_schema()
@@ -57,7 +57,7 @@ impl SchemaValidator {
             .with_draft(Draft::Draft7)
             .compile(&schema)
             .map_err(|e| {
-                SchemaValidationError::ValidationFailed(format!("Failed to compile schema: {}", e))
+                SchemaValidationError::ValidationFailed(format!("Failed to compile schema: {e}"))
             })?;
 
         Ok(Self { schema, compiled })
@@ -239,11 +239,11 @@ pub enum SchemaValidationError {
 impl std::fmt::Display for SchemaValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SchemaValidationError::IoError(e) => write!(f, "Schema file I/O error: {}", e),
-            SchemaValidationError::JsonError(e) => write!(f, "Schema JSON parse error: {}", e),
-            SchemaValidationError::TomlParse(msg) => write!(f, "Config TOML parse error: {}", msg),
+            SchemaValidationError::IoError(e) => write!(f, "Schema file I/O error: {e}"),
+            SchemaValidationError::JsonError(e) => write!(f, "Schema JSON parse error: {e}"),
+            SchemaValidationError::TomlParse(msg) => write!(f, "Config TOML parse error: {msg}"),
             SchemaValidationError::ValidationFailed(msg) => {
-                write!(f, "Schema validation failed: {}", msg)
+                write!(f, "Schema validation failed: {msg}")
             }
         }
     }

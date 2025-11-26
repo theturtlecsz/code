@@ -13,7 +13,7 @@
 //! Tests automatically skip with helpful error messages if API keys are not configured.
 
 use codex_core::async_agent_executor::{
-    AgentExecutionError, AgentOutput, AnthropicProvider, AsyncAgentExecutor, DirectProcessExecutor,
+    AgentExecutionError, AnthropicProvider, AsyncAgentExecutor, DirectProcessExecutor,
     GoogleProvider, OpenAIProvider,
 };
 use std::collections::HashMap;
@@ -26,10 +26,9 @@ use std::collections::HashMap;
 fn require_env_var(var_name: &str, cli_install_cmd: &str) -> String {
     std::env::var(var_name).unwrap_or_else(|_| {
         panic!(
-            "{} not set - install {} and set API key:\n\
-             Install: {}\n\
-             Set key: export {}=\"your-api-key-here\"",
-            var_name, var_name, cli_install_cmd, var_name
+            "{var_name} not set - install {var_name} and set API key:\n\
+             Install: {cli_install_cmd}\n\
+             Set key: export {var_name}=\"your-api-key-here\""
         )
     })
 }
@@ -71,7 +70,7 @@ async fn test_claude_small_prompt() {
     let output = executor
         .execute(
             "claude",
-            &vec!["-p".to_string(), "Say 'hello' and nothing else".to_string()],
+            &["-p".to_string(), "Say 'hello' and nothing else".to_string()],
             &env,
             None,
             600, // 10 minute timeout (generous for network latency)
@@ -115,14 +114,13 @@ async fn test_claude_large_prompt() {
     // Create 2KB prompt to verify stdin piping (exceeds some OS command-line limits)
     let large_prompt = create_large_prompt(2);
     let prompt_with_question = format!(
-        "{}\n\nBased on the above text, answer: What is this a test of?",
-        large_prompt
+        "{large_prompt}\n\nBased on the above text, answer: What is this a test of?"
     );
 
     let output = executor
         .execute(
             "claude",
-            &vec!["-p".to_string(), "-".to_string()], // "-" reads from stdin
+            &["-p".to_string(), "-".to_string()], // "-" reads from stdin
             &env,
             None,
             600, // 10 minute timeout
@@ -137,7 +135,7 @@ async fn test_claude_large_prompt() {
         "claude should exit successfully with large prompt"
     );
     assert!(
-        output.stdout.len() > 0,
+        !output.stdout.is_empty(),
         "claude should produce output for large prompt"
     );
     assert!(
@@ -168,7 +166,7 @@ async fn test_claude_oauth2_error() {
     let result = executor
         .execute(
             "claude",
-            &vec!["-p".to_string(), "hello".to_string()],
+            &["-p".to_string(), "hello".to_string()],
             &env,
             None,
             600,
@@ -181,14 +179,12 @@ async fn test_claude_oauth2_error() {
         Err(AgentExecutionError::OAuth2Required(msg)) => {
             assert!(
                 msg.contains("ANTHROPIC_API_KEY") || msg.contains("API key"),
-                "error message should mention API key requirement, got: {}",
-                msg
+                "error message should mention API key requirement, got: {msg}"
             );
         }
         Ok(_) => panic!("claude should fail without API key (OAuth2Required expected)"),
         Err(e) => panic!(
-            "Expected OAuth2Required error, got different error: {:?}",
-            e
+            "Expected OAuth2Required error, got different error: {e:?}"
         ),
     }
 }
@@ -222,11 +218,9 @@ async fn test_gemini_small_prompt() {
     let output = executor
         .execute(
             "gemini",
-            &vec![
-                "generate".to_string(),
+            &["generate".to_string(),
                 "--prompt".to_string(),
-                "Say 'hello' and nothing else".to_string(),
-            ],
+                "Say 'hello' and nothing else".to_string()],
             &env,
             None,
             600, // 10 minute timeout
@@ -277,13 +271,11 @@ async fn test_openai_timeout() {
     let result = executor
         .execute(
             "openai",
-            &vec![
-                "chat".to_string(),
+            &["chat".to_string(),
                 "completions".to_string(),
                 "create".to_string(),
                 "--message".to_string(),
-                "hello".to_string(),
-            ],
+                "hello".to_string()],
             &env,
             None,
             1, // 1ms timeout (intentionally too short to force timeout)
@@ -305,7 +297,7 @@ async fn test_openai_timeout() {
                 "output should be marked as timed_out if it completed"
             );
         }
-        Err(e) => panic!("Expected Timeout error, got different error: {:?}", e),
+        Err(e) => panic!("Expected Timeout error, got different error: {e:?}"),
     }
 }
 
@@ -333,7 +325,7 @@ async fn test_nonexistent_cli() {
     let result = executor
         .execute(
             "this_cli_definitely_does_not_exist_12345",
-            &vec!["arg1".to_string()],
+            &["arg1".to_string()],
             &env,
             None,
             600,
@@ -348,12 +340,11 @@ async fn test_nonexistent_cli() {
                 cmd, "this_cli_definitely_does_not_exist_12345",
                 "command name should match"
             );
-            println!("CommandNotFound error correctly detected: {}", cmd);
+            println!("CommandNotFound error correctly detected: {cmd}");
         }
         Ok(_) => panic!("non-existent CLI should fail with CommandNotFound"),
         Err(e) => panic!(
-            "Expected CommandNotFound error, got different error: {:?}",
-            e
+            "Expected CommandNotFound error, got different error: {e:?}"
         ),
     }
 }
@@ -387,11 +378,9 @@ async fn test_claude_stderr() {
     let output = executor
         .execute(
             "claude",
-            &vec![
-                "--verbose".to_string(),
+            &["--verbose".to_string(),
                 "-p".to_string(),
-                "hello".to_string(),
-            ],
+                "hello".to_string()],
             &env,
             None,
             600,
@@ -436,10 +425,8 @@ async fn test_concurrent_execution() {
                 let output = executor
                     .execute(
                         "claude",
-                        &vec![
-                            "-p".to_string(),
-                            format!("Say 'Task {}' and nothing else", i),
-                        ],
+                        &["-p".to_string(),
+                            format!("Say 'Task {}' and nothing else", i)],
                         &env,
                         None,
                         600,
@@ -449,15 +436,14 @@ async fn test_concurrent_execution() {
                     .await
                     .expect("concurrent claude execution should succeed");
 
-                assert_eq!(output.exit_code, 0, "Task {} should exit successfully", i);
+                assert_eq!(output.exit_code, 0, "Task {i} should exit successfully");
                 assert!(
-                    output.stdout.contains(&format!("Task {}", i))
+                    output.stdout.contains(&format!("Task {i}"))
                         || output
                             .stdout
                             .to_lowercase()
-                            .contains(&format!("task {}", i)),
-                    "Task {} output should contain task number",
-                    i
+                            .contains(&format!("task {i}")),
+                    "Task {i} output should contain task number"
                 );
             })
         })

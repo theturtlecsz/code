@@ -110,9 +110,9 @@ impl GeminiPipesSession {
         );
 
         // Verify binary is available
-        if !which::which(&config.binary_path).is_ok() {
+        if which::which(&config.binary_path).is_err() {
             return Err(CliError::BinaryNotFound {
-                binary: config.binary_path.clone(),
+                binary: config.binary_path,
                 install_hint: "Install: npm install -g @google/gemini-cli && gemini (to auth)"
                     .to_string(),
             });
@@ -203,7 +203,7 @@ impl GeminiPipesSession {
 
         // Spawn process
         let mut child = cmd.spawn().map_err(|e| CliError::Internal {
-            message: format!("Failed to spawn gemini: {}", e),
+            message: format!("Failed to spawn gemini: {e}"),
         })?;
 
         // Track process ID
@@ -299,26 +299,23 @@ impl GeminiPipesSession {
                         match event_type {
                             Some("init") => {
                                 // Capture session_id on first turn
-                                if self.session_id.is_none() {
-                                    if let Some(session_id) =
+                                if self.session_id.is_none()
+                                    && let Some(session_id) =
                                         event.get("session_id").and_then(|s| s.as_str())
                                     {
                                         self.session_id = Some(session_id.to_string());
                                         tracing::info!("Captured session_id: {}", session_id);
                                     }
-                                }
                             }
                             Some("message") => {
                                 // Assistant message with content
                                 if let Some(content) = event.get("content").and_then(|c| c.as_str())
-                                {
-                                    if event.get("role").and_then(|r| r.as_str())
+                                    && event.get("role").and_then(|r| r.as_str())
                                         == Some("assistant")
                                     {
                                         let _ =
                                             tx.send(StreamEvent::Delta(content.to_string())).await;
                                     }
-                                }
                             }
                             Some("result") => {
                                 // Turn complete - result event indicates end
@@ -346,7 +343,7 @@ impl GeminiPipesSession {
                 Ok(Err(e)) => {
                     tracing::error!("Read error: {}", e);
                     return Err(CliError::Internal {
-                        message: format!("Read error: {}", e),
+                        message: format!("Read error: {e}"),
                     });
                 }
                 Err(_) => {
@@ -524,7 +521,7 @@ impl GeminiPipesProvider {
                 tracing::info!("Creating new Gemini pipes session for conv: {}", conv_id);
 
                 // Create session
-                let cwd_path = cwd.as_ref().map(|s| Path::new(s));
+                let cwd_path = cwd.as_ref().map(Path::new);
                 match GeminiPipesSession::spawn(&model, cwd_path).await {
                     Ok(session) => {
                         sessions.insert(conv_id.clone(), session);

@@ -324,11 +324,10 @@ async fn read_head_and_flags(
                 }
             }
             RolloutItem::Event(event) => {
-                if let Some(msg) = crate::protocol::event_msg_from_protocol(&event.msg) {
-                    if matches!(msg, crate::protocol::EventMsg::AgentMessage(_)) {
+                if let Some(msg) = crate::protocol::event_msg_from_protocol(&event.msg)
+                    && matches!(msg, crate::protocol::EventMsg::AgentMessage(_)) {
                         saw_user_event = true;
                     }
-                }
             }
             // Skip variants not displayed in list summaries.
             RolloutItem::Compacted(_) | RolloutItem::TurnContext(_) => {}

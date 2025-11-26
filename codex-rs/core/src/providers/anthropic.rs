@@ -203,7 +203,7 @@ mod urlencoding {
                 }
                 _ => {
                     result.push('%');
-                    result.push_str(&format!("{:02X}", c));
+                    result.push_str(&format!("{c:02X}"));
                 }
             }
         }

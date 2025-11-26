@@ -138,12 +138,12 @@ impl CodexAuth {
 
     pub fn get_account_id(&self) -> Option<String> {
         self.get_current_token_data()
-            .and_then(|t| t.account_id.clone())
+            .and_then(|t| t.account_id)
     }
 
     pub fn get_plan_type(&self) -> Option<String> {
         self.get_current_token_data()
-            .and_then(|t| t.id_token.chatgpt_plan_type.as_ref().map(|p| p.as_string()))
+            .and_then(|t| t.id_token.chatgpt_plan_type.as_ref().map(super::token_data::PlanType::as_string))
     }
 
     fn get_current_auth_json(&self) -> Option<AuthDotJson> {
@@ -152,7 +152,7 @@ impl CodexAuth {
     }
 
     fn get_current_token_data(&self) -> Option<TokenData> {
-        self.get_current_auth_json().and_then(|t| t.tokens.clone())
+        self.get_current_auth_json().and_then(|t| t.tokens)
     }
 
     /// Consider this private to integration tests.
@@ -248,7 +248,7 @@ pub fn activate_account(codex_home: &Path, account_id: &str) -> std::io::Result<
     let account_id_owned = account.id.clone();
     match account.mode {
         AuthMode::ApiKey => {
-            let api_key = account.openai_api_key.clone().ok_or_else(|| {
+            let api_key = account.openai_api_key.ok_or_else(|| {
                 std::io::Error::other("stored API key account is missing the key value")
             })?;
             let auth = AuthDotJson {
@@ -386,16 +386,16 @@ async fn update_tokens(
     let tokens = auth_dot_json.tokens.get_or_insert_with(TokenData::default);
     tokens.id_token = parse_id_token(&id_token).map_err(std::io::Error::other)?;
     if let Some(access_token) = access_token {
-        tokens.access_token = access_token.to_string();
+        tokens.access_token = access_token;
     }
     if let Some(refresh_token) = refresh_token {
-        tokens.refresh_token = refresh_token.to_string();
+        tokens.refresh_token = refresh_token;
     }
     auth_dot_json.last_refresh = Some(Utc::now());
     write_auth_json(auth_file, &auth_dot_json)?;
 
-    if let Some(codex_home) = auth_file.parent() {
-        if let Some(tokens) = auth_dot_json.tokens.clone() {
+    if let Some(codex_home) = auth_file.parent()
+        && let Some(tokens) = auth_dot_json.tokens.clone() {
             let last_refresh = auth_dot_json.last_refresh.unwrap_or_else(Utc::now);
             let email = tokens.id_token.email.clone();
             let _ = crate::auth_accounts::upsert_chatgpt_account(
@@ -406,7 +406,6 @@ async fn update_tokens(
                 true,
             )?;
         }
-    }
     Ok(auth_dot_json)
 }
 

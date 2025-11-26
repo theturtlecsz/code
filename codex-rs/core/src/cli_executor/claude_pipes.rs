@@ -63,33 +63,27 @@ pub(crate) fn parse_stream_json_event(
             match event_type {
                 Some("system") => {
                     // Capture session_id if not already set
-                    if current_session_id.is_none() {
-                        if let Some(session_id) = event.get("session_id").and_then(|s| s.as_str()) {
+                    if current_session_id.is_none()
+                        && let Some(session_id) = event.get("session_id").and_then(|s| s.as_str()) {
                             *current_session_id = Some(session_id.to_string());
                         }
-                    }
                 }
                 Some("assistant") => {
                     // Extract text content from assistant message
-                    if let Some(message) = event.get("message") {
-                        if let Some(content) = message.get("content") {
-                            if let Some(content_array) = content.as_array() {
+                    if let Some(message) = event.get("message")
+                        && let Some(content) = message.get("content")
+                            && let Some(content_array) = content.as_array() {
                                 for item in content_array {
                                     if let Some(text_type) =
                                         item.get("type").and_then(|t| t.as_str())
-                                    {
-                                        if text_type == "text" {
-                                            if let Some(text) =
+                                        && text_type == "text"
+                                            && let Some(text) =
                                                 item.get("text").and_then(|t| t.as_str())
                                             {
                                                 events.push(StreamEvent::Delta(text.to_string()));
                                             }
-                                        }
-                                    }
                                 }
                             }
-                        }
-                    }
                 }
                 Some("result") => {
                     events.push(StreamEvent::Done);
@@ -176,9 +170,9 @@ impl ClaudePipesSession {
         );
 
         // Verify binary is available
-        if !which::which(&config.binary_path).is_ok() {
+        if which::which(&config.binary_path).is_err() {
             return Err(CliError::BinaryNotFound {
-                binary: config.binary_path.clone(),
+                binary: config.binary_path,
                 install_hint: "Install: Visit https://claude.ai/download".to_string(),
             });
         }
@@ -272,7 +266,7 @@ impl ClaudePipesSession {
 
         // Spawn process
         let mut child = cmd.spawn().map_err(|e| CliError::Internal {
-            message: format!("Failed to spawn claude: {}", e),
+            message: format!("Failed to spawn claude: {e}"),
         })?;
 
         // Track process ID
@@ -368,26 +362,24 @@ impl ClaudePipesSession {
                         match event_type {
                             Some("system") => {
                                 // System event with session_id
-                                if self.session_id.is_none() {
-                                    if let Some(session_id) =
+                                if self.session_id.is_none()
+                                    && let Some(session_id) =
                                         event.get("session_id").and_then(|s| s.as_str())
                                     {
                                         self.session_id = Some(session_id.to_string());
                                         tracing::info!("Captured session_id: {}", session_id);
                                     }
-                                }
                             }
                             Some("assistant") => {
                                 // Assistant message event
-                                if let Some(message) = event.get("message") {
-                                    if let Some(content) = message.get("content") {
-                                        if let Some(content_array) = content.as_array() {
+                                if let Some(message) = event.get("message")
+                                    && let Some(content) = message.get("content")
+                                        && let Some(content_array) = content.as_array() {
                                             for item in content_array {
                                                 if let Some(text_type) =
                                                     item.get("type").and_then(|t| t.as_str())
-                                                {
-                                                    if text_type == "text" {
-                                                        if let Some(text) = item
+                                                    && text_type == "text"
+                                                        && let Some(text) = item
                                                             .get("text")
                                                             .and_then(|t| t.as_str())
                                                         {
@@ -397,12 +389,8 @@ impl ClaudePipesSession {
                                                                 ))
                                                                 .await;
                                                         }
-                                                    }
-                                                }
                                             }
                                         }
-                                    }
-                                }
                             }
                             Some("result") => {
                                 // Turn complete - result event indicates end
@@ -426,7 +414,7 @@ impl ClaudePipesSession {
                 Ok(Err(e)) => {
                     tracing::error!("Read error: {}", e);
                     return Err(CliError::Internal {
-                        message: format!("Read error: {}", e),
+                        message: format!("Read error: {e}"),
                     });
                 }
                 Err(_) => {
@@ -586,7 +574,7 @@ impl ClaudePipesProvider {
                 tracing::info!("Creating new Claude pipes session for conv: {}", conv_id);
 
                 // Create session
-                let cwd_path = cwd.as_ref().map(|s| Path::new(s));
+                let cwd_path = cwd.as_ref().map(Path::new);
                 match ClaudePipesSession::spawn(&model, cwd_path).await {
                     Ok(session) => {
                         sessions.insert(conv_id.clone(), session);

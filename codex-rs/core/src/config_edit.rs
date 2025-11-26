@@ -336,17 +336,16 @@ fn append_agent_entry(
     if let Some(w) = args_write {
         t["args-write"] = toml_edit::value(toml_edit::Array::from_iter(w.iter().cloned()));
     }
-    if let Some(instr) = instructions {
-        if !instr.trim().is_empty() {
+    if let Some(instr) = instructions
+        && !instr.trim().is_empty() {
             t["instructions"] = toml_edit::value(instr.to_string());
         }
-    }
 
     let mut arr = doc
         .as_table()
         .get("agents")
         .and_then(|i| i.as_array_of_tables().cloned())
-        .unwrap_or_else(toml_edit::ArrayOfTables::new);
+        .unwrap_or_default();
     arr.push(t);
     doc["agents"] = toml_edit::Item::ArrayOfTables(arr);
 }
@@ -420,7 +419,7 @@ async fn persist_overrides_with_behavior(
     } else {
         doc.get("profile")
             .and_then(|i| i.as_str())
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
     };
 
     let mut mutated = false;

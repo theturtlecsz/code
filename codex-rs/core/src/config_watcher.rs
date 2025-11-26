@@ -90,14 +90,13 @@ impl ConfigWatcher {
         }
 
         // Check if debounce period has elapsed
-        if let Some(last_time) = self.last_event_time {
-            if !self.pending_changes.is_empty() && last_time.elapsed() >= self.debounce_duration {
+        if let Some(last_time) = self.last_event_time
+            && !self.pending_changes.is_empty() && last_time.elapsed() >= self.debounce_duration {
                 // Debounce period elapsed - return changes and reset
                 let changes: Vec<PathBuf> = self.pending_changes.drain().collect();
                 self.last_event_time = None;
                 return Some(changes);
             }
-        }
 
         None
     }

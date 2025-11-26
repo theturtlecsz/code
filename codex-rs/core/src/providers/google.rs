@@ -42,6 +42,7 @@ impl GoogleAuth {
     /// # Panics
     /// Panics if GOOGLE_OAUTH_CLIENT_SECRET is not set.
     /// For native apps, this should be the public OAuth client secret.
+    #[allow(clippy::expect_used)] // intentional panic for required config
     fn client_secret() -> String {
         std::env::var("GOOGLE_OAUTH_CLIENT_SECRET")
             .expect("GOOGLE_OAUTH_CLIENT_SECRET environment variable must be set for Google OAuth")
@@ -279,7 +280,7 @@ mod urlencoding {
                 }
                 _ => {
                     result.push('%');
-                    result.push_str(&format!("{:02X}", c));
+                    result.push_str(&format!("{c:02X}"));
                 }
             }
         }

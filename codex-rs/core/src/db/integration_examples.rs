@@ -62,7 +62,7 @@ pub async fn store_consensus_with_agents(
 
     let spec_id = spec_id.to_string();
     let stage = stage.to_string();
-    let synthesis_json = synthesis_json.map(|s| s.to_string());
+    let synthesis_json = synthesis_json.map(std::string::ToString::to_string);
     let agent_outputs: Vec<(String, String, String)> = agent_outputs
         .iter()
         .map(|(name, version, content)| {
@@ -85,8 +85,8 @@ pub async fn store_consensus_with_agents(
             // 2. Store all agent outputs atomically
             let timestamp = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as i64;
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or(0);
 
             for (agent_name, model_version, content) in agent_outputs {
                 tx.execute(
@@ -141,14 +141,14 @@ pub async fn update_agent_state(
     let stage = stage.to_string();
     let agent_name = agent_name.to_string();
     let status = status.to_string();
-    let status_message = status_message.map(|s| s.to_string());
+    let status_message = status_message.map(std::string::ToString::to_string);
 
     with_connection(pool, move |conn| {
         execute_in_transaction(conn, TransactionBehavior::Immediate, |tx| {
             let timestamp = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as i64;
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or(0);
 
             // Create agent_state table if not exists (example schema)
             tx.execute(
@@ -286,7 +286,7 @@ pub async fn batch_store_agent_outputs(
             (
                 *run_id,
                 name.to_string(),
-                version.map(|s| s.to_string()),
+                version.map(std::string::ToString::to_string),
                 content.to_string(),
             )
         })
@@ -301,8 +301,8 @@ pub async fn batch_store_agent_outputs(
             |tx, (run_id, agent_name, model_version, content)| {
                 let timestamp = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_millis() as i64;
+                    .map(|d| d.as_millis() as i64)
+                    .unwrap_or(0);
 
                 tx.execute(
                     "INSERT INTO agent_outputs (run_id, agent_name, model_version, content, output_timestamp)

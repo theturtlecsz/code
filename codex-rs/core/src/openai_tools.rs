@@ -197,7 +197,7 @@ impl ToolsConfig {
         };
         if matches!(approval_policy, AskForApproval::OnRequest) && !use_streamable_shell_tool {
             shell_type = ConfigShellToolType::ShellWithRequest {
-                sandbox_policy: sandbox_policy.clone(),
+                sandbox_policy,
             }
         }
 
@@ -503,13 +503,12 @@ fn sanitize_json_schema(value: &mut JsonValue) {
         }
         JsonValue::Object(map) => {
             // First, recursively sanitize known nested schema holders
-            if let Some(props) = map.get_mut("properties") {
-                if let Some(props_map) = props.as_object_mut() {
+            if let Some(props) = map.get_mut("properties")
+                && let Some(props_map) = props.as_object_mut() {
                     for (_k, v) in props_map.iter_mut() {
                         sanitize_json_schema(v);
                     }
                 }
-            }
             if let Some(items) = map.get_mut("items") {
                 sanitize_json_schema(items);
             }
@@ -524,21 +523,19 @@ fn sanitize_json_schema(value: &mut JsonValue) {
             let mut ty = map.get("type").and_then(|v| v.as_str()).map(str::to_string);
 
             // If type is an array (union), pick first supported; else leave to inference
-            if ty.is_none() {
-                if let Some(JsonValue::Array(types)) = map.get("type") {
+            if ty.is_none()
+                && let Some(JsonValue::Array(types)) = map.get("type") {
                     for t in types {
-                        if let Some(tt) = t.as_str() {
-                            if matches!(
+                        if let Some(tt) = t.as_str()
+                            && matches!(
                                 tt,
                                 "object" | "array" | "string" | "number" | "integer" | "boolean"
                             ) {
                                 ty = Some(tt.to_string());
                                 break;
                             }
-                        }
                     }
                 }
-            }
 
             // Infer type if still missing
             if ty.is_none() {

@@ -58,7 +58,7 @@ impl CallbackServer {
     ///
     /// Returns an error if the port is already in use.
     pub fn on_port(port: u16) -> std::io::Result<Self> {
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", port))?;
+        let listener = TcpListener::bind(format!("127.0.0.1:{port}"))?;
         listener.set_nonblocking(false)?;
         Ok(Self { listener, port })
     }
@@ -122,7 +122,7 @@ impl CallbackServer {
         let mut request_line = String::new();
         reader
             .read_line(&mut request_line)
-            .map_err(|e| AuthError::Io(e))?;
+            .map_err(AuthError::Io)?;
 
         // Parse the callback parameters
         let (code, state, error) = parse_callback_params(&request_line)?;
@@ -132,8 +132,7 @@ impl CallbackServer {
             let response = format!(
                 "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n\
                 <!DOCTYPE html><html><head><title>Authentication Failed</title></head>\
-                <body><h1>Authentication failed</h1><p>Error: {}</p></body></html>",
-                error_code
+                <body><h1>Authentication failed</h1><p>Error: {error_code}</p></body></html>"
             );
             let _ = stream.write_all(response.as_bytes());
             return Err(AuthError::OAuth {
@@ -219,8 +218,8 @@ impl CallbackServer {
         );
         stream
             .write_all(response.as_bytes())
-            .map_err(|e| AuthError::Io(e))?;
-        stream.flush().map_err(|e| AuthError::Io(e))?;
+            .map_err(AuthError::Io)?;
+        stream.flush().map_err(AuthError::Io)?;
 
         Ok(code)
     }

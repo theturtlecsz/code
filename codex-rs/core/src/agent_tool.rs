@@ -75,6 +75,12 @@ pub struct AgentStatusUpdatePayload {
     pub task: Option<String>,
 }
 
+impl Default for AgentManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AgentManager {
     pub fn new() -> Self {
         Self {
@@ -188,10 +194,10 @@ impl AgentManager {
         let agent_config = agent_configs
             .iter()
             .find(|c| c.name == config_name)
-            .ok_or_else(|| format!("Agent config '{}' not found in config.toml", config_name))?;
+            .ok_or_else(|| format!("Agent config '{config_name}' not found in config.toml"))?;
 
         if !agent_config.enabled {
-            return Err(format!("Agent '{}' is disabled in config", config_name));
+            return Err(format!("Agent '{config_name}' is disabled in config"));
         }
 
         // SPEC-949 Phase 2: Per-agent model override
@@ -316,21 +322,18 @@ impl AgentManager {
         self.agents
             .values()
             .filter(|agent| {
-                if let Some(ref filter) = status_filter {
-                    if agent.status != *filter {
+                if let Some(ref filter) = status_filter
+                    && agent.status != *filter {
                         return false;
                     }
-                }
-                if let Some(ref batch) = batch_id {
-                    if agent.batch_id.as_ref() != Some(batch) {
+                if let Some(ref batch) = batch_id
+                    && agent.batch_id.as_ref() != Some(batch) {
                         return false;
                     }
-                }
-                if let Some(cutoff) = cutoff {
-                    if agent.created_at < cutoff {
+                if let Some(cutoff) = cutoff
+                    && agent.created_at < cutoff {
                         return false;
                     }
-                }
                 true
             })
             .cloned()
@@ -479,10 +482,10 @@ impl AgentManager {
 
 async fn get_git_root() -> Result<PathBuf, String> {
     let output = Command::new("git")
-        .args(&["rev-parse", "--show-toplevel"])
+        .args(["rev-parse", "--show-toplevel"])
         .output()
         .await
-        .map_err(|e| format!("Git not installed or not in a git repository: {}", e))?;
+        .map_err(|e| format!("Git not installed or not in a git repository: {e}"))?;
 
     if output.status.success() {
         let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -527,7 +530,7 @@ fn generate_branch_id(model: &str, agent: &str) -> String {
         }
     }
 
-    format!("code-{}-{}", model_s, suffix_s)
+    format!("code-{model_s}-{suffix_s}")
 }
 
 use crate::git_worktree::setup_worktree;
@@ -544,7 +547,7 @@ fn extract_json_from_mixed_output(output: &str, model: &str) -> String {
     // SPEC-KIT-928: Use char boundaries to avoid UTF-8 panic
     let output_preview = output.chars().take(100).collect::<String>();
     let preview_with_ellipsis = if output.len() > 100 {
-        format!("{}...", output_preview)
+        format!("{output_preview}...")
     } else {
         output_preview
     };
@@ -706,18 +709,16 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
     // Build the full prompt with context
     let mut full_prompt = prompt.clone();
     // Prepend any per-agent instructions from config when available
-    if let Some(cfg) = config.as_ref() {
-        if let Some(instr) = cfg.instructions.as_ref() {
-            if !instr.trim().is_empty() {
+    if let Some(cfg) = config.as_ref()
+        && let Some(instr) = cfg.instructions.as_ref()
+            && !instr.trim().is_empty() {
                 full_prompt = format!("{}\n\n{}", instr.trim(), full_prompt);
             }
-        }
-    }
     if let Some(context) = &context {
-        full_prompt = format!("Context: {}\n\nAgent: {}", context, full_prompt);
+        full_prompt = format!("Context: {context}\n\nAgent: {full_prompt}");
     }
     if let Some(output_goal) = &output_goal {
-        full_prompt = format!("{}\n\nDesired output: {}", full_prompt, output_goal);
+        full_prompt = format!("{full_prompt}\n\nDesired output: {output_goal}");
     }
     if !files.is_empty() {
         full_prompt = format!("{}\n\nFiles to consider: {}", full_prompt, files.join(", "));
@@ -732,7 +733,7 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
 
                 let mut manager = AGENT_MANAGER.write().await;
                 manager
-                    .add_progress(&agent_id, format!("Creating git worktree: {}", branch_id))
+                    .add_progress(&agent_id, format!("Creating git worktree: {branch_id}"))
                     .await;
                 drop(manager);
 
@@ -764,16 +765,15 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
                         )
                         .await
                     }
-                    Err(e) => Err(format!("Failed to setup worktree: {}", e)),
+                    Err(e) => Err(format!("Failed to setup worktree: {e}")),
                 }
             }
-            Err(e) => Err(format!("Git is required for non-read-only agents: {}", e)),
+            Err(e) => Err(format!("Git is required for non-read-only agents: {e}")),
         }
     } else {
         // Execute in read-only mode
         full_prompt = format!(
-            "{}\n\n[Running in read-only mode - no modifications allowed]",
-            full_prompt
+            "{full_prompt}\n\n[Running in read-only mode - no modifications allowed]"
         );
         execute_model_with_permissions(&model, &full_prompt, true, None, config).await
     };
@@ -785,7 +785,7 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
         "📊 Agent {} execution returned after {:.2}s, result size: {}",
         agent_id,
         execution_duration.as_secs_f64(),
-        result.as_ref().map(|s| s.len()).unwrap_or(0)
+        result.as_ref().map(std::string::String::len).unwrap_or(0)
     );
 
     // SPEC-KIT-928: Log execution result for debugging
@@ -845,7 +845,7 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
     // SPEC-KIT-927: Validate output before marking agent as complete
     // This prevents storing partial/invalid output (schema templates, headers only)
     // SPEC-KIT-928: Keep reference to raw output for storing on validation failure
-    let raw_output_for_storage = result.as_ref().ok().map(|s| s.clone());
+    let raw_output_for_storage = result.as_ref().ok().cloned();
     let validated_result = match result {
         Ok(output) => {
             tracing::info!(
@@ -896,9 +896,7 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
                     "Corrupted output sample: {}",
                     &cleaned_output.chars().take(500).collect::<String>()
                 );
-                Err(format!(
-                    "Agent output polluted with TUI conversation text. Stdout redirection broken."
-                ))
+                Err("Agent output polluted with TUI conversation text. Stdout redirection broken.".to_string())
             }
             // Check for headers-only output (codex initialization without actual response)
             else if cleaned_output.contains("OpenAI Codex v")
@@ -913,9 +911,7 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
                     "Headers-only output: {}",
                     &cleaned_output.chars().take(400).collect::<String>()
                 );
-                Err(format!(
-                    "Agent returned initialization headers without JSON output. Premature collection."
-                ))
+                Err("Agent returned initialization headers without JSON output. Premature collection.".to_string())
             }
             // Validation 1: Minimum size check (>500 bytes for valid agent output)
             else if cleaned_output.len() < 500 {
@@ -961,7 +957,7 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
                 );
 
                 // SPEC-KIT-928: Save full invalid output to temp file for debugging
-                let temp_file = format!("/tmp/agent-invalid-json-{}.txt", agent_id);
+                let temp_file = format!("/tmp/agent-invalid-json-{agent_id}.txt");
                 if let Err(write_err) = std::fs::write(&temp_file, &cleaned_output) {
                     tracing::warn!(
                         "Failed to write invalid JSON to {}: {}",
@@ -972,7 +968,7 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
                     tracing::error!("📝 Full invalid JSON saved to: {}", temp_file);
                 }
 
-                Err(format!("Agent output is not valid JSON: {}", e))
+                Err(format!("Agent output is not valid JSON: {e}"))
             }
             // All validations passed
             else {
@@ -1034,8 +1030,7 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
                 );
                 // Store output with validation error message prepended
                 let output_with_error = format!(
-                    "VALIDATION_FAILED: {}\n\n--- RAW OUTPUT ---\n{}",
-                    validation_error, cleaned
+                    "VALIDATION_FAILED: {validation_error}\n\n--- RAW OUTPUT ---\n{cleaned}"
                 );
                 manager
                     .update_agent_result(&agent_id, Err(output_with_error))
@@ -1067,7 +1062,7 @@ async fn execute_agent(agent_id: String, config: Option<AgentConfig>) {
 /// ```
 fn get_provider_registry() -> &'static ProviderRegistry {
     static REGISTRY: OnceLock<ProviderRegistry> = OnceLock::new();
-    REGISTRY.get_or_init(|| ProviderRegistry::with_defaults())
+    REGISTRY.get_or_init(ProviderRegistry::with_defaults)
 }
 
 async fn execute_model_with_permissions(
@@ -1117,14 +1112,13 @@ async fn execute_model_with_permissions(
                     continue;
                 }
                 let candidate = dir.join(cmd);
-                if let Ok(meta) = std::fs::metadata(&candidate) {
-                    if meta.is_file() {
+                if let Ok(meta) = std::fs::metadata(&candidate)
+                    && meta.is_file() {
                         let mode = meta.permissions().mode();
                         if mode & 0o111 != 0 {
                             return true;
                         }
                     }
-                }
             }
             false
         }
@@ -1145,7 +1139,7 @@ async fn execute_model_with_permissions(
     let mut cmd = if (model_lower == "code" || model_lower == "codex") && config.is_none() {
         match std::env::current_exe() {
             Ok(path) => Command::new(path),
-            Err(e) => return Err(format!("Failed to resolve current executable: {}", e)),
+            Err(e) => return Err(format!("Failed to resolve current executable: {e}")),
         }
     } else {
         Command::new(command.clone())
@@ -1222,7 +1216,7 @@ async fn execute_model_with_permissions(
             }
         }
         _ => {
-            return Err(format!("Unknown model: {}", model));
+            return Err(format!("Unknown model: {model}"));
         }
     }
 
@@ -1231,8 +1225,7 @@ async fn execute_model_with_permissions(
     // like "program not found" and lets us surface a cleaner message.
     if model_name != "codex" && model_name != "code" && !command_exists(&command) {
         return Err(format!(
-            "Required agent '{}' is not installed or not in PATH",
-            command
+            "Required agent '{command}' is not installed or not in PATH"
         ));
     }
 
@@ -1242,9 +1235,8 @@ async fn execute_model_with_permissions(
     let provider = registry.detect_from_cli(&command).ok_or_else(|| {
         let available = registry.list_available_clis();
         format!(
-            "Unknown CLI provider: '{}'. Available: {:?}. \
-             Register custom providers with ProviderRegistry::register()",
-            command, available
+            "Unknown CLI provider: '{command}'. Available: {available:?}. \
+             Register custom providers with ProviderRegistry::register()"
         )
     })?;
 
@@ -1259,13 +1251,12 @@ async fn execute_model_with_permissions(
         .collect();
 
     // Overlay config-provided env vars
-    if let Some(ref cfg) = config {
-        if let Some(ref e) = cfg.env {
+    if let Some(ref cfg) = config
+        && let Some(ref e) = cfg.env {
             for (k, v) in e {
                 env.insert(k.clone(), v.clone());
             }
         }
-    }
 
     // Convenience: map common API key names so external CLIs "just work"
     if let Some(google_key) = env.get("GOOGLE_API_KEY").cloned() {
@@ -1311,7 +1302,7 @@ async fn execute_model_with_permissions(
     // Resolve program path
     let program = if (model_lower == "code" || model_lower == "codex") && config.is_none() {
         std::env::current_exe()
-            .map_err(|e| format!("Failed to resolve current executable: {}", e))?
+            .map_err(|e| format!("Failed to resolve current executable: {e}"))?
             .to_string_lossy()
             .to_string()
     } else {
@@ -1409,7 +1400,7 @@ async fn execute_model_with_permissions(
             provider,
         )
         .await
-        .map_err(|e| format!("Agent execution failed: {}", e))?;
+        .map_err(|e| format!("Agent execution failed: {e}"))?;
 
     // DirectProcessExecutor returns AgentOutput with stdout/stderr already separated
     // On success, return stdout; errors are already handled by executor

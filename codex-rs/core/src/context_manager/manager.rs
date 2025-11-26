@@ -124,7 +124,7 @@ impl ContextManager {
         let id = self
             .session_id
             .clone()
-            .unwrap_or_else(|| generate_session_id());
+            .unwrap_or_else(generate_session_id);
         self.save_session(&id)?;
         self.session_id = Some(id.clone());
         Ok(id)
@@ -202,7 +202,7 @@ impl ContextManager {
 fn generate_session_id() -> String {
     let timestamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
     let random: u32 = rand::random();
-    format!("{}-{:08x}", timestamp, random)
+    format!("{timestamp}-{random:08x}")
 }
 
 #[cfg(test)]

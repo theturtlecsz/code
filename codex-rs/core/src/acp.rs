@@ -111,7 +111,7 @@ impl<'a> FileSystem for AcpFileSystem<'a> {
         if let Some(tool) = self.tools.read_text_file.as_ref() {
             self.read_text_file_impl(tool, path)
                 .await
-                .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+                .map_err(std::io::Error::other)
         } else {
             StdFileSystem.read_text_file(path).await
         }
@@ -121,7 +121,7 @@ impl<'a> FileSystem for AcpFileSystem<'a> {
         if let Some(tool) = self.tools.write_text_file.as_ref() {
             self.write_text_file_impl(tool, path, contents)
                 .await
-                .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+                .map_err(std::io::Error::other)
         } else {
             StdFileSystem.write_text_file(path, contents).await
         }

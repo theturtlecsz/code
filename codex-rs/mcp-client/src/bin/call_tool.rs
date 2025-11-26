@@ -149,9 +149,7 @@ fn parse_args() -> Result<CliArgs> {
         idx += 1;
     }
 
-    if tool_name.is_none() {
-        return Err(anyhow!("--tool is required"));
-    }
+    let tool_name = tool_name.ok_or_else(|| anyhow!("--tool is required"))?;
 
     if idx >= args.len() {
         return Err(anyhow!("server command is required after `--`"));
@@ -164,7 +162,7 @@ fn parse_args() -> Result<CliArgs> {
         .collect::<Vec<_>>();
 
     Ok(CliArgs {
-        tool_name: tool_name.unwrap(),
+        tool_name,
         arguments,
         timeout,
         program,

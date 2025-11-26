@@ -77,13 +77,13 @@ where
         // Get connection from pool
         let mut conn = pool
             .get()
-            .map_err(|e| DbError::Pool(format!("Failed to get connection: {}", e)))?;
+            .map_err(|e| DbError::Pool(format!("Failed to get connection: {e}")))?;
 
         // Execute operation
         f(&mut conn)
     })
     .await
-    .map_err(|e| DbError::Transaction(format!("Task join error: {}", e)))?
+    .map_err(|e| DbError::Transaction(format!("Task join error: {e}")))?
 }
 
 /// Store consensus run with async wrapper
@@ -130,7 +130,7 @@ pub async fn store_consensus_run(
 ) -> Result<i64> {
     let spec_id = spec_id.to_string();
     let stage = stage.to_string();
-    let synthesis_json = synthesis_json.map(|s| s.to_string());
+    let synthesis_json = synthesis_json.map(std::string::ToString::to_string);
 
     with_connection(pool, move |conn| {
         use crate::db::transactions::{execute_in_transaction, upsert_consensus_run};
@@ -190,7 +190,7 @@ pub async fn store_agent_output(
     content: &str,
 ) -> Result<i64> {
     let agent_name = agent_name.to_string();
-    let model_version = model_version.map(|s| s.to_string());
+    let model_version = model_version.map(std::string::ToString::to_string);
     let content = content.to_string();
 
     with_connection(pool, move |conn| {
@@ -198,8 +198,8 @@ pub async fn store_agent_output(
 
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as i64;
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
 
         conn.execute(
             "INSERT INTO agent_outputs (run_id, agent_name, model_version, content, output_timestamp)
@@ -245,7 +245,7 @@ pub async fn query_consensus_runs(
     stage: Option<&str>,
 ) -> Result<Vec<(i64, i64, bool, bool, Option<String>)>> {
     let spec_id = spec_id.to_string();
-    let stage = stage.map(|s| s.to_string());
+    let stage = stage.map(std::string::ToString::to_string);
 
     with_connection(pool, move |conn| {
         use rusqlite::params;

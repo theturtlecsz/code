@@ -1,4 +1,3 @@
-use chrono::Utc;
 use super::types::{Conversation, Message, Role};
 
 /// Maximum context size as percentage of model limit (safety margin)

@@ -245,6 +245,12 @@ pub trait ProviderConfig: Send + Sync {
 #[derive(Debug, Clone)]
 pub struct AnthropicProvider;
 
+impl Default for AnthropicProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AnthropicProvider {
     pub fn new() -> Self {
         Self
@@ -301,6 +307,12 @@ impl ProviderConfig for AnthropicProvider {
 /// ```
 #[derive(Debug, Clone)]
 pub struct GoogleProvider;
+
+impl Default for GoogleProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl GoogleProvider {
     pub fn new() -> Self {
@@ -368,6 +380,12 @@ impl ProviderConfig for GoogleProvider {
 /// ```
 #[derive(Debug, Clone)]
 pub struct OpenAIProvider;
+
+impl Default for OpenAIProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl OpenAIProvider {
     pub fn new() -> Self {
@@ -438,6 +456,12 @@ impl ProviderConfig for OpenAIProvider {
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct DeepseekProvider;
+
+impl Default for DeepseekProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl DeepseekProvider {
     pub fn new() -> Self {
@@ -519,6 +543,12 @@ impl ProviderConfig for DeepseekProvider {
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct KimiProvider;
+
+impl Default for KimiProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl KimiProvider {
     pub fn new() -> Self {
@@ -602,6 +632,12 @@ pub struct ProviderRegistry {
     providers: HashMap<String, Box<dyn ProviderConfig>>,
 }
 
+impl Default for ProviderRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ProviderRegistry {
     /// Create new empty registry
     pub fn new() -> Self {
@@ -618,7 +654,7 @@ impl ProviderRegistry {
 
     /// Get provider by name
     pub fn get(&self, name: &str) -> Option<&dyn ProviderConfig> {
-        self.providers.get(name).map(|p| p.as_ref())
+        self.providers.get(name).map(std::convert::AsRef::as_ref)
     }
 
     /// Detect provider from CLI executable name
@@ -629,7 +665,7 @@ impl ProviderRegistry {
         self.providers
             .values()
             .find(|p| p.cli_executable() == cli)
-            .map(|p| p.as_ref())
+            .map(std::convert::AsRef::as_ref)
     }
 
     /// List all registered CLI executables
@@ -876,8 +912,8 @@ impl AsyncAgentExecutor for DirectProcessExecutor {
             })?;
 
         // Send large input via stdin if provided
-        if let Some(input) = large_input {
-            if let Some(mut stdin) = child.stdin.take() {
+        if let Some(input) = large_input
+            && let Some(mut stdin) = child.stdin.take() {
                 stdin
                     .write_all(input.as_bytes())
                     .await
@@ -885,7 +921,6 @@ impl AsyncAgentExecutor for DirectProcessExecutor {
                 // Explicit drop to signal EOF
                 drop(stdin);
             }
-        }
 
         // Spawn streaming tasks for stdout and stderr
         let stdout_handle = tokio::spawn({
@@ -929,20 +964,20 @@ impl AsyncAgentExecutor for DirectProcessExecutor {
         let stdout = stdout_handle
             .await
             .map_err(|e| {
-                AgentExecutionError::OutputCaptureFailed(format!("stdout task join error: {}", e))
+                AgentExecutionError::OutputCaptureFailed(format!("stdout task join error: {e}"))
             })?
             .map_err(AgentExecutionError::IoError)?;
 
         let stderr = stderr_handle
             .await
             .map_err(|e| {
-                AgentExecutionError::OutputCaptureFailed(format!("stderr task join error: {}", e))
+                AgentExecutionError::OutputCaptureFailed(format!("stderr task join error: {e}"))
             })?
             .map_err(AgentExecutionError::IoError)?;
 
         // Detect OAuth2 errors using provider-specific detection
         if provider.detect_oauth2_error(&stderr) {
-            return Err(AgentExecutionError::OAuth2Required(stderr.clone()));
+            return Err(AgentExecutionError::OAuth2Required(stderr));
         }
 
         Ok(AgentOutput {

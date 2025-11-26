@@ -257,7 +257,12 @@ impl HotReloadWatcher {
     /// ```
     pub fn get_config(&self) -> Arc<AppConfig> {
         // Read lock held briefly (~1μs)
-        Arc::clone(&*self.config.read().unwrap())
+        Arc::clone(
+            &*self
+                .config
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        )
     }
 
     /// Receive next reload event (async).
@@ -327,7 +332,10 @@ impl HotReloadWatcher {
     /// # }
     /// ```
     pub fn average_reload_latency(&self) -> Option<Duration> {
-        let latencies = self.reload_latencies.lock().unwrap();
+        let latencies = self
+            .reload_latencies
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if latencies.is_empty() {
             return None;
         }
@@ -353,7 +361,10 @@ impl HotReloadWatcher {
     /// # }
     /// ```
     pub fn p95_reload_latency(&self) -> Option<Duration> {
-        let latencies = self.reload_latencies.lock().unwrap();
+        let latencies = self
+            .reload_latencies
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if latencies.len() < 20 {
             return None;
         }
@@ -386,8 +397,11 @@ impl HotReloadWatcher {
     /// ```
     pub fn has_config_drift(&self) -> Result<bool> {
         let current_hash = Self::compute_file_hash(&self.config_path)?;
-        let last_hash = self.last_file_hash.read().unwrap();
-        Ok(last_hash.map_or(false, |h| h != current_hash))
+        let last_hash = self
+            .last_file_hash
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        Ok(last_hash.is_some_and(|h| h != current_hash))
     }
 
     /// Handle filesystem event (internal).
@@ -407,12 +421,11 @@ impl HotReloadWatcher {
         match result {
             Ok(events) => {
                 // Filter for relevant events (WRITE, MODIFY, METADATA_CHANGE)
-                let relevant_events: Vec<_> = events
+                let has_relevant = events
                     .iter()
-                    .filter(|e| Self::is_relevant_event(&e.event))
-                    .collect();
+                    .any(|e| Self::is_relevant_event(&e.event));
 
-                if relevant_events.is_empty() {
+                if !has_relevant {
                     return Ok(());
                 }
 
@@ -432,15 +445,23 @@ impl HotReloadWatcher {
                     Ok(new_config) => {
                         // Atomic replacement (write lock held <1ms)
                         {
-                            let mut config_guard = config.write().unwrap();
+                            let mut config_guard = config
+                                .write()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner);
                             *config_guard = Arc::new(new_config);
                         } // Write lock released
 
                         // Phase 3: Record metrics on successful reload
                         reload_counter.fetch_add(1, Ordering::Relaxed);
                         let latency = reload_start.elapsed();
-                        reload_latencies.lock().unwrap().push(latency);
-                        *last_file_hash.write().unwrap() = Some(new_file_hash);
+                        reload_latencies
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .push(latency);
+                        *last_file_hash
+                            .write()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+                            Some(new_file_hash);
 
                         let _ = event_tx.send(ConfigReloadEvent::ReloadSuccess).await;
                         tracing::info!(
@@ -451,7 +472,7 @@ impl HotReloadWatcher {
                         );
                     }
                     Err(e) => {
-                        let error_msg = format!("Config validation failed: {}", e);
+                        let error_msg = format!("Config validation failed: {e}");
                         let _ = event_tx
                             .send(ConfigReloadEvent::ReloadFailed(error_msg.clone()))
                             .await;
@@ -641,8 +662,7 @@ max_agents = 5
         // Debouncing should consolidate to 1-2 reloads (not 3)
         assert!(
             reload_count <= 2,
-            "Expected 1-2 reloads, got {}",
-            reload_count
+            "Expected 1-2 reloads, got {reload_count}"
         );
     }
 
@@ -892,7 +912,7 @@ max_agents = 5
         let avg_ns = elapsed.as_nanos() / iterations;
 
         // Should be <1μs per call
-        assert!(avg_ns < 1000, "get_config() too slow: {}ns average", avg_ns);
+        assert!(avg_ns < 1000, "get_config() too slow: {avg_ns}ns average");
     }
 
     // ====================
@@ -954,7 +974,7 @@ max_agents = 5
         let avg = watcher
             .average_reload_latency()
             .expect("Should have latency data");
-        assert!(avg.as_millis() < 150, "Reload took too long: {:?}", avg);
+        assert!(avg.as_millis() < 150, "Reload took too long: {avg:?}");
 
         // p95 requires 20 samples, should be None
         assert!(watcher.p95_reload_latency().is_none());
@@ -985,7 +1005,7 @@ max_agents = 5
 
         // Should have p95 after 25 samples
         let p95 = watcher.p95_reload_latency().expect("Should have p95 data");
-        assert!(p95.as_millis() < 200, "p95 latency too high: {:?}", p95);
+        assert!(p95.as_millis() < 200, "p95 latency too high: {p95:?}");
     }
 
     #[tokio::test]

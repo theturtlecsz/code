@@ -29,9 +29,8 @@ pub fn migrate_to_latest(conn: &mut Connection) -> Result<()> {
 
     if current_version > SCHEMA_VERSION {
         return Err(DbError::Migration(format!(
-            "Database schema version {} is newer than application version {}. \
-             Please update the application.",
-            current_version, SCHEMA_VERSION
+            "Database schema version {current_version} is newer than application version {SCHEMA_VERSION}. \
+             Please update the application."
         )));
     }
 
@@ -43,7 +42,7 @@ pub fn migrate_to_latest(conn: &mut Connection) -> Result<()> {
     // Apply migrations sequentially within a transaction
     let tx = conn
         .transaction_with_behavior(TransactionBehavior::Exclusive)
-        .map_err(|e| DbError::Migration(format!("Failed to begin migration transaction: {}", e)))?;
+        .map_err(|e| DbError::Migration(format!("Failed to begin migration transaction: {e}")))?;
 
     for version in (current_version + 1)..=SCHEMA_VERSION {
         info!("Applying migration to version {}", version);
@@ -51,11 +50,11 @@ pub fn migrate_to_latest(conn: &mut Connection) -> Result<()> {
     }
 
     // Update schema version
-    tx.execute(&format!("PRAGMA user_version = {}", SCHEMA_VERSION), [])
-        .map_err(|e| DbError::Migration(format!("Failed to update schema version: {}", e)))?;
+    tx.execute(&format!("PRAGMA user_version = {SCHEMA_VERSION}"), [])
+        .map_err(|e| DbError::Migration(format!("Failed to update schema version: {e}")))?;
 
     tx.commit()
-        .map_err(|e| DbError::Migration(format!("Failed to commit migration: {}", e)))?;
+        .map_err(|e| DbError::Migration(format!("Failed to commit migration: {e}")))?;
 
     info!("Schema migration complete: version {}", SCHEMA_VERSION);
     Ok(())
@@ -67,7 +66,7 @@ pub fn migrate_to_latest(conn: &mut Connection) -> Result<()> {
 fn get_schema_version(conn: &Connection) -> Result<i32> {
     let version: i32 = conn
         .query_row("PRAGMA user_version", [], |row| row.get(0))
-        .map_err(|e| DbError::Migration(format!("Failed to query schema version: {}", e)))?;
+        .map_err(|e| DbError::Migration(format!("Failed to query schema version: {e}")))?;
 
     Ok(version)
 }
@@ -80,8 +79,7 @@ fn apply_migration(conn: &Connection, version: i32) -> Result<()> {
         1 => migration_v1(conn),
         2 => migration_v2(conn),
         _ => Err(DbError::Migration(format!(
-            "Unknown migration version: {}",
-            version
+            "Unknown migration version: {version}"
         ))),
     }
 }
@@ -134,7 +132,7 @@ fn migration_v1(conn: &Connection) -> Result<()> {
             ON agent_outputs(agent_name);
         ",
     )
-    .map_err(|e| DbError::Migration(format!("Failed to execute migration V1: {}", e)))?;
+    .map_err(|e| DbError::Migration(format!("Failed to execute migration V1: {e}")))?;
 
     info!("Migration V1 complete: created consensus_runs and agent_outputs tables");
     Ok(())
@@ -163,7 +161,7 @@ fn migration_v2(conn: &Connection) -> Result<()> {
         DROP INDEX IF EXISTS idx_synthesis_spec_stage;
         ",
     )
-    .map_err(|e| DbError::Migration(format!("Failed to execute migration V2: {}", e)))?;
+    .map_err(|e| DbError::Migration(format!("Failed to execute migration V2: {e}")))?;
 
     info!(
         "Migration V2 complete: removed old schema tables (consensus_artifacts, consensus_synthesis)"

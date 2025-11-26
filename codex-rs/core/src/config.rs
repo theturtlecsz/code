@@ -472,7 +472,7 @@ pub async fn persist_model_selection(
 
             let profiles_table = profiles_item
                 .as_table_mut()
-                .expect("profiles table should be a table");
+                .ok_or_else(|| anyhow::anyhow!("profiles should be a table"))?;
 
             let profile_item = profiles_table.entry(profile_name).or_insert_with(|| {
                 let mut table = TomlTable::new();
@@ -482,7 +482,7 @@ pub async fn persist_model_selection(
 
             let profile_table = profile_item
                 .as_table_mut()
-                .expect("profile entry should be a table");
+                .ok_or_else(|| anyhow::anyhow!("profile entry should be a table"))?;
 
             profile_table["model"] = toml_edit::value(model.to_string());
 
@@ -634,12 +634,11 @@ pub fn set_tui_theme_name(codex_home: &Path, theme: ThemeName) -> anyhow::Result
     doc["tui"]["theme"]["name"] = toml_edit::value(theme_str);
     // When switching away from the Custom theme, clear any lingering custom
     // overrides so built-in themes render true to spec on next startup.
-    if theme != ThemeName::Custom {
-        if let Some(tbl) = doc["tui"]["theme"].as_table_mut() {
+    if theme != ThemeName::Custom
+        && let Some(tbl) = doc["tui"]["theme"].as_table_mut() {
             tbl.remove("label");
             tbl.remove("colors");
         }
-    }
 
     // ensure codex_home exists
     std::fs::create_dir_all(codex_home)?;
@@ -797,11 +796,15 @@ pub fn set_custom_theme(
         if !doc["tui"]["theme"].is_table() {
             doc["tui"]["theme"] = It::Table(toml_edit::Table::new());
         }
-        let theme_tbl = doc["tui"]["theme"].as_table_mut().unwrap();
+        let Some(theme_tbl) = doc["tui"]["theme"].as_table_mut() else {
+            return Err(anyhow::anyhow!("tui.theme should be a table"));
+        };
         if !theme_tbl.contains_key("colors") {
             theme_tbl.insert("colors", It::Table(toml_edit::Table::new()));
         }
-        let colors_tbl = theme_tbl["colors"].as_table_mut().unwrap();
+        let Some(colors_tbl) = theme_tbl["colors"].as_table_mut() else {
+            return Err(anyhow::anyhow!("tui.theme.colors should be a table"));
+        };
         macro_rules! set_opt {
             ($key:ident) => {
                 if let Some(ref v) = colors.$key {
@@ -1013,11 +1016,11 @@ pub fn set_project_access_mode(
     // Write fields
     proj_tbl.insert(
         "approval_policy",
-        TomlItem::Value(toml_edit::Value::from(format!("{}", approval))),
+        TomlItem::Value(toml_edit::Value::from(format!("{approval}"))),
     );
     proj_tbl.insert(
         "sandbox_mode",
-        TomlItem::Value(toml_edit::Value::from(format!("{}", sandbox_mode))),
+        TomlItem::Value(toml_edit::Value::from(format!("{sandbox_mode}"))),
     );
 
     // Harmonize trust_level with selected access mode:
@@ -1171,7 +1174,7 @@ pub fn list_mcp_servers(
                     .and_then(|v| v.as_array())
                     .map(|arr| {
                         arr.iter()
-                            .filter_map(|i| i.as_str().map(|s| s.to_string()))
+                            .filter_map(|i| i.as_str().map(std::string::ToString::to_string))
                             .collect()
                     })
                     .unwrap_or_default();
@@ -1183,7 +1186,7 @@ pub fn list_mcp_servers(
                     });
                 let startup_timeout_ms = t
                     .get("startup_timeout_ms")
-                    .and_then(|v| v.as_integer())
+                    .and_then(toml_edit::Item::as_integer)
                     .map(|i| i as u64);
 
                 out.push((
@@ -1243,7 +1246,9 @@ pub fn add_mcp_server(codex_home: &Path, name: &str, cfg: McpServerConfig) -> an
     if !doc.as_table().contains_key("mcp_servers") {
         doc["mcp_servers"] = TomlItem::Table(toml_edit::Table::new());
     }
-    let tbl = doc["mcp_servers"].as_table_mut().unwrap();
+    let Some(tbl) = doc["mcp_servers"].as_table_mut() else {
+        return Err(anyhow::anyhow!("mcp_servers should be a table"));
+    };
 
     // Build table for this server
     let mut server_tbl = toml_edit::Table::new();
@@ -1300,34 +1305,38 @@ pub fn set_mcp_server_enabled(
         Err(e) => return Err(e.into()),
     };
 
-    // Helper to ensure table exists
-    fn ensure_table<'a>(doc: &'a mut DocumentMut, key: &'a str) -> &'a mut toml_edit::Table {
+    // Helper to ensure table exists - returns Option since we just inserted a table
+    fn ensure_table<'a>(doc: &'a mut DocumentMut, key: &'a str) -> Option<&'a mut toml_edit::Table> {
         if !doc.as_table().contains_key(key) {
             doc[key] = TomlItem::Table(toml_edit::Table::new());
         }
-        doc[key].as_table_mut().unwrap()
+        doc[key].as_table_mut()
     }
 
     let mut changed = false;
     if enabled {
         // Move from disabled -> enabled
         let moved = {
-            let disabled_tbl = ensure_table(&mut doc, "mcp_servers_disabled");
+            let disabled_tbl = ensure_table(&mut doc, "mcp_servers_disabled")
+                .ok_or_else(|| anyhow::anyhow!("mcp_servers_disabled should be a table"))?;
             disabled_tbl.remove(name)
         };
         if let Some(item) = moved {
-            let enabled_tbl = ensure_table(&mut doc, "mcp_servers");
+            let enabled_tbl = ensure_table(&mut doc, "mcp_servers")
+                .ok_or_else(|| anyhow::anyhow!("mcp_servers should be a table"))?;
             enabled_tbl.insert(name, item);
             changed = true;
         }
     } else {
         // Move from enabled -> disabled
         let moved = {
-            let enabled_tbl = ensure_table(&mut doc, "mcp_servers");
+            let enabled_tbl = ensure_table(&mut doc, "mcp_servers")
+                .ok_or_else(|| anyhow::anyhow!("mcp_servers should be a table"))?;
             enabled_tbl.remove(name)
         };
         if let Some(item) = moved {
-            let disabled_tbl = ensure_table(&mut doc, "mcp_servers_disabled");
+            let disabled_tbl = ensure_table(&mut doc, "mcp_servers_disabled")
+                .ok_or_else(|| anyhow::anyhow!("mcp_servers_disabled should be a table"))?;
             disabled_tbl.insert(name, item);
             changed = true;
         }
@@ -1863,8 +1872,8 @@ impl Config {
         let history = cfg.history.unwrap_or_default();
 
         let mut always_allow_commands: Vec<ApprovedCommandPattern> = Vec::new();
-        if let Some(project_cfg) = project_override {
-            if let Some(commands) = &project_cfg.always_allow_commands {
+        if let Some(project_cfg) = project_override
+            && let Some(commands) = &project_cfg.always_allow_commands {
                 for cmd in commands {
                     if cmd.argv.is_empty() {
                         continue;
@@ -1885,7 +1894,6 @@ impl Config {
                     ));
                 }
             }
-        }
 
         let project_hooks = project_override
             .map(|cfg| ProjectHooks::from_configs(&cfg.hooks, &resolved_cwd))
@@ -1967,7 +1975,7 @@ impl Config {
 
         let mut confirm_guard = ConfirmGuardConfig::default();
         if let Some(mut user_guard) = cfg.confirm_guard {
-            confirm_guard.patterns.extend(user_guard.patterns.drain(..));
+            confirm_guard.patterns.append(&mut user_guard.patterns);
         }
         for pattern in &confirm_guard.patterns {
             if let Err(err) = regex_lite::Regex::new(&pattern.regex) {
@@ -2223,29 +2231,27 @@ impl Config {
 
         // === Hot-Reload Validation ===
         // Validate hot-reload debounce_ms is in reasonable range
-        if let Some(hr) = &config.hot_reload {
-            if hr.debounce_ms < 100 || hr.debounce_ms > 10000 {
+        if let Some(hr) = &config.hot_reload
+            && (hr.debounce_ms < 100 || hr.debounce_ms > 10000) {
                 tracing::warn!(
                     "Hot-reload debounce_ms ({}) outside recommended range (100-10000ms). \
                      Hint: Adjust hot_reload.debounce_ms in config.toml",
                     hr.debounce_ms
                 );
             }
-        }
 
         // === Canonical Names Validation ===
         // Validate no duplicate canonical_names
         let mut canonical_names = std::collections::HashSet::new();
         for agent in &config.agents {
-            if let Some(canonical) = &agent.canonical_name {
-                if !canonical_names.insert(canonical) {
+            if let Some(canonical) = &agent.canonical_name
+                && !canonical_names.insert(canonical) {
                     tracing::warn!(
                         "Duplicate canonical_name '{}' found in agent configs. \
                          Hint: Each agent must have a unique canonical_name",
                         canonical
                     );
                 }
-            }
         }
 
         // === Canonical Name Migration Warnings ===
@@ -2330,7 +2336,7 @@ impl Config {
             .map_err(|e| {
                 crate::config_loader::ConfigLoadError::IoError(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    format!("Failed to reload config: {}", e),
+                    format!("Failed to reload config: {e}"),
                 ))
             })
     }
@@ -2411,9 +2417,8 @@ fn validate_shell_policy_conflicts(cfg: &ConfigToml) -> std::io::Result<()> {
 
                 if has_toml_config {
                     warnings.push(format!(
-                        "Shell environment policy sets '{}={}', but {} is also configured in config.toml. \
-                         Shell policy takes precedence at runtime.",
-                        env_key, env_val, config_key
+                        "Shell environment policy sets '{env_key}={env_val}', but {config_key} is also configured in config.toml. \
+                         Shell policy takes precedence at runtime."
                     ));
                 }
             }

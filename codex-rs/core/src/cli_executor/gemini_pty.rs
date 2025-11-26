@@ -162,22 +162,23 @@ impl GeminiPtySession {
                     }
                 } else {
                     CliError::Internal {
-                        message: format!("Failed to spawn gemini: {}", e),
+                        message: format!("Failed to spawn gemini: {e}"),
                     }
                 }
             })?;
 
         // Capture stderr in a thread so we can log it
-        let stderr = child.stderr.take().unwrap();
+        let Some(stderr) = child.stderr.take() else {
+            return Err(CliError::Internal { message: "Failed to capture stderr".to_string() });
+        };
         std::thread::spawn(move || {
             let reader = BufReader::new(stderr);
             use std::io::BufRead;
             for line in reader.lines() {
-                if let Ok(line) = line {
-                    if !line.is_empty() {
+                if let Ok(line) = line
+                    && !line.is_empty() {
                         tracing::warn!("Gemini CLI stderr: {}", line);
                     }
-                }
             }
         });
 
@@ -199,7 +200,7 @@ impl GeminiPtySession {
 
         tracing::info!(
             "Gemini CLI process ready (PID: {:?})",
-            self.child.as_ref().map(|c| c.id())
+            self.child.as_ref().map(std::process::Child::id)
         );
         Ok(())
     }
@@ -262,7 +263,7 @@ impl GeminiPtySession {
                 }
                 Err(e) => {
                     return Err(CliError::Internal {
-                        message: format!("Read error while waiting for prompt: {}", e),
+                        message: format!("Read error while waiting for prompt: {e}"),
                     });
                 }
             }
@@ -306,23 +307,22 @@ impl GeminiPtySession {
             message: "Stdin not available".to_string(),
         })?;
 
-        writeln!(stdin, "{}", message).map_err(|e| CliError::Internal {
-            message: format!("Failed to write to stdin: {}", e),
+        writeln!(stdin, "{message}").map_err(|e| CliError::Internal {
+            message: format!("Failed to write to stdin: {e}"),
         })?;
 
         stdin.flush().map_err(|e| CliError::Internal {
-            message: format!("Failed to flush stdin: {}", e),
+            message: format!("Failed to flush stdin: {e}"),
         })?;
 
         // Read and stream response from stdout
         let response = self.read_and_stream_response(tx, cancel)?;
 
         // Auto-checkpoint if configured
-        if let Some(interval) = self.config.auto_checkpoint_interval {
-            if self.turn_count % interval == 0 {
+        if let Some(interval) = self.config.auto_checkpoint_interval
+            && self.turn_count.is_multiple_of(interval) {
                 self.auto_checkpoint()?;
             }
-        }
 
         Ok(response)
     }
@@ -353,7 +353,7 @@ impl GeminiPtySession {
             if cancel.is_cancelled() {
                 tracing::info!("Response cancelled by user");
                 // ✅ Strip prompt markers before returning
-                let clean = remove_prompt_marker(&accumulated.trim_end());
+                let clean = remove_prompt_marker(accumulated.trim_end());
                 return Ok(clean);
             }
 
@@ -366,12 +366,11 @@ impl GeminiPtySession {
             }
 
             // Check idle timeout (no new data for idle_threshold duration)
-            if Instant::now().duration_since(last_activity) > idle_threshold {
-                if !accumulated.is_empty() {
+            if Instant::now().duration_since(last_activity) > idle_threshold
+                && !accumulated.is_empty() {
                     tracing::debug!("Idle timeout reached, treating as complete");
                     break;
                 }
-            }
 
             // Try to read a line (non-blocking via peek check)
             let mut line = String::new();
@@ -424,7 +423,7 @@ impl GeminiPtySession {
                 }
                 Err(e) => {
                     return Err(CliError::Internal {
-                        message: format!("Read error: {}", e),
+                        message: format!("Read error: {e}"),
                     });
                 }
             }
@@ -434,7 +433,7 @@ impl GeminiPtySession {
         }
 
         // ✅ Strip any trailing prompt markers that might have leaked through
-        let clean_response = remove_prompt_marker(&accumulated.trim_end());
+        let clean_response = remove_prompt_marker(accumulated.trim_end());
 
         // Send done event
         let _ = tx.blocking_send(StreamEvent::Done);
@@ -452,17 +451,17 @@ impl GeminiPtySession {
             message: "Stdin not available".to_string(),
         })?;
 
-        writeln!(stdin, "{}", command).map_err(|e| CliError::Internal {
-            message: format!("Failed to write command: {}", e),
+        writeln!(stdin, "{command}").map_err(|e| CliError::Internal {
+            message: format!("Failed to write command: {e}"),
         })?;
 
         stdin.flush().map_err(|e| CliError::Internal {
-            message: format!("Failed to flush stdin: {}", e),
+            message: format!("Failed to flush stdin: {e}"),
         })?;
 
         // ✅ Wait for command to complete and prompt to return
         // Commands like /chat save, /compress produce output then return to prompt
-        self.consume_until_prompt(&format!("after command: {}", command))?;
+        self.consume_until_prompt(&format!("after command: {command}"))?;
 
         Ok(())
     }
@@ -475,7 +474,7 @@ impl GeminiPtySession {
 
         tracing::info!("Creating auto-checkpoint: {}", checkpoint_id);
 
-        self.send_command(&format!("/chat save {}", checkpoint_id))?;
+        self.send_command(&format!("/chat save {checkpoint_id}"))?;
         self.last_checkpoint = Some(checkpoint_id);
 
         Ok(())
@@ -508,7 +507,7 @@ impl GeminiPtySession {
             // Try to restore from last checkpoint
             if let Some(checkpoint) = &self.last_checkpoint.clone() {
                 tracing::info!("Restoring from checkpoint: {}", checkpoint);
-                self.send_command(&format!("/chat resume {}", checkpoint))?;
+                self.send_command(&format!("/chat resume {checkpoint}"))?;
             } else {
                 tracing::warn!("No checkpoint available, conversation state lost");
             }
@@ -547,13 +546,12 @@ impl GeminiPtySession {
         }
 
         // Force kill if still alive
-        if let Some(mut child) = self.child {
-            if let Ok(None) = child.try_wait() {
+        if let Some(mut child) = self.child
+            && let Ok(None) = child.try_wait() {
                 tracing::debug!("Force killing Gemini CLI process");
                 let _ = child.kill();
                 let _ = child.wait();
             }
-        }
 
         Ok(())
     }
@@ -763,7 +761,7 @@ impl GeminiPtyProvider {
             })
             .await
             .map_err(|e| CliError::Internal {
-                message: format!("Session spawn task failed: {}", e),
+                message: format!("Session spawn task failed: {e}"),
             })??;
 
             sessions.insert(conv_id.clone(), session);
@@ -835,7 +833,7 @@ impl GeminiPtyProvider {
             tokio::task::spawn_blocking(move || session.shutdown())
                 .await
                 .map_err(|e| CliError::Internal {
-                    message: format!("Shutdown task failed: {}", e),
+                    message: format!("Shutdown task failed: {e}"),
                 })??;
         }
 
@@ -855,7 +853,7 @@ impl GeminiPtyProvider {
             tokio::task::spawn_blocking(move || session.shutdown())
                 .await
                 .map_err(|e| CliError::Internal {
-                    message: format!("Shutdown task failed: {}", e),
+                    message: format!("Shutdown task failed: {e}"),
                 })??;
         }
 

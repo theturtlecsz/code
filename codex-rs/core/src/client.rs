@@ -309,8 +309,8 @@ impl ModelClient {
         if azure_workaround {
             attach_item_ids(&mut payload_json, &input_with_instructions);
         }
-        if let Some(openrouter_cfg) = self.provider.openrouter_config() {
-            if let Some(obj) = payload_json.as_object_mut() {
+        if let Some(openrouter_cfg) = self.provider.openrouter_config()
+            && let Some(obj) = payload_json.as_object_mut() {
                 if let Some(provider) = &openrouter_cfg.provider {
                     obj.insert("provider".to_string(), serde_json::to_value(provider)?);
                 }
@@ -321,7 +321,6 @@ impl ModelClient {
                     obj.entry(key.clone()).or_insert(value.clone());
                 }
             }
-        }
         let payload_body = serde_json::to_string(&payload_json)?;
 
         let mut attempt = 0;
@@ -369,13 +368,11 @@ impl ModelClient {
                 .json(&payload_json);
 
             // Avoid unstable `let` chains: expand into nested conditionals.
-            if let Some(auth) = auth.as_ref() {
-                if auth.mode == AuthMode::ChatGPT {
-                    if let Some(account_id) = auth.get_account_id() {
+            if let Some(auth) = auth.as_ref()
+                && auth.mode == AuthMode::ChatGPT
+                    && let Some(account_id) = auth.get_account_id() {
                         req_builder = req_builder.header("chatgpt-account-id", account_id);
                     }
-                }
-            }
 
             let res = req_builder.send().await;
             if let Ok(resp) = &res {
@@ -473,7 +470,7 @@ impl ModelClient {
                         .headers()
                         .get("x-request-id")
                         .and_then(|v| v.to_str().ok())
-                        .map(|s| s.to_string());
+                        .map(std::string::ToString::to_string);
 
                     // Pull out Retry‑After header if present.
                     let retry_after_secs = res
@@ -482,11 +479,10 @@ impl ModelClient {
                         .and_then(|v| v.to_str().ok())
                         .and_then(|s| s.parse::<u64>().ok());
 
-                    if status == StatusCode::UNAUTHORIZED {
-                        if let Some(a) = auth.as_ref() {
+                    if status == StatusCode::UNAUTHORIZED
+                        && let Some(a) = auth.as_ref() {
                             let _ = a.refresh_token().await;
                         }
-                    }
 
                     // Read the response body once for diagnostics across error branches.
                     let body_text = res.text().await.unwrap_or_default();
@@ -606,7 +602,7 @@ impl ModelClient {
                     if attempt > max_retries {
                         // Log network error
                         if let Ok(logger) = self.debug_logger.lock() {
-                            let _ = logger.log_error(&endpoint, &format!("Network error: {}", e));
+                            let _ = logger.log_error(&endpoint, &format!("Network error: {e}"));
                         }
                         return Err(e.into());
                     }
@@ -762,7 +758,7 @@ fn format_rate_limit_headers(headers: &HeaderMap) -> String {
         .iter()
         .map(|(name, value)| {
             let value_str = value.to_str().unwrap_or("<invalid>");
-            format!("{}: {}", name, value_str)
+            format!("{name}: {value_str}")
         })
         .collect();
     pairs.sort();
@@ -864,11 +860,10 @@ async fn process_sse<S>(
         trace!("SSE event: {}", raw);
 
         // Log the raw SSE event data
-        if let Ok(logger) = debug_logger.lock() {
-            if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&sse.data) {
+        if let Ok(logger) = debug_logger.lock()
+            && let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&sse.data) {
                 let _ = logger.append_response_event(&request_id, "sse_event", &json_value);
             }
-        }
 
         let event: SseEvent = match serde_json::from_str(&sse.data) {
             Ok(event) => event,
@@ -930,7 +925,7 @@ async fn process_sse<S>(
                         .get("action")
                         .and_then(|a| a.get("query"))
                         .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
+                        .map(std::string::ToString::to_string);
                     let ev = ResponseEvent::WebSearchCallCompleted { call_id, query };
                     if tx_event.send(Ok(ev)).await.is_err() {
                         return;
@@ -1001,7 +996,7 @@ async fn process_sse<S>(
                         } else {
                             // Best-effort: drop exact duplicate text for same key when seq is missing
                             let key = (id.clone(), out_idx, sum_idx);
-                            if last_text_reasoning_summary.get(&key).map_or(false, |prev| prev == &delta) {
+                            if last_text_reasoning_summary.get(&key) == Some(&delta) {
                                 continue;
                             }
                             last_text_reasoning_summary.insert(key, delta.clone());
@@ -1042,7 +1037,7 @@ async fn process_sse<S>(
                         } else {
                             // Best-effort: drop exact duplicate text for same key when seq is missing
                             let key = (id.clone(), out_idx, content_idx);
-                            if last_text_reasoning_content.get(&key).map_or(false, |prev| prev == &delta) {
+                            if last_text_reasoning_content.get(&key) == Some(&delta) {
                                 continue;
                             }
                             last_text_reasoning_content.insert(key, delta.clone());
@@ -1115,11 +1110,11 @@ async fn process_sse<S>(
             | "response.in_progress"
             | "response.output_item.added"
             | "response.output_text.done" => {
-                if event.kind == "response.output_item.added" {
-                    if let Some(item) = event.item.as_ref() {
+                if event.kind == "response.output_item.added"
+                    && let Some(item) = event.item.as_ref() {
                         // Detect web_search_call begin and forward a synthetic event upstream.
-                        if let Some(ty) = item.get("type").and_then(|v| v.as_str()) {
-                            if ty == "web_search_call" {
+                        if let Some(ty) = item.get("type").and_then(|v| v.as_str())
+                            && ty == "web_search_call" {
                                 let call_id = item
                                     .get("id")
                                     .and_then(|v| v.as_str())
@@ -1130,9 +1125,7 @@ async fn process_sse<S>(
                                     return;
                                 }
                             }
-                        }
                     }
-                }
             }
             "response.reasoning_summary_part.added" => {
                 // Boundary between reasoning summary sections (e.g., titles).
@@ -1166,6 +1159,8 @@ async fn stream_from_fixture(
     let rdr = std::io::Cursor::new(content);
     let stream = ReaderStream::new(rdr).map_err(CodexErr::Io);
     // Create a dummy debug logger for testing
+    // SAFETY: DebugLogger::new(false) never fails - it returns early before any I/O
+    #[allow(clippy::unwrap_used)]
     let debug_logger = Arc::new(Mutex::new(DebugLogger::new(false).unwrap()));
     tokio::spawn(process_sse(
         stream,

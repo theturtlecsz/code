@@ -87,8 +87,8 @@ impl PromptDetector {
         }
 
         // Signal 2: Idle timeout + looks complete (medium confidence)
-        if now.duration_since(self.last_output_time) > self.idle_threshold {
-            if self.looks_complete(output) {
+        if now.duration_since(self.last_output_time) > self.idle_threshold
+            && self.looks_complete(output) {
                 self.confidence = Confidence::Medium;
                 tracing::debug!(
                     "Prompt detected (MEDIUM confidence): idle {}ms + looks complete",
@@ -96,7 +96,6 @@ impl PromptDetector {
                 );
                 return true;
             }
-        }
 
         // Signal 3: Still responding
         self.confidence = Confidence::Low;
@@ -151,7 +150,7 @@ impl PromptDetector {
 
         // Code fence not closed = incomplete
         let fence_count = trimmed.matches("```").count();
-        if fence_count % 2 != 0 {
+        if !fence_count.is_multiple_of(2) {
             return false;
         }
 

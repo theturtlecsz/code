@@ -79,7 +79,7 @@ impl SpecAgent {
 
     /// Parse from string (case-insensitive)
     pub fn from_string(s: &str) -> Option<Self> {
-        let normalized = s.to_ascii_lowercase().replace('-', "_").replace(' ', "_");
+        let normalized = s.to_ascii_lowercase().replace(['-', ' '], "_");
         let trimmed = normalized.trim_matches('_');
 
         if trimmed.is_empty() {

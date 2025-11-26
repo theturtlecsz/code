@@ -293,7 +293,7 @@ impl EnvironmentContext {
                     if writable_roots.is_empty() {
                         None
                     } else {
-                        Some(writable_roots.clone())
+                        Some(writable_roots)
                     }
                 }
                 _ => None,
@@ -396,15 +396,14 @@ impl EnvironmentContext {
             }
             lines.push("  </operating_system>".to_string());
         }
-        if let Some(common_tools) = self.common_tools {
-            if !common_tools.is_empty() {
+        if let Some(common_tools) = self.common_tools
+            && !common_tools.is_empty() {
                 lines.push("  <common_tools>".to_string());
                 for tool in common_tools {
                     lines.push(format!("    <tool>{tool}</tool>"));
                 }
                 lines.push("  </common_tools>".to_string());
             }
-        }
         if let Some(shell) = self.shell
             && let Some(shell_name) = shell.name()
         {

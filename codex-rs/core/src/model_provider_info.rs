@@ -145,30 +145,24 @@ pub struct OpenRouterProviderConfig {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum OpenRouterDataCollectionPolicy {
+    #[default]
     Allow,
     Deny,
 }
 
-impl Default for OpenRouterDataCollectionPolicy {
-    fn default() -> Self {
-        OpenRouterDataCollectionPolicy::Allow
-    }
-}
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum OpenRouterProviderSort {
+    #[default]
     Price,
     Throughput,
     Latency,
 }
 
-impl Default for OpenRouterProviderSort {
-    fn default() -> Self {
-        OpenRouterProviderSort::Price
-    }
-}
 
 /// `max_price` envelope for OpenRouter provider routing controls.
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
@@ -221,8 +215,8 @@ impl ModelProviderInfo {
         // upstream server, which causes handshake failures. By setting
         // Host to the authority derived from the final URL here, we ensure
         // the proxy sees the correct host and can forward/SNI appropriately.
-        if let Ok(parsed) = url::Url::parse(&url) {
-            if let Some(host) = parsed.host_str() {
+        if let Ok(parsed) = url::Url::parse(&url)
+            && let Some(host) = parsed.host_str() {
                 let authority = match parsed.port() {
                     Some(port) => format!("{host}:{port}"),
                     None => host.to_string(),
@@ -231,7 +225,6 @@ impl ModelProviderInfo {
                     builder = builder.header(reqwest::header::HOST, hv);
                 }
             }
-        }
 
         if let Some(auth) = effective_auth.as_ref() {
             builder = builder.bearer_auth(auth.get_token().await?);
@@ -309,11 +302,10 @@ impl ModelProviderInfo {
 
         if let Some(env_headers) = &self.env_http_headers {
             for (header, env_var) in env_headers {
-                if let Ok(val) = std::env::var(env_var) {
-                    if !val.trim().is_empty() {
+                if let Ok(val) = std::env::var(env_var)
+                    && !val.trim().is_empty() {
                         builder = builder.header(header, val);
                     }
-                }
             }
         }
         builder

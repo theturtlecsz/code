@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         while let Some(event) = rx.recv().await {
                             match event {
                                 StreamEvent::Delta(text) => {
-                                    print!("{}", text);
+                                    print!("{text}");
                                     io::stdout().flush().ok();
                                 }
                                 StreamEvent::Done => {
@@ -84,7 +84,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     break;
                                 }
                                 StreamEvent::Error(e) => {
-                                    eprintln!("\n[ERROR: {}]\n", e);
+                                    eprintln!("\n[ERROR: {e}]\n");
                                     break;
                                 }
                                 _ => {}
@@ -100,7 +100,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             println!("[DONE - {} chars]\n", response.len());
                         }
                         Err(e) => {
-                            eprintln!("Error sending message: {}\n", e);
+                            eprintln!("Error sending message: {e}\n");
                         }
                     }
                 }
@@ -112,8 +112,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     })
     .await
-    .map_err(|e| format!("Join error: {}", e))?
-    .map_err(|e| format!("Session error: {}", e))?;
+    .map_err(|e| format!("Join error: {e}"))?
+    .map_err(|e| format!("Session error: {e}"))?;
 
     Ok(())
 }

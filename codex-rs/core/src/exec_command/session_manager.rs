@@ -396,21 +396,19 @@ fn truncate_middle(s: &str, max_bytes: usize) -> (String, Option<u64>) {
     // Given a left/right budget, prefer newline boundaries; otherwise fall back
     // to UTF-8 char boundaries.
     fn pick_prefix_end(s: &str, left_budget: usize) -> usize {
-        if let Some(head) = s.get(..left_budget) {
-            if let Some(i) = head.rfind('\n') {
+        if let Some(head) = s.get(..left_budget)
+            && let Some(i) = head.rfind('\n') {
                 return i + 1; // keep the newline so suffix starts on a fresh line
             }
-        }
         truncate_on_boundary(s, left_budget).len()
     }
 
     fn pick_suffix_start(s: &str, right_budget: usize) -> usize {
         let start_tail = s.len().saturating_sub(right_budget);
-        if let Some(tail) = s.get(start_tail..) {
-            if let Some(i) = tail.find('\n') {
+        if let Some(tail) = s.get(start_tail..)
+            && let Some(i) = tail.find('\n') {
                 return start_tail + i + 1; // start after newline
             }
-        }
         // Fall back to a char boundary at or after start_tail.
         let mut idx = start_tail.min(s.len());
         while idx < s.len() && !s.is_char_boundary(idx) {

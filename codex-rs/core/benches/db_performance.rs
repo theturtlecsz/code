@@ -1,3 +1,6 @@
+// Benchmarks use expect/unwrap for simplicity - test code, not production
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+
 //! SPEC-945B: Database Performance Benchmarks
 //!
 //! Week 2 Day 4: Benchmarking & Performance Validation

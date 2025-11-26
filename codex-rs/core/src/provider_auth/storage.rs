@@ -296,8 +296,7 @@ impl AuthAccountsStorage {
 
         if !account_exists {
             return Err(AuthError::Config(format!(
-                "Account {} not found for provider {}",
-                account_id, provider
+                "Account {account_id} not found for provider {provider}"
             )));
         }
 

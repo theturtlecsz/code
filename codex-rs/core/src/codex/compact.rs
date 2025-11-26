@@ -549,7 +549,7 @@ fn response_input_from_core_items(items: Vec<InputItem>) -> ResponseInputItem {
             InputItem::EphemeralImage { path, metadata } => {
                 if let Some(meta) = metadata {
                     content_items.push(ContentItem::InputText {
-                        text: format!("[EPHEMERAL:{}]", meta),
+                        text: format!("[EPHEMERAL:{meta}]"),
                     });
                 }
                 match std::fs::read(&path) {

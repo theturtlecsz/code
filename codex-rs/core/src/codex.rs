@@ -208,7 +208,7 @@ fn response_input_from_core_items(items: Vec<InputItem>) -> ResponseInputItem {
 
                 if let Some(meta) = metadata {
                     content_items.push(ContentItem::InputText {
-                        text: format!("[EPHEMERAL:{}]", meta),
+                        text: format!("[EPHEMERAL:{meta}]"),
                     });
                 }
 
@@ -260,13 +260,11 @@ fn convert_call_tool_result_to_function_call_output_payload(
 
 fn get_git_branch(cwd: &std::path::Path) -> Option<String> {
     let head_path = cwd.join(".git/HEAD");
-    if let Ok(contents) = std::fs::read_to_string(&head_path) {
-        if let Some(rest) = contents.trim().strip_prefix("ref: ") {
-            if let Some(branch) = rest.trim().rsplit('/').next() {
+    if let Ok(contents) = std::fs::read_to_string(&head_path)
+        && let Some(rest) = contents.trim().strip_prefix("ref: ")
+            && let Some(branch) = rest.trim().rsplit('/').next() {
                 return Some(branch.to_string());
             }
-        }
-    }
     None
 }
 
@@ -282,11 +280,10 @@ fn maybe_update_from_model_info<T: Copy + PartialEq>(
         return;
     }
 
-    if let (Some(current), Some(old_val)) = (*field, old_default) {
-        if current == old_val {
+    if let (Some(current), Some(old_val)) = (*field, old_default)
+        && current == old_val {
             *field = new_default;
         }
-    }
 }
 
 async fn build_turn_status_items(sess: &Session) -> Vec<ResponseItem> {
@@ -311,8 +308,8 @@ async fn build_turn_status_items(sess: &Session) -> Vec<ResponseItem> {
     let mut screenshot_content: Option<ContentItem> = None;
     let mut include_screenshot = false;
 
-    if let Some(browser_manager) = codex_browser::global::get_browser_manager().await {
-        if browser_manager.is_enabled().await {
+    if let Some(browser_manager) = codex_browser::global::get_browser_manager().await
+        && browser_manager.is_enabled().await {
             // Get current URL and browser info
             let url = browser_manager
                 .get_current_url()
@@ -330,13 +327,12 @@ async fn build_turn_status_items(sess: &Session) -> Vec<ResponseItem> {
 
             // Get viewport dimensions
             let (viewport_width, viewport_height) = browser_manager.get_viewport_size().await;
-            let viewport_info = format!(" | Viewport: {}x{}", viewport_width, viewport_height);
+            let viewport_info = format!(" | Viewport: {viewport_width}x{viewport_height}");
 
             // Get cursor position
             let cursor_info = match browser_manager.get_cursor_position().await {
                 Ok((x, y)) => format!(
-                    " | Mouse position: ({:.0}, {:.0}) [shown as a blue cursor in the screenshot]",
-                    x, y
+                    " | Mouse position: ({x:.0}, {y:.0}) [shown as a blue cursor in the screenshot]"
                 ),
                 Err(_) => String::new(),
             };
@@ -406,25 +402,22 @@ async fn build_turn_status_items(sess: &Session) -> Vec<ResponseItem> {
                 }
                 Err(err_msg) => {
                     // Include error message so LLM knows screenshot failed
-                    format!(" [Screenshot unavailable: {}]", err_msg).leak()
+                    format!(" [Screenshot unavailable: {err_msg}]").leak()
                 }
             };
 
             let status_line = if let Some(t) = title {
                 format!(
-                    "Browser url: {} — {} ({}){}{}{}. You can interact with it using browser_* tools.",
-                    url, t, browser_type, viewport_info, cursor_info, screenshot_status
+                    "Browser url: {url} — {t} ({browser_type}){viewport_info}{cursor_info}{screenshot_status}. You can interact with it using browser_* tools."
                 )
             } else {
                 format!(
-                    "Browser url: {} ({}){}{}{}. You can interact with it using browser_* tools.",
-                    url, browser_type, viewport_info, cursor_info, screenshot_status
+                    "Browser url: {url} ({browser_type}){viewport_info}{cursor_info}{screenshot_status}. You can interact with it using browser_* tools."
                 )
             };
-            current_status.push_str("\n");
+            current_status.push('\n');
             current_status.push_str(&status_line);
         }
-    }
 
     // Check if system status has changed
     let mut last_status = sess.last_system_status.lock().unwrap();
@@ -444,11 +437,10 @@ async fn build_turn_status_items(sess: &Session) -> Vec<ResponseItem> {
         });
     }
 
-    if include_screenshot {
-        if let Some(image) = screenshot_content {
+    if include_screenshot
+        && let Some(image) = screenshot_content {
             content.push(image);
         }
-    }
 
     if !content.is_empty() {
         jar.items.push(ResponseItem::Message {
@@ -1188,6 +1180,7 @@ impl Session {
                 text: PENDING_ONLY_SENTINEL.to_string(),
             }];
             let agent = AgentTask::spawn(
+                #[allow(clippy::expect_used)] // session must exist during turn
                 self.upgrade_self().expect("session"),
                 turn_context,
                 sub_id,
@@ -1352,11 +1345,10 @@ impl Session {
 
     pub fn remove_task(&self, sub_id: &str) {
         let mut state = self.state.lock().unwrap();
-        if let Some(agent) = &state.current_task {
-            if agent.sub_id == sub_id {
+        if let Some(agent) = &state.current_task
+            && agent.sub_id == sub_id {
                 state.current_task.take();
             }
-        }
     }
 
     pub fn has_running_task(&self) -> bool {
@@ -1856,11 +1848,10 @@ impl Session {
             let guard = self.rollout.lock().unwrap();
             guard.as_ref().cloned()
         };
-        if let Some(rec) = recorder {
-            if let Err(e) = rec.record_items(items).await {
+        if let Some(rec) = recorder
+            && let Err(e) = rec.record_items(items).await {
                 error!("failed to record rollout items: {e:#}");
             }
-        }
     }
 
     async fn on_exec_command_begin(
@@ -2032,8 +2023,8 @@ impl Session {
             None
         };
 
-        if enable_hooks {
-            if let Some(params_ref) = params_for_hooks.as_ref() {
+        if enable_hooks
+            && let Some(params_ref) = params_for_hooks.as_ref() {
                 let before_event = if is_apply_patch {
                     ProjectHookEvent::FileBeforeWrite
                 } else {
@@ -2049,7 +2040,6 @@ impl Session {
                 )
                 .await;
             }
-        }
 
         self.on_exec_command_begin(
             turn_diff_tracker,
@@ -2098,8 +2088,8 @@ impl Session {
         )
         .await;
 
-        if enable_hooks {
-            if let Some(params_ref) = params_for_hooks.as_ref() {
+        if enable_hooks
+            && let Some(params_ref) = params_for_hooks.as_ref() {
                 let after_event = if is_apply_patch {
                     ProjectHookEvent::FileAfterWrite
                 } else {
@@ -2115,7 +2105,6 @@ impl Session {
                 )
                 .await;
             }
-        }
 
         if let Some(analysis) = dry_run_analysis.as_ref() {
             let mut state = self.state.lock().unwrap();
@@ -2389,7 +2378,7 @@ impl Session {
                 justification: None,
             };
 
-            (params, command_cfg.name.clone())
+            (params, command_cfg.name)
         };
 
         let call_id = format!("project_cmd_{}", sanitize_identifier(&cmd_name));
@@ -3182,8 +3171,8 @@ async fn submission_loop(
 
                 let new_config = Arc::new(updated_config);
 
-                if model_changed || effort_changed {
-                    if let Err(err) = persist_model_selection(
+                if (model_changed || effort_changed)
+                    && let Err(err) = persist_model_selection(
                         &new_config.codex_home,
                         new_config.active_profile.as_deref(),
                         &new_config.model,
@@ -3193,7 +3182,6 @@ async fn submission_loop(
                     {
                         warn!("failed to persist model selection: {err:#}");
                     }
-                }
 
                 config = Arc::clone(&new_config);
 
@@ -3383,19 +3371,18 @@ async fn submission_loop(
                     inner.self_handle = weak_handle;
                 }
                 sess = Some(new_session);
-                if let Some(sess_arc) = &sess {
-                    if !config.always_allow_commands.is_empty() {
+                if let Some(sess_arc) = &sess
+                    && !config.always_allow_commands.is_empty() {
                         let mut st = sess_arc.state.lock().unwrap();
                         for pattern in &config.always_allow_commands {
                             st.approved_commands.insert(pattern.clone());
                         }
                     }
-                }
                 let mut replay_history_items: Option<Vec<ResponseItem>> = None;
 
                 // Patch restored state into the newly created session.
-                if let Some(sess_arc) = &sess {
-                    if let Some(items) = &restored_items {
+                if let Some(sess_arc) = &sess
+                    && let Some(items) = &restored_items {
                         let turn_context = sess_arc.make_turn_context();
                         let reconstructed =
                             sess_arc.reconstruct_history_from_rollout(&turn_context, items);
@@ -3406,13 +3393,13 @@ async fn submission_loop(
                         }
                         replay_history_items = Some(reconstructed);
                     }
-                }
 
                 // Gather history metadata for SessionConfiguredEvent.
                 let (history_log_id, history_entry_count) =
                     crate::message_history::history_metadata(&config).await;
 
                 // ack
+                #[allow(clippy::expect_used)] // session guaranteed initialized at this point
                 let sess_arc = sess.as_ref().expect("session initialized");
                 let events = std::iter::once(sess_arc.make_event(
                     INITIAL_SUBMIT_ID,
@@ -3461,6 +3448,7 @@ async fn submission_loop(
                     manager.set_event_sender(agent_tx);
                     drop(manager);
 
+                    #[allow(clippy::expect_used)] // session guaranteed active at this point
                     let sess_for_agents = sess.as_ref().expect("session active").clone();
                     // Forward agent events to the main event channel
                     let tx_event_clone = tx_event.clone();
@@ -3529,7 +3517,7 @@ async fn submission_loop(
                 // Spawn a new agent for this user input.
                 let turn_context = sess.make_turn_context();
                 let agent =
-                    AgentTask::spawn(Arc::clone(&sess), turn_context, sub.id.clone(), items);
+                    AgentTask::spawn(Arc::clone(sess), turn_context, sub.id.clone(), items);
                 sess.set_task(agent);
             }
             Op::QueueUserInput { items } => {
@@ -3555,7 +3543,7 @@ async fn submission_loop(
                     sess.cleanup_old_status_items().await;
                     let turn_context = sess.make_turn_context();
                     let agent =
-                        AgentTask::spawn(Arc::clone(&sess), turn_context, sub.id.clone(), items);
+                        AgentTask::spawn(Arc::clone(sess), turn_context, sub.id.clone(), items);
                     sess.set_task(agent);
                 }
             }
@@ -3830,8 +3818,8 @@ async fn submission_loop(
                 // that inspect the rollout file do not race with the background writer.
                 if let Some(ref sess_arc) = sess {
                     let recorder_opt = sess_arc.rollout.lock().unwrap().take();
-                    if let Some(rec) = recorder_opt {
-                        if let Err(e) = rec.shutdown().await {
+                    if let Some(rec) = recorder_opt
+                        && let Err(e) = rec.shutdown().await {
                             warn!("failed to shutdown rollout recorder: {e}");
                             let event = sess_arc.make_event(
                                 &sub.id,
@@ -3843,7 +3831,6 @@ async fn submission_loop(
                                 warn!("failed to send error message: {e:?}");
                             }
                         }
-                    }
                 }
                 if let Some(ref sess_arc) = sess {
                     sess_arc
@@ -3996,8 +3983,7 @@ async fn exit_review_mode(
             };
 
             format!(
-                "<user_action>\n  <context>User initiated a review task. Here's the full review output from reviewer model. User may select one or more comments to resolve.</context>\n  <action>review</action>\n  <results>\n  {}\n  </results>\n</user_action>\n",
-                results
+                "<user_action>\n  <context>User initiated a review task. Here's the full review output from reviewer model. User may select one or more comments to resolve.</context>\n  <action>review</action>\n  <results>\n  {results}\n  </results>\n</user_action>\n"
             )
         }
         None => {
@@ -4061,14 +4047,13 @@ fn parse_review_output_event(text: &str) -> ReviewOutputEvent {
     }
 
     // Attempt to extract JSON from fenced code blocks if present.
-    if let Some(idx) = text.find("```json") {
-        if let Some(end_idx) = text[idx + 7..].find("```") {
+    if let Some(idx) = text.find("```json")
+        && let Some(end_idx) = text[idx + 7..].find("```") {
             let json_slice = &text[idx + 7..idx + 7 + end_idx];
             if let Ok(parsed) = serde_json::from_str::<ReviewOutputEvent>(json_slice) {
                 return parsed;
             }
         }
-    }
 
     ReviewOutputEvent {
         findings: Vec::new(),
@@ -4240,15 +4225,14 @@ async fn run_agent(
                         (ResponseItem::Message { role, .. }, None) if role == "assistant" => {
                             // If the model returned a message, we need to record it.
                             items_to_record_in_conversation_history.push(item.clone());
-                            if is_review_mode {
-                                if let ResponseItem::Message { content, .. } = &item {
+                            if is_review_mode
+                                && let ResponseItem::Message { content, .. } = &item {
                                     for ci in content {
                                         if let ContentItem::OutputText { text } = ci {
                                             review_messages.push(text.clone());
                                         }
                                     }
                                 }
-                            }
                         }
                         (
                             ResponseItem::LocalShellCall { .. },
@@ -4296,7 +4280,7 @@ async fn run_agent(
                         ) => {
                             items_to_record_in_conversation_history.push(item.clone());
                             let output =
-                                convert_call_tool_result_to_function_call_output_payload(&result);
+                                convert_call_tool_result_to_function_call_output_payload(result);
                             items_to_record_in_conversation_history.push(
                                 ResponseItem::FunctionCallOutput {
                                     call_id: call_id.clone(),
@@ -4343,13 +4327,12 @@ async fn run_agent(
                 }
 
                 // If there are responses, add them to pending input for the next iteration
-                if !responses.is_empty() {
-                    if !is_review_mode {
+                if !responses.is_empty()
+                    && !is_review_mode {
                         for response in &responses {
                             sess.add_pending_input(response.clone());
                         }
                     }
-                }
 
                 if responses.is_empty() {
                     debug!("Turn completed");
@@ -4409,13 +4392,10 @@ async fn run_agent(
             last_agent_message: last_task_message,
         }),
     );
-    match &event.msg {
-        EventMsg::TaskComplete(TaskCompleteEvent {
+    if let EventMsg::TaskComplete(TaskCompleteEvent {
             last_agent_message: Some(m),
-        }) => {
-            tracing::info!("core.emit TaskComplete last_agent_message.len={}", m.len());
-        }
-        _ => {}
+        }) = &event.msg {
+        tracing::info!("core.emit TaskComplete last_agent_message.len={}", m.len());
     }
     sess.tx_event.send(event).await.ok();
 
@@ -4529,11 +4509,11 @@ async fn run_turn(
             Err(CodexErr::Interrupted) => return Err(CodexErr::Interrupted),
             Err(CodexErr::EnvVar(var)) => return Err(CodexErr::EnvVar(var)),
             Err(e @ (CodexErr::UsageLimitReached(_) | CodexErr::UsageNotIncluded)) => {
-                if let CodexErr::UsageLimitReached(limit_err) = &e {
-                    if let Some(ctx) = account_usage_context(&sess) {
+                if let CodexErr::UsageLimitReached(limit_err) = &e
+                    && let Some(ctx) = account_usage_context(sess) {
                         let usage_home = ctx.codex_home.clone();
                         let usage_account = ctx.account_id.clone();
-                        let usage_plan = ctx.plan.clone();
+                        let usage_plan = ctx.plan;
                         let resets = limit_err.resets_in_seconds;
                         spawn_usage_task(move || {
                             if let Err(err) = account_usage::record_usage_limit_hint(
@@ -4547,13 +4527,12 @@ async fn run_turn(
                             }
                         });
                     }
-                }
                 return Err(e);
             }
             Err(e) => {
                 // Detect context-window overflow and auto-run a compact summarization once
-                if !did_auto_compact {
-                    if let CodexErr::Stream(msg, _maybe_delay) = &e {
+                if !did_auto_compact
+                    && let CodexErr::Stream(msg, _maybe_delay) = &e {
                         let lower = msg.to_ascii_lowercase();
                         let looks_like_context_overflow = lower
                             .contains("exceeds the context window")
@@ -4577,8 +4556,8 @@ async fn run_turn(
 
                             let previous_input_snapshot = input.clone();
                             let compacted_history = compact::run_inline_auto_compact_task(
-                                Arc::clone(&sess),
-                                Arc::clone(&turn_context),
+                                Arc::clone(sess),
+                                Arc::clone(turn_context),
                             )
                             .await;
 
@@ -4613,7 +4592,6 @@ async fn run_turn(
                             continue;
                         }
                     }
-                }
 
                 // Use the configured provider-specific stream retry budget.
                 let max_retries = tc.client.get_provider().stream_max_retries();
@@ -4701,8 +4679,7 @@ async fn run_turn(
                                 };
                                 let tail = &s[start_idx..];
                                 hint.push_str(&format!(
-                                    "Last reasoning summary fragment:\n{}\n\n",
-                                    tail
+                                    "Last reasoning summary fragment:\n{tail}\n\n"
                                 ));
                             }
                             if !sp.partial_assistant_text.is_empty() {
@@ -4719,8 +4696,7 @@ async fn run_turn(
                                 };
                                 let tail = &s[start_idx..];
                                 hint.push_str(&format!(
-                                    "Last assistant text fragment:\n{}\n",
-                                    tail
+                                    "Last assistant text fragment:\n{tail}\n"
                                 ));
                             }
                             attempt_input.push(ResponseItem::Message {
@@ -4869,7 +4845,7 @@ async fn try_run_turn(
                 }
             })
             .map(|call_id| ResponseItem::CustomToolCallOutput {
-                call_id: call_id.clone(),
+                call_id,
                 output: "aborted".to_string(),
             })
             .collect::<Vec<_>>()
@@ -4930,7 +4906,7 @@ async fn try_run_turn(
                 .await?;
 
                 // Save into scratchpad so we can seed a retry if the stream drops later.
-                sess.scratchpad_push(&item, &response, &sub_id);
+                sess.scratchpad_push(&item, &response, sub_id);
 
                 // If this was a finalized assistant message, clear partial text buffer
                 if let ResponseItem::Message { .. } = &item {
@@ -4945,7 +4921,7 @@ async fn try_run_turn(
                 let ctx = ToolCallCtx::new(sub_id.to_string(), call_id.clone(), None, None);
                 let order = ctx.order_meta(attempt_req);
                 let ev = sess.make_event_with_order(
-                    &sub_id,
+                    sub_id,
                     EventMsg::WebSearchBegin(WebSearchBeginEvent {
                         call_id,
                         query: None,
@@ -4959,7 +4935,7 @@ async fn try_run_turn(
                 let ctx = ToolCallCtx::new(sub_id.to_string(), call_id.clone(), None, None);
                 let order = ctx.order_meta(attempt_req);
                 let ev = sess.make_event_with_order(
-                    &sub_id,
+                    sub_id,
                     EventMsg::WebSearchComplete(WebSearchCompleteEvent { call_id, query }),
                     order,
                     None,
@@ -4992,16 +4968,16 @@ async fn try_run_turn(
                         rate_limits,
                     };
                     sess.tx_event
-                        .send(sess.make_event(&sub_id, EventMsg::TokenCount(payload)))
+                        .send(sess.make_event(sub_id, EventMsg::TokenCount(payload)))
                         .await
                         .ok();
                 }
 
-                if let Some(usage) = token_usage.as_ref() {
-                    if let Some(ctx) = account_usage_context(sess) {
+                if let Some(usage) = token_usage.as_ref()
+                    && let Some(ctx) = account_usage_context(sess) {
                         let usage_home = ctx.codex_home.clone();
                         let usage_account = ctx.account_id.clone();
-                        let usage_plan = ctx.plan.clone();
+                        let usage_plan = ctx.plan;
                         let usage_clone = usage.clone();
                         spawn_usage_task(move || {
                             if let Err(err) = account_usage::record_token_usage(
@@ -5015,12 +4991,11 @@ async fn try_run_turn(
                             }
                         });
                     }
-                }
 
                 let unified_diff = turn_diff_tracker.get_unified_diff();
                 if let Ok(Some(unified_diff)) = unified_diff {
                     let msg = EventMsg::TurnDiff(TurnDiffEvent { unified_diff });
-                    let _ = sess.tx_event.send(sess.make_event(&sub_id, msg)).await;
+                    let _ = sess.tx_event.send(sess.make_event(sub_id, msg)).await;
                 }
 
                 return Ok(output);
@@ -5067,7 +5042,7 @@ async fn try_run_turn(
                 // Use the item_id if present, otherwise fall back to sub_id
                 let mut event_id = item_id.unwrap_or_else(|| sub_id.to_string());
                 if let Some(si) = summary_index {
-                    event_id = format!("{}#s{}", event_id, si);
+                    event_id = format!("{event_id}#s{si}");
                 }
                 let order = crate::protocol::OrderMeta {
                     request_ordinal: attempt_req,
@@ -5089,7 +5064,7 @@ async fn try_run_turn(
             }
             ResponseEvent::ReasoningSummaryPartAdded => {
                 let stamped = sess.make_event(
-                    &sub_id,
+                    sub_id,
                     EventMsg::AgentReasoningSectionBreak(AgentReasoningSectionBreakEvent {}),
                 );
                 sess.tx_event.send(stamped).await.ok();
@@ -5105,7 +5080,7 @@ async fn try_run_turn(
                     // Use the item_id if present, otherwise fall back to sub_id
                     let mut event_id = item_id.unwrap_or_else(|| sub_id.to_string());
                     if let Some(ci) = content_index {
-                        event_id = format!("{}#c{}", event_id, ci);
+                        event_id = format!("{event_id}#c{ci}");
                     }
                     let order = crate::protocol::OrderMeta {
                         request_ordinal: attempt_req,
@@ -5196,7 +5171,7 @@ async fn handle_response_item(
                 let text = match item {
                     ReasoningItemReasoningSummary::SummaryText { text } => text,
                 };
-                let eid = format!("{}#s{}", event_id, i);
+                let eid = format!("{event_id}#s{i}");
                 let order = crate::protocol::OrderMeta {
                     request_ordinal: attempt_req,
                     output_index,
@@ -5322,7 +5297,7 @@ async fn handle_response_item(
             if let WebSearchAction::Search { query } = action {
                 let call_id = id.unwrap_or_else(|| "".to_string());
                 let event = sess.make_event_with_hint(
-                    &sub_id,
+                    sub_id,
                     EventMsg::WebSearchComplete(WebSearchCompleteEvent {
                         call_id,
                         query: Some(query),
@@ -5534,7 +5509,7 @@ async fn handle_browser_cleanup(sess: &Session, ctx: &ToolCallCtx) -> ResponseIn
                     Err(e) => ResponseInputItem::FunctionCallOutput {
                         call_id: call_id_clone,
                         output: FunctionCallOutputPayload {
-                            content: format!("Cleanup failed: {}", e),
+                            content: format!("Cleanup failed: {e}"),
                             success: Some(false),
                         },
                     },
@@ -5563,8 +5538,8 @@ async fn handle_web_fetch(
     // Include raw params in begin event for observability
     let mut params_for_event = serde_json::from_str::<serde_json::Value>(&arguments).ok();
     // If call_id is provided, include a friendly "for" string with the command we are waiting on
-    if let Some(serde_json::Value::Object(map)) = params_for_event.as_mut() {
-        if let Some(serde_json::Value::String(cid)) = map.get("call_id") {
+    if let Some(serde_json::Value::Object(map)) = params_for_event.as_mut()
+        && let Some(serde_json::Value::String(cid)) = map.get("call_id") {
             let st = sess.state.lock().unwrap();
             if let Some(bg) = st.background_execs.get(cid) {
                 map.insert(
@@ -5573,7 +5548,6 @@ async fn handle_web_fetch(
                 );
             }
         }
-    }
     let arguments_clone = arguments.clone();
     let call_id_clone = ctx.call_id.clone();
 
@@ -5653,7 +5627,7 @@ async fn handle_web_fetch(
                         Ok(Ok(val)) => {
                             let count = val
                                 .get("value")
-                                .and_then(|v| v.as_i64())
+                                .and_then(serde_json::Value::as_i64)
                                 .unwrap_or(0);
                             if count > 0 {
                                 break;
@@ -5719,8 +5693,8 @@ async fn handle_web_fetch(
   return (discuss.length + timeline.length + article.length);
 })()"#;
 
-                if prefer_global {
-                    if let Some(manager) = codex_browser::global::get_browser_manager().await {
+                if prefer_global
+                    && let Some(manager) = codex_browser::global::get_browser_manager().await {
                         if manager.is_enabled_sync() {
                             match tokio::time::timeout(timeout, manager.goto(url)).await {
                                 Ok(Ok(res)) => {
@@ -5729,7 +5703,7 @@ async fn handle_web_fetch(
                                             Ok(Ok(val)) => {
                                                 let count = val
                                                     .get("value")
-                                                    .and_then(|v| v.as_i64())
+                                                    .and_then(serde_json::Value::as_i64)
                                                     .unwrap_or(0);
                                                 if count > 0 {
                                                     break;
@@ -5753,15 +5727,13 @@ async fn handle_web_fetch(
                                                 .get("value")
                                                 .and_then(|v| v.get("html"))
                                                 .and_then(|v| v.as_str())
-                                            {
-                                                if !html.trim().is_empty() {
+                                                && !html.trim().is_empty() {
                                                     return Some(BrowserFetchOutcome {
                                                         html: html.to_string(),
                                                         final_url: Some(res.url.clone()),
                                                         headless: false,
                                                     });
                                                 }
-                                            }
                                         }
                                         Ok(Err(e)) => {
                                             tracing::debug!("Global browser HTML extraction failed: {}", e);
@@ -5782,7 +5754,6 @@ async fn handle_web_fetch(
                             tracing::debug!("Global browser manager disabled; skipping UI fetch");
                         }
                     }
-                }
 
                 match fetch_html_via_headless_browser(url, timeout).await {
                     Ok(outcome) => Some(outcome),
@@ -5826,7 +5797,7 @@ async fn handle_web_fetch(
                 // This avoids allocating lowercase copies and accidentally using
                 // indices from a different string representation.
                 fn eq_ascii_ci(a: u8, b: u8) -> bool {
-                    a.to_ascii_lowercase() == b.to_ascii_lowercase()
+                    a.eq_ignore_ascii_case(&b)
                 }
                 fn starts_with_tag_ci(bytes: &[u8], tag: &[u8]) -> bool {
                     if bytes.len() < tag.len() { return false; }
@@ -5925,8 +5896,7 @@ async fn handle_web_fetch(
                                 while j < bytes.len() && bytes[j] != b'>' { j += 1; }
                                 if j < bytes.len() { Some((i, j + 1)) } else { None }
                             } else { None }
-                        } else { None }
-                            .map(|pair| return pair);
+                        } else { None };
                         i += 1;
                     }
                     None
@@ -5936,8 +5906,8 @@ async fn handle_web_fetch(
                 let mut i = after_open;
                 let tag_close = b"</main";
                 while i + tag_close.len() + 1 < bytes.len() {
-                    if bytes[i] == b'<' && bytes[i+1] == b'/' {
-                        if bytes[i..].len() >= tag_close.len() && bytes[i..i+tag_close.len()].eq_ignore_ascii_case(tag_close) {
+                    if bytes[i] == b'<' && bytes[i+1] == b'/'
+                        && bytes[i..].len() >= tag_close.len() && bytes[i..i+tag_close.len()].eq_ignore_ascii_case(tag_close) {
                             // Find closing '>'
                             let mut j = i + tag_close.len();
                             while j < bytes.len() && bytes[j] != b'>' { j += 1; }
@@ -5947,7 +5917,6 @@ async fn handle_web_fetch(
                                 return Some(html[start..].to_string());
                             }
                         }
-                    }
                     i += 1;
                 }
                 Some(html[start..].to_string())
@@ -6041,7 +6010,7 @@ async fn handle_web_fetch(
                 fn extract_ld_json(html: &str) -> Option<serde_json::Value> {
                     let mut s = html;
                     loop {
-                        let start = s.find("<script").map(|i| i)?;
+                        let start = s.find("<script")?;
                         let rest = &s[start + 7..];
                         if rest.to_lowercase().contains("type=\"application/ld+json\"") {
                             // Find end of script open tag
@@ -6055,11 +6024,10 @@ async fn handle_web_fetch(
                                     return Some(v);
                                 }
                                 // Some pages JSON-encode the JSON-LD; try to unescape once
-                                if let Ok(un) = serde_json::from_str::<String>(json_str) {
-                                    if let Ok(v2) = serde_json::from_str::<serde_json::Value>(&un) {
+                                if let Ok(un) = serde_json::from_str::<String>(json_str)
+                                    && let Ok(v2) = serde_json::from_str::<serde_json::Value>(&un) {
                                         return Some(v2);
                                     }
-                                }
                                 // Advance after this script to search for next
                                 s = &after_open[close_rel + 9..];
                                 continue;
@@ -6107,14 +6075,13 @@ async fn handle_web_fetch(
                 let mut issue_body_md: Option<String> = None;
                 let mut opened_by: Option<String> = None;
                 let mut opened_at: Option<String> = None;
-                if let Some(ld) = extract_ld_json(html) {
-                    if ld.get("@type").and_then(|v| v.as_str()) == Some("DiscussionForumPosting") {
-                        title = ld.get("headline").and_then(|v| v.as_str()).map(|s| s.to_string());
-                        issue_body_md = ld.get("articleBody").and_then(|v| v.as_str()).map(|s| s.to_string());
-                        opened_by = ld.get("author").and_then(|a| a.get("name")).and_then(|v| v.as_str()).map(|s| s.to_string());
-                        opened_at = ld.get("datePublished").and_then(|v| v.as_str()).map(|s| s.to_string());
+                if let Some(ld) = extract_ld_json(html)
+                    && ld.get("@type").and_then(|v| v.as_str()) == Some("DiscussionForumPosting") {
+                        title = ld.get("headline").and_then(|v| v.as_str()).map(std::string::ToString::to_string);
+                        issue_body_md = ld.get("articleBody").and_then(|v| v.as_str()).map(std::string::ToString::to_string);
+                        opened_by = ld.get("author").and_then(|a| a.get("name")).and_then(|v| v.as_str()).map(std::string::ToString::to_string);
+                        opened_at = ld.get("datePublished").and_then(|v| v.as_str()).map(std::string::ToString::to_string);
                     }
-                }
 
                 // Parse GraphQL payload for comments and state
                 let arr_str = extract_json_array_after(html, "\"preloadedQueries\"")?;
@@ -6128,8 +6095,8 @@ async fn handle_web_fetch(
                         let issue = repo.and_then(|r| r.get("issue"));
                         if let Some(issue) = issue {
                             if state.is_none() {
-                                state = issue.get("state").and_then(|v| v.as_str()).map(|s| s.to_string());
-                                state_reason = issue.get("stateReason").and_then(|v| v.as_str()).map(|s| s.to_string());
+                                state = issue.get("state").and_then(|v| v.as_str()).map(std::string::ToString::to_string);
+                                state_reason = issue.get("stateReason").and_then(|v| v.as_str()).map(std::string::ToString::to_string);
                             }
                             if let Some(edges) = issue.get("frontTimelineItems").and_then(|v| v.get("edges")).and_then(|v| v.as_array()) {
                                 for e in edges {
@@ -6166,14 +6133,14 @@ async fn handle_web_fetch(
 
                 // Compose readable markdown
                 let mut out = String::new();
-                if let Some(t) = title { out.push_str(&format!("# {}\n\n", t)); }
-                if let (Some(by), Some(at)) = (opened_by, opened_at) { out.push_str(&format!("Opened by {} on {}\n\n", by, at)); }
-                if let (Some(s), _) = (state.clone(), state_reason.clone()) { out.push_str(&format!("State: {}\n\n", s)); }
-                if let Some(body) = issue_body_md { out.push_str(&format!("{}\n\n", body)); }
+                if let Some(t) = title { out.push_str(&format!("# {t}\n\n")); }
+                if let (Some(by), Some(at)) = (opened_by, opened_at) { out.push_str(&format!("Opened by {by} on {at}\n\n")); }
+                if let (Some(s), _) = (state, state_reason) { out.push_str(&format!("State: {s}\n\n")); }
+                if let Some(body) = issue_body_md { out.push_str(&format!("{body}\n\n")); }
                 if !comments.is_empty() {
                     out.push_str("## Comments\n\n");
                     for (author, created, body) in comments {
-                        out.push_str(&format!("- {} — {}\n\n{}\n\n", author, created, body));
+                        out.push_str(&format!("- {author} — {created}\n\n{body}\n\n"));
                     }
                 }
                 Some(out)
@@ -6242,8 +6209,8 @@ async fn handle_web_fetch(
             let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(15000));
             let codex_ua = crate::default_client::get_codex_user_agent(Some("web_fetch"));
 
-            if matches!(params.mode.as_deref(), Some("browser")) {
-                if let Some(browser_fetch) = fetch_html_via_browser(&params.url, timeout, true).await {
+            if matches!(params.mode.as_deref(), Some("browser"))
+                && let Some(browser_fetch) = fetch_html_via_browser(&params.url, timeout, true).await {
                     let (markdown, truncated) = match convert_html_to_markdown_trimmed(browser_fetch.html, 120_000) {
                         Ok(t) => t,
                         Err(e) => {
@@ -6270,7 +6237,6 @@ async fn handle_web_fetch(
                         output: FunctionCallOutputPayload { content: body.to_string(), success: Some(true) },
                     };
                 }
-            }
             // Attempt 1: Codex UA + polite headers
             let resp = match do_request(&params.url, &codex_ua, timeout, None).await {
                 Ok(r) => r,
@@ -6330,11 +6296,11 @@ async fn handle_web_fetch(
                 let retry_after = headers
                     .get(reqwest::header::RETRY_AFTER)
                     .and_then(|v| v.to_str().ok())
-                    .map(|s| s.to_string());
+                    .map(std::string::ToString::to_string);
                 let cf_ray = headers
                     .get("cf-ray")
                     .and_then(|v| v.to_str().ok())
-                    .map(|s| s.to_string());
+                    .map(std::string::ToString::to_string);
 
                 let mut diag = serde_json::json!({
                     "final_url": final_url,
@@ -6404,11 +6370,11 @@ async fn handle_web_fetch(
                 let retry_after = headers
                     .get(reqwest::header::RETRY_AFTER)
                     .and_then(|v| v.to_str().ok())
-                    .map(|s| s.to_string());
+                    .map(std::string::ToString::to_string);
                 let cf_ray = headers
                     .get("cf-ray")
                     .and_then(|v| v.to_str().ok())
-                    .map(|s| s.to_string());
+                    .map(std::string::ToString::to_string);
 
                 let mut diag = serde_json::json!({
                     "final_url": final_url,
@@ -6441,8 +6407,8 @@ async fn handle_web_fetch(
             }
 
             // Domain-specific extraction first (e.g., GitHub issues)
-            if params.url.contains("github.com/") && params.url.contains("/issues/") {
-                if let Some(md) = try_extract_github_issue_markdown(&body_text) {
+            if params.url.contains("github.com/") && params.url.contains("/issues/")
+                && let Some(md) = try_extract_github_issue_markdown(&body_text) {
                     let body = serde_json::json!({
                         "url": params.url,
                         "status": status.as_u16(),
@@ -6454,7 +6420,6 @@ async fn handle_web_fetch(
                     });
                     return ResponseInputItem::FunctionCallOutput { call_id: call_id_clone, output: FunctionCallOutputPayload { content: body.to_string(), success: Some(true) } };
                 }
-            }
 
             // Success: convert to markdown (sanitized and size-limited)
             let (markdown, truncated) = match convert_html_to_markdown_trimmed(body_text, 120_000) {
@@ -6535,8 +6500,8 @@ async fn handle_wait(sess: &Session, ctx: &ToolCallCtx, arguments: String) -> Re
         timeout_ms: Option<u64>,
     }
     let mut params_for_event = serde_json::from_str::<serde_json::Value>(&arguments).ok();
-    if let Some(serde_json::Value::Object(map)) = params_for_event.as_mut() {
-        if let Some(serde_json::Value::String(cid)) = map.get("call_id") {
+    if let Some(serde_json::Value::Object(map)) = params_for_event.as_mut()
+        && let Some(serde_json::Value::String(cid)) = map.get("call_id") {
             let st = sess.state.lock().unwrap();
             if let Some(bg) = st.background_execs.get(cid) {
                 map.insert(
@@ -6545,7 +6510,6 @@ async fn handle_wait(sess: &Session, ctx: &ToolCallCtx, arguments: String) -> Re
                 );
             }
         }
-    }
     let arguments_clone = arguments.clone();
     let ctx_clone = ToolCallCtx::new(
         ctx.sub_id.clone(),
@@ -6567,7 +6531,7 @@ async fn handle_wait(sess: &Session, ctx: &ToolCallCtx, arguments: String) -> Re
                     return ResponseInputItem::FunctionCallOutput {
                         call_id: ctx_inner.call_id.clone(),
                         output: FunctionCallOutputPayload {
-                            content: format!("Invalid wait arguments: {}", e),
+                            content: format!("Invalid wait arguments: {e}"),
                             success: Some(false),
                         },
                     };
@@ -6621,7 +6585,7 @@ async fn handle_wait(sess: &Session, ctx: &ToolCallCtx, arguments: String) -> Re
                         return ResponseInputItem::FunctionCallOutput {
                             call_id: ctx_inner.call_id.clone(),
                             output: FunctionCallOutputPayload {
-                                content: format!("No background job found for call_id={}", cid),
+                                content: format!("No background job found for call_id={cid}"),
                                 success: Some(false),
                             },
                         };
@@ -6638,17 +6602,13 @@ async fn handle_wait(sess: &Session, ctx: &ToolCallCtx, arguments: String) -> Re
                     )
                     .await;
                     if raced.is_err() {
-                        let tail_text = tail
-                            .and_then(|arc| {
-                                Some(String::from_utf8_lossy(&arc.lock().unwrap()).to_string())
-                            })
+                        let tail_text = tail.map(|arc| String::from_utf8_lossy(&arc.lock().unwrap()).to_string())
                             .unwrap_or_default();
                         let msg = if tail_text.is_empty() {
-                            format!("Background job {} still running...", cid)
+                            format!("Background job {cid} still running...")
                         } else {
                             format!(
-                                "Background job {} still running...\n\nOutput so far (tail):\n{}",
-                                cid, tail_text
+                                "Background job {cid} still running...\n\nOutput so far (tail):\n{tail_text}"
                             )
                         };
                         if let Some(flag) = &suppress_flag {
@@ -6904,7 +6864,7 @@ async fn handle_kill(sess: &Session, ctx: &ToolCallCtx, arguments: String) -> Re
             let status = if cmd_display.trim().is_empty() {
                 format!("Killed background job {}", parsed.call_id)
             } else {
-                format!("Killed background command: {}", cmd_display)
+                format!("Killed background command: {cmd_display}")
             };
 
             ResponseInputItem::FunctionCallOutput {
@@ -7112,14 +7072,13 @@ pub(crate) async fn handle_run_agent(
                                     continue;
                                 }
                                 let candidate = dir.join(cmd);
-                                if let Ok(meta) = std::fs::metadata(&candidate) {
-                                    if meta.is_file() {
+                                if let Ok(meta) = std::fs::metadata(&candidate)
+                                    && meta.is_file() {
                                         let mode = meta.permissions().mode();
                                         if mode & 0o111 != 0 {
                                             return true;
                                         }
                                     }
-                                }
                             }
                             false
                         }
@@ -7149,7 +7108,7 @@ pub(crate) async fn handle_run_agent(
                             let (cmd_to_check, is_builtin) =
                                 resolve_command_for_check(&model, Some(config));
                             if !is_builtin && !command_exists(&cmd_to_check) {
-                                skipped.push(format!("{} (missing: {})", model, cmd_to_check));
+                                skipped.push(format!("{model} (missing: {cmd_to_check})"));
                                 continue;
                             }
 
@@ -7174,7 +7133,7 @@ pub(crate) async fn handle_run_agent(
                             let (cmd_to_check, is_builtin) =
                                 resolve_command_for_check(&model, None);
                             if !is_builtin && !command_exists(&cmd_to_check) {
-                                skipped.push(format!("{} (missing: {})", model, cmd_to_check));
+                                skipped.push(format!("{model} (missing: {cmd_to_check})"));
                                 continue;
                             }
                             let read_only = resolve_agent_read_only(params.read_only, None);
@@ -7212,7 +7171,7 @@ pub(crate) async fn handle_run_agent(
 
                     // Send agent status update event
                     drop(manager); // Release the write lock first
-                    if agent_ids.len() > 0 {
+                    if !agent_ids.is_empty() {
                         send_agent_status_update(sess).await;
                     }
 
@@ -7244,7 +7203,7 @@ pub(crate) async fn handle_run_agent(
                 Err(e) => ResponseInputItem::FunctionCallOutput {
                     call_id: call_id_clone,
                     output: FunctionCallOutputPayload {
-                        content: format!("Invalid agent_run arguments: {}", e),
+                        content: format!("Invalid agent_run arguments: {e}"),
                         success: None,
                     },
                 },
@@ -7298,8 +7257,7 @@ async fn handle_check_agent_status(
                                         call_id: call_id_clone,
                                         output: FunctionCallOutputPayload {
                                             content: format!(
-                                                "Failed to prepare agent progress file: {}",
-                                                e
+                                                "Failed to prepare agent progress file: {e}"
                                             ),
                                             success: Some(false),
                                         },
@@ -7323,8 +7281,7 @@ async fn handle_check_agent_status(
                                             call_id: call_id_clone,
                                             output: FunctionCallOutputPayload {
                                                 content: format!(
-                                                    "Failed to write progress file: {}",
-                                                    e
+                                                    "Failed to write progress file: {e}"
                                                 ),
                                                 success: Some(false),
                                             },
@@ -7371,7 +7328,7 @@ async fn handle_check_agent_status(
                 Err(e) => ResponseInputItem::FunctionCallOutput {
                     call_id: call_id_clone,
                     output: FunctionCallOutputPayload {
-                        content: format!("Invalid agent_check arguments: {}", e),
+                        content: format!("Invalid agent_check arguments: {e}"),
                         success: None,
                     },
                 },
@@ -7408,8 +7365,7 @@ async fn handle_get_agent_result(
                                     call_id: call_id_clone,
                                     output: FunctionCallOutputPayload {
                                         content: format!(
-                                            "Failed to prepare agent output dir: {}",
-                                            e
+                                            "Failed to prepare agent output dir: {e}"
                                         ),
                                         success: Some(false),
                                     },
@@ -7427,7 +7383,7 @@ async fn handle_get_agent_result(
                                 let file_path =
                                     match write_agent_file(&dir, "result.txt", &output_text) {
                                         Ok(p) => p.display().to_string(),
-                                        Err(e) => format!("Failed to write result file: {}", e),
+                                        Err(e) => format!("Failed to write result file: {e}"),
                                     };
                                 let response = serde_json::json!({
                                     "agent_id": params.agent_id,
@@ -7452,7 +7408,7 @@ async fn handle_get_agent_result(
                                 let file_path =
                                     match write_agent_file(&dir, "error.txt", &error_text) {
                                         Ok(p) => p.display().to_string(),
-                                        Err(e) => format!("Failed to write error file: {}", e),
+                                        Err(e) => format!("Failed to write error file: {e}"),
                                     };
                                 let response = serde_json::json!({
                                     "agent_id": params.agent_id,
@@ -7494,7 +7450,7 @@ async fn handle_get_agent_result(
                 Err(e) => ResponseInputItem::FunctionCallOutput {
                     call_id: call_id_clone,
                     output: FunctionCallOutputPayload {
-                        content: format!("Invalid agent_result arguments: {}", e),
+                        content: format!("Invalid agent_result arguments: {e}"),
                         success: None,
                     },
                 },
@@ -7527,7 +7483,7 @@ async fn handle_cancel_agent(
                             ResponseInputItem::FunctionCallOutput {
                                 call_id: call_id_clone,
                                 output: FunctionCallOutputPayload {
-                                    content: format!("Agent {} cancelled", agent_id),
+                                    content: format!("Agent {agent_id} cancelled"),
                                     success: Some(true),
                                 },
                             }
@@ -7535,7 +7491,7 @@ async fn handle_cancel_agent(
                             ResponseInputItem::FunctionCallOutput {
                                 call_id: call_id_clone,
                                 output: FunctionCallOutputPayload {
-                                    content: format!("Failed to cancel agent {}", agent_id),
+                                    content: format!("Failed to cancel agent {agent_id}"),
                                     success: Some(false),
                                 },
                             }
@@ -7546,8 +7502,7 @@ async fn handle_cancel_agent(
                             call_id: call_id_clone,
                             output: FunctionCallOutputPayload {
                                 content: format!(
-                                    "Cancelled {} agents in batch {}",
-                                    count, batch_id
+                                    "Cancelled {count} agents in batch {batch_id}"
                                 ),
                                 success: Some(true),
                             },
@@ -7565,7 +7520,7 @@ async fn handle_cancel_agent(
                 Err(e) => ResponseInputItem::FunctionCallOutput {
                     call_id: call_id_clone,
                     output: FunctionCallOutputPayload {
-                        content: format!("Invalid agent_cancel arguments: {}", e),
+                        content: format!("Invalid agent_cancel arguments: {e}"),
                         success: None,
                     },
                 },
@@ -7609,8 +7564,8 @@ async fn handle_wait_for_agent(
                 let manager = AGENT_MANAGER.read().await;
 
                 if let Some(agent_id) = &params.agent_id {
-                    if let Some(agent) = manager.get_agent(agent_id) {
-                        if matches!(
+                    if let Some(agent) = manager.get_agent(agent_id)
+                        && matches!(
                             agent.status,
                             AgentStatus::Completed | AgentStatus::Failed | AgentStatus::Cancelled
                         ) {
@@ -7623,7 +7578,7 @@ async fn handle_wait_for_agent(
                                     let (p, total) = preview_first_n_lines(&text, 500);
                                     let fp = write_agent_file(&dir, "result.txt", &text)
                                         .map(|p| p.display().to_string())
-                                        .unwrap_or_else(|e| format!("Failed to write result file: {}", e));
+                                        .unwrap_or_else(|e| format!("Failed to write result file: {e}"));
                                     ("output_preview", "output_file", p, fp, total)
                                 }
                                 AgentStatus::Failed => {
@@ -7631,7 +7586,7 @@ async fn handle_wait_for_agent(
                                     let (p, total) = preview_first_n_lines(&text, 500);
                                     let fp = write_agent_file(&dir, "error.txt", &text)
                                         .map(|p| p.display().to_string())
-                                        .unwrap_or_else(|e| format!("Failed to write error file: {}", e));
+                                        .unwrap_or_else(|e| format!("Failed to write error file: {e}"));
                                     ("error_preview", "error_file", p, fp, total)
                                 }
                                 AgentStatus::Cancelled => {
@@ -7639,7 +7594,7 @@ async fn handle_wait_for_agent(
                                     let (p, total) = preview_first_n_lines(&text, 500);
                                     let fp = write_agent_file(&dir, "status.txt", &text)
                                         .map(|p| p.display().to_string())
-                                        .unwrap_or_else(|e| format!("Failed to write status file: {}", e));
+                                        .unwrap_or_else(|e| format!("Failed to write status file: {e}"));
                                     ("status_preview", "status_file", p, fp, total)
                                 }
                                 _ => unreachable!(),
@@ -7663,7 +7618,6 @@ async fn handle_wait_for_agent(
                                 },
                             };
                         }
-                    }
                 } else if let Some(batch_id) = &params.batch_id {
                     let agents = manager.list_agents(None, Some(batch_id.clone()), false);
 
@@ -7729,7 +7683,7 @@ async fn handle_wait_for_agent(
                                     let (p, total) = preview_first_n_lines(&text, 500);
                                     let fp = write_agent_file(&dir, "result.txt", &text)
                                         .map(|p| p.display().to_string())
-                                        .unwrap_or_else(|e| format!("Failed to write result file: {}", e));
+                                        .unwrap_or_else(|e| format!("Failed to write result file: {e}"));
                                     ("output_preview", "output_file", p, fp, total)
                                 }
                                 AgentStatus::Failed => {
@@ -7737,7 +7691,7 @@ async fn handle_wait_for_agent(
                                     let (p, total) = preview_first_n_lines(&text, 500);
                                     let fp = write_agent_file(&dir, "error.txt", &text)
                                         .map(|p| p.display().to_string())
-                                        .unwrap_or_else(|e| format!("Failed to write error file: {}", e));
+                                        .unwrap_or_else(|e| format!("Failed to write error file: {e}"));
                                     ("error_preview", "error_file", p, fp, total)
                                 }
                                 AgentStatus::Cancelled => {
@@ -7745,7 +7699,7 @@ async fn handle_wait_for_agent(
                                     let (p, total) = preview_first_n_lines(&text, 500);
                                     let fp = write_agent_file(&dir, "status.txt", &text)
                                         .map(|p| p.display().to_string())
-                                        .unwrap_or_else(|e| format!("Failed to write status file: {}", e));
+                                        .unwrap_or_else(|e| format!("Failed to write status file: {e}"));
                                     ("status_preview", "status_file", p, fp, total)
                                 }
                                 _ => unreachable!(),
@@ -7801,7 +7755,7 @@ async fn handle_wait_for_agent(
         Err(e) => ResponseInputItem::FunctionCallOutput {
             call_id: call_id_clone,
             output: FunctionCallOutputPayload {
-                content: format!("Invalid wait_for_agent arguments: {}", e),
+                content: format!("Invalid wait_for_agent arguments: {e}"),
                 success: None,
             },
         },
@@ -7921,7 +7875,7 @@ async fn handle_list_agents(
                 Err(e) => ResponseInputItem::FunctionCallOutput {
                     call_id: call_id_clone,
                     output: FunctionCallOutputPayload {
-                        content: format!("Invalid list_agents arguments: {}", e),
+                        content: format!("Invalid list_agents arguments: {e}"),
                         success: None,
                     },
                 },
@@ -8000,9 +7954,9 @@ async fn handle_container_exec_with_params(
         }
 
         // 2) Split into simple commands at common separators.
-        for chunk in cleaned.split(|c| matches!(c, ';' | '\n' | '\r')) {
+        for chunk in cleaned.split([';', '\n', '\r']) {
             // Further split on conditional operators while keeping order.
-            for part in chunk.split(|c| matches!(c, '|' | '&')) {
+            for part in chunk.split(['|', '&']) {
                 let s = part.trim();
                 if s.is_empty() {
                     continue;
@@ -8104,7 +8058,7 @@ async fn handle_container_exec_with_params(
                     "checkout" => {
                         let args: Vec<&str> =
                             raw_tokens[i..].iter().map(|t| strip_tok(t)).collect();
-                        let has_path_delimiter = args.iter().any(|a| *a == "--");
+                        let has_path_delimiter = args.contains(&"--");
                         if has_path_delimiter {
                             return Some(SensitiveGitKind::PathCheckout);
                         }
@@ -8209,20 +8163,16 @@ async fn handle_container_exec_with_params(
     ) -> String {
         match kind {
             SensitiveGitKind::BranchChange => format!(
-                "Blocked git checkout/switch on a branch. Switching branches can discard or hide in-progress changes. Only continue if the user explicitly requested this branch change. Resend with 'confirm:' if you intend to proceed.\n\n{}: {}\nresend_exact_argv: {}",
-                original_label, original_value, suggested
+                "Blocked git checkout/switch on a branch. Switching branches can discard or hide in-progress changes. Only continue if the user explicitly requested this branch change. Resend with 'confirm:' if you intend to proceed.\n\n{original_label}: {original_value}\nresend_exact_argv: {suggested}"
             ),
             SensitiveGitKind::PathCheckout => format!(
-                "Blocked git checkout -- <paths>. This command overwrites local modifications to the specified files. Consider backing up the files first. If you intentionally want to discard those edits, resend the exact command prefixed with 'confirm:'.\n\n{}: {}\nresend_exact_argv: {}",
-                original_label, original_value, suggested
+                "Blocked git checkout -- <paths>. This command overwrites local modifications to the specified files. Consider backing up the files first. If you intentionally want to discard those edits, resend the exact command prefixed with 'confirm:'.\n\n{original_label}: {original_value}\nresend_exact_argv: {suggested}"
             ),
             SensitiveGitKind::Reset => format!(
-                "Blocked git reset. Reset rewrites the working tree/index and may delete local work. Consider backing up the files first. If backups exist and this was explicitly requested, resend prefixed with 'confirm:'.\n\n{}: {}\nresend_exact_argv: {}",
-                original_label, original_value, suggested
+                "Blocked git reset. Reset rewrites the working tree/index and may delete local work. Consider backing up the files first. If backups exist and this was explicitly requested, resend prefixed with 'confirm:'.\n\n{original_label}: {original_value}\nresend_exact_argv: {suggested}"
             ),
             SensitiveGitKind::Revert => format!(
-                "Blocked git revert. Reverting commits alters history and should only happen when the user asks for it. If that’s the case, resend the command with 'confirm:'.\n\n{}: {}\nresend_exact_argv: {}",
-                original_label, original_value, suggested
+                "Blocked git revert. Reverting commits alters history and should only happen when the user asks for it. If that’s the case, resend the command with 'confirm:'.\n\n{original_label}: {original_value}\nresend_exact_argv: {suggested}"
             ),
         }
     }
@@ -8269,7 +8219,7 @@ async fn handle_container_exec_with_params(
                     .unwrap_or_else(|_| "<failed to serialize suggested argv>".to_string());
                 let guidance = pattern.guidance("original_script", &script, &suggested);
 
-                sess.notify_background_event(&sub_id, format!("Command guard: {}", guidance))
+                sess.notify_background_event(&sub_id, format!("Command guard: {guidance}"))
                     .await;
 
                 return ResponseInputItem::FunctionCallOutput {
@@ -8320,9 +8270,9 @@ async fn handle_container_exec_with_params(
         }
 
         let dry_run_analysis = analyze_command(&params.command);
-        if !has_confirm_prefix {
-            if let Some(analysis) = dry_run_analysis.as_ref() {
-                if analysis.disposition == DryRunDisposition::Mutating {
+        if !has_confirm_prefix
+            && let Some(analysis) = dry_run_analysis.as_ref()
+                && analysis.disposition == DryRunDisposition::Mutating {
                     let needs_dry_run = {
                         let state = sess.state.lock().unwrap();
                         !state.dry_run_guard.has_recent_dry_run(analysis.key)
@@ -8353,8 +8303,6 @@ async fn handle_container_exec_with_params(
                         };
                     }
                 }
-            }
-        }
     }
 
     strip_leading_confirm_prefix(&mut params.command);
@@ -8404,8 +8352,8 @@ async fn handle_container_exec_with_params(
     // If no shell wrapper, perform a lightweight argv inspection for sensitive git commands.
     if extract_shell_script_from_wrapper(&params.command).is_none() {
         let joined = params.command.join(" ");
-        if !sess.confirm_guard.is_empty() {
-            if let Some(pattern) = sess.confirm_guard.matched_pattern(&joined) {
+        if !sess.confirm_guard.is_empty()
+            && let Some(pattern) = sess.confirm_guard.matched_pattern(&joined) {
                 let suggested = serde_json::to_string(&vec![
                     "bash".to_string(),
                     "-lc".to_string(),
@@ -8432,10 +8380,9 @@ async fn handle_container_exec_with_params(
                     },
                 };
             }
-        }
 
-        if let Some(analysis) = analyze_command(&params.command) {
-            if analysis.disposition == DryRunDisposition::Mutating {
+        if let Some(analysis) = analyze_command(&params.command)
+            && analysis.disposition == DryRunDisposition::Mutating {
                 let needs_dry_run = {
                     let state = sess.state.lock().unwrap();
                     !state.dry_run_guard.has_recent_dry_run(analysis.key)
@@ -8468,7 +8415,6 @@ async fn handle_container_exec_with_params(
                     };
                 }
             }
-        }
 
         fn strip_tok2(t: &str) -> &str {
             t.trim_matches(|c| matches!(c, '(' | ')' | '{' | '}' | '\'' | '"'))
@@ -8532,7 +8478,7 @@ async fn handle_container_exec_with_params(
                         .collect();
                     let kind = match sub {
                         "checkout" => {
-                            if args.iter().any(|a| *a == "--") {
+                            if args.contains(&"--") {
                                 Some(SensitiveGitKind::PathCheckout)
                             } else if args
                                 .iter()
@@ -8651,14 +8597,13 @@ async fn handle_container_exec_with_params(
                         }
                         content.push_str(&format!("stderr: {}", run.stderr));
                     }
-                    if let Some(summary) = run.harness_summary_json {
-                        if !summary.is_empty() {
+                    if let Some(summary) = run.harness_summary_json
+                        && !summary.is_empty() {
                             if !content.is_empty() {
                                 content.push('\n');
                             }
                             content.push_str(&summary);
                         }
-                    }
 
                     return ResponseInputItem::FunctionCallOutput {
                         call_id,
@@ -8892,7 +8837,7 @@ async fn handle_container_exec_with_params(
             if !suppress_event_flag_task.load(std::sync::atomic::Ordering::Relaxed) {
                 let label = display_label_task.trim();
                 let message = if label.is_empty() {
-                    format!("Background shell '{}' completed.", call_id_for_events)
+                    format!("Background shell '{call_id_for_events}' completed.")
                 } else {
                     format!("{} completed in background", display_label_task.clone())
                 };
@@ -8907,7 +8852,7 @@ async fn handle_container_exec_with_params(
 
                 if let Some(tx) = TX_SUB_GLOBAL.get() {
                     let header_label = if label.is_empty() {
-                        format!("call_id={}", call_id_for_events)
+                        format!("call_id={call_id_for_events}")
                     } else {
                         display_label_task.clone()
                     };
@@ -8922,7 +8867,7 @@ async fn handle_container_exec_with_params(
                         &call_id_for_events,
                         &full_body,
                     );
-                    let dev_text = format!("{}\n\n{}", header, body);
+                    let dev_text = format!("{header}\n\n{body}");
                     let _ = tx
                         .send(Submission {
                             id: uuid::Uuid::new_v4().to_string(),
@@ -8958,12 +8903,11 @@ async fn handle_container_exec_with_params(
         if let Some(done) = done_opt {
             let is_success = done.exit_code == 0;
             let mut content = format_exec_output_with_limit(sess, &sub_id, &call_id, &done);
-            if let Some(harness) = harness_summary_json.as_ref() {
-                if !harness.is_empty() {
+            if let Some(harness) = harness_summary_json.as_ref()
+                && !harness.is_empty() {
                     content.push('\n');
                     content.push_str(harness);
                 }
-            }
             return ResponseInputItem::FunctionCallOutput {
                 call_id: call_id.clone(),
                 output: FunctionCallOutputPayload {
@@ -8973,7 +8917,7 @@ async fn handle_container_exec_with_params(
             };
         } else {
             // Fallback (should not happen): indicate completion without detail
-            let msg = format!("Command completed.");
+            let msg = "Command completed.".to_string();
             return ResponseInputItem::FunctionCallOutput {
                 call_id: call_id.clone(),
                 output: FunctionCallOutputPayload {
@@ -8988,13 +8932,12 @@ async fn handle_container_exec_with_params(
     backgrounded.store(true, std::sync::atomic::Ordering::Relaxed);
     let tail = String::from_utf8_lossy(&tail_buf.lock().unwrap()).to_string();
     let header = format!(
-        "Command running in background (call_id={}).\nTo wait: wait(call_id=\"{}\")\nYou can continue other work or wait. You'll be notified when the command completes.",
-        call_id, call_id
+        "Command running in background (call_id={call_id}).\nTo wait: wait(call_id=\"{call_id}\")\nYou can continue other work or wait. You'll be notified when the command completes."
     );
     let msg = if tail.is_empty() {
         header
     } else {
-        format!("{}\n\nOutput so far (tail):\n{}", header, tail)
+        format!("{header}\n\nOutput so far (tail):\n{tail}")
     };
     ResponseInputItem::FunctionCallOutput {
         call_id: call_id.clone(),
@@ -9185,11 +9128,10 @@ fn truncate_middle_bytes(s: &str, max_bytes: usize) -> (String, bool, usize, usi
     // Safe prefix end on a char boundary, prefer last newline within budget.
     let prefix_end = {
         let mut end = left_budget.min(s.len());
-        if let Some(head) = s.get(..end) {
-            if let Some(i) = head.rfind('\n') {
+        if let Some(head) = s.get(..end)
+            && let Some(i) = head.rfind('\n') {
                 end = i + 1;
             }
-        }
         while end > 0 && !s.is_char_boundary(end) {
             end -= 1;
         }
@@ -9199,11 +9141,10 @@ fn truncate_middle_bytes(s: &str, max_bytes: usize) -> (String, bool, usize, usi
     // Safe suffix start on a char boundary, prefer first newline within budget.
     let suffix_start = {
         let mut start = s.len().saturating_sub(right_budget);
-        if let Some(tail) = s.get(start..) {
-            if let Some(i) = tail.find('\n') {
+        if let Some(tail) = s.get(start..)
+            && let Some(i) = tail.find('\n') {
                 start += i + 1;
             }
-        }
         while start < s.len() && !s.is_char_boundary(start) {
             start += 1;
         }
@@ -9346,13 +9287,13 @@ async fn capture_browser_screenshot(_sess: &Session) -> Result<(PathBuf, String)
                 );
                 Ok((first_screenshot.clone(), url))
             } else {
-                let msg = format!("Screenshot capture returned empty results at URL: {}", url);
+                let msg = format!("Screenshot capture returned empty results at URL: {url}");
                 tracing::warn!("{}", msg);
                 Err(msg)
             }
         }
         Err(e) => {
-            let msg = format!("Failed to capture screenshot at {}: {}", url, e);
+            let msg = format!("Failed to capture screenshot at {url}: {e}");
             tracing::warn!("{}", msg);
             Err(msg)
         }
@@ -9427,13 +9368,14 @@ fn add_pending_screenshot(sess: &Session, screenshot_path: PathBuf, url: String)
 }
 
 /// Consume pending screenshots and return them as ResponseInputItems
-#[allow(dead_code)]
+#[allow(dead_code, clippy::significant_drop_in_scrutinee)]
 fn consume_pending_screenshots(sess: &Session) -> Vec<ResponseInputItem> {
-    let mut pending = sess.pending_browser_screenshots.lock().unwrap();
-    let screenshots = pending.drain(..).collect::<Vec<_>>();
-
-    screenshots
-        .into_iter()
+    let mut pending = sess
+        .pending_browser_screenshots
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    pending
+        .drain(..)
         .map(|path| {
             let metadata = format!(
                 "[EPHEMERAL:browser_screenshot] Browser screenshot at {}",
@@ -9464,7 +9406,7 @@ fn consume_pending_screenshots(sess: &Session) -> Vec<ResponseInputItem> {
                     ResponseInputItem::Message {
                         role: "user".to_string(),
                         content: vec![ContentItem::InputText {
-                            text: format!("Failed to load browser screenshot: {}", e),
+                            text: format!("Failed to load browser screenshot: {e}"),
                         }],
                     }
                 }
@@ -9589,7 +9531,7 @@ async fn handle_browser_open(
                                 ResponseInputItem::FunctionCallOutput {
                                     call_id: call_id_clone.clone(),
                                     output: FunctionCallOutputPayload {
-                                        content: format!("Browser opened to: {}", url),
+                                        content: format!("Browser opened to: {url}"),
                                         success: Some(true),
                                     },
                                 }
@@ -9598,8 +9540,7 @@ async fn handle_browser_open(
                                 call_id: call_id_clone.clone(),
                                 output: FunctionCallOutputPayload {
                                     content: format!(
-                                        "Failed to navigate browser to {}: {}",
-                                        url, e
+                                        "Failed to navigate browser to {url}: {e}"
                                     ),
                                     success: Some(false),
                                 },
@@ -9618,7 +9559,7 @@ async fn handle_browser_open(
                 Err(e) => ResponseInputItem::FunctionCallOutput {
                     call_id: call_id_clone,
                     output: FunctionCallOutputPayload {
-                        content: format!("Failed to parse browser_open arguments: {}", e),
+                        content: format!("Failed to parse browser_open arguments: {e}"),
                         success: Some(false),
                     },
                 },
@@ -9667,7 +9608,7 @@ async fn handle_browser_close(sess: &Session, ctx: &ToolCallCtx) -> ResponseInpu
                     Err(e) => ResponseInputItem::FunctionCallOutput {
                         call_id: call_id_clone.clone(),
                         output: FunctionCallOutputPayload {
-                            content: format!("Failed to close browser: {}", e),
+                            content: format!("Failed to close browser: {e}"),
                             success: Some(false),
                         },
                     },
@@ -9704,7 +9645,7 @@ async fn handle_browser_status(sess: &Session, ctx: &ToolCallCtx) -> ResponseInp
                 let status = browser_manager.get_status().await;
                 let status_msg = if status.enabled {
                     if let Some(url) = status.current_url {
-                        format!("Browser status: Enabled, currently at {}", url)
+                        format!("Browser status: Enabled, currently at {url}")
                     } else {
                         "Browser status: Enabled, no page loaded".to_string()
                     }
@@ -9767,10 +9708,10 @@ async fn handle_browser_click(
                 // Optional absolute coordinates
                 let (mut target_x, mut target_y) = (None, None);
                 if let Some(p) = params.as_ref() {
-                    if let Some(vx) = p.get("x").and_then(|v| v.as_f64()) {
+                    if let Some(vx) = p.get("x").and_then(serde_json::Value::as_f64) {
                         target_x = Some(vx);
                     }
-                    if let Some(vy) = p.get("y").and_then(|v| v.as_f64()) {
+                    if let Some(vy) = p.get("y").and_then(serde_json::Value::as_f64) {
                         target_y = Some(vy);
                     }
                 }
@@ -9786,7 +9727,7 @@ async fn handle_browser_click(
                                 return ResponseInputItem::FunctionCallOutput {
                                     call_id: call_id_clone.clone(),
                                     output: FunctionCallOutputPayload {
-                                        content: format!("Failed to move before click: {}", e),
+                                        content: format!("Failed to move before click: {e}"),
                                         success: Some(false),
                                     },
                                 };
@@ -9797,8 +9738,7 @@ async fn handle_browser_click(
                                 call_id: call_id_clone.clone(),
                                 output: FunctionCallOutputPayload {
                                     content: format!(
-                                        "Failed to get current cursor position: {}",
-                                        e
+                                        "Failed to get current cursor position: {e}"
                                     ),
                                     success: Some(false),
                                 },
@@ -9827,14 +9767,14 @@ async fn handle_browser_click(
                     Ok((x, y, label)) => ResponseInputItem::FunctionCallOutput {
                         call_id: call_id_clone.clone(),
                         output: FunctionCallOutputPayload {
-                            content: format!("{} at ({}, {})", label, x, y),
+                            content: format!("{label} at ({x}, {y})"),
                             success: Some(true),
                         },
                     },
                     Err(e) => ResponseInputItem::FunctionCallOutput {
                         call_id: call_id_clone.clone(),
                         output: FunctionCallOutputPayload {
-                            content: format!("Failed to perform mouse action: {}", e),
+                            content: format!("Failed to perform mouse action: {e}"),
                             success: Some(false),
                         },
                     },
@@ -9888,13 +9828,13 @@ async fn handle_browser_move(
 
                         let result = if has_dx || has_dy {
                             // Relative movement
-                            let dx = json.get("dx").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                            let dy = json.get("dy").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                            let dx = json.get("dx").and_then(serde_json::Value::as_f64).unwrap_or(0.0);
+                            let dy = json.get("dy").and_then(serde_json::Value::as_f64).unwrap_or(0.0);
                             browser_manager.move_mouse_relative(dx, dy).await
                         } else if has_x || has_y {
                             // Absolute movement
-                            let x = json.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                            let y = json.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                            let x = json.get("x").and_then(serde_json::Value::as_f64).unwrap_or(0.0);
+                            let y = json.get("y").and_then(serde_json::Value::as_f64).unwrap_or(0.0);
                             browser_manager.move_mouse(x, y).await.map(|_| (x, y))
                         } else {
                             // No parameters provided, just return current position
@@ -9905,14 +9845,14 @@ async fn handle_browser_move(
                             Ok((x, y)) => ResponseInputItem::FunctionCallOutput {
                                 call_id: call_id_clone.clone(),
                                 output: FunctionCallOutputPayload {
-                                    content: format!("Moved mouse position to ({}, {})", x, y),
+                                    content: format!("Moved mouse position to ({x}, {y})"),
                                     success: Some(true),
                                 },
                             },
                             Err(e) => ResponseInputItem::FunctionCallOutput {
                                 call_id: call_id_clone.clone(),
                                 output: FunctionCallOutputPayload {
-                                    content: format!("Failed to move mouse: {}", e),
+                                    content: format!("Failed to move mouse: {e}"),
                                     success: Some(false),
                                 },
                             },
@@ -9921,7 +9861,7 @@ async fn handle_browser_move(
                     Err(e) => ResponseInputItem::FunctionCallOutput {
                         call_id: call_id_clone.clone(),
                         output: FunctionCallOutputPayload {
-                            content: format!("Failed to parse browser_move arguments: {}", e),
+                            content: format!("Failed to parse browser_move arguments: {e}"),
                             success: Some(false),
                         },
                     },
@@ -9972,14 +9912,14 @@ async fn handle_browser_type(
                             Ok(_) => ResponseInputItem::FunctionCallOutput {
                                 call_id: call_id_clone.clone(),
                                 output: FunctionCallOutputPayload {
-                                    content: format!("Typed: {}", text),
+                                    content: format!("Typed: {text}"),
                                     success: Some(true),
                                 },
                             },
                             Err(e) => ResponseInputItem::FunctionCallOutput {
                                 call_id: call_id_clone.clone(),
                                 output: FunctionCallOutputPayload {
-                                    content: format!("Failed to type text: {}", e),
+                                    content: format!("Failed to type text: {e}"),
                                     success: Some(false),
                                 },
                             },
@@ -9988,7 +9928,7 @@ async fn handle_browser_type(
                     Err(e) => ResponseInputItem::FunctionCallOutput {
                         call_id: call_id_clone.clone(),
                         output: FunctionCallOutputPayload {
-                            content: format!("Failed to parse browser_type arguments: {}", e),
+                            content: format!("Failed to parse browser_type arguments: {e}"),
                             success: Some(false),
                         },
                     },
@@ -10039,14 +9979,14 @@ async fn handle_browser_key(
                             Ok(_) => ResponseInputItem::FunctionCallOutput {
                                 call_id: call_id_clone.clone(),
                                 output: FunctionCallOutputPayload {
-                                    content: format!("Pressed key: {}", key),
+                                    content: format!("Pressed key: {key}"),
                                     success: Some(true),
                                 },
                             },
                             Err(e) => ResponseInputItem::FunctionCallOutput {
                                 call_id: call_id_clone.clone(),
                                 output: FunctionCallOutputPayload {
-                                    content: format!("Failed to press key: {}", e),
+                                    content: format!("Failed to press key: {e}"),
                                     success: Some(false),
                                 },
                             },
@@ -10055,7 +9995,7 @@ async fn handle_browser_key(
                     Err(e) => ResponseInputItem::FunctionCallOutput {
                         call_id: call_id_clone,
                         output: FunctionCallOutputPayload {
-                            content: format!("Failed to parse browser_key arguments: {}", e),
+                            content: format!("Failed to parse browser_key arguments: {e}"),
                             success: Some(false),
                         },
                     },
@@ -10116,18 +10056,17 @@ async fn handle_browser_javascript(
                                         let logs = obj.get("logs").and_then(|v| v.as_array());
                                         let mut output = String::new();
 
-                                        if let Some(logs) = logs {
-                                            if !logs.is_empty() {
+                                        if let Some(logs) = logs
+                                            && !logs.is_empty() {
                                                 output.push_str("Console logs:\n");
                                                 for log in logs {
                                                     if let Some(log_str) = log.as_str() {
                                                         output
-                                                            .push_str(&format!("  {}\n", log_str));
+                                                            .push_str(&format!("  {log_str}\n"));
                                                     }
                                                 }
-                                                output.push_str("\n");
+                                                output.push('\n');
                                             }
-                                        }
 
                                         if success.as_bool().unwrap_or(false) {
                                             output.push_str("Result: ");
@@ -10165,7 +10104,7 @@ async fn handle_browser_javascript(
                             Err(e) => ResponseInputItem::FunctionCallOutput {
                                 call_id: call_id_clone.clone(),
                                 output: FunctionCallOutputPayload {
-                                    content: format!("Failed to execute JavaScript: {}", e),
+                                    content: format!("Failed to execute JavaScript: {e}"),
                                     success: Some(false),
                                 },
                             },
@@ -10174,7 +10113,7 @@ async fn handle_browser_javascript(
                     Err(e) => ResponseInputItem::FunctionCallOutput {
                         call_id: call_id_clone,
                         output: FunctionCallOutputPayload {
-                            content: format!("Failed to parse browser_javascript arguments: {}", e),
+                            content: format!("Failed to parse browser_javascript arguments: {e}"),
                             success: Some(false),
                         },
                     },
@@ -10219,21 +10158,21 @@ async fn handle_browser_scroll(
                 let args: Result<Value, _> = serde_json::from_str(&arguments_clone);
                 match args {
                     Ok(json) => {
-                        let dx = json.get("dx").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                        let dy = json.get("dy").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        let dx = json.get("dx").and_then(serde_json::Value::as_f64).unwrap_or(0.0);
+                        let dy = json.get("dy").and_then(serde_json::Value::as_f64).unwrap_or(0.0);
 
                         match browser_manager.scroll_by(dx, dy).await {
                             Ok(_) => ResponseInputItem::FunctionCallOutput {
                                 call_id: call_id_clone.clone(),
                                 output: FunctionCallOutputPayload {
-                                    content: format!("Scrolled by ({}, {})", dx, dy),
+                                    content: format!("Scrolled by ({dx}, {dy})"),
                                     success: Some(true),
                                 },
                             },
                             Err(e) => ResponseInputItem::FunctionCallOutput {
                                 call_id: call_id_clone.clone(),
                                 output: FunctionCallOutputPayload {
-                                    content: format!("Failed to scroll: {}", e),
+                                    content: format!("Failed to scroll: {e}"),
                                     success: Some(false),
                                 },
                             },
@@ -10242,7 +10181,7 @@ async fn handle_browser_scroll(
                     Err(e) => ResponseInputItem::FunctionCallOutput {
                         call_id: call_id_clone,
                         output: FunctionCallOutputPayload {
-                            content: format!("Failed to parse browser_scroll arguments: {}", e),
+                            content: format!("Failed to parse browser_scroll arguments: {e}"),
                             success: Some(false),
                         },
                     },
@@ -10285,7 +10224,7 @@ async fn handle_browser_console(
                 let lines = match args {
                     Ok(json) => json
                         .get("lines")
-                        .and_then(|v| v.as_u64())
+                        .and_then(serde_json::Value::as_u64)
                         .map(|n| n as usize),
                     Err(_) => None,
                 };
@@ -10339,7 +10278,7 @@ async fn handle_browser_console(
                     Err(e) => ResponseInputItem::FunctionCallOutput {
                         call_id: call_id_clone,
                         output: FunctionCallOutputPayload {
-                            content: format!("Failed to get console logs: {}", e),
+                            content: format!("Failed to get console logs: {e}"),
                             success: Some(false),
                         },
                     },
@@ -10428,7 +10367,7 @@ async fn handle_browser_cdp(
                             Err(e) => ResponseInputItem::FunctionCallOutput {
                                 call_id: call_id_clone,
                                 output: FunctionCallOutputPayload {
-                                    content: format!("Failed to execute CDP command: {}", e),
+                                    content: format!("Failed to execute CDP command: {e}"),
                                     success: Some(false),
                                 },
                             },
@@ -10437,7 +10376,7 @@ async fn handle_browser_cdp(
                     Err(e) => ResponseInputItem::FunctionCallOutput {
                         call_id: call_id_clone,
                         output: FunctionCallOutputPayload {
-                            content: format!("Failed to parse browser_cdp arguments: {}", e),
+                            content: format!("Failed to parse browser_cdp arguments: {e}"),
                             success: Some(false),
                         },
                     },
@@ -10484,9 +10423,9 @@ async fn handle_browser_inspect(
                         let id_attr = json
                             .get("id")
                             .and_then(|v| v.as_str())
-                            .map(|s| s.to_string());
-                        let mut x = json.get("x").and_then(|v| v.as_f64());
-                        let mut y = json.get("y").and_then(|v| v.as_f64());
+                            .map(std::string::ToString::to_string);
+                        let mut x = json.get("x").and_then(serde_json::Value::as_f64);
+                        let mut y = json.get("y").and_then(serde_json::Value::as_f64);
 
                         if (x.is_none() || y.is_none()) && id_attr.is_none() {
                             // No coords provided; use current cursor
@@ -10501,17 +10440,16 @@ async fn handle_browser_inspect(
                             // Use DOM.getDocument -> DOM.querySelector with selector `#id`
                             let doc = browser_manager
                                 .execute_cdp("DOM.getDocument", json!({}))
-                                .await
-                                .map_err(|e| e);
+                                .await;
                             let root_id = match doc {
                                 Ok(v) => v
                                     .get("root")
                                     .and_then(|r| r.get("nodeId"))
-                                    .and_then(|n| n.as_u64()),
+                                    .and_then(serde_json::Value::as_u64),
                                 Err(_) => None,
                             };
                             if let Some(root_node_id) = root_id {
-                                let sel = format!("#{}", id_attr);
+                                let sel = format!("#{id_attr}");
                                 let q = browser_manager
                                     .execute_cdp(
                                         "DOM.querySelector",
@@ -10543,7 +10481,7 @@ async fn handle_browser_inspect(
                                     if let Some(n) = v.get("nodeId").cloned() {
                                         Some(n)
                                     } else if let Some(backend) =
-                                        v.get("backendNodeId").and_then(|b| b.as_u64())
+                                        v.get("backendNodeId").and_then(serde_json::Value::as_u64)
                                     {
                                         let pushed = browser_manager
                                             .execute_cdp(
@@ -10627,12 +10565,12 @@ async fn handle_browser_inspect(
                         // Format output
                         let mut out = String::new();
                         if let (Some(ix), Some(iy)) = (x, y) {
-                            out.push_str(&format!("Target: coordinates ({}, {})\n", ix, iy));
+                            out.push_str(&format!("Target: coordinates ({ix}, {iy})\n"));
                         }
                         if let Some(id_attr) = id_attr {
-                            out.push_str(&format!("Target: id '#{}'\n", id_attr));
+                            out.push_str(&format!("Target: id '#{id_attr}'\n"));
                         }
-                        out.push_str(&format!("NodeId: {}\n", node_id));
+                        out.push_str(&format!("NodeId: {node_id}\n"));
 
                         // Attributes
                         if let Some(arr) = attrs.get("attributes").and_then(|v| v.as_array()) {
@@ -10654,7 +10592,7 @@ async fn handle_browser_inspect(
                             out.push_str("\nOuterHTML (truncated):\n");
                             out.push_str(&snippet);
                             if one.len() > snippet.len() {
-                                out.push_str("…");
+                                out.push('…');
                             }
                             out.push('\n');
                         }
@@ -10684,7 +10622,7 @@ async fn handle_browser_inspect(
                     Err(e) => ResponseInputItem::FunctionCallOutput {
                         call_id: call_id_clone,
                         output: FunctionCallOutputPayload {
-                            content: format!("Failed to parse browser_inspect arguments: {}", e),
+                            content: format!("Failed to parse browser_inspect arguments: {e}"),
                             success: Some(false),
                         },
                     },
@@ -10734,8 +10672,7 @@ async fn handle_browser_history(
                                 call_id: call_id_clone,
                                 output: FunctionCallOutputPayload {
                                     content: format!(
-                                        "Unsupported direction: {} (expected 'back' or 'forward')",
-                                        direction
+                                        "Unsupported direction: {direction} (expected 'back' or 'forward')"
                                     ),
                                     success: Some(false),
                                 },
@@ -10752,14 +10689,14 @@ async fn handle_browser_history(
                             Ok(_) => ResponseInputItem::FunctionCallOutput {
                                 call_id: call_id_clone.clone(),
                                 output: FunctionCallOutputPayload {
-                                    content: format!("History {} triggered", direction),
+                                    content: format!("History {direction} triggered"),
                                     success: Some(true),
                                 },
                             },
                             Err(e) => ResponseInputItem::FunctionCallOutput {
                                 call_id: call_id_clone.clone(),
                                 output: FunctionCallOutputPayload {
-                                    content: format!("Failed to navigate history: {}", e),
+                                    content: format!("Failed to navigate history: {e}"),
                                     success: Some(false),
                                 },
                             },
@@ -10768,7 +10705,7 @@ async fn handle_browser_history(
                     Err(e) => ResponseInputItem::FunctionCallOutput {
                         call_id: call_id_clone,
                         output: FunctionCallOutputPayload {
-                            content: format!("Failed to parse browser_history arguments: {}", e),
+                            content: format!("Failed to parse browser_history arguments: {e}"),
                             success: Some(false),
                         },
                     },
@@ -10812,14 +10749,13 @@ struct CatWriteSuggestion {
 }
 
 fn detect_cat_write(argv: &[String]) -> Option<CatWriteSuggestion> {
-    if let Some((_, script)) = extract_shell_script_from_wrapper(argv) {
-        if script_contains_cat_write(&script) {
+    if let Some((_, script)) = extract_shell_script_from_wrapper(argv)
+        && script_contains_cat_write(&script) {
             return Some(CatWriteSuggestion {
                 label: "original_script",
                 original_value: script,
             });
         }
-    }
 
     None
 }
@@ -10827,7 +10763,7 @@ fn detect_cat_write(argv: &[String]) -> Option<CatWriteSuggestion> {
 fn script_contains_cat_write(script: &str) -> bool {
     script
         .lines()
-        .any(|line| line_contains_cat_heredoc_write(line))
+        .any(line_contains_cat_heredoc_write)
 }
 
 fn line_contains_cat_heredoc_write(line: &str) -> bool {
@@ -10901,14 +10837,13 @@ struct PythonWriteSuggestion {
 }
 
 fn detect_python_write(argv: &[String]) -> Option<PythonWriteSuggestion> {
-    if let Some((_, script)) = extract_shell_script_from_wrapper(argv) {
-        if script_contains_python_write(&script) {
+    if let Some((_, script)) = extract_shell_script_from_wrapper(argv)
+        && script_contains_python_write(&script) {
             return Some(PythonWriteSuggestion {
                 label: "original_script",
                 original_value: script,
             });
         }
-    }
 
     detect_python_write_in_argv(argv)
 }
@@ -10986,13 +10921,12 @@ struct RedundantCdSuggestion {
 
 fn detect_redundant_cd(argv: &[String], cwd: &Path) -> Option<RedundantCdSuggestion> {
     let normalized_cwd = normalize_path(cwd);
-    if let Some((script_index, script)) = extract_shell_script_from_wrapper(argv) {
-        if let Some(suggestion) =
+    if let Some((script_index, script)) = extract_shell_script_from_wrapper(argv)
+        && let Some(suggestion) =
             detect_redundant_cd_in_shell(argv, script_index, &script, cwd, &normalized_cwd)
         {
             return Some(suggestion);
         }
-    }
     detect_redundant_cd_in_argv(argv, cwd, &normalized_cwd)
 }
 
@@ -11031,7 +10965,7 @@ fn detect_redundant_cd_in_shell(
     }
 
     let remainder_tokens = tokens[idx..].to_vec();
-    let suggested_script = shlex_try_join(remainder_tokens.iter().map(|s| s.as_str()))
+    let suggested_script = shlex_try_join(remainder_tokens.iter().map(std::string::String::as_str))
         .unwrap_or_else(|_| remainder_tokens.join(" "));
     if suggested_script.trim().is_empty() {
         return None;
@@ -11086,7 +11020,7 @@ fn detect_redundant_cd_in_argv(
 
     Some(RedundantCdSuggestion {
         label: "original_argv",
-        original_value: format!("{:?}", argv),
+        original_value: format!("{argv:?}"),
         suggested,
         target_arg: target,
         cwd: normalized_cwd.to_path_buf(),
@@ -11303,12 +11237,12 @@ fn debug_history(label: &str, items: &[ResponseItem]) {
                 let snippet: String = text.chars().take(80).collect();
                 format!("{idx}:{role}:{snippet}")
             }
-            _ => format!("{idx}:{:?}", item),
+            _ => format!("{idx}:{item:?}"),
         })
         .collect();
     let rendered = preview.join(" | ");
     if std::env::var_os("CODEX_COMPACT_TRACE").is_some() {
-        eprintln!("[compact_history] {} => [{}]", label, rendered);
+        tracing::debug!("[compact_history] {label} => [{rendered}]");
     }
     info!(
         target = "codex_core::compact_history",

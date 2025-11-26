@@ -17,7 +17,7 @@ impl SchemaValidator {
         // Load the main app config schema
         let app_schema_str = include_str!("schemas/app_config.schema.json");
         let app_schema_value: Value = serde_json::from_str(app_schema_str).map_err(|e| {
-            ConfigError::SchemaValidationError(format!("Failed to parse app schema: {}", e))
+            ConfigError::SchemaValidationError(format!("Failed to parse app schema: {e}"))
         })?;
 
         // Compile the schema with JSON Schema Draft 7
@@ -25,7 +25,7 @@ impl SchemaValidator {
             .with_draft(Draft::Draft7)
             .compile(&app_schema_value)
             .map_err(|e| {
-                ConfigError::SchemaValidationError(format!("Failed to compile app schema: {}", e))
+                ConfigError::SchemaValidationError(format!("Failed to compile app schema: {e}"))
             })?;
 
         Ok(Self { app_schema })
@@ -49,7 +49,7 @@ impl SchemaValidator {
     pub fn validate(&self, config: &AppConfig) -> Result<()> {
         // Serialize config to JSON Value for validation
         let config_value = serde_json::to_value(config).map_err(|e| {
-            ConfigError::SchemaValidationError(format!("Failed to serialize config: {}", e))
+            ConfigError::SchemaValidationError(format!("Failed to serialize config: {e}"))
         })?;
 
         // Validate against schema
@@ -65,7 +65,7 @@ impl SchemaValidator {
                     } else {
                         path_str
                     };
-                    format!("{} at '{}'", e, path)
+                    format!("{e} at '{path}'")
                 })
                 .collect();
 
@@ -82,6 +82,7 @@ impl SchemaValidator {
 }
 
 impl Default for SchemaValidator {
+    #[allow(clippy::expect_used)] // Default impl must succeed; panic is appropriate for schema load failure
     fn default() -> Self {
         Self::new().expect("Failed to create default schema validator")
     }
@@ -106,8 +107,7 @@ mod tests {
         let result = validator.validate(&config);
         assert!(
             result.is_ok(),
-            "Default config should be valid: {:?}",
-            result
+            "Default config should be valid: {result:?}"
         );
     }
 
@@ -125,8 +125,7 @@ mod tests {
         let err_msg = err.to_string();
         assert!(
             err_msg.contains("consensus_threshold") || err_msg.contains("quality_gates"),
-            "Error should mention consensus_threshold or quality_gates, got: {}",
-            err_msg
+            "Error should mention consensus_threshold or quality_gates, got: {err_msg}"
         );
     }
 
@@ -166,8 +165,7 @@ mod tests {
         let err_msg = result.unwrap_err().to_string();
         assert!(
             err_msg.contains("temperature") || err_msg.contains("models"),
-            "Error should mention temperature or models, got: {}",
-            err_msg
+            "Error should mention temperature or models, got: {err_msg}"
         );
     }
 
@@ -183,8 +181,7 @@ mod tests {
         let err_msg = result.unwrap_err().to_string();
         assert!(
             err_msg.contains("min_agents") || err_msg.contains("consensus"),
-            "Error should mention min_agents or consensus, got: {}",
-            err_msg
+            "Error should mention min_agents or consensus, got: {err_msg}"
         );
     }
 
@@ -200,8 +197,7 @@ mod tests {
         let err_msg = result.unwrap_err().to_string();
         assert!(
             err_msg.contains("max_agents") || err_msg.contains("consensus"),
-            "Error should mention max_agents or consensus, got: {}",
-            err_msg
+            "Error should mention max_agents or consensus, got: {err_msg}"
         );
     }
 
@@ -217,8 +213,7 @@ mod tests {
         let err_msg = result.unwrap_err().to_string();
         assert!(
             err_msg.contains("alert_threshold") || err_msg.contains("cost"),
-            "Error should mention alert_threshold or cost, got: {}",
-            err_msg
+            "Error should mention alert_threshold or cost, got: {err_msg}"
         );
     }
 
@@ -234,8 +229,7 @@ mod tests {
 
         assert!(
             result.is_ok(),
-            "Config with None optional fields should be valid: {:?}",
-            result
+            "Config with None optional fields should be valid: {result:?}"
         );
     }
 
@@ -251,8 +245,7 @@ mod tests {
 
         assert!(
             result.is_ok(),
-            "Config with valid optional fields should pass: {:?}",
-            result
+            "Config with valid optional fields should pass: {result:?}"
         );
     }
 
@@ -268,8 +261,7 @@ mod tests {
         let err_msg = result.unwrap_err().to_string();
         assert!(
             err_msg.contains("min_test_coverage") || err_msg.contains("quality_gates"),
-            "Error should mention min_test_coverage, got: {}",
-            err_msg
+            "Error should mention min_test_coverage, got: {err_msg}"
         );
     }
 
@@ -289,8 +281,7 @@ mod tests {
         // Should report multiple errors (the exact count may vary based on schema validation order)
         assert!(
             err_msg.contains("error"),
-            "Should mention errors: {}",
-            err_msg
+            "Should mention errors: {err_msg}"
         );
     }
 
@@ -308,13 +299,11 @@ mod tests {
         // Error message should be helpful
         assert!(
             err_msg.contains("validation failed") || err_msg.contains("Configuration"),
-            "Should have clear error prefix: {}",
-            err_msg
+            "Should have clear error prefix: {err_msg}"
         );
         assert!(
             err_msg.len() > 20,
-            "Error message should be descriptive: {}",
-            err_msg
+            "Error message should be descriptive: {err_msg}"
         );
     }
 }

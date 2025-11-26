@@ -323,11 +323,10 @@ impl AnthropicClient {
         // Add system prompt (from config or serialization)
         if let Some(ref system) = config.system {
             body["system"] = json!(system);
-        } else if let Some(system) = serialized.get("system") {
-            if !system.is_null() {
+        } else if let Some(system) = serialized.get("system")
+            && !system.is_null() {
                 body["system"] = system.clone();
             }
-        }
 
         // Add temperature if specified
         if let Some(temp) = config.temperature {
@@ -350,12 +349,11 @@ impl AnthropicClient {
 
             // Process complete SSE events
             while let Some(event) = Self::extract_sse_event(&mut buffer) {
-                if let Some(stream_event) = Self::parse_sse_event(&event)? {
-                    if tx.send(Ok(stream_event)).await.is_err() {
+                if let Some(stream_event) = Self::parse_sse_event(&event)?
+                    && tx.send(Ok(stream_event)).await.is_err() {
                         // Receiver dropped, stop processing
                         return Ok(());
                     }
-                }
             }
         }
 
@@ -394,7 +392,7 @@ impl AnthropicClient {
 
         // Parse JSON data
         let parsed: SseEvent = serde_json::from_str(&data)
-            .map_err(|e| ApiError::Parse(format!("Failed to parse SSE event: {}", e)))?;
+            .map_err(|e| ApiError::Parse(format!("Failed to parse SSE event: {e}")))?;
 
         let stream_event = match parsed {
             SseEvent::MessageStart { message } => StreamEvent::MessageStart {

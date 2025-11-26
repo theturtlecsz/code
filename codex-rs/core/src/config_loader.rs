@@ -55,11 +55,11 @@ pub enum ConfigLoadError {
 impl std::fmt::Display for ConfigLoadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConfigLoadError::IoError(e) => write!(f, "I/O error loading config: {}", e),
-            ConfigLoadError::TomlParseError(e) => write!(f, "TOML parsing error: {}", e),
-            ConfigLoadError::ValidationError(msg) => write!(f, "Config validation error: {}", msg),
+            ConfigLoadError::IoError(e) => write!(f, "I/O error loading config: {e}"),
+            ConfigLoadError::TomlParseError(e) => write!(f, "TOML parsing error: {e}"),
+            ConfigLoadError::ValidationError(msg) => write!(f, "Config validation error: {msg}"),
             ConfigLoadError::MissingRequiredField { field, context } => {
-                write!(f, "Missing required field '{}' in {}", field, context)
+                write!(f, "Missing required field '{field}' in {context}")
             }
             ConfigLoadError::InvalidEnvValue {
                 var,
@@ -67,8 +67,7 @@ impl std::fmt::Display for ConfigLoadError {
                 expected,
             } => write!(
                 f,
-                "Invalid value for ${}: '{}' (expected: {})",
-                var, value, expected
+                "Invalid value for ${var}: '{value}' (expected: {expected})"
             ),
             ConfigLoadError::SchemaValidationFailed(errors) => {
                 write!(f, "Schema validation failed: {}", errors.join("; "))
@@ -333,35 +332,40 @@ impl ConfigLoader {
         if let TomlValue::Table(table) = value {
             // Extract known top-level fields
             if let Some(ace_value) = table.get("ace") {
+                let ace_str = toml::to_string(ace_value)
+                    .map_err(|e| ConfigLoadError::ValidationError(format!("ace serialization: {e}")))?;
                 config.ace = Some(
-                    toml::from_str(&toml::to_string(ace_value).unwrap())
-                        .map_err(ConfigLoadError::TomlParseError)?,
+                    toml::from_str(&ace_str).map_err(ConfigLoadError::TomlParseError)?,
                 );
             }
 
             if let Some(agents_value) = table.get("agents") {
-                config.agents = toml::from_str(&toml::to_string(agents_value).unwrap())
-                    .map_err(ConfigLoadError::TomlParseError)?;
+                let agents_str = toml::to_string(agents_value)
+                    .map_err(|e| ConfigLoadError::ValidationError(format!("agents serialization: {e}")))?;
+                config.agents = toml::from_str(&agents_str).map_err(ConfigLoadError::TomlParseError)?;
             }
 
             if let Some(quality_gates_value) = table.get("quality_gates") {
+                let qg_str = toml::to_string(quality_gates_value)
+                    .map_err(|e| ConfigLoadError::ValidationError(format!("quality_gates serialization: {e}")))?;
                 config.quality_gates = Some(
-                    toml::from_str(&toml::to_string(quality_gates_value).unwrap())
-                        .map_err(ConfigLoadError::TomlParseError)?,
+                    toml::from_str(&qg_str).map_err(ConfigLoadError::TomlParseError)?,
                 );
             }
 
             if let Some(hot_reload_value) = table.get("hot_reload") {
+                let hr_str = toml::to_string(hot_reload_value)
+                    .map_err(|e| ConfigLoadError::ValidationError(format!("hot_reload serialization: {e}")))?;
                 config.hot_reload = Some(
-                    toml::from_str(&toml::to_string(hot_reload_value).unwrap())
-                        .map_err(ConfigLoadError::TomlParseError)?,
+                    toml::from_str(&hr_str).map_err(ConfigLoadError::TomlParseError)?,
                 );
             }
 
             if let Some(validation_value) = table.get("validation") {
+                let val_str = toml::to_string(validation_value)
+                    .map_err(|e| ConfigLoadError::ValidationError(format!("validation serialization: {e}")))?;
                 config.validation = Some(
-                    toml::from_str(&toml::to_string(validation_value).unwrap())
-                        .map_err(ConfigLoadError::TomlParseError)?,
+                    toml::from_str(&val_str).map_err(ConfigLoadError::TomlParseError)?,
                 );
             }
 
@@ -482,25 +486,23 @@ impl ConfigLoader {
         prefix: &str,
     ) -> Result<(), ConfigLoadError> {
         // MODEL override
-        let model_var = format!("{}_MODEL", prefix);
-        if let Ok(value) = env::var(&model_var) {
-            if !value.trim().is_empty() {
+        let model_var = format!("{prefix}_MODEL");
+        if let Ok(value) = env::var(&model_var)
+            && !value.trim().is_empty() {
                 tracing::debug!("Applying env override: {}={}", model_var, value);
                 config.model = Some(value);
             }
-        }
 
         // PROVIDER override
-        let provider_var = format!("{}_PROVIDER", prefix);
-        if let Ok(value) = env::var(&provider_var) {
-            if !value.trim().is_empty() {
+        let provider_var = format!("{prefix}_PROVIDER");
+        if let Ok(value) = env::var(&provider_var)
+            && !value.trim().is_empty() {
                 tracing::debug!("Applying env override: {}={}", provider_var, value);
                 config.model_provider = Some(value);
             }
-        }
 
         // AUTO_UPGRADE override
-        let upgrade_var = format!("{}_AUTO_UPGRADE", prefix);
+        let upgrade_var = format!("{prefix}_AUTO_UPGRADE");
         if let Ok(value) = env::var(&upgrade_var) {
             let trimmed = value.trim().to_lowercase();
             match trimmed.as_str() {
@@ -515,7 +517,7 @@ impl ConfigLoader {
                 _ => {
                     return Err(ConfigLoadError::InvalidEnvValue {
                         var: upgrade_var,
-                        value: value.clone(),
+                        value,
                         expected: "true/false, 1/0, yes/no, on/off".to_string(),
                     });
                 }

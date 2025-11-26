@@ -33,14 +33,13 @@ fn serialize_openai(messages: &[&Message]) -> Value {
             };
 
             // OpenAI can use string content for simple text
-            if m.content.len() == 1 {
-                if let ContentBlock::Text { text } = &m.content[0] {
+            if m.content.len() == 1
+                && let ContentBlock::Text { text } = &m.content[0] {
                     return json!({
                         "role": role,
                         "content": text
                     });
                 }
-            }
 
             // Multi-part content
             let content: Vec<Value> = m

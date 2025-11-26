@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut model = "gemini-2.5-flash".to_string();
     let mut session = GeminiPipesSession::spawn(&model, None).await?;
 
-    println!("✓ Session started (model: {})\n", model);
+    println!("✓ Session started (model: {model})\n");
 
     loop {
         // Prompt
@@ -61,12 +61,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("\n─── Session Statistics ───");
             println!("Model:       {}", stats.model);
             println!("Turn count:  {}", stats.turn_count);
-            println!("Conv ID:     {:?}", stats.conversation_id);
+            println!("Session ID:  {:?}", stats.session_id);
             println!("──────────────────────────\n");
             continue;
-        } else if input.starts_with("/model ") {
-            let new_model = input.strip_prefix("/model ").unwrap().trim();
-            println!("\nSwitching to model: {}", new_model);
+        } else if let Some(stripped) = input.strip_prefix("/model ") {
+            let new_model = stripped.trim();
+            println!("\nSwitching to model: {new_model}");
 
             // Shutdown old session
             session.shutdown().await?;
@@ -78,26 +78,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
 
-        // Send message
-        println!();
-        if let Err(e) = session.send_user_message(input).await {
-            eprintln!("Error sending message: {}", e);
-            continue;
-        }
-
         // Stream response
         let (tx, mut rx) = tokio::sync::mpsc::channel(128);
         let cancel = CancellationToken::new();
+        let message = input.to_string();
 
         // Spawn stream task and print concurrently
-        let stream_task =
-            tokio::spawn(async move { session.stream_turn(tx, cancel).await.map(|_| session) });
+        println!();
+        let stream_task = tokio::spawn(async move {
+            session
+                .stream_turn(message, tx, cancel)
+                .await
+                .map(|_| session)
+        });
 
         // Print response as it streams
         while let Some(event) = rx.recv().await {
             match event {
                 StreamEvent::Delta(text) => {
-                    print!("{}", text);
+                    print!("{text}");
                     io::stdout().flush()?;
                 }
                 StreamEvent::Done => {
@@ -105,7 +104,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     break;
                 }
                 StreamEvent::Error(e) => {
-                    eprintln!("\n[ERROR] {}\n", e);
+                    eprintln!("\n[ERROR] {e}\n");
                     break;
                 }
                 _ => {}
@@ -118,7 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 session = sess;
             }
             Ok(Err(e)) => {
-                eprintln!("[ERROR] Stream error: {}. Session may be dead.\n", e);
+                eprintln!("[ERROR] Stream error: {e}. Session may be dead.\n");
                 // Try to recreate session
                 println!("Attempting to recreate session...");
                 match GeminiPipesSession::spawn(&model, None).await {
@@ -127,13 +126,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!("✓ Session recreated\n");
                     }
                     Err(e) => {
-                        eprintln!("[FATAL] Cannot recreate session: {}", e);
+                        eprintln!("[FATAL] Cannot recreate session: {e}");
                         break;
                     }
                 }
             }
             Err(e) => {
-                eprintln!("[FATAL] Task panic: {}", e);
+                eprintln!("[FATAL] Task panic: {e}");
                 break;
             }
         }

@@ -56,7 +56,7 @@ pub(crate) async fn observe_now(sess: Arc<Session>, sub_id: String, reason: &'st
         &sub_id,
         ProEvent::DeveloperNote {
             turn_id: "observer_run".to_string(),
-            note: format!("Observer ran at {} because {}", timestamp, reason),
+            note: format!("Observer ran at {timestamp} because {reason}"),
             artifacts: Vec::new(),
         },
     )
@@ -65,7 +65,7 @@ pub(crate) async fn observe_now(sess: Arc<Session>, sub_id: String, reason: &'st
     let stream = match sess.model_client().stream(&prompt).await {
         Ok(stream) => stream,
         Err(err) => {
-            sess.notify_background_event(&sub_id, format!("observer stream error: {}", err))
+            sess.notify_background_event(&sub_id, format!("observer stream error: {err}"))
                 .await;
             return;
         }
@@ -136,7 +136,10 @@ async fn run_observer_stream(sess: Arc<Session>, mut stream: ResponseStream, sub
     }
 
     if !pending_outputs.is_empty() {
-        let mut history = sess.pro_observer_history().lock().expect("poisoned lock");
+        let mut history = sess
+            .pro_observer_history()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         for output in pending_outputs {
             history.record_items([&ResponseItem::from(output)]);
         }
@@ -166,7 +169,7 @@ async fn handle_output_item(
                 } else if note.is_empty() {
                     title.clone()
                 } else {
-                    format!("{}\n\n{}", title, note)
+                    format!("{title}\n\n{note}")
                 };
                 sess.emit_pro_event(
                     sub_id,
@@ -177,7 +180,7 @@ async fn handle_output_item(
                     },
                 )
                 .await;
-                actions.push(format!("recommendation: {}", title));
+                actions.push(format!("recommendation: {title}"));
                 record_observer_log(sess, &item);
                 record_history_item(sess, &item);
 
@@ -194,7 +197,7 @@ async fn handle_output_item(
             "assist_core" => {
                 let instructions = parse_instructions(arguments);
                 if !instructions.is_empty() {
-                    let developer_text = format!("[Observer → Core]\n{}", instructions);
+                    let developer_text = format!("[Observer → Core]\n{instructions}");
                     sess.add_pending_input(ResponseInputItem::Message {
                         role: "developer".to_string(),
                         content: vec![ContentItem::InputText {
@@ -251,7 +254,7 @@ async fn handle_output_item(
                 pending_outputs.push(output.clone());
                 record_observer_log(sess, &item);
                 record_history_item(sess, &item);
-                record_history_item(sess, &ResponseItem::from(output.clone()));
+                record_history_item(sess, &ResponseItem::from(output));
                 actions.push("spawn agent".to_string());
 
                 let sess_clone = Arc::clone(sess);
@@ -297,7 +300,7 @@ async fn handle_output_item(
                 let output = ResponseInputItem::FunctionCallOutput {
                     call_id: call_id.clone(),
                     output: FunctionCallOutputPayload {
-                        content: format!("unsupported call: {}", other),
+                        content: format!("unsupported call: {other}"),
                         success: Some(false),
                     },
                 };
@@ -324,7 +327,7 @@ async fn summarize_observer_run(
     lines.push(format!("Observer completed in {}s", elapsed.as_secs()));
     if !actions.is_empty() {
         for action in actions {
-            lines.push(format!("- {}", action));
+            lines.push(format!("- {action}"));
         }
     }
 
@@ -353,7 +356,10 @@ async fn summarize_observer_run(
 }
 
 fn record_observer_log(sess: &Session, item: &ResponseItem) {
-    let mut log = sess.pro_observer_log().lock().expect("poisoned lock");
+    let mut log = sess
+        .pro_observer_log()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     log.push(item.clone());
     if log.len() > 80 {
         let drain = log.len() - 80;
@@ -362,7 +368,10 @@ fn record_observer_log(sess: &Session, item: &ResponseItem) {
 }
 
 fn record_history_item(sess: &Session, item: &ResponseItem) {
-    let mut history = sess.pro_observer_history().lock().expect("poisoned lock");
+    let mut history = sess
+        .pro_observer_history()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     history.record_items([item]);
 }
 
@@ -392,7 +401,7 @@ fn build_observer_inputs(sess: &Session) -> (Vec<ResponseItem>, Vec<ResponseItem
     let log = sess
         .pro_observer_log()
         .lock()
-        .expect("poisoned lock")
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .clone();
     for item in log.iter().rev() {
         if let Some((len, converted)) = clone_for_prompt(item) {
@@ -548,9 +557,9 @@ fn summarize_shell_call(
     match action {
         codex_protocol::models::LocalShellAction::Exec(exec) => {
             let joined = exec.command.join(" ");
-            let mut body = format!("{joined}");
+            let mut body = joined;
             if let Some(timeout) = exec.timeout_ms {
-                body.push_str(&format!(" (timeout={}ms)", timeout));
+                body.push_str(&format!(" (timeout={timeout}ms)"));
             }
             if let Some(dir) = &exec.working_directory {
                 body.push_str(&format!(" [cwd={dir}]"));
@@ -608,7 +617,7 @@ fn parse_instructions(arguments: &str) -> String {
             value
                 .get("instructions")
                 .and_then(|s| s.as_str())
-                .map(|s| s.to_string())
+                .map(std::string::ToString::to_string)
         })
         .unwrap_or_default()
 }
@@ -620,7 +629,7 @@ fn parse_follow_up(arguments: &str) -> Option<String> {
             value
                 .get("text")
                 .and_then(|s| s.as_str())
-                .map(|s| s.to_string())
+                .map(std::string::ToString::to_string)
         })
 }
 

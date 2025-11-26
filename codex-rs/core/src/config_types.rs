@@ -309,6 +309,7 @@ pub struct GithubConfig {
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
+#[derive(Default)]
 pub struct ValidationConfig {
     /// Legacy master toggle for the validation harness (kept for config compatibility).
     /// `run_patch_harness` now relies solely on the functional/stylistic group toggles.
@@ -332,19 +333,9 @@ pub struct ValidationConfig {
     pub tools: ValidationTools,
 }
 
-impl Default for ValidationConfig {
-    fn default() -> Self {
-        Self {
-            patch_harness: false,
-            tools_allowlist: None,
-            timeout_seconds: None,
-            groups: ValidationGroups::default(),
-            tools: ValidationTools::default(),
-        }
-    }
-}
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
+#[derive(Default)]
 pub struct ValidationGroups {
     /// Functional checks catch correctness regressions.
     #[serde(default = "default_true")]
@@ -355,14 +346,6 @@ pub struct ValidationGroups {
     pub stylistic: bool,
 }
 
-impl Default for ValidationGroups {
-    fn default() -> Self {
-        Self {
-            functional: false,
-            stylistic: false,
-        }
-    }
-}
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct ValidationTools {
@@ -639,6 +622,7 @@ pub enum ReasoningSummaryFormat {
 
 /// Theme configuration for the TUI
 #[derive(Deserialize, Debug, Clone, PartialEq)]
+#[derive(Default)]
 pub struct ThemeConfig {
     /// Name of the predefined theme to use
     #[serde(default)]
@@ -661,16 +645,6 @@ pub struct ThemeConfig {
     pub is_dark: Option<bool>,
 }
 
-impl Default for ThemeConfig {
-    fn default() -> Self {
-        Self {
-            name: ThemeName::default(),
-            colors: ThemeColors::default(),
-            label: None,
-            is_dark: None,
-        }
-    }
-}
 
 /// Selected loading spinner style.
 #[derive(Deserialize, Debug, Clone, PartialEq)]

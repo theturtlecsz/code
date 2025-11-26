@@ -449,8 +449,8 @@ async fn read_capped<R: AsyncRead + Unpin + Send + 'static>(
             break;
         }
 
-        if let Some(stream) = &stream {
-            if emitted_deltas < MAX_EXEC_OUTPUT_DELTAS_PER_CALL {
+        if let Some(stream) = &stream
+            && emitted_deltas < MAX_EXEC_OUTPUT_DELTAS_PER_CALL {
                 let chunk = tmp[..n].to_vec();
                 let msg = EventMsg::ExecCommandOutputDelta(ExecCommandOutputDeltaEvent {
                     call_id: stream.call_id.clone(),
@@ -477,7 +477,7 @@ async fn read_capped<R: AsyncRead + Unpin + Send + 'static>(
 
                 // Update tail buffer if present (keep last ~8 KiB)
                 if let Some(buf_arc) = &stream.tail_buf {
-                    let mut b = buf_arc.lock().unwrap();
+                    let mut b = buf_arc.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                     const MAX_TAIL: usize = 8 * 1024;
                     b.extend_from_slice(&tmp[..n]);
                     if b.len() > MAX_TAIL {
@@ -486,7 +486,6 @@ async fn read_capped<R: AsyncRead + Unpin + Send + 'static>(
                     }
                 }
             }
-        }
 
         if let Some(tx) = &aggregate_tx {
             let _ = tx.send(tmp[..n].to_vec()).await;
@@ -520,6 +519,7 @@ impl KillOnDrop {
     fn new(child: Child) -> Self {
         Self { child: Some(child) }
     }
+    #[allow(clippy::expect_used)] // invariant: child present until disarmed
     fn as_mut(&mut self) -> &mut Child {
         self.child.as_mut().expect("child present")
     }

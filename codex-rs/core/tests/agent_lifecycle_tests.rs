@@ -117,8 +117,7 @@ mod agent_output_validation_tests {
             let is_suspicious = duration_secs < 30 && output_size < 1000;
             assert_eq!(
                 is_suspicious, expected_suspicious,
-                "duration={}s, size={} bytes should be suspicious={}",
-                duration_secs, output_size, expected_suspicious
+                "duration={duration_secs}s, size={output_size} bytes should be suspicious={expected_suspicious}"
             );
         }
 
@@ -191,8 +190,7 @@ mod tmux_completion_detection_tests {
             let is_valid = file_size >= min_file_size;
             assert_eq!(
                 is_valid, expected_valid,
-                "file_size={} should be valid={}",
-                file_size, expected_valid
+                "file_size={file_size} should be valid={expected_valid}"
             );
         }
     }
@@ -267,8 +265,7 @@ mod zombie_cleanup_tests {
             let needs_cleanup = zombie_count > 0;
             assert_eq!(
                 needs_cleanup, should_cleanup,
-                "zombie_count={} should need cleanup={}",
-                zombie_count, should_cleanup
+                "zombie_count={zombie_count} should need cleanup={should_cleanup}"
             );
         }
     }

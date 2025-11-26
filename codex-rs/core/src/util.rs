@@ -20,7 +20,7 @@ pub(crate) fn backoff(attempt: u64) -> Duration {
 }
 
 pub fn escape_command(command: &[String]) -> String {
-    try_join(command.iter().map(|s| s.as_str())).unwrap_or_else(|_| command.join(" "))
+    try_join(command.iter().map(std::string::String::as_str)).unwrap_or_else(|_| command.join(" "))
 }
 
 pub fn strip_bash_lc_and_escape(command: &[String]) -> String {

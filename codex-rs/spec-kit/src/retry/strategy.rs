@@ -347,9 +347,8 @@ mod tests {
 
             // Should be between 500ms and 1500ms (±50%)
             assert!(
-                jittered_ms >= 500.0 && jittered_ms <= 1500.0,
-                "Jittered value {} out of range [500, 1500]",
-                jittered_ms
+                (500.0..=1500.0).contains(&jittered_ms),
+                "Jittered value {jittered_ms} out of range [500, 1500]"
             );
         }
     }
@@ -374,7 +373,7 @@ mod tests {
         use std::sync::Arc;
         use std::sync::Mutex;
         use std::sync::atomic::{AtomicUsize, Ordering};
-        use tokio::time::{Duration, Instant};
+        use tokio::time::Instant;
 
         let call_count = Arc::new(AtomicUsize::new(0));
         let call_times = Arc::new(Mutex::new(Vec::new()));
@@ -433,9 +432,7 @@ mod tests {
             // First retry after ~50ms backoff
             assert!(
                 interval1 >= 40 && interval1 <= 60 + tolerance_ms,
-                "First retry interval {} should be ~50ms ±{}ms",
-                interval1,
-                tolerance_ms
+                "First retry interval {interval1} should be ~50ms ±{tolerance_ms}ms"
             );
         }
     }
@@ -600,9 +597,8 @@ mod tests {
         if times.len() >= 2 {
             let interval1 = (times[1] - times[0]).as_millis();
             assert!(
-                interval1 >= 15 && interval1 <= 30,
-                "First retry interval {} should be ~20ms ±5ms",
-                interval1
+                (15..=30).contains(&interval1),
+                "First retry interval {interval1} should be ~20ms ±5ms"
             );
         }
 
@@ -611,9 +607,8 @@ mod tests {
             let total_time = times[2].as_millis();
             // 20ms (first backoff) + 40ms (second backoff) = ~60ms
             assert!(
-                total_time >= 50 && total_time <= 80,
-                "Total time {} should be ~60ms ±10ms",
-                total_time
+                (50..=80).contains(&total_time),
+                "Total time {total_time} should be ~60ms ±10ms"
             );
         }
     }

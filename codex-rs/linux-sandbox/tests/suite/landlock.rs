@@ -54,6 +54,7 @@ async fn run_cmd(cmd: &[&str], writable_roots: &[PathBuf], timeout_ms: u64) {
         // writing to in the sandbox.
         exclude_tmpdir_env_var: true,
         exclude_slash_tmp: true,
+        allow_git_writes: true,
     };
     let sandbox_program = env!("CARGO_BIN_EXE_codex-linux-sandbox");
     let codex_linux_sandbox_exe = Some(PathBuf::from(sandbox_program));

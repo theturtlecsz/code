@@ -137,11 +137,10 @@ impl SessionManager {
         for entry in std::fs::read_dir(&self.sessions_dir)? {
             let entry = entry?;
             let path = entry.path();
-            if path.extension().map(|e| e == "json").unwrap_or(false) {
-                if let Some(name) = path.file_stem() {
+            if path.extension().map(|e| e == "json").unwrap_or(false)
+                && let Some(name) = path.file_stem() {
                     sessions.push(name.to_string_lossy().to_string());
                 }
-            }
         }
 
         // Sort by name (which often includes timestamp)
@@ -166,7 +165,7 @@ impl SessionManager {
 
     /// Get path for a session file
     fn session_path(&self, session_id: &str) -> PathBuf {
-        self.sessions_dir.join(format!("{}.json", session_id))
+        self.sessions_dir.join(format!("{session_id}.json"))
     }
 
     /// Get sessions directory path

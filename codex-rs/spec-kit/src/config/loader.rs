@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 /// Root application configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct AppConfig {
     /// Model configurations (provider → model settings)
     #[serde(default)]
@@ -246,17 +247,6 @@ impl Default for ConsensusConfig {
     }
 }
 
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            models: HashMap::new(),
-            quality_gates: QualityGateConfig::default(),
-            cost: CostConfig::default(),
-            evidence: EvidenceConfig::default(),
-            consensus: ConsensusConfig::default(),
-        }
-    }
-}
 
 /// Configuration loader with layered merging support
 pub struct ConfigLoader {
@@ -413,9 +403,9 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = AppConfig::default();
-        assert_eq!(config.quality_gates.enabled, true);
+        assert!(config.quality_gates.enabled);
         assert_eq!(config.quality_gates.consensus_threshold, 0.67);
-        assert_eq!(config.cost.enabled, true);
+        assert!(config.cost.enabled);
         assert_eq!(config.evidence.max_size_per_spec_mb, 25);
         assert_eq!(config.consensus.min_agents, 2);
         assert_eq!(config.consensus.max_agents, 5);
@@ -426,7 +416,7 @@ mod tests {
     fn test_load_with_defaults_only() {
         let loader = ConfigLoader::new();
         let config = loader.load().expect("Failed to load default config");
-        assert_eq!(config.quality_gates.enabled, true);
+        assert!(config.quality_gates.enabled);
         assert_eq!(config.consensus.min_agents, 2);
     }
 
@@ -445,11 +435,11 @@ mod tests {
         let loader = ConfigLoader::new();
         let config = loader.load().expect("Failed to load config");
 
-        // Debug output
-        eprintln!("Quality gates enabled: {}", config.quality_gates.enabled);
-        eprintln!("Consensus min agents: {}", config.consensus.min_agents);
+        // Debug output (test only)
+        tracing::debug!("Quality gates enabled: {}", config.quality_gates.enabled);
+        tracing::debug!("Consensus min agents: {}", config.consensus.min_agents);
 
-        assert_eq!(config.quality_gates.enabled, false);
+        assert!(!config.quality_gates.enabled);
         assert_eq!(config.consensus.min_agents, 3);
 
         // Cleanup
@@ -483,7 +473,7 @@ max_agents = 7
         let loader = ConfigLoader::new().with_file(&config_path);
         let config = loader.load().expect("Failed to load config");
 
-        assert_eq!(config.quality_gates.enabled, false);
+        assert!(!config.quality_gates.enabled);
         assert_eq!(config.quality_gates.consensus_threshold, 0.8);
         assert_eq!(config.cost.daily_limit_usd, Some(10.0));
         assert_eq!(config.consensus.min_agents, 3);
@@ -513,7 +503,7 @@ consensus_threshold = 0.8
         let config = loader.load().expect("Failed to load config");
 
         // Env var should win over file
-        assert_eq!(config.quality_gates.enabled, true);
+        assert!(config.quality_gates.enabled);
         // File value should be preserved for non-overridden fields
         assert_eq!(config.quality_gates.consensus_threshold, 0.8);
 
@@ -542,7 +532,7 @@ consensus_threshold = 0.8
     #[test]
     fn test_evidence_config_defaults() {
         let evidence = EvidenceConfig::default();
-        assert_eq!(evidence.enabled, true);
+        assert!(evidence.enabled);
         assert_eq!(evidence.max_size_per_spec_mb, 25);
         assert_eq!(evidence.retention_days, 90);
         assert_eq!(evidence.base_dir, PathBuf::from("docs/evidence"));
@@ -551,7 +541,7 @@ consensus_threshold = 0.8
     #[test]
     fn test_cost_config_defaults() {
         let cost = CostConfig::default();
-        assert_eq!(cost.enabled, true);
+        assert!(cost.enabled);
         assert_eq!(cost.daily_limit_usd, None);
         assert_eq!(cost.monthly_limit_usd, None);
         assert_eq!(cost.alert_threshold, 0.8);
@@ -613,7 +603,7 @@ consensus_threshold = 0.8
         // Should succeed without warnings
         assert!(result.is_ok());
         let config = result.unwrap();
-        assert_eq!(config.cost.enabled, true);
+        assert!(config.cost.enabled);
 
         // Cleanup
         unsafe {
@@ -676,14 +666,12 @@ schema_validation = true
         let err = result.unwrap_err();
         assert!(
             matches!(err, ConfigError::SchemaValidationError(_)),
-            "Expected SchemaValidationError, got: {:?}",
-            err
+            "Expected SchemaValidationError, got: {err:?}"
         );
         let err_msg = err.to_string();
         assert!(
             err_msg.contains("consensus_threshold") || err_msg.contains("quality_gates"),
-            "Error should mention consensus_threshold, got: {}",
-            err_msg
+            "Error should mention consensus_threshold, got: {err_msg}"
         );
     }
 
@@ -707,12 +695,11 @@ schema_validation = false
         // Should succeed because schema_validation = false
         assert!(
             result.is_ok(),
-            "Config should load when validation is disabled: {:?}",
-            result
+            "Config should load when validation is disabled: {result:?}"
         );
         let config = result.unwrap();
         assert_eq!(config.quality_gates.consensus_threshold, 1.5);
-        assert_eq!(config.quality_gates.schema_validation, false);
+        assert!(!config.quality_gates.schema_validation);
     }
 
     #[test]
@@ -739,8 +726,7 @@ schema_validation = true
 
         assert!(
             result.is_err(),
-            "Expected validation error for env override: {:?}",
-            result
+            "Expected validation error for env override: {result:?}"
         );
         let err = result.unwrap_err();
         assert!(matches!(err, ConfigError::SchemaValidationError(_)));
@@ -776,13 +762,11 @@ min_agents = 1
         // Error message should be helpful and descriptive
         assert!(
             err_msg.contains("validation failed") || err_msg.contains("Configuration"),
-            "Should have clear error prefix: {}",
-            err_msg
+            "Should have clear error prefix: {err_msg}"
         );
         assert!(
             err_msg.len() > 50,
-            "Error message should be descriptive: {}",
-            err_msg
+            "Error message should be descriptive: {err_msg}"
         );
 
         // Should mention at least one of the invalid fields
@@ -793,8 +777,7 @@ min_agents = 1
 
         assert!(
             has_field_mention,
-            "Error should mention invalid field(s), got: {}",
-            err_msg
+            "Error should mention invalid field(s), got: {err_msg}"
         );
     }
 
@@ -828,8 +811,7 @@ max_agents = 20  # Invalid: > 10
         let err_msg = err.to_string();
         assert!(
             err_msg.contains("error"),
-            "Should mention errors: {}",
-            err_msg
+            "Should mention errors: {err_msg}"
         );
     }
 }

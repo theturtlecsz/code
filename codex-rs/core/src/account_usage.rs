@@ -113,11 +113,10 @@ impl AccountUsageData {
     }
 
     fn apply_plan(&mut self, plan: Option<&str>) {
-        if let Some(plan) = plan {
-            if self.plan.as_deref() != Some(plan) {
+        if let Some(plan) = plan
+            && self.plan.as_deref() != Some(plan) {
                 self.plan = Some(plan.to_string());
             }
-        }
     }
 
     fn update_last_hour(&mut self, now: DateTime<Utc>) {

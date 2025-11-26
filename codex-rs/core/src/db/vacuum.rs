@@ -47,7 +47,7 @@ pub async fn run_vacuum_cycle(pool: &Pool<SqliteConnectionManager>) -> Result<Va
         let pool = pool.clone();
         move || {
             let conn = pool.get().map_err(|e| {
-                DbError::Pool(format!("Failed to acquire connection for vacuum: {}", e))
+                DbError::Pool(format!("Failed to acquire connection for vacuum: {e}"))
             })?;
 
             let size_before = get_db_size(&conn)?;
@@ -73,7 +73,7 @@ pub async fn run_vacuum_cycle(pool: &Pool<SqliteConnectionManager>) -> Result<Va
         }
     })
     .await
-    .map_err(|e| DbError::Pool(format!("Vacuum task panicked: {}", e)))?
+    .map_err(|e| DbError::Pool(format!("Vacuum task panicked: {e}")))?
 }
 
 /// Get current database size (data + freelist)

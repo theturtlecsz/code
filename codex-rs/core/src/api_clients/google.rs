@@ -198,7 +198,7 @@ impl GeminiClient {
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
         headers.insert(
             AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {}", token))
+            HeaderValue::from_str(&format!("Bearer {token}"))
                 .map_err(|_| ApiError::InvalidConfig("Invalid token".to_string()))?,
         );
 
@@ -274,11 +274,10 @@ impl GeminiClient {
             body["systemInstruction"] = json!({
                 "parts": [{ "text": system }]
             });
-        } else if let Some(sys) = serialized.get("system_instruction") {
-            if !sys.is_null() {
+        } else if let Some(sys) = serialized.get("system_instruction")
+            && !sys.is_null() {
                 body["systemInstruction"] = sys.clone();
             }
-        }
 
         // Add generation config
         let mut gen_config = json!({
@@ -346,15 +345,14 @@ impl GeminiClient {
                 };
 
                 // Handle prompt blocked
-                if let Some(feedback) = &parsed.prompt_feedback {
-                    if let Some(reason) = &feedback.block_reason {
+                if let Some(feedback) = &parsed.prompt_feedback
+                    && let Some(reason) = &feedback.block_reason {
                         return Err(ApiError::ApiResponse {
                             status: 400,
-                            message: format!("Prompt blocked: {}", reason),
+                            message: format!("Prompt blocked: {reason}"),
                             error_type: Some("PROMPT_BLOCKED".to_string()),
                         });
                     }
-                }
 
                 // Send message start on first chunk
                 if !started {
@@ -378,21 +376,20 @@ impl GeminiClient {
                 if let Some(candidates) = &parsed.candidates {
                     for candidate in candidates {
                         // Check for safety block
-                        if let Some(reason) = &candidate.finish_reason {
-                            if reason == "SAFETY" {
+                        if let Some(reason) = &candidate.finish_reason
+                            && reason == "SAFETY" {
                                 return Err(ApiError::ApiResponse {
                                     status: 400,
                                     message: "Response blocked due to safety concerns".to_string(),
                                     error_type: Some("SAFETY_BLOCK".to_string()),
                                 });
                             }
-                        }
 
                         if let Some(content) = &candidate.content {
                             for part in &content.parts {
-                                if let Some(text) = &part.text {
-                                    if !text.is_empty() {
-                                        if tx
+                                if let Some(text) = &part.text
+                                    && !text.is_empty()
+                                        && tx
                                             .send(Ok(StreamEvent::TextDelta {
                                                 index: content_index,
                                                 text: text.clone(),
@@ -402,14 +399,12 @@ impl GeminiClient {
                                         {
                                             return Ok(());
                                         }
-                                    }
-                                }
                             }
                         }
 
                         // Check for completion
-                        if let Some(reason) = &candidate.finish_reason {
-                            if reason == "STOP" || reason == "MAX_TOKENS" {
+                        if let Some(reason) = &candidate.finish_reason
+                            && (reason == "STOP" || reason == "MAX_TOKENS") {
                                 // Send content block stop
                                 let _ = tx
                                     .send(Ok(StreamEvent::ContentBlockStop {
@@ -435,7 +430,6 @@ impl GeminiClient {
                                 // Send message stop
                                 let _ = tx.send(Ok(StreamEvent::MessageStop)).await;
                             }
-                        }
                     }
                 }
             }

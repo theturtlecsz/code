@@ -103,7 +103,7 @@ impl CliExecutor for ClaudeCliExecutor {
                     }
                 } else {
                     CliError::Internal {
-                        message: format!("Failed to spawn Claude CLI: {}", e),
+                        message: format!("Failed to spawn Claude CLI: {e}"),
                     }
                 }
             })?;
@@ -114,10 +114,10 @@ impl CliExecutor for ClaudeCliExecutor {
                 .write_all(prompt.as_bytes())
                 .await
                 .map_err(|e| CliError::Internal {
-                    message: format!("Failed to write to stdin: {}", e),
+                    message: format!("Failed to write to stdin: {e}"),
                 })?;
             stdin.shutdown().await.map_err(|e| CliError::Internal {
-                message: format!("Failed to close stdin: {}", e),
+                message: format!("Failed to close stdin: {e}"),
             })?;
         }
 
@@ -154,8 +154,8 @@ impl CliExecutor for ClaudeCliExecutor {
             }
 
             // Wait for process to exit and check status
-            if let Ok(status) = child.wait().await {
-                if !status.success() {
+            if let Ok(status) = child.wait().await
+                && !status.success() {
                     let code = status.code().unwrap_or(-1);
                     tracing::error!("Claude CLI exited with code: {}", code);
 
@@ -163,7 +163,7 @@ impl CliExecutor for ClaudeCliExecutor {
                     if let Some(mut stderr) = child.stderr {
                         let mut stderr_content = String::new();
                         use tokio::io::AsyncReadExt;
-                        if let Ok(_) = stderr.read_to_string(&mut stderr_content).await {
+                        if (stderr.read_to_string(&mut stderr_content).await).is_ok() {
                             let _ = tx
                                 .send(StreamEvent::Error(CliError::ProcessFailed {
                                     code,
@@ -173,7 +173,6 @@ impl CliExecutor for ClaudeCliExecutor {
                         }
                     }
                 }
-            }
         });
 
         Ok(rx)
@@ -192,7 +191,7 @@ impl CliExecutor for ClaudeCliExecutor {
                     }
                 } else {
                     CliError::Internal {
-                        message: format!("Failed to run health check: {}", e),
+                        message: format!("Failed to run health check: {e}"),
                     }
                 }
             })?;

@@ -291,13 +291,12 @@ fn parse_retry_after(msg: &str) -> Option<u64> {
             let remainder = &msg[after_pos..];
 
             // Extract first number found
-            if let Some(num) = remainder
+            if let Ok(num) = remainder
                 .chars()
                 .skip_while(|c| !c.is_ascii_digit())
-                .take_while(|c| c.is_ascii_digit())
+                .take_while(char::is_ascii_digit)
                 .collect::<String>()
                 .parse::<u64>()
-                .ok()
             {
                 return Some(num.clamp(30, 120)); // Clamp to 30-120s
             }
