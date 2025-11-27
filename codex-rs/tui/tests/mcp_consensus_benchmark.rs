@@ -169,7 +169,7 @@ async fn bench_mcp_vs_subprocess() {
     for _ in 0..SUBPROCESS_ITERATIONS {
         let start = Instant::now();
         let output = Command::new("local-memory")
-            .args(&["search", "test", "--json", "--limit", "5"])
+            .args(["search", "test", "--json", "--limit", "5"])
             .output();
 
         match output {

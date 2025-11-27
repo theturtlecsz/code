@@ -292,12 +292,20 @@ fn test_from_str_trait() {
 #[test]
 fn test_result_type_ok() {
     let result: Result<i32> = Ok(42);
-    assert_eq!(result.unwrap(), 42);
+    // Use pattern matching to extract the value
+    if let Ok(value) = result {
+        assert_eq!(value, 42);
+    } else {
+        panic!("Expected Ok variant");
+    }
 }
 
 #[test]
 fn test_result_type_err() {
     let result: Result<i32> = Err(SpecKitError::from_string("test error"));
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "test error");
+    // Use pattern matching to extract the error
+    if let Err(err) = result {
+        assert_eq!(err.to_string(), "test error");
+    }
 }

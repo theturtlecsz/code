@@ -53,8 +53,16 @@ pub(crate) fn make_widget_with_dir(cwd: &Path) -> ChatWidget<'static> {
     )
 }
 
-/// Helper to create a minimal ChatWidget for key generation testing
-/// Reuses make_widget() for consistency
+/// Helper to create a minimal ChatWidget for key generation testing.
+/// Uses new_for_testing() to avoid counter increments from welcome cells.
+/// This ensures predictable initial state for OrderKey tests.
 pub(crate) fn create_test_widget_for_keygen() -> ChatWidget<'static> {
-    make_widget()
+    let (tx_raw, _rx) = tokio::sync::mpsc::unbounded_channel::<AppEvent>();
+    let app_event_tx = AppEventSender::new(tx_raw);
+    let cfg = test_config();
+    let term = crate::tui::TerminalInfo {
+        picker: None,
+        font_size: (8, 16),
+    };
+    ChatWidget::new_for_testing(cfg, app_event_tx, term)
 }

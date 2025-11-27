@@ -40,7 +40,7 @@ fn fixture_missing_doc_warns_packet_health() {
             .iter()
             .any(|w| w.contains("tasks.md missing"))
     );
-    assert!(report.packet.docs.get("tasks.md").is_some());
+    assert!(report.packet.docs.contains_key("tasks.md"));
 }
 
 #[test]

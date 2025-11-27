@@ -18149,7 +18149,7 @@ mod tests {
 
     struct LocalMemoryMock {
         _guard: std::sync::MutexGuard<'static, ()>,
-        dir: tempfile::TempDir,
+        _dir: tempfile::TempDir,
         prev_path: Option<String>,
         prev_search: Option<String>,
         prev_remember: Option<String>,
@@ -18211,7 +18211,7 @@ mod tests {
 
             Self {
                 _guard: guard,
-                dir,
+                _dir: dir,
                 prev_path,
                 prev_search,
                 prev_remember,

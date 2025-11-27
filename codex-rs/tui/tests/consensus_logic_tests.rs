@@ -49,7 +49,7 @@ async fn test_mcp_search_returns_consensus_artifacts() {
         .unwrap();
 
     // Should return 2 artifacts
-    assert!(result.content.len() > 0);
+    assert!(!result.content.is_empty());
     assert_eq!(result.is_error, Some(false));
 }
 

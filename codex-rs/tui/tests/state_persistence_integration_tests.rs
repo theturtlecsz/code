@@ -255,7 +255,7 @@ fn s09_state_migration_schema_change_evidence_adapts() {
 fn s10_state_audit_trail_all_transitions_recorded() {
     let ctx = IntegrationTestContext::new("SPEC-S10-001").unwrap();
 
-    let transitions = vec!["plan", "tasks", "implement"];
+    let transitions = ["plan", "tasks", "implement"];
     for (i, stage) in transitions.iter().enumerate() {
         let audit = ctx.commands_dir().join(format!("audit_{}.json", stage));
         std::fs::write(

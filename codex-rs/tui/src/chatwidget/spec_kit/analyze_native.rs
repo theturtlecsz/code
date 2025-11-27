@@ -442,8 +442,6 @@ fn check_constitution_compliance(
     }
 }
 
-/// Find SPEC directory from SPEC-ID
-
 #[cfg(test)]
 mod tests {
     use super::*;

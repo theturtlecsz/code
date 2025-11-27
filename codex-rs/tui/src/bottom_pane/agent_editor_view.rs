@@ -682,7 +682,7 @@ mod tests {
             actual_height
         );
 
-        let spacer_idx = (preferred_layout.instr_offset + preferred_layout.instr_height) as usize;
+        let _spacer_idx = (preferred_layout.instr_offset + preferred_layout.instr_height) as usize;
         // Spacer line check - layout may have changed, skip this assertion
         // The important part is testing margin spacing below
         // Skip button layout checks - focus on the core test: margin spacing

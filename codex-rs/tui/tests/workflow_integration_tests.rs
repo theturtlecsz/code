@@ -679,7 +679,7 @@ fn w10_state_updates_reflected_in_evidence() {
         .build();
 
     // Simulate state progression through stages
-    let stages = vec![SpecStage::Plan, SpecStage::Tasks, SpecStage::Implement];
+    let stages = [SpecStage::Plan, SpecStage::Tasks, SpecStage::Implement];
 
     for (index, stage) in stages.iter().enumerate() {
         // Write evidence for each stage transition
@@ -748,7 +748,7 @@ fn w11_multi_stage_progression() {
         .starting_at(SpecStage::Plan)
         .build();
 
-    let stages = vec![SpecStage::Plan, SpecStage::Tasks, SpecStage::Implement];
+    let stages = [SpecStage::Plan, SpecStage::Tasks, SpecStage::Implement];
 
     for (index, stage) in stages.iter().enumerate() {
         // Verify current stage
@@ -806,8 +806,7 @@ fn w11_multi_stage_progression() {
     assert_eq!(state.current_index, 2);
 
     // Verify evidence integrity - all files exist
-    for (index, stage) in stages.iter().enumerate() {
-        let stage_name = format!("{:?}", stage).to_lowercase();
+    for stage in stages.iter() {
         assert!(ctx.assert_consensus_exists(*stage, "gemini"));
         assert!(ctx.assert_guardrail_telemetry_exists(*stage));
     }
@@ -821,7 +820,7 @@ fn w12_stage_rollback_on_failure() {
     let ctx = IntegrationTestContext::new("SPEC-W12-001").unwrap();
 
     // Start at tasks stage
-    let mut state = StateBuilder::new("SPEC-W12-001")
+    let state = StateBuilder::new("SPEC-W12-001")
         .starting_at(SpecStage::Tasks)
         .build();
 
@@ -927,7 +926,7 @@ fn w14_state_recovery_after_crash() {
     let ctx = IntegrationTestContext::new("SPEC-W14-001").unwrap();
 
     // Simulate pre-crash state: plan and tasks completed
-    let stages_completed = vec![SpecStage::Plan, SpecStage::Tasks];
+    let stages_completed = [SpecStage::Plan, SpecStage::Tasks];
 
     for (index, stage) in stages_completed.iter().enumerate() {
         let stage_name = format!("{:?}", stage).to_lowercase();
@@ -1000,7 +999,7 @@ fn w15_full_pipeline_completion() {
         .starting_at(SpecStage::Plan)
         .build();
 
-    let all_stages = vec![
+    let all_stages = [
         SpecStage::Plan,
         SpecStage::Tasks,
         SpecStage::Implement,

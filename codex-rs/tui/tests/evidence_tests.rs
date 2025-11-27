@@ -63,7 +63,7 @@ fn test_consensus_verdict_path() {
 fn test_path_with_special_characters() {
     let base = PathBuf::from("docs/SPEC-OPS-004-integrated-coder-hooks/evidence");
     let special = base.join("commands/SPEC-KIT-123_test-123");
-    assert!(special.is_absolute() == false);
+    assert!(!special.is_absolute());
     assert!(special.to_str().unwrap().contains("_test-123"));
 }
 

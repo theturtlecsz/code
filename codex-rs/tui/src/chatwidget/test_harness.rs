@@ -149,14 +149,15 @@ impl TestHarness {
 
     /// Get a specific history cell by index
     #[allow(dead_code)]
-    pub fn history_cell(&self, idx: usize) -> Option<&Box<dyn HistoryCell>> {
-        self.widget.history_cells.get(idx)
+    pub fn history_cell(&self, idx: usize) -> Option<&dyn HistoryCell> {
+        self.widget.history_cells.get(idx).map(|b| b.as_ref())
     }
 
     /// Group history cell indices by request/turn
     /// Returns: (user_indices, assistant_indices) where each Vec contains indices for that turn
     /// Example: user_indices[0] = [2, 3] means user turn 1 occupies indices 2-3
     ///          assistant_indices[0] = [4, 5, 6] means assistant turn 1 occupies indices 4-6
+    #[allow(dead_code)]
     pub fn cells_by_turn(&self) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
         let mut user_groups: Vec<Vec<usize>> = Vec::new();
         let mut assistant_groups: Vec<Vec<usize>> = Vec::new();
@@ -657,7 +658,7 @@ mod tests {
 
         // Check that no second-turn cells appear between first-turn user and assistant
         for idx in (first_user_idx + 1)..first_assistant_idx {
-            if let Some(cell) = harness.widget.history_cells.get(idx) {
+            if let Some(_cell) = harness.widget.history_cells.get(idx) {
                 // Should not be the second user message or an assistant message from turn 2
                 assert_ne!(
                     idx, user_cells[1],

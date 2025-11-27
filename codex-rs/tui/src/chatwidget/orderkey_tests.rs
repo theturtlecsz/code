@@ -188,11 +188,16 @@ async fn test_no_collisions_across_key_categories() {
 
 #[tokio::test]
 async fn test_key_ordering_within_request() {
-    // Test that within a single request, keys are ordered as expected:
-    // banner (top) < prompt < after_prompt < internal (end)
+    // Test key ordering with SPEC-955 Session 2 semantics:
+    // - next_req_key_top() increments current_request_index (for banners/status)
+    // - next_req_key_prompt() increments current_request_index (for user prompts)
+    // - next_req_key_after_prompt() uses current request (for notices after prompt)
+    // - next_internal_key() uses last_seen_request_index (for model output)
+    //
+    // Each call to top/prompt creates a NEW synthetic request to prevent interleaving.
     let mut widget = create_test_widget_for_keygen();
 
-    // Simulate starting a new request
+    // Simulate provider being at request 5
     widget.last_seen_request_index = 5;
 
     let banner = widget.next_req_key_top();
@@ -200,56 +205,82 @@ async fn test_key_ordering_within_request() {
     let after_prompt = widget.next_req_key_after_prompt();
     let internal = widget.next_internal_key();
 
-    // Verify ordering
+    // Verify ordering: all keys should be monotonically increasing
     assert!(banner < prompt, "banner should come before prompt");
     assert!(
         prompt < after_prompt,
         "prompt should come before after_prompt"
     );
+    // Internal key anchors to last_seen (5), which is less than synthetic keys (6, 7, 7)
+    // So internal actually comes BEFORE the synthetic keys in sort order
+    assert!(internal < banner, "internal (anchored to last_seen=5) < banner (synthetic=6)");
 
-    // Internal key uses current request (5) not next (6), and i32::MAX for out
-    // So it depends on req value - if same req, it comes last; if different, depends on req
-    // Let's verify the out values are as expected
+    // Verify the out values are as expected
     assert_eq!(banner.out, i32::MIN);
     assert_eq!(prompt.out, i32::MIN + 1);
     assert_eq!(after_prompt.out, i32::MIN + 2);
     assert_eq!(internal.out, i32::MAX);
 
-    // Banner, prompt, after_prompt should all be for next request (6)
-    assert_eq!(banner.req, 6);
-    assert_eq!(prompt.req, 6);
-    assert_eq!(after_prompt.req, 6);
+    // SPEC-955 Session 2: Each synthetic key type increments current_request_index
+    // banner uses max(current+1, last_seen+1) = max(1, 6) = 6
+    assert_eq!(banner.req, 6, "banner gets first synthetic req");
+    // prompt increments again: max(7, 6) = 7
+    assert_eq!(prompt.req, 7, "prompt gets second synthetic req");
+    // after_prompt does NOT increment, uses current (7)
+    assert_eq!(after_prompt.req, 7, "after_prompt shares req with prompt");
+    // internal uses last_seen_request_index directly (5)
+    assert_eq!(internal.req, 5, "internal anchors to provider's last_seen");
 }
 
 #[tokio::test]
 async fn test_key_ordering_across_multiple_requests() {
-    // Test that keys from different requests are properly ordered
+    // Test key ordering with SPEC-955 Session 2 semantics across provider requests.
+    //
+    // Key insight: There are TWO request numbering systems:
+    // 1. last_seen_request_index: The provider's actual request counter (from API)
+    // 2. current_request_index: Synthetic counter for user-side content
+    //
+    // Internal keys anchor to last_seen (provider), synthetic keys use current (user).
     let mut widget = create_test_widget_for_keygen();
 
-    // Request 1
+    // Provider request 1
     widget.last_seen_request_index = 1;
     let req1_banner = widget.next_req_key_top();
     let req1_prompt = widget.next_req_key_prompt();
     let req1_internal = widget.next_internal_key();
 
-    // Request 2
+    // Provider request 2
     widget.last_seen_request_index = 2;
     let req2_banner = widget.next_req_key_top();
     let req2_prompt = widget.next_req_key_prompt();
     let req2_internal = widget.next_internal_key();
 
-    // All keys from request 1 should come before all keys from request 2
-    assert!(req1_banner < req2_banner);
-    assert!(req1_banner < req2_prompt);
-    assert!(req1_banner < req2_internal);
+    // Verify internal keys (model output) sort by provider's last_seen
+    assert!(
+        req1_internal < req2_internal,
+        "Internal keys should sort by provider request order"
+    );
+    assert_eq!(req1_internal.req, 1, "internal1 anchored to last_seen=1");
+    assert_eq!(req2_internal.req, 2, "internal2 anchored to last_seen=2");
 
-    assert!(req1_prompt < req2_banner);
-    assert!(req1_prompt < req2_prompt);
-    assert!(req1_prompt < req2_internal);
+    // Verify synthetic keys (banners, prompts) sort by their generation order
+    assert!(req1_banner < req1_prompt, "banner1 < prompt1 (sequential generation)");
+    assert!(req1_prompt < req2_banner, "prompt1 < banner2 (sequential generation)");
+    assert!(req2_banner < req2_prompt, "banner2 < prompt2 (sequential generation)");
 
-    assert!(req1_internal < req2_banner);
-    assert!(req1_internal < req2_prompt);
-    assert!(req1_internal < req2_internal);
+    // Internal keys anchor to last_seen, which is typically LESS than synthetic keys
+    // (synthetic keys advance current_request_index beyond last_seen+1)
+    // So internal1 (req=1) < banner1 (req=2)
+    assert!(
+        req1_internal < req1_banner,
+        "Internal (req=1) < synthetic banner (req=2)"
+    );
+
+    // Verify the actual req values match SPEC-955 Session 2 behavior
+    assert_eq!(req1_banner.req, 2, "banner1: max(1, 1+1) = 2");
+    assert_eq!(req1_prompt.req, 3, "prompt1: max(3, 1+1) = 3");
+    assert_eq!(req2_banner.req, 4, "banner2: max(4, 2+1) = 4");
+    assert_eq!(req2_prompt.req, 5, "prompt2: max(5, 2+1) = 5");
 }
 
 #[test]
