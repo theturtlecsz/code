@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use std::collections::HashMap;
+
 use codex_core::config::Config;
 use ratatui::style::Modifier;
 use ratatui::text::Line;
@@ -80,14 +82,28 @@ impl HistorySink for AppEventHistorySink {
 
 type Lines = Vec<Line<'static>>;
 
+/// Default ID used when no stream ID is provided.
+/// This maintains backward compatibility with callers that don't pass an ID.
+const DEFAULT_STREAM_ID: &str = "__default__";
+
 /// Controller that manages newline-gated streaming, header emission, and
 /// commit animation across streams.
+///
+/// SPEC-959: Refactored to use per-ID stream state to support concurrent streams.
+/// Previously used a single buffer per StreamKind which caused content merging
+/// when multiple streams of the same kind were active (e.g., "worldhello" instead
+/// of separate "world" and "hello" for different requests).
 pub(crate) struct StreamController {
     config: Config,
     header: HeaderEmitter,
-    states: [StreamState; 2],
+    /// Per-ID state maps for concurrent stream support (SPEC-959)
+    answer_streams: HashMap<String, StreamState>,
+    reasoning_streams: HashMap<String, StreamState>,
+    /// Track which stream ID is "active" for UI display purposes
+    active_answer_id: Option<String>,
+    active_reasoning_id: Option<String>,
+    /// Legacy field: tracks the current stream kind for backward compatibility
     current_stream: Option<StreamKind>,
-    current_stream_id: Option<String>,
     finishing_after_drain: bool,
     thinking_placeholder_shown: bool,
 }
@@ -97,12 +113,11 @@ impl StreamController {
         Self {
             config,
             header: HeaderEmitter::new(),
-            states: [
-                StreamState::new_for_kind(StreamKind::Answer),
-                StreamState::new_for_kind(StreamKind::Reasoning),
-            ],
+            answer_streams: HashMap::new(),
+            reasoning_streams: HashMap::new(),
+            active_answer_id: None,
+            active_reasoning_id: None,
             current_stream: None,
-            current_stream_id: None,
             finishing_after_drain: false,
             thinking_placeholder_shown: false,
         }
@@ -118,27 +133,78 @@ impl StreamController {
 
     pub(crate) fn clear_all(&mut self) {
         tracing::debug!("clear_all called, current_stream={:?}", self.current_stream);
-        self.states.iter_mut().for_each(|s| s.clear());
+        self.answer_streams.clear();
+        self.reasoning_streams.clear();
+        self.active_answer_id = None;
+        self.active_reasoning_id = None;
         self.current_stream = None;
         self.finishing_after_drain = false;
         self.thinking_placeholder_shown = false;
         // leave header state unchanged; caller decides when to reset
     }
 
-    #[inline]
-    fn idx(kind: StreamKind) -> usize {
-        kind as usize
-    }
-    fn state(&self, kind: StreamKind) -> &StreamState {
-        &self.states[Self::idx(kind)]
-    }
-    fn state_mut(&mut self, kind: StreamKind) -> &mut StreamState {
-        &mut self.states[Self::idx(kind)]
+    /// Get the streams map for the given kind
+    fn streams(&self, kind: StreamKind) -> &HashMap<String, StreamState> {
+        match kind {
+            StreamKind::Answer => &self.answer_streams,
+            StreamKind::Reasoning => &self.reasoning_streams,
+        }
     }
 
-    /// Record the latest provider sequence_number for this stream kind.
+    /// Get the mutable streams map for the given kind
+    fn streams_mut(&mut self, kind: StreamKind) -> &mut HashMap<String, StreamState> {
+        match kind {
+            StreamKind::Answer => &mut self.answer_streams,
+            StreamKind::Reasoning => &mut self.reasoning_streams,
+        }
+    }
+
+    /// Get or create state for a specific stream ID
+    fn get_or_create_state(&mut self, kind: StreamKind, id: &str) -> &mut StreamState {
+        let streams = self.streams_mut(kind);
+        streams
+            .entry(id.to_string())
+            .or_insert_with(|| StreamState::new_for_kind(kind))
+    }
+
+    /// Get state for a specific stream ID if it exists
+    fn get_state(&self, kind: StreamKind, id: &str) -> Option<&StreamState> {
+        self.streams(kind).get(id)
+    }
+
+    /// Get mutable state for a specific stream ID if it exists
+    fn get_state_mut(&mut self, kind: StreamKind, id: &str) -> Option<&mut StreamState> {
+        self.streams_mut(kind).get_mut(id)
+    }
+
+    /// Get the active stream ID for the given kind
+    fn active_id(&self, kind: StreamKind) -> Option<&String> {
+        match kind {
+            StreamKind::Answer => self.active_answer_id.as_ref(),
+            StreamKind::Reasoning => self.active_reasoning_id.as_ref(),
+        }
+    }
+
+    /// Set the active stream ID for the given kind
+    fn set_active_id(&mut self, kind: StreamKind, id: Option<String>) {
+        match kind {
+            StreamKind::Answer => self.active_answer_id = id,
+            StreamKind::Reasoning => self.active_reasoning_id = id,
+        }
+    }
+
+    /// Normalize an optional ID to a string, using DEFAULT_STREAM_ID if None
+    fn normalize_id(id: &Option<String>) -> &str {
+        id.as_deref().unwrap_or(DEFAULT_STREAM_ID)
+    }
+
+    /// Record the latest provider sequence_number for this stream.
     pub(crate) fn set_last_sequence_number(&mut self, kind: StreamKind, seq: Option<u64>) {
-        self.state_mut(kind).last_sequence_number = seq;
+        if let Some(id) = self.active_id(kind).cloned() {
+            if let Some(state) = self.get_state_mut(kind, &id) {
+                state.last_sequence_number = seq;
+            }
+        }
     }
 
     fn emit_header_if_needed(&mut self, kind: StreamKind, out_lines: &mut Lines) -> bool {
@@ -155,6 +221,7 @@ impl StreamController {
     fn maybe_append_reasoning_debug_marker(
         &self,
         kind: StreamKind,
+        stream_id: &str,
         lines: &mut Vec<Line<'static>>,
     ) {
         // Only when explicitly enabled to avoid noise in normal use.
@@ -165,19 +232,15 @@ impl StreamController {
         if !enabled || !matches!(kind, StreamKind::Reasoning) {
             return;
         }
-        let id = match self.current_stream_id() {
-            Some(s) => s.clone(),
-            None => return,
-        };
         // Parse trailing #s<idx>
-        let idx = id
+        let idx = stream_id
             .split('#')
             .next_back()
             .and_then(|frag| frag.strip_prefix('s'));
         if let Some(sidx) = idx {
             let seq_part = self
-                .state(kind)
-                .last_sequence_number
+                .get_state(kind, stream_id)
+                .and_then(|s| s.last_sequence_number)
                 .map(|n| format!(" seq{}", n))
                 .unwrap_or_default();
             let marker = format!("[s{}{}]", sidx, seq_part);
@@ -200,146 +263,77 @@ impl StreamController {
         self.current_stream
     }
 
-    /// Get the current stream ID
+    /// Get the current stream ID for backward compatibility.
+    /// Returns the active ID for the current stream kind.
     pub(crate) fn current_stream_id(&self) -> Option<&String> {
-        self.current_stream_id.as_ref()
+        self.current_stream.and_then(|kind| self.active_id(kind))
     }
 
-    /// Begin a stream, flushing previously completed lines from any other
-    /// active stream to maintain ordering.
+    /// Begin a stream for a specific ID, creating per-ID state.
+    ///
+    /// SPEC-959: This method now supports concurrent streams of the same kind.
+    /// Each stream ID gets its own buffer, preventing content merging.
+    /// Unlike the previous implementation, we do NOT flush other streams when
+    /// a new one starts - they continue independently.
     pub(crate) fn begin_with_id(
         &mut self,
         kind: StreamKind,
         id: Option<String>,
         sink: &impl HistorySink,
     ) {
+        let stream_id = Self::normalize_id(&id).to_string();
         tracing::debug!(
-            "stream.begin kind={:?} prev={:?} new_id={:?}",
+            "stream.begin kind={:?} stream_id={:?} active_id={:?}",
             kind,
-            self.current_stream,
-            id
+            stream_id,
+            self.active_id(kind)
         );
-        // NOTE (dup‑guard): Historically we cleared `current_stream[_id]` even when
-        // `kind` did not change, which caused the active Answer stream to lose its id.
-        // Downstream, the UI could not find the streaming cell by id on finalization
-        // and appended a new Assistant cell (visible duplicate). Keep state when the
-        // kind is unchanged, and if the id changes mid‑stream, flush under the old id
-        // and adopt the new one so the final can match and replace in‑place.
-        if let Some(current) = self.current_stream {
-            if current != kind {
-                tracing::debug!(
-                    "Switching from {:?} to {:?}, flushing previous",
-                    current,
-                    kind
-                );
-                // Synchronously flush completed lines from previous stream.
-                let cfg = self.config.clone();
-                let step = {
-                    let prev_state = self.state_mut(current);
-                    let newly_completed = prev_state.collector.commit_complete_lines(&cfg);
-                    if !newly_completed.is_empty() {
-                        prev_state.enqueue(newly_completed);
-                    }
-                    let result = prev_state.drain_all();
-                    // Clear the previous stream state to ensure no contamination
-                    tracing::debug!("Clearing {:?} stream state", current);
-                    prev_state.clear();
-                    result
-                };
-                if !step.history.is_empty() {
-                    tracing::debug!(
-                        "stream.flush prev={:?} lines={}",
-                        current,
-                        step.history.len()
-                    );
-                    let mut lines: Lines = Vec::new();
-                    self.emit_header_if_needed(current, &mut lines);
-                    lines.extend(step.history);
-                    // Don't add extra blank line - markdown renderer handles spacing
-                    sink.insert_history_with_kind(self.current_stream_id.clone(), current, lines);
-                }
-                // Only clear current stream tracking when actually switching kinds.
-                self.current_stream = None;
-                self.current_stream_id = None;
-            }
-            // If the kind is unchanged, we may still need to handle id transitions.
-            // If the incoming id differs from our current id, flush any buffered
-            // content under the old id and then adopt the new id so downstream
-            // finalize uses a matching identifier.
-            if current == kind {
-                if let Some(ref new_id) = id {
-                    if self.current_stream_id.as_ref() != Some(new_id) {
-                        let cfg = self.config.clone();
-                        let step = {
-                            let prev_state = self.state_mut(current);
-                            let newly_completed = prev_state.collector.commit_complete_lines(&cfg);
-                            if !newly_completed.is_empty() {
-                                prev_state.enqueue(newly_completed);
-                            }
-                            let result = prev_state.drain_all();
-                            tracing::debug!(
-                                "Flushing {:?} due to id change {:?} -> {:?}",
-                                current,
-                                self.current_stream_id,
-                                id
-                            );
-                            result
-                        };
-                        if !step.history.is_empty() {
-                            let mut lines: Lines = Vec::new();
-                            self.emit_header_if_needed(current, &mut lines);
-                            lines.extend(step.history);
-                            sink.insert_history_with_kind(
-                                self.current_stream_id.clone(),
-                                current,
-                                lines,
-                            );
-                        }
-                        // Now adopt the new id; do not reset kind.
-                        self.current_stream_id = Some(new_id.clone());
-                    }
-                } else if self.current_stream_id.is_none() {
-                    // If we previously had no id and a None arrives again, keep as None.
-                }
-            }
+
+        // Get or create state for this specific stream ID
+        // This is the key change from SPEC-959: each ID has its own buffer
+        let _ = self.get_or_create_state(kind, &stream_id);
+
+        // Update the active stream ID for this kind
+        let prev_active = self.active_id(kind).cloned();
+        self.set_active_id(kind, Some(stream_id.clone()));
+
+        // Track the current stream kind for backward compatibility
+        let prev_kind = self.current_stream;
+        self.current_stream = Some(kind);
+
+        // Reset finishing flag when starting a new stream
+        self.finishing_after_drain = false;
+
+        // Emit header if this is a new kind or new stream
+        let is_new_kind = prev_kind != Some(kind);
+        let is_new_id = prev_active.as_ref() != Some(&stream_id);
+
+        if is_new_kind {
+            self.header.reset_for_stream(kind);
         }
 
-        if self.current_stream != Some(kind) {
-            let prev = self.current_stream;
-            self.current_stream = Some(kind);
-            // Always adopt the provided id when starting a new stream
-            self.current_stream_id = id;
-            // Starting a new stream cancels any pending finish-from-previous-stream animation.
-            self.finishing_after_drain = false;
-            if prev.is_some() {
-                self.header.reset_for_stream(kind);
-            }
-            // Emit header immediately for reasoning; for answers, optionally emit immediately.
-            if matches!(kind, StreamKind::Reasoning)
+        // Emit header immediately for reasoning; for answers, optionally emit immediately.
+        if is_new_id
+            && (matches!(kind, StreamKind::Reasoning)
                 || (matches!(kind, StreamKind::Answer)
-                    && self.config.tui.stream.answer_header_immediate)
-            {
-                let mut header_lines = Vec::new();
-                if self.emit_header_if_needed(kind, &mut header_lines) {
-                    // Always associate header lines with the active stream id so
-                    // the TUI can enforce strict per-stream ordering.
+                    && self.config.tui.stream.answer_header_immediate))
+        {
+            let mut header_lines = Vec::new();
+            if self.emit_header_if_needed(kind, &mut header_lines) {
+                // Always associate header lines with the active stream id so
+                // the TUI can enforce strict per-stream ordering.
+                sink.insert_history_with_kind(Some(stream_id.clone()), kind, header_lines);
+                self.thinking_placeholder_shown = true;
+                // For answers, optionally insert an empty streaming cell with a hidden header so
+                // the UI can show a body placeholder (ellipsis) before the first text arrives.
+                if matches!(kind, StreamKind::Answer)
+                    && self.config.tui.stream.show_answer_ellipsis
+                {
                     sink.insert_history_with_kind(
-                        self.current_stream_id.clone(),
+                        Some(stream_id),
                         kind,
-                        header_lines,
+                        vec![ratatui::text::Line::from("codex")],
                     );
-                    self.thinking_placeholder_shown = true;
-                    // For answers, optionally insert an empty streaming cell with a hidden header so
-                    // the UI can show a body placeholder (ellipsis) before the first text arrives.
-                    if matches!(kind, StreamKind::Answer)
-                        && self.config.tui.stream.show_answer_ellipsis
-                    {
-                        sink.insert_history_with_kind(
-                            self.current_stream_id.clone(),
-                            kind,
-                            vec![ratatui::text::Line::from("codex")],
-                        );
-                    }
                 }
             }
         }
@@ -351,14 +345,22 @@ impl StreamController {
     }
 
     /// Push a delta; if it contains a newline, commit completed lines and start animation.
+    ///
+    /// SPEC-959: Uses the active stream ID for the current kind to route deltas
+    /// to the correct per-ID buffer.
     pub(crate) fn push_and_maybe_commit(&mut self, delta: &str, sink: &impl HistorySink) {
         let Some(kind) = self.current_stream else {
             tracing::debug!("push_and_maybe_commit called but no current_stream");
             return;
         };
+        let Some(stream_id) = self.active_id(kind).cloned() else {
+            tracing::debug!("push_and_maybe_commit called but no active_id for {:?}", kind);
+            return;
+        };
         tracing::debug!(
-            "push_and_maybe_commit for {:?}, delta.len={} contains_nl={}",
+            "push_and_maybe_commit for {:?}/{}, delta.len={} contains_nl={}",
             kind,
+            stream_id,
             delta.len(),
             delta.contains('\n')
         );
@@ -369,7 +371,7 @@ impl StreamController {
 
         // Mutate collector and counters in a short scope to avoid long mutable borrows.
         {
-            let state = self.state_mut(kind);
+            let state = self.get_or_create_state(kind, &stream_id);
             if !delta.is_empty() {
                 state.has_seen_delta = true;
             }
@@ -378,7 +380,10 @@ impl StreamController {
                 state.tail_chars_since_commit.saturating_add(delta.len());
         }
         if delta.contains('\n') {
-            let mut newly_completed = self.state_mut(kind).collector.commit_complete_lines(&cfg);
+            let mut newly_completed = {
+                let state = self.get_state_mut(kind, &stream_id).unwrap();
+                state.collector.commit_complete_lines(&cfg)
+            };
             // Reduce leading blanks to at most one across commits
             if !newly_completed.is_empty() {
                 let mut skip_count = 0;
@@ -414,8 +419,8 @@ impl StreamController {
                 {
                     // Add a non-content debug marker line for reasoning
                     let mut with_marker = styled;
-                    self.maybe_append_reasoning_debug_marker(kind, &mut with_marker);
-                    let state = self.state_mut(kind);
+                    self.maybe_append_reasoning_debug_marker(kind, &stream_id, &mut with_marker);
+                    let state = self.get_state_mut(kind, &stream_id).unwrap();
                     state.enqueue(with_marker);
                     state.last_commit_instant = Some(std::time::Instant::now());
                     state.tail_chars_since_commit = 0;
@@ -437,13 +442,17 @@ impl StreamController {
                         None
                     });
             if let Some(limit) = threshold {
-                let ready = { self.state(kind).tail_chars_since_commit >= limit };
+                let ready = {
+                    self.get_state(kind, &stream_id)
+                        .map(|s| s.tail_chars_since_commit >= limit)
+                        .unwrap_or(false)
+                };
                 if ready {
                     let relax_list = self.config.tui.stream.relax_list_holdback;
                     let relax_code = self.config.tui.stream.relax_code_holdback;
                     let cfg2 = self.config.clone();
                     let mut newly_completed = {
-                        let state = self.state_mut(kind);
+                        let state = self.get_state_mut(kind, &stream_id).unwrap();
                         state
                             .collector
                             .commit_soft_lines(&cfg2, relax_list, relax_code)
@@ -465,8 +474,8 @@ impl StreamController {
                         }
                         {
                             let mut with_marker = styled;
-                            self.maybe_append_reasoning_debug_marker(kind, &mut with_marker);
-                            let state = self.state_mut(kind);
+                            self.maybe_append_reasoning_debug_marker(kind, &stream_id, &mut with_marker);
+                            let state = self.get_state_mut(kind, &stream_id).unwrap();
                             state.enqueue(with_marker);
                             state.last_commit_instant = Some(std::time::Instant::now());
                             state.tail_chars_since_commit = 0;
@@ -487,7 +496,10 @@ impl StreamController {
                 let cfg2 = self.config.clone();
                 // Peek at the rendered lines without changing collector state
                 let (committed, saw_heading) = {
-                    let state = self.state(kind);
+                    let state = match self.get_state(kind, &stream_id) {
+                        Some(s) => s,
+                        None => return,
+                    };
                     let committed = state.collector.committed_count();
                     let preview = state.collector.render_preview_lines(&cfg2);
                     let mut saw_heading = false;
@@ -506,12 +518,16 @@ impl StreamController {
                 };
                 // Only early-commit a heading when we are at a line boundary to
                 // avoid truncating partially streamed titles (e.g., "Summar").
-                let at_boundary = { self.state(kind).collector.ends_with_newline() };
+                let at_boundary = {
+                    self.get_state(kind, &stream_id)
+                        .map(|s| s.collector.ends_with_newline())
+                        .unwrap_or(false)
+                };
                 if saw_heading && at_boundary {
                     let relax_list = self.config.tui.stream.relax_list_holdback;
                     let relax_code = self.config.tui.stream.relax_code_holdback;
                     let mut newly_completed = {
-                        let state = self.state_mut(kind);
+                        let state = self.get_state_mut(kind, &stream_id).unwrap();
                         // This advances committed_count; ensure we enqueue the exact lines.
                         state
                             .collector
@@ -529,7 +545,7 @@ impl StreamController {
                             styled.push(line);
                         }
                         {
-                            let state = self.state_mut(kind);
+                            let state = self.get_state_mut(kind, &stream_id).unwrap();
                             state.enqueue(styled);
                             state.last_commit_instant = Some(std::time::Instant::now());
                             state.tail_chars_since_commit = 0;
@@ -548,14 +564,21 @@ impl StreamController {
         // Only insert a section break when we are actively streaming Reasoning
         // and have a seeded stream id. Without an id, the TUI will drop the
         // insert per strict ordering rules.
-        if self.current_stream != Some(StreamKind::Reasoning) || self.current_stream_id.is_none() {
+        let Some(stream_id) = self.active_id(StreamKind::Reasoning).cloned() else {
             tracing::debug!("skip section break: no active reasoning stream or missing id");
+            return;
+        };
+        if self.current_stream != Some(StreamKind::Reasoning) {
+            tracing::debug!("skip section break: current stream is not Reasoning");
             return;
         }
         let cfg = self.config.clone();
         // Scope the mutable borrow of state to collector ops only
         let mut newly_completed = {
-            let state = self.state_mut(StreamKind::Reasoning);
+            let state = match self.get_state_mut(StreamKind::Reasoning, &stream_id) {
+                Some(s) => s,
+                None => return,
+            };
             // Insert an explicit section break so upcoming section titles are
             // rendered on a fresh line. Without this, bold titles that arrive
             // mid-line can be glued to the previous sentence and fail to be
@@ -591,14 +614,17 @@ impl StreamController {
                 styled.push(line);
             }
             let mut with_marker = styled;
-            self.maybe_append_reasoning_debug_marker(StreamKind::Reasoning, &mut with_marker);
-            let state = self.state_mut(StreamKind::Reasoning);
+            self.maybe_append_reasoning_debug_marker(StreamKind::Reasoning, &stream_id, &mut with_marker);
+            let state = self.get_state_mut(StreamKind::Reasoning, &stream_id).unwrap();
             state.enqueue(with_marker);
             sink.start_commit_animation();
         }
     }
 
     /// Finalize the active stream. If `flush_immediately` is true, drain and emit now.
+    ///
+    /// SPEC-959: This method now finalizes the specific stream ID for the given kind,
+    /// removing it from the HashMap after completion.
     pub(crate) fn finalize(
         &mut self,
         kind: StreamKind,
@@ -608,23 +634,32 @@ impl StreamController {
         if self.current_stream != Some(kind) {
             return false;
         }
+        let Some(stream_id) = self.active_id(kind).cloned() else {
+            return false;
+        };
         let cfg = self.config.clone();
         // Capture the full render source BEFORE draining/clearing the collector so
         // we can rebuild the final Assistant cell without losing any content.
         let full_source_before_drain = {
-            let state = self.state(kind);
+            let state = match self.get_state(kind, &stream_id) {
+                Some(s) => s,
+                None => return false,
+            };
             state.collector.full_render_source_preview()
         };
         // Finalize collector (this clears internal buffers).
         let remaining = {
-            let state = self.state_mut(kind);
+            let state = match self.get_state_mut(kind, &stream_id) {
+                Some(s) => s,
+                None => return false,
+            };
             state.collector.finalize_and_drain(&cfg)
         };
         if flush_immediately {
             // Collect all output first to avoid emitting headers when there is no content.
             let mut out_lines: Lines = Vec::new();
             {
-                let state = self.state_mut(kind);
+                let state = self.get_state_mut(kind, &stream_id).unwrap();
                 if !remaining.is_empty() {
                     state.enqueue(remaining);
                 }
@@ -670,8 +705,7 @@ impl StreamController {
                     Err(_) => false,
                 };
                 if enabled
-                    && let Some(id) = self.current_stream_id()
-                    && let Some(sidx) = id
+                    && let Some(sidx) = stream_id
                         .split('#')
                         .next_back()
                         .and_then(|frag| frag.strip_prefix('s'))
@@ -691,49 +725,50 @@ impl StreamController {
                 // when the collector was cleared by finalize_and_drain.
                 tracing::debug!(
                     "stream.finalize ANSWER id={:?} header={} out_lines={} source_len={}",
-                    self.current_stream_id,
+                    stream_id,
                     emitted_header,
                     lines_with_header.len(),
                     full_source_before_drain.len()
                 );
                 sink.insert_final_answer(
-                    self.current_stream_id.clone(),
+                    Some(stream_id.clone()),
                     lines_with_header,
                     full_source_before_drain,
                 );
             } else if !lines_with_header.is_empty() {
                 tracing::debug!(
                     "stream.finalize REASONING id={:?} header={} out_lines={}",
-                    self.current_stream_id,
+                    stream_id,
                     emitted_header,
                     lines_with_header.len()
                 );
-                sink.insert_history_with_kind(
-                    self.current_stream_id.clone(),
-                    kind,
-                    lines_with_header,
-                );
+                sink.insert_history_with_kind(Some(stream_id.clone()), kind, lines_with_header);
             }
 
-            // Cleanup
-            self.state_mut(kind).clear();
+            // Cleanup - remove the stream from the HashMap
+            self.streams_mut(kind).remove(&stream_id);
             // Allow a subsequent block of the same kind in this turn to emit its header.
             self.header.allow_reemit_for_same_kind_in_turn(kind);
             // Also clear the per-stream emitted flag so the header can render again.
             self.header.reset_for_stream(kind);
-            self.current_stream = None;
-            self.current_stream_id = None;
+            // Clear active ID if this was the active stream
+            if self.active_id(kind).map(|id| id == &stream_id).unwrap_or(false) {
+                self.set_active_id(kind, None);
+            }
+            // Only clear current_stream if no other streams of this kind are active
+            if self.streams(kind).is_empty() {
+                self.current_stream = None;
+            }
             self.finishing_after_drain = false;
             // Ensure any commit animation thread is stopped when we finalize immediately.
             sink.stop_commit_animation();
             true
         } else {
             if !remaining.is_empty() {
-                let state = self.state_mut(kind);
+                let state = self.get_state_mut(kind, &stream_id).unwrap();
                 state.enqueue(remaining);
             }
             // Don't add spacer - causes extra blank lines
-            // self.state_mut(kind).enqueue(vec![Line::from("")]);
             self.finishing_after_drain = true;
             sink.start_commit_animation();
             false
@@ -745,6 +780,9 @@ impl StreamController {
         let Some(kind) = self.current_stream else {
             return false;
         };
+        let Some(stream_id) = self.active_id(kind).cloned() else {
+            return false;
+        };
         // Timeout-based soft commit: if no newline arrived and nothing is queued, force a soft commit.
         let timeout_ms = self.config.tui.stream.soft_commit_timeout_ms.or(
             if self.config.tui.stream.responsive {
@@ -754,18 +792,25 @@ impl StreamController {
             },
         );
         if let Some(ms) = timeout_ms {
-            let queue_empty = self.state(kind).is_idle();
-            let overdue = self
-                .state(kind)
-                .last_commit_instant
-                .map(|t| t.elapsed() >= std::time::Duration::from_millis(ms))
-                .unwrap_or(false);
+            let (queue_empty, overdue) = {
+                match self.get_state(kind, &stream_id) {
+                    Some(state) => {
+                        let queue_empty = state.is_idle();
+                        let overdue = state
+                            .last_commit_instant
+                            .map(|t| t.elapsed() >= std::time::Duration::from_millis(ms))
+                            .unwrap_or(false);
+                        (queue_empty, overdue)
+                    }
+                    None => return false,
+                }
+            };
             if queue_empty && overdue {
                 let relax_list = self.config.tui.stream.relax_list_holdback;
                 let relax_code = self.config.tui.stream.relax_code_holdback;
                 let cfg2 = self.config.clone();
                 let mut newly_completed = {
-                    let state = self.state_mut(kind);
+                    let state = self.get_state_mut(kind, &stream_id).unwrap();
                     state
                         .collector
                         .commit_soft_lines(&cfg2, relax_list, relax_code)
@@ -783,7 +828,7 @@ impl StreamController {
                         styled.push(line);
                     }
                     {
-                        let state = self.state_mut(kind);
+                        let state = self.get_state_mut(kind, &stream_id).unwrap();
                         state.enqueue(styled);
                         state.last_commit_instant = Some(std::time::Instant::now());
                         state.tail_chars_since_commit = 0;
@@ -793,8 +838,10 @@ impl StreamController {
             }
         }
         let step = {
-            let state = self.state_mut(kind);
-            state.step()
+            match self.get_state_mut(kind, &stream_id) {
+                Some(state) => state.step(),
+                None => return false,
+            }
         };
         if !step.history.is_empty() {
             let mut lines: Lines = Vec::new();
@@ -831,23 +878,32 @@ impl StreamController {
                 })
                 .collect();
             // Append debug marker to streamed reasoning batches as their own line.
-            self.maybe_append_reasoning_debug_marker(kind, &mut history);
+            self.maybe_append_reasoning_debug_marker(kind, &stream_id, &mut history);
             out.extend(history);
-            sink.insert_history_with_kind(self.current_stream_id.clone(), kind, out);
+            sink.insert_history_with_kind(Some(stream_id.clone()), kind, out);
         }
 
-        let is_idle = self.state(kind).is_idle();
+        let is_idle = self
+            .get_state(kind, &stream_id)
+            .map(|s| s.is_idle())
+            .unwrap_or(true);
         if is_idle {
             sink.stop_commit_animation();
             if self.finishing_after_drain {
-                // Reset and notify
-                self.state_mut(kind).clear();
+                // Reset and notify - remove the stream from HashMap
+                self.streams_mut(kind).remove(&stream_id);
                 // Allow a subsequent block of the same kind in this turn to emit its header.
                 self.header.allow_reemit_for_same_kind_in_turn(kind);
                 // Also clear the per-stream emitted flag so the header can render again.
                 self.header.reset_for_stream(kind);
-                self.current_stream = None;
-                self.current_stream_id = None;
+                // Clear active ID if this was the active stream
+                if self.active_id(kind).map(|id| id == &stream_id).unwrap_or(false) {
+                    self.set_active_id(kind, None);
+                }
+                // Only clear current_stream if no other streams of this kind are active
+                if self.streams(kind).is_empty() {
+                    self.current_stream = None;
+                }
                 self.finishing_after_drain = false;
                 return true;
             }
@@ -888,10 +944,20 @@ impl StreamController {
             self.current_stream
         );
 
+        let Some(stream_id) = self.active_id(kind).cloned() else {
+            tracing::error!(
+                "apply_full_final called without active stream ID for {:?}",
+                kind
+            );
+            return false;
+        };
+
         // Check if we're already processing this stream
         if self.current_stream == Some(kind) {
-            let state = self.state(kind);
-            let has_delta = state.has_seen_delta;
+            let has_delta = self
+                .get_state(kind, &stream_id)
+                .map(|s| s.has_seen_delta)
+                .unwrap_or(false);
 
             if has_delta {
                 // Key-based deduplication for Reasoning:
@@ -939,7 +1005,10 @@ impl StreamController {
         }
 
         {
-            let state = self.state_mut(kind);
+            let state = match self.get_state_mut(kind, &stream_id) {
+                Some(s) => s,
+                None => return false,
+            };
             tracing::debug!(
                 "State for {:?}: has_seen_delta={}, committed_count={}, message_empty={}",
                 kind,
@@ -1001,6 +1070,22 @@ mod tests {
         fn insert_history(&self, lines: Vec<Line<'static>>) {
             self.lines.borrow_mut().push(lines);
         }
+        fn insert_history_with_kind(
+            &self,
+            _id: Option<String>,
+            _kind: StreamKind,
+            lines: Vec<Line<'static>>,
+        ) {
+            self.lines.borrow_mut().push(lines);
+        }
+        fn insert_final_answer(
+            &self,
+            _id: Option<String>,
+            lines: Vec<Line<'static>>,
+            _full_markdown_source: String,
+        ) {
+            self.lines.borrow_mut().push(lines);
+        }
         fn start_commit_animation(&self) {}
         fn stop_commit_animation(&self) {}
     }
@@ -1023,7 +1108,7 @@ mod tests {
         let cfg = test_config();
         let mut ctrl = StreamController::new(cfg.clone());
         let sink = TestSink::new();
-        ctrl.begin(&sink);
+        ctrl.begin(StreamKind::Answer, &sink);
 
         // Exact deltas from the session log (section: Loose vs. tight list items)
         let deltas = vec![
@@ -1102,7 +1187,7 @@ mod tests {
             let _ = ctrl.on_commit_tick(&sink);
         }
         // Finalize and flush remaining lines now.
-        let _ = ctrl.finalize(true, &sink);
+        let _ = ctrl.finalize(StreamKind::Answer, true, &sink);
 
         // Flatten sink output and strip the header that the controller inserts (blank + "codex").
         let mut flat: Vec<ratatui::text::Line<'static>> = Vec::new();

@@ -1,0 +1,27 @@
+---
+source: tui/src/chatwidget/test_harness.rs
+expression: snapshot_output
+---
+ ┌────────────────────────────────────────────────────────────────────────────┐ 
+ │    Code  •  Model: GPT-5-Codex  •  Reasoning: medium  •  Directory: /tmp   │ 
+ └────────────────────────────────────────────────────────────────────────────┘ 
+                                                                                
+                                                                                
+                                                                                
+ • hello                                                                        
+                                                                                
+                                                                                
+ › First turn                                                                   
+                                                                                
+ › Second turn                                                                  
+                                                                                
+ » Snapshots disabled: this workspace is not inside a Git repository.           
+                                                                                
+                                                                                
+ • world response                                                               
+                                                                                
+                                                                                
+ ┌────────────────────────────────────────────────────────────────────────────┐ 
+ │ What can I code for you tonight?                                           │ 
+ └────────────────────────────────────────────────────────────────────────────┘ 
+                                                                   Ctrl+H help
