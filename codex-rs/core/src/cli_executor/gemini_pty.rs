@@ -960,7 +960,7 @@ mod provider_tests {
             .await
             .unwrap();
 
-        while let Some(_) = rx1.recv().await {}
+        while rx1.recv().await.is_some() {}
 
         // Turn 2
         let mut rx2 = provider

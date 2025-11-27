@@ -1136,6 +1136,7 @@ dependencies = [
  "codex-ollama",
  "codex-protocol",
  "core_test_support",
+ "landlock",
  "libc",
  "owo-colors",
  "predicates",

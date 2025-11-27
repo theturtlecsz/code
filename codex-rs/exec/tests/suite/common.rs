@@ -53,7 +53,7 @@ pub(crate) async fn run_e2e_exec_test(cwd: &Path, response_streams: Vec<String>)
 
     let cwd = cwd.to_path_buf();
     let uri = server.uri();
-    Command::cargo_bin("codex-exec")
+    let output = Command::cargo_bin("codex-exec")
         .context("should find binary for codex-exec")
         .expect("should find binary for codex-exec")
         .current_dir(cwd.clone())
@@ -64,6 +64,17 @@ pub(crate) async fn run_e2e_exec_test(cwd: &Path, response_streams: Vec<String>)
         .arg("-s")
         .arg("danger-full-access")
         .arg("foo")
-        .assert()
-        .success();
+        .output()
+        .expect("should execute codex-exec");
+
+    // Print stdout/stderr for debugging test failures
+    if !output.status.success() || std::env::var("DEBUG_E2E_TEST").is_ok() {
+        eprintln!("=== codex-exec stdout ===");
+        eprintln!("{}", String::from_utf8_lossy(&output.stdout));
+        eprintln!("=== codex-exec stderr ===");
+        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+        eprintln!("=== exit status: {:?} ===", output.status);
+    }
+
+    assert!(output.status.success(), "codex-exec failed with status {:?}", output.status);
 }

@@ -1192,10 +1192,10 @@ mod tests {
                 let mut session_id = None;
                 let events = parse_stream_json_event(&json, &mut session_id);
 
-                if !events.is_empty() {
-                    if let StreamEvent::Delta(parsed_text) = &events[0] {
-                        prop_assert_eq!(parsed_text, &text, "Text content should be preserved exactly");
-                    }
+                if !events.is_empty()
+                    && let StreamEvent::Delta(parsed_text) = &events[0]
+                {
+                    prop_assert_eq!(parsed_text, &text, "Text content should be preserved exactly");
                 }
             }
 

@@ -49,3 +49,6 @@ tempfile = { workspace = true }
 uuid = { workspace = true }
 walkdir = { workspace = true }
 wiremock = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+landlock = { workspace = true }

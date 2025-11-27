@@ -143,7 +143,7 @@ mod tests {
         let config_path = temp_dir.path().join("config.toml");
         fs::write(&config_path, "initial").unwrap();
 
-        let mut watcher = ConfigWatcher::new(&[config_path.clone()], 100).unwrap();
+        let mut watcher = ConfigWatcher::new(std::slice::from_ref(&config_path), 100).unwrap();
 
         // Modify file
         fs::write(&config_path, "modified1").unwrap();

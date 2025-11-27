@@ -33,10 +33,10 @@ struct JsonRpcResp {
 }
 
 fn sleep_env_ms(var: &str) {
-    if let Ok(v) = env::var(var) {
-        if let Ok(ms) = v.parse::<u64>() {
-            thread::sleep(Duration::from_millis(ms));
-        }
+    if let Ok(v) = env::var(var)
+        && let Ok(ms) = v.parse::<u64>()
+    {
+        thread::sleep(Duration::from_millis(ms));
     }
 }
 

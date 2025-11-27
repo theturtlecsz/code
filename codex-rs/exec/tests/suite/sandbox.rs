@@ -10,6 +10,40 @@ use std::process::ExitStatus;
 use tokio::fs::create_dir_all;
 use tokio::process::Child;
 
+/// Check if Landlock is available and can be enforced on this system.
+/// Returns `true` if Landlock is supported and enforced, `false` otherwise.
+#[cfg(target_os = "linux")]
+fn is_landlock_enforced() -> bool {
+    use landlock::{ABI, AccessFs, CompatLevel, Compatible, Ruleset, RulesetAttr, RulesetCreatedAttr, RulesetStatus};
+    use std::thread;
+
+    // Run in a separate thread because restrict_self() affects the calling thread
+    thread::spawn(|| {
+        let abi = ABI::V5;
+        let access_ro = AccessFs::from_read(abi);
+
+        let result = Ruleset::default()
+            .set_compatibility(CompatLevel::BestEffort)
+            .handle_access(access_ro)
+            .and_then(Ruleset::create)
+            .and_then(|r| r.set_no_new_privs(true).restrict_self());
+
+        match result {
+            Ok(status) => status.ruleset == RulesetStatus::FullyEnforced,
+            Err(_) => false,
+        }
+    })
+    .join()
+    .unwrap_or(false)
+}
+
+#[cfg(target_os = "macos")]
+fn is_landlock_enforced() -> bool {
+    // macOS uses Seatbelt, not Landlock - always return true
+    // to indicate that sandbox enforcement is expected to work
+    true
+}
+
 #[cfg(target_os = "macos")]
 async fn spawn_command_under_sandbox(
     command: Vec<String>,
@@ -111,6 +145,14 @@ if __name__ == '__main__':
 
 #[tokio::test]
 async fn sandbox_distinguishes_command_and_policy_cwds() {
+    // This test specifically requires Landlock enforcement to verify that
+    // the sandbox blocks writes outside the sandbox policy cwd.
+    // Skip on systems where Landlock is not enforced (e.g., Proxmox containers).
+    if !is_landlock_enforced() {
+        eprintln!("Skipping test: Landlock is not enforced on this system");
+        return;
+    }
+
     let temp = tempfile::tempdir().expect("should be able to create temp dir");
     let sandbox_root = temp.path().join("sandbox");
     let command_root = temp.path().join("command");

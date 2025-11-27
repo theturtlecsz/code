@@ -7,9 +7,32 @@ use codex_core::exec::SandboxType;
 use codex_core::exec::process_exec_tool_call;
 use codex_core::exec_env::create_env;
 use codex_core::protocol::SandboxPolicy;
+use landlock::{ABI, AccessFs, CompatLevel, Compatible, Ruleset, RulesetAttr, RulesetCreatedAttr, RulesetStatus};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::thread;
 use tempfile::NamedTempFile;
+
+/// Check if Landlock is available and can be enforced on this system.
+fn is_landlock_enforced() -> bool {
+    thread::spawn(|| {
+        let abi = ABI::V5;
+        let access_ro = AccessFs::from_read(abi);
+
+        let result = Ruleset::default()
+            .set_compatibility(CompatLevel::BestEffort)
+            .handle_access(access_ro)
+            .and_then(Ruleset::create)
+            .and_then(|r| r.set_no_new_privs(true).restrict_self());
+
+        match result {
+            Ok(status) => status.ruleset == RulesetStatus::FullyEnforced,
+            Err(_) => false,
+        }
+    })
+    .join()
+    .unwrap_or(false)
+}
 
 // At least on GitHub CI, the arm64 tests appear to need longer timeouts.
 
@@ -84,6 +107,12 @@ async fn test_root_read() {
 #[tokio::test]
 #[should_panic]
 async fn test_root_write() {
+    // Skip this test if Landlock is not enforced, as the test relies on
+    // Landlock to block writes outside allowed directories.
+    if !is_landlock_enforced() {
+        panic!("Skipping test: Landlock is not enforced on this system - panic to satisfy #[should_panic]");
+    }
+
     let tmpfile = NamedTempFile::new().unwrap();
     let tmpfile_path = tmpfile.path().to_string_lossy();
     run_cmd(

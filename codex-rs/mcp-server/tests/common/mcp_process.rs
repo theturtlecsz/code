@@ -64,8 +64,8 @@ impl McpProcess {
         env_overrides: &[(&str, Option<&str>)],
     ) -> anyhow::Result<Self> {
         // Use assert_cmd to locate the binary path and then switch to tokio::process::Command
-        let std_cmd = StdCommand::cargo_bin("code-mcp-server")
-            .context("should find binary for code-mcp-server")?;
+        let std_cmd = StdCommand::cargo_bin("codex-mcp-server")
+            .context("should find binary for codex-mcp-server")?;
 
         let program = std_cmd.get_program().to_owned();
 
@@ -91,7 +91,7 @@ impl McpProcess {
         let mut process = cmd
             .kill_on_drop(true)
             .spawn()
-            .context("code-mcp-server proc should start")?;
+            .context("codex-mcp-server proc should start")?;
         let stdin = process
             .stdin
             .take()

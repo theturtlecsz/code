@@ -640,12 +640,11 @@ max_agents = 5
 
         // Count reload events (should be consolidated)
         let mut reload_count = 0;
-        let mut file_changed_count = 0;
 
         loop {
             match timeout(Duration::from_millis(100), watcher.recv_event()).await {
                 Ok(Some(ConfigReloadEvent::FileChanged(_))) => {
-                    file_changed_count += 1;
+                    // FileChanged events are expected but not counted for assertion
                 }
                 Ok(Some(ConfigReloadEvent::ReloadSuccess)) => {
                     reload_count += 1;
