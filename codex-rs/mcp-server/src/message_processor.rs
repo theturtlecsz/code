@@ -387,7 +387,7 @@ impl MessageProcessor {
         }]);
 
         let result = serde_json::json!({
-            "protocolVersion": 1,
+            "protocolVersion": mcp_types::MCP_SCHEMA_VERSION,
             "serverInfo": server_info,
             "capabilities": {
                 "tools": {

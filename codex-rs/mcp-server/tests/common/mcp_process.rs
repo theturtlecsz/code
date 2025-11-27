@@ -174,7 +174,23 @@ impl McpProcess {
                         "version": "0.0.0",
                         "user_agent": user_agent
                     },
-                    "protocolVersion": mcp_types::MCP_SCHEMA_VERSION
+                    "protocolVersion": mcp_types::MCP_SCHEMA_VERSION,
+                    "agentCapabilities": {
+                        "promptCapabilities": {
+                            "image": true,
+                            "embeddedContext": true,
+                            "audio": false
+                        },
+                        "mcpCapabilities": {
+                            "http": false,
+                            "sse": false
+                        }
+                    },
+                    "authMethods": [{
+                        "id": "code-login",
+                        "name": "Use Code login",
+                        "description": "Run `code login` (ChatGPT or API key) before connecting."
+                    }]
                 })
             }),
             initialized

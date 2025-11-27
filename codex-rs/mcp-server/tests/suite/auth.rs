@@ -57,6 +57,7 @@ sandbox_mode = "danger-full-access"
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "SPEC-958: Auth status endpoint removed from fork - see codex_message_processor.rs:138"]
 async fn get_auth_status_no_auth() {
     let codex_home = TempDir::new().unwrap_or_else(|e| panic!("create tempdir: {e}"));
     create_config_toml(codex_home.path()).expect("write config.toml");
@@ -90,6 +91,7 @@ async fn get_auth_status_no_auth() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "SPEC-958: Auth status endpoint removed from fork - see codex_message_processor.rs:138"]
 async fn get_auth_status_with_api_key() {
     let codex_home = TempDir::new().unwrap_or_else(|e| panic!("create tempdir: {e}"));
     create_config_toml(codex_home.path()).expect("write config.toml");
@@ -124,6 +126,7 @@ async fn get_auth_status_with_api_key() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "SPEC-958: Auth status endpoint removed from fork - see codex_message_processor.rs:138"]
 async fn get_auth_status_with_api_key_when_auth_not_required() {
     let codex_home = TempDir::new().unwrap_or_else(|e| panic!("create tempdir: {e}"));
     create_config_toml_custom_provider(codex_home.path(), false)
@@ -165,6 +168,7 @@ async fn get_auth_status_with_api_key_when_auth_not_required() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "SPEC-958: Auth status endpoint removed from fork - see codex_message_processor.rs:138"]
 async fn get_auth_status_with_api_key_no_include_token() {
     let codex_home = TempDir::new().unwrap_or_else(|e| panic!("create tempdir: {e}"));
     create_config_toml(codex_home.path()).expect("write config.toml");

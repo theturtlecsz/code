@@ -180,25 +180,27 @@ fn test_is_executing_agents_false() {
 
 #[test]
 fn test_quality_checkpoint_names() {
-    assert_eq!(QualityCheckpoint::BeforeSpecify.name(), "pre-planning");
-    assert_eq!(QualityCheckpoint::AfterSpecify.name(), "post-plan");
-    assert_eq!(QualityCheckpoint::AfterTasks.name(), "post-tasks");
+    assert_eq!(QualityCheckpoint::BeforeSpecify.name(), "before-specify");
+    assert_eq!(QualityCheckpoint::AfterSpecify.name(), "after-specify");
+    assert_eq!(QualityCheckpoint::AfterTasks.name(), "after-tasks");
 }
 
 #[test]
 fn test_quality_checkpoint_gates() {
-    let pre_planning = QualityCheckpoint::BeforeSpecify.gates();
-    assert_eq!(pre_planning.len(), 2);
-    assert!(pre_planning.contains(&QualityGateType::Clarify));
-    assert!(pre_planning.contains(&QualityGateType::Checklist));
+    // BeforeSpecify runs clarify (single gate)
+    let before_specify = QualityCheckpoint::BeforeSpecify.gates();
+    assert_eq!(before_specify.len(), 1);
+    assert!(before_specify.contains(&QualityGateType::Clarify));
 
-    let post_plan = QualityCheckpoint::AfterSpecify.gates();
-    assert_eq!(post_plan.len(), 1);
-    assert!(post_plan.contains(&QualityGateType::Analyze));
+    // AfterSpecify runs checklist (single gate)
+    let after_specify = QualityCheckpoint::AfterSpecify.gates();
+    assert_eq!(after_specify.len(), 1);
+    assert!(after_specify.contains(&QualityGateType::Checklist));
 
-    let post_tasks = QualityCheckpoint::AfterTasks.gates();
-    assert_eq!(post_tasks.len(), 1);
-    assert!(post_tasks.contains(&QualityGateType::Analyze));
+    // AfterTasks runs analyze (single gate)
+    let after_tasks = QualityCheckpoint::AfterTasks.gates();
+    assert_eq!(after_tasks.len(), 1);
+    assert!(after_tasks.contains(&QualityGateType::Analyze));
 }
 
 // ===== QualityGateType Tests =====
@@ -214,29 +216,30 @@ fn test_quality_gate_command_names() {
 
 #[test]
 fn test_guardrail_for_stage() {
+    // SPEC-KIT-066: Uses native /guardrail.* commands (not legacy /spec-ops-* bash scripts)
     assert_eq!(
         guardrail_for_stage(SpecStage::Plan),
-        SlashCommand::SpecOpsPlan
+        SlashCommand::GuardrailPlan
     );
     assert_eq!(
         guardrail_for_stage(SpecStage::Tasks),
-        SlashCommand::SpecOpsTasks
+        SlashCommand::GuardrailTasks
     );
     assert_eq!(
         guardrail_for_stage(SpecStage::Implement),
-        SlashCommand::SpecOpsImplement
+        SlashCommand::GuardrailImplement
     );
     assert_eq!(
         guardrail_for_stage(SpecStage::Validate),
-        SlashCommand::SpecOpsValidate
+        SlashCommand::GuardrailValidate
     );
     assert_eq!(
         guardrail_for_stage(SpecStage::Audit),
-        SlashCommand::SpecOpsAudit
+        SlashCommand::GuardrailAudit
     );
     assert_eq!(
         guardrail_for_stage(SpecStage::Unlock),
-        SlashCommand::SpecOpsUnlock
+        SlashCommand::GuardrailUnlock
     );
 }
 

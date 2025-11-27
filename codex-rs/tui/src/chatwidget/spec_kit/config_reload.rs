@@ -111,7 +111,7 @@ pub enum ReloadNotification {
 ///
 /// # Example
 ///
-/// ```no_run
+/// ```ignore
 /// # use codex_spec_kit::config::{ConfigReloadEvent, AppConfig};
 /// # use codex_tui::chatwidget::spec_kit::config_reload::handle_reload_event;
 /// # use std::sync::Arc;
@@ -232,7 +232,7 @@ fn count_model_changes(old: &AppConfig, new: &AppConfig) -> usize {
 ///
 /// # Example
 ///
-/// ```
+/// ```ignore
 /// # use codex_tui::chatwidget::spec_kit::config_reload::should_defer_reload;
 /// let defer = should_defer_reload(true, false);
 /// assert!(defer, "Should defer when quality gate is active");

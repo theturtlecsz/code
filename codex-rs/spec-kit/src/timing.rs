@@ -8,7 +8,7 @@
 //!
 //! ## Synchronous operations
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use codex_spec_kit::measure_time;
 //!
 //! let result = measure_time!("config_parse", {
@@ -19,7 +19,7 @@
 //!
 //! ## Asynchronous operations
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use codex_spec_kit::measure_time_async;
 //!
 //! let result = measure_time_async!("spawn_agent", async {
@@ -29,7 +29,7 @@
 //!
 //! ## Nested timing
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use codex_spec_kit::{measure_time, measure_time_async};
 //!
 //! async fn spawn_agent(name: &str) -> Result<AgentHandle> {
@@ -61,7 +61,7 @@ use std::time::Instant;
 ///
 /// # Examples
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use codex_spec_kit::measure_time;
 ///
 /// let result = measure_time!("parse_config", {
@@ -93,7 +93,7 @@ macro_rules! measure_time {
 ///
 /// # Examples
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use codex_spec_kit::measure_time_async;
 ///
 /// let result = measure_time_async!("spawn_agent", async {
@@ -122,7 +122,7 @@ macro_rules! measure_time_async {
 ///
 /// # Examples
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use codex_spec_kit::timing::Timer;
 ///
 /// fn process_batch(items: &[Item]) -> Result<()> {

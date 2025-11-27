@@ -1,6 +1,6 @@
 # Spec-Kit Multi-Agent Framework - Task Tracker
 
-**Last Updated**: 2025-10-18
+**Last Updated**: 2025-11-27
 **Branch**: main
 **Status**: ✅ **PHASE 3 COMPLETE** - Production ready
 
@@ -193,6 +193,56 @@
 | 19 | SPEC-957 | Warning Cleanup (Zero Warnings Sprint) | **Done** | Code | N/A | main | dbf4a78a1 | 2025-11-25 | Phase 3 complete (0 warnings) | **COMPLETE** (2025-11-25): Phase 1 (19 test failures fixed) + Phase 2 (208→27 warnings, 87% reduction) + Phase 3 (27→0 warnings, 100% clean). **Phase 3 fixes**: Fixed deprecated rand methods, removed unreachable patterns, removed duplicate match arms, added #[allow(dead_code)] to scaffolded variants, fixed unused variables, changed visibility to pub(crate) for internal items, added #[allow(unused_assignments)] where needed. **Result**: 0 compiler warnings in codex-tui. **Impact**: Clean compiler output, easier to spot real issues, no noise in CI. |
 | 20 | SPEC-958 | Comprehensive Workspace Test Restoration | **In Progress** | Code | docs/SPEC-958-test-restoration/spec.md | main | N/A | 2025-11-26 | TUI infinite loop fixed | **IN PROGRESS** (2025-11-26): Session 2 completed - fixed infinite loop in resort_history_by_order(). **Fixed**: (1) Buggy cycle-following algorithm causing infinite loop (8→10 tests, +2 passing), (2) test_overlapping_turns_no_interleaving now passes. **Remaining**: (1) SPEC-959 per-ID stream buffers (4-8h), (2) codex-core Op types investigation (2h), (3) Behavior change tests (4h), (4) Ignored test audit (<40 from 56), (5) Clippy cleanup (2-3h). **TUI Tests**: 8/10 passing, 2 ignored (StreamController per-ID buffer issue - created SPEC-959). |
 | 21 | SPEC-959 | StreamController Per-ID Stream Buffers | **Ready** | Code | docs/SPEC-959-streamcontroller-per-id-buffers/spec.md | N/A | N/A | 2025-11-26 | Created from SPEC-958 | **READY FOR IMPLEMENTATION** (4-8h): Refactor StreamController to support concurrent streams of same kind but different IDs. **Problem**: Single buffer per StreamKind causes content merging when multiple turns stream concurrently. **Impact**: MEDIUM - affects quick sequential message submission, network reordering, session replay. **Solution**: Replace `states: [StreamState; 2]` with `answer_streams: HashMap<String, StreamState>`. **Enables**: 2 remaining ignored TUI tests. **Blocked by**: Nothing. **Created from**: SPEC-958 Session 2 investigation. |
+
+### Upstream Sync (2025-11-27 Analysis)
+
+**Context**: Comprehensive upstream analysis comparing fork (`~/code`) with upstream (`~/old/code`). Two reports generated: `docs/UPSTREAM-ANALYSIS-2025-11-27.md` (patch plan) and `docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md` (product gaps).
+
+**STATUS**: 0/18 Started (18 items identified, ready for execution)
+
+**Total Effort**: 70-121 hours (Security: 4-6h, Core: 14-26h, Features: 53-89h)
+
+#### Security & Infrastructure (P0/P1 from UPSTREAM-ANALYSIS-2025-11-27.md)
+
+| Order | Task ID | Title | Status | Owners | PRD | Branch | PR | Last Validation | Evidence | Notes |
+|-------|---------|-------|--------|--------|-----|--------|----|-----------------|----------|-------|
+| 1 | SYNC-001 | Add dangerous command detection | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P0 Security**: Add `is_dangerous_command.rs` + Windows variant to command_safety/. Detects `git reset --hard`, `rm -rf`, nested shell commands. Integrate with safety.rs approval flow. No fork conflicts. **Files**: core/src/command_safety/{mod.rs, is_dangerous_command.rs, windows_dangerous_commands.rs}, core/src/safety.rs. Est: 2-3h. |
+| 2 | SYNC-002 | Add process-hardening crate | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P0 Security**: Copy standalone crate (~150 LOC). Disables core dumps (RLIMIT_CORE=0), ptrace (PR_SET_DUMPABLE), removes LD_PRELOAD/DYLD_*. Integrate pre_main_hardening() into TUI startup. **Files**: codex-rs/process-hardening/, Cargo.toml, tui/src/main.rs. Est: 1-2h. |
+| 3 | SYNC-003 | Add cargo deny configuration | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P0 Security**: Copy deny.toml for license + vulnerability auditing. RustSec advisory database integration. May need fork-specific advisory ignores. **Files**: codex-rs/deny.toml. Est: 30min. |
+| 4 | SYNC-004 | Add async-utils crate | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P1 Utility**: Copy standalone crate (~90 LOC). Provides `.or_cancel()` extension for futures with clean cancellation patterns. **Files**: codex-rs/async-utils/, Cargo.toml. Est: 30min. |
+| 5 | SYNC-005 | Add keyring-store crate | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P1 Security**: Copy standalone crate (~200 LOC). System keyring abstraction (macOS Keychain, Windows Credential Manager, Linux Secret Service). Auth integration optional. **Files**: codex-rs/keyring-store/, Cargo.toml. Est: 1h crate, 4-8h integration. |
+| 6 | SYNC-006 | Add feedback crate | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P1 UX**: Copy standalone crate (~250 LOC). Ring buffer logging (4MB cap) + Sentry integration for bug reporting. Requires Sentry account for full integration. **Files**: codex-rs/feedback/, Cargo.toml. Est: 1h crate, 4-6h TUI integration. |
+| 7 | SYNC-007 | Adapt API error bridge logic | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P1 Core**: Extract rate limit parsing and error mapping from upstream api_bridge.rs. Adapt to fork's error types in core/src/error.rs. **Files**: core/src/error.rs, core/src/api_clients/mod.rs. Est: 3-4h. |
+| 8 | SYNC-008 | Add ASCII animation module | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P2 UX**: Copy upstream ascii_animation.rs. Frame-based animation driver for loading states. Requires TUI integration verification. **Files**: tui/src/ascii_animation.rs, tui/src/lib.rs, tui/src/app.rs. Est: 4-6h. |
+| 9 | SYNC-009 | Adapt footer improvements | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P2 UX**: Extract FooterMode enum, context percentage display, keyboard hints from upstream footer.rs. Adapt to fork's bottom_pane_view.rs. **Files**: tui/src/bottom_pane/bottom_pane_view.rs. Est: 4-6h. |
+
+#### Feature Gaps (from UPSTREAM-FEATURE-GAP-ANALYSIS.md)
+
+| Order | Task ID | Title | Status | Owners | PRD | Branch | PR | Last Validation | Evidence | Notes |
+|-------|---------|-------|--------|--------|-----|--------|----|-----------------|----------|-------|
+| 10 | SYNC-010 | Evaluate Auto Drive patterns for spec-kit | **Backlog** | Code | docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md | | | | | **P1 Feature**: Analyze upstream Auto Drive's observer/retry/coordinator patterns (113KB coordinator!). Cherry-pick patterns that enhance spec-kit reliability. NOT full port - different paradigm. **Research**: code-rs/code-auto-drive-core/. Est: 8h research, 20-40h selective implementation. |
+| 11 | SYNC-011 | Add OpenTelemetry observability crate | **Backlog** | Code | docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md | | | | | **P1 Observability**: Port `codex-otel` crate (otel_event_manager.rs 19KB, otel_provider.rs 9KB). Integrate with DirectProcessExecutor and spec-kit pipeline. Enables production monitoring. **Files**: codex-rs/otel/. Est: 8-12h. |
+| 12 | SYNC-012 | Add TypeScript SDK | **Backlog** | Code | docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md | | | | | **P2 Integration**: Copy `sdk/typescript/` package (@openai/codex-sdk). Thread management, event streaming, execution control. Enables external tooling, VS Code extensions. **Files**: sdk/typescript/. Est: 4-6h. |
+| 13 | SYNC-013 | Add Shell MCP server | **Backlog** | Code | docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md | | | | | **P2 Integration**: Copy `shell-tool-mcp/` npm package. MCP shell tool server for ecosystem compatibility. **Files**: shell-tool-mcp/. Est: 2-3h. |
+| 14 | SYNC-014 | Add prompt management UI | **Backlog** | Code | docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md | | | | | **P2 UX**: Port prompt save/reload, alias autocomplete from upstream custom_prompt_view.rs, prompt_args.rs. Consider integration with ACE for persistence. **Files**: tui/src/bottom_pane/. Est: 6-10h. |
+| 15 | SYNC-015 | Add character encoding detection | **Backlog** | Code | docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md | | | | | **P3 Quality**: Port chardetng usage from upstream bash.rs for Unicode log decoding. Small change, high impact for i18n users. **Files**: exec/src/bash.rs. Est: 2-3h. |
+| 16 | SYNC-016 | Add device code auth fallback | **Backlog** | Code | docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md | | | | | **P3 Auth**: Port device code flow from upstream login module. Displays code for user to enter on another device. Improves headless/SSH auth. **Files**: login/src/. Est: 3-4h. |
+| 17 | SYNC-017 | Add /review and /merge workflows | **Backlog** | Code | docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md | | | | | **P2 Workflow**: Port /review uncommitted preset and /merge command from upstream. Integrate with fork's git-tooling module. **Files**: tui/src/slash_command.rs. Est: 6-8h. |
+| 18 | SYNC-018 | Add branch-aware session resume | **Backlog** | Code | docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md | | | | | **P3 UX**: Port branch filtering to session resume picker. Filters sessions by git branch for large workspaces. Small QoL improvement. **Files**: tui/src/. Est: 2-3h. |
+
+**Rejected Items** (from analysis - incompatible with fork architecture):
+- ❌ `codex-api` crate - Conflicts with fork's CLI routing (SPEC-952)
+- ❌ `compact_remote.rs` - Fork already has own compact.rs implementation
+- ❌ `app-server` crates - Conflicts with DirectProcessExecutor
+- ❌ `cloud-tasks` - Requires infrastructure, conflicts with native execution
+- ❌ `lmstudio` - Ollama covers use case
+
+**Protected Fork Features** (DO NOT regress):
+- ✅ spec-kit/ multi-agent orchestration (80+ files)
+- ✅ ACE/ Agentic Context Engine
+- ✅ DirectProcessExecutor native async execution
+- ✅ cli_executor/ Claude/Gemini CLI routing
+- ✅ *_native.rs zero-cost quality commands
 
 ### Completed Tasks
 

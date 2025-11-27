@@ -25,18 +25,17 @@ use std::collections::HashMap;
 
 #[test]
 fn test_checkpoint_gates_correct() {
-    // PrePlanning should run clarify + checklist
+    // BeforeSpecify runs clarify (single gate for early ambiguity detection)
     let gates = QualityCheckpoint::BeforeSpecify.gates();
-    assert_eq!(gates.len(), 2);
+    assert_eq!(gates.len(), 1);
     assert!(gates.contains(&QualityGateType::Clarify));
-    assert!(gates.contains(&QualityGateType::Checklist));
 
-    // PostPlan should run analyze
+    // AfterSpecify runs checklist (quality scoring after plan)
     let gates = QualityCheckpoint::AfterSpecify.gates();
     assert_eq!(gates.len(), 1);
-    assert!(gates.contains(&QualityGateType::Analyze));
+    assert!(gates.contains(&QualityGateType::Checklist));
 
-    // PostTasks should run analyze
+    // AfterTasks runs analyze (consistency check before implement)
     let gates = QualityCheckpoint::AfterTasks.gates();
     assert_eq!(gates.len(), 1);
     assert!(gates.contains(&QualityGateType::Analyze));
@@ -44,9 +43,9 @@ fn test_checkpoint_gates_correct() {
 
 #[test]
 fn test_checkpoint_naming() {
-    assert_eq!(QualityCheckpoint::BeforeSpecify.name(), "pre-planning");
-    assert_eq!(QualityCheckpoint::AfterSpecify.name(), "post-plan");
-    assert_eq!(QualityCheckpoint::AfterTasks.name(), "post-tasks");
+    assert_eq!(QualityCheckpoint::BeforeSpecify.name(), "before-specify");
+    assert_eq!(QualityCheckpoint::AfterSpecify.name(), "after-specify");
+    assert_eq!(QualityCheckpoint::AfterTasks.name(), "after-tasks");
 }
 
 #[test]
@@ -269,7 +268,7 @@ fn test_majority_issue_needs_validation() {
             recommended,
             ..
         } => {
-            assert!(reason.contains("GPT-5 validation needed"));
+            assert!(reason.contains("GPT-5.1 validation needed"));
             assert_eq!(recommended, Some("OAuth2".to_string()));
         }
         _ => panic!("Expected Escalate for majority issue"),

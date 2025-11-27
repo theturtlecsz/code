@@ -81,19 +81,19 @@ fn test_resolvability_need_human() {
 #[test]
 fn test_quality_checkpoint_pre_planning() {
     let checkpoint = QualityCheckpoint::BeforeSpecify;
-    assert_eq!(checkpoint.name(), "pre-planning");
+    assert_eq!(checkpoint.name(), "before-specify");
 }
 
 #[test]
 fn test_quality_checkpoint_post_plan() {
     let checkpoint = QualityCheckpoint::AfterSpecify;
-    assert_eq!(checkpoint.name(), "post-plan");
+    assert_eq!(checkpoint.name(), "after-specify");
 }
 
 #[test]
 fn test_quality_checkpoint_post_tasks() {
     let checkpoint = QualityCheckpoint::AfterTasks;
-    assert_eq!(checkpoint.name(), "post-tasks");
+    assert_eq!(checkpoint.name(), "after-tasks");
 }
 
 // ============================================================================

@@ -15,7 +15,11 @@ use walkdir::WalkDir;
 fn fixture_healthy_marks_pass() {
     let tmp = load_fixture("healthy");
     let report = collect_fixture_report(tmp.path(), "SPEC-FIX-HEALTHY");
-    assert!(report.warnings.is_empty());
+    // Debug: print warnings if any
+    if !report.warnings.is_empty() {
+        eprintln!("Unexpected warnings: {:?}", report.warnings);
+    }
+    assert!(report.warnings.is_empty(), "Expected no warnings, got: {:?}", report.warnings);
     let plan = find_stage(&report, StageKind::Plan);
     assert_eq!(plan.cue, StageCue::Pass);
     assert!(!plan.is_stale);

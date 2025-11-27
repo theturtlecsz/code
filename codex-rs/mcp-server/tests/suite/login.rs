@@ -40,6 +40,7 @@ stream_max_retries = 0
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "SPEC-958: Login/logout endpoints removed from fork - see codex_message_processor.rs:113-136"]
 async fn logout_chatgpt_removes_auth() {
     let codex_home = TempDir::new().unwrap_or_else(|e| panic!("create tempdir: {e}"));
     create_config_toml(codex_home.path()).expect("write config.toml");
@@ -93,6 +94,7 @@ async fn logout_chatgpt_removes_auth() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "SPEC-958: Login/logout endpoints removed from fork - see codex_message_processor.rs:113-136"]
 async fn login_and_cancel_chatgpt() {
     let codex_home = TempDir::new().unwrap_or_else(|e| panic!("create tempdir: {e}"));
     create_config_toml(codex_home.path()).expect("write config.toml");
