@@ -99,6 +99,7 @@ pub mod shell;
 pub mod spawn;
 pub mod terminal;
 pub mod timing; // SPEC-940: Performance timing infrastructure
+pub mod benchmarks; // SPEC-940: Benchmark harness with statistical analysis
 mod tool_apply_patch;
 pub mod turn_diff_tracker;
 mod workflow_validation;
