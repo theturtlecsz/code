@@ -645,6 +645,7 @@ pub fn parse_mcp_results_to_local_memory(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::collections::HashMap;
     use std::fs;
     use std::sync::Mutex;
@@ -824,6 +825,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn model_metadata_defaults_align_with_strategy() {
         let gemini = metadata_map(SpecStage::Plan, SpecAgent::Gemini);
         assert_eq!(gemini.get("MODEL_ID"), Some(&"gemini-2.5-pro".to_string()));
@@ -845,6 +847,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn model_metadata_env_overrides_apply() {
         unsafe {
             std::env::set_var("SPECKIT_MODEL_ID_GPT_PRO_SPEC_IMPLEMENT", "custom-gpt");

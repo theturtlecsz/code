@@ -109,6 +109,7 @@ maplit = "1.0.2"
 predicates = "3"
 pretty_assertions = "1.4.1"
 proptest = "1.5"
+serial_test = "3"
 tempfile = "3"
 tokio-test = "0.4"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

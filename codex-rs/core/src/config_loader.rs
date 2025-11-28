@@ -541,6 +541,7 @@ impl Default for ConfigLoader {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
     fn test_default_config() {
@@ -612,6 +613,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_apply_env_overrides_model() {
         unsafe {
             std::env::set_var("TEST_MODEL", "env-model");
@@ -631,6 +633,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_apply_env_overrides_auto_upgrade_variations() {
         let test_cases = vec![
             ("true", true),
@@ -666,6 +669,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_apply_env_overrides_invalid_bool() {
         unsafe {
             std::env::set_var("TEST_AUTO_UPGRADE", "invalid");
@@ -686,6 +690,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_load_with_skip_layers() {
         // Test skip_file_layer
         let config = ConfigLoader::new()
