@@ -31,19 +31,9 @@ fn collect_stdout_events(rx: Receiver<Event>) -> Vec<u8> {
     out
 }
 
-/// SPEC-957: StdoutStream has private fields - test stubbed
-#[tokio::test]
-#[ignore = "SPEC-957: StdoutStream has private fields that prevent struct literal construction"]
-async fn test_exec_stdout_stream_events_echo() {
-    unimplemented!("SPEC-957: StdoutStream has private fields");
-}
-
-/// SPEC-957: StdoutStream has private fields - test stubbed
-#[tokio::test]
-#[ignore = "SPEC-957: StdoutStream has private fields that prevent struct literal construction"]
-async fn test_exec_stderr_stream_events_echo() {
-    unimplemented!("SPEC-957: StdoutStream has private fields");
-}
+// SPEC-958: Stubbed tests removed (needed StdoutStream with public fields):
+// - test_exec_stdout_stream_events_echo
+// - test_exec_stderr_stream_events_echo
 
 #[tokio::test]
 async fn test_aggregated_output_interleaves_in_order() {

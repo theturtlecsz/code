@@ -14,7 +14,10 @@ use tokio::process::Child;
 /// Returns `true` if Landlock is supported and enforced, `false` otherwise.
 #[cfg(target_os = "linux")]
 fn is_landlock_enforced() -> bool {
-    use landlock::{ABI, AccessFs, CompatLevel, Compatible, Ruleset, RulesetAttr, RulesetCreatedAttr, RulesetStatus};
+    use landlock::{
+        ABI, AccessFs, CompatLevel, Compatible, Ruleset, RulesetAttr, RulesetCreatedAttr,
+        RulesetStatus,
+    };
     use std::thread;
 
     // Run in a separate thread because restrict_self() affects the calling thread

@@ -76,5 +76,9 @@ pub(crate) async fn run_e2e_exec_test(cwd: &Path, response_streams: Vec<String>)
         eprintln!("=== exit status: {:?} ===", output.status);
     }
 
-    assert!(output.status.success(), "codex-exec failed with status {:?}", output.status);
+    assert!(
+        output.status.success(),
+        "codex-exec failed with status {:?}",
+        output.status
+    );
 }

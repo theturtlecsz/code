@@ -9,7 +9,6 @@ use tempfile::TempDir;
 use wiremock::matchers::any;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-958: API format changed - text.format field not present in current implementation"]
 async fn exec_includes_output_schema_in_request() -> anyhow::Result<()> {
     let home = TempDir::new()?;
     let workspace = TempDir::new()?;
@@ -62,7 +61,10 @@ async fn exec_includes_output_schema_in_request() -> anyhow::Result<()> {
 
     // Debug: Print the actual request payload
     eprintln!("=== Request payload ===");
-    eprintln!("{}", serde_json::to_string_pretty(&payload).unwrap_or_default());
+    eprintln!(
+        "{}",
+        serde_json::to_string_pretty(&payload).unwrap_or_default()
+    );
 
     let text = payload.get("text").expect("request missing text field");
     let format = text

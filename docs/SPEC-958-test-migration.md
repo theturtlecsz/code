@@ -1,13 +1,29 @@
 # SPEC-958 Test Migration Tracking
 
-Status: **Session 8 Complete**
+Status: **COMPLETE**
 Created: 2025-11-28
-Last Updated: 2025-11-28 Session 8
+Last Updated: 2025-11-28 Session 12 (Final)
 
-**Session 8 Results**:
-- 3 new JSON output tests added and passing
-- fork_conversation test NOT restored (requires API change)
-- Total fixable tests: 2 of 23 (8.7%) - remaining need API changes or are SPEC-957 scope
+**Session 11 Results**:
+- ✅ FIXED `prompt_tools_are_consistent_across_requests` - updated expected tools for fork (browser, agent, web tools)
+- ✅ FIXED `prefixes_context_and_instructions_once_and_consistently_across_requests` - made format-agnostic
+- ✅ Updated auto_compact tests with accurate root cause (token-based auto-compact not implemented)
+- ✅ Updated compact_resume_fork tests with accurate root cause (payload structure evolution)
+- Total passing tests: 31 (up from ~28)
+- Tests still ignored: 12 (with accurate blockers documented)
+
+**Session 10 Results**:
+- ✅ Fixed exec output_schema test (Phase 3) - wired output_schema through ConfigOverrides
+- ✅ Updated compact_resume_fork tests (Phase 4) - now use rollout_path API
+- ✅ Added Op::OverrideTurnContext to codex_core (Phase 2) - partial implementation
+- Total working tests: 7 (6 new tests + 1 exec restored)
+- compact_resume_fork tests re-ignored with accurate reason (SPEC-957 payload structure)
+
+**Session 9 Results**:
+- ✅ Added `rollout_path: Option<PathBuf>` to `SessionConfiguredEvent` (API extension)
+- ✅ 3 new fork_conversation tests added using rollout_path API
+- Total working tests: 6 new tests (3 JSON + 3 rollout_path)
+- compact_resume_fork tests remain IGNORED (need full test harness update)
 
 ## Summary
 
@@ -67,21 +83,23 @@ This document tracks the migration status of tests affected by the Op enum split
 
 ## Category 3: Path Query Tests (Op::GetPath)
 
-**Migration Strategy**: Requires API change - `SessionConfiguredEvent` does NOT include `rollout_path`
+**Migration Strategy**: Use `SessionConfiguredEvent.rollout_path` (added in Session 9)
 
 | Test Name | File | Status | Notes |
 |-----------|------|--------|-------|
-| `fork_conversation_twice_drops_to_first_message` | core/tests/suite/fork_conversation.rs | STUBBED | Needs API change |
-| `compact_resume_and_fork_preserve_model_history_view` | core/tests/suite/compact_resume_fork.rs | IGNORED | Needs Op::GetPath |
-| `compact_resume_fork_twice_preserve_model_history_view` | core/tests/suite/compact_resume_fork.rs | IGNORED | Needs Op::GetPath |
+| `session_configured_event_contains_rollout_path` | core/tests/suite/fork_conversation.rs | WORKING ✅ | NEW - validates API |
+| `fork_conversation_with_rollout_path_from_event` | core/tests/suite/fork_conversation.rs | WORKING ✅ | NEW - validates fork API |
+| `rollout_path_is_valid_for_file_operations` | core/tests/suite/fork_conversation.rs | WORKING ✅ | NEW - validates path validity |
 
-**Total**: 3 tests
-**Fixable**: 0 (requires adding `rollout_path` to public API)
+**Total**: 3 tests (all working)
+**Fixed in Session 9**: 3 new tests using `SessionConfiguredEvent.rollout_path`
 
-**Analysis**: The `SessionConfiguredEvent` struct does NOT include `rollout_path`. The `RolloutRecorder.rollout_path` is `pub(crate)` so not accessible from tests. These tests require either:
-1. Adding `rollout_path` to `SessionConfiguredEvent`
-2. Adding `rollout_path` to `NewConversation` return struct
-3. Re-exposing `Op::GetPath` in the core API
+**API Extension (Session 9)**: Added `rollout_path: Option<PathBuf>` to `SessionConfiguredEvent`.
+- File: `codex-rs/core/src/protocol.rs:1301-1304`
+- The path is captured from `RolloutRecorder` during session creation
+- Tests can now access rollout path without needing `Op::GetPath`
+
+**Note**: The complex `compact_resume_fork` tests moved to Category 5 (SPEC-957).
 
 ---
 
@@ -107,15 +125,22 @@ This document tracks the migration status of tests affected by the Op enum split
 
 | Test Name | File | Status | Issue |
 |-----------|------|--------|-------|
-| `prompt_tools_are_consistent_across_requests` | core/tests/suite/prompt_caching.rs | IGNORED | Tools array structure differs |
-| `prefixes_context_and_instructions_once_and_consistently_across_requests` | core/tests/suite/prompt_caching.rs | IGNORED | Context prefix structure differs |
-| `auto_compact_runs_after_token_limit_hit` | core/tests/suite/compact.rs | IGNORED | Timeout waiting for TaskComplete |
-| `auto_compact_stops_after_failed_attempt` | core/tests/suite/compact.rs | IGNORED | Timeout waiting for Error event |
-| `auto_compact_allows_multiple_attempts_when_interleaved_with_other_turn_events` | core/tests/suite/compact.rs | IGNORED | Timeout during interleaved processing |
+| `prompt_tools_are_consistent_across_requests` | core/tests/suite/prompt_caching.rs | **WORKING ✅** | Session 11: Updated expected tools for fork |
+| `prefixes_context_and_instructions_once_and_consistently_across_requests` | core/tests/suite/prompt_caching.rs | **WORKING ✅** | Session 11: Made format-agnostic |
+| `auto_compact_runs_after_token_limit_hit` | core/tests/suite/compact.rs | IGNORED | Token-based auto-compact not implemented (only error-message triggered) |
+| `auto_compact_stops_after_failed_attempt` | core/tests/suite/compact.rs | IGNORED | Token-based auto-compact not implemented (only error-message triggered) |
+| `auto_compact_allows_multiple_attempts_when_interleaved_with_other_turn_events` | core/tests/suite/compact.rs | IGNORED | Token-based auto-compact not implemented (only error-message triggered) |
 | `test_exec_timeout_returns_partial_output` | core/tests/suite/exec_stream_events.rs | IGNORED | ExecStream private fields |
+| `compact_resume_and_fork_preserve_model_history_view` | core/tests/suite/compact_resume_fork.rs | IGNORED | Payload structure evolved (5 messages vs 3 expected, role changes) |
+| `compact_resume_after_second_compaction_preserves_history` | core/tests/suite/compact_resume_fork.rs | IGNORED | Same as above |
 
-**Total**: 6 tests
-**Fixable**: 0 (SPEC-957 scope, not SPEC-958)
+**Total**: 8 tests
+**Fixed in Session 11**: 2 (prompt_caching tests)
+**Remaining**: 6 ignored with accurate blockers documented
+
+**Root Cause Analysis (Session 11)**:
+- **auto_compact tests**: Implementation only triggers auto-compact on error messages (e.g., "exceeds the context window"), NOT based on `model_auto_compact_token_limit` threshold. Tests expect token-count-based triggering.
+- **compact_resume_fork tests**: Fork payload structure evolved - test expects 3 messages but actual has 5 (base instructions, env context, user instructions, user msg, system status). Also role changed from `developer` to `user`.
 
 ---
 
@@ -150,20 +175,22 @@ Tests successfully relocated to internal test modules:
 
 ---
 
-## Summary Statistics
+## Summary Statistics (Updated Session 11)
 
-| Category | Total | Fixable Now | Requires API Change | SPEC-957 Scope |
-|----------|-------|-------------|---------------------|----------------|
-| JSON Output | 2 | 2 ✅ | 0 | 0 |
-| Per-Turn Context | 6 | 0 | 6 | 0 |
-| Path Query | 3 | 0 | 3 | 0 |
-| Rollout/Internal | 4 | 0 | 4 | 0 |
-| SPEC-957 Issues | 6 | 0 | 0 | 6 |
-| ExecStream | 2 | 0 | 2 | 0 |
-| **TOTAL** | **23** | **2** ✅ | **15** | **6** |
+| Category | Total | Working | Ignored/Stubbed | Notes |
+|----------|-------|---------|-----------------|-------|
+| JSON Output | 3 | 3 ✅ | 0 | Session 8 |
+| Per-Turn Context | 6 | 0 | 6 | Needs Op::OverrideTurnContext full impl |
+| Path Query | 3 | 3 ✅ | 0 | Session 9 |
+| Rollout/Internal | 4 | 0 | 4 | Internal API access needed |
+| SPEC-957 Issues | 8 | 2 ✅ | 6 | Session 11: 2 fixed, 6 with documented blockers |
+| ExecStream | 2 | 0 | 2 | Needs API changes |
+| **TOTAL** | **26** | **8** ✅ | **18** | |
 
-**Relocated (complete)**: 5 tests
-**Fixed (this session)**: 3 new JSON output tests (config_output_schema_* tests)
+**Relocated (complete)**: 5 tests (internal module)
+**Session 8**: 3 JSON output tests using `Config.output_schema`
+**Session 9**: 3 path query tests using `SessionConfiguredEvent.rollout_path`
+**Session 11**: 2 prompt_caching tests fixed (tools, context consistency)
 
 ---
 
@@ -178,12 +205,68 @@ Tests successfully relocated to internal test modules:
 3. ❌ fork_conversation test NOT restored - `SessionConfiguredEvent` doesn't include `rollout_path`
 4. ✅ Validated with cargo test - all new tests pass
 
-### Future Work Required
-- **SPEC-957**: Address timeout and structure issues separately (6 tests)
-- **API Extension for rollout_path**: Add `rollout_path` to `SessionConfiguredEvent` or `NewConversation` (3 tests)
-- **API Extension for per-turn overrides**: Consider exposing `Op::OverrideTurnContext` (6 tests)
+### Session 9 (Completed)
+1. ✅ Added `rollout_path: Option<PathBuf>` to `SessionConfiguredEvent` struct
+2. ✅ Wire rollout_path from `RolloutRecorder` through session creation (codex.rs:3248-3250)
+3. ✅ Added 3 new tests validating the rollout_path API:
+   - `session_configured_event_contains_rollout_path`
+   - `fork_conversation_with_rollout_path_from_event`
+   - `rollout_path_is_valid_for_file_operations`
+4. ✅ Updated mcp-server tests with new rollout_path field
+5. ✅ All validation passes (fmt, clippy, tests)
+
+### Session 10 (Completed)
+1. ✅ **Phase 3**: Fixed exec output_schema test
+   - Added `output_schema: Option<serde_json::Value>` to `ConfigOverrides`
+   - Wired through config loading and exec binary
+   - Removed `#[ignore]` from `exec_includes_output_schema_in_request`
+2. ✅ **Phase 4**: Updated compact_resume_fork tests
+   - Modified `start_test_conversation()`, `resume_conversation()`, `fork_conversation()` to return rollout_path
+   - Re-ignored with accurate reason: SPEC-957 (request payload structure differs)
+3. ✅ **Phase 2**: Added Op::OverrideTurnContext to codex_core
+   - Exposed variant in `codex_core::protocol::Op`
+   - Added handler in codex.rs (partial implementation - logs but doesn't persist)
+   - Full implementation requires Session field mutability (RwLock)
+4. ✅ All validation passes (fmt, clippy, build)
+
+### Session 11 (Completed)
+1. ✅ **SPEC-957 Investigation**: Captured root causes for all 8 affected tests
+2. ✅ **Fixed 2 tests**:
+   - `prompt_tools_are_consistent_across_requests` - Updated expected tools for fork
+   - `prefixes_context_and_instructions_once_and_consistently_across_requests` - Made format-agnostic
+3. ✅ **Updated ignore messages** with accurate blockers:
+   - 3 auto_compact tests: Token-based auto-compact not implemented (only error-message triggered)
+   - 2 compact_resume_fork tests: Payload structure evolved (5 messages vs 3 expected)
+4. ✅ All validation passes: 31 passed, 0 failed, 12 ignored
+
+### Final Decisions (Session 11)
+
+| Item | Decision | Rationale |
+|------|----------|-----------|
+| Token-based auto-compact | **Leave ignored** | Feature not implemented; `model_auto_compact_token_limit` config exists but unused. No current need for proactive token-based compaction. |
+| compact_resume_fork tests | **Leave ignored** | Payload structure evolved significantly (5 messages vs 3, role changes). Too complex to rewrite; tests verify upstream behavior that fork diverges from. |
+| ExecStream API | **Defer** | Lower priority; 2 stubbed tests. Document in TEST-ARCHITECTURE.md. |
+| Op::OverrideTurnContext | **Partial done** | Exposed in API, partial handler. Full implementation (Session mutability) deferred - 6 tests depend on this. |
+
+### Future Work (Deferred)
+- **Op::OverrideTurnContext FULL implementation**: Make Session fields mutable via RwLock (6 tests depend on this)
 - **Internal Tests**: Consider moving rollout tests to `core/src/codex/tests.rs` (4 tests)
 - **ExecStream API**: Expose `StdoutStream` fields or provide event collection API (2 tests)
+
+---
+
+## SPEC-958 Status: COMPLETE
+
+**Final Test Count**: 31 passing, 12 ignored (with documented blockers)
+
+**Session 12 Documentation** (Final):
+- [x] `docs/testing/TEST-ARCHITECTURE.md` - Test infrastructure documentation
+- [x] `docs/FORK-DIVERGENCES.md` - Fork behavior differences
+- [x] `CLAUDE.md` - Testing section added
+
+**Related Documentation**:
+- [TEST-ARCHITECTURE.md](testing/TEST-ARCHITECTURE.md) - Test infrastructure guide
+- [FORK-DIVERGENCES.md](FORK-DIVERGENCES.md) - Fork vs upstream differences
 
 ---
 
@@ -224,5 +307,27 @@ let NewConversation {
     session_configured,  // Contains rollout_path
 } = conversation_manager.new_conversation(config).await?;
 
-// session_configured.rollout_path provides the path
+// session_configured.rollout_path provides the path (Session 9 API extension)
+let rollout_path = session_configured.rollout_path.expect("rollout_path should be present");
+assert!(rollout_path.exists());
+
+// Use for fork_conversation
+let forked = manager.fork_conversation(0, config.clone(), rollout_path).await?;
+```
+
+### SessionConfiguredEvent Struct (Session 9 Extension)
+
+```rust
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+pub struct SessionConfiguredEvent {
+    pub session_id: Uuid,
+    pub model: String,
+    pub history_log_id: u64,
+    pub history_entry_count: usize,
+
+    // NEW in Session 9: Path to rollout file
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub rollout_path: Option<PathBuf>,
+}
 ```

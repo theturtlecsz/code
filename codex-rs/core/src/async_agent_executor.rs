@@ -997,6 +997,7 @@ impl AsyncAgentExecutor for DirectProcessExecutor {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::print_stdout, clippy::print_stderr)]
     use super::*;
 
     /// Test successful execution with stdout capture
@@ -1669,41 +1670,34 @@ mod tests {
             / ITERATIONS as f64;
         let stddev = variance.sqrt();
 
-        // Log results
-        println!("\n=== SPEC-940 Performance Validation ===");
-        println!("Iterations: {}", ITERATIONS);
-        println!("Mean:   {:.2}ms", mean);
-        println!("Stddev: {:.2}ms", stddev);
-        println!("Min:    {}ms", min);
-        println!("Max:    {}ms", max);
-        println!("Samples: {:?}", samples_ms);
-        println!("========================================\n");
+        // Log results (eprintln for test output)
+        eprintln!("\n=== SPEC-940 Performance Validation ===");
+        eprintln!("Iterations: {ITERATIONS}");
+        eprintln!("Mean:   {mean:.2}ms");
+        eprintln!("Stddev: {stddev:.2}ms");
+        eprintln!("Min:    {min}ms");
+        eprintln!("Max:    {max}ms");
+        eprintln!("Samples: {samples_ms:?}");
+        eprintln!("========================================\n");
 
         // Assertions
         assert!(
             mean < MAX_MEAN_MS as f64,
-            "SPEC-940 FAIL: Mean spawn time {:.2}ms exceeds {}ms target",
-            mean,
-            MAX_MEAN_MS
+            "SPEC-940 FAIL: Mean spawn time {mean:.2}ms exceeds {MAX_MEAN_MS}ms target",
         );
 
         assert!(
             max < MAX_SINGLE_MS,
-            "SPEC-940 FAIL: Max spawn time {}ms exceeds {}ms limit (outlier detected)",
-            max,
-            MAX_SINGLE_MS
+            "SPEC-940 FAIL: Max spawn time {max}ms exceeds {MAX_SINGLE_MS}ms limit (outlier detected)",
         );
 
         assert!(
             stddev < MAX_STDDEV_MS,
-            "SPEC-940 FAIL: Stddev {:.2}ms exceeds {}ms (inconsistent performance)",
-            stddev,
-            MAX_STDDEV_MS
+            "SPEC-940 FAIL: Stddev {stddev:.2}ms exceeds {MAX_STDDEV_MS}ms (inconsistent performance)",
         );
 
-        println!(
-            "✅ SPEC-940 PASS: DirectProcessExecutor {:.1}ms mean, {:.1}ms stddev (n={})",
-            mean, stddev, ITERATIONS
+        eprintln!(
+            "✅ SPEC-940 PASS: DirectProcessExecutor {mean:.1}ms mean, {stddev:.1}ms stddev (n={ITERATIONS})",
         );
     }
 }

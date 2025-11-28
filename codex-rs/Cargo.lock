@@ -1095,6 +1095,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "serde_yaml",
+ "serial_test",
  "sha1",
  "sha2",
  "shlex",

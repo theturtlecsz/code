@@ -21,7 +21,6 @@ use tokio::time::timeout;
 const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-958: Core now prepends system status message to user turns - test assertion needs update"]
 async fn test_conversation_create_and_send_message_ok() {
     // Mock server – we won't strictly rely on it, but provide one to satisfy any model wiring.
     let responses = vec![
@@ -125,9 +124,24 @@ async fn test_conversation_create_and_send_message_ok() {
     let messages = body["messages"]
         .as_array()
         .expect("messages should be array");
-    let last = messages.last().expect("at least one message");
-    assert_eq!(last["role"], json!("user"));
-    assert_eq!(last["content"], json!("Hello"));
+    // Find the user message containing "Hello" (not the system status message)
+    let user_hello_message = messages
+        .iter()
+        .filter(|m| m["role"] == json!("user"))
+        .find(|m| {
+            let content = &m["content"];
+            // Content can be a string or array of content items
+            if let Some(text) = content.as_str() {
+                text == "Hello"
+            } else if let Some(arr) = content.as_array() {
+                arr.iter()
+                    .any(|item| item.get("text").and_then(|t| t.as_str()) == Some("Hello"))
+            } else {
+                false
+            }
+        })
+        .expect("should find user message with 'Hello'");
+    assert_eq!(user_hello_message["role"], json!("user"));
 
     drop(server);
 }

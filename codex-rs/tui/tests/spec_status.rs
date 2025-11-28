@@ -1,5 +1,9 @@
 // SPEC-957: Allow test code flexibility
-#![allow(clippy::uninlined_format_args, clippy::expect_used, clippy::unwrap_used)]
+#![allow(
+    clippy::uninlined_format_args,
+    clippy::expect_used,
+    clippy::unwrap_used
+)]
 #![allow(clippy::redundant_closure)]
 
 use std::fs;
@@ -19,7 +23,11 @@ fn fixture_healthy_marks_pass() {
     if !report.warnings.is_empty() {
         eprintln!("Unexpected warnings: {:?}", report.warnings);
     }
-    assert!(report.warnings.is_empty(), "Expected no warnings, got: {:?}", report.warnings);
+    assert!(
+        report.warnings.is_empty(),
+        "Expected no warnings, got: {:?}",
+        report.warnings
+    );
     let plan = find_stage(&report, StageKind::Plan);
     assert_eq!(plan.cue, StageCue::Pass);
     assert!(!plan.is_stale);

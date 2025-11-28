@@ -41,7 +41,7 @@ fn network_disabled() -> bool {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-957: Op::GetPath not exposed in codex_core::protocol::Op"]
+#[ignore = "SPEC-957: Fork payload structure evolved - test expects 3 messages but actual has 5 (base instructions, env context, user instructions, user msg, system status). Also role changed from developer to user."]
 /// Scenario: compact an initial conversation, resume it, fork one turn back, and
 /// ensure the model-visible history matches expectations at each request.
 async fn compact_resume_and_fork_preserve_model_history_view() {
@@ -55,26 +55,24 @@ async fn compact_resume_and_fork_preserve_model_history_view() {
     mount_initial_flow(&server).await;
 
     // 2. Start a new conversation and drive it through the compact/resume/fork steps.
-    let (_home, config, manager, base) = start_test_conversation(&server).await;
+    let (_home, config, manager, base, base_path) = start_test_conversation(&server).await;
 
     user_turn(&base, "hello world").await;
     compact_conversation(&base).await;
     user_turn(&base, "AFTER_COMPACT").await;
-    let base_path = fetch_conversation_path(&base, "base conversation").await;
     assert!(
         base_path.exists(),
         "compact+resume test expects base path {base_path:?} to exist",
     );
 
-    let resumed = resume_conversation(&manager, &config, base_path).await;
+    let (resumed, resumed_path) = resume_conversation(&manager, &config, base_path).await;
     user_turn(&resumed, "AFTER_RESUME").await;
-    let resumed_path = fetch_conversation_path(&resumed, "resumed conversation").await;
     assert!(
         resumed_path.exists(),
         "compact+resume test expects resumed path {resumed_path:?} to exist",
     );
 
-    let forked = fork_conversation(&manager, &config, resumed_path, 2).await;
+    let (forked, _forked_path) = fork_conversation(&manager, &config, resumed_path, 2).await;
     user_turn(&forked, "AFTER_FORK").await;
 
     // 3. Capture the requests to the model and validate the history slices.
@@ -497,7 +495,7 @@ SUMMARY_ONLY_CONTEXT"
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-957: Op::GetPath not exposed in codex_core::protocol::Op"]
+#[ignore = "SPEC-957: Fork payload structure evolved - same issue as compact_resume_and_fork_preserve_model_history_view"]
 /// Scenario: after the forked branch is compacted, resuming again should reuse
 /// the compacted history and only append the new user message.
 async fn compact_resume_after_second_compaction_preserves_history() {
@@ -512,37 +510,35 @@ async fn compact_resume_after_second_compaction_preserves_history() {
     mount_second_compact_flow(&server).await;
 
     // 2. Drive the conversation through compact -> resume -> fork -> compact -> resume.
-    let (_home, config, manager, base) = start_test_conversation(&server).await;
+    let (_home, config, manager, base, base_path) = start_test_conversation(&server).await;
 
     user_turn(&base, "hello world").await;
     compact_conversation(&base).await;
     user_turn(&base, "AFTER_COMPACT").await;
-    let base_path = fetch_conversation_path(&base, "base conversation").await;
     assert!(
         base_path.exists(),
         "second compact test expects base path {base_path:?} to exist",
     );
 
-    let resumed = resume_conversation(&manager, &config, base_path).await;
+    let (resumed, resumed_path) = resume_conversation(&manager, &config, base_path).await;
     user_turn(&resumed, "AFTER_RESUME").await;
-    let resumed_path = fetch_conversation_path(&resumed, "resumed conversation").await;
     assert!(
         resumed_path.exists(),
         "second compact test expects resumed path {resumed_path:?} to exist",
     );
 
-    let forked = fork_conversation(&manager, &config, resumed_path, 3).await;
+    let (forked, forked_path) = fork_conversation(&manager, &config, resumed_path, 3).await;
     user_turn(&forked, "AFTER_FORK").await;
 
     compact_conversation(&forked).await;
     user_turn(&forked, "AFTER_COMPACT_2").await;
-    let forked_path = fetch_conversation_path(&forked, "forked conversation").await;
     assert!(
         forked_path.exists(),
         "second compact test expects forked path {forked_path:?} to exist",
     );
 
-    let resumed_again = resume_conversation(&manager, &config, forked_path).await;
+    let (resumed_again, _resumed_again_path) =
+        resume_conversation(&manager, &config, forked_path).await;
     user_turn(&resumed_again, AFTER_SECOND_RESUME).await;
 
     let requests = gather_request_bodies(&server).await;
@@ -755,7 +751,13 @@ async fn mount_second_compact_flow(server: &MockServer) {
 
 async fn start_test_conversation(
     server: &MockServer,
-) -> (TempDir, Config, ConversationManager, Arc<CodexConversation>) {
+) -> (
+    TempDir,
+    Config,
+    ConversationManager,
+    Arc<CodexConversation>,
+    std::path::PathBuf,
+) {
     let model_provider = ModelProviderInfo {
         base_url: Some(format!("{}/v1", server.uri())),
         ..built_in_model_providers()["openai"].clone()
@@ -765,12 +767,20 @@ async fn start_test_conversation(
     config.model_provider = model_provider;
 
     let manager = ConversationManager::with_auth(CodexAuth::from_api_key("dummy"));
-    let NewConversation { conversation, .. } = manager
+    let NewConversation {
+        conversation,
+        session_configured,
+        ..
+    } = manager
         .new_conversation(config.clone())
         .await
         .expect("create conversation");
 
-    (home, config, manager, conversation)
+    let rollout_path = session_configured
+        .rollout_path
+        .expect("rollout_path should be present in SessionConfiguredEvent");
+
+    (home, config, manager, conversation, rollout_path)
 }
 
 async fn user_turn(conversation: &Arc<CodexConversation>, text: &str) {
@@ -791,27 +801,39 @@ async fn compact_conversation(conversation: &Arc<CodexConversation>) {
     wait_for_event(conversation, |ev| matches!(ev, EventMsg::TaskComplete(_))).await;
 }
 
-/// SPEC-957: Op::GetPath not exposed in codex_core::protocol::Op - this helper is stubbed out
+/// Fetches the rollout path from the conversation's initial SessionConfiguredEvent.
+/// The path is captured during conversation creation and stored externally.
+/// Returns the rollout path for the conversation, if available.
 #[allow(dead_code, unused_variables)]
 async fn fetch_conversation_path(
-    conversation: &Arc<CodexConversation>,
-    context: &str,
+    _conversation: &Arc<CodexConversation>,
+    _context: &str,
 ) -> std::path::PathBuf {
-    unimplemented!("SPEC-957: Op::GetPath not exposed in codex_core::protocol::Op from the API")
+    // This helper was originally used with Op::GetPath which was removed.
+    // Now we use rollout_path from SessionConfiguredEvent captured during new_conversation().
+    // Tests should pass the rollout_path directly instead of fetching it here.
+    unimplemented!("Tests should capture rollout_path from SessionConfiguredEvent")
 }
 
 async fn resume_conversation(
     manager: &ConversationManager,
     config: &Config,
     path: std::path::PathBuf,
-) -> Arc<CodexConversation> {
+) -> (Arc<CodexConversation>, std::path::PathBuf) {
     let auth_manager =
         codex_core::AuthManager::from_auth_for_testing(CodexAuth::from_api_key("dummy"));
-    let NewConversation { conversation, .. } = manager
+    let NewConversation {
+        conversation,
+        session_configured,
+        ..
+    } = manager
         .resume_conversation_from_rollout(config.clone(), path, auth_manager)
         .await
         .expect("resume conversation");
-    conversation
+    let rollout_path = session_configured
+        .rollout_path
+        .expect("rollout_path should be present in resumed SessionConfiguredEvent");
+    (conversation, rollout_path)
 }
 
 #[cfg(test)]
@@ -820,10 +842,17 @@ async fn fork_conversation(
     config: &Config,
     path: std::path::PathBuf,
     nth_user_message: usize,
-) -> Arc<CodexConversation> {
-    let NewConversation { conversation, .. } = manager
+) -> (Arc<CodexConversation>, std::path::PathBuf) {
+    let NewConversation {
+        conversation,
+        session_configured,
+        ..
+    } = manager
         .fork_conversation(nth_user_message, config.clone(), path)
         .await
         .expect("fork conversation");
-    conversation
+    let rollout_path = session_configured
+        .rollout_path
+        .expect("rollout_path should be present in forked SessionConfiguredEvent");
+    (conversation, rollout_path)
 }

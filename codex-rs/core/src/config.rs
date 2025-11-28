@@ -1726,6 +1726,7 @@ pub struct ConfigOverrides {
     pub tools_web_search_request: Option<bool>,
     pub mcp_servers: Option<HashMap<String, McpServerConfig>>,
     pub experimental_client_tools: Option<ClientTools>,
+    pub output_schema: Option<serde_json::Value>,
 }
 
 impl Config {
@@ -1760,6 +1761,7 @@ impl Config {
             tools_web_search_request: override_tools_web_search_request,
             mcp_servers,
             experimental_client_tools,
+            output_schema,
         } = overrides;
 
         if let Some(mcp_servers) = mcp_servers {
@@ -2081,7 +2083,7 @@ impl Config {
             hot_reload: cfg.hot_reload,
             subagent_commands: cfg.subagents.map(|s| s.commands).unwrap_or_default(),
             experimental_resume: cfg.experimental_resume,
-            output_schema: None,
+            output_schema,
             // Surface TUI notifications preference from config when present.
             tui_notifications: cfg
                 .tui

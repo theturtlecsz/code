@@ -361,6 +361,38 @@ cd ~/code/codex-rs && cargo clean      # Full cleanup
 CLEAN=1 ~/code/build-fast.sh           # Clean + build
 ```
 
+### Running Tests
+
+**Basic test commands** (run from `codex-rs/`):
+```bash
+# Run all core tests
+cargo test -p codex-core
+
+# Run specific test module
+cargo test -p codex-core --test all -- suite::fork_conversation
+
+# Run single test
+cargo test -p codex-core -- session_configured_event_contains_rollout_path
+
+# Include ignored tests
+cargo test -p codex-core -- --ignored
+```
+
+**Current test status** (SPEC-958):
+- `codex-core`: 31 passing, 12 ignored
+- Ignored tests have documented blockers (fork divergences)
+
+**What ignored tests mean**:
+- 3 auto_compact tests: Token-based trigger not implemented (error-message only)
+- 2 compact_resume_fork tests: Payload structure evolved (5 vs 3 messages)
+- 6 per-turn context tests: Op::OverrideTurnContext partial implementation
+- 1 exec timeout test: ExecStream private fields
+
+**Test documentation**:
+- [TEST-ARCHITECTURE.md](docs/testing/TEST-ARCHITECTURE.md) - Test infrastructure guide
+- [FORK-DIVERGENCES.md](docs/FORK-DIVERGENCES.md) - Fork vs upstream differences
+- [SPEC-958-test-migration.md](docs/SPEC-958-test-migration.md) - Migration tracking
+
 ## 7. Branch & Git Discipline
 - Default branch name is **main**.
 - Upstream sync: `git fetch upstream` then `git merge --no-ff --no-commit upstream/main` (see docs/UPSTREAM-SYNC.md).

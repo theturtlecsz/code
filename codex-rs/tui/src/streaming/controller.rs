@@ -326,8 +326,7 @@ impl StreamController {
                 self.thinking_placeholder_shown = true;
                 // For answers, optionally insert an empty streaming cell with a hidden header so
                 // the UI can show a body placeholder (ellipsis) before the first text arrives.
-                if matches!(kind, StreamKind::Answer)
-                    && self.config.tui.stream.show_answer_ellipsis
+                if matches!(kind, StreamKind::Answer) && self.config.tui.stream.show_answer_ellipsis
                 {
                     sink.insert_history_with_kind(
                         Some(stream_id),
@@ -354,7 +353,10 @@ impl StreamController {
             return;
         };
         let Some(stream_id) = self.active_id(kind).cloned() else {
-            tracing::debug!("push_and_maybe_commit called but no active_id for {:?}", kind);
+            tracing::debug!(
+                "push_and_maybe_commit called but no active_id for {:?}",
+                kind
+            );
             return;
         };
         tracing::debug!(
@@ -474,7 +476,11 @@ impl StreamController {
                         }
                         {
                             let mut with_marker = styled;
-                            self.maybe_append_reasoning_debug_marker(kind, &stream_id, &mut with_marker);
+                            self.maybe_append_reasoning_debug_marker(
+                                kind,
+                                &stream_id,
+                                &mut with_marker,
+                            );
                             let state = self.get_state_mut(kind, &stream_id).unwrap();
                             state.enqueue(with_marker);
                             state.last_commit_instant = Some(std::time::Instant::now());
@@ -614,8 +620,14 @@ impl StreamController {
                 styled.push(line);
             }
             let mut with_marker = styled;
-            self.maybe_append_reasoning_debug_marker(StreamKind::Reasoning, &stream_id, &mut with_marker);
-            let state = self.get_state_mut(StreamKind::Reasoning, &stream_id).unwrap();
+            self.maybe_append_reasoning_debug_marker(
+                StreamKind::Reasoning,
+                &stream_id,
+                &mut with_marker,
+            );
+            let state = self
+                .get_state_mut(StreamKind::Reasoning, &stream_id)
+                .unwrap();
             state.enqueue(with_marker);
             sink.start_commit_animation();
         }
@@ -752,7 +764,11 @@ impl StreamController {
             // Also clear the per-stream emitted flag so the header can render again.
             self.header.reset_for_stream(kind);
             // Clear active ID if this was the active stream
-            if self.active_id(kind).map(|id| id == &stream_id).unwrap_or(false) {
+            if self
+                .active_id(kind)
+                .map(|id| id == &stream_id)
+                .unwrap_or(false)
+            {
                 self.set_active_id(kind, None);
             }
             // Only clear current_stream if no other streams of this kind are active
@@ -897,7 +913,11 @@ impl StreamController {
                 // Also clear the per-stream emitted flag so the header can render again.
                 self.header.reset_for_stream(kind);
                 // Clear active ID if this was the active stream
-                if self.active_id(kind).map(|id| id == &stream_id).unwrap_or(false) {
+                if self
+                    .active_id(kind)
+                    .map(|id| id == &stream_id)
+                    .unwrap_or(false)
+                {
                     self.set_active_id(kind, None);
                 }
                 // Only clear current_stream if no other streams of this kind are active

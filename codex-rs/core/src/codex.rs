@@ -3245,6 +3245,9 @@ async fn submission_loop(
                         }
                     }
                 };
+                // Save rollout_path for SessionConfiguredEvent before moving recorder into Session.
+                let rollout_path_for_event =
+                    rollout_recorder.as_ref().map(|r| r.rollout_path.clone());
 
                 // Create debug logger based on config
                 let debug_logger = match crate::debug_logger::DebugLogger::new(config.debug) {
@@ -3426,6 +3429,7 @@ async fn submission_loop(
                         model,
                         history_log_id,
                         history_entry_count,
+                        rollout_path: rollout_path_for_event,
                     }),
                 ))
                 .chain(mcp_connection_errors.into_iter().map(|message| {
@@ -3563,6 +3567,43 @@ async fn submission_loop(
                         AgentTask::spawn(Arc::clone(sess), turn_context, sub.id.clone(), items);
                     sess.set_task(agent);
                 }
+            }
+            Op::OverrideTurnContext {
+                cwd,
+                approval_policy,
+                sandbox_policy,
+                model,
+                effort,
+                summary,
+            } => {
+                let sess = match sess.as_ref() {
+                    Some(sess) => sess,
+                    None => {
+                        send_no_session_event(sub.id).await;
+                        continue;
+                    }
+                };
+                // Log what was requested for debugging purposes.
+                // Full implementation requires making Session fields mutable (SPEC-958 Phase 2).
+                tracing::warn!(
+                    ?cwd,
+                    ?approval_policy,
+                    ?sandbox_policy,
+                    ?model,
+                    ?effort,
+                    ?summary,
+                    "OverrideTurnContext received but not fully implemented - overrides will not persist"
+                );
+                // Suppress unused variable warnings for the partial implementation.
+                let _ = (
+                    cwd,
+                    approval_policy,
+                    sandbox_policy,
+                    model,
+                    effort,
+                    summary,
+                    sess,
+                );
             }
             Op::ExecApproval { id, decision } => {
                 let sess = match sess.as_ref() {

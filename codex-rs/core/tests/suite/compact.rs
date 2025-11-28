@@ -46,25 +46,17 @@ const FINAL_REPLY: &str = "FINAL_REPLY";
 const DUMMY_FUNCTION_NAME: &str = "unsupported_tool";
 const DUMMY_CALL_ID: &str = "call-multi-auto";
 
-/// SPEC-957: rollout_path is no longer exposed via SessionConfiguredEvent - test stubbed.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-957: requires rollout_path which is no longer exposed via SessionConfiguredEvent"]
-async fn summarize_context_three_requests_and_instructions() {
-    unimplemented!("SPEC-957: rollout_path is no longer exposed via SessionConfiguredEvent");
-}
-
-/// SPEC-957: get_rollout_history is now private - test stubbed.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-957: requires get_rollout_history which is now private"]
-async fn get_rollout_history_retains_compacted_entries() {
-    unimplemented!("SPEC-957: RolloutRecorder::get_rollout_history is now private");
-}
+// SPEC-958: Stubbed tests removed (provided no coverage, just `unimplemented!()`):
+// - summarize_context_three_requests_and_instructions (needed rollout_path)
+// - get_rollout_history_retains_compacted_entries (needed get_rollout_history)
 
 // Windows CI only: bump to 4 workers to prevent SSE/event starvation and test timeouts.
-/// SPEC-957: Test times out waiting for TaskComplete event after auto-compact.
+/// SPEC-957: Token-based auto-compact not implemented.
+/// The implementation only triggers auto-compact on error messages (e.g., "exceeds the context window"),
+/// not based on model_auto_compact_token_limit threshold. Test expects token-count triggering.
 #[cfg_attr(windows, tokio::test(flavor = "multi_thread", worker_threads = 4))]
 #[cfg_attr(not(windows), tokio::test(flavor = "multi_thread", worker_threads = 2))]
-#[ignore = "SPEC-957: timeout waiting for TaskComplete after auto-compact token limit"]
+#[ignore = "SPEC-957: token-based auto-compact not implemented (only error-message triggered)"]
 async fn auto_compact_runs_after_token_limit_hit() {
     non_sandbox_test!();
 
@@ -224,16 +216,13 @@ async fn auto_compact_runs_after_token_limit_hit() {
     );
 }
 
-/// SPEC-957: rollout_path is no longer exposed via SessionConfiguredEvent - test stubbed.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-957: requires rollout_path which is no longer exposed via SessionConfiguredEvent"]
-async fn auto_compact_persists_rollout_entries() {
-    unimplemented!("SPEC-957: rollout_path is no longer exposed via SessionConfiguredEvent");
-}
+// SPEC-958: auto_compact_persists_rollout_entries removed (stubbed, needed rollout_path)
 
-/// SPEC-957: Test times out waiting for Error event after failed compact.
+/// SPEC-957: Token-based auto-compact not implemented.
+/// Test expects token-count triggering (model_auto_compact_token_limit=200) but implementation
+/// only triggers auto-compact on error messages (e.g., "exceeds the context window").
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-957: timeout waiting for Error event after failed auto-compact"]
+#[ignore = "SPEC-957: token-based auto-compact not implemented (only error-message triggered)"]
 async fn auto_compact_stops_after_failed_attempt() {
     non_sandbox_test!();
 
@@ -354,9 +343,11 @@ async fn auto_compact_stops_after_failed_attempt() {
     );
 }
 
-/// SPEC-957: Test times out/fails waiting for interleaved auto-compact events.
+/// SPEC-957: Token-based auto-compact not implemented.
+/// Test expects multiple auto-compacts triggered by token accumulation, but implementation
+/// only triggers auto-compact on error messages (e.g., "exceeds the context window").
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "SPEC-957: timeout during interleaved auto-compact event processing"]
+#[ignore = "SPEC-957: token-based auto-compact not implemented (only error-message triggered)"]
 async fn auto_compact_allows_multiple_attempts_when_interleaved_with_other_turn_events() {
     non_sandbox_test!();
 

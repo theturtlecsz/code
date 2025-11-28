@@ -147,6 +147,41 @@ pub enum Op {
         items: Vec<InputItem>,
     },
 
+    /// Override parts of the persistent turn context for subsequent turns.
+    ///
+    /// All fields are optional; when omitted, the existing value is preserved.
+    /// This does not enqueue any input – it only updates defaults used for
+    /// future `UserInput` turns.
+    OverrideTurnContext {
+        /// Updated `cwd` for sandbox/tool calls.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        cwd: Option<std::path::PathBuf>,
+
+        /// Updated command approval policy.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        approval_policy: Option<AskForApproval>,
+
+        /// Updated sandbox policy for tool calls.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        sandbox_policy: Option<SandboxPolicy>,
+
+        /// Updated model slug. When set, the model family is derived
+        /// automatically.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        model: Option<String>,
+
+        /// Updated reasoning effort (honored only for reasoning-capable models).
+        ///
+        /// Use `Some(Some(_))` to set a specific effort, `Some(None)` to clear
+        /// the effort, or `None` to leave the existing value unchanged.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        effort: Option<Option<ReasoningEffortConfig>>,
+
+        /// Updated reasoning summary preference (honored only for reasoning-capable models).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        summary: Option<ReasoningSummaryConfig>,
+    },
+
     /// Queue user input to be appended to the next model request without
     /// interrupting the current turn.
     QueueUserInput {
@@ -1297,6 +1332,11 @@ pub struct SessionConfiguredEvent {
 
     /// Current number of entries in the history log.
     pub history_entry_count: usize,
+
+    /// Path to the rollout file for this session, if rollout recording is enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub rollout_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -1408,10 +1448,12 @@ mod tests {
                 model: "codex-mini-latest".to_string(),
                 history_log_id: 0,
                 history_entry_count: 0,
+                rollout_path: None,
             }),
             order: None,
         };
         let serialized = serde_json::to_string(&event).unwrap();
+        // rollout_path: None is skipped in serialization
         assert_eq!(
             serialized,
             r#"{"id":"1234","event_seq":0,"msg":{"type":"session_configured","session_id":"67e55044-10b1-426f-9247-bb680e5fe0c8","model":"codex-mini-latest","history_log_id":0,"history_entry_count":0}}"#

@@ -241,6 +241,7 @@ impl CodexToolCallParam {
             tools_web_search_request: None,
             mcp_servers: None,
             experimental_client_tools: None,
+            output_schema: None,
         };
 
         let cli_overrides = cli_overrides

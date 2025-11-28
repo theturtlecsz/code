@@ -7,7 +7,9 @@ use codex_core::exec::SandboxType;
 use codex_core::exec::process_exec_tool_call;
 use codex_core::exec_env::create_env;
 use codex_core::protocol::SandboxPolicy;
-use landlock::{ABI, AccessFs, CompatLevel, Compatible, Ruleset, RulesetAttr, RulesetCreatedAttr, RulesetStatus};
+use landlock::{
+    ABI, AccessFs, CompatLevel, Compatible, Ruleset, RulesetAttr, RulesetCreatedAttr, RulesetStatus,
+};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::thread;
@@ -110,7 +112,9 @@ async fn test_root_write() {
     // Skip this test if Landlock is not enforced, as the test relies on
     // Landlock to block writes outside allowed directories.
     if !is_landlock_enforced() {
-        panic!("Skipping test: Landlock is not enforced on this system - panic to satisfy #[should_panic]");
+        panic!(
+            "Skipping test: Landlock is not enforced on this system - panic to satisfy #[should_panic]"
+        );
     }
 
     let tmpfile = NamedTempFile::new().unwrap();

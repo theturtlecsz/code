@@ -44,7 +44,10 @@ fn main() {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     for line in stdin.lock().lines() {
-        let line = match line { Ok(l) => l, Err(_) => break };
+        let line = match line {
+            Ok(l) => l,
+            Err(_) => break,
+        };
         let Ok(req) = serde_json::from_str::<JsonRpcReq>(&line) else {
             continue;
         };
@@ -62,7 +65,12 @@ fn main() {
                     "serverInfo": { "name": "codex-mcp-test-server", "version": "0.0.1" },
                     "protocolVersion": "2025-06-18"
                 });
-                let resp = JsonRpcResp { jsonrpc: "2.0".into(), id: req.id, result: Some(result), error: None };
+                let resp = JsonRpcResp {
+                    jsonrpc: "2.0".into(),
+                    id: req.id,
+                    result: Some(result),
+                    error: None,
+                };
                 let _ = writeln!(stdout, "{}", serde_json::to_string(&resp).unwrap());
                 let _ = stdout.flush();
             }
@@ -80,14 +88,24 @@ fn main() {
                         }
                     ]
                 });
-                let resp = JsonRpcResp { jsonrpc: "2.0".into(), id: req.id, result: Some(tools), error: None };
+                let resp = JsonRpcResp {
+                    jsonrpc: "2.0".into(),
+                    id: req.id,
+                    result: Some(tools),
+                    error: None,
+                };
                 let _ = writeln!(stdout, "{}", serde_json::to_string(&resp).unwrap());
                 let _ = stdout.flush();
             }
             _ => {
                 // Unknown method -> echo minimal error structure
                 let err = json!({ "code": -32601, "message": "Method not found" });
-                let resp = JsonRpcResp { jsonrpc: "2.0".into(), id: req.id, result: None, error: Some(err) };
+                let resp = JsonRpcResp {
+                    jsonrpc: "2.0".into(),
+                    id: req.id,
+                    result: None,
+                    error: Some(err),
+                };
                 let _ = writeln!(stdout, "{}", serde_json::to_string(&resp).unwrap());
                 let _ = stdout.flush();
             }

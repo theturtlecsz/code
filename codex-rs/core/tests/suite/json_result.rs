@@ -111,16 +111,12 @@ async fn config_output_schema_sends_json_schema_format_for_gpt5() {
 
     let format_value = format.unwrap();
     assert_eq!(
-        format_value
-            .get("type")
-            .and_then(serde_json::Value::as_str),
+        format_value.get("type").and_then(serde_json::Value::as_str),
         Some("json_schema"),
         "format type should be json_schema"
     );
     assert_eq!(
-        format_value
-            .get("name")
-            .and_then(serde_json::Value::as_str),
+        format_value.get("name").and_then(serde_json::Value::as_str),
         Some("codex_output_schema"),
         "format name should be codex_output_schema"
     );
@@ -218,9 +214,7 @@ async fn config_output_schema_sends_json_schema_format_for_gpt5_codex() {
 
     let format_value = format.unwrap();
     assert_eq!(
-        format_value
-            .get("type")
-            .and_then(serde_json::Value::as_str),
+        format_value.get("type").and_then(serde_json::Value::as_str),
         Some("json_schema"),
         "format type should be json_schema"
     );

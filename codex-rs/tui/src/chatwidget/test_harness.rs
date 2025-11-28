@@ -848,13 +848,26 @@ mod tests {
         }
 
         // Verify each expected response exists as a distinct cell
-        let has_first = assistant_contents.iter().any(|c| c.contains("first") && !c.contains("third"));
+        let has_first = assistant_contents
+            .iter()
+            .any(|c| c.contains("first") && !c.contains("third"));
         let has_second = assistant_contents.iter().any(|c| c.contains("second"));
-        let has_third = assistant_contents.iter().any(|c| c.contains("third response"));
+        let has_third = assistant_contents
+            .iter()
+            .any(|c| c.contains("third response"));
 
-        assert!(has_first, "Should have 'first' response as separate content");
-        assert!(has_second, "Should have 'second' response as separate content");
-        assert!(has_third, "Should have 'third response' as separate content");
+        assert!(
+            has_first,
+            "Should have 'first' response as separate content"
+        );
+        assert!(
+            has_second,
+            "Should have 'second' response as separate content"
+        );
+        assert!(
+            has_third,
+            "Should have 'third response' as separate content"
+        );
 
         // Note: Cell ordering relative to user messages is tested separately.
         // This test focuses on SPEC-959: per-ID stream buffers preventing content merging.
@@ -1033,8 +1046,14 @@ mod tests {
         // Verify each expected response exists as a separate cell
         let has_hello = assistant_contents.iter().any(|c| c.contains("hello"));
         let has_world = assistant_contents.iter().any(|c| c.contains("world"));
-        assert!(has_hello, "Should have 'hello' response as separate content");
-        assert!(has_world, "Should have 'world' response as separate content");
+        assert!(
+            has_hello,
+            "Should have 'hello' response as separate content"
+        );
+        assert!(
+            has_world,
+            "Should have 'world' response as separate content"
+        );
 
         // Render to a TestBackend with fixed size (80x24)
         let backend = TestBackend::new(80, 24);

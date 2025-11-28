@@ -213,7 +213,10 @@ async fn test_key_ordering_within_request() {
     );
     // Internal key anchors to last_seen (5), which is less than synthetic keys (6, 7, 7)
     // So internal actually comes BEFORE the synthetic keys in sort order
-    assert!(internal < banner, "internal (anchored to last_seen=5) < banner (synthetic=6)");
+    assert!(
+        internal < banner,
+        "internal (anchored to last_seen=5) < banner (synthetic=6)"
+    );
 
     // Verify the out values are as expected
     assert_eq!(banner.out, i32::MIN);
@@ -264,9 +267,18 @@ async fn test_key_ordering_across_multiple_requests() {
     assert_eq!(req2_internal.req, 2, "internal2 anchored to last_seen=2");
 
     // Verify synthetic keys (banners, prompts) sort by their generation order
-    assert!(req1_banner < req1_prompt, "banner1 < prompt1 (sequential generation)");
-    assert!(req1_prompt < req2_banner, "prompt1 < banner2 (sequential generation)");
-    assert!(req2_banner < req2_prompt, "banner2 < prompt2 (sequential generation)");
+    assert!(
+        req1_banner < req1_prompt,
+        "banner1 < prompt1 (sequential generation)"
+    );
+    assert!(
+        req1_prompt < req2_banner,
+        "prompt1 < banner2 (sequential generation)"
+    );
+    assert!(
+        req2_banner < req2_prompt,
+        "banner2 < prompt2 (sequential generation)"
+    );
 
     // Internal keys anchor to last_seen, which is typically LESS than synthetic keys
     // (synthetic keys advance current_request_index beyond last_seen+1)
