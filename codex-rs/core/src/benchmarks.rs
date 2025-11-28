@@ -409,7 +409,7 @@ mod tests {
     #[test]
     fn test_benchmark_result_percentiles() {
         // 10 samples: 1, 2, 3, ..., 10
-        let samples: Vec<Duration> = (1..=10).map(|i| Duration::from_millis(i)).collect();
+        let samples: Vec<Duration> = (1..=10).map(Duration::from_millis).collect();
         let result = BenchmarkResult::from_samples("percentiles", &samples);
 
         assert_eq!(result.sample_count, 10);
@@ -514,7 +514,7 @@ mod tests {
         let improved = BenchmarkResult::from_samples("improved", &improved_samples);
 
         let speedup = improved.speedup_vs(&baseline);
-        assert!((speedup - 10.0).abs() < 0.1, "speedup: {}", speedup);
+        assert!((speedup - 10.0).abs() < 0.1, "speedup: {speedup}");
     }
 
     #[test]
