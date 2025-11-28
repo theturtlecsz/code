@@ -1,0 +1,14 @@
+[package]
+name = "codex-process-hardening"
+version.workspace = true
+edition = "2024"
+
+[lib]
+name = "codex_process_hardening"
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+libc = { workspace = true }
