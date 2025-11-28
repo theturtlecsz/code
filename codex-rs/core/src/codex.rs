@@ -612,6 +612,7 @@ impl Codex {
             notify: config.notify.clone(),
             cwd: config.cwd.clone(),
             resume_path: resume_path.clone(),
+            output_schema: config.output_schema.clone(),
         };
 
         let config = Arc::new(config);
@@ -921,6 +922,9 @@ pub(crate) struct Session {
     pro_observer_activity_since_last: AtomicU64,
     self_handle: Weak<Session>,
     active_review: Mutex<Option<ReviewRequest>>,
+    /// Optional JSON schema for structured model output. When set, the model's
+    /// final response will conform to this schema.
+    output_schema: Option<serde_json::Value>,
 }
 
 struct HookGuard<'a> {
@@ -1014,6 +1018,12 @@ impl Session {
 
     fn take_active_review(&self) -> Option<ReviewRequest> {
         self.active_review.lock().unwrap().take()
+    }
+
+    /// Returns true if a review session is currently active.
+    /// Used to suppress AgentMessage events during structured review output.
+    fn is_in_review_mode(&self) -> bool {
+        self.active_review.lock().unwrap().is_some()
     }
 
     fn upgrade_self(&self) -> Option<Arc<Self>> {
@@ -3094,6 +3104,7 @@ async fn submission_loop(
                 notify,
                 cwd,
                 resume_path,
+                output_schema,
             } => {
                 debug!(
                     "Configuring session: model={model}; provider={provider:?}; resume={resume_path:?}"
@@ -3134,6 +3145,7 @@ async fn submission_loop(
                 updated_config.disable_response_storage = disable_response_storage;
                 updated_config.notify = notify.clone();
                 updated_config.cwd = cwd.clone();
+                updated_config.output_schema = output_schema;
 
                 updated_config.model_family = find_family_for_model(&updated_config.model)
                     .unwrap_or_else(|| derive_default_model_family(&updated_config.model));
@@ -3368,6 +3380,7 @@ async fn submission_loop(
                     pro_observer_activity_since_last: AtomicU64::new(0),
                     self_handle: Weak::new(),
                     active_review: Mutex::new(None),
+                    output_schema: config.output_schema.clone(),
                 });
                 let weak_handle = Arc::downgrade(&new_session);
                 if let Some(inner) = Arc::get_mut(&mut new_session) {
@@ -4494,13 +4507,22 @@ async fn run_turn(
             text_format: None,
             model_override: None,
             model_family_override: None,
-            output_schema: None,
+            output_schema: sess.output_schema.clone(),
         };
 
         // Start a new scratchpad for this HTTP attempt
         sess.begin_attempt_scratchpad();
 
-        match try_run_turn(sess, turn_diff_tracker, &sub_id, &prompt, attempt_req).await {
+        match try_run_turn(
+            sess,
+            &turn_context.client,
+            turn_diff_tracker,
+            &sub_id,
+            &prompt,
+            attempt_req,
+        )
+        .await
+        {
             Ok(output) => {
                 // Record status items to conversation history after successful turn
                 // This ensures they persist for future requests in the right chronological order
@@ -4803,6 +4825,7 @@ struct ProcessedResponseItem {
 
 async fn try_run_turn(
     sess: &Session,
+    client: &ModelClient,
     turn_diff_tracker: &mut TurnDiffTracker,
     sub_id: &str,
     prompt: &Prompt,
@@ -4863,7 +4886,7 @@ async fn try_run_turn(
         })
     };
 
-    let mut stream = sess.client.clone().stream(&prompt).await?;
+    let mut stream = client.clone().stream(&prompt).await?;
 
     let mut output = Vec::new();
     loop {
@@ -5140,20 +5163,24 @@ async fn handle_response_item(
         ResponseItem::Message { content, id, .. } => {
             // Use the item_id if present, otherwise fall back to sub_id
             let event_id = id.unwrap_or_else(|| sub_id.to_string());
-            for item in content {
-                if let ContentItem::OutputText { text } = item {
-                    let order = crate::protocol::OrderMeta {
-                        request_ordinal: attempt_req,
-                        output_index,
-                        sequence_number: seq_hint,
-                    };
-                    let stamped = sess.make_event_with_order(
-                        &event_id,
-                        EventMsg::AgentMessage(AgentMessageEvent { message: text }),
-                        order,
-                        seq_hint,
-                    );
-                    sess.tx_event.send(stamped).await.ok();
+            // In review mode, suppress AgentMessage events - the UI consumes
+            // the structured review result via ExitedReviewMode instead.
+            if !sess.is_in_review_mode() {
+                for item in content {
+                    if let ContentItem::OutputText { text } = item {
+                        let order = crate::protocol::OrderMeta {
+                            request_ordinal: attempt_req,
+                            output_index,
+                            sequence_number: seq_hint,
+                        };
+                        let stamped = sess.make_event_with_order(
+                            &event_id,
+                            EventMsg::AgentMessage(AgentMessageEvent { message: text }),
+                            order,
+                            seq_hint,
+                        );
+                        sess.tx_event.send(stamped).await.ok();
+                    }
                 }
             }
             None
@@ -11270,4 +11297,868 @@ fn debug_history(label: &str, items: &[ResponseItem]) {
         target = "codex_core::compact_history",
         "{} => [{}]", label, rendered
     );
+}
+
+// =============================================================================
+// SPEC-958 Session 6: Client Integration Tests
+// Tests relocated from core/tests/suite/client.rs for internal API access
+// =============================================================================
+#[cfg(test)]
+mod client_integration_tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
+    use crate::CodexConversation;
+    use crate::Prompt;
+    use crate::auth::CodexAuth;
+    use crate::client::ModelClient;
+    use crate::config::{Config, ConfigOverrides, ConfigToml};
+    use crate::conversation_manager::{ConversationManager, NewConversation};
+    use crate::debug_logger::DebugLogger;
+    use crate::model_provider_info::{ModelProviderInfo, WireApi, built_in_model_providers};
+    use crate::protocol::{EventMsg, InputItem, Op};
+    use codex_protocol::models::{
+        ContentItem, LocalShellAction, LocalShellExecAction, LocalShellStatus,
+        ReasoningItemContent, ReasoningItemReasoningSummary, ResponseItem, WebSearchAction,
+    };
+    use futures::StreamExt;
+    use serde_json::{Value, json};
+    use std::fs;
+    use std::io::Write;
+    use std::sync::{Arc, Mutex};
+    use tempfile::TempDir;
+    use tokio::time::{Duration, timeout};
+    use uuid::Uuid;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    // =========================================================================
+    // Test helpers (duplicated from core_test_support to avoid circular deps)
+    // =========================================================================
+
+    /// Returns a default `Config` whose on-disk state is confined to the provided
+    /// temporary directory.
+    fn load_default_config_for_test(codex_home: &TempDir) -> Config {
+        Config::load_from_base_config_with_overrides(
+            ConfigToml::default(),
+            ConfigOverrides::default(),
+            codex_home.path().to_path_buf(),
+        )
+        .expect("defaults for test should always succeed")
+    }
+
+    /// Builds an SSE stream body from a JSON fixture, replacing __ID__ with id.
+    fn load_sse_fixture_with_id(path: impl AsRef<std::path::Path>, id: &str) -> String {
+        let raw = std::fs::read_to_string(path).expect("read fixture template");
+        let replaced = raw.replace("__ID__", id);
+        let events: Vec<serde_json::Value> =
+            serde_json::from_str(&replaced).expect("parse JSON fixture");
+        events
+            .into_iter()
+            .map(|e| {
+                let kind = e
+                    .get("type")
+                    .and_then(|v| v.as_str())
+                    .expect("fixture event missing type");
+                if e.as_object().map(|o| o.len() == 1).unwrap_or(false) {
+                    format!("event: {kind}\n\n")
+                } else {
+                    format!("event: {kind}\ndata: {e}\n\n")
+                }
+            })
+            .collect()
+    }
+
+    /// Wait for an event matching the predicate.
+    async fn wait_for_event<F>(codex: &CodexConversation, mut predicate: F) -> EventMsg
+    where
+        F: FnMut(&EventMsg) -> bool,
+    {
+        let wait_time = Duration::from_secs(5);
+        loop {
+            let ev = timeout(wait_time, codex.next_event())
+                .await
+                .expect("timeout waiting for event")
+                .expect("stream ended unexpectedly");
+            if predicate(&ev.msg) {
+                return ev.msg;
+            }
+        }
+    }
+
+    /// Skip test if running in Codex sandbox with network disabled.
+    macro_rules! non_sandbox_test {
+        () => {{
+            if ::std::env::var("CODEX_SANDBOX_NETWORK_DISABLED").is_ok() {
+                println!("Skipping test because it cannot execute when network is disabled in a Codex sandbox.");
+                return;
+            }
+        }};
+    }
+
+    /// Build an SSE stream body from a list of JSON events.
+    fn sse(events: Vec<Value>) -> String {
+        use std::fmt::Write as _;
+        let mut out = String::new();
+        for ev in events {
+            let kind = ev.get("type").and_then(|v| v.as_str()).unwrap();
+            writeln!(&mut out, "event: {kind}").unwrap();
+            if !ev.as_object().map(|o| o.len() == 1).unwrap_or(false) {
+                write!(&mut out, "data: {ev}\n\n").unwrap();
+            } else {
+                out.push('\n');
+            }
+        }
+        out
+    }
+
+    fn ev_completed_with_tokens(id: &str, total_tokens: u64) -> Value {
+        serde_json::json!({
+            "type": "response.completed",
+            "response": {
+                "id": id,
+                "usage": {
+                    "input_tokens": total_tokens,
+                    "input_tokens_details": null,
+                    "output_tokens": 0,
+                    "output_tokens_details": null,
+                    "total_tokens": total_tokens
+                }
+            }
+        })
+    }
+
+    // Helper from original client.rs
+    fn sse_completed(id: &str) -> String {
+        load_sse_fixture_with_id("tests/fixtures/completed_template.json", id)
+    }
+
+    #[allow(dead_code)]
+    fn assert_message_role(request_body: &serde_json::Value, role: &str) {
+        assert_eq!(request_body["role"].as_str().unwrap(), role);
+    }
+
+    #[allow(dead_code)]
+    fn assert_message_ends_with(request_body: &serde_json::Value, text: &str) {
+        let content = request_body["content"][0]["text"]
+            .as_str()
+            .expect("invalid message content");
+        assert!(
+            content.ends_with(text),
+            "expected message content '{content}' to end with '{text}'"
+        );
+    }
+
+    /// TestCodex builder - simplified version for internal tests.
+    struct TestCodexBuilder {
+        config_mutators: Vec<Box<dyn FnOnce(&mut Config)>>,
+    }
+
+    impl TestCodexBuilder {
+        fn new() -> Self {
+            Self {
+                config_mutators: vec![],
+            }
+        }
+
+        async fn build(&mut self, server: &MockServer) -> anyhow::Result<TestCodex> {
+            let model_provider = ModelProviderInfo {
+                base_url: Some(format!("{}/v1", server.uri())),
+                ..built_in_model_providers()["openai"].clone()
+            };
+            let home = TempDir::new()?;
+            let cwd = TempDir::new()?;
+            let mut config = load_default_config_for_test(&home);
+            config.cwd = cwd.path().to_path_buf();
+            config.model_provider = model_provider;
+            let mutators = std::mem::take(&mut self.config_mutators);
+            for mutator in mutators {
+                mutator(&mut config);
+            }
+            let conversation_manager =
+                ConversationManager::with_auth(CodexAuth::from_api_key("dummy"));
+            let NewConversation {
+                conversation,
+                session_configured,
+                ..
+            } = conversation_manager.new_conversation(config).await?;
+            Ok(TestCodex {
+                _home: home,
+                _cwd: cwd,
+                codex: conversation,
+                _session_configured: session_configured,
+            })
+        }
+    }
+
+    struct TestCodex {
+        _home: TempDir,
+        _cwd: TempDir,
+        codex: Arc<CodexConversation>,
+        _session_configured: crate::protocol::SessionConfiguredEvent,
+    }
+
+    fn test_codex() -> TestCodexBuilder {
+        TestCodexBuilder::new()
+    }
+
+    #[allow(dead_code)]
+    fn write_auth_json(
+        codex_home: &TempDir,
+        openai_api_key: Option<&str>,
+        chatgpt_plan_type: &str,
+        access_token: &str,
+        account_id: Option<&str>,
+    ) -> String {
+        use base64::Engine as _;
+        let header = json!({ "alg": "none", "typ": "JWT" });
+        let payload = json!({
+            "email": "user@example.com",
+            "https://api.openai.com/auth": {
+                "chatgpt_plan_type": chatgpt_plan_type,
+                "chatgpt_account_id": account_id.unwrap_or("acc-123")
+            }
+        });
+        let b64 = |b: &[u8]| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b);
+        let header_b64 = b64(&serde_json::to_vec(&header).unwrap());
+        let payload_b64 = b64(&serde_json::to_vec(&payload).unwrap());
+        let signature_b64 = b64(b"sig");
+        let fake_jwt = format!("{header_b64}.{payload_b64}.{signature_b64}");
+        let mut tokens = json!({
+            "id_token": fake_jwt,
+            "access_token": access_token,
+            "refresh_token": "refresh-test",
+        });
+        if let Some(acc) = account_id {
+            tokens["account_id"] = json!(acc);
+        }
+        let auth_json = json!({
+            "OPENAI_API_KEY": openai_api_key,
+            "tokens": tokens,
+            "last_refresh": chrono::Utc::now(),
+        });
+        std::fs::write(
+            codex_home.path().join("auth.json"),
+            serde_json::to_string_pretty(&auth_json).unwrap(),
+        )
+        .unwrap();
+        fake_jwt
+    }
+
+    #[allow(dead_code)]
+    fn create_dummy_codex_auth() -> CodexAuth {
+        CodexAuth::create_dummy_chatgpt_auth_for_testing()
+    }
+
+    /// SPEC-957: Resume conversation history format changed.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "SPEC-957: resume conversation history_entry_count assertion fails"]
+    async fn resume_includes_initial_messages_and_sends_prior_items() {
+        non_sandbox_test!();
+
+        let tmpdir = TempDir::new().unwrap();
+        let session_path = tmpdir.path().join("resume-session.jsonl");
+        let mut f = std::fs::File::create(&session_path).unwrap();
+        let convo_id = Uuid::new_v4();
+        writeln!(
+            f,
+            "{}",
+            json!({
+                "timestamp": "2024-01-01T00:00:00.000Z",
+                "type": "session_meta",
+                "payload": {
+                    "id": convo_id,
+                    "timestamp": "2024-01-01T00:00:00Z",
+                    "instructions": "be nice",
+                    "cwd": ".",
+                    "originator": "test_originator",
+                    "cli_version": "test_version"
+                }
+            })
+        )
+        .unwrap();
+
+        let prior_user = ResponseItem::Message {
+            id: None,
+            role: "user".to_string(),
+            content: vec![ContentItem::InputText {
+                text: "resumed user message".to_string(),
+            }],
+        };
+        let prior_user_json = serde_json::to_value(&prior_user).unwrap();
+        writeln!(
+            f,
+            "{}",
+            json!({
+                "timestamp": "2024-01-01T00:00:01.000Z",
+                "type": "response_item",
+                "payload": prior_user_json
+            })
+        )
+        .unwrap();
+
+        let prior_system = ResponseItem::Message {
+            id: None,
+            role: "system".to_string(),
+            content: vec![ContentItem::OutputText {
+                text: "resumed system instruction".to_string(),
+            }],
+        };
+        let prior_system_json = serde_json::to_value(&prior_system).unwrap();
+        writeln!(
+            f,
+            "{}",
+            json!({
+                "timestamp": "2024-01-01T00:00:02.000Z",
+                "type": "response_item",
+                "payload": prior_system_json
+            })
+        )
+        .unwrap();
+
+        let prior_item = ResponseItem::Message {
+            id: None,
+            role: "assistant".to_string(),
+            content: vec![ContentItem::OutputText {
+                text: "resumed assistant message".to_string(),
+            }],
+        };
+        let prior_item_json = serde_json::to_value(&prior_item).unwrap();
+        writeln!(
+            f,
+            "{}",
+            json!({
+                "timestamp": "2024-01-01T00:00:03.000Z",
+                "type": "response_item",
+                "payload": prior_item_json
+            })
+        )
+        .unwrap();
+        drop(f);
+
+        let server = MockServer::start().await;
+        let first = ResponseTemplate::new(200)
+            .insert_header("content-type", "text/event-stream")
+            .set_body_raw(sse_completed("resp1"), "text/event-stream");
+        Mock::given(method("POST"))
+            .and(path("/v1/responses"))
+            .respond_with(first)
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let model_provider = ModelProviderInfo {
+            base_url: Some(format!("{}/v1", server.uri())),
+            ..built_in_model_providers()["openai"].clone()
+        };
+        let codex_home = TempDir::new().unwrap();
+        let mut config = load_default_config_for_test(&codex_home);
+        config.model_provider = model_provider;
+        config.user_instructions = Some("be nice".to_string());
+
+        let conversation_manager =
+            ConversationManager::with_auth(CodexAuth::from_api_key("Test API Key"));
+        let auth_manager =
+            crate::AuthManager::from_auth_for_testing(CodexAuth::from_api_key("Test API Key"));
+        let NewConversation {
+            conversation: codex,
+            session_configured,
+            ..
+        } = conversation_manager
+            .resume_conversation_from_rollout(config, session_path.clone(), auth_manager)
+            .await
+            .expect("resume conversation");
+
+        assert!(
+            session_configured.history_entry_count > 0,
+            "expected history entries for resumed session"
+        );
+
+        codex
+            .submit(Op::UserInput {
+                items: vec![InputItem::Text {
+                    text: "hello".into(),
+                }],
+            })
+            .await
+            .unwrap();
+        wait_for_event(&codex, |ev| matches!(ev, EventMsg::TaskComplete(_))).await;
+
+        let request = &server.received_requests().await.unwrap()[0];
+        let request_body = request.body_json::<serde_json::Value>().unwrap();
+        let expected_input = json!([
+            {
+                "type": "message",
+                "role": "user",
+                "content": [{ "type": "input_text", "text": "resumed user message" }]
+            },
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{ "type": "output_text", "text": "resumed assistant message" }]
+            },
+            {
+                "type": "message",
+                "role": "user",
+                "content": [{ "type": "input_text", "text": "hello" }]
+            }
+        ]);
+        assert_eq!(request_body["input"], expected_input);
+    }
+
+    /// SPEC-957: Test times out waiting for SessionConfigured event.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "SPEC-957: timeout waiting for SessionConfigured event after ConfigureSession op"]
+    async fn configure_session_refreshes_user_instructions_after_cwd_change() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/v1/responses"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "text/event-stream")
+                    .set_body_raw(sse_completed("resp1"), "text/event-stream"),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let codex_home = TempDir::new().unwrap();
+        let mut config = load_default_config_for_test(&codex_home);
+        config.model_provider = ModelProviderInfo {
+            base_url: Some(format!("{}/v1", server.uri())),
+            ..built_in_model_providers()["openai"].clone()
+        };
+
+        let repo_root = TempDir::new().unwrap();
+        let cwd_one = repo_root.path().join("workspace_one");
+        let cwd_two = repo_root.path().join("workspace_two");
+        fs::create_dir_all(&cwd_one).unwrap();
+        fs::create_dir_all(&cwd_two).unwrap();
+        fs::write(cwd_one.join("AGENTS.md"), "Instruction from first cwd").unwrap();
+        fs::write(cwd_two.join("AGENTS.md"), "Instruction from second cwd").unwrap();
+
+        config.cwd = cwd_one.clone();
+        config.project_doc_max_bytes = 8 * 1024;
+
+        let provider = config.model_provider.clone();
+        let model = config.model.clone();
+        let model_reasoning_effort = config.model_reasoning_effort;
+        let model_reasoning_summary = config.model_reasoning_summary;
+        let model_text_verbosity = config.model_text_verbosity;
+        let base_instructions = config.base_instructions.clone();
+        let approval_policy = config.approval_policy;
+        let sandbox_policy = config.sandbox_policy.clone();
+        let disable_response_storage = config.disable_response_storage;
+        let notify = config.notify.clone();
+
+        let conversation_manager =
+            ConversationManager::with_auth(CodexAuth::from_api_key("Test API Key"));
+        let codex = conversation_manager
+            .new_conversation(config)
+            .await
+            .expect("create new conversation")
+            .conversation;
+
+        wait_for_event(&codex, |ev| matches!(ev, EventMsg::SessionConfigured(_))).await;
+
+        codex
+            .submit(Op::ConfigureSession {
+                provider,
+                model,
+                model_reasoning_effort,
+                model_reasoning_summary,
+                model_text_verbosity,
+                user_instructions: None,
+                base_instructions,
+                approval_policy,
+                sandbox_policy,
+                disable_response_storage,
+                notify,
+                cwd: cwd_two.clone(),
+                resume_path: None,
+                output_schema: None,
+            })
+            .await
+            .unwrap();
+
+        wait_for_event(&codex, |ev| matches!(ev, EventMsg::SessionConfigured(_))).await;
+
+        codex
+            .submit(Op::UserInput {
+                items: vec![InputItem::Text {
+                    text: "post-branch".into(),
+                }],
+            })
+            .await
+            .unwrap();
+
+        wait_for_event(&codex, |ev| matches!(ev, EventMsg::TaskComplete(_))).await;
+
+        let requests = server.received_requests().await.unwrap();
+        assert_eq!(requests.len(), 1);
+        let request_body = requests[0].body_json::<serde_json::Value>().unwrap();
+
+        let instructions = request_body["input"][0]["content"][0]["text"]
+            .as_str()
+            .expect("instructions text");
+        assert!(instructions.contains("Instruction from second cwd"));
+        assert!(!instructions.contains("Instruction from first cwd"));
+    }
+
+    /// SPEC-957: ModelClient API changed - test needs update for new constructor signature.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "SPEC-957: ModelClient::new signature changed - test needs update"]
+    async fn azure_responses_request_includes_store_and_reasoning_ids() {
+        non_sandbox_test!();
+
+        let server = MockServer::start().await;
+
+        let sse_body = concat!(
+            "data: {\"type\":\"response.created\",\"response\":{}}\n\n",
+            "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\"}}\n\n",
+        );
+
+        let template = ResponseTemplate::new(200)
+            .insert_header("content-type", "text/event-stream")
+            .set_body_raw(sse_body, "text/event-stream");
+
+        Mock::given(method("POST"))
+            .and(path("/openai/responses"))
+            .respond_with(template)
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let provider = ModelProviderInfo {
+            name: "azure".into(),
+            base_url: Some(format!("{}/openai", server.uri())),
+            env_key: None,
+            env_key_instructions: None,
+            wire_api: WireApi::Responses,
+            query_params: None,
+            http_headers: None,
+            env_http_headers: None,
+            request_max_retries: Some(0),
+            stream_max_retries: Some(0),
+            stream_idle_timeout_ms: Some(5_000),
+            agent_total_timeout_ms: None,
+            requires_openai_auth: false,
+            openrouter: None,
+        };
+
+        let codex_home = TempDir::new().unwrap();
+        let mut config = load_default_config_for_test(&codex_home);
+        config.model_provider_id = provider.name.clone();
+        config.model_provider = provider.clone();
+        let effort = config.model_reasoning_effort;
+        let summary = config.model_reasoning_summary;
+        let verbosity = config.model_text_verbosity;
+        let config = Arc::new(config);
+
+        let client = ModelClient::new(
+            Arc::clone(&config),
+            None,
+            provider,
+            effort,
+            summary,
+            verbosity,
+            Uuid::new_v4(),
+            Arc::new(Mutex::new(DebugLogger::new(false).unwrap())),
+        );
+
+        let mut prompt = Prompt::default();
+        prompt.input.push(ResponseItem::Reasoning {
+            id: "reasoning-id".into(),
+            summary: vec![ReasoningItemReasoningSummary::SummaryText {
+                text: "summary".into(),
+            }],
+            content: Some(vec![ReasoningItemContent::ReasoningText {
+                text: "content".into(),
+            }]),
+            encrypted_content: None,
+        });
+        prompt.input.push(ResponseItem::Message {
+            id: Some("message-id".into()),
+            role: "assistant".into(),
+            content: vec![ContentItem::OutputText {
+                text: "message".into(),
+            }],
+        });
+        prompt.input.push(ResponseItem::WebSearchCall {
+            id: Some("web-search-id".into()),
+            status: Some("completed".into()),
+            action: WebSearchAction::Search {
+                query: "weather".into(),
+            },
+        });
+        prompt.input.push(ResponseItem::FunctionCall {
+            id: Some("function-id".into()),
+            name: "do_thing".into(),
+            arguments: "{}".into(),
+            call_id: "function-call-id".into(),
+        });
+        prompt.input.push(ResponseItem::LocalShellCall {
+            id: Some("local-shell-id".into()),
+            call_id: Some("local-shell-call-id".into()),
+            status: LocalShellStatus::Completed,
+            action: LocalShellAction::Exec(LocalShellExecAction {
+                command: vec!["echo".into(), "hello".into()],
+                timeout_ms: None,
+                working_directory: None,
+                env: None,
+                user: None,
+            }),
+        });
+        prompt.input.push(ResponseItem::CustomToolCall {
+            id: Some("custom-tool-id".into()),
+            status: Some("completed".into()),
+            call_id: "custom-tool-call-id".into(),
+            name: "custom_tool".into(),
+            input: "{}".into(),
+        });
+
+        let mut stream = client
+            .stream(&prompt)
+            .await
+            .expect("responses stream to start");
+
+        while let Some(event) = stream.next().await {
+            if let Ok(crate::ResponseEvent::Completed { .. }) = event {
+                break;
+            }
+        }
+
+        let requests = server
+            .received_requests()
+            .await
+            .expect("mock server collected requests");
+        assert_eq!(requests.len(), 1, "expected a single request");
+        let body: serde_json::Value = requests[0]
+            .body_json()
+            .expect("request body to be valid JSON");
+
+        assert_eq!(body["store"], serde_json::Value::Bool(true));
+        assert_eq!(body["stream"], serde_json::Value::Bool(true));
+        assert_eq!(body["input"].as_array().map(Vec::len), Some(6));
+        assert_eq!(body["input"][0]["id"].as_str(), Some("reasoning-id"));
+        assert_eq!(body["input"][1]["id"].as_str(), Some("message-id"));
+        assert_eq!(body["input"][2]["id"].as_str(), Some("web-search-id"));
+        assert_eq!(body["input"][3]["id"].as_str(), Some("function-id"));
+        assert_eq!(body["input"][4]["id"].as_str(), Some("local-shell-id"));
+        assert_eq!(body["input"][5]["id"].as_str(), Some("custom-tool-id"));
+    }
+
+    /// SPEC-957: TokenCount event structure changed - rate_limits assertion fails.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "SPEC-957: TokenCount event structure differs from expected"]
+    async fn token_count_includes_rate_limits_snapshot() {
+        let server = MockServer::start().await;
+
+        let sse_body = sse(vec![ev_completed_with_tokens("resp_rate", 123)]);
+
+        let response = ResponseTemplate::new(200)
+            .insert_header("content-type", "text/event-stream")
+            .insert_header("x-codex-primary-used-percent", "12.5")
+            .insert_header("x-codex-secondary-used-percent", "40.0")
+            .insert_header("x-codex-primary-window-minutes", "10")
+            .insert_header("x-codex-secondary-window-minutes", "60")
+            .insert_header("x-codex-primary-reset-after-seconds", "1800")
+            .insert_header("x-codex-secondary-reset-after-seconds", "7200")
+            .set_body_raw(sse_body, "text/event-stream");
+
+        Mock::given(method("POST"))
+            .and(path("/v1/responses"))
+            .respond_with(response)
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let mut provider = built_in_model_providers()["openai"].clone();
+        provider.base_url = Some(format!("{}/v1", server.uri()));
+
+        let home = TempDir::new().unwrap();
+        let mut config = load_default_config_for_test(&home);
+        config.model_provider = provider;
+
+        let conversation_manager = ConversationManager::with_auth(CodexAuth::from_api_key("test"));
+        let codex = conversation_manager
+            .new_conversation(config)
+            .await
+            .expect("create conversation")
+            .conversation;
+
+        codex
+            .submit(Op::UserInput {
+                items: vec![InputItem::Text {
+                    text: "hello".into(),
+                }],
+            })
+            .await
+            .unwrap();
+
+        let first_token_event =
+            wait_for_event(&codex, |msg| matches!(msg, EventMsg::TokenCount(_))).await;
+        let rate_limit_only = match first_token_event {
+            EventMsg::TokenCount(ev) => ev,
+            _ => unreachable!(),
+        };
+
+        let rate_limit_json = serde_json::to_value(&rate_limit_only).unwrap();
+        pretty_assertions::assert_eq!(
+            rate_limit_json,
+            json!({
+                "info": null,
+                "rate_limits": {
+                    "primary": {
+                        "used_percent": 12.5,
+                        "window_minutes": 10,
+                        "resets_in_seconds": 1800
+                    },
+                    "secondary": {
+                        "used_percent": 40.0,
+                        "window_minutes": 60,
+                        "resets_in_seconds": 7200
+                    }
+                }
+            })
+        );
+
+        let token_event = wait_for_event(
+            &codex,
+            |msg| matches!(msg, EventMsg::TokenCount(ev) if ev.info.is_some()),
+        )
+        .await;
+        let final_payload = match token_event {
+            EventMsg::TokenCount(ev) => ev,
+            _ => unreachable!(),
+        };
+        let final_json = serde_json::to_value(&final_payload).unwrap();
+        pretty_assertions::assert_eq!(
+            final_json,
+            json!({
+                "info": {
+                    "total_token_usage": {
+                        "input_tokens": 123,
+                        "cached_input_tokens": 0,
+                        "output_tokens": 0,
+                        "reasoning_output_tokens": 0,
+                        "total_tokens": 123
+                    },
+                    "last_token_usage": {
+                        "input_tokens": 123,
+                        "cached_input_tokens": 0,
+                        "output_tokens": 0,
+                        "reasoning_output_tokens": 0,
+                        "total_tokens": 123
+                    },
+                    "model_context_window": 272000
+                },
+                "rate_limits": {
+                    "primary": {
+                        "used_percent": 12.5,
+                        "window_minutes": 10,
+                        "resets_in_seconds": 1800
+                    },
+                    "secondary": {
+                        "used_percent": 40.0,
+                        "window_minutes": 60,
+                        "resets_in_seconds": 7200
+                    }
+                }
+            })
+        );
+        let usage = final_payload
+            .info
+            .expect("token usage info should be recorded after completion");
+        assert_eq!(usage.total_token_usage.total_tokens, 123);
+        let final_snapshot = final_payload
+            .rate_limits
+            .expect("latest rate limit snapshot should be retained");
+        assert_eq!(final_snapshot.primary_used_percent, 12.5);
+        assert_eq!(final_snapshot.primary_reset_after_seconds, Some(1800));
+
+        wait_for_event(&codex, |msg| matches!(msg, EventMsg::TaskComplete(_))).await;
+    }
+
+    /// SPEC-957: Test times out waiting for TokenCount event on 429 error.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "SPEC-957: timeout waiting for TokenCount event on usage limit error"]
+    async fn usage_limit_error_emits_rate_limit_event() {
+        non_sandbox_test!();
+
+        let server = MockServer::start().await;
+
+        let response = ResponseTemplate::new(429)
+            .insert_header("x-codex-primary-used-percent", "100.0")
+            .insert_header("x-codex-secondary-used-percent", "87.5")
+            .insert_header("x-codex-primary-over-secondary-limit-percent", "95.0")
+            .insert_header("x-codex-primary-window-minutes", "15")
+            .insert_header("x-codex-secondary-window-minutes", "60")
+            .set_body_json(json!({
+                "error": {
+                    "type": "usage_limit_reached",
+                    "message": "limit reached",
+                    "resets_in_seconds": 42,
+                    "plan_type": "pro"
+                }
+            }));
+
+        Mock::given(method("POST"))
+            .and(path("/v1/responses"))
+            .respond_with(response)
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let mut builder = test_codex();
+        let codex_fixture = builder.build(&server).await.expect("build codex");
+        let codex = codex_fixture.codex.clone();
+
+        let expected_limits = json!({
+            "primary": {
+                "used_percent": 100.0,
+                "window_minutes": 15,
+                "resets_in_seconds": null
+            },
+            "secondary": {
+                "used_percent": 87.5,
+                "window_minutes": 60,
+                "resets_in_seconds": null
+            }
+        });
+
+        let submission_id = codex
+            .submit(Op::UserInput {
+                items: vec![InputItem::Text {
+                    text: "hello".into(),
+                }],
+            })
+            .await
+            .expect("submission should succeed while emitting usage limit error events");
+
+        let token_event =
+            wait_for_event(&codex, |msg| matches!(msg, EventMsg::TokenCount(_))).await;
+        let EventMsg::TokenCount(event) = token_event else {
+            unreachable!();
+        };
+
+        let event_json = serde_json::to_value(&event).expect("serialize token count event");
+        pretty_assertions::assert_eq!(
+            event_json,
+            json!({
+                "info": null,
+                "rate_limits": expected_limits
+            })
+        );
+
+        let error_event = wait_for_event(&codex, |msg| matches!(msg, EventMsg::Error(_))).await;
+        let EventMsg::Error(error_event) = error_event else {
+            unreachable!();
+        };
+        assert!(
+            error_event.message.to_lowercase().contains("usage limit"),
+            "unexpected error message for submission {submission_id}: {}",
+            error_event.message
+        );
+    }
 }

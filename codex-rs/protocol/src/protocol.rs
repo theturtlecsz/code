@@ -46,7 +46,25 @@ pub struct Submission {
     pub op: Op,
 }
 
-/// Submission operation
+/// Submission operation for the external wire protocol.
+///
+/// # Architecture Note
+///
+/// This enum is the **external wire protocol** for MCP clients and TypeScript bindings.
+/// It differs intentionally from `codex_core::protocol::Op`, which is the internal API.
+///
+/// **Key differences from `codex_core::protocol::Op`:**
+/// - **Per-turn context**: [`Op::UserTurn`] carries cwd, policies, model, and other context
+///   with each request, allowing clients to override these per-turn.
+/// - **Context updates**: [`Op::OverrideTurnContext`] allows runtime updates without input.
+/// - **Path queries**: [`Op::GetPath`], [`Op::ListMcpTools`], [`Op::ListCustomPrompts`]
+///   provide query capabilities for external clients.
+///
+/// The internal API uses [`Op::ConfigureSession`] to set context at session start,
+/// with lightweight [`Op::UserInput`] for subsequent turns. The MCP server bridges
+/// these protocols by converting `SendUserTurnParams` to internal operations.
+///
+/// For structured JSON output in `codex_core`, use `ConfigureSession.output_schema`.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[allow(clippy::large_enum_variant)]

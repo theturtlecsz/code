@@ -10728,6 +10728,7 @@ impl ChatWidget<'_> {
                 notify: self.config.notify.clone(),
                 cwd: self.config.cwd.clone(),
                 resume_path: None,
+                output_schema: self.config.output_schema.clone(),
             };
             self.submit_op(op);
         }
@@ -10853,6 +10854,7 @@ impl ChatWidget<'_> {
                 notify: self.config.notify.clone(),
                 cwd: self.config.cwd.clone(),
                 resume_path: None,
+                output_schema: self.config.output_schema.clone(),
             };
             let _ = self.codex_op_tx.send(op);
         } else {
@@ -10980,6 +10982,7 @@ impl ChatWidget<'_> {
             notify: self.config.notify.clone(),
             cwd: self.config.cwd.clone(),
             resume_path: None,
+            output_schema: self.config.output_schema.clone(),
         };
 
         self.submit_op(op);
@@ -11014,6 +11017,7 @@ impl ChatWidget<'_> {
             notify: self.config.notify.clone(),
             cwd: self.config.cwd.clone(),
             resume_path: None,
+            output_schema: self.config.output_schema.clone(),
         };
 
         self.submit_op(op);
@@ -11281,6 +11285,7 @@ impl ChatWidget<'_> {
             notify: self.config.notify.clone(),
             cwd: self.config.cwd.clone(),
             resume_path: None,
+            output_schema: self.config.output_schema.clone(),
         };
         self.submit_op(op);
 
@@ -16886,6 +16891,7 @@ impl ChatWidget<'_> {
             notify: self.config.notify.clone(),
             cwd: self.config.cwd.clone(),
             resume_path: None,
+            output_schema: self.config.output_schema.clone(),
         };
         self.submit_op(op);
 

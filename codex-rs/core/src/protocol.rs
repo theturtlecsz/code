@@ -15,6 +15,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_bytes::ByteBuf;
+use serde_json::Value;
 use strum_macros::Display;
 use uuid::Uuid;
 
@@ -57,7 +58,26 @@ pub enum ValidationGroup {
     Stylistic,
 }
 
-/// Submission operation
+/// Submission operation for the internal codex-core API.
+///
+/// # Architecture Note
+///
+/// This enum differs intentionally from [`codex_protocol::protocol::Op`], which is
+/// the external wire protocol for MCP clients and TypeScript bindings.
+///
+/// **Key differences:**
+/// - **Session-based configuration**: Uses [`Op::ConfigureSession`] at session start
+///   to set cwd, policies, model, and other context. The external protocol uses
+///   [`codex_protocol::protocol::Op::UserTurn`] to override these per-turn.
+/// - **Lightweight input**: [`Op::UserInput`] contains only input items; context
+///   comes from the session configuration.
+/// - **Internal operations**: Includes variants like [`Op::Pro`], [`Op::RunProjectCommand`],
+///   and validation toggles that aren't exposed externally.
+///
+/// The MCP server bridges these by converting `SendUserTurnParams` to `Op::UserInput`,
+/// using session-level configuration rather than per-turn overrides.
+///
+/// For structured JSON output, use the `output_schema` field in [`Op::ConfigureSession`].
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[allow(clippy::large_enum_variant)]
@@ -108,6 +128,13 @@ pub enum Op {
         /// Path to a rollout file to resume from.
         #[serde(skip_serializing_if = "Option::is_none")]
         resume_path: Option<std::path::PathBuf>,
+
+        /// Optional JSON schema for structured model output. When set, the model's
+        /// final response will conform to this schema. This enables the JSON result
+        /// functionality that was previously only accessible via `codex_protocol::Op::UserTurn`.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(default)]
+        output_schema: Option<Value>,
     },
 
     /// Abort current task.

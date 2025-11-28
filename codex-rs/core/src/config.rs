@@ -273,6 +273,11 @@ pub struct Config {
     /// When set, the core will send this path in the initial ConfigureSession
     /// so the backend can attempt to resume.
     pub experimental_resume: Option<PathBuf>,
+
+    /// Optional JSON schema for structured model output. When set, the model's
+    /// final response will conform to this schema. Enables structured JSON
+    /// responses for programmatic consumption.
+    pub output_schema: Option<serde_json::Value>,
 }
 
 impl Config {
@@ -2076,6 +2081,7 @@ impl Config {
             hot_reload: cfg.hot_reload,
             subagent_commands: cfg.subagents.map(|s| s.commands).unwrap_or_default(),
             experimental_resume: cfg.experimental_resume,
+            output_schema: None,
             // Surface TUI notifications preference from config when present.
             tui_notifications: cfg
                 .tui
@@ -3032,6 +3038,7 @@ model_text_verbosity = "high"
                 validation: ValidationConfig::default(),
                 subagent_commands: Vec::new(),
                 experimental_resume: None,
+                output_schema: None,
                 tui_notifications: Default::default(),
             },
             o3_profile_config
@@ -3113,6 +3120,7 @@ model_text_verbosity = "high"
             validation: ValidationConfig::default(),
             subagent_commands: Vec::new(),
             experimental_resume: None,
+            output_schema: None,
             tui_notifications: Default::default(),
         };
 
@@ -3209,6 +3217,7 @@ model_text_verbosity = "high"
             validation: ValidationConfig::default(),
             subagent_commands: Vec::new(),
             experimental_resume: None,
+            output_schema: None,
             tui_notifications: Default::default(),
         };
 
@@ -3291,6 +3300,7 @@ model_text_verbosity = "high"
             validation: ValidationConfig::default(),
             subagent_commands: Vec::new(),
             experimental_resume: None,
+            output_schema: None,
             tui_notifications: Default::default(),
         };
 
