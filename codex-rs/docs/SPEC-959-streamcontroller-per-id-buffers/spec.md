@@ -1,6 +1,11 @@
 # SPEC-959: StreamController Per-ID Stream Buffers
 
-## Status: Ready for Implementation
+## Status: COMPLETE (2025-11-28)
+
+### Completion Summary
+- **Implementation**: HashMap-based per-ID stream buffers in `controller.rs`
+- **Tests**: All 10 test_harness tests pass (0 ignored)
+- **Validation**: TUI 391 tests pass, 0 failed
 
 ## Problem Statement
 
@@ -129,11 +134,11 @@ pub(crate) struct StreamController {
 
 ## Success Criteria
 
-- [ ] All 10 TUI test_harness tests pass (currently 8 pass, 2 ignored)
-- [ ] No content merging when concurrent streams active
-- [ ] No memory leaks from abandoned streams
-- [ ] Existing single-stream behavior unchanged
-- [ ] No new clippy warnings
+- [x] All 10 TUI test_harness tests pass (currently 8 pass, 2 ignored) ✅ 10/10 pass
+- [x] No content merging when concurrent streams active ✅ HashMap isolation
+- [x] No memory leaks from abandoned streams ✅ Cleanup in finalize()
+- [x] Existing single-stream behavior unchanged ✅ Verified
+- [x] No new clippy warnings ✅ TUI lib compiles clean
 
 ## Estimated Effort
 

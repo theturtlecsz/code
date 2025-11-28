@@ -1607,4 +1607,103 @@ mod tests {
         assert!(registry.detect_from_cli("gemini").is_some());
         assert!(registry.detect_from_cli("openai").is_some());
     }
+
+    // ========================================================================
+    // Performance Validation Tests (SPEC-940)
+    // ========================================================================
+
+    /// SPEC-940: Validate DirectProcessExecutor spawn performance
+    ///
+    /// Claim: <50ms per agent spawn (vs 6.5s tmux baseline = 99.2%+ improvement)
+    ///
+    /// This test runs 10 iterations of process spawn + execution and validates:
+    /// - Mean execution time <50ms
+    /// - No significant outliers (max <100ms)
+    /// - Consistent performance (stddev <20ms)
+    ///
+    /// Uses `echo` command for minimal execution time (measures spawn overhead).
+    #[tokio::test]
+    async fn test_spec940_spawn_performance_validation() {
+        const ITERATIONS: usize = 10;
+        const MAX_MEAN_MS: u128 = 50; // Claimed <50ms
+        const MAX_SINGLE_MS: u128 = 100; // Allow some variance
+        const MAX_STDDEV_MS: f64 = 20.0; // Consistency check
+
+        let executor = DirectProcessExecutor;
+        let provider = AnthropicProvider::new();
+
+        let mut samples_ms: Vec<u128> = Vec::with_capacity(ITERATIONS);
+
+        for _ in 0..ITERATIONS {
+            let start = std::time::Instant::now();
+            let output = executor
+                .execute(
+                    "echo",
+                    &["benchmark".to_string()],
+                    &HashMap::new(),
+                    None,
+                    60,
+                    None,
+                    &provider,
+                )
+                .await
+                .expect("echo should succeed");
+
+            let elapsed_ms = start.elapsed().as_millis();
+            samples_ms.push(elapsed_ms);
+
+            assert_eq!(output.exit_code, 0);
+            assert!(output.stdout.contains("benchmark"));
+        }
+
+        // Calculate statistics
+        let sum: u128 = samples_ms.iter().sum();
+        let mean = sum as f64 / ITERATIONS as f64;
+        let min = *samples_ms.iter().min().unwrap();
+        let max = *samples_ms.iter().max().unwrap();
+
+        let variance: f64 = samples_ms
+            .iter()
+            .map(|&x| (x as f64 - mean).powi(2))
+            .sum::<f64>()
+            / ITERATIONS as f64;
+        let stddev = variance.sqrt();
+
+        // Log results
+        println!("\n=== SPEC-940 Performance Validation ===");
+        println!("Iterations: {}", ITERATIONS);
+        println!("Mean:   {:.2}ms", mean);
+        println!("Stddev: {:.2}ms", stddev);
+        println!("Min:    {}ms", min);
+        println!("Max:    {}ms", max);
+        println!("Samples: {:?}", samples_ms);
+        println!("========================================\n");
+
+        // Assertions
+        assert!(
+            mean < MAX_MEAN_MS as f64,
+            "SPEC-940 FAIL: Mean spawn time {:.2}ms exceeds {}ms target",
+            mean,
+            MAX_MEAN_MS
+        );
+
+        assert!(
+            max < MAX_SINGLE_MS,
+            "SPEC-940 FAIL: Max spawn time {}ms exceeds {}ms limit (outlier detected)",
+            max,
+            MAX_SINGLE_MS
+        );
+
+        assert!(
+            stddev < MAX_STDDEV_MS,
+            "SPEC-940 FAIL: Stddev {:.2}ms exceeds {}ms (inconsistent performance)",
+            stddev,
+            MAX_STDDEV_MS
+        );
+
+        println!(
+            "✅ SPEC-940 PASS: DirectProcessExecutor {:.1}ms mean, {:.1}ms stddev (n={})",
+            mean, stddev, ITERATIONS
+        );
+    }
 }
