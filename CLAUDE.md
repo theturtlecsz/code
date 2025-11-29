@@ -22,7 +22,7 @@ This playbook gives Claude Code everything it needs to operate safely inside thi
 - **Cargo workspace location:** run Rust commands from `codex-rs/` (for example `cd codex-rs && cargo test -p codex-tui spec_auto`). Guardrail scripts set `SPEC_OPS_CARGO_MANIFEST` when needed, but manual commands must honour the workspace root.
 - **HAL secrets:** full validation requires `HAL_SECRET_KAVEDARR_API_KEY`. If unavailable, set `SPEC_OPS_HAL_SKIP=1` (decision on default behaviour pending) and document the skip in results.
 - **Evidence footprint:** keep evidence under the 25 MB per-SPEC soft limit; use `/spec-evidence-stats` after large runs. Current: All SPECs within limit ✅ (per MAINT-4 evidence automation, 2025-10-18).
-- **Multi-provider model support (SPEC-KIT-952):** Claude models route through native CLI with streaming support. Gemini CLI routing disabled (see Known Limitations).
+- **Multi-provider model support (SPEC-KIT-952):** Claude and Gemini models route through native CLI with streaming support. Device code OAuth available for all providers (P6-SYNC Phase 7).
 
 ## 0.1 Model Guidance (Opus 4.5)
 

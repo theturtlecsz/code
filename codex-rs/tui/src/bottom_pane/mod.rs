@@ -40,6 +40,7 @@ mod selection_popup_common;
 pub(crate) use custom_prompt_view::CustomPromptView;
 pub(crate) use list_selection_view::SelectionAction;
 pub mod agents_settings_view;
+mod device_code_login_view;
 mod github_settings_view;
 mod login_accounts_view;
 pub mod mcp_settings_view;
@@ -61,6 +62,9 @@ pub(crate) enum CancellationEvent {
 
 pub(crate) use chat_composer::ChatComposer;
 pub(crate) use chat_composer::InputResult;
+pub(crate) use device_code_login_view::{
+    DeviceCodeLoginState, DeviceCodeLoginView,
+};
 pub(crate) use login_accounts_view::{
     LoginAccountsState, LoginAccountsView, LoginAddAccountState, LoginAddAccountView,
 };
@@ -199,6 +203,13 @@ impl BottomPane<'_> {
     }
 
     pub fn show_login_add_account(&mut self, view: LoginAddAccountView) {
+        self.active_view = Some(Box::new(view));
+        self.status_view_active = false;
+        self.request_redraw();
+    }
+
+    /// P6-SYNC Phase 7: Show device code login view for OAuth authentication
+    pub fn show_device_code_login(&mut self, view: DeviceCodeLoginView) {
         self.active_view = Some(Box::new(view));
         self.status_view_active = false;
         self.request_redraw();

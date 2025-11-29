@@ -2910,6 +2910,64 @@ impl App<'_> {
                     }
                 }
 
+                // P6-SYNC Phase 7: Device Code OAuth login flow
+                AppEvent::DeviceCodeLoginStart { provider } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.start_device_code_login(provider);
+                    }
+                }
+                AppEvent::DeviceCodeLoginCodeReceived {
+                    provider,
+                    user_code,
+                    verification_uri,
+                    verification_uri_complete,
+                    device_code,
+                    expires_in,
+                    interval,
+                } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.on_device_code_received(
+                            provider,
+                            user_code,
+                            verification_uri,
+                            verification_uri_complete,
+                            device_code,
+                            expires_in,
+                            interval,
+                        );
+                    }
+                }
+                AppEvent::DeviceCodeLoginPollAttempt { provider, poll_count } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.on_device_code_poll_attempt(provider, poll_count);
+                    }
+                }
+                AppEvent::DeviceCodeLoginSuccess { provider } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.on_device_code_success(provider);
+                    }
+                }
+                AppEvent::DeviceCodeLoginError { provider, error } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.on_device_code_error(provider, error);
+                    }
+                }
+                AppEvent::DeviceCodeLoginExpired { provider } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.on_device_code_expired(provider);
+                    }
+                }
+                AppEvent::DeviceCodeLoginDenied { provider } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.on_device_code_denied(provider);
+                    }
+                }
+                AppEvent::DeviceCodeLoginCancel { provider } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        widget.on_device_code_cancelled(provider);
+                    }
+                }
+
                 // SPEC-954: Handle user message timeout
                 AppEvent::UserMessageTimeout {
                     message_id,

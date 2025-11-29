@@ -179,6 +179,15 @@ impl DeviceCodeProvider {
             Self::Anthropic => "anthropic",
         }
     }
+
+    /// Human-readable display name for UI
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::OpenAI => "OpenAI",
+            Self::Google => "Gemini",
+            Self::Anthropic => "Claude",
+        }
+    }
 }
 
 impl std::fmt::Display for DeviceCodeProvider {

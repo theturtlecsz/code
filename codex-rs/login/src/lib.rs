@@ -14,7 +14,13 @@ pub use server::ShutdownHandle;
 pub use server::run_login_server;
 
 // P6-SYNC Phase 5: Re-export commonly used device code types
-pub use device_code::DeviceCodeProvider;
+pub use device_code::{
+    DeviceAuthError, DeviceAuthorizationResponse, DeviceCodeAuth, DeviceCodeProvider, PollError,
+    RefreshError, StoredToken, TokenResponse,
+};
+pub use device_code_anthropic::AnthropicDeviceCode;
+pub use device_code_google::GoogleDeviceCode;
+pub use device_code_openai::OpenAIDeviceCode;
 pub use device_code_storage::{DeviceCodeTokenStorage, TokenStatus};
 
 // Re-export commonly used auth types and helpers from codex-core for compatibility

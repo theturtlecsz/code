@@ -392,6 +392,8 @@ pub(crate) struct ChatWidget<'a> {
     auth_manager: Arc<AuthManager>,
     login_view_state: Option<Weak<RefCell<LoginAccountsState>>>,
     login_add_view_state: Option<Weak<RefCell<LoginAddAccountState>>>,
+    // P6-SYNC Phase 7: Device code login view state for interactive OAuth flow
+    device_code_login_state: Option<Weak<RefCell<crate::bottom_pane::DeviceCodeLoginState>>>,
     active_exec_cell: Option<ExecCell>,
     history_cells: Vec<Box<dyn HistoryCell>>, // Store all history in memory
     history_render: HistoryRenderState,
@@ -2729,6 +2731,7 @@ impl ChatWidget<'_> {
             auth_manager: auth_manager.clone(),
             login_view_state: None,
             login_add_view_state: None,
+            device_code_login_state: None,
             active_exec_cell: None,
             history_cells,
             config: config.clone(),
@@ -2974,6 +2977,7 @@ impl ChatWidget<'_> {
             auth_manager: auth_manager.clone(),
             login_view_state: None,
             login_add_view_state: None,
+            device_code_login_state: None,
             active_exec_cell: None,
             history_cells,
             config: config.clone(),
@@ -3189,6 +3193,7 @@ impl ChatWidget<'_> {
             auth_manager: auth_manager.clone(),
             login_view_state: None,
             login_add_view_state: None,
+            device_code_login_state: None,
             active_exec_cell: None,
             history_cells,
             config: config.clone(),
@@ -8809,22 +8814,31 @@ impl ChatWidget<'_> {
             Some("login") => {
                 let provider = parts.get(1).map(|s| s.to_lowercase());
                 match provider.as_deref() {
-                    Some("openai") | Some("google") | Some("gemini") | Some("anthropic") | Some("claude") => {
-                        let provider_name = match provider.as_deref() {
-                            Some("openai") => "OpenAI",
-                            Some("google") | Some("gemini") => "Google (Gemini)",
-                            Some("anthropic") | Some("claude") => "Anthropic (Claude)",
-                            _ => unreachable!(),
-                        };
-                        show_message(self, format!(
-                            "Device code login for {} is not yet implemented.\n\n\
-                             For now, please use the provider's CLI directly:\n\
-                             - OpenAI: Use 'codex' CLI\n\
-                             - Claude: Use 'claude' CLI and run 'claude'\n\
-                             - Gemini: Use 'gcloud auth login'\n\n\
-                             The status bar will update when tokens are detected.",
-                            provider_name
-                        ));
+                    Some("openai") => {
+                        // P6-SYNC Phase 7: Start interactive device code login
+                        self.app_event_tx.send(AppEvent::DeviceCodeLoginStart {
+                            provider: DeviceCodeProvider::OpenAI,
+                        });
+                    }
+                    Some("google") | Some("gemini") => {
+                        // Check if Google OAuth client is configured
+                        if std::env::var("GOOGLE_OAUTH_CLIENT_ID").is_err() {
+                            show_message(self, String::from(
+                                "Google OAuth requires configuration.\n\n\
+                                 Set GOOGLE_OAUTH_CLIENT_ID environment variable.\n\
+                                 Create OAuth credentials at:\n\
+                                 https://console.cloud.google.com/apis/credentials"
+                            ));
+                        } else {
+                            self.app_event_tx.send(AppEvent::DeviceCodeLoginStart {
+                                provider: DeviceCodeProvider::Google,
+                            });
+                        }
+                    }
+                    Some("anthropic") | Some("claude") => {
+                        self.app_event_tx.send(AppEvent::DeviceCodeLoginStart {
+                            provider: DeviceCodeProvider::Anthropic,
+                        });
                     }
                     _ => {
                         show_message(self, String::from(
@@ -8980,6 +8994,237 @@ impl ChatWidget<'_> {
 
     pub(crate) fn notify_login_gemini_cancelled(&mut self) {
         if self.with_login_add_view(|state| state.on_gemini_cancelled()) {}
+    }
+
+    // P6-SYNC Phase 7: Device Code OAuth flow methods
+    /// Start device code login for a provider - shows interactive login view
+    pub(crate) fn start_device_code_login(&mut self, provider: codex_login::DeviceCodeProvider) {
+        use crate::bottom_pane::DeviceCodeLoginView;
+
+        let (view, state) = DeviceCodeLoginView::new(provider, self.app_event_tx.clone());
+        self.device_code_login_state = Some(std::rc::Rc::downgrade(&state));
+        self.bottom_pane.show_device_code_login(view);
+
+        // Start the device authorization flow asynchronously
+        let tx = self.app_event_tx.clone();
+        let provider_clone = provider;
+        tokio::spawn(async move {
+            use codex_login::{DeviceCodeAuth, OpenAIDeviceCode, GoogleDeviceCode, AnthropicDeviceCode};
+
+            let result: Result<codex_login::DeviceAuthorizationResponse, String> = match provider_clone {
+                codex_login::DeviceCodeProvider::OpenAI => {
+                    let client = OpenAIDeviceCode::new();
+                    client.start_device_authorization().await.map_err(|e| e.to_string())
+                }
+                codex_login::DeviceCodeProvider::Google => {
+                    match GoogleDeviceCode::from_env() {
+                        Ok(client) => client.start_device_authorization().await.map_err(|e| e.to_string()),
+                        Err(e) => Err(e.to_string()),
+                    }
+                }
+                codex_login::DeviceCodeProvider::Anthropic => {
+                    let client = AnthropicDeviceCode::new();
+                    client.start_device_authorization().await.map_err(|e| e.to_string())
+                }
+            };
+
+            match result {
+                Ok(response) => {
+                    tx.send(AppEvent::DeviceCodeLoginCodeReceived {
+                        provider: provider_clone,
+                        user_code: response.user_code,
+                        verification_uri: response.verification_uri,
+                        verification_uri_complete: response.verification_uri_complete,
+                        device_code: response.device_code,
+                        expires_in: response.expires_in,
+                        interval: response.interval,
+                    });
+                }
+                Err(error) => {
+                    tx.send(AppEvent::DeviceCodeLoginError {
+                        provider: provider_clone,
+                        error,
+                    });
+                }
+            }
+        });
+    }
+
+    /// Handle device code received - update UI and start polling
+    pub(crate) fn on_device_code_received(
+        &mut self,
+        provider: codex_login::DeviceCodeProvider,
+        user_code: String,
+        verification_uri: String,
+        verification_uri_complete: Option<String>,
+        device_code: String,
+        expires_in: u64,
+        interval: u64,
+    ) {
+        // Update the view state
+        self.with_device_code_view(|state| {
+            state.on_device_auth_response(
+                user_code.clone(),
+                verification_uri.clone(),
+                verification_uri_complete.clone(),
+            );
+        });
+
+        // Start polling for token
+        let tx = self.app_event_tx.clone();
+        let provider_clone = provider;
+        let device_code_clone = device_code.clone();
+        let poll_interval = std::time::Duration::from_secs(interval.max(5)); // Minimum 5 seconds
+        let expires_at = std::time::Instant::now() + std::time::Duration::from_secs(expires_in);
+
+        tokio::spawn(async move {
+            use codex_login::{DeviceCodeAuth, PollError, OpenAIDeviceCode, GoogleDeviceCode, AnthropicDeviceCode};
+            use codex_login::device_code_storage::DeviceCodeTokenStorage;
+
+            let mut poll_count = 0u32;
+
+            loop {
+                // Check expiry
+                if std::time::Instant::now() >= expires_at {
+                    tx.send(AppEvent::DeviceCodeLoginExpired { provider: provider_clone });
+                    break;
+                }
+
+                // Wait for poll interval
+                tokio::time::sleep(poll_interval).await;
+
+                poll_count += 1;
+                tx.send(AppEvent::DeviceCodeLoginPollAttempt {
+                    provider: provider_clone,
+                    poll_count,
+                });
+
+                // Poll for token
+                let poll_result = match provider_clone {
+                    codex_login::DeviceCodeProvider::OpenAI => {
+                        let client = OpenAIDeviceCode::new();
+                        client.poll_for_token(&device_code_clone).await
+                    }
+                    codex_login::DeviceCodeProvider::Google => {
+                        match GoogleDeviceCode::from_env() {
+                            Ok(client) => client.poll_for_token(&device_code_clone).await,
+                            Err(e) => Err(PollError::Server(e.to_string())),
+                        }
+                    }
+                    codex_login::DeviceCodeProvider::Anthropic => {
+                        let client = AnthropicDeviceCode::new();
+                        client.poll_for_token(&device_code_clone).await
+                    }
+                };
+
+                match poll_result {
+                    Ok(token_response) => {
+                        // Store the token
+                        if let Ok(storage) = DeviceCodeTokenStorage::new() {
+                            if let Err(e) = storage.store_token(provider_clone, token_response) {
+                                tx.send(AppEvent::DeviceCodeLoginError {
+                                    provider: provider_clone,
+                                    error: format!("Failed to store token: {}", e),
+                                });
+                                break;
+                            }
+                        }
+                        tx.send(AppEvent::DeviceCodeLoginSuccess { provider: provider_clone });
+                        break;
+                    }
+                    Err(PollError::AuthorizationPending) => {
+                        // Continue polling
+                        continue;
+                    }
+                    Err(PollError::SlowDown) => {
+                        // Increase interval and continue
+                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                        continue;
+                    }
+                    Err(PollError::AccessDenied) => {
+                        tx.send(AppEvent::DeviceCodeLoginDenied { provider: provider_clone });
+                        break;
+                    }
+                    Err(PollError::ExpiredToken) => {
+                        tx.send(AppEvent::DeviceCodeLoginExpired { provider: provider_clone });
+                        break;
+                    }
+                    Err(e) => {
+                        tx.send(AppEvent::DeviceCodeLoginError {
+                            provider: provider_clone,
+                            error: e.to_string(),
+                        });
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
+    /// Handle poll attempt - update UI with progress
+    pub(crate) fn on_device_code_poll_attempt(&mut self, _provider: codex_login::DeviceCodeProvider, poll_count: u32) {
+        self.with_device_code_view(|state| {
+            state.on_poll_attempt(poll_count);
+        });
+        self.request_redraw();
+    }
+
+    /// Handle successful device code authentication
+    pub(crate) fn on_device_code_success(&mut self, provider: codex_login::DeviceCodeProvider) {
+        self.with_device_code_view(|state| {
+            state.on_success();
+        });
+        self.push_background_tail(format!(
+            "{} authenticated successfully via device code flow.",
+            provider.display_name()
+        ));
+        self.request_redraw();
+    }
+
+    /// Handle device code error
+    pub(crate) fn on_device_code_error(&mut self, _provider: codex_login::DeviceCodeProvider, error: String) {
+        self.with_device_code_view(|state| {
+            state.on_error(error);
+        });
+        self.request_redraw();
+    }
+
+    /// Handle device code expiry
+    pub(crate) fn on_device_code_expired(&mut self, _provider: codex_login::DeviceCodeProvider) {
+        self.with_device_code_view(|state| {
+            state.on_expired();
+        });
+        self.request_redraw();
+    }
+
+    /// Handle user denied access
+    pub(crate) fn on_device_code_denied(&mut self, _provider: codex_login::DeviceCodeProvider) {
+        self.with_device_code_view(|state| {
+            state.on_access_denied();
+        });
+        self.request_redraw();
+    }
+
+    /// Handle device code login cancelled
+    pub(crate) fn on_device_code_cancelled(&mut self, _provider: codex_login::DeviceCodeProvider) {
+        // The view handles closing itself
+        self.device_code_login_state = None;
+        self.request_redraw();
+    }
+
+    /// Helper to access device code login view state
+    fn with_device_code_view<F, R>(&mut self, f: F) -> Option<R>
+    where
+        F: FnOnce(&mut crate::bottom_pane::DeviceCodeLoginState) -> R,
+    {
+        if let Some(weak) = &self.device_code_login_state {
+            if let Some(rc) = weak.upgrade() {
+                if let Ok(mut state) = rc.try_borrow_mut() {
+                    return Some(f(&mut state));
+                }
+            }
+        }
+        None
     }
 
     /// Handle user message timeout (SPEC-954)

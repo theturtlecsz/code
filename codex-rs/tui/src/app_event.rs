@@ -428,6 +428,56 @@ pub(crate) enum AppEvent {
         result: Result<(), String>,
     },
 
+    // === FORK-SPECIFIC: Device Code OAuth Events (P6-SYNC Phase 7) ===
+    /// Start device code OAuth flow for a provider
+    DeviceCodeLoginStart {
+        provider: codex_login::DeviceCodeProvider,
+    },
+
+    /// Device code received from authorization server
+    DeviceCodeLoginCodeReceived {
+        provider: codex_login::DeviceCodeProvider,
+        user_code: String,
+        verification_uri: String,
+        verification_uri_complete: Option<String>,
+        device_code: String,
+        expires_in: u64,
+        interval: u64,
+    },
+
+    /// Device code poll attempt made
+    DeviceCodeLoginPollAttempt {
+        provider: codex_login::DeviceCodeProvider,
+        poll_count: u32,
+    },
+
+    /// Device code flow completed successfully
+    DeviceCodeLoginSuccess {
+        provider: codex_login::DeviceCodeProvider,
+    },
+
+    /// Device code flow failed
+    DeviceCodeLoginError {
+        provider: codex_login::DeviceCodeProvider,
+        error: String,
+    },
+
+    /// Device code expired
+    DeviceCodeLoginExpired {
+        provider: codex_login::DeviceCodeProvider,
+    },
+
+    /// User denied access during device code flow
+    DeviceCodeLoginDenied {
+        provider: codex_login::DeviceCodeProvider,
+    },
+
+    /// Cancel device code login flow
+    DeviceCodeLoginCancel {
+        provider: codex_login::DeviceCodeProvider,
+    },
+    // === END FORK-SPECIFIC: Device Code OAuth Events ===
+
     /// Show Chrome launch options dialog
     #[allow(dead_code)]
     ShowChromeOptions(Option<u16>),
