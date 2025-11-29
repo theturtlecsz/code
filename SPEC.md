@@ -74,7 +74,7 @@
 
 | Stage | Status | Branch | PR | Last Run | Notes |
 |-------|--------|--------|----|----------|-------|
-| `/speckit.tasks` | **Manual Consensus** (3/3 proposals; CLI rerun pending MCP access) | feature/spec-kit-069-complete | TBD | 2025-10-28 | 9-task matrix captured in `docs/SPEC-KIT-900-generic-smoke/{spec,tasks}.md`; telemetry/cost schema, security template, consensus playbook, QA sweep, adoption dashboard, and audit packet docs delivered (see `docs/spec-kit/*`); rerun CLI once MCP endpoints recover. |
+| `/speckit.tasks` | **Done** | main | - | 2025-10-28 | 9-task matrix captured in `docs/SPEC-KIT-900-generic-smoke/{spec,tasks}.md`; telemetry/cost schema, security template, consensus playbook, QA sweep, adoption dashboard delivered. Branch merged and cleaned up 2025-11-29. |
 
 ### Maintenance & Refactoring (2025-10-18 Post-Documentation)
 
