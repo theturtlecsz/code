@@ -47,6 +47,30 @@ pub fn is_blank_line_trim(line: &Line<'_>) -> bool {
     line.spans.iter().all(|s| s.content.trim().is_empty())
 }
 
+/// Prefix each line with `initial_prefix` for the first line and
+/// `subsequent_prefix` for following lines. Returns a new Vec of owned lines.
+#[allow(dead_code)] // Used by footer module, will be wired in SYNC-009
+pub fn prefix_lines(
+    lines: Vec<Line<'static>>,
+    initial_prefix: Span<'static>,
+    subsequent_prefix: Span<'static>,
+) -> Vec<Line<'static>> {
+    lines
+        .into_iter()
+        .enumerate()
+        .map(|(i, l)| {
+            let mut spans = Vec::with_capacity(l.spans.len() + 1);
+            spans.push(if i == 0 {
+                initial_prefix.clone()
+            } else {
+                subsequent_prefix.clone()
+            });
+            spans.extend(l.spans);
+            Line::from(spans).style(l.style)
+        })
+        .collect()
+}
+
 /// Whether this line is painted with the code-block background color.
 /// Used to distinguish a truly blank paragraph separator (no background)
 /// from a blank line that is part of a code block (should not be dropped

@@ -19,6 +19,7 @@ mod approval_modal_view;
 mod bottom_pane_view;
 mod chat_composer;
 mod chat_composer_history;
+pub(crate) mod footer;
 pub mod chrome_selection_view;
 mod command_popup;
 mod custom_prompt_view;

@@ -7,4 +7,9 @@
 /// - Chat composer reserves this many columns for the left border + padding.
 /// - Status indicator lines begin with this many spaces for alignment.
 /// - User history lines account for this many columns (e.g., "▌ ") when wrapping.
-pub(crate) const _LIVE_PREFIX_COLS: u16 = 2;
+#[allow(dead_code)] // Used by footer module, will be wired in SYNC-009
+pub(crate) const LIVE_PREFIX_COLS: u16 = 2;
+
+/// Indent for footer lines (matches the live prefix for alignment).
+#[allow(dead_code)] // Used by footer module, will be wired in SYNC-009
+pub(crate) const FOOTER_INDENT_COLS: usize = LIVE_PREFIX_COLS as usize;

@@ -1,0 +1,5 @@
+---
+source: tui/src/bottom_pane/footer.rs
+expression: output
+---
+  65% context left · ? for shortcuts

@@ -22,6 +22,7 @@ use super::chat_composer_history::ChatComposerHistory;
 use super::command_popup::CommandItem;
 use super::command_popup::CommandPopup;
 use super::file_search_popup::FileSearchPopup;
+use super::footer::{FooterMode, FooterProps, footer_height, render_footer, toggle_shortcut_mode};
 use super::paste_burst::PasteBurst;
 use crate::slash_command::SlashCommand;
 use codex_protocol::custom_prompts::CustomPrompt;
@@ -98,8 +99,8 @@ pub(crate) struct ChatComposer {
     app_event_tx: AppEventSender,
     history: ChatComposerHistory,
     ctrl_c_quit_hint: bool,
-    #[allow(dead_code)]
     use_shift_enter_hint: bool,
+    footer_mode: FooterMode,
     dismissed_file_popup_token: Option<String>,
     current_file_query: Option<String>,
     // Tracks a one-off Tab-triggered file search. When set, we will only
@@ -162,6 +163,7 @@ impl ChatComposer {
             history: ChatComposerHistory::new(),
             ctrl_c_quit_hint: false,
             use_shift_enter_hint,
+            footer_mode: FooterMode::ShortcutSummary,
             dismissed_file_popup_token: None,
             current_file_query: None,
             pending_tab_file_query: None,
@@ -490,6 +492,28 @@ impl ChatComposer {
     #[allow(dead_code)]
     pub(crate) fn is_empty(&self) -> bool {
         self.textarea.is_empty()
+    }
+
+    /// Compute the context window remaining percentage (0-100).
+    fn context_window_percent(&self) -> Option<i64> {
+        self.token_usage_info.as_ref().and_then(|info| {
+            info.model_context_window.filter(|&w| w > 0).map(|ctx_win| {
+                let tokens_used = info.last_token_usage.tokens_in_context_window();
+                let pct = 100.0 - (tokens_used as f32 / ctx_win as f32 * 100.0);
+                pct.clamp(0.0, 100.0) as i64
+            })
+        })
+    }
+
+    /// Build FooterProps from current ChatComposer state.
+    fn footer_props(&self) -> FooterProps {
+        FooterProps {
+            mode: self.footer_mode,
+            esc_backtrack_hint: false, // App manages Esc policy
+            use_shift_enter_hint: self.use_shift_enter_hint,
+            is_task_running: self.is_task_running,
+            context_window_percent: self.context_window_percent(),
+        }
     }
 
     /// Update the cached *context-left* percentage and refresh the placeholder
@@ -1437,6 +1461,18 @@ impl ChatComposer {
                     }
                 }
             }
+            // -------------------------------------------------------------
+            // "?" key — toggle shortcut overlay when composer is empty
+            // -------------------------------------------------------------
+            KeyEvent {
+                code: KeyCode::Char('?'),
+                modifiers: KeyModifiers::SHIFT, // '?' requires shift on most keyboards
+                kind: KeyEventKind::Press,
+                ..
+            } if self.is_empty() => {
+                self.footer_mode = toggle_shortcut_mode(self.footer_mode, self.ctrl_c_quit_hint);
+                (InputResult::None, true)
+            }
             KeyEvent {
                 code: KeyCode::Enter,
                 modifiers: KeyModifiers::NONE,
@@ -1723,8 +1759,13 @@ impl WidgetRef for ChatComposer {
             ActivePopup::None => 1,
         };
         // Split area: textarea with border at top, hints/popup at bottom
+        // When in ShortcutOverlay mode, use footer_height for multi-line overlay
         let hint_height = if matches!(self.active_popup, ActivePopup::None) {
-            1
+            if matches!(self.footer_mode, FooterMode::ShortcutOverlay) {
+                footer_height(self.footer_props())
+            } else {
+                1
+            }
         } else {
             popup_height
         };
@@ -1749,13 +1790,18 @@ impl WidgetRef for ChatComposer {
                 popup.render_ref(hint_area, buf);
             }
             ActivePopup::None => {
-                let bottom_line_rect = hint_area;
+                // Use footer module for ShortcutOverlay mode (SYNC-009)
+                if matches!(self.footer_mode, FooterMode::ShortcutOverlay) {
+                    render_footer(hint_area, buf, self.footer_props());
+                } else {
+                    // Fork's inline footer for normal status display
+                    let bottom_line_rect = hint_area;
 
-                let key_hint_style = Style::default().fg(crate::colors::function());
-                let label_style = Style::default().fg(crate::colors::text_dim());
-                // Left side: padding + notices (and Ctrl+C again-to-quit notice if active)
-                let mut left_spans: Vec<Span> = Vec::new();
-                left_spans.push(Span::from("  "));
+                    let key_hint_style = Style::default().fg(crate::colors::function());
+                    let label_style = Style::default().fg(crate::colors::text_dim());
+                    // Left side: padding + notices (and Ctrl+C again-to-quit notice if active)
+                    let mut left_spans: Vec<Span> = Vec::new();
+                    left_spans.push(Span::from("  "));
 
                 // Access mode indicator (Read Only / Write with Approval / Full Access)
                 // When the label is ephemeral, hide it after expiry. The "(Shift+Tab change)"
@@ -1965,6 +2011,7 @@ impl WidgetRef for ChatComposer {
                             .add_modifier(Modifier::DIM),
                     )
                     .render_ref(bottom_line_rect, buf);
+                }
             }
         }
         // Draw border around input area with optional "Coding" title when task is running
