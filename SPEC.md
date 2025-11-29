@@ -197,23 +197,23 @@
 
 **Context**: Comprehensive upstream analysis comparing fork (`~/code`) with upstream (`~/old/code`). Two reports generated: `docs/UPSTREAM-ANALYSIS-2025-11-27.md` (patch plan) and `docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md` (product gaps).
 
-**STATUS**: 0/18 Started (18 items identified, ready for execution)
+**STATUS**: 9/18 Complete (Core SYNC items done, integration + feature gaps remain)
 
-**Total Effort**: 70-121 hours (Security: 4-6h, Core: 14-26h, Features: 53-89h)
+**Total Effort**: 70-121 hours (Security: DONE, Core: 10-22h, Features: 53-89h)
 
-#### Security & Infrastructure (P0/P1 from UPSTREAM-ANALYSIS-2025-11-27.md)
+#### Security & Infrastructure (P0/P1 - COMPLETE)
 
 | Order | Task ID | Title | Status | Owners | PRD | Branch | PR | Last Validation | Evidence | Notes |
 |-------|---------|-------|--------|--------|-----|--------|----|-----------------|----------|-------|
-| 1 | SYNC-001 | Add dangerous command detection | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P0 Security**: Add `is_dangerous_command.rs` + Windows variant to command_safety/. Detects `git reset --hard`, `rm -rf`, nested shell commands. Integrate with safety.rs approval flow. No fork conflicts. **Files**: core/src/command_safety/{mod.rs, is_dangerous_command.rs, windows_dangerous_commands.rs}, core/src/safety.rs. Est: 2-3h. |
-| 2 | SYNC-002 | Add process-hardening crate | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P0 Security**: Copy standalone crate (~150 LOC). Disables core dumps (RLIMIT_CORE=0), ptrace (PR_SET_DUMPABLE), removes LD_PRELOAD/DYLD_*. Integrate pre_main_hardening() into TUI startup. **Files**: codex-rs/process-hardening/, Cargo.toml, tui/src/main.rs. Est: 1-2h. |
-| 3 | SYNC-003 | Add cargo deny configuration | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P0 Security**: Copy deny.toml for license + vulnerability auditing. RustSec advisory database integration. May need fork-specific advisory ignores. **Files**: codex-rs/deny.toml. Est: 30min. |
-| 4 | SYNC-004 | Add async-utils crate | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P1 Utility**: Copy standalone crate (~90 LOC). Provides `.or_cancel()` extension for futures with clean cancellation patterns. **Files**: codex-rs/async-utils/, Cargo.toml. Est: 30min. |
-| 5 | SYNC-005 | Add keyring-store crate | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P1 Security**: Copy standalone crate (~200 LOC). System keyring abstraction (macOS Keychain, Windows Credential Manager, Linux Secret Service). Auth integration optional. **Files**: codex-rs/keyring-store/, Cargo.toml. Est: 1h crate, 4-8h integration. |
-| 6 | SYNC-006 | Add feedback crate | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P1 UX**: Copy standalone crate (~250 LOC). Ring buffer logging (4MB cap) + Sentry integration for bug reporting. Requires Sentry account for full integration. **Files**: codex-rs/feedback/, Cargo.toml. Est: 1h crate, 4-6h TUI integration. |
-| 7 | SYNC-007 | Adapt API error bridge logic | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P1 Core**: Extract rate limit parsing and error mapping from upstream api_bridge.rs. Adapt to fork's error types in core/src/error.rs. **Files**: core/src/error.rs, core/src/api_clients/mod.rs. Est: 3-4h. |
-| 8 | SYNC-008 | Add ASCII animation module | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P2 UX**: Copy upstream ascii_animation.rs. Frame-based animation driver for loading states. Requires TUI integration verification. **Files**: tui/src/ascii_animation.rs, tui/src/lib.rs, tui/src/app.rs. Est: 4-6h. |
-| 9 | SYNC-009 | Adapt footer improvements | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P2 UX**: Extract FooterMode enum, context percentage display, keyboard hints from upstream footer.rs. Adapt to fork's bottom_pane_view.rs. **Files**: tui/src/bottom_pane/bottom_pane_view.rs. Est: 4-6h. |
+| 1 | SYNC-001 | Add dangerous command detection | **Done** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | main | | 2025-11-29 | | Integrated into safety.rs. 4 new tests. |
+| 2 | SYNC-002 | Add process-hardening crate | **Done** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | main | | 2025-11-28 | | 173 LOC, 4 tests. Integrated in TUI startup. |
+| 3 | SYNC-003 | Add cargo deny configuration | **Done** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | main | | 2025-11-28 | | 288 LOC deny.toml. |
+| 4 | SYNC-004 | Add async-utils crate | **Done** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | main | | 2025-11-29 | | 102 LOC, 3 tests. OrCancelExt trait. |
+| 5 | SYNC-005 | Add keyring-store crate | **Done** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | main | | 2025-11-29 | | 241 LOC. KeyringStore + MockKeyringStore. **Integration pending**. |
+| 6 | SYNC-006 | Add feedback crate | **Done** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | main | | 2025-11-29 | | 306 LOC, 6 tests. Ring buffer + tracing. **Integration pending**. |
+| 7 | SYNC-007 | Adapt API error bridge logic | **N/A** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | main | | 2025-11-29 | | Fork has equivalent (UsageLimitReachedError, retry logic). |
+| 8 | SYNC-008 | Add ASCII animation module | **Done** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | main | | 2025-11-29 | | glitch_animation.rs (437 LOC) already exists. |
+| 9 | SYNC-009 | Adapt footer improvements | **Done** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | main | | 2025-11-29 | | footer.rs (560 LOC, 11 tests) already exists. |
 
 #### Feature Gaps (from UPSTREAM-FEATURE-GAP-ANALYSIS.md)
 
