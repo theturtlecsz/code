@@ -1,0 +1,19 @@
+[package]
+name = "codex-keyring-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+keyring = { workspace = true, features = ["crypto-rust"] }
+tracing.workspace = true
+
+# Linux-only support (fork decision)
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { workspace = true, features = ["linux-native-async-persistent"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { workspace = true, features = ["apple-native"] }
