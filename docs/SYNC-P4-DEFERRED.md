@@ -75,28 +75,46 @@ Port if:
 
 ## SYNC-016: Device Code Auth
 
-**Status**: BLOCKED
-**Effort**: 3-5 hours
-**Blocker**: codex_core::auth module sync required
+**Status**: READY (was BLOCKED)
+**Effort**: 2-3 hours (revised down from 3-5h)
+**Blocker**: ~~codex_core::auth module sync required~~ RESOLVED
+**Updated**: 2025-11-29 (P6 session)
 
 ### What Upstream Has
-- `login/src/device_code_auth.rs` (206 LOC)
+- `login/src/device_code_auth.rs` (359 LOC, 11KB)
 - User code request/display flow for headless environments
 - Token polling with 15-minute timeout
 - Integration with PKCE and token exchange
+- Cloudflare challenge fallback via browser automation
 
-### Missing Dependencies in Fork
-1. `AuthCredentialsStoreMode` enum in codex_core::auth
-2. `save_auth` helper function
-3. `cli_auth_credentials_store_mode` field in ServerOptions
-4. `ensure_workspace_allowed` function
-5. `CODEX_API_KEY_ENV_VAR` constant
+### Actual Missing Dependencies (Corrected)
 
-### Unblocking Steps
-1. Compare codex_core::auth fork vs upstream
-2. Port missing auth types/functions
-3. Update ServerOptions struct
-4. Then port device_code_auth.rs
+**Originally Listed (4 of 5 DON'T EXIST in upstream):**
+1. ~~`AuthCredentialsStoreMode` enum~~ - NOT IN UPSTREAM
+2. ~~`save_auth` helper function~~ - NOT IN UPSTREAM
+3. ~~`cli_auth_credentials_store_mode` field~~ - NOT IN UPSTREAM
+4. ~~`ensure_workspace_allowed` function~~ - NOT IN UPSTREAM
+5. `CODEX_API_KEY_ENV_VAR` constant - **CONFIRMED MISSING** (only valid blocker)
+
+**Actual Requirements:**
+1. `CODEX_API_KEY_ENV_VAR` constant (~2 lines)
+2. `read_codex_api_key_from_env()` function (~6 lines)
+3. `RefreshTokenError` + `RefreshTokenErrorKind` types (~40 lines)
+4. `classify_refresh_failure()` helper (~50 lines)
+5. `adopt_rotated_refresh_token_from_disk()` method (~20 lines)
+6. `device_code_auth.rs` module (~180 lines after substitution)
+
+### Migration Path
+See `docs/AUTH-MODULE-DIFF-REPORT.md` for detailed plan.
+
+**Phase 1**: Core auth enhancements (~150 LOC, low risk)
+**Phase 2**: Device code auth port (~180 LOC, medium risk)
+**Phase 3**: CLI integration (optional, low risk)
+
+### Pre-Port Verification
+- [ ] `codex_browser` crate has `global::get_or_create_browser_manager()`
+- [ ] `ServerOptions` struct is compatible
+- [ ] `persist_tokens_async()` is exported from server.rs
 
 ### Use Cases
 - SSH environments without browser access
@@ -127,6 +145,6 @@ Port if:
 |----|------|--------|--------|---------|
 | SYNC-009 | Footer Module | ✅ Complete | ~2h | - |
 | SYNC-010 | Auto Drive Patterns | Deferred | 10-20h | Architectural |
-| SYNC-016 | Device Code Auth | Blocked | 3-5h | Auth module sync |
+| SYNC-016 | Device Code Auth | ✅ Ready | 2-3h | ~~Auth module sync~~ RESOLVED |
 | SYNC-013 | Shell MCP Server | Not Needed | - | Fork ahead |
 | SYNC-017 | Review/Merge | Not Needed | - | Fork ahead |
