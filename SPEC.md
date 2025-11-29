@@ -103,21 +103,21 @@
 
 **Context**: Comprehensive architecture review generated 10 actionable tasks from diagram analysis and ACE debugging session. **Note**: Removed SPEC-KIT-907, 908, 905 (upstream sync tasks - not applicable per fork strategy decision 2025-10-31).
 
-**STATUS**: 0/7 Started (7 remaining tasks, ready for execution)
+**STATUS**: 4/7 Complete (909 ✅, 903 ✅, 910 ✅ closed, 901/902 need PRD)
 
 | Order | Task ID | Title | Status | Owners | PRD | Branch | PR | Created | Notes |
 |-------|---------|-------|--------|--------|-----|--------|----|---------|-------|
 | 1 | SPEC-KIT-909 | Evidence Lifecycle Management (50MB Enforcement) | **DONE** | Code | docs/SPEC-KIT-909-evidence-cleanup-automation/PRD.md | feature/spec-kit-069-complete | TBD | 2025-11-01 | 90% complete via MAINT-4, finalized in 30 min | **COMPLETE** (2025-11-01): Evidence lifecycle already 90% implemented via MAINT-4 (2025-10-18). **Existing**: evidence_archive.sh (compress >30d consensus, SHA256 checksums, --dry-run, --retention-days), evidence_cleanup.sh (purge >180d with --enable-purge safety), evidence_stats.sh (policy compliance reporting). **Added**: (1) Updated limits 25MB→50MB in evidence_stats.sh, (2) Pre-flight check in pipeline_coordinator.rs (abort /speckit.auto if >50MB). **Impact**: Blocks evidence bloat, unblocks SPEC-KIT-910 and 902. **Tests**: Dry-run validated on SPEC-KIT-025/045/DEMO, all <50MB ✅. **Scripts**: All in scripts/spec_ops_004/. **Policy**: docs/spec-kit/evidence-policy.md. Effort: 30 min (reused MAINT-4 infrastructure). |
 | 3 | SPEC-KIT-903 | Add Template Version Tracking | **DONE** | Code | docs/SPEC-KIT-903-template-versioning/PRD.md | feature/spec-kit-069-complete | TBD | 2025-11-01 | 15 min - trivial implementation | **COMPLETE** (2025-11-01): Added **Template Version** metadata to 6 agent command templates. Modified: plan-template.md (plan-v1.0), tasks-template.md (tasks-v1.0), implement-template.md (implement-v1.0), validate-template.md (validate-v1.0), audit-template.md (audit-v1.0), unlock-template.md (unlock-v1.0). Agents automatically include version line when using templates, enabling reproducibility and stale artifact detection. **Scope**: 6 agent commands only (native commands don't use templates post SPEC-KIT-070). **Impact**: Template evolution tracking, quality assurance for generated artifacts. **Effort**: 15 min (was estimated 2-4 hours, actual trivial via template header injection). **Files**: 6 templates updated. |
 | 4 | SPEC-KIT-901 | Formalize MCP Native Interface | **NEEDS PRD** | Code | docs/SPEC-KIT-901-mcp-native-interface-docs/spec.md (stub only) | | | 2025-10-30 | **P1 - 60 Day** ⚠️ NEEDS PRD: Stub spec only (539 bytes), PRD.md missing. Document NativeMcpServer trait contract (current implementation mature post-ARCH-004). **Revised Effort**: 2-3h PRD creation + 2-4h implementation (down from 4h, extracting existing patterns). **Total**: 4-7h. **Action Required**: Create detailed PRD before proceeding. |
-| 5 | SPEC-KIT-910 | Separate Consensus Database | **NEEDS INVESTIGATION** | Code | docs/SPEC-KIT-910-consensus-db-separation/spec.md (stub only) | | | 2025-10-30 | **P1 - 60 Day** ⚠️ NEEDS INVESTIGATION: Stub spec only (545 bytes), PRD.md missing. May be completed by SPEC-934 (consensus_db already uses SQLite). **Action Required**: (1) Audit consensus storage (local-memory vs SQLite), (2) If complete → CLOSE, (3) If gaps → create PRD with reduced scope (post-SPEC-070: -50% volume). **Investigation**: 1-2h. **Depends**: SPEC-909 ✅ (complete). |
+| 5 | SPEC-KIT-910 | Separate Consensus Database | **DONE** | Code | docs/SPEC-KIT-910-consensus-db-separation/spec.md | | | 2025-10-30 | **CLOSED** (2025-11-29): Investigation confirmed goal already achieved. **Evidence**: consensus_db.rs (1072 LOC) provides dedicated SQLite at `~/.code/consensus_artifacts.db` with 6 tables, WAL mode, connection pooling, retry logic. Implemented via: SPEC-072 (initial), SPEC-934 (MCP elimination, 4→0 storage calls), SPEC-945B/C (schema optimization). No further work needed. |
 | 6 | SPEC-KIT-902 | Nativize Guardrail Scripts | **NEEDS PRD** | Code | docs/SPEC-KIT-902-nativize-guardrails/spec.md (stub only) | | | 2025-10-30 | **P2 - 90 Day** ⚠️ NEEDS PRD: Stub spec only (543 bytes), PRD.md missing. Scope reduced by SPEC-070 (4 quality commands already native). **Revised Effort**: 3-5h PRD + 20-30h implementation (down from 40h). **Total**: 23-35h. **Action Required**: Create PRD assessing 7 remaining guardrail scripts. **Depends**: SPEC-909 ✅ (complete). |
 
-**Sequencing** (Updated 2025-11-01, end of session):
-- **Completed Today**: 070 ✅, 068 ✅, 909 ✅, 903 ✅ (13 hours)
-- **Closed Today**: 904 ❌ (obsolete), 906 ❌ (rejected), 067 ❌ (test only)
-- **Remaining**: 3 SPECs (901, 910, 902)
-- **Next Session**: 901 (4h) → 910 (1-2d, now unblocked) → 902 (1w, now unblocked)
+**Sequencing** (Updated 2025-11-29):
+- **Completed**: 070 ✅, 068 ✅, 909 ✅, 903 ✅, 910 ✅ (closed - already implemented)
+- **Closed**: 904 ❌ (obsolete), 906 ❌ (rejected), 067 ❌ (test only)
+- **Remaining**: 2 SPECs (901, 902) - both need PRD before implementation
+- **Next**: 901 (4-7h) → 902 (23-35h)
 
 ### Implementation Backlog (from SPEC-932 Planning Session, 2025-11-13)
 
