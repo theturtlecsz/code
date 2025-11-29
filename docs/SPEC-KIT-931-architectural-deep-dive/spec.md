@@ -1,12 +1,19 @@
 # SPEC-KIT-931: Architectural Deep Dive - Master Index
 
-**Status**: IN PROGRESS - Systematic Analysis
+**Status**: ✅ COMPLETE (10/10 child specs done)
 **Priority**: P0 (Critical - blocks SPEC-930 implementation)
 **Created**: 2025-11-12
-**Updated**: 2025-11-12 (restructured as master with child specs)
+**Updated**: 2025-11-29 (all child specs complete, major recommendations implemented)
 **Parent**: SPEC-KIT-930 (master research spec)
 **Type**: Master Coordination Spec (10 focused child specs)
 **Effort**: 10-15 hours total (1-2 hour sessions each)
+
+**SUMMARY**: All 10 child specs complete. Key decisions:
+- **Event Sourcing**: NO-GO (SPEC-931F) - too complex for current SLA
+- **Actor Model**: NO-GO (SPEC-931H) - doesn't solve dual-write
+- **Storage Consolidation**: GO → IMPLEMENTED (SPEC-931I → SPEC-934)
+- **Tmux Removal**: OBSOLETE → IMPLEMENTED (SPEC-931G → SPEC-936)
+- **Dead Code Elimination**: GO → PARTIAL (SPEC-931J → SPEC-902)
 
 ---
 
@@ -146,37 +153,34 @@
 
 ### Group C: Pattern Validation (SPEC-930 Fit)
 
-**SPEC-931F: Event Sourcing Feasibility** 📋 PLANNED
+**SPEC-931F: Event Sourcing Feasibility** ✅ COMPLETE
 - **Scope**: Event log design, migration path, performance validation
-- **Questions**:
-  - Can we migrate agent_executions → event_log + projections?
-  - What's the replay performance at scale (1,000 events)?
-  - How to run old + new systems in parallel?
-  - What's the cutover strategy + rollback plan?
-- **Deliverables**:
-  - Event sourcing schema design
-  - Migration step-by-step plan
-  - Performance benchmarks (prototype)
-  - Decision: GO/NO-GO with timeline
-- **Effort**: 2-3 hours (includes prototyping)
-- **Status**: Not started
+- **Delivered**:
+  - SPEC-931F-event-sourcing-feasibility.md (1157 lines, comprehensive analysis)
+  - Event sourcing schema design (event_log, snapshots, projections)
+  - Migration complexity analysis (150-180 hours)
+  - Performance estimates and cross-validation
+- **DECISION**: ❌ **NO-GO** on full event sourcing migration
+- **Key Findings**:
+  - Event sourcing does NOT eliminate dual-write (AGENT_MANAGER still needed for TUI)
+  - Migration complexity (150-180h) exceeds benefit for current SLA
+  - SPEC-928 bugs were logic errors, not storage bugs
+  - Simpler alternative: Add SQLite transactions (48-72h)
+- **Recommendation**: Incremental ACID compliance with existing schema
+- **Status**: ✅ Complete (2025-11-13)
 
 ---
 
-**SPEC-931G: Tmux Removal Investigation** 📋 PLANNED
+**SPEC-931G: Tmux Removal Investigation** ✅ OBSOLETE
 - **Scope**: Provider CLI non-interactive testing, direct API architecture
-- **Questions**:
-  - Can Claude CLI run without OAuth2 device code UI?
-  - How to handle large prompts without wrapper scripts?
-  - What observability alternatives exist (no tmux attach)?
-  - What's the migration risk (parallel run strategy)?
-- **Deliverables**:
-  - Provider CLI test results (Claude, Gemini, Code)
-  - Direct API call architecture
-  - Observability strategy (logs, TUI, metrics)
-  - Decision: GO/NO-GO with migration plan
-- **Effort**: 2-3 hours (includes testing)
-- **Status**: Not started
+- **DECISION**: ❌ **OBSOLETE** - Superseded by SPEC-936
+- **Key Finding**: SPEC-936 (Tmux Elimination & Async Orchestration) COMPLETE (2025-11-17)
+  - Tmux system eliminated via DirectProcessExecutor
+  - 851 LOC tmux.rs deleted (commit 3890b66d7)
+  - Performance: <50ms per agent (from 6.5s, 99.2% improvement)
+  - 23/23 tests passing
+- **No Further Work Needed**: All questions answered by SPEC-936 implementation
+- **Status**: ✅ Closed as obsolete (2025-11-29)
 
 ---
 
@@ -210,37 +214,43 @@
 
 ### Group D: Product Decisions (Should It EXIST)
 
-**SPEC-931I: Storage Consolidation** 📋 PLANNED
+**SPEC-931I: Storage Consolidation** ✅ COMPLETE + IMPLEMENTED
 - **Scope**: Reduce 4 systems → 2, MCP migration, single source of truth
-- **Questions**:
-  - Which storage systems serve product needs?
-  - Should consensus artifacts use SQLite or MCP?
-  - Can we eliminate filesystem (result.txt files)?
-  - What's the single source of truth architecture?
-- **Deliverables**:
-  - Storage necessity assessment (keep/remove per system)
-  - MCP → SQLite migration plan
-  - Single source of truth architecture
-  - Decision: Target architecture (2 systems, which ones)
-- **Effort**: 1-2 hours
-- **Status**: Not started
+- **Delivered**:
+  - SPEC-931I-storage-consolidation-analysis.md (584 lines)
+  - Architecture diagrams (before/after)
+  - Migration strategy (3 phases)
+- **DECISION**: ✅ **GO** - Storage consolidation from 4→2 systems
+- **Key Findings**:
+  - SPEC-KIT-072 policy violation confirmed (quality gates used MCP)
+  - AGENT_MANAGER non-eliminable (TUI needs sync cache)
+  - Target: AGENT_MANAGER + SQLite (eliminate MCP for consensus)
+- **IMPLEMENTATION**: ✅ **COMPLETE via SPEC-934**
+  - SPEC-934 eliminated MCP from orchestration (4→0 storage calls)
+  - Migrated to SQLite (consensus_db)
+  - All recommendations implemented
+- **Status**: ✅ Complete (2025-11-13), Implemented (2025-11-14 via SPEC-934)
 
 ---
 
-**SPEC-931J: Dead Code Elimination** 📋 PLANNED
-- **Scope**: Remove consensus_artifacts, consensus_synthesis, unused methods
-- **Questions**:
-  - Why do dead tables exist (git history review)?
-  - Are they planned features or abandoned code?
-  - What's the safe removal process?
-  - Any hidden dependencies?
-- **Deliverables**:
-  - Git history analysis (table creation intent)
-  - Dead code inventory (~225 LOC)
-  - Removal plan with validation
-  - Decision: Remove vs implement proper usage
-- **Effort**: 1 hour
-- **Status**: Not started
+**SPEC-931J: Dead Code Elimination** ✅ COMPLETE + PARTIALLY IMPLEMENTED
+- **Scope**: Remove dead functions, empty tables, legacy patterns
+- **Delivered**:
+  - SPEC-931J-dead-code-elimination-analysis.md (801 lines)
+  - Dead code inventory (296 LOC, 1.4% bloat)
+  - Risk categorization (P0/P1/P2)
+  - Break-even analysis (3-12 months)
+- **DECISION**: ✅ **GO** - Phased removal recommended
+- **Key Findings**:
+  - store_quality_gate_artifacts_sync(): 127 LOC dead
+  - fetch_agent_payloads_from_filesystem(): 169 LOC legacy
+  - 2 empty database tables (consensus_artifacts, consensus_synthesis)
+- **PARTIAL IMPLEMENTATION via SPEC-902** (2025-11-29):
+  - Deleted 10 legacy shell scripts (~1,466 LOC)
+  - Removed 15 legacy enum variants
+  - Removed queue_consensus_runner(), parse_spec_stage_invocation()
+- **Remaining**: P1 filesystem fallback, database table decisions
+- **Status**: ✅ Analysis complete (2025-11-13), Partial implementation (2025-11-29)
 
 ---
 
