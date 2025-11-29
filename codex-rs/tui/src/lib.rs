@@ -124,6 +124,7 @@ mod glitch_animation;
 mod history;
 mod history_cell;
 mod insert_history;
+mod key_hint;
 pub mod live_wrap;
 mod local_memory_util;
 mod markdown;
