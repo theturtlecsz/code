@@ -692,6 +692,175 @@ fn export_verdict_record(
     Ok(verdict_file)
 }
 
+// === NATIVE EVIDENCE STATS (SPEC-KIT-902) ===
+
+/// Evidence size limits (SPEC-KIT-909)
+pub const EVIDENCE_WARN_MB: f64 = 40.0;
+pub const EVIDENCE_LIMIT_MB: f64 = 50.0;
+
+/// Result of evidence size calculation
+#[derive(Debug, Clone)]
+pub struct EvidenceStats {
+    /// Total size in bytes
+    pub total_size_bytes: u64,
+    /// Human-readable size (e.g., "15.2 MB")
+    pub total_size_human: String,
+    /// Size by SPEC ID: (spec_id, bytes)
+    pub spec_sizes: Vec<(String, u64)>,
+    /// True if total exceeds warning threshold (40 MB)
+    pub exceeds_warning: bool,
+    /// True if total exceeds hard limit (50 MB)
+    pub exceeds_limit: bool,
+}
+
+impl EvidenceStats {
+    /// Format bytes as human-readable string
+    fn format_size(bytes: u64) -> String {
+        const KB: u64 = 1024;
+        const MB: u64 = KB * 1024;
+        const GB: u64 = MB * 1024;
+
+        if bytes >= GB {
+            format!("{:.1} GB", bytes as f64 / GB as f64)
+        } else if bytes >= MB {
+            format!("{:.1} MB", bytes as f64 / MB as f64)
+        } else if bytes >= KB {
+            format!("{:.1} KB", bytes as f64 / KB as f64)
+        } else {
+            format!("{} B", bytes)
+        }
+    }
+}
+
+/// Calculate evidence statistics for a SPEC or all SPECs
+///
+/// # Arguments
+/// * `cwd` - Project root directory
+/// * `spec_id` - Optional SPEC ID to filter by (None = all SPECs)
+///
+/// # Returns
+/// Evidence statistics including sizes and limit checks
+pub fn calculate_evidence_stats(cwd: &Path, spec_id: Option<&str>) -> Result<EvidenceStats> {
+    let evidence_root = cwd.join(DEFAULT_EVIDENCE_BASE);
+
+    if !evidence_root.exists() {
+        return Ok(EvidenceStats {
+            total_size_bytes: 0,
+            total_size_human: "0 B".to_string(),
+            spec_sizes: Vec::new(),
+            exceeds_warning: false,
+            exceeds_limit: false,
+        });
+    }
+
+    let consensus_dir = evidence_root.join("consensus");
+    let commands_dir = evidence_root.join("commands");
+
+    let mut spec_sizes: Vec<(String, u64)> = Vec::new();
+
+    // Collect all SPEC IDs from consensus and commands directories
+    let mut spec_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for dir in [&consensus_dir, &commands_dir] {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                if entry.path().is_dir() {
+                    if let Some(name) = entry.file_name().to_str() {
+                        // Skip hidden directories and locks
+                        if !name.starts_with('.') {
+                            spec_ids.insert(name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Filter by spec_id if provided
+    if let Some(filter_id) = spec_id {
+        spec_ids.retain(|id| id == filter_id);
+    }
+
+    // Calculate sizes for each SPEC
+    for id in &spec_ids {
+        let mut size: u64 = 0;
+
+        // Consensus directory
+        let spec_consensus = consensus_dir.join(id);
+        if spec_consensus.exists() {
+            size += calculate_dir_size(&spec_consensus);
+        }
+
+        // Commands directory
+        let spec_commands = commands_dir.join(id);
+        if spec_commands.exists() {
+            size += calculate_dir_size(&spec_commands);
+        }
+
+        spec_sizes.push((id.clone(), size));
+    }
+
+    // Sort by size (largest first)
+    spec_sizes.sort_by(|a, b| b.1.cmp(&a.1));
+
+    let total_size_bytes: u64 = spec_sizes.iter().map(|(_, s)| s).sum();
+    let total_mb = total_size_bytes as f64 / (1024.0 * 1024.0);
+
+    Ok(EvidenceStats {
+        total_size_bytes,
+        total_size_human: EvidenceStats::format_size(total_size_bytes),
+        spec_sizes,
+        exceeds_warning: total_mb > EVIDENCE_WARN_MB,
+        exceeds_limit: total_mb > EVIDENCE_LIMIT_MB,
+    })
+}
+
+/// Calculate total size of a directory recursively
+fn calculate_dir_size(dir: &Path) -> u64 {
+    let mut total: u64 = 0;
+
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if path.is_file() {
+                total += path.metadata().map(|m| m.len()).unwrap_or(0);
+            } else if path.is_dir() {
+                total += calculate_dir_size(&path);
+            }
+        }
+    }
+
+    total
+}
+
+/// Check if a SPEC's evidence exceeds the size limit (50 MB)
+///
+/// This is the native replacement for calling evidence_stats.sh
+///
+/// # Returns
+/// Ok(()) if within limits, Err with message if exceeds 50 MB
+pub fn check_spec_evidence_limit(cwd: &Path, spec_id: &str) -> Result<()> {
+    let stats = calculate_evidence_stats(cwd, Some(spec_id))?;
+
+    if stats.exceeds_limit {
+        let size_mb = stats.total_size_bytes as f64 / (1024.0 * 1024.0);
+        return Err(SpecKitError::from_string(format!(
+            "{} evidence is {:.1} MB (exceeds {:.0} MB limit). Archive consensus artifacts before continuing.",
+            spec_id, size_mb, EVIDENCE_LIMIT_MB
+        )));
+    }
+
+    if stats.exceeds_warning {
+        let size_mb = stats.total_size_bytes as f64 / (1024.0 * 1024.0);
+        tracing::warn!(
+            "⚠️  {} evidence is {:.1} MB (above {:.0} MB warning threshold)",
+            spec_id, size_mb, EVIDENCE_WARN_MB
+        );
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

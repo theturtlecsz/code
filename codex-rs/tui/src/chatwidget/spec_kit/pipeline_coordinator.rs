@@ -1149,44 +1149,11 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
     }
 }
 
-/// SPEC-KIT-909: Check evidence size limit (50MB hard limit)
+/// SPEC-KIT-909, SPEC-KIT-902: Check evidence size limit (50MB hard limit)
+///
+/// Native Rust implementation - no longer calls evidence_stats.sh
 fn check_evidence_size_limit(spec_id: &str, cwd: &std::path::Path) -> super::error::Result<()> {
-    use std::process::Command;
-
-    // Use evidence_stats.sh to check size
-    let stats_script = cwd.join("scripts/spec_ops_004/evidence_stats.sh");
-    if !stats_script.exists() {
-        // Script missing - allow pipeline to continue (graceful degradation)
-        return Ok(());
-    }
-
-    let output = Command::new("bash")
-        .arg(&stats_script)
-        .arg("--spec")
-        .arg(spec_id)
-        .current_dir(cwd)
-        .output()
-        .map_err(|e| {
-            super::error::SpecKitError::Other(format!("Failed to run evidence_stats.sh: {}", e))
-        })?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    // Check for error indicator (❌ means >50MB)
-    if stdout.contains("❌") && stdout.contains(spec_id) {
-        // Extract size from output
-        let size_line = stdout
-            .lines()
-            .find(|line| line.contains(spec_id) && line.contains("MB"))
-            .unwrap_or("");
-
-        return Err(super::error::SpecKitError::Other(format!(
-            "{} evidence exceeds 50MB limit. Archive consensus artifacts before continuing.",
-            spec_id
-        )));
-    }
-
-    Ok(())
+    super::evidence::check_spec_evidence_limit(cwd, spec_id)
 }
 
 /// Synthesize consensus from cached agent responses

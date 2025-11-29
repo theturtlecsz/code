@@ -5124,110 +5124,64 @@ impl ChatWidget<'_> {
             }
         }
 
-        let stage_invocation = parse_spec_stage_invocation(original_trimmed);
-        if let Some(inv) = &stage_invocation
-            && inv.consensus
-        {
-            let mut sanitized = format!("/{} {}", inv.stage.command_name(), inv.spec_id);
-            if !inv.remainder.trim().is_empty() {
-                sanitized.push(' ');
-                sanitized.push_str(inv.remainder.trim());
-            }
-            text_only = sanitized;
-        }
+        // SPEC-KIT-902: Stage commands now use direct spawning via command_registry,
+        // so we don't need to parse stage invocations here anymore.
 
         let processed = crate::slash_command::process_slash_command_message(&text_only);
         match processed {
             crate::slash_command::ProcessedCommand::ExpandedPrompt(expanded) => {
-                if let Some(inv) = &stage_invocation {
-                    let stage = inv.stage;
-                    let spec_id = &inv.spec_id;
+                // If a built-in multi-agent slash command was used, resolve
+                // configured subagent settings and show an acknowledgement in history.
+                let trimmed = original_trimmed;
+                let (cmd_name, args_opt) = if let Some(rest) = trimmed.strip_prefix("/plan ") {
+                    ("plan", Some(rest.trim().to_string()))
+                } else if let Some(rest) = trimmed.strip_prefix("/solve ") {
+                    ("solve", Some(rest.trim().to_string()))
+                } else if let Some(rest) = trimmed.strip_prefix("/code ") {
+                    ("code", Some(rest.trim().to_string()))
+                } else {
+                    ("", None)
+                };
+
+                if let Some(task) = args_opt {
+                    let res = codex_core::slash_commands::format_subagent_command(
+                        cmd_name,
+                        &task,
+                        Some(&self.config.agents),
+                        Some(&self.config.subagent_commands),
+                    );
+
+                    // Acknowledge the command and show which agents will run.
                     use ratatui::text::Line;
+                    let mode = if res.read_only { "read-only" } else { "write" };
                     let mut lines: Vec<Line<'static>> = Vec::new();
-                    lines.push(Line::from(format!("/{} prepared", stage.command_name())));
-                    lines.push(Line::from(format!("SPEC: {}", spec_id)));
-                    lines.push(Line::from(
-                        "Prompts for Gemini, Claude, and GPT Pro inserted into the composer.",
-                    ));
-                    if inv.consensus {
-                        let exec_note = if inv.consensus_execute {
-                            "execute"
+                    lines.push(Line::from(format!("/{} configured", cmd_name)));
+                    lines.push(Line::from(format!("mode: {}", mode)));
+                    lines.push(Line::from(format!(
+                        "agents: {}",
+                        if res.models.is_empty() {
+                            "<none>".to_string()
                         } else {
-                            "dry-run"
-                        };
-                        lines.push(Line::from(format!(
-                            "Consensus runner queued for this stage ({exec_note})."
-                        )));
-                        self.queue_consensus_runner(
-                            stage,
-                            spec_id,
-                            inv.consensus_execute,
-                            inv.allow_conflict,
-                        );
-                    }
+                            res.models.join(", ")
+                        }
+                    )));
+                    lines.push(Line::from(format!("command: {}", original_text.trim())));
                     self.history_push(crate::history_cell::PlainHistoryCell::new(
                         lines,
                         crate::history_cell::HistoryCellType::Notice,
                     ));
 
+                    // Replace the message with the resolved prompt
+                    message.ordered_items.clear();
+                    message
+                        .ordered_items
+                        .push(InputItem::Text { text: res.prompt });
+                } else {
+                    // Fallback to default expansion behavior
                     message.ordered_items.clear();
                     message
                         .ordered_items
                         .push(InputItem::Text { text: expanded });
-                } else {
-                    // If a built-in multi-agent slash command was used, resolve
-                    // configured subagent settings and show an acknowledgement in history.
-                    let trimmed = original_trimmed;
-                    let (cmd_name, args_opt) = if let Some(rest) = trimmed.strip_prefix("/plan ") {
-                        ("plan", Some(rest.trim().to_string()))
-                    } else if let Some(rest) = trimmed.strip_prefix("/solve ") {
-                        ("solve", Some(rest.trim().to_string()))
-                    } else if let Some(rest) = trimmed.strip_prefix("/code ") {
-                        ("code", Some(rest.trim().to_string()))
-                    } else {
-                        ("", None)
-                    };
-
-                    if let Some(task) = args_opt {
-                        let res = codex_core::slash_commands::format_subagent_command(
-                            cmd_name,
-                            &task,
-                            Some(&self.config.agents),
-                            Some(&self.config.subagent_commands),
-                        );
-
-                        // Acknowledge the command and show which agents will run.
-                        use ratatui::text::Line;
-                        let mode = if res.read_only { "read-only" } else { "write" };
-                        let mut lines: Vec<Line<'static>> = Vec::new();
-                        lines.push(Line::from(format!("/{} configured", cmd_name)));
-                        lines.push(Line::from(format!("mode: {}", mode)));
-                        lines.push(Line::from(format!(
-                            "agents: {}",
-                            if res.models.is_empty() {
-                                "<none>".to_string()
-                            } else {
-                                res.models.join(", ")
-                            }
-                        )));
-                        lines.push(Line::from(format!("command: {}", original_text.trim())));
-                        self.history_push(crate::history_cell::PlainHistoryCell::new(
-                            lines,
-                            crate::history_cell::HistoryCellType::Notice,
-                        ));
-
-                        // Replace the message with the resolved prompt
-                        message.ordered_items.clear();
-                        message
-                            .ordered_items
-                            .push(InputItem::Text { text: res.prompt });
-                    } else {
-                        // Fallback to default expansion behavior
-                        message.ordered_items.clear();
-                        message
-                            .ordered_items
-                            .push(InputItem::Text { text: expanded });
-                    }
                 }
             }
             crate::slash_command::ProcessedCommand::RegularCommand {
@@ -17906,76 +17860,11 @@ impl ChatWidget<'_> {
     }
 }
 
-#[derive(Debug, Clone)]
-struct SpecStageInvocation {
-    stage: SpecStage,
-    spec_id: String,
-    remainder: String,
-    consensus: bool,
-    consensus_execute: bool,
-    allow_conflict: bool,
-}
+// SPEC-KIT-902: SpecStageInvocation, parse_spec_stage_invocation, and
+// queue_consensus_runner deleted. Stage commands now use direct spawning
+// via command_registry and auto_submit_spec_stage_prompt.
 
-fn parse_spec_stage_invocation(input: &str) -> Option<SpecStageInvocation> {
-    let trimmed = input.trim();
-    let parse_for_stage = |prefix: &str, stage: SpecStage| -> Option<SpecStageInvocation> {
-        let rest = trimmed.strip_prefix(prefix)?.trim();
-        if rest.is_empty() {
-            return None;
-        }
-
-        let tokens = rest.split_whitespace();
-        let mut consensus = false;
-        let mut execute_consensus = false;
-        let mut allow_conflict = false;
-        let mut spec_id: Option<String> = None;
-        let mut remainder_tokens: Vec<String> = Vec::new();
-
-        for token in tokens {
-            if spec_id.is_none() && token.starts_with("--") {
-                match token {
-                    "--consensus" => consensus = true,
-                    "--consensus-exec" => {
-                        consensus = true;
-                        execute_consensus = true;
-                    }
-                    "--consensus-dry-run" => {
-                        consensus = true;
-                        execute_consensus = false;
-                    }
-                    "--allow-conflict" => allow_conflict = true,
-                    _ => {}
-                }
-                continue;
-            }
-
-            if spec_id.is_none() {
-                spec_id = Some(token.to_string());
-            } else {
-                remainder_tokens.push(token.to_string());
-            }
-        }
-
-        let spec_id = spec_id?;
-        Some(SpecStageInvocation {
-            stage,
-            spec_id,
-            remainder: remainder_tokens.join(" "),
-            consensus,
-            consensus_execute: execute_consensus,
-            allow_conflict,
-        })
-    };
-
-    parse_for_stage("/spec-plan ", SpecStage::Plan)
-        .or_else(|| parse_for_stage("/spec-tasks ", SpecStage::Tasks))
-        .or_else(|| parse_for_stage("/spec-implement ", SpecStage::Implement))
-        .or_else(|| parse_for_stage("/spec-validate ", SpecStage::Validate))
-        .or_else(|| parse_for_stage("/spec-review ", SpecStage::Audit))
-        .or_else(|| parse_for_stage("/spec-audit ", SpecStage::Audit))
-        .or_else(|| parse_for_stage("/spec-unlock ", SpecStage::Unlock))
-}
-
+/// Parse /speckit.validate command for lifecycle tracking
 fn parse_validate_command(input: &str) -> Option<(String, String)> {
     let trimmed = input.trim();
     if !trimmed.starts_with('/') {
@@ -17984,68 +17873,14 @@ fn parse_validate_command(input: &str) -> Option<(String, String)> {
 
     let mut parts = trimmed[1..].split_whitespace();
     let command = parts.next()?.to_ascii_lowercase();
-    let is_validate = matches!(
-        command.as_str(),
-        "speckit.validate" | "spec-validate" | "spec-ops-validate"
-    );
-    if !is_validate {
+    // SPEC-KIT-902: Only recognize speckit.validate (legacy aliases removed)
+    if command != "speckit.validate" {
         return None;
     }
 
     let spec_id = parts.next()?.to_string();
     let remainder = parts.collect::<Vec<_>>().join(" ");
     Some((spec_id, remainder))
-}
-
-impl ChatWidget<'_> {
-    fn queue_consensus_runner(
-        &mut self,
-        stage: SpecStage,
-        spec_id: &str,
-        execute: bool,
-        allow_conflict: bool,
-    ) {
-        let script = "scripts/spec_ops_004/consensus_runner.sh";
-        let mut command_line = format!(
-            "scripts/env_run.sh {} --stage {} --spec {}",
-            script,
-            stage.command_name(),
-            spec_id
-        );
-        if execute {
-            command_line.push_str(" --execute");
-        } else {
-            command_line.push_str(" --dry-run");
-        }
-        if allow_conflict {
-            command_line.push_str(" --allow-conflict");
-        }
-
-        let argv = wrap_command(&command_line);
-        if argv.is_empty() {
-            self.history_push(crate::history_cell::new_error_event(
-                "Unable to build consensus runner invocation.".to_string(),
-            ));
-            return;
-        }
-
-        let name = format!("spec_consensus_{}", stage.command_name().replace('-', "_"));
-        self.submit_op(Op::RunProjectCommand {
-            name,
-            command: Some(argv),
-            display: Some(command_line.clone()),
-            env: HashMap::new(),
-        });
-
-        self.insert_background_event_with_placement(
-            format!(
-                "Consensus runner queued for {} ({}).",
-                spec_id,
-                stage.display_name()
-            ),
-            BackgroundPlacement::Tail,
-        );
-    }
 }
 
 // === FORK-SPECIFIC: Spec-kit state moved to spec_kit module ===

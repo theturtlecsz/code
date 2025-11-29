@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# DEPRECATED (SPEC-KIT-902): This script is replaced by native Rust implementation
+# in codex-rs/tui/src/chatwidget/spec_kit/evidence.rs (check_spec_evidence_limit)
+# Kept for manual CLI use and backward compatibility.
+# Use /spec-evidence-stats in TUI for native implementation.
 
 set -euo pipefail
 

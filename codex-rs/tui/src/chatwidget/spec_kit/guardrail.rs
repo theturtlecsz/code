@@ -452,14 +452,15 @@ pub fn collect_guardrail_outcome(
 }
 
 /// Map slash command to spec stage for multi-agent followup (if applicable)
+/// SPEC-KIT-902: Updated to use /guardrail.* commands (legacy /spec-ops-* removed)
 fn spec_stage_for_multi_agent_followup(command: SlashCommand) -> Option<SpecStage> {
     match command {
-        SlashCommand::SpecOpsPlan => Some(SpecStage::Plan),
-        SlashCommand::SpecOpsTasks => Some(SpecStage::Tasks),
-        SlashCommand::SpecOpsImplement => Some(SpecStage::Implement),
-        SlashCommand::SpecOpsValidate => Some(SpecStage::Validate),
-        SlashCommand::SpecOpsAudit => Some(SpecStage::Audit),
-        SlashCommand::SpecOpsUnlock => Some(SpecStage::Unlock),
+        SlashCommand::GuardrailPlan => Some(SpecStage::Plan),
+        SlashCommand::GuardrailTasks => Some(SpecStage::Tasks),
+        SlashCommand::GuardrailImplement => Some(SpecStage::Implement),
+        SlashCommand::GuardrailValidate => Some(SpecStage::Validate),
+        SlashCommand::GuardrailAudit => Some(SpecStage::Audit),
+        SlashCommand::GuardrailUnlock => Some(SpecStage::Unlock),
         _ => None,
     }
 }

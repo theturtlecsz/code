@@ -2070,19 +2070,8 @@ impl App<'_> {
                         // REMOVED: SpecKitStatus, SpecKitConstitution, SpecKitAceStatus
                         // Now registry-only (eliminates duplicate autocomplete entries)
 
-                        // Legacy spec commands (backward compat)
-                        SlashCommand::NewSpec => {
-                            // Redirect to SpecKitNew
-                        }
-                        SlashCommand::SpecPlan
-                        | SlashCommand::SpecTasks
-                        | SlashCommand::SpecImplement
-                        | SlashCommand::SpecValidate
-                        | SlashCommand::SpecAudit
-                        | SlashCommand::SpecUnlock
-                        | SlashCommand::SpecAuto => {
-                            // Prompt-expanded (legacy)
-                        }
+                        // SPEC-KIT-902: Legacy /spec-* and /spec-ops-* removed
+                        // Use /speckit.* or /guardrail.* commands instead
                         SlashCommand::SpecStatus => {
                             if let AppState::Chat { widget } = &mut self.app_state {
                                 widget.handle_spec_status_command(command_args);
@@ -2095,13 +2084,6 @@ impl App<'_> {
                         | SlashCommand::GuardrailAudit
                         | SlashCommand::GuardrailUnlock
                         | SlashCommand::GuardrailAuto
-                        | SlashCommand::SpecOpsPlan
-                        | SlashCommand::SpecOpsTasks
-                        | SlashCommand::SpecOpsImplement
-                        | SlashCommand::SpecOpsValidate
-                        | SlashCommand::SpecOpsAudit
-                        | SlashCommand::SpecOpsUnlock
-                        | SlashCommand::SpecOpsAuto
                         | SlashCommand::SpecEvidenceStats => {
                             if let AppState::Chat { widget } = &mut self.app_state {
                                 widget.handle_spec_ops_command(command, command_args, None);

@@ -169,37 +169,8 @@ pub enum SlashCommand {
     GuardrailUnlock,
     #[strum(serialize = "guardrail.auto")]
     GuardrailAuto,
-    // Legacy names (backward compat - will be removed in future release)
-    #[strum(serialize = "new-spec")]
-    NewSpec,
-    #[strum(serialize = "spec-plan")]
-    SpecPlan,
-    #[strum(serialize = "spec-tasks")]
-    SpecTasks,
-    #[strum(serialize = "spec-implement")]
-    SpecImplement,
-    #[strum(serialize = "spec-validate")]
-    SpecValidate,
-    #[strum(serialize = "spec-audit")]
-    SpecAudit,
-    #[strum(serialize = "spec-unlock")]
-    SpecUnlock,
-    #[strum(serialize = "spec-auto")]
-    SpecAuto,
-    #[strum(serialize = "spec-ops-plan")]
-    SpecOpsPlan,
-    #[strum(serialize = "spec-ops-tasks")]
-    SpecOpsTasks,
-    #[strum(serialize = "spec-ops-implement")]
-    SpecOpsImplement,
-    #[strum(serialize = "spec-ops-validate")]
-    SpecOpsValidate,
-    #[strum(serialize = "spec-ops-audit")]
-    SpecOpsAudit,
-    #[strum(serialize = "spec-ops-unlock")]
-    SpecOpsUnlock,
-    #[strum(serialize = "spec-ops-auto")]
-    SpecOpsAuto,
+    // SPEC-KIT-902: Legacy /spec-* and /spec-ops-* removed. Use /speckit.* or /guardrail.*
+    // Utility commands retained:
     #[strum(serialize = "spec-evidence-stats")]
     SpecEvidenceStats,
     #[strum(serialize = "spec-consensus")]
@@ -259,28 +230,8 @@ impl SlashCommand {
             SlashCommand::SpecKitConfigure => "configure pipeline stages (interactive modal)",
             SlashCommand::SpecKitConstitution => "extract ACE bullets (native)",
             SlashCommand::SpecKitAceStatus => "show ACE stats (native)",
-            // Legacy (deprecated)
-            SlashCommand::NewSpec => "DEPRECATED: use /speckit.new",
-            SlashCommand::SpecPlan => "DEPRECATED: use /speckit.plan",
-            SlashCommand::SpecTasks => "DEPRECATED: use /speckit.tasks",
-            SlashCommand::SpecImplement => "multi-agent implementation design (requires SPEC ID)",
-            SlashCommand::SpecValidate => "multi-agent validation consensus (requires SPEC ID)",
-            SlashCommand::SpecAudit => "multi-agent audit/go-no-go (requires SPEC ID)",
-            SlashCommand::SpecUnlock => "multi-agent unlock justification (requires SPEC ID)",
-            SlashCommand::SpecAuto => {
-                "full automated pipeline with visible agents (orchestrator-driven)"
-            }
-            SlashCommand::SpecOpsPlan => "run Spec Ops plan automation (requires SPEC ID)",
-            SlashCommand::SpecOpsTasks => "run Spec Ops tasks automation (requires SPEC ID)",
-            SlashCommand::SpecOpsImplement => {
-                "run Spec Ops implement automation (requires SPEC ID)"
-            }
-            SlashCommand::SpecOpsValidate => "run Spec Ops validate automation (requires SPEC ID)",
-            SlashCommand::SpecOpsAudit => "run Spec Ops audit automation (requires SPEC ID)",
-            SlashCommand::SpecOpsUnlock => "unlock SPEC.md copy-on-write lock (requires SPEC ID)",
-            SlashCommand::SpecOpsAuto => {
-                "run Spec Ops guardrail sequence (requires SPEC ID; optional --from)"
-            }
+            // SPEC-KIT-902: Legacy /spec-* and /spec-ops-* removed
+            // Utility commands retained:
             SlashCommand::SpecEvidenceStats => {
                 "summarize guardrail/consensus evidence sizes (optional --spec)"
             }
@@ -353,68 +304,29 @@ impl SlashCommand {
     }
 
     /// Returns true when this command maps to Spec Ops automation.
+    /// SPEC-KIT-902: Legacy /spec-ops-* removed. Only SpecEvidenceStats remains.
     pub fn is_spec_ops(self) -> bool {
-        matches!(
-            self,
-            SlashCommand::SpecOpsPlan
-                | SlashCommand::SpecOpsTasks
-                | SlashCommand::SpecOpsImplement
-                | SlashCommand::SpecOpsValidate
-                | SlashCommand::SpecOpsAudit
-                | SlashCommand::SpecOpsUnlock
-                | SlashCommand::SpecOpsAuto
-                | SlashCommand::SpecEvidenceStats
-        )
+        matches!(self, SlashCommand::SpecEvidenceStats)
     }
 
     /// Returns Spec Ops metadata for the command.
+    /// SPEC-KIT-902: Legacy /spec-ops-* removed. Only SpecEvidenceStats remains.
     pub fn spec_ops(self) -> Option<SpecOpsCommand> {
         match self {
-            SlashCommand::SpecOpsPlan => Some(SpecOpsCommand {
-                display: "plan",
-                script: "spec_ops_plan.sh",
-            }),
-            SlashCommand::SpecOpsTasks => Some(SpecOpsCommand {
-                display: "tasks",
-                script: "spec_ops_tasks.sh",
-            }),
-            SlashCommand::SpecOpsImplement => Some(SpecOpsCommand {
-                display: "implement",
-                script: "spec_ops_implement.sh",
-            }),
-            SlashCommand::SpecOpsValidate => Some(SpecOpsCommand {
-                display: "validate",
-                script: "spec_ops_validate.sh",
-            }),
-            SlashCommand::SpecOpsAudit => Some(SpecOpsCommand {
-                display: "audit",
-                script: "spec_ops_audit.sh",
-            }),
-            SlashCommand::SpecOpsUnlock => Some(SpecOpsCommand {
-                display: "unlock",
-                script: "spec_ops_unlock.sh",
-            }),
-            SlashCommand::SpecOpsAuto => Some(SpecOpsCommand {
-                display: "auto",
-                script: "spec_auto.sh",
-            }),
             SlashCommand::SpecEvidenceStats => Some(SpecOpsCommand {
                 display: "evidence-stats",
                 script: "evidence_stats.sh",
             }),
-            SlashCommand::SpecStatus => None,
             _ => None,
         }
     }
 
+    /// SPEC-KIT-902: spec_stage() removed. Use speckit command registry instead.
+    #[allow(dead_code)]
     pub fn spec_stage(self) -> Option<SpecStage> {
+        // Legacy /spec-* commands removed. This method is kept for compatibility
+        // but always returns None. Use the command registry for stage mapping.
         match self {
-            SlashCommand::SpecPlan => Some(SpecStage::Plan),
-            SlashCommand::SpecTasks => Some(SpecStage::Tasks),
-            SlashCommand::SpecImplement => Some(SpecStage::Implement),
-            SlashCommand::SpecValidate => Some(SpecStage::Validate),
-            SlashCommand::SpecAudit => Some(SpecStage::Audit),
-            SlashCommand::SpecUnlock => Some(SpecStage::Unlock),
             _ => None,
         }
     }
@@ -552,7 +464,8 @@ pub fn process_slash_command_message(message: &str) -> ProcessedCommand {
             }
         }
 
-        if command == SlashCommand::SpecAuto {
+        // SPEC-KIT-902: SpecAuto removed, use SpecKitAuto for /speckit.auto
+        if command == SlashCommand::SpecKitAuto {
             match parse_spec_auto_args(args_raw) {
                 Ok(auto) => {
                     return ProcessedCommand::SpecAuto(auto);
