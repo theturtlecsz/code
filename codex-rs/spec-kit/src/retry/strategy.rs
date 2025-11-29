@@ -1,10 +1,15 @@
 //! Backoff strategy implementations
 //!
 //! SPEC-945C: Exponential backoff with jitter
+//! Enhanced with Auto Drive patterns (P5-SYNC):
+//! - Total elapsed timeout
+//! - Cancellation support via tokio CancellationToken
+//! - Status callbacks for progress reporting
 
 use backon::{ExponentialBuilder, Retryable};
 use rand::Rng;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use tokio_util::sync::CancellationToken;
 
 /// Retry configuration
 #[derive(Debug, Clone)]
@@ -14,6 +19,10 @@ pub struct RetryConfig {
     pub max_backoff_ms: u64,
     pub backoff_multiplier: f64,
     pub jitter_factor: f64,
+    /// Total elapsed timeout (Auto Drive pattern)
+    /// If set, retries stop after this duration regardless of remaining attempts.
+    /// Default: None (use max_attempts only)
+    pub max_elapsed_ms: Option<u64>,
 }
 
 impl Default for RetryConfig {
@@ -24,8 +33,28 @@ impl Default for RetryConfig {
             max_backoff_ms: 10_000,
             backoff_multiplier: 2.0,
             jitter_factor: 0.5,
+            max_elapsed_ms: None,
         }
     }
+}
+
+/// Retry status for progress callbacks (Auto Drive pattern)
+///
+/// Reports current retry state for UI updates or logging.
+#[derive(Debug, Clone)]
+pub struct RetryStatus {
+    /// Current attempt number (1-indexed)
+    pub attempt: u32,
+    /// Total elapsed time since first attempt
+    pub elapsed: Duration,
+    /// Duration of next backoff sleep (None if not sleeping)
+    pub sleep: Option<Duration>,
+    /// When retry will resume (None if not sleeping)
+    pub resume_at: Option<Instant>,
+    /// Human-readable reason for current state
+    pub reason: String,
+    /// True if this is a rate-limit wait (vs normal backoff)
+    pub is_rate_limit: bool,
 }
 
 /// Execute operation with exponential backoff retry (using backon crate)
@@ -141,6 +170,133 @@ where
                 backoff_ms = (backoff_ms as f64 * config.backoff_multiplier) as u64;
             }
         }
+    }
+}
+
+/// Execute operation with cancellation support and status callbacks (Auto Drive pattern)
+///
+/// This is the full-featured retry function ported from upstream Auto Drive.
+/// Use this when you need:
+/// - External cancellation (via CancellationToken)
+/// - Total elapsed timeout (vs just max attempts)
+/// - Progress callbacks for UI updates
+///
+/// # Example
+/// ```ignore
+/// use tokio_util::sync::CancellationToken;
+///
+/// let cancel = CancellationToken::new();
+/// let config = RetryConfig {
+///     max_elapsed_ms: Some(30_000), // 30 second total timeout
+///     ..Default::default()
+/// };
+///
+/// let result = execute_with_backoff_cancellable(
+///     || async { api_call().await },
+///     &config,
+///     &cancel,
+///     |status| tracing::info!("Retry attempt {}: {}", status.attempt, status.reason),
+/// ).await;
+/// ```
+pub async fn execute_with_backoff_cancellable<F, Fut, T, E, StatusCb>(
+    mut operation: F,
+    config: &RetryConfig,
+    cancel: &CancellationToken,
+    mut status_cb: StatusCb,
+) -> super::Result<T>
+where
+    F: FnMut() -> Fut + Send,
+    Fut: std::future::Future<Output = Result<T, E>> + Send,
+    E: std::error::Error + super::classifier::RetryClassifiable + Send + Sync + 'static,
+    StatusCb: FnMut(RetryStatus) + Send,
+{
+    let start_time = Instant::now();
+    let mut attempt: u32 = 0;
+    let mut backoff_ms = config.initial_backoff_ms;
+    let max_elapsed = config.max_elapsed_ms.map(Duration::from_millis);
+
+    loop {
+        // Check cancellation before each attempt
+        if cancel.is_cancelled() {
+            return Err(super::RetryError::Aborted);
+        }
+
+        attempt = attempt.saturating_add(1);
+        let output = operation().await;
+
+        match output {
+            Ok(value) => return Ok(value),
+            Err(err) => {
+                let elapsed = start_time.elapsed();
+
+                // Check total elapsed timeout (Auto Drive pattern)
+                if let Some(max) = max_elapsed {
+                    if elapsed >= max {
+                        return Err(super::RetryError::Timeout {
+                            elapsed,
+                            last_error: err.to_string(),
+                        });
+                    }
+                }
+
+                // Check if error is retryable
+                if !err.is_retryable() {
+                    return Err(super::RetryError::PermanentError(err.to_string()));
+                }
+
+                // Check if we've exhausted attempts
+                if attempt as usize > config.max_attempts {
+                    return Err(super::RetryError::MaxAttemptsExceeded(config.max_attempts));
+                }
+
+                // Check for rate limit with suggested backoff
+                let (sleep_duration, is_rate_limit) = if let Some(suggested) = err.suggested_backoff() {
+                    // Use server-suggested backoff for rate limits
+                    (suggested, true)
+                } else {
+                    // Use exponential backoff with jitter
+                    let backoff_duration = Duration::from_millis(backoff_ms.min(config.max_backoff_ms));
+                    (apply_jitter(backoff_duration, config.jitter_factor), false)
+                };
+
+                let resume_at = Instant::now() + sleep_duration;
+                let reason = if is_rate_limit {
+                    format!("Rate limited, waiting {:?}", sleep_duration)
+                } else {
+                    format!("Transient error: {}, retrying in {:?}", err, sleep_duration)
+                };
+
+                // Report status before sleeping
+                status_cb(RetryStatus {
+                    attempt,
+                    elapsed,
+                    sleep: Some(sleep_duration),
+                    resume_at: Some(resume_at),
+                    reason: reason.clone(),
+                    is_rate_limit,
+                });
+
+                // Sleep with cancellation support
+                if wait_with_cancel(cancel, sleep_duration).await.is_err() {
+                    return Err(super::RetryError::Aborted);
+                }
+
+                // Increase backoff for next iteration (exponential)
+                backoff_ms = (backoff_ms as f64 * config.backoff_multiplier) as u64;
+            }
+        }
+    }
+}
+
+/// Wait with cancellation support (Auto Drive pattern)
+async fn wait_with_cancel(cancel: &CancellationToken, duration: Duration) -> Result<(), ()> {
+    if duration.is_zero() {
+        return Ok(());
+    }
+
+    tokio::select! {
+        _ = tokio::time::sleep(duration) => Ok(()),
+        _ = cancel.cancelled() => Err(()),
     }
 }
 
@@ -386,6 +542,7 @@ mod tests {
             max_backoff_ms: 1000,
             backoff_multiplier: 2.0,
             jitter_factor: 0.0, // Disable jitter for predictable timing
+            max_elapsed_ms: None,
         };
 
         let start = Instant::now();
@@ -566,6 +723,7 @@ mod tests {
             max_backoff_ms: 1000,
             backoff_multiplier: 2.0,
             jitter_factor: 0.0, // Disable jitter for predictable timing
+            max_elapsed_ms: None,
         };
 
         let start = Instant::now();
@@ -611,5 +769,159 @@ mod tests {
                 "Total time {total_time} should be ~60ms ±10ms"
             );
         }
+    }
+
+    // === Cancellable Retry Tests (Auto Drive patterns) ===
+
+    #[tokio::test]
+    async fn test_cancellable_immediate_success() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let call_count_clone = call_count.clone();
+        let cancel = CancellationToken::new();
+        let status_calls = Arc::new(AtomicUsize::new(0));
+        let status_calls_clone = status_calls.clone();
+
+        let config = RetryConfig::default();
+
+        let result = execute_with_backoff_cancellable(
+            move || {
+                let count = call_count_clone.clone();
+                async move {
+                    count.fetch_add(1, Ordering::SeqCst);
+                    Ok::<i32, TestError>(42)
+                }
+            },
+            &config,
+            &cancel,
+            move |_status| {
+                status_calls_clone.fetch_add(1, Ordering::SeqCst);
+            },
+        )
+        .await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 42);
+        assert_eq!(call_count.load(Ordering::SeqCst), 1);
+        assert_eq!(status_calls.load(Ordering::SeqCst), 0, "No status calls on success");
+    }
+
+    #[tokio::test]
+    async fn test_cancellable_aborted() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let call_count_clone = call_count.clone();
+        let cancel = CancellationToken::new();
+
+        // Cancel immediately
+        cancel.cancel();
+
+        let config = RetryConfig::default();
+
+        let result = execute_with_backoff_cancellable(
+            move || {
+                let count = call_count_clone.clone();
+                async move {
+                    count.fetch_add(1, Ordering::SeqCst);
+                    Ok::<i32, TestError>(42)
+                }
+            },
+            &config,
+            &cancel,
+            |_| {},
+        )
+        .await;
+
+        assert!(matches!(result, Err(crate::retry::RetryError::Aborted)));
+        assert_eq!(call_count.load(Ordering::SeqCst), 0, "Should not call when cancelled");
+    }
+
+    #[tokio::test]
+    async fn test_cancellable_timeout() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let call_count_clone = call_count.clone();
+        let cancel = CancellationToken::new();
+
+        let config = RetryConfig {
+            max_attempts: 100, // High so timeout triggers first
+            initial_backoff_ms: 50,
+            max_backoff_ms: 100,
+            backoff_multiplier: 1.5,
+            jitter_factor: 0.0,
+            max_elapsed_ms: Some(100), // 100ms timeout
+        };
+
+        let result = execute_with_backoff_cancellable(
+            move || {
+                let count = call_count_clone.clone();
+                async move {
+                    count.fetch_add(1, Ordering::SeqCst);
+                    Err::<i32, TestError>(TestError::Transient("timeout".to_string()))
+                }
+            },
+            &config,
+            &cancel,
+            |_| {},
+        )
+        .await;
+
+        assert!(matches!(result, Err(crate::retry::RetryError::Timeout { .. })));
+        // Should have made at least one attempt but hit timeout
+        assert!(call_count.load(Ordering::SeqCst) >= 1);
+    }
+
+    #[tokio::test]
+    async fn test_cancellable_status_callback() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Mutex;
+
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let call_count_clone = call_count.clone();
+        let cancel = CancellationToken::new();
+        let statuses = Arc::new(Mutex::new(Vec::new()));
+        let statuses_clone = statuses.clone();
+
+        let config = RetryConfig {
+            max_attempts: 3,
+            initial_backoff_ms: 10,
+            max_backoff_ms: 100,
+            backoff_multiplier: 2.0,
+            jitter_factor: 0.0,
+            max_elapsed_ms: None,
+        };
+
+        let result = execute_with_backoff_cancellable(
+            move || {
+                let count = call_count_clone.clone();
+                async move {
+                    let current = count.fetch_add(1, Ordering::SeqCst) + 1;
+                    if current < 3 {
+                        Err::<i32, TestError>(TestError::Transient("retry me".to_string()))
+                    } else {
+                        Ok(42)
+                    }
+                }
+            },
+            &config,
+            &cancel,
+            move |status| {
+                statuses_clone.lock().unwrap().push(status.attempt);
+            },
+        )
+        .await;
+
+        assert!(result.is_ok());
+        let recorded = statuses.lock().unwrap();
+        assert_eq!(recorded.len(), 2, "Should have 2 status callbacks for 2 retries");
+        assert_eq!(recorded[0], 1, "First callback for attempt 1");
+        assert_eq!(recorded[1], 2, "Second callback for attempt 2");
     }
 }
