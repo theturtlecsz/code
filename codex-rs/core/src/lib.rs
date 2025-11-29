@@ -117,6 +117,7 @@ mod user_notification;
 pub mod util;
 
 pub use apply_patch::CODEX_APPLY_PATCH_ARG1;
+pub use command_safety::is_dangerous_command;
 pub use command_safety::is_safe_command;
 pub use safety::get_platform_sandbox;
 // Use our internal protocol module for crate-internal types and helpers.
