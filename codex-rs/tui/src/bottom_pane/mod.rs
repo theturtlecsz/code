@@ -7,6 +7,9 @@ use crate::util::buffer::fill_rect;
 use bottom_pane_view::BottomPaneView;
 use codex_core::protocol::TokenUsage;
 use codex_file_search::FileMatch;
+
+// P6-SYNC Phase 6: Token metrics widget for spec-kit status bar
+use crate::token_metrics_widget::TokenMetricsWidget;
 use crossterm::event::KeyEvent;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -497,6 +500,13 @@ impl BottomPane<'_> {
     ) {
         self.composer
             .set_token_usage(total_token_usage, last_token_usage, model_context_window);
+        self.request_redraw();
+    }
+
+    /// P6-SYNC Phase 6: Update spec-kit token metrics for status bar display.
+    /// Called when spec-kit pipeline is running to show real-time token tracking.
+    pub(crate) fn set_spec_auto_metrics(&mut self, metrics: Option<TokenMetricsWidget>) {
+        self.composer.set_spec_auto_metrics(metrics);
         self.request_redraw();
     }
 

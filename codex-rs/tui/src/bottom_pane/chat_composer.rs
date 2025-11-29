@@ -34,6 +34,10 @@ use crate::clipboard_paste::normalize_pasted_path;
 use crate::clipboard_paste::paste_image_to_temp_png;
 use crate::clipboard_paste::try_decode_base64_image_to_temp_png;
 use codex_file_search::FileMatch;
+
+// P6-SYNC Phase 6: Token metrics widget for spec-kit status bar
+use crate::token_metrics_widget::TokenMetricsWidget;
+
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -137,6 +141,8 @@ pub(crate) struct ChatComposer {
     // Detect and coalesce paste bursts for smoother UX
     paste_burst: PasteBurst,
     post_paste_space_guard: Option<PostPasteSpaceGuard>,
+    // P6-SYNC Phase 6: Spec-kit token metrics for status bar display
+    spec_auto_metrics: Option<TokenMetricsWidget>,
 }
 
 /// Popup state – at most one can be visible at any time.
@@ -188,6 +194,7 @@ impl ChatComposer {
             next_down_scrolls_history: false,
             paste_burst: PasteBurst::default(),
             post_paste_space_guard: None,
+            spec_auto_metrics: None,
         }
     }
 
@@ -537,6 +544,13 @@ impl ChatComposer {
             model_context_window,
             initial_prompt_tokens,
         });
+    }
+
+    /// P6-SYNC Phase 6: Update spec-kit token metrics for status bar display.
+    /// When set, the spec-auto metrics take priority over regular token display
+    /// in the footer to show real-time pipeline tracking with context warnings.
+    pub(crate) fn set_spec_auto_metrics(&mut self, metrics: Option<TokenMetricsWidget>) {
+        self.spec_auto_metrics = metrics;
     }
 
     /// Record the history metadata advertised by `SessionConfiguredEvent` so
@@ -1869,8 +1883,22 @@ impl WidgetRef for ChatComposer {
                     let mut right_spans: Vec<Span> = Vec::new();
 
                     // Prepare token usage spans (always shown when available)
+                    // P6-SYNC Phase 6: Spec-auto metrics take priority when set
                     let mut token_spans: Vec<Span> = Vec::new();
-                    if let Some(token_usage_info) = &self.token_usage_info {
+                    if let Some(spec_metrics) = &self.spec_auto_metrics {
+                        // Use spec-kit token metrics (compact format for footer)
+                        // Format: "12.5k/3.2k | T5 | ~4k | 45%"
+                        let line = spec_metrics.render_compact();
+                        for span in line.spans {
+                            token_spans.push(span);
+                        }
+                        // Add warning indicator if context is stressed
+                        if spec_metrics.is_critical() {
+                            token_spans.push(Span::styled(" ⚠", Style::default().fg(ratatui::style::Color::Red)));
+                        } else if spec_metrics.is_warning() {
+                            token_spans.push(Span::styled(" ⚡", Style::default().fg(ratatui::style::Color::Yellow)));
+                        }
+                    } else if let Some(token_usage_info) = &self.token_usage_info {
                         let turn_usage = &token_usage_info.last_token_usage;
                         let tokens_used = turn_usage.tokens_in_context_window();
                         let used_str = format_with_thousands(tokens_used);

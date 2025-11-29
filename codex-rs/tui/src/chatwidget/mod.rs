@@ -22963,6 +22963,10 @@ impl spec_kit::SpecKitContext for ChatWidget<'_> {
         &self.spec_auto_state
     }
 
+    fn set_spec_auto_metrics(&mut self, metrics: Option<crate::token_metrics_widget::TokenMetricsWidget>) {
+        self.bottom_pane.set_spec_auto_metrics(metrics);
+    }
+
     fn collect_guardrail_outcome(
         &self,
         spec_id: &str,

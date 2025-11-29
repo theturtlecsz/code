@@ -383,6 +383,8 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
 
                 // Successful completion - clear state without cancellation event
                 widget.spec_auto_state = None;
+                // P6-SYNC Phase 6: Clear spec-kit token metrics from status bar
+                widget.bottom_pane.set_spec_auto_metrics(None);
                 return;
             }
             NextAction::RunGuardrail {

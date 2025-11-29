@@ -10,6 +10,8 @@
 use super::error::Result;
 use super::state::{EscalatedQuestion, GuardrailOutcome, QualityCheckpoint, SpecAutoState};
 use crate::app_event::BackgroundPlacement;
+// P6-SYNC Phase 6: Token metrics widget for spec-kit status bar
+use crate::token_metrics_widget::TokenMetricsWidget;
 use crate::history_cell::HistoryCell;
 use crate::slash_command::{HalMode, SlashCommand};
 use crate::spec_prompts::SpecStage;
@@ -71,6 +73,9 @@ pub(crate) trait SpecKitContext {
     fn take_spec_auto_state(&mut self) -> Option<SpecAutoState> {
         self.spec_auto_state_mut().take()
     }
+
+    /// P6-SYNC Phase 6: Update spec-kit token metrics in status bar
+    fn set_spec_auto_metrics(&mut self, metrics: Option<TokenMetricsWidget>);
 
     // === Guardrail & Consensus Operations (T79-Revised) ===
 
@@ -209,6 +214,10 @@ pub mod test_mock {
 
         fn spec_auto_state(&self) -> &Option<SpecAutoState> {
             &self.spec_auto_state
+        }
+
+        fn set_spec_auto_metrics(&mut self, _metrics: Option<TokenMetricsWidget>) {
+            // Mock: No-op since there's no real UI to update
         }
 
         fn collect_guardrail_outcome(

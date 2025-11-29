@@ -22,6 +22,8 @@ use super::validation_lifecycle::{
 };
 use crate::history_cell::HistoryCellType;
 use crate::spec_prompts::{SpecAgent, SpecStage};
+// P6-SYNC Phase 6: Token metrics UI integration
+use crate::token_metrics_widget::{TokenMetricsWidget, model_context_window};
 use codex_core::agent_tool::AGENT_MANAGER;
 use codex_core::config_types::AgentConfig;
 use codex_core::protocol::{AgentInfo, InputItem};
@@ -2203,6 +2205,16 @@ pub fn record_agent_costs(widget: &mut ChatWidget, agents: &[AgentInfo]) {
                 state.session_metrics.running_total().input_tokens,
                 state.session_metrics.estimated_next_prompt_tokens()
             );
+
+            // P6-SYNC Phase 6: Update UI with spec-kit token metrics
+            let model_id = state.current_model.as_deref().unwrap_or("gpt-5");
+            let context_window = model_context_window(model_id);
+            let metrics = TokenMetricsWidget::from_session_metrics(
+                &state.session_metrics,
+                context_window,
+                model_id,
+            );
+            widget.bottom_pane.set_spec_auto_metrics(Some(metrics));
         }
     }
 }

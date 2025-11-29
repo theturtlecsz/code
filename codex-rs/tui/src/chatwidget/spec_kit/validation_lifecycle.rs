@@ -146,6 +146,8 @@ pub fn cleanup_spec_auto_with_cancel(widget: &mut ChatWidget, reason: &str) {
 
     // Clear the spec_auto_state
     widget.spec_auto_state = None;
+    // P6-SYNC Phase 6: Clear spec-kit token metrics from status bar
+    widget.bottom_pane.set_spec_auto_metrics(None);
 
     // Log cancellation reason for debugging
     widget.history_push(crate::history_cell::PlainHistoryCell::new(

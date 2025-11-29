@@ -106,6 +106,8 @@ pub fn halt_spec_auto_with_error(widget: &mut impl SpecKitContext, reason: Strin
     ));
 
     *widget.spec_auto_state_mut() = None;
+    // P6-SYNC Phase 6: Clear spec-kit token metrics from status bar
+    widget.set_spec_auto_metrics(None);
 }
 
 /// Handle /spec-consensus command (inspect consensus artifacts)
