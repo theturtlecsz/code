@@ -1,0 +1,12 @@
+[package]
+name = "codex-feedback"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Ring buffer logging infrastructure for Codex feedback collection"
+
+[dependencies]
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
