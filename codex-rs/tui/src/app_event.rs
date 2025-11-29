@@ -472,7 +472,6 @@ pub(crate) enum AppEvent {
         provider: codex_login::DeviceCodeProvider,
     },
     // === END FORK-SPECIFIC: Device Code OAuth Events ===
-
     /// Show Chrome launch options dialog
     #[allow(dead_code)]
     ShowChromeOptions(Option<u16>),

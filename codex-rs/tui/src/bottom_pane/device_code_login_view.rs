@@ -125,7 +125,10 @@ impl DeviceCodeLoginState {
             app_event_tx,
             flow_state: LoginFlowState::Starting,
             feedback: Some(Feedback {
-                message: format!("Starting {} device authorization...", provider_display_name(provider)),
+                message: format!(
+                    "Starting {} device authorization...",
+                    provider_display_name(provider)
+                ),
                 is_error: false,
             }),
             is_complete: false,
@@ -148,10 +151,7 @@ impl DeviceCodeLoginState {
             started_at: Instant::now(),
         };
         self.feedback = Some(Feedback {
-            message: format!(
-                "Enter code {} at the URL below to authenticate.",
-                user_code
-            ),
+            message: format!("Enter code {} at the URL below to authenticate.", user_code),
             is_error: false,
         });
     }
@@ -242,7 +242,8 @@ impl DeviceCodeLoginState {
                             let _ = open::that(url);
                             self.browser_opened = true;
                             self.feedback = Some(Feedback {
-                                message: "Browser opened. Complete sign-in to continue.".to_string(),
+                                message: "Browser opened. Complete sign-in to continue."
+                                    .to_string(),
                                 is_error: false,
                             });
                         }
@@ -342,7 +343,10 @@ impl DeviceCodeLoginState {
                     .bg(crate::colors::background())
                     .fg(crate::colors::text()),
             )
-            .title(format!(" {} Device Login ", provider_display_name(self.provider)))
+            .title(format!(
+                " {} Device Login ",
+                provider_display_name(self.provider)
+            ))
             .title_alignment(Alignment::Center);
         let inner = block.inner(area);
         block.render(area, buf);
@@ -414,11 +418,7 @@ impl DeviceCodeLoginState {
                 let elapsed = started_at.elapsed();
                 let dots = ".".repeat((*poll_count as usize % 4) + 1);
                 lines.push(Line::from(vec![Span::styled(
-                    format!(
-                        "Waiting for authorization{} ({}s)",
-                        dots,
-                        elapsed.as_secs()
-                    ),
+                    format!("Waiting for authorization{} ({}s)", dots, elapsed.as_secs()),
                     Style::default().fg(crate::colors::text_dim()),
                 )]));
                 lines.push(Line::from(""));
@@ -585,7 +585,10 @@ mod tests {
     #[test]
     fn test_provider_display_names() {
         assert_eq!(provider_display_name(DeviceCodeProvider::OpenAI), "OpenAI");
-        assert_eq!(provider_display_name(DeviceCodeProvider::Anthropic), "Claude");
+        assert_eq!(
+            provider_display_name(DeviceCodeProvider::Anthropic),
+            "Claude"
+        );
         assert_eq!(provider_display_name(DeviceCodeProvider::Google), "Gemini");
     }
 }

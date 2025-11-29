@@ -11,10 +11,10 @@ use super::error::Result;
 use super::state::{EscalatedQuestion, GuardrailOutcome, QualityCheckpoint, SpecAutoState};
 use crate::app_event::BackgroundPlacement;
 // P6-SYNC Phase 6: Token metrics widget for spec-kit status bar
-use crate::token_metrics_widget::TokenMetricsWidget;
 use crate::history_cell::HistoryCell;
 use crate::slash_command::{HalMode, SlashCommand};
 use crate::spec_prompts::SpecStage;
+use crate::token_metrics_widget::TokenMetricsWidget;
 use codex_core::config_types::{AgentConfig, SubagentCommandConfig};
 use codex_core::protocol::{InputItem, Op};
 use std::path::Path;

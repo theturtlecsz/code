@@ -13,8 +13,8 @@
 //! 4. Store access_token and refresh_token
 
 use crate::device_code::{
-    DeviceAuthError, DeviceAuthorizationResponse, DeviceCodeAuth, DeviceCodeProvider,
-    PollError, RefreshError, TokenResponse,
+    DeviceAuthError, DeviceAuthorizationResponse, DeviceCodeAuth, DeviceCodeProvider, PollError,
+    RefreshError, TokenResponse,
 };
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -65,8 +65,7 @@ impl OpenAIDeviceCode {
 
     /// Get client ID from environment or use default
     fn get_client_id() -> String {
-        std::env::var("OPENAI_OAUTH_CLIENT_ID")
-            .unwrap_or_else(|_| DEFAULT_CLIENT_ID.to_string())
+        std::env::var("OPENAI_OAUTH_CLIENT_ID").unwrap_or_else(|_| DEFAULT_CLIENT_ID.to_string())
     }
 
     /// Build URL for an endpoint
@@ -112,7 +111,9 @@ impl DeviceCodeAuth for OpenAIDeviceCode {
         DeviceCodeProvider::OpenAI
     }
 
-    async fn start_device_authorization(&self) -> Result<DeviceAuthorizationResponse, DeviceAuthError> {
+    async fn start_device_authorization(
+        &self,
+    ) -> Result<DeviceAuthorizationResponse, DeviceAuthError> {
         let url = self.endpoint_url(DEVICE_AUTH_ENDPOINT);
         let scope = OPENAI_SCOPES.join(" ");
 
@@ -142,9 +143,7 @@ impl DeviceCodeAuth for OpenAIDeviceCode {
                 )));
             }
 
-            return Err(DeviceAuthError::Server(format!(
-                "HTTP {status}: {body}"
-            )));
+            return Err(DeviceAuthError::Server(format!("HTTP {status}: {body}")));
         }
 
         response

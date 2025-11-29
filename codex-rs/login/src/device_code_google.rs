@@ -16,8 +16,8 @@
 //! and the Generative Language API enabled.
 
 use crate::device_code::{
-    DeviceAuthError, DeviceAuthorizationResponse, DeviceCodeAuth, DeviceCodeProvider,
-    PollError, RefreshError, TokenResponse,
+    DeviceAuthError, DeviceAuthorizationResponse, DeviceCodeAuth, DeviceCodeProvider, PollError,
+    RefreshError, TokenResponse,
 };
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -29,7 +29,7 @@ const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 /// Default client ID for Google OAuth (Gemini API access)
 /// Users should configure their own client ID via environment variable
 #[allow(dead_code)]
-const DEFAULT_CLIENT_ID: &str = "";  // Must be configured
+const DEFAULT_CLIENT_ID: &str = ""; // Must be configured
 
 /// Google OAuth scopes for Gemini API
 /// generative-language scope for Gemini API access
@@ -51,12 +51,13 @@ impl GoogleDeviceCode {
     /// Requires GOOGLE_OAUTH_CLIENT_ID environment variable.
     /// Optionally uses GOOGLE_OAUTH_CLIENT_SECRET if configured.
     pub fn from_env() -> Result<Self, DeviceAuthError> {
-        let client_id = std::env::var("GOOGLE_OAUTH_CLIENT_ID")
-            .map_err(|_| DeviceAuthError::Config(
+        let client_id = std::env::var("GOOGLE_OAUTH_CLIENT_ID").map_err(|_| {
+            DeviceAuthError::Config(
                 "GOOGLE_OAUTH_CLIENT_ID environment variable not set. \
                  Create OAuth credentials at https://console.cloud.google.com/apis/credentials"
-                    .to_string()
-            ))?;
+                    .to_string(),
+            )
+        })?;
 
         let client_secret = std::env::var("GOOGLE_OAUTH_CLIENT_SECRET").ok();
 
@@ -88,7 +89,7 @@ impl GoogleDeviceCode {
 struct GoogleDeviceAuthResponse {
     device_code: String,
     user_code: String,
-    verification_url: String,  // Google uses verification_url not verification_uri
+    verification_url: String, // Google uses verification_url not verification_uri
     expires_in: u64,
     interval: u64,
 }
@@ -97,8 +98,7 @@ impl From<GoogleDeviceAuthResponse> for DeviceAuthorizationResponse {
     fn from(resp: GoogleDeviceAuthResponse) -> Self {
         let verification_uri_complete = Some(format!(
             "{}?user_code={}",
-            resp.verification_url,
-            resp.user_code
+            resp.verification_url, resp.user_code
         ));
         Self {
             device_code: resp.device_code,
@@ -152,7 +152,9 @@ impl DeviceCodeAuth for GoogleDeviceCode {
         DeviceCodeProvider::Google
     }
 
-    async fn start_device_authorization(&self) -> Result<DeviceAuthorizationResponse, DeviceAuthError> {
+    async fn start_device_authorization(
+        &self,
+    ) -> Result<DeviceAuthorizationResponse, DeviceAuthError> {
         if !self.is_configured() {
             return Err(DeviceAuthError::Config(
                 "Google OAuth not configured. Set GOOGLE_OAUTH_CLIENT_ID environment variable."
@@ -187,9 +189,7 @@ impl DeviceCodeAuth for GoogleDeviceCode {
                 )));
             }
 
-            return Err(DeviceAuthError::Server(format!(
-                "HTTP {status}: {body}"
-            )));
+            return Err(DeviceAuthError::Server(format!("HTTP {status}: {body}")));
         }
 
         let google_response: GoogleDeviceAuthResponse = response
@@ -332,18 +332,22 @@ mod tests {
         assert_eq!(response.user_code, "ABCD-1234");
         assert_eq!(response.verification_uri, "https://google.com/device");
         assert!(response.verification_uri_complete.is_some());
-        assert!(response
-            .verification_uri_complete
-            .unwrap()
-            .contains("ABCD-1234"));
+        assert!(
+            response
+                .verification_uri_complete
+                .unwrap()
+                .contains("ABCD-1234")
+        );
     }
 
     #[test]
     fn test_scopes_include_generative_language() {
         let client = GoogleDeviceCode::new("test".to_string(), None);
-        assert!(client
-            .scopes()
-            .iter()
-            .any(|s| s.contains("generative-language")));
+        assert!(
+            client
+                .scopes()
+                .iter()
+                .any(|s| s.contains("generative-language"))
+        );
     }
 }

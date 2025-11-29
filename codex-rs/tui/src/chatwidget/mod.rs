@@ -3609,9 +3609,9 @@ impl ChatWidget<'_> {
                 match storage.status_summary() {
                     Ok(status) => {
                         // Only show if at least one provider has a non-default status
-                        let has_any_status = status.iter().any(|(_, s)| {
-                            !matches!(s, codex_login::TokenStatus::NotAuthenticated)
-                        });
+                        let has_any_status = status
+                            .iter()
+                            .any(|(_, s)| !matches!(s, codex_login::TokenStatus::NotAuthenticated));
                         if has_any_status {
                             self.bottom_pane.set_device_token_status(Some(status));
                         } else {
@@ -8701,30 +8701,29 @@ impl ChatWidget<'_> {
                 let mut message = String::from("Device Code OAuth Status\n\n");
 
                 match DeviceCodeTokenStorage::new() {
-                    Ok(storage) => {
-                        match storage.status_summary() {
-                            Ok(status) => {
-                                for (provider, token_status) in &status {
-                                    let provider_name = match provider {
-                                        DeviceCodeProvider::OpenAI => "OpenAI",
-                                        DeviceCodeProvider::Google => "Google (Gemini)",
-                                        DeviceCodeProvider::Anthropic => "Anthropic (Claude)",
-                                    };
-                                    let status_text = match token_status {
-                                        TokenStatus::Valid => "✓ authenticated",
-                                        TokenStatus::NeedsRefresh => "⚡ needs refresh",
-                                        TokenStatus::Expired => "✗ expired",
-                                        TokenStatus::NotAuthenticated => "· not authenticated",
-                                    };
-                                    message.push_str(&format!("  {}: {}\n", provider_name, status_text));
-                                }
-                                message.push_str("\nUse /auth login <provider> to authenticate");
+                    Ok(storage) => match storage.status_summary() {
+                        Ok(status) => {
+                            for (provider, token_status) in &status {
+                                let provider_name = match provider {
+                                    DeviceCodeProvider::OpenAI => "OpenAI",
+                                    DeviceCodeProvider::Google => "Google (Gemini)",
+                                    DeviceCodeProvider::Anthropic => "Anthropic (Claude)",
+                                };
+                                let status_text = match token_status {
+                                    TokenStatus::Valid => "✓ authenticated",
+                                    TokenStatus::NeedsRefresh => "⚡ needs refresh",
+                                    TokenStatus::Expired => "✗ expired",
+                                    TokenStatus::NotAuthenticated => "· not authenticated",
+                                };
+                                message
+                                    .push_str(&format!("  {}: {}\n", provider_name, status_text));
                             }
-                            Err(e) => {
-                                message.push_str(&format!("Error reading token status: {}", e));
-                            }
+                            message.push_str("\nUse /auth login <provider> to authenticate");
                         }
-                    }
+                        Err(e) => {
+                            message.push_str(&format!("Error reading token status: {}", e));
+                        }
+                    },
                     Err(e) => {
                         message.push_str(&format!("Error accessing token storage: {}", e));
                     }
@@ -8746,12 +8745,15 @@ impl ChatWidget<'_> {
                     Some("google") | Some("gemini") => {
                         // Check if Google OAuth client is configured
                         if std::env::var("GOOGLE_OAUTH_CLIENT_ID").is_err() {
-                            show_message(self, String::from(
-                                "Google OAuth requires configuration.\n\n\
+                            show_message(
+                                self,
+                                String::from(
+                                    "Google OAuth requires configuration.\n\n\
                                  Set GOOGLE_OAUTH_CLIENT_ID environment variable.\n\
                                  Create OAuth credentials at:\n\
-                                 https://console.cloud.google.com/apis/credentials"
-                            ));
+                                 https://console.cloud.google.com/apis/credentials",
+                                ),
+                            );
                         } else {
                             self.app_event_tx.send(AppEvent::DeviceCodeLoginStart {
                                 provider: DeviceCodeProvider::Google,
@@ -8764,10 +8766,13 @@ impl ChatWidget<'_> {
                         });
                     }
                     _ => {
-                        show_message(self, String::from(
-                            "Usage: /auth login <provider>\n\
-                             Providers: openai, google, anthropic (or gemini, claude)"
-                        ));
+                        show_message(
+                            self,
+                            String::from(
+                                "Usage: /auth login <provider>\n\
+                             Providers: openai, google, anthropic (or gemini, claude)",
+                            ),
+                        );
                     }
                 }
             }
@@ -8778,7 +8783,10 @@ impl ChatWidget<'_> {
                         if let Ok(storage) = DeviceCodeTokenStorage::new() {
                             match storage.remove_token(DeviceCodeProvider::OpenAI) {
                                 Ok(()) => {
-                                    show_message(self, String::from("OpenAI device code token removed."));
+                                    show_message(
+                                        self,
+                                        String::from("OpenAI device code token removed."),
+                                    );
                                     self.update_device_token_status();
                                 }
                                 Err(e) => {
@@ -8791,7 +8799,10 @@ impl ChatWidget<'_> {
                         if let Ok(storage) = DeviceCodeTokenStorage::new() {
                             match storage.remove_token(DeviceCodeProvider::Google) {
                                 Ok(()) => {
-                                    show_message(self, String::from("Google device code token removed."));
+                                    show_message(
+                                        self,
+                                        String::from("Google device code token removed."),
+                                    );
                                     self.update_device_token_status();
                                 }
                                 Err(e) => {
@@ -8804,7 +8815,10 @@ impl ChatWidget<'_> {
                         if let Ok(storage) = DeviceCodeTokenStorage::new() {
                             match storage.remove_token(DeviceCodeProvider::Anthropic) {
                                 Ok(()) => {
-                                    show_message(self, String::from("Anthropic device code token removed."));
+                                    show_message(
+                                        self,
+                                        String::from("Anthropic device code token removed."),
+                                    );
                                     self.update_device_token_status();
                                 }
                                 Err(e) => {
@@ -8814,22 +8828,28 @@ impl ChatWidget<'_> {
                         }
                     }
                     _ => {
-                        show_message(self, String::from(
-                            "Usage: /auth logout <provider>\n\
-                             Providers: openai, google, anthropic (or gemini, claude)"
-                        ));
+                        show_message(
+                            self,
+                            String::from(
+                                "Usage: /auth logout <provider>\n\
+                             Providers: openai, google, anthropic (or gemini, claude)",
+                            ),
+                        );
                     }
                 }
             }
             Some(unknown) => {
-                show_message(self, format!(
-                    "Unknown /auth subcommand: {}\n\n\
+                show_message(
+                    self,
+                    format!(
+                        "Unknown /auth subcommand: {}\n\n\
                      Usage:\n\
                      - /auth status - Show token status\n\
                      - /auth login <provider> - Start device code flow\n\
                      - /auth logout <provider> - Remove stored token",
-                    unknown
-                ));
+                        unknown
+                    ),
+                );
             }
         }
         self.request_redraw();
@@ -8932,24 +8952,34 @@ impl ChatWidget<'_> {
         let tx = self.app_event_tx.clone();
         let provider_clone = provider;
         tokio::spawn(async move {
-            use codex_login::{DeviceCodeAuth, OpenAIDeviceCode, GoogleDeviceCode, AnthropicDeviceCode};
-
-            let result: Result<codex_login::DeviceAuthorizationResponse, String> = match provider_clone {
-                codex_login::DeviceCodeProvider::OpenAI => {
-                    let client = OpenAIDeviceCode::new();
-                    client.start_device_authorization().await.map_err(|e| e.to_string())
-                }
-                codex_login::DeviceCodeProvider::Google => {
-                    match GoogleDeviceCode::from_env() {
-                        Ok(client) => client.start_device_authorization().await.map_err(|e| e.to_string()),
-                        Err(e) => Err(e.to_string()),
-                    }
-                }
-                codex_login::DeviceCodeProvider::Anthropic => {
-                    let client = AnthropicDeviceCode::new();
-                    client.start_device_authorization().await.map_err(|e| e.to_string())
-                }
+            use codex_login::{
+                AnthropicDeviceCode, DeviceCodeAuth, GoogleDeviceCode, OpenAIDeviceCode,
             };
+
+            let result: Result<codex_login::DeviceAuthorizationResponse, String> =
+                match provider_clone {
+                    codex_login::DeviceCodeProvider::OpenAI => {
+                        let client = OpenAIDeviceCode::new();
+                        client
+                            .start_device_authorization()
+                            .await
+                            .map_err(|e| e.to_string())
+                    }
+                    codex_login::DeviceCodeProvider::Google => match GoogleDeviceCode::from_env() {
+                        Ok(client) => client
+                            .start_device_authorization()
+                            .await
+                            .map_err(|e| e.to_string()),
+                        Err(e) => Err(e.to_string()),
+                    },
+                    codex_login::DeviceCodeProvider::Anthropic => {
+                        let client = AnthropicDeviceCode::new();
+                        client
+                            .start_device_authorization()
+                            .await
+                            .map_err(|e| e.to_string())
+                    }
+                };
 
             match result {
                 Ok(response) => {
@@ -9001,15 +9031,19 @@ impl ChatWidget<'_> {
         let expires_at = std::time::Instant::now() + std::time::Duration::from_secs(expires_in);
 
         tokio::spawn(async move {
-            use codex_login::{DeviceCodeAuth, PollError, OpenAIDeviceCode, GoogleDeviceCode, AnthropicDeviceCode};
             use codex_login::device_code_storage::DeviceCodeTokenStorage;
+            use codex_login::{
+                AnthropicDeviceCode, DeviceCodeAuth, GoogleDeviceCode, OpenAIDeviceCode, PollError,
+            };
 
             let mut poll_count = 0u32;
 
             loop {
                 // Check expiry
                 if std::time::Instant::now() >= expires_at {
-                    tx.send(AppEvent::DeviceCodeLoginExpired { provider: provider_clone });
+                    tx.send(AppEvent::DeviceCodeLoginExpired {
+                        provider: provider_clone,
+                    });
                     break;
                 }
 
@@ -9028,12 +9062,10 @@ impl ChatWidget<'_> {
                         let client = OpenAIDeviceCode::new();
                         client.poll_for_token(&device_code_clone).await
                     }
-                    codex_login::DeviceCodeProvider::Google => {
-                        match GoogleDeviceCode::from_env() {
-                            Ok(client) => client.poll_for_token(&device_code_clone).await,
-                            Err(e) => Err(PollError::Server(e.to_string())),
-                        }
-                    }
+                    codex_login::DeviceCodeProvider::Google => match GoogleDeviceCode::from_env() {
+                        Ok(client) => client.poll_for_token(&device_code_clone).await,
+                        Err(e) => Err(PollError::Server(e.to_string())),
+                    },
                     codex_login::DeviceCodeProvider::Anthropic => {
                         let client = AnthropicDeviceCode::new();
                         client.poll_for_token(&device_code_clone).await
@@ -9052,7 +9084,9 @@ impl ChatWidget<'_> {
                                 break;
                             }
                         }
-                        tx.send(AppEvent::DeviceCodeLoginSuccess { provider: provider_clone });
+                        tx.send(AppEvent::DeviceCodeLoginSuccess {
+                            provider: provider_clone,
+                        });
                         break;
                     }
                     Err(PollError::AuthorizationPending) => {
@@ -9065,11 +9099,15 @@ impl ChatWidget<'_> {
                         continue;
                     }
                     Err(PollError::AccessDenied) => {
-                        tx.send(AppEvent::DeviceCodeLoginDenied { provider: provider_clone });
+                        tx.send(AppEvent::DeviceCodeLoginDenied {
+                            provider: provider_clone,
+                        });
                         break;
                     }
                     Err(PollError::ExpiredToken) => {
-                        tx.send(AppEvent::DeviceCodeLoginExpired { provider: provider_clone });
+                        tx.send(AppEvent::DeviceCodeLoginExpired {
+                            provider: provider_clone,
+                        });
                         break;
                     }
                     Err(e) => {
@@ -9085,7 +9123,11 @@ impl ChatWidget<'_> {
     }
 
     /// Handle poll attempt - update UI with progress
-    pub(crate) fn on_device_code_poll_attempt(&mut self, _provider: codex_login::DeviceCodeProvider, poll_count: u32) {
+    pub(crate) fn on_device_code_poll_attempt(
+        &mut self,
+        _provider: codex_login::DeviceCodeProvider,
+        poll_count: u32,
+    ) {
         self.with_device_code_view(|state| {
             state.on_poll_attempt(poll_count);
         });
@@ -9105,7 +9147,11 @@ impl ChatWidget<'_> {
     }
 
     /// Handle device code error
-    pub(crate) fn on_device_code_error(&mut self, _provider: codex_login::DeviceCodeProvider, error: String) {
+    pub(crate) fn on_device_code_error(
+        &mut self,
+        _provider: codex_login::DeviceCodeProvider,
+        error: String,
+    ) {
         self.with_device_code_view(|state| {
             state.on_error(error);
         });
@@ -11099,15 +11145,22 @@ impl ChatWidget<'_> {
             if !cli_available {
                 let provider_name = crate::model_router::provider_display_name(&self.config.model);
                 let instructions = match provider_type {
-                    crate::providers::ProviderType::Claude => crate::providers::claude::install_instructions(),
-                    crate::providers::ProviderType::Gemini => crate::providers::gemini::install_instructions(),
+                    crate::providers::ProviderType::Claude => {
+                        crate::providers::claude::install_instructions()
+                    }
+                    crate::providers::ProviderType::Gemini => {
+                        crate::providers::gemini::install_instructions()
+                    }
                     crate::providers::ProviderType::ChatGPT => "",
                 };
                 self.history_push(history_cell::PlainHistoryCell::new(
                     vec![
                         ratatui::text::Line::from(format!("⚠️  {} CLI Required", provider_name)),
                         ratatui::text::Line::from(""),
-                        ratatui::text::Line::from(format!("{} CLI is required but not installed.\n\n{}", provider_name, instructions)),
+                        ratatui::text::Line::from(format!(
+                            "{} CLI is required but not installed.\n\n{}",
+                            provider_name, instructions
+                        )),
                     ],
                     history_cell::HistoryCellType::Notice,
                 ));
@@ -23194,7 +23247,10 @@ impl spec_kit::SpecKitContext for ChatWidget<'_> {
         &self.spec_auto_state
     }
 
-    fn set_spec_auto_metrics(&mut self, metrics: Option<crate::token_metrics_widget::TokenMetricsWidget>) {
+    fn set_spec_auto_metrics(
+        &mut self,
+        metrics: Option<crate::token_metrics_widget::TokenMetricsWidget>,
+    ) {
         self.bottom_pane.set_spec_auto_metrics(metrics);
     }
 

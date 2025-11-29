@@ -1908,9 +1908,15 @@ impl WidgetRef for ChatComposer {
                         }
                         // Add warning indicator if context is stressed
                         if spec_metrics.is_critical() {
-                            token_spans.push(Span::styled(" ⚠", Style::default().fg(ratatui::style::Color::Red)));
+                            token_spans.push(Span::styled(
+                                " ⚠",
+                                Style::default().fg(ratatui::style::Color::Red),
+                            ));
                         } else if spec_metrics.is_warning() {
-                            token_spans.push(Span::styled(" ⚡", Style::default().fg(ratatui::style::Color::Yellow)));
+                            token_spans.push(Span::styled(
+                                " ⚡",
+                                Style::default().fg(ratatui::style::Color::Yellow),
+                            ));
                         }
                     } else if let Some(token_usage_info) = &self.token_usage_info {
                         let turn_usage = &token_usage_info.last_token_usage;
@@ -2007,7 +2013,9 @@ impl WidgetRef for ChatComposer {
                                 TokenStatus::Valid => ("✓", ratatui::style::Color::Green),
                                 TokenStatus::NeedsRefresh => ("⚡", ratatui::style::Color::Yellow),
                                 TokenStatus::Expired => ("✗", ratatui::style::Color::Red),
-                                TokenStatus::NotAuthenticated => ("·", ratatui::style::Color::DarkGray),
+                                TokenStatus::NotAuthenticated => {
+                                    ("·", ratatui::style::Color::DarkGray)
+                                }
                             };
                             if !indicators.is_empty() {
                                 indicators.push(Span::raw(" "));
@@ -2024,19 +2032,20 @@ impl WidgetRef for ChatComposer {
 
                     // We'll add separators between sections when both are present
                     let sep_len = "  •  ".chars().count();
-                    let combined_len = |h: &Vec<Span>, t: &Vec<Span>, a: &Vec<Span>, d: &Vec<Span>| -> usize {
-                        let mut len = measure(h) + measure(t) + measure(a) + measure(d);
-                        if !h.is_empty() && !t.is_empty() {
-                            len += sep_len;
-                        }
-                        if (!h.is_empty() || !t.is_empty()) && !a.is_empty() {
-                            len += sep_len;
-                        }
-                        if (!h.is_empty() || !t.is_empty() || !a.is_empty()) && !d.is_empty() {
-                            len += sep_len;
-                        }
-                        len
-                    };
+                    let combined_len =
+                        |h: &Vec<Span>, t: &Vec<Span>, a: &Vec<Span>, d: &Vec<Span>| -> usize {
+                            let mut len = measure(h) + measure(t) + measure(a) + measure(d);
+                            if !h.is_empty() && !t.is_empty() {
+                                len += sep_len;
+                            }
+                            if (!h.is_empty() || !t.is_empty()) && !a.is_empty() {
+                                len += sep_len;
+                            }
+                            if (!h.is_empty() || !t.is_empty() || !a.is_empty()) && !d.is_empty() {
+                                len += sep_len;
+                            }
+                            len
+                        };
 
                     // Elide hints in order until content fits
                     while left_len

@@ -269,7 +269,10 @@ fn default_codex_home() -> io::Result<PathBuf> {
 
     // Fall back to ~/.codex
     let home = dirs::home_dir().ok_or_else(|| {
-        io::Error::new(io::ErrorKind::NotFound, "Could not determine home directory")
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "Could not determine home directory",
+        )
     })?;
 
     Ok(home.join(".codex"))

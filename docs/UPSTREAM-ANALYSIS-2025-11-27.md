@@ -452,7 +452,7 @@ Fork eliminated tmux and moved to DirectProcessExecutor. Server-based execution 
 
 | Order | Task ID | Title | Status | Owners | PRD | Branch | PR | Last Validation | Evidence | Notes |
 |-------|---------|-------|--------|--------|-----|--------|----|-----------------|----------|-------|
-| 1 | SYNC-001 | Add dangerous command detection | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P0 Security**: Add `is_dangerous_command.rs` + Windows variant to command_safety. Integrate with safety.rs approval flow. No fork conflicts. Est: 2-3h. |
+| 1 | SYNC-001 | Add dangerous command detection | **Done** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | main | | 2025-11-29 | | **P0 Security**: Added `is_dangerous_command.rs` + integration into safety.rs. Dangerous commands (git reset, rm -rf, etc.) now prompt for approval even in DangerFullAccess mode. 4 new tests added. |
 | 2 | SYNC-002 | Add process-hardening crate | **Done** | Code | docs/SYNC-002-process-hardening/PRD.md | main | | 2025-11-28 | | **P0 Security**: 173 LOC crate + 4 tests. Integrated into TUI startup. Disables core dumps, ptrace, LD_*/DYLD_*. |
 | 3 | SYNC-003 | Add cargo deny configuration | **Done** | Code | docs/SYNC-003-cargo-deny/PRD.md | main | | 2025-11-28 | | **P0 Security**: 288 LOC deny.toml + 28 crate license updates. Advisories, licenses, bans, sources all passing. |
 | 4 | SYNC-004 | Add async-utils crate | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P1 Utility**: Copy standalone crate. Provides `.or_cancel()` extension for futures. 90 LOC. Est: 30min. |

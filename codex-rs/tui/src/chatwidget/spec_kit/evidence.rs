@@ -854,7 +854,9 @@ pub fn check_spec_evidence_limit(cwd: &Path, spec_id: &str) -> Result<()> {
         let size_mb = stats.total_size_bytes as f64 / (1024.0 * 1024.0);
         tracing::warn!(
             "⚠️  {} evidence is {:.1} MB (above {:.0} MB warning threshold)",
-            spec_id, size_mb, EVIDENCE_WARN_MB
+            spec_id,
+            size_mb,
+            EVIDENCE_WARN_MB
         );
     }
 

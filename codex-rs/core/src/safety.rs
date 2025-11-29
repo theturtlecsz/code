@@ -7,6 +7,7 @@ use codex_apply_patch::ApplyPatchAction;
 use codex_apply_patch::ApplyPatchFileChange;
 
 use crate::codex::ApprovedCommandPattern;
+use crate::command_safety::is_dangerous_command::command_might_be_dangerous;
 use crate::exec::SandboxType;
 use crate::is_safe_command::is_known_safe_command;
 use crate::protocol::AskForApproval;
@@ -97,6 +98,20 @@ pub fn assess_command_safety(
     approved: &HashSet<ApprovedCommandPattern>,
     with_escalated_permissions: bool,
 ) -> SafetyCheck {
+    // SYNC-001: Check for dangerous commands first. These should ALWAYS prompt
+    // for user approval, even in permissive modes like DangerFullAccess.
+    // This protects against accidental destructive operations like `git reset --hard`
+    // or `rm -rf /`.
+    if command_might_be_dangerous(command) {
+        return match approval_policy {
+            AskForApproval::Never => SafetyCheck::Reject {
+                reason: "potentially destructive command rejected (approval policy is 'never')"
+                    .to_string(),
+            },
+            _ => SafetyCheck::AskUser,
+        };
+    }
+
     // A command is "trusted" because either:
     // - it belongs to a set of commands we consider "safe" by default, or
     // - the user has explicitly approved the command for this session
@@ -402,5 +417,80 @@ mod tests {
             None => SafetyCheck::AskUser,
         };
         assert_eq!(safety_check, expected);
+    }
+
+    // SYNC-001: Dangerous command detection tests
+    #[test]
+    fn test_dangerous_command_always_asks_user() {
+        // git reset is dangerous and should always prompt
+        let command = vec!["git".to_string(), "reset".to_string(), "--hard".to_string()];
+        let approval_policy = AskForApproval::OnRequest;
+        let sandbox_policy = SandboxPolicy::DangerFullAccess;
+        let approved: HashSet<ApprovedCommandPattern> = HashSet::new();
+
+        let safety_check =
+            assess_command_safety(&command, approval_policy, &sandbox_policy, &approved, false);
+
+        // Even with DangerFullAccess, dangerous commands should prompt
+        assert_eq!(safety_check, SafetyCheck::AskUser);
+    }
+
+    #[test]
+    fn test_dangerous_command_rejected_when_never() {
+        // With approval policy Never, dangerous commands should be rejected
+        let command = vec!["rm".to_string(), "-rf".to_string(), "/".to_string()];
+        let approval_policy = AskForApproval::Never;
+        let sandbox_policy = SandboxPolicy::DangerFullAccess;
+        let approved: HashSet<ApprovedCommandPattern> = HashSet::new();
+
+        let safety_check =
+            assess_command_safety(&command, approval_policy, &sandbox_policy, &approved, false);
+
+        match safety_check {
+            SafetyCheck::Reject { reason } => {
+                assert!(reason.contains("destructive"));
+            }
+            other => {
+                panic!("expected rejection for dangerous command with Never policy, got {other:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn test_dangerous_command_in_shell_wrapper() {
+        // bash -lc "git reset --hard" should also be detected as dangerous
+        let command = vec![
+            "bash".to_string(),
+            "-lc".to_string(),
+            "git reset --hard".to_string(),
+        ];
+        let approval_policy = AskForApproval::OnRequest;
+        let sandbox_policy = SandboxPolicy::DangerFullAccess;
+        let approved: HashSet<ApprovedCommandPattern> = HashSet::new();
+
+        let safety_check =
+            assess_command_safety(&command, approval_policy, &sandbox_policy, &approved, false);
+
+        assert_eq!(safety_check, SafetyCheck::AskUser);
+    }
+
+    #[test]
+    fn test_safe_command_not_affected_by_dangerous_check() {
+        // git status is safe and not dangerous
+        let command = vec!["git".to_string(), "status".to_string()];
+        let approval_policy = AskForApproval::OnRequest;
+        let sandbox_policy = SandboxPolicy::DangerFullAccess;
+        let approved: HashSet<ApprovedCommandPattern> = HashSet::new();
+
+        let safety_check =
+            assess_command_safety(&command, approval_policy, &sandbox_policy, &approved, false);
+
+        // Safe command with DangerFullAccess should auto-approve
+        assert_eq!(
+            safety_check,
+            SafetyCheck::AutoApprove {
+                sandbox_type: SandboxType::None
+            }
+        );
     }
 }

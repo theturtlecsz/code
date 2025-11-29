@@ -152,7 +152,12 @@ pub async fn spawn_quality_gate_agents_native(
                 run_id.as_deref(),
                 branch_id.as_deref(),
             ) {
-                tracing::warn!("{} Failed to record agent spawn for {}: {}", run_tag, agent_name, e);
+                tracing::warn!(
+                    "{} Failed to record agent spawn for {}: {}",
+                    run_tag,
+                    agent_name,
+                    e
+                );
             } else {
                 tracing::info!(
                     "{} Recorded quality gate agent spawn: {} ({})",

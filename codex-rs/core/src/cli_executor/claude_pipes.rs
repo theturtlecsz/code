@@ -1422,12 +1422,18 @@ mod tests {
         if metadata_received {
             if let Some(input) = input_tokens {
                 assert!(input > 0, "Input tokens should be positive");
-                assert!(input < 100, "Input tokens should be reasonable (<100 for this prompt)");
+                assert!(
+                    input < 100,
+                    "Input tokens should be reasonable (<100 for this prompt)"
+                );
                 println!("✅ Input tokens validated: {}", input);
             }
             if let Some(output) = output_tokens {
                 assert!(output > 0, "Output tokens should be positive");
-                assert!(output < 200, "Output tokens should be reasonable (<200 for a haiku)");
+                assert!(
+                    output < 200,
+                    "Output tokens should be reasonable (<200 for a haiku)"
+                );
                 println!("✅ Output tokens validated: {}", output);
             }
         } else {

@@ -3,9 +3,9 @@ mod server;
 
 // P6-SYNC Phase 5: Device Code Authorization Flow
 pub mod device_code;
-pub mod device_code_openai;
-pub mod device_code_google;
 pub mod device_code_anthropic;
+pub mod device_code_google;
+pub mod device_code_openai;
 pub mod device_code_storage;
 
 pub use server::LoginServer;

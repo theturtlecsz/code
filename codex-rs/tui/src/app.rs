@@ -2919,7 +2919,10 @@ impl App<'_> {
                         );
                     }
                 }
-                AppEvent::DeviceCodeLoginPollAttempt { provider, poll_count } => {
+                AppEvent::DeviceCodeLoginPollAttempt {
+                    provider,
+                    poll_count,
+                } => {
                     if let AppState::Chat { widget } = &mut self.app_state {
                         widget.on_device_code_poll_attempt(provider, poll_count);
                     }

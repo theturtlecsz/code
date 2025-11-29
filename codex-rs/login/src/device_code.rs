@@ -209,25 +209,21 @@ pub trait DeviceCodeAuth: Send + Sync {
     ///
     /// Returns the device code and user code for the user to complete
     /// authorization in their browser.
-    async fn start_device_authorization(&self) -> Result<DeviceAuthorizationResponse, DeviceAuthError>;
+    async fn start_device_authorization(
+        &self,
+    ) -> Result<DeviceAuthorizationResponse, DeviceAuthError>;
 
     /// Poll for token after user authorization
     ///
     /// Should be called repeatedly at the interval specified in
     /// DeviceAuthorizationResponse until success or terminal error.
-    async fn poll_for_token(
-        &self,
-        device_code: &str,
-    ) -> Result<TokenResponse, PollError>;
+    async fn poll_for_token(&self, device_code: &str) -> Result<TokenResponse, PollError>;
 
     /// Refresh an expired access token
     ///
     /// Uses the refresh token to obtain a new access token without
     /// requiring user interaction.
-    async fn refresh_token(
-        &self,
-        refresh_token: &str,
-    ) -> Result<TokenResponse, RefreshError>;
+    async fn refresh_token(&self, refresh_token: &str) -> Result<TokenResponse, RefreshError>;
 
     /// Get the scopes requested for this provider
     fn scopes(&self) -> &[&str];
@@ -304,7 +300,9 @@ mod tests {
         assert_eq!(response.display_uri(), "https://example.com/device");
 
         let response_with_complete = DeviceAuthorizationResponse {
-            verification_uri_complete: Some("https://example.com/device?code=ABCD-1234".to_string()),
+            verification_uri_complete: Some(
+                "https://example.com/device?code=ABCD-1234".to_string(),
+            ),
             ..response
         };
         assert_eq!(

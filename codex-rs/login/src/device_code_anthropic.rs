@@ -15,8 +15,8 @@
 //! Based on the OAuth endpoints discovered from Claude Code's auth flow.
 
 use crate::device_code::{
-    DeviceAuthError, DeviceAuthorizationResponse, DeviceCodeAuth, DeviceCodeProvider,
-    PollError, RefreshError, TokenResponse,
+    DeviceAuthError, DeviceAuthorizationResponse, DeviceCodeAuth, DeviceCodeProvider, PollError,
+    RefreshError, TokenResponse,
 };
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -31,11 +31,7 @@ const ANTHROPIC_TOKEN_URL: &str = "https://console.anthropic.com/v1/oauth/token"
 const DEFAULT_CLIENT_ID: &str = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 
 /// Anthropic OAuth scopes
-const ANTHROPIC_SCOPES: &[&str] = &[
-    "org:create_api_key",
-    "user:profile",
-    "user:inference",
-];
+const ANTHROPIC_SCOPES: &[&str] = &["org:create_api_key", "user:profile", "user:inference"];
 
 /// Anthropic/Claude device code authorization client
 pub struct AnthropicDeviceCode {
@@ -68,8 +64,7 @@ impl AnthropicDeviceCode {
 
     /// Get client ID from environment or use default
     fn get_client_id() -> String {
-        std::env::var("ANTHROPIC_OAUTH_CLIENT_ID")
-            .unwrap_or_else(|_| DEFAULT_CLIENT_ID.to_string())
+        std::env::var("ANTHROPIC_OAUTH_CLIENT_ID").unwrap_or_else(|_| DEFAULT_CLIENT_ID.to_string())
     }
 }
 
@@ -110,7 +105,9 @@ impl DeviceCodeAuth for AnthropicDeviceCode {
         DeviceCodeProvider::Anthropic
     }
 
-    async fn start_device_authorization(&self) -> Result<DeviceAuthorizationResponse, DeviceAuthError> {
+    async fn start_device_authorization(
+        &self,
+    ) -> Result<DeviceAuthorizationResponse, DeviceAuthError> {
         let scope = ANTHROPIC_SCOPES.join(" ");
 
         let request = DeviceAuthRequest {
@@ -139,9 +136,7 @@ impl DeviceCodeAuth for AnthropicDeviceCode {
                 )));
             }
 
-            return Err(DeviceAuthError::Server(format!(
-                "HTTP {status}: {body}"
-            )));
+            return Err(DeviceAuthError::Server(format!("HTTP {status}: {body}")));
         }
 
         response

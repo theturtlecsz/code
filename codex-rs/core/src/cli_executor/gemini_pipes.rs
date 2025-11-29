@@ -854,7 +854,10 @@ fn is_perfect_square(n: u64) -> bool {
         let cancel = CancellationToken::new();
 
         let stream_result = session.stream_turn(prompt, tx, cancel).await;
-        assert!(stream_result.is_ok(), "Stream should succeed with long prompt");
+        assert!(
+            stream_result.is_ok(),
+            "Stream should succeed with long prompt"
+        );
 
         let mut response = String::new();
         while let Some(event) = rx.recv().await {
@@ -863,7 +866,11 @@ fn is_perfect_square(n: u64) -> bool {
             }
         }
 
-        println!("Long prompt response ({} chars): {}", response.len(), response);
+        println!(
+            "Long prompt response ({} chars): {}",
+            response.len(),
+            response
+        );
 
         // Verify the model processed the entire input by checking it found all functions
         let response_lower = response.to_lowercase();
@@ -926,7 +933,11 @@ fn is_perfect_square(n: u64) -> bool {
 
                     let success = response.to_lowercase().contains("hello");
                     if success {
-                        println!("  ✅ {} responded: {}...", display_name, &response[..response.len().min(50)]);
+                        println!(
+                            "  ✅ {} responded: {}...",
+                            display_name,
+                            &response[..response.len().min(50)]
+                        );
                     } else {
                         println!("  ⚠️  {} response unexpected: {}", display_name, response);
                     }

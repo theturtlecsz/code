@@ -62,9 +62,7 @@ pub(crate) enum CancellationEvent {
 
 pub(crate) use chat_composer::ChatComposer;
 pub(crate) use chat_composer::InputResult;
-pub(crate) use device_code_login_view::{
-    DeviceCodeLoginState, DeviceCodeLoginView,
-};
+pub(crate) use device_code_login_view::{DeviceCodeLoginState, DeviceCodeLoginView};
 pub(crate) use login_accounts_view::{
     LoginAccountsState, LoginAccountsView, LoginAddAccountState, LoginAddAccountView,
 };
