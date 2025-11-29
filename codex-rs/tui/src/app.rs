@@ -2962,11 +2962,6 @@ impl App<'_> {
                         widget.on_device_code_denied(provider);
                     }
                 }
-                AppEvent::DeviceCodeLoginCancel { provider } => {
-                    if let AppState::Chat { widget } = &mut self.app_state {
-                        widget.on_device_code_cancelled(provider);
-                    }
-                }
 
                 // SPEC-954: Handle user message timeout
                 AppEvent::UserMessageTimeout {

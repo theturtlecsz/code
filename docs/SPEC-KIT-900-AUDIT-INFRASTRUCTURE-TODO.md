@@ -18,26 +18,26 @@
 7. Comprehensive logging (synthesis, advancement)
 8. run_id column added to schema (+ migration)
 
-### ⏸️ Remaining Work
+### ✅ Completed (2025-11-29)
 
-## Task 1: Propagate run_id Throughout System (2-3 hours)
+## Task 1: Propagate run_id Throughout System ✅
 
-**Files to Update**:
+**Files Updated**:
 
 ### consensus_db.rs
 - [x] Add run_id column to schema
 - [x] Update record_agent_spawn signature
-- [ ] Update all spawn call sites (10+ locations)
+- [x] Update all spawn call sites (already done in prior work)
 
 ### agent_orchestrator.rs
-- [ ] Update spawn_and_wait_for_agent calls (pass run_id)
-- [ ] Update spawn_regular_stage_agents_sequential (get run_id from state)
-- [ ] Update spawn_regular_stage_agents_parallel (get run_id from state)
-- [ ] Pass run_id to record_agent_spawn (6 call sites)
+- [x] Update spawn_and_wait_for_agent calls (pass run_id)
+- [x] Update spawn_regular_stage_agents_sequential (get run_id from state)
+- [x] Update spawn_regular_stage_agents_parallel (wired branch_id 2025-11-29)
+- [x] Pass run_id to record_agent_spawn (all call sites)
 
 ### native_quality_gate_orchestrator.rs
-- [ ] Update spawn_quality_gate_agents_native (get run_id from state)
-- [ ] Pass run_id to record_agent_spawn (3 call sites)
+- [x] Update spawn_quality_gate_agents_native (get run_id from state)
+- [x] Pass run_id to record_agent_spawn (all call sites)
 
 **How to get run_id**:
 ```rust
@@ -47,7 +47,7 @@ let run_id = widget.spec_auto_state.as_ref()
 
 ---
 
-## Task 2: Tag All Logs with [run_id] and Agent Type (1 hour)
+## Task 2: Tag All Logs with [run_id] and Agent Type ✅
 
 **Pattern**:
 ```rust
@@ -69,7 +69,7 @@ tracing::warn!("[run:{}] [type:regular_stage] 🎬 SEQUENTIAL: Spawning gemini",
 
 ---
 
-## Task 3: Record Quality Gate Completions (30 min)
+## Task 3: Record Quality Gate Completions ✅ (Already Implemented)
 
 **File**: `native_quality_gate_orchestrator.rs`
 

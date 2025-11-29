@@ -471,11 +471,6 @@ pub(crate) enum AppEvent {
     DeviceCodeLoginDenied {
         provider: codex_login::DeviceCodeProvider,
     },
-
-    /// Cancel device code login flow
-    DeviceCodeLoginCancel {
-        provider: codex_login::DeviceCodeProvider,
-    },
     // === END FORK-SPECIFIC: Device Code OAuth Events ===
 
     /// Show Chrome launch options dialog

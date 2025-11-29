@@ -9205,13 +9205,6 @@ impl ChatWidget<'_> {
         self.request_redraw();
     }
 
-    /// Handle device code login cancelled
-    pub(crate) fn on_device_code_cancelled(&mut self, _provider: codex_login::DeviceCodeProvider) {
-        // The view handles closing itself
-        self.device_code_login_state = None;
-        self.request_redraw();
-    }
-
     /// Helper to access device code login view state
     fn with_device_code_view<F, R>(&mut self, f: F) -> Option<R>
     where

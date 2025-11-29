@@ -14,7 +14,7 @@
 //! 6. On error/expiry: show retry option
 
 use std::cell::RefCell;
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 use std::time::Instant;
 
 use codex_login::DeviceCodeProvider;
@@ -133,10 +133,6 @@ impl DeviceCodeLoginState {
         }
     }
 
-    pub fn weak_handle(state: &Rc<RefCell<Self>>) -> Weak<RefCell<Self>> {
-        Rc::downgrade(state)
-    }
-
     /// Called when device authorization response is received
     pub fn on_device_auth_response(
         &mut self,
@@ -212,12 +208,6 @@ impl DeviceCodeLoginState {
             is_error: true,
         });
     }
-
-    /// Mark browser as opened
-    pub fn set_browser_opened(&mut self) {
-        self.browser_opened = true;
-    }
-
     fn handle_key_event(&mut self, key_event: KeyEvent) {
         match key_event.code {
             KeyCode::Esc | KeyCode::Char('q') => {
