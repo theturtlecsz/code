@@ -1,8 +1,7 @@
-# Next Session: Upstream Sync Continuation
+# Upstream Sync Status
 
-**Date**: 2025-11-29 (updated)
-**Primary Focus**: Complete P2 UX + Document P3 Backlog
-**Estimated Effort**: 12-18h across sessions
+**Last Updated**: 2025-11-29
+**Status**: P2 Complete, P3 Backlog Documented
 **Mode**: IMPLEMENTATION (direct execution, minimal prose)
 
 ---
@@ -16,22 +15,24 @@
 | SYNC-003 | Cargo Deny Configuration | ✅ Done | 2025-11-28 | 288 LOC deny.toml |
 | SYNC-004 | Async Utils Crate | ✅ Done | 2025-11-29 | ~90 LOC, OrCancelExt trait |
 | SYNC-005 | Keyring Store (scaffold) | ✅ Done | 2025-11-29 | ~220 LOC, Linux/macOS only |
+| SYNC-006 | Feedback Crate | ✅ Done | 2025-11-29 | 220 LOC, 6 tests, ring buffer only |
 | SYNC-007 | API Error Bridge | ⏭️ N/A | 2025-11-29 | Fork already has equivalent |
+| SYNC-008 | ASCII Animation | ⏭️ Covered | 2025-11-29 | Fork has in new_model_popup.rs |
+| SYNC-009 | Footer Improvements | ✅ Partial | 2025-11-29 | key_hint.rs (170 LOC, 6 tests) |
+| SYNC-015 | Character Encoding | ✅ Done | 2025-11-29 | 160 LOC, 10 tests, utils/string |
 
-**Total Completed**: 5 SYNC tasks, ~950 LOC added
+**Total Completed**: 9 SYNC tasks, ~1500 LOC added
 
 ---
 
-## Next Session: P2 UX Items
+## P2 UX Items (COMPLETE)
 
-### Priority Order
-
-| Order | SYNC | Task | Est. | Decision |
-|-------|------|------|------|----------|
-| 1 | SYNC-006 | Feedback Crate | 1-2h | **Ring buffer only** (no Sentry) |
-| 2 | SYNC-015 | Character Encoding | 2-3h | UTF-8 detection utilities |
-| 3 | SYNC-008 | ASCII Animation | 2-4h | TUI widget integration |
-| 4 | SYNC-009 | Footer Improvements | 4-8h | Complex - 11K LOC bottom_pane |
+| Order | SYNC | Task | Result | Notes |
+|-------|------|------|--------|-------|
+| 1 | SYNC-006 | Feedback Crate | ✅ Done | Ring buffer only (no Sentry) |
+| 2 | SYNC-015 | Character Encoding | ✅ Done | UTF-8 boundary truncation utils |
+| 3 | SYNC-008 | ASCII Animation | ⏭️ Covered | Fork has frames/ + new_model_popup.rs |
+| 4 | SYNC-009 | Footer Improvements | ✅ Partial | key_hint.rs module; full footer deferred |
 
 ### SYNC-006: Feedback Crate (Ring Buffer Only)
 
