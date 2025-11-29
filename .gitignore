@@ -104,6 +104,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# auth/credentials
+cookies.txt
+
 # package
 *.tgz
 
