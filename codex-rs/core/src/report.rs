@@ -199,7 +199,10 @@ impl ComparisonReport {
 
     /// Get all regressions
     pub fn regressions(&self) -> Vec<&ComparisonResult> {
-        self.comparisons.iter().filter(|c| c.is_regression).collect()
+        self.comparisons
+            .iter()
+            .filter(|c| c.is_regression)
+            .collect()
     }
 
     /// Get all improvements (>20% faster, significant)
@@ -215,8 +218,10 @@ impl ComparisonReport {
         let mut output = String::new();
 
         output.push_str("# Performance Comparison Report\n\n");
-        output.push_str("| Operation | Baseline (ms) | Current (ms) | Change | Speedup | Status |\n");
-        output.push_str("|-----------|---------------|--------------|--------|---------|--------|\n");
+        output
+            .push_str("| Operation | Baseline (ms) | Current (ms) | Change | Speedup | Status |\n");
+        output
+            .push_str("|-----------|---------------|--------------|--------|---------|--------|\n");
 
         for comparison in &self.comparisons {
             let status = if comparison.is_regression {

@@ -49,7 +49,10 @@ fn parse_shell_lc_plain_commands(command: &[String]) -> Option<Vec<Vec<String>>>
         .unwrap_or(shell)
         .to_lowercase();
 
-    if !matches!(shell_basename.as_str(), "bash" | "zsh" | "bash.exe" | "zsh.exe") {
+    if !matches!(
+        shell_basename.as_str(),
+        "bash" | "zsh" | "bash.exe" | "zsh.exe"
+    ) {
         return None;
     }
 

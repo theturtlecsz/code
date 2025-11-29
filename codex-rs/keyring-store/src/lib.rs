@@ -122,9 +122,9 @@ impl KeyringStore for DefaultKeyringStore {
 pub mod tests {
     use super::CredentialStoreError;
     use super::KeyringStore;
+    use keyring::Error as KeyringError;
     use keyring::credential::CredentialApi as _;
     use keyring::mock::MockCredential;
-    use keyring::Error as KeyringError;
     use std::collections::HashMap;
     use std::sync::Arc;
     use std::sync::Mutex;

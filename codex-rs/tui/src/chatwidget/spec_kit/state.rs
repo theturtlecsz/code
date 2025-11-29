@@ -906,6 +906,12 @@ pub struct SpecAutoState {
     // P6-SYNC Phase 2: Session metrics for token usage tracking and estimation
     pub session_metrics: super::session_metrics::SessionMetrics,
 
+    // P6-SYNC Phase 6: Per-stage token metrics for breakdown display
+    pub stage_metrics: HashMap<SpecStage, super::session_metrics::SessionMetrics>,
+
+    // P6-SYNC Phase 6: Current model for context window lookups
+    pub current_model: Option<String>,
+
     // P6-SYNC Phase 4: Branch tracking for resume filtering
     pub current_branch: Option<PipelineBranch>,
 }
@@ -999,6 +1005,9 @@ impl SpecAutoState {
             consensus_sequence: ConsensusSequence::new(),
             // P6-SYNC Phase 2: Session metrics for token tracking
             session_metrics: super::session_metrics::SessionMetrics::default(),
+            // P6-SYNC Phase 6: Per-stage metrics and model tracking
+            stage_metrics: HashMap::new(),
+            current_model: None,
             // P6-SYNC Phase 4: Branch tracking for resume filtering
             current_branch,
         }
@@ -1110,6 +1119,52 @@ impl SpecAutoState {
     /// Reset session metrics (e.g., for new pipeline run).
     pub fn reset_session_metrics(&mut self) {
         self.session_metrics.reset();
+    }
+
+    // P6-SYNC Phase 6: Per-stage token tracking and model context
+
+    /// Record token usage for both global session and current stage.
+    pub fn record_stage_tokens(&mut self, usage: &codex_core::protocol::TokenUsage) {
+        // Update global session metrics
+        self.session_metrics.record_turn(usage);
+
+        // Update per-stage metrics
+        if let Some(stage) = self.current_stage() {
+            self.stage_metrics
+                .entry(stage)
+                .or_default()
+                .record_turn(usage);
+        }
+    }
+
+    /// Get token metrics for a specific stage.
+    pub fn stage_token_totals(&self, stage: SpecStage) -> Option<(u64, u64)> {
+        self.stage_metrics.get(&stage).map(|m| {
+            let total = m.running_total();
+            (total.input_tokens, total.output_tokens)
+        })
+    }
+
+    /// Set the current model ID (for context window lookups).
+    pub fn set_current_model(&mut self, model_id: &str) {
+        self.current_model = Some(model_id.to_string());
+    }
+
+    /// Get context window for current model.
+    pub fn context_window(&self) -> u64 {
+        self.current_model
+            .as_deref()
+            .map(crate::token_metrics_widget::model_context_window)
+            .unwrap_or(128_000)
+    }
+
+    /// Get context utilization (0.0 - 1.0).
+    pub fn context_utilization(&self) -> f64 {
+        let window = self.context_window();
+        if window == 0 {
+            return 0.0;
+        }
+        self.session_metrics.blended_total() as f64 / window as f64
     }
 
     // P6-SYNC Phase 4: Branch tracking accessors

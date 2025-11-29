@@ -119,7 +119,8 @@ fn init_config() -> HashMap<FaultScope, FaultConfig> {
         if let Ok(spec) = std::env::var("CODEX_FAULTS") {
             let cfg = FaultConfig::default();
             let timeout_ms = parse_timeout_duration();
-            cfg.timeout_duration_ms.store(timeout_ms as usize, Ordering::Relaxed);
+            cfg.timeout_duration_ms
+                .store(timeout_ms as usize, Ordering::Relaxed);
 
             for entry in spec.split(',').map(str::trim).filter(|s| !s.is_empty()) {
                 if let Some((label, count)) = entry.split_once(':') {
@@ -314,7 +315,9 @@ mod tests {
         };
         let cloned = fault.clone();
         match cloned {
-            InjectedFault::RateLimit { reset_hint: Some(FaultReset::Seconds(s)) } => {
+            InjectedFault::RateLimit {
+                reset_hint: Some(FaultReset::Seconds(s)),
+            } => {
                 assert_eq!(s, 60);
             }
             _ => panic!("Clone failed"),

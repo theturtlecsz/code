@@ -210,6 +210,7 @@ mod clipboard_paste;
 mod greeting;
 mod height_manager;
 mod spinner;
+mod token_metrics_widget;
 mod transcript_app;
 mod tui;
 mod ui_consts;
@@ -223,6 +224,9 @@ mod status_indicator_widget;
 mod updates;
 
 pub use cli::Cli;
+
+// P6-SYNC Phase 6: Re-export token metrics widget for status bar
+pub use token_metrics_widget::{TokenMetricsWidget, model_context_window};
 
 fn theme_configured_in_config_file(codex_home: &std::path::Path) -> bool {
     let config_path = codex_home.join("config.toml");

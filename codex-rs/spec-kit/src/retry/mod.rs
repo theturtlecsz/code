@@ -17,7 +17,9 @@ pub mod classifier;
 pub mod strategy;
 
 pub use classifier::{ErrorClass, RetryClassifiable};
-pub use strategy::{RetryConfig, RetryStatus, execute_with_backoff, execute_with_backoff_cancellable};
+pub use strategy::{
+    RetryConfig, RetryStatus, execute_with_backoff, execute_with_backoff_cancellable,
+};
 
 use std::time::Duration;
 

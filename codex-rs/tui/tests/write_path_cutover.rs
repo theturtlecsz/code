@@ -325,7 +325,10 @@ fn test_branch_id_null_when_not_provided() {
             |row| row.get(0),
         )
         .unwrap();
-    assert!(branch.is_none(), "branch_id should be NULL when not provided");
+    assert!(
+        branch.is_none(),
+        "branch_id should be NULL when not provided"
+    );
 }
 
 #[test]
@@ -373,7 +376,9 @@ fn test_get_responses_for_branch_filters_correctly() {
     .unwrap();
 
     // Query for branch A - should get 2
-    let branch_a_responses = db.get_responses_for_branch(spec_id, stage, branch_a).unwrap();
+    let branch_a_responses = db
+        .get_responses_for_branch(spec_id, stage, branch_a)
+        .unwrap();
     assert_eq!(
         branch_a_responses.len(),
         2,
@@ -381,7 +386,9 @@ fn test_get_responses_for_branch_filters_correctly() {
     );
 
     // Query for branch B - should get 1
-    let branch_b_responses = db.get_responses_for_branch(spec_id, stage, branch_b).unwrap();
+    let branch_b_responses = db
+        .get_responses_for_branch(spec_id, stage, branch_b)
+        .unwrap();
     assert_eq!(
         branch_b_responses.len(),
         1,

@@ -162,10 +162,7 @@ mod tests {
 
     #[test]
     fn key_binding_special_keys() {
-        assert_eq!(
-            Span::from(plain(KeyCode::Up)).content.as_ref(),
-            "↑"
-        );
+        assert_eq!(Span::from(plain(KeyCode::Up)).content.as_ref(), "↑");
         assert_eq!(
             Span::from(plain(KeyCode::PageDown)).content.as_ref(),
             "pgdn"

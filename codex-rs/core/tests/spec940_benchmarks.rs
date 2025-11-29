@@ -130,7 +130,8 @@ async fn benchmark_spawn_performance() {
 
     eprintln!(
         "✅ SPEC-940 P0 PASS: {:.2}ms mean spawn (target: <{}ms)",
-        result.mean_ms, thresholds::SPAWN_MEAN_MS
+        result.mean_ms,
+        thresholds::SPAWN_MEAN_MS
     );
 }
 
@@ -184,7 +185,8 @@ async fn benchmark_sqlite_write_performance() {
 
     eprintln!(
         "✅ SPEC-940 P1 PASS: {:.2}ms mean SQLite write (target: <{}ms)",
-        result.mean_ms, thresholds::SQLITE_WRITE_MEAN_MS
+        result.mean_ms,
+        thresholds::SQLITE_WRITE_MEAN_MS
     );
 }
 
@@ -201,22 +203,21 @@ async fn benchmark_sqlite_batch_transaction() {
         warmup_iterations: WARMUP,
     });
 
-    let result = harness
-        .run_sync(|| {
-            let conn = Connection::open(&db_path).expect("Failed to open connection");
+    let result = harness.run_sync(|| {
+        let conn = Connection::open(&db_path).expect("Failed to open connection");
 
-            // Batch 10 inserts in a single transaction
-            conn.execute_batch("BEGIN TRANSACTION").unwrap();
-            for i in 0..10 {
-                conn.execute(
-                    "INSERT INTO consensus_runs (spec_id, stage, consensus_ok, created_at)
+        // Batch 10 inserts in a single transaction
+        conn.execute_batch("BEGIN TRANSACTION").unwrap();
+        for i in 0..10 {
+            conn.execute(
+                "INSERT INTO consensus_runs (spec_id, stage, consensus_ok, created_at)
                      VALUES (?1, ?2, ?3, ?4)",
-                    rusqlite::params![format!("BATCH-{}", i), "plan", 1, 0],
-                )
-                .unwrap();
-            }
-            conn.execute_batch("COMMIT").unwrap();
-        });
+                rusqlite::params![format!("BATCH-{}", i), "plan", 1, 0],
+            )
+            .unwrap();
+        }
+        conn.execute_batch("COMMIT").unwrap();
+    });
 
     report_benchmark(&result);
 
@@ -225,7 +226,8 @@ async fn benchmark_sqlite_batch_transaction() {
 
     eprintln!(
         "✅ SPEC-940 P1 PASS: {:.2}ms mean batch (10 ops) (target: <{}ms)",
-        result.mean_ms, thresholds::SQLITE_WRITE_MEAN_MS
+        result.mean_ms,
+        thresholds::SQLITE_WRITE_MEAN_MS
     );
 }
 
@@ -260,7 +262,8 @@ async fn benchmark_config_parsing() {
 
     eprintln!(
         "✅ SPEC-940 P1 PASS: {:.2}ms mean config parse (target: <{}ms)",
-        result.mean_ms, thresholds::CONFIG_PARSE_MEAN_MS
+        result.mean_ms,
+        thresholds::CONFIG_PARSE_MEAN_MS
     );
 }
 
@@ -274,7 +277,10 @@ async fn generate_baseline_report() {
     eprintln!("\n");
     eprintln!("╔═══════════════════════════════════════════════════════════════╗");
     eprintln!("║           SPEC-940 Performance Baseline Report                ║");
-    eprintln!("║                    Date: {}                   ║", chrono::Utc::now().format("%Y-%m-%d"));
+    eprintln!(
+        "║                    Date: {}                   ║",
+        chrono::Utc::now().format("%Y-%m-%d")
+    );
     eprintln!("╠═══════════════════════════════════════════════════════════════╣");
     eprintln!("║ Operation                    │ Mean±Stddev │ P95    │ Max    ║");
     eprintln!("╠══════════════════════════════╪═════════════╪════════╪════════╣");
@@ -314,15 +320,14 @@ async fn run_spawn_benchmark() -> BenchmarkResult {
 async fn run_sqlite_benchmark() -> BenchmarkResult {
     let (_temp_dir, db_path) = setup_temp_db();
     let harness = BenchmarkHarness::new(BenchmarkConfig::new("sqlite").iterations(10).warmup(2));
-    harness
-        .run_sync(|| {
-            let conn = Connection::open(&db_path).expect("conn");
-            conn.execute(
-                "INSERT INTO consensus_runs VALUES (NULL, 'X', 'plan', 1, 0)",
-                [],
-            )
-            .expect("insert");
-        })
+    harness.run_sync(|| {
+        let conn = Connection::open(&db_path).expect("conn");
+        conn.execute(
+            "INSERT INTO consensus_runs VALUES (NULL, 'X', 'plan', 1, 0)",
+            [],
+        )
+        .expect("insert");
+    })
 }
 
 async fn run_config_benchmark() -> BenchmarkResult {

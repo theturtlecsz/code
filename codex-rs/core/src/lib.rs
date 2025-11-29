@@ -80,6 +80,7 @@ pub use conversation_manager::NewConversation;
 // Re-export common auth types for workspace consumers
 pub use auth::AuthManager;
 pub use auth::CodexAuth;
+pub mod benchmarks; // SPEC-940: Benchmark harness with statistical analysis
 pub mod default_client;
 pub mod model_family;
 mod openai_model_info;
@@ -92,6 +93,7 @@ pub mod project_doc;
 pub mod project_features;
 pub mod provider_auth; // SPEC-KIT-953-D: Multi-provider OAuth 2.0 PKCE framework
 pub mod providers; // SPEC-KIT-953: Provider implementations (OpenAI, Anthropic, Google)
+pub mod report; // SPEC-940: Performance reporting with regression detection
 mod rollout;
 pub(crate) mod safety;
 pub mod seatbelt;
@@ -99,8 +101,6 @@ pub mod shell;
 pub mod spawn;
 pub mod terminal;
 pub mod timing; // SPEC-940: Performance timing infrastructure
-pub mod benchmarks; // SPEC-940: Benchmark harness with statistical analysis
-pub mod report; // SPEC-940: Performance reporting with regression detection
 mod tool_apply_patch;
 pub mod turn_diff_tracker;
 mod workflow_validation;

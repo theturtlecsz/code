@@ -102,10 +102,7 @@ impl ConsensusDb {
             [],
         );
         // P6-SYNC Phase 4: Branch tracking for resume filtering
-        let _ = conn.execute(
-            "ALTER TABLE agent_executions ADD COLUMN branch_id TEXT",
-            [],
-        );
+        let _ = conn.execute("ALTER TABLE agent_executions ADD COLUMN branch_id TEXT", []);
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_agent_executions_spec

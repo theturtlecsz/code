@@ -230,13 +230,13 @@ where
                 let elapsed = start_time.elapsed();
 
                 // Check total elapsed timeout (Auto Drive pattern)
-                if let Some(max) = max_elapsed {
-                    if elapsed >= max {
-                        return Err(super::RetryError::Timeout {
-                            elapsed,
-                            last_error: err.to_string(),
-                        });
-                    }
+                if let Some(max) = max_elapsed
+                    && elapsed >= max
+                {
+                    return Err(super::RetryError::Timeout {
+                        elapsed,
+                        last_error: err.to_string(),
+                    });
                 }
 
                 // Check if error is retryable
@@ -250,20 +250,22 @@ where
                 }
 
                 // Check for rate limit with suggested backoff
-                let (sleep_duration, is_rate_limit) = if let Some(suggested) = err.suggested_backoff() {
-                    // Use server-suggested backoff for rate limits
-                    (suggested, true)
-                } else {
-                    // Use exponential backoff with jitter
-                    let backoff_duration = Duration::from_millis(backoff_ms.min(config.max_backoff_ms));
-                    (apply_jitter(backoff_duration, config.jitter_factor), false)
-                };
+                let (sleep_duration, is_rate_limit) =
+                    if let Some(suggested) = err.suggested_backoff() {
+                        // Use server-suggested backoff for rate limits
+                        (suggested, true)
+                    } else {
+                        // Use exponential backoff with jitter
+                        let backoff_duration =
+                            Duration::from_millis(backoff_ms.min(config.max_backoff_ms));
+                        (apply_jitter(backoff_duration, config.jitter_factor), false)
+                    };
 
                 let resume_at = Instant::now() + sleep_duration;
                 let reason = if is_rate_limit {
-                    format!("Rate limited, waiting {:?}", sleep_duration)
+                    format!("Rate limited, waiting {sleep_duration:?}")
                 } else {
-                    format!("Transient error: {}, retrying in {:?}", err, sleep_duration)
+                    format!("Transient error: {err}, retrying in {sleep_duration:?}")
                 };
 
                 // Report status before sleeping
@@ -805,7 +807,11 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 42);
         assert_eq!(call_count.load(Ordering::SeqCst), 1);
-        assert_eq!(status_calls.load(Ordering::SeqCst), 0, "No status calls on success");
+        assert_eq!(
+            status_calls.load(Ordering::SeqCst),
+            0,
+            "No status calls on success"
+        );
     }
 
     #[tokio::test]
@@ -837,7 +843,11 @@ mod tests {
         .await;
 
         assert!(matches!(result, Err(crate::retry::RetryError::Aborted)));
-        assert_eq!(call_count.load(Ordering::SeqCst), 0, "Should not call when cancelled");
+        assert_eq!(
+            call_count.load(Ordering::SeqCst),
+            0,
+            "Should not call when cancelled"
+        );
     }
 
     #[tokio::test]
@@ -872,7 +882,10 @@ mod tests {
         )
         .await;
 
-        assert!(matches!(result, Err(crate::retry::RetryError::Timeout { .. })));
+        assert!(matches!(
+            result,
+            Err(crate::retry::RetryError::Timeout { .. })
+        ));
         // Should have made at least one attempt but hit timeout
         assert!(call_count.load(Ordering::SeqCst) >= 1);
     }
@@ -880,8 +893,8 @@ mod tests {
     #[tokio::test]
     async fn test_cancellable_status_callback() {
         use std::sync::Arc;
-        use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Mutex;
+        use std::sync::atomic::{AtomicUsize, Ordering};
 
         let call_count = Arc::new(AtomicUsize::new(0));
         let call_count_clone = call_count.clone();
@@ -920,7 +933,11 @@ mod tests {
 
         assert!(result.is_ok());
         let recorded = statuses.lock().unwrap();
-        assert_eq!(recorded.len(), 2, "Should have 2 status callbacks for 2 retries");
+        assert_eq!(
+            recorded.len(),
+            2,
+            "Should have 2 status callbacks for 2 retries"
+        );
         assert_eq!(recorded[0], 1, "First callback for attempt 1");
         assert_eq!(recorded[1], 2, "Second callback for attempt 2");
     }

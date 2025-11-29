@@ -362,7 +362,9 @@ fn percentile(sorted: &[u64], p: usize) -> u64 {
     if sorted.is_empty() {
         return 0;
     }
-    let idx = (sorted.len() * p / 100).saturating_sub(1).min(sorted.len() - 1);
+    let idx = (sorted.len() * p / 100)
+        .saturating_sub(1)
+        .min(sorted.len() - 1);
     sorted[idx]
 }
 
@@ -384,9 +386,17 @@ mod tests {
         let result = BenchmarkResult::from_samples("test", &samples);
 
         assert_eq!(result.sample_count, 5);
-        assert!((result.mean_ms - 11.4).abs() < 0.01, "mean: {}", result.mean_ms);
+        assert!(
+            (result.mean_ms - 11.4).abs() < 0.01,
+            "mean: {}",
+            result.mean_ms
+        );
         assert!((result.min_ms - 9.0).abs() < 0.01, "min: {}", result.min_ms);
-        assert!((result.max_ms - 15.0).abs() < 0.01, "max: {}", result.max_ms);
+        assert!(
+            (result.max_ms - 15.0).abs() < 0.01,
+            "max: {}",
+            result.max_ms
+        );
     }
 
     #[test]
@@ -403,7 +413,10 @@ mod tests {
 
         assert_eq!(result.sample_count, 1);
         assert!((result.mean_ms - 100.0).abs() < 0.01);
-        assert!((result.stddev_ms).abs() < 0.01, "single sample has no variance");
+        assert!(
+            (result.stddev_ms).abs() < 0.01,
+            "single sample has no variance"
+        );
     }
 
     #[test]
@@ -414,9 +427,17 @@ mod tests {
 
         assert_eq!(result.sample_count, 10);
         // p50 (median) should be around 5
-        assert!(result.p50_ms >= 4.0 && result.p50_ms <= 6.0, "p50: {}", result.p50_ms);
+        assert!(
+            result.p50_ms >= 4.0 && result.p50_ms <= 6.0,
+            "p50: {}",
+            result.p50_ms
+        );
         // p95 should be around 9-10
-        assert!(result.p95_ms >= 8.0 && result.p95_ms <= 10.0, "p95: {}", result.p95_ms);
+        assert!(
+            result.p95_ms >= 8.0 && result.p95_ms <= 10.0,
+            "p95: {}",
+            result.p95_ms
+        );
     }
 
     #[test]
@@ -481,7 +502,11 @@ mod tests {
 
         // Some iterations should have failed
         assert!(result.sample_count < 11, "expected some failures");
-        assert!(result.sample_count >= 6, "too many failures: {}", result.sample_count);
+        assert!(
+            result.sample_count >= 6,
+            "too many failures: {}",
+            result.sample_count
+        );
     }
 
     #[test]

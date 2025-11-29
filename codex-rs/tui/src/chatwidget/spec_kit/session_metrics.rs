@@ -179,7 +179,9 @@ impl SessionMetrics {
 /// Add token usage to accumulator (in-place addition).
 fn add_token_usage(acc: &mut TokenUsage, other: &TokenUsage) {
     acc.input_tokens = acc.input_tokens.saturating_add(other.input_tokens);
-    acc.cached_input_tokens = acc.cached_input_tokens.saturating_add(other.cached_input_tokens);
+    acc.cached_input_tokens = acc
+        .cached_input_tokens
+        .saturating_add(other.cached_input_tokens);
     acc.output_tokens = acc.output_tokens.saturating_add(other.output_tokens);
     acc.reasoning_output_tokens = acc
         .reasoning_output_tokens
@@ -302,7 +304,10 @@ mod tests {
         assert_eq!(metrics.replay_updates(), 0);
         assert_eq!(metrics.duplicate_items(), 0);
         // Default estimate when no observations
-        assert_eq!(metrics.estimated_next_prompt_tokens(), DEFAULT_PROMPT_ESTIMATE);
+        assert_eq!(
+            metrics.estimated_next_prompt_tokens(),
+            DEFAULT_PROMPT_ESTIMATE
+        );
     }
 
     #[test]

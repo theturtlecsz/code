@@ -407,7 +407,13 @@ mod tests {
         for y in 0..height {
             let mut line = String::new();
             for x in 0..width {
-                line.push(terminal.backend().buffer()[(x, y)].symbol().chars().next().unwrap_or(' '));
+                line.push(
+                    terminal.backend().buffer()[(x, y)]
+                        .symbol()
+                        .chars()
+                        .next()
+                        .unwrap_or(' '),
+                );
             }
             lines.push(line.trim_end().to_string());
         }
@@ -426,8 +432,14 @@ mod tests {
             },
             80,
         );
-        assert!(output.contains("72% context left"), "expected context percentage in: {output}");
-        assert!(output.contains("for shortcuts"), "expected shortcuts hint in: {output}");
+        assert!(
+            output.contains("72% context left"),
+            "expected context percentage in: {output}"
+        );
+        assert!(
+            output.contains("for shortcuts"),
+            "expected shortcuts hint in: {output}"
+        );
     }
 
     #[test]
@@ -442,7 +454,10 @@ mod tests {
             },
             80,
         );
-        assert!(output.contains("again to quit"), "expected quit hint in: {output}");
+        assert!(
+            output.contains("again to quit"),
+            "expected quit hint in: {output}"
+        );
     }
 
     #[test]
@@ -457,7 +472,10 @@ mod tests {
             },
             80,
         );
-        assert!(output.contains("again to interrupt"), "expected interrupt hint in: {output}");
+        assert!(
+            output.contains("again to interrupt"),
+            "expected interrupt hint in: {output}"
+        );
     }
 
     #[test]
@@ -470,7 +488,10 @@ mod tests {
             context_window_percent: None,
         };
         let height = footer_height(props);
-        assert!(height > 1, "overlay should have multiple lines, got {height}");
+        assert!(
+            height > 1,
+            "overlay should have multiple lines, got {height}"
+        );
     }
 
     #[test]

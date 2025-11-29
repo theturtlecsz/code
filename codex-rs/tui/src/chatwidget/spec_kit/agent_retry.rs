@@ -159,7 +159,9 @@ where
 
         // P6-SYNC Phase 3: Check for injected faults before operation
         #[cfg(feature = "dev-faults")]
-        if let Some(fault) = codex_spec_kit::faults::next_fault(codex_spec_kit::faults::FaultScope::SpecKit) {
+        if let Some(fault) =
+            codex_spec_kit::faults::next_fault(codex_spec_kit::faults::FaultScope::SpecKit)
+        {
             let fault_error = codex_spec_kit::faults::fault_to_error(fault);
             tracing::warn!(
                 agent = agent_name,
