@@ -455,9 +455,9 @@ Fork eliminated tmux and moved to DirectProcessExecutor. Server-based execution 
 | 1 | SYNC-001 | Add dangerous command detection | **Done** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | main | | 2025-11-29 | | **P0 Security**: Added `is_dangerous_command.rs` + integration into safety.rs. Dangerous commands (git reset, rm -rf, etc.) now prompt for approval even in DangerFullAccess mode. 4 new tests added. |
 | 2 | SYNC-002 | Add process-hardening crate | **Done** | Code | docs/SYNC-002-process-hardening/PRD.md | main | | 2025-11-28 | | **P0 Security**: 173 LOC crate + 4 tests. Integrated into TUI startup. Disables core dumps, ptrace, LD_*/DYLD_*. |
 | 3 | SYNC-003 | Add cargo deny configuration | **Done** | Code | docs/SYNC-003-cargo-deny/PRD.md | main | | 2025-11-28 | | **P0 Security**: 288 LOC deny.toml + 28 crate license updates. Advisories, licenses, bans, sources all passing. |
-| 4 | SYNC-004 | Add async-utils crate | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P1 Utility**: Copy standalone crate. Provides `.or_cancel()` extension for futures. 90 LOC. Est: 30min. |
-| 5 | SYNC-005 | Add keyring-store crate | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P1 Security**: Copy standalone crate. System keyring abstraction. Auth integration optional. Est: 1h crate, 4-8h integration. |
-| 6 | SYNC-006 | Add feedback crate | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P1 UX**: Copy standalone crate. Ring buffer logging + Sentry. Requires Sentry account for full integration. Est: 1h crate, 4-6h TUI. |
+| 4 | SYNC-004 | Add async-utils crate | **Done** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | main | | 2025-11-29 | | **P1 Utility**: 102 LOC crate with `OrCancelExt` trait for cancellation-aware futures. 3 tests passing. |
+| 5 | SYNC-005 | Add keyring-store crate | **Done** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | main | | 2025-11-29 | | **P1 Security**: 241 LOC crate with `KeyringStore` trait, `DefaultKeyringStore`, and `MockKeyringStore` for tests. Linux Secret Service + macOS Keychain support. |
+| 6 | SYNC-006 | Add feedback crate | **Done** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | main | | 2025-11-29 | | **P1 UX**: 306 LOC crate with ring buffer (4MB cap), tracing integration via `FeedbackMakeWriter`, snapshot save. 6 tests passing. |
 | 7 | SYNC-007 | Adapt API error bridge logic | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P1 Core**: Extract rate limit parsing and error mapping. Adapt to fork's error types. Est: 3-4h. |
 | 8 | SYNC-008 | Add ASCII animation module | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P2 UX**: Copy module. Requires TUI integration verification. Visual loading enhancement. Est: 4-6h. |
 | 9 | SYNC-009 | Adapt footer improvements | **Backlog** | Code | docs/UPSTREAM-ANALYSIS-2025-11-27.md | | | | | **P2 UX**: Extract context percentage, mode patterns. Adapt to fork's bottom_pane_view.rs. Est: 4-6h. |
@@ -474,21 +474,21 @@ Fork eliminated tmux and moved to DirectProcessExecutor. Server-based execution 
 
 ## Summary
 
-### Effort Breakdown
+### Effort Breakdown (Updated 2025-11-29)
 
-| Priority | Items | Total Effort |
-|----------|-------|--------------|
-| P0 (Security) | 3 | 3.5-5.5 hours |
-| P1 (Core) | 4 | 5.5-14.5 hours |
-| P2 (UX) | 2 | 8-12 hours |
-| **Total** | **9** | **17-32 hours** |
+| Priority | Items | Status | Notes |
+|----------|-------|--------|-------|
+| P0 (Security) | 3 | ✅ **Done** | SYNC-001, SYNC-002, SYNC-003 complete |
+| P1 (Utilities) | 3 | ✅ **Done** | SYNC-004, SYNC-005, SYNC-006 complete |
+| P1 (Core) | 1 | Backlog | SYNC-007 (API error bridge) |
+| P2 (UX) | 2 | Backlog | SYNC-008, SYNC-009 |
+| **Total** | **9** | **6 Done, 3 Remaining** | |
 
-### Recommended Execution Order
+### Remaining Work
 
-1. **Week 1**: P0 Security (SYNC-001, SYNC-002, SYNC-003) - Immediate security improvements
-2. **Week 2**: P1 Utilities (SYNC-004, SYNC-005) - Standalone crates, low risk
-3. **Week 3**: P1 Core (SYNC-006, SYNC-007) - Feature enhancements
-4. **Week 4**: P2 UX (SYNC-008, SYNC-009) - Visual polish
+1. **SYNC-007**: Adapt API error bridge logic (~3-4h)
+2. **SYNC-008**: Add ASCII animation module (~4-6h)
+3. **SYNC-009**: Adapt footer improvements (~4-6h)
 
 ### Fork Architecture Preserved
 
