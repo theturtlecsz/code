@@ -138,6 +138,7 @@ where
         max_backoff_ms: 10_000,
         backoff_multiplier: 2.0,
         jitter_factor: 0.5,
+        max_elapsed_ms: None, // Use max_attempts only
     };
 
     let agent_name = agent_name.to_string();

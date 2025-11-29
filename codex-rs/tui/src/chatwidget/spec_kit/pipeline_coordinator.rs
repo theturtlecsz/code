@@ -686,6 +686,33 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
         return;
     };
 
+    // P6-SYNC: Decision sequencing - acquire sequence and check for duplicate
+    let consensus_seq = state.consensus_sequence.next_seq();
+    if !state.consensus_sequence.begin_processing(consensus_seq) {
+        // Another consensus check is already in progress or this is a duplicate
+        let run_tag = state
+            .run_id
+            .as_ref()
+            .map(|r| format!("[run:{}]", &r[..8]))
+            .unwrap_or_else(|| "[run:none]".to_string());
+
+        tracing::warn!(
+            "{} CONSENSUS SEQUENCING: Rejecting duplicate/blocked consensus seq={} (pending={:?})",
+            run_tag,
+            consensus_seq,
+            state.consensus_sequence.pending_seq()
+        );
+
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![ratatui::text::Line::from(format!(
+                "⚠ Consensus check #{} blocked (duplicate or concurrent processing)",
+                consensus_seq
+            ))],
+            HistoryCellType::Notice,
+        ));
+        return;
+    }
+
     let spec_id = state.spec_id.clone();
 
     let mut active_validate_info: Option<ValidateRunInfo> = None;
@@ -828,6 +855,8 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                     state.current_index += 1;
                     state.agent_responses_cache = None; // Clear cache
                     state.phase = SpecAutoPhase::Guardrail; // CRITICAL: Reset to Guardrail for next stage
+                    // P6-SYNC: Acknowledge successful consensus processing
+                    state.consensus_sequence.ack_processed(consensus_seq);
                     tracing::warn!("    Stage index: {} → {}", old_index, state.current_index);
                     tracing::warn!("    Phase reset to: Guardrail");
                 }
@@ -851,6 +880,8 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                     state.current_index += 1;
                     state.agent_responses_cache = None;
                     state.phase = SpecAutoPhase::Guardrail; // CRITICAL: Reset to Guardrail for next stage
+                    // P6-SYNC: Acknowledge even on error (we handled it, moving on)
+                    state.consensus_sequence.ack_processed(consensus_seq);
                 }
                 advance_spec_auto(widget);
             }
@@ -1047,6 +1078,8 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                     // Clear ACE cache for next stage
                     state.ace_bullets_cache = None;
                     state.ace_bullet_ids_used = None;
+                    // P6-SYNC: Acknowledge successful consensus processing
+                    state.consensus_sequence.ack_processed(consensus_seq);
                 }
 
                 // Trigger next stage
@@ -1068,6 +1101,10 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                         ValidateLifecycleEvent::Failed,
                     );
                 }
+                // P6-SYNC: Acknowledge on consensus failure (still processed, just not OK)
+                if let Some(state) = widget.spec_auto_state.as_ref() {
+                    state.consensus_sequence.ack_processed(consensus_seq);
+                }
                 // Consensus failed - halt (no retries)
                 halt_spec_auto_with_error(
                     widget,
@@ -1076,6 +1113,10 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
             }
         }
         Err(err) => {
+            // P6-SYNC: Acknowledge on error (still processed, just errored)
+            if let Some(state) = widget.spec_auto_state.as_ref() {
+                state.consensus_sequence.ack_processed(consensus_seq);
+            }
             // Consensus error - halt (no retries)
             if current_stage == SpecStage::Validate
                 && let Some(state_ref) = widget.spec_auto_state.as_ref()

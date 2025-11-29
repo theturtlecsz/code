@@ -192,6 +192,7 @@ impl ConsensusDb {
             max_backoff_ms: 10_000,
             backoff_multiplier: 1.5,
             jitter_factor: 0.5,
+            max_elapsed_ms: None,
         };
 
         // Write to NEW schema using async wrapper with retry
@@ -263,6 +264,7 @@ impl ConsensusDb {
             max_backoff_ms: 5_000,
             backoff_multiplier: 2.0,
             jitter_factor: 0.5,
+            max_elapsed_ms: None,
         };
 
         // Use Runtime::new() to avoid nested runtime issues
@@ -355,6 +357,7 @@ impl ConsensusDb {
             max_backoff_ms: 5_000,
             backoff_multiplier: 2.0,
             jitter_factor: 0.5,
+            max_elapsed_ms: None,
         };
 
         // Use Runtime::new() to avoid nested runtime issues
@@ -465,6 +468,7 @@ impl ConsensusDb {
             max_backoff_ms: 10_000,
             backoff_multiplier: 1.5,
             jitter_factor: 0.5,
+            max_elapsed_ms: None,
         };
 
         // Write to NEW schema using async wrapper with retry
@@ -536,6 +540,7 @@ impl ConsensusDb {
             max_backoff_ms: 5_000,
             backoff_multiplier: 1.5,
             jitter_factor: 0.5,
+            max_elapsed_ms: None,
         };
 
         // Clone parameters for move into closure
@@ -581,6 +586,7 @@ impl ConsensusDb {
             max_backoff_ms: 5_000,
             backoff_multiplier: 2.0,
             jitter_factor: 0.5,
+            max_elapsed_ms: None,
         };
 
         let agent_id = agent_id.to_string();
@@ -619,6 +625,7 @@ impl ConsensusDb {
             max_backoff_ms: 5_000,
             backoff_multiplier: 2.0,
             jitter_factor: 0.5,
+            max_elapsed_ms: None,
         };
 
         let agent_id = agent_id.to_string();
@@ -657,6 +664,7 @@ impl ConsensusDb {
             max_backoff_ms: 5_000,
             backoff_multiplier: 1.5,
             jitter_factor: 0.5,
+            max_elapsed_ms: None,
         };
 
         let agent_id = agent_id.to_string();
@@ -701,6 +709,7 @@ impl ConsensusDb {
             max_backoff_ms: 5_000,
             backoff_multiplier: 1.5,
             jitter_factor: 0.5,
+            max_elapsed_ms: None,
         };
 
         let agent_id = agent_id.to_string();
@@ -745,6 +754,7 @@ impl ConsensusDb {
             max_backoff_ms: 5_000,
             backoff_multiplier: 2.0,
             jitter_factor: 0.5,
+            max_elapsed_ms: None,
         };
 
         let spec_id = spec_id.to_string();
@@ -794,6 +804,7 @@ impl ConsensusDb {
             max_backoff_ms: 5_000,
             backoff_multiplier: 1.5,
             jitter_factor: 0.5,
+            max_elapsed_ms: None,
         };
 
         execute_with_backoff_sync(
@@ -851,6 +862,7 @@ impl ConsensusDb {
             max_backoff_ms: 5_000,
             backoff_multiplier: 1.5,
             jitter_factor: 0.5,
+            max_elapsed_ms: None,
         };
 
         // Write to NEW schema using async wrapper with retry

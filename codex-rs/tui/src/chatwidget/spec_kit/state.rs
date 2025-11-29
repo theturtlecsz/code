@@ -7,8 +7,208 @@ use crate::spec_prompts::SpecStage;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
+
+// ============================================================================
+// CONSENSUS SEQUENCING (P6-SYNC)
+// Pattern ported from Auto Drive: decision sequencing for exactly-once processing
+// ============================================================================
+
+/// Consensus sequence tracking for exactly-once agent response processing.
+///
+/// Prevents duplicate consensus processing that could occur from:
+/// - Retry logic producing duplicate responses
+/// - Out-of-order completion events
+/// - Race conditions in parallel agent execution
+///
+/// Pattern source: Auto Drive auto_coordinator.rs decision sequencing
+#[derive(Debug)]
+pub struct ConsensusSequence {
+    /// Monotonically increasing sequence number for consensus operations
+    decision_seq: AtomicU64,
+    /// Sequence numbers that have been fully processed (for duplicate rejection)
+    processed_seqs: Mutex<HashSet<u64>>,
+    /// Pending acknowledgment (sequence awaiting consensus completion)
+    pending_ack_seq: Mutex<Option<u64>>,
+}
+
+impl Default for ConsensusSequence {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Clone for ConsensusSequence {
+    fn clone(&self) -> Self {
+        Self {
+            decision_seq: AtomicU64::new(self.decision_seq.load(Ordering::SeqCst)),
+            processed_seqs: Mutex::new(
+                self.processed_seqs
+                    .lock()
+                    .expect("processed_seqs mutex poisoned")
+                    .clone(),
+            ),
+            pending_ack_seq: Mutex::new(
+                *self
+                    .pending_ack_seq
+                    .lock()
+                    .expect("pending_ack_seq mutex poisoned"),
+            ),
+        }
+    }
+}
+
+impl ConsensusSequence {
+    pub fn new() -> Self {
+        Self {
+            decision_seq: AtomicU64::new(0),
+            processed_seqs: Mutex::new(HashSet::new()),
+            pending_ack_seq: Mutex::new(None),
+        }
+    }
+
+    /// Acquire the next sequence number for a new consensus operation.
+    /// Returns (seq, is_duplicate) where is_duplicate indicates if this
+    /// sequence was already processed (should be rejected).
+    pub fn next_seq(&self) -> u64 {
+        self.decision_seq.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    /// Check if a sequence number should be processed.
+    /// Returns false if the sequence was already processed (duplicate).
+    pub fn should_process(&self, seq: u64) -> bool {
+        let processed = self
+            .processed_seqs
+            .lock()
+            .expect("processed_seqs mutex poisoned");
+        !processed.contains(&seq)
+    }
+
+    /// Begin processing a sequence. Returns false if already being processed.
+    /// Sets the pending acknowledgment sequence.
+    pub fn begin_processing(&self, seq: u64) -> bool {
+        let processed = self
+            .processed_seqs
+            .lock()
+            .expect("processed_seqs mutex poisoned");
+        if processed.contains(&seq) {
+            return false;
+        }
+
+        let mut pending = self
+            .pending_ack_seq
+            .lock()
+            .expect("pending_ack_seq mutex poisoned");
+        if pending.is_some() {
+            // Already processing another sequence
+            tracing::warn!(
+                "Consensus: Attempted to begin seq {} while seq {:?} is pending",
+                seq,
+                *pending
+            );
+            return false;
+        }
+        *pending = Some(seq);
+        true
+    }
+
+    /// Acknowledge successful processing of a sequence.
+    /// Marks the sequence as processed and clears the pending acknowledgment.
+    pub fn ack_processed(&self, seq: u64) -> bool {
+        let mut pending = self
+            .pending_ack_seq
+            .lock()
+            .expect("pending_ack_seq mutex poisoned");
+
+        if *pending != Some(seq) {
+            tracing::warn!(
+                "Consensus: Ack for seq {} but pending is {:?}",
+                seq,
+                *pending
+            );
+            return false;
+        }
+
+        // Clear pending and mark as processed
+        *pending = None;
+        drop(pending);
+
+        let mut processed = self
+            .processed_seqs
+            .lock()
+            .expect("processed_seqs mutex poisoned");
+        processed.insert(seq);
+
+        tracing::debug!("Consensus: Ack seq {} - now processed", seq);
+        true
+    }
+
+    /// Cancel pending processing (e.g., on error/timeout).
+    /// Does NOT mark as processed, allowing retry with same sequence.
+    pub fn cancel_pending(&self, seq: u64) -> bool {
+        let mut pending = self
+            .pending_ack_seq
+            .lock()
+            .expect("pending_ack_seq mutex poisoned");
+
+        if *pending != Some(seq) {
+            return false;
+        }
+
+        *pending = None;
+        tracing::debug!("Consensus: Cancelled pending seq {}", seq);
+        true
+    }
+
+    /// Get the current sequence number (latest assigned).
+    pub fn current_seq(&self) -> u64 {
+        self.decision_seq.load(Ordering::SeqCst)
+    }
+
+    /// Get the pending acknowledgment sequence, if any.
+    pub fn pending_seq(&self) -> Option<u64> {
+        *self
+            .pending_ack_seq
+            .lock()
+            .expect("pending_ack_seq mutex poisoned")
+    }
+
+    /// Get the count of processed sequences.
+    pub fn processed_count(&self) -> usize {
+        self.processed_seqs
+            .lock()
+            .expect("processed_seqs mutex poisoned")
+            .len()
+    }
+
+    /// Reset all state (for new pipeline run).
+    pub fn reset(&self) {
+        self.decision_seq.store(0, Ordering::SeqCst);
+        self.processed_seqs
+            .lock()
+            .expect("processed_seqs mutex poisoned")
+            .clear();
+        *self
+            .pending_ack_seq
+            .lock()
+            .expect("pending_ack_seq mutex poisoned") = None;
+    }
+}
+
+/// Result of attempting to begin consensus processing
+/// Reserved for future UI integration (showing sequence status in status bar)
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConsensusBeginOutcome {
+    /// Started processing with assigned sequence
+    Started { seq: u64 },
+    /// Duplicate - sequence already processed
+    Duplicate { seq: u64 },
+    /// Blocked - another sequence is pending
+    Blocked { pending_seq: u64 },
+}
 
 /// Phase tracking for /speckit.auto pipeline
 #[derive(Debug, Clone)]
@@ -426,6 +626,110 @@ mod tests {
 
         assert!(lifecycle.active().is_none());
     }
+
+    // P6-SYNC: ConsensusSequence tests
+
+    #[test]
+    fn consensus_sequence_basic_flow() {
+        let seq = ConsensusSequence::new();
+
+        // Initial state
+        assert_eq!(seq.current_seq(), 0);
+        assert_eq!(seq.pending_seq(), None);
+        assert_eq!(seq.processed_count(), 0);
+
+        // Get first sequence
+        let s1 = seq.next_seq();
+        assert_eq!(s1, 1);
+        assert_eq!(seq.current_seq(), 1);
+
+        // Should be processable
+        assert!(seq.should_process(s1));
+
+        // Begin processing
+        assert!(seq.begin_processing(s1));
+        assert_eq!(seq.pending_seq(), Some(s1));
+
+        // Cannot begin another while one is pending
+        let s2 = seq.next_seq();
+        assert!(!seq.begin_processing(s2));
+
+        // Ack completion
+        assert!(seq.ack_processed(s1));
+        assert_eq!(seq.pending_seq(), None);
+        assert_eq!(seq.processed_count(), 1);
+
+        // s1 is now processed (duplicate)
+        assert!(!seq.should_process(s1));
+        assert!(!seq.begin_processing(s1));
+
+        // s2 is still processable
+        assert!(seq.should_process(s2));
+        assert!(seq.begin_processing(s2));
+        assert!(seq.ack_processed(s2));
+    }
+
+    #[test]
+    fn consensus_sequence_cancel_allows_retry() {
+        let seq = ConsensusSequence::new();
+
+        let s1 = seq.next_seq();
+        assert!(seq.begin_processing(s1));
+
+        // Cancel - should allow retry
+        assert!(seq.cancel_pending(s1));
+        assert_eq!(seq.pending_seq(), None);
+        assert_eq!(seq.processed_count(), 0);
+
+        // Can retry the same sequence
+        assert!(seq.should_process(s1));
+        assert!(seq.begin_processing(s1));
+        assert!(seq.ack_processed(s1));
+
+        // Now it's processed
+        assert!(!seq.should_process(s1));
+    }
+
+    #[test]
+    fn consensus_sequence_reset() {
+        let seq = ConsensusSequence::new();
+
+        // Process a few sequences
+        let s1 = seq.next_seq();
+        seq.begin_processing(s1);
+        seq.ack_processed(s1);
+
+        let s2 = seq.next_seq();
+        seq.begin_processing(s2);
+        seq.ack_processed(s2);
+
+        assert_eq!(seq.current_seq(), 2);
+        assert_eq!(seq.processed_count(), 2);
+
+        // Reset
+        seq.reset();
+
+        assert_eq!(seq.current_seq(), 0);
+        assert_eq!(seq.processed_count(), 0);
+        assert_eq!(seq.pending_seq(), None);
+
+        // Fresh start
+        let s3 = seq.next_seq();
+        assert_eq!(s3, 1);
+    }
+
+    #[test]
+    fn consensus_sequence_clone() {
+        let seq = ConsensusSequence::new();
+        let s1 = seq.next_seq();
+        seq.begin_processing(s1);
+        seq.ack_processed(s1);
+
+        let cloned = seq.clone();
+        assert_eq!(cloned.current_seq(), seq.current_seq());
+        assert_eq!(cloned.processed_count(), seq.processed_count());
+        assert!(!cloned.should_process(s1)); // Still tracked as processed
+    }
 }
 
 /// State for /speckit.auto pipeline automation
@@ -479,6 +783,9 @@ pub struct SpecAutoState {
 
     // SPEC-948: Pipeline configuration for modular stage execution
     pub pipeline_config: super::pipeline_config::PipelineConfig,
+
+    // P6-SYNC: Consensus sequence tracking for exactly-once processing
+    pub consensus_sequence: ConsensusSequence,
 }
 
 impl SpecAutoState {
@@ -563,6 +870,8 @@ impl SpecAutoState {
             agent_responses_cache: None,
             // Pipeline configuration (SPEC-948)
             pipeline_config,
+            // P6-SYNC: Consensus sequence tracking
+            consensus_sequence: ConsensusSequence::new(),
         }
     }
 

@@ -149,6 +149,7 @@ impl FilesystemEvidence {
             max_backoff_ms: 5_000,
             backoff_multiplier: 2.0,
             jitter_factor: 0.5,
+            max_elapsed_ms: None, // Use max_attempts only
         };
 
         // Lock auto-released when lock_file drops (RAII)
