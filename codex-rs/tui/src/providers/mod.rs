@@ -111,6 +111,7 @@ impl ProviderType {
     }
 
     /// Check if this provider uses CLI routing
+    #[allow(dead_code)] // Used in tests
     pub fn uses_cli_routing(&self) -> bool {
         matches!(self, Self::Claude | Self::Gemini)
     }

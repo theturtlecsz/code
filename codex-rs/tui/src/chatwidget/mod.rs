@@ -25,7 +25,6 @@ use std::time::{Duration, Instant, SystemTime};
 use ratatui::style::Modifier;
 use ratatui::style::Style;
 
-use crate::model_router::ModelRouter;
 use crate::slash_command::HalMode;
 use crate::slash_command::SlashCommand;
 use crate::slash_command::SpecAutoInvocation;
@@ -618,9 +617,6 @@ pub(crate) struct ChatWidget<'a> {
     native_stream_id: Option<String>,
     /// Accumulated streaming content for history
     native_stream_content: String,
-    /// Per-provider conversation history (maps provider name to message history)
-    native_provider_history:
-        std::collections::HashMap<String, Vec<codex_core::context_manager::Message>>,
     // === END FORK-SPECIFIC ===
 
     // Stable synthetic request bucket for pre‑turn system notices (set on first use)
@@ -2887,7 +2883,6 @@ impl ChatWidget<'_> {
             native_stream_model: None,
             native_stream_id: None,
             native_stream_content: String::new(),
-            native_provider_history: std::collections::HashMap::new(),
         };
         if let Ok(Some(active_id)) = auth_accounts::get_active_account_id(&config.codex_home)
             && let Ok(records) = account_usage::list_rate_limit_snapshots(&config.codex_home)
@@ -3123,7 +3118,6 @@ impl ChatWidget<'_> {
             native_stream_model: None,
             native_stream_id: None,
             native_stream_content: String::new(),
-            native_provider_history: std::collections::HashMap::new(),
         }
     }
 
@@ -3344,7 +3338,6 @@ impl ChatWidget<'_> {
             native_stream_model: None,
             native_stream_id: None,
             native_stream_content: String::new(),
-            native_provider_history: std::collections::HashMap::new(),
         };
         if let Ok(Some(active_id)) = auth_accounts::get_active_account_id(&config.codex_home)
             && let Ok(records) = account_usage::list_rate_limit_snapshots(&config.codex_home)
@@ -5396,7 +5389,7 @@ impl ChatWidget<'_> {
 
             // SPEC-KIT-952: Skip codex-core queue for CLI-routed models
             // CLI models (Claude/Gemini) process queued messages locally via CLI routing
-            let is_cli_model = crate::model_router::supports_native_streaming(&self.config.model);
+            let is_cli_model = crate::model_router::supports_cli_streaming(&self.config.model);
 
             self.queued_user_messages.push_back(message);
             self.refresh_queued_user_messages();
@@ -5988,7 +5981,7 @@ impl ChatWidget<'_> {
         self.flush_pending_agent_notes();
 
         // SPEC-KIT-952: Check if CLI routing should be used for this model (Claude/Gemini)
-        if crate::model_router::supports_native_streaming(&self.config.model) {
+        if crate::model_router::supports_cli_streaming(&self.config.model) {
             // Extract prompt text from combined items
             let prompt_text: String = combined_items
                 .iter()
@@ -6024,43 +6017,19 @@ impl ChatWidget<'_> {
                     }
                 }
 
-                // 2. Get provider name for history key
-                let provider_name =
-                    crate::model_router::provider_display_name(&self.config.model).to_string();
-
-                // 3. Build conversation history for the provider
-                use codex_core::context_manager::Message;
-
-                // Initialize provider history if not exists
-                if !self.native_provider_history.contains_key(&provider_name) {
-                    self.native_provider_history
-                        .insert(provider_name.clone(), Vec::new());
-                }
-
-                // Add user message to conversation history
-                if let Some(history) = self.native_provider_history.get_mut(&provider_name) {
-                    history.push(Message::user(&prompt_text));
-                }
-
-                // Clone history for async task
-                let messages: Vec<Message> = self
-                    .native_provider_history
-                    .get(&provider_name)
-                    .cloned()
-                    .unwrap_or_default();
-
-                // 4. Set task running to block input
+                // 2. Set task running to block input
                 self.bottom_pane.set_task_running(true);
 
-                // 5. Clone data for async task
+                // 3. Clone data for async task
                 let model = self.config.model.clone();
+                let prompt = prompt_text.clone();
                 let tx = self.app_event_tx.clone();
 
-                // 6. Spawn async CLI streaming task (SPEC-KIT-952)
+                // 4. Spawn async CLI streaming task (SPEC-KIT-952)
                 tokio::spawn(async move {
                     let result = crate::model_router::execute_with_cli_streaming(
                         &model,
-                        &messages,
+                        &prompt,
                         tx.clone(),
                     )
                     .await;
@@ -11120,19 +11089,29 @@ impl ChatWidget<'_> {
         );
 
         // SPEC-KIT-952: Check CLI availability for CLI-routed providers
-        if ModelRouter::should_use_cli(&self.config.model)
-            && let Err(msg) = ModelRouter::check_cli_availability(&self.config.model)
-        {
-            // Show warning about CLI not being available
-            let provider_name = crate::model_router::provider_display_name(&self.config.model);
-            self.history_push(history_cell::PlainHistoryCell::new(
-                vec![
-                    ratatui::text::Line::from(format!("⚠️  {} CLI Required", provider_name)),
-                    ratatui::text::Line::from(""),
-                    ratatui::text::Line::from(msg),
-                ],
-                history_cell::HistoryCellType::Notice,
-            ));
+        if crate::model_router::supports_cli_streaming(&self.config.model) {
+            let provider_type = crate::providers::ProviderType::from_model_name(&self.config.model);
+            let cli_available = match provider_type {
+                crate::providers::ProviderType::Claude => crate::providers::claude::is_available(),
+                crate::providers::ProviderType::Gemini => crate::providers::gemini::is_available(),
+                crate::providers::ProviderType::ChatGPT => true,
+            };
+            if !cli_available {
+                let provider_name = crate::model_router::provider_display_name(&self.config.model);
+                let instructions = match provider_type {
+                    crate::providers::ProviderType::Claude => crate::providers::claude::install_instructions(),
+                    crate::providers::ProviderType::Gemini => crate::providers::gemini::install_instructions(),
+                    crate::providers::ProviderType::ChatGPT => "",
+                };
+                self.history_push(history_cell::PlainHistoryCell::new(
+                    vec![
+                        ratatui::text::Line::from(format!("⚠️  {} CLI Required", provider_name)),
+                        ratatui::text::Line::from(""),
+                        ratatui::text::Line::from(format!("{} CLI is required but not installed.\n\n{}", provider_name, instructions)),
+                    ],
+                    history_cell::HistoryCellType::Notice,
+                ));
+            }
         }
 
         self.request_redraw();
@@ -12158,7 +12137,7 @@ impl ChatWidget<'_> {
         streaming::finalize(self, StreamKind::Answer, true);
 
         // Update conversation history with the accumulated response
-        if let (Some(provider), Some(_model)) = (
+        if let (Some(_provider), Some(_model)) = (
             self.native_stream_provider.take(),
             self.native_stream_model.take(),
         ) {
@@ -12168,12 +12147,6 @@ impl ChatWidget<'_> {
                 "🟠 ASSISTANT_MSG_PUSH: Adding assistant response to conversation history | preview: {}...",
                 &content.chars().take(50).collect::<String>()
             );
-
-            // Add assistant response to conversation history
-            if let Some(history) = self.native_provider_history.get_mut(&provider) {
-                use codex_core::context_manager::Message;
-                history.push(Message::assistant(&content));
-            }
 
             // Log token usage if available
             if let (Some(input), Some(output)) = (input_tokens, output_tokens) {

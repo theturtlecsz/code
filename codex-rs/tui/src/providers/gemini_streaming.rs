@@ -71,35 +71,17 @@ impl GeminiStreamingProvider {
     /// Uses session-based API for O(1) data transfer per turn.
     pub async fn execute_streaming(
         &self,
-        messages: &[codex_core::context_manager::Message],
+        prompt: &str,
         model: &str,
         tx: AppEventSender,
     ) -> ProviderResult<String> {
-        // Derive conversation ID from message history (hash of conversation)
-        let conv_id = Self::derive_conversation_id(messages);
-
-        // Get last message as current user message (extract text from ContentBlocks)
-        let user_message = messages
-            .last()
-            .map(|m| {
-                m.content
-                    .iter()
-                    .filter_map(|block| {
-                        if let codex_core::context_manager::ContentBlock::Text { text } = block {
-                            Some(text.clone())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            })
-            .unwrap_or_default();
+        // Derive conversation ID from prompt hash
+        let conv_id = Self::derive_conversation_id(prompt);
 
         // Send message via global session-based provider (creates/reuses session)
         let provider = get_gemini_provider();
         let mut rx = provider
-            .send_message(conv_id, user_message)
+            .send_message(conv_id, prompt.to_string())
             .await
             .map_err(|e| Self::map_cli_error(e))?;
 
@@ -107,9 +89,13 @@ impl GeminiStreamingProvider {
         let mut accumulated = String::new();
         let mut received_done = false;
 
-        // SPEC-954-FIX: Generate unique message ID per turn (not hardcoded "pipes")
-        // Use message count to ensure uniqueness
-        let message_id = format!("gemini-msg{}", messages.len());
+        // Generate unique message ID per turn
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        let message_id = format!("gemini-msg{}", timestamp);
 
         tx.send_native_stream_start("Gemini Pipes", model.to_string(), message_id);
 
@@ -149,39 +135,12 @@ impl GeminiStreamingProvider {
         Ok(accumulated)
     }
 
-    /// Derive a conversation ID from message history
+    /// Derive a conversation ID from prompt
     ///
-    /// FIXED: Uses stable ID based on FIRST user message only.
-    /// This ensures the same conversation reuses the same session.
-    fn derive_conversation_id(messages: &[codex_core::context_manager::Message]) -> ConversationId {
-        // Find first user message to use as stable anchor
-        let first_user_msg = messages
-            .iter()
-            .find(|msg| matches!(msg.role, codex_core::context_manager::MessageRole::User))
-            .and_then(|msg| {
-                msg.content.iter().find_map(|block| {
-                    if let codex_core::context_manager::ContentBlock::Text { text } = block {
-                        Some(text.clone())
-                    } else {
-                        None
-                    }
-                })
-            });
-
-        // Hash only the first user message to create stable ID
+    /// Uses hash of prompt to create conversation ID.
+    fn derive_conversation_id(prompt: &str) -> ConversationId {
         let mut hasher = DefaultHasher::new();
-        if let Some(first_msg) = first_user_msg {
-            first_msg.hash(&mut hasher);
-        } else {
-            // Fallback: use current timestamp (new conversation each time)
-            use std::time::{SystemTime, UNIX_EPOCH};
-            let timestamp = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
-            timestamp.hash(&mut hasher);
-        }
-
+        prompt.hash(&mut hasher);
         format!("gemini-conv-{:x}", hasher.finish())
     }
 
