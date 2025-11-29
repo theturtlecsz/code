@@ -47,6 +47,12 @@ pub async fn spawn_quality_gate_agents_native(
 
     let gate = gates[0];
 
+    // P7-SPEC: Create run_tag for consistent log tagging
+    let run_tag = run_id
+        .as_ref()
+        .map(|r| format!("[run:{}]", &r[..8.min(r.len())]))
+        .unwrap_or_else(|| "[run:none]".to_string());
+
     // Load prompts from prompts.json
     let prompts_path = cwd.join("docs/spec-kit/prompts.json");
     let prompts_content = std::fs::read_to_string(&prompts_path)
@@ -87,14 +93,16 @@ pub async fn spawn_quality_gate_agents_native(
                 .map(|(id, model, _)| format!("{} ({})", model, &id[..8]))
                 .collect();
             tracing::info!(
-                "📊 Pre-spawn check for {}: {} agents currently running: {}",
+                "{} 📊 Pre-spawn check for {}: {} agents currently running: {}",
+                run_tag,
                 spec_id,
                 running_list.len(),
                 running_list.join(", ")
             );
         } else {
             tracing::info!(
-                "📊 Pre-spawn check for {}: No agents currently running",
+                "{} 📊 Pre-spawn check for {}: No agents currently running",
+                run_tag,
                 spec_id
             );
         }
@@ -144,13 +152,13 @@ pub async fn spawn_quality_gate_agents_native(
                 run_id.as_deref(),
                 branch_id.as_deref(),
             ) {
-                tracing::warn!("Failed to record agent spawn for {}: {}", agent_name, e);
+                tracing::warn!("{} Failed to record agent spawn for {}: {}", run_tag, agent_name, e);
             } else {
                 tracing::info!(
-                    "Recorded quality gate agent spawn: {} ({}) with run_id={:?}",
+                    "{} Recorded quality gate agent spawn: {} ({})",
+                    run_tag,
                     agent_name,
-                    agent_id,
-                    run_id
+                    agent_id
                 );
             }
         }
@@ -174,7 +182,8 @@ pub async fn spawn_quality_gate_agents_native(
             .collect();
 
         tracing::info!(
-            "📊 Post-spawn check for {}: {} agents now running (spawned {}): {}",
+            "{} 📊 Post-spawn check for {}: {} agents now running (spawned {}): {}",
+            run_tag,
             spec_id,
             now_running.len(),
             spawn_infos.len(),
@@ -185,7 +194,8 @@ pub async fn spawn_quality_gate_agents_native(
         let concurrent = manager_post_check.check_concurrent_agents();
         for (model, count) in concurrent {
             tracing::warn!(
-                "🚨 CONCURRENT AGENTS DETECTED: {} instances of '{}' running simultaneously!",
+                "{} 🚨 CONCURRENT AGENTS DETECTED: {} instances of '{}' running simultaneously!",
+                run_tag,
                 count,
                 model
             );

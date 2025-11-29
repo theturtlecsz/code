@@ -572,7 +572,7 @@ async fn spawn_regular_stage_agents_parallel(
     spec_id: &str,
     stage: SpecStage,
     run_id: Option<String>,
-    _branch_id: Option<String>, // P6-SYNC Phase 4: Reserved for future parallel branch tracking
+    branch_id: Option<String>, // P6-SYNC Phase 4: Branch tracking for resume filtering
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
 ) -> Result<Vec<AgentSpawnInfo>, String> {
@@ -618,6 +618,7 @@ async fn spawn_regular_stage_agents_parallel(
         let spec_id = spec_id.to_string();
         let stage = stage;
         let run_id = run_id.clone();
+        let branch_id = branch_id.clone();
         let batch_id = batch_id.clone();
         let agent_configs = agent_configs.to_vec();
 
@@ -650,8 +651,7 @@ async fn spawn_regular_stage_agents_parallel(
 
             let spawn_duration = spawn_start.elapsed();
 
-            // Record to SQLite with run_id (has built-in retry logic)
-            // P6-SYNC Phase 4: branch_id passed as None - full wiring pending
+            // Record to SQLite with run_id and branch_id (has built-in retry logic)
             if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
                 let _ = db.record_agent_spawn(
                     &agent_id,
@@ -660,7 +660,7 @@ async fn spawn_regular_stage_agents_parallel(
                     "regular_stage",
                     &agent_name,
                     run_id.as_deref(),
-                    None, // branch_id - wiring pending
+                    branch_id.as_deref(),
                 );
             }
 
