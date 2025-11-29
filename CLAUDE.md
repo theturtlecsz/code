@@ -230,7 +230,9 @@ See `MEMORY-POLICY.md` for complete policy. Local-memory is the **only** knowled
 See `docs/spec-kit/PIPELINE_CONFIGURATION_GUIDE.md` section 6 (Common Workflows) and
 `docs/spec-kit/workflow-examples/*.toml` for ready-to-use configuration files.
 
-### Tiered Model Strategy (Updated 2025-11-01, SPEC-KIT-070 Phase 2+3)
+### Tiered Model Strategy (Updated 2025-11-29, SPEC-KIT-957 Complete)
+
+**All speckit.* commands now use native Rust routing** (SPEC-KIT-902/957 complete).
 
 **Tier 0: Native Rust** (0 agents, $0, <1s) **EXPANDED**
 - `/speckit.new` - Template-based SPEC creation (native)
