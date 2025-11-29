@@ -45,6 +45,11 @@ rusqlite = { workspace = true }
 # P5-SYNC: Auto Drive retry patterns (cancellation support)
 tokio-util = { workspace = true }
 
+[features]
+default = []
+# P6-SYNC Phase 3: Development-only fault injection for testing error handling
+dev-faults = []
+
 [dev-dependencies]
 serial_test = "3"
 tempfile = "3"

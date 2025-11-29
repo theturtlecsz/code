@@ -411,57 +411,17 @@ cargo test -p codex-core -- --ignored
 
 ## 9. Memory Workflow
 
-**Policy**: Use **local-memory MCP exclusively** for high-value knowledge. See `MEMORY-POLICY.md` for complete details.
+Use **local-memory MCP exclusively** for high-value knowledge (importance ≥8).
 
-**Purpose**: Build a curated knowledge base of reusable patterns, NOT a complete history archive.
+**Full protocol**: See `~/.local-memory/PROTOCOL.md` and `CLEARFRAME.md [LOCAL-MEMORY]` section.
 
-### Core Principle
+**Quick reference**:
+- Search: `local-memory search "query" --limit 5`
+- Store: `mcp__local-memory__store_memory(content, tags, importance>=8, domain)`
+- Health: `~/.claude/hooks/lm-dashboard.sh --compact`
 
-Store **high-value insights only** (importance ≥8). Quality over quantity.
-
-**Store**:
-- Architecture decisions with rationale (WHY, not just what)
-- Reusable patterns and non-obvious solutions
-- Critical discoveries (rate limits, breaking changes)
-- Major milestones with outcomes
-
-**Don't Store**:
-- Session summaries (use git commits)
-- Progress updates (use SPEC.md)
-- Information already in documentation
-- Routine operations or transient status
-
-### Quick Reference
-
-```bash
-# Session start - retrieve context
-mcp__local-memory__search(query="project architecture", limit=10)
-
-# Store high-value insight
-mcp__local-memory__store_memory(
-  content="Pattern: Use native Rust for deterministic tasks - 10,000x faster than AI consensus",
-  domain="infrastructure",
-  tags=["type:pattern", "spec:SPEC-KIT-070"],
-  importance=9
-)
-```
-
-### Tags
-
-Use namespaced format: `spec:SPEC-KIT-071`, `type:bug-fix`, `component:routing`
-
-**Domains**: spec-kit, infrastructure, rust, documentation, debugging
-
-**Avoid**: date tags, task IDs, status values (ephemeral, not reusable)
-
-### Importance Scale
-
-| Level | Use For | Frequency |
-|-------|---------|-----------|
-| 10 | Crisis events, system-breaking discoveries | <5% |
-| 9 | Major architecture decisions, critical patterns | 10-15% |
-| 8 | Important milestones, valuable solutions | 15-20% |
-| <8 | Don't store (use git/docs instead) | - |
+**Store**: Architecture decisions, reusable patterns, critical discoveries, milestones.
+**Don't store**: Session summaries, progress updates, routine operations.
 
 ## 10. Evidence & Validation Ritual
 - Guardrail runs must have a clean tree unless specifically allowed (`SPEC_OPS_ALLOW_DIRTY=1`).

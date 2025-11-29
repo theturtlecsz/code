@@ -4,6 +4,7 @@
 
 use crate::slash_command::{HalMode, SlashCommand};
 use crate::spec_prompts::SpecStage;
+use chrono::{DateTime, Utc};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -208,6 +209,66 @@ pub enum ConsensusBeginOutcome {
     Duplicate { seq: u64 },
     /// Blocked - another sequence is pending
     Blocked { pending_seq: u64 },
+}
+
+// ============================================================================
+// PIPELINE BRANCH TRACKING (P6-SYNC Phase 4)
+// Isolates pipeline runs for clean resume filtering
+// ============================================================================
+
+/// Branch identifier for pipeline run isolation.
+///
+/// When resuming a pipeline, agent responses from abandoned branches
+/// (failed retries, interrupted runs) should be filtered out to avoid
+/// confusion. Each pipeline run gets a unique branch ID.
+///
+/// Pattern: Similar to git branch isolation - only see history from current branch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PipelineBranch {
+    /// Unique identifier for this pipeline run.
+    /// Format: `{spec_id}-{timestamp}-{uuid_suffix}`
+    pub branch_id: String,
+    /// When this branch was created
+    pub created_at: DateTime<Utc>,
+    /// Parent branch ID if this is a retry/nested branch
+    pub parent_branch: Option<String>,
+    /// Human-readable short ID for UI display (first 8 chars of UUID suffix)
+    pub short_id: String,
+}
+
+impl PipelineBranch {
+    /// Create a new pipeline branch for a spec.
+    pub fn new(spec_id: &str) -> Self {
+        let uuid_suffix = Uuid::new_v4().simple().to_string();
+        let now = Utc::now();
+        let timestamp = now.format("%Y%m%d%H%M%S");
+        let branch_id = format!("{}-{}-{}", spec_id, timestamp, uuid_suffix);
+        let short_id = uuid_suffix[..8].to_string();
+
+        Self {
+            branch_id,
+            created_at: now,
+            parent_branch: None,
+            short_id,
+        }
+    }
+
+    /// Create a nested branch (for retries within a pipeline).
+    pub fn nested(spec_id: &str, parent_branch_id: &str) -> Self {
+        let mut branch = Self::new(spec_id);
+        branch.parent_branch = Some(parent_branch_id.to_string());
+        branch
+    }
+
+    /// Get the branch ID for storage.
+    pub fn id(&self) -> &str {
+        &self.branch_id
+    }
+
+    /// Get display-friendly short ID (8 chars).
+    pub fn display_id(&self) -> &str {
+        &self.short_id
+    }
 }
 
 /// Phase tracking for /speckit.auto pipeline
@@ -730,6 +791,61 @@ mod tests {
         assert_eq!(cloned.processed_count(), seq.processed_count());
         assert!(!cloned.should_process(s1)); // Still tracked as processed
     }
+
+    // P6-SYNC Phase 4: PipelineBranch tests
+
+    #[test]
+    fn pipeline_branch_creation() {
+        let branch = super::PipelineBranch::new("SPEC-KIT-999");
+
+        // Branch ID format: {spec_id}-{timestamp}-{uuid}
+        assert!(branch.branch_id.starts_with("SPEC-KIT-999-"));
+        assert!(branch.branch_id.len() > 30); // Has UUID suffix
+
+        // Short ID is 8 chars
+        assert_eq!(branch.short_id.len(), 8);
+
+        // No parent for root branch
+        assert!(branch.parent_branch.is_none());
+
+        // Created timestamp is set
+        assert!(branch.created_at.timestamp() > 0);
+    }
+
+    #[test]
+    fn pipeline_branch_unique_ids() {
+        let b1 = super::PipelineBranch::new("SPEC-KIT-999");
+        let b2 = super::PipelineBranch::new("SPEC-KIT-999");
+
+        // Each branch gets unique ID even for same spec
+        assert_ne!(b1.branch_id, b2.branch_id);
+        assert_ne!(b1.short_id, b2.short_id);
+    }
+
+    #[test]
+    fn pipeline_branch_nested() {
+        let parent = super::PipelineBranch::new("SPEC-KIT-999");
+        let parent_id = parent.branch_id.clone();
+
+        let nested = super::PipelineBranch::nested("SPEC-KIT-999", &parent_id);
+
+        // Nested has different ID
+        assert_ne!(nested.branch_id, parent_id);
+
+        // Nested tracks parent
+        assert_eq!(nested.parent_branch.as_ref().unwrap(), &parent_id);
+    }
+
+    #[test]
+    fn pipeline_branch_accessors() {
+        let branch = super::PipelineBranch::new("TEST-123");
+
+        // id() returns full branch_id
+        assert_eq!(branch.id(), &branch.branch_id);
+
+        // display_id() returns short_id
+        assert_eq!(branch.display_id(), &branch.short_id);
+    }
 }
 
 /// State for /speckit.auto pipeline automation
@@ -786,6 +902,12 @@ pub struct SpecAutoState {
 
     // P6-SYNC: Consensus sequence tracking for exactly-once processing
     pub consensus_sequence: ConsensusSequence,
+
+    // P6-SYNC Phase 2: Session metrics for token usage tracking and estimation
+    pub session_metrics: super::session_metrics::SessionMetrics,
+
+    // P6-SYNC Phase 4: Branch tracking for resume filtering
+    pub current_branch: Option<PipelineBranch>,
 }
 
 impl SpecAutoState {
@@ -838,6 +960,9 @@ impl SpecAutoState {
             tracing::warn!("Failed to initialize execution logger: {}", e);
         }
 
+        // P6-SYNC Phase 4: Create branch before spec_id moves
+        let current_branch = Some(PipelineBranch::new(&spec_id));
+
         Self {
             spec_id,
             goal,
@@ -872,6 +997,10 @@ impl SpecAutoState {
             pipeline_config,
             // P6-SYNC: Consensus sequence tracking
             consensus_sequence: ConsensusSequence::new(),
+            // P6-SYNC Phase 2: Session metrics for token tracking
+            session_metrics: super::session_metrics::SessionMetrics::default(),
+            // P6-SYNC Phase 4: Branch tracking for resume filtering
+            current_branch,
         }
     }
 
@@ -958,6 +1087,56 @@ impl SpecAutoState {
 
     pub fn current_validate_payload_hash(&self) -> Option<String> {
         self.validate_lifecycle.active_payload_hash()
+    }
+
+    // P6-SYNC Phase 2: Session metrics accessors
+
+    /// Get estimated tokens for next prompt (sliding window average).
+    pub fn estimated_next_prompt_tokens(&self) -> u64 {
+        self.session_metrics.estimated_next_prompt_tokens()
+    }
+
+    /// Get current session token totals.
+    pub fn session_token_totals(&self) -> (u64, u64) {
+        let total = self.session_metrics.running_total();
+        (total.input_tokens, total.output_tokens)
+    }
+
+    /// Get session turn count.
+    pub fn session_turn_count(&self) -> u32 {
+        self.session_metrics.turn_count()
+    }
+
+    /// Reset session metrics (e.g., for new pipeline run).
+    pub fn reset_session_metrics(&mut self) {
+        self.session_metrics.reset();
+    }
+
+    // P6-SYNC Phase 4: Branch tracking accessors
+
+    /// Get current branch ID for agent output storage.
+    pub fn branch_id(&self) -> Option<&str> {
+        self.current_branch.as_ref().map(|b| b.id())
+    }
+
+    /// Get current branch display ID (short form for UI).
+    pub fn branch_display_id(&self) -> Option<&str> {
+        self.current_branch.as_ref().map(|b| b.display_id())
+    }
+
+    /// Get the current branch (for detailed info).
+    pub fn branch(&self) -> Option<&PipelineBranch> {
+        self.current_branch.as_ref()
+    }
+
+    /// Create a nested branch for retries within the current pipeline.
+    /// Returns the new branch ID.
+    pub fn create_nested_branch(&mut self) -> Option<String> {
+        let parent_id = self.current_branch.as_ref()?.id().to_string();
+        let nested = PipelineBranch::nested(&self.spec_id, &parent_id);
+        let new_id = nested.branch_id.clone();
+        self.current_branch = Some(nested);
+        Some(new_id)
     }
 }
 

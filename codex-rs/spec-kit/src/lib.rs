@@ -12,6 +12,8 @@
 
 pub mod config; // SPEC-945D: Configuration management (layered config, hot-reload)
 pub mod error;
+#[cfg(feature = "dev-faults")]
+pub mod faults; // P6-SYNC Phase 3: Fault injection for testing error handling
 pub mod retry; // SPEC-945C: Retry logic (backoff, error classification)
 pub mod timing; // SPEC-940: Performance timing infrastructure
 pub mod types;

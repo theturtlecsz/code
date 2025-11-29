@@ -261,3 +261,194 @@ fn test_write_path_cutover_consistency_under_load() {
         assert_eq!(artifacts.len(), 1, "Spec {spec_id} artifact accessible");
     }
 }
+
+// ============================================================================
+// P6-SYNC Phase 4: Branch-Aware Resume Filtering Tests
+// ============================================================================
+
+#[test]
+fn test_branch_id_stored_with_agent_spawn() {
+    // Test: record_agent_spawn stores branch_id correctly
+    let (db, _temp, db_path) = create_test_db();
+
+    // Record spawn with branch_id
+    let result = db.record_agent_spawn(
+        "agent-123",
+        "SPEC-BRANCH-001",
+        SpecStage::Plan,
+        "regular_stage",
+        "gemini",
+        Some("run-abc"),
+        Some("SPEC-BRANCH-001-20251129-abc123"),
+    );
+    assert!(result.is_ok(), "record_agent_spawn should succeed");
+
+    // Verify branch_id is stored in agent_executions table
+    let conn = Connection::open(&db_path).unwrap();
+    let branch: Option<String> = conn
+        .query_row(
+            "SELECT branch_id FROM agent_executions WHERE agent_id = ?",
+            ["agent-123"],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        branch,
+        Some("SPEC-BRANCH-001-20251129-abc123".to_string()),
+        "branch_id should be stored"
+    );
+}
+
+#[test]
+fn test_branch_id_null_when_not_provided() {
+    // Test: branch_id is NULL when not provided
+    let (db, _temp, db_path) = create_test_db();
+
+    // Record spawn without branch_id
+    db.record_agent_spawn(
+        "agent-456",
+        "SPEC-BRANCH-002",
+        SpecStage::Tasks,
+        "quality_gate",
+        "claude",
+        Some("run-def"),
+        None, // No branch_id
+    )
+    .unwrap();
+
+    // Verify branch_id is NULL
+    let conn = Connection::open(&db_path).unwrap();
+    let branch: Option<String> = conn
+        .query_row(
+            "SELECT branch_id FROM agent_executions WHERE agent_id = ?",
+            ["agent-456"],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(branch.is_none(), "branch_id should be NULL when not provided");
+}
+
+#[test]
+fn test_get_responses_for_branch_filters_correctly() {
+    // Test: get_responses_for_branch returns only matching branch
+    let (db, _temp, _db_path) = create_test_db();
+
+    let spec_id = "SPEC-BRANCH-003";
+    let stage = SpecStage::Plan;
+    let branch_a = "SPEC-BRANCH-003-20251129-aaaa";
+    let branch_b = "SPEC-BRANCH-003-20251129-bbbb";
+
+    // Record 2 spawns for branch A
+    db.record_agent_spawn(
+        "agent-a1",
+        spec_id,
+        stage,
+        "regular",
+        "gemini",
+        Some("run-a"),
+        Some(branch_a),
+    )
+    .unwrap();
+    db.record_agent_spawn(
+        "agent-a2",
+        spec_id,
+        stage,
+        "regular",
+        "claude",
+        Some("run-a"),
+        Some(branch_a),
+    )
+    .unwrap();
+
+    // Record 1 spawn for branch B
+    db.record_agent_spawn(
+        "agent-b1",
+        spec_id,
+        stage,
+        "regular",
+        "gemini",
+        Some("run-b"),
+        Some(branch_b),
+    )
+    .unwrap();
+
+    // Query for branch A - should get 2
+    let branch_a_responses = db.get_responses_for_branch(spec_id, stage, branch_a).unwrap();
+    assert_eq!(
+        branch_a_responses.len(),
+        2,
+        "Should find 2 responses for branch A"
+    );
+
+    // Query for branch B - should get 1
+    let branch_b_responses = db.get_responses_for_branch(spec_id, stage, branch_b).unwrap();
+    assert_eq!(
+        branch_b_responses.len(),
+        1,
+        "Should find 1 response for branch B"
+    );
+
+    // Query for non-existent branch - should get 0
+    let no_branch = db
+        .get_responses_for_branch(spec_id, stage, "non-existent-branch")
+        .unwrap();
+    assert_eq!(
+        no_branch.len(),
+        0,
+        "Should find 0 responses for non-existent branch"
+    );
+}
+
+#[test]
+fn test_branch_filtering_isolates_parallel_runs() {
+    // Test: Two parallel pipeline runs are isolated by branch_id
+    let (db, _temp, _db_path) = create_test_db();
+
+    let spec_id = "SPEC-PARALLEL-001";
+    let branch_1 = "SPEC-PARALLEL-001-20251129-run1";
+    let branch_2 = "SPEC-PARALLEL-001-20251129-run2";
+
+    // Simulate parallel pipeline runs with different branches
+    // Run 1: Plan stage
+    db.record_agent_spawn(
+        "run1-plan-gemini",
+        spec_id,
+        SpecStage::Plan,
+        "regular",
+        "gemini",
+        Some("run-1"),
+        Some(branch_1),
+    )
+    .unwrap();
+
+    // Run 2: Also Plan stage (parallel)
+    db.record_agent_spawn(
+        "run2-plan-gemini",
+        spec_id,
+        SpecStage::Plan,
+        "regular",
+        "gemini",
+        Some("run-2"),
+        Some(branch_2),
+    )
+    .unwrap();
+
+    // Each run should see only its own agents
+    let run1_plan = db
+        .get_responses_for_branch(spec_id, SpecStage::Plan, branch_1)
+        .unwrap();
+    assert_eq!(run1_plan.len(), 1, "Run 1 should see only its own agent");
+    assert!(
+        run1_plan.iter().any(|r| r.agent_id == "run1-plan-gemini"),
+        "Run 1 should see run1-plan-gemini"
+    );
+
+    let run2_plan = db
+        .get_responses_for_branch(spec_id, SpecStage::Plan, branch_2)
+        .unwrap();
+    assert_eq!(run2_plan.len(), 1, "Run 2 should see only its own agent");
+    assert!(
+        run2_plan.iter().any(|r| r.agent_id == "run2-plan-gemini"),
+        "Run 2 should see run2-plan-gemini"
+    );
+}

@@ -157,6 +157,20 @@ where
             "Attempting agent spawn"
         );
 
+        // P6-SYNC Phase 3: Check for injected faults before operation
+        #[cfg(feature = "dev-faults")]
+        if let Some(fault) = codex_spec_kit::faults::next_fault(codex_spec_kit::faults::FaultScope::SpecKit) {
+            let fault_error = codex_spec_kit::faults::fault_to_error(fault);
+            tracing::warn!(
+                agent = agent_name,
+                attempt = attempt,
+                "[dev-faults] Injecting fault: {}",
+                fault_error
+            );
+            // Treat injected fault as a spawn failure (triggers retry logic)
+            return Err(AgentError::SpawnFailed(fault_error.to_string()));
+        }
+
         match operation().await {
             Ok(result) => {
                 if attempt > 1 {

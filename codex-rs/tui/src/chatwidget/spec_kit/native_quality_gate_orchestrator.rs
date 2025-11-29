@@ -32,6 +32,7 @@ pub async fn spawn_quality_gate_agents_native(
     checkpoint: QualityCheckpoint,
     agent_configs: &[AgentConfig],
     run_id: Option<String>,
+    branch_id: Option<String>, // P6-SYNC Phase 4: Branch tracking for resume filtering
 ) -> Result<Vec<AgentSpawnInfo>, String> {
     let gates = checkpoint.gates();
 
@@ -131,6 +132,7 @@ pub async fn spawn_quality_gate_agents_native(
             .map_err(|e| format!("Failed to spawn {}: {}", config_name, e))?;
 
         // Record agent spawn to SQLite for definitive routing at completion
+        // P6-SYNC Phase 4: branch_id now wired from SpecAutoState
         if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
             let stage = crate::spec_prompts::SpecStage::Plan; // Quality gates run before Plan
             if let Err(e) = db.record_agent_spawn(
@@ -140,6 +142,7 @@ pub async fn spawn_quality_gate_agents_native(
                 "quality_gate",
                 agent_name,
                 run_id.as_deref(),
+                branch_id.as_deref(),
             ) {
                 tracing::warn!("Failed to record agent spawn for {}: {}", agent_name, e);
             } else {

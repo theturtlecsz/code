@@ -262,6 +262,7 @@ async fn spawn_and_wait_for_agent(
     spec_id: &str,
     stage: SpecStage,
     run_id: Option<&str>,
+    branch_id: Option<&str>, // P6-SYNC Phase 4: Branch tracking for resume filtering
     timeout_secs: u64,
 ) -> Result<(String, String), String> {
     use super::agent_retry::spawn_agent_with_retry;
@@ -292,6 +293,7 @@ async fn spawn_and_wait_for_agent(
     let spec_id_clone = spec_id.to_string();
     let stage_clone = stage;
     let run_id_clone = run_id.map(|s| s.to_string());
+    let branch_id_clone = branch_id.map(|s| s.to_string()); // P6-SYNC Phase 4
     let agent_name_clone = agent_name.to_string();
     let run_tag_clone = run_tag.clone();
 
@@ -303,6 +305,7 @@ async fn spawn_and_wait_for_agent(
         let agent_configs = agent_configs_clone.clone();
         let spec_id = spec_id_clone.clone();
         let run_id_opt = run_id_clone.clone();
+        let branch_id_opt = branch_id_clone.clone(); // P6-SYNC Phase 4
         let agent_name = agent_name_clone.clone();
         let run_tag = run_tag_clone.clone();
 
@@ -332,6 +335,7 @@ async fn spawn_and_wait_for_agent(
             );
 
             // Record to SQLite (idempotent, safe to retry)
+            // P6-SYNC Phase 4: branch_id now wired from SpecAutoState
             if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
                 let _ = db.record_agent_spawn(
                     &agent_id,
@@ -340,6 +344,7 @@ async fn spawn_and_wait_for_agent(
                     "regular_stage",
                     &agent_name,
                     run_id_opt.as_deref(),
+                    branch_id_opt.as_deref(),
                 );
             }
 
@@ -419,6 +424,7 @@ async fn spawn_regular_stage_agents_sequential(
     spec_id: &str,
     stage: SpecStage,
     run_id: Option<String>,
+    branch_id: Option<String>, // P6-SYNC Phase 4: Branch tracking for resume filtering
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
 ) -> Result<Vec<AgentSpawnInfo>, String> {
@@ -529,7 +535,8 @@ async fn spawn_regular_stage_agents_sequential(
             spec_id,
             stage,
             run_id.as_deref(),
-            1200, // 20min timeout per agent (Gemini can be slow)
+            branch_id.as_deref(), // P6-SYNC Phase 4
+            1200,                 // 20min timeout per agent (Gemini can be slow)
         )
         .await?;
 
@@ -563,6 +570,7 @@ async fn spawn_regular_stage_agents_parallel(
     spec_id: &str,
     stage: SpecStage,
     run_id: Option<String>,
+    _branch_id: Option<String>, // P6-SYNC Phase 4: Reserved for future parallel branch tracking
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
 ) -> Result<Vec<AgentSpawnInfo>, String> {
@@ -641,6 +649,7 @@ async fn spawn_regular_stage_agents_parallel(
             let spawn_duration = spawn_start.elapsed();
 
             // Record to SQLite with run_id (has built-in retry logic)
+            // P6-SYNC Phase 4: branch_id passed as None - full wiring pending
             if let Ok(db) = super::consensus_db::ConsensusDb::init_default() {
                 let _ = db.record_agent_spawn(
                     &agent_id,
@@ -649,6 +658,7 @@ async fn spawn_regular_stage_agents_parallel(
                     "regular_stage",
                     &agent_name,
                     run_id.as_deref(),
+                    None, // branch_id - wiring pending
                 );
             }
 
@@ -742,6 +752,7 @@ async fn spawn_regular_stage_agents_native(
     stage: SpecStage,
     _prompt: &str, // Deprecated: no longer used (was mega-bundle)
     run_id: Option<String>,
+    branch_id: Option<String>, // P6-SYNC Phase 4: Branch tracking for resume filtering
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
 ) -> Result<Vec<AgentSpawnInfo>, String> {
@@ -764,6 +775,7 @@ async fn spawn_regular_stage_agents_native(
                 spec_id,
                 stage,
                 run_id,
+                branch_id, // P6-SYNC Phase 4
                 expected_agents,
                 agent_configs,
             )
@@ -782,6 +794,7 @@ async fn spawn_regular_stage_agents_native(
                 spec_id,
                 stage,
                 run_id,
+                branch_id, // P6-SYNC Phase 4
                 expected_agents,
                 agent_configs,
             )
@@ -802,6 +815,7 @@ async fn spawn_regular_stage_agents_native(
                 spec_id,
                 stage,
                 run_id,
+                branch_id, // P6-SYNC Phase 4
                 expected_agents,
                 agent_configs,
             )
@@ -820,6 +834,7 @@ async fn spawn_regular_stage_agents_native(
                 spec_id,
                 stage,
                 run_id,
+                branch_id, // P6-SYNC Phase 4
                 expected_agents,
                 agent_configs,
             )
@@ -1271,6 +1286,13 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                 .and_then(|s| s.run_id.clone());
             let run_id_for_spawn = run_id_owned.clone(); // Clone for async move
 
+            // P6-SYNC Phase 4: Extract branch_id for resume filtering
+            let branch_id_owned = widget
+                .spec_auto_state
+                .as_ref()
+                .and_then(|s| s.branch_id().map(|b| b.to_string()));
+            let branch_id_for_spawn = branch_id_owned.clone();
+
             let spawn_result = block_on_sync(|| async move {
                 spawn_regular_stage_agents_native(
                     &cwd,
@@ -1278,6 +1300,7 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                     stage,
                     &prompt_owned,
                     run_id_for_spawn,
+                    branch_id_for_spawn, // P6-SYNC Phase 4
                     &expected_agents_owned,
                     &agent_configs_owned,
                 )
@@ -2147,6 +2170,9 @@ pub fn record_agent_costs(widget: &mut ChatWidget, agents: &[AgentInfo]) {
         return;
     };
 
+    // P6-SYNC Phase 2: Track if we recorded any agent costs for session metrics
+    let recorded_any = !to_record.is_empty();
+
     for info in to_record {
         let model = info.model.as_deref().unwrap_or("unknown");
         let usage = widget.last_token_usage.clone();
@@ -2163,6 +2189,20 @@ pub fn record_agent_costs(widget: &mut ChatWidget, agents: &[AgentInfo]) {
                 vec![ratatui::text::Line::from(alert.to_user_message())],
                 HistoryCellType::Notice,
             ));
+        }
+    }
+
+    // P6-SYNC Phase 2: Record token usage in SessionMetrics for predictive estimation
+    if recorded_any {
+        if let Some(state) = widget.spec_auto_state.as_mut() {
+            let usage = widget.last_token_usage.clone();
+            state.session_metrics.record_turn(&usage);
+            tracing::debug!(
+                "SessionMetrics: turn={}, total_input={}, estimated_next={}",
+                state.session_metrics.turn_count(),
+                state.session_metrics.running_total().input_tokens,
+                state.session_metrics.estimated_next_prompt_tokens()
+            );
         }
     }
 }

@@ -25,6 +25,8 @@ debug-logs = []
 legacy_tests = []
 # Enable test utilities (MockSpecKitContext, test helpers) for integration tests
 test-utils = []
+# P6-SYNC Phase 3: Development-only fault injection for testing error handling
+dev-faults = ["codex-spec-kit/dev-faults"]
 
 [lints]
 workspace = true

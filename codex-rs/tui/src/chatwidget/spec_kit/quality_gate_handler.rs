@@ -1227,6 +1227,11 @@ pub(super) fn execute_quality_checkpoint(
         .spec_auto_state
         .as_ref()
         .and_then(|s| s.run_id.clone());
+    // P6-SYNC Phase 4: Extract branch_id for resume filtering
+    let branch_id = widget
+        .spec_auto_state
+        .as_ref()
+        .and_then(|s| s.branch_id().map(|b| b.to_string()));
     let agent_configs = widget.config.agents.clone();
     let event_tx = widget.app_event_tx.clone();
 
@@ -1292,6 +1297,7 @@ pub(super) fn execute_quality_checkpoint(
             checkpoint_clone,
             &agent_configs,
             run_id.clone(),
+            branch_id, // P6-SYNC Phase 4
         )
         .await
         {

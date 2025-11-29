@@ -101,6 +101,11 @@ impl ConsensusDb {
             "ALTER TABLE agent_executions ADD COLUMN extraction_error TEXT",
             [],
         );
+        // P6-SYNC Phase 4: Branch tracking for resume filtering
+        let _ = conn.execute(
+            "ALTER TABLE agent_executions ADD COLUMN branch_id TEXT",
+            [],
+        );
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_agent_executions_spec
@@ -111,6 +116,13 @@ impl ConsensusDb {
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_agent_executions_run
              ON agent_executions(run_id)",
+            [],
+        )?;
+
+        // P6-SYNC Phase 4: Index for branch filtering
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_agent_executions_branch
+             ON agent_executions(spec_id, stage, branch_id)",
             [],
         )?;
 
@@ -522,6 +534,7 @@ impl ConsensusDb {
 
     /// Record agent spawn (called when agents are launched)
     ///
+    /// P6-SYNC Phase 4: Added branch_id for resume filtering.
     /// SPEC-945C Day 4-5: Wrapped with sync retry logic (3 attempts, 100ms initial, 1.5x multiplier).
     /// Retries on SQLITE_BUSY and SQLITE_LOCKED errors.
     pub fn record_agent_spawn(
@@ -532,6 +545,7 @@ impl ConsensusDb {
         phase_type: &str, // "quality_gate" | "regular_stage"
         agent_name: &str,
         run_id: Option<&str>,
+        branch_id: Option<&str>, // P6-SYNC Phase 4: Branch tracking
     ) -> SqlResult<()> {
         // Retry configuration for SQLite writes
         let retry_config = RetryConfig {
@@ -550,6 +564,7 @@ impl ConsensusDb {
         let phase_type = phase_type.to_string();
         let agent_name = agent_name.to_string();
         let run_id = run_id.map(|s| s.to_string());
+        let branch_id = branch_id.map(|s| s.to_string());
 
         execute_with_backoff_sync(
             || {
@@ -560,10 +575,10 @@ impl ConsensusDb {
 
                 conn.execute(
                     "INSERT OR REPLACE INTO agent_executions
-                     (agent_id, spec_id, stage, phase_type, agent_name, run_id, spawned_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'))",
+                     (agent_id, spec_id, stage, phase_type, agent_name, run_id, branch_id, spawned_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))",
                     params![
-                        agent_id, spec_id, stage_name, phase_type, agent_name, run_id,
+                        agent_id, spec_id, stage_name, phase_type, agent_name, run_id, branch_id,
                     ],
                 )?;
 
@@ -906,6 +921,136 @@ impl ConsensusDb {
             .map_err(|_| rusqlite::Error::InvalidQuery)
         })
     }
+
+    // === P6-SYNC Phase 4: Branch-Aware Queries ===
+
+    /// Get agent responses filtered by branch ID.
+    ///
+    /// Returns agent executions for a specific spec/stage/branch combination.
+    /// Used for resume filtering to exclude responses from abandoned pipeline runs.
+    pub fn get_responses_for_branch(
+        &self,
+        spec_id: &str,
+        stage: SpecStage,
+        branch_id: &str,
+    ) -> SqlResult<Vec<AgentExecution>> {
+        let retry_config = RetryConfig {
+            max_attempts: 2,
+            initial_backoff_ms: 50,
+            max_backoff_ms: 5_000,
+            backoff_multiplier: 2.0,
+            jitter_factor: 0.5,
+            max_elapsed_ms: None,
+        };
+
+        let spec_id = spec_id.to_string();
+        let stage_name = stage.command_name().to_string();
+        let branch_id = branch_id.to_string();
+
+        execute_with_backoff_sync(
+            || {
+                let conn = self
+                    .conn
+                    .lock()
+                    .map_err(|_| rusqlite::Error::InvalidQuery)?;
+
+                let mut stmt = conn.prepare(
+                    "SELECT agent_id, spec_id, stage, phase_type, agent_name, run_id,
+                            branch_id, spawned_at, completed_at, response_text
+                     FROM agent_executions
+                     WHERE spec_id = ?1 AND stage = ?2 AND branch_id = ?3
+                     ORDER BY spawned_at DESC",
+                )?;
+
+                let rows = stmt.query_map(params![spec_id, stage_name, branch_id], |row| {
+                    Ok(AgentExecution {
+                        agent_id: row.get(0)?,
+                        spec_id: row.get(1)?,
+                        stage: row.get(2)?,
+                        phase_type: row.get(3)?,
+                        agent_name: row.get(4)?,
+                        run_id: row.get(5)?,
+                        branch_id: row.get(6)?,
+                        spawned_at: row.get(7)?,
+                        completed_at: row.get(8)?,
+                        response_text: row.get(9)?,
+                    })
+                })?;
+
+                let mut results = Vec::new();
+                for row in rows {
+                    results.push(row?);
+                }
+
+                Ok::<Vec<AgentExecution>, rusqlite::Error>(results)
+            },
+            &retry_config,
+        )
+        .map_err(|_| rusqlite::Error::InvalidQuery)
+    }
+
+    /// Get agent spawn info including branch_id
+    ///
+    /// Returns (phase_type, stage, branch_id) for routing.
+    pub fn get_agent_spawn_info_with_branch(
+        &self,
+        agent_id: &str,
+    ) -> SqlResult<Option<(String, String, Option<String>)>> {
+        let retry_config = RetryConfig {
+            max_attempts: 2,
+            initial_backoff_ms: 50,
+            max_backoff_ms: 5_000,
+            backoff_multiplier: 2.0,
+            jitter_factor: 0.5,
+            max_elapsed_ms: None,
+        };
+
+        let agent_id = agent_id.to_string();
+
+        execute_with_backoff_sync(
+            || {
+                let conn = self
+                    .conn
+                    .lock()
+                    .map_err(|_| rusqlite::Error::InvalidQuery)?;
+
+                let result = conn.query_row(
+                    "SELECT phase_type, stage, branch_id FROM agent_executions WHERE agent_id = ?1",
+                    params![agent_id],
+                    |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, Option<String>>(2)?,
+                        ))
+                    },
+                );
+
+                match result {
+                    Ok(info) => Ok(Some(info)),
+                    Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+                    Err(e) => Err(e),
+                }
+            },
+            &retry_config,
+        )
+        .map_err(|_| rusqlite::Error::InvalidQuery)
+    }
+}
+
+/// Agent execution record for branch filtering
+#[derive(Debug, Clone)]
+pub struct AgentExecution {
+    pub agent_id: String,
+    pub spec_id: String,
+    pub stage: String,
+    pub phase_type: String,
+    pub agent_name: String,
+    pub run_id: Option<String>,
+    pub branch_id: Option<String>,
+    pub spawned_at: String,
+    pub completed_at: Option<String>,
+    pub response_text: Option<String>,
 }
 
 // Unit tests removed - covered by integration tests in tests/read_path_migration.rs
