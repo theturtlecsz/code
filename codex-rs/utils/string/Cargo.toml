@@ -1,0 +1,12 @@
+[package]
+name = "codex-utils-string"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "UTF-8 boundary-safe string truncation utilities"
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
