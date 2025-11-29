@@ -1,86 +1,92 @@
 # Next Session: Upstream Sync Continuation
 
-**Date**: 2025-11-29
-**Primary Focus**: Comprehensive Upstream Sync (SYNC-001 through SYNC-018)
-**Estimated Effort**: Full day session (8-12h)
+**Date**: 2025-11-29 (updated)
+**Primary Focus**: Complete P2 UX + Document P3 Backlog
+**Estimated Effort**: 12-18h across sessions
 **Mode**: IMPLEMENTATION (direct execution, minimal prose)
 
 ---
 
-## Session Context
+## Completed SYNC Tasks
 
-### Previous Session Accomplishments (2025-11-28)
-- **SYNC-002 COMPLETE**: Process Hardening Crate
-  - 173 LOC + 73 LOC tests (246 total)
-  - Platforms: Linux, macOS, FreeBSD/OpenBSD, Windows stub
-  - TUI integration: `pre_main_hardening()` in main.rs:17-19
-  - 4 unit tests passing
-- **SYNC-003 COMPLETE**: Cargo Deny Configuration
-  - 288 LOC deny.toml with fork-specific additions
-  - 28 workspace crates → Apache-2.0 license
-  - All checks passing: advisories, licenses, bans, sources
-- **Commits**: 7 commits total (latest: 80e66d4)
+| SYNC | Task | Status | Session | Notes |
+|------|------|--------|---------|-------|
+| SYNC-001 | Dangerous Command Detection | ✅ Done | 2025-11-29 | ~100 LOC, 9 tests, tree-sitter-bash |
+| SYNC-002 | Process Hardening Crate | ✅ Done | 2025-11-28 | 246 LOC, Linux/macOS/FreeBSD |
+| SYNC-003 | Cargo Deny Configuration | ✅ Done | 2025-11-28 | 288 LOC deny.toml |
+| SYNC-004 | Async Utils Crate | ✅ Done | 2025-11-29 | ~90 LOC, OrCancelExt trait |
+| SYNC-005 | Keyring Store (scaffold) | ✅ Done | 2025-11-29 | ~220 LOC, Linux/macOS only |
+| SYNC-007 | API Error Bridge | ⏭️ N/A | 2025-11-29 | Fork already has equivalent |
 
-### Current State
-- **Build**: Passes (`cargo build --workspace`)
-- **Tests**: codex-core 31 passing, 12 ignored (documented)
-- **Cargo Deny**: All checks passing
-- **Completed**: SYNC-002, SYNC-003
-- **Remaining**: 15 sync tasks (SYNC-001, SYNC-004 through SYNC-018)
+**Total Completed**: 5 SYNC tasks, ~950 LOC added
 
 ---
 
-## Priority Execution Order
+## Next Session: P2 UX Items
 
-### Phase 1: P0 Security (IMMEDIATE)
+### Priority Order
 
-| SYNC | Task | Est. | Status | Decision Point |
-|------|------|------|--------|----------------|
-| **SYNC-001** | Dangerous Command Detection | 2-3h | Backlog | None - straightforward port |
+| Order | SYNC | Task | Est. | Decision |
+|-------|------|------|------|----------|
+| 1 | SYNC-006 | Feedback Crate | 1-2h | **Ring buffer only** (no Sentry) |
+| 2 | SYNC-015 | Character Encoding | 2-3h | UTF-8 detection utilities |
+| 3 | SYNC-008 | ASCII Animation | 2-4h | TUI widget integration |
+| 4 | SYNC-009 | Footer Improvements | 4-8h | Complex - 11K LOC bottom_pane |
 
-**SYNC-001 Details**:
-- Source: `~/old/code/codex-rs/core/src/command_safety/is_dangerous_command.rs`
-- Integration: `safety.rs` approval flow
-- Tests: Port existing test cases
-- No fork conflicts expected
+### SYNC-006: Feedback Crate (Ring Buffer Only)
 
-### Phase 2: P1 Core Functionality
+**Source**: `~/old/code/codex-rs/feedback/src/lib.rs` (299 LOC)
 
-| SYNC | Task | Est. | Status | Decision Point |
-|------|------|------|--------|----------------|
-| **SYNC-004** | Async Utils Crate | 30min | Backlog | None - 90 LOC standalone |
-| **SYNC-005** | Keyring Store | 1-8h | Backlog | **Depth**: Crate only (1h) vs full auth integration (4-8h) |
-| **SYNC-007** | API Error Bridge | 3-4h | Backlog | Adapt to fork's error types |
+**Scope**: Ring buffer logging infrastructure WITHOUT Sentry integration
 
-**SYNC-005 Decision**: At implementation time, choose:
-- [ ] **Scaffold only**: Create crate with platform stubs, defer integration
-- [ ] **Full integration**: Wire into login flow, migrate credentials
+**Files to Create**:
+```
+codex-rs/feedback/
+├── Cargo.toml
+└── src/
+    └── lib.rs
+```
 
-### Phase 3: P2 User Experience
+**Integration**:
+- Add to workspace Cargo.toml
+- Wire into TUI for log capture (optional)
 
-| SYNC | Task | Est. | Status | Decision Point |
-|------|------|------|--------|----------------|
-| **SYNC-006** | Feedback Crate | 1-6h | Backlog | **Depth**: Ring buffer only (1h) vs Sentry integration (4-6h) |
-| **SYNC-008** | ASCII Animation | 4-6h | Backlog | TUI widget integration |
-| **SYNC-009** | Footer Improvements | 4-6h | Backlog | Adapt to bottom_pane_view.rs |
-| **SYNC-015** | Character Encoding | 2-3h | Backlog | UTF-8 detection utilities |
+### SYNC-015: Character Encoding Utilities
 
-**SYNC-006 Decision**: At implementation time, choose:
-- [ ] **Ring buffer only**: Logging infrastructure without external services
-- [ ] **Full Sentry**: Requires Sentry account setup, env vars
+**Source**: Check `~/old/code/codex-rs/` for encoding-related modules
 
-### Phase 4: P3 Extensions (Backlog for Future)
+**Scope**: UTF-8 detection and validation utilities
 
-| SYNC | Task | Priority | Notes |
-|------|------|----------|-------|
-| SYNC-010 | Auto Drive Patterns | Medium | Agent retry/recovery |
-| SYNC-011 | OpenTelemetry | Low | Observability (large scope) |
-| SYNC-012 | TypeScript SDK | Low | VS Code integration |
-| SYNC-013 | Shell MCP Server | Medium | MCP protocol expansion |
-| SYNC-014 | Prompt Management | Low | UI feature |
-| SYNC-016 | Device Code Auth | Medium | Headless auth fallback |
-| SYNC-017 | Review/Merge Workflows | Medium | /review, /merge commands |
-| SYNC-018 | Branch-Aware Resume | Low | Session filtering |
+### SYNC-008: ASCII Animation Module
+
+**Source**: `~/old/code/codex-rs/tui/src/ascii_animation.rs` (111 LOC)
+
+**Scope**: Loading/spinner animations for TUI
+
+**Integration Point**: `codex-rs/tui/src/`
+
+### SYNC-009: Footer/Bottom Pane Improvements
+
+**Source**: `~/old/code/codex-rs/tui/src/bottom_pane/` (~11K LOC total)
+
+**Scope**: Extract useful patterns - context percentage, mode indicators
+
+**Warning**: Large module - selective extraction recommended
+
+---
+
+## P3 Backlog (Document Only)
+
+| SYNC | Task | Priority | Upstream Source | Notes |
+|------|------|----------|-----------------|-------|
+| SYNC-010 | Auto Drive Patterns | Medium | codex-rs/core/ | Agent retry/recovery patterns |
+| SYNC-011 | OpenTelemetry | Low | codex-rs/telemetry/ | Large scope, defer |
+| SYNC-012 | TypeScript SDK | Low | protocol-ts/ | VS Code integration |
+| SYNC-013 | Shell MCP Server | Medium | mcp-server/ | MCP protocol expansion |
+| SYNC-014 | Prompt Management | Low | tui/prompts/ | UI feature |
+| SYNC-016 | Device Code Auth | Medium | login/ | Headless auth fallback |
+| SYNC-017 | Review/Merge Workflows | Medium | tui/commands/ | /review, /merge commands |
+| SYNC-018 | Branch-Aware Resume | Low | core/session/ | Session filtering by branch |
 
 ---
 
@@ -88,53 +94,49 @@
 
 ### Session Start
 ```
-1. [ ] Load context: `load ~/.claude/CLEARFRAME.md`
-2. [ ] Query local-memory for SYNC context:
-       - mcp__local-memory__search(query="SYNC upstream security", limit=5)
-       - mcp__local-memory__search(query="SYNC-002 SYNC-003 milestone", limit=3)
-3. [ ] Verify build: `cd ~/code/codex-rs && cargo build -p codex-tui`
-4. [ ] Verify deny: `cargo deny check`
+1. [ ] Load context: load ~/.claude/CLEARFRAME.md and load docs/NEXT-SESSION-UPSTREAM-SYNC.md
+2. [ ] Query local-memory:
+       ~/.claude/hooks/lm-search.sh "SYNC upstream milestone" 5
+3. [ ] Verify build: cd ~/code/codex-rs && cargo build -p codex-tui
+4. [ ] Verify deny: cargo deny check
 ```
 
 ### Per-SYNC Workflow
 ```
 For each SYNC-XXX:
-1. [ ] Check upstream source: `ls ~/old/code/codex-rs/<path>`
-2. [ ] Read existing PRD if exists: `docs/SYNC-XXX-*/PRD.md`
-3. [ ] Create/scaffold crate or module
-4. [ ] Add to workspace if new crate
-5. [ ] Port implementation
-6. [ ] Add tests
-7. [ ] Run validation: `cargo build && cargo clippy && cargo test`
-8. [ ] Update PRD status to Done
-9. [ ] Update UPSTREAM-ANALYSIS table
-10. [ ] Store milestone in local-memory (importance ≥8)
-11. [ ] Commit with conventional format
+1. [ ] Check upstream source exists
+2. [ ] Create crate/module structure
+3. [ ] Add to workspace if new crate
+4. [ ] Port implementation (adapt to fork patterns)
+5. [ ] Add tests
+6. [ ] Run validation: cargo build && cargo clippy && cargo test -p <crate>
+7. [ ] Store milestone in local-memory (importance ≥8)
+8. [ ] Commit: feat(sync): <description> (SYNC-XXX)
 ```
 
 ### Session End
 ```
-1. [ ] Run full validation: `cargo deny check && cargo clippy --workspace`
-2. [ ] Update this file with next session context
+1. [ ] Run full validation: cargo deny check && cargo clippy --workspace
+2. [ ] Update this file with completion status
 3. [ ] Store session summary in local-memory
+4. [ ] Create continuation prompt if work remains
 ```
 
 ---
 
-## Quick Reference
+## Upstream Source Paths
 
-### Upstream Source Paths
 ```bash
-~/old/code/codex-rs/core/src/command_safety/   # SYNC-001
-~/old/code/codex-rs/async-utils/               # SYNC-004
-~/old/code/codex-rs/keyring-store/             # SYNC-005
-~/old/code/codex-rs/feedback/                  # SYNC-006
-~/old/code/codex-rs/core/src/api_error_bridge/ # SYNC-007
-~/old/code/codex-rs/tui/src/ascii_animation/   # SYNC-008
-~/old/code/codex-rs/tui/src/bottom_pane_view/  # SYNC-009
+~/old/code/codex-rs/feedback/                    # SYNC-006
+~/old/code/codex-rs/tui/src/ascii_animation.rs   # SYNC-008
+~/old/code/codex-rs/tui/src/bottom_pane/         # SYNC-009
+# SYNC-015: Search for encoding utilities
 ```
 
-### Build Commands
+---
+
+## Build Commands
+
 ```bash
 cd ~/code/codex-rs
 
@@ -149,58 +151,31 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 # Tests
 cargo test -p codex-core
-cargo test -p codex-process-hardening
+cargo test -p codex-<new-crate>
 
 # Deny checks
 cargo deny check
 ```
 
-### Local Memory Commands
-```bash
-# Search (CLI - fast)
-~/.claude/hooks/lm-search.sh "SYNC upstream" 10
-
-# Store (MCP - validation)
-mcp__local-memory__store_memory(
-  content="...",
-  domain="infrastructure",
-  tags=["sync:SYNC-XXX", "type:milestone"],
-  importance=8
-)
-```
-
 ---
 
-## Rejected Items (Reference Only)
-
-These upstream items conflict with fork architecture:
+## Rejected Items (Reference)
 
 | Item | Reason | Alternative |
 |------|--------|-------------|
 | codex-api crate | Fork has SPEC-952 CLI routing | Keep api_clients/ |
 | compact_remote | Fork has compact.rs | Review for bug fixes only |
 | app-server crates | Conflicts with DirectProcessExecutor | Keep fork's execution model |
-
----
-
-## Effort Summary
-
-| Phase | Items | Est. Hours | Cumulative |
-|-------|-------|------------|------------|
-| P0 Security | 1 | 2-3h | 2-3h |
-| P1 Core | 3 | 4.5-12.5h | 6.5-15.5h |
-| P2 UX | 4 | 11-18h | 17.5-33.5h |
-| P3 Extensions | 8 | (backlog) | - |
-
-**Recommended Session Goal**: Complete P0 + P1 (~6-15h depending on integration depth)
+| Windows support | User decision | Linux/macOS only |
 
 ---
 
 ## Notes for Claude
 
-1. **Use IMPLEMENTATION mode** - Direct execution, code quality over prose
-2. **Decision points marked** - Ask user at SYNC-005/006 for integration depth
-3. **Commit incrementally** - One SYNC per commit, conventional format
-4. **Store milestones** - Local-memory for each completed SYNC (importance ≥8)
-5. **Track with TodoWrite** - Update todo list as work progresses
-6. **P3 is backlog** - Document but don't implement unless time permits
+1. **IMPLEMENTATION mode** - Direct execution, minimal prose
+2. **Ring buffer only for SYNC-006** - No Sentry integration
+3. **SYNC-009 is large** - Extract selectively, don't port entire 11K LOC
+4. **Commit incrementally** - One SYNC per commit
+5. **Store milestones** - Local-memory for each completed SYNC
+6. **Track with TodoWrite** - Update todo list as work progresses
+7. **Linux/macOS only** - Skip Windows-specific code
