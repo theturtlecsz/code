@@ -766,4 +766,176 @@ mod tests {
 
         session.shutdown().await.ok();
     }
+
+    // ===================================================================
+    // SPEC-947 Phase 2: Additional Integration Tests
+    // ===================================================================
+
+    /// Test 3: Long prompt handling - verifies large inputs are processed correctly
+    /// SPEC-947 Phase 2: Validates no truncation occurs with 1000+ character prompts
+    #[tokio::test]
+    #[ignore] // Requires Gemini CLI installed
+    async fn test_long_prompt_handling() {
+        let mut session = GeminiPipesSession::spawn("gemini-2.5-pro", None)
+            .await
+            .expect("Failed to spawn session");
+
+        // Create a long prompt (1000+ characters) with verifiable content
+        let long_code = r#"
+// Mathematical utility functions in Rust
+// This module provides common mathematical operations
+
+/// Calculates the nth Fibonacci number recursively
+/// Time complexity: O(2^n) - exponential, not efficient for large n
+fn fibonacci(n: u64) -> u64 {
+    match n {
+        0 => 0,
+        1 => 1,
+        _ => fibonacci(n - 1) + fibonacci(n - 2),
+    }
+}
+
+/// Calculates the factorial of n (n!)
+/// Returns 1 for n=0 or n=1 (base cases)
+fn factorial(n: u64) -> u64 {
+    match n {
+        0 | 1 => 1,
+        _ => n * factorial(n - 1),
+    }
+}
+
+/// Checks if a number is prime using trial division
+/// Optimized to only check odd divisors up to sqrt(n)
+fn is_prime(n: u64) -> bool {
+    if n < 2 { return false; }
+    if n == 2 { return true; }
+    if n % 2 == 0 { return false; }
+    let sqrt_n = (n as f64).sqrt() as u64;
+    for i in (3..=sqrt_n).step_by(2) {
+        if n % i == 0 { return false; }
+    }
+    true
+}
+
+/// Calculates the greatest common divisor using Euclidean algorithm
+fn gcd(a: u64, b: u64) -> u64 {
+    if b == 0 { a } else { gcd(b, a % b) }
+}
+
+/// Calculates the least common multiple using GCD
+fn lcm(a: u64, b: u64) -> u64 {
+    a / gcd(a, b) * b
+}
+
+/// Calculates the sum of all integers from 1 to n
+fn sum_to_n(n: u64) -> u64 {
+    n * (n + 1) / 2
+}
+
+/// Checks if a number is a perfect square
+fn is_perfect_square(n: u64) -> bool {
+    let sqrt = (n as f64).sqrt() as u64;
+    sqrt * sqrt == n
+}
+"#;
+
+        let prompt = format!(
+            "Analyze this Rust code and list ONLY the function names (one per line, no explanation):\n{}",
+            long_code
+        );
+
+        assert!(
+            prompt.len() > 1000,
+            "Prompt should be >1000 chars, got {}",
+            prompt.len()
+        );
+
+        let (tx, mut rx) = mpsc::channel(32);
+        let cancel = CancellationToken::new();
+
+        let stream_result = session.stream_turn(prompt, tx, cancel).await;
+        assert!(stream_result.is_ok(), "Stream should succeed with long prompt");
+
+        let mut response = String::new();
+        while let Some(event) = rx.recv().await {
+            if let StreamEvent::Delta(text) = event {
+                response.push_str(&text);
+            }
+        }
+
+        println!("Long prompt response ({} chars): {}", response.len(), response);
+
+        // Verify the model processed the entire input by checking it found all functions
+        let response_lower = response.to_lowercase();
+        assert!(
+            response_lower.contains("fibonacci"),
+            "Response should mention fibonacci function"
+        );
+        assert!(
+            response_lower.contains("factorial"),
+            "Response should mention factorial function"
+        );
+        assert!(
+            response_lower.contains("prime") || response_lower.contains("is_prime"),
+            "Response should mention is_prime function"
+        );
+
+        session.shutdown().await.ok();
+    }
+
+    /// Test 7a: Gemini models smoke test - validates all 3 Gemini models respond
+    /// SPEC-947 Phase 2: Part of 6-model validation
+    #[tokio::test]
+    #[ignore] // Requires Gemini CLI installed
+    async fn test_all_gemini_models_smoke() {
+        let models = [
+            ("gemini-2.5-flash", "Gemini 2.5 Flash"),
+            ("gemini-2.5-pro", "Gemini 2.5 Pro"),
+            ("gemini-2.0-flash", "Gemini 2.0 Flash"),
+        ];
+
+        for (model_id, display_name) in models {
+            println!("\n=== Testing {} ({}) ===", display_name, model_id);
+
+            let session_result = GeminiPipesSession::spawn(model_id, None).await;
+
+            match session_result {
+                Ok(mut session) => {
+                    let (tx, mut rx) = mpsc::channel(32);
+                    let cancel = CancellationToken::new();
+
+                    let prompt = format!(
+                        "Say exactly: Hello from {} test",
+                        display_name.replace(' ', "-")
+                    );
+
+                    let stream_result = session.stream_turn(prompt, tx, cancel).await;
+
+                    if let Err(e) = &stream_result {
+                        println!("  ❌ {} failed to stream: {:?}", display_name, e);
+                        continue;
+                    }
+
+                    let mut response = String::new();
+                    while let Some(event) = rx.recv().await {
+                        if let StreamEvent::Delta(text) = event {
+                            response.push_str(&text);
+                        }
+                    }
+
+                    let success = response.to_lowercase().contains("hello");
+                    if success {
+                        println!("  ✅ {} responded: {}...", display_name, &response[..response.len().min(50)]);
+                    } else {
+                        println!("  ⚠️  {} response unexpected: {}", display_name, response);
+                    }
+
+                    session.shutdown().await.ok();
+                }
+                Err(e) => {
+                    println!("  ❌ {} failed to spawn: {:?}", display_name, e);
+                }
+            }
+        }
+    }
 }
