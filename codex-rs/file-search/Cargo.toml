@@ -2,6 +2,7 @@
 edition = "2024"
 name = "codex-file-search"
 version = { workspace = true }
+license = "Apache-2.0"
 
 [[bin]]
 name = "codex-file-search"

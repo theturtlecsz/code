@@ -170,3 +170,77 @@ fn pre_main_hardening_windows() {
     // - Disable debug privileges
     // - Enable DEP (Data Execution Prevention)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test that pre_main_hardening runs without panic on the current platform.
+    /// This is an integration test that verifies the syscalls succeed.
+    #[test]
+    fn test_pre_main_hardening_succeeds() {
+        // Should not panic or exit
+        pre_main_hardening();
+    }
+
+    /// Verify RLIMIT_CORE is set to 0 after hardening.
+    #[cfg(unix)]
+    #[test]
+    fn test_rlimit_core_is_zero() {
+        pre_main_hardening();
+
+        let mut rlim = libc::rlimit {
+            rlim_cur: u64::MAX,
+            rlim_max: u64::MAX,
+        };
+
+        let ret = unsafe { libc::getrlimit(libc::RLIMIT_CORE, &mut rlim) };
+        assert_eq!(ret, 0, "getrlimit should succeed");
+        assert_eq!(rlim.rlim_cur, 0, "RLIMIT_CORE soft limit should be 0");
+        assert_eq!(rlim.rlim_max, 0, "RLIMIT_CORE hard limit should be 0");
+    }
+
+    /// Verify LD_* environment variables are cleared on Linux.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[test]
+    fn test_ld_env_vars_cleared() {
+        // Set a test LD_ variable
+        unsafe {
+            std::env::set_var("LD_TEST_VAR", "should_be_removed");
+        }
+
+        pre_main_hardening();
+
+        assert!(
+            std::env::var("LD_TEST_VAR").is_err(),
+            "LD_TEST_VAR should be removed"
+        );
+    }
+
+    /// Verify DYLD_* environment variables are cleared on macOS.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_dyld_env_vars_cleared() {
+        // Set a test DYLD_ variable
+        unsafe {
+            std::env::set_var("DYLD_TEST_VAR", "should_be_removed");
+        }
+
+        pre_main_hardening();
+
+        assert!(
+            std::env::var("DYLD_TEST_VAR").is_err(),
+            "DYLD_TEST_VAR should be removed"
+        );
+    }
+
+    /// Verify process is non-dumpable on Linux after hardening.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[test]
+    fn test_process_non_dumpable() {
+        pre_main_hardening();
+
+        let dumpable = unsafe { libc::prctl(libc::PR_GET_DUMPABLE, 0, 0, 0, 0) };
+        assert_eq!(dumpable, 0, "Process should be non-dumpable");
+    }
+}

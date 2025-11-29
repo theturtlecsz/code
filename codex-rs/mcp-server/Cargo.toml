@@ -2,6 +2,7 @@
 edition = "2024"
 name = "codex-mcp-server"
 version = { workspace = true }
+license = "Apache-2.0"
 
 [[bin]]
 name = "codex-mcp-server"

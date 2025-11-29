@@ -17,6 +17,7 @@ members = [
     "mcp-test-server",
     "mcp-types",
     "ollama",
+    "process-hardening",  # SYNC-002: Security hardening
     "protocol",
     "protocol-ts",
     "spec-kit",  # MAINT-10: New crate (foundation phase)
@@ -32,6 +33,10 @@ version = "0.0.0"
 # crates created with `cargo new -w ...` automatically inherit the 2024
 # edition.
 edition = "2024"
+# Apache-2.0 license for all workspace crates (inherited via license.workspace = true)
+license = "Apache-2.0"
+# Workspace crates are not published to crates.io
+publish = false
 
 [workspace.dependencies]
 # Internal
@@ -49,6 +54,7 @@ codex-login = { path = "login" }
 codex-mcp-client = { path = "mcp-client" }
 codex-mcp-server = { path = "mcp-server" }
 codex-ollama = { path = "ollama" }
+codex-process-hardening = { path = "process-hardening" }
 codex-protocol = { path = "protocol" }
 codex-protocol-ts = { path = "protocol-ts" }
 codex-tui = { path = "tui" }

@@ -2,6 +2,7 @@
 edition = "2024"
 name = "codex-tui"
 version = { workspace = true }
+license = "Apache-2.0"
 
 [[bin]]
 name = "code-tui"
@@ -48,6 +49,7 @@ codex-spec-kit = { path = "../spec-kit" }
 codex-git-tooling = { path = "../git-tooling" }
 codex-login = { path = "../login" }
 codex-ollama = { path = "../ollama" }
+codex-process-hardening = { path = "../process-hardening" }
 codex-protocol = { path = "../protocol" }
 codex-version = { path = "../codex-version" }
 codex-mcp-client = { path = "../mcp-client" }

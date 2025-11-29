@@ -14,6 +14,10 @@ struct TopCli {
 }
 
 fn main() -> anyhow::Result<()> {
+    // SYNC-002: Apply process hardening before any other operations.
+    // Disables core dumps, prevents debugger attachment, clears dangerous env vars.
+    codex_process_hardening::pre_main_hardening();
+
     arg0_dispatch_or_else(|codex_linux_sandbox_exe| async move {
         let top_cli = TopCli::parse();
         let mut inner = top_cli.inner;

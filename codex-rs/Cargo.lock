@@ -1299,6 +1299,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-process-hardening"
+version = "0.0.0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "codex-protocol"
 version = "0.0.0"
 dependencies = [
@@ -1381,6 +1388,7 @@ dependencies = [
  "codex-login",
  "codex-mcp-client",
  "codex-ollama",
+ "codex-process-hardening",
  "codex-protocol",
  "codex-spec-kit",
  "codex-version",

@@ -2,6 +2,7 @@
 edition = "2024"
 name = "codex-browser"
 version = { workspace = true }
+license = "Apache-2.0"
 
 [lib]
 name = "codex_browser"
