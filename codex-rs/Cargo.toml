@@ -3,6 +3,7 @@ members = [
     "ansi-escape",
     "apply-patch",
     "arg0",
+    "async-utils",  # SYNC-004: Async cancellation utilities
     "cli",
     "common",
     "core",
