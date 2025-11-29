@@ -8,15 +8,18 @@ license = "Apache-2.0"
 workspace = true
 
 [dependencies]
+async-trait = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 codex-core = { workspace = true }
 codex-protocol = { workspace = true }
+dirs = { workspace = true }
 rand = { workspace = true }
 reqwest = { version = "0.12", default-features = false, features = ["json", "blocking", "rustls-tls"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
+thiserror = { workspace = true }
 tempfile = { workspace = true }
 tiny_http = { workspace = true }
 tokio = { workspace = true, features = [
