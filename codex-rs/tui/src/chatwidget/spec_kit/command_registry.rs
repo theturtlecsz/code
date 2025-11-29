@@ -156,6 +156,7 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
     registry.register(Box::new(SpecKitAutoCommand));
     registry.register(Box::new(SpecKitStatusCommand));
     registry.register(Box::new(SpecKitConfigureCommand)); // SPEC-947 Phase 4
+    registry.register(Box::new(SpecKitProjectCommand)); // SPEC-KIT-960
     registry.register(Box::new(VerifyCommand));
     registry.register(Box::new(SpecConsensusCommand));
     registry.register(Box::new(SpecKitConstitutionCommand));
@@ -299,8 +300,8 @@ mod tests {
         // Test that the global registry has all expected commands
         let registry = SPEC_KIT_REGISTRY.lock().unwrap();
 
-        // 27 commands: 9 special + 6 stage + 3 quality + 7 guardrail + 1 evidence + 1 search
-        assert_eq!(registry.len(), 27, "Registry should have 27 commands");
+        // 28 commands: 10 special + 6 stage + 3 quality + 7 guardrail + 1 evidence + 1 search
+        assert_eq!(registry.len(), 28, "Registry should have 28 commands");
 
         // Verify key commands are registered
         assert!(registry.find("speckit.status").is_some());
@@ -415,6 +416,7 @@ mod tests {
         assert!(registry.find("speckit.specify").is_some());
         assert!(registry.find("speckit.auto").is_some());
         assert!(registry.find("speckit.status").is_some());
+        assert!(registry.find("speckit.project").is_some()); // SPEC-KIT-960
         assert!(registry.find("spec-consensus").is_some());
         assert!(registry.find("speckit.constitution").is_some());
         assert!(registry.find("spec-evidence-stats").is_some());
@@ -510,13 +512,13 @@ mod tests {
         let registry = SPEC_KIT_REGISTRY.lock().unwrap();
 
         // SPEC-KIT-902: Legacy spec-* aliases removed.
-        // 27 primary names + 11 remaining aliases = 38 total names
-        // (Previously 44: removed spec-plan, spec-tasks, spec-implement, spec-auto, new-spec, spec-status)
+        // SPEC-KIT-960: Added speckit.project with 'project' alias
+        // 28 primary names + 12 remaining aliases = 40 total names
         let all_names = registry.all_names();
         assert_eq!(
             all_names.len(),
-            38,
-            "Should have 38 total command names (27 primary + 11 aliases)"
+            40,
+            "Should have 40 total command names (28 primary + 12 aliases)"
         );
     }
 

@@ -8,6 +8,7 @@
 mod configure; // SPEC-947 Phase 4: Pipeline configurator command
 mod guardrail;
 mod plan;
+mod project; // SPEC-KIT-960: Project scaffolding command
 mod quality;
 pub mod search;
 mod special;
@@ -18,6 +19,7 @@ pub mod verify;
 pub use configure::*;
 pub use guardrail::*;
 pub use plan::*;
+pub use project::*;
 pub use quality::*;
 pub use search::*;
 pub use special::*;

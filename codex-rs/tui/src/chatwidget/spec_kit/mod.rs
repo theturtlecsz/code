@@ -43,6 +43,7 @@ pub mod native_guardrail; // SPEC-KIT-066, SPEC-KIT-902: Native guardrail valida
 pub mod native_quality_gate_orchestrator; // SPEC-KIT-900, I-003: Native quality gate orchestration (eliminates LLM plumbing)
 pub mod new_native; // SPEC-KIT-072: Native SPEC creation (eliminates 2 agents, $0.15 → $0)
 pub mod pipeline_config; // SPEC-948: Modular pipeline logic - stage filtering and configuration
+pub mod project_native; // SPEC-KIT-960: Native project scaffolding
 pub mod pipeline_configurator; // SPEC-947: Pipeline UI configurator - interactive stage selection
 pub mod pipeline_coordinator;
 pub mod spec_directory;
