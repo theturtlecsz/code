@@ -92,11 +92,14 @@ pub fn create_project(
     let mut files_created = Vec::new();
     let date = Local::now().format("%Y-%m-%d").to_string();
 
-    // Create core spec-kit files
+    // Create core spec-kit files (CLAUDE.md Section 1 requirements)
     create_claude_md(&project_dir, project_name, project_type, &date, &mut files_created)?;
     create_spec_md(&project_dir, &date, &mut files_created)?;
+    create_product_requirements(&project_dir, project_name, &date, &mut files_created)?;
+    create_planning_md(&project_dir, project_name, project_type, &date, &mut files_created)?;
     create_docs_dir(&project_dir, &mut files_created)?;
     create_constitution(&project_dir, project_name, &date, &mut files_created)?;
+    create_templates_dir(&project_dir, &mut files_created)?;
 
     // Create type-specific files
     match project_type {
@@ -239,6 +242,294 @@ fn create_spec_md(
         source: e,
     })?;
     files.push("SPEC.md".to_string());
+    Ok(())
+}
+
+/// Create product-requirements.md (CLAUDE.md Section 1 requirement)
+fn create_product_requirements(
+    project_dir: &Path,
+    project_name: &str,
+    date: &str,
+    files: &mut Vec<String>,
+) -> Result<(), SpecKitError> {
+    let content = format!(
+        r#"# {name} - Product Requirements
+
+> Status: v1.0 ({date}) - Initial draft
+
+## 1. Product Summary
+- **Product name:** {name}
+- **Domain:** [Define the domain/category]
+- **Mission:** [Define the core mission in one sentence]
+
+## 2. Primary Users & Goals
+- **[User Type 1]** - [What they want to accomplish]
+- **[User Type 2]** - [What they want to accomplish]
+
+## 3. Core Features
+
+### Must Have (P0)
+- [ ] [Critical feature 1]
+- [ ] [Critical feature 2]
+
+### Should Have (P1)
+- [ ] [Important feature 1]
+- [ ] [Important feature 2]
+
+### Nice to Have (P2)
+- [ ] [Enhancement 1]
+- [ ] [Enhancement 2]
+
+## 4. Non-Goals (Out of Scope)
+- [Explicitly excluded feature 1]
+- [Explicitly excluded feature 2]
+
+## 5. Success Metrics
+| Metric | Target | Measurement |
+|--------|--------|-------------|
+| [KPI 1] | [Target] | [How to measure] |
+| [KPI 2] | [Target] | [How to measure] |
+
+## 6. Constraints
+- **Technical:** [Technical constraints]
+- **Timeline:** [Timeline constraints]
+- **Resources:** [Resource constraints]
+
+## 7. Dependencies
+- [External dependency 1]
+- [External dependency 2]
+
+---
+*Use `/speckit.specify SPEC-ID` to refine requirements for specific features.*
+"#,
+        name = project_name,
+        date = date
+    );
+
+    let path = project_dir.join("product-requirements.md");
+    fs::write(&path, content).map_err(|e| SpecKitError::FileWrite {
+        path: path.clone(),
+        source: e,
+    })?;
+    files.push("product-requirements.md".to_string());
+    Ok(())
+}
+
+/// Create PLANNING.md (CLAUDE.md Section 1 requirement)
+fn create_planning_md(
+    project_dir: &Path,
+    project_name: &str,
+    project_type: ProjectType,
+    date: &str,
+    files: &mut Vec<String>,
+) -> Result<(), SpecKitError> {
+    let (lang_section, build_info) = match project_type {
+        ProjectType::Rust => (
+            "- **Primary language:** Rust",
+            "- `cargo build` - Build the project\n- `cargo test` - Run tests\n- `cargo clippy` - Lint checks",
+        ),
+        ProjectType::Python => (
+            "- **Primary language:** Python",
+            "- `uv sync` - Install dependencies\n- `pytest` - Run tests\n- `ruff check` - Lint checks",
+        ),
+        ProjectType::TypeScript => (
+            "- **Primary language:** TypeScript",
+            "- `npm install` - Install dependencies\n- `npm run build` - Build\n- `npm test` - Run tests",
+        ),
+        ProjectType::Generic => (
+            "- **Primary language:** [Specify]",
+            "- [Add build commands]\n- [Add test commands]",
+        ),
+    };
+
+    let content = format!(
+        r#"# {name} - Architecture & Planning
+
+> Status: v1.0 ({date}) - Initial structure
+
+## 1. Repository Overview
+- **Repository:** [Add repository URL]
+{lang_section}
+- **Key directories:**
+  - `docs/` - SPEC directories and documentation
+  - `memory/` - Constitution and project context
+  - `templates/` - PRD and spec templates for /speckit.new
+
+## 2. Architecture
+
+### 2.1 Component Structure
+```
+[Describe your component architecture]
+```
+
+### 2.2 Data Flow
+```
+[Input] -> [Processing] -> [Output]
+```
+
+## 3. Development Workflow
+
+### Spec-Kit Integration
+This project uses spec-kit for structured development:
+1. `/speckit.new <description>` - Create new SPEC
+2. `/speckit.auto SPEC-ID` - Run full automation pipeline
+3. Review generated artifacts in `docs/SPEC-*/`
+
+### Build Commands
+{build_info}
+
+## 4. Key Decisions
+
+| Date | Decision | Rationale |
+|------|----------|-----------|
+| {date} | Project structure established | Spec-kit ready scaffold |
+
+## 5. Constraints & Risks
+
+### Technical Constraints
+- [Constraint 1]
+
+### Known Risks
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| [Risk 1] | [Impact] | [Mitigation] |
+
+## 6. Roadmap
+
+### Phase 1: Foundation
+- [ ] Core implementation
+- [ ] Basic testing
+
+### Phase 2: Enhancement
+- [ ] Additional features
+- [ ] Documentation
+
+---
+*Complements `product-requirements.md` - see that file for feature requirements.*
+"#,
+        name = project_name,
+        date = date,
+        lang_section = lang_section,
+        build_info = build_info
+    );
+
+    let path = project_dir.join("PLANNING.md");
+    fs::write(&path, content).map_err(|e| SpecKitError::FileWrite {
+        path: path.clone(),
+        source: e,
+    })?;
+    files.push("PLANNING.md".to_string());
+    Ok(())
+}
+
+/// Create templates/ directory with PRD and spec templates
+fn create_templates_dir(
+    project_dir: &Path,
+    files: &mut Vec<String>,
+) -> Result<(), SpecKitError> {
+    let templates_dir = project_dir.join("templates");
+    fs::create_dir(&templates_dir).map_err(|e| SpecKitError::DirectoryCreate {
+        path: templates_dir.clone(),
+        source: e,
+    })?;
+
+    // PRD template (minimal, used by /speckit.new)
+    let prd_template = r#"# PRD: [FEATURE_NAME]
+
+**SPEC-ID**: [SPEC_ID]
+**Status**: Draft
+**Created**: [DATE]
+**Author**: [AUTHOR]
+
+---
+
+## Problem Statement
+
+**Current State**: [WHAT_EXISTS_TODAY]
+
+**Pain Points**:
+- [USER_PAIN_1]
+- [INEFFICIENCY_1]
+
+**Impact**: [WHY_THIS_MATTERS]
+
+---
+
+## Requirements
+
+### Functional Requirements
+
+- **FR1**: [REQUIREMENT_DESCRIPTION]
+- **FR2**: [REQUIREMENT]
+
+### Non-Functional Requirements
+
+- **NFR1**: Performance - [LATENCY_TARGET]
+- **NFR2**: Reliability - [UPTIME_TARGET]
+
+---
+
+## Success Criteria
+
+- [CRITERION_1]
+- [CRITERION_2]
+
+---
+
+## Next Steps
+
+Use `/speckit.clarify [SPEC_ID]` to resolve ambiguities.
+"#;
+
+    let path = templates_dir.join("PRD-template.md");
+    fs::write(&path, prd_template).map_err(|e| SpecKitError::FileWrite {
+        path: path.clone(),
+        source: e,
+    })?;
+    files.push("templates/PRD-template.md".to_string());
+
+    // Spec template (minimal)
+    let spec_template = r#"**SPEC-ID**: [SPEC_ID]
+**Feature**: [FEATURE_NAME]
+**Status**: Backlog
+**Created**: [CREATION_DATE]
+**Branch**: [BRANCH_NAME]
+**Owner**: [OWNER]
+
+**Context**: [BACKGROUND_PROBLEM_STATEMENT]
+
+---
+
+## Requirements
+
+### Functional Requirements
+
+- **FR1**: [REQUIREMENT_WITH_ACCEPTANCE_CRITERIA]
+
+### Non-Functional Requirements
+
+- **Performance**: [METRIC_OR_CONSTRAINT]
+
+---
+
+## Success Criteria
+
+- [MEASURABLE_OUTCOME_1]
+
+---
+
+## Notes
+
+Created via native SPEC generation. Run `/speckit.clarify [SPEC_ID]` to fill in details.
+"#;
+
+    let path = templates_dir.join("spec-template.md");
+    fs::write(&path, spec_template).map_err(|e| SpecKitError::FileWrite {
+        path: path.clone(),
+        source: e,
+    })?;
+    files.push("templates/spec-template.md".to_string());
+
     Ok(())
 }
 
@@ -684,10 +975,16 @@ mod tests {
         assert_eq!(result.project_type, ProjectType::Rust);
         assert_eq!(result.project_name, "my-rust-lib");
         assert!(result.directory.exists());
+        // Core spec-kit files (CLAUDE.md Section 1 requirements)
         assert!(result.directory.join("CLAUDE.md").exists());
         assert!(result.directory.join("SPEC.md").exists());
+        assert!(result.directory.join("product-requirements.md").exists());
+        assert!(result.directory.join("PLANNING.md").exists());
         assert!(result.directory.join("docs").is_dir());
         assert!(result.directory.join("memory/constitution.md").exists());
+        assert!(result.directory.join("templates/PRD-template.md").exists());
+        assert!(result.directory.join("templates/spec-template.md").exists());
+        // Type-specific files
         assert!(result.directory.join("Cargo.toml").exists());
         assert!(result.directory.join("src/lib.rs").exists());
         assert!(result.directory.join(".gitignore").exists());
@@ -721,11 +1018,15 @@ mod tests {
         let result = create_project(ProjectType::Generic, "minimal-spec", temp.path()).unwrap();
 
         assert_eq!(result.project_type, ProjectType::Generic);
-        // Core files
+        // Core spec-kit files (CLAUDE.md Section 1 requirements)
         assert!(result.directory.join("CLAUDE.md").exists());
         assert!(result.directory.join("SPEC.md").exists());
+        assert!(result.directory.join("product-requirements.md").exists());
+        assert!(result.directory.join("PLANNING.md").exists());
         assert!(result.directory.join("docs").is_dir());
         assert!(result.directory.join("memory/constitution.md").exists());
+        assert!(result.directory.join("templates/PRD-template.md").exists());
+        assert!(result.directory.join("templates/spec-template.md").exists());
         // Only .gitignore for type-specific
         assert!(result.directory.join(".gitignore").exists());
         // No src, Cargo.toml, etc
@@ -765,5 +1066,49 @@ mod tests {
         assert!(content.contains("SPEC Tracker"));
         assert!(content.contains("SPEC-001"));
         assert!(content.contains("/speckit.project"));
+    }
+
+    #[test]
+    fn test_product_requirements_content() {
+        let temp = TempDir::new().unwrap();
+        create_project(ProjectType::Rust, "test-proj", temp.path()).unwrap();
+
+        let content =
+            fs::read_to_string(temp.path().join("test-proj/product-requirements.md")).unwrap();
+        assert!(content.contains("test-proj"));
+        assert!(content.contains("Product Summary"));
+        assert!(content.contains("Primary Users"));
+        assert!(content.contains("Core Features"));
+        assert!(content.contains("/speckit.specify"));
+    }
+
+    #[test]
+    fn test_planning_md_content() {
+        let temp = TempDir::new().unwrap();
+        create_project(ProjectType::Rust, "test-proj", temp.path()).unwrap();
+
+        let content = fs::read_to_string(temp.path().join("test-proj/PLANNING.md")).unwrap();
+        assert!(content.contains("test-proj"));
+        assert!(content.contains("Architecture"));
+        assert!(content.contains("Rust"));
+        assert!(content.contains("cargo build"));
+        assert!(content.contains("/speckit.new"));
+    }
+
+    #[test]
+    fn test_templates_content() {
+        let temp = TempDir::new().unwrap();
+        create_project(ProjectType::Generic, "test-proj", temp.path()).unwrap();
+
+        // PRD template
+        let prd = fs::read_to_string(temp.path().join("test-proj/templates/PRD-template.md")).unwrap();
+        assert!(prd.contains("[FEATURE_NAME]"));
+        assert!(prd.contains("[SPEC_ID]"));
+        assert!(prd.contains("Problem Statement"));
+
+        // Spec template
+        let spec = fs::read_to_string(temp.path().join("test-proj/templates/spec-template.md")).unwrap();
+        assert!(spec.contains("[SPEC_ID]"));
+        assert!(spec.contains("Requirements"));
     }
 }
