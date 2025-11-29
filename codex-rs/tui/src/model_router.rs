@@ -96,7 +96,7 @@ impl ModelRouter {
     /// Execute a prompt using the appropriate provider for the given model
     ///
     /// # Arguments
-    /// * `model` - The model name/ID (e.g., "claude-sonnet-4.5", "gemini-2.0-flash")
+    /// * `model` - The model name/ID (e.g., "claude-sonnet-4.5", "gemini-2.5-flash")
     /// * `prompt` - The prompt text to execute
     ///
     /// # Returns
@@ -412,11 +412,12 @@ async fn execute_gemini_native(
 }
 
 /// Map Claude model preset to actual API model name
+/// SPEC-959: Updated to use Claude 4.5 family (Nov 2025)
 fn map_claude_model(preset: &str) -> &str {
     let preset_lower = preset.to_ascii_lowercase();
 
     if preset_lower.contains("opus") {
-        "claude-opus-4-1-20250805"
+        "claude-opus-4-5-20251101"
     } else if preset_lower.contains("sonnet") {
         "claude-sonnet-4-5-20250929"
     } else if preset_lower.contains("haiku") {

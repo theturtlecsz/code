@@ -313,27 +313,20 @@ mod tests {
 
     #[test]
     fn test_legacy_aliases_work() {
-        // Test that all legacy command names still work
+        // SPEC-KIT-902: Legacy spec-* aliases removed from stage commands.
+        // Only guardrail commands retain spec-ops-* aliases.
         let registry = SPEC_KIT_REGISTRY.lock().unwrap();
 
-        // Legacy spec-* commands (note: spec-auto intentionally removed per special.rs)
-        assert!(registry.find("spec-plan").is_some());
-        assert!(registry.find("spec-tasks").is_some());
-        assert!(registry.find("spec-implement").is_some());
-        // spec-auto removed to prevent confusion with subagent routing
-        assert!(registry.find("new-spec").is_some());
-
-        // Legacy spec-ops-* commands
+        // Legacy spec-ops-* aliases for guardrail commands (still supported)
         assert!(registry.find("spec-ops-plan").is_some());
         assert!(registry.find("spec-ops-tasks").is_some());
         assert!(registry.find("spec-ops-implement").is_some());
         assert!(registry.find("spec-ops-validate").is_some());
         assert!(registry.find("spec-ops-audit").is_some());
         assert!(registry.find("spec-ops-unlock").is_some());
-        assert!(registry.find("spec-ops-auto").is_some());
 
-        // Legacy status commands
-        assert!(registry.find("spec-status").is_some());
+        // Note: spec-plan, spec-tasks, spec-implement, new-spec, spec-status
+        // aliases were removed in SPEC-KIT-902. Use speckit.* commands instead.
     }
 
     #[test]
@@ -443,10 +436,12 @@ mod tests {
 
     #[test]
     fn test_prompt_expanding_commands() {
+        // SPEC-KIT-902: Stage commands no longer expand prompts.
+        // They execute directly via execute() instead of orchestrator pattern.
         let registry = SPEC_KIT_REGISTRY.lock().unwrap();
 
-        // Stage commands should be prompt-expanding
-        let expanding = vec![
+        // Stage commands should NOT expand prompts (execute directly)
+        let stage_commands = vec![
             "speckit.plan",
             "speckit.tasks",
             "speckit.implement",
@@ -455,13 +450,11 @@ mod tests {
             "speckit.unlock",
         ];
 
-        for cmd_name in expanding {
+        for cmd_name in stage_commands {
             let cmd = registry.find(cmd_name).unwrap();
-            let expanded = cmd.expand_prompt("SPEC-TEST-001");
-            assert!(expanded.is_some(), "{} should expand prompts", cmd_name);
             assert!(
-                !expanded.unwrap().is_empty(),
-                "{} expanded prompt should not be empty",
+                cmd.expand_prompt("SPEC-TEST-001").is_none(),
+                "{} should NOT expand prompts (SPEC-KIT-902: direct execution)",
                 cmd_name
             );
         }
@@ -471,7 +464,7 @@ mod tests {
     fn test_non_expanding_commands() {
         let registry = SPEC_KIT_REGISTRY.lock().unwrap();
 
-        // Guardrail and status commands should NOT expand prompts
+        // Guardrail, status, and utility commands do not expand prompts
         let non_expanding = vec![
             "guardrail.plan",
             "speckit.status",
@@ -516,12 +509,14 @@ mod tests {
     fn test_all_names_count() {
         let registry = SPEC_KIT_REGISTRY.lock().unwrap();
 
-        // 27 primary names + 17 aliases = 44 total names
+        // SPEC-KIT-902: Legacy spec-* aliases removed.
+        // 27 primary names + 11 remaining aliases = 38 total names
+        // (Previously 44: removed spec-plan, spec-tasks, spec-implement, spec-auto, new-spec, spec-status)
         let all_names = registry.all_names();
         assert_eq!(
             all_names.len(),
-            44,
-            "Should have 44 total command names (27 primary + 17 aliases)"
+            38,
+            "Should have 38 total command names (27 primary + 11 aliases)"
         );
     }
 

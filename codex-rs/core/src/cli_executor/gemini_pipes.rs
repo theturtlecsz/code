@@ -888,10 +888,11 @@ fn is_perfect_square(n: u64) -> bool {
     #[tokio::test]
     #[ignore] // Requires Gemini CLI installed
     async fn test_all_gemini_models_smoke() {
+        // SPEC-959: Use current model names only (gemini-2.0 deprecated Nov 2025)
         let models = [
             ("gemini-2.5-flash", "Gemini 2.5 Flash"),
             ("gemini-2.5-pro", "Gemini 2.5 Pro"),
-            ("gemini-2.0-flash", "Gemini 2.0 Flash"),
+            ("gemini-3-pro", "Gemini 3 Pro"),
         ];
 
         for (model_id, display_name) in models {

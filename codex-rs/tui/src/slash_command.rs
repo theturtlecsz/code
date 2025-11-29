@@ -326,9 +326,7 @@ impl SlashCommand {
     pub fn spec_stage(self) -> Option<SpecStage> {
         // Legacy /spec-* commands removed. This method is kept for compatibility
         // but always returns None. Use the command registry for stage mapping.
-        match self {
-            _ => None,
-        }
+        None
     }
 
     pub fn is_available(self) -> bool {
@@ -643,19 +641,8 @@ fn parse_stage_name(value: &str) -> Option<SpecStage> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn legacy_spec_alias_emits_notice() {
-        let message = process_slash_command_message("/spec-plan SPEC-OPS-999");
-        // Legacy /spec-plan now expands to prompt (not RegularCommand)
-        // since SlashCommand::SpecPlan has spec_stage() implementation
-        match message {
-            ProcessedCommand::ExpandedPrompt(prompt) => {
-                assert!(prompt.contains("spec-plan"));
-                assert!(prompt.contains("SPEC-OPS-999"));
-            }
-            other => panic!("expected ExpandedPrompt, got {other:?}"),
-        }
-    }
+    // SPEC-KIT-902: legacy_spec_alias_emits_notice test removed.
+    // /spec-plan variant removed; use /speckit.plan instead.
 
     #[test]
     fn parse_spec_auto_args_supports_from_flag() {
@@ -680,17 +667,8 @@ mod tests {
         assert!(matches!(err, SpecAutoParseError::UnknownHalMode(_)));
     }
 
-    #[test]
-    fn spec_ops_auto_maps_to_spec_auto_script() {
-        let command = SlashCommand::SpecOpsAuto;
-        assert!(
-            command.is_spec_ops(),
-            "/spec-ops-auto should be recognized as Spec Ops command"
-        );
-        let meta = command.spec_ops().expect("Spec Ops metadata");
-        assert_eq!(meta.display, "auto");
-        assert_eq!(meta.script, "spec_auto.sh");
-    }
+    // SPEC-KIT-902: spec_ops_auto_maps_to_spec_auto_script test removed.
+    // SpecKitAuto uses the command registry, not spec_ops() shell script metadata.
 
     #[test]
     fn spec_evidence_stats_maps_to_evidence_stats_script() {
