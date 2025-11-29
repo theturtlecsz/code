@@ -197,6 +197,7 @@ pub(in super::super) fn validate_required_fields(stage: SpecStage, summary: &Val
 
     // Stage-specific required fields
     match stage {
+        SpecStage::Specify => obj.contains_key("prd_sections"),
         SpecStage::Plan => {
             obj.contains_key("work_breakdown") && obj.contains_key("acceptance_mapping")
         }

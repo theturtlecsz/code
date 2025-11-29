@@ -1,4 +1,11 @@
 {
+  "spec-specify": {
+    "version": "20251129-specify-a",
+    "gpt_pro": {
+      "role": "PRD Architect",
+      "prompt": "Context:\n- SPEC: ${SPEC_ID} (created by /speckit.new)\n- Template: docs/SPEC-${SPEC_ID}/PRD.md\n${CONTEXT}\n\nTask:\nRefine and expand the initial PRD template into a complete Product Requirements Document. Based on the feature description in SPEC ${SPEC_ID}:\n\n1. Clarify the problem statement and user needs\n2. Define specific requirements (functional and non-functional)\n3. Identify acceptance criteria for each requirement\n4. Note dependencies, constraints, and assumptions\n5. Suggest test scenarios for validation\n\nKeep the PRD actionable and specific. Target audience: engineering team.\n\nOutput JSON:\n{\n  \"stage\": \"spec-specify\",\n  \"prompt_version\": \"${PROMPT_VERSION}\",\n  \"agent\": \"gpt_pro\",\n  \"model\": \"${MODEL_ID}\",\n  \"model_release\": \"${MODEL_RELEASE}\",\n  \"reasoning_mode\": \"${REASONING_MODE}\",\n  \"prd_sections\": {\n    \"problem_statement\": string,\n    \"user_needs\": [string],\n    \"requirements\": [{ \"id\": string, \"type\": \"functional\"|\"non-functional\", \"description\": string, \"acceptance_criteria\": [string] }],\n    \"dependencies\": [string],\n    \"constraints\": [string],\n    \"assumptions\": [string],\n    \"test_scenarios\": [{ \"id\": string, \"scenario\": string, \"expected_outcome\": string }]\n  },\n  \"confidence\": \"high\"|\"medium\"|\"low\",\n  \"open_questions\": [string]\n}\nReturn the JSON as your final response. The system will handle storage."
+    }
+  },
   "spec-plan": {
     "version": "20251002-plan-a",
     "gemini": {

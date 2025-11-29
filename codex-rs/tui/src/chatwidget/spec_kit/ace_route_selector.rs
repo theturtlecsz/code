@@ -288,6 +288,8 @@ pub fn decide_stage_routing(
 ) -> StageRoutingDecision {
     // Baseline per stage
     let mut effort = match stage {
+        // SPEC-KIT-957: Specify uses Tier 1 (single agent, minimal effort)
+        crate::spec_prompts::SpecStage::Specify => AggregatorEffort::Minimal,
         crate::spec_prompts::SpecStage::Validate | crate::spec_prompts::SpecStage::Unlock => {
             AggregatorEffort::Minimal
         }

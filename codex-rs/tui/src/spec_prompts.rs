@@ -257,6 +257,8 @@ pub fn model_metadata(stage: SpecStage, agent: SpecAgent) -> Vec<(String, String
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SpecStage {
+    // Pre-pipeline stage (PRD generation)
+    Specify,
     // Main 6-stage pipeline
     Plan,
     Tasks,
@@ -282,9 +284,10 @@ impl SpecStage {
         ]
     }
 
-    /// All stages including quality commands
-    pub fn all_including_quality() -> [SpecStage; 9] {
+    /// All stages including quality commands and pre-pipeline stages
+    pub fn all_including_quality() -> [SpecStage; 10] {
         [
+            SpecStage::Specify,
             SpecStage::Plan,
             SpecStage::Tasks,
             SpecStage::Implement,
@@ -299,6 +302,7 @@ impl SpecStage {
 
     pub fn key(self) -> &'static str {
         match self {
+            SpecStage::Specify => "spec-specify",
             SpecStage::Plan => "spec-plan",
             SpecStage::Tasks => "spec-tasks",
             SpecStage::Implement => "spec-implement",
@@ -313,6 +317,7 @@ impl SpecStage {
 
     pub fn command_name(self) -> &'static str {
         match self {
+            SpecStage::Specify => "speckit.specify",
             SpecStage::Plan => "spec-plan",
             SpecStage::Tasks => "spec-tasks",
             SpecStage::Implement => "spec-implement",
@@ -327,6 +332,7 @@ impl SpecStage {
 
     pub fn display_name(self) -> &'static str {
         match self {
+            SpecStage::Specify => "Specify",
             SpecStage::Plan => "Plan",
             SpecStage::Tasks => "Tasks",
             SpecStage::Implement => "Implement",
@@ -345,6 +351,11 @@ impl SpecStage {
             self,
             SpecStage::Clarify | SpecStage::Analyze | SpecStage::Checklist
         )
+    }
+
+    /// Check if this is a pre-pipeline stage (before main 6-stage pipeline)
+    pub fn is_pre_pipeline(self) -> bool {
+        matches!(self, SpecStage::Specify)
     }
 }
 
@@ -397,6 +408,13 @@ pub fn build_stage_prompt_with_mcp(
     ];
 
     match stage {
+        SpecStage::Specify => {
+            // Pre-pipeline stage: PRD generation from initial SPEC template
+            replacements.push((
+                "SPEC_TEMPLATE".into(),
+                "Initial SPEC template created by /speckit.new (docs/SPEC-*/PRD.md).".into(),
+            ));
+        }
         SpecStage::Plan => {
             replacements.push((
                 "PREVIOUS_OUTPUTS.gemini".into(),

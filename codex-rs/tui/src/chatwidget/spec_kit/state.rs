@@ -1380,8 +1380,11 @@ pub fn guardrail_for_stage(stage: SpecStage) -> SlashCommand {
         SpecStage::Validate => SlashCommand::GuardrailValidate,
         SpecStage::Audit => SlashCommand::GuardrailAudit,
         SpecStage::Unlock => SlashCommand::GuardrailUnlock,
-        SpecStage::Clarify | SpecStage::Analyze | SpecStage::Checklist => {
-            // Quality commands don't have guardrails (they are quality checks themselves)
+        // Specify (pre-pipeline) and quality commands don't have guardrails
+        SpecStage::Specify
+        | SpecStage::Clarify
+        | SpecStage::Analyze
+        | SpecStage::Checklist => {
             SlashCommand::GuardrailPlan // Fallback (unused)
         }
     }
@@ -1389,6 +1392,7 @@ pub fn guardrail_for_stage(stage: SpecStage) -> SlashCommand {
 
 pub fn spec_ops_stage_prefix(stage: SpecStage) -> &'static str {
     match stage {
+        SpecStage::Specify => "specify_",
         SpecStage::Plan => "plan_",
         SpecStage::Tasks => "tasks_",
         SpecStage::Implement => "implement_",
@@ -1403,6 +1407,7 @@ pub fn spec_ops_stage_prefix(stage: SpecStage) -> &'static str {
 
 pub fn expected_guardrail_command(stage: SpecStage) -> &'static str {
     match stage {
+        SpecStage::Specify => "speckit-specify",
         SpecStage::Plan => "spec-ops-plan",
         SpecStage::Tasks => "spec-ops-tasks",
         SpecStage::Implement => "spec-ops-implement",

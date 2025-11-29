@@ -60,6 +60,9 @@ pub fn validate_guardrail_schema(stage: SpecStage, telemetry: &Value) -> Vec<Str
     }
 
     match stage {
+        SpecStage::Specify => {
+            // Pre-pipeline stage: no special telemetry fields required
+        }
         SpecStage::Plan => {
             if require_object(telemetry, &["baseline"], &mut failures).is_some() {
                 require_string_field(telemetry, &["baseline", "mode"], &mut failures);
@@ -185,6 +188,14 @@ pub fn validate_guardrail_schema(stage: SpecStage, telemetry: &Value) -> Vec<Str
 
 pub fn evaluate_guardrail_value(stage: SpecStage, value: &Value) -> GuardrailEvaluation {
     match stage {
+        SpecStage::Specify => {
+            // Pre-pipeline stage: no guardrails (PRD generation)
+            GuardrailEvaluation {
+                success: true,
+                summary: "Pre-pipeline stage (no guardrail)".to_string(),
+                failures: Vec::new(),
+            }
+        }
         SpecStage::Plan => {
             let baseline = value
                 .get("baseline")

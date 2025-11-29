@@ -197,7 +197,9 @@ impl SpecKitCommand for SpecKitUnlockCommand {
 /// 1. Validates SPEC-ID argument
 /// 2. Runs native guardrail validation
 /// 3. Spawns agents directly via auto_submit_spec_stage_prompt()
-fn execute_stage_command(
+///
+/// SPEC-KIT-957: Made public for use by SpecKitSpecifyCommand
+pub fn execute_stage_command(
     widget: &mut ChatWidget,
     args: String,
     stage: SpecStage,

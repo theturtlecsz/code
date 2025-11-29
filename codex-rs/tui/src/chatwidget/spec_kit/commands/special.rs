@@ -138,7 +138,7 @@ impl SpecKitCommand for SpecKitNewCommand {
 }
 
 /// Command: /speckit.specify
-/// Generate PRD with multi-agent consensus
+/// Generate PRD with single-agent refinement (SPEC-KIT-957: Tier 1)
 pub struct SpecKitSpecifyCommand;
 
 impl SpecKitCommand for SpecKitSpecifyCommand {
@@ -151,18 +151,21 @@ impl SpecKitCommand for SpecKitSpecifyCommand {
     }
 
     fn description(&self) -> &'static str {
-        "generate PRD with multi-agent consensus"
+        "refine PRD with single-agent (Tier 1, ~$0.10)"
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
-        // Routed to subagent orchestrators
-        let formatted = codex_core::slash_commands::format_subagent_command(
+        // SPEC-KIT-957: Direct execution, no longer uses orchestrator pattern
+        super::plan::execute_stage_command(
+            widget,
+            args,
+            crate::spec_prompts::SpecStage::Specify,
             "speckit.specify",
-            &args,
-            Some(&widget.config.agents),
-            Some(&widget.config.subagent_commands),
         );
-        widget.submit_prompt_with_display(args, formatted.prompt);
+    }
+
+    fn expand_prompt(&self, _args: &str) -> Option<String> {
+        None // SPEC-KIT-957: No longer uses orchestrator pattern
     }
 
     fn requires_args(&self) -> bool {
