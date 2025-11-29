@@ -103,7 +103,7 @@
 
 **Context**: Comprehensive architecture review generated 10 actionable tasks from diagram analysis and ACE debugging session. **Note**: Removed SPEC-KIT-907, 908, 905 (upstream sync tasks - not applicable per fork strategy decision 2025-10-31).
 
-**STATUS**: 5/7 Complete (909 ✅, 903 ✅, 910 ✅, 901 ✅ closed obsolete, 902 needs PRD)
+**STATUS**: 6/6 Complete (909 ✅, 903 ✅, 910 ✅, 901 ✅ closed obsolete, 902 ✅) - **100% COMPLETE**
 
 | Order | Task ID | Title | Status | Owners | PRD | Branch | PR | Created | Notes |
 |-------|---------|-------|--------|--------|-----|--------|----|---------|-------|
@@ -111,13 +111,12 @@
 | 3 | SPEC-KIT-903 | Add Template Version Tracking | **DONE** | Code | docs/SPEC-KIT-903-template-versioning/PRD.md | feature/spec-kit-069-complete | TBD | 2025-11-01 | 15 min - trivial implementation | **COMPLETE** (2025-11-01): Added **Template Version** metadata to 6 agent command templates. Modified: plan-template.md (plan-v1.0), tasks-template.md (tasks-v1.0), implement-template.md (implement-v1.0), validate-template.md (validate-v1.0), audit-template.md (audit-v1.0), unlock-template.md (unlock-v1.0). Agents automatically include version line when using templates, enabling reproducibility and stale artifact detection. **Scope**: 6 agent commands only (native commands don't use templates post SPEC-KIT-070). **Impact**: Template evolution tracking, quality assurance for generated artifacts. **Effort**: 15 min (was estimated 2-4 hours, actual trivial via template header injection). **Files**: 6 templates updated. |
 | 4 | SPEC-KIT-901 | Formalize MCP Native Interface | **CLOSED** | Code | docs/SPEC-KIT-901-mcp-native-interface-docs/spec.md | | | 2025-10-30 | **CLOSED** (2025-11-29): Obsolete - architecture evolved. **Findings**: (1) "NativeMcpServer trait" doesn't exist - uses message processors, (2) Documentation already exists (`codex_mcp_interface.md`, 125 lines), (3) SPEC-934 eliminated MCP from spec-kit hot path (SQLite now primary), (4) 4-7h for docs with no identified consumers. Original problem (undocumented interface) no longer relevant. |
 | 5 | SPEC-KIT-910 | Separate Consensus Database | **DONE** | Code | docs/SPEC-KIT-910-consensus-db-separation/spec.md | | | 2025-10-30 | **CLOSED** (2025-11-29): Investigation confirmed goal already achieved. **Evidence**: consensus_db.rs (1072 LOC) provides dedicated SQLite at `~/.code/consensus_artifacts.db` with 6 tables, WAL mode, connection pooling, retry logic. Implemented via: SPEC-072 (initial), SPEC-934 (MCP elimination, 4→0 storage calls), SPEC-945B/C (schema optimization). No further work needed. |
-| 6 | SPEC-KIT-902 | Nativize Guardrail Scripts | **NEEDS PRD** | Code | docs/SPEC-KIT-902-nativize-guardrails/spec.md (stub only) | | | 2025-10-30 | **P2 - 90 Day** ⚠️ NEEDS PRD: Stub spec only (543 bytes), PRD.md missing. Scope reduced by SPEC-070 (4 quality commands already native). **Revised Effort**: 3-5h PRD + 20-30h implementation (down from 40h). **Total**: 23-35h. **Action Required**: Create PRD assessing 7 remaining guardrail scripts. **Depends**: SPEC-909 ✅ (complete). |
+| 6 | SPEC-KIT-902 | Nativize Guardrail Scripts | **DONE** | Code | docs/SPEC-KIT-902-nativize-guardrails/PRD.md | main | bddd82fd7 | 2025-10-30 | **COMPLETE** (2025-11-29): Eliminated orchestrator pattern from stage commands. **Delivered**: (1) Refactored /speckit.plan,tasks,implement,validate,audit,unlock to direct agent spawning, (2) Deleted legacy code (SpecStageInvocation, parse_spec_stage_invocation, queue_consensus_runner), (3) Removed 15 enum variants from slash_command.rs, (4) Deleted 10 shell scripts (consensus_runner.sh, common.sh, etc.), (5) Nativized evidence_stats.sh → check_spec_evidence_limit(). **Impact**: ~1,700 LOC deleted, no subprocess orchestrator, direct TUI agent spawning. **Actual Effort**: ~4h. **Commits**: bddd82fd7, fffbeaf19. |
 
 **Sequencing** (Updated 2025-11-29):
-- **Completed**: 070 ✅, 068 ✅, 909 ✅, 903 ✅, 910 ✅, 901 ✅ (closed obsolete)
+- **Completed**: 070 ✅, 068 ✅, 909 ✅, 903 ✅, 910 ✅, 901 ✅ (closed obsolete), **902 ✅**
 - **Closed**: 904 ❌ (obsolete), 906 ❌ (rejected), 067 ❌ (test only), 901 ❌ (obsolete - architecture evolved)
-- **Remaining**: 1 SPEC (902) - needs PRD before implementation
-- **Next**: 902 (23-35h) - nativize remaining guardrail scripts
+- **STATUS**: Architecture Backlog **100% COMPLETE** (6/6 done, 2 closed obsolete)
 
 ### Implementation Backlog (from SPEC-932 Planning Session, 2025-11-13)
 
