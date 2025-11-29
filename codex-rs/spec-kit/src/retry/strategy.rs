@@ -7,6 +7,7 @@
 //! - Status callbacks for progress reporting
 
 use backon::{ExponentialBuilder, Retryable};
+use codex_async_utils::OrCancelExt;
 use rand::Rng;
 use std::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
@@ -278,8 +279,12 @@ where
                     is_rate_limit,
                 });
 
-                // Sleep with cancellation support
-                if wait_with_cancel(cancel, sleep_duration).await.is_err() {
+                // Sleep with cancellation support (P53-SYNC: OrCancelExt)
+                if tokio::time::sleep(sleep_duration)
+                    .or_cancel(cancel)
+                    .await
+                    .is_err()
+                {
                     return Err(super::RetryError::Aborted);
                 }
 
@@ -287,18 +292,6 @@ where
                 backoff_ms = (backoff_ms as f64 * config.backoff_multiplier) as u64;
             }
         }
-    }
-}
-
-/// Wait with cancellation support (Auto Drive pattern)
-async fn wait_with_cancel(cancel: &CancellationToken, duration: Duration) -> Result<(), ()> {
-    if duration.is_zero() {
-        return Ok(());
-    }
-
-    tokio::select! {
-        _ = tokio::time::sleep(duration) => Ok(()),
-        _ = cancel.cancelled() => Err(()),
     }
 }
 

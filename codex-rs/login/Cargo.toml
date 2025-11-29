@@ -33,6 +33,10 @@ url = { workspace = true }
 urlencoding = { workspace = true }
 webbrowser = { workspace = true }
 
+# P53-SYNC: Secure credential storage via system keyring
+codex-keyring-store = { workspace = true }
+tracing = { workspace = true }
+
 [dev-dependencies]
 anyhow = { workspace = true }
 core_test_support = { workspace = true }

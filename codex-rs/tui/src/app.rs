@@ -2159,6 +2159,12 @@ impl App<'_> {
                                 widget.handle_auth_command(&command_args);
                             }
                         }
+                        // P53-SYNC: Export session logs for debugging
+                        SlashCommand::Feedback => {
+                            if let AppState::Chat { widget } = &mut self.app_state {
+                                widget.handle_feedback_command(&self.config);
+                            }
+                        }
                         SlashCommand::Diff => {
                             let tx = self.app_event_tx.clone();
                             tokio::spawn(async move {

@@ -178,6 +178,8 @@ pub enum SlashCommand {
     #[strum(serialize = "spec-status")]
     SpecStatus,
     // === END FORK-SPECIFIC: spec-kit commands ===
+    // P53-SYNC: Diagnostic feedback export
+    Feedback,
     Logout,
     Quit,
     #[cfg(debug_assertions)]
@@ -261,6 +263,7 @@ impl SlashCommand {
             SlashCommand::Demo => "populate history with demo cells (dev/perf only)",
             SlashCommand::Login => "manage Code sign-ins (add/select/disconnect)",
             SlashCommand::Auth => "device code OAuth status (status/login/logout <provider>)",
+            SlashCommand::Feedback => "export session logs for debugging/bug reports",
             SlashCommand::Logout => "log out of Code",
             #[cfg(debug_assertions)]
             SlashCommand::TestApproval => "test approval request",

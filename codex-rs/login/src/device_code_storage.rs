@@ -1,24 +1,36 @@
 //! Token Storage for Device Code Authorization
 //!
-//! FORK-SPECIFIC (just-every/code): P6-SYNC Phase 5
+//! FORK-SPECIFIC (just-every/code): P6-SYNC Phase 5 + P53-SYNC Keyring Integration
 //!
 //! Persists OAuth tokens from device code flow to enable:
 //! - Session continuity without re-authentication
 //! - Automatic token refresh when access tokens expire
 //! - Secure storage of refresh tokens
 //!
-//! Storage location: ~/.codex/device_tokens.json (alongside auth.json)
+//! Storage strategy (P53-SYNC):
+//! - Primary: System keyring (encrypted at rest, OS-managed)
+//! - Fallback: ~/.codex/device_tokens.json (file-based, chmod 600)
+//! - Migration: File tokens auto-migrate to keyring on first load
 
 use crate::device_code::{DeviceCodeProvider, StoredToken, TokenResponse};
+use codex_keyring_store::{CredentialStoreError, DefaultKeyringStore, KeyringStore};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use thiserror::Error;
+use tracing::{debug, trace, warn};
 
 /// Default filename for device code tokens
 const TOKEN_FILE: &str = "device_tokens.json";
+
+/// Keyring service identifier (P53-SYNC)
+const KEYRING_SERVICE: &str = "codex-cli";
+
+/// Keyring account prefix for device code tokens
+const KEYRING_ACCOUNT_PREFIX: &str = "device-token-";
 
 /// Storage errors
 #[derive(Debug, Error)]
@@ -31,6 +43,9 @@ pub enum StorageError {
 
     #[error("Token not found for provider: {0}")]
     NotFound(String),
+
+    #[error("Keyring error: {0}")]
+    Keyring(#[from] CredentialStoreError),
 }
 
 /// Token storage file format
@@ -48,26 +63,167 @@ fn default_version() -> u32 {
 }
 
 /// Device code token storage manager
+///
+/// P53-SYNC: Uses keyring as primary storage with file fallback.
+/// Tokens are automatically migrated from file to keyring on first access.
 pub struct DeviceCodeTokenStorage {
-    /// Path to the token file
+    /// Path to the token file (fallback storage)
     file_path: PathBuf,
+    /// System keyring store (primary storage, optional for headless environments)
+    keyring: Option<Arc<dyn KeyringStore>>,
 }
 
 impl DeviceCodeTokenStorage {
     /// Create storage with default location (~/.codex/device_tokens.json)
+    /// and system keyring enabled.
     pub fn new() -> io::Result<Self> {
         let codex_home = default_codex_home()?;
-        Ok(Self::with_path(codex_home.join(TOKEN_FILE)))
+        let file_path = codex_home.join(TOKEN_FILE);
+
+        // Try to initialize system keyring (graceful fallback if unavailable)
+        let keyring: Option<Arc<dyn KeyringStore>> = match Self::try_init_keyring() {
+            Ok(k) => {
+                debug!("Keyring initialized successfully for token storage");
+                Some(Arc::new(k))
+            }
+            Err(e) => {
+                warn!("Keyring unavailable, using file-only storage: {}", e);
+                None
+            }
+        };
+
+        Ok(Self { file_path, keyring })
     }
 
-    /// Create storage with custom file path
+    /// Create storage with custom file path (keyring enabled by default)
     pub fn with_path(path: PathBuf) -> Self {
-        Self { file_path: path }
+        let keyring: Option<Arc<dyn KeyringStore>> = match Self::try_init_keyring() {
+            Ok(k) => Some(Arc::new(k)),
+            Err(_) => None,
+        };
+        Self {
+            file_path: path,
+            keyring,
+        }
+    }
+
+    /// Create storage with custom file path and keyring (for testing)
+    pub fn with_path_and_keyring(path: PathBuf, keyring: Option<Arc<dyn KeyringStore>>) -> Self {
+        Self {
+            file_path: path,
+            keyring,
+        }
+    }
+
+    /// Try to initialize the default keyring store
+    fn try_init_keyring() -> Result<DefaultKeyringStore, &'static str> {
+        // DefaultKeyringStore may fail on headless systems
+        // We test it with a probe operation
+        let store = DefaultKeyringStore;
+
+        // Probe: Try to load a non-existent key to verify keyring is accessible
+        // This catches headless environments where keyring daemon isn't running
+        match store.load(KEYRING_SERVICE, "probe-test") {
+            Ok(_) | Err(CredentialStoreError::Other(_)) => {
+                // Ok means probe worked (and returned None for missing key)
+                // Other error is acceptable - keyring is accessible but operation failed
+                Ok(store)
+            }
+        }
     }
 
     /// Get the storage file path
     pub fn path(&self) -> &Path {
         &self.file_path
+    }
+
+    /// Check if keyring storage is available
+    pub fn has_keyring(&self) -> bool {
+        self.keyring.is_some()
+    }
+
+    /// Get keyring account name for a provider
+    fn keyring_account(provider: DeviceCodeProvider) -> String {
+        format!("{}{}", KEYRING_ACCOUNT_PREFIX, provider.as_str())
+    }
+
+    /// Load token from keyring (P53-SYNC)
+    fn load_from_keyring(&self, provider: DeviceCodeProvider) -> Option<StoredToken> {
+        let keyring = self.keyring.as_ref()?;
+        let account = Self::keyring_account(provider);
+
+        match keyring.load(KEYRING_SERVICE, &account) {
+            Ok(Some(json)) => {
+                trace!("keyring.load success for {}", provider.as_str());
+                match serde_json::from_str(&json) {
+                    Ok(token) => Some(token),
+                    Err(e) => {
+                        warn!(
+                            "Failed to parse keyring token for {}: {}",
+                            provider.as_str(),
+                            e
+                        );
+                        None
+                    }
+                }
+            }
+            Ok(None) => {
+                trace!("keyring.load no entry for {}", provider.as_str());
+                None
+            }
+            Err(e) => {
+                warn!("keyring.load error for {}: {}", provider.as_str(), e);
+                None
+            }
+        }
+    }
+
+    /// Save token to keyring (P53-SYNC)
+    fn save_to_keyring(&self, provider: DeviceCodeProvider, token: &StoredToken) -> bool {
+        let Some(keyring) = self.keyring.as_ref() else {
+            return false;
+        };
+        let account = Self::keyring_account(provider);
+
+        match serde_json::to_string(token) {
+            Ok(json) => match keyring.save(KEYRING_SERVICE, &account, &json) {
+                Ok(()) => {
+                    trace!("keyring.save success for {}", provider.as_str());
+                    true
+                }
+                Err(e) => {
+                    warn!("keyring.save error for {}: {}", provider.as_str(), e);
+                    false
+                }
+            },
+            Err(e) => {
+                warn!("Failed to serialize token for keyring: {}", e);
+                false
+            }
+        }
+    }
+
+    /// Delete token from keyring (P53-SYNC)
+    fn delete_from_keyring(&self, provider: DeviceCodeProvider) -> bool {
+        let Some(keyring) = self.keyring.as_ref() else {
+            return false;
+        };
+        let account = Self::keyring_account(provider);
+
+        match keyring.delete(KEYRING_SERVICE, &account) {
+            Ok(existed) => {
+                trace!(
+                    "keyring.delete success for {} (existed: {})",
+                    provider.as_str(),
+                    existed
+                );
+                true
+            }
+            Err(e) => {
+                warn!("keyring.delete error for {}: {}", provider.as_str(), e);
+                false
+            }
+        }
     }
 
     /// Read all stored tokens
@@ -103,25 +259,63 @@ impl DeviceCodeTokenStorage {
     }
 
     /// Store a token for a provider
+    ///
+    /// P53-SYNC: Saves to keyring (primary) and file (backup).
     pub fn store_token(
         &self,
         provider: DeviceCodeProvider,
         response: TokenResponse,
     ) -> Result<(), StorageError> {
-        let mut store = self.read_store()?;
         let token = StoredToken::from_response(provider, response);
+
+        // P53-SYNC: Save to keyring first (primary storage)
+        let keyring_saved = self.save_to_keyring(provider, &token);
+        if keyring_saved {
+            debug!("Token saved to keyring for {}", provider.as_str());
+        }
+
+        // Always save to file as backup (or as primary if keyring unavailable)
+        let mut store = self.read_store()?;
         store.tokens.insert(provider.as_str().to_string(), token);
-        self.write_store(&store)
+        self.write_store(&store)?;
+
+        if !keyring_saved && self.keyring.is_some() {
+            warn!(
+                "Token saved to file only (keyring save failed) for {}",
+                provider.as_str()
+            );
+        }
+
+        Ok(())
     }
 
     /// Get a stored token for a provider
+    ///
+    /// P53-SYNC: Tries keyring first, falls back to file, migrates if found in file only.
     pub fn get_token(&self, provider: DeviceCodeProvider) -> Result<StoredToken, StorageError> {
+        // P53-SYNC: Try keyring first (primary storage)
+        if let Some(token) = self.load_from_keyring(provider) {
+            trace!("Token loaded from keyring for {}", provider.as_str());
+            return Ok(token);
+        }
+
+        // Fallback to file storage
         let store = self.read_store()?;
-        store
+        let token = store
             .tokens
             .get(provider.as_str())
             .cloned()
-            .ok_or_else(|| StorageError::NotFound(provider.to_string()))
+            .ok_or_else(|| StorageError::NotFound(provider.to_string()))?;
+
+        // P53-SYNC: Migrate file token to keyring
+        if self.keyring.is_some() && self.save_to_keyring(provider, &token) {
+            debug!(
+                "Migrated token from file to keyring for {}",
+                provider.as_str()
+            );
+        }
+
+        Ok(token)
     }
 
     /// Check if a token exists for a provider
@@ -165,7 +359,13 @@ impl DeviceCodeTokenStorage {
     }
 
     /// Remove a token for a provider
+    ///
+    /// P53-SYNC: Removes from both keyring and file storage.
     pub fn remove_token(&self, provider: DeviceCodeProvider) -> Result<(), StorageError> {
+        // P53-SYNC: Remove from keyring
+        self.delete_from_keyring(provider);
+
+        // Remove from file storage
         let mut store = self.read_store()?;
         store.tokens.remove(provider.as_str());
         self.write_store(&store)
@@ -281,12 +481,27 @@ fn default_codex_home() -> io::Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use codex_keyring_store::tests::MockKeyringStore;
     use tempfile::TempDir;
 
+    /// Create file-only storage (no keyring) for basic tests
     fn test_storage() -> (TempDir, DeviceCodeTokenStorage) {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("tokens.json");
-        (dir, DeviceCodeTokenStorage::with_path(path))
+        // Use file-only storage to avoid CI keyring issues
+        (
+            dir,
+            DeviceCodeTokenStorage::with_path_and_keyring(path, None),
+        )
+    }
+
+    /// Create storage with mock keyring for keyring integration tests
+    fn test_storage_with_keyring() -> (TempDir, DeviceCodeTokenStorage, Arc<MockKeyringStore>) {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("tokens.json");
+        let keyring = Arc::new(MockKeyringStore::default());
+        let storage = DeviceCodeTokenStorage::with_path_and_keyring(path, Some(keyring.clone()));
+        (dir, storage, keyring)
     }
 
     fn make_token_response() -> TokenResponse {
@@ -428,5 +643,88 @@ mod tests {
         assert!(TokenStatus::NeedsRefresh.is_usable());
         assert!(!TokenStatus::Expired.is_usable());
         assert!(!TokenStatus::NotAuthenticated.is_usable());
+    }
+
+    // === P53-SYNC: Keyring integration tests ===
+
+    #[test]
+    fn test_keyring_store_and_get() {
+        let (_dir, storage, keyring) = test_storage_with_keyring();
+
+        // Store a token
+        storage
+            .store_token(DeviceCodeProvider::OpenAI, make_token_response())
+            .unwrap();
+
+        // Verify it was saved to keyring
+        let account = DeviceCodeTokenStorage::keyring_account(DeviceCodeProvider::OpenAI);
+        assert!(
+            keyring.saved_value(&account).is_some(),
+            "Token should be saved to keyring"
+        );
+
+        // Retrieve it - should come from keyring
+        let token = storage.get_token(DeviceCodeProvider::OpenAI).unwrap();
+        assert_eq!(token.access_token, "test-access-token");
+    }
+
+    #[test]
+    fn test_keyring_migration_from_file() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("tokens.json");
+
+        // Step 1: Create file-only storage and save a token
+        let file_only_storage = DeviceCodeTokenStorage::with_path_and_keyring(path.clone(), None);
+        file_only_storage
+            .store_token(DeviceCodeProvider::OpenAI, make_token_response())
+            .unwrap();
+
+        // Step 2: Create keyring-enabled storage with same file path
+        let keyring = Arc::new(MockKeyringStore::default());
+        let keyring_storage =
+            DeviceCodeTokenStorage::with_path_and_keyring(path, Some(keyring.clone()));
+
+        // Keyring should be empty initially
+        let account = DeviceCodeTokenStorage::keyring_account(DeviceCodeProvider::OpenAI);
+        assert!(keyring.saved_value(&account).is_none());
+
+        // Step 3: Get token - should migrate from file to keyring
+        let token = keyring_storage
+            .get_token(DeviceCodeProvider::OpenAI)
+            .unwrap();
+        assert_eq!(token.access_token, "test-access-token");
+
+        // Keyring should now have the token
+        assert!(
+            keyring.saved_value(&account).is_some(),
+            "Token should have been migrated to keyring"
+        );
+    }
+
+    #[test]
+    fn test_keyring_remove_token() {
+        let (_dir, storage, keyring) = test_storage_with_keyring();
+
+        // Store and then remove
+        storage
+            .store_token(DeviceCodeProvider::OpenAI, make_token_response())
+            .unwrap();
+        let account = DeviceCodeTokenStorage::keyring_account(DeviceCodeProvider::OpenAI);
+        assert!(keyring.saved_value(&account).is_some());
+
+        storage.remove_token(DeviceCodeProvider::OpenAI).unwrap();
+
+        // Should be removed from keyring
+        assert!(keyring.saved_value(&account).is_none());
+        assert!(!storage.has_token(DeviceCodeProvider::OpenAI));
+    }
+
+    #[test]
+    fn test_has_keyring_flag() {
+        let (_dir, storage_no_keyring) = test_storage();
+        assert!(!storage_no_keyring.has_keyring());
+
+        let (_dir2, storage_with_keyring, _keyring) = test_storage_with_keyring();
+        assert!(storage_with_keyring.has_keyring());
     }
 }

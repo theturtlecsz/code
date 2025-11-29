@@ -8855,6 +8855,74 @@ impl ChatWidget<'_> {
         self.request_redraw();
     }
 
+    /// P53-SYNC: Handle /feedback command to export session logs
+    pub(crate) fn handle_feedback_command(&mut self, config: &codex_core::config::Config) {
+        use std::fs;
+        use std::io::Write;
+
+        // Helper to display messages in chat history
+        let show_msg = |widget: &mut Self, message: String| {
+            let cell = history_cell::new_background_event(message);
+            widget.push_system_cell(
+                cell,
+                SystemPlacement::EndOfCurrent,
+                None,
+                None,
+                "feedback:result",
+            );
+        };
+
+        // Get the feedback collector
+        let Some(feedback) = crate::get_feedback_collector() else {
+            show_msg(self, String::from("Feedback collection not initialized."));
+            return;
+        };
+
+        // Take a snapshot of the ring buffer (None = current session)
+        let snapshot = feedback.snapshot(None);
+        if snapshot.is_empty() {
+            show_msg(
+                self,
+                String::from("No logs captured yet. Try again after performing some actions."),
+            );
+            return;
+        }
+
+        // Create feedback directory
+        let feedback_dir = config.codex_home.join("feedback");
+        if let Err(e) = fs::create_dir_all(&feedback_dir) {
+            show_msg(self, format!("Failed to create feedback directory: {}", e));
+            return;
+        }
+
+        // Generate filename with timestamp
+        let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+        let filename = format!("feedback_{}.log", timestamp);
+        let filepath = feedback_dir.join(&filename);
+
+        // Write snapshot to file
+        match fs::File::create(&filepath) {
+            Ok(mut file) => {
+                if let Err(e) = file.write_all(snapshot.as_bytes()) {
+                    show_msg(self, format!("Failed to write feedback file: {}", e));
+                    return;
+                }
+
+                let msg = format!(
+                    "Session logs exported ({} bytes):\n{}\n\nAttach this file when reporting issues.",
+                    snapshot.len(),
+                    filepath.display()
+                );
+                show_msg(self, msg);
+            }
+            Err(e) => {
+                show_msg(self, format!("Failed to create feedback file: {}", e));
+            }
+        }
+
+        self.request_redraw();
+    }
+
     pub(crate) fn auth_manager(&self) -> Arc<AuthManager> {
         self.auth_manager.clone()
     }

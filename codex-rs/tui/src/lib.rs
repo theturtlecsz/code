@@ -94,6 +94,7 @@ use codex_core::config_types::ThemeConfig;
 use codex_core::config_types::ThemeName;
 use codex_core::protocol::AskForApproval;
 use codex_core::protocol::SandboxPolicy;
+use codex_feedback::CodexFeedback;
 use codex_login::AuthMode;
 use codex_login::CodexAuth;
 use codex_ollama::DEFAULT_OSS_MODEL;
@@ -101,9 +102,20 @@ use codex_protocol::config_types::SandboxMode;
 use regex_lite::Regex;
 use std::fs::OpenOptions;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 use tracing_appender::non_blocking;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::prelude::*;
+
+// P53-SYNC: Global feedback collector for /feedback command
+static FEEDBACK_COLLECTOR: OnceLock<CodexFeedback> = OnceLock::new();
+
+/// Get the global feedback collector (P53-SYNC)
+///
+/// Returns None if feedback collection wasn't initialized.
+pub fn get_feedback_collector() -> Option<&'static CodexFeedback> {
+    FEEDBACK_COLLECTOR.get()
+}
 
 mod app;
 mod app_event;
@@ -401,11 +413,22 @@ pub async fn run_main(
     let env_filter =
         || EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
 
-    // Build layered subscriber:
+    // P53-SYNC: Initialize feedback collector for /feedback command
+    let feedback = CodexFeedback::new();
+    let _ = FEEDBACK_COLLECTOR.set(feedback.clone());
+
+    // Build layered subscriber with file output and feedback ring buffer:
     let file_layer = tracing_subscriber::fmt::layer()
         .with_writer(non_blocking)
         .with_target(false)
         .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
+        .with_filter(env_filter());
+
+    // P53-SYNC: Feedback layer captures logs to ring buffer
+    let feedback_layer = tracing_subscriber::fmt::layer()
+        .with_writer(feedback.make_writer())
+        .with_target(true)
+        .with_ansi(false) // No ANSI in log exports
         .with_filter(env_filter());
 
     if cli.oss {
@@ -414,7 +437,10 @@ pub async fn run_main(
             .map_err(|e| std::io::Error::other(format!("OSS setup failed: {e}")))?;
     }
 
-    let _ = tracing_subscriber::registry().with(file_layer).try_init();
+    let _ = tracing_subscriber::registry()
+        .with(file_layer)
+        .with(feedback_layer)
+        .try_init();
 
     let latest_upgrade_version = if crate::updates::upgrade_ui_enabled() {
         updates::get_upgrade_version(&config)
