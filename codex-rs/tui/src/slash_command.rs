@@ -112,6 +112,8 @@ pub enum SlashCommand {
     Mcp,
     Resume,
     Login,
+    // P6-SYNC Phase 5: Device code OAuth management
+    Auth,
     // Prompt-expanding commands
     Plan,
     Solve,
@@ -307,6 +309,7 @@ impl SlashCommand {
             SlashCommand::Perf => "performance tracing (on/off/show/reset)",
             SlashCommand::Demo => "populate history with demo cells (dev/perf only)",
             SlashCommand::Login => "manage Code sign-ins (add/select/disconnect)",
+            SlashCommand::Auth => "device code OAuth status (status/login/logout <provider>)",
             SlashCommand::Logout => "log out of Code",
             #[cfg(debug_assertions)]
             SlashCommand::TestApproval => "test approval request",

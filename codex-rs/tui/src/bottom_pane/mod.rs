@@ -510,6 +510,16 @@ impl BottomPane<'_> {
         self.request_redraw();
     }
 
+    /// P6-SYNC Phase 5: Update device code token status for footer display.
+    /// Called periodically to show OAuth token status for OpenAI/Google/Anthropic.
+    pub(crate) fn set_device_token_status(
+        &mut self,
+        status: Option<Vec<(codex_login::DeviceCodeProvider, codex_login::TokenStatus)>>,
+    ) {
+        self.composer.set_device_token_status(status);
+        self.request_redraw();
+    }
+
     /// Called when the agent requests user approval.
     pub fn push_approval_request(&mut self, request: ApprovalRequest) {
         let request = if let Some(view) = self.active_view.as_mut() {

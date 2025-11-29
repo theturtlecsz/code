@@ -473,6 +473,8 @@ impl App<'_> {
             }
             // Check for initial animations after widget is created
             chat_widget.check_for_initial_animations();
+            // P6-SYNC Phase 5: Update device token status on startup
+            chat_widget.update_device_token_status();
             if let Some(notice) = startup_footer_notice {
                 chat_widget.debug_notice(notice);
             }
@@ -2169,6 +2171,11 @@ impl App<'_> {
                                 tracing::error!("failed to logout: {e}");
                             }
                             break 'main;
+                        }
+                        SlashCommand::Auth => {
+                            if let AppState::Chat { widget } = &mut self.app_state {
+                                widget.handle_auth_command(&command_args);
+                            }
                         }
                         SlashCommand::Diff => {
                             let tx = self.app_event_tx.clone();

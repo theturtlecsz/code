@@ -77,6 +77,12 @@ pub(crate) trait SpecKitContext {
     /// P6-SYNC Phase 6: Update spec-kit token metrics in status bar
     fn set_spec_auto_metrics(&mut self, metrics: Option<TokenMetricsWidget>);
 
+    /// P6-SYNC Phase 5: Update device code token status in footer
+    fn set_device_token_status(
+        &mut self,
+        status: Option<Vec<(codex_login::DeviceCodeProvider, codex_login::TokenStatus)>>,
+    );
+
     // === Guardrail & Consensus Operations (T79-Revised) ===
 
     /// Collect guardrail outcome for a spec/stage
@@ -217,6 +223,13 @@ pub mod test_mock {
         }
 
         fn set_spec_auto_metrics(&mut self, _metrics: Option<TokenMetricsWidget>) {
+            // Mock: No-op since there's no real UI to update
+        }
+
+        fn set_device_token_status(
+            &mut self,
+            _status: Option<Vec<(codex_login::DeviceCodeProvider, codex_login::TokenStatus)>>,
+        ) {
             // Mock: No-op since there's no real UI to update
         }
 

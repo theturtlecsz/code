@@ -3601,6 +3601,38 @@ impl ChatWidget<'_> {
         }
     }
 
+    /// P6-SYNC Phase 5: Update device code token status from storage
+    /// Called on startup and can be called periodically to refresh status
+    pub fn update_device_token_status(&mut self) {
+        use codex_login::DeviceCodeTokenStorage;
+
+        match DeviceCodeTokenStorage::new() {
+            Ok(storage) => {
+                match storage.status_summary() {
+                    Ok(status) => {
+                        // Only show if at least one provider has a non-default status
+                        let has_any_status = status.iter().any(|(_, s)| {
+                            !matches!(s, codex_login::TokenStatus::NotAuthenticated)
+                        });
+                        if has_any_status {
+                            self.bottom_pane.set_device_token_status(Some(status));
+                        } else {
+                            self.bottom_pane.set_device_token_status(None);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::debug!("Failed to get device token status: {}", e);
+                        self.bottom_pane.set_device_token_status(None);
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Failed to create device token storage: {}", e);
+                self.bottom_pane.set_device_token_status(None);
+            }
+        }
+    }
+
     /// Format model name with proper capitalization (e.g., "gpt-4" -> "GPT-4")
     fn format_model_name(&self, model_name: &str) -> String {
         if let Some(rest) = model_name.strip_prefix("gpt-") {
@@ -8711,6 +8743,159 @@ impl ChatWidget<'_> {
 
     pub(crate) fn handle_login_command(&mut self) {
         self.show_login_accounts_view();
+    }
+
+    /// P6-SYNC Phase 5: Handle /auth command for device code OAuth management
+    /// Subcommands:
+    /// - /auth or /auth status - Show token status for all providers
+    /// - /auth login <provider> - Start device code flow for provider (openai/google/anthropic)
+    /// - /auth logout <provider> - Remove stored token for provider
+    pub(crate) fn handle_auth_command(&mut self, args: &str) {
+        use codex_login::{DeviceCodeProvider, DeviceCodeTokenStorage, TokenStatus};
+
+        let args = args.trim();
+        let parts: Vec<&str> = args.split_whitespace().collect();
+
+        let show_message = |widget: &mut Self, message: String| {
+            let cell = history_cell::new_background_event(message);
+            widget.push_system_cell(
+                cell,
+                SystemPlacement::EndOfCurrent,
+                None,
+                None,
+                "auth:result",
+            );
+        };
+
+        match parts.first().map(|s| s.to_lowercase()).as_deref() {
+            None | Some("status") => {
+                // Show status for all providers
+                let mut message = String::from("Device Code OAuth Status\n\n");
+
+                match DeviceCodeTokenStorage::new() {
+                    Ok(storage) => {
+                        match storage.status_summary() {
+                            Ok(status) => {
+                                for (provider, token_status) in &status {
+                                    let provider_name = match provider {
+                                        DeviceCodeProvider::OpenAI => "OpenAI",
+                                        DeviceCodeProvider::Google => "Google (Gemini)",
+                                        DeviceCodeProvider::Anthropic => "Anthropic (Claude)",
+                                    };
+                                    let status_text = match token_status {
+                                        TokenStatus::Valid => "✓ authenticated",
+                                        TokenStatus::NeedsRefresh => "⚡ needs refresh",
+                                        TokenStatus::Expired => "✗ expired",
+                                        TokenStatus::NotAuthenticated => "· not authenticated",
+                                    };
+                                    message.push_str(&format!("  {}: {}\n", provider_name, status_text));
+                                }
+                                message.push_str("\nUse /auth login <provider> to authenticate");
+                            }
+                            Err(e) => {
+                                message.push_str(&format!("Error reading token status: {}", e));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        message.push_str(&format!("Error accessing token storage: {}", e));
+                    }
+                }
+
+                show_message(self, message);
+                // Update footer status
+                self.update_device_token_status();
+            }
+            Some("login") => {
+                let provider = parts.get(1).map(|s| s.to_lowercase());
+                match provider.as_deref() {
+                    Some("openai") | Some("google") | Some("gemini") | Some("anthropic") | Some("claude") => {
+                        let provider_name = match provider.as_deref() {
+                            Some("openai") => "OpenAI",
+                            Some("google") | Some("gemini") => "Google (Gemini)",
+                            Some("anthropic") | Some("claude") => "Anthropic (Claude)",
+                            _ => unreachable!(),
+                        };
+                        show_message(self, format!(
+                            "Device code login for {} is not yet implemented.\n\n\
+                             For now, please use the provider's CLI directly:\n\
+                             - OpenAI: Use 'codex' CLI\n\
+                             - Claude: Use 'claude' CLI and run 'claude'\n\
+                             - Gemini: Use 'gcloud auth login'\n\n\
+                             The status bar will update when tokens are detected.",
+                            provider_name
+                        ));
+                    }
+                    _ => {
+                        show_message(self, String::from(
+                            "Usage: /auth login <provider>\n\
+                             Providers: openai, google, anthropic (or gemini, claude)"
+                        ));
+                    }
+                }
+            }
+            Some("logout") => {
+                let provider = parts.get(1).map(|s| s.to_lowercase());
+                match provider.as_deref() {
+                    Some("openai") => {
+                        if let Ok(storage) = DeviceCodeTokenStorage::new() {
+                            match storage.remove_token(DeviceCodeProvider::OpenAI) {
+                                Ok(()) => {
+                                    show_message(self, String::from("OpenAI device code token removed."));
+                                    self.update_device_token_status();
+                                }
+                                Err(e) => {
+                                    show_message(self, format!("Failed to remove token: {}", e));
+                                }
+                            }
+                        }
+                    }
+                    Some("google") | Some("gemini") => {
+                        if let Ok(storage) = DeviceCodeTokenStorage::new() {
+                            match storage.remove_token(DeviceCodeProvider::Google) {
+                                Ok(()) => {
+                                    show_message(self, String::from("Google device code token removed."));
+                                    self.update_device_token_status();
+                                }
+                                Err(e) => {
+                                    show_message(self, format!("Failed to remove token: {}", e));
+                                }
+                            }
+                        }
+                    }
+                    Some("anthropic") | Some("claude") => {
+                        if let Ok(storage) = DeviceCodeTokenStorage::new() {
+                            match storage.remove_token(DeviceCodeProvider::Anthropic) {
+                                Ok(()) => {
+                                    show_message(self, String::from("Anthropic device code token removed."));
+                                    self.update_device_token_status();
+                                }
+                                Err(e) => {
+                                    show_message(self, format!("Failed to remove token: {}", e));
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        show_message(self, String::from(
+                            "Usage: /auth logout <provider>\n\
+                             Providers: openai, google, anthropic (or gemini, claude)"
+                        ));
+                    }
+                }
+            }
+            Some(unknown) => {
+                show_message(self, format!(
+                    "Unknown /auth subcommand: {}\n\n\
+                     Usage:\n\
+                     - /auth status - Show token status\n\
+                     - /auth login <provider> - Start device code flow\n\
+                     - /auth logout <provider> - Remove stored token",
+                    unknown
+                ));
+            }
+        }
+        self.request_redraw();
     }
 
     pub(crate) fn auth_manager(&self) -> Arc<AuthManager> {
@@ -22965,6 +23150,13 @@ impl spec_kit::SpecKitContext for ChatWidget<'_> {
 
     fn set_spec_auto_metrics(&mut self, metrics: Option<crate::token_metrics_widget::TokenMetricsWidget>) {
         self.bottom_pane.set_spec_auto_metrics(metrics);
+    }
+
+    fn set_device_token_status(
+        &mut self,
+        status: Option<Vec<(codex_login::DeviceCodeProvider, codex_login::TokenStatus)>>,
+    ) {
+        self.bottom_pane.set_device_token_status(status);
     }
 
     fn collect_guardrail_outcome(

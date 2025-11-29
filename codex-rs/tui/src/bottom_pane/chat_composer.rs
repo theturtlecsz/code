@@ -38,6 +38,9 @@ use codex_file_search::FileMatch;
 // P6-SYNC Phase 6: Token metrics widget for spec-kit status bar
 use crate::token_metrics_widget::TokenMetricsWidget;
 
+// P6-SYNC Phase 5: Device code token status for footer display
+use codex_login::{DeviceCodeProvider, TokenStatus};
+
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -143,6 +146,8 @@ pub(crate) struct ChatComposer {
     post_paste_space_guard: Option<PostPasteSpaceGuard>,
     // P6-SYNC Phase 6: Spec-kit token metrics for status bar display
     spec_auto_metrics: Option<TokenMetricsWidget>,
+    // P6-SYNC Phase 5: Device code token status for footer display
+    device_token_status: Option<Vec<(DeviceCodeProvider, TokenStatus)>>,
 }
 
 /// Popup state – at most one can be visible at any time.
@@ -195,6 +200,7 @@ impl ChatComposer {
             paste_burst: PasteBurst::default(),
             post_paste_space_guard: None,
             spec_auto_metrics: None,
+            device_token_status: None,
         }
     }
 
@@ -551,6 +557,14 @@ impl ChatComposer {
     /// in the footer to show real-time pipeline tracking with context warnings.
     pub(crate) fn set_spec_auto_metrics(&mut self, metrics: Option<TokenMetricsWidget>) {
         self.spec_auto_metrics = metrics;
+    }
+
+    /// P6-SYNC Phase 5: Set device code token status for footer display
+    pub(crate) fn set_device_token_status(
+        &mut self,
+        status: Option<Vec<(DeviceCodeProvider, TokenStatus)>>,
+    ) {
+        self.device_token_status = status;
     }
 
     /// Record the history metadata advertised by `SessionConfiguredEvent` so
@@ -1978,14 +1992,47 @@ impl WidgetRef for ChatComposer {
                         auth_spans.push(Span::from("API key").style(label_style));
                     }
 
+                    // P6-SYNC Phase 5: Device code token status indicators
+                    // Format: O✓ C⚡ G· (OpenAI valid, Claude needs refresh, Google not auth)
+                    let mut device_token_spans: Vec<Span> = Vec::new();
+                    if let Some(ref status) = self.device_token_status {
+                        let mut indicators: Vec<Span> = Vec::new();
+                        for (provider, token_status) in status {
+                            let prefix = match provider {
+                                DeviceCodeProvider::OpenAI => "O",
+                                DeviceCodeProvider::Google => "G",
+                                DeviceCodeProvider::Anthropic => "C",
+                            };
+                            let (icon, color) = match token_status {
+                                TokenStatus::Valid => ("✓", ratatui::style::Color::Green),
+                                TokenStatus::NeedsRefresh => ("⚡", ratatui::style::Color::Yellow),
+                                TokenStatus::Expired => ("✗", ratatui::style::Color::Red),
+                                TokenStatus::NotAuthenticated => ("·", ratatui::style::Color::DarkGray),
+                            };
+                            if !indicators.is_empty() {
+                                indicators.push(Span::raw(" "));
+                            }
+                            indicators.push(Span::styled(
+                                format!("{}{}", prefix, icon),
+                                Style::default().fg(color),
+                            ));
+                        }
+                        if !indicators.is_empty() {
+                            device_token_spans = indicators;
+                        }
+                    }
+
                     // We'll add separators between sections when both are present
                     let sep_len = "  •  ".chars().count();
-                    let combined_len = |h: &Vec<Span>, t: &Vec<Span>, a: &Vec<Span>| -> usize {
-                        let mut len = measure(h) + measure(t) + measure(a);
+                    let combined_len = |h: &Vec<Span>, t: &Vec<Span>, a: &Vec<Span>, d: &Vec<Span>| -> usize {
+                        let mut len = measure(h) + measure(t) + measure(a) + measure(d);
                         if !h.is_empty() && !t.is_empty() {
                             len += sep_len;
                         }
                         if (!h.is_empty() || !t.is_empty()) && !a.is_empty() {
+                            len += sep_len;
+                        }
+                        if (!h.is_empty() || !t.is_empty() || !a.is_empty()) && !d.is_empty() {
                             len += sep_len;
                         }
                         len
@@ -1993,7 +2040,7 @@ impl WidgetRef for ChatComposer {
 
                     // Elide hints in order until content fits
                     while left_len
-                        + combined_len(&hint_spans, &token_spans, &auth_spans)
+                        + combined_len(&hint_spans, &token_spans, &auth_spans, &device_token_spans)
                         + trailing_pad
                         > total_width
                     {
@@ -2001,6 +2048,9 @@ impl WidgetRef for ChatComposer {
                             include_reasoning = false;
                         } else if include_diff {
                             include_diff = false;
+                        } else if !device_token_spans.is_empty() {
+                            // Drop device token spans before auth spans
+                            device_token_spans.clear();
                         } else if !auth_spans.is_empty() {
                             // If still too tight, drop the auth tag as a last resort
                             auth_spans.clear();
@@ -2018,11 +2068,16 @@ impl WidgetRef for ChatComposer {
                         right_spans.push(Span::from("  •  ").style(label_style));
                     }
                     right_spans.extend(token_spans);
-                    // Append auth notice at the very end (right-most) if present
+                    // Append auth notice if present
                     if !right_spans.is_empty() && !auth_spans.is_empty() {
                         right_spans.push(Span::from("  •  ").style(label_style));
                     }
                     right_spans.extend(auth_spans);
+                    // P6-SYNC Phase 5: Append device token status at the very end
+                    if !right_spans.is_empty() && !device_token_spans.is_empty() {
+                        right_spans.push(Span::from("  •  ").style(label_style));
+                    }
+                    right_spans.extend(device_token_spans);
 
                     // Recompute spacer after elision
                     let right_len: usize =
