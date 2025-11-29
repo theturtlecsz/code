@@ -224,9 +224,9 @@
 | 12 | SYNC-012 | Add TypeScript SDK | **N/A** | Code | docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md | | | 2025-11-29 | | Fork is Rust-native (spec-kit). TypeScript SDK paradigm not applicable. |
 | 13 | SYNC-013 | Add Shell MCP server | **N/A** | Code | docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md | | | 2025-11-29 | | MCP integration exists through different architecture. Shell tool server not needed. |
 | 14 | SYNC-014 | Add prompt management UI | **N/A** | Code | docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md | | | 2025-11-29 | | TUI has prompt views in bottom_pane/. ACE handles persistence. |
-| 15 | SYNC-015 | Add character encoding detection | **Backlog** | Code | docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md | | | | | **P3 Quality**: Port chardetng usage from upstream bash.rs for Unicode log decoding. Small change, high impact for i18n users. **Files**: exec/src/bash.rs. Est: 2-3h. |
+| 15 | SYNC-015 | Add character encoding detection | **N/A** | Code | docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md | | | 2025-11-29 | | Spec-kit workflow is entirely UTF-8 (LLM APIs, TOML, Rust tooling). No non-UTF-8 sources. chardetng not applicable. |
 | 16 | SYNC-016 | Add device code auth fallback | **Done** | Code | docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md | main | | 2025-11-29 | | P6-SYNC Phase 7: Device code OAuth for all providers (OpenAI, Google, Anthropic). P53: keyring-store integration for secure token storage. |
-| 17 | SYNC-017 | Add /review and /merge workflows | **Backlog** | Code | docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md | | | | | **P2 Workflow**: Port /review uncommitted preset and /merge command from upstream. Integrate with fork's git-tooling module. **Files**: tui/src/slash_command.rs. Est: 6-8h. |
+| 17 | SYNC-017 | Add /review and /merge workflows | **Done** | Code | docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md | main | | 2025-11-29 | | Already implemented: handle_review_command() (mod.rs:16252), handle_merge_command() (mod.rs:17382). |
 | 18 | SYNC-018 | Add branch-aware session resume | **Done** | Code | docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md | main | | 2025-11-29 | | P6-SYNC Phase 4: PipelineBranch struct, branch_id column in SQLite, get_responses_for_branch() filtering. |
 
 **Rejected Items** (from analysis - incompatible with fork architecture):
