@@ -1,0 +1,43 @@
+{
+  "model": {
+    "name": "gemini-2.5-flash"
+  },
+  "security": {
+    "auth": {
+      "selectedType": "oauth-personal"
+    }
+  },
+  "hooks": {
+    "pre_command": "/home/thetu/.claude/hooks/session_start.sh",
+    "post_tool_use": {
+      "command": "/home/thetu/.claude/hooks/lm-precommit.sh",
+      "scope": "project"
+    }
+  },
+  "mcpServers": {
+    "local-memory": {
+      "command": "/home/thetu/.nvm/versions/node/v22.18.0/bin/local-memory",
+      "args": ["--mcp"],
+      "tools": {
+        "alwaysAllow": [
+          "search",
+          "store_memory",
+          "find_related",
+          "map_graph",
+          "discover",
+          "analysis"
+        ],
+        "disabled": false
+      },
+      "disabled": false
+    },
+    "notebooklm": {
+      "command": "node",
+      "args": ["/home/thetu/notebooklm-mcp/dist/index.js"],
+      "disabled": false
+    }
+  },
+  "general": {
+    "previewFeatures": true
+  }
+}

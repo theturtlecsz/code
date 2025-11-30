@@ -1,9 +1,10 @@
 # PRD: /speckit.project Command (SPEC-KIT-960)
 
-**Version**: v20251129-project-a
-**Status**: Draft
+**Version**: v20251129-project-b
+**Status**: Complete ✅
 **Author**: Claude (P58)
 **Created**: 2025-11-29
+**Completed**: 2025-11-29
 
 ## 1. Overview
 
@@ -20,11 +21,11 @@ This is repetitive, error-prone, and creates friction for adopting spec-kit work
 Create `/speckit.project` command that scaffolds new projects with full spec-kit infrastructure in under 1 second.
 
 ### Success Criteria
-- [ ] `/speckit.project <type> <name>` creates complete project structure
-- [ ] All 4 template types work (rust, python, typescript, generic)
-- [ ] Created projects are immediately ready for `/speckit.new`
-- [ ] Execution time <1s (Tier 0 native)
-- [ ] Zero agent cost ($0)
+- [x] `/speckit.project <type> <name>` creates complete project structure
+- [x] All 4 template types work (rust, python, typescript, generic)
+- [x] Created projects are immediately ready for `/speckit.new`
+- [x] Execution time <1s (Tier 0 native)
+- [x] Zero agent cost ($0)
 
 ## 2. Functional Requirements
 
@@ -373,3 +374,52 @@ cat my-rust-lib/Cargo.toml
 - SPEC-KIT-902: Native routing architecture
 - `/speckit.new`: Similar native command pattern
 - `new_native.rs`: Reference implementation for file creation
+
+---
+
+## 10. Completion Notes (P58)
+
+**Implemented**: 2025-11-29
+**Commits**: `0316aa037`, `55ca08937`
+
+### Final Implementation
+
+**Primary file**: `codex-rs/tui/src/chatwidget/spec_kit/project_native.rs`
+
+### Files Created Per Template
+
+**All templates include:**
+- `CLAUDE.md` - Project instructions with type-specific build commands
+- `SPEC.md` - Task tracker (initialized)
+- `product-requirements.md` - PRD structure
+- `PLANNING.md` - Architecture and build commands
+- `templates/PRD-template.md` - PRD template
+- `templates/spec-template.md` - SPEC template
+- `docs/.gitkeep` - Documentation directory
+- `memory/constitution.md` - Project charter
+
+**Rust-specific:**
+- `Cargo.toml`, `src/lib.rs`, `tests/.gitkeep`, `.gitignore`
+
+**Python-specific:**
+- `pyproject.toml`, `src/<name>/__init__.py`, `tests/__init__.py`, `.gitignore`
+
+**TypeScript-specific:**
+- `package.json`, `tsconfig.json`, `src/index.ts`, `tests/.gitkeep`, `.gitignore`
+
+**Generic:**
+- `.gitignore` (minimal)
+
+### Key Decisions
+
+1. **Embedded templates**: Templates are const strings in binary, not external files
+2. **CLAUDE.md Section 1 compliance**: Added `product-requirements.md` and `PLANNING.md` per mandatory references
+3. **Tier 0 classification**: Zero agents, $0 cost, <1s execution
+4. **Variable substitution**: `[PROJECT_NAME]`, `[PROJECT_TYPE]`, `[DATE]`, `[DESCRIPTION]` patterns
+
+### Future Enhancements (Not Implemented)
+
+- Go template (SPEC-KIT-961 candidate)
+- Full 11-template directory (currently 2)
+- Interactive mode
+- `--git` flag for git init

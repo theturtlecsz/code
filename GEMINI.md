@@ -1,4 +1,4 @@
-# CLAUDE.md
+# GEMINI.md
 
 This is a fork of [just-every/code](https://github.com/just-every/code) (community OpenAI Codex fork).
 Not related to Anthropic's Claude Code.

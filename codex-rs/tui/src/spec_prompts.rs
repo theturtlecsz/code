@@ -194,9 +194,9 @@ pub fn expand_template_refs(text: &str) -> String {
 
     re.replace_all(text, |caps: &regex_lite::Captures| {
         let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+        // SPEC-KIT-964: Only project-local and embedded sources (hermetic isolation)
         match resolve_template_source(name) {
             TemplateSource::ProjectLocal(p) => p.display().to_string(),
-            TemplateSource::UserConfig(p) => p.display().to_string(),
             TemplateSource::Embedded => format!("[embedded:{}]", name),
         }
     })

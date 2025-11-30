@@ -107,16 +107,15 @@ impl SpecKitCommand for SpecKitTemplateStatusCommand {
         let mut output = String::new();
         output.push_str("## Template Resolution Status\n\n");
         output.push_str("Templates are resolved in priority order:\n");
+        // SPEC-KIT-964: Hermetic isolation - only project-local and embedded
         output.push_str("1. **Project-local**: `./templates/*.md`\n");
-        output.push_str("2. **User config**: `~/.config/code/templates/*.md`\n");
-        output.push_str("3. **Embedded**: Compiled into binary\n\n");
+        output.push_str("2. **Embedded**: Compiled into binary\n\n");
         output.push_str("| Template | Source | Status |\n");
         output.push_str("|----------|--------|--------|\n");
 
         for s in &status {
             let source_str = match &s.source {
                 TemplateSource::ProjectLocal(p) => format!("`{}`", p.display()),
-                TemplateSource::UserConfig(p) => format!("`{}`", p.display()),
                 TemplateSource::Embedded => "[embedded]".to_string(),
             };
             let status_icon = if s.available { "OK" } else { "MISSING" };
@@ -126,7 +125,7 @@ impl SpecKitCommand for SpecKitTemplateStatusCommand {
             ));
         }
 
-        output.push_str("\n*Run `/speckit.install-templates` to copy to user config for customization.*\n");
+        output.push_str("\n*Run `/speckit.install-templates` to copy embedded templates to `./templates/` for customization.*\n");
 
         widget.insert_background_event_with_placement(output, BackgroundPlacement::Tail);
         widget.request_redraw();

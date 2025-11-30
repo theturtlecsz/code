@@ -1,7 +1,7 @@
 {
   "template_context": {
     "version": "20251129-templates-b",
-    "description": "SPEC-KIT-962: Templates are resolved via layered system: 1) ./templates/ (project-local), 2) ~/.config/code/templates/ (user config), 3) embedded in binary (fallback). Use ${TEMPLATE:name} syntax in prompts - resolved at runtime.",
+    "description": "SPEC-KIT-964: Templates are resolved via hermetic system: 1) ./templates/ (project-local), 2) embedded in binary (fallback). Global user config is NOT checked to ensure agent isolation. Use ${TEMPLATE:name} syntax in prompts - resolved at runtime.",
     "templates": {
       "plan": "${TEMPLATE:plan}",
       "tasks": "${TEMPLATE:tasks}",

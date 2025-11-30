@@ -3,11 +3,14 @@
 //! Templates are compiled into the binary using `include_str!()`.
 //! This ensures the TUI works without any external file dependencies.
 //!
-//! ## Resolution Order
+//! ## Resolution Order (SPEC-KIT-964: Hermetic Isolation)
 //!
 //! 1. **Project-local**: `./templates/{name}-template.md`
-//! 2. **User config**: `~/.config/code/templates/{name}-template.md` (XDG-compliant)
-//! 3. **Embedded**: Compiled into binary (always available)
+//! 2. **Embedded**: Compiled into binary (always available)
+//!
+//! **Note**: Global user config (`~/.config/code/templates/`) is intentionally
+//! NOT checked to ensure hermetic agent isolation. Spawned agents must not
+//! depend on user-specific global configurations.
 //!
 //! ## Usage
 //!
@@ -20,7 +23,6 @@
 //! // Check where a template would be resolved from
 //! match resolve_template_source("plan") {
 //!     TemplateSource::ProjectLocal(path) => println!("Using project: {}", path.display()),
-//!     TemplateSource::UserConfig(path) => println!("Using user: {}", path.display()),
 //!     TemplateSource::Embedded => println!("Using embedded default"),
 //! }
 //! ```
@@ -121,12 +123,13 @@ pub fn template_names() -> &'static [&'static str] {
 }
 
 /// Source location for a resolved template.
+///
+/// SPEC-KIT-964: Only project-local and embedded sources are supported.
+/// Global user config is intentionally excluded for hermetic isolation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TemplateSource {
     /// Template found in project-local `./templates/` directory
     ProjectLocal(PathBuf),
-    /// Template found in user config directory (XDG-compliant)
-    UserConfig(PathBuf),
     /// Template using embedded default compiled into binary
     Embedded,
 }
@@ -135,7 +138,6 @@ impl std::fmt::Display for TemplateSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             TemplateSource::ProjectLocal(p) => write!(f, "{}", p.display()),
-            TemplateSource::UserConfig(p) => write!(f, "{}", p.display()),
             TemplateSource::Embedded => write!(f, "[embedded]"),
         }
     }
@@ -143,10 +145,11 @@ impl std::fmt::Display for TemplateSource {
 
 /// Resolve a template by name, checking locations in priority order.
 ///
-/// Resolution order:
+/// Resolution order (SPEC-KIT-964: Hermetic Isolation):
 /// 1. **Project-local**: `./templates/{name}-template.md`
-/// 2. **User config**: `~/.config/code/templates/{name}-template.md`
-/// 3. **Embedded**: Compiled-in default (always succeeds for known templates)
+/// 2. **Embedded**: Compiled-in default (always succeeds for known templates)
+///
+/// **Note**: Global user config is NOT checked to ensure hermetic agent isolation.
 ///
 /// # Arguments
 ///
@@ -184,22 +187,7 @@ pub fn resolve_template(name: &str) -> String {
         }
     }
 
-    // 2. User config (XDG Base Directory)
-    if let Some(config_dir) = dirs::config_dir() {
-        let user_path = config_dir.join("code/templates").join(&filename);
-        if user_path.exists() {
-            if let Ok(content) = fs::read_to_string(&user_path) {
-                tracing::debug!(
-                    template = %name,
-                    source = %user_path.display(),
-                    "Template resolved from user config"
-                );
-                return content;
-            }
-        }
-    }
-
-    // 3. Embedded fallback
+    // 2. Embedded fallback (SPEC-KIT-964: skip global user config)
     tracing::debug!(template = %name, "Template resolved from embedded defaults");
     get_embedded(&normalized)
         .map(|s| s.to_string())
@@ -212,6 +200,8 @@ pub fn resolve_template(name: &str) -> String {
 /// Get the source location where a template would be resolved from.
 ///
 /// Useful for diagnostics and the `/speckit.template-status` command.
+///
+/// SPEC-KIT-964: Only returns ProjectLocal or Embedded (no global user config).
 ///
 /// # Arguments
 ///
@@ -230,15 +220,7 @@ pub fn resolve_template_source(name: &str) -> TemplateSource {
         return TemplateSource::ProjectLocal(local_path);
     }
 
-    // 2. User config
-    if let Some(config_dir) = dirs::config_dir() {
-        let user_path = config_dir.join("code/templates").join(&filename);
-        if user_path.exists() {
-            return TemplateSource::UserConfig(user_path);
-        }
-    }
-
-    // 3. Embedded (default)
+    // 2. Embedded (default) - SPEC-KIT-964: skip global user config
     TemplateSource::Embedded
 }
 
@@ -262,7 +244,7 @@ pub fn all_template_status() -> Vec<TemplateStatus> {
         .map(|name| {
             let source = resolve_template_source(name);
             let available = get_embedded(name).is_some()
-                || matches!(&source, TemplateSource::ProjectLocal(p) | TemplateSource::UserConfig(p) if p.exists());
+                || matches!(&source, TemplateSource::ProjectLocal(p) if p.exists());
             TemplateStatus {
                 name: (*name).to_string(),
                 source,
@@ -283,9 +265,12 @@ pub struct InstallResult {
     pub path: PathBuf,
 }
 
-/// Copy embedded templates to user config directory for customization.
+/// Copy embedded templates to project-local directory for customization.
 ///
-/// Creates `~/.config/code/templates/` with all embedded templates.
+/// Creates `./templates/` with all embedded templates.
+///
+/// SPEC-KIT-964: Templates are installed to project-local directory only,
+/// not global user config, to ensure hermetic agent isolation.
 ///
 /// # Arguments
 ///
@@ -297,12 +282,10 @@ pub struct InstallResult {
 ///
 /// # Errors
 ///
-/// Returns error if config directory cannot be determined or created.
+/// Returns error if templates directory cannot be created.
 pub fn install_templates(force: bool) -> anyhow::Result<InstallResult> {
-    let config_dir =
-        dirs::config_dir().ok_or_else(|| anyhow::anyhow!("Could not determine config directory"))?;
-
-    let templates_dir = config_dir.join("code/templates");
+    // SPEC-KIT-964: Install to project-local ./templates/ (not global)
+    let templates_dir = PathBuf::from("templates");
     fs::create_dir_all(&templates_dir)?;
 
     let mut installed = Vec::new();
