@@ -63,7 +63,8 @@ impl SpecKitCommand for SpecKitAutoCommand {
 }
 
 /// Command: /speckit.new (and /new-spec)
-/// Create new SPEC from description with templates - FULLY NATIVE (zero agents, $0)
+/// Create new SPEC from description with interactive Q&A - FULLY NATIVE (zero agents, $0)
+/// SPEC-KIT-970: Now shows modal with 3 required questions before generating PRD
 pub struct SpecKitNewCommand;
 
 impl SpecKitCommand for SpecKitNewCommand {
@@ -76,60 +77,14 @@ impl SpecKitCommand for SpecKitNewCommand {
     }
 
     fn description(&self) -> &'static str {
-        "create new SPEC from description with templates (INSTANT, zero agents, $0)"
+        "create new SPEC with interactive Q&A (INSTANT, zero agents, $0)"
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
-        use crate::history_cell::{HistoryCellType, PlainHistoryCell};
-        use ratatui::text::Line;
-
-        // SPEC-KIT-072: Fully native SPEC creation (eliminates 2 agents, $0.15 → $0)
-        match super::super::new_native::create_spec(&args, &widget.config.cwd) {
-            Ok(result) => {
-                widget.history_push(PlainHistoryCell::new(
-                    vec![
-                        Line::from(format!(
-                            "✅ Created {}: {}",
-                            result.spec_id, result.feature_name
-                        )),
-                        Line::from(""),
-                        Line::from(format!(
-                            "   Directory: docs/{}/",
-                            result.directory.file_name().unwrap().to_string_lossy()
-                        )),
-                        Line::from(format!(
-                            "   Files created: {}",
-                            result.files_created.join(", ")
-                        )),
-                        Line::from("   Updated: SPEC.md tracker".to_string()),
-                        Line::from(""),
-                        Line::from("Next steps:"),
-                        Line::from(format!(
-                            "   • Run /speckit.clarify {} to resolve ambiguities",
-                            result.spec_id
-                        )),
-                        Line::from(format!(
-                            "   • Run /speckit.analyze {} to check consistency",
-                            result.spec_id
-                        )),
-                        Line::from(format!(
-                            "   • Run /speckit.auto {} to generate full implementation",
-                            result.spec_id
-                        )),
-                        Line::from(""),
-                        Line::from("Cost savings: $0.15 → $0 (100% reduction, zero agents used)"),
-                    ],
-                    HistoryCellType::Notice,
-                ));
-            }
-            Err(err) => {
-                widget.history_push(crate::history_cell::new_error_event(format!(
-                    "Failed to create SPEC: {}",
-                    err
-                )));
-            }
-        }
-        widget.request_redraw();
+        // SPEC-KIT-970: Show interactive PRD builder modal
+        // Modal collects: Problem, Target User, Success Criteria
+        // Then triggers AppEvent::PrdBuilderSubmitted to create spec
+        widget.show_prd_builder(args.trim().to_string());
     }
 
     fn requires_args(&self) -> bool {

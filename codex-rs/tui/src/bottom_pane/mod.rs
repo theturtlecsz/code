@@ -34,6 +34,7 @@ mod model_selection_view;
 mod paste_burst;
 mod pipeline_configurator_view;
 mod popup_consts;
+mod prd_builder_modal;
 mod quality_gate_modal;
 mod scroll_state;
 mod selection_popup_common;
@@ -637,6 +638,14 @@ impl BottomPane<'_> {
         let view =
             PipelineConfiguratorView::new(spec_id, initial_config, self.app_event_tx.clone());
         self.active_view = Some(Box::new(view));
+        self.status_view_active = false;
+        self.request_redraw();
+    }
+
+    /// Show PRD builder modal for interactive spec creation (SPEC-KIT-970)
+    pub fn show_prd_builder(&mut self, description: String) {
+        let modal = prd_builder_modal::PrdBuilderModal::new(description, self.app_event_tx.clone());
+        self.active_view = Some(Box::new(modal));
         self.status_view_active = false;
         self.request_redraw();
     }

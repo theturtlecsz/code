@@ -3189,6 +3189,21 @@ impl App<'_> {
                         spec_kit::on_quality_gate_cancelled(widget, checkpoint);
                     }
                 }
+                // === FORK-SPECIFIC: PRD builder events (SPEC-KIT-970) ===
+                AppEvent::PrdBuilderSubmitted {
+                    description,
+                    answers,
+                } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        spec_kit::on_prd_builder_submitted(widget, description, answers);
+                    }
+                }
+                AppEvent::PrdBuilderCancelled { description } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        spec_kit::on_prd_builder_cancelled(widget, description);
+                    }
+                }
+                // === END FORK-SPECIFIC: PRD builder events ===
                 AppEvent::QualityGateNativeAgentsComplete {
                     checkpoint,
                     agent_ids,

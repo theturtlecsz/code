@@ -608,6 +608,17 @@ pub(crate) enum AppEvent {
         checkpoint: crate::chatwidget::spec_kit::QualityCheckpoint,
     },
 
+    /// PRD builder questions answered (SPEC-KIT-970)
+    PrdBuilderSubmitted {
+        description: String,
+        answers: std::collections::HashMap<String, String>,
+    },
+
+    /// PRD builder was cancelled by user (SPEC-KIT-970)
+    PrdBuilderCancelled {
+        description: String,
+    },
+
     /// Native quality gate agents completed (SPEC-KIT-900)
     QualityGateNativeAgentsComplete {
         checkpoint: crate::chatwidget::spec_kit::QualityCheckpoint,

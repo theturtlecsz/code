@@ -5750,6 +5750,11 @@ impl ChatWidget<'_> {
         self.bottom_pane.show_undo_restore_view(view);
     }
 
+    /// Show PRD builder modal for interactive spec creation (SPEC-KIT-970)
+    pub(crate) fn show_prd_builder(&mut self, description: String) {
+        self.bottom_pane.show_prd_builder(description);
+    }
+
     pub(crate) fn perform_undo_restore(
         &mut self,
         index: usize,

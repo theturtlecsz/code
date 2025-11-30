@@ -98,6 +98,225 @@ pub fn create_spec(description: &str, cwd: &Path) -> Result<SpecCreationResult, 
     })
 }
 
+/// Create a new SPEC with enhanced context from PRD builder modal (SPEC-KIT-970)
+///
+/// Similar to create_spec but uses the enhanced description which includes
+/// answers from the interactive Q&A modal (Problem, Target, Success criteria).
+pub fn create_spec_with_context(
+    description: &str,
+    enhanced_description: &str,
+    cwd: &Path,
+) -> Result<SpecCreationResult, SpecKitError> {
+    let description = description.trim();
+    if description.is_empty() {
+        return Err(SpecKitError::Other(
+            "Description cannot be empty".to_string(),
+        ));
+    }
+
+    // Step 1: Generate SPEC-ID
+    let spec_id = generate_next_spec_id(cwd)
+        .map_err(|e| SpecKitError::Other(format!("Failed to generate SPEC-ID: {}", e)))?;
+
+    // Step 2: Parse description
+    let slug = create_slug(description);
+    if slug.is_empty() {
+        return Err(SpecKitError::Other(
+            "Description must contain alphanumeric characters".to_string(),
+        ));
+    }
+
+    // Extract feature name (capitalize first letter of each word in description)
+    let feature_name = capitalize_words(description);
+
+    // Step 3: Create directory
+    let dir_name = format!("{}-{}", spec_id, slug);
+    let spec_dir = cwd.join("docs").join(&dir_name);
+
+    fs::create_dir_all(&spec_dir).map_err(|e| SpecKitError::DirectoryCreate {
+        path: spec_dir.clone(),
+        source: e,
+    })?;
+
+    // Step 4: Fill PRD template with enhanced context
+    let prd_path = spec_dir.join("PRD.md");
+    let prd_content = fill_prd_template_with_context(&spec_id, &feature_name, enhanced_description)?;
+
+    fs::write(&prd_path, prd_content).map_err(|e| SpecKitError::FileWrite {
+        path: prd_path.clone(),
+        source: e,
+    })?;
+
+    // Step 5: Create spec.md with enhanced description
+    let spec_path = spec_dir.join("spec.md");
+    let spec_content = fill_spec_template(&spec_id, &feature_name, enhanced_description)?;
+
+    fs::write(&spec_path, spec_content).map_err(|e| SpecKitError::FileWrite {
+        path: spec_path.clone(),
+        source: e,
+    })?;
+
+    // Step 6: Update SPEC.md tracker
+    update_spec_tracker(cwd, &spec_id, &feature_name, &dir_name)?;
+
+    Ok(SpecCreationResult {
+        spec_id,
+        directory: spec_dir,
+        files_created: vec!["PRD.md".to_string(), "spec.md".to_string()],
+        feature_name,
+        slug,
+    })
+}
+
+/// Fill PRD template with enhanced context from modal (SPEC-KIT-970)
+fn fill_prd_template_with_context(
+    spec_id: &str,
+    feature_name: &str,
+    enhanced_description: &str,
+) -> Result<String, SpecKitError> {
+    // Parse enhanced description to extract sections
+    let (problem, target, success) = parse_enhanced_description(enhanced_description);
+
+    // Read template (fallback to embedded if file not found)
+    let template = read_template_or_embedded("PRD-template.md")?;
+
+    let date = Local::now().format("%Y-%m-%d").to_string();
+
+    // Replace placeholders with context-aware values
+    let content = template
+        .replace("[SPEC_ID]", spec_id)
+        .replace("[FEATURE_NAME]", feature_name)
+        .replace("[DATE]", &date)
+        .replace(
+            "[WHAT_EXISTS_TODAY]",
+            "Current implementation does not support this feature",
+        )
+        .replace("[USER_PAIN_1]", &problem)
+        .replace("[INEFFICIENCY_1]", "Manual workarounds required")
+        .replace("[GAP_1]", &problem)
+        .replace("[WHY_THIS_MATTERS]", &problem)
+        .replace("[USER_TYPE_1]", &target)
+        .replace("[USER_DESCRIPTION]", &format!("{} using this system", target))
+        .replace("[HOW_THEY_WORK_TODAY]", "Manual processes")
+        .replace("[WHAT_FRUSTRATES_THEM]", &problem)
+        .replace("[WHAT_THEY_WANT]", feature_name)
+        .replace("[USER_TYPE_2]", "End User")
+        .replace("[DESCRIPTION]", "Person using the final product")
+        .replace("[HOW_THEY_USE_THE_SYSTEM]", "Through the provided interface")
+        .replace("[GOAL_1]", &format!("Implement {}", feature_name))
+        .replace("[HOW_TO_MEASURE]", &success)
+        .replace("[GOAL_2]", "Maintain quality and performance")
+        .replace("[METRIC]", &success)
+        .replace("[SECONDARY_GOAL]", "Documentation complete")
+        .replace("[WHAT_WE_WONT_DO_1]", "Out of scope enhancements")
+        .replace("[FUTURE_ENHANCEMENT_1]", "Future iterations")
+        .replace("[RELATED_BUT_SEPARATE_CONCERN]", "Unrelated features")
+        .replace("[WHY_THESE_ARE_NON_GOALS]", "Focus on core functionality first")
+        .replace("[INCLUDED_FEATURE_1]", feature_name)
+        .replace("[INCLUDED_CAPABILITY_2]", "Basic implementation")
+        .replace("[ASSUMPTION_1]", "Required dependencies are available")
+        .replace("[DEPENDENCY_ASSUMPTION_2]", "No breaking changes in upstream")
+        .replace("[TECHNICAL_CONSTRAINT]", "Must maintain backward compatibility")
+        .replace("[RESOURCE_CONSTRAINT]", "Development time available")
+        .replace("[TIME_CONSTRAINT]", "Target completion within sprint")
+        .replace("[REQUIREMENT_DESCRIPTION]", feature_name)
+        .replace("[HOW_TO_VERIFY]", &success)
+        .replace("[REQUIREMENT]", "Implementation complete")
+        .replace("[CRITERIA]", &success)
+        .replace("[LATENCY_TARGET]", "<100ms")
+        .replace("[LOAD_TEST_COMMAND]", "cargo test")
+        .replace("[UPTIME_TARGET]", "99.9%")
+        .replace("[MONITORING_DASHBOARD]", "Local testing")
+        .replace("[SECURITY_STANDARD]", "Follow project security guidelines")
+        .replace("[AUDIT_PROCESS]", "Code review")
+        .replace("[SCALE_TARGET]", "Handle expected load")
+        .replace("[STRESS_TEST]", "Performance benchmarks")
+        .replace("[PRIMARY_USER_FLOW]", &format!("Using {}", feature_name))
+        .replace("[ACTION_1]", "Initiates feature")
+        .replace("[RESPONSE_1]", "System responds")
+        .replace("[ACTION_2]", "Completes action")
+        .replace("[RESPONSE_2]", "Feature executes")
+        .replace("[HAPPY_PATH_OUTCOME]", &success)
+        .replace("[ERROR_CONDITION]", "invalid input")
+        .replace("[HANDLING]", "show error message")
+        .replace("[SECONDARY_FLOW]", "Error handling")
+        .replace("[LIBRARY_OR_FRAMEWORK_1]", "Project dependencies")
+        .replace("[SERVICE_DEPENDENCY_1]", "None")
+        .replace("[TEAM_DEPENDENCY]", "Code review approval")
+        .replace("[APPROVAL_REQUIREMENT]", "PRD acceptance")
+        .replace("[DATA_SOURCE_1]", "Application state")
+        .replace("[MIGRATION_REQUIREMENT]", "None")
+        .replace("[RISK_1]", "Implementation complexity")
+        .replace("[IMPACT]", "High")
+        .replace("[MITIGATION_STRATEGY]", "Incremental development")
+        .replace("[OWNER]", "Code")
+        .replace("[RISK_2]", "Schedule slip")
+        .replace("[STRATEGY]", "Regular status updates")
+        .replace("[CRITERION_1]", &success)
+        .replace("[CRITERION_2]", "Documentation complete")
+        .replace("[KPI_1]", "Feature adoption")
+        .replace("[TARGET]", "Initial usage")
+        .replace("[DECISION_1]", "Implementation approach")
+        .replace("[ALTERNATIVES]", "Multiple options considered")
+        .replace("[CHOSEN]", "Best fit for requirements")
+        .replace("[RATIONALE]", "Balances complexity and maintainability");
+
+    Ok(content)
+}
+
+/// Parse enhanced description to extract Problem, Target, Success sections
+fn parse_enhanced_description(enhanced: &str) -> (String, String, String) {
+    let mut problem = String::new();
+    let mut target = String::new();
+    let mut success = String::new();
+
+    let mut current_section = "";
+    for line in enhanced.lines() {
+        if line.starts_with("## Problem") {
+            current_section = "problem";
+        } else if line.starts_with("## Target User") {
+            current_section = "target";
+        } else if line.starts_with("## Success Criteria") {
+            current_section = "success";
+        } else if !line.starts_with("##") {
+            match current_section {
+                "problem" => {
+                    if !problem.is_empty() {
+                        problem.push(' ');
+                    }
+                    problem.push_str(line.trim());
+                }
+                "target" => {
+                    if !target.is_empty() {
+                        target.push(' ');
+                    }
+                    target.push_str(line.trim());
+                }
+                "success" => {
+                    if !success.is_empty() {
+                        success.push(' ');
+                    }
+                    success.push_str(line.trim());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // Defaults if empty
+    if problem.is_empty() {
+        problem = "Improves user experience".to_string();
+    }
+    if target.is_empty() {
+        target = "Developer".to_string();
+    }
+    if success.is_empty() {
+        success = "Feature works as expected".to_string();
+    }
+
+    (problem.trim().to_string(), target.trim().to_string(), success.trim().to_string())
+}
+
 /// Fill PRD template with actual values
 fn fill_prd_template(
     spec_id: &str,
