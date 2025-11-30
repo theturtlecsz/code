@@ -59,9 +59,13 @@ pub fn generate_next_spec_id(cwd: &Path) -> Result<String, String> {
     Ok(format!("SPEC-KIT-{:03}", next_id))
 }
 
+/// Maximum slug length to avoid filesystem limits (255 bytes minus SPEC-KIT-XXX- prefix)
+const MAX_SLUG_LENGTH: usize = 60;
+
 /// Create a URL-safe slug from a description
 ///
 /// Converts "Add user authentication with OAuth2" → "add-user-authentication-with-oauth2"
+/// Truncates to MAX_SLUG_LENGTH characters to avoid filesystem limits.
 pub fn create_slug(description: &str) -> String {
     let slug = description
         .to_lowercase()
@@ -79,10 +83,24 @@ pub fn create_slug(description: &str) -> String {
         .collect::<String>();
 
     // Split by whitespace and dashes, filter empty, rejoin with single dash
-    slug.split(|c: char| c == '-' || c.is_whitespace())
+    let full_slug = slug
+        .split(|c: char| c == '-' || c.is_whitespace())
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>()
-        .join("-")
+        .join("-");
+
+    // Truncate to max length, but don't cut in the middle of a word
+    if full_slug.len() <= MAX_SLUG_LENGTH {
+        full_slug
+    } else {
+        // Find last dash before max length to avoid cutting words
+        let truncated = &full_slug[..MAX_SLUG_LENGTH];
+        if let Some(last_dash) = truncated.rfind('-') {
+            truncated[..last_dash].to_string()
+        } else {
+            truncated.to_string()
+        }
+    }
 }
 
 /// Generate full SPEC directory name from description

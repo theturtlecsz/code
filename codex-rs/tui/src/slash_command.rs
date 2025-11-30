@@ -152,6 +152,17 @@ pub enum SlashCommand {
     SpecKitConstitution,
     #[strum(serialize = "speckit.ace-status")]
     SpecKitAceStatus,
+    // SPEC-KIT-960: Project scaffolding
+    #[strum(serialize = "speckit.project")]
+    SpecKitProject,
+    // Verification command
+    #[strum(serialize = "speckit.verify")]
+    SpecKitVerify,
+    // SPEC-KIT-962: Template management commands
+    #[strum(serialize = "speckit.install-templates")]
+    SpecKitInstallTemplates,
+    #[strum(serialize = "speckit.template-status")]
+    SpecKitTemplateStatus,
     // Guardrail commands (Phase 3 Week 2)
     #[strum(serialize = "guardrail.plan")]
     GuardrailPlan,
@@ -228,6 +239,10 @@ impl SlashCommand {
             SlashCommand::SpecKitConfigure => "configure pipeline stages (interactive modal)",
             SlashCommand::SpecKitConstitution => "extract ACE bullets (native)",
             SlashCommand::SpecKitAceStatus => "show ACE stats (native)",
+            SlashCommand::SpecKitProject => "scaffold new project with spec-kit support (native, $0)",
+            SlashCommand::SpecKitVerify => "verify spec implementation (native)",
+            SlashCommand::SpecKitInstallTemplates => "install templates to project (native)",
+            SlashCommand::SpecKitTemplateStatus => "show template resolution status (native)",
             // SPEC-KIT-902: Legacy /spec-* and /spec-ops-* removed
             // Utility commands retained:
             SlashCommand::SpecEvidenceStats => {

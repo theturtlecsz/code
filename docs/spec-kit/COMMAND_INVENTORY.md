@@ -1,8 +1,8 @@
 # Complete Spec-Kit Command Inventory
 
-**Last Updated:** 2025-10-16
-**Total Commands:** 22 command structs
-**Total Names:** 38 (22 primary + 16 aliases)
+**Last Updated:** 2025-11-30
+**Total Commands:** 23 command structs
+**Total Names:** 40 (23 primary + 17 aliases)
 **Registry:** Dynamic registration via `SPEC_KIT_REGISTRY`
 
 ---
@@ -255,7 +255,25 @@
 
 ---
 
-### 6. Utility Commands (2)
+### 6. Project Commands (1)
+
+#### /speckit.project
+- **Struct:** `SpecKitProjectCommand`
+- **Module:** `commands/project.rs`
+- **Aliases:** `/project`
+- **Type:** Native (Tier 0)
+- **Description:** Scaffold new project with spec-kit workflow support
+- **Requires Args:** Yes (type, name)
+- **Prompt Expanding:** No
+- **Usage:** `/speckit.project <type> <name>`
+- **Types:** rust, python, typescript, go, generic
+- **Time:** <1s
+- **Cost:** $0 (native Rust)
+- **Created files:** CLAUDE.md, AGENTS.md, GEMINI.md, SPEC.md, docs/, memory/constitution.md + type-specific files
+
+---
+
+### 7. Utility Commands (2)
 
 #### /spec-consensus
 - **Struct:** `SpecConsensusCommand`
@@ -306,6 +324,7 @@
 | 20 | guardrail.auto | spec-ops-auto | Guardrail | Shell | guardrail.rs |
 | 21 | spec-consensus | - | Utility | Diagnostic | special.rs |
 | 22 | spec-evidence-stats | - | Utility | Diagnostic | guardrail.rs |
+| 23 | speckit.project | project | Project | Native | project.rs |
 
 ---
 
@@ -350,9 +369,10 @@ Commands that orchestrate multi-stage workflows:
 
 **Behavior:** State machine → sequential stage execution → auto-advancement → final report
 
-### Native Commands (1)
+### Native Commands (2)
 Commands implemented in Rust (no agents):
 1. speckit.status
+2. speckit.project
 
 **Behavior:** Pure Rust implementation → instant response → $0 cost
 
@@ -385,6 +405,7 @@ Commands for inspection and debugging:
 | /spec-ops-audit | /guardrail.audit | Guardrail |
 | /spec-ops-unlock | /guardrail.unlock | Guardrail |
 | /spec-ops-auto | /guardrail.auto | Guardrail |
+| /project | /speckit.project | Project |
 
 **All legacy names work for backward compatibility** ✅
 
@@ -467,7 +488,7 @@ Commands for inspection and debugging:
 ## Tiered Model Strategy
 
 ### Tier 0: Native (No Agents)
-- **Commands:** speckit.status
+- **Commands:** speckit.status, speckit.project
 - **Agents:** 0
 - **Time:** <1s
 - **Cost:** $0
@@ -505,6 +526,7 @@ Commands for inspection and debugging:
 | Command | Template File | Purpose |
 |---------|--------------|---------|
 | speckit.new | spec-template.md, PRD-template.md | Initial SPEC structure |
+| speckit.project | CLAUDE-template.md, AGENTS-template.md, GEMINI-template.md | Instruction files |
 | speckit.clarify | clarify-template.md | Ambiguity questions |
 | speckit.analyze | analyze-template.md | Consistency analysis |
 | speckit.checklist | checklist-template.md | Quality scoring |
@@ -515,16 +537,25 @@ Commands for inspection and debugging:
 | speckit.audit | audit-template.md | Compliance review |
 | speckit.unlock | unlock-template.md | Final approval |
 
-**All 11 templates actively used** ✅
+### Template Inventory (14 total)
+
+| Category | Templates | Count |
+|----------|-----------|-------|
+| **Stages** | plan, tasks, implement, validate, audit, unlock | 6 |
+| **Quality Gates** | clarify, analyze, checklist | 3 |
+| **Documents** | prd, spec | 2 |
+| **Instructions** | claude, agents, gemini | 3 |
+
+**All 14 templates embedded in binary and actively used** ✅
 
 ---
 
 ## Registry Statistics
 
-**Total Commands:** 22 structs
-**Total Names:** 38 (primary + aliases)
-**Backward Compatible Names:** 16 aliases
-**Modules:** 5 command modules
+**Total Commands:** 23 structs
+**Total Names:** 40 (primary + aliases)
+**Backward Compatible Names:** 17 aliases
+**Modules:** 6 command modules
 **Lines of Code:** 977 lines (command implementations)
 **Registry Code:** 258 lines (trait + registry)
 **Tests:** 16 unit tests for registry
@@ -609,4 +640,4 @@ SPEC_KIT_REGISTRY.register(Box::new(CommandNameCommand));
 /speckit.unlock SPEC-KIT-###
 ```
 
-**All 22 commands production-ready and fully tested** ✅
+**All 23 commands production-ready and fully tested** ✅

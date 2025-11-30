@@ -87,9 +87,11 @@ impl SpecKitCommand for SpecKitProjectCommand {
         // Create project
         match create_project(project_type, name, &widget.config.cwd) {
             Ok(result) => {
+                let project_dir = result.directory.clone();
+
                 let mut lines = vec![
                     Line::from(format!(
-                        "Created {} project: {}",
+                        "✓ Created {} project: {}",
                         result.project_type.display_name(),
                         result.project_name
                     )),
@@ -108,14 +110,17 @@ impl SpecKitCommand for SpecKitProjectCommand {
 
                 lines.extend(vec![
                     Line::from(""),
-                    Line::from("Next steps:"),
-                    Line::from(format!("   cd {}", result.project_name)),
-                    Line::from("   /speckit.new <feature description>"),
+                    Line::from("Switching to project directory..."),
+                    Line::from(""),
+                    Line::from("Next: /speckit.new <feature description>"),
                     Line::from(""),
                     Line::from("Cost: $0 (zero agents, instant)"),
                 ]);
 
                 widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));
+
+                // Auto-switch to the new project directory
+                widget.app_event_tx.send(crate::app_event::AppEvent::SwitchCwd(project_dir, None));
             }
             Err(err) => {
                 widget.history_push(crate::history_cell::new_error_event(format!(

@@ -2052,7 +2052,11 @@ impl App<'_> {
                         | SlashCommand::SpecKitStatus
                         | SlashCommand::SpecKitConfigure
                         | SlashCommand::SpecKitConstitution
-                        | SlashCommand::SpecKitAceStatus => {
+                        | SlashCommand::SpecKitAceStatus
+                        | SlashCommand::SpecKitProject
+                        | SlashCommand::SpecKitVerify
+                        | SlashCommand::SpecKitInstallTemplates
+                        | SlashCommand::SpecKitTemplateStatus => {
                             // ALWAYS redirect to registry (native execution)
                             // Enum exists only for autocomplete discoverability
                             if let AppState::Chat { widget } = &mut self.app_state {
