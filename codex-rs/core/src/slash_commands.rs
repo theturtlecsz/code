@@ -1,10 +1,10 @@
 use crate::config_types::AgentConfig;
 use crate::config_types::SubagentCommandConfig;
 
-// NOTE: These are the prompt formatters for the prompt‑expanding slash commands
-// (/plan, /solve, /code). If you add or change a slash command, please update
-// the user documentation in `docs/slash-commands.md` so the list stays in sync
-// with the UI and behavior.
+// NOTE: SPEC-KIT-963 removed the built-in prompt-expanding commands (/plan, /solve, /code).
+// This fork (theturtlecsz/code) uses /speckit.* namespace exclusively.
+// The format_subagent_command() function is retained for custom [[subagents.commands]] config.
+// If you add custom subagent commands, document them in your project's CLAUDE.md.
 
 /// Get the list of enabled agent names from the configuration
 pub fn get_enabled_agents(agents: &[AgentConfig]) -> Vec<String> {
@@ -36,12 +36,10 @@ pub struct SubagentResolution {
     pub prompt: String,
 }
 
-/// Default read_only for built-in subagent commands.
-pub fn default_read_only_for(name: &str) -> bool {
-    match name {
-        "plan" | "solve" => true,
-        _ => name != "code",
-    }
+/// Default read_only for custom subagent commands.
+/// SPEC-KIT-963: Built-in plan/solve/code removed. Custom commands default to read-only.
+pub fn default_read_only_for(_name: &str) -> bool {
+    true // Custom subagent commands default to read-only for safety
 }
 
 fn resolve_models(explicit: &[String], agents: Option<&[AgentConfig]>) -> Vec<String> {
@@ -57,45 +55,10 @@ fn resolve_models(explicit: &[String], agents: Option<&[AgentConfig]>) -> Vec<St
     get_default_models()
 }
 
-/// Format a subagent command (built-in or custom) using optional overrides
-/// from `[[subagents.commands]]`. When a `plan|solve|code` entry exists, it
-/// replaces the built-in defaults for that command.
-/// Default multi-line instructions for built-in commands.
-/// Returns None for custom subagent names.
-pub fn default_instructions_for(name: &str) -> Option<String> {
-    match name.to_ascii_lowercase().as_str() {
-        "plan" => Some(r#"1. If you do not fully understand the context for the plan, very briefly research the code base. Do not come up with the plan yourself.
-2. Start multiple agents working in parallel.
-3. Wait for all agents to complete.
-4. Analyze every agent's plans and recommendations. Identify common themes and best practices from each agent.
-5. Think deeply and synthesize the best elements from each to create a final, comprehensive plan that incorporates the strongest recommendations from all agents.
-6. Present the final plan with clear steps and rationale."#.to_string()),
-        "solve" => Some(r#"Solve a complicated problem leveraging multiple state-of-the-art agents working in parallel.
-
-1. If you do not fully understand the problem, research it briefly. Do not attempt to solve it yet, just understand what the problem is and what the desired result should be.
-2. Provide full context to the agents so they can work on the problem themselves. You do not need to guide them on how to solve the problem - focus on describing the current issue and desired outcome. Allow each agent to come up with it's own path to the solution. If there have been previous attempts at the problem which have not worked, please explain these.
-3. Wait for most agents to complete. If a couple of agents complete and one is still working, look at the completed agents first.
-4. Go through each possible solution to the problem from each agent. If you're able to test each solution to compare them, you should do so. Utilize short helper scripts to do this.
-5. If no solutions work, then start additional agents. You should always try to gather additional debugging information to feed to the agents.
-6. Do no stop any agents prematurely - wait until problem is completely solved. Longer running agents may sometimes come up with unique solutions.
-7. Once you have a working solution, check all running agents once again - see if there's any new solutions which might be optimal before completing the task."#.to_string()),
-        "code" => Some(r#"Complete a coding task using multiple state-of-the-art agents working in parallel.
-
-1. If you do not fully understand the task, research it briefly. Do not attempt to code or solve it, just understand the task in the context of the current code base.
-2. Provide full context to the agents so they can work on the task themselves. You do not need to guide them on how to write the code - focus on describing the current task and desired outcome.
-3. Start agents with read-only: false - each agents will work in a separate worktree and can:
-- Read and analyze existing code
-- Create new files
-- Modify existing files
-- Execute commands
-- Run tests
-- Install dependencies
-4. Wait for all agents to complete.
-5. View each agent's implementation in the worktree for each agent. You may use git to compare changes. Consider the different approaches and solutions
-6. Bring the best parts of each solution into your own final implementation
-7. If you are not satisfied the solution has been found, start a new round of agents with additional context"#.to_string()),
-        _ => None,
-    }
+/// Format a subagent command (custom) using optional overrides from `[[subagents.commands]]`.
+/// SPEC-KIT-963: Built-in plan/solve/code removed. Custom commands provide their own instructions.
+pub fn default_instructions_for(_name: &str) -> Option<String> {
+    None // Built-in subagent commands removed; custom commands use config
 }
 
 pub fn format_subagent_command(
@@ -148,183 +111,38 @@ pub fn format_subagent_command(
     }
 }
 
-/// Format the /plan command into a prompt for the LLM
-/// Legacy wrapper retained for compatibility; now delegates to unified formatter.
-pub fn format_plan_command(
-    task: &str,
-    _models: Option<Vec<String>>,
-    agents: Option<&[AgentConfig]>,
-) -> String {
-    let res = format_subagent_command("plan", task, agents, None);
-    res.prompt
-}
-
-/// Format the /solve command into a prompt for the LLM
-/// Legacy wrapper retained for compatibility; now delegates to unified formatter.
-pub fn format_solve_command(
-    task: &str,
-    _models: Option<Vec<String>>,
-    agents: Option<&[AgentConfig]>,
-) -> String {
-    let res = format_subagent_command("solve", task, agents, None);
-    res.prompt
-}
-
-/// Format the /code command into a prompt for the LLM
-/// Legacy wrapper retained for compatibility; now delegates to unified formatter.
-pub fn format_code_command(
-    task: &str,
-    _models: Option<Vec<String>>,
-    agents: Option<&[AgentConfig]>,
-) -> String {
-    let res = format_subagent_command("code", task, agents, None);
-    res.prompt
-}
-
-/// Parse a slash command and return the formatted prompt
-pub fn handle_slash_command(input: &str, agents: Option<&[AgentConfig]>) -> Option<String> {
-    let input = input.trim();
-
-    // Check if it starts with a slash
-    if !input.starts_with('/') {
-        return None;
-    }
-
-    // Parse the command and arguments
-    let parts: Vec<&str> = input.splitn(2, ' ').collect();
-    let command = parts[0];
-    let args = parts
-        .get(1)
-        .map(std::string::ToString::to_string)
-        .unwrap_or_default();
-
-    match command {
-        "/plan" => {
-            if args.is_empty() {
-                Some("Error: /plan requires a task description. Usage: /plan <task>".to_string())
-            } else {
-                Some(format_plan_command(&args, None, agents))
-            }
-        }
-        "/solve" => {
-            if args.is_empty() {
-                Some(
-                    "Error: /solve requires a problem description. Usage: /solve <problem>"
-                        .to_string(),
-                )
-            } else {
-                Some(format_solve_command(&args, None, agents))
-            }
-        }
-        "/code" => {
-            if args.is_empty() {
-                Some("Error: /code requires a task description. Usage: /code <task>".to_string())
-            } else {
-                Some(format_code_command(&args, None, agents))
-            }
-        }
-        _ => None,
-    }
-}
+// SPEC-KIT-963: Legacy format_plan_command, format_solve_command, format_code_command removed.
+// SPEC-KIT-963: handle_slash_command removed (only handled /plan, /solve, /code).
+// This fork uses /speckit.* namespace via the command registry instead.
+// format_subagent_command() retained for custom [[subagents.commands]] in config.
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_slash_command_parsing() {
-        // Test /plan command - should contain task and instructions marker
-        let result = handle_slash_command("/plan implement a new feature", None);
-        assert!(result.is_some());
-        let plan_output = result.unwrap();
-        assert!(
-            plan_output.contains("implement a new feature"),
-            "Plan output should contain the task"
-        );
-        assert!(
-            plan_output.contains("Instructions for /plan"),
-            "Plan output should contain instructions marker"
-        );
-
-        // Test /solve command - should contain task and instructions
-        let result = handle_slash_command("/solve fix the bug in authentication", None);
-        assert!(result.is_some());
-        let solve_output = result.unwrap();
-        assert!(
-            solve_output.contains("fix the bug in authentication"),
-            "Solve output should contain the task"
-        );
-        assert!(
-            solve_output.contains("Solve a complicated problem"),
-            "Solve output should contain instructions"
-        );
-
-        // Test /code command - should contain task and instructions
-        let result = handle_slash_command("/code refactor the database module", None);
-        assert!(result.is_some());
-        let code_output = result.unwrap();
-        assert!(
-            code_output.contains("refactor the database module"),
-            "Code output should contain the task"
-        );
-        assert!(
-            code_output.contains("Complete a coding task"),
-            "Code output should contain instructions"
-        );
-
-        // Test invalid command
-        let result = handle_slash_command("/invalid test", None);
-        assert!(result.is_none());
-
-        // Test non-slash command
-        let result = handle_slash_command("regular message", None);
-        assert!(result.is_none());
-
-        // Test empty arguments
-        let result = handle_slash_command("/plan", None);
-        assert!(result.is_some());
-        assert!(result.unwrap().contains("Error"));
+    fn test_format_subagent_command_basic() {
+        // Test that custom subagent commands can be formatted
+        let result = format_subagent_command("custom-task", "do something", None, None);
+        assert_eq!(result.name, "custom-task");
+        assert!(result.prompt.contains("do something"));
+        assert!(result.read_only); // defaults to true for safety
     }
 
     #[test]
-    fn test_slash_commands_with_agents() {
-        // Create test agent configurations
-        let agents = vec![
-            AgentConfig {
-                name: "test-claude".to_string(),
-                canonical_name: None,
-                command: "claude".to_string(),
-                args: vec![],
-                read_only: false,
-                enabled: true,
-                description: None,
-                env: None,
-                args_read_only: None,
-                args_write: None,
-                instructions: None,
-                model: None,
-            },
-            AgentConfig {
-                name: "test-gemini".to_string(),
-                canonical_name: None,
-                command: "gemini".to_string(),
-                args: vec![],
-                read_only: false,
-                enabled: false, // disabled
-                description: None,
-                env: None,
-                args_read_only: None,
-                args_write: None,
-                instructions: None,
-                model: None,
-            },
-        ];
+    fn test_default_read_only_for_custom() {
+        // SPEC-KIT-963: All commands default to read-only
+        assert!(default_read_only_for("anything"));
+        assert!(default_read_only_for("custom"));
+        assert!(default_read_only_for("plan")); // Even old names default to read-only now
+    }
 
-        // Test that only enabled agents are included
-        let result = handle_slash_command("/plan test task", Some(&agents));
-        assert!(result.is_some());
-        let prompt = result.unwrap();
-        assert!(prompt.contains("test-claude"));
-        assert!(!prompt.contains("test-gemini")); // Should not include disabled agent
+    #[test]
+    fn test_default_instructions_for_returns_none() {
+        // SPEC-KIT-963: No built-in instructions
+        assert!(default_instructions_for("plan").is_none());
+        assert!(default_instructions_for("solve").is_none());
+        assert!(default_instructions_for("code").is_none());
+        assert!(default_instructions_for("custom").is_none());
     }
 }

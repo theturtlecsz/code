@@ -114,10 +114,8 @@ pub enum SlashCommand {
     Login,
     // P6-SYNC Phase 5: Device code OAuth management
     Auth,
-    // Prompt-expanding commands
-    Plan,
-    Solve,
-    Code,
+    // SPEC-KIT-963: Upstream /plan, /solve, /code removed.
+    // This fork uses /speckit.* namespace exclusively.
     // === FORK-SPECIFIC: spec-kit slash commands ===
     // Upstream: Does not have spec-kit automation
     // Preserve: All spec-kit commands during rebases
@@ -193,9 +191,7 @@ impl SlashCommand {
             SlashCommand::Chrome => "connect to Chrome",
             SlashCommand::Browser => "open internal browser",
             SlashCommand::Resume => "resume a past session for this folder",
-            SlashCommand::Plan => "create a comprehensive plan (multiple agents)",
-            SlashCommand::Solve => "solve a challenging problem (multiple agents)",
-            SlashCommand::Code => "perform a coding task (multiple agents)",
+            // SPEC-KIT-963: /plan, /solve, /code removed - use /speckit.* commands
             SlashCommand::Reasoning => "change reasoning effort (minimal/low/medium/high)",
             SlashCommand::Verbosity => "change text verbosity (high/medium/low)",
             SlashCommand::New => "start a new chat during a conversation",
@@ -277,23 +273,18 @@ impl SlashCommand {
     }
 
     /// Returns true if this command should expand into a prompt for the LLM.
+    /// SPEC-KIT-963: All prompt-expanding commands removed. Spec-kit uses registry.
     pub fn is_prompt_expanding(self) -> bool {
-        matches!(
-            self,
-            SlashCommand::Plan | SlashCommand::Solve | SlashCommand::Code // SPEC-KIT-070: Quality commands are NATIVE (not prompt-expanding)
-                                                                          // SpecKitClarify, SpecKitAnalyze, SpecKitChecklist removed
-        )
+        false
     }
 
     /// Returns true if this command requires additional arguments after the command.
+    /// SPEC-KIT-963: Upstream /plan, /solve, /code removed.
     pub fn requires_arguments(self) -> bool {
         matches!(
             self,
-            SlashCommand::Plan
-                | SlashCommand::Solve
-                | SlashCommand::Code
-                // REMOVED: SpecKitNew, SpecKitClarify, SpecKitAnalyze, SpecKitChecklist (registry-only)
-                | SlashCommand::SpecKitSpecify
+            // REMOVED: SpecKitNew, SpecKitClarify, SpecKitAnalyze, SpecKitChecklist (registry-only)
+            SlashCommand::SpecKitSpecify
                 | SlashCommand::SpecKitPlan
                 | SlashCommand::SpecKitTasks
                 | SlashCommand::SpecKitImplement
@@ -341,29 +332,12 @@ impl SlashCommand {
     }
 
     /// Expands a prompt-expanding command into a full prompt for the LLM.
-    /// Returns None if the command is not a prompt-expanding command.
+    /// SPEC-KIT-963: All prompt-expanding commands removed. Returns None always.
+    /// Spec-kit commands use the registry-based system instead.
+    #[allow(unused_variables)]
     pub fn expand_prompt(self, args: &str) -> Option<String> {
-        if !self.is_prompt_expanding() {
-            return None;
-        }
-
-        // Use the slash_commands module from core to generate the prompts
-        // Note: We pass None for agents here as the TUI doesn't have access to the session config
-        // The actual agents will be determined when the agent tool is invoked
-        match self {
-            SlashCommand::Plan => Some(codex_core::slash_commands::format_plan_command(
-                args, None, None,
-            )),
-            SlashCommand::Solve => Some(codex_core::slash_commands::format_solve_command(
-                args, None, None,
-            )),
-            SlashCommand::Code => Some(codex_core::slash_commands::format_code_command(
-                args, None, None,
-            )),
-            // SPEC-KIT-070: Quality commands are NATIVE (handled by command registry)
-            // SpecKitClarify, SpecKitAnalyze, SpecKitChecklist removed (unreachable due to is_prompt_expanding check)
-            _ => None,
-        }
+        // is_prompt_expanding() returns false for all commands
+        None
     }
 }
 
