@@ -4,10 +4,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use once_cell::sync::OnceCell;
+use regex_lite::Regex;
 use serde::Deserialize;
 use std::fmt::Write as _;
 
 use crate::local_memory_util;
+use crate::templates::{resolve_template_source, TemplateSource};
 
 const PROMPTS_JSON: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -175,6 +177,32 @@ pub fn orchestrator_notes(stage: &str) -> Option<Vec<String>> {
     registry().stage(stage)?.orchestrator_notes.clone()
 }
 
+/// Expand `${TEMPLATE:name}` references in a prompt string.
+///
+/// Template references are resolved using the layered resolution system:
+/// 1. Project-local: `./templates/{name}-template.md`
+/// 2. User config: `~/.config/code/templates/{name}-template.md`
+/// 3. Embedded: Compiled into binary
+///
+/// Returns the source path or `[embedded:name]` for embedded templates.
+pub fn expand_template_refs(text: &str) -> String {
+    // Lazy static regex for ${TEMPLATE:name} pattern
+    static TEMPLATE_RE: once_cell::sync::OnceCell<Regex> = once_cell::sync::OnceCell::new();
+    let re = TEMPLATE_RE.get_or_init(|| {
+        Regex::new(r"\$\{TEMPLATE:(\w+)\}").expect("valid template regex")
+    });
+
+    re.replace_all(text, |caps: &regex_lite::Captures| {
+        let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+        match resolve_template_source(name) {
+            TemplateSource::ProjectLocal(p) => p.display().to_string(),
+            TemplateSource::UserConfig(p) => p.display().to_string(),
+            TemplateSource::Embedded => format!("[embedded:{}]", name),
+        }
+    })
+    .to_string()
+}
+
 pub fn render_prompt(stage: &str, agent: SpecAgent, vars: &[(&str, &str)]) -> Option<String> {
     let prompt = agent_prompt(stage, agent)?;
     let mut text = prompt.prompt;
@@ -186,6 +214,8 @@ pub fn render_prompt(stage: &str, agent: SpecAgent, vars: &[(&str, &str)]) -> Op
         let version = stage_version(stage).unwrap_or_else(|| "unversioned".to_string());
         text = text.replace("${PROMPT_VERSION}", &version);
     }
+    // SPEC-KIT-962: Expand template references after other substitutions
+    text = expand_template_refs(&text);
     Some(text)
 }
 
@@ -882,5 +912,39 @@ mod tests {
         assert_eq!(map.get("MODEL_ID"), Some(&"custom-gpt".to_string()));
         assert_eq!(map.get("MODEL_RELEASE"), Some(&"2025-09-27".to_string()));
         assert_eq!(map.get("REASONING_MODE"), Some(&"deep".to_string()));
+    }
+
+    // SPEC-KIT-962: Template expansion tests
+    #[test]
+    fn expand_template_refs_embedded_fallback() {
+        // Without local templates, should resolve to embedded
+        let input = "Template: ${TEMPLATE:plan}\n\nTask: Build something";
+        let output = expand_template_refs(input);
+        assert!(output.contains("[embedded:plan]"));
+        assert!(output.contains("Task: Build something"));
+    }
+
+    #[test]
+    fn expand_template_refs_multiple_templates() {
+        let input = "Use ${TEMPLATE:plan} and ${TEMPLATE:tasks} for guidance.";
+        let output = expand_template_refs(input);
+        assert!(output.contains("[embedded:plan]"));
+        assert!(output.contains("[embedded:tasks]"));
+        assert!(!output.contains("${TEMPLATE:"));
+    }
+
+    #[test]
+    fn expand_template_refs_no_templates() {
+        let input = "No template references here.";
+        let output = expand_template_refs(input);
+        assert_eq!(input, output);
+    }
+
+    #[test]
+    fn expand_template_refs_unknown_template() {
+        // Unknown templates still expand (to embedded marker, but content would be empty)
+        let input = "${TEMPLATE:nonexistent}";
+        let output = expand_template_refs(input);
+        assert!(output.contains("[embedded:nonexistent]"));
     }
 }

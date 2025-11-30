@@ -4,12 +4,15 @@
 //!
 //! Scaffolds new projects with spec-kit workflow infrastructure.
 //! Pure Rust implementation - zero agents, $0 cost, <1s execution.
+//!
+//! SPEC-KIT-962: Uses resolve_template() for layered template resolution.
 
 use chrono::Local;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::error::SpecKitError;
+use crate::templates::resolve_template;
 
 /// Project template types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -423,6 +426,9 @@ This project uses spec-kit for structured development:
 }
 
 /// Create templates/ directory with PRD and spec templates
+///
+/// SPEC-KIT-962: Uses resolve_template() to get template content from the
+/// layered resolution system (project-local -> user config -> embedded).
 fn create_templates_dir(
     project_dir: &Path,
     files: &mut Vec<String>,
@@ -433,98 +439,19 @@ fn create_templates_dir(
         source: e,
     })?;
 
-    // PRD template (minimal, used by /speckit.new)
-    let prd_template = r#"# PRD: [FEATURE_NAME]
-
-**SPEC-ID**: [SPEC_ID]
-**Status**: Draft
-**Created**: [DATE]
-**Author**: [AUTHOR]
-
----
-
-## Problem Statement
-
-**Current State**: [WHAT_EXISTS_TODAY]
-
-**Pain Points**:
-- [USER_PAIN_1]
-- [INEFFICIENCY_1]
-
-**Impact**: [WHY_THIS_MATTERS]
-
----
-
-## Requirements
-
-### Functional Requirements
-
-- **FR1**: [REQUIREMENT_DESCRIPTION]
-- **FR2**: [REQUIREMENT]
-
-### Non-Functional Requirements
-
-- **NFR1**: Performance - [LATENCY_TARGET]
-- **NFR2**: Reliability - [UPTIME_TARGET]
-
----
-
-## Success Criteria
-
-- [CRITERION_1]
-- [CRITERION_2]
-
----
-
-## Next Steps
-
-Use `/speckit.clarify [SPEC_ID]` to resolve ambiguities.
-"#;
-
+    // PRD template (from embedded defaults or user config)
+    let prd_content = resolve_template("prd");
     let path = templates_dir.join("PRD-template.md");
-    fs::write(&path, prd_template).map_err(|e| SpecKitError::FileWrite {
+    fs::write(&path, &prd_content).map_err(|e| SpecKitError::FileWrite {
         path: path.clone(),
         source: e,
     })?;
     files.push("templates/PRD-template.md".to_string());
 
-    // Spec template (minimal)
-    let spec_template = r#"**SPEC-ID**: [SPEC_ID]
-**Feature**: [FEATURE_NAME]
-**Status**: Backlog
-**Created**: [CREATION_DATE]
-**Branch**: [BRANCH_NAME]
-**Owner**: [OWNER]
-
-**Context**: [BACKGROUND_PROBLEM_STATEMENT]
-
----
-
-## Requirements
-
-### Functional Requirements
-
-- **FR1**: [REQUIREMENT_WITH_ACCEPTANCE_CRITERIA]
-
-### Non-Functional Requirements
-
-- **Performance**: [METRIC_OR_CONSTRAINT]
-
----
-
-## Success Criteria
-
-- [MEASURABLE_OUTCOME_1]
-
----
-
-## Notes
-
-Created via native SPEC generation. Run `/speckit.clarify [SPEC_ID]` to fill in details.
-"#;
-
+    // Spec template (from embedded defaults or user config)
+    let spec_content = resolve_template("spec");
     let path = templates_dir.join("spec-template.md");
-    fs::write(&path, spec_template).map_err(|e| SpecKitError::FileWrite {
+    fs::write(&path, &spec_content).map_err(|e| SpecKitError::FileWrite {
         path: path.clone(),
         source: e,
     })?;

@@ -160,6 +160,7 @@ mod slash_command;
 mod spec_prompts;
 pub mod spec_status;
 mod streaming;
+pub mod templates;
 
 // Re-export spec_kit types for integration testing (T78)
 pub use chatwidget::spec_kit::{

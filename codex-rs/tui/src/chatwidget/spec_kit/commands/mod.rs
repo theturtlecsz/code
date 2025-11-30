@@ -13,6 +13,7 @@ mod quality;
 pub mod search;
 mod special;
 mod status;
+mod templates; // SPEC-KIT-962: Template management commands
 pub mod verify;
 
 // Re-export all commands
@@ -24,4 +25,5 @@ pub use quality::*;
 pub use search::*;
 pub use special::*;
 pub use status::*;
+pub use templates::*;
 pub use verify::*;

@@ -190,6 +190,10 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
     // Search commands
     registry.register(Box::new(SearchCommand));
 
+    // SPEC-KIT-962: Template management commands
+    registry.register(Box::new(SpecKitInstallTemplatesCommand));
+    registry.register(Box::new(SpecKitTemplateStatusCommand));
+
     Mutex::new(registry)
 });
 
@@ -300,8 +304,8 @@ mod tests {
         // Test that the global registry has all expected commands
         let registry = SPEC_KIT_REGISTRY.lock().unwrap();
 
-        // 28 commands: 10 special + 6 stage + 3 quality + 7 guardrail + 1 evidence + 1 search
-        assert_eq!(registry.len(), 28, "Registry should have 28 commands");
+        // 30 commands: 10 special + 6 stage + 3 quality + 7 guardrail + 1 evidence + 1 search + 2 templates
+        assert_eq!(registry.len(), 30, "Registry should have 30 commands");
 
         // Verify key commands are registered
         assert!(registry.find("speckit.status").is_some());
@@ -513,12 +517,13 @@ mod tests {
 
         // SPEC-KIT-902: Legacy spec-* aliases removed.
         // SPEC-KIT-960: Added speckit.project with 'project' alias
-        // 28 primary names + 12 remaining aliases = 40 total names
+        // SPEC-KIT-962: Added template commands with aliases
+        // 30 primary names + 14 aliases = 44 total names
         let all_names = registry.all_names();
         assert_eq!(
             all_names.len(),
-            40,
-            "Should have 40 total command names (28 primary + 12 aliases)"
+            44,
+            "Should have 44 total command names (30 primary + 14 aliases)"
         );
     }
 
