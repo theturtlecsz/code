@@ -20,6 +20,7 @@ pub enum ProjectType {
     Rust,
     Python,
     TypeScript,
+    Go,
     Generic,
 }
 
@@ -30,6 +31,7 @@ impl ProjectType {
             "rust" | "rs" => Some(Self::Rust),
             "python" | "py" => Some(Self::Python),
             "typescript" | "ts" => Some(Self::TypeScript),
+            "go" | "golang" => Some(Self::Go),
             "generic" | "gen" => Some(Self::Generic),
             _ => None,
         }
@@ -41,13 +43,14 @@ impl ProjectType {
             Self::Rust => "Rust",
             Self::Python => "Python",
             Self::TypeScript => "TypeScript",
+            Self::Go => "Go",
             Self::Generic => "Generic",
         }
     }
 
     /// Get valid type strings for help
     pub fn valid_types() -> &'static str {
-        "rust, python, typescript, generic"
+        "rust, python, typescript, go, generic"
     }
 }
 
@@ -96,7 +99,8 @@ pub fn create_project(
     let date = Local::now().format("%Y-%m-%d").to_string();
 
     // Create core spec-kit files (CLAUDE.md Section 1 requirements)
-    create_claude_md(&project_dir, project_name, project_type, &date, &mut files_created)?;
+    // SPEC-KIT-961 Phase 5: Create all three instruction files for hermetic isolation
+    create_instruction_files(&project_dir, project_name, project_type, &date, &mut files_created)?;
     create_spec_md(&project_dir, &date, &mut files_created)?;
     create_product_requirements(&project_dir, project_name, &date, &mut files_created)?;
     create_planning_md(&project_dir, project_name, project_type, &date, &mut files_created)?;
@@ -113,6 +117,7 @@ pub fn create_project(
         ProjectType::TypeScript => {
             create_typescript_files(&project_dir, project_name, &mut files_created)?
         }
+        ProjectType::Go => create_go_files(&project_dir, project_name, &mut files_created)?,
         ProjectType::Generic => create_generic_files(&project_dir, &mut files_created)?,
     }
 
@@ -158,8 +163,11 @@ fn validate_project_name(name: &str) -> Result<(), SpecKitError> {
     Ok(())
 }
 
-/// Create CLAUDE.md
-fn create_claude_md(
+/// SPEC-KIT-961 Phase 5: Create all instruction files (CLAUDE.md, AGENTS.md, GEMINI.md)
+///
+/// Creates all three instruction files for hermetic agent isolation.
+/// Files are identical except for the header line, ensuring parity validation passes.
+fn create_instruction_files(
     project_dir: &Path,
     project_name: &str,
     project_type: ProjectType,
@@ -170,12 +178,13 @@ fn create_claude_md(
         ProjectType::Rust => ("cargo build", "cargo test"),
         ProjectType::Python => ("uv sync", "pytest"),
         ProjectType::TypeScript => ("npm run build", "npm test"),
+        ProjectType::Go => ("go build ./...", "go test ./..."),
         ProjectType::Generic => ("# Add your build command", "# Add your test command"),
     };
 
-    let content = format!(
-        r#"# CLAUDE.md - {name} Instructions
-
+    // Common content for all instruction files (everything after line 1)
+    let common_content = format!(
+        r#"
 ## Repository Context
 **Project**: {name}
 **Created**: {date}
@@ -214,12 +223,22 @@ This project uses spec-kit for structured development:
         test_cmd = test_cmd,
     );
 
-    let path = project_dir.join("CLAUDE.md");
-    fs::write(&path, content).map_err(|e| SpecKitError::FileWrite {
-        path: path.clone(),
-        source: e,
-    })?;
-    files.push("CLAUDE.md".to_string());
+    // Create all three instruction files with unique headers
+    let instruction_files = [
+        ("CLAUDE.md", format!("# CLAUDE.md - {} Instructions{}", project_name, common_content)),
+        ("AGENTS.md", format!("# AGENTS.md - {} Instructions{}", project_name, common_content)),
+        ("GEMINI.md", format!("# GEMINI.md - {} Instructions{}", project_name, common_content)),
+    ];
+
+    for (filename, content) in instruction_files {
+        let path = project_dir.join(filename);
+        fs::write(&path, &content).map_err(|e| SpecKitError::FileWrite {
+            path: path.clone(),
+            source: e,
+        })?;
+        files.push(filename.to_string());
+    }
+
     Ok(())
 }
 
@@ -338,6 +357,10 @@ fn create_planning_md(
         ProjectType::TypeScript => (
             "- **Primary language:** TypeScript",
             "- `npm install` - Install dependencies\n- `npm run build` - Build\n- `npm test` - Run tests",
+        ),
+        ProjectType::Go => (
+            "- **Primary language:** Go",
+            "- `go build ./...` - Build all packages\n- `go test ./...` - Run tests\n- `go vet ./...` - Lint checks",
         ),
         ProjectType::Generic => (
             "- **Primary language:** [Specify]",
@@ -833,6 +856,118 @@ dist/
     Ok(())
 }
 
+/// SPEC-KIT-961 Phase 6: Create Go-specific files
+fn create_go_files(
+    project_dir: &Path,
+    project_name: &str,
+    files: &mut Vec<String>,
+) -> Result<(), SpecKitError> {
+    // Convert project name to Go module name (lowercase, no special chars)
+    let module_name = project_name.replace('-', "").replace('_', "");
+
+    // go.mod
+    let go_mod = format!(
+        r#"module {}
+
+go 1.22
+"#,
+        module_name
+    );
+
+    let path = project_dir.join("go.mod");
+    fs::write(&path, go_mod).map_err(|e| SpecKitError::FileWrite {
+        path: path.clone(),
+        source: e,
+    })?;
+    files.push("go.mod".to_string());
+
+    // main.go
+    let main_go = format!(
+        r#"// Package main is the entry point for {name}.
+package main
+
+import "fmt"
+
+func main() {{
+    fmt.Println(Hello())
+}}
+
+// Hello returns a greeting message.
+func Hello() string {{
+    return "Hello from {name}!"
+}}
+"#,
+        name = project_name
+    );
+
+    let path = project_dir.join("main.go");
+    fs::write(&path, main_go).map_err(|e| SpecKitError::FileWrite {
+        path: path.clone(),
+        source: e,
+    })?;
+    files.push("main.go".to_string());
+
+    // main_test.go
+    let main_test = format!(
+        r#"package main
+
+import "testing"
+
+func TestHello(t *testing.T) {{
+    want := "Hello from {name}!"
+    got := Hello()
+    if got != want {{
+        t.Errorf("Hello() = %q, want %q", got, want)
+    }}
+}}
+"#,
+        name = project_name
+    );
+
+    let path = project_dir.join("main_test.go");
+    fs::write(&path, main_test).map_err(|e| SpecKitError::FileWrite {
+        path: path.clone(),
+        source: e,
+    })?;
+    files.push("main_test.go".to_string());
+
+    // .gitignore
+    let gitignore = format!(
+        r#"# Binaries
+/{}
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test coverage
+*.test
+*.out
+coverage.txt
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Vendor (if not committed)
+# vendor/
+"#,
+        project_name
+    );
+
+    let path = project_dir.join(".gitignore");
+    fs::write(&path, gitignore).map_err(|e| SpecKitError::FileWrite {
+        path: path.clone(),
+        source: e,
+    })?;
+    files.push(".gitignore".to_string());
+
+    Ok(())
+}
+
 /// Create Generic-specific files (minimal)
 fn create_generic_files(
     project_dir: &Path,
@@ -871,6 +1006,10 @@ mod tests {
             Some(ProjectType::TypeScript)
         );
         assert_eq!(ProjectType::from_str("ts"), Some(ProjectType::TypeScript));
+        // SPEC-KIT-961 Phase 6: Go project type
+        assert_eq!(ProjectType::from_str("go"), Some(ProjectType::Go));
+        assert_eq!(ProjectType::from_str("golang"), Some(ProjectType::Go));
+        assert_eq!(ProjectType::from_str("GO"), Some(ProjectType::Go));
         assert_eq!(ProjectType::from_str("generic"), Some(ProjectType::Generic));
         assert_eq!(ProjectType::from_str("gen"), Some(ProjectType::Generic));
         assert_eq!(ProjectType::from_str("invalid"), None);
@@ -902,8 +1041,11 @@ mod tests {
         assert_eq!(result.project_type, ProjectType::Rust);
         assert_eq!(result.project_name, "my-rust-lib");
         assert!(result.directory.exists());
-        // Core spec-kit files (CLAUDE.md Section 1 requirements)
+        // SPEC-KIT-961: All three instruction files required for hermetic isolation
         assert!(result.directory.join("CLAUDE.md").exists());
+        assert!(result.directory.join("AGENTS.md").exists());
+        assert!(result.directory.join("GEMINI.md").exists());
+        // Core spec-kit files
         assert!(result.directory.join("SPEC.md").exists());
         assert!(result.directory.join("product-requirements.md").exists());
         assert!(result.directory.join("PLANNING.md").exists());
@@ -940,13 +1082,33 @@ mod tests {
     }
 
     #[test]
+    fn test_create_go_project() {
+        let temp = TempDir::new().unwrap();
+        let result = create_project(ProjectType::Go, "my-go-app", temp.path()).unwrap();
+
+        assert_eq!(result.project_type, ProjectType::Go);
+        // SPEC-KIT-961: All three instruction files required
+        assert!(result.directory.join("CLAUDE.md").exists());
+        assert!(result.directory.join("AGENTS.md").exists());
+        assert!(result.directory.join("GEMINI.md").exists());
+        // Go-specific files
+        assert!(result.directory.join("go.mod").exists());
+        assert!(result.directory.join("main.go").exists());
+        assert!(result.directory.join("main_test.go").exists());
+        assert!(result.directory.join(".gitignore").exists());
+    }
+
+    #[test]
     fn test_create_generic_project() {
         let temp = TempDir::new().unwrap();
         let result = create_project(ProjectType::Generic, "minimal-spec", temp.path()).unwrap();
 
         assert_eq!(result.project_type, ProjectType::Generic);
-        // Core spec-kit files (CLAUDE.md Section 1 requirements)
+        // SPEC-KIT-961: All three instruction files required for hermetic isolation
         assert!(result.directory.join("CLAUDE.md").exists());
+        assert!(result.directory.join("AGENTS.md").exists());
+        assert!(result.directory.join("GEMINI.md").exists());
+        // Core spec-kit files
         assert!(result.directory.join("SPEC.md").exists());
         assert!(result.directory.join("product-requirements.md").exists());
         assert!(result.directory.join("PLANNING.md").exists());

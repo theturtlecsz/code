@@ -517,6 +517,7 @@ fn load_artifacts_from_evidence(
 }
 
 // FORK-SPECIFIC (just-every/code): Native MCP for local-memory
+// SPEC-KIT-964 Phase 7: Project scoping for hermetic isolation
 async fn fetch_memory_entries(
     spec_id: &str,
     stage: SpecStage,
@@ -530,10 +531,21 @@ async fn fetch_memory_entries(
     // - format!("stage:{}", stage.display_name().to_lowercase()) e.g., "stage:plan"
     // - format!("stage:{}", stage.command_name()) e.g., "stage:spec-plan"
 
+    // SPEC-KIT-964 Phase 7: Derive project tag from current working directory
+    // This scopes memory queries to the current project, preventing cross-project leakage
+    let project_tag = std::env::current_dir()
+        .ok()
+        .and_then(|p| {
+            // Extract project identifier: last component of path or git remote
+            p.file_name()
+                .map(|name| format!("project:{}", name.to_string_lossy()))
+        })
+        .unwrap_or_else(|| "project:unknown".to_string());
+
     let args = json!({
         "query": query,
         "limit": 20,
-        "tags": [format!("spec:{}", spec_id)],
+        "tags": [format!("spec:{}", spec_id), project_tag],
         "search_type": "hybrid"
     });
 

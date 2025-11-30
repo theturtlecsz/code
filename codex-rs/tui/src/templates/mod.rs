@@ -67,6 +67,16 @@ pub mod embedded {
 
     /// Spec template - technical specification
     pub const SPEC: &str = include_str!("../../../../templates/spec-template.md");
+
+    // SPEC-KIT-961 Phase 5: Instruction file templates for hermetic agent isolation
+    /// CLAUDE.md instruction file template
+    pub const CLAUDE: &str = include_str!("../../../../templates/CLAUDE-template.md");
+
+    /// AGENTS.md instruction file template
+    pub const AGENTS: &str = include_str!("../../../../templates/AGENTS-template.md");
+
+    /// GEMINI.md instruction file template
+    pub const GEMINI: &str = include_str!("../../../../templates/GEMINI-template.md");
 }
 
 /// Get embedded template by name.
@@ -99,6 +109,10 @@ pub fn get_embedded(name: &str) -> Option<&'static str> {
         "checklist" => Some(embedded::CHECKLIST),
         "prd" => Some(embedded::PRD),
         "spec" => Some(embedded::SPEC),
+        // SPEC-KIT-961 Phase 5: Instruction file templates
+        "claude" => Some(embedded::CLAUDE),
+        "agents" => Some(embedded::AGENTS),
+        "gemini" => Some(embedded::GEMINI),
         _ => None,
     }
 }
@@ -119,6 +133,10 @@ pub fn template_names() -> &'static [&'static str] {
         "checklist",
         "prd",
         "spec",
+        // SPEC-KIT-961 Phase 5: Instruction file templates
+        "claude",
+        "agents",
+        "gemini",
     ]
 }
 
@@ -382,9 +400,18 @@ mod tests {
     #[test]
     fn test_all_template_status() {
         let status = all_template_status();
-        assert_eq!(status.len(), 11);
+        // 11 original + 3 instruction file templates = 14
+        assert_eq!(status.len(), 14);
         for s in &status {
             assert!(s.available, "Template {} should be available", s.name);
         }
+    }
+
+    #[test]
+    fn test_instruction_file_templates() {
+        // SPEC-KIT-961: Verify instruction file templates exist
+        assert!(get_embedded("claude").is_some(), "claude template missing");
+        assert!(get_embedded("agents").is_some(), "agents template missing");
+        assert!(get_embedded("gemini").is_some(), "gemini template missing");
     }
 }

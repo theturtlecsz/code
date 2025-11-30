@@ -1,37 +1,72 @@
 #!/bin/bash
-# Pre-commit hook for policy compliance (SPEC-941)
+# Pre-commit hook for policy compliance (SPEC-941, SPEC-KIT-964)
 #
 # Runs fast policy checks (<5s) to catch violations before commit.
 # Can be bypassed with --no-verify for emergencies.
 #
-# See: codex-rs/MEMORY-POLICY.md
+# See: codex-rs/MEMORY-POLICY.md, docs/spec-kit/MULTI-AGENT-ARCHITECTURE.md
 
+echo "🔍 Running pre-commit checks..."
+echo ""
+
+# === SPEC-KIT-964: Config isolation validation ===
+# Always run, regardless of what files changed
+if [[ -f "scripts/validate-config-isolation.sh" ]]; then
+    if ! bash scripts/validate-config-isolation.sh; then
+        echo ""
+        echo "❌ Config isolation violation detected"
+        echo "Fix violations before committing, or skip with: git commit --no-verify"
+        exit 1
+    fi
+fi
+
+# === Priority 3: Instruction file parity validation ===
+# Check that CLAUDE.md, AGENTS.md, GEMINI.md are in sync (except header line)
+if [[ -f "CLAUDE.md" && -f "AGENTS.md" && -f "GEMINI.md" ]]; then
+    echo "Validating instruction file parity..."
+
+    # Compare CLAUDE.md and AGENTS.md (skip first line - header differs)
+    if ! diff <(tail -n +2 CLAUDE.md) <(tail -n +2 AGENTS.md) > /dev/null 2>&1; then
+        echo "  WARNING: CLAUDE.md and AGENTS.md are out of sync"
+        echo "  Files should be identical except for line 1 (header)"
+        # Warning only - don't block commit, but inform developer
+    fi
+
+    # Compare CLAUDE.md and GEMINI.md (skip first line - header differs)
+    if ! diff <(tail -n +2 CLAUDE.md) <(tail -n +2 GEMINI.md) > /dev/null 2>&1; then
+        echo "  WARNING: CLAUDE.md and GEMINI.md are out of sync"
+        echo "  Files should be identical except for line 1 (header)"
+        # Warning only - don't block commit, but inform developer
+    fi
+
+    echo "  Instruction file parity check complete"
+fi
+
+# === SPEC-941: Policy compliance checks ===
 # Only run if spec_kit modules modified
 SPEC_KIT_CHANGES=$(git diff --cached --name-only | grep "spec_kit" || true)
 
-if [ -z "$SPEC_KIT_CHANGES" ]; then
-    # No spec_kit changes, skip policy checks
-    exit 0
+if [ -n "$SPEC_KIT_CHANGES" ]; then
+    echo ""
+    echo "spec_kit changes detected, running policy checks..."
+
+    # Check 1: Storage policy
+    if ! bash scripts/validate_storage_policy.sh; then
+        echo ""
+        echo "❌ Storage policy violation detected"
+        echo "Fix violations before committing, or skip with: git commit --no-verify"
+        exit 1
+    fi
+
+    # Check 2: Tag schema
+    if ! bash scripts/validate_tag_schema.sh; then
+        echo ""
+        echo "❌ Tag schema violation detected"
+        echo "Fix violations before committing, or skip with: git commit --no-verify"
+        exit 1
+    fi
 fi
 
-echo "🔍 Running policy compliance checks (spec_kit modified)..."
 echo ""
-
-# Check 1: Storage policy
-if ! bash scripts/validate_storage_policy.sh; then
-    echo ""
-    echo "❌ Storage policy violation detected"
-    echo "Fix violations before committing, or skip with: git commit --no-verify"
-    exit 1
-fi
-
-# Check 2: Tag schema
-if ! bash scripts/validate_tag_schema.sh; then
-    echo ""
-    echo "❌ Tag schema violation detected"
-    echo "Fix violations before committing, or skip with: git commit --no-verify"
-    exit 1
-fi
-
-echo "✅ Policy compliance checks passed"
+echo "✅ Pre-commit checks passed"
 exit 0

@@ -132,7 +132,7 @@ Note: Global user config (~/.config/code/templates/) is NOT checked
 to ensure hermetic agent isolation and reproducible behavior.
 ```
 
-### Embedded Templates (11 total)
+### Embedded Templates (14 total)
 
 | Template | Used By | Purpose |
 |----------|---------|---------|
@@ -144,9 +144,14 @@ to ensure hermetic agent isolation and reproducible behavior.
 | `validate-template.md` | `/speckit.validate` | Test strategy |
 | `audit-template.md` | `/speckit.audit` | Compliance checklist |
 | `unlock-template.md` | `/speckit.unlock` | Ship decision |
-| `evidence-template.md` | All stages | Evidence capture |
-| `consensus-template.md` | Multi-agent stages | Synthesis format |
-| `CLAUDE-template.md` | `/speckit.project` | Project instructions |
+| `clarify-template.md` | Quality gates | Ambiguity detection |
+| `analyze-template.md` | Quality gates | Consistency checking |
+| `checklist-template.md` | Quality gates | Quality scoring |
+| `CLAUDE-template.md` | `/speckit.project` | Claude Code instructions |
+| `AGENTS-template.md` | `/speckit.project` | Codex agent instructions |
+| `GEMINI-template.md` | `/speckit.project` | Gemini CLI instructions |
+
+**SPEC-KIT-961**: All three instruction file templates are scaffolded by `/speckit.project` for hermetic agent isolation.
 
 ## Multi-IDE Integration
 
@@ -167,6 +172,75 @@ to ensure hermetic agent isolation and reproducible behavior.
 | Tier 3 | Premium agents | gemini-pro | Premium agents |
 
 **Note**: Gemini CLI uses its configured model directly; multi-agent consensus requires TUI or Claude Code.
+
+## ACE Playbook Integration
+
+The Agentic Context Engine (ACE) provides execution learning and playbook management via the `ace-playbook` MCP server.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Spec-kit Stage Execution                      │
+├─────────────────────────────────────────────────────────────────┤
+│  1. playbook_slice() → Fetch relevant bullets for scope          │
+│  2. Inject bullets into agent prompts                            │
+│  3. Execute stage agents                                         │
+│  4. Collect execution feedback (compile_ok, tests_passed)        │
+│  5. learn() → Update bullet scores based on outcomes             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Scopes
+
+| Scope | Used By | Purpose |
+|-------|---------|---------|
+| `global` | All stages | Cross-cutting guidance |
+| `specify` | `/speckit.specify` | Requirement refinement |
+| `tasks` | `/speckit.tasks` | Task decomposition |
+| `implement` | `/speckit.implement` | Code generation |
+| `test` | `/speckit.validate` | Test strategy |
+
+### Key Functions (ace_* modules)
+
+| Module | Purpose |
+|--------|---------|
+| `ace_client.rs` | MCP client for ace-playbook server |
+| `ace_constitution.rs` | Pin project constitution as playbook bullets |
+| `ace_curator.rs` | Strategic playbook management |
+| `ace_learning.rs` | Learn from execution outcomes |
+| `ace_orchestrator.rs` | Full reflection-curation cycle |
+| `ace_prompt_injector.rs` | Inject bullets into agent prompts |
+| `ace_reflector.rs` | Deep outcome analysis |
+| `ace_route_selector.rs` | Route selection for complex tasks |
+
+### Scoring Rules
+
+```yaml
+success:       # compile_ok AND tests_passed
+  score: +1.0
+failure:       # compile_ok=false OR tests_passed=false
+  score: -0.6
+clamp_range: [-2.0, +5.0]
+```
+
+### Usage
+
+```rust
+// Fetch bullets for scope
+let slice = playbook_slice(repo_root, "implement", k=20)?;
+
+// After execution
+learn(repo_root, "implement", question, attempt, feedback)?;
+```
+
+### Constitution Pinning
+
+Project constitution (`memory/constitution.md`) can be pinned to the `global` scope to ensure consistent guidance across all stages:
+
+```rust
+ace_constitution::pin_constitution_to_playbook(repo_root)?;
+```
 
 ## Debugging
 

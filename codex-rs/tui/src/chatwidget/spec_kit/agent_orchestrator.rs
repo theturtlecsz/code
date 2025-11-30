@@ -763,6 +763,17 @@ async fn spawn_regular_stage_agents_native(
         .map(|r| format!("[run:{}]", &r[..8]))
         .unwrap_or_else(|| "[run:none]".to_string());
 
+    // SPEC-KIT-964 Phase 6: Validate hermetic isolation before spawning agents
+    if let Err(e) = super::isolation_validator::validate_agent_isolation_with_skip(cwd) {
+        tracing::warn!(
+            "{} SPEC-KIT-964: Isolation validation failed: {}",
+            run_tag,
+            e
+        );
+        // Log warning but don't block execution - some projects may not have all instruction files
+        // This provides visibility while allowing existing workflows to continue
+    }
+
     // Stage-specific execution patterns (Option 4)
     match stage {
         // Sequential pipeline: Research → Synthesis → QA
