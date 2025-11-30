@@ -3204,6 +3204,21 @@ impl App<'_> {
                     }
                 }
                 // === END FORK-SPECIFIC: PRD builder events ===
+                // === FORK-SPECIFIC: Clarify events (SPEC-KIT-971) ===
+                AppEvent::ClarifySubmitted {
+                    spec_id,
+                    resolutions,
+                } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        spec_kit::on_clarify_submitted(widget, spec_id, resolutions);
+                    }
+                }
+                AppEvent::ClarifyCancelled { spec_id } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        spec_kit::on_clarify_cancelled(widget, spec_id);
+                    }
+                }
+                // === END FORK-SPECIFIC: Clarify events ===
                 AppEvent::QualityGateNativeAgentsComplete {
                     checkpoint,
                     agent_ids,

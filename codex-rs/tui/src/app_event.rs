@@ -619,6 +619,17 @@ pub(crate) enum AppEvent {
         description: String,
     },
 
+    /// Clarification markers resolved (SPEC-KIT-971)
+    ClarifySubmitted {
+        spec_id: String,
+        resolutions: Vec<(crate::bottom_pane::clarify_modal::ClarifyQuestion, String)>,
+    },
+
+    /// Clarification was cancelled by user (SPEC-KIT-971)
+    ClarifyCancelled {
+        spec_id: String,
+    },
+
     /// Native quality gate agents completed (SPEC-KIT-900)
     QualityGateNativeAgentsComplete {
         checkpoint: crate::chatwidget::spec_kit::QualityCheckpoint,

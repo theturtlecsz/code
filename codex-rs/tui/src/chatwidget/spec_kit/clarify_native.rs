@@ -358,6 +358,108 @@ fn regex_escape(s: &str) -> String {
         .collect()
 }
 
+// =============================================================================
+// [NEEDS CLARIFICATION] Marker Resolution (SPEC-KIT-971)
+// =============================================================================
+
+/// A clarification marker found in a spec file
+#[derive(Debug, Clone)]
+pub struct ClarificationMarker {
+    /// Unique ID for this marker (CLR-001, CLR-002, etc.)
+    pub id: String,
+    /// The question text from inside the marker
+    pub question: String,
+    /// File path where marker was found
+    pub file_path: std::path::PathBuf,
+    /// Line number (1-indexed)
+    pub line_number: usize,
+    /// The full original marker text (for replacement)
+    pub original_text: String,
+}
+
+/// Find all [NEEDS CLARIFICATION: ...] markers in a SPEC
+pub fn find_clarification_markers(spec_id: &str, cwd: &Path) -> Result<Vec<ClarificationMarker>> {
+    let spec_dir = super::spec_directory::find_spec_directory(cwd, spec_id)
+        .map_err(|e| SpecKitError::Other(e))?;
+    let mut markers = Vec::new();
+
+    // Pattern: [NEEDS CLARIFICATION: question text here]
+    let marker_re = Regex::new(r"\[NEEDS CLARIFICATION:\s*([^\]]+)\]").unwrap();
+
+    // Files to scan
+    let files_to_scan = vec!["PRD.md", "spec.md", "plan.md", "tasks.md"];
+
+    for filename in files_to_scan {
+        let file_path = spec_dir.join(filename);
+        if !file_path.exists() {
+            continue;
+        }
+
+        let content =
+            fs::read_to_string(&file_path).map_err(|e| SpecKitError::file_read(&file_path, e))?;
+
+        for (line_idx, line) in content.lines().enumerate() {
+            for cap in marker_re.captures_iter(line) {
+                let full_match = cap.get(0).unwrap().as_str();
+                let question = cap.get(1).unwrap().as_str().trim();
+
+                markers.push(ClarificationMarker {
+                    id: format!("CLR-{:03}", markers.len() + 1),
+                    question: question.to_string(),
+                    file_path: file_path.clone(),
+                    line_number: line_idx + 1,
+                    original_text: full_match.to_string(),
+                });
+            }
+        }
+    }
+
+    Ok(markers)
+}
+
+/// Resolve a clarification marker by replacing it with the answer
+pub fn resolve_marker(marker: &ClarificationMarker, answer: &str) -> Result<()> {
+    let content = fs::read_to_string(&marker.file_path)
+        .map_err(|e| SpecKitError::file_read(&marker.file_path, e))?;
+
+    // Replace the marker with the answer
+    let updated = content.replace(&marker.original_text, answer);
+
+    fs::write(&marker.file_path, updated)
+        .map_err(|e| SpecKitError::file_write(&marker.file_path, e))?;
+
+    Ok(())
+}
+
+/// Resolve multiple markers at once (batch update)
+pub fn resolve_markers(resolutions: &[(ClarificationMarker, String)]) -> Result<()> {
+    use std::collections::HashMap;
+
+    // Group by file path for efficiency
+    let mut by_file: HashMap<std::path::PathBuf, Vec<(&ClarificationMarker, &str)>> =
+        HashMap::new();
+    for (marker, answer) in resolutions {
+        by_file
+            .entry(marker.file_path.clone())
+            .or_default()
+            .push((marker, answer.as_str()));
+    }
+
+    // Process each file
+    for (file_path, replacements) in by_file {
+        let mut content = fs::read_to_string(&file_path)
+            .map_err(|e| SpecKitError::file_read(&file_path, e))?;
+
+        for (marker, answer) in replacements {
+            content = content.replace(&marker.original_text, answer);
+        }
+
+        fs::write(&file_path, content).map_err(|e| SpecKitError::file_write(&file_path, e))?;
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -436,5 +538,29 @@ mod tests {
         });
 
         assert_eq!(issues[0].severity, Severity::Critical);
+    }
+
+    #[test]
+    fn test_clarification_marker_regex() {
+        let marker_re = Regex::new(r"\[NEEDS CLARIFICATION:\s*([^\]]+)\]").unwrap();
+
+        // Should match
+        let test1 = "[NEEDS CLARIFICATION: Should we use sync or async?]";
+        let cap = marker_re.captures(test1).unwrap();
+        assert_eq!(cap.get(1).unwrap().as_str().trim(), "Should we use sync or async?");
+
+        // Should match with extra whitespace
+        let test2 = "[NEEDS CLARIFICATION:   What is the latency target?  ]";
+        let cap = marker_re.captures(test2).unwrap();
+        assert_eq!(cap.get(1).unwrap().as_str().trim(), "What is the latency target?");
+
+        // Should NOT match incomplete markers
+        let test3 = "[NEEDS CLARIFICATION]";
+        assert!(marker_re.captures(test3).is_none());
+
+        // Multiple markers in one line
+        let test4 = "Choice: [NEEDS CLARIFICATION: A or B?] and [NEEDS CLARIFICATION: X or Y?]";
+        let matches: Vec<_> = marker_re.captures_iter(test4).collect();
+        assert_eq!(matches.len(), 2);
     }
 }

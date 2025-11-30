@@ -34,7 +34,8 @@ mod model_selection_view;
 mod paste_burst;
 mod pipeline_configurator_view;
 mod popup_consts;
-mod prd_builder_modal;
+pub(crate) mod prd_builder_modal;
+pub(crate) mod clarify_modal;
 mod quality_gate_modal;
 mod scroll_state;
 mod selection_popup_common;
@@ -643,8 +644,39 @@ impl BottomPane<'_> {
     }
 
     /// Show PRD builder modal for interactive spec creation (SPEC-KIT-970)
+    /// Uses generic questions - prefer show_prd_builder_with_context for project-aware questions
     pub fn show_prd_builder(&mut self, description: String) {
         let modal = prd_builder_modal::PrdBuilderModal::new(description, self.app_event_tx.clone());
+        self.active_view = Some(Box::new(modal));
+        self.status_view_active = false;
+        self.request_redraw();
+    }
+
+    /// Show PRD builder modal with project-specific questions (SPEC-KIT-971)
+    pub fn show_prd_builder_with_context(
+        &mut self,
+        description: String,
+        project_type_display: String,
+        questions: Vec<prd_builder_modal::PrdQuestion>,
+    ) {
+        let modal = prd_builder_modal::PrdBuilderModal::with_project_questions(
+            description,
+            project_type_display,
+            questions,
+            self.app_event_tx.clone(),
+        );
+        self.active_view = Some(Box::new(modal));
+        self.status_view_active = false;
+        self.request_redraw();
+    }
+
+    /// Show clarify modal for interactive clarification resolution (SPEC-KIT-971)
+    pub fn show_clarify_modal(
+        &mut self,
+        spec_id: String,
+        questions: Vec<clarify_modal::ClarifyQuestion>,
+    ) {
+        let modal = clarify_modal::ClarifyModal::new(spec_id, questions, self.app_event_tx.clone());
         self.active_view = Some(Box::new(modal));
         self.status_view_active = false;
         self.request_redraw();

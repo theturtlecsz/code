@@ -65,6 +65,7 @@ impl SpecKitCommand for SpecKitAutoCommand {
 /// Command: /speckit.new (and /new-spec)
 /// Create new SPEC from description with interactive Q&A - FULLY NATIVE (zero agents, $0)
 /// SPEC-KIT-970: Now shows modal with 3 required questions before generating PRD
+/// SPEC-KIT-971: Questions customized based on detected project type
 pub struct SpecKitNewCommand;
 
 impl SpecKitCommand for SpecKitNewCommand {
@@ -77,14 +78,43 @@ impl SpecKitCommand for SpecKitNewCommand {
     }
 
     fn description(&self) -> &'static str {
-        "create new SPEC with interactive Q&A (INSTANT, zero agents, $0)"
+        "create new SPEC with project-aware Q&A (INSTANT, zero agents, $0)"
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
-        // SPEC-KIT-970: Show interactive PRD builder modal
-        // Modal collects: Problem, Target User, Success Criteria
-        // Then triggers AppEvent::PrdBuilderSubmitted to create spec
-        widget.show_prd_builder(args.trim().to_string());
+        use super::super::project_detector::{detect_project_type, get_project_questions};
+
+        // SPEC-KIT-971: Detect project type and customize questions
+        let project_type = detect_project_type(&widget.config.cwd);
+        let project_questions = get_project_questions(project_type);
+
+        // Convert project_detector questions to prd_builder_modal format
+        let modal_questions: Vec<crate::bottom_pane::prd_builder_modal::PrdQuestion> =
+            project_questions
+                .into_iter()
+                .map(|q| crate::bottom_pane::prd_builder_modal::PrdQuestion {
+                    category: q.category,
+                    question: q.question,
+                    options: q
+                        .options
+                        .into_iter()
+                        .map(|o| crate::bottom_pane::prd_builder_modal::PrdOption {
+                            label: o.label,
+                            text: o.text,
+                            is_custom: o.is_custom,
+                        })
+                        .collect(),
+                })
+                .collect();
+
+        let project_display = format!("{} {}", project_type.icon(), project_type.display_name());
+
+        // SPEC-KIT-970: Show interactive PRD builder modal with project-aware questions
+        widget.show_prd_builder_with_context(
+            args.trim().to_string(),
+            project_display,
+            modal_questions,
+        );
     }
 
     fn requires_args(&self) -> bool {

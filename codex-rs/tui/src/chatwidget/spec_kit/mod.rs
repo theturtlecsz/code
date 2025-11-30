@@ -45,6 +45,8 @@ pub mod native_quality_gate_orchestrator; // SPEC-KIT-900, I-003: Native quality
 pub mod new_native; // SPEC-KIT-072: Native SPEC creation (eliminates 2 agents, $0.15 → $0)
 pub mod pipeline_config; // SPEC-948: Modular pipeline logic - stage filtering and configuration
 pub mod prd_builder_handler; // SPEC-KIT-970: PRD builder modal event handlers
+pub mod clarify_handler; // SPEC-KIT-971: Clarify modal event handlers
+pub mod project_detector; // SPEC-KIT-971: Project type detection for context-aware questions
 pub mod project_native; // SPEC-KIT-960: Native project scaffolding
 pub mod pipeline_configurator; // SPEC-947: Pipeline UI configurator - interactive stage selection
 pub mod pipeline_coordinator;
@@ -112,6 +114,9 @@ pub(crate) use handler::{
 
 // Re-export PRD builder handler functions (SPEC-KIT-970)
 pub(crate) use prd_builder_handler::{on_prd_builder_cancelled, on_prd_builder_submitted};
+
+// Re-export clarify handler functions (SPEC-KIT-971)
+pub(crate) use clarify_handler::{on_clarify_cancelled, on_clarify_submitted};
 
 // Re-export pipeline configuration types (SPEC-948)
 pub use pipeline_config::PipelineOverrides;

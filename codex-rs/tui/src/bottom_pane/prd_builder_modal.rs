@@ -1,9 +1,7 @@
 //! PRD builder modal for interactive spec creation (SPEC-KIT-970)
 //!
-//! Displays required questions before generating a PRD:
-//! 1. Problem - What problem does this solve?
-//! 2. Target User - Who is the primary user?
-//! 3. Success Criteria - How will you know it's complete?
+//! Displays project-aware questions before generating a PRD.
+//! Questions are customized based on detected project type (Rust, Python, TypeScript, etc.)
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use ratatui::buffer::Buffer;
@@ -36,6 +34,7 @@ pub(crate) struct PrdOption {
 /// Modal state for PRD builder questions
 pub(crate) struct PrdBuilderModal {
     description: String,
+    project_type_display: String,
     questions: Vec<PrdQuestion>,
     current_index: usize,
     answers: Vec<String>,
@@ -46,6 +45,27 @@ pub(crate) struct PrdBuilderModal {
 }
 
 impl PrdBuilderModal {
+    /// Create modal with project-specific questions
+    pub fn with_project_questions(
+        description: String,
+        project_type_display: String,
+        questions: Vec<PrdQuestion>,
+        app_event_tx: AppEventSender,
+    ) -> Self {
+        Self {
+            description,
+            project_type_display,
+            questions,
+            current_index: 0,
+            answers: Vec::new(),
+            current_input: String::new(),
+            custom_mode: false,
+            app_event_tx,
+            done: false,
+        }
+    }
+
+    /// Create modal with default generic questions (backwards compatible)
     pub fn new(description: String, app_event_tx: AppEventSender) -> Self {
         let questions = vec![
             PrdQuestion {
@@ -82,6 +102,7 @@ impl PrdBuilderModal {
 
         Self {
             description,
+            project_type_display: "Generic".to_string(),
             questions,
             current_index: 0,
             answers: Vec::new(),
@@ -255,14 +276,16 @@ impl BottomPaneView<'_> for PrdBuilderModal {
 
         let mut lines = Vec::new();
 
-        // Description (truncated)
-        let desc_display = if self.description.len() > 50 {
-            format!("{}...", &self.description[..47])
+        // Project type + Description
+        let desc_display = if self.description.len() > 40 {
+            format!("{}...", &self.description[..37])
         } else {
             self.description.clone()
         };
         lines.push(Line::from(vec![
-            Span::styled("Feature: ", Style::default().dim()),
+            Span::styled("Project: ", Style::default().dim()),
+            Span::styled(&self.project_type_display, Style::default().fg(Color::Magenta).bold()),
+            Span::styled("  Feature: ", Style::default().dim()),
             Span::styled(desc_display, Style::default().fg(Color::White)),
         ]));
         lines.push(Line::from(""));

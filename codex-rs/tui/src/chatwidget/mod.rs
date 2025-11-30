@@ -5755,6 +5755,26 @@ impl ChatWidget<'_> {
         self.bottom_pane.show_prd_builder(description);
     }
 
+    /// Show PRD builder modal with project-specific questions (SPEC-KIT-971)
+    pub(crate) fn show_prd_builder_with_context(
+        &mut self,
+        description: String,
+        project_type_display: String,
+        questions: Vec<crate::bottom_pane::prd_builder_modal::PrdQuestion>,
+    ) {
+        self.bottom_pane
+            .show_prd_builder_with_context(description, project_type_display, questions);
+    }
+
+    /// Show clarify modal for interactive clarification resolution (SPEC-KIT-971)
+    pub(crate) fn show_clarify_modal(
+        &mut self,
+        spec_id: String,
+        questions: Vec<crate::bottom_pane::clarify_modal::ClarifyQuestion>,
+    ) {
+        self.bottom_pane.show_clarify_modal(spec_id, questions);
+    }
+
     pub(crate) fn perform_undo_restore(
         &mut self,
         index: usize,

@@ -11,7 +11,11 @@ use super::super::command_registry::SpecKitCommand;
 use crate::history_cell;
 
 /// Command: /speckit.clarify
-/// Native ambiguity detection (zero agents, <1s, FREE)
+/// Interactive clarification resolution + native ambiguity detection
+///
+/// Two modes:
+/// 1. If [NEEDS CLARIFICATION: ...] markers exist → interactive modal
+/// 2. Otherwise → native ambiguity heuristics (zero agents, <1s, FREE)
 pub struct SpecKitClarifyCommand;
 
 impl SpecKitCommand for SpecKitClarifyCommand {
@@ -24,7 +28,7 @@ impl SpecKitCommand for SpecKitClarifyCommand {
     }
 
     fn description(&self) -> &'static str {
-        "detect spec ambiguities (native heuristics, instant)"
+        "resolve clarification markers & detect ambiguities"
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
@@ -36,7 +40,47 @@ impl SpecKitCommand for SpecKitClarifyCommand {
             return;
         }
 
-        // Use NATIVE heuristics (no agents!)
+        // First, check for [NEEDS CLARIFICATION] markers
+        match clarify_native::find_clarification_markers(spec_id, &widget.config.cwd) {
+            Ok(markers) if !markers.is_empty() => {
+                // Convert to modal questions and launch interactive resolution
+                let questions: Vec<crate::bottom_pane::clarify_modal::ClarifyQuestion> = markers
+                    .into_iter()
+                    .map(|m| crate::bottom_pane::clarify_modal::ClarifyQuestion {
+                        id: m.id,
+                        question: m.question,
+                        file_path: m.file_path,
+                        line_number: m.line_number,
+                        original_text: m.original_text,
+                    })
+                    .collect();
+
+                widget.history_push(history_cell::PlainHistoryCell::new(
+                    vec![ratatui::text::Line::from(format!(
+                        "Found {} clarification marker{} in {} - launching interactive resolution...",
+                        questions.len(),
+                        if questions.len() == 1 { "" } else { "s" },
+                        spec_id
+                    ))],
+                    history_cell::HistoryCellType::Notice,
+                ));
+
+                widget.show_clarify_modal(spec_id.to_string(), questions);
+                return;
+            }
+            Ok(_) => {
+                // No markers - fall through to ambiguity detection
+            }
+            Err(err) => {
+                widget.history_push(history_cell::new_error_event(format!(
+                    "Failed to scan for markers: {}",
+                    err
+                )));
+                return;
+            }
+        }
+
+        // No markers found - use NATIVE ambiguity heuristics
         match clarify_native::find_ambiguities(spec_id, &widget.config.cwd) {
             Ok(ambiguities) => {
                 display_clarify_results(widget, spec_id, ambiguities);
