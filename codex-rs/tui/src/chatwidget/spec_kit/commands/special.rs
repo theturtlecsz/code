@@ -189,7 +189,13 @@ impl SpecKitCommand for SpecConsensusCommand {
 }
 
 /// Command: /speckit.constitution
-/// Extract and pin constitution bullets to ACE
+/// Manage project constitution (view/add/sync)
+///
+/// P91/SPEC-KIT-105: Constitution management command with subcommands:
+/// - view (default): Display current constitution from overlay DB
+/// - add: Interactive entry to add constitution items
+/// - sync: Regenerate NL_CONSTITUTION.md and memory/constitution.md
+/// - ace: Extract and pin bullets to ACE playbook (legacy behavior)
 pub struct SpecKitConstitutionCommand;
 
 impl SpecKitCommand for SpecKitConstitutionCommand {
@@ -202,119 +208,542 @@ impl SpecKitCommand for SpecKitConstitutionCommand {
     }
 
     fn description(&self) -> &'static str {
-        "extract and pin constitution bullets to ACE playbook"
+        "manage constitution (view/add/sync)"
     }
 
-    fn execute(&self, widget: &mut ChatWidget, _args: String) {
-        tracing::info!("SpecKitConstitution: execute() called");
-
-        // Find constitution.md in the repository
-        let constitution_path = widget.config.cwd.join("memory").join("constitution.md");
-
-        tracing::info!(
-            "SpecKitConstitution: Looking for constitution at: {:?}",
-            constitution_path
-        );
-
-        if !constitution_path.exists() {
-            widget.history_push(crate::history_cell::new_error_event(
-                "Constitution not found at memory/constitution.md".to_string(),
-            ));
-            widget.request_redraw();
-            return;
-        }
-
-        // Read constitution
-        let markdown = match std::fs::read_to_string(&constitution_path) {
-            Ok(content) => content,
-            Err(e) => {
-                widget.history_push(crate::history_cell::new_error_event(format!(
-                    "Failed to read constitution: {}",
-                    e
-                )));
-                widget.request_redraw();
-                return;
-            }
+    fn execute(&self, widget: &mut ChatWidget, args: String) {
+        let args = args.trim();
+        let (subcommand, rest) = if args.is_empty() {
+            ("view", "")
+        } else {
+            args.split_once(' ').unwrap_or((args, ""))
         };
 
-        // Extract bullets
-        let bullets = ace_constitution::extract_bullets(&markdown);
-
-        if bullets.is_empty() {
-            widget.history_push(crate::history_cell::new_error_event(
-                "No valid bullets extracted from constitution".to_string(),
-            ));
-            widget.request_redraw();
-            return;
-        }
-
-        // Show detailed extraction info
-        let scope_counts: std::collections::HashMap<String, usize> = bullets
-            .iter()
-            .flat_map(|b| b.scopes.iter())
-            .fold(std::collections::HashMap::new(), |mut acc, scope| {
-                *acc.entry(scope.clone()).or_insert(0) += 1;
-                acc
-            });
-
-        let scope_summary = scope_counts
-            .iter()
-            .map(|(scope, count)| format!("{}: {}", scope, count))
-            .collect::<Vec<_>>()
-            .join(", ");
-
-        widget.history_push(crate::history_cell::PlainHistoryCell::new(
-            vec![
-                ratatui::text::Line::from(format!(
-                    "📋 Extracted {} bullets from constitution",
-                    bullets.len()
-                )),
-                ratatui::text::Line::from(format!("   Scopes: {}", scope_summary)),
-                ratatui::text::Line::from("   Pinning to ACE playbook..."),
-            ],
-            crate::history_cell::HistoryCellType::Notice,
-        ));
-
-        // Get git context
-        let repo_root = get_repo_root(&widget.config.cwd).unwrap_or_else(|| ".".to_string());
-        let branch = get_current_branch(&widget.config.cwd).unwrap_or_else(|| "main".to_string());
-
-        // Pin to ACE
-        match ace_constitution::pin_constitution_to_ace_sync(
-            &widget.config.ace,
-            repo_root,
-            branch,
-            bullets,
-        ) {
-            Ok(pinned_count) => {
-                widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                    vec![
-                        ratatui::text::Line::from(format!(
-                            "✅ Successfully pinned {} bullets to ACE playbook",
-                            pinned_count
-                        )),
-                        ratatui::text::Line::from(
-                            "   Database: ~/.code/ace/playbooks_normalized.sqlite3",
-                        ),
-                        ratatui::text::Line::from("   Use /speckit.ace-status to view playbook"),
-                    ],
-                    crate::history_cell::HistoryCellType::Notice,
-                ));
-            }
-            Err(e) => {
+        match subcommand.to_lowercase().as_str() {
+            "view" | "" => execute_constitution_view(widget),
+            "add" => execute_constitution_add(widget, rest.trim()),
+            "sync" => execute_constitution_sync(widget),
+            "ace" => execute_constitution_ace(widget),
+            _ => {
                 widget.history_push(crate::history_cell::new_error_event(format!(
-                    "❌ Failed to pin bullets to ACE: {}",
-                    e
+                    "Unknown subcommand '{}'. Use: view, add, sync, or ace",
+                    subcommand
                 )));
+                widget.request_redraw();
             }
         }
-
-        widget.request_redraw();
     }
 
     fn requires_args(&self) -> bool {
         false
     }
+}
+
+/// P91: Display current constitution from overlay DB
+fn execute_constitution_view(widget: &mut ChatWidget) {
+    // Load Stage0 config and connect to DB
+    let config = match codex_stage0::Stage0Config::load() {
+        Ok(c) => c,
+        Err(e) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Failed to load Stage0 config: {}",
+                e
+            )));
+            widget.request_redraw();
+            return;
+        }
+    };
+
+    let db = match codex_stage0::OverlayDb::connect_and_init(&config) {
+        Ok(d) => d,
+        Err(e) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Failed to connect to overlay DB: {}",
+                e
+            )));
+            widget.request_redraw();
+            return;
+        }
+    };
+
+    // Get constitution meta
+    let (version, hash, updated_at) = match db.get_constitution_meta() {
+        Ok(meta) => meta,
+        Err(e) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Failed to get constitution meta: {}",
+                e
+            )));
+            widget.request_redraw();
+            return;
+        }
+    };
+
+    if version == 0 {
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![
+                ratatui::text::Line::from("📋 Constitution Status"),
+                ratatui::text::Line::from(""),
+                ratatui::text::Line::from("No constitution defined."),
+                ratatui::text::Line::from(""),
+                ratatui::text::Line::from("Use /speckit.constitution add to create one."),
+            ],
+            crate::history_cell::HistoryCellType::Notice,
+        ));
+        widget.request_redraw();
+        return;
+    }
+
+    // Get constitution memories
+    let memories = match db.get_constitution_memories(50) {
+        Ok(m) => m,
+        Err(e) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Failed to get constitution memories: {}",
+                e
+            )));
+            widget.request_redraw();
+            return;
+        }
+    };
+
+    // Group by type (priority)
+    let guardrails: Vec<_> = memories.iter().filter(|m| m.initial_priority == 10).collect();
+    let principles: Vec<_> = memories.iter().filter(|m| m.initial_priority == 9).collect();
+    let goals: Vec<_> = memories.iter().filter(|m| m.initial_priority == 8).collect();
+
+    let mut lines: Vec<ratatui::text::Line<'static>> = Vec::new();
+    lines.push(ratatui::text::Line::from("📋 Constitution Status"));
+    lines.push(ratatui::text::Line::from(""));
+    lines.push(ratatui::text::Line::from(format!(
+        "Version: {} | Hash: {}",
+        version,
+        hash.as_deref().unwrap_or("none")
+    )));
+    if let Some(dt) = updated_at {
+        lines.push(ratatui::text::Line::from(format!(
+            "Updated: {}",
+            dt.format("%Y-%m-%d %H:%M UTC")
+        )));
+    }
+    lines.push(ratatui::text::Line::from(""));
+
+    // Guardrails
+    lines.push(ratatui::text::Line::from(format!(
+        "🛡️ Guardrails ({})",
+        guardrails.len()
+    )));
+    for m in &guardrails {
+        let content = m.content_raw.as_deref().unwrap_or("[no content]");
+        let truncated = if content.len() > 60 {
+            format!("{}...", &content[..60])
+        } else {
+            content.to_string()
+        };
+        lines.push(ratatui::text::Line::from(format!("  • {}", truncated)));
+    }
+
+    // Principles
+    lines.push(ratatui::text::Line::from(format!(
+        "📐 Principles ({})",
+        principles.len()
+    )));
+    for m in &principles {
+        let content = m.content_raw.as_deref().unwrap_or("[no content]");
+        let truncated = if content.len() > 60 {
+            format!("{}...", &content[..60])
+        } else {
+            content.to_string()
+        };
+        lines.push(ratatui::text::Line::from(format!("  • {}", truncated)));
+    }
+
+    // Goals
+    lines.push(ratatui::text::Line::from(format!(
+        "🎯 Goals/Non-Goals ({})",
+        goals.len()
+    )));
+    for m in &goals {
+        let content = m.content_raw.as_deref().unwrap_or("[no content]");
+        let truncated = if content.len() > 60 {
+            format!("{}...", &content[..60])
+        } else {
+            content.to_string()
+        };
+        lines.push(ratatui::text::Line::from(format!("  • {}", truncated)));
+    }
+
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+        lines,
+        crate::history_cell::HistoryCellType::Notice,
+    ));
+    widget.request_redraw();
+}
+
+/// P91: Add constitution entry (non-interactive for now, shows usage)
+fn execute_constitution_add(widget: &mut ChatWidget, args: &str) {
+    if args.is_empty() {
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![
+                ratatui::text::Line::from("📋 Constitution Add"),
+                ratatui::text::Line::from(""),
+                ratatui::text::Line::from("Usage: /speckit.constitution add <type> <content>"),
+                ratatui::text::Line::from(""),
+                ratatui::text::Line::from("Types:"),
+                ratatui::text::Line::from("  guardrail - Hard constraints (priority 10)"),
+                ratatui::text::Line::from("  principle - Architectural values (priority 9)"),
+                ratatui::text::Line::from("  goal      - Project objectives (priority 8)"),
+                ratatui::text::Line::from("  nongoal   - Explicit exclusions (priority 8)"),
+                ratatui::text::Line::from(""),
+                ratatui::text::Line::from("Example:"),
+                ratatui::text::Line::from(
+                    "  /speckit.constitution add guardrail Never break backwards compatibility",
+                ),
+            ],
+            crate::history_cell::HistoryCellType::Notice,
+        ));
+        widget.request_redraw();
+        return;
+    }
+
+    // Parse type and content
+    let (type_str, content) = match args.split_once(' ') {
+        Some((t, c)) => (t.trim(), c.trim()),
+        None => {
+            widget.history_push(crate::history_cell::new_error_event(
+                "Missing content. Usage: /speckit.constitution add <type> <content>".to_string(),
+            ));
+            widget.request_redraw();
+            return;
+        }
+    };
+
+    if content.is_empty() {
+        widget.history_push(crate::history_cell::new_error_event(
+            "Content cannot be empty".to_string(),
+        ));
+        widget.request_redraw();
+        return;
+    }
+
+    let constitution_type = match type_str.to_lowercase().as_str() {
+        "guardrail" => codex_stage0::ConstitutionType::Guardrail,
+        "principle" => codex_stage0::ConstitutionType::Principle,
+        "goal" => codex_stage0::ConstitutionType::Goal,
+        "nongoal" | "non-goal" => codex_stage0::ConstitutionType::NonGoal,
+        _ => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Unknown type '{}'. Use: guardrail, principle, goal, or nongoal",
+                type_str
+            )));
+            widget.request_redraw();
+            return;
+        }
+    };
+
+    // Connect to DB and add entry
+    let config = match codex_stage0::Stage0Config::load() {
+        Ok(c) => c,
+        Err(e) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Failed to load Stage0 config: {}",
+                e
+            )));
+            widget.request_redraw();
+            return;
+        }
+    };
+
+    let db = match codex_stage0::OverlayDb::connect_and_init(&config) {
+        Ok(d) => d,
+        Err(e) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Failed to connect to overlay DB: {}",
+                e
+            )));
+            widget.request_redraw();
+            return;
+        }
+    };
+
+    // Generate a unique memory ID
+    let memory_id = format!("constitution-{}-{}", type_str, uuid::Uuid::new_v4());
+
+    // Upsert the constitution memory
+    if let Err(e) = db.upsert_constitution_memory(&memory_id, constitution_type, content) {
+        widget.history_push(crate::history_cell::new_error_event(format!(
+            "Failed to add constitution entry: {}",
+            e
+        )));
+        widget.request_redraw();
+        return;
+    }
+
+    // Compute content hash and increment version
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    content.hash(&mut hasher);
+    let hash = format!("{:016x}", hasher.finish());
+    if let Err(e) = db.increment_constitution_version(Some(&hash)) {
+        widget.history_push(crate::history_cell::new_error_event(format!(
+            "Failed to increment version: {}",
+            e
+        )));
+        widget.request_redraw();
+        return;
+    }
+
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+        vec![
+            ratatui::text::Line::from(format!(
+                "✅ Added {} to constitution",
+                type_str
+            )),
+            ratatui::text::Line::from(format!("   Content: {}", content)),
+            ratatui::text::Line::from(""),
+            ratatui::text::Line::from("   Run /speckit.constitution sync to regenerate files."),
+        ],
+        crate::history_cell::HistoryCellType::Notice,
+    ));
+    widget.request_redraw();
+}
+
+/// P91: Sync constitution to markdown files
+fn execute_constitution_sync(widget: &mut ChatWidget) {
+    // Load config and connect to DB
+    let config = match codex_stage0::Stage0Config::load() {
+        Ok(c) => c,
+        Err(e) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Failed to load Stage0 config: {}",
+                e
+            )));
+            widget.request_redraw();
+            return;
+        }
+    };
+
+    let db = match codex_stage0::OverlayDb::connect_and_init(&config) {
+        Ok(d) => d,
+        Err(e) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Failed to connect to overlay DB: {}",
+                e
+            )));
+            widget.request_redraw();
+            return;
+        }
+    };
+
+    // Get constitution memories
+    let memories = match db.get_constitution_memories(100) {
+        Ok(m) => m,
+        Err(e) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Failed to get constitution memories: {}",
+                e
+            )));
+            widget.request_redraw();
+            return;
+        }
+    };
+
+    if memories.is_empty() {
+        widget.history_push(crate::history_cell::new_error_event(
+            "No constitution entries to sync. Use /speckit.constitution add first.".to_string(),
+        ));
+        widget.request_redraw();
+        return;
+    }
+
+    // Group by type
+    let guardrails: Vec<_> = memories
+        .iter()
+        .filter(|m| m.initial_priority == 10)
+        .filter_map(|m| m.content_raw.as_deref())
+        .collect();
+    let principles: Vec<_> = memories
+        .iter()
+        .filter(|m| m.initial_priority == 9)
+        .filter_map(|m| m.content_raw.as_deref())
+        .collect();
+    let goals: Vec<_> = memories
+        .iter()
+        .filter(|m| m.initial_priority == 8)
+        .filter_map(|m| m.content_raw.as_deref())
+        .collect();
+
+    // Build markdown content
+    let mut md = String::new();
+    md.push_str("# Project Constitution\n\n");
+    md.push_str("_Auto-generated from overlay DB. Do not edit directly._\n\n");
+
+    md.push_str("## Guardrails\n\n");
+    md.push_str("Hard constraints that must never be violated.\n\n");
+    for g in &guardrails {
+        md.push_str(&format!("- {}\n", g));
+    }
+    md.push('\n');
+
+    md.push_str("## Principles\n\n");
+    md.push_str("Architectural values and design principles.\n\n");
+    for p in &principles {
+        md.push_str(&format!("- {}\n", p));
+    }
+    md.push('\n');
+
+    md.push_str("## Goals\n\n");
+    md.push_str("Project objectives and explicit exclusions.\n\n");
+    for g in &goals {
+        md.push_str(&format!("- {}\n", g));
+    }
+
+    // Write to memory/constitution.md
+    let memory_dir = widget.config.cwd.join("memory");
+    if let Err(e) = std::fs::create_dir_all(&memory_dir) {
+        widget.history_push(crate::history_cell::new_error_event(format!(
+            "Failed to create memory directory: {}",
+            e
+        )));
+        widget.request_redraw();
+        return;
+    }
+
+    let constitution_path = memory_dir.join("constitution.md");
+    if let Err(e) = std::fs::write(&constitution_path, &md) {
+        widget.history_push(crate::history_cell::new_error_event(format!(
+            "Failed to write constitution.md: {}",
+            e
+        )));
+        widget.request_redraw();
+        return;
+    }
+
+    // Also write to NL_CONSTITUTION.md for NotebookLM seeding
+    let nl_path = memory_dir.join("NL_CONSTITUTION.md");
+    if let Err(e) = std::fs::write(&nl_path, &md) {
+        tracing::warn!("Failed to write NL_CONSTITUTION.md: {}", e);
+    }
+
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+        vec![
+            ratatui::text::Line::from("✅ Constitution synced"),
+            ratatui::text::Line::from(format!(
+                "   Guardrails: {} | Principles: {} | Goals: {}",
+                guardrails.len(),
+                principles.len(),
+                goals.len()
+            )),
+            ratatui::text::Line::from("   Files updated:"),
+            ratatui::text::Line::from("   • memory/constitution.md"),
+            ratatui::text::Line::from("   • memory/NL_CONSTITUTION.md"),
+        ],
+        crate::history_cell::HistoryCellType::Notice,
+    ));
+    widget.request_redraw();
+}
+
+/// Legacy ACE bullet extraction and pinning
+fn execute_constitution_ace(widget: &mut ChatWidget) {
+    tracing::info!("SpecKitConstitution: ace subcommand called");
+
+    // Find constitution.md in the repository
+    let constitution_path = widget.config.cwd.join("memory").join("constitution.md");
+
+    if !constitution_path.exists() {
+        widget.history_push(crate::history_cell::new_error_event(
+            "Constitution not found at memory/constitution.md".to_string(),
+        ));
+        widget.request_redraw();
+        return;
+    }
+
+    // Read constitution
+    let markdown = match std::fs::read_to_string(&constitution_path) {
+        Ok(content) => content,
+        Err(e) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Failed to read constitution: {}",
+                e
+            )));
+            widget.request_redraw();
+            return;
+        }
+    };
+
+    // Extract bullets
+    let bullets = ace_constitution::extract_bullets(&markdown);
+
+    if bullets.is_empty() {
+        widget.history_push(crate::history_cell::new_error_event(
+            "No valid bullets extracted from constitution".to_string(),
+        ));
+        widget.request_redraw();
+        return;
+    }
+
+    // Show detailed extraction info
+    let scope_counts: std::collections::HashMap<String, usize> = bullets
+        .iter()
+        .flat_map(|b| b.scopes.iter())
+        .fold(std::collections::HashMap::new(), |mut acc, scope| {
+            *acc.entry(scope.clone()).or_insert(0) += 1;
+            acc
+        });
+
+    let scope_summary = scope_counts
+        .iter()
+        .map(|(scope, count)| format!("{}: {}", scope, count))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+        vec![
+            ratatui::text::Line::from(format!(
+                "📋 Extracted {} bullets from constitution",
+                bullets.len()
+            )),
+            ratatui::text::Line::from(format!("   Scopes: {}", scope_summary)),
+            ratatui::text::Line::from("   Pinning to ACE playbook..."),
+        ],
+        crate::history_cell::HistoryCellType::Notice,
+    ));
+
+    // Get git context
+    let repo_root = get_repo_root(&widget.config.cwd).unwrap_or_else(|| ".".to_string());
+    let branch = get_current_branch(&widget.config.cwd).unwrap_or_else(|| "main".to_string());
+
+    // Pin to ACE
+    match ace_constitution::pin_constitution_to_ace_sync(
+        &widget.config.ace,
+        repo_root,
+        branch,
+        bullets,
+    ) {
+        Ok(pinned_count) => {
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![
+                    ratatui::text::Line::from(format!(
+                        "✅ Successfully pinned {} bullets to ACE playbook",
+                        pinned_count
+                    )),
+                    ratatui::text::Line::from(
+                        "   Database: ~/.code/ace/playbooks_normalized.sqlite3",
+                    ),
+                    ratatui::text::Line::from("   Use /speckit.ace-status to view playbook"),
+                ],
+                crate::history_cell::HistoryCellType::Notice,
+            ));
+        }
+        Err(e) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "❌ Failed to pin bullets to ACE: {}",
+                e
+            )));
+        }
+    }
+
+    widget.request_redraw();
 }
 
 /// Command: /speckit.seed
