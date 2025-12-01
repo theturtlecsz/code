@@ -46,6 +46,15 @@ Received validation that the SPEC-KIT-105 design is sound and aligns with GitHub
 
 Per SPEC-KIT-105 Phase 3, P90 should implement:
 
+### Pre-Flight: Housekeeping (docs only)
+
+Commit orphaned session artifacts alongside P90 work:
+- `docs/HANDOFF-P73.md`
+- `docs/SPEC-KIT-102-notebooklm-integration/research/`
+- Any other uncommitted research docs
+
+Keep commits clearly separated from implementation changes.
+
 ### 1. TASK_BRIEF Section 0 (spec.md Section 5)
 
 Add Section 0 before Section 1 in `assemble_task_brief()`:
@@ -68,8 +77,20 @@ Add Section 0 before Section 1 in `assemble_task_brief()`:
 **Rules**:
 - Maximum 5 items (2-3 principles, 2-3 guardrails)
 - Include memory IDs for traceability
-- Conditional: omit if no constitution memories exist
-- Log `stage0.constitution=missing` if omitted
+
+**Empty State Behavior** (Decision: Placeholder section):
+```rust
+out.push_str("## 0. Project Constitution (Summary)\n\n");
+if constitution_memories.is_empty() {
+    out.push_str("_No constitution defined for this project._\n");
+    out.push_str("_Run `/speckit.constitution` to define principles and guardrails._\n\n");
+    tracing::warn!(target: "stage0", "stage0.constitution=missing");
+} else {
+    // render Principles / Guardrails / Goals lists
+}
+```
+
+Rationale: Always render Section 0 for consistent TASK_BRIEF shape; placeholder makes missing constitution visible to humans and LLMs.
 
 ### 2. TASK_BRIEF Metadata JSON (spec.md Section 5.4)
 
@@ -104,6 +125,27 @@ Add subsection to Divine Truth output:
 - Spec proposes direct file writes, but G2 requires sandboxing
 - Mitigation: Use VFS abstraction layer (see Pattern P-034)
 ```
+
+**Parsing Strategy** (Decision: Basic parsing only):
+```rust
+// In tier2.rs parse_divine_truth()
+pub struct ConstitutionAlignment {
+    pub aligned_ids: Vec<String>,      // e.g., ["P1", "G2"]
+    pub conflicts_raw: Option<String>, // raw markdown of conflicts section
+}
+```
+
+- Extract `## 2. Constitution Alignment` section
+- Parse aligned IDs from "**Aligned with:**" line
+- Store conflicts as raw markdown (no error types yet)
+- Include in Stage0Result metadata
+
+**NOT in P90 scope:**
+- `CONSTITUTION_CONFLICT_WARNING` error category
+- Gate behavior based on conflicts
+- Routing changes in `/speckit.auto`
+
+Full conflict detection moves to P91/P92 once Tier-2 output shape is validated.
 
 ---
 
