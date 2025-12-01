@@ -560,30 +560,39 @@ impl SpecKitCommand for Stage0IndexCommand {
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
+        use super::super::code_index::CodeUnitExtractor;
         use crate::stage0_adapters::{has_local_memory_server, LocalMemoryMcpAdapter};
         use crate::vector_state::{IndexingStats, VECTOR_STATE};
         use codex_stage0::{
-            DocumentKind, Iqo, LocalMemoryClient, LocalMemorySearchParams,
+            DocumentKind, DocumentMetadata, Iqo, LocalMemoryClient, LocalMemorySearchParams,
             TfIdfBackend, VectorBackend, VectorDocument,
         };
         use std::sync::Arc;
 
         // Parse optional arguments
-        let mut max_results = 100usize;
+        let mut max_memories = 100usize;
+        let mut index_code = true; // P85: Code indexing enabled by default
 
         for arg in args.split_whitespace() {
-            if arg.starts_with("--max=") {
-                if let Ok(n) = arg.trim_start_matches("--max=").parse() {
-                    max_results = n;
+            if arg.starts_with("--max=") || arg.starts_with("--max-memories=") {
+                if let Ok(n) = arg
+                    .trim_start_matches("--max=")
+                    .trim_start_matches("--max-memories=")
+                    .parse()
+                {
+                    max_memories = n;
                 }
+            } else if arg == "--no-code" {
+                index_code = false;
             }
         }
 
         // Show starting message
         widget.history_push(crate::history_cell::PlainHistoryCell::new(
             vec![
-                ratatui::text::Line::from("🔍 Stage0 Vector Backend Indexing"),
-                ratatui::text::Line::from(format!("   Max memories: {}", max_results)),
+                ratatui::text::Line::from("🔍 Stage0 Vector Backend Indexing (P85)"),
+                ratatui::text::Line::from(format!("   Max memories: {}", max_memories)),
+                ratatui::text::Line::from(format!("   Code indexing: {}", if index_code { "enabled" } else { "disabled" })),
                 ratatui::text::Line::from("   Fetching memories from local-memory..."),
             ],
             crate::history_cell::HistoryCellType::Notice,
@@ -591,6 +600,7 @@ impl SpecKitCommand for Stage0IndexCommand {
         widget.request_redraw();
 
         let mcp_manager = widget.mcp_manager.clone();
+        let cwd = widget.config.cwd.clone();
 
         // Run indexing in async context
         let result = super::super::consensus_coordinator::block_on_sync(|| async move {
@@ -609,12 +619,12 @@ impl SpecKitCommand for Stage0IndexCommand {
             let iqo = Iqo {
                 keywords: vec!["*".to_string()],
                 domains: vec![],
-                max_candidates: max_results,
+                max_candidates: max_memories,
                 ..Default::default()
             };
             let params = LocalMemorySearchParams {
                 iqo,
-                max_results,
+                max_results: max_memories,
             };
 
             let memories = local_mem
@@ -622,12 +632,8 @@ impl SpecKitCommand for Stage0IndexCommand {
                 .await
                 .map_err(|e| format!("Failed to fetch memories: {}", e))?;
 
-            if memories.is_empty() {
-                return Ok((0, 0, 0, 0));
-            }
-
-            // Convert to VectorDocuments
-            let docs: Vec<VectorDocument> = memories
+            // Convert memories to VectorDocuments
+            let mut docs: Vec<VectorDocument> = memories
                 .iter()
                 .map(|m| {
                     let mut doc = VectorDocument::new(
@@ -648,7 +654,59 @@ impl SpecKitCommand for Stage0IndexCommand {
                 })
                 .collect();
 
-            let doc_count = docs.len();
+            let memory_count = docs.len();
+
+            // P85: Extract and index code units
+            let code_count = if index_code {
+                // Find codex-rs root (walk up from cwd looking for codex-rs/Cargo.toml)
+                let codex_rs_root = find_codex_rs_root(&cwd);
+
+                if let Some(root) = codex_rs_root {
+                    let extractor = CodeUnitExtractor::new("codex-rs");
+                    let (code_units, _extraction_stats) = extractor.extract_from_codex_rs(&root);
+
+                    // Convert code units to VectorDocuments
+                    let code_docs: Vec<VectorDocument> = code_units
+                        .iter()
+                        .map(|cu| {
+                            let mut extra = std::collections::HashMap::new();
+                            if let Some(sym) = &cu.symbol {
+                                extra.insert("symbol".to_string(), serde_json::json!(sym));
+                            }
+                            extra.insert("unit_kind".to_string(), serde_json::json!(cu.kind.as_str()));
+                            extra.insert("line_start".to_string(), serde_json::json!(cu.line_start));
+                            extra.insert("text".to_string(), serde_json::json!(cu.text.clone()));
+
+                            let metadata = DocumentMetadata {
+                                source_path: Some(cu.path.clone()),
+                                domain: Some("codex-rs".to_string()),
+                                extra,
+                                ..Default::default()
+                            };
+
+                            VectorDocument::new(
+                                cu.id.clone(),
+                                DocumentKind::Code,
+                                cu.text.clone(),
+                            ).with_metadata(metadata)
+                        })
+                        .collect();
+
+                    let count = code_docs.len();
+                    docs.extend(code_docs);
+                    count
+                } else {
+                    0
+                }
+            } else {
+                0
+            };
+
+            let total_docs = docs.len();
+
+            if total_docs == 0 {
+                return Ok((0, 0, 0, 0, 0));
+            }
 
             // Create backend and index - V2.5b: Store in shared state
             let backend = TfIdfBackend::new();
@@ -659,7 +717,7 @@ impl SpecKitCommand for Stage0IndexCommand {
 
             // Store in shared VECTOR_STATE for use by run_stage0_blocking
             let indexing_stats = IndexingStats {
-                doc_count,
+                doc_count: total_docs,
                 unique_tokens: stats.unique_tokens,
                 total_tokens: stats.total_tokens,
                 duration_ms: stats.duration_ms,
@@ -668,7 +726,8 @@ impl SpecKitCommand for Stage0IndexCommand {
             VECTOR_STATE.set_backend(backend, indexing_stats).await;
 
             Ok((
-                doc_count,
+                memory_count,
+                code_count,
                 stats.unique_tokens,
                 stats.total_tokens,
                 stats.duration_ms,
@@ -676,11 +735,12 @@ impl SpecKitCommand for Stage0IndexCommand {
         });
 
         match result {
-            Ok((doc_count, unique_tokens, total_tokens, duration_ms)) => {
-                if doc_count == 0 {
+            Ok((memory_count, code_count, unique_tokens, total_tokens, duration_ms)) => {
+                let total = memory_count + code_count;
+                if total == 0 {
                     widget.history_push(crate::history_cell::PlainHistoryCell::new(
                         vec![ratatui::text::Line::from(
-                            "⚠ No memories found in local-memory",
+                            "⚠ No documents found to index",
                         )],
                         crate::history_cell::HistoryCellType::Notice,
                     ));
@@ -693,8 +753,16 @@ impl SpecKitCommand for Stage0IndexCommand {
                                 duration_ms
                             )),
                             ratatui::text::Line::from(format!(
-                                "   Documents indexed: {}",
-                                doc_count
+                                "   Memories indexed: {}",
+                                memory_count
+                            )),
+                            ratatui::text::Line::from(format!(
+                                "   Code units indexed: {}",
+                                code_count
+                            )),
+                            ratatui::text::Line::from(format!(
+                                "   Total documents: {}",
+                                total
                             )),
                             ratatui::text::Line::from(format!(
                                 "   Unique tokens: {}",
@@ -959,3 +1027,39 @@ impl SpecKitCommand for Stage0EvalBackendCommand {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// P85: Helper Functions for Code Indexing
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Find the codex-rs root directory by walking up from cwd
+///
+/// Looks for a directory containing stage0/Cargo.toml (our marker for codex-rs workspace)
+fn find_codex_rs_root(cwd: &std::path::Path) -> Option<std::path::PathBuf> {
+    let mut current = cwd.to_path_buf();
+
+    for _ in 0..10 {
+        // Check if this is codex-rs root (has stage0/Cargo.toml)
+        if current.join("stage0").join("Cargo.toml").exists() {
+            return Some(current);
+        }
+
+        // Also check if we're inside codex-rs and need to go up
+        if current.join("Cargo.toml").exists() {
+            // Check if parent is codex-rs root
+            if let Some(parent) = current.parent() {
+                if parent.join("stage0").join("Cargo.toml").exists() {
+                    return Some(parent.to_path_buf());
+                }
+            }
+        }
+
+        // Go up one level
+        if let Some(parent) = current.parent() {
+            current = parent.to_path_buf();
+        } else {
+            break;
+        }
+    }
+
+    None
+}

@@ -9,6 +9,7 @@
 pub mod ace_client; // ACE (Agentic Context Engine) MCP client
 pub mod ace_constitution; // ACE constitution pinning
 pub mod ace_curator; // ACE Curator - Strategic playbook management
+pub mod code_index; // P85: Code unit extraction for Shadow Code Brain
 pub mod ace_learning; // ACE learning from execution outcomes
 pub mod ace_orchestrator; // ACE Orchestrator - Full reflection-curation cycle
 pub mod ace_prompt_injector; // ACE prompt injection logic

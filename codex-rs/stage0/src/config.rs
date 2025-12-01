@@ -213,6 +213,18 @@ pub struct ContextCompilerConfig {
     /// Maximum results from vector backend before merge
     #[serde(default = "default_vector_top_k")]
     pub vector_top_k: usize,
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // P85: Code lane configuration
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// Enable code lane in TASK_BRIEF (requires indexed code units)
+    #[serde(default = "default_code_lane_enabled")]
+    pub code_lane_enabled: bool,
+
+    /// Number of code units to include in TASK_BRIEF
+    #[serde(default = "default_code_top_k")]
+    pub code_top_k: usize,
 }
 
 fn default_max_tokens() -> usize {
@@ -248,6 +260,14 @@ fn default_vector_top_k() -> usize {
     50
 }
 
+// P85: Code lane defaults
+fn default_code_lane_enabled() -> bool {
+    true
+}
+fn default_code_top_k() -> usize {
+    10
+}
+
 impl Default for ContextCompilerConfig {
     fn default() -> Self {
         Self {
@@ -261,6 +281,8 @@ impl Default for ContextCompilerConfig {
             hybrid_enabled: default_hybrid_enabled(),
             vector_weight: default_vector_weight(),
             vector_top_k: default_vector_top_k(),
+            code_lane_enabled: default_code_lane_enabled(),
+            code_top_k: default_code_top_k(),
         }
     }
 }
@@ -320,7 +342,7 @@ impl Default for Tier2Config {
 
 /// Vector index configuration
 ///
-/// Controls how many memories are indexed into the TF-IDF vector backend
+/// Controls how many memories and code units are indexed into the TF-IDF vector backend
 /// for hybrid retrieval.
 #[derive(Debug, Deserialize, Clone)]
 pub struct VectorIndexConfig {
@@ -328,9 +350,18 @@ pub struct VectorIndexConfig {
     /// When set, indexes top N by dynamic_score DESC
     #[serde(default = "default_vector_max_memories")]
     pub max_memories_to_index: usize,
+
+    /// P85: Maximum code units to index (0 = no limit, index all)
+    /// Code units are extracted from stage0/src/, tui/src/, core/src/
+    #[serde(default = "default_vector_max_code_units")]
+    pub max_code_units_to_index: usize,
 }
 
 fn default_vector_max_memories() -> usize {
+    0 // No limit by default - index all
+}
+
+fn default_vector_max_code_units() -> usize {
     0 // No limit by default - index all
 }
 
@@ -338,6 +369,7 @@ impl Default for VectorIndexConfig {
     fn default() -> Self {
         Self {
             max_memories_to_index: default_vector_max_memories(),
+            max_code_units_to_index: default_vector_max_code_units(),
         }
     }
 }

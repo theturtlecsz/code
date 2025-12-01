@@ -118,6 +118,31 @@ pub struct MemoryCandidate {
     pub combined_score: f64,
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// P85: Code Lane Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A code unit candidate for TASK_BRIEF Code Context section
+#[derive(Debug, Clone)]
+pub struct CodeCandidate {
+    /// Code unit ID (e.g., "code:tui/src/lib.rs::main")
+    pub id: String,
+    /// File path
+    pub path: String,
+    /// Symbol name (function, struct, etc.)
+    pub symbol: Option<String>,
+    /// Type of code unit (function, struct, impl, trait, module)
+    pub unit_kind: String,
+    /// Code snippet
+    pub snippet: String,
+    /// TF-IDF relevance score
+    pub score: f64,
+    /// Line number where the code starts
+    pub line_start: usize,
+    /// Heuristic-generated relevance explanation
+    pub why_relevant: String,
+}
+
 /// Score breakdown for explainability
 #[derive(Debug, Clone, Serialize)]
 pub struct ExplainScore {
@@ -150,6 +175,8 @@ pub struct CompileContextResult {
     pub memories_used: Vec<String>,
     /// Score breakdown if explain=true
     pub explain_scores: Option<ExplainScores>,
+    /// P85: Code candidates selected for Code Context section
+    pub code_candidates: Vec<CodeCandidate>,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -472,8 +499,63 @@ where
         "Applied MMR selection"
     );
 
-    // 7. Assemble TASK_BRIEF.md
-    let task_brief_md = assemble_task_brief(spec_id, spec_content, &selected, &iqo, ctx.cfg);
+    // 7. P85: Query code units if code lane enabled
+    let code_candidates = if ctx.cfg.context_compiler.code_lane_enabled {
+        if let Some(vec_backend) = vector {
+            let query_text = iqo.keywords.join(" ");
+            let code_filters = VectorFilters::new()
+                .with_kinds(vec![DocumentKind::Code]);
+
+            match vec_backend.search(&query_text, &code_filters, ctx.cfg.context_compiler.code_top_k).await {
+                Ok(results) => {
+                    tracing::debug!(
+                        target: "stage0",
+                        count = results.len(),
+                        "Retrieved code unit search results"
+                    );
+                    results.into_iter().map(|sv| {
+                        let why_relevant = generate_code_relevance_heuristic(
+                            &sv.id,
+                            sv.metadata.source_path.as_deref(),
+                            &iqo.keywords,
+                        );
+                        CodeCandidate {
+                            id: sv.id.clone(),
+                            path: sv.metadata.source_path.clone().unwrap_or_default(),
+                            symbol: sv.metadata.extra.get("symbol")
+                                .and_then(|v| v.as_str())
+                                .map(String::from),
+                            unit_kind: sv.metadata.extra.get("unit_kind")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("function")
+                                .to_string(),
+                            snippet: sv.metadata.extra.get("text")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string(),
+                            score: sv.score,
+                            line_start: sv.metadata.extra.get("line_start")
+                                .and_then(|v| v.as_u64())
+                                .unwrap_or(0) as usize,
+                            why_relevant,
+                        }
+                    }).collect()
+                }
+                Err(e) => {
+                    tracing::warn!(target: "stage0", error = %e, "Code lane search failed");
+                    Vec::new()
+                }
+            }
+        } else {
+            tracing::debug!(target: "stage0", "Code lane enabled but no vector backend available");
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+
+    // 8. Assemble TASK_BRIEF.md
+    let task_brief_md = assemble_task_brief(spec_id, spec_content, &selected, &code_candidates, &iqo, ctx.cfg);
 
     let memories_used: Vec<String> = selected.iter().map(|c| c.id.clone()).collect();
 
@@ -489,7 +571,60 @@ where
         task_brief_md,
         memories_used,
         explain_scores: explain_opt,
+        code_candidates,
     })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P85: Code Relevance Heuristics
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Generate a heuristic "why relevant" explanation for a code unit
+///
+/// This uses simple heuristics - no LLM calls. Designed for future LLM bolt-on.
+fn generate_code_relevance_heuristic(
+    id: &str,
+    path: Option<&str>,
+    keywords: &[String],
+) -> String {
+    let mut reasons = Vec::new();
+
+    // Check if ID/path contains any keywords
+    let id_lower = id.to_lowercase();
+    let path_lower = path.map(|p| p.to_lowercase()).unwrap_or_default();
+
+    let matching_keywords: Vec<&String> = keywords
+        .iter()
+        .filter(|kw| {
+            let kw_lower = kw.to_lowercase();
+            id_lower.contains(&kw_lower) || path_lower.contains(&kw_lower)
+        })
+        .take(3)
+        .collect();
+
+    if !matching_keywords.is_empty() {
+        let kw_list: Vec<&str> = matching_keywords.iter().map(|s| s.as_str()).collect();
+        reasons.push(format!("Matches keywords: `{}`", kw_list.join("`, `")));
+    }
+
+    // Infer from path structure
+    if let Some(p) = path {
+        if p.contains("pipeline") || p.contains("handler") {
+            reasons.push("Part of pipeline/handler layer".to_string());
+        } else if p.contains("dcc") || p.contains("context") {
+            reasons.push("Context compilation component".to_string());
+        } else if p.contains("stage0") {
+            reasons.push("Stage 0 subsystem".to_string());
+        } else if p.contains("spec_kit") {
+            reasons.push("Spec-kit component".to_string());
+        }
+    }
+
+    if reasons.is_empty() {
+        "Matched by TF-IDF relevance score".to_string()
+    } else {
+        reasons.join("; ")
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -561,13 +696,14 @@ fn select_with_mmr(
 // TASK_BRIEF Assembly
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Assemble TASK_BRIEF.md from selected memories
+/// Assemble TASK_BRIEF.md from selected memories and code candidates
 ///
-/// Follows STAGE0_TASK_BRIEF_TEMPLATE.md structure.
+/// Follows STAGE0_TASK_BRIEF_TEMPLATE.md structure with P85 Code Context.
 fn assemble_task_brief(
     spec_id: &str,
     spec_content: &str,
     selected: &[MemoryCandidate],
+    code_candidates: &[CodeCandidate],
     iqo: &Iqo,
     cfg: &Stage0Config,
 ) -> String {
@@ -632,9 +768,70 @@ fn assemble_task_brief(
         }
     }
 
-    // Section 3: Code Context (placeholder for V1.4)
+    // Section 3: Code Context (P85: Shadow Code Brain)
     out.push_str("## 3. Code Context\n\n");
-    out.push_str("_Code context extraction not implemented in V1.4._\n\n");
+
+    if code_candidates.is_empty() {
+        if cfg.context_compiler.code_lane_enabled {
+            out.push_str("_No relevant code units found for this spec._\n\n");
+        } else {
+            out.push_str("_Code lane disabled in configuration._\n\n");
+        }
+    } else {
+        out.push_str(&format!(
+            "_Selected {} code units from TF-IDF search (code_top_k={})_\n\n",
+            code_candidates.len(),
+            cfg.context_compiler.code_top_k
+        ));
+
+        // Split into key units (top 3) and other references
+        let key_units: Vec<_> = code_candidates.iter().take(3).collect();
+        let other_refs: Vec<_> = code_candidates.iter().skip(3).collect();
+
+        if !key_units.is_empty() {
+            out.push_str("### 3.1 Key Code Units\n\n");
+
+            for (idx, code) in key_units.iter().enumerate() {
+                out.push_str(&format!("#### Code Unit {}\n\n", idx + 1));
+                out.push_str(&format!(
+                    "- **Location:** `{}`",
+                    code.path
+                ));
+                if let Some(sym) = &code.symbol {
+                    out.push_str(&format!(" (symbol: `{}`)", sym));
+                }
+                out.push('\n');
+                out.push_str(&format!("- **Type:** {}\n", code.unit_kind));
+                out.push_str(&format!("- **Why relevant:** {}\n", code.why_relevant));
+                out.push_str(&format!("- **Lines:** {}-{}\n", code.line_start, code.line_start + code.snippet.lines().count().saturating_sub(1)));
+                out.push_str(&format!("- **Score:** {:.3}\n\n", code.score));
+
+                // Include truncated snippet
+                if !code.snippet.is_empty() {
+                    out.push_str("```rust\n");
+                    // Limit snippet to first 15 lines
+                    let snippet_lines: Vec<&str> = code.snippet.lines().take(15).collect();
+                    out.push_str(&snippet_lines.join("\n"));
+                    if code.snippet.lines().count() > 15 {
+                        out.push_str("\n// ...");
+                    }
+                    out.push_str("\n```\n\n");
+                }
+            }
+        }
+
+        if !other_refs.is_empty() {
+            out.push_str("### 3.2 Other Code References\n\n");
+            for code in other_refs {
+                let sym_str = code.symbol.as_deref().unwrap_or("(anonymous)");
+                out.push_str(&format!(
+                    "- `{}::{}` – {} (score: {:.3})\n",
+                    code.path, sym_str, code.unit_kind, code.score
+                ));
+            }
+            out.push('\n');
+        }
+    }
 
     // Section 4: Documentation Context (placeholder for V1.4)
     out.push_str("## 4. Documentation Context\n\n");
@@ -992,13 +1189,15 @@ mod tests {
             combined_score: 0.85,
         }];
 
-        let brief = assemble_task_brief(spec_id, spec_content, &selected, &iqo, &cfg);
+        let code_candidates: Vec<CodeCandidate> = vec![];
+        let brief = assemble_task_brief(spec_id, spec_content, &selected, &code_candidates, &iqo, &cfg);
 
         // Check required sections
         assert!(brief.contains("# Task Brief: SPEC-TEST-001"));
         assert!(brief.contains("## 1. Spec Snapshot"));
         assert!(brief.contains("## 2. Relevant Context (Memories)"));
         assert!(brief.contains("Memory 1 – `mem-001`"));
+        assert!(brief.contains("## 3. Code Context"));
         assert!(brief.contains("## 7. Metadata"));
         assert!(brief.contains("\"spec_id\": \"SPEC-TEST-001\""));
     }
