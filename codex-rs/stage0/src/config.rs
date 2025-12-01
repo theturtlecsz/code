@@ -7,6 +7,25 @@ use crate::errors::{Result, Stage0Error};
 use serde::Deserialize;
 use std::path::PathBuf;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// P91/SPEC-KIT-105: Constitution Gate Mode
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Mode for Phase -1 constitution readiness gate
+///
+/// Controls how /speckit.auto and /speckit.new behave when constitution
+/// is missing or incomplete.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GateMode {
+    /// Warn about missing constitution but proceed (default)
+    #[default]
+    Warn,
+    /// Skip gate check entirely (no warnings)
+    Skip,
+    // Future: Block mode will hard-stop the pipeline (P92)
+}
+
 /// Root configuration for Stage0 overlay engine
 #[derive(Debug, Deserialize, Clone)]
 pub struct Stage0Config {
@@ -41,6 +60,18 @@ pub struct Stage0Config {
     /// Vector index settings (V2.5b)
     #[serde(default)]
     pub vector_index: VectorIndexConfig,
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // P91/SPEC-KIT-105: Constitution gate settings
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// Phase -1 readiness gate mode (warn or skip)
+    ///
+    /// Controls behavior when constitution is missing before /speckit.auto or /speckit.new
+    /// - `warn`: Print warnings but proceed (default)
+    /// - `skip`: No gate check at all
+    #[serde(default)]
+    pub phase1_gate_mode: GateMode,
 }
 
 fn default_enabled() -> bool {
@@ -383,6 +414,7 @@ impl Default for Stage0Config {
             context_compiler: ContextCompilerConfig::default(),
             tier2: Tier2Config::default(),
             vector_index: VectorIndexConfig::default(),
+            phase1_gate_mode: GateMode::default(),
         }
     }
 }
@@ -510,6 +542,35 @@ mod tests {
         assert_eq!(cfg.scoring.weights.usage, 0.30);
         assert_eq!(cfg.context_compiler.max_tokens, 8000);
         assert!(cfg.tier2.enabled);
+        // P91: Gate mode defaults to Warn
+        assert_eq!(cfg.phase1_gate_mode, GateMode::Warn);
+    }
+
+    // P91/SPEC-KIT-105: GateMode tests
+    #[test]
+    fn test_gate_mode_default() {
+        let mode = GateMode::default();
+        assert_eq!(mode, GateMode::Warn);
+    }
+
+    #[test]
+    fn test_gate_mode_parse_warn() {
+        let toml = r#"
+            enabled = true
+            phase1_gate_mode = "warn"
+        "#;
+        let cfg = Stage0Config::parse(toml).expect("should parse");
+        assert_eq!(cfg.phase1_gate_mode, GateMode::Warn);
+    }
+
+    #[test]
+    fn test_gate_mode_parse_skip() {
+        let toml = r#"
+            enabled = true
+            phase1_gate_mode = "skip"
+        "#;
+        let cfg = Stage0Config::parse(toml).expect("should parse");
+        assert_eq!(cfg.phase1_gate_mode, GateMode::Skip);
     }
 
     #[test]

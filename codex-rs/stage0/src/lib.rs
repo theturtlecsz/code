@@ -24,7 +24,7 @@ pub mod tfidf;
 pub mod tier2;
 pub mod vector;
 
-pub use config::{Stage0Config, VectorIndexConfig};
+pub use config::{GateMode, Stage0Config, VectorIndexConfig};
 pub use dcc::{
     CompileContextResult, DccContext, EnvCtx, ExplainScore, ExplainScores, Iqo, LocalMemoryClient,
     LocalMemorySearchParams, LocalMemorySummary, MemoryCandidate, NoopVectorBackend,
@@ -41,7 +41,9 @@ pub use guardians::{
     GuardedMemory, LlmClient, MemoryDraft, MemoryKind, apply_metadata_guardian,
     apply_template_guardian, apply_template_guardian_passthrough,
 };
-pub use overlay_db::{OverlayDb, OverlayMemory, StructureStatus, Tier2CacheEntry};
+pub use overlay_db::{
+    ConstitutionType, OverlayDb, OverlayMemory, StructureStatus, Tier2CacheEntry,
+};
 pub use scoring::{ScoringComponents, ScoringInput, calculate_dynamic_score, calculate_score};
 pub use tfidf::{TfIdfBackend, TfIdfConfig};
 pub use tier2::{
@@ -135,6 +137,82 @@ impl Stage0Result {
     pub fn has_context(&self) -> bool {
         !self.memories_used.is_empty() || !self.divine_truth.raw_markdown.is_empty()
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P91/SPEC-KIT-105: Constitution Readiness Gate
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Check constitution readiness and return any warnings
+///
+/// This function checks if the project has a valid constitution defined
+/// in the overlay database. It returns a list of warning messages.
+///
+/// # Arguments
+/// * `db` - Reference to the overlay database
+///
+/// # Returns
+/// * `Vec<String>` - List of warning messages (empty if constitution is ready)
+///
+/// # Example Warnings
+/// - "No constitution defined. Run /speckit.constitution add to create one."
+/// - "Constitution has no guardrails defined."
+/// - "Constitution has no principles defined."
+pub fn check_constitution_readiness(db: &OverlayDb) -> Vec<String> {
+    let mut warnings = Vec::new();
+
+    // Check constitution version (0 = never defined)
+    let version = match db.get_constitution_version() {
+        Ok(v) => v,
+        Err(e) => {
+            warnings.push(format!("Failed to check constitution: {}", e));
+            return warnings;
+        }
+    };
+
+    if version == 0 {
+        warnings.push(
+            "No constitution defined. Run /speckit.constitution add to create one.".to_string(),
+        );
+        return warnings;
+    }
+
+    // Check constitution memory count
+    let memory_count = match db.constitution_memory_count() {
+        Ok(c) => c,
+        Err(e) => {
+            warnings.push(format!("Failed to count constitution memories: {}", e));
+            return warnings;
+        }
+    };
+
+    if memory_count == 0 {
+        warnings.push("Constitution defined but has no memories. Add principles or guardrails.".to_string());
+        return warnings;
+    }
+
+    // Check for guardrails (priority 10) and principles (priority 9)
+    // We look at the constitution memories and check their content types
+    let memories = match db.get_constitution_memories(50) {
+        Ok(m) => m,
+        Err(e) => {
+            warnings.push(format!("Failed to get constitution memories: {}", e));
+            return warnings;
+        }
+    };
+
+    let has_guardrails = memories.iter().any(|m| m.initial_priority == 10);
+    let has_principles = memories.iter().any(|m| m.initial_priority == 9);
+
+    if !has_guardrails {
+        warnings.push("Constitution has no guardrails defined (priority 10).".to_string());
+    }
+
+    if !has_principles {
+        warnings.push("Constitution has no principles defined (priority 9).".to_string());
+    }
+
+    warnings
 }
 
 /// Main entry point for Stage 0 operations
@@ -1231,6 +1309,60 @@ mod tests {
                 constitution_aligned_ids: vec![],
             };
             assert!(!empty.has_context());
+        }
+
+        // P91/SPEC-KIT-105: Constitution readiness gate tests
+        #[test]
+        fn test_check_constitution_readiness_empty_db() {
+            let db = OverlayDb::connect_in_memory().expect("should connect");
+            let warnings = check_constitution_readiness(&db);
+            // Version 0 = no constitution defined
+            assert_eq!(warnings.len(), 1);
+            assert!(warnings[0].contains("No constitution defined"));
+        }
+
+        #[test]
+        fn test_check_constitution_readiness_with_guardrail() {
+            let db = OverlayDb::connect_in_memory().expect("should connect");
+
+            // Add a guardrail (priority 10) and increment version
+            db.upsert_constitution_memory(
+                "guardrail-001",
+                overlay_db::ConstitutionType::Guardrail,
+                "Never break backwards compatibility",
+            )
+            .expect("upsert");
+            db.increment_constitution_version(Some("test-hash"))
+                .expect("increment");
+
+            let warnings = check_constitution_readiness(&db);
+            // Should warn about missing principles (no priority 9)
+            assert_eq!(warnings.len(), 1);
+            assert!(warnings[0].contains("no principles"));
+        }
+
+        #[test]
+        fn test_check_constitution_readiness_complete() {
+            let db = OverlayDb::connect_in_memory().expect("should connect");
+
+            // Add both guardrail and principle
+            db.upsert_constitution_memory(
+                "guardrail-001",
+                overlay_db::ConstitutionType::Guardrail,
+                "Never break backwards compatibility",
+            )
+            .expect("upsert guardrail");
+            db.upsert_constitution_memory(
+                "principle-001",
+                overlay_db::ConstitutionType::Principle,
+                "Prefer simplicity over complexity",
+            )
+            .expect("upsert principle");
+            db.increment_constitution_version(Some("test-hash"))
+                .expect("increment");
+
+            let warnings = check_constitution_readiness(&db);
+            assert!(warnings.is_empty(), "Should have no warnings with complete constitution");
         }
     }
 }

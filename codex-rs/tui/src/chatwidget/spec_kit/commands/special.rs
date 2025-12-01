@@ -82,7 +82,11 @@ impl SpecKitCommand for SpecKitNewCommand {
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
+        use super::super::pipeline_coordinator::run_constitution_readiness_gate;
         use super::super::project_detector::{detect_project_type, get_project_questions};
+
+        // P91/SPEC-KIT-105: Run constitution readiness gate (warn-only)
+        run_constitution_readiness_gate(widget);
 
         // SPEC-KIT-971: Detect project type and customize questions
         let project_type = detect_project_type(&widget.config.cwd);

@@ -100,6 +100,9 @@ pub fn handle_spec_auto(
         return;
     }
 
+    // P91/SPEC-KIT-105: Phase -1 Constitution Readiness Gate (Warn-Only)
+    run_constitution_readiness_gate(widget);
+
     let lifecycle = widget.ensure_validate_lifecycle(&spec_id);
     let mut state = super::state::SpecAutoState::new(
         spec_id.clone(),
@@ -1795,4 +1798,72 @@ fn record_stage_skip(spec_id: &str, stage: SpecStage, reason: &str) -> Result<()
 
     tracing::debug!("📝 Skip telemetry recorded: {}", skip_file);
     Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P91/SPEC-KIT-105: Constitution Readiness Gate
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Run Phase -1 constitution readiness gate check
+///
+/// This function checks if the project has a valid constitution and displays
+/// warnings if it's missing or incomplete. It does NOT block execution.
+///
+/// # Behavior
+/// - If gate_mode is Skip: Does nothing
+/// - If gate_mode is Warn (default): Shows warnings but proceeds
+pub fn run_constitution_readiness_gate(widget: &mut ChatWidget) {
+    // Try to load Stage0 config and check gate mode
+    let config = match codex_stage0::Stage0Config::load() {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::debug!("Could not load Stage0 config for gate check: {}", e);
+            return;
+        }
+    };
+
+    // Check if gate is skipped
+    if config.phase1_gate_mode == codex_stage0::GateMode::Skip {
+        tracing::debug!("Constitution gate check skipped (phase1_gate_mode = skip)");
+        return;
+    }
+
+    // Try to connect to overlay DB and run readiness check
+    let db = match codex_stage0::OverlayDb::connect_and_init(&config) {
+        Ok(d) => d,
+        Err(e) => {
+            // Can't check - log but don't block
+            tracing::debug!("Could not connect to overlay DB for gate check: {}", e);
+            return;
+        }
+    };
+
+    let warnings = codex_stage0::check_constitution_readiness(&db);
+
+    if warnings.is_empty() {
+        tracing::debug!("Constitution readiness gate: OK");
+        return;
+    }
+
+    // Display warnings to user
+    let mut lines: Vec<ratatui::text::Line<'static>> = Vec::new();
+    lines.push(ratatui::text::Line::from(
+        "⚠ Constitution Readiness Check (P91):",
+    ));
+    for warning in &warnings {
+        lines.push(ratatui::text::Line::from(format!("  • {}", warning)));
+    }
+    lines.push(ratatui::text::Line::from(
+        "  Run /speckit.constitution to configure.",
+    ));
+
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+        lines,
+        HistoryCellType::Notice,
+    ));
+
+    tracing::warn!(
+        "Constitution readiness gate: {} warning(s)",
+        warnings.len()
+    );
 }
