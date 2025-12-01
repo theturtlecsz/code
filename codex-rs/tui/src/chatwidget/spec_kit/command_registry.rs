@@ -164,6 +164,7 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
     registry.register(Box::new(SpecKitSeedCommand)); // SPEC-KIT-102: Shadow Notebook Seeder
     registry.register(Box::new(Stage0IndexCommand)); // SPEC-KIT-102 V2: Vector indexing
     registry.register(Box::new(Stage0EvalBackendCommand)); // SPEC-KIT-102 V2: Vector eval
+    registry.register(Box::new(Stage0EvalCodeCommand)); // P86: Code lane eval shortcut
 
     // Stage commands (plan → unlock)
     registry.register(Box::new(SpecKitPlanCommand));
@@ -307,9 +308,10 @@ mod tests {
         // Test that the global registry has all expected commands
         let registry = SPEC_KIT_REGISTRY.lock().unwrap();
 
-        // 33 commands: 13 special + 6 stage + 3 quality + 7 guardrail + 1 evidence + 1 search + 2 templates
+        // 34 commands: 13 special + 6 stage + 3 quality + 7 guardrail + 1 evidence + 1 search + 2 templates
         // SPEC-KIT-102 V2: Added stage0.index and stage0.eval-backend (2 new)
-        assert_eq!(registry.len(), 33, "Registry should have 33 commands");
+        // P86: Added stage0.eval-code (1 new)
+        assert_eq!(registry.len(), 34, "Registry should have 34 commands");
 
         // Verify key commands are registered
         assert!(registry.find("speckit.status").is_some());
@@ -524,12 +526,13 @@ mod tests {
         // SPEC-KIT-962: Added template commands with aliases
         // SPEC-KIT-102: Added speckit.seed with 'notebooklm-seed' alias
         // SPEC-KIT-102 V2: Added stage0.index (no alias) + stage0.eval-backend with 'stage0.eval' alias
-        // 33 primary names + 16 aliases = 49 total names
+        // P86: Added stage0.eval-code (no alias)
+        // 34 primary names + 16 aliases = 50 total names
         let all_names = registry.all_names();
         assert_eq!(
             all_names.len(),
-            49,
-            "Should have 49 total command names (33 primary + 16 aliases)"
+            50,
+            "Should have 50 total command names (34 primary + 16 aliases)"
         );
     }
 

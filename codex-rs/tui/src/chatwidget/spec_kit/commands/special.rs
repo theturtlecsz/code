@@ -800,7 +800,19 @@ impl SpecKitCommand for Stage0IndexCommand {
 /// Command: /stage0.eval-backend
 /// Run evaluation harness comparing baseline vs hybrid retrieval
 /// SPEC-KIT-102 V2.5b: Baseline vs Hybrid DCC comparison
+/// P86: Extended with --lane and --strict flags for code lane evaluation
 pub struct Stage0EvalBackendCommand;
+
+/// P86: Lane filter for evaluation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EvalLaneFilter {
+    /// Both memory and code lanes
+    Both,
+    /// Memory lane only
+    Memory,
+    /// Code lane only
+    Code,
+}
 
 impl SpecKitCommand for Stage0EvalBackendCommand {
     fn name(&self) -> &'static str {
@@ -812,14 +824,14 @@ impl SpecKitCommand for Stage0EvalBackendCommand {
     }
 
     fn description(&self) -> &'static str {
-        "compare baseline vs hybrid retrieval using eval cases"
+        "compare baseline vs hybrid retrieval using eval cases (--lane={memory,code,both} --strict)"
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
         use crate::vector_state::VECTOR_STATE;
         use codex_stage0::{
-            built_in_eval_cases, built_in_test_documents, evaluate_backend,
-            TfIdfBackend, VectorBackend, VectorFilters,
+            built_in_eval_cases, built_in_test_documents, combined_eval_cases,
+            evaluate_backend, EvalLane, TfIdfBackend, VectorBackend, VectorFilters,
         };
         use std::path::PathBuf;
 
@@ -827,6 +839,8 @@ impl SpecKitCommand for Stage0EvalBackendCommand {
         let mut top_k = 10usize;
         let mut output_json = false;
         let mut cases_file: Option<PathBuf> = None;
+        let mut lane_filter = EvalLaneFilter::Both;
+        let mut strict_mode = false;
 
         for arg in args.split_whitespace() {
             if arg.starts_with("--top-k=") || arg.starts_with("--k=") {
@@ -841,14 +855,44 @@ impl SpecKitCommand for Stage0EvalBackendCommand {
                 output_json = true;
             } else if arg.starts_with("--cases=") {
                 cases_file = Some(PathBuf::from(arg.trim_start_matches("--cases=")));
+            } else if arg.starts_with("--lane=") {
+                let lane_str = arg.trim_start_matches("--lane=");
+                lane_filter = match lane_str {
+                    "memory" => EvalLaneFilter::Memory,
+                    "code" => EvalLaneFilter::Code,
+                    "both" => EvalLaneFilter::Both,
+                    _ => {
+                        widget.history_push(crate::history_cell::new_error_event(format!(
+                            "Invalid lane '{}': use memory, code, or both",
+                            lane_str
+                        )));
+                        return;
+                    }
+                };
+            } else if arg == "--strict" {
+                strict_mode = true;
             }
         }
 
+        // P86: Convert lane filter to Option<EvalLane>
+        let lane_option = match lane_filter {
+            EvalLaneFilter::Both => None,
+            EvalLaneFilter::Memory => Some(EvalLane::Memory),
+            EvalLaneFilter::Code => Some(EvalLane::Code),
+        };
+
         // Show starting message
+        let lane_str = match lane_filter {
+            EvalLaneFilter::Both => "both",
+            EvalLaneFilter::Memory => "memory",
+            EvalLaneFilter::Code => "code",
+        };
         widget.history_push(crate::history_cell::PlainHistoryCell::new(
             vec![
                 ratatui::text::Line::from("📊 Stage0 Baseline vs Hybrid Evaluation"),
                 ratatui::text::Line::from(format!("   Top K: {}", top_k)),
+                ratatui::text::Line::from(format!("   Lane: {}", lane_str)),
+                ratatui::text::Line::from(if strict_mode { "   Mode: strict" } else { "   Mode: normal" }),
                 ratatui::text::Line::from(match &cases_file {
                     Some(p) => format!("   Cases: {}", p.display()),
                     None => "   Cases: Built-in test cases".to_string(),
@@ -861,15 +905,19 @@ impl SpecKitCommand for Stage0EvalBackendCommand {
 
         // Run evaluation in async context
         let result = super::super::consensus_coordinator::block_on_sync(|| async move {
-            // Load eval cases
-            let cases = match cases_file {
-                Some(ref path) => codex_stage0::load_eval_cases_from_file(path)
-                    .map_err(|e| format!("Failed to load eval cases: {}", e))?,
-                None => built_in_eval_cases(),
-            };
+            // P86: Load eval cases with lane filtering
+            let cases = combined_eval_cases(
+                cases_file.is_none(), // use builtins if no file provided
+                cases_file.as_deref(),
+                lane_option,
+            )
+            .map_err(|e| format!("Failed to load eval cases: {}", e))?;
 
             if cases.is_empty() {
-                return Err("No eval cases to run".to_string());
+                return Err(format!(
+                    "No eval cases found for lane '{}'",
+                    lane_str
+                ));
             }
 
             // Index test documents in a fresh backend (for baseline)
@@ -901,15 +949,38 @@ impl SpecKitCommand for Stage0EvalBackendCommand {
                 None
             };
 
-            Ok((baseline_result, hybrid_result))
+            Ok((baseline_result, hybrid_result, cases.len()))
         });
 
         match result {
-            Ok((baseline, hybrid_opt)) => {
+            Ok((baseline, hybrid_opt, case_count)) => {
+                // P86: Check strict mode - fail if any missing IDs
+                if strict_mode && baseline.has_missing_ids() {
+                    widget.history_push(crate::history_cell::new_error_event(format!(
+                        "Strict mode: {} missing expected IDs in baseline evaluation",
+                        baseline.total_missing_ids
+                    )));
+                    return;
+                }
+                if strict_mode {
+                    if let Some(ref h) = hybrid_opt {
+                        if h.has_missing_ids() {
+                            widget.history_push(crate::history_cell::new_error_event(format!(
+                                "Strict mode: {} missing expected IDs in hybrid evaluation",
+                                h.total_missing_ids
+                            )));
+                            return;
+                        }
+                    }
+                }
+
                 if output_json {
                     // JSON output for CI automation
                     let json_output = serde_json::json!({
                         "top_k": top_k,
+                        "lane": lane_str,
+                        "strict": strict_mode,
+                        "case_count": case_count,
                         "baseline": {
                             "mean_precision": baseline.mean_precision,
                             "mean_recall": baseline.mean_recall,
@@ -917,6 +988,7 @@ impl SpecKitCommand for Stage0EvalBackendCommand {
                             "cases_passed": baseline.cases_passed,
                             "total_cases": baseline.total_cases,
                             "pass_rate": baseline.pass_rate(),
+                            "missing_ids": baseline.total_missing_ids,
                         },
                         "hybrid": hybrid_opt.as_ref().map(|h| serde_json::json!({
                             "mean_precision": h.mean_precision,
@@ -925,6 +997,7 @@ impl SpecKitCommand for Stage0EvalBackendCommand {
                             "cases_passed": h.cases_passed,
                             "total_cases": h.total_cases,
                             "pass_rate": h.pass_rate(),
+                            "missing_ids": h.total_missing_ids,
                         })),
                         "improvement": hybrid_opt.as_ref().map(|h| serde_json::json!({
                             "precision_delta": h.mean_precision - baseline.mean_precision,
@@ -1020,6 +1093,43 @@ impl SpecKitCommand for Stage0EvalBackendCommand {
         }
 
         widget.request_redraw();
+    }
+
+    fn requires_args(&self) -> bool {
+        false
+    }
+}
+
+/// Command: /stage0.eval-code
+/// P86: Sugar for /stage0.eval-backend --lane=code
+///
+/// Runs evaluation harness specifically for code lane cases.
+/// Default k=10.
+pub struct Stage0EvalCodeCommand;
+
+impl SpecKitCommand for Stage0EvalCodeCommand {
+    fn name(&self) -> &'static str {
+        "stage0.eval-code"
+    }
+
+    fn aliases(&self) -> &[&'static str] {
+        &[]
+    }
+
+    fn description(&self) -> &'static str {
+        "evaluate code lane retrieval quality (P@K, R@K, MRR)"
+    }
+
+    fn execute(&self, widget: &mut ChatWidget, args: String) {
+        // P86: Delegate to eval-backend with --lane=code
+        let mut new_args = format!("--lane=code {}", args);
+
+        // Set default k=10 if not specified
+        if !args.contains("--top-k=") && !args.contains("--k=") {
+            new_args.push_str(" --k=10");
+        }
+
+        Stage0EvalBackendCommand.execute(widget, new_args);
     }
 
     fn requires_args(&self) -> bool {

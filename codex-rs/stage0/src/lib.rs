@@ -48,9 +48,12 @@ pub use vector::{
 };
 pub use tfidf::{TfIdfBackend, TfIdfConfig};
 pub use eval::{
-    EvalCase, EvalResult, EvalSuiteResult, built_in_eval_cases, built_in_test_documents,
-    compute_metrics, compute_suite_metrics, evaluate_backend, evaluate_case,
-    load_eval_cases_from_file, save_eval_cases_to_file,
+    EvalCase, EvalCaseSource, EvalLane, EvalResult, EvalSuiteResult,
+    built_in_code_eval_cases, built_in_eval_cases, built_in_memory_eval_cases,
+    built_in_test_documents, combined_eval_cases, compute_metrics, compute_metrics_with_missing,
+    compute_suite_metrics, evaluate_backend, evaluate_case, evaluate_dcc_code_result,
+    evaluate_dcc_memory_result, evaluate_dcc_results, load_eval_cases_from_file,
+    save_eval_cases_to_file,
 };
 
 use sha2::{Digest, Sha256};
