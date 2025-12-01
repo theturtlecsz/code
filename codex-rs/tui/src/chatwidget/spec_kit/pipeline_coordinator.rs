@@ -129,6 +129,62 @@ pub fn handle_spec_auto(
             });
     }
 
+    // SPEC-KIT-102: Run Stage 0 context injection before pipeline starts
+    if !state.stage0_disabled {
+        // Load spec content
+        let spec_path = widget.config.cwd.join(format!("docs/{}/spec.md", spec_id));
+        let spec_content = std::fs::read_to_string(&spec_path).unwrap_or_default();
+
+        if !spec_content.is_empty() {
+            // Build Stage0 config
+            let stage0_config = super::stage0_integration::Stage0ExecutionConfig {
+                disabled: state.stage0_disabled,
+                explain: state.stage0_explain,
+            };
+
+            // Run Stage0
+            let result = super::stage0_integration::run_stage0_for_spec(
+                &widget.mcp_manager,
+                &spec_id,
+                &spec_content,
+                &widget.config.cwd,
+                &stage0_config,
+            );
+
+            // Store result in state
+            if let Some(stage0_result) = result.result {
+                // Write TASK_BRIEF.md to evidence directory
+                if let Err(e) = super::stage0_integration::write_task_brief_to_evidence(
+                    &spec_id,
+                    &widget.config.cwd,
+                    &stage0_result.task_brief_md,
+                ) {
+                    tracing::warn!("Failed to write TASK_BRIEF.md: {}", e);
+                }
+
+                // Log Stage0 success
+                widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                    vec![ratatui::text::Line::from(format!(
+                        "Stage 0: Context compiled ({} memories, tier2={}, {}ms)",
+                        stage0_result.memories_used.len(),
+                        stage0_result.tier2_used,
+                        stage0_result.latency_ms
+                    ))],
+                    crate::history_cell::HistoryCellType::Notice,
+                ));
+
+                state.stage0_result = Some(stage0_result);
+            } else if let Some(skip_reason) = result.skip_reason {
+                state.stage0_skip_reason = Some(skip_reason.clone());
+                tracing::info!("Stage 0 skipped: {}", skip_reason);
+            }
+        } else {
+            state.stage0_skip_reason = Some("spec.md is empty or not found".to_string());
+        }
+    } else {
+        state.stage0_skip_reason = Some("Stage 0 disabled by flag".to_string());
+    }
+
     widget.spec_auto_state = Some(state);
     advance_spec_auto(widget);
 }

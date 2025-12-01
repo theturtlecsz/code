@@ -53,6 +53,7 @@ pub mod pipeline_coordinator;
 pub mod spec_directory;
 pub mod stage_details; // SPEC-947 Phase 3: Stage details widget (right pane)
 pub mod stage_selector; // SPEC-947 Phase 3: Stage selector widget (checkbox list) // SPEC-KIT-900 Session 3: ACID-compliant SPEC directory resolution // MAINT-3 Phase 5: Pipeline state machine (extracted from handler.rs)
+pub mod stage0_integration; // SPEC-KIT-102: Stage 0 context injection for /speckit.auto
 // FORK-SPECIFIC (just-every/code): local_memory_client.rs deleted 2025-10-18
 // Replaced by native MCP integration in consensus.rs
 pub mod quality;

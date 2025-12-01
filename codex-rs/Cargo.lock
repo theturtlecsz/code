@@ -1586,6 +1586,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "arboard",
+ "async-trait",
  "base64 0.22.1",
  "blake3",
  "chrono",
@@ -1604,6 +1605,7 @@ dependencies = [
  "codex-process-hardening",
  "codex-protocol",
  "codex-spec-kit",
+ "codex-stage0",
  "codex-version",
  "color-eyre",
  "crossterm",

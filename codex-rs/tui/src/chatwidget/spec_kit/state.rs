@@ -914,6 +914,15 @@ pub struct SpecAutoState {
 
     // P6-SYNC Phase 4: Branch tracking for resume filtering
     pub current_branch: Option<PipelineBranch>,
+
+    // SPEC-KIT-102: Stage 0 context injection result
+    pub stage0_result: Option<codex_stage0::Stage0Result>,
+    /// If Stage 0 was skipped or failed, reason is stored here
+    pub stage0_skip_reason: Option<String>,
+    /// Whether Stage 0 is disabled via CLI flag
+    pub stage0_disabled: bool,
+    /// Whether to include Stage 0 score breakdown in TASK_BRIEF
+    pub stage0_explain: bool,
 }
 
 impl SpecAutoState {
@@ -1010,6 +1019,11 @@ impl SpecAutoState {
             current_model: None,
             // P6-SYNC Phase 4: Branch tracking for resume filtering
             current_branch,
+            // SPEC-KIT-102: Stage 0 context injection
+            stage0_result: None,
+            stage0_skip_reason: None,
+            stage0_disabled: false,
+            stage0_explain: false,
         }
     }
 

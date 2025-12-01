@@ -159,6 +159,7 @@ mod shimmer;
 mod slash_command;
 mod spec_prompts;
 pub mod spec_status;
+pub mod stage0_adapters;
 mod streaming;
 pub mod templates;
 

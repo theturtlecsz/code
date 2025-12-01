@@ -113,7 +113,29 @@ async fn build_individual_agent_prompt(
     // Total budget: ~100KB for all files combined
     const MAX_FILE_SIZE: usize = 20_000; // ~20KB per file (very conservative)
 
-    let mut context = format!("SPEC: {}\n\n## spec.md\n", spec_id);
+    let mut context = format!("SPEC: {}\n\n", spec_id);
+
+    // SPEC-KIT-102: Add Stage 0 context (TASK_BRIEF.md) if available
+    let task_brief_path = spec_dir.join("evidence").join("TASK_BRIEF.md");
+    if let Ok(task_brief) = std::fs::read_to_string(&task_brief_path) {
+        context.push_str("## Stage 0: Task Context Brief\n\n");
+        // Truncate task brief if too large (use half the budget for Stage0)
+        if task_brief.len() > MAX_FILE_SIZE / 2 {
+            context.push_str(
+                &task_brief
+                    .chars()
+                    .take(MAX_FILE_SIZE / 2)
+                    .collect::<String>(),
+            );
+            context.push_str("\n\n[...Stage 0 context truncated...]\n\n");
+        } else {
+            context.push_str(&task_brief);
+            context.push_str("\n\n");
+        }
+        tracing::info!("  📚 Stage 0: Injected {} chars from TASK_BRIEF.md", task_brief.len());
+    }
+
+    context.push_str("## spec.md\n");
 
     // Add spec.md (truncate if too large)
     if spec_content.len() > MAX_FILE_SIZE {
