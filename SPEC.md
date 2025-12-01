@@ -70,7 +70,7 @@
 
 ### Utility / Test SPECs
 
-- **SPEC-KIT-900**: Neutral multi-stage workload for cost and consensus benchmarking (plan → tasks → validate → implement → audit → unlock). Prompts and acceptance criteria live in `docs/SPEC-KIT-900/`. Recommended for spec-kit pipeline validation.
+- **SPEC-KIT-900**: Stage 0 Integration Test Harness using ferris-says (OSS) as benchmark project. Validates full `/speckit.auto` pipeline with DCC, Tier 2 (NotebookLM), and Divine Truth injection. Located at `docs/SPEC-KIT-900-stage0-integration-test/`. Benchmark workspace: `/home/thetu/benchmark/ferris-clone/`.
 
 | Stage | Status | Branch | PR | Last Run | Notes |
 |-------|--------|--------|----|----------|-------|
@@ -385,6 +385,8 @@ The Shadow Stage 0 overlay provides deep context and code awareness for `/specki
 | **SPEC-KIT-102R** | Implementation-Ready | Documents current architecture | P86 |
 | **SPEC-KIT-103** | Roadmap | Librarian & Repair Jobs (Phase 3) | - |
 | **SPEC-KIT-104** | Roadmap | Metrics & Learning (Phase 4) | - |
+| **SPEC-KIT-900** | In-Progress | E2E Integration Test Harness (ferris-test benchmark) | P87 |
+| **SPEC-KIT-105** | Research | Constitution & Vision Workflow Enhancement | P87 |
 
 ### Phase Completion
 
