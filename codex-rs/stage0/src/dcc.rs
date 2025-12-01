@@ -12,9 +12,9 @@
 use crate::config::Stage0Config;
 use crate::errors::Result;
 use crate::guardians::LlmClient;
-use crate::overlay_db::{OverlayDb, CONSTITUTION_DOMAIN, CONSTITUTION_MIN_COUNT};
+use crate::overlay_db::{CONSTITUTION_DOMAIN, CONSTITUTION_MIN_COUNT, OverlayDb};
 use crate::scoring::{ScoringInput, calculate_dynamic_score};
-use crate::vector::{VectorBackend, VectorFilters, DocumentKind};
+use crate::vector::{DocumentKind, VectorBackend, VectorFilters};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -199,7 +199,10 @@ pub struct NoopVectorBackend;
 
 #[async_trait]
 impl VectorBackend for NoopVectorBackend {
-    async fn index_documents(&self, _docs: Vec<crate::vector::VectorDocument>) -> Result<crate::vector::IndexStats> {
+    async fn index_documents(
+        &self,
+        _docs: Vec<crate::vector::VectorDocument>,
+    ) -> Result<crate::vector::IndexStats> {
         Ok(crate::vector::IndexStats::default())
     }
 
@@ -277,16 +280,100 @@ fn heuristic_iqo(spec_content: &str, cfg: &Stage0Config) -> Iqo {
 fn heuristic_keywords(spec: &str) -> Vec<String> {
     // Common stopwords to filter out
     const STOPWORDS: &[&str] = &[
-        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-        "have", "has", "had", "do", "does", "did", "will", "would", "could",
-        "should", "may", "might", "must", "shall", "can", "need", "to", "of",
-        "in", "for", "on", "with", "at", "by", "from", "as", "into", "through",
-        "and", "or", "but", "if", "then", "else", "when", "where", "why", "how",
-        "all", "each", "every", "both", "few", "more", "most", "other", "some",
-        "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too",
-        "very", "just", "also", "now", "here", "there", "this", "that", "these",
-        "those", "it", "its", "we", "our", "you", "your", "they", "their", "them",
-        "using", "implement", "create", "add", "new", "get", "set", "use",
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "must",
+        "shall",
+        "can",
+        "need",
+        "to",
+        "of",
+        "in",
+        "for",
+        "on",
+        "with",
+        "at",
+        "by",
+        "from",
+        "as",
+        "into",
+        "through",
+        "and",
+        "or",
+        "but",
+        "if",
+        "then",
+        "else",
+        "when",
+        "where",
+        "why",
+        "how",
+        "all",
+        "each",
+        "every",
+        "both",
+        "few",
+        "more",
+        "most",
+        "other",
+        "some",
+        "such",
+        "no",
+        "nor",
+        "not",
+        "only",
+        "own",
+        "same",
+        "so",
+        "than",
+        "too",
+        "very",
+        "just",
+        "also",
+        "now",
+        "here",
+        "there",
+        "this",
+        "that",
+        "these",
+        "those",
+        "it",
+        "its",
+        "we",
+        "our",
+        "you",
+        "your",
+        "they",
+        "their",
+        "them",
+        "using",
+        "implement",
+        "create",
+        "add",
+        "new",
+        "get",
+        "set",
+        "use",
     ];
 
     let stopword_set: std::collections::HashSet<&str> = STOPWORDS.iter().copied().collect();
@@ -434,17 +521,19 @@ where
         if let Some(vec_backend) = vector {
             // Build query from spec keywords
             let query_text = iqo.keywords.join(" ");
-            let filters = VectorFilters::new()
-                .with_kinds(vec![DocumentKind::Memory]);
+            let filters = VectorFilters::new().with_kinds(vec![DocumentKind::Memory]);
 
-            match vec_backend.search(&query_text, &filters, ctx.cfg.context_compiler.vector_top_k).await {
+            match vec_backend
+                .search(&query_text, &filters, ctx.cfg.context_compiler.vector_top_k)
+                .await
+            {
                 Ok(results) => {
-                    tracing::debug!(
-                        count = results.len(),
-                        "Retrieved vector search results"
-                    );
+                    tracing::debug!(count = results.len(), "Retrieved vector search results");
                     // Build map of id -> score
-                    results.into_iter().map(|sv| (sv.id, sv.score)).collect::<HashMap<String, f64>>()
+                    results
+                        .into_iter()
+                        .map(|sv| (sv.id, sv.score))
+                        .collect::<HashMap<String, f64>>()
                 }
                 Err(e) => {
                     tracing::warn!(error = %e, "Vector search failed, continuing without hybrid scores");
@@ -480,62 +569,59 @@ where
     let norm_vec = vec_weight / total_weight;
 
     // Helper closure to convert a LocalMemorySummary to a MemoryCandidate
-    let mut process_summary = |s: LocalMemorySummary, is_constitution: bool| -> Result<MemoryCandidate> {
-        // Fetch overlay row or use defaults
-        let overlay = ctx.db.get_memory(&s.id)?;
+    let mut process_summary =
+        |s: LocalMemorySummary, is_constitution: bool| -> Result<MemoryCandidate> {
+            // Fetch overlay row or use defaults
+            let overlay = ctx.db.get_memory(&s.id)?;
 
-        let (usage_count, initial_priority, last_accessed_at) = match &overlay {
-            Some(o) => (o.usage_count as u32, o.initial_priority, o.last_accessed_at),
-            None => (0, 5, None), // Default priority 5 for unknown memories
-        };
+            let (usage_count, initial_priority, last_accessed_at) = match &overlay {
+                Some(o) => (o.usage_count as u32, o.initial_priority, o.last_accessed_at),
+                None => (0, 5, None), // Default priority 5 for unknown memories
+            };
 
-        // Use provided created_at or fall back to now
-        let created_at = s.created_at.unwrap_or(now);
+            // Use provided created_at or fall back to now
+            let created_at = s.created_at.unwrap_or(now);
 
-        let scoring_input = ScoringInput::new(
-            usage_count,
-            initial_priority,
-            last_accessed_at,
-            created_at,
-        );
-        let components = calculate_dynamic_score(&scoring_input, &ctx.cfg.scoring, now);
+            let scoring_input =
+                ScoringInput::new(usage_count, initial_priority, last_accessed_at, created_at);
+            let components = calculate_dynamic_score(&scoring_input, &ctx.cfg.scoring, now);
 
-        // Look up vector score (default 0.0 if not found)
-        let vector_score = vector_scores.get(&s.id).copied().unwrap_or(0.0);
+            // Look up vector score (default 0.0 if not found)
+            let vector_score = vector_scores.get(&s.id).copied().unwrap_or(0.0);
 
-        // Combined score with normalized weights
-        let combined = norm_sim * s.similarity_score
-            + norm_dyn * components.final_score
-            + norm_vec * vector_score;
+            // Combined score with normalized weights
+            let combined = norm_sim * s.similarity_score
+                + norm_dyn * components.final_score
+                + norm_vec * vector_score;
 
-        if explain && !is_constitution {
-            explain_scores.push(ExplainScore {
+            if explain && !is_constitution {
+                explain_scores.push(ExplainScore {
+                    id: s.id.clone(),
+                    similarity: s.similarity_score,
+                    dynamic_score: components.final_score,
+                    vector_score,
+                    combined_score: combined,
+                    usage_score: components.usage_score,
+                    recency_score: components.recency_score,
+                    priority_score: components.priority_score,
+                    age_penalty: components.age_penalty,
+                    novelty_factor: components.novelty_factor,
+                    base_score: components.base_score,
+                });
+            }
+
+            Ok(MemoryCandidate {
                 id: s.id.clone(),
-                similarity: s.similarity_score,
+                domain: s.domain.clone(),
+                tags: s.tags.clone(),
+                created_at: Some(created_at),
+                snippet: s.snippet.clone(),
+                similarity_score: s.similarity_score,
                 dynamic_score: components.final_score,
                 vector_score,
                 combined_score: combined,
-                usage_score: components.usage_score,
-                recency_score: components.recency_score,
-                priority_score: components.priority_score,
-                age_penalty: components.age_penalty,
-                novelty_factor: components.novelty_factor,
-                base_score: components.base_score,
-            });
-        }
-
-        Ok(MemoryCandidate {
-            id: s.id.clone(),
-            domain: s.domain.clone(),
-            tags: s.tags.clone(),
-            created_at: Some(created_at),
-            snippet: s.snippet.clone(),
-            similarity_score: s.similarity_score,
-            dynamic_score: components.final_score,
-            vector_score,
-            combined_score: combined,
-        })
-    };
+            })
+        };
 
     // Process main summaries
     for s in summaries {
@@ -579,49 +665,75 @@ where
 
     // 9. (P89) Ensure minimum constitution memories in selection
     // Per SPEC-KIT-105 Section 4.3: "At least 3 constitution memories always included"
-    ensure_constitution_minimum(&mut selected, &constitution_candidates, CONSTITUTION_MIN_COUNT);
+    ensure_constitution_minimum(
+        &mut selected,
+        &constitution_candidates,
+        CONSTITUTION_MIN_COUNT,
+    );
 
     // 10. P85: Query code units if code lane enabled
     let code_candidates = if ctx.cfg.context_compiler.code_lane_enabled {
         if let Some(vec_backend) = vector {
             let query_text = iqo.keywords.join(" ");
-            let code_filters = VectorFilters::new()
-                .with_kinds(vec![DocumentKind::Code]);
+            let code_filters = VectorFilters::new().with_kinds(vec![DocumentKind::Code]);
 
-            match vec_backend.search(&query_text, &code_filters, ctx.cfg.context_compiler.code_top_k).await {
+            match vec_backend
+                .search(
+                    &query_text,
+                    &code_filters,
+                    ctx.cfg.context_compiler.code_top_k,
+                )
+                .await
+            {
                 Ok(results) => {
                     tracing::debug!(
                         target: "stage0",
                         count = results.len(),
                         "Retrieved code unit search results"
                     );
-                    results.into_iter().map(|sv| {
-                        let why_relevant = generate_code_relevance_heuristic(
-                            &sv.id,
-                            sv.metadata.source_path.as_deref(),
-                            &iqo.keywords,
-                        );
-                        CodeCandidate {
-                            id: sv.id.clone(),
-                            path: sv.metadata.source_path.clone().unwrap_or_default(),
-                            symbol: sv.metadata.extra.get("symbol")
-                                .and_then(|v| v.as_str())
-                                .map(String::from),
-                            unit_kind: sv.metadata.extra.get("unit_kind")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("function")
-                                .to_string(),
-                            snippet: sv.metadata.extra.get("text")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string(),
-                            score: sv.score,
-                            line_start: sv.metadata.extra.get("line_start")
-                                .and_then(|v| v.as_u64())
-                                .unwrap_or(0) as usize,
-                            why_relevant,
-                        }
-                    }).collect()
+                    results
+                        .into_iter()
+                        .map(|sv| {
+                            let why_relevant = generate_code_relevance_heuristic(
+                                &sv.id,
+                                sv.metadata.source_path.as_deref(),
+                                &iqo.keywords,
+                            );
+                            CodeCandidate {
+                                id: sv.id.clone(),
+                                path: sv.metadata.source_path.clone().unwrap_or_default(),
+                                symbol: sv
+                                    .metadata
+                                    .extra
+                                    .get("symbol")
+                                    .and_then(|v| v.as_str())
+                                    .map(String::from),
+                                unit_kind: sv
+                                    .metadata
+                                    .extra
+                                    .get("unit_kind")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("function")
+                                    .to_string(),
+                                snippet: sv
+                                    .metadata
+                                    .extra
+                                    .get("text")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_string(),
+                                score: sv.score,
+                                line_start: sv
+                                    .metadata
+                                    .extra
+                                    .get("line_start")
+                                    .and_then(|v| v.as_u64())
+                                    .unwrap_or(0)
+                                    as usize,
+                                why_relevant,
+                            }
+                        })
+                        .collect()
                 }
                 Err(e) => {
                     tracing::warn!(target: "stage0", error = %e, "Code lane search failed");
@@ -636,8 +748,22 @@ where
         Vec::new()
     };
 
-    // 11. Assemble TASK_BRIEF.md
-    let task_brief_md = assemble_task_brief(spec_id, spec_content, &selected, &code_candidates, &iqo, ctx.cfg);
+    // 11. (P90) Fetch constitution metadata for TASK_BRIEF
+    let constitution_meta = ctx.db.get_constitution_meta().unwrap_or_else(|e| {
+        tracing::warn!(error = %e, "Failed to fetch constitution metadata");
+        (0, None, None)
+    });
+
+    // 12. Assemble TASK_BRIEF.md
+    let task_brief_md = assemble_task_brief(
+        spec_id,
+        spec_content,
+        &selected,
+        &code_candidates,
+        &iqo,
+        ctx.cfg,
+        &constitution_meta,
+    );
 
     let memories_used: Vec<String> = selected.iter().map(|c| c.id.clone()).collect();
 
@@ -664,11 +790,7 @@ where
 /// Generate a heuristic "why relevant" explanation for a code unit
 ///
 /// This uses simple heuristics - no LLM calls. Designed for future LLM bolt-on.
-fn generate_code_relevance_heuristic(
-    id: &str,
-    path: Option<&str>,
-    keywords: &[String],
-) -> String {
+fn generate_code_relevance_heuristic(id: &str, path: Option<&str>, keywords: &[String]) -> String {
     let mut reasons = Vec::new();
 
     // Check if ID/path contains any keywords
@@ -817,7 +939,10 @@ fn ensure_constitution_minimum(
     min_count: usize,
 ) {
     // Count constitution memories already selected
-    let current_count = selected.iter().filter(|m| is_constitution_candidate(m)).count();
+    let current_count = selected
+        .iter()
+        .filter(|m| is_constitution_candidate(m))
+        .count();
 
     if current_count >= min_count {
         tracing::debug!(
@@ -875,9 +1000,13 @@ fn ensure_constitution_minimum(
 // TASK_BRIEF Assembly
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Constitution metadata tuple: (version, content_hash, updated_at)
+type ConstitutionMeta = (u32, Option<String>, Option<DateTime<Utc>>);
+
 /// Assemble TASK_BRIEF.md from selected memories and code candidates
 ///
 /// Follows STAGE0_TASK_BRIEF_TEMPLATE.md structure with P85 Code Context.
+/// P90: Adds Section 0 (Project Constitution Summary) before Section 1.
 fn assemble_task_brief(
     spec_id: &str,
     spec_content: &str,
@@ -885,15 +1014,87 @@ fn assemble_task_brief(
     code_candidates: &[CodeCandidate],
     iqo: &Iqo,
     cfg: &Stage0Config,
+    constitution_meta: &ConstitutionMeta,
 ) -> String {
     let mut out = String::new();
 
     // Header
     out.push_str(&format!("# Task Brief: {spec_id}\n\n"));
-    out.push_str(&format!(
-        "_Generated by Stage0 v{}_\n\n",
-        crate::VERSION
-    ));
+    out.push_str(&format!("_Generated by Stage0 v{}_\n\n", crate::VERSION));
+
+    // Section 0: Project Constitution Summary (P90/SPEC-KIT-105)
+    out.push_str("## 0. Project Constitution (Summary)\n\n");
+
+    // Filter constitution memories from selected
+    let constitution_memories: Vec<&MemoryCandidate> = selected
+        .iter()
+        .filter(|m| is_constitution_candidate(m))
+        .take(5) // Max 5 items per spec
+        .collect();
+
+    if constitution_memories.is_empty() {
+        out.push_str("_No constitution defined for this project._\n");
+        out.push_str("_Run `/speckit.constitution` to define principles and guardrails._\n\n");
+        tracing::warn!(target: "stage0", "stage0.constitution=missing");
+    } else {
+        // Group by type: principles, guardrails, goals
+        let mut principles: Vec<&MemoryCandidate> = Vec::new();
+        let mut guardrails: Vec<&MemoryCandidate> = Vec::new();
+        let mut goals: Vec<&MemoryCandidate> = Vec::new();
+
+        for mem in &constitution_memories {
+            let const_type = infer_constitution_type(&mem.tags);
+            match const_type {
+                "principle" => principles.push(mem),
+                "guardrail" => guardrails.push(mem),
+                "goal" | "non-goal" => goals.push(mem),
+                _ => principles.push(mem), // Default to principle
+            }
+        }
+
+        // Render Principles
+        if !principles.is_empty() {
+            out.push_str("### Principles\n\n");
+            for (i, mem) in principles.iter().enumerate() {
+                let summary = truncate_snippet(&mem.snippet, 100);
+                out.push_str(&format!("- [P{}] {} (`{}`)\n", i + 1, summary, mem.id));
+            }
+            out.push('\n');
+        }
+
+        // Render Guardrails
+        if !guardrails.is_empty() {
+            out.push_str("### Guardrails\n\n");
+            for (i, mem) in guardrails.iter().enumerate() {
+                let summary = truncate_snippet(&mem.snippet, 100);
+                out.push_str(&format!("- [G{}] {} (`{}`)\n", i + 1, summary, mem.id));
+            }
+            out.push('\n');
+        }
+
+        // Render Goals
+        if !goals.is_empty() {
+            out.push_str("### Goals\n\n");
+            for mem in &goals {
+                let summary = truncate_snippet(&mem.snippet, 100);
+                let label = if mem.tags.iter().any(|t| t == "type:non-goal") {
+                    "Non-Goal"
+                } else {
+                    "Goal"
+                };
+                out.push_str(&format!("- [{}] {} (`{}`)\n", label, summary, mem.id));
+            }
+            out.push('\n');
+        }
+
+        tracing::debug!(
+            target: "stage0",
+            principles = principles.len(),
+            guardrails = guardrails.len(),
+            goals = goals.len(),
+            "Rendered constitution Section 0"
+        );
+    }
 
     // Section 1: Spec Snapshot
     out.push_str("## 1. Spec Snapshot\n\n");
@@ -972,17 +1173,18 @@ fn assemble_task_brief(
 
             for (idx, code) in key_units.iter().enumerate() {
                 out.push_str(&format!("#### Code Unit {}\n\n", idx + 1));
-                out.push_str(&format!(
-                    "- **Location:** `{}`",
-                    code.path
-                ));
+                out.push_str(&format!("- **Location:** `{}`", code.path));
                 if let Some(sym) = &code.symbol {
                     out.push_str(&format!(" (symbol: `{}`)", sym));
                 }
                 out.push('\n');
                 out.push_str(&format!("- **Type:** {}\n", code.unit_kind));
                 out.push_str(&format!("- **Why relevant:** {}\n", code.why_relevant));
-                out.push_str(&format!("- **Lines:** {}-{}\n", code.line_start, code.line_start + code.snippet.lines().count().saturating_sub(1)));
+                out.push_str(&format!(
+                    "- **Lines:** {}-{}\n",
+                    code.line_start,
+                    code.line_start + code.snippet.lines().count().saturating_sub(1)
+                ));
                 out.push_str(&format!("- **Score:** {:.3}\n\n", code.score));
 
                 // Include truncated snippet
@@ -1027,9 +1229,21 @@ fn assemble_task_brief(
     // Section 7: Metadata
     out.push_str("---\n\n## 7. Metadata\n\n```json\n");
 
+    // P90: Extract constitution-aligned memory IDs for P91 conflict detection
+    let constitution_aligned_ids: Vec<&str> = selected
+        .iter()
+        .filter(|m| is_constitution_candidate(m))
+        .map(|m| m.id.as_str())
+        .collect();
+
+    let (const_version, const_hash, _) = constitution_meta;
+
     let metadata = serde_json::json!({
         "spec_id": spec_id,
         "stage0_version": crate::VERSION,
+        "constitution_version": const_version,
+        "constitution_hash": const_hash,
+        "constitution_aligned_ids": constitution_aligned_ids,
         "dcc_config": {
             "max_tokens": cfg.context_compiler.max_tokens,
             "top_k": cfg.context_compiler.top_k,
@@ -1097,6 +1311,33 @@ fn infer_memory_type(tags: &[String]) -> &'static str {
     "Other"
 }
 
+/// Infer constitution type from tags (P90/SPEC-KIT-105)
+///
+/// Returns: "principle", "guardrail", "goal", "non-goal", or "unknown"
+fn infer_constitution_type(tags: &[String]) -> &'static str {
+    for tag in tags {
+        match tag.as_str() {
+            "type:guardrail" => return "guardrail",
+            "type:principle" => return "principle",
+            "type:goal" => return "goal",
+            "type:non-goal" => return "non-goal",
+            _ => {}
+        }
+    }
+    "unknown"
+}
+
+/// Truncate a snippet to a maximum character length, adding "..." if truncated
+fn truncate_snippet(snippet: &str, max_chars: usize) -> String {
+    // Take first line only, then truncate
+    let first_line = snippet.lines().next().unwrap_or(snippet);
+    if first_line.len() <= max_chars {
+        first_line.to_string()
+    } else {
+        format!("{}...", &first_line[..max_chars.saturating_sub(3)])
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Tests
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1156,19 +1397,11 @@ mod tests {
             Ok(MemoryKind::Other)
         }
 
-        async fn restructure_template(
-            &self,
-            input: &str,
-            _kind: MemoryKind,
-        ) -> Result<String> {
+        async fn restructure_template(&self, input: &str, _kind: MemoryKind) -> Result<String> {
             Ok(input.to_string())
         }
 
-        async fn generate_iqo(
-            &self,
-            _spec_content: &str,
-            _env: &EnvCtx,
-        ) -> Result<Iqo> {
+        async fn generate_iqo(&self, _spec_content: &str, _env: &EnvCtx) -> Result<Iqo> {
             match &self.iqo_response {
                 Some(iqo) => Ok(iqo.clone()),
                 None => Err(Stage0Error::prompt("Mock IQO not configured")),
@@ -1331,22 +1564,10 @@ mod tests {
 
     #[test]
     fn test_infer_memory_type() {
-        assert_eq!(
-            infer_memory_type(&["type:pattern".to_string()]),
-            "Pattern"
-        );
-        assert_eq!(
-            infer_memory_type(&["decision".to_string()]),
-            "Decision"
-        );
-        assert_eq!(
-            infer_memory_type(&["bug-report".to_string()]),
-            "Problem"
-        );
-        assert_eq!(
-            infer_memory_type(&["learning".to_string()]),
-            "Insight"
-        );
+        assert_eq!(infer_memory_type(&["type:pattern".to_string()]), "Pattern");
+        assert_eq!(infer_memory_type(&["decision".to_string()]), "Decision");
+        assert_eq!(infer_memory_type(&["bug-report".to_string()]), "Problem");
+        assert_eq!(infer_memory_type(&["learning".to_string()]), "Insight");
         assert_eq!(infer_memory_type(&["random".to_string()]), "Other");
     }
 
@@ -1369,16 +1590,140 @@ mod tests {
         }];
 
         let code_candidates: Vec<CodeCandidate> = vec![];
-        let brief = assemble_task_brief(spec_id, spec_content, &selected, &code_candidates, &iqo, &cfg);
+        let constitution_meta: ConstitutionMeta = (0, None, None);
+        let brief = assemble_task_brief(
+            spec_id,
+            spec_content,
+            &selected,
+            &code_candidates,
+            &iqo,
+            &cfg,
+            &constitution_meta,
+        );
 
-        // Check required sections
+        // Check required sections (P90: Section 0 now before Section 1)
         assert!(brief.contains("# Task Brief: SPEC-TEST-001"));
+        assert!(brief.contains("## 0. Project Constitution (Summary)"));
         assert!(brief.contains("## 1. Spec Snapshot"));
         assert!(brief.contains("## 2. Relevant Context (Memories)"));
         assert!(brief.contains("Memory 1 – `mem-001`"));
         assert!(brief.contains("## 3. Code Context"));
         assert!(brief.contains("## 7. Metadata"));
         assert!(brief.contains("\"spec_id\": \"SPEC-TEST-001\""));
+        // P90: Check constitution metadata in JSON
+        assert!(brief.contains("\"constitution_version\": 0"));
+    }
+
+    #[test]
+    fn test_assemble_task_brief_section0_with_constitution() {
+        let cfg = Stage0Config::default();
+        let spec_id = "SPEC-TEST-002";
+        let spec_content = "# Test Spec";
+        let iqo = Iqo::default();
+
+        // Include constitution memories
+        let selected = vec![
+            MemoryCandidate {
+                id: "const-001".to_string(),
+                domain: Some(CONSTITUTION_DOMAIN.to_string()),
+                tags: vec!["type:guardrail".to_string()],
+                created_at: Some(Utc::now()),
+                snippet: "Never store secrets in plain text".to_string(),
+                similarity_score: 0.9,
+                dynamic_score: 0.9,
+                vector_score: 0.0,
+                combined_score: 0.9,
+            },
+            MemoryCandidate {
+                id: "const-002".to_string(),
+                domain: Some(CONSTITUTION_DOMAIN.to_string()),
+                tags: vec!["type:principle".to_string()],
+                created_at: Some(Utc::now()),
+                snippet: "Optimize for developer ergonomics".to_string(),
+                similarity_score: 0.8,
+                dynamic_score: 0.8,
+                vector_score: 0.0,
+                combined_score: 0.8,
+            },
+            MemoryCandidate {
+                id: "const-003".to_string(),
+                domain: Some(CONSTITUTION_DOMAIN.to_string()),
+                tags: vec!["type:goal".to_string()],
+                created_at: Some(Utc::now()),
+                snippet: "Support 3 cloud providers by Q3".to_string(),
+                similarity_score: 0.7,
+                dynamic_score: 0.7,
+                vector_score: 0.0,
+                combined_score: 0.7,
+            },
+        ];
+
+        let code_candidates: Vec<CodeCandidate> = vec![];
+        let constitution_meta: ConstitutionMeta = (3, Some("sha256:abc123".to_string()), None);
+        let brief = assemble_task_brief(
+            spec_id,
+            spec_content,
+            &selected,
+            &code_candidates,
+            &iqo,
+            &cfg,
+            &constitution_meta,
+        );
+
+        // Check Section 0 renders constitution memories
+        assert!(brief.contains("## 0. Project Constitution (Summary)"));
+        assert!(brief.contains("### Guardrails"));
+        assert!(brief.contains("[G1]"));
+        assert!(brief.contains("Never store secrets"));
+        assert!(brief.contains("const-001"));
+        assert!(brief.contains("### Principles"));
+        assert!(brief.contains("[P1]"));
+        assert!(brief.contains("developer ergonomics"));
+        assert!(brief.contains("### Goals"));
+        assert!(brief.contains("[Goal]"));
+
+        // Check constitution metadata
+        assert!(brief.contains("\"constitution_version\": 3"));
+        assert!(brief.contains("\"constitution_hash\": \"sha256:abc123\""));
+        assert!(brief.contains("\"constitution_aligned_ids\""));
+    }
+
+    #[test]
+    fn test_assemble_task_brief_section0_empty_placeholder() {
+        let cfg = Stage0Config::default();
+        let spec_id = "SPEC-TEST-003";
+        let spec_content = "# Test Spec";
+        let iqo = Iqo::default();
+
+        // No constitution memories
+        let selected = vec![MemoryCandidate {
+            id: "mem-001".to_string(),
+            domain: Some("spec-kit".to_string()),
+            tags: vec!["type:pattern".to_string()],
+            created_at: Some(Utc::now()),
+            snippet: "Regular memory".to_string(),
+            similarity_score: 0.9,
+            dynamic_score: 0.7,
+            vector_score: 0.0,
+            combined_score: 0.85,
+        }];
+
+        let code_candidates: Vec<CodeCandidate> = vec![];
+        let constitution_meta: ConstitutionMeta = (0, None, None);
+        let brief = assemble_task_brief(
+            spec_id,
+            spec_content,
+            &selected,
+            &code_candidates,
+            &iqo,
+            &cfg,
+            &constitution_meta,
+        );
+
+        // Check placeholder is rendered
+        assert!(brief.contains("## 0. Project Constitution (Summary)"));
+        assert!(brief.contains("No constitution defined"));
+        assert!(brief.contains("/speckit.constitution"));
     }
 
     #[tokio::test]
@@ -1477,9 +1822,17 @@ mod tests {
 
         let env = EnvCtx::default();
         let noop_vector: Option<&NoopVectorBackend> = None;
-        let result = compile_context(&ctx, noop_vector, "SPEC", "content", &env, false, Utc::now())
-            .await
-            .expect("compile_context should succeed");
+        let result = compile_context(
+            &ctx,
+            noop_vector,
+            "SPEC",
+            "content",
+            &env,
+            false,
+            Utc::now(),
+        )
+        .await
+        .expect("compile_context should succeed");
 
         assert_eq!(result.memories_used.len(), 2);
     }
@@ -1510,9 +1863,17 @@ mod tests {
 
         let env = EnvCtx::default();
         let noop_vector: Option<&NoopVectorBackend> = None;
-        let result = compile_context(&ctx, noop_vector, "SPEC", "content", &env, false, Utc::now())
-            .await
-            .expect("compile_context should succeed");
+        let result = compile_context(
+            &ctx,
+            noop_vector,
+            "SPEC",
+            "content",
+            &env,
+            false,
+            Utc::now(),
+        )
+        .await
+        .expect("compile_context should succeed");
 
         // Should succeed and produce output
         assert!(result.task_brief_md.contains("custom-domain"));
@@ -1535,9 +1896,21 @@ mod tests {
         // Create and populate TF-IDF backend
         let tfidf = TfIdfBackend::new();
         let docs = vec![
-            VectorDocument::new("mem-001", DocumentKind::Memory, "Pattern for async operations"),
-            VectorDocument::new("mem-002", DocumentKind::Memory, "SQLite overlay database decision"),
-            VectorDocument::new("mem-003", DocumentKind::Memory, "LLM client abstraction pattern"),
+            VectorDocument::new(
+                "mem-001",
+                DocumentKind::Memory,
+                "Pattern for async operations",
+            ),
+            VectorDocument::new(
+                "mem-002",
+                DocumentKind::Memory,
+                "SQLite overlay database decision",
+            ),
+            VectorDocument::new(
+                "mem-003",
+                DocumentKind::Memory,
+                "LLM client abstraction pattern",
+            ),
         ];
         tfidf.index_documents(docs).await.expect("index");
 
@@ -1549,16 +1922,27 @@ mod tests {
         };
 
         let env = EnvCtx::default();
-        let result = compile_context(&ctx, Some(&tfidf), "SPEC", "async pattern", &env, true, Utc::now())
-            .await
-            .expect("compile_context should succeed");
+        let result = compile_context(
+            &ctx,
+            Some(&tfidf),
+            "SPEC",
+            "async pattern",
+            &env,
+            true,
+            Utc::now(),
+        )
+        .await
+        .expect("compile_context should succeed");
 
         // Should have explain scores with vector_score populated
         assert!(result.explain_scores.is_some());
         let scores = result.explain_scores.unwrap();
         // At least one memory should have non-zero vector score if it matched
         let has_vector_score = scores.memories.iter().any(|s| s.vector_score > 0.0);
-        assert!(has_vector_score, "Expected at least one memory with vector score");
+        assert!(
+            has_vector_score,
+            "Expected at least one memory with vector score"
+        );
     }
 
     #[tokio::test]
@@ -1575,9 +1959,11 @@ mod tests {
 
         // Create and populate TF-IDF backend
         let tfidf = TfIdfBackend::new();
-        let docs = vec![
-            VectorDocument::new("mem-001", DocumentKind::Memory, "Pattern for async operations"),
-        ];
+        let docs = vec![VectorDocument::new(
+            "mem-001",
+            DocumentKind::Memory,
+            "Pattern for async operations",
+        )];
         tfidf.index_documents(docs).await.expect("index");
 
         let ctx = DccContext {
@@ -1588,9 +1974,17 @@ mod tests {
         };
 
         let env = EnvCtx::default();
-        let result = compile_context(&ctx, Some(&tfidf), "SPEC", "async pattern", &env, true, Utc::now())
-            .await
-            .expect("compile_context should succeed");
+        let result = compile_context(
+            &ctx,
+            Some(&tfidf),
+            "SPEC",
+            "async pattern",
+            &env,
+            true,
+            Utc::now(),
+        )
+        .await
+        .expect("compile_context should succeed");
 
         // With hybrid disabled, all vector scores should be 0
         let scores = result.explain_scores.expect("explain should be present");
@@ -1623,7 +2017,11 @@ mod tests {
 
         // Calling again should not duplicate
         ensure_constitution_domain(&mut iqo);
-        assert_eq!(iqo.domains.len(), 3, "Should not duplicate constitution domain");
+        assert_eq!(
+            iqo.domains.len(),
+            3,
+            "Should not duplicate constitution domain"
+        );
     }
 
     #[test]
@@ -1649,10 +2047,25 @@ mod tests {
 
         assert_eq!(params.iqo.domains, vec![CONSTITUTION_DOMAIN.to_string()]);
         assert!(params.iqo.required_tags.is_empty());
-        assert!(params.iqo.optional_tags.contains(&"type:guardrail".to_string()));
-        assert!(params.iqo.optional_tags.contains(&"type:principle".to_string()));
+        assert!(
+            params
+                .iqo
+                .optional_tags
+                .contains(&"type:guardrail".to_string())
+        );
+        assert!(
+            params
+                .iqo
+                .optional_tags
+                .contains(&"type:principle".to_string())
+        );
         assert!(params.iqo.optional_tags.contains(&"type:goal".to_string()));
-        assert!(params.iqo.optional_tags.contains(&"type:non-goal".to_string()));
+        assert!(
+            params
+                .iqo
+                .optional_tags
+                .contains(&"type:non-goal".to_string())
+        );
         assert!(params.iqo.keywords.is_empty()); // No keyword filtering for constitution
         assert_eq!(params.max_results, 6);
     }
@@ -1827,8 +2240,14 @@ mod tests {
         assert_eq!(selected.len(), 4); // 1 original const + 1 regular + 2 backfilled
 
         // Count constitution memories
-        let const_count = selected.iter().filter(|m| is_constitution_candidate(m)).count();
-        assert_eq!(const_count, 3, "Should have exactly 3 constitution memories");
+        let const_count = selected
+            .iter()
+            .filter(|m| is_constitution_candidate(m))
+            .count();
+        assert_eq!(
+            const_count, 3,
+            "Should have exactly 3 constitution memories"
+        );
 
         // Should have const-2 and const-3 added
         assert!(selected.iter().any(|m| m.id == "const-2"));
@@ -1838,19 +2257,17 @@ mod tests {
     #[test]
     fn test_ensure_constitution_minimum_no_duplicates() {
         // Selected already has one from pool
-        let mut selected = vec![
-            MemoryCandidate {
-                id: "const-1".to_string(),
-                domain: Some(CONSTITUTION_DOMAIN.to_string()),
-                tags: vec!["type:guardrail".to_string()],
-                created_at: Some(Utc::now()),
-                snippet: "Guardrail 1".to_string(),
-                similarity_score: 0.9,
-                dynamic_score: 0.9,
-                vector_score: 0.0,
-                combined_score: 0.9,
-            },
-        ];
+        let mut selected = vec![MemoryCandidate {
+            id: "const-1".to_string(),
+            domain: Some(CONSTITUTION_DOMAIN.to_string()),
+            tags: vec!["type:guardrail".to_string()],
+            created_at: Some(Utc::now()),
+            snippet: "Guardrail 1".to_string(),
+            similarity_score: 0.9,
+            dynamic_score: 0.9,
+            vector_score: 0.0,
+            combined_score: 0.9,
+        }];
 
         // Pool contains const-1 (already in selected) and const-2
         let pool = vec![

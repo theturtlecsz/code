@@ -47,10 +47,22 @@ impl CausalLinkSuggestion {
 /// Raw response from Tier2 client
 #[derive(Debug, Clone)]
 pub struct Tier2Response {
-    /// Full Divine Truth markdown (sections 1-5)
+    /// Full Divine Truth markdown (sections 1-6)
     pub divine_truth_md: String,
-    /// Parsed causal link suggestions from Section 5 JSON
+    /// Parsed causal link suggestions from Section 6 JSON
     pub suggested_links: Vec<CausalLinkSuggestion>,
+}
+
+/// P90/SPEC-KIT-105: Constitution alignment analysis from Tier-2
+///
+/// Extracted from Section 2 of Divine Truth output.
+/// Used for P91 conflict detection (basic parsing only in P90).
+#[derive(Debug, Clone, Default)]
+pub struct ConstitutionAlignment {
+    /// IDs of principles/guardrails this spec aligns with (e.g., ["P1", "G2"])
+    pub aligned_ids: Vec<String>,
+    /// Raw markdown of conflicts section (for P91 conflict detection)
+    pub conflicts_raw: Option<String>,
 }
 
 /// Parsed Divine Truth with structured sections
@@ -58,13 +70,15 @@ pub struct Tier2Response {
 pub struct DivineTruth {
     /// Section 1: Executive summary bullets
     pub executive_summary: String,
-    /// Section 2: Architectural guardrails and constraints
+    /// Section 2: Constitution alignment analysis (P90/SPEC-KIT-105)
+    pub constitution_alignment: ConstitutionAlignment,
+    /// Section 3: Architectural guardrails and constraints
     pub architectural_guardrails: String,
-    /// Section 3: Historical context and lessons learned
+    /// Section 4: Historical context and lessons learned
     pub historical_context: String,
-    /// Section 4: Risks and open questions
+    /// Section 5: Risks and open questions
     pub risks_and_questions: String,
-    /// Section 5: Suggested causal links (parsed from JSON)
+    /// Section 6: Suggested causal links (parsed from JSON)
     pub suggested_links: Vec<CausalLinkSuggestion>,
     /// Original raw markdown (preserved for debugging/display)
     pub raw_markdown: String,
@@ -121,6 +135,8 @@ pub trait Tier2Client: Send + Sync {
 ///
 /// P84: Updated to explicitly reference NL_* artifact names for better
 /// NotebookLM retrieval (seeded artifacts use these exact filenames).
+///
+/// P90/SPEC-KIT-105: Added constitution awareness clause and Section 2.
 pub fn build_tier2_prompt(spec_id: &str, spec_content: &str, task_brief_md: &str) -> String {
     format!(
         r#"You are the "Shadow Staff Engineer" for the codex-rs project.
@@ -131,6 +147,18 @@ You have access to these seeded knowledge files (use these exact names in your s
 - **NL_BUG_RETROS_01.md** - Failure patterns, anti-patterns, post-mortems
 - **NL_DEBT_LANDSCAPE.md** - TODO/FIXME/HACK clusters, known issues by module
 - **NL_PROJECT_DIARY_01.md** - Session history, progress patterns, milestones
+
+=== CONSTITUTION AWARENESS (P90/SPEC-KIT-105) ===
+
+The TASK_BRIEF contains a "Project Constitution" section (Section 0) with:
+- **Principles**: Core values guiding implementation choices
+- **Guardrails**: Hard constraints that MUST NOT be violated
+- **Goals**: Project objectives to align with
+
+When making recommendations, you MUST:
+1. Respect all guardrails as hard constraints (no exceptions)
+2. Align suggestions with stated principles
+3. Call out any spec details that conflict with the constitution
 
 Your job is to synthesize a "Divine Truth" brief for the /speckit.auto pipeline.
 This brief guides multiple agents to plan, implement, and validate the spec.
@@ -147,13 +175,25 @@ Follow this structure EXACTLY. Do not add extra sections.
 - Assume the reader knows codex-rs generally but not this spec.
 - Keep to ~200 words.
 
-## 2. Architectural Guardrails
+## 2. Constitution Alignment
+Analyze how this spec aligns with the project constitution from Section 0.
+
+**Aligned with:** List principle/guardrail IDs that this spec supports (e.g., P1, G2).
+
+**Potential conflicts:**
+- If any spec requirements could violate guardrails, list them here.
+- For each conflict, suggest a mitigation or ask a clarifying question.
+- If no conflicts, write "None identified."
+
+Keep to ~150 words.
+
+## 3. Architectural Guardrails
 - List architectural constraints or patterns that MUST be respected.
 - Reference relevant historical decisions from Architecture Bible.
 - Call out potential conflicts with prior decisions.
 - Keep to ~300 words.
 
-## 3. Historical Context & Lessons
+## 4. Historical Context & Lessons
 - Summarize relevant lessons from:
   - Bug Retrospectives / Anti-Patterns
   - Project Diary entries
@@ -162,13 +202,13 @@ Follow this structure EXACTLY. Do not add extra sections.
 - Explain what to do differently this time.
 - Keep to ~300 words.
 
-## 4. Risks & Open Questions
+## 5. Risks & Open Questions
 - List concrete risks to: correctness, performance, maintainability, DX.
 - For each risk, suggest: mitigations, validation strategies, or questions.
 - If there are major unknowns, call them out explicitly.
 - Keep to ~300 words.
 
-## 5. Suggested Causal Links
+## 6. Suggested Causal Links
 Provide a JSON array of suggested relationships between memories.
 
 ```json
@@ -206,11 +246,12 @@ TASK BRIEF (TASK_BRIEF.md):
 === INSTRUCTIONS ===
 
 1. Read the spec and task brief carefully.
-2. Cross-reference with your seeded knowledge.
-3. Synthesize into the 5-section format above.
-4. Prefer to mark uncertainties as "Open Questions" rather than hallucinate.
-5. Keep total output under 2000 words.
-6. Output ONLY the Divine Truth brief. No preamble, no closing remarks."#
+2. Pay special attention to Section 0 (Project Constitution) in the task brief.
+3. Cross-reference with your seeded knowledge.
+4. Synthesize into the 6-section format above.
+5. Prefer to mark uncertainties as "Open Questions" rather than hallucinate.
+6. Keep total output under 2000 words.
+7. Output ONLY the Divine Truth brief. No preamble, no closing remarks."#
     )
 }
 
@@ -219,6 +260,9 @@ TASK BRIEF (TASK_BRIEF.md):
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Parse Divine Truth markdown into structured sections
+///
+/// P90/SPEC-KIT-105: Updated to parse Section 2 (Constitution Alignment)
+/// and handle renumbered sections (3-6 instead of 2-5).
 pub fn parse_divine_truth(response: &str) -> DivineTruth {
     let raw_markdown = response.to_string();
     let sections = extract_sections_by_header(response);
@@ -227,33 +271,95 @@ pub fn parse_divine_truth(response: &str) -> DivineTruth {
         .get("1. Executive Summary")
         .cloned()
         .unwrap_or_default();
+
+    // P90: Parse Section 2 (Constitution Alignment)
+    let constitution_alignment = sections
+        .get("2. Constitution Alignment")
+        .map(|s| parse_constitution_alignment(s))
+        .unwrap_or_default();
+
+    // P90: Section numbers shifted (was 2-5, now 3-6)
     let architectural_guardrails = sections
-        .get("2. Architectural Guardrails")
+        .get("3. Architectural Guardrails")
         .cloned()
         .unwrap_or_default();
     let historical_context = sections
-        .get("3. Historical Context & Lessons")
+        .get("4. Historical Context & Lessons")
         .cloned()
         .unwrap_or_default();
     let risks_and_questions = sections
-        .get("4. Risks & Open Questions")
+        .get("5. Risks & Open Questions")
         .cloned()
         .unwrap_or_default();
 
     let suggested_links = extract_causal_links(
         sections
-            .get("5. Suggested Causal Links")
+            .get("6. Suggested Causal Links")
             .map(String::as_str)
             .unwrap_or(""),
     );
 
     DivineTruth {
         executive_summary,
+        constitution_alignment,
         architectural_guardrails,
         historical_context,
         risks_and_questions,
         suggested_links,
         raw_markdown,
+    }
+}
+
+/// P90/SPEC-KIT-105: Parse Constitution Alignment section
+///
+/// Extracts aligned IDs from "**Aligned with:**" line and stores
+/// conflicts as raw markdown for P91 conflict detection.
+fn parse_constitution_alignment(section: &str) -> ConstitutionAlignment {
+    let mut aligned_ids: Vec<String> = Vec::new();
+    let mut conflicts_raw: Option<String> = None;
+
+    // Find "**Aligned with:**" line and extract IDs
+    for line in section.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("**Aligned with:**") || trimmed.starts_with("Aligned with:") {
+            // Extract IDs like P1, G2, etc. from the line
+            let after_label = trimmed
+                .trim_start_matches("**Aligned with:**")
+                .trim_start_matches("Aligned with:")
+                .trim();
+
+            // Parse comma-separated IDs, handling various formats:
+            // "P1, G2" or "P1 (developer ergonomics), G2 (sandboxed ops)"
+            for part in after_label.split(',') {
+                let part = part.trim();
+                // Extract just the ID (first word, or word before parenthesis)
+                if let Some(id) = part.split_whitespace().next() {
+                    let id = id.trim_matches(|c: char| !c.is_alphanumeric());
+                    if !id.is_empty() {
+                        aligned_ids.push(id.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // Extract conflicts section (everything after "**Potential conflicts:**")
+    if let Some(conflicts_start) = section.find("**Potential conflicts:**") {
+        let after_conflicts = &section[conflicts_start..];
+        // Take until next ** or end of section
+        let conflicts_end = after_conflicts[24..] // Skip "**Potential conflicts:**"
+            .find("**")
+            .map(|i| i + 24)
+            .unwrap_or(after_conflicts.len());
+        let conflicts_text = after_conflicts[24..conflicts_end].trim();
+        if !conflicts_text.is_empty() && conflicts_text != "None identified." {
+            conflicts_raw = Some(conflicts_text.to_string());
+        }
+    }
+
+    ConstitutionAlignment {
+        aligned_ids,
+        conflicts_raw,
     }
 }
 
@@ -359,6 +465,8 @@ pub fn validate_causal_links(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Build a Tier1-only fallback Divine Truth when Tier2 is unavailable
+///
+/// P90/SPEC-KIT-105: Updated to include Section 2 (Constitution Alignment)
 pub fn build_fallback_divine_truth(
     spec_id: &str,
     spec_content: &str,
@@ -366,9 +474,7 @@ pub fn build_fallback_divine_truth(
 ) -> DivineTruth {
     let mut raw_markdown = String::new();
 
-    raw_markdown.push_str(&format!(
-        "# Divine Truth Brief (Fallback): {spec_id}\n\n"
-    ));
+    raw_markdown.push_str(&format!("# Divine Truth Brief (Fallback): {spec_id}\n\n"));
     raw_markdown.push_str("## 1. Executive Summary\n\n");
     raw_markdown.push_str(
         "- Tier2 (NotebookLM) was unavailable. This brief is generated from local context only.\n",
@@ -384,24 +490,32 @@ pub fn build_fallback_divine_truth(
         }
     }
 
-    raw_markdown.push_str("\n## 2. Architectural Guardrails\n\n");
+    // P90: Section 2 (Constitution Alignment)
+    raw_markdown.push_str("\n## 2. Constitution Alignment\n\n");
+    raw_markdown.push_str("**Aligned with:** _Unable to analyze (Tier2 unavailable)_\n\n");
+    raw_markdown.push_str("**Potential conflicts:** _Unable to analyze (Tier2 unavailable)_\n");
+    raw_markdown.push_str("- See Section 0 of TASK_BRIEF.md for constitution details.\n");
+
+    // P90: Section numbers shifted (was 2-5, now 3-6)
+    raw_markdown.push_str("\n## 3. Architectural Guardrails\n\n");
     raw_markdown.push_str("- See TASK_BRIEF.md for relevant memories and historical decisions.\n");
     raw_markdown.push_str("- Architectural analysis requires Tier2 (NotebookLM) access.\n");
 
-    raw_markdown.push_str("\n## 3. Historical Context & Lessons\n\n");
+    raw_markdown.push_str("\n## 4. Historical Context & Lessons\n\n");
     raw_markdown.push_str("- Historical analysis requires Tier2 (NotebookLM) access.\n");
     raw_markdown.push_str("- Relevant memories are included in TASK_BRIEF.md.\n");
 
-    raw_markdown.push_str("\n## 4. Risks & Open Questions\n\n");
+    raw_markdown.push_str("\n## 5. Risks & Open Questions\n\n");
     raw_markdown.push_str("- Risk analysis requires Tier2 (NotebookLM) access.\n");
     raw_markdown.push_str("- Consider reviewing related SPECs and patterns manually.\n");
 
-    raw_markdown.push_str("\n## 5. Suggested Causal Links\n\n");
+    raw_markdown.push_str("\n## 6. Suggested Causal Links\n\n");
     raw_markdown.push_str("```json\n[]\n```\n");
     raw_markdown.push_str("_Causal link suggestions require Tier2 access._\n");
 
     DivineTruth {
         executive_summary: "Tier2 unavailable. See TASK_BRIEF.md for local context.".to_string(),
+        constitution_alignment: ConstitutionAlignment::default(),
         architectural_guardrails: "Tier2 unavailable.".to_string(),
         historical_context: "Tier2 unavailable.".to_string(),
         risks_and_questions: "Tier2 unavailable.".to_string(),
@@ -418,6 +532,7 @@ pub fn build_fallback_divine_truth(
 mod tests {
     use super::*;
 
+    /// Sample Divine Truth with P90 6-section format
     fn sample_divine_truth_md() -> &'static str {
         r#"# Divine Truth Brief: SPEC-KIT-102
 
@@ -427,25 +542,33 @@ mod tests {
 - Provides architectural guidance from seeded knowledge.
 - Results are cached in overlay DB.
 
-## 2. Architectural Guardrails
+## 2. Constitution Alignment
+
+**Aligned with:** P1 (developer ergonomics), G2 (sandboxed ops)
+
+**Potential conflicts:**
+- Spec proposes direct file writes, but G2 requires sandboxing
+- Mitigation: Use VFS abstraction layer (see Pattern P-034)
+
+## 3. Architectural Guardrails
 
 - Overlay pattern required: local-memory is closed-source.
 - MCP-only access: use public MCP tools.
 - Cache-first: always check cache before NotebookLM.
 
-## 3. Historical Context & Lessons
+## 4. Historical Context & Lessons
 
 - Prior daemon modification attempts failed.
 - MCP integrations have been reliable.
 - Rate limits are real and must be respected.
 
-## 4. Risks & Open Questions
+## 5. Risks & Open Questions
 
 - Risk: NotebookLM rate limits. Mitigation: aggressive caching.
 - Risk: Response format instability. Mitigation: robust parsing.
 - Open question: single vs committee notebooks?
 
-## 5. Suggested Causal Links
+## 6. Suggested Causal Links
 
 ```json
 [
@@ -473,10 +596,23 @@ mod tests {
         let dt = parse_divine_truth(sample_divine_truth_md());
 
         assert!(dt.executive_summary.contains("NotebookLM"));
+        // P90: Section numbers shifted
         assert!(dt.architectural_guardrails.contains("Overlay pattern"));
         assert!(dt.historical_context.contains("daemon modification"));
         assert!(dt.risks_and_questions.contains("rate limits"));
         assert!(!dt.raw_markdown.is_empty());
+    }
+
+    #[test]
+    fn test_parse_divine_truth_extracts_constitution_alignment() {
+        let dt = parse_divine_truth(sample_divine_truth_md());
+
+        // P90: Check constitution alignment extraction
+        assert_eq!(dt.constitution_alignment.aligned_ids, vec!["P1", "G2"]);
+        assert!(dt.constitution_alignment.conflicts_raw.is_some());
+        let conflicts = dt.constitution_alignment.conflicts_raw.as_ref().unwrap();
+        assert!(conflicts.contains("direct file writes"));
+        assert!(conflicts.contains("G2 requires sandboxing"));
     }
 
     #[test]
@@ -493,6 +629,34 @@ mod tests {
 
         let second = &dt.suggested_links[1];
         assert_eq!(second.rel_type, "expands");
+    }
+
+    #[test]
+    fn test_parse_constitution_alignment_empty() {
+        let section = "No constitution defined in this project.";
+        let alignment = parse_constitution_alignment(section);
+        assert!(alignment.aligned_ids.is_empty());
+        assert!(alignment.conflicts_raw.is_none());
+    }
+
+    #[test]
+    fn test_parse_constitution_alignment_no_conflicts() {
+        let section = r#"
+**Aligned with:** P1, P2, G1
+
+**Potential conflicts:**
+None identified.
+"#;
+        let alignment = parse_constitution_alignment(section);
+        assert_eq!(alignment.aligned_ids, vec!["P1", "P2", "G1"]);
+        assert!(alignment.conflicts_raw.is_none()); // "None identified." is filtered
+    }
+
+    #[test]
+    fn test_parse_constitution_alignment_with_descriptions() {
+        let section = "**Aligned with:** P1 (developer ergonomics), G2 (sandboxed ops), Goal1";
+        let alignment = parse_constitution_alignment(section);
+        assert_eq!(alignment.aligned_ids, vec!["P1", "G2", "Goal1"]);
     }
 
     #[test]
@@ -569,6 +733,7 @@ mod tests {
         assert!(prompt.contains("Test spec content"));
         assert!(prompt.contains("Test brief"));
         assert!(prompt.contains("Executive Summary"));
+        assert!(prompt.contains("Constitution Alignment")); // P90: New section
         assert!(prompt.contains("Architectural Guardrails"));
         assert!(prompt.contains("Historical Context"));
         assert!(prompt.contains("Risks & Open Questions"));
@@ -580,6 +745,13 @@ mod tests {
         assert!(prompt.contains("NL_BUG_RETROS_01.md"));
         assert!(prompt.contains("NL_DEBT_LANDSCAPE.md"));
         assert!(prompt.contains("NL_PROJECT_DIARY_01.md"));
+
+        // P90: Verify constitution awareness clause
+        assert!(prompt.contains("CONSTITUTION AWARENESS"));
+        assert!(prompt.contains("Principles"));
+        assert!(prompt.contains("Guardrails"));
+        assert!(prompt.contains("hard constraints"));
+        assert!(prompt.contains("Section 0"));
     }
 
     #[test]
