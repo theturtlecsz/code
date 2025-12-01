@@ -313,6 +313,140 @@ impl SpecKitCommand for SpecKitConstitutionCommand {
     }
 }
 
+/// Command: /speckit.seed
+/// Generate NotebookLM-ready Markdown files from local-memory and codebase
+/// SPEC-KIT-102: Shadow Notebook Seeder V1
+pub struct SpecKitSeedCommand;
+
+impl SpecKitCommand for SpecKitSeedCommand {
+    fn name(&self) -> &'static str {
+        "speckit.seed"
+    }
+
+    fn aliases(&self) -> &[&'static str] {
+        &["notebooklm-seed"]
+    }
+
+    fn description(&self) -> &'static str {
+        "generate NotebookLM-ready Markdown files from local-memory (Stage0 Seeder)"
+    }
+
+    fn execute(&self, widget: &mut ChatWidget, args: String) {
+        use super::super::stage0_seeding::{run_shadow_seeding, SeedingConfig};
+        use crate::stage0_adapters::{has_local_memory_server, LocalMemoryMcpAdapter};
+        use std::sync::Arc;
+
+        // Parse optional arguments
+        let mut max_memories = 50usize;
+        let mut output_dir = widget.config.cwd.join("evidence").join("notebooklm");
+
+        for arg in args.split_whitespace() {
+            if arg.starts_with("--max=") {
+                if let Ok(n) = arg.trim_start_matches("--max=").parse() {
+                    max_memories = n;
+                }
+            } else if arg.starts_with("--output=") {
+                output_dir = std::path::PathBuf::from(arg.trim_start_matches("--output="));
+            }
+        }
+
+        // Show starting message
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![
+                ratatui::text::Line::from("🌱 Stage0 NotebookLM Seeder"),
+                ratatui::text::Line::from(format!(
+                    "   Output: {}",
+                    output_dir.display()
+                )),
+                ratatui::text::Line::from(format!("   Max memories per artifact: {}", max_memories)),
+                ratatui::text::Line::from("   Scanning local-memory and codebase..."),
+            ],
+            crate::history_cell::HistoryCellType::Notice,
+        ));
+        widget.request_redraw();
+
+        // Get MCP manager
+        let mcp_manager = widget.mcp_manager.clone();
+        let cwd = widget.config.cwd.clone();
+
+        // Run seeding in async context
+        let result = super::super::consensus_coordinator::block_on_sync(|| async move {
+            let mcp_lock = mcp_manager.lock().await;
+            let Some(mcp) = mcp_lock.as_ref() else {
+                return Err("MCP manager not available".to_string());
+            };
+
+            if !has_local_memory_server(mcp) {
+                return Err("local-memory MCP server not available".to_string());
+            }
+
+            let local_mem = LocalMemoryMcpAdapter::new(Arc::clone(mcp));
+            let config = SeedingConfig {
+                max_memories_per_artifact: max_memories,
+                output_dir,
+                project_root: cwd,
+            };
+
+            Ok(run_shadow_seeding(&local_mem, &config).await)
+        });
+
+        match result {
+            Ok(seeding_result) => {
+                let mut lines = vec![
+                    ratatui::text::Line::from(""),
+                    ratatui::text::Line::from(format!(
+                        "✅ Stage0 NotebookLM seeding complete ({} ms)",
+                        seeding_result.duration_ms
+                    )),
+                ];
+
+                for artifact in &seeding_result.artifacts {
+                    let status = if artifact.written { "✓" } else { "✗" };
+                    lines.push(ratatui::text::Line::from(format!(
+                        "   {} {} ({} sources)",
+                        status,
+                        artifact.kind.filename(),
+                        artifact.count
+                    )));
+                }
+
+                if !seeding_result.errors.is_empty() {
+                    lines.push(ratatui::text::Line::from(""));
+                    lines.push(ratatui::text::Line::from("⚠ Warnings:"));
+                    for err in &seeding_result.errors {
+                        lines.push(ratatui::text::Line::from(format!("   - {}", err)));
+                    }
+                }
+
+                lines.push(ratatui::text::Line::from(""));
+                lines.push(ratatui::text::Line::from(
+                    "📚 Upload these files to your NotebookLM notebook:",
+                ));
+                lines.push(ratatui::text::Line::from(
+                    "   \"codex-rs – Shadow Stage 0\"",
+                ));
+
+                widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                    lines,
+                    crate::history_cell::HistoryCellType::Notice,
+                ));
+            }
+            Err(e) => {
+                widget.history_push(crate::history_cell::new_error_event(format!(
+                    "Stage0 seeding failed: {}",
+                    e
+                )));
+            }
+        }
+
+        widget.request_redraw();
+    }
+
+    fn requires_args(&self) -> bool {
+        false
+    }
+}
+
 /// Command: /speckit.ace-status
 /// Show ACE playbook status and statistics
 pub struct SpecKitAceStatusCommand;

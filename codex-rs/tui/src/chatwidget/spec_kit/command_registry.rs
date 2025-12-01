@@ -161,6 +161,7 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
     registry.register(Box::new(SpecConsensusCommand));
     registry.register(Box::new(SpecKitConstitutionCommand));
     registry.register(Box::new(SpecKitAceStatusCommand));
+    registry.register(Box::new(SpecKitSeedCommand)); // SPEC-KIT-102: Shadow Notebook Seeder
 
     // Stage commands (plan → unlock)
     registry.register(Box::new(SpecKitPlanCommand));
@@ -304,8 +305,8 @@ mod tests {
         // Test that the global registry has all expected commands
         let registry = SPEC_KIT_REGISTRY.lock().unwrap();
 
-        // 30 commands: 10 special + 6 stage + 3 quality + 7 guardrail + 1 evidence + 1 search + 2 templates
-        assert_eq!(registry.len(), 30, "Registry should have 30 commands");
+        // 31 commands: 11 special + 6 stage + 3 quality + 7 guardrail + 1 evidence + 1 search + 2 templates
+        assert_eq!(registry.len(), 31, "Registry should have 31 commands");
 
         // Verify key commands are registered
         assert!(registry.find("speckit.status").is_some());
@@ -518,12 +519,13 @@ mod tests {
         // SPEC-KIT-902: Legacy spec-* aliases removed.
         // SPEC-KIT-960: Added speckit.project with 'project' alias
         // SPEC-KIT-962: Added template commands with aliases
-        // 30 primary names + 14 aliases = 44 total names
+        // SPEC-KIT-102: Added speckit.seed with 'notebooklm-seed' alias
+        // 31 primary names + 15 aliases = 46 total names
         let all_names = registry.all_names();
         assert_eq!(
             all_names.len(),
-            44,
-            "Should have 44 total command names (30 primary + 14 aliases)"
+            46,
+            "Should have 46 total command names (31 primary + 15 aliases)"
         );
     }
 
