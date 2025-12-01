@@ -35,6 +35,7 @@ pub use scoring::{ScoringComponents, ScoringInput, calculate_dynamic_score, calc
 pub use dcc::{
     CompileContextResult, DccContext, EnvCtx, ExplainScore, ExplainScores, Iqo,
     LocalMemoryClient, LocalMemorySearchParams, LocalMemorySummary, MemoryCandidate,
+    NoopVectorBackend,
 };
 pub use tier2::{
     CausalLinkSuggestion, DivineTruth, Tier2Client, Tier2Response,
@@ -277,20 +278,24 @@ impl Stage0Engine {
     /// it:
     /// 1. Generates an IQO (Intent Query Object) from the spec
     /// 2. Queries local-memory for relevant memories
-    /// 3. Joins with overlay scores and applies MMR diversity
-    /// 4. Assembles a TASK_BRIEF.md document
+    /// 3. (V2.5) Optionally queries vector backend for hybrid retrieval
+    /// 4. Joins with overlay scores and applies MMR diversity
+    /// 5. Assembles a TASK_BRIEF.md document
     ///
     /// # Arguments
     /// * `local_mem` - Local-memory client for querying memories
     /// * `llm` - LLM client for IQO generation (optional, falls back to heuristics)
+    /// * `vector` - (V2.5) Optional vector backend for hybrid retrieval
     /// * `spec_id` - Identifier for the spec (e.g., "SPEC-KIT-102")
     /// * `spec_content` - Full content of the spec document
     /// * `env` - Environment context (cwd, branch, recent files)
     /// * `explain` - If true, include score breakdown in result
-    pub async fn compile_context<Lm, Ll>(
+    #[allow(clippy::too_many_arguments)]
+    pub async fn compile_context<Lm, Ll, V>(
         &self,
         local_mem: &Lm,
         llm: &Ll,
+        vector: Option<&V>,
         spec_id: &str,
         spec_content: &str,
         env: &EnvCtx,
@@ -299,6 +304,7 @@ impl Stage0Engine {
     where
         Lm: dcc::LocalMemoryClient,
         Ll: guardians::LlmClient,
+        V: vector::VectorBackend,
     {
         let now = chrono::Utc::now();
         let ctx = dcc::DccContext {
@@ -307,7 +313,7 @@ impl Stage0Engine {
             local_mem,
             llm,
         };
-        dcc::compile_context(&ctx, spec_id, spec_content, env, explain, now).await
+        dcc::compile_context(&ctx, vector, spec_id, spec_content, env, explain, now).await
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -318,7 +324,7 @@ impl Stage0Engine {
     ///
     /// This is the main entry point called by `/speckit.auto`. It:
     /// 1. Checks if Stage 0 is enabled
-    /// 2. Runs DCC to compile TASK_BRIEF
+    /// 2. Runs DCC to compile TASK_BRIEF (with optional hybrid retrieval)
     /// 3. Checks Tier 2 cache (with TTL)
     /// 4. On cache miss, calls Tier 2 (NotebookLM) if enabled
     /// 5. Caches the result and stores dependencies
@@ -328,6 +334,7 @@ impl Stage0Engine {
     /// # Arguments
     /// * `local_mem` - Local-memory client for querying memories
     /// * `llm` - LLM client for IQO generation
+    /// * `vector` - (V2.5) Optional vector backend for hybrid retrieval
     /// * `tier2` - Tier 2 client for NotebookLM calls
     /// * `spec_id` - Spec identifier (e.g., "SPEC-KIT-102")
     /// * `spec_content` - Full spec.md content
@@ -340,10 +347,11 @@ impl Stage0Engine {
     /// - `Stage0Error::OverlayDb` - If cache operations fail
     /// - Tier 2 errors are soft (fallback to DCC-only)
     #[allow(clippy::too_many_arguments)]
-    pub async fn run_stage0<Lm, Ll, T2>(
+    pub async fn run_stage0<Lm, Ll, V, T2>(
         &self,
         local_mem: &Lm,
         llm: &Ll,
+        vector: Option<&V>,
         tier2: &T2,
         spec_id: &str,
         spec_content: &str,
@@ -353,6 +361,7 @@ impl Stage0Engine {
     where
         Lm: dcc::LocalMemoryClient,
         Ll: guardians::LlmClient,
+        V: vector::VectorBackend,
         T2: tier2::Tier2Client,
     {
         let start = Instant::now();
@@ -366,12 +375,13 @@ impl Stage0Engine {
         tracing::info!(
             spec_id = spec_id,
             tier2_enabled = self.cfg.tier2.enabled,
+            hybrid_enabled = self.cfg.context_compiler.hybrid_enabled,
             "Starting Stage 0 run"
         );
 
-        // 2. Run DCC to compile TASK_BRIEF
+        // 2. Run DCC to compile TASK_BRIEF (with optional hybrid retrieval)
         let dcc_result = self
-            .compile_context(local_mem, llm, spec_id, spec_content, env, explain)
+            .compile_context(local_mem, llm, vector, spec_id, spec_content, env, explain)
             .await?;
 
         tracing::debug!(
@@ -826,11 +836,13 @@ mod tests {
             let local_mem = MockLocalMemoryClient::with_sample_memories();
             let llm = MockLlmClient;
             let tier2 = MockTier2Client::success();
+            let noop_vector: Option<&NoopVectorBackend> = None;
 
             let result = engine
                 .run_stage0(
                     &local_mem,
                     &llm,
+                    noop_vector,
                     &tier2,
                     "SPEC-TEST",
                     "Test spec",
@@ -853,11 +865,13 @@ mod tests {
             let local_mem = MockLocalMemoryClient::with_sample_memories();
             let llm = MockLlmClient;
             let tier2 = MockTier2Client::success();
+            let noop_vector: Option<&NoopVectorBackend> = None;
 
             let result = engine
                 .run_stage0(
                     &local_mem,
                     &llm,
+                    noop_vector,
                     &tier2,
                     "SPEC-TEST",
                     "Test spec content",
@@ -883,11 +897,13 @@ mod tests {
             let local_mem = MockLocalMemoryClient::with_sample_memories();
             let llm = MockLlmClient;
             let tier2 = MockTier2Client::success();
+            let noop_vector: Option<&NoopVectorBackend> = None;
 
             let result = engine
                 .run_stage0(
                     &local_mem,
                     &llm,
+                    noop_vector,
                     &tier2,
                     "SPEC-TEST",
                     "Test spec content",
@@ -915,11 +931,13 @@ mod tests {
             let local_mem = MockLocalMemoryClient::with_sample_memories();
             let llm = MockLlmClient;
             let tier2 = MockTier2Client::failing();
+            let noop_vector: Option<&NoopVectorBackend> = None;
 
             let result = engine
                 .run_stage0(
                     &local_mem,
                     &llm,
+                    noop_vector,
                     &tier2,
                     "SPEC-TEST",
                     "Test spec content",
@@ -949,12 +967,14 @@ mod tests {
             let local_mem = MockLocalMemoryClient::with_sample_memories();
             let llm = MockLlmClient;
             let tier2 = MockTier2Client::success();
+            let noop_vector: Option<&NoopVectorBackend> = None;
 
             // First call - cache miss, creates cache entry
             let result1 = engine1
                 .run_stage0(
                     &local_mem,
                     &llm,
+                    noop_vector,
                     &tier2,
                     "SPEC-TEST",
                     "Test spec content",
@@ -988,12 +1008,14 @@ mod tests {
             let local_mem = MockLocalMemoryClient::with_sample_memories();
             let llm = MockLlmClient;
             let tier2 = MockTier2Client::success();
+            let noop_vector: Option<&NoopVectorBackend> = None;
 
             // First call - creates cache entry
             let result1 = engine
                 .run_stage0(
                     &local_mem,
                     &llm,
+                    noop_vector,
                     &tier2,
                     "SPEC-TTL-TEST",
                     "Test TTL spec content",
@@ -1018,11 +1040,13 @@ mod tests {
             let local_mem = MockLocalMemoryClient::with_sample_memories();
             let llm = MockLlmClient;
             let tier2 = MockTier2Client::success();
+            let noop_vector: Option<&NoopVectorBackend> = None;
 
             let result = engine
                 .run_stage0(
                     &local_mem,
                     &llm,
+                    noop_vector,
                     &tier2,
                     "SPEC-TEST",
                     "Test spec content",
@@ -1049,11 +1073,13 @@ mod tests {
             let local_mem = MockLocalMemoryClient::with_sample_memories();
             let llm = MockLlmClient;
             let tier2 = MockTier2Client::success();
+            let noop_vector: Option<&NoopVectorBackend> = None;
 
             let result = engine
                 .run_stage0(
                     &local_mem,
                     &llm,
+                    noop_vector,
                     &tier2,
                     "SPEC-TEST",
                     "Test spec content",

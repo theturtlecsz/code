@@ -192,6 +192,23 @@ pub struct ContextCompilerConfig {
     /// Whether to use LLM for IQO generation
     #[serde(default = "default_iqo_llm_enabled")]
     pub iqo_llm_enabled: bool,
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // V2.5: Hybrid retrieval configuration
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// Enable hybrid retrieval (TF-IDF + local-memory)
+    #[serde(default = "default_hybrid_enabled")]
+    pub hybrid_enabled: bool,
+
+    /// Weight for vector/TF-IDF score in combined ranking
+    /// Combined formula: sim_weight*sim + dyn_weight*dyn + vec_weight*vec
+    #[serde(default = "default_vector_weight")]
+    pub vector_weight: f32,
+
+    /// Maximum results from vector backend before merge
+    #[serde(default = "default_vector_top_k")]
+    pub vector_top_k: usize,
 }
 
 fn default_max_tokens() -> usize {
@@ -216,6 +233,17 @@ fn default_iqo_llm_enabled() -> bool {
     true
 }
 
+// V2.5: Hybrid retrieval defaults
+fn default_hybrid_enabled() -> bool {
+    true
+}
+fn default_vector_weight() -> f32 {
+    0.20
+}
+fn default_vector_top_k() -> usize {
+    50
+}
+
 impl Default for ContextCompilerConfig {
     fn default() -> Self {
         Self {
@@ -226,6 +254,9 @@ impl Default for ContextCompilerConfig {
             pre_filter_limit: default_pre_filter_limit(),
             diversity_lambda: default_diversity_lambda(),
             iqo_llm_enabled: default_iqo_llm_enabled(),
+            hybrid_enabled: default_hybrid_enabled(),
+            vector_weight: default_vector_weight(),
+            vector_top_k: default_vector_top_k(),
         }
     }
 }

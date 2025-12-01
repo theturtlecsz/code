@@ -187,6 +187,10 @@ fn run_stage0_blocking(
         let engine =
             Stage0Engine::new().map_err(|e| format!("Failed to create Stage0Engine: {e}"))?;
 
+        // V2.5: No vector backend for now - TF-IDF index would need to be populated
+        // separately via /stage0.index command. Pass None to disable hybrid retrieval.
+        let noop_vector: Option<&codex_stage0::NoopVectorBackend> = None;
+
         // Run Stage 0 with appropriate Tier2 client
         if let Some(tier2_client) = tier2 {
             // Use real NotebookLM adapter
@@ -194,6 +198,7 @@ fn run_stage0_blocking(
                 .run_stage0(
                     &local_memory,
                     &llm,
+                    noop_vector,
                     &tier2_client,
                     &spec_id,
                     &spec_content,
@@ -209,6 +214,7 @@ fn run_stage0_blocking(
                 .run_stage0(
                     &local_memory,
                     &llm,
+                    noop_vector,
                     &noop_tier2,
                     &spec_id,
                     &spec_content,

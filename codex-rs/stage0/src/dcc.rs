@@ -14,10 +14,12 @@ use crate::errors::Result;
 use crate::guardians::LlmClient;
 use crate::overlay_db::OverlayDb;
 use crate::scoring::{ScoringInput, calculate_dynamic_score};
+use crate::vector::{VectorBackend, VectorFilters, DocumentKind};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
+use std::collections::HashMap;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Data Types
@@ -110,7 +112,9 @@ pub struct MemoryCandidate {
     pub similarity_score: f64,
     /// Dynamic score from overlay
     pub dynamic_score: f64,
-    /// Combined score (weighted sum of similarity + dynamic)
+    /// Vector/TF-IDF score from hybrid retrieval (V2.5)
+    pub vector_score: f64,
+    /// Combined score (weighted sum of similarity + dynamic + vector)
     pub combined_score: f64,
 }
 
@@ -120,6 +124,8 @@ pub struct ExplainScore {
     pub id: String,
     pub similarity: f64,
     pub dynamic_score: f64,
+    /// Vector/TF-IDF score from hybrid retrieval (V2.5)
+    pub vector_score: f64,
     pub combined_score: f64,
     pub usage_score: f64,
     pub recency_score: f64,
@@ -156,6 +162,44 @@ pub struct DccContext<'a, Lm: LocalMemoryClient, Ll: LlmClient> {
     pub db: &'a OverlayDb,
     pub local_mem: &'a Lm,
     pub llm: &'a Ll,
+}
+
+/// V2.5: No-op vector backend for when hybrid retrieval is disabled or unavailable
+///
+/// This struct implements VectorBackend but always returns empty results.
+/// Used as a type placeholder when no actual vector backend is configured.
+pub struct NoopVectorBackend;
+
+#[async_trait]
+impl VectorBackend for NoopVectorBackend {
+    async fn index_documents(&self, _docs: Vec<crate::vector::VectorDocument>) -> Result<crate::vector::IndexStats> {
+        Ok(crate::vector::IndexStats::default())
+    }
+
+    async fn search(
+        &self,
+        _query_text: &str,
+        _filters: &VectorFilters,
+        _top_k: usize,
+    ) -> Result<Vec<crate::vector::ScoredVector>> {
+        Ok(Vec::new())
+    }
+
+    async fn document_count(&self) -> Result<usize> {
+        Ok(0)
+    }
+
+    async fn clear(&self) -> Result<()> {
+        Ok(())
+    }
+
+    async fn get_document(&self, _id: &str) -> Result<Option<crate::vector::VectorDocument>> {
+        Ok(None)
+    }
+
+    async fn delete_document(&self, _id: &str) -> Result<bool> {
+        Ok(false)
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -260,11 +304,13 @@ fn normalize_iqo(mut iqo: Iqo, cfg: &Stage0Config) -> Iqo {
 /// # Steps
 /// 1. Build IQO from spec + env
 /// 2. Query local-memory
-/// 3. Join with overlay scores
-/// 4. Apply MMR diversity reranking
-/// 5. Assemble TASK_BRIEF.md
-pub async fn compile_context<Lm, Ll>(
+/// 3. (V2.5) Query vector backend for hybrid retrieval
+/// 4. Merge and join with overlay scores
+/// 5. Apply MMR diversity reranking
+/// 6. Assemble TASK_BRIEF.md
+pub async fn compile_context<Lm, Ll, V>(
     ctx: &DccContext<'_, Lm, Ll>,
+    vector: Option<&V>,
     spec_id: &str,
     spec_content: &str,
     env: &EnvCtx,
@@ -274,6 +320,7 @@ pub async fn compile_context<Lm, Ll>(
 where
     Lm: LocalMemoryClient,
     Ll: LlmClient,
+    V: VectorBackend,
 {
     // 1. Build IQO
     let iqo = build_iqo(ctx.llm, ctx.cfg, spec_content, env).await?;
@@ -297,9 +344,54 @@ where
         "Retrieved memory summaries from local-memory"
     );
 
-    // 3. Join with overlay and compute combined scores
+    // 3. (V2.5) Query vector backend if hybrid enabled
+    let vector_scores = if ctx.cfg.context_compiler.hybrid_enabled {
+        if let Some(vec_backend) = vector {
+            // Build query from spec keywords
+            let query_text = iqo.keywords.join(" ");
+            let filters = VectorFilters::new()
+                .with_kinds(vec![DocumentKind::Memory]);
+
+            match vec_backend.search(&query_text, &filters, ctx.cfg.context_compiler.vector_top_k).await {
+                Ok(results) => {
+                    tracing::debug!(
+                        count = results.len(),
+                        "Retrieved vector search results"
+                    );
+                    // Build map of id -> score
+                    results.into_iter().map(|sv| (sv.id, sv.score)).collect::<HashMap<String, f64>>()
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "Vector search failed, continuing without hybrid scores");
+                    HashMap::new()
+                }
+            }
+        } else {
+            tracing::debug!("Hybrid enabled but no vector backend provided");
+            HashMap::new()
+        }
+    } else {
+        HashMap::new()
+    };
+
+    // 4. Join with overlay and compute combined scores (including vector scores)
     let mut candidates: Vec<MemoryCandidate> = Vec::new();
     let mut explain_scores: Vec<ExplainScore> = Vec::new();
+
+    // Get weight configuration
+    let sim_weight = ctx.cfg.context_compiler.semantic_similarity_weight as f64;
+    let dyn_weight = ctx.cfg.context_compiler.dynamic_score_weight as f64;
+    let vec_weight = if ctx.cfg.context_compiler.hybrid_enabled {
+        ctx.cfg.context_compiler.vector_weight as f64
+    } else {
+        0.0
+    };
+
+    // Normalize weights if vector is enabled (should sum to ~1.0)
+    let total_weight = sim_weight + dyn_weight + vec_weight;
+    let norm_sim = sim_weight / total_weight;
+    let norm_dyn = dyn_weight / total_weight;
+    let norm_vec = vec_weight / total_weight;
 
     for s in summaries {
         // Fetch overlay row or use defaults
@@ -321,9 +413,13 @@ where
         );
         let components = calculate_dynamic_score(&scoring_input, &ctx.cfg.scoring, now);
 
-        let combined = ctx.cfg.context_compiler.semantic_similarity_weight as f64
-            * s.similarity_score
-            + ctx.cfg.context_compiler.dynamic_score_weight as f64 * components.final_score;
+        // Look up vector score (default 0.0 if not found)
+        let vector_score = vector_scores.get(&s.id).copied().unwrap_or(0.0);
+
+        // Combined score with normalized weights
+        let combined = norm_sim * s.similarity_score
+            + norm_dyn * components.final_score
+            + norm_vec * vector_score;
 
         candidates.push(MemoryCandidate {
             id: s.id.clone(),
@@ -333,6 +429,7 @@ where
             snippet: s.snippet.clone(),
             similarity_score: s.similarity_score,
             dynamic_score: components.final_score,
+            vector_score,
             combined_score: combined,
         });
 
@@ -341,6 +438,7 @@ where
                 id: s.id.clone(),
                 similarity: s.similarity_score,
                 dynamic_score: components.final_score,
+                vector_score,
                 combined_score: combined,
                 usage_score: components.usage_score,
                 recency_score: components.recency_score,
@@ -352,14 +450,14 @@ where
         }
     }
 
-    // 4. Sort by combined_score descending
+    // 5. Sort by combined_score descending
     candidates.sort_by(|a, b| {
         b.combined_score
             .partial_cmp(&a.combined_score)
             .unwrap_or(Ordering::Equal)
     });
 
-    // 5. Apply MMR diversity reranking
+    // 6. Apply MMR diversity reranking
     let selected = select_with_mmr(
         candidates,
         ctx.cfg.context_compiler.top_k,
@@ -369,10 +467,12 @@ where
     tracing::debug!(
         selected_count = selected.len(),
         top_k = ctx.cfg.context_compiler.top_k,
+        hybrid_enabled = ctx.cfg.context_compiler.hybrid_enabled,
+        vector_candidates = vector_scores.len(),
         "Applied MMR selection"
     );
 
-    // 6. Assemble TASK_BRIEF.md
+    // 7. Assemble TASK_BRIEF.md
     let task_brief_md = assemble_task_brief(spec_id, spec_content, &selected, &iqo, ctx.cfg);
 
     let memories_used: Vec<String> = selected.iter().map(|c| c.id.clone()).collect();
@@ -791,6 +891,7 @@ mod tests {
                 snippet: format!("Memory {i}"),
                 similarity_score: 0.9 - (i as f64 * 0.05),
                 dynamic_score: 0.5,
+                vector_score: 0.0,
                 combined_score: 0.7 - (i as f64 * 0.03),
             })
             .collect();
@@ -812,6 +913,7 @@ mod tests {
                 snippet: "Similar memory 1".to_string(),
                 similarity_score: 0.95,
                 dynamic_score: 0.5,
+                vector_score: 0.0,
                 combined_score: 0.9,
             },
             MemoryCandidate {
@@ -822,6 +924,7 @@ mod tests {
                 snippet: "Similar memory 2".to_string(),
                 similarity_score: 0.94,
                 dynamic_score: 0.5,
+                vector_score: 0.0,
                 combined_score: 0.85, // Closer to diverse to make diversity matter more
             },
             MemoryCandidate {
@@ -832,6 +935,7 @@ mod tests {
                 snippet: "Different memory".to_string(),
                 similarity_score: 0.70, // Lower similarity = lower penalty from selected
                 dynamic_score: 0.5,
+                vector_score: 0.0,
                 combined_score: 0.80,
             },
         ];
@@ -884,6 +988,7 @@ mod tests {
             snippet: "Test memory snippet".to_string(),
             similarity_score: 0.9,
             dynamic_score: 0.7,
+            vector_score: 0.0,
             combined_score: 0.85,
         }];
 
@@ -914,8 +1019,10 @@ mod tests {
         };
 
         let env = EnvCtx::default();
+        let noop_vector: Option<&NoopVectorBackend> = None;
         let result = compile_context(
             &ctx,
+            noop_vector,
             "SPEC-KIT-102",
             "# Stage0 DCC\n\nImplement DCC pipeline.",
             &env,
@@ -947,10 +1054,12 @@ mod tests {
         };
 
         let env = EnvCtx::default();
+        let noop_vector: Option<&NoopVectorBackend> = None;
 
         // With explain=true
         let result = compile_context(
             &ctx,
+            noop_vector,
             "SPEC-TEST",
             "Test spec content",
             &env,
@@ -989,7 +1098,8 @@ mod tests {
         };
 
         let env = EnvCtx::default();
-        let result = compile_context(&ctx, "SPEC", "content", &env, false, Utc::now())
+        let noop_vector: Option<&NoopVectorBackend> = None;
+        let result = compile_context(&ctx, noop_vector, "SPEC", "content", &env, false, Utc::now())
             .await
             .expect("compile_context should succeed");
 
@@ -1021,11 +1131,91 @@ mod tests {
         };
 
         let env = EnvCtx::default();
-        let result = compile_context(&ctx, "SPEC", "content", &env, false, Utc::now())
+        let noop_vector: Option<&NoopVectorBackend> = None;
+        let result = compile_context(&ctx, noop_vector, "SPEC", "content", &env, false, Utc::now())
             .await
             .expect("compile_context should succeed");
 
         // Should succeed and produce output
         assert!(result.task_brief_md.contains("custom-domain"));
+    }
+
+    // V2.5: Test hybrid retrieval with vector backend
+    #[tokio::test]
+    async fn test_compile_context_with_hybrid_enabled() {
+        use crate::tfidf::TfIdfBackend;
+        use crate::vector::VectorDocument;
+
+        let mut cfg = Stage0Config::default();
+        cfg.context_compiler.hybrid_enabled = true;
+        cfg.context_compiler.vector_weight = 0.2;
+
+        let db = crate::overlay_db::OverlayDb::connect_in_memory().expect("db");
+        let local_mem = MockLocalMemoryClient::new(sample_memories());
+        let llm = MockLlmClient::new();
+
+        // Create and populate TF-IDF backend
+        let tfidf = TfIdfBackend::new();
+        let docs = vec![
+            VectorDocument::new("mem-001", DocumentKind::Memory, "Pattern for async operations"),
+            VectorDocument::new("mem-002", DocumentKind::Memory, "SQLite overlay database decision"),
+            VectorDocument::new("mem-003", DocumentKind::Memory, "LLM client abstraction pattern"),
+        ];
+        tfidf.index_documents(docs).await.expect("index");
+
+        let ctx = DccContext {
+            cfg: &cfg,
+            db: &db,
+            local_mem: &local_mem,
+            llm: &llm,
+        };
+
+        let env = EnvCtx::default();
+        let result = compile_context(&ctx, Some(&tfidf), "SPEC", "async pattern", &env, true, Utc::now())
+            .await
+            .expect("compile_context should succeed");
+
+        // Should have explain scores with vector_score populated
+        assert!(result.explain_scores.is_some());
+        let scores = result.explain_scores.unwrap();
+        // At least one memory should have non-zero vector score if it matched
+        let has_vector_score = scores.memories.iter().any(|s| s.vector_score > 0.0);
+        assert!(has_vector_score, "Expected at least one memory with vector score");
+    }
+
+    #[tokio::test]
+    async fn test_compile_context_hybrid_disabled_ignores_vector() {
+        use crate::tfidf::TfIdfBackend;
+        use crate::vector::VectorDocument;
+
+        let mut cfg = Stage0Config::default();
+        cfg.context_compiler.hybrid_enabled = false; // Disabled
+
+        let db = crate::overlay_db::OverlayDb::connect_in_memory().expect("db");
+        let local_mem = MockLocalMemoryClient::new(sample_memories());
+        let llm = MockLlmClient::new();
+
+        // Create and populate TF-IDF backend
+        let tfidf = TfIdfBackend::new();
+        let docs = vec![
+            VectorDocument::new("mem-001", DocumentKind::Memory, "Pattern for async operations"),
+        ];
+        tfidf.index_documents(docs).await.expect("index");
+
+        let ctx = DccContext {
+            cfg: &cfg,
+            db: &db,
+            local_mem: &local_mem,
+            llm: &llm,
+        };
+
+        let env = EnvCtx::default();
+        let result = compile_context(&ctx, Some(&tfidf), "SPEC", "async pattern", &env, true, Utc::now())
+            .await
+            .expect("compile_context should succeed");
+
+        // With hybrid disabled, all vector scores should be 0
+        let scores = result.explain_scores.expect("explain should be present");
+        assert!(scores.memories.iter().all(|s| s.vector_score == 0.0));
     }
 }
