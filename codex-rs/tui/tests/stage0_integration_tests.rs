@@ -223,6 +223,7 @@ fn stage0_result_combined_context_md() {
         spec_id: "SPEC-105".to_string(),
         divine_truth: DivineTruth {
             executive_summary: "Executive summary".to_string(),
+            constitution_alignment: Default::default(),
             architectural_guardrails: "Guardrails".to_string(),
             historical_context: "History".to_string(),
             risks_and_questions: "Risks".to_string(),
@@ -235,6 +236,8 @@ fn stage0_result_combined_context_md() {
         tier2_used: true,
         latency_ms: 100,
         explain_scores: None,
+        constitution_conflicts: None,
+        constitution_aligned_ids: vec![],
     };
 
     let combined = result.combined_context_md();
@@ -254,6 +257,7 @@ fn stage0_result_has_context() {
         spec_id: "SPEC-106".to_string(),
         divine_truth: DivineTruth {
             executive_summary: String::new(),
+            constitution_alignment: Default::default(),
             architectural_guardrails: String::new(),
             historical_context: String::new(),
             risks_and_questions: String::new(),
@@ -266,6 +270,8 @@ fn stage0_result_has_context() {
         tier2_used: false,
         latency_ms: 50,
         explain_scores: None,
+        constitution_conflicts: None,
+        constitution_aligned_ids: vec![],
     };
 
     assert!(result.has_context());
@@ -275,6 +281,7 @@ fn stage0_result_has_context() {
         spec_id: "SPEC-107".to_string(),
         divine_truth: DivineTruth {
             executive_summary: String::new(),
+            constitution_alignment: Default::default(),
             architectural_guardrails: String::new(),
             historical_context: String::new(),
             risks_and_questions: String::new(),
@@ -287,6 +294,8 @@ fn stage0_result_has_context() {
         tier2_used: false,
         latency_ms: 0,
         explain_scores: None,
+        constitution_conflicts: None,
+        constitution_aligned_ids: vec![],
     };
 
     assert!(!empty_result.has_context());

@@ -92,6 +92,22 @@ pub struct Stage0Result {
 
     /// Optional score breakdown (when explain=true)
     pub explain_scores: Option<ExplainScores>,
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // P91/SPEC-KIT-105: Constitution conflict detection fields
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// P91: Raw constitution conflict text from Divine Truth Section 2
+    ///
+    /// Populated when Tier-2 identifies conflicts between spec requirements
+    /// and project constitution (guardrails, principles). None if no conflicts.
+    pub constitution_conflicts: Option<String>,
+
+    /// P91: IDs of constitution items this spec aligns with (e.g., ["P1", "G2"])
+    ///
+    /// Extracted from Divine Truth Section 2 "Aligned with:" line.
+    /// Empty if no alignment analysis available (fallback mode).
+    pub constitution_aligned_ids: Vec<String>,
 }
 
 impl Stage0Result {
@@ -506,6 +522,27 @@ impl Stage0Engine {
             }
         }
 
+        // P91/SPEC-KIT-105: Extract constitution conflict information from Divine Truth
+        let constitution_conflicts = divine_truth
+            .constitution_alignment
+            .conflicts_raw
+            .as_ref()
+            .filter(|c| !c.trim().is_empty() && c.trim() != "None identified.")
+            .cloned();
+
+        // P91: Log warning if constitution conflicts detected
+        if let Some(ref conflicts) = constitution_conflicts {
+            tracing::warn!(
+                target: "stage0",
+                spec_id = spec_id,
+                conflicts = %conflicts,
+                "Constitution conflict detected in spec"
+            );
+        }
+
+        // P91: Extract aligned constitution IDs from Divine Truth Section 2
+        let constitution_aligned_ids = divine_truth.constitution_alignment.aligned_ids.clone();
+
         // 6. Build result
         let latency_ms = start.elapsed().as_millis() as u64;
 
@@ -515,6 +552,8 @@ impl Stage0Engine {
             cache_hit = cache_hit,
             tier2_used = tier2_used,
             latency_ms = latency_ms,
+            aligned_ids = ?constitution_aligned_ids,
+            has_conflicts = constitution_conflicts.is_some(),
             "Stage 0 run completed"
         );
 
@@ -527,6 +566,8 @@ impl Stage0Engine {
             tier2_used,
             latency_ms,
             explain_scores: dcc_result.explain_scores,
+            constitution_conflicts,
+            constitution_aligned_ids,
         })
     }
 }
@@ -1133,6 +1174,8 @@ mod tests {
                 tier2_used: true,
                 latency_ms: 100,
                 explain_scores: None,
+                constitution_conflicts: None,
+                constitution_aligned_ids: vec![],
             };
 
             let combined = result.combined_context_md();
@@ -1153,6 +1196,8 @@ mod tests {
                 tier2_used: false,
                 latency_ms: 0,
                 explain_scores: None,
+                constitution_conflicts: None,
+                constitution_aligned_ids: vec![],
             };
             assert!(with_memories.has_context());
 
@@ -1168,6 +1213,8 @@ mod tests {
                 tier2_used: false,
                 latency_ms: 0,
                 explain_scores: None,
+                constitution_conflicts: None,
+                constitution_aligned_ids: vec![],
             };
             assert!(with_divine_truth.has_context());
 
@@ -1180,6 +1227,8 @@ mod tests {
                 tier2_used: false,
                 latency_ms: 0,
                 explain_scores: None,
+                constitution_conflicts: None,
+                constitution_aligned_ids: vec![],
             };
             assert!(!empty.has_context());
         }
