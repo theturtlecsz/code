@@ -1419,5 +1419,225 @@ mod tests {
             // Warn mode: no warnings → return true
             // Skip mode: skip check → return true
         }
+
+        // ─────────────────────────────────────────────────────────────────────────────
+        // P93/SPEC-KIT-105: Vision Front Door Tests
+        // ─────────────────────────────────────────────────────────────────────────────
+
+        #[test]
+        fn test_vision_creates_goal_memories() {
+            let db = OverlayDb::connect_in_memory().expect("should connect");
+
+            // Simulate vision builder creating goals
+            db.upsert_constitution_memory(
+                "vision-goal-001",
+                overlay_db::ConstitutionType::Goal,
+                "High performance",
+            )
+            .expect("upsert goal 1");
+            db.upsert_constitution_memory(
+                "vision-goal-002",
+                overlay_db::ConstitutionType::Goal,
+                "Scalability",
+            )
+            .expect("upsert goal 2");
+
+            // Goals should have priority 8
+            let mem = db.get_memory("vision-goal-001").expect("get").expect("exists");
+            assert_eq!(mem.initial_priority, 8, "Goal should have priority 8");
+
+            let mem = db.get_memory("vision-goal-002").expect("get").expect("exists");
+            assert_eq!(mem.initial_priority, 8, "Goal should have priority 8");
+        }
+
+        #[test]
+        fn test_vision_creates_nongoal_memories() {
+            let db = OverlayDb::connect_in_memory().expect("should connect");
+
+            // Simulate vision builder creating non-goals
+            db.upsert_constitution_memory(
+                "vision-nongoal-001",
+                overlay_db::ConstitutionType::NonGoal,
+                "No UI components",
+            )
+            .expect("upsert non-goal");
+
+            // Non-goals should have priority 8
+            let mem = db.get_memory("vision-nongoal-001").expect("get").expect("exists");
+            assert_eq!(mem.initial_priority, 8, "NonGoal should have priority 8");
+        }
+
+        #[test]
+        fn test_vision_creates_principle_memories() {
+            let db = OverlayDb::connect_in_memory().expect("should connect");
+
+            // Simulate vision builder creating principles
+            db.upsert_constitution_memory(
+                "vision-principle-001",
+                overlay_db::ConstitutionType::Principle,
+                "Simplicity over features",
+            )
+            .expect("upsert principle 1");
+            db.upsert_constitution_memory(
+                "vision-principle-002",
+                overlay_db::ConstitutionType::Principle,
+                "Type safety",
+            )
+            .expect("upsert principle 2");
+
+            // Principles should have priority 9
+            let mem = db.get_memory("vision-principle-001").expect("get").expect("exists");
+            assert_eq!(mem.initial_priority, 9, "Principle should have priority 9");
+
+            let mem = db.get_memory("vision-principle-002").expect("get").expect("exists");
+            assert_eq!(mem.initial_priority, 9, "Principle should have priority 9");
+        }
+
+        #[test]
+        fn test_vision_increments_constitution_version() {
+            let db = OverlayDb::connect_in_memory().expect("should connect");
+
+            let initial_version = db.get_constitution_version().expect("get version");
+            assert_eq!(initial_version, 0, "Initial version should be 0");
+
+            // Add vision content and increment version
+            db.upsert_constitution_memory(
+                "vision-goal-001",
+                overlay_db::ConstitutionType::Goal,
+                "Test goal",
+            )
+            .expect("upsert");
+            let hash = "abc123";
+            let new_version = db
+                .increment_constitution_version(Some(hash))
+                .expect("increment");
+
+            assert_eq!(new_version, 1, "Version should be 1 after increment");
+
+            // Verify meta
+            let (version, stored_hash, _updated_at) = db.get_constitution_meta().expect("meta");
+            assert_eq!(version, 1);
+            assert_eq!(stored_hash, Some(hash.to_string()));
+        }
+
+        #[test]
+        fn test_vision_invalidates_tier2_cache() {
+            let db = OverlayDb::connect_in_memory().expect("should connect");
+
+            // First, create a constitution memory and a cache entry that depends on it
+            db.upsert_constitution_memory(
+                "vision-principle-001",
+                overlay_db::ConstitutionType::Principle,
+                "Test principle",
+            )
+            .expect("upsert");
+
+            // Create a cache entry
+            db.upsert_tier2_cache(
+                "test-hash",
+                "spec-hash",
+                "brief-hash",
+                "Test synthesis result",
+                Some("[]"),
+            )
+            .expect("cache");
+
+            // Record dependency
+            db.add_cache_dependency("test-hash", "vision-principle-001")
+                .expect("record dependency");
+
+            // Verify cache exists
+            let cached = db.get_tier2_cache("test-hash").expect("get");
+            assert!(cached.is_some(), "Cache should exist before invalidation");
+
+            // Now invalidate based on constitution change
+            let invalidated = db.invalidate_tier2_by_constitution().expect("invalidate");
+            assert!(invalidated > 0, "Should have invalidated at least one entry");
+
+            // Verify cache is gone
+            let cached_after = db.get_tier2_cache("test-hash").expect("get");
+            assert!(cached_after.is_none(), "Cache should be invalidated");
+        }
+
+        #[test]
+        fn test_vision_complete_constitution_passes_gate() {
+            let db = OverlayDb::connect_in_memory().expect("should connect");
+
+            // Create complete vision-based constitution
+            // Vision creates goals, non-goals, and principles but users should
+            // also add guardrails for a complete constitution
+
+            // Guardrails (priority 10) - Required for gate to pass
+            db.upsert_constitution_memory(
+                "vision-guardrail-001",
+                overlay_db::ConstitutionType::Guardrail,
+                "Never break backwards compatibility",
+            )
+            .expect("upsert guardrail");
+
+            // Goals (priority 8)
+            db.upsert_constitution_memory(
+                "vision-goal-001",
+                overlay_db::ConstitutionType::Goal,
+                "High performance",
+            )
+            .expect("upsert goal");
+
+            // Non-goals (priority 8)
+            db.upsert_constitution_memory(
+                "vision-nongoal-001",
+                overlay_db::ConstitutionType::NonGoal,
+                "No UI components",
+            )
+            .expect("upsert non-goal");
+
+            // Principles (priority 9) - Required for gate to pass
+            db.upsert_constitution_memory(
+                "vision-principle-001",
+                overlay_db::ConstitutionType::Principle,
+                "Simplicity over features",
+            )
+            .expect("upsert principle");
+
+            // Increment version
+            db.increment_constitution_version(Some("vision-hash"))
+                .expect("increment");
+
+            // Gate should pass (no warnings)
+            let warnings = check_constitution_readiness(&db);
+            assert!(
+                warnings.is_empty(),
+                "Vision-created constitution should pass gate: {:?}",
+                warnings
+            );
+        }
+
+        #[test]
+        fn test_vision_without_principles_warns() {
+            let db = OverlayDb::connect_in_memory().expect("should connect");
+
+            // Only goals and non-goals, no principles
+            db.upsert_constitution_memory(
+                "vision-goal-001",
+                overlay_db::ConstitutionType::Goal,
+                "High performance",
+            )
+            .expect("upsert goal");
+            db.upsert_constitution_memory(
+                "vision-nongoal-001",
+                overlay_db::ConstitutionType::NonGoal,
+                "No UI",
+            )
+            .expect("upsert non-goal");
+            db.increment_constitution_version(None).expect("increment");
+
+            // Gate should warn about missing principles
+            let warnings = check_constitution_readiness(&db);
+            assert!(!warnings.is_empty(), "Should warn without principles");
+            assert!(
+                warnings.iter().any(|w| w.contains("no principles")),
+                "Should specifically warn about missing principles"
+            );
+        }
     }
 }
