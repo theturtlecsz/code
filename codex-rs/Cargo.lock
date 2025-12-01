@@ -1561,6 +1561,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-stage0"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "dirs 6.0.0",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.16",
+ "tokio",
+ "tokio-test",
+ "toml 0.9.5",
+ "tracing",
+]
+
+[[package]]
 name = "codex-tui"
 version = "0.0.0"
 dependencies = [

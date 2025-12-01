@@ -24,6 +24,7 @@ members = [
     "protocol",
     "protocol-ts",
     "spec-kit",  # MAINT-10: New crate (foundation phase)
+    "stage0",  # SPEC-KIT-102: Stage 0 overlay engine
     "tui",
     "utils/readiness",
     "utils/string",  # SYNC-015: UTF-8 string utilities
@@ -64,6 +65,7 @@ codex-ollama = { path = "ollama" }
 codex-process-hardening = { path = "process-hardening" }
 codex-protocol = { path = "protocol" }
 codex-protocol-ts = { path = "protocol-ts" }
+codex-stage0 = { path = "stage0" }
 codex-tui = { path = "tui" }
 codex-utils-readiness = { path = "utils/readiness" }
 codex-utils-string = { path = "utils/string" }

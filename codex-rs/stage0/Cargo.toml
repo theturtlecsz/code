@@ -1,0 +1,39 @@
+[package]
+edition = "2024"
+name = "codex-stage0"
+version = { workspace = true }
+license = { workspace = true }
+description = "Stage 0 Overlay Engine for SPEC-KIT memory retrieval and Tier 2 synthesis"
+
+[lib]
+name = "codex_stage0"
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+# Core
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+dirs = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+
+# Database
+rusqlite = { workspace = true }
+
+# Async runtime (for future MCP/LLM calls)
+tokio = { workspace = true, features = ["rt-multi-thread", "sync"] }
+
+# Hashing for cache keys
+sha2 = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tokio-test = { workspace = true }
