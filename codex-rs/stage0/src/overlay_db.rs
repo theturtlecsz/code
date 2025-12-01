@@ -1084,6 +1084,92 @@ impl OverlayDb {
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
+    // P92/SPEC-KIT-105: Tier 2 Cache Invalidation
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// Invalidate Tier 2 cache entries that depend on constitution memories
+    ///
+    /// When the constitution changes (via sync or upsert), cached synthesis results
+    /// that were based on constitution content become stale. This method:
+    /// 1. Finds all constitution memory IDs (priority >= 8)
+    /// 2. Finds cache entries that depend on those memories
+    /// 3. Deletes the stale cache entries
+    ///
+    /// # Returns
+    /// Number of cache entries invalidated
+    pub fn invalidate_tier2_by_constitution(&self) -> Result<usize> {
+        // Find cache entries that depend on constitution memories
+        // Constitution memories are identified by priority >= 8
+        let count: i64 = self
+            .conn
+            .query_row(
+                r#"
+                SELECT COUNT(DISTINCT cmd.cache_hash)
+                FROM cache_memory_dependencies cmd
+                INNER JOIN overlay_memories om ON cmd.memory_id = om.memory_id
+                WHERE om.initial_priority >= 8
+                "#,
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| {
+                Stage0Error::overlay_db_with_source(
+                    "failed to count constitution-dependent cache entries",
+                    e,
+                )
+            })?;
+
+        if count == 0 {
+            tracing::debug!("No Tier 2 cache entries depend on constitution memories");
+            return Ok(0);
+        }
+
+        // Delete the cache entries that depend on constitution memories
+        let deleted = self
+            .conn
+            .execute(
+                r#"
+                DELETE FROM tier2_synthesis_cache
+                WHERE input_hash IN (
+                    SELECT DISTINCT cmd.cache_hash
+                    FROM cache_memory_dependencies cmd
+                    INNER JOIN overlay_memories om ON cmd.memory_id = om.memory_id
+                    WHERE om.initial_priority >= 8
+                )
+                "#,
+                [],
+            )
+            .map_err(|e| {
+                Stage0Error::overlay_db_with_source(
+                    "failed to delete constitution-dependent cache entries",
+                    e,
+                )
+            })?;
+
+        // Clean up the dependency records (cascade)
+        self.conn
+            .execute(
+                r#"
+                DELETE FROM cache_memory_dependencies
+                WHERE cache_hash NOT IN (
+                    SELECT input_hash FROM tier2_synthesis_cache
+                )
+                "#,
+                [],
+            )
+            .map_err(|e| {
+                Stage0Error::overlay_db_with_source("failed to clean dependency records", e)
+            })?;
+
+        tracing::info!(
+            invalidated = deleted,
+            "Invalidated Tier 2 cache entries due to constitution change"
+        );
+
+        Ok(deleted)
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
     // Metrics
     // ─────────────────────────────────────────────────────────────────────────────
 

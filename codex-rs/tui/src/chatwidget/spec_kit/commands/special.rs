@@ -493,16 +493,34 @@ fn execute_constitution_add(widget: &mut ChatWidget, args: &str) {
         return;
     }
 
+    // P92/SPEC-KIT-105: Invalidate Tier 2 cache when constitution memory added
+    let cache_invalidated = match db.invalidate_tier2_by_constitution() {
+        Ok(count) => count,
+        Err(e) => {
+            tracing::warn!("Failed to invalidate Tier 2 cache: {}", e);
+            0
+        }
+    };
+
+    let mut lines = vec![
+        ratatui::text::Line::from(format!("✅ Added {} to constitution", type_str)),
+        ratatui::text::Line::from(format!("   Content: {}", content)),
+    ];
+
+    if cache_invalidated > 0 {
+        lines.push(ratatui::text::Line::from(format!(
+            "   Cache: {} Tier 2 entries invalidated (P92)",
+            cache_invalidated
+        )));
+    }
+
+    lines.push(ratatui::text::Line::from(""));
+    lines.push(ratatui::text::Line::from(
+        "   Run /speckit.constitution sync to regenerate files.",
+    ));
+
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
-        vec![
-            ratatui::text::Line::from(format!(
-                "✅ Added {} to constitution",
-                type_str
-            )),
-            ratatui::text::Line::from(format!("   Content: {}", content)),
-            ratatui::text::Line::from(""),
-            ratatui::text::Line::from("   Run /speckit.constitution sync to regenerate files."),
-        ],
+        lines,
         crate::history_cell::HistoryCellType::Notice,
     ));
     widget.request_redraw();
@@ -625,19 +643,38 @@ fn execute_constitution_sync(widget: &mut ChatWidget) {
         tracing::warn!("Failed to write NL_CONSTITUTION.md: {}", e);
     }
 
+    // P92/SPEC-KIT-105: Invalidate Tier 2 cache when constitution changes
+    // Constitution-dependent cache entries become stale after sync
+    let cache_invalidated = match db.invalidate_tier2_by_constitution() {
+        Ok(count) => count,
+        Err(e) => {
+            tracing::warn!("Failed to invalidate Tier 2 cache: {}", e);
+            0
+        }
+    };
+
+    let mut lines = vec![
+        ratatui::text::Line::from("✅ Constitution synced"),
+        ratatui::text::Line::from(format!(
+            "   Guardrails: {} | Principles: {} | Goals: {}",
+            guardrails.len(),
+            principles.len(),
+            goals.len()
+        )),
+        ratatui::text::Line::from("   Files updated:"),
+        ratatui::text::Line::from("   • memory/constitution.md"),
+        ratatui::text::Line::from("   • memory/NL_CONSTITUTION.md"),
+    ];
+
+    if cache_invalidated > 0 {
+        lines.push(ratatui::text::Line::from(format!(
+            "   Cache: {} Tier 2 entries invalidated (P92)",
+            cache_invalidated
+        )));
+    }
+
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
-        vec![
-            ratatui::text::Line::from("✅ Constitution synced"),
-            ratatui::text::Line::from(format!(
-                "   Guardrails: {} | Principles: {} | Goals: {}",
-                guardrails.len(),
-                principles.len(),
-                goals.len()
-            )),
-            ratatui::text::Line::from("   Files updated:"),
-            ratatui::text::Line::from("   • memory/constitution.md"),
-            ratatui::text::Line::from("   • memory/NL_CONSTITUTION.md"),
-        ],
+        lines,
         crate::history_cell::HistoryCellType::Notice,
     ));
     widget.request_redraw();
