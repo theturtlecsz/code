@@ -6,11 +6,13 @@
 //! - Running Stage0Engine before the main pipeline
 //! - Creating adapters from MCP connections
 //! - Injecting Divine Truth + TASK_BRIEF into agent prompts
+//! - V2.5b: Hybrid retrieval using shared TfIdfBackend
 
 use crate::stage0_adapters::{
     create_stage0_adapters, has_local_memory_server, has_notebooklm_server,
     LocalMemoryMcpAdapter, LlmStubAdapter, NoopTier2Client, Tier2McpAdapter,
 };
+use crate::vector_state::VECTOR_STATE;
 use codex_core::mcp_connection_manager::McpConnectionManager;
 use codex_stage0::dcc::EnvCtx;
 use codex_stage0::Stage0Engine;
@@ -30,6 +32,8 @@ pub struct Stage0ExecutionResult {
     pub tier2_used: bool,
     /// Whether cache was hit
     pub cache_hit: bool,
+    /// V2.5b: Whether hybrid retrieval was used (TfIdfBackend available)
+    pub hybrid_retrieval_used: bool,
 }
 
 /// Configuration for Stage 0 execution
@@ -60,6 +64,7 @@ pub fn run_stage0_for_spec(
             duration_ms: 0,
             tier2_used: false,
             cache_hit: false,
+            hybrid_retrieval_used: false,
         };
     }
 
@@ -78,6 +83,7 @@ pub fn run_stage0_for_spec(
             duration_ms: start.elapsed().as_millis() as u64,
             tier2_used: false,
             cache_hit: false,
+            hybrid_retrieval_used: false,
         };
     };
 
@@ -89,6 +95,7 @@ pub fn run_stage0_for_spec(
             duration_ms: start.elapsed().as_millis() as u64,
             tier2_used: false,
             cache_hit: false,
+            hybrid_retrieval_used: false,
         };
     }
 
@@ -104,6 +111,7 @@ pub fn run_stage0_for_spec(
             duration_ms: start.elapsed().as_millis() as u64,
             tier2_used: false,
             cache_hit: false,
+            hybrid_retrieval_used: false,
         };
     };
 
@@ -117,7 +125,7 @@ pub fn run_stage0_for_spec(
     // Run Stage 0 engine
     // Note: Stage0Engine contains rusqlite::Connection which is not Send,
     // so we need to run everything in a dedicated single-threaded runtime
-    let stage0_result = run_stage0_blocking(
+    let (stage0_result, hybrid_used) = run_stage0_blocking(
         spec_id.to_string(),
         spec_content.to_string(),
         env,
@@ -135,10 +143,11 @@ pub fn run_stage0_for_spec(
             let cache_hit = result.cache_hit;
 
             tracing::info!(
-                "Stage 0 completed for {}: tier2={}, cache_hit={}, duration={}ms",
+                "Stage 0 completed for {}: tier2={}, cache_hit={}, hybrid={}, duration={}ms",
                 spec_id,
                 tier2_used,
                 cache_hit,
+                hybrid_used,
                 duration_ms
             );
 
@@ -148,6 +157,7 @@ pub fn run_stage0_for_spec(
                 duration_ms,
                 tier2_used,
                 cache_hit,
+                hybrid_retrieval_used: hybrid_used,
             }
         }
         Err(e) => {
@@ -158,6 +168,7 @@ pub fn run_stage0_for_spec(
                 duration_ms,
                 tier2_used: false,
                 cache_hit: false,
+                hybrid_retrieval_used: false,
             }
         }
     }
@@ -167,6 +178,9 @@ pub fn run_stage0_for_spec(
 ///
 /// Uses a dedicated single-threaded runtime because Stage0Engine
 /// contains rusqlite::Connection which is not Send/Sync.
+///
+/// V2.5b: Returns (result, hybrid_used) tuple. Uses shared VECTOR_STATE
+/// if available for hybrid retrieval.
 fn run_stage0_blocking(
     spec_id: String,
     spec_content: String,
@@ -175,56 +189,129 @@ fn run_stage0_blocking(
     llm: LlmStubAdapter,
     tier2: Option<Tier2McpAdapter>,
     explain: bool,
-) -> Result<codex_stage0::Stage0Result, String> {
+) -> (Result<codex_stage0::Stage0Result, String>, bool) {
     // Create a dedicated runtime for Stage0 (single-threaded to avoid Send requirements)
-    let rt = tokio::runtime::Builder::new_current_thread()
+    let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
-        .map_err(|e| format!("Failed to create Stage0 runtime: {e}"))?;
+    {
+        Ok(rt) => rt,
+        Err(e) => return (Err(format!("Failed to create Stage0 runtime: {e}")), false),
+    };
 
     rt.block_on(async {
         // Create Stage0Engine inside the async block
-        let engine =
-            Stage0Engine::new().map_err(|e| format!("Failed to create Stage0Engine: {e}"))?;
+        let engine = match Stage0Engine::new() {
+            Ok(e) => e,
+            Err(e) => return (Err(format!("Failed to create Stage0Engine: {e}")), false),
+        };
 
-        // V2.5: No vector backend for now - TF-IDF index would need to be populated
-        // separately via /stage0.index command. Pass None to disable hybrid retrieval.
-        let noop_vector: Option<&codex_stage0::NoopVectorBackend> = None;
+        // V2.5b: Check if shared TfIdfBackend is available
+        let backend_handle = VECTOR_STATE.backend_handle();
+        let backend_lock = backend_handle.read().await;
 
-        // Run Stage 0 with appropriate Tier2 client
-        if let Some(tier2_client) = tier2 {
-            // Use real NotebookLM adapter
-            engine
-                .run_stage0(
-                    &local_memory,
-                    &llm,
-                    noop_vector,
-                    &tier2_client,
-                    &spec_id,
-                    &spec_content,
-                    &env,
-                    explain,
-                )
-                .await
-                .map_err(|e| format!("Stage 0 execution failed: {e}"))
+        let result = if backend_lock.is_some() {
+            // Use shared TfIdfBackend for hybrid retrieval
+            tracing::debug!("Using shared TfIdfBackend for hybrid retrieval");
+            drop(backend_lock);
+
+            // Re-acquire lock for the actual operation
+            let backend_handle = VECTOR_STATE.backend_handle();
+            let backend_lock = backend_handle.read().await;
+            let backend_ref = backend_lock.as_ref();
+
+            if let Some(backend) = backend_ref {
+                let result = if let Some(tier2_client) = tier2 {
+                    engine
+                        .run_stage0(
+                            &local_memory,
+                            &llm,
+                            Some(backend),
+                            &tier2_client,
+                            &spec_id,
+                            &spec_content,
+                            &env,
+                            explain,
+                        )
+                        .await
+                        .map_err(|e| format!("Stage 0 execution failed: {e}"))
+                } else {
+                    let noop_tier2 = NoopTier2Client::new();
+                    engine
+                        .run_stage0(
+                            &local_memory,
+                            &llm,
+                            Some(backend),
+                            &noop_tier2,
+                            &spec_id,
+                            &spec_content,
+                            &env,
+                            explain,
+                        )
+                        .await
+                        .map_err(|e| format!("Stage 0 execution failed: {e}"))
+                };
+                (result, true)
+            } else {
+                // Backend disappeared, fall back to noop
+                run_without_vector(&engine, &local_memory, &llm, tier2, &spec_id, &spec_content, &env, explain).await
+            }
         } else {
-            // Use noop Tier2 client (will trigger fallback to Tier1-only mode)
-            let noop_tier2 = NoopTier2Client::new();
-            engine
-                .run_stage0(
-                    &local_memory,
-                    &llm,
-                    noop_vector,
-                    &noop_tier2,
-                    &spec_id,
-                    &spec_content,
-                    &env,
-                    explain,
-                )
-                .await
-                .map_err(|e| format!("Stage 0 execution failed: {e}"))
-        }
+            // No backend available, run without hybrid retrieval
+            drop(backend_lock);
+            tracing::debug!("No TfIdfBackend available, running without hybrid retrieval");
+            run_without_vector(&engine, &local_memory, &llm, tier2, &spec_id, &spec_content, &env, explain).await
+        };
+
+        result
     })
+}
+
+/// Helper to run Stage0 without vector backend
+async fn run_without_vector(
+    engine: &Stage0Engine,
+    local_memory: &LocalMemoryMcpAdapter,
+    llm: &LlmStubAdapter,
+    tier2: Option<Tier2McpAdapter>,
+    spec_id: &str,
+    spec_content: &str,
+    env: &EnvCtx,
+    explain: bool,
+) -> (Result<codex_stage0::Stage0Result, String>, bool) {
+    let noop_vector: Option<&codex_stage0::NoopVectorBackend> = None;
+
+    let result = if let Some(tier2_client) = tier2 {
+        engine
+            .run_stage0(
+                local_memory,
+                llm,
+                noop_vector,
+                &tier2_client,
+                spec_id,
+                spec_content,
+                env,
+                explain,
+            )
+            .await
+            .map_err(|e| format!("Stage 0 execution failed: {e}"))
+    } else {
+        let noop_tier2 = NoopTier2Client::new();
+        engine
+            .run_stage0(
+                local_memory,
+                llm,
+                noop_vector,
+                &noop_tier2,
+                spec_id,
+                spec_content,
+                env,
+                explain,
+            )
+            .await
+            .map_err(|e| format!("Stage 0 execution failed: {e}"))
+    };
+
+    (result, false)
 }
 
 /// Get current git branch

@@ -542,8 +542,8 @@ impl SpecKitCommand for SpecKitAceStatusCommand {
 }
 
 /// Command: /stage0.index
-/// Index local-memory contents into the in-memory TF-IDF vector backend
-/// SPEC-KIT-102 V2: Vector backend indexing command
+/// Index local-memory contents into the shared TF-IDF vector backend
+/// SPEC-KIT-102 V2.5b: Vector backend indexing command with shared state
 pub struct Stage0IndexCommand;
 
 impl SpecKitCommand for Stage0IndexCommand {
@@ -561,6 +561,7 @@ impl SpecKitCommand for Stage0IndexCommand {
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
         use crate::stage0_adapters::{has_local_memory_server, LocalMemoryMcpAdapter};
+        use crate::vector_state::{IndexingStats, VECTOR_STATE};
         use codex_stage0::{
             DocumentKind, Iqo, LocalMemoryClient, LocalMemorySearchParams,
             TfIdfBackend, VectorBackend, VectorDocument,
@@ -649,12 +650,22 @@ impl SpecKitCommand for Stage0IndexCommand {
 
             let doc_count = docs.len();
 
-            // Create backend and index
+            // Create backend and index - V2.5b: Store in shared state
             let backend = TfIdfBackend::new();
             let stats = backend
                 .index_documents(docs)
                 .await
                 .map_err(|e| format!("Indexing failed: {}", e))?;
+
+            // Store in shared VECTOR_STATE for use by run_stage0_blocking
+            let indexing_stats = IndexingStats {
+                doc_count,
+                unique_tokens: stats.unique_tokens,
+                total_tokens: stats.total_tokens,
+                duration_ms: stats.duration_ms,
+                indexed_at: chrono::Utc::now(),
+            };
+            VECTOR_STATE.set_backend(backend, indexing_stats).await;
 
             Ok((
                 doc_count,
@@ -695,7 +706,7 @@ impl SpecKitCommand for Stage0IndexCommand {
                             )),
                             ratatui::text::Line::from(""),
                             ratatui::text::Line::from(
-                                "   Note: Index is ephemeral (in-memory). Run /stage0.eval-backend to evaluate.",
+                                "   Backend stored in shared state. Run /speckit.auto to use hybrid retrieval.",
                             ),
                         ],
                         crate::history_cell::HistoryCellType::Notice,
@@ -719,8 +730,8 @@ impl SpecKitCommand for Stage0IndexCommand {
 }
 
 /// Command: /stage0.eval-backend
-/// Run evaluation harness against vector backend with built-in test cases
-/// SPEC-KIT-102 V2: Vector backend evaluation command
+/// Run evaluation harness comparing baseline vs hybrid retrieval
+/// SPEC-KIT-102 V2.5b: Baseline vs Hybrid DCC comparison
 pub struct Stage0EvalBackendCommand;
 
 impl SpecKitCommand for Stage0EvalBackendCommand {
@@ -733,10 +744,11 @@ impl SpecKitCommand for Stage0EvalBackendCommand {
     }
 
     fn description(&self) -> &'static str {
-        "run evaluation harness against Stage0 vector backend"
+        "compare baseline vs hybrid retrieval using eval cases"
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
+        use crate::vector_state::VECTOR_STATE;
         use codex_stage0::{
             built_in_eval_cases, built_in_test_documents, evaluate_backend,
             TfIdfBackend, VectorBackend, VectorFilters,
@@ -745,12 +757,8 @@ impl SpecKitCommand for Stage0EvalBackendCommand {
 
         // Parse optional arguments
         let mut top_k = 10usize;
-        let mut use_json_file = false;
-        let mut json_path = widget
-            .config
-            .cwd
-            .join("evidence")
-            .join("vector_eval_cases.json");
+        let mut output_json = false;
+        let mut cases_file: Option<PathBuf> = None;
 
         for arg in args.split_whitespace() {
             if arg.starts_with("--top-k=") || arg.starts_with("--k=") {
@@ -762,22 +770,20 @@ impl SpecKitCommand for Stage0EvalBackendCommand {
                     top_k = n;
                 }
             } else if arg == "--json" {
-                use_json_file = true;
-            } else if arg.starts_with("--json=") {
-                use_json_file = true;
-                json_path = PathBuf::from(arg.trim_start_matches("--json="));
+                output_json = true;
+            } else if arg.starts_with("--cases=") {
+                cases_file = Some(PathBuf::from(arg.trim_start_matches("--cases=")));
             }
         }
 
         // Show starting message
         widget.history_push(crate::history_cell::PlainHistoryCell::new(
             vec![
-                ratatui::text::Line::from("📊 Stage0 Vector Backend Evaluation"),
+                ratatui::text::Line::from("📊 Stage0 Baseline vs Hybrid Evaluation"),
                 ratatui::text::Line::from(format!("   Top K: {}", top_k)),
-                ratatui::text::Line::from(if use_json_file {
-                    format!("   Cases: {}", json_path.display())
-                } else {
-                    "   Cases: Built-in test cases".to_string()
+                ratatui::text::Line::from(match &cases_file {
+                    Some(p) => format!("   Cases: {}", p.display()),
+                    None => "   Cases: Built-in test cases".to_string(),
                 }),
                 ratatui::text::Line::from("   Running evaluation..."),
             ],
@@ -788,80 +794,154 @@ impl SpecKitCommand for Stage0EvalBackendCommand {
         // Run evaluation in async context
         let result = super::super::consensus_coordinator::block_on_sync(|| async move {
             // Load eval cases
-            let cases = if use_json_file {
-                codex_stage0::load_eval_cases_from_file(&json_path)
-                    .map_err(|e| format!("Failed to load eval cases: {}", e))?
-            } else {
-                built_in_eval_cases()
+            let cases = match cases_file {
+                Some(ref path) => codex_stage0::load_eval_cases_from_file(path)
+                    .map_err(|e| format!("Failed to load eval cases: {}", e))?,
+                None => built_in_eval_cases(),
             };
 
             if cases.is_empty() {
                 return Err("No eval cases to run".to_string());
             }
 
-            // Create backend and index test documents
-            let backend = TfIdfBackend::new();
+            // Index test documents in a fresh backend (for baseline)
+            let baseline_backend = TfIdfBackend::new();
             let docs = built_in_test_documents();
-            backend
+            baseline_backend
                 .index_documents(docs)
                 .await
                 .map_err(|e| format!("Indexing failed: {}", e))?;
 
-            // Run evaluation
-            let suite_result = evaluate_backend(&backend, &cases, &VectorFilters::new(), top_k)
-                .await
-                .map_err(|e| format!("Evaluation failed: {}", e))?;
+            // Run baseline evaluation
+            let baseline_result =
+                evaluate_backend(&baseline_backend, &cases, &VectorFilters::new(), top_k)
+                    .await
+                    .map_err(|e| format!("Baseline evaluation failed: {}", e))?;
 
-            Ok(suite_result)
+            // Check for shared backend (hybrid)
+            let backend_handle = VECTOR_STATE.backend_handle();
+            let backend_lock = backend_handle.read().await;
+
+            let hybrid_result = if let Some(ref hybrid_backend) = *backend_lock {
+                // Run hybrid evaluation with shared backend
+                let result =
+                    evaluate_backend(hybrid_backend, &cases, &VectorFilters::new(), top_k)
+                        .await
+                        .map_err(|e| format!("Hybrid evaluation failed: {}", e))?;
+                Some(result)
+            } else {
+                None
+            };
+
+            Ok((baseline_result, hybrid_result))
         });
 
         match result {
-            Ok(suite_result) => {
-                let mut lines = vec![
-                    ratatui::text::Line::from(""),
-                    ratatui::text::Line::from(format!(
-                        "{:<30} {:>8} {:>8} {:>8}",
-                        "Case", "P@k", "R@k", "RR"
-                    )),
-                    ratatui::text::Line::from("-".repeat(60)),
-                ];
+            Ok((baseline, hybrid_opt)) => {
+                if output_json {
+                    // JSON output for CI automation
+                    let json_output = serde_json::json!({
+                        "top_k": top_k,
+                        "baseline": {
+                            "mean_precision": baseline.mean_precision,
+                            "mean_recall": baseline.mean_recall,
+                            "mrr": baseline.mrr,
+                            "cases_passed": baseline.cases_passed,
+                            "total_cases": baseline.total_cases,
+                            "pass_rate": baseline.pass_rate(),
+                        },
+                        "hybrid": hybrid_opt.as_ref().map(|h| serde_json::json!({
+                            "mean_precision": h.mean_precision,
+                            "mean_recall": h.mean_recall,
+                            "mrr": h.mrr,
+                            "cases_passed": h.cases_passed,
+                            "total_cases": h.total_cases,
+                            "pass_rate": h.pass_rate(),
+                        })),
+                        "improvement": hybrid_opt.as_ref().map(|h| serde_json::json!({
+                            "precision_delta": h.mean_precision - baseline.mean_precision,
+                            "recall_delta": h.mean_recall - baseline.mean_recall,
+                            "mrr_delta": h.mrr - baseline.mrr,
+                        })),
+                    });
 
-                for result in &suite_result.results {
-                    let pass_marker = if result.passes(0.5, 0.5) {
-                        "✓"
-                    } else {
-                        "✗"
+                    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                        vec![
+                            ratatui::text::Line::from(""),
+                            ratatui::text::Line::from(
+                                serde_json::to_string_pretty(&json_output).unwrap_or_default(),
+                            ),
+                        ],
+                        crate::history_cell::HistoryCellType::Notice,
+                    ));
+                } else {
+                    // Text table output
+                    let mut lines = vec![
+                        ratatui::text::Line::from(""),
+                        ratatui::text::Line::from(format!(
+                            "{:<20} {:>12} {:>12}",
+                            "Metric",
+                            "Baseline",
+                            hybrid_opt.as_ref().map(|_| "Hybrid").unwrap_or("N/A")
+                        )),
+                        ratatui::text::Line::from("-".repeat(48)),
+                    ];
+
+                    let format_delta = |baseline_val: f64, hybrid_val: Option<f64>| -> String {
+                        match hybrid_val {
+                            Some(h) => {
+                                let delta = h - baseline_val;
+                                let sign = if delta >= 0.0 { "+" } else { "" };
+                                format!("{:.2} ({}{:.2})", h, sign, delta)
+                            }
+                            None => "N/A".to_string(),
+                        }
                     };
+
                     lines.push(ratatui::text::Line::from(format!(
-                        "{} {:<28} {:>8.2} {:>8.2} {:>8.2}",
-                        pass_marker,
-                        truncate_str(&result.case_name, 28),
-                        result.precision_at_k,
-                        result.recall_at_k,
-                        result.reciprocal_rank,
+                        "{:<20} {:>12.2} {:>12}",
+                        "Mean P@k",
+                        baseline.mean_precision,
+                        format_delta(baseline.mean_precision, hybrid_opt.as_ref().map(|h| h.mean_precision))
                     )));
+
+                    lines.push(ratatui::text::Line::from(format!(
+                        "{:<20} {:>12.2} {:>12}",
+                        "Mean R@k",
+                        baseline.mean_recall,
+                        format_delta(baseline.mean_recall, hybrid_opt.as_ref().map(|h| h.mean_recall))
+                    )));
+
+                    lines.push(ratatui::text::Line::from(format!(
+                        "{:<20} {:>12.2} {:>12}",
+                        "MRR",
+                        baseline.mrr,
+                        format_delta(baseline.mrr, hybrid_opt.as_ref().map(|h| h.mrr))
+                    )));
+
+                    lines.push(ratatui::text::Line::from(format!(
+                        "{:<20} {:>12} {:>12}",
+                        "Pass Rate",
+                        format!("{:.1}%", baseline.pass_rate() * 100.0),
+                        hybrid_opt
+                            .as_ref()
+                            .map(|h| format!("{:.1}%", h.pass_rate() * 100.0))
+                            .unwrap_or_else(|| "N/A".to_string())
+                    )));
+
+                    lines.push(ratatui::text::Line::from("-".repeat(48)));
+
+                    if hybrid_opt.is_none() {
+                        lines.push(ratatui::text::Line::from(
+                            "⚠ No hybrid backend. Run /stage0.index first.",
+                        ));
+                    }
+
+                    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                        lines,
+                        crate::history_cell::HistoryCellType::Notice,
+                    ));
                 }
-
-                lines.push(ratatui::text::Line::from("-".repeat(60)));
-                lines.push(ratatui::text::Line::from(format!(
-                    "Summary: {}/{} passed ({:.1}%)",
-                    suite_result.cases_passed,
-                    suite_result.total_cases,
-                    suite_result.pass_rate() * 100.0
-                )));
-                lines.push(ratatui::text::Line::from(format!(
-                    "Mean P@{}: {:.2}, Mean R@{}: {:.2}, MRR: {:.2}",
-                    top_k,
-                    suite_result.mean_precision,
-                    top_k,
-                    suite_result.mean_recall,
-                    suite_result.mrr
-                )));
-
-                widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                    lines,
-                    crate::history_cell::HistoryCellType::Notice,
-                ));
             }
             Err(e) => {
                 widget.history_push(crate::history_cell::new_error_event(format!(
@@ -879,10 +959,3 @@ impl SpecKitCommand for Stage0EvalBackendCommand {
     }
 }
 
-fn truncate_str(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
-        s.to_string()
-    } else {
-        format!("{}...", &s[..max_len.saturating_sub(3)])
-    }
-}

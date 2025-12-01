@@ -37,6 +37,10 @@ pub struct Stage0Config {
     /// Tier 2 (NotebookLM) settings
     #[serde(default)]
     pub tier2: Tier2Config,
+
+    /// Vector index settings (V2.5b)
+    #[serde(default)]
+    pub vector_index: VectorIndexConfig,
 }
 
 fn default_enabled() -> bool {
@@ -310,6 +314,34 @@ impl Default for Tier2Config {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// V2.5b: Vector Index Configuration
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Vector index configuration
+///
+/// Controls how many memories are indexed into the TF-IDF vector backend
+/// for hybrid retrieval.
+#[derive(Debug, Deserialize, Clone)]
+pub struct VectorIndexConfig {
+    /// Maximum memories to index (0 = no limit, index all)
+    /// When set, indexes top N by dynamic_score DESC
+    #[serde(default = "default_vector_max_memories")]
+    pub max_memories_to_index: usize,
+}
+
+fn default_vector_max_memories() -> usize {
+    0 // No limit by default - index all
+}
+
+impl Default for VectorIndexConfig {
+    fn default() -> Self {
+        Self {
+            max_memories_to_index: default_vector_max_memories(),
+        }
+    }
+}
+
 impl Default for Stage0Config {
     fn default() -> Self {
         Self {
@@ -320,6 +352,7 @@ impl Default for Stage0Config {
             scoring: ScoringConfig::default(),
             context_compiler: ContextCompilerConfig::default(),
             tier2: Tier2Config::default(),
+            vector_index: VectorIndexConfig::default(),
         }
     }
 }

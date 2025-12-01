@@ -24,7 +24,7 @@ pub mod tfidf;
 pub mod tier2;
 pub mod vector;
 
-pub use config::Stage0Config;
+pub use config::{Stage0Config, VectorIndexConfig};
 pub use errors::{ErrorCategory, Result, Stage0Error};
 pub use guardians::{
     GuardedMemory, LlmClient, MemoryDraft, MemoryKind, apply_metadata_guardian,

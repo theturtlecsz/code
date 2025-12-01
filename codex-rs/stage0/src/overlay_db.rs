@@ -341,6 +341,45 @@ impl OverlayDb {
         Ok(memories)
     }
 
+    /// Get memory IDs ordered by dynamic score for vector indexing
+    ///
+    /// V2.5b: Used by `/stage0.index` to determine which memories to index.
+    /// Returns memory IDs ordered by dynamic_score DESC.
+    ///
+    /// # Arguments
+    /// * `max_memories` - Maximum number to return (0 = no limit)
+    pub fn get_memory_ids_for_indexing(&self, max_memories: usize) -> Result<Vec<String>> {
+        let limit = if max_memories == 0 {
+            i64::MAX
+        } else {
+            max_memories as i64
+        };
+
+        let mut stmt = self
+            .conn
+            .prepare(
+                r#"
+                SELECT memory_id
+                FROM overlay_memories
+                ORDER BY dynamic_score DESC NULLS LAST, initial_priority DESC
+                LIMIT ?1
+                "#,
+            )
+            .map_err(|e| Stage0Error::overlay_db_with_source("failed to prepare query", e))?;
+
+        let rows = stmt
+            .query_map(params![limit], |row| row.get(0))
+            .map_err(|e| Stage0Error::overlay_db_with_source("failed to query memory ids", e))?;
+
+        let mut ids = Vec::new();
+        for row in rows {
+            ids.push(row.map_err(|e| {
+                Stage0Error::overlay_db_with_source("failed to read memory id", e)
+            })?);
+        }
+        Ok(ids)
+    }
+
     // ─────────────────────────────────────────────────────────────────────────────
     // tier2_synthesis_cache CRUD
     // ─────────────────────────────────────────────────────────────────────────────

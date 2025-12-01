@@ -160,6 +160,7 @@ mod slash_command;
 mod spec_prompts;
 pub mod spec_status;
 pub mod stage0_adapters;
+pub mod vector_state; // SPEC-KIT-102 V2.5b: Shared TfIdfBackend for hybrid retrieval
 mod streaming;
 pub mod templates;
 

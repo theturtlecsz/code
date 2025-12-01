@@ -1,50 +1,32 @@
 [
   {
-    "name": "stage0-architecture",
-    "query": "Stage 0 overlay engine architecture design decisions",
-    "expected_ids": ["mem-stage0-arch-001", "mem-stage0-overlay-002"],
-    "description": "Tests retrieval of Stage 0 architecture memories"
-  },
-  {
-    "name": "tfidf-implementation",
-    "query": "TF-IDF vector search implementation BM25 scoring",
-    "expected_ids": ["mem-vector-tfidf-001", "mem-bm25-scoring-002"],
-    "description": "Tests retrieval of TF-IDF implementation details"
-  },
-  {
-    "name": "bug-pattern-resize",
-    "query": "resize window crash segfault memory corruption",
-    "expected_ids": ["mem-bug-resize-001", "mem-bug-segfault-002"],
-    "description": "Tests retrieval of bug pattern memories"
-  },
-  {
-    "name": "spec-kit-notebooklm",
-    "query": "SPEC-KIT-102 NotebookLM integration Tier 2 synthesis",
+    "name": "spec-kit-102-notebooklm",
+    "query": "NotebookLM integration Stage0 Tier2 synthesis divine truth",
     "expected_ids": ["mem-speckit-102-001", "mem-tier2-notebook-002"],
-    "description": "Tests SPEC-KIT-102 related memories"
+    "description": "Tests retrieval of SPEC-KIT-102 NotebookLM integration memories"
   },
   {
-    "name": "rust-error-handling",
-    "query": "Rust error handling Result thiserror anyhow",
-    "expected_ids": ["mem-rust-errors-001", "mem-thiserror-002"],
-    "description": "Tests Rust-specific pattern memories"
+    "name": "vector-backend-tfidf",
+    "query": "TF-IDF vector backend BM25 scoring hybrid retrieval",
+    "expected_ids": ["mem-vector-tfidf-001", "mem-bm25-scoring-002"],
+    "description": "Tests retrieval of vector backend implementation details"
   },
   {
-    "name": "dcc-context-compilation",
-    "query": "Dynamic Context Compiler DCC memory retrieval scoring",
-    "expected_ids": ["mem-dcc-001", "mem-scoring-002"],
-    "description": "Tests DCC-related memory retrieval"
+    "name": "stage0-dcc-architecture",
+    "query": "Stage0 DCC dynamic context compiler overlay database",
+    "expected_ids": ["mem-stage0-arch-001", "mem-stage0-overlay-002"],
+    "description": "Tests retrieval of Stage0 architecture and DCC memories"
   },
   {
-    "name": "guardian-validation",
-    "query": "guardian validation metadata template passthrough",
-    "expected_ids": ["mem-guardian-001", "mem-validation-002"],
-    "description": "Tests guardian system memories"
+    "name": "memory-indexing-config",
+    "query": "VectorIndexConfig max_memories_to_index memory ranking",
+    "expected_ids": ["mem-vector-config-001"],
+    "description": "Tests retrieval of vector indexing configuration memories"
   },
   {
-    "name": "async-concurrency",
-    "query": "async await tokio concurrency runtime",
-    "expected_ids": ["mem-async-001", "mem-tokio-002"],
-    "description": "Tests async/concurrency pattern memories"
+    "name": "eval-harness-metrics",
+    "query": "P@k R@k MRR evaluation harness precision recall",
+    "expected_ids": ["mem-eval-metrics-001", "mem-eval-harness-002"],
+    "description": "Tests retrieval of evaluation harness and metrics memories"
   }
 ]
