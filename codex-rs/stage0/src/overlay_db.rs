@@ -425,6 +425,93 @@ impl OverlayDb {
         Ok(())
     }
 
+    /// Get tier2 cache entry with TTL check
+    ///
+    /// Returns None if:
+    /// - Entry doesn't exist
+    /// - Entry is older than TTL hours
+    ///
+    /// Automatically records a cache hit if entry is valid.
+    pub fn get_tier2_cache_with_ttl(
+        &self,
+        input_hash: &str,
+        ttl_hours: u64,
+        now: DateTime<Utc>,
+    ) -> Result<Option<Tier2CacheEntry>> {
+        let entry = self.get_tier2_cache(input_hash)?;
+
+        if let Some(ref e) = entry {
+            let cutoff = now - chrono::Duration::hours(ttl_hours as i64);
+            if e.created_at < cutoff {
+                // Entry is stale, treat as cache miss
+                tracing::debug!(
+                    input_hash = input_hash,
+                    created_at = %e.created_at,
+                    cutoff = %cutoff,
+                    "Tier2 cache entry stale (TTL expired)"
+                );
+                return Ok(None);
+            }
+
+            // Valid entry - record hit
+            self.record_tier2_cache_hit(input_hash)?;
+        }
+
+        Ok(entry)
+    }
+
+    /// Store tier2 cache entry with suggested links
+    ///
+    /// Links are serialized to JSON for storage.
+    pub fn store_tier2_cache_with_links(
+        &self,
+        input_hash: &str,
+        spec_hash: &str,
+        brief_hash: &str,
+        synthesis_result: &str,
+        links: &[crate::tier2::CausalLinkSuggestion],
+    ) -> Result<()> {
+        let links_json = if links.is_empty() {
+            None
+        } else {
+            Some(
+                serde_json::to_string(links)
+                    .map_err(|e| Stage0Error::overlay_db_with_source("failed to serialize links", e))?,
+            )
+        };
+
+        self.upsert_tier2_cache(
+            input_hash,
+            spec_hash,
+            brief_hash,
+            synthesis_result,
+            links_json.as_deref(),
+        )
+    }
+
+    /// Store cache dependencies for multiple memories
+    pub fn store_cache_dependencies(&self, cache_hash: &str, memory_ids: &[String]) -> Result<()> {
+        for memory_id in memory_ids {
+            self.add_cache_dependency(cache_hash, memory_id)?;
+        }
+        Ok(())
+    }
+
+    /// Parse suggested links from cached JSON
+    pub fn parse_cached_links(
+        json_str: Option<&str>,
+    ) -> Vec<crate::tier2::CausalLinkSuggestion> {
+        match json_str {
+            Some(s) if !s.is_empty() => {
+                serde_json::from_str(s).unwrap_or_else(|e| {
+                    tracing::warn!(error = %e, "Failed to parse cached links JSON");
+                    vec![]
+                })
+            }
+            _ => vec![],
+        }
+    }
+
     /// Delete stale cache entries older than TTL hours
     pub fn prune_tier2_cache(&self, ttl_hours: u64) -> Result<usize> {
         let cutoff = Utc::now() - chrono::Duration::hours(ttl_hours as i64);

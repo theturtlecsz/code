@@ -180,6 +180,63 @@ impl Stage0Error {
             source: Some(Box::new(source)),
         }
     }
+
+    /// Create a Tier2 error
+    pub fn tier2(message: impl Into<String>) -> Self {
+        Self::Tier2 {
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    /// Create a Tier2 error with source
+    pub fn tier2_with_source(
+        message: impl Into<String>,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::Tier2 {
+            message: message.into(),
+            source: Some(Box::new(source)),
+        }
+    }
+
+    /// Create a local-memory error
+    pub fn local_memory(message: impl Into<String>) -> Self {
+        Self::LocalMemory {
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    /// Create a local-memory error with source
+    pub fn local_memory_with_source(
+        message: impl Into<String>,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::LocalMemory {
+            message: message.into(),
+            source: Some(Box::new(source)),
+        }
+    }
+
+    /// Create a DCC error
+    pub fn dcc(message: impl Into<String>) -> Self {
+        Self::Dcc {
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    /// Create a DCC error with source
+    pub fn dcc_with_source(
+        message: impl Into<String>,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::Dcc {
+            message: message.into(),
+            source: Some(Box::new(source)),
+        }
+    }
 }
 
 impl Clone for Stage0Error {

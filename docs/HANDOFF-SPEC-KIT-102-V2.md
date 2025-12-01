@@ -1,7 +1,7 @@
 # SPEC-KIT-102 V2 Handoff: Stage 0 Overlay Engine
 
-**Status**: Implementation In Progress | V1.1–V1.4 Complete, V1.5 Next
-**Last Session**: P76 (2025-12-01)
+**Status**: V1 Core Complete | Integration Next
+**Last Session**: P77 (2025-12-01)
 **Architecture**: Rust Overlay Engine (treats local-memory as black-box backend)
 
 ---
@@ -16,269 +16,169 @@ SPEC-KIT-102 V2 defines a **Stage 0 Overlay Engine** in Rust that:
 
 **Key Architectural Pivot**: V1 assumed we could modify local-memory's schema. V2 recognizes local-memory is closed-source and builds an overlay layer instead.
 
-**Session P73 Progress**:
-- Designed `/speckit.auto` integration contract
-- Created IQO and Tier 2 prompt specifications
-- Identified remaining spec gaps (TASK_BRIEF template, error taxonomy, metrics)
+---
 
-**Session P74 Progress**:
-- Completed all spec gaps: TASK_BRIEF template, error taxonomy, metrics
-- All 12 spec documents now complete
-- Research phase finished; ready for V1.1 implementation
+## Session Progress
 
-**Session P75 Progress**:
-- **V1.1 Complete**: Created `codex-rs/stage0/` crate with overlay DB + config
-- **V1.2 Complete**: Implemented MetadataGuardian + TemplateGuardian + LlmClient trait
-- 26 tests passing, clippy clean
+| Session | Progress |
+|---------|----------|
+| P73 | Designed `/speckit.auto` integration, IQO/Tier2 prompts, identified spec gaps |
+| P74 | Completed all spec docs (12 total), research phase finished |
+| P75 | **V1.1 + V1.2**: Crate setup, overlay DB, guardians (26 tests) |
+| P76 | **V1.3 + V1.4**: Scoring + DCC (53 tests) |
+| P77 | **V1.5**: Tier 2 Orchestration (74 tests) ✅ |
 
-**Session P76 Progress**:
-- **V1.3 Complete**: Implemented Dynamic Scoring
-  - Created `scoring.rs` with formula from spec (usage/recency/priority/novelty)
-  - `ScoringInput`, `ScoringComponents`, `calculate_dynamic_score()`
-  - Extended `OverlayDb` with `record_memory_usage()`, `record_batch_usage()`, `recalculate_score()`
-  - Added `Stage0Engine::record_selected_memories_usage()` for DCC integration
-- **V1.4 Complete**: Implemented DCC (Dynamic Context Compiler)
-  - Created `dcc.rs` with full pipeline: IQO → search → score combination → MMR → TASK_BRIEF
-  - `Iqo`, `MemoryCandidate`, `ExplainScore`, `CompileContextResult` types
-  - `LocalMemoryClient` trait for local-memory abstraction
-  - Extended `LlmClient` trait with `generate_iqo()` method
-  - `build_iqo()` with LLM or heuristic fallback
-  - `compile_context()` pipeline with MMR diversity reranking
-  - `assemble_task_brief()` following STAGE0_TASK_BRIEF_TEMPLATE.md
-  - `Stage0Engine::compile_context()` wrapper
-  - 53 tests passing, clippy clean
-- Ready for V1.5 Tier 2 Orchestration
+---
+
+## V1.5 Completion Summary (P77)
+
+### New Files
+- `codex-rs/stage0/src/tier2.rs` - Tier2Client trait, DivineTruth, CausalLinkSuggestion, prompt builder, parser
+
+### Modified Files
+- `lib.rs` - Stage0Result, run_stage0() entry point
+- `overlay_db.rs` - TTL-aware cache methods, batch dependency storage
+- `errors.rs` - tier2(), local_memory(), dcc() error constructors
+
+### Key Types
+
+```rust
+// Stage0Result - main return type from run_stage0()
+pub struct Stage0Result {
+    pub spec_id: String,
+    pub divine_truth: DivineTruth,
+    pub task_brief_md: String,
+    pub memories_used: Vec<String>,
+    pub cache_hit: bool,
+    pub tier2_used: bool,
+    pub latency_ms: u64,
+    pub explain_scores: Option<ExplainScores>,
+}
+
+// DivineTruth - parsed Tier 2 response
+pub struct DivineTruth {
+    pub executive_summary: String,
+    pub architectural_guardrails: String,
+    pub historical_context: String,
+    pub risks_and_questions: String,
+    pub suggested_links: Vec<CausalLinkSuggestion>,
+    pub raw_markdown: String,
+}
+
+// Tier2Client trait - NotebookLM abstraction
+#[async_trait]
+pub trait Tier2Client: Send + Sync {
+    async fn generate_divine_truth(
+        &self,
+        spec_id: &str,
+        spec_content: &str,
+        task_brief_md: &str,
+    ) -> Result<Tier2Response>;
+}
+```
+
+### Test Coverage
+- 74 tests total, all passing
+- Clippy clean
+
+---
+
+## Crate Structure (Post V1.5)
+
+```
+codex-rs/stage0/
+├── Cargo.toml
+├── STAGE0_SCHEMA.sql
+└── src/
+    ├── lib.rs          # Stage0Engine, Stage0Result, run_stage0()
+    ├── config.rs       # Stage0Config
+    ├── errors.rs       # Stage0Error (7 categories)
+    ├── guardians.rs    # MetadataGuardian, TemplateGuardian, LlmClient
+    ├── overlay_db.rs   # OverlayDb (SQLite + scoring + cache)
+    ├── scoring.rs      # Dynamic scoring formula
+    ├── dcc.rs          # IQO, LocalMemoryClient, compile_context(), MMR
+    └── tier2.rs        # Tier2Client, DivineTruth, run_stage0 helpers
+```
+
+---
+
+## Next Steps (Choose in Next Session)
+
+### Option A: codex-rs Integration
+Wire Stage0Engine into `/speckit.auto` pipeline:
+- `codex-rs/tui/src/chatwidget/spec_kit/pipeline_coordinator.rs`
+- `codex-rs/tui/src/chatwidget/spec_kit/agent_orchestrator.rs`
+- Create real `LocalMemoryClient` implementation (MCP adapter)
+- Create real `Tier2Client` implementation (NotebookLM MCP adapter)
+
+### Option B: Phase F - Observability
+Complete V1 with:
+- Push suggested causal links to local-memory via relationships API
+- Structured `stage0_run` event logging
+- Metrics emission
+
+### Option C: End-to-End Test
+Manual validation:
+- Create NotebookLM notebook ("codex-rs Shadow Stage 0")
+- Seed with architecture docs
+- Run `/speckit.auto` with real Stage 0
+
+### Option D: V2 Planning
+Design next iteration:
+- V2.1-V2.4: Vector DB integration
+- V2.8: Multi-notebook committee
+- V2.9: Knowledge seeding pipeline
 
 ---
 
 ## Spec Files Index
 
-All spec files are in repo root (`/home/thetu/code/`):
+All spec files in repo root (`/home/thetu/code/`):
 
-### Core Architecture Specs
-| File | Purpose | Status |
-|------|---------|--------|
-| `STAGE0_IMPLEMENTATION_GUIDE.md` | High-level architecture, phases A-F | Complete |
-| `STAGE0_SCHEMA.sql` | Overlay SQLite schema | Complete |
-| `STAGE0_SCORING_AND_DCC.md` | Dynamic scoring formula, DCC pipeline | Complete |
-| `STAGE0_GUARDIANS_AND_ORCHESTRATION.md` | Metadata/Template Guardians, run_stage0, cache | Complete |
-| `STAGE0_CONFIG_AND_PROMPTS.md` | YAML config structure | Complete |
-| `STAGE0_OBSERVABILITY.md` | Structured logging schema (stage0_run events) | Complete |
-
-### Integration & Prompt Specs (NEW - P73)
-| File | Purpose | Status |
-|------|---------|--------|
-| `STAGE0_SPECKITAUTO_INTEGRATION.md` | /speckit.auto integration contract, API types | **Complete** |
-| `STAGE0_IQO_PROMPT.md` | IQO generation prompt, schema, validation | **Complete** |
-| `STAGE0_TIER2_PROMPT.md` | Divine Truth prompt, parsing, fallbacks | **Complete** |
-
-### Spec Gaps (Completed - P74)
-| File | Purpose | Status |
-|------|---------|--------|
-| `STAGE0_TASK_BRIEF_TEMPLATE.md` | DCC output format specification | **Complete** |
-| `STAGE0_ERROR_TAXONOMY.md` | Stage0Error types, recovery strategies | **Complete** |
-| `STAGE0_METRICS.md` | Telemetry, dashboards, alerting | **Complete** |
-
-### Reference Documents
 | File | Purpose |
 |------|---------|
-| `docs/LOCAL-MEMORY-ENVIRONMENT.md` | Local-memory API reference (MCP/REST) |
-| `docs/HANDOFF-SPEC-KIT-102-DEFERRED.md` | Previous V1 handoff (superseded) |
+| `STAGE0_IMPLEMENTATION_GUIDE.md` | High-level architecture, phases A-F |
+| `STAGE0_SCHEMA.sql` | Overlay SQLite schema |
+| `STAGE0_SCORING_AND_DCC.md` | Dynamic scoring formula, DCC pipeline |
+| `STAGE0_GUARDIANS_AND_ORCHESTRATION.md` | Guardians, run_stage0, cache |
+| `STAGE0_CONFIG_AND_PROMPTS.md` | YAML config structure |
+| `STAGE0_OBSERVABILITY.md` | Structured logging schema |
+| `STAGE0_SPECKITAUTO_INTEGRATION.md` | /speckit.auto integration contract |
+| `STAGE0_IQO_PROMPT.md` | IQO generation prompt |
+| `STAGE0_TIER2_PROMPT.md` | Divine Truth prompt |
+| `STAGE0_TASK_BRIEF_TEMPLATE.md` | DCC output format |
+| `STAGE0_ERROR_TAXONOMY.md` | Error types, recovery |
+| `STAGE0_METRICS.md` | Telemetry spec |
 
 ---
 
-## Architecture Overview
+## Resume Prompt
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     codex-rs TUI/CLI                         │
-│                   (/speckit.auto Stage 0)                    │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│              Stage 0 Overlay Engine (Rust)                   │
-│                                                              │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
-│  │  Guardians   │  │   Scoring    │  │     DCC      │       │
-│  │ (Metadata +  │  │ (dynamic_    │  │ (IQO+hybrid  │       │
-│  │  Template)   │  │  score)      │  │  +diversity) │       │
-│  └──────────────┘  └──────────────┘  └──────────────┘       │
-│                                                              │
-│  ┌──────────────────────────────────────────────────┐       │
-│  │           Overlay SQLite DB                       │       │
-│  │  - overlay_memories (scores, structure_status)    │       │
-│  │  - tier2_synthesis_cache                          │       │
-│  │  - cache_memory_dependencies                      │       │
-│  └──────────────────────────────────────────────────┘       │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-          ┌───────────────┼───────────────┐
-          │               │               │
-          ▼               ▼               ▼
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│local-memory │  │   Ollama    │  │ NotebookLM  │
-│ (REST/MCP)  │  │  (LLM)      │  │   (MCP)     │
-│ Black Box   │  │             │  │  Tier 2     │
-└─────────────┘  └─────────────┘  └─────────────┘
-```
+ultrathink Load docs/HANDOFF-SPEC-KIT-102-V2.md
 
----
-
-## Key Design Decisions (Locked In)
-
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| Crate location | `codex-rs/stage0/` | Follows existing conventions |
-| Memory content caching | No cache (fetch from local-memory) | local-memory is source of truth |
-| Tier 2 cache | TTL (24h) + write invalidation | Simple, effective |
-| Failure mode | Soft failure (log and continue) | Stage 0 shouldn't brick pipeline |
-| NotebookLM | Single notebook for V1 | Committee in V2.8 |
-| Template Guardian | Best-effort classify → OTHER fallback | Flexible structure |
-
----
-
-## Implementation Phases (V1.1 → V1.5)
-
-```
-V1.1: Overlay DB & Basic Plumbing ✅ COMPLETE (P75)
-  - Created codex-rs/stage0/ crate
-  - Schema init from STAGE0_SCHEMA.sql via include_str!
-  - Stage0Config loading from ~/.config/codex/stage0.toml
-  - OverlayDb with full CRUD for 3 tables
-  - Stage0Error taxonomy (7 categories)
-  - 11 tests passing
-
-V1.2: Guardians ✅ COMPLETE (P75)
-  - MemoryKind enum (Pattern/Decision/Problem/Insight/Other)
-  - MemoryDraft (input) + GuardedMemory (output) structs
-  - MetadataGuardian: strict/lenient validation
-  - TemplateGuardian: LlmClient trait + async restructuring
-  - Stage0Engine::guard_memory() + guard_memory_sync()
-  - MockLlmClient for testing
-  - 26 tests passing (15 new guardian tests)
-
-V1.3: Dynamic Scoring ✅ COMPLETE (P76)
-  - Created scoring.rs with full formula implementation
-  - ScoringInput, ScoringComponents, calculate_dynamic_score()
-  - Config-driven weights from Stage0Config.scoring
-  - OverlayDb: record_memory_usage(), record_batch_usage(), recalculate_score()
-  - Stage0Engine::record_selected_memories_usage() for DCC integration
-  - 16 new tests (42 total)
-
-V1.4: DCC (Dynamic Context Compiler) ✅ COMPLETE (P76)
-  - Created dcc.rs with full pipeline implementation
-  - Iqo, MemoryCandidate, ExplainScore, CompileContextResult types
-  - LocalMemoryClient trait (local-memory abstraction)
-  - Extended LlmClient with generate_iqo() method
-  - build_iqo() with LLM/heuristic fallback
-  - compile_context() pipeline: IQO → search → score → MMR → TASK_BRIEF
-  - select_with_mmr() diversity reranking
-  - assemble_task_brief() following template spec
-  - Stage0Engine::compile_context() wrapper
-  - 11 new tests (53 total)
-
-V1.5: Tier 2 Orchestration ⏳ NEXT
-  - run_stage0() entry point (from STAGE0_SPECKITAUTO_INTEGRATION.md)
-  - Cache lookup (input_hash = hash(spec + brief))
-  - NotebookLM MCP calls (from STAGE0_TIER2_PROMPT.md)
-  - Divine Truth parsing and injection
-```
-
----
-
-## Remaining Research Tasks
-
-### Priority 1: Spec Gaps (Completed P74)
-- [x] Design TASK_BRIEF.md template specification
-- [x] Design Stage0 error taxonomy
-- [x] Design Stage0 metrics/telemetry spec
-
-### Priority 1.5: Pre-Implementation Setup
-- [ ] Create NotebookLM notebook: "codex-rs – Shadow Stage 0"
-
-### Priority 2: Deferred Decisions
-- [ ] Bootstrap strategy for 1000+ memories (decide during V1.1)
-- [ ] Embedding source: local-memory Qdrant vs overlay vectors
-- [ ] Cache granularity refinement
-
-### Priority 3: Future Phases (V2+)
-- [ ] Vector DB integration (V2.1-V2.4)
-- [ ] Multi-notebook committee (V2.8)
-- [ ] Knowledge seeding pipeline (V2.9)
-- [ ] Learned routing (V5)
-
----
-
-## Related Files
-
-| File | Relationship |
-|------|--------------|
-| `codex-rs/spec-kit/` | Target integration point |
-| `codex-rs/tui/src/chatwidget/spec_kit/pipeline_coordinator.rs` | Stage 0 insertion point |
-| `codex-rs/tui/src/chatwidget/spec_kit/agent_orchestrator.rs` | Context injection point |
-| `codex-rs/ollama/` | Existing Ollama client (reusable) |
-| `codex-rs/mcp-client/` | Existing MCP client (reusable) |
-
----
-
-## Resume Prompt (V1.5 Tier 2 Orchestration)
-
-```
-Load docs/HANDOFF-SPEC-KIT-102-V2.md
-
-Resuming SPEC-KIT-102 Stage 0 Overlay Engine - V1.5 Tier 2 Orchestration.
+Resuming SPEC-KIT-102 Stage 0 Overlay Engine.
 
 Current state:
-- V1.1 Complete: codex-rs/stage0/ crate with overlay DB + config
-- V1.2 Complete: Guardians (MetadataGuardian + TemplateGuardian + LlmClient trait)
-- V1.3 Complete: Dynamic Scoring (scoring.rs)
-- V1.4 Complete: DCC (dcc.rs - IQO, compile_context, MMR, TASK_BRIEF, 53 tests)
-- V1.5 Next: Tier 2 Orchestration
+- V1.1-V1.5 COMPLETE (74 tests, clippy clean)
+- Stage 0 crate has full DCC + Tier 2 orchestration
+- run_stage0() returns Stage0Result with divine_truth + task_brief
+- Cache with TTL, fallback on Tier 2 failure
+- Traits defined: LocalMemoryClient, LlmClient, Tier2Client
 
-V1.5 Implementation Tasks:
-1. Create tier2.rs with NotebookLM client trait
-2. Implement cache lookup (input_hash = hash(spec + brief))
-3. Add run_stage0() entry point (from STAGE0_SPECKITAUTO_INTEGRATION.md)
-4. Implement NotebookLM MCP calls (from STAGE0_TIER2_PROMPT.md)
-5. Parse Divine Truth response and inject into output
-6. Update usage counts after successful run
+Integration points needed:
+- codex-rs: Real MCP adapters for local-memory and NotebookLM
+- codex-rs: Wire into /speckit.auto pipeline
+- Optional: Phase F observability (structured logging, link ingestion)
 
-Key files to reference:
-- STAGE0_SPECKITAUTO_INTEGRATION.md (run_stage0 API contract)
-- STAGE0_TIER2_PROMPT.md (NotebookLM prompt)
-- codex-rs/stage0/src/dcc.rs (compile_context integration)
-- codex-rs/stage0/src/overlay_db.rs (tier2_synthesis_cache methods)
-
-Design decisions:
-- Tier 2 client should be a trait (NotebookLmClient) for testability
-- Cache key = hash(spec_content + task_brief_md)
-- Divine Truth response should be parsed into structured format
-- run_stage0 returns Stage0Result with brief + divine_truth + metadata
-
-[Continue with V1.5 implementation]
+What would you like to focus on?
+1. codex-rs Integration (MCP adapters + pipeline wiring)
+2. Phase F Observability (logging + causal links)
+3. End-to-End Test (NotebookLM notebook + real run)
+4. V2 Planning (vector DB, multi-notebook)
 ```
 
 ---
 
-## Crate Structure (Post V1.4)
-
-```
-codex-rs/stage0/
-├── Cargo.toml
-├── STAGE0_SCHEMA.sql        # Embedded via include_str!
-└── src/
-    ├── lib.rs               # Stage0Engine, exports
-    ├── config.rs            # Stage0Config (TOML loading)
-    ├── errors.rs            # Stage0Error (7 categories)
-    ├── guardians.rs         # MemoryKind, MemoryDraft, GuardedMemory, LlmClient
-    ├── overlay_db.rs        # OverlayDb (SQLite wrapper + scoring methods)
-    ├── scoring.rs           # V1.3: ScoringInput, calculate_dynamic_score()
-    ├── dcc.rs               # V1.4: Iqo, LocalMemoryClient, compile_context(), MMR
-    └── tier2.rs             # V1.5: TODO - NotebookLmClient, run_stage0()
-```
-
----
-
-*Handoff updated: 2025-12-01 (Session P76)*
-*Status: V1.1–V1.4 complete; V1.5 Tier 2 Orchestration next*
+*Handoff updated: 2025-12-01 (Session P77)*
+*Status: V1 Core Complete (V1.1-V1.5); Integration phase next*
