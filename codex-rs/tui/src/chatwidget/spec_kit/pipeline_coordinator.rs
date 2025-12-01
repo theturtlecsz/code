@@ -100,8 +100,12 @@ pub fn handle_spec_auto(
         return;
     }
 
-    // P91/SPEC-KIT-105: Phase -1 Constitution Readiness Gate (Warn-Only)
-    run_constitution_readiness_gate(widget);
+    // P91/SPEC-KIT-105: Phase -1 Constitution Readiness Gate
+    // P92: Now returns bool - Block mode can abort pipeline
+    if !run_constitution_readiness_gate(widget) {
+        // Gate blocked execution - abort pipeline
+        return;
+    }
 
     let lifecycle = widget.ensure_validate_lifecycle(&spec_id);
     let mut state = super::state::SpecAutoState::new(
@@ -1802,30 +1806,36 @@ fn record_stage_skip(spec_id: &str, stage: SpecStage, reason: &str) -> Result<()
 
 // ─────────────────────────────────────────────────────────────────────────────
 // P91/SPEC-KIT-105: Constitution Readiness Gate
+// P92: Added Block mode support
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Run Phase -1 constitution readiness gate check
 ///
 /// This function checks if the project has a valid constitution and displays
-/// warnings if it's missing or incomplete. It does NOT block execution.
+/// warnings/errors if it's missing or incomplete.
+///
+/// # Returns
+/// - `true`: Pipeline should proceed
+/// - `false`: Pipeline should abort (Block mode + constitution issues)
 ///
 /// # Behavior
-/// - If gate_mode is Skip: Does nothing
-/// - If gate_mode is Warn (default): Shows warnings but proceeds
-pub fn run_constitution_readiness_gate(widget: &mut ChatWidget) {
+/// - If gate_mode is Skip: Returns true (no check)
+/// - If gate_mode is Warn (default): Shows warnings but returns true
+/// - If gate_mode is Block (P92): Shows error and returns false when constitution is incomplete
+pub fn run_constitution_readiness_gate(widget: &mut ChatWidget) -> bool {
     // Try to load Stage0 config and check gate mode
     let config = match codex_stage0::Stage0Config::load() {
         Ok(c) => c,
         Err(e) => {
             tracing::debug!("Could not load Stage0 config for gate check: {}", e);
-            return;
+            return true; // Can't check, allow to proceed
         }
     };
 
     // Check if gate is skipped
     if config.phase1_gate_mode == codex_stage0::GateMode::Skip {
         tracing::debug!("Constitution gate check skipped (phase1_gate_mode = skip)");
-        return;
+        return true;
     }
 
     // Try to connect to overlay DB and run readiness check
@@ -1834,7 +1844,7 @@ pub fn run_constitution_readiness_gate(widget: &mut ChatWidget) {
         Err(e) => {
             // Can't check - log but don't block
             tracing::debug!("Could not connect to overlay DB for gate check: {}", e);
-            return;
+            return true;
         }
     };
 
@@ -1842,14 +1852,25 @@ pub fn run_constitution_readiness_gate(widget: &mut ChatWidget) {
 
     if warnings.is_empty() {
         tracing::debug!("Constitution readiness gate: OK");
-        return;
+        return true;
     }
 
-    // Display warnings to user
+    // P92: Check if we should block execution
+    let is_block_mode = config.phase1_gate_mode == codex_stage0::GateMode::Block;
+
+    // Display warnings/errors to user
     let mut lines: Vec<ratatui::text::Line<'static>> = Vec::new();
-    lines.push(ratatui::text::Line::from(
-        "⚠ Constitution Readiness Check (P91):",
-    ));
+
+    if is_block_mode {
+        lines.push(ratatui::text::Line::from(
+            "❌ Constitution Readiness Gate BLOCKED (P92):",
+        ));
+    } else {
+        lines.push(ratatui::text::Line::from(
+            "⚠ Constitution Readiness Check (P91):",
+        ));
+    }
+
     for warning in &warnings {
         lines.push(ratatui::text::Line::from(format!("  • {}", warning)));
     }
@@ -1857,13 +1878,32 @@ pub fn run_constitution_readiness_gate(widget: &mut ChatWidget) {
         "  Run /speckit.constitution to configure.",
     ));
 
+    if is_block_mode {
+        lines.push(ratatui::text::Line::from(
+            "  Pipeline aborted. Set phase1_gate_mode = \"warn\" to proceed without constitution.",
+        ));
+    }
+
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
         lines,
-        HistoryCellType::Notice,
+        if is_block_mode {
+            HistoryCellType::Error
+        } else {
+            HistoryCellType::Notice
+        },
     ));
+
+    if is_block_mode {
+        tracing::error!(
+            "Constitution readiness gate: BLOCKED ({} issue(s))",
+            warnings.len()
+        );
+        return false;
+    }
 
     tracing::warn!(
         "Constitution readiness gate: {} warning(s)",
         warnings.len()
     );
+    true
 }

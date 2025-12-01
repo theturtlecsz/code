@@ -13,8 +13,8 @@ use std::path::PathBuf;
 
 /// Mode for Phase -1 constitution readiness gate
 ///
-/// Controls how /speckit.auto and /speckit.new behave when constitution
-/// is missing or incomplete.
+/// Controls how /speckit.auto, /speckit.plan, and /speckit.new behave when
+/// constitution is missing or incomplete.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum GateMode {
@@ -23,7 +23,8 @@ pub enum GateMode {
     Warn,
     /// Skip gate check entirely (no warnings)
     Skip,
-    // Future: Block mode will hard-stop the pipeline (P92)
+    /// Block pipeline execution when constitution is missing or incomplete (P92)
+    Block,
 }
 
 /// Root configuration for Stage0 overlay engine
@@ -65,11 +66,12 @@ pub struct Stage0Config {
     // P91/SPEC-KIT-105: Constitution gate settings
     // ─────────────────────────────────────────────────────────────────────────────
 
-    /// Phase -1 readiness gate mode (warn or skip)
+    /// Phase -1 readiness gate mode
     ///
-    /// Controls behavior when constitution is missing before /speckit.auto or /speckit.new
+    /// Controls behavior when constitution is missing before /speckit.auto, /speckit.plan, or /speckit.new
     /// - `warn`: Print warnings but proceed (default)
     /// - `skip`: No gate check at all
+    /// - `block`: Abort pipeline execution when constitution is incomplete (P92)
     #[serde(default)]
     pub phase1_gate_mode: GateMode,
 }
@@ -571,6 +573,17 @@ mod tests {
         "#;
         let cfg = Stage0Config::parse(toml).expect("should parse");
         assert_eq!(cfg.phase1_gate_mode, GateMode::Skip);
+    }
+
+    // P92/SPEC-KIT-105: Block mode test
+    #[test]
+    fn test_gate_mode_parse_block() {
+        let toml = r#"
+            enabled = true
+            phase1_gate_mode = "block"
+        "#;
+        let cfg = Stage0Config::parse(toml).expect("should parse");
+        assert_eq!(cfg.phase1_gate_mode, GateMode::Block);
     }
 
     #[test]
