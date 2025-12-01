@@ -12,7 +12,7 @@
 use crate::config::Stage0Config;
 use crate::errors::Result;
 use crate::guardians::LlmClient;
-use crate::overlay_db::OverlayDb;
+use crate::overlay_db::{OverlayDb, CONSTITUTION_DOMAIN, CONSTITUTION_MIN_COUNT};
 use crate::scoring::{ScoringInput, calculate_dynamic_score};
 use crate::vector::{VectorBackend, VectorFilters, DocumentKind};
 use async_trait::async_trait;
@@ -323,6 +323,48 @@ fn normalize_iqo(mut iqo: Iqo, cfg: &Stage0Config) -> Iqo {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// P89/SPEC-KIT-105: Constitution IQO Amendment
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Ensure the constitution domain is included in the IQO via union (not replace)
+///
+/// This is called after IQO generation to guarantee constitution memories
+/// are always eligible for retrieval. Per SPEC-KIT-105 Section 4.1:
+/// "Constitution domain MUST be added via union, preserving LLM-generated domains"
+fn ensure_constitution_domain(iqo: &mut Iqo) {
+    if !iqo.domains.iter().any(|d| d == CONSTITUTION_DOMAIN) {
+        iqo.domains.push(CONSTITUTION_DOMAIN.to_string());
+        tracing::debug!(
+            domains = ?iqo.domains,
+            "Added constitution domain to IQO via union"
+        );
+    }
+}
+
+/// Build search parameters specifically for constitution memories
+///
+/// This creates a separate IQO targeting only the constitution domain,
+/// used for the always-on constitution pass.
+fn build_constitution_search_params(limit: usize) -> LocalMemorySearchParams {
+    LocalMemorySearchParams {
+        iqo: Iqo {
+            domains: vec![CONSTITUTION_DOMAIN.to_string()],
+            required_tags: vec![],
+            optional_tags: vec![
+                "type:guardrail".to_string(),
+                "type:principle".to_string(),
+                "type:goal".to_string(),
+                "type:non-goal".to_string(),
+            ],
+            keywords: vec![], // No keyword filtering for constitution
+            max_candidates: limit,
+            notebook_focus: vec![],
+        },
+        max_results: limit,
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // DCC Pipeline
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -330,11 +372,14 @@ fn normalize_iqo(mut iqo: Iqo, cfg: &Stage0Config) -> Iqo {
 ///
 /// # Steps
 /// 1. Build IQO from spec + env
-/// 2. Query local-memory
-/// 3. (V2.5) Query vector backend for hybrid retrieval
-/// 4. Merge and join with overlay scores
-/// 5. Apply MMR diversity reranking
-/// 6. Assemble TASK_BRIEF.md
+/// 2. (P89) Ensure constitution domain in IQO via union
+/// 3. Query local-memory
+/// 4. (P89) Separately fetch constitution memories (always-on pass)
+/// 5. (V2.5) Query vector backend for hybrid retrieval
+/// 6. Merge and join with overlay scores
+/// 7. Apply MMR diversity reranking
+/// 8. (P89) Ensure minimum constitution memories in selection
+/// 9. Assemble TASK_BRIEF.md
 pub async fn compile_context<Lm, Ll, V>(
     ctx: &DccContext<'_, Lm, Ll>,
     vector: Option<&V>,
@@ -350,16 +395,19 @@ where
     V: VectorBackend,
 {
     // 1. Build IQO
-    let iqo = build_iqo(ctx.llm, ctx.cfg, spec_content, env).await?;
+    let mut iqo = build_iqo(ctx.llm, ctx.cfg, spec_content, env).await?;
+
+    // 2. (P89) Ensure constitution domain is included via union
+    ensure_constitution_domain(&mut iqo);
 
     tracing::debug!(
         keywords = ?iqo.keywords,
         domains = ?iqo.domains,
         max_candidates = iqo.max_candidates,
-        "Built IQO"
+        "Built IQO (with constitution domain)"
     );
 
-    // 2. Query local-memory
+    // 3. Query local-memory (main IQO search)
     let search_params = LocalMemorySearchParams {
         iqo: iqo.clone(),
         max_results: ctx.cfg.context_compiler.pre_filter_limit,
@@ -371,7 +419,17 @@ where
         "Retrieved memory summaries from local-memory"
     );
 
-    // 3. (V2.5) Query vector backend if hybrid enabled
+    // 4. (P89) Separate always-on pass for constitution memories
+    // Per SPEC-KIT-105 Section 4.2: "Constitution retrieval MUST be a separate pass"
+    let constitution_params = build_constitution_search_params(CONSTITUTION_MIN_COUNT * 2); // Fetch 2x for backfill pool
+    let constitution_summaries = ctx.local_mem.search_memories(constitution_params).await?;
+
+    tracing::debug!(
+        count = constitution_summaries.len(),
+        "Retrieved constitution summaries (always-on pass)"
+    );
+
+    // 5. (V2.5) Query vector backend if hybrid enabled
     let vector_scores = if ctx.cfg.context_compiler.hybrid_enabled {
         if let Some(vec_backend) = vector {
             // Build query from spec keywords
@@ -401,8 +459,9 @@ where
         HashMap::new()
     };
 
-    // 4. Join with overlay and compute combined scores (including vector scores)
+    // 6. Join with overlay and compute combined scores (including vector scores)
     let mut candidates: Vec<MemoryCandidate> = Vec::new();
+    let mut constitution_candidates: Vec<MemoryCandidate> = Vec::new(); // P89: Track constitution separately
     let mut explain_scores: Vec<ExplainScore> = Vec::new();
 
     // Get weight configuration
@@ -420,7 +479,8 @@ where
     let norm_dyn = dyn_weight / total_weight;
     let norm_vec = vec_weight / total_weight;
 
-    for s in summaries {
+    // Helper closure to convert a LocalMemorySummary to a MemoryCandidate
+    let mut process_summary = |s: LocalMemorySummary, is_constitution: bool| -> Result<MemoryCandidate> {
         // Fetch overlay row or use defaults
         let overlay = ctx.db.get_memory(&s.id)?;
 
@@ -448,19 +508,7 @@ where
             + norm_dyn * components.final_score
             + norm_vec * vector_score;
 
-        candidates.push(MemoryCandidate {
-            id: s.id.clone(),
-            domain: s.domain.clone(),
-            tags: s.tags.clone(),
-            created_at: Some(created_at),
-            snippet: s.snippet.clone(),
-            similarity_score: s.similarity_score,
-            dynamic_score: components.final_score,
-            vector_score,
-            combined_score: combined,
-        });
-
-        if explain {
+        if explain && !is_constitution {
             explain_scores.push(ExplainScore {
                 id: s.id.clone(),
                 similarity: s.similarity_score,
@@ -475,17 +523,47 @@ where
                 base_score: components.base_score,
             });
         }
+
+        Ok(MemoryCandidate {
+            id: s.id.clone(),
+            domain: s.domain.clone(),
+            tags: s.tags.clone(),
+            created_at: Some(created_at),
+            snippet: s.snippet.clone(),
+            similarity_score: s.similarity_score,
+            dynamic_score: components.final_score,
+            vector_score,
+            combined_score: combined,
+        })
+    };
+
+    // Process main summaries
+    for s in summaries {
+        let candidate = process_summary(s, false)?;
+        candidates.push(candidate);
     }
 
-    // 5. Sort by combined_score descending
+    // P89: Process constitution summaries separately (for backfill pool)
+    for s in constitution_summaries {
+        let candidate = process_summary(s, true)?;
+        constitution_candidates.push(candidate);
+    }
+
+    tracing::debug!(
+        main_candidates = candidates.len(),
+        constitution_pool = constitution_candidates.len(),
+        "Processed all memory summaries"
+    );
+
+    // 7. Sort by combined_score descending
     candidates.sort_by(|a, b| {
         b.combined_score
             .partial_cmp(&a.combined_score)
             .unwrap_or(Ordering::Equal)
     });
 
-    // 6. Apply MMR diversity reranking
-    let selected = select_with_mmr(
+    // 8. Apply MMR diversity reranking
+    let mut selected = select_with_mmr(
         candidates,
         ctx.cfg.context_compiler.top_k,
         ctx.cfg.context_compiler.diversity_lambda as f64,
@@ -499,7 +577,11 @@ where
         "Applied MMR selection"
     );
 
-    // 7. P85: Query code units if code lane enabled
+    // 9. (P89) Ensure minimum constitution memories in selection
+    // Per SPEC-KIT-105 Section 4.3: "At least 3 constitution memories always included"
+    ensure_constitution_minimum(&mut selected, &constitution_candidates, CONSTITUTION_MIN_COUNT);
+
+    // 10. P85: Query code units if code lane enabled
     let code_candidates = if ctx.cfg.context_compiler.code_lane_enabled {
         if let Some(vec_backend) = vector {
             let query_text = iqo.keywords.join(" ");
@@ -554,7 +636,7 @@ where
         Vec::new()
     };
 
-    // 8. Assemble TASK_BRIEF.md
+    // 11. Assemble TASK_BRIEF.md
     let task_brief_md = assemble_task_brief(spec_id, spec_content, &selected, &code_candidates, &iqo, ctx.cfg);
 
     let memories_used: Vec<String> = selected.iter().map(|c| c.id.clone()).collect();
@@ -690,6 +772,103 @@ fn select_with_mmr(
     }
 
     selected
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P89/SPEC-KIT-105: Constitution Minimum Guarantee
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Check if a memory candidate is a constitution memory
+///
+/// A candidate is considered constitution if:
+/// 1. Its domain is "constitution", OR
+/// 2. It has a constitution type tag (type:guardrail, type:principle, etc.)
+fn is_constitution_candidate(candidate: &MemoryCandidate) -> bool {
+    if candidate.domain.as_deref() == Some(CONSTITUTION_DOMAIN) {
+        return true;
+    }
+
+    candidate.tags.iter().any(|tag| {
+        matches!(
+            tag.as_str(),
+            "type:guardrail" | "type:principle" | "type:goal" | "type:non-goal"
+        )
+    })
+}
+
+/// Ensure at least N constitution memories are in the selected set
+///
+/// Per SPEC-KIT-105 Section 4.3: "Section 0 MUST include at least 3 constitution
+/// memories (preferring guardrails, then principles) even if their dynamic_score
+/// would not place them in top-k."
+///
+/// This function:
+/// 1. Counts constitution memories already in selected
+/// 2. If count < min_count, backfills from constitution_pool
+/// 3. Prefers guardrails (priority 10) > principles (9) > goals/non-goals (8)
+///
+/// # Arguments
+/// * `selected` - The MMR-selected candidates (modified in place)
+/// * `constitution_pool` - All available constitution candidates
+/// * `min_count` - Minimum constitution memories required (default: CONSTITUTION_MIN_COUNT)
+fn ensure_constitution_minimum(
+    selected: &mut Vec<MemoryCandidate>,
+    constitution_pool: &[MemoryCandidate],
+    min_count: usize,
+) {
+    // Count constitution memories already selected
+    let current_count = selected.iter().filter(|m| is_constitution_candidate(m)).count();
+
+    if current_count >= min_count {
+        tracing::debug!(
+            current = current_count,
+            min = min_count,
+            "Constitution minimum already satisfied"
+        );
+        return;
+    }
+
+    let needed = min_count - current_count;
+
+    // Find constitution candidates not already in selected
+    let selected_ids: std::collections::HashSet<&str> =
+        selected.iter().map(|m| m.id.as_str()).collect();
+
+    // Sort pool by priority-like heuristic: guardrails first, then principles
+    // We approximate this by combined_score since constitution memories have high priority
+    // IMPORTANT: Only include candidates that ARE constitution memories (domain or tag)
+    let mut available: Vec<_> = constitution_pool
+        .iter()
+        .filter(|c| !selected_ids.contains(c.id.as_str()))
+        .filter(|c| is_constitution_candidate(c)) // P89: Only backfill actual constitution memories
+        .collect();
+
+    // Sort by combined_score descending (constitution priority is baked into dynamic_score)
+    available.sort_by(|a, b| {
+        b.combined_score
+            .partial_cmp(&a.combined_score)
+            .unwrap_or(Ordering::Equal)
+    });
+
+    // Backfill needed constitution memories
+    let to_add: Vec<_> = available.into_iter().take(needed).cloned().collect();
+
+    tracing::debug!(
+        current = current_count,
+        needed = needed,
+        backfilling = to_add.len(),
+        "Backfilling constitution memories"
+    );
+
+    for candidate in to_add {
+        tracing::debug!(
+            id = %candidate.id,
+            domain = ?candidate.domain,
+            score = candidate.combined_score,
+            "Adding constitution memory to selection"
+        );
+        selected.push(candidate);
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1416,5 +1595,307 @@ mod tests {
         // With hybrid disabled, all vector scores should be 0
         let scores = result.explain_scores.expect("explain should be present");
         assert!(scores.memories.iter().all(|s| s.vector_score == 0.0));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // P89/SPEC-KIT-105: Constitution tests
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_ensure_constitution_domain() {
+        // Test that constitution domain is added via union
+        let mut iqo = Iqo {
+            domains: vec!["spec-kit".to_string(), "infrastructure".to_string()],
+            ..Default::default()
+        };
+
+        ensure_constitution_domain(&mut iqo);
+
+        // Should have constitution domain added
+        assert!(
+            iqo.domains.contains(&CONSTITUTION_DOMAIN.to_string()),
+            "Constitution domain should be added"
+        );
+        // Original domains preserved
+        assert!(iqo.domains.contains(&"spec-kit".to_string()));
+        assert!(iqo.domains.contains(&"infrastructure".to_string()));
+        assert_eq!(iqo.domains.len(), 3);
+
+        // Calling again should not duplicate
+        ensure_constitution_domain(&mut iqo);
+        assert_eq!(iqo.domains.len(), 3, "Should not duplicate constitution domain");
+    }
+
+    #[test]
+    fn test_ensure_constitution_domain_already_present() {
+        let mut iqo = Iqo {
+            domains: vec!["constitution".to_string(), "spec-kit".to_string()],
+            ..Default::default()
+        };
+
+        ensure_constitution_domain(&mut iqo);
+
+        // Should not add duplicate
+        assert_eq!(iqo.domains.len(), 2);
+        assert_eq!(
+            iqo.domains.iter().filter(|d| *d == "constitution").count(),
+            1
+        );
+    }
+
+    #[test]
+    fn test_build_constitution_search_params() {
+        let params = build_constitution_search_params(6);
+
+        assert_eq!(params.iqo.domains, vec![CONSTITUTION_DOMAIN.to_string()]);
+        assert!(params.iqo.required_tags.is_empty());
+        assert!(params.iqo.optional_tags.contains(&"type:guardrail".to_string()));
+        assert!(params.iqo.optional_tags.contains(&"type:principle".to_string()));
+        assert!(params.iqo.optional_tags.contains(&"type:goal".to_string()));
+        assert!(params.iqo.optional_tags.contains(&"type:non-goal".to_string()));
+        assert!(params.iqo.keywords.is_empty()); // No keyword filtering for constitution
+        assert_eq!(params.max_results, 6);
+    }
+
+    #[test]
+    fn test_is_constitution_candidate_by_domain() {
+        let candidate = MemoryCandidate {
+            id: "test".to_string(),
+            domain: Some(CONSTITUTION_DOMAIN.to_string()),
+            tags: vec![],
+            created_at: Some(Utc::now()),
+            snippet: "Test".to_string(),
+            similarity_score: 0.5,
+            dynamic_score: 0.5,
+            vector_score: 0.0,
+            combined_score: 0.5,
+        };
+
+        assert!(is_constitution_candidate(&candidate));
+    }
+
+    #[test]
+    fn test_is_constitution_candidate_by_tag() {
+        let tags_to_test = [
+            "type:guardrail",
+            "type:principle",
+            "type:goal",
+            "type:non-goal",
+        ];
+
+        for tag in tags_to_test {
+            let candidate = MemoryCandidate {
+                id: "test".to_string(),
+                domain: Some("other-domain".to_string()),
+                tags: vec![tag.to_string()],
+                created_at: Some(Utc::now()),
+                snippet: "Test".to_string(),
+                similarity_score: 0.5,
+                dynamic_score: 0.5,
+                vector_score: 0.0,
+                combined_score: 0.5,
+            };
+
+            assert!(
+                is_constitution_candidate(&candidate),
+                "Should detect constitution by tag: {}",
+                tag
+            );
+        }
+    }
+
+    #[test]
+    fn test_is_not_constitution_candidate() {
+        let candidate = MemoryCandidate {
+            id: "test".to_string(),
+            domain: Some("spec-kit".to_string()),
+            tags: vec!["type:pattern".to_string()],
+            created_at: Some(Utc::now()),
+            snippet: "Test".to_string(),
+            similarity_score: 0.5,
+            dynamic_score: 0.5,
+            vector_score: 0.0,
+            combined_score: 0.5,
+        };
+
+        assert!(!is_constitution_candidate(&candidate));
+    }
+
+    #[test]
+    fn test_ensure_constitution_minimum_already_satisfied() {
+        let mut selected = vec![
+            MemoryCandidate {
+                id: "const-1".to_string(),
+                domain: Some(CONSTITUTION_DOMAIN.to_string()),
+                tags: vec!["type:guardrail".to_string()],
+                created_at: Some(Utc::now()),
+                snippet: "Guardrail 1".to_string(),
+                similarity_score: 0.9,
+                dynamic_score: 0.9,
+                vector_score: 0.0,
+                combined_score: 0.9,
+            },
+            MemoryCandidate {
+                id: "const-2".to_string(),
+                domain: Some(CONSTITUTION_DOMAIN.to_string()),
+                tags: vec!["type:principle".to_string()],
+                created_at: Some(Utc::now()),
+                snippet: "Principle 1".to_string(),
+                similarity_score: 0.8,
+                dynamic_score: 0.8,
+                vector_score: 0.0,
+                combined_score: 0.8,
+            },
+            MemoryCandidate {
+                id: "const-3".to_string(),
+                domain: Some(CONSTITUTION_DOMAIN.to_string()),
+                tags: vec!["type:goal".to_string()],
+                created_at: Some(Utc::now()),
+                snippet: "Goal 1".to_string(),
+                similarity_score: 0.7,
+                dynamic_score: 0.7,
+                vector_score: 0.0,
+                combined_score: 0.7,
+            },
+        ];
+
+        let pool: Vec<MemoryCandidate> = vec![];
+
+        ensure_constitution_minimum(&mut selected, &pool, CONSTITUTION_MIN_COUNT);
+
+        // Should not add any more since we already have 3
+        assert_eq!(selected.len(), 3);
+    }
+
+    #[test]
+    fn test_ensure_constitution_minimum_backfills() {
+        // Start with only one constitution memory
+        let mut selected = vec![
+            MemoryCandidate {
+                id: "const-1".to_string(),
+                domain: Some(CONSTITUTION_DOMAIN.to_string()),
+                tags: vec!["type:guardrail".to_string()],
+                created_at: Some(Utc::now()),
+                snippet: "Guardrail 1".to_string(),
+                similarity_score: 0.9,
+                dynamic_score: 0.9,
+                vector_score: 0.0,
+                combined_score: 0.9,
+            },
+            MemoryCandidate {
+                id: "regular-1".to_string(),
+                domain: Some("spec-kit".to_string()),
+                tags: vec!["type:pattern".to_string()],
+                created_at: Some(Utc::now()),
+                snippet: "Pattern".to_string(),
+                similarity_score: 0.85,
+                dynamic_score: 0.85,
+                vector_score: 0.0,
+                combined_score: 0.85,
+            },
+        ];
+
+        // Pool has more constitution memories to backfill from
+        let pool = vec![
+            MemoryCandidate {
+                id: "const-2".to_string(),
+                domain: Some(CONSTITUTION_DOMAIN.to_string()),
+                tags: vec!["type:principle".to_string()],
+                created_at: Some(Utc::now()),
+                snippet: "Principle 1".to_string(),
+                similarity_score: 0.7,
+                dynamic_score: 0.7,
+                vector_score: 0.0,
+                combined_score: 0.7,
+            },
+            MemoryCandidate {
+                id: "const-3".to_string(),
+                domain: Some(CONSTITUTION_DOMAIN.to_string()),
+                tags: vec!["type:goal".to_string()],
+                created_at: Some(Utc::now()),
+                snippet: "Goal 1".to_string(),
+                similarity_score: 0.6,
+                dynamic_score: 0.6,
+                vector_score: 0.0,
+                combined_score: 0.6,
+            },
+        ];
+
+        ensure_constitution_minimum(&mut selected, &pool, CONSTITUTION_MIN_COUNT);
+
+        // Should have backfilled 2 more constitution memories
+        assert_eq!(selected.len(), 4); // 1 original const + 1 regular + 2 backfilled
+
+        // Count constitution memories
+        let const_count = selected.iter().filter(|m| is_constitution_candidate(m)).count();
+        assert_eq!(const_count, 3, "Should have exactly 3 constitution memories");
+
+        // Should have const-2 and const-3 added
+        assert!(selected.iter().any(|m| m.id == "const-2"));
+        assert!(selected.iter().any(|m| m.id == "const-3"));
+    }
+
+    #[test]
+    fn test_ensure_constitution_minimum_no_duplicates() {
+        // Selected already has one from pool
+        let mut selected = vec![
+            MemoryCandidate {
+                id: "const-1".to_string(),
+                domain: Some(CONSTITUTION_DOMAIN.to_string()),
+                tags: vec!["type:guardrail".to_string()],
+                created_at: Some(Utc::now()),
+                snippet: "Guardrail 1".to_string(),
+                similarity_score: 0.9,
+                dynamic_score: 0.9,
+                vector_score: 0.0,
+                combined_score: 0.9,
+            },
+        ];
+
+        // Pool contains const-1 (already in selected) and const-2
+        let pool = vec![
+            MemoryCandidate {
+                id: "const-1".to_string(), // Already in selected
+                domain: Some(CONSTITUTION_DOMAIN.to_string()),
+                tags: vec!["type:guardrail".to_string()],
+                created_at: Some(Utc::now()),
+                snippet: "Guardrail 1".to_string(),
+                similarity_score: 0.9,
+                dynamic_score: 0.9,
+                vector_score: 0.0,
+                combined_score: 0.9,
+            },
+            MemoryCandidate {
+                id: "const-2".to_string(),
+                domain: Some(CONSTITUTION_DOMAIN.to_string()),
+                tags: vec!["type:principle".to_string()],
+                created_at: Some(Utc::now()),
+                snippet: "Principle 1".to_string(),
+                similarity_score: 0.7,
+                dynamic_score: 0.7,
+                vector_score: 0.0,
+                combined_score: 0.7,
+            },
+            MemoryCandidate {
+                id: "const-3".to_string(),
+                domain: Some(CONSTITUTION_DOMAIN.to_string()),
+                tags: vec!["type:goal".to_string()],
+                created_at: Some(Utc::now()),
+                snippet: "Goal 1".to_string(),
+                similarity_score: 0.6,
+                dynamic_score: 0.6,
+                vector_score: 0.0,
+                combined_score: 0.6,
+            },
+        ];
+
+        ensure_constitution_minimum(&mut selected, &pool, CONSTITUTION_MIN_COUNT);
+
+        // Should have 3 total (1 original + 2 new, not including duplicate)
+        assert_eq!(selected.len(), 3);
+
+        // Should not have duplicate const-1
+        let const_1_count = selected.iter().filter(|m| m.id == "const-1").count();
+        assert_eq!(const_1_count, 1, "Should not have duplicate const-1");
     }
 }

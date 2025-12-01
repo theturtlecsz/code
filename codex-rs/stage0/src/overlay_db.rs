@@ -25,6 +25,75 @@ pub enum StructureStatus {
     Structured,
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// P89/SPEC-KIT-105: Constitution Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Constitution memory types with associated priority levels
+///
+/// Used for domain:constitution memories. Each type maps to a specific
+/// initial_priority value that ensures constitution content ranks highly
+/// in DCC selection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConstitutionType {
+    /// Hard constraints that must never be violated (priority: 10)
+    Guardrail,
+    /// Architectural values and design principles (priority: 9)
+    Principle,
+    /// Mid-term objectives and success criteria (priority: 8)
+    Goal,
+    /// Explicit exclusions - what we don't build (priority: 8)
+    NonGoal,
+}
+
+impl ConstitutionType {
+    /// Get the initial_priority for this constitution type
+    ///
+    /// Returns:
+    /// - Guardrail: 10 (highest - hard constraints)
+    /// - Principle: 9 (architectural values)
+    /// - Goal/NonGoal: 8 (objectives and exclusions)
+    pub fn priority(&self) -> i32 {
+        match self {
+            Self::Guardrail => 10,
+            Self::Principle => 9,
+            Self::Goal | Self::NonGoal => 8,
+        }
+    }
+
+    /// Get the tag string for this constitution type
+    ///
+    /// Returns tag in format "type:guardrail", "type:principle", etc.
+    pub fn as_tag(&self) -> &'static str {
+        match self {
+            Self::Guardrail => "type:guardrail",
+            Self::Principle => "type:principle",
+            Self::Goal => "type:goal",
+            Self::NonGoal => "type:non-goal",
+        }
+    }
+
+    /// Parse constitution type from a tag string
+    ///
+    /// Accepts both "type:guardrail" and "guardrail" formats
+    pub fn parse(tag: &str) -> Option<Self> {
+        let normalized = tag.strip_prefix("type:").unwrap_or(tag);
+        match normalized {
+            "guardrail" => Some(Self::Guardrail),
+            "principle" => Some(Self::Principle),
+            "goal" => Some(Self::Goal),
+            "non-goal" | "nongoal" => Some(Self::NonGoal),
+            _ => None,
+        }
+    }
+}
+
+/// The domain identifier for constitution memories
+pub const CONSTITUTION_DOMAIN: &str = "constitution";
+
+/// Minimum number of constitution memories to always include in TASK_BRIEF
+pub const CONSTITUTION_MIN_COUNT: usize = 3;
+
 impl StructureStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -798,6 +867,220 @@ impl OverlayDb {
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
+    // P89/SPEC-KIT-105: Constitution Methods
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// Upsert a constitution memory with type-specific priority
+    ///
+    /// This is the primary method for storing constitution entries. It:
+    /// 1. Uses the ConstitutionType to determine initial_priority
+    /// 2. Creates/updates the overlay memory row
+    /// 3. Does NOT increment version (caller should use increment_constitution_version)
+    ///
+    /// # Arguments
+    /// * `memory_id` - The local-memory ID
+    /// * `constitution_type` - Type determines priority: guardrail=10, principle=9, goal/non-goal=8
+    /// * `content` - Raw constitution text content
+    pub fn upsert_constitution_memory(
+        &self,
+        memory_id: &str,
+        constitution_type: ConstitutionType,
+        content: &str,
+    ) -> Result<()> {
+        let priority = constitution_type.priority();
+        let now = Utc::now().to_rfc3339();
+        let status = StructureStatus::Structured.as_str();
+
+        self.conn
+            .execute(
+                r#"
+                INSERT INTO overlay_memories
+                    (memory_id, initial_priority, structure_status, content_raw, last_accessed_at)
+                VALUES (?1, ?2, ?3, ?4, ?5)
+                ON CONFLICT(memory_id) DO UPDATE SET
+                    initial_priority = ?2,
+                    structure_status = ?3,
+                    content_raw = ?4,
+                    last_accessed_at = ?5
+                "#,
+                params![memory_id, priority, status, content, now],
+            )
+            .map_err(|e| {
+                Stage0Error::overlay_db_with_source("failed to upsert constitution memory", e)
+            })?;
+
+        tracing::debug!(
+            memory_id = memory_id,
+            constitution_type = ?constitution_type,
+            priority = priority,
+            "Upserted constitution memory"
+        );
+
+        Ok(())
+    }
+
+    /// Get the current constitution version
+    ///
+    /// Returns 0 if no constitution has been defined yet.
+    pub fn get_constitution_version(&self) -> Result<u32> {
+        let version: i32 = self
+            .conn
+            .query_row(
+                "SELECT version FROM constitution_meta WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| {
+                Stage0Error::overlay_db_with_source("failed to get constitution version", e)
+            })?;
+
+        Ok(version as u32)
+    }
+
+    /// Increment the constitution version and optionally update the content hash
+    ///
+    /// Call this after modifying constitution memories (add/update/delete).
+    /// Returns the new version number.
+    pub fn increment_constitution_version(&self, content_hash: Option<&str>) -> Result<u32> {
+        let now = Utc::now().to_rfc3339();
+
+        if let Some(hash) = content_hash {
+            self.conn.execute(
+                r#"
+                UPDATE constitution_meta
+                SET version = version + 1,
+                    updated_at = ?1,
+                    content_hash = ?2
+                WHERE id = 1
+                "#,
+                params![now, hash],
+            )
+        } else {
+            self.conn.execute(
+                r#"
+                UPDATE constitution_meta
+                SET version = version + 1,
+                    updated_at = ?1
+                WHERE id = 1
+                "#,
+                params![now],
+            )
+        }
+        .map_err(|e| {
+            Stage0Error::overlay_db_with_source("failed to increment constitution version", e)
+        })?;
+
+        let new_version = self.get_constitution_version()?;
+
+        tracing::info!(
+            version = new_version,
+            hash = content_hash,
+            "Incremented constitution version"
+        );
+
+        Ok(new_version)
+    }
+
+    /// Get constitution metadata (version, hash, updated_at)
+    ///
+    /// Returns (version, content_hash, updated_at)
+    pub fn get_constitution_meta(&self) -> Result<(u32, Option<String>, Option<DateTime<Utc>>)> {
+        let result = self
+            .conn
+            .query_row(
+                r#"
+                SELECT version, content_hash, updated_at
+                FROM constitution_meta
+                WHERE id = 1
+                "#,
+                [],
+                |row| {
+                    let version: i32 = row.get(0)?;
+                    let hash: Option<String> = row.get(1)?;
+                    let updated_str: Option<String> = row.get(2)?;
+                    let updated_at = updated_str.and_then(|s| {
+                        DateTime::parse_from_rfc3339(&s)
+                            .ok()
+                            .map(|dt| dt.with_timezone(&Utc))
+                    });
+                    Ok((version as u32, hash, updated_at))
+                },
+            )
+            .map_err(|e| {
+                Stage0Error::overlay_db_with_source("failed to get constitution meta", e)
+            })?;
+
+        Ok(result)
+    }
+
+    /// Get all constitution memories ordered by priority (descending)
+    ///
+    /// Returns memories that have domain=constitution based on tag pattern.
+    /// Used by DCC for the separate always-on constitution pass.
+    ///
+    /// # Arguments
+    /// * `limit` - Maximum number of constitution memories to return
+    pub fn get_constitution_memories(&self, limit: usize) -> Result<Vec<OverlayMemory>> {
+        // Constitution memories have priority >= 8 (goal/non-goal/principle/guardrail)
+        // We identify them by high priority as a proxy for domain
+        // Full domain filtering happens in DCC via local-memory search
+        let mut stmt = self
+            .conn
+            .prepare(
+                r#"
+                SELECT memory_id, initial_priority, usage_count, last_accessed_at,
+                       dynamic_score, structure_status, content_raw
+                FROM overlay_memories
+                WHERE initial_priority >= 8
+                ORDER BY initial_priority DESC, dynamic_score DESC NULLS LAST
+                LIMIT ?1
+                "#,
+            )
+            .map_err(|e| Stage0Error::overlay_db_with_source("failed to prepare query", e))?;
+
+        let rows = stmt
+            .query_map(params![limit as i64], |row| {
+                Ok(OverlayMemory {
+                    memory_id: row.get(0)?,
+                    initial_priority: row.get(1)?,
+                    usage_count: row.get(2)?,
+                    last_accessed_at: row.get::<_, Option<String>>(3)?.and_then(|s| {
+                        DateTime::parse_from_rfc3339(&s)
+                            .ok()
+                            .map(|dt| dt.with_timezone(&Utc))
+                    }),
+                    dynamic_score: row.get(4)?,
+                    structure_status: row
+                        .get::<_, Option<String>>(5)?
+                        .and_then(|s| StructureStatus::parse(&s)),
+                    content_raw: row.get(6)?,
+                })
+            })
+            .map_err(|e| Stage0Error::overlay_db_with_source("failed to query constitution memories", e))?;
+
+        let mut memories = Vec::new();
+        for row in rows {
+            memories.push(row.map_err(|e| {
+                Stage0Error::overlay_db_with_source("failed to read constitution memory row", e)
+            })?);
+        }
+        Ok(memories)
+    }
+
+    /// Count constitution memories in the overlay
+    ///
+    /// Returns count of memories with priority >= 8 (constitution range)
+    pub fn constitution_memory_count(&self) -> Result<i64> {
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM overlay_memories WHERE initial_priority >= 8",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| Stage0Error::overlay_db_with_source("failed to count constitution memories", e))
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
     // Metrics
     // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1141,5 +1424,184 @@ mod tests {
             .get_tier2_cache_with_ttl("nonexistent-hash", 24, now)
             .expect("lookup");
         assert!(result.is_none(), "Nonexistent entry should return None");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // P89/SPEC-KIT-105: Constitution tests
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_constitution_type_priority() {
+        assert_eq!(ConstitutionType::Guardrail.priority(), 10);
+        assert_eq!(ConstitutionType::Principle.priority(), 9);
+        assert_eq!(ConstitutionType::Goal.priority(), 8);
+        assert_eq!(ConstitutionType::NonGoal.priority(), 8);
+    }
+
+    #[test]
+    fn test_constitution_type_tags() {
+        assert_eq!(ConstitutionType::Guardrail.as_tag(), "type:guardrail");
+        assert_eq!(ConstitutionType::Principle.as_tag(), "type:principle");
+        assert_eq!(ConstitutionType::Goal.as_tag(), "type:goal");
+        assert_eq!(ConstitutionType::NonGoal.as_tag(), "type:non-goal");
+    }
+
+    #[test]
+    fn test_constitution_type_parse() {
+        // Full format
+        assert_eq!(
+            ConstitutionType::parse("type:guardrail"),
+            Some(ConstitutionType::Guardrail)
+        );
+        assert_eq!(
+            ConstitutionType::parse("type:principle"),
+            Some(ConstitutionType::Principle)
+        );
+        assert_eq!(
+            ConstitutionType::parse("type:goal"),
+            Some(ConstitutionType::Goal)
+        );
+        assert_eq!(
+            ConstitutionType::parse("type:non-goal"),
+            Some(ConstitutionType::NonGoal)
+        );
+
+        // Short format
+        assert_eq!(
+            ConstitutionType::parse("guardrail"),
+            Some(ConstitutionType::Guardrail)
+        );
+        assert_eq!(
+            ConstitutionType::parse("nongoal"),
+            Some(ConstitutionType::NonGoal)
+        );
+
+        // Unknown
+        assert_eq!(ConstitutionType::parse("type:unknown"), None);
+        assert_eq!(ConstitutionType::parse("pattern"), None);
+    }
+
+    #[test]
+    fn test_upsert_constitution_memory() {
+        let db = OverlayDb::connect_in_memory().expect("should connect");
+
+        // Insert a guardrail (priority 10)
+        db.upsert_constitution_memory(
+            "const-001",
+            ConstitutionType::Guardrail,
+            "Never store secrets in plain text",
+        )
+        .expect("upsert guardrail");
+
+        let mem = db.get_memory("const-001").expect("get").expect("exists");
+        assert_eq!(mem.initial_priority, 10);
+        assert_eq!(mem.structure_status, Some(StructureStatus::Structured));
+
+        // Insert a principle (priority 9)
+        db.upsert_constitution_memory(
+            "const-002",
+            ConstitutionType::Principle,
+            "Developer ergonomics first",
+        )
+        .expect("upsert principle");
+
+        let mem = db.get_memory("const-002").expect("get").expect("exists");
+        assert_eq!(mem.initial_priority, 9);
+
+        // Insert a goal (priority 8)
+        db.upsert_constitution_memory(
+            "const-003",
+            ConstitutionType::Goal,
+            "Support 3 cloud providers by Q3",
+        )
+        .expect("upsert goal");
+
+        let mem = db.get_memory("const-003").expect("get").expect("exists");
+        assert_eq!(mem.initial_priority, 8);
+    }
+
+    #[test]
+    fn test_constitution_version_starts_at_zero() {
+        let db = OverlayDb::connect_in_memory().expect("should connect");
+
+        let version = db.get_constitution_version().expect("get version");
+        assert_eq!(version, 0, "Constitution version should start at 0");
+    }
+
+    #[test]
+    fn test_constitution_version_increment() {
+        let db = OverlayDb::connect_in_memory().expect("should connect");
+
+        // Initial version
+        let v0 = db.get_constitution_version().expect("get");
+        assert_eq!(v0, 0);
+
+        // Increment without hash
+        let v1 = db.increment_constitution_version(None).expect("increment");
+        assert_eq!(v1, 1);
+
+        // Increment with hash
+        let v2 = db
+            .increment_constitution_version(Some("sha256:abc123"))
+            .expect("increment");
+        assert_eq!(v2, 2);
+
+        // Verify stored in DB
+        let (version, hash, updated_at) = db.get_constitution_meta().expect("meta");
+        assert_eq!(version, 2);
+        assert_eq!(hash, Some("sha256:abc123".to_string()));
+        assert!(updated_at.is_some());
+    }
+
+    #[test]
+    fn test_get_constitution_memories() {
+        let db = OverlayDb::connect_in_memory().expect("should connect");
+
+        // Insert some constitution memories (high priority)
+        db.upsert_constitution_memory("const-g1", ConstitutionType::Guardrail, "Guardrail 1")
+            .expect("insert");
+        db.upsert_constitution_memory("const-p1", ConstitutionType::Principle, "Principle 1")
+            .expect("insert");
+        db.upsert_constitution_memory("const-goal", ConstitutionType::Goal, "Goal 1")
+            .expect("insert");
+
+        // Insert some regular memories (low priority)
+        db.ensure_memory_row("regular-1", 5).expect("insert");
+        db.ensure_memory_row("regular-2", 3).expect("insert");
+
+        // Get constitution memories only
+        let constitution = db.get_constitution_memories(10).expect("get");
+
+        // Should have 3 constitution memories (priority >= 8)
+        assert_eq!(constitution.len(), 3);
+
+        // Should be ordered by priority (guardrail=10, principle=9, goal=8)
+        assert_eq!(constitution[0].initial_priority, 10);
+        assert_eq!(constitution[1].initial_priority, 9);
+        assert_eq!(constitution[2].initial_priority, 8);
+    }
+
+    #[test]
+    fn test_constitution_memory_count() {
+        let db = OverlayDb::connect_in_memory().expect("should connect");
+
+        // No constitution memories initially
+        let count = db.constitution_memory_count().expect("count");
+        assert_eq!(count, 0);
+
+        // Add constitution memories
+        db.upsert_constitution_memory("const-1", ConstitutionType::Guardrail, "G1")
+            .expect("insert");
+        db.upsert_constitution_memory("const-2", ConstitutionType::Principle, "P1")
+            .expect("insert");
+
+        let count = db.constitution_memory_count().expect("count");
+        assert_eq!(count, 2);
+
+        // Add regular memory (should not be counted)
+        db.ensure_memory_row("regular", 5).expect("insert");
+
+        let count = db.constitution_memory_count().expect("count");
+        assert_eq!(count, 2, "Regular memories should not be counted");
     }
 }

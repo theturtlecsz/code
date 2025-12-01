@@ -45,4 +45,21 @@ CREATE TABLE IF NOT EXISTS cache_memory_dependencies (
 CREATE INDEX IF NOT EXISTS idx_cache_dependency_memory_id
     ON cache_memory_dependencies(memory_id);
 
+-- P89/SPEC-KIT-105: Constitution metadata and versioning
+-- Single-row table (enforced by CHECK constraint) for constitution version tracking
+CREATE TABLE IF NOT EXISTS constitution_meta (
+    id           INTEGER PRIMARY KEY CHECK (id = 1),
+    version      INTEGER NOT NULL DEFAULT 1,
+    updated_at   DATETIME NOT NULL,
+    content_hash TEXT     -- SHA-256 hash of constitution content for drift detection
+);
+
+-- Index for efficient version lookups
+CREATE INDEX IF NOT EXISTS idx_constitution_version
+    ON constitution_meta(version);
+
+-- Initialize constitution_meta if empty (single row table)
+INSERT OR IGNORE INTO constitution_meta (id, version, updated_at)
+VALUES (1, 0, datetime('now'));
+
 COMMIT;
