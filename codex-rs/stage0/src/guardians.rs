@@ -156,7 +156,7 @@ impl GuardedMemory {
 // LLM Client Trait
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Trait for LLM operations used by TemplateGuardian
+/// Trait for LLM operations used by Guardians and DCC
 ///
 /// Implementations should be provided by codex-rs using codex-ollama or similar.
 /// Stage0 only depends on this trait, not on specific LLM crates.
@@ -180,6 +180,17 @@ pub trait LlmClient: Send + Sync {
     /// OUTCOME: <result/impact>
     /// ```
     async fn restructure_template(&self, input: &str, kind: MemoryKind) -> Result<String>;
+
+    /// Generate an Intent Query Object (IQO) from spec content and environment
+    ///
+    /// Used by DCC to shape local-memory queries. See STAGE0_IQO_PROMPT.md.
+    /// Implementations should parse spec content and environment context to
+    /// produce relevant domains, tags, and keywords for memory retrieval.
+    async fn generate_iqo(
+        &self,
+        spec_content: &str,
+        env: &crate::dcc::EnvCtx,
+    ) -> Result<crate::dcc::Iqo>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -386,6 +397,20 @@ mod tests {
                 }
                 Err(e) => Err(Stage0Error::prompt(e.to_string())),
             }
+        }
+
+        async fn generate_iqo(
+            &self,
+            _spec_content: &str,
+            _env: &crate::dcc::EnvCtx,
+        ) -> Result<crate::dcc::Iqo> {
+            // Default mock returns simple IQO
+            Ok(crate::dcc::Iqo {
+                domains: vec!["spec-kit".to_string()],
+                keywords: vec!["test".to_string()],
+                max_candidates: 50,
+                ..Default::default()
+            })
         }
     }
 

@@ -529,6 +529,130 @@ impl OverlayDb {
         Ok(deleted)
     }
 
+    // ─────────────────────────────────────────────────────────────────────────────
+    // V1.3: Scoring-aware usage recording
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// Record memory usage and recalculate dynamic score
+    ///
+    /// This is the primary method for DCC integration. When a memory is selected
+    /// for inclusion in a TASK_BRIEF, call this to:
+    /// 1. Increment usage_count
+    /// 2. Update last_accessed_at
+    /// 3. Recalculate dynamic_score using the scoring formula
+    ///
+    /// If the memory doesn't exist in the overlay, it's created with defaults.
+    ///
+    /// # Arguments
+    /// * `memory_id` - The local-memory ID
+    /// * `initial_priority` - Priority to use if creating new row (1-10)
+    /// * `created_at` - Memory creation time (from local-memory)
+    /// * `scoring_config` - Scoring weights and parameters
+    pub fn record_memory_usage(
+        &self,
+        memory_id: &str,
+        initial_priority: i32,
+        created_at: DateTime<Utc>,
+        scoring_config: &crate::config::ScoringConfig,
+    ) -> Result<f64> {
+        let now = Utc::now();
+        let now_str = now.to_rfc3339();
+
+        // Ensure the row exists
+        self.ensure_memory_row(memory_id, initial_priority)?;
+
+        // Get current state
+        let mem = self
+            .get_memory(memory_id)?
+            .ok_or_else(|| Stage0Error::overlay_db("memory row not found after ensure"))?;
+
+        // Calculate new score with incremented usage
+        let new_usage_count = mem.usage_count as u32 + 1;
+        let scoring_input = crate::scoring::ScoringInput::new(
+            new_usage_count,
+            mem.initial_priority,
+            Some(now), // last_accessed_at will be now
+            created_at,
+        );
+        let new_score = crate::scoring::calculate_score(&scoring_input, scoring_config, now);
+
+        // Atomic update
+        self.conn
+            .execute(
+                r#"
+                UPDATE overlay_memories
+                SET usage_count = ?2,
+                    last_accessed_at = ?3,
+                    dynamic_score = ?4
+                WHERE memory_id = ?1
+                "#,
+                params![memory_id, new_usage_count as i32, now_str, new_score],
+            )
+            .map_err(|e| Stage0Error::overlay_db_with_source("failed to record memory usage", e))?;
+
+        tracing::debug!(
+            memory_id = memory_id,
+            usage_count = new_usage_count,
+            new_score = new_score,
+            "Recorded memory usage"
+        );
+
+        Ok(new_score)
+    }
+
+    /// Batch record usage for multiple memories
+    ///
+    /// More efficient than calling record_memory_usage in a loop when
+    /// multiple memories are selected in a single DCC run.
+    ///
+    /// Returns a map of memory_id -> new_score.
+    pub fn record_batch_usage(
+        &self,
+        memories: &[(String, i32, DateTime<Utc>)], // (memory_id, priority, created_at)
+        scoring_config: &crate::config::ScoringConfig,
+    ) -> Result<Vec<(String, f64)>> {
+        let mut results = Vec::with_capacity(memories.len());
+
+        for (memory_id, priority, created_at) in memories {
+            let score = self.record_memory_usage(memory_id, *priority, *created_at, scoring_config)?;
+            results.push((memory_id.clone(), score));
+        }
+
+        Ok(results)
+    }
+
+    /// Recalculate dynamic score for a memory without recording usage
+    ///
+    /// Useful for background score refresh or when re-scoring after config changes.
+    pub fn recalculate_score(
+        &self,
+        memory_id: &str,
+        created_at: DateTime<Utc>,
+        scoring_config: &crate::config::ScoringConfig,
+    ) -> Result<Option<f64>> {
+        let now = Utc::now();
+
+        let Some(mem) = self.get_memory(memory_id)? else {
+            return Ok(None);
+        };
+
+        let scoring_input = crate::scoring::ScoringInput::new(
+            mem.usage_count as u32,
+            mem.initial_priority,
+            mem.last_accessed_at,
+            created_at,
+        );
+        let new_score = crate::scoring::calculate_score(&scoring_input, scoring_config, now);
+
+        self.update_dynamic_score(memory_id, new_score)?;
+
+        Ok(Some(new_score))
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Metrics
+    // ─────────────────────────────────────────────────────────────────────────────
+
     /// Get memory count (for metrics/debugging)
     pub fn memory_count(&self) -> Result<i64> {
         self.conn
@@ -670,5 +794,104 @@ mod tests {
         assert_eq!(mems[0].memory_id, "mem-002"); // highest score
         assert_eq!(mems[1].memory_id, "mem-003");
         assert_eq!(mems[2].memory_id, "mem-001"); // lowest score
+    }
+
+    // V1.3: Scoring tests
+    #[test]
+    fn test_record_memory_usage() {
+        use crate::config::ScoringConfig;
+
+        let db = OverlayDb::connect_in_memory().expect("should connect");
+        let config = ScoringConfig::default();
+        let created_at = Utc::now();
+
+        // Record usage for a new memory (creates row)
+        let score1 = db
+            .record_memory_usage("mem-new", 8, created_at, &config)
+            .expect("record");
+        assert!(score1 > 0.0);
+
+        let mem = db.get_memory("mem-new").expect("get").expect("exists");
+        assert_eq!(mem.usage_count, 1);
+        assert!(mem.last_accessed_at.is_some());
+        assert!(mem.dynamic_score.is_some());
+
+        // Record again - usage should increment
+        let score2 = db
+            .record_memory_usage("mem-new", 8, created_at, &config)
+            .expect("record");
+        let mem = db.get_memory("mem-new").expect("get").expect("exists");
+        assert_eq!(mem.usage_count, 2);
+
+        // Score should change (typically decrease due to less novelty)
+        assert_ne!(score1, score2);
+    }
+
+    #[test]
+    fn test_record_batch_usage() {
+        use crate::config::ScoringConfig;
+
+        let db = OverlayDb::connect_in_memory().expect("should connect");
+        let config = ScoringConfig::default();
+        let created_at = Utc::now();
+
+        let memories = vec![
+            ("mem-a".to_string(), 5, created_at),
+            ("mem-b".to_string(), 8, created_at),
+            ("mem-c".to_string(), 3, created_at),
+        ];
+
+        let results = db.record_batch_usage(&memories, &config).expect("batch");
+        assert_eq!(results.len(), 3);
+
+        // All should have scores > 0
+        for (_, score) in &results {
+            assert!(*score > 0.0);
+        }
+
+        // Higher priority should generally yield higher score
+        let score_b = results.iter().find(|(id, _)| id == "mem-b").unwrap().1;
+        let score_c = results.iter().find(|(id, _)| id == "mem-c").unwrap().1;
+        assert!(score_b > score_c);
+    }
+
+    #[test]
+    fn test_recalculate_score() {
+        use crate::config::ScoringConfig;
+
+        let db = OverlayDb::connect_in_memory().expect("should connect");
+        let config = ScoringConfig::default();
+        let created_at = Utc::now();
+
+        // Setup: create memory with some usage
+        db.ensure_memory_row("mem-recalc", 7).expect("insert");
+        db.record_access("mem-recalc").expect("access");
+        db.record_access("mem-recalc").expect("access");
+
+        // Recalculate
+        let new_score = db
+            .recalculate_score("mem-recalc", created_at, &config)
+            .expect("recalc")
+            .expect("exists");
+
+        assert!(new_score > 0.0);
+
+        // Verify stored in DB
+        let mem = db.get_memory("mem-recalc").expect("get").expect("exists");
+        assert!((mem.dynamic_score.unwrap() - new_score).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_recalculate_score_nonexistent() {
+        use crate::config::ScoringConfig;
+
+        let db = OverlayDb::connect_in_memory().expect("should connect");
+        let config = ScoringConfig::default();
+
+        let result = db
+            .recalculate_score("nonexistent", Utc::now(), &config)
+            .expect("recalc");
+
+        assert!(result.is_none());
     }
 }

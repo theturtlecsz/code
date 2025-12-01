@@ -1,7 +1,7 @@
 # SPEC-KIT-102 V2 Handoff: Stage 0 Overlay Engine
 
-**Status**: Implementation In Progress | V1.1+V1.2 Complete, V1.3 Next
-**Last Session**: P75 (2025-12-01)
+**Status**: Implementation In Progress | V1.1–V1.4 Complete, V1.5 Next
+**Last Session**: P76 (2025-12-01)
 **Architecture**: Rust Overlay Engine (treats local-memory as black-box backend)
 
 ---
@@ -30,7 +30,24 @@ SPEC-KIT-102 V2 defines a **Stage 0 Overlay Engine** in Rust that:
 - **V1.1 Complete**: Created `codex-rs/stage0/` crate with overlay DB + config
 - **V1.2 Complete**: Implemented MetadataGuardian + TemplateGuardian + LlmClient trait
 - 26 tests passing, clippy clean
-- Ready for V1.3 Dynamic Scoring
+
+**Session P76 Progress**:
+- **V1.3 Complete**: Implemented Dynamic Scoring
+  - Created `scoring.rs` with formula from spec (usage/recency/priority/novelty)
+  - `ScoringInput`, `ScoringComponents`, `calculate_dynamic_score()`
+  - Extended `OverlayDb` with `record_memory_usage()`, `record_batch_usage()`, `recalculate_score()`
+  - Added `Stage0Engine::record_selected_memories_usage()` for DCC integration
+- **V1.4 Complete**: Implemented DCC (Dynamic Context Compiler)
+  - Created `dcc.rs` with full pipeline: IQO → search → score combination → MMR → TASK_BRIEF
+  - `Iqo`, `MemoryCandidate`, `ExplainScore`, `CompileContextResult` types
+  - `LocalMemoryClient` trait for local-memory abstraction
+  - Extended `LlmClient` trait with `generate_iqo()` method
+  - `build_iqo()` with LLM or heuristic fallback
+  - `compile_context()` pipeline with MMR diversity reranking
+  - `assemble_task_brief()` following STAGE0_TASK_BRIEF_TEMPLATE.md
+  - `Stage0Engine::compile_context()` wrapper
+  - 53 tests passing, clippy clean
+- Ready for V1.5 Tier 2 Orchestration
 
 ---
 
@@ -141,19 +158,27 @@ V1.2: Guardians ✅ COMPLETE (P75)
   - MockLlmClient for testing
   - 26 tests passing (15 new guardian tests)
 
-V1.3: Dynamic Scoring ⏳ NEXT
-  - Implement scoring formula (usage/recency/priority/novelty)
+V1.3: Dynamic Scoring ✅ COMPLETE (P76)
+  - Created scoring.rs with full formula implementation
+  - ScoringInput, ScoringComponents, calculate_dynamic_score()
   - Config-driven weights from Stage0Config.scoring
-  - Real-time score updates on memory selection
-  - record_selected_memories_usage() for DCC integration
+  - OverlayDb: record_memory_usage(), record_batch_usage(), recalculate_score()
+  - Stage0Engine::record_selected_memories_usage() for DCC integration
+  - 16 new tests (42 total)
 
-V1.4: DCC (Dynamic Context Compiler)
-  - IQO generation (from STAGE0_IQO_PROMPT.md)
-  - Query local-memory via search/analysis MCP tools
-  - Join with overlay scores, MMR diversity
-  - TASK_BRIEF.md assembly
+V1.4: DCC (Dynamic Context Compiler) ✅ COMPLETE (P76)
+  - Created dcc.rs with full pipeline implementation
+  - Iqo, MemoryCandidate, ExplainScore, CompileContextResult types
+  - LocalMemoryClient trait (local-memory abstraction)
+  - Extended LlmClient with generate_iqo() method
+  - build_iqo() with LLM/heuristic fallback
+  - compile_context() pipeline: IQO → search → score → MMR → TASK_BRIEF
+  - select_with_mmr() diversity reranking
+  - assemble_task_brief() following template spec
+  - Stage0Engine::compile_context() wrapper
+  - 11 new tests (53 total)
 
-V1.5: Tier 2 Orchestration
+V1.5: Tier 2 Orchestration ⏳ NEXT
   - run_stage0() entry point (from STAGE0_SPECKITAUTO_INTEGRATION.md)
   - Cache lookup (input_hash = hash(spec + brief))
   - NotebookLM MCP calls (from STAGE0_TIER2_PROMPT.md)
@@ -197,40 +222,46 @@ V1.5: Tier 2 Orchestration
 
 ---
 
-## Resume Prompt (V1.3 Dynamic Scoring)
+## Resume Prompt (V1.5 Tier 2 Orchestration)
 
 ```
 Load docs/HANDOFF-SPEC-KIT-102-V2.md
 
-Resuming SPEC-KIT-102 Stage 0 Overlay Engine - V1.3 Dynamic Scoring.
+Resuming SPEC-KIT-102 Stage 0 Overlay Engine - V1.5 Tier 2 Orchestration.
 
 Current state:
-- V1.1 Complete: codex-rs/stage0/ crate with overlay DB + config (11 tests)
-- V1.2 Complete: Guardians (MetadataGuardian + TemplateGuardian + LlmClient trait, 26 tests)
-- V1.3 Next: Dynamic Scoring
+- V1.1 Complete: codex-rs/stage0/ crate with overlay DB + config
+- V1.2 Complete: Guardians (MetadataGuardian + TemplateGuardian + LlmClient trait)
+- V1.3 Complete: Dynamic Scoring (scoring.rs)
+- V1.4 Complete: DCC (dcc.rs - IQO, compile_context, MMR, TASK_BRIEF, 53 tests)
+- V1.5 Next: Tier 2 Orchestration
 
-V1.3 Implementation Tasks:
-1. Create scoring.rs with ScoringInput, ScoringParams, calculate_dynamic_score()
-2. Extend OverlayDb with get_overlay_memory() and record_memory_usage()
-3. Add Stage0Engine::record_selected_memories_usage() for DCC integration
-4. Unit tests for scoring formula behavior
+V1.5 Implementation Tasks:
+1. Create tier2.rs with NotebookLM client trait
+2. Implement cache lookup (input_hash = hash(spec + brief))
+3. Add run_stage0() entry point (from STAGE0_SPECKITAUTO_INTEGRATION.md)
+4. Implement NotebookLM MCP calls (from STAGE0_TIER2_PROMPT.md)
+5. Parse Divine Truth response and inject into output
+6. Update usage counts after successful run
 
 Key files to reference:
-- STAGE0_SCORING_AND_DCC.md (scoring formula spec)
-- codex-rs/stage0/src/config.rs (ScoringConfig already defined)
-- codex-rs/stage0/src/overlay_db.rs (extend with scoring updates)
+- STAGE0_SPECKITAUTO_INTEGRATION.md (run_stage0 API contract)
+- STAGE0_TIER2_PROMPT.md (NotebookLM prompt)
+- codex-rs/stage0/src/dcc.rs (compile_context integration)
+- codex-rs/stage0/src/overlay_db.rs (tier2_synthesis_cache methods)
 
-Design decisions (from P75):
-- Real-time scoring on memory selection (not batch)
-- Defer Ollama LlmClient adapter to V1.4+
-- No global background recalculation yet
+Design decisions:
+- Tier 2 client should be a trait (NotebookLmClient) for testability
+- Cache key = hash(spec_content + task_brief_md)
+- Divine Truth response should be parsed into structured format
+- run_stage0 returns Stage0Result with brief + divine_truth + metadata
 
-[Continue with V1.3 implementation]
+[Continue with V1.5 implementation]
 ```
 
 ---
 
-## Crate Structure (Post V1.2)
+## Crate Structure (Post V1.4)
 
 ```
 codex-rs/stage0/
@@ -241,11 +272,13 @@ codex-rs/stage0/
     ├── config.rs            # Stage0Config (TOML loading)
     ├── errors.rs            # Stage0Error (7 categories)
     ├── guardians.rs         # MemoryKind, MemoryDraft, GuardedMemory, LlmClient
-    ├── overlay_db.rs        # OverlayDb (SQLite wrapper)
-    └── scoring.rs           # V1.3: NEW - scoring formula
+    ├── overlay_db.rs        # OverlayDb (SQLite wrapper + scoring methods)
+    ├── scoring.rs           # V1.3: ScoringInput, calculate_dynamic_score()
+    ├── dcc.rs               # V1.4: Iqo, LocalMemoryClient, compile_context(), MMR
+    └── tier2.rs             # V1.5: TODO - NotebookLmClient, run_stage0()
 ```
 
 ---
 
-*Handoff updated: 2025-12-01 (Session P75)*
-*Status: V1.1+V1.2 complete; V1.3 Dynamic Scoring next*
+*Handoff updated: 2025-12-01 (Session P76)*
+*Status: V1.1–V1.4 complete; V1.5 Tier 2 Orchestration next*
