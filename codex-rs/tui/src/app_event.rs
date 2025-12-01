@@ -619,6 +619,14 @@ pub(crate) enum AppEvent {
         description: String,
     },
 
+    /// Vision builder questions answered (P93/SPEC-KIT-105)
+    VisionBuilderSubmitted {
+        answers: std::collections::HashMap<String, String>,
+    },
+
+    /// Vision builder was cancelled by user (P93/SPEC-KIT-105)
+    VisionBuilderCancelled,
+
     /// Clarification markers resolved (SPEC-KIT-971)
     ClarifySubmitted {
         spec_id: String,

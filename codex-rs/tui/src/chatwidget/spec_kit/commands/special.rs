@@ -783,6 +783,47 @@ fn execute_constitution_ace(widget: &mut ChatWidget) {
     widget.request_redraw();
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// P93/SPEC-KIT-105: Vision Front Door Command
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Command: /speckit.vision
+/// Guided Q&A wizard for project vision and constitution creation
+///
+/// P93/SPEC-KIT-105: Captures target users, problem statement, goals, non-goals,
+/// and principles through an interactive modal. Answers are stored as constitution
+/// memories with appropriate types and priorities.
+pub struct SpecKitVisionCommand;
+
+impl SpecKitCommand for SpecKitVisionCommand {
+    fn name(&self) -> &'static str {
+        "speckit.vision"
+    }
+
+    fn aliases(&self) -> &[&'static str] {
+        &["vision"]
+    }
+
+    fn description(&self) -> &'static str {
+        "guided Q&A wizard for project vision and constitution (P93)"
+    }
+
+    fn execute(&self, widget: &mut ChatWidget, _args: String) {
+        use super::super::pipeline_coordinator::run_constitution_readiness_gate;
+
+        // P91/SPEC-KIT-105: Run constitution readiness gate (warn-only)
+        // Vision is how users CREATE constitution, so gate is informational only
+        run_constitution_readiness_gate(widget);
+
+        // Show the vision builder modal
+        widget.show_vision_builder();
+    }
+
+    fn requires_args(&self) -> bool {
+        false
+    }
+}
+
 /// Command: /speckit.seed
 /// Generate NotebookLM-ready Markdown files from local-memory and codebase
 /// SPEC-KIT-102: Shadow Notebook Seeder V1

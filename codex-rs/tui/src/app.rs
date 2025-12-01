@@ -3204,6 +3204,18 @@ impl App<'_> {
                     }
                 }
                 // === END FORK-SPECIFIC: PRD builder events ===
+                // === FORK-SPECIFIC: Vision builder events (P93/SPEC-KIT-105) ===
+                AppEvent::VisionBuilderSubmitted { answers } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        spec_kit::on_vision_builder_submitted(widget, answers);
+                    }
+                }
+                AppEvent::VisionBuilderCancelled => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        spec_kit::on_vision_builder_cancelled(widget);
+                    }
+                }
+                // === END FORK-SPECIFIC: Vision builder events ===
                 // === FORK-SPECIFIC: Clarify events (SPEC-KIT-971) ===
                 AppEvent::ClarifySubmitted {
                     spec_id,

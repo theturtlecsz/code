@@ -37,6 +37,7 @@ mod pipeline_configurator_view;
 mod popup_consts;
 pub(crate) mod prd_builder_modal;
 mod quality_gate_modal;
+pub(crate) mod vision_builder_modal;
 mod scroll_state;
 mod selection_popup_common;
 pub(crate) use custom_prompt_view::CustomPromptView;
@@ -677,6 +678,14 @@ impl BottomPane<'_> {
         questions: Vec<clarify_modal::ClarifyQuestion>,
     ) {
         let modal = clarify_modal::ClarifyModal::new(spec_id, questions, self.app_event_tx.clone());
+        self.active_view = Some(Box::new(modal));
+        self.status_view_active = false;
+        self.request_redraw();
+    }
+
+    /// Show vision builder modal for guided constitution creation (P93/SPEC-KIT-105)
+    pub fn show_vision_builder(&mut self) {
+        let modal = vision_builder_modal::VisionBuilderModal::new(self.app_event_tx.clone());
         self.active_view = Some(Box::new(modal));
         self.status_view_active = false;
         self.request_redraw();

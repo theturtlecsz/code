@@ -160,6 +160,7 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
     registry.register(Box::new(VerifyCommand));
     registry.register(Box::new(SpecConsensusCommand));
     registry.register(Box::new(SpecKitConstitutionCommand));
+    registry.register(Box::new(SpecKitVisionCommand)); // P93/SPEC-KIT-105: Vision Q&A wizard
     registry.register(Box::new(SpecKitAceStatusCommand));
     registry.register(Box::new(SpecKitSeedCommand)); // SPEC-KIT-102: Shadow Notebook Seeder
     registry.register(Box::new(SpecKitPlanPipelineCommand)); // P92/SPEC-KIT-105: Planning pipeline
@@ -309,11 +310,12 @@ mod tests {
         // Test that the global registry has all expected commands
         let registry = SPEC_KIT_REGISTRY.lock().unwrap();
 
-        // 35 commands: 14 special + 6 stage + 3 quality + 7 guardrail + 1 evidence + 1 search + 2 templates
+        // 36 commands: 15 special + 6 stage + 3 quality + 7 guardrail + 1 evidence + 1 search + 2 templates
         // SPEC-KIT-102 V2: Added stage0.index and stage0.eval-backend (2 new)
         // P86: Added stage0.eval-code (1 new)
         // P92/SPEC-KIT-105: Added speckit.plan-pipeline (1 new)
-        assert_eq!(registry.len(), 35, "Registry should have 35 commands");
+        // P93/SPEC-KIT-105: Added speckit.vision (1 new)
+        assert_eq!(registry.len(), 36, "Registry should have 36 commands");
 
         // Verify key commands are registered
         assert!(registry.find("speckit.status").is_some());
@@ -321,6 +323,7 @@ mod tests {
         assert!(registry.find("speckit.plan").is_some());
         assert!(registry.find("speckit.auto").is_some());
         assert!(registry.find("speckit.constitution").is_some());
+        assert!(registry.find("speckit.vision").is_some()); // P93
         assert!(registry.find("guardrail.plan").is_some());
     }
 
@@ -530,12 +533,13 @@ mod tests {
         // SPEC-KIT-102 V2: Added stage0.index (no alias) + stage0.eval-backend with 'stage0.eval' alias
         // P86: Added stage0.eval-code (no alias)
         // P92/SPEC-KIT-105: Added speckit.plan-pipeline with 'speckit.planning' and 'plan-pipeline' aliases
-        // 35 primary names + 18 aliases = 53 total names
+        // P93/SPEC-KIT-105: Added speckit.vision with 'vision' alias
+        // 36 primary names + 19 aliases = 55 total names
         let all_names = registry.all_names();
         assert_eq!(
             all_names.len(),
-            53,
-            "Should have 53 total command names (35 primary + 18 aliases)"
+            55,
+            "Should have 55 total command names (36 primary + 19 aliases)"
         );
     }
 

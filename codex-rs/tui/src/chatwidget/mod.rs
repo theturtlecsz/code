@@ -5778,6 +5778,11 @@ impl ChatWidget<'_> {
         self.bottom_pane.show_clarify_modal(spec_id, questions);
     }
 
+    /// Show vision builder modal for guided constitution creation (P93/SPEC-KIT-105)
+    pub(crate) fn show_vision_builder(&mut self) {
+        self.bottom_pane.show_vision_builder();
+    }
+
     pub(crate) fn perform_undo_restore(
         &mut self,
         index: usize,

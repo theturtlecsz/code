@@ -50,6 +50,7 @@ pub mod pipeline_configurator; // SPEC-947: Pipeline UI configurator - interacti
 pub mod pipeline_coordinator;
 pub mod prd_builder_handler; // SPEC-KIT-970: PRD builder modal event handlers
 pub mod project_detector; // SPEC-KIT-971: Project type detection for context-aware questions
+pub mod vision_builder_handler; // P93/SPEC-KIT-105: Vision builder modal event handlers
 pub mod project_native; // SPEC-KIT-960: Native project scaffolding
 pub mod spec_directory;
 pub mod stage0_integration; // SPEC-KIT-102: Stage 0 context injection for /speckit.auto
@@ -120,6 +121,9 @@ pub(crate) use prd_builder_handler::{on_prd_builder_cancelled, on_prd_builder_su
 
 // Re-export clarify handler functions (SPEC-KIT-971)
 pub(crate) use clarify_handler::{on_clarify_cancelled, on_clarify_submitted};
+
+// Re-export vision builder handler functions (P93/SPEC-KIT-105)
+pub(crate) use vision_builder_handler::{on_vision_builder_cancelled, on_vision_builder_submitted};
 
 // Re-export pipeline configuration types (SPEC-948)
 pub use pipeline_config::PipelineOverrides;
