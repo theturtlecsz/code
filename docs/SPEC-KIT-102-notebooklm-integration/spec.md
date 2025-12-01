@@ -1,19 +1,37 @@
 # SPEC-KIT-102: NotebookLM Integration & Tiered Memory Architecture
 
-**Status**: Draft (Research Complete, Pending Implementation)
+**Status**: Research & Planning Complete | Implementation Ready
 **Created**: 2025-11-30
-**Updated**: 2025-11-30 (P71 Session Decisions)
+**Updated**: 2025-11-30 (P72 - Research Complete)
 **Authors**: Research synthesis from PPP Framework analysis
-**Dependencies**: local-memory daemon, NotebookLM MCP bridge
+**Dependencies**: local-memory daemon (closed-source), NotebookLM MCP bridge
 
-### Session Decisions (P71)
+### Related Documentation
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| Phase 0 (Data Integrity) | Research/Documentation first | No implementation until research complete |
-| Seeding Script | Include as fallback | Manual option for initial NotebookLM setup |
-| Predictive Prefetching | In scope | Include in implementation plan |
-| Local LLM for Guardian | TBD - needs HW analysis | Requires hardware requirement analysis first |
+| Document | Purpose |
+|----------|---------|
+| `IMPLEMENTATION-PLAN.md` | Full 5-phase implementation plan with code examples |
+| `research/data-integrity-analysis.md` | Database issues & SQL remediation scripts |
+| `research/local-llm-requirements.md` | Hardware analysis, qwen2.5:3b benchmark results |
+| `research/mcp-bridge-analysis.md` | NotebookLM MCP architecture & integration details |
+| `artifacts/HISTORY_ROLLUP.md` | 393k word export for NotebookLM seeding |
+
+### Critical Architectural Discovery (P72)
+
+**The `local-memory` daemon is CLOSED-SOURCE** (compiled Go binary).
+- Cannot modify daemon internals
+- Must build external Python orchestrator (`codex-rs/orchestrator/`)
+- Can access SQLite directly for schema additions
+- Can use MCP/CLI interface for all operations
+
+### Session Decisions
+
+| Decision | Choice | Session | Rationale |
+|----------|--------|---------|-----------|
+| Orchestrator Location | codex-rs/orchestrator/ | P72 | Monorepo approach |
+| Local LLM Model | qwen2.5:3b | P72 | 4.67s latency, good quality |
+| Phase 0 Migration | Test copy first | P72 | Safe verification before production |
+| NotebookLM Setup | TBD at implementation | P72 | Create new notebook when ready |
 
 ---
 
