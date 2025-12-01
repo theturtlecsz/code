@@ -526,6 +526,10 @@ pub struct SpecAutoInvocation {
     pub hal_mode: Option<HalMode>,
     /// SPEC-948: CLI args for pipeline configuration (--skip-*, --stages=, etc.)
     pub cli_args: Vec<String>,
+    /// SPEC-KIT-102: Disable Stage 0 context injection
+    pub no_stage0: bool,
+    /// SPEC-KIT-102: Include score breakdown in TASK_BRIEF
+    pub stage0_explain: bool,
 }
 
 #[derive(Debug, Error)]
@@ -552,6 +556,8 @@ pub fn parse_spec_auto_args(args: &str) -> Result<SpecAutoInvocation, SpecAutoPa
     let mut pending_hal = false;
     let mut hal_mode: Option<HalMode> = None;
     let mut cli_args: Vec<String> = Vec::new(); // SPEC-948: Pipeline config flags
+    let mut no_stage0 = false; // SPEC-KIT-102: Stage 0 flags
+    let mut stage0_explain = false;
 
     for token in tokens {
         if pending_from {
@@ -597,6 +603,13 @@ pub fn parse_spec_auto_args(args: &str) -> Result<SpecAutoInvocation, SpecAutoPa
             t if t.starts_with("--skip-") || t.starts_with("--only-") || t == "--configure" => {
                 cli_args.push(t.to_string());
             }
+            // SPEC-KIT-102: Stage 0 control flags
+            "--no-stage0" => {
+                no_stage0 = true;
+            }
+            "--stage0-explain" => {
+                stage0_explain = true;
+            }
             _ => goal_tokens.push(token.to_string()),
         }
     }
@@ -614,6 +627,8 @@ pub fn parse_spec_auto_args(args: &str) -> Result<SpecAutoInvocation, SpecAutoPa
         resume_from,
         hal_mode,
         cli_args, // SPEC-948
+        no_stage0,        // SPEC-KIT-102
+        stage0_explain,   // SPEC-KIT-102
     })
 }
 
@@ -728,5 +743,40 @@ mod tests {
         assert_eq!(auto.spec_id, "SPEC-948");
         assert_eq!(auto.goal, "simple goal");
         assert!(auto.cli_args.is_empty());
+    }
+
+    // SPEC-KIT-102: Stage 0 flag parsing tests
+    #[test]
+    fn parse_spec_auto_args_supports_no_stage0() {
+        let auto = parse_spec_auto_args("SPEC-102 --no-stage0").unwrap();
+        assert_eq!(auto.spec_id, "SPEC-102");
+        assert!(auto.no_stage0);
+        assert!(!auto.stage0_explain);
+    }
+
+    #[test]
+    fn parse_spec_auto_args_supports_stage0_explain() {
+        let auto = parse_spec_auto_args("SPEC-102 --stage0-explain").unwrap();
+        assert_eq!(auto.spec_id, "SPEC-102");
+        assert!(!auto.no_stage0);
+        assert!(auto.stage0_explain);
+    }
+
+    #[test]
+    fn parse_spec_auto_args_supports_both_stage0_flags() {
+        let auto = parse_spec_auto_args("SPEC-102 --no-stage0 --stage0-explain debug goal").unwrap();
+        assert_eq!(auto.spec_id, "SPEC-102");
+        assert!(auto.no_stage0);
+        assert!(auto.stage0_explain);
+        assert_eq!(auto.goal, "debug goal");
+    }
+
+    #[test]
+    fn parse_spec_auto_args_stage0_flags_default_false() {
+        let auto = parse_spec_auto_args("SPEC-102 some goal").unwrap();
+        assert_eq!(auto.spec_id, "SPEC-102");
+        assert!(!auto.no_stage0);
+        assert!(!auto.stage0_explain);
+        assert_eq!(auto.goal, "some goal");
     }
 }

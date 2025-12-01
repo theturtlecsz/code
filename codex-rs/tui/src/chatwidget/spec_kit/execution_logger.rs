@@ -45,6 +45,26 @@ pub enum ExecutionEvent {
         quality_gates_enabled: bool,
         hal_mode: String,
     },
+    /// SPEC-KIT-102: Stage 0 context injection started
+    Stage0Start {
+        run_id: RunId,
+        spec_id: String,
+        tier2_enabled: bool,
+        explain_enabled: bool,
+        timestamp: String,
+    },
+    /// SPEC-KIT-102: Stage 0 context injection completed
+    Stage0Complete {
+        run_id: RunId,
+        spec_id: String,
+        duration_ms: u64,
+        tier2_used: bool,
+        cache_hit: bool,
+        memories_used: usize,
+        task_brief_written: bool,
+        skip_reason: Option<String>,
+        timestamp: String,
+    },
     StageStart {
         run_id: RunId,
         stage: String,
@@ -172,6 +192,8 @@ impl ExecutionEvent {
     pub fn run_id(&self) -> &str {
         match self {
             Self::RunStart { run_id, .. }
+            | Self::Stage0Start { run_id, .. }
+            | Self::Stage0Complete { run_id, .. }
             | Self::StageStart { run_id, .. }
             | Self::AgentSpawn { run_id, .. }
             | Self::AgentComplete { run_id, .. }
@@ -320,6 +342,17 @@ impl ExecutionLogger {
 
         // Update based on event type
         match event {
+            // SPEC-KIT-102: Stage 0 context injection
+            ExecutionEvent::Stage0Start { .. } => {
+                status.current_phase = Some("stage0_context".to_string());
+            }
+            ExecutionEvent::Stage0Complete { skip_reason, .. } => {
+                if skip_reason.is_some() {
+                    status.current_phase = Some("stage0_skipped".to_string());
+                } else {
+                    status.current_phase = Some("stage0_complete".to_string());
+                }
+            }
             ExecutionEvent::StageStart { stage, .. } => {
                 status.current_stage = Some(stage.clone());
                 status.current_phase = Some("guardrail".to_string());

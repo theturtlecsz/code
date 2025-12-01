@@ -65,11 +65,13 @@ fn extract_useful_content_from_stage_file(content: &str) -> String {
 
 /// Build individual agent prompt with context (matches quality gate pattern)
 /// SPEC-KIT-900 Session 3: Fix architectural mismatch - each agent gets unique prompt
+/// SPEC-KIT-102: Added stage0_context parameter for combined Divine Truth + Task Brief injection
 async fn build_individual_agent_prompt(
     spec_id: &str,
     stage: SpecStage,
     agent_name: &str,
     cwd: &Path,
+    stage0_context: Option<&str>, // SPEC-KIT-102: Pre-computed combined_context_md()
 ) -> Result<String, String> {
     use serde_json::Value;
 
@@ -115,24 +117,50 @@ async fn build_individual_agent_prompt(
 
     let mut context = format!("SPEC: {}\n\n", spec_id);
 
-    // SPEC-KIT-102: Add Stage 0 context (TASK_BRIEF.md) if available
-    let task_brief_path = spec_dir.join("evidence").join("TASK_BRIEF.md");
-    if let Ok(task_brief) = std::fs::read_to_string(&task_brief_path) {
-        context.push_str("## Stage 0: Task Context Brief\n\n");
-        // Truncate task brief if too large (use half the budget for Stage0)
-        if task_brief.len() > MAX_FILE_SIZE / 2 {
+    // SPEC-KIT-102: Add Stage 0 context (combined Divine Truth + Task Brief)
+    // Prefer passed stage0_context (from combined_context_md()) over file fallback
+    if let Some(stage0_ctx) = stage0_context {
+        context.push_str("## Stage 0: Shadow Context (Divine Truth + Task Brief)\n\n");
+        // Truncate if too large (use half the budget for Stage0)
+        if stage0_ctx.len() > MAX_FILE_SIZE / 2 {
             context.push_str(
-                &task_brief
+                &stage0_ctx
                     .chars()
                     .take(MAX_FILE_SIZE / 2)
                     .collect::<String>(),
             );
             context.push_str("\n\n[...Stage 0 context truncated...]\n\n");
         } else {
-            context.push_str(&task_brief);
+            context.push_str(stage0_ctx);
             context.push_str("\n\n");
         }
-        tracing::info!("  📚 Stage 0: Injected {} chars from TASK_BRIEF.md", task_brief.len());
+        tracing::info!(
+            "  📚 Stage 0: Injected {} chars from combined_context_md()",
+            stage0_ctx.len()
+        );
+    } else {
+        // Fallback: Read from TASK_BRIEF.md file if passed context is unavailable
+        let task_brief_path = spec_dir.join("evidence").join("TASK_BRIEF.md");
+        if let Ok(task_brief) = std::fs::read_to_string(&task_brief_path) {
+            context.push_str("## Stage 0: Task Context Brief\n\n");
+            // Truncate task brief if too large (use half the budget for Stage0)
+            if task_brief.len() > MAX_FILE_SIZE / 2 {
+                context.push_str(
+                    &task_brief
+                        .chars()
+                        .take(MAX_FILE_SIZE / 2)
+                        .collect::<String>(),
+                );
+                context.push_str("\n\n[...Stage 0 context truncated...]\n\n");
+            } else {
+                context.push_str(&task_brief);
+                context.push_str("\n\n");
+            }
+            tracing::info!(
+                "  📚 Stage 0: Injected {} chars from TASK_BRIEF.md (fallback)",
+                task_brief.len()
+            );
+        }
     }
 
     context.push_str("## spec.md\n");
@@ -451,6 +479,7 @@ async fn spawn_regular_stage_agents_sequential(
     branch_id: Option<String>, // P6-SYNC Phase 4: Branch tracking for resume filtering
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
+    stage0_context: Option<&str>, // SPEC-KIT-102: Combined context from Stage 0
 ) -> Result<Vec<AgentSpawnInfo>, String> {
     let run_tag = run_id
         .as_ref()
@@ -493,7 +522,8 @@ async fn spawn_regular_stage_agents_sequential(
             .ok_or_else(|| format!("No config mapping for agent {}", agent_name))?;
 
         // Build prompt for THIS agent with previous agent outputs injected
-        let mut prompt = build_individual_agent_prompt(spec_id, stage, agent_name, cwd).await?;
+        let mut prompt =
+            build_individual_agent_prompt(spec_id, stage, agent_name, cwd, stage0_context).await?;
 
         // Inject previous agent outputs into prompt (INTELLIGENT EXTRACTION)
         for (prev_agent_name, prev_output) in &agent_outputs {
@@ -597,6 +627,7 @@ async fn spawn_regular_stage_agents_parallel(
     branch_id: Option<String>, // P6-SYNC Phase 4: Branch tracking for resume filtering
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
+    stage0_context: Option<String>, // SPEC-KIT-102: Combined context from Stage 0 (owned for async)
 ) -> Result<Vec<AgentSpawnInfo>, String> {
     use std::time::Instant;
     use tokio::task::JoinSet;
@@ -643,6 +674,7 @@ async fn spawn_regular_stage_agents_parallel(
         let branch_id = branch_id.clone();
         let batch_id = batch_id.clone();
         let agent_configs = agent_configs.to_vec();
+        let stage0_ctx = stage0_context.clone(); // SPEC-KIT-102: Clone for async move
 
         let config_name = agent_config_map
             .get(agent_name.as_str())
@@ -654,7 +686,15 @@ async fn spawn_regular_stage_agents_parallel(
             let spawn_start = Instant::now();
 
             // Build individual prompt (no previous outputs)
-            let prompt = build_individual_agent_prompt(&spec_id, stage, &agent_name, &cwd).await?;
+            // SPEC-KIT-102: Pass Stage 0 context to agent prompt builder
+            let prompt = build_individual_agent_prompt(
+                &spec_id,
+                stage,
+                &agent_name,
+                &cwd,
+                stage0_ctx.as_deref(),
+            )
+            .await?;
 
             // Spawn agent (critical section - AGENT_MANAGER write lock)
             let agent_id = {
@@ -779,6 +819,7 @@ async fn spawn_regular_stage_agents_native(
     branch_id: Option<String>, // P6-SYNC Phase 4: Branch tracking for resume filtering
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
+    stage0_context: Option<String>, // SPEC-KIT-102: Combined context from Stage 0
 ) -> Result<Vec<AgentSpawnInfo>, String> {
     let run_tag = run_id
         .as_ref()
@@ -813,6 +854,7 @@ async fn spawn_regular_stage_agents_native(
                 branch_id, // P6-SYNC Phase 4
                 expected_agents,
                 agent_configs,
+                stage0_context.as_deref(), // SPEC-KIT-102
             )
             .await
         }
@@ -832,6 +874,7 @@ async fn spawn_regular_stage_agents_native(
                 branch_id, // P6-SYNC Phase 4
                 expected_agents,
                 agent_configs,
+                stage0_context.as_deref(), // SPEC-KIT-102
             )
             .await
         }
@@ -853,6 +896,7 @@ async fn spawn_regular_stage_agents_native(
                 branch_id, // P6-SYNC Phase 4
                 expected_agents,
                 agent_configs,
+                stage0_context, // SPEC-KIT-102
             )
             .await
         }
@@ -872,6 +916,7 @@ async fn spawn_regular_stage_agents_native(
                 branch_id, // P6-SYNC Phase 4
                 expected_agents,
                 agent_configs,
+                stage0_context.as_deref(), // SPEC-KIT-102
             )
             .await
         }
@@ -1328,6 +1373,13 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                 .and_then(|s| s.branch_id().map(|b| b.to_string()));
             let branch_id_for_spawn = branch_id_owned.clone();
 
+            // SPEC-KIT-102: Extract Stage 0 combined context from state
+            let stage0_context_owned = widget
+                .spec_auto_state
+                .as_ref()
+                .and_then(|s| s.stage0_result.as_ref())
+                .map(|r| r.combined_context_md());
+
             let spawn_result = block_on_sync(|| async move {
                 spawn_regular_stage_agents_native(
                     &cwd,
@@ -1338,6 +1390,7 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                     branch_id_for_spawn, // P6-SYNC Phase 4
                     &expected_agents_owned,
                     &agent_configs_owned,
+                    stage0_context_owned, // SPEC-KIT-102
                 )
                 .await
             });

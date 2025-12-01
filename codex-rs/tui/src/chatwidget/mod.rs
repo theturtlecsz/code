@@ -18017,6 +18017,8 @@ impl ChatWidget<'_> {
             resume_from,
             hal_mode,
             cli_args,
+            no_stage0,
+            stage0_explain,
         } = invocation;
 
         // SPEC-947: Check for --configure flag (interactive modal before automation)
@@ -18051,7 +18053,13 @@ impl ChatWidget<'_> {
             None
         };
 
-        spec_kit::handle_spec_auto(self, spec_id, goal, resume_from, hal_mode, cli_overrides);
+        // SPEC-KIT-102: Build Stage 0 config from CLI flags
+        let stage0_config = spec_kit::stage0_integration::Stage0ExecutionConfig {
+            disabled: no_stage0,
+            explain: stage0_explain,
+        };
+
+        spec_kit::handle_spec_auto(self, spec_id, goal, resume_from, hal_mode, cli_overrides, stage0_config);
     }
 
     #[allow(dead_code)] // Pipeline advancement via spec_kit

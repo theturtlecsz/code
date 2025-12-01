@@ -36,6 +36,7 @@ pub fn handle_spec_auto(
     resume_from: SpecStage,
     hal_mode: Option<HalMode>,
     cli_overrides: Option<PipelineOverrides>, // SPEC-948: CLI flags for stage filtering
+    stage0_config: super::stage0_integration::Stage0ExecutionConfig, // SPEC-KIT-102: Stage 0 config
 ) {
     let mut header: Vec<ratatui::text::Line<'static>> = Vec::new();
     header.push(ratatui::text::Line::from(format!("/spec-auto {}", spec_id)));
@@ -109,6 +110,10 @@ pub fn handle_spec_auto(
     );
     state.set_validate_lifecycle(lifecycle);
 
+    // SPEC-KIT-102: Set Stage 0 configuration from CLI flags
+    state.stage0_disabled = stage0_config.disabled;
+    state.stage0_explain = stage0_config.explain;
+
     // Log run start event
     if let Some(run_id) = &state.run_id {
         state
@@ -130,19 +135,26 @@ pub fn handle_spec_auto(
     }
 
     // SPEC-KIT-102: Run Stage 0 context injection before pipeline starts
-    if !state.stage0_disabled {
+    if !stage0_config.disabled {
         // Load spec content
         let spec_path = widget.config.cwd.join(format!("docs/{}/spec.md", spec_id));
         let spec_content = std::fs::read_to_string(&spec_path).unwrap_or_default();
 
         if !spec_content.is_empty() {
-            // Build Stage0 config
-            let stage0_config = super::stage0_integration::Stage0ExecutionConfig {
-                disabled: state.stage0_disabled,
-                explain: state.stage0_explain,
-            };
+            // Log Stage0Start event
+            if let Some(run_id) = &state.run_id {
+                state.execution_logger.log_event(
+                    super::execution_logger::ExecutionEvent::Stage0Start {
+                        run_id: run_id.clone(),
+                        spec_id: spec_id.clone(),
+                        tier2_enabled: true, // TODO: Get from config when MCP is available
+                        explain_enabled: stage0_config.explain,
+                        timestamp: super::execution_logger::ExecutionEvent::now(),
+                    },
+                );
+            }
 
-            // Run Stage0
+            // Run Stage0 with the passed config
             let result = super::stage0_integration::run_stage0_for_spec(
                 &widget.mcp_manager,
                 &spec_id,
@@ -152,17 +164,47 @@ pub fn handle_spec_auto(
             );
 
             // Store result in state
+            let task_brief_written;
             if let Some(stage0_result) = result.result {
                 // Write TASK_BRIEF.md to evidence directory
-                if let Err(e) = super::stage0_integration::write_task_brief_to_evidence(
+                task_brief_written = super::stage0_integration::write_task_brief_to_evidence(
                     &spec_id,
                     &widget.config.cwd,
                     &stage0_result.task_brief_md,
-                ) {
-                    tracing::warn!("Failed to write TASK_BRIEF.md: {}", e);
+                )
+                .is_ok();
+
+                if !task_brief_written {
+                    tracing::warn!("Failed to write TASK_BRIEF.md");
                 }
 
-                // Log Stage0 success
+                // SPEC-KIT-102: Write DIVINE_TRUTH.md to evidence directory
+                if let Err(e) = super::stage0_integration::write_divine_truth_to_evidence(
+                    &spec_id,
+                    &widget.config.cwd,
+                    &stage0_result.divine_truth.raw_markdown,
+                ) {
+                    tracing::warn!("Failed to write DIVINE_TRUTH.md: {}", e);
+                }
+
+                // Log Stage0Complete event (success)
+                if let Some(run_id) = &state.run_id {
+                    state.execution_logger.log_event(
+                        super::execution_logger::ExecutionEvent::Stage0Complete {
+                            run_id: run_id.clone(),
+                            spec_id: spec_id.clone(),
+                            duration_ms: result.duration_ms,
+                            tier2_used: result.tier2_used,
+                            cache_hit: result.cache_hit,
+                            memories_used: stage0_result.memories_used.len(),
+                            task_brief_written,
+                            skip_reason: None,
+                            timestamp: super::execution_logger::ExecutionEvent::now(),
+                        },
+                    );
+                }
+
+                // Log Stage0 success to UI
                 widget.history_push(crate::history_cell::PlainHistoryCell::new(
                     vec![ratatui::text::Line::from(format!(
                         "Stage 0: Context compiled ({} memories, tier2={}, {}ms)",
@@ -175,13 +217,61 @@ pub fn handle_spec_auto(
 
                 state.stage0_result = Some(stage0_result);
             } else if let Some(skip_reason) = result.skip_reason {
+                // Log Stage0Complete event (skipped)
+                if let Some(run_id) = &state.run_id {
+                    state.execution_logger.log_event(
+                        super::execution_logger::ExecutionEvent::Stage0Complete {
+                            run_id: run_id.clone(),
+                            spec_id: spec_id.clone(),
+                            duration_ms: result.duration_ms,
+                            tier2_used: false,
+                            cache_hit: false,
+                            memories_used: 0,
+                            task_brief_written: false,
+                            skip_reason: Some(skip_reason.clone()),
+                            timestamp: super::execution_logger::ExecutionEvent::now(),
+                        },
+                    );
+                }
                 state.stage0_skip_reason = Some(skip_reason.clone());
                 tracing::info!("Stage 0 skipped: {}", skip_reason);
             }
         } else {
+            // Log Stage0Complete event (skipped - no spec content)
+            if let Some(run_id) = &state.run_id {
+                state.execution_logger.log_event(
+                    super::execution_logger::ExecutionEvent::Stage0Complete {
+                        run_id: run_id.clone(),
+                        spec_id: spec_id.clone(),
+                        duration_ms: 0,
+                        tier2_used: false,
+                        cache_hit: false,
+                        memories_used: 0,
+                        task_brief_written: false,
+                        skip_reason: Some("spec.md is empty or not found".to_string()),
+                        timestamp: super::execution_logger::ExecutionEvent::now(),
+                    },
+                );
+            }
             state.stage0_skip_reason = Some("spec.md is empty or not found".to_string());
         }
     } else {
+        // Log Stage0Complete event (disabled by flag)
+        if let Some(run_id) = &state.run_id {
+            state.execution_logger.log_event(
+                super::execution_logger::ExecutionEvent::Stage0Complete {
+                    run_id: run_id.clone(),
+                    spec_id: spec_id.clone(),
+                    duration_ms: 0,
+                    tier2_used: false,
+                    cache_hit: false,
+                    memories_used: 0,
+                    task_brief_written: false,
+                    skip_reason: Some("Stage 0 disabled by flag".to_string()),
+                    timestamp: super::execution_logger::ExecutionEvent::now(),
+                },
+            );
+        }
         state.stage0_skip_reason = Some("Stage 0 disabled by flag".to_string());
     }
 

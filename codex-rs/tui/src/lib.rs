@@ -177,6 +177,13 @@ pub use chatwidget::spec_kit::pipeline_config::PipelineConfig;
 pub use chatwidget::spec_kit::state::SpecAutoPhase;
 pub use spec_prompts::SpecAgent;
 
+// SPEC-KIT-102: Re-export Stage0 types for integration testing
+pub use chatwidget::spec_kit::execution_logger::ExecutionEvent;
+pub use chatwidget::spec_kit::stage0_integration::{
+    Stage0ExecutionConfig, write_divine_truth_to_evidence, write_task_brief_to_evidence,
+};
+pub use slash_command::{parse_spec_auto_args, SpecAutoInvocation};
+
 // SPEC-957 Phase 2: Re-export test utilities for integration tests
 // Note: SpecKitContext and related functions are internal APIs,
 // tests requiring them should be moved to lib.rs or disabled

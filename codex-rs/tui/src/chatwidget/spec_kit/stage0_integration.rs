@@ -282,6 +282,23 @@ pub fn write_task_brief_to_evidence(
     Ok(path)
 }
 
+/// SPEC-KIT-102: Write DIVINE_TRUTH.md to evidence directory
+/// Contains the Tier 2 (NotebookLM) synthesis - high-level guidance, risks, and framing
+pub fn write_divine_truth_to_evidence(
+    spec_id: &str,
+    cwd: &Path,
+    divine_truth: &str,
+) -> std::io::Result<std::path::PathBuf> {
+    let evidence_dir = cwd.join("docs").join(spec_id).join("evidence");
+    std::fs::create_dir_all(&evidence_dir)?;
+
+    let path = evidence_dir.join("DIVINE_TRUTH.md");
+    std::fs::write(&path, divine_truth)?;
+
+    tracing::debug!("Wrote DIVINE_TRUTH.md to {}", path.display());
+    Ok(path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
