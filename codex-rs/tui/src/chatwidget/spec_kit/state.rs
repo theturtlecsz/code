@@ -1395,10 +1395,7 @@ pub fn guardrail_for_stage(stage: SpecStage) -> SlashCommand {
         SpecStage::Audit => SlashCommand::GuardrailAudit,
         SpecStage::Unlock => SlashCommand::GuardrailUnlock,
         // Specify (pre-pipeline) and quality commands don't have guardrails
-        SpecStage::Specify
-        | SpecStage::Clarify
-        | SpecStage::Analyze
-        | SpecStage::Checklist => {
+        SpecStage::Specify | SpecStage::Clarify | SpecStage::Analyze | SpecStage::Checklist => {
             SlashCommand::GuardrailPlan // Fallback (unused)
         }
     }

@@ -39,7 +39,11 @@ pub(crate) struct ClarifyModal {
 }
 
 impl ClarifyModal {
-    pub fn new(spec_id: String, questions: Vec<ClarifyQuestion>, app_event_tx: AppEventSender) -> Self {
+    pub fn new(
+        spec_id: String,
+        questions: Vec<ClarifyQuestion>,
+        app_event_tx: AppEventSender,
+    ) -> Self {
         Self {
             spec_id,
             questions,

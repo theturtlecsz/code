@@ -447,8 +447,8 @@ pub fn resolve_markers(resolutions: &[(ClarificationMarker, String)]) -> Result<
 
     // Process each file
     for (file_path, replacements) in by_file {
-        let mut content = fs::read_to_string(&file_path)
-            .map_err(|e| SpecKitError::file_read(&file_path, e))?;
+        let mut content =
+            fs::read_to_string(&file_path).map_err(|e| SpecKitError::file_read(&file_path, e))?;
 
         for (marker, answer) in replacements {
             content = content.replace(&marker.original_text, answer);
@@ -547,12 +547,18 @@ mod tests {
         // Should match
         let test1 = "[NEEDS CLARIFICATION: Should we use sync or async?]";
         let cap = marker_re.captures(test1).unwrap();
-        assert_eq!(cap.get(1).unwrap().as_str().trim(), "Should we use sync or async?");
+        assert_eq!(
+            cap.get(1).unwrap().as_str().trim(),
+            "Should we use sync or async?"
+        );
 
         // Should match with extra whitespace
         let test2 = "[NEEDS CLARIFICATION:   What is the latency target?  ]";
         let cap = marker_re.captures(test2).unwrap();
-        assert_eq!(cap.get(1).unwrap().as_str().trim(), "What is the latency target?");
+        assert_eq!(
+            cap.get(1).unwrap().as_str().trim(),
+            "What is the latency target?"
+        );
 
         // Should NOT match incomplete markers
         let test3 = "[NEEDS CLARIFICATION]";

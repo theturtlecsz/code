@@ -212,14 +212,17 @@ async fn test_hybrid_improves_over_baseline() {
     }
 
     use codex_stage0::{
-        built_in_eval_cases, built_in_test_documents, evaluate_backend,
-        TfIdfBackend, VectorBackend, VectorFilters,
+        TfIdfBackend, VectorBackend, VectorFilters, built_in_eval_cases, built_in_test_documents,
+        evaluate_backend,
     };
 
     // Run evaluation with built-in cases as a sanity check
     let backend = TfIdfBackend::new();
     let docs = built_in_test_documents();
-    backend.index_documents(docs).await.expect("Indexing failed");
+    backend
+        .index_documents(docs)
+        .await
+        .expect("Indexing failed");
 
     let cases = built_in_eval_cases();
     let result = evaluate_backend(&backend, &cases, &VectorFilters::new(), 10)

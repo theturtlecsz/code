@@ -73,7 +73,12 @@ pub struct CodeUnit {
 
 impl CodeUnit {
     /// Generate a stable ID for this code unit
-    pub fn generate_id(path: &str, symbol: Option<&str>, kind: CodeUnitKind, line: usize) -> String {
+    pub fn generate_id(
+        path: &str,
+        symbol: Option<&str>,
+        kind: CodeUnitKind,
+        line: usize,
+    ) -> String {
         match symbol {
             Some(s) => format!("code:{}::{}", path, s),
             None => format!("code:{}::{}@{}", path, kind.as_str(), line),
@@ -558,7 +563,11 @@ pub fn main() {
         let units = extractor.extract_from_tree(&tree, source, "test.rs");
 
         // Should find: struct Config, impl Config, trait Configurable, fn main
-        assert!(units.len() >= 4, "Expected at least 4 units, got {}", units.len());
+        assert!(
+            units.len() >= 4,
+            "Expected at least 4 units, got {}",
+            units.len()
+        );
 
         // Check we found the struct
         let struct_unit = units.iter().find(|u| u.kind == CodeUnitKind::Struct);
@@ -566,7 +575,9 @@ pub fn main() {
         assert_eq!(struct_unit.unwrap().symbol, Some("Config".to_string()));
 
         // Check we found the function
-        let fn_unit = units.iter().find(|u| u.kind == CodeUnitKind::Function && u.symbol == Some("main".to_string()));
+        let fn_unit = units
+            .iter()
+            .find(|u| u.kind == CodeUnitKind::Function && u.symbol == Some("main".to_string()));
         assert!(fn_unit.is_some(), "Should find main function");
 
         // Check we found the trait
@@ -608,18 +619,25 @@ pub fn main() {
         parser.set_language(&language.into()).unwrap();
 
         let tree = parser.parse(source, None).unwrap();
-        let extractor = CodeUnitExtractor::new("test-repo")
-            .with_max_context_lines(10);
+        let extractor = CodeUnitExtractor::new("test-repo").with_max_context_lines(10);
         let units = extractor.extract_from_tree(&tree, source, "test.rs");
 
         assert_eq!(units.len(), 1);
         let unit = &units[0];
 
         // Should be truncated and end with ...
-        assert!(unit.text.ends_with("..."), "Should be truncated: {}", unit.text);
+        assert!(
+            unit.text.ends_with("..."),
+            "Should be truncated: {}",
+            unit.text
+        );
         // Should have fewer lines than original
         let line_count = unit.text.lines().count();
-        assert!(line_count <= 11, "Should have at most 10 lines + partial: got {}", line_count);
+        assert!(
+            line_count <= 11,
+            "Should have at most 10 lines + partial: got {}",
+            line_count
+        );
     }
 
     #[test]
@@ -641,7 +659,12 @@ fn _private_helper() {}
         let units = extractor.extract_from_tree(&tree, source, "test.rs");
 
         // Should only find real_function
-        assert_eq!(units.len(), 1, "Should only find 1 function, got {:?}", units);
+        assert_eq!(
+            units.len(),
+            1,
+            "Should only find 1 function, got {:?}",
+            units
+        );
         assert_eq!(units[0].symbol, Some("real_function".to_string()));
     }
 
@@ -668,7 +691,11 @@ impl Display for Config {
         assert!(impl_unit.is_some(), "Should find impl block");
         // Symbol should include trait name
         let symbol = impl_unit.unwrap().symbol.as_ref().unwrap();
-        assert!(symbol.contains("Display"), "Symbol should include trait name: {}", symbol);
+        assert!(
+            symbol.contains("Display"),
+            "Symbol should include trait name: {}",
+            symbol
+        );
     }
 
     #[test]
@@ -694,7 +721,11 @@ pub fn main() {
         let units = extractor.extract_from_tree(&tree, source, "test.rs");
 
         // Should find at least struct Config and fn main
-        assert!(units.len() >= 2, "Should extract at least 2 units, got {}", units.len());
+        assert!(
+            units.len() >= 2,
+            "Should extract at least 2 units, got {}",
+            units.len()
+        );
 
         // Verify we found the expected items
         let has_struct = units.iter().any(|u| u.kind == CodeUnitKind::Struct);

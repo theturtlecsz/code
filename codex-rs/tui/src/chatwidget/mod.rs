@@ -5762,8 +5762,11 @@ impl ChatWidget<'_> {
         project_type_display: String,
         questions: Vec<crate::bottom_pane::prd_builder_modal::PrdQuestion>,
     ) {
-        self.bottom_pane
-            .show_prd_builder_with_context(description, project_type_display, questions);
+        self.bottom_pane.show_prd_builder_with_context(
+            description,
+            project_type_display,
+            questions,
+        );
     }
 
     /// Show clarify modal for interactive clarification resolution (SPEC-KIT-971)
@@ -18059,7 +18062,15 @@ impl ChatWidget<'_> {
             explain: stage0_explain,
         };
 
-        spec_kit::handle_spec_auto(self, spec_id, goal, resume_from, hal_mode, cli_overrides, stage0_config);
+        spec_kit::handle_spec_auto(
+            self,
+            spec_id,
+            goal,
+            resume_from,
+            hal_mode,
+            cli_overrides,
+            stage0_config,
+        );
     }
 
     #[allow(dead_code)] // Pipeline advancement via spec_kit

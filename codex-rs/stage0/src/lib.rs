@@ -25,35 +25,32 @@ pub mod tier2;
 pub mod vector;
 
 pub use config::{Stage0Config, VectorIndexConfig};
+pub use dcc::{
+    CompileContextResult, DccContext, EnvCtx, ExplainScore, ExplainScores, Iqo, LocalMemoryClient,
+    LocalMemorySearchParams, LocalMemorySummary, MemoryCandidate, NoopVectorBackend,
+};
 pub use errors::{ErrorCategory, Result, Stage0Error};
+pub use eval::{
+    EvalCase, EvalCaseSource, EvalLane, EvalResult, EvalSuiteResult, built_in_code_eval_cases,
+    built_in_eval_cases, built_in_memory_eval_cases, built_in_test_documents, combined_eval_cases,
+    compute_metrics, compute_metrics_with_missing, compute_suite_metrics, evaluate_backend,
+    evaluate_case, evaluate_dcc_code_result, evaluate_dcc_memory_result, evaluate_dcc_results,
+    load_eval_cases_from_file, save_eval_cases_to_file,
+};
 pub use guardians::{
     GuardedMemory, LlmClient, MemoryDraft, MemoryKind, apply_metadata_guardian,
     apply_template_guardian, apply_template_guardian_passthrough,
 };
 pub use overlay_db::{OverlayDb, OverlayMemory, StructureStatus, Tier2CacheEntry};
 pub use scoring::{ScoringComponents, ScoringInput, calculate_dynamic_score, calculate_score};
-pub use dcc::{
-    CompileContextResult, DccContext, EnvCtx, ExplainScore, ExplainScores, Iqo,
-    LocalMemoryClient, LocalMemorySearchParams, LocalMemorySummary, MemoryCandidate,
-    NoopVectorBackend,
-};
+pub use tfidf::{TfIdfBackend, TfIdfConfig};
 pub use tier2::{
-    CausalLinkSuggestion, DivineTruth, Tier2Client, Tier2Response,
-    build_fallback_divine_truth, build_tier2_prompt, parse_divine_truth,
-    validate_causal_links,
+    CausalLinkSuggestion, DivineTruth, Tier2Client, Tier2Response, build_fallback_divine_truth,
+    build_tier2_prompt, parse_divine_truth, validate_causal_links,
 };
 pub use vector::{
-    DocumentKind, DocumentMetadata, IndexStats, ScoredVector, VectorBackend,
-    VectorDocument, VectorFilters,
-};
-pub use tfidf::{TfIdfBackend, TfIdfConfig};
-pub use eval::{
-    EvalCase, EvalCaseSource, EvalLane, EvalResult, EvalSuiteResult,
-    built_in_code_eval_cases, built_in_eval_cases, built_in_memory_eval_cases,
-    built_in_test_documents, combined_eval_cases, compute_metrics, compute_metrics_with_missing,
-    compute_suite_metrics, evaluate_backend, evaluate_case, evaluate_dcc_code_result,
-    evaluate_dcc_memory_result, evaluate_dcc_results, load_eval_cases_from_file,
-    save_eval_cases_to_file,
+    DocumentKind, DocumentMetadata, IndexStats, ScoredVector, VectorBackend, VectorDocument,
+    VectorFilters,
 };
 
 use sha2::{Digest, Sha256};
@@ -268,7 +265,8 @@ impl Stage0Engine {
         memory_id: &str,
         created_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<Option<f64>> {
-        self.db.recalculate_score(memory_id, created_at, &self.cfg.scoring)
+        self.db
+            .recalculate_score(memory_id, created_at, &self.cfg.scoring)
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -400,7 +398,9 @@ impl Stage0Engine {
 
         // 4. Check Tier 2 cache (with TTL)
         let ttl_hours = self.cfg.tier2.cache_ttl_hours;
-        let cached_entry = self.db.get_tier2_cache_with_ttl(&input_hash, ttl_hours, now)?;
+        let cached_entry = self
+            .db
+            .get_tier2_cache_with_ttl(&input_hash, ttl_hours, now)?;
 
         let (divine_truth, cache_hit, tier2_used) = if let Some(entry) = cached_entry {
             // Cache hit - parse cached result
@@ -410,9 +410,8 @@ impl Stage0Engine {
                 "Tier 2 cache hit"
             );
 
-            let cached_links = overlay_db::OverlayDb::parse_cached_links(
-                entry.suggested_links.as_deref(),
-            );
+            let cached_links =
+                overlay_db::OverlayDb::parse_cached_links(entry.suggested_links.as_deref());
 
             let mut dt = tier2::parse_divine_truth(&entry.synthesis_result);
             dt.suggested_links = cached_links;
@@ -448,10 +447,8 @@ impl Stage0Engine {
                         // Validate links against known memory IDs
                         let valid_ids: std::collections::HashSet<String> =
                             dcc_result.memories_used.iter().cloned().collect();
-                        dt.suggested_links = tier2::validate_causal_links(
-                            dt.suggested_links,
-                            &valid_ids,
-                        );
+                        dt.suggested_links =
+                            tier2::validate_causal_links(dt.suggested_links, &valid_ids);
 
                         // Store in cache
                         if let Err(e) = self.db.store_tier2_cache_with_links(
@@ -465,10 +462,10 @@ impl Stage0Engine {
                         }
 
                         // Store cache dependencies
-                        if let Err(e) = self.db.store_cache_dependencies(
-                            &input_hash,
-                            &dcc_result.memories_used,
-                        ) {
+                        if let Err(e) = self
+                            .db
+                            .store_cache_dependencies(&input_hash, &dcc_result.memories_used)
+                        {
                             tracing::warn!(error = %e, "Failed to store cache dependencies");
                         }
 
@@ -614,10 +611,7 @@ mod tests {
         let engine = Stage0Engine::in_memory().expect("should create");
         let now = chrono::Utc::now();
 
-        let memories = vec![
-            ("mem-x".to_string(), 7, now),
-            ("mem-y".to_string(), 5, now),
-        ];
+        let memories = vec![("mem-x".to_string(), 7, now), ("mem-y".to_string(), 5, now)];
 
         let results = engine
             .record_selected_memories_usage(&memories)
@@ -631,7 +625,11 @@ mod tests {
         }
 
         // Verify DB was updated
-        let mem_x = engine.db().get_memory("mem-x").expect("get").expect("exists");
+        let mem_x = engine
+            .db()
+            .get_memory("mem-x")
+            .expect("get")
+            .expect("exists");
         assert_eq!(mem_x.usage_count, 1);
         assert!(mem_x.dynamic_score.is_some());
     }
@@ -728,19 +726,11 @@ mod tests {
                 Ok(MemoryKind::Other)
             }
 
-            async fn restructure_template(
-                &self,
-                input: &str,
-                _kind: MemoryKind,
-            ) -> Result<String> {
+            async fn restructure_template(&self, input: &str, _kind: MemoryKind) -> Result<String> {
                 Ok(input.to_string())
             }
 
-            async fn generate_iqo(
-                &self,
-                _spec_content: &str,
-                _env: &EnvCtx,
-            ) -> Result<dcc::Iqo> {
+            async fn generate_iqo(&self, _spec_content: &str, _env: &EnvCtx) -> Result<dcc::Iqo> {
                 Ok(dcc::Iqo {
                     domains: vec!["spec-kit".to_string()],
                     keywords: vec!["test".to_string()],
@@ -920,7 +910,12 @@ mod tests {
             assert!(result.tier2_used);
             assert!(!result.cache_hit);
             assert!(!result.divine_truth.is_fallback());
-            assert!(result.divine_truth.raw_markdown.contains("Executive Summary"));
+            assert!(
+                result
+                    .divine_truth
+                    .raw_markdown
+                    .contains("Executive Summary")
+            );
             assert!(!result.task_brief_md.is_empty());
             assert!(!result.memories_used.is_empty());
 
@@ -993,7 +988,10 @@ mod tests {
 
             // Verify cache entry was created
             let input_hash = compute_cache_key("Test spec content", &result1.task_brief_md);
-            let cached = engine1.db().get_tier2_cache(&input_hash).expect("cache lookup");
+            let cached = engine1
+                .db()
+                .get_tier2_cache(&input_hash)
+                .expect("cache lookup");
             assert!(cached.is_some(), "Cache entry should exist after first run");
 
             // Verify cache entry contents
@@ -1081,7 +1079,11 @@ mod tests {
 
             // Check that usage was recorded in DB
             for mem_id in &result.memories_used {
-                let overlay = engine.db().get_memory(mem_id).expect("get").expect("exists");
+                let overlay = engine
+                    .db()
+                    .get_memory(mem_id)
+                    .expect("get")
+                    .expect("exists");
                 assert_eq!(overlay.usage_count, 1);
                 assert!(overlay.dynamic_score.is_some());
             }

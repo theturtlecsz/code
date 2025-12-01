@@ -227,7 +227,9 @@ async fn seed_architecture_bible(
 
     // Generate markdown content
     let content = format_architecture_bible(&filtered);
-    let path = config.output_dir.join(SeedKind::ArchitectureBible.filename());
+    let path = config
+        .output_dir
+        .join(SeedKind::ArchitectureBible.filename());
 
     std::fs::write(&path, &content).map_err(|e| format!("Failed to write file: {e}"))?;
 
@@ -505,10 +507,16 @@ fn format_architecture_bible(memories: &[LocalMemorySummary]) -> String {
         sections.push(format!("Design Decisions ({} entries)", decisions_count));
     }
     if patterns_count > 0 {
-        sections.push(format!("Architectural Patterns ({} entries)", patterns_count));
+        sections.push(format!(
+            "Architectural Patterns ({} entries)",
+            patterns_count
+        ));
     }
     if other_count > 0 {
-        sections.push(format!("Other Architecture Notes ({} entries)", other_count));
+        sections.push(format!(
+            "Other Architecture Notes ({} entries)",
+            other_count
+        ));
     }
     let section_refs: Vec<&str> = sections.iter().map(|s| s.as_str()).collect();
 
@@ -536,7 +544,10 @@ fn format_architecture_bible(memories: &[LocalMemorySummary]) -> String {
     if !decisions.is_empty() {
         out.push_str("## Design Decisions\n\n");
         for m in &decisions {
-            out.push_str(&format!("### [DECISION] {}\n\n", truncate_first_line(&m.snippet)));
+            out.push_str(&format!(
+                "### [DECISION] {}\n\n",
+                truncate_first_line(&m.snippet)
+            ));
             out.push_str(&format!("{}\n\n", &m.snippet));
             if !m.tags.is_empty() {
                 out.push_str(&format!("_Tags: {}_\n\n", m.tags.join(", ")));
@@ -549,7 +560,10 @@ fn format_architecture_bible(memories: &[LocalMemorySummary]) -> String {
     if !patterns.is_empty() {
         out.push_str("## Architectural Patterns\n\n");
         for m in &patterns {
-            out.push_str(&format!("### [PATTERN] {}\n\n", truncate_first_line(&m.snippet)));
+            out.push_str(&format!(
+                "### [PATTERN] {}\n\n",
+                truncate_first_line(&m.snippet)
+            ));
             out.push_str(&format!("{}\n\n", &m.snippet));
             if !m.tags.is_empty() {
                 out.push_str(&format!("_Tags: {}_\n\n", m.tags.join(", ")));
@@ -795,10 +809,7 @@ fn format_project_diary(memories: &[LocalMemorySummary]) -> String {
                     out.push_str(&format!("\n## {}\n\n", date.format("%B %Y")));
                 }
 
-                out.push_str(&format!(
-                    "### {} - Entry\n\n",
-                    date.format("%Y-%m-%d")
-                ));
+                out.push_str(&format!("### {} - Entry\n\n", date.format("%Y-%m-%d")));
             } else {
                 out.push_str("### Undated Entry\n\n");
             }
@@ -1062,10 +1073,7 @@ mod tests {
 
     #[test]
     fn test_truncate_first_line() {
-        assert_eq!(
-            truncate_first_line("First line\nSecond line"),
-            "First line"
-        );
+        assert_eq!(truncate_first_line("First line\nSecond line"), "First line");
         assert_eq!(truncate_first_line("Single line"), "Single line");
     }
 
@@ -1158,7 +1166,11 @@ mod tests {
         let src_dir = tmp.path().join("src");
         std::fs::create_dir_all(&src_dir).unwrap();
         let test_file = src_dir.join("test.rs");
-        std::fs::write(&test_file, "// TODO: Fix this\n// FIXME: And this\n// HACK: workaround").unwrap();
+        std::fs::write(
+            &test_file,
+            "// TODO: Fix this\n// FIXME: And this\n// HACK: workaround",
+        )
+        .unwrap();
 
         // Create output directory
         let output_dir = tmp.path().join("output");
@@ -1181,7 +1193,10 @@ mod tests {
         let output_file = output_dir.join(SeedKind::DebtLandscape.filename());
         assert!(output_file.exists(), "Output file should exist");
         let content = std::fs::read_to_string(&output_file).unwrap();
-        assert!(content.contains("# NL_DEBT_LANDSCAPE"), "Should have header");
+        assert!(
+            content.contains("# NL_DEBT_LANDSCAPE"),
+            "Should have header"
+        );
     }
 
     #[test]

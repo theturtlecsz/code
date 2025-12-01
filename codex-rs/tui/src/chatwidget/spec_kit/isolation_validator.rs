@@ -97,9 +97,7 @@ pub fn isolation_check_enabled() -> bool {
 /// Otherwise, performs full validation.
 pub fn validate_agent_isolation_with_skip(cwd: &Path) -> Result<(), IsolationError> {
     if !isolation_check_enabled() {
-        tracing::info!(
-            "SPEC-KIT-964: Isolation check skipped (SPEC_KIT_SKIP_ISOLATION=1)"
-        );
+        tracing::info!("SPEC-KIT-964: Isolation check skipped (SPEC_KIT_SKIP_ISOLATION=1)");
         return Ok(());
     }
     validate_agent_isolation(cwd)
@@ -123,7 +121,10 @@ mod tests {
     #[test]
     fn test_validate_missing_directory() {
         let result = validate_agent_isolation(Path::new("/nonexistent/path/that/does/not/exist"));
-        assert!(matches!(result, Err(IsolationError::InvalidWorkingDirectory)));
+        assert!(matches!(
+            result,
+            Err(IsolationError::InvalidWorkingDirectory)
+        ));
     }
 
     #[test]

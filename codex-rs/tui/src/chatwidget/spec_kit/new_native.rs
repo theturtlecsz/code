@@ -140,7 +140,8 @@ pub fn create_spec_with_context(
 
     // Step 4: Fill PRD template with enhanced context
     let prd_path = spec_dir.join("PRD.md");
-    let prd_content = fill_prd_template_with_context(&spec_id, &feature_name, enhanced_description)?;
+    let prd_content =
+        fill_prd_template_with_context(&spec_id, &feature_name, enhanced_description)?;
 
     fs::write(&prd_path, prd_content).map_err(|e| SpecKitError::FileWrite {
         path: prd_path.clone(),
@@ -196,13 +197,19 @@ fn fill_prd_template_with_context(
         .replace("[GAP_1]", &problem)
         .replace("[WHY_THIS_MATTERS]", &problem)
         .replace("[USER_TYPE_1]", &target)
-        .replace("[USER_DESCRIPTION]", &format!("{} using this system", target))
+        .replace(
+            "[USER_DESCRIPTION]",
+            &format!("{} using this system", target),
+        )
         .replace("[HOW_THEY_WORK_TODAY]", "Manual processes")
         .replace("[WHAT_FRUSTRATES_THEM]", &problem)
         .replace("[WHAT_THEY_WANT]", feature_name)
         .replace("[USER_TYPE_2]", "End User")
         .replace("[DESCRIPTION]", "Person using the final product")
-        .replace("[HOW_THEY_USE_THE_SYSTEM]", "Through the provided interface")
+        .replace(
+            "[HOW_THEY_USE_THE_SYSTEM]",
+            "Through the provided interface",
+        )
         .replace("[GOAL_1]", &format!("Implement {}", feature_name))
         .replace("[HOW_TO_MEASURE]", &success)
         .replace("[GOAL_2]", "Maintain quality and performance")
@@ -211,12 +218,21 @@ fn fill_prd_template_with_context(
         .replace("[WHAT_WE_WONT_DO_1]", "Out of scope enhancements")
         .replace("[FUTURE_ENHANCEMENT_1]", "Future iterations")
         .replace("[RELATED_BUT_SEPARATE_CONCERN]", "Unrelated features")
-        .replace("[WHY_THESE_ARE_NON_GOALS]", "Focus on core functionality first")
+        .replace(
+            "[WHY_THESE_ARE_NON_GOALS]",
+            "Focus on core functionality first",
+        )
         .replace("[INCLUDED_FEATURE_1]", feature_name)
         .replace("[INCLUDED_CAPABILITY_2]", "Basic implementation")
         .replace("[ASSUMPTION_1]", "Required dependencies are available")
-        .replace("[DEPENDENCY_ASSUMPTION_2]", "No breaking changes in upstream")
-        .replace("[TECHNICAL_CONSTRAINT]", "Must maintain backward compatibility")
+        .replace(
+            "[DEPENDENCY_ASSUMPTION_2]",
+            "No breaking changes in upstream",
+        )
+        .replace(
+            "[TECHNICAL_CONSTRAINT]",
+            "Must maintain backward compatibility",
+        )
         .replace("[RESOURCE_CONSTRAINT]", "Development time available")
         .replace("[TIME_CONSTRAINT]", "Target completion within sprint")
         .replace("[REQUIREMENT_DESCRIPTION]", feature_name)
@@ -314,7 +330,11 @@ fn parse_enhanced_description(enhanced: &str) -> (String, String, String) {
         success = "Feature works as expected".to_string();
     }
 
-    (problem.trim().to_string(), target.trim().to_string(), success.trim().to_string())
+    (
+        problem.trim().to_string(),
+        target.trim().to_string(),
+        success.trim().to_string(),
+    )
 }
 
 /// Fill PRD template with actual values

@@ -134,30 +134,78 @@ fn rust_questions() -> Vec<ProjectQuestion> {
             category: "Artifact",
             question: "What type of Rust artifact is this?",
             options: vec![
-                ProjectOption { label: 'A', text: "Library crate (lib.rs)", is_custom: false },
-                ProjectOption { label: 'B', text: "Binary crate (main.rs)", is_custom: false },
-                ProjectOption { label: 'C', text: "Workspace member", is_custom: false },
-                ProjectOption { label: 'D', text: "Custom...", is_custom: true },
+                ProjectOption {
+                    label: 'A',
+                    text: "Library crate (lib.rs)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'B',
+                    text: "Binary crate (main.rs)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'C',
+                    text: "Workspace member",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'D',
+                    text: "Custom...",
+                    is_custom: true,
+                },
             ],
         },
         ProjectQuestion {
             category: "Target",
             question: "Who is the primary user?",
             options: vec![
-                ProjectOption { label: 'A', text: "Rust developers (API consumers)", is_custom: false },
-                ProjectOption { label: 'B', text: "CLI users", is_custom: false },
-                ProjectOption { label: 'C', text: "Internal codebase only", is_custom: false },
-                ProjectOption { label: 'D', text: "Custom...", is_custom: true },
+                ProjectOption {
+                    label: 'A',
+                    text: "Rust developers (API consumers)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'B',
+                    text: "CLI users",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'C',
+                    text: "Internal codebase only",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'D',
+                    text: "Custom...",
+                    is_custom: true,
+                },
             ],
         },
         ProjectQuestion {
             category: "Success",
             question: "How will you know it's complete?",
             options: vec![
-                ProjectOption { label: 'A', text: "cargo test passes", is_custom: false },
-                ProjectOption { label: 'B', text: "cargo clippy clean", is_custom: false },
-                ProjectOption { label: 'C', text: "Documented with rustdoc", is_custom: false },
-                ProjectOption { label: 'D', text: "Custom...", is_custom: true },
+                ProjectOption {
+                    label: 'A',
+                    text: "cargo test passes",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'B',
+                    text: "cargo clippy clean",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'C',
+                    text: "Documented with rustdoc",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'D',
+                    text: "Custom...",
+                    is_custom: true,
+                },
             ],
         },
     ]
@@ -169,30 +217,78 @@ fn python_questions() -> Vec<ProjectQuestion> {
             category: "Artifact",
             question: "What type of Python artifact is this?",
             options: vec![
-                ProjectOption { label: 'A', text: "Library/Package (pip installable)", is_custom: false },
-                ProjectOption { label: 'B', text: "CLI tool", is_custom: false },
-                ProjectOption { label: 'C', text: "Web application (FastAPI/Django)", is_custom: false },
-                ProjectOption { label: 'D', text: "Custom...", is_custom: true },
+                ProjectOption {
+                    label: 'A',
+                    text: "Library/Package (pip installable)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'B',
+                    text: "CLI tool",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'C',
+                    text: "Web application (FastAPI/Django)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'D',
+                    text: "Custom...",
+                    is_custom: true,
+                },
             ],
         },
         ProjectQuestion {
             category: "Async",
             question: "Does this require async/await?",
             options: vec![
-                ProjectOption { label: 'A', text: "Yes, async throughout", is_custom: false },
-                ProjectOption { label: 'B', text: "No, synchronous", is_custom: false },
-                ProjectOption { label: 'C', text: "Mixed (async-optional)", is_custom: false },
-                ProjectOption { label: 'D', text: "Custom...", is_custom: true },
+                ProjectOption {
+                    label: 'A',
+                    text: "Yes, async throughout",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'B',
+                    text: "No, synchronous",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'C',
+                    text: "Mixed (async-optional)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'D',
+                    text: "Custom...",
+                    is_custom: true,
+                },
             ],
         },
         ProjectQuestion {
             category: "Success",
             question: "How will you know it's complete?",
             options: vec![
-                ProjectOption { label: 'A', text: "pytest passes", is_custom: false },
-                ProjectOption { label: 'B', text: "Type hints validated (mypy)", is_custom: false },
-                ProjectOption { label: 'C', text: "Feature works end-to-end", is_custom: false },
-                ProjectOption { label: 'D', text: "Custom...", is_custom: true },
+                ProjectOption {
+                    label: 'A',
+                    text: "pytest passes",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'B',
+                    text: "Type hints validated (mypy)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'C',
+                    text: "Feature works end-to-end",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'D',
+                    text: "Custom...",
+                    is_custom: true,
+                },
             ],
         },
     ]
@@ -204,30 +300,78 @@ fn typescript_questions() -> Vec<ProjectQuestion> {
             category: "Platform",
             question: "What platform is this for?",
             options: vec![
-                ProjectOption { label: 'A', text: "Frontend (React/Vue/Svelte)", is_custom: false },
-                ProjectOption { label: 'B', text: "Backend (Node.js/Deno)", is_custom: false },
-                ProjectOption { label: 'C', text: "Full-stack (Next.js/Nuxt)", is_custom: false },
-                ProjectOption { label: 'D', text: "Custom...", is_custom: true },
+                ProjectOption {
+                    label: 'A',
+                    text: "Frontend (React/Vue/Svelte)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'B',
+                    text: "Backend (Node.js/Deno)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'C',
+                    text: "Full-stack (Next.js/Nuxt)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'D',
+                    text: "Custom...",
+                    is_custom: true,
+                },
             ],
         },
         ProjectQuestion {
             category: "Target",
             question: "Who is the primary user?",
             options: vec![
-                ProjectOption { label: 'A', text: "End-users (UI consumers)", is_custom: false },
-                ProjectOption { label: 'B', text: "Developers (API/SDK)", is_custom: false },
-                ProjectOption { label: 'C', text: "Internal team only", is_custom: false },
-                ProjectOption { label: 'D', text: "Custom...", is_custom: true },
+                ProjectOption {
+                    label: 'A',
+                    text: "End-users (UI consumers)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'B',
+                    text: "Developers (API/SDK)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'C',
+                    text: "Internal team only",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'D',
+                    text: "Custom...",
+                    is_custom: true,
+                },
             ],
         },
         ProjectQuestion {
             category: "Success",
             question: "How will you know it's complete?",
             options: vec![
-                ProjectOption { label: 'A', text: "Tests pass (Jest/Vitest)", is_custom: false },
-                ProjectOption { label: 'B', text: "Type-safe (tsc --noEmit)", is_custom: false },
-                ProjectOption { label: 'C', text: "E2E tests pass (Playwright)", is_custom: false },
-                ProjectOption { label: 'D', text: "Custom...", is_custom: true },
+                ProjectOption {
+                    label: 'A',
+                    text: "Tests pass (Jest/Vitest)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'B',
+                    text: "Type-safe (tsc --noEmit)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'C',
+                    text: "E2E tests pass (Playwright)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'D',
+                    text: "Custom...",
+                    is_custom: true,
+                },
             ],
         },
     ]
@@ -239,30 +383,78 @@ fn javascript_questions() -> Vec<ProjectQuestion> {
             category: "Platform",
             question: "What platform is this for?",
             options: vec![
-                ProjectOption { label: 'A', text: "Frontend (Browser)", is_custom: false },
-                ProjectOption { label: 'B', text: "Backend (Node.js)", is_custom: false },
-                ProjectOption { label: 'C', text: "Universal (Isomorphic)", is_custom: false },
-                ProjectOption { label: 'D', text: "Custom...", is_custom: true },
+                ProjectOption {
+                    label: 'A',
+                    text: "Frontend (Browser)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'B',
+                    text: "Backend (Node.js)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'C',
+                    text: "Universal (Isomorphic)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'D',
+                    text: "Custom...",
+                    is_custom: true,
+                },
             ],
         },
         ProjectQuestion {
             category: "Target",
             question: "Who is the primary user?",
             options: vec![
-                ProjectOption { label: 'A', text: "End-users", is_custom: false },
-                ProjectOption { label: 'B', text: "Developers", is_custom: false },
-                ProjectOption { label: 'C', text: "Internal team", is_custom: false },
-                ProjectOption { label: 'D', text: "Custom...", is_custom: true },
+                ProjectOption {
+                    label: 'A',
+                    text: "End-users",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'B',
+                    text: "Developers",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'C',
+                    text: "Internal team",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'D',
+                    text: "Custom...",
+                    is_custom: true,
+                },
             ],
         },
         ProjectQuestion {
             category: "Success",
             question: "How will you know it's complete?",
             options: vec![
-                ProjectOption { label: 'A', text: "Tests pass", is_custom: false },
-                ProjectOption { label: 'B', text: "Feature works end-to-end", is_custom: false },
-                ProjectOption { label: 'C', text: "No console errors", is_custom: false },
-                ProjectOption { label: 'D', text: "Custom...", is_custom: true },
+                ProjectOption {
+                    label: 'A',
+                    text: "Tests pass",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'B',
+                    text: "Feature works end-to-end",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'C',
+                    text: "No console errors",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'D',
+                    text: "Custom...",
+                    is_custom: true,
+                },
             ],
         },
     ]
@@ -274,30 +466,78 @@ fn go_questions() -> Vec<ProjectQuestion> {
             category: "Artifact",
             question: "What type of Go artifact is this?",
             options: vec![
-                ProjectOption { label: 'A', text: "Library (importable package)", is_custom: false },
-                ProjectOption { label: 'B', text: "CLI tool (main package)", is_custom: false },
-                ProjectOption { label: 'C', text: "Web service (HTTP/gRPC)", is_custom: false },
-                ProjectOption { label: 'D', text: "Custom...", is_custom: true },
+                ProjectOption {
+                    label: 'A',
+                    text: "Library (importable package)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'B',
+                    text: "CLI tool (main package)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'C',
+                    text: "Web service (HTTP/gRPC)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'D',
+                    text: "Custom...",
+                    is_custom: true,
+                },
             ],
         },
         ProjectQuestion {
             category: "Target",
             question: "Who is the primary user?",
             options: vec![
-                ProjectOption { label: 'A', text: "Go developers", is_custom: false },
-                ProjectOption { label: 'B', text: "CLI users", is_custom: false },
-                ProjectOption { label: 'C', text: "Service consumers (API)", is_custom: false },
-                ProjectOption { label: 'D', text: "Custom...", is_custom: true },
+                ProjectOption {
+                    label: 'A',
+                    text: "Go developers",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'B',
+                    text: "CLI users",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'C',
+                    text: "Service consumers (API)",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'D',
+                    text: "Custom...",
+                    is_custom: true,
+                },
             ],
         },
         ProjectQuestion {
             category: "Success",
             question: "How will you know it's complete?",
             options: vec![
-                ProjectOption { label: 'A', text: "go test passes", is_custom: false },
-                ProjectOption { label: 'B', text: "golangci-lint clean", is_custom: false },
-                ProjectOption { label: 'C', text: "Benchmarks meet target", is_custom: false },
-                ProjectOption { label: 'D', text: "Custom...", is_custom: true },
+                ProjectOption {
+                    label: 'A',
+                    text: "go test passes",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'B',
+                    text: "golangci-lint clean",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'C',
+                    text: "Benchmarks meet target",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'D',
+                    text: "Custom...",
+                    is_custom: true,
+                },
             ],
         },
     ]
@@ -309,30 +549,78 @@ fn generic_questions() -> Vec<ProjectQuestion> {
             category: "Problem",
             question: "What problem does this solve?",
             options: vec![
-                ProjectOption { label: 'A', text: "Performance issue", is_custom: false },
-                ProjectOption { label: 'B', text: "Missing functionality", is_custom: false },
-                ProjectOption { label: 'C', text: "Developer experience", is_custom: false },
-                ProjectOption { label: 'D', text: "Custom...", is_custom: true },
+                ProjectOption {
+                    label: 'A',
+                    text: "Performance issue",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'B',
+                    text: "Missing functionality",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'C',
+                    text: "Developer experience",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'D',
+                    text: "Custom...",
+                    is_custom: true,
+                },
             ],
         },
         ProjectQuestion {
             category: "Target",
             question: "Who is the primary user?",
             options: vec![
-                ProjectOption { label: 'A', text: "Developer", is_custom: false },
-                ProjectOption { label: 'B', text: "End-user", is_custom: false },
-                ProjectOption { label: 'C', text: "Admin/Operator", is_custom: false },
-                ProjectOption { label: 'D', text: "Custom...", is_custom: true },
+                ProjectOption {
+                    label: 'A',
+                    text: "Developer",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'B',
+                    text: "End-user",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'C',
+                    text: "Admin/Operator",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'D',
+                    text: "Custom...",
+                    is_custom: true,
+                },
             ],
         },
         ProjectQuestion {
             category: "Success",
             question: "How will you know it's complete?",
             options: vec![
-                ProjectOption { label: 'A', text: "Tests pass", is_custom: false },
-                ProjectOption { label: 'B', text: "Feature works end-to-end", is_custom: false },
-                ProjectOption { label: 'C', text: "Performance target met", is_custom: false },
-                ProjectOption { label: 'D', text: "Custom...", is_custom: true },
+                ProjectOption {
+                    label: 'A',
+                    text: "Tests pass",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'B',
+                    text: "Feature works end-to-end",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'C',
+                    text: "Performance target met",
+                    is_custom: false,
+                },
+                ProjectOption {
+                    label: 'D',
+                    text: "Custom...",
+                    is_custom: true,
+                },
             ],
         },
     ]
@@ -368,7 +656,11 @@ mod tests {
     #[test]
     fn test_detect_typescript_project() {
         let dir = TempDir::new().unwrap();
-        fs::write(dir.path().join("package.json"), r#"{"devDependencies":{"typescript":"5.0"}}"#).unwrap();
+        fs::write(
+            dir.path().join("package.json"),
+            r#"{"devDependencies":{"typescript":"5.0"}}"#,
+        )
+        .unwrap();
         assert_eq!(detect_project_type(dir.path()), ProjectType::TypeScript);
     }
 

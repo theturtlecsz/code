@@ -1751,14 +1751,8 @@ fn spec_stage_to_stage_type(stage: SpecStage) -> super::pipeline_config::StageTy
         SpecStage::Unlock => StageType::Unlock,
         // Specify (pre-pipeline) and quality commands are not part of /speckit.auto pipeline
         // They should never appear in state.stages (which is Plan→Unlock only)
-        SpecStage::Specify
-        | SpecStage::Clarify
-        | SpecStage::Analyze
-        | SpecStage::Checklist => {
-            panic!(
-                "Stage {:?} should not be in /speckit.auto pipeline",
-                stage
-            )
+        SpecStage::Specify | SpecStage::Clarify | SpecStage::Analyze | SpecStage::Checklist => {
+            panic!("Stage {:?} should not be in /speckit.auto pipeline", stage)
         }
     }
 }

@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use ratatui::text::Line;
 
 use crate::chatwidget::ChatWidget;
-use crate::history_cell::{new_error_event, HistoryCellType, PlainHistoryCell};
+use crate::history_cell::{HistoryCellType, PlainHistoryCell, new_error_event};
 
 /// Called when user completes the PRD builder modal with all answers
 pub fn on_prd_builder_submitted(

@@ -100,10 +100,22 @@ pub fn create_project(
 
     // Create core spec-kit files (CLAUDE.md Section 1 requirements)
     // SPEC-KIT-961 Phase 5: Create all three instruction files for hermetic isolation
-    create_instruction_files(&project_dir, project_name, project_type, &date, &mut files_created)?;
+    create_instruction_files(
+        &project_dir,
+        project_name,
+        project_type,
+        &date,
+        &mut files_created,
+    )?;
     create_spec_md(&project_dir, &date, &mut files_created)?;
     create_product_requirements(&project_dir, project_name, &date, &mut files_created)?;
-    create_planning_md(&project_dir, project_name, project_type, &date, &mut files_created)?;
+    create_planning_md(
+        &project_dir,
+        project_name,
+        project_type,
+        &date,
+        &mut files_created,
+    )?;
     create_docs_dir(&project_dir, &mut files_created)?;
     create_constitution(&project_dir, project_name, &date, &mut files_created)?;
     create_templates_dir(&project_dir, &mut files_created)?;
@@ -111,9 +123,7 @@ pub fn create_project(
     // Create type-specific files
     match project_type {
         ProjectType::Rust => create_rust_files(&project_dir, project_name, &mut files_created)?,
-        ProjectType::Python => {
-            create_python_files(&project_dir, project_name, &mut files_created)?
-        }
+        ProjectType::Python => create_python_files(&project_dir, project_name, &mut files_created)?,
         ProjectType::TypeScript => {
             create_typescript_files(&project_dir, project_name, &mut files_created)?
         }
@@ -154,7 +164,12 @@ fn validate_project_name(name: &str) -> Result<(), SpecKitError> {
     }
 
     // Must start with letter
-    if !name.chars().next().map(|c| c.is_ascii_lowercase()).unwrap_or(false) {
+    if !name
+        .chars()
+        .next()
+        .map(|c| c.is_ascii_lowercase())
+        .unwrap_or(false)
+    {
         return Err(SpecKitError::Other(
             "Project name must start with a lowercase letter".to_string(),
         ));
@@ -225,9 +240,27 @@ This project uses spec-kit for structured development:
 
     // Create all three instruction files with unique headers
     let instruction_files = [
-        ("CLAUDE.md", format!("# CLAUDE.md - {} Instructions{}", project_name, common_content)),
-        ("AGENTS.md", format!("# AGENTS.md - {} Instructions{}", project_name, common_content)),
-        ("GEMINI.md", format!("# GEMINI.md - {} Instructions{}", project_name, common_content)),
+        (
+            "CLAUDE.md",
+            format!(
+                "# CLAUDE.md - {} Instructions{}",
+                project_name, common_content
+            ),
+        ),
+        (
+            "AGENTS.md",
+            format!(
+                "# AGENTS.md - {} Instructions{}",
+                project_name, common_content
+            ),
+        ),
+        (
+            "GEMINI.md",
+            format!(
+                "# GEMINI.md - {} Instructions{}",
+                project_name, common_content
+            ),
+        ),
     ];
 
     for (filename, content) in instruction_files {
@@ -452,10 +485,7 @@ This project uses spec-kit for structured development:
 ///
 /// SPEC-KIT-962: Uses resolve_template() to get template content from the
 /// layered resolution system (project-local -> user config -> embedded).
-fn create_templates_dir(
-    project_dir: &Path,
-    files: &mut Vec<String>,
-) -> Result<(), SpecKitError> {
+fn create_templates_dir(project_dir: &Path, files: &mut Vec<String>) -> Result<(), SpecKitError> {
     let templates_dir = project_dir.join("templates");
     fs::create_dir(&templates_dir).map_err(|e| SpecKitError::DirectoryCreate {
         path: templates_dir.clone(),
@@ -969,10 +999,7 @@ coverage.txt
 }
 
 /// Create Generic-specific files (minimal)
-fn create_generic_files(
-    project_dir: &Path,
-    files: &mut Vec<String>,
-) -> Result<(), SpecKitError> {
+fn create_generic_files(project_dir: &Path, files: &mut Vec<String>) -> Result<(), SpecKitError> {
     // Only .gitignore for generic projects
     let gitignore = r#"# Add project-specific ignores here
 *.log
@@ -1190,13 +1217,15 @@ mod tests {
         create_project(ProjectType::Generic, "test-proj", temp.path()).unwrap();
 
         // PRD template
-        let prd = fs::read_to_string(temp.path().join("test-proj/templates/PRD-template.md")).unwrap();
+        let prd =
+            fs::read_to_string(temp.path().join("test-proj/templates/PRD-template.md")).unwrap();
         assert!(prd.contains("[FEATURE_NAME]"));
         assert!(prd.contains("[SPEC_ID]"));
         assert!(prd.contains("Problem Statement"));
 
         // Spec template
-        let spec = fs::read_to_string(temp.path().join("test-proj/templates/spec-template.md")).unwrap();
+        let spec =
+            fs::read_to_string(temp.path().join("test-proj/templates/spec-template.md")).unwrap();
         assert!(spec.contains("[SPEC_ID]"));
         assert!(spec.contains("Requirements"));
     }

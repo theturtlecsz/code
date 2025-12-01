@@ -1,9 +1,9 @@
-# HANDOFF-P91: Constitution Conflict Detection (SPEC-KIT-105 Phase 4)
+# HANDOFF-P91: Constitution Enforcement Foundation (SPEC-KIT-105 Phase 4)
 
 **Session**: P91
 **Previous**: P90 (Constitution TASK_BRIEF Integration)
 **Status**: Ready to Start
-**Primary Goal**: Implement conflict detection and slash commands
+**Primary Goal**: Implement constitution enforcement primitives: conflict detection, readiness gates, `/speckit.constitution`
 
 ---
 
@@ -41,100 +41,149 @@
 
 ---
 
-## P91 Scope
+## P91 Scope (Refined)
 
-### 1. CONSTITUTION_CONFLICT_WARNING Error Type
+### 1. Structured Conflict Detection
 
-**File**: `codex-rs/stage0/src/errors.rs`
+**File**: `codex-rs/stage0/src/lib.rs`
 
-Add new error variant:
-```rust
-pub enum Stage0Error {
-    // ...existing variants
+Parse Divine Truth's Constitution Alignment section and record conflicts:
 
-    /// Constitution conflict detected (non-fatal warning)
-    ConstitutionConflict {
-        spec_id: String,
-        conflicts: Vec<String>,  // Conflict descriptions
-        severity: ConflictSeverity,
-    },
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum ConflictSeverity {
-    Warning,    // Log but continue
-    Blocking,   // Stop pipeline (future P92)
-}
-```
-
-**Usage**: When `DivineTruth.constitution_alignment.conflicts_raw` is populated:
-- Parse conflict descriptions
-- Emit warning-level log
-- Store in result for UI display
-- Do NOT stop pipeline (P92 will add blocking)
-
-### 2. Conflict Detection Integration
-
-**File**: `codex-rs/stage0/src/lib.rs` (run_stage0 function)
-
-After Tier-2 synthesis:
 ```rust
 // After divine_truth = parse_divine_truth(response)
-if let Some(conflicts) = &divine_truth.constitution_alignment.conflicts_raw {
-    if !conflicts.trim().is_empty() {
+let conflict_summary = if let Some(conflicts) = &divine_truth.constitution_alignment.conflicts_raw {
+    if !conflicts.trim().is_empty() && conflicts != "None identified." {
         tracing::warn!(
             target: "stage0",
             spec_id = spec_id,
             conflicts = %conflicts,
             "Constitution conflict detected in spec"
         );
-        // Store in result for UI
+        Some(conflicts.clone())
+    } else {
+        None
     }
+} else {
+    None
+};
+
+// Store in Stage0Result for UI consumption
+```
+
+**File**: `codex-rs/stage0/src/lib.rs` (Stage0Result)
+
+Add field to result:
+```rust
+pub struct Stage0Result {
+    // ...existing fields
+    pub constitution_conflicts: Option<String>,  // P91: Raw conflict text
+    pub constitution_aligned_ids: Vec<String>,   // P91: Aligned principle/guardrail IDs
 }
 ```
 
-### 3. Slash Commands (TUI)
+### 2. Phase -1 Readiness Gate (Warn-Only)
 
-**Location**: `codex-rs/tui/src/chatwidget/spec_kit/commands/`
+**File**: `codex-rs/tui/src/chatwidget/spec_kit/pipeline_coordinator.rs` (or new gate module)
 
-#### `/speckit.constitution`
-- Shows current constitution from overlay DB
-- Lists all constitution memories with types
-- Shows version and hash
-
-#### `/speckit.vision`
-- Shows spec purpose/vision (deferred from P89)
-- Reads from spec.md or asks user to define
-
-#### `/speckit.plan`
-- Shows current SPEC state (planned vs implemented)
-- Lists completed vs pending phases
-
-**Implementation Pattern** (follow existing commands):
+Implement soft pre-flight check:
 ```rust
-// In commands/mod.rs
-pub mod constitution;
+/// Check constitution readiness before pipeline runs
+/// Returns warnings but does not block execution
+pub fn check_constitution_readiness(db: &OverlayDb) -> Vec<String> {
+    let mut warnings = Vec::new();
 
-// In commands/constitution.rs
-pub fn handle_constitution_command(state: &SpecKitState, db: &OverlayDb) -> String {
+    let count = db.constitution_memory_count().unwrap_or(0);
+    if count == 0 {
+        warnings.push("⚠ No constitution defined for this project. Run /speckit.constitution.".into());
+        tracing::warn!(target: "stage0", "stage0.gate.constitution_missing=true");
+    }
+
+    // Check for minimum types
     let mems = db.get_constitution_memories().unwrap_or_default();
-    if mems.is_empty() {
-        return "No constitution defined. Use `store_memory` with domain='constitution' and type:* tags.".into();
+    let has_principle = mems.iter().any(|m| m.const_type == ConstitutionType::Principle);
+    let has_guardrail = mems.iter().any(|m| m.const_type == ConstitutionType::Guardrail);
+
+    if count > 0 && !has_principle {
+        warnings.push("⚠ No principles defined. Consider adding at least one.".into());
     }
-    // Format as markdown table
+    if count > 0 && !has_guardrail {
+        warnings.push("⚠ No guardrails defined. Consider adding at least one.".into());
+    }
+
+    warnings
 }
 ```
 
-### 4. Phase -1 Gates (Optional)
-
-If time permits, add pre-flight check:
+**Config key**: Add `phase1_gate_mode` supporting `warn|skip` (reserve `block` for P92):
 ```rust
-fn check_constitution_readiness(db: &OverlayDb) -> Result<()> {
-    let meta = db.get_constitution_meta()?;
-    if meta.0 == 0 {
-        tracing::warn!("No constitution defined - spec alignment will be limited");
+// In config.rs or Stage0Config
+pub enum GateMode {
+    Warn,   // Log warning, continue
+    Skip,   // No check
+    // Block, // P92+: Stop pipeline
+}
+```
+
+**Integration point**: Call gate before `/speckit.auto` and `/speckit.new` in pipeline coordinator.
+
+### 3. `/speckit.constitution` Command
+
+**Files**:
+- `codex-rs/tui/src/chatwidget/spec_kit/commands/constitution.rs` (new)
+- `codex-rs/tui/src/chatwidget/spec_kit/commands/mod.rs` (register)
+- `codex-rs/tui/src/slash_command.rs` (dispatch)
+
+**Functionality**:
+1. **View mode** (no args): Display current constitution
+   ```
+   /speckit.constitution
+
+   📜 Project Constitution (v3)
+
+   ## Principles
+   - [P1] Optimize for developer ergonomics (const-001)
+   - [P2] All APIs must be documented (const-002)
+
+   ## Guardrails
+   - [G1] Never store secrets in plain text (const-003)
+
+   ## Goals
+   - [Goal] Support 3 cloud providers by Q3 (const-004)
+
+   Total: 4 items | Hash: sha256:abc123
+   ```
+
+2. **Add mode**: Interactive constitution entry
+   ```
+   /speckit.constitution add
+
+   What type? [principle/guardrail/goal/non-goal]: guardrail
+   Enter the guardrail: All file operations must be sandboxed
+
+   ✅ Added guardrail (const-005). Constitution v4.
+   ```
+
+3. **Regenerate**: Update `NL_CONSTITUTION.md` and `memory/constitution.md`
+   ```
+   /speckit.constitution sync
+
+   ✅ Regenerated NL_CONSTITUTION.md (4 items)
+   ✅ Updated memory/constitution.md
+   ```
+
+**Implementation pattern** (follow existing commands like `/speckit.new`):
+```rust
+pub async fn handle_constitution_command(
+    args: &str,
+    state: &mut SpecKitState,
+    db: &OverlayDb,
+) -> Result<String, SpecKitError> {
+    match args.trim() {
+        "" | "view" => view_constitution(db),
+        "add" => add_constitution_entry(state, db).await,
+        "sync" => sync_constitution_files(state, db).await,
+        _ => Err(SpecKitError::InvalidArgs("constitution".into())),
     }
-    Ok(())
 }
 ```
 
@@ -144,20 +193,24 @@ fn check_constitution_readiness(db: &OverlayDb) -> Result<()> {
 
 | File | Purpose |
 |------|---------|
-| `stage0/src/errors.rs` | Add ConstitutionConflict error |
-| `stage0/src/lib.rs` | Conflict detection integration |
-| `tui/src/chatwidget/spec_kit/commands/` | Slash command handlers |
-| `tui/src/chatwidget/spec_kit/mod.rs` | Command dispatch |
+| `stage0/src/lib.rs` | Stage0Result with conflict fields |
+| `tui/src/chatwidget/spec_kit/commands/constitution.rs` | NEW: /speckit.constitution handler |
+| `tui/src/chatwidget/spec_kit/commands/mod.rs` | Register constitution command |
+| `tui/src/chatwidget/spec_kit/pipeline_coordinator.rs` | Readiness gate integration |
+| `stage0/src/config.rs` | GateMode enum and config |
 
 ---
 
 ## Out of Scope (P92+)
 
-- Blocking conflict enforcement
+- `/speckit.vision` - Vision/Articles Q&A wizard
+- `/speckit.plan` - Plan-only CLI mode
+- Hard blocking on missing constitution or conflicts
 - Auto-remediation suggestions
 - Constitution versioning UI
 - NotebookLM artifact seeding for constitution
 - Constitution diff/history tracking
+- `GateMode::Block` implementation
 
 ---
 
@@ -182,6 +235,8 @@ cargo clippy -p codex-stage0 --all-targets -- -D warnings
 ```
 9f8224a56 docs(SPEC-KIT-102): add orphaned session artifacts and research
 79461a646 feat(stage0): implement constitution TASK_BRIEF integration (SPEC-KIT-105 Phase 3)
+ce483e9b8 docs: Add P91 session handoff for conflict detection
+4179f9719 style: apply cargo fmt to workspace
 ```
 
 ---
@@ -193,7 +248,17 @@ P89 (Constitution Data Model)
     ↓
 P90 (TASK_BRIEF + Tier-2) ← COMPLETED
     ↓
-P91 (Conflict Detection + Slash Commands) ← NEXT
+P91 (Conflict Detection + Gate + /speckit.constitution) ← NEXT
     ↓
-P92 (Blocking Enforcement, NotebookLM Artifacts)
+P92 (Vision, Plan, Blocking Enforcement)
 ```
+
+---
+
+## Acceptance Criteria
+
+1. **Conflict Detection**: `Stage0Result` contains `constitution_conflicts` and `constitution_aligned_ids` populated from Divine Truth Section 2
+2. **Readiness Gate**: Warning printed before `/speckit.auto` when no constitution exists
+3. **Slash Command**: `/speckit.constitution` displays current constitution, allows adding entries, syncs to files
+4. **Tests**: New tests for gate logic and command parsing
+5. **Config**: `phase1_gate_mode` config key with `warn`/`skip` support

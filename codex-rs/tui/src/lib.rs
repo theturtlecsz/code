@@ -160,9 +160,9 @@ mod slash_command;
 mod spec_prompts;
 pub mod spec_status;
 pub mod stage0_adapters;
-pub mod vector_state; // SPEC-KIT-102 V2.5b: Shared TfIdfBackend for hybrid retrieval
 mod streaming;
 pub mod templates;
+pub mod vector_state; // SPEC-KIT-102 V2.5b: Shared TfIdfBackend for hybrid retrieval
 
 // Re-export spec_kit types for integration testing (T78)
 pub use chatwidget::spec_kit::{
@@ -183,7 +183,7 @@ pub use chatwidget::spec_kit::execution_logger::ExecutionEvent;
 pub use chatwidget::spec_kit::stage0_integration::{
     Stage0ExecutionConfig, write_divine_truth_to_evidence, write_task_brief_to_evidence,
 };
-pub use slash_command::{parse_spec_auto_args, SpecAutoInvocation};
+pub use slash_command::{SpecAutoInvocation, parse_spec_auto_args};
 
 // SPEC-957 Phase 2: Re-export test utilities for integration tests
 // Note: SpecKitContext and related functions are internal APIs,

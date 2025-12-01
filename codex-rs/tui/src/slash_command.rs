@@ -239,7 +239,9 @@ impl SlashCommand {
             SlashCommand::SpecKitConfigure => "configure pipeline stages (interactive modal)",
             SlashCommand::SpecKitConstitution => "extract ACE bullets (native)",
             SlashCommand::SpecKitAceStatus => "show ACE stats (native)",
-            SlashCommand::SpecKitProject => "scaffold new project with spec-kit support (native, $0)",
+            SlashCommand::SpecKitProject => {
+                "scaffold new project with spec-kit support (native, $0)"
+            }
             SlashCommand::SpecKitVerify => "verify spec implementation (native)",
             SlashCommand::SpecKitInstallTemplates => "install templates to project (native)",
             SlashCommand::SpecKitTemplateStatus => "show template resolution status (native)",
@@ -626,9 +628,9 @@ pub fn parse_spec_auto_args(args: &str) -> Result<SpecAutoInvocation, SpecAutoPa
         goal: goal_tokens.join(" "),
         resume_from,
         hal_mode,
-        cli_args, // SPEC-948
-        no_stage0,        // SPEC-KIT-102
-        stage0_explain,   // SPEC-KIT-102
+        cli_args,       // SPEC-948
+        no_stage0,      // SPEC-KIT-102
+        stage0_explain, // SPEC-KIT-102
     })
 }
 
@@ -764,7 +766,8 @@ mod tests {
 
     #[test]
     fn parse_spec_auto_args_supports_both_stage0_flags() {
-        let auto = parse_spec_auto_args("SPEC-102 --no-stage0 --stage0-explain debug goal").unwrap();
+        let auto =
+            parse_spec_auto_args("SPEC-102 --no-stage0 --stage0-explain debug goal").unwrap();
         assert_eq!(auto.spec_id, "SPEC-102");
         assert!(auto.no_stage0);
         assert!(auto.stage0_explain);

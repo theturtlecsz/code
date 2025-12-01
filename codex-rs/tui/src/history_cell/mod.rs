@@ -4491,13 +4491,19 @@ fn popular_commands_lines(_latest_version: Option<&str>) -> Vec<Line<'static>> {
     ]));
     // SPEC-KIT-963: /plan, /code removed. Show /speckit.* equivalents.
     lines.push(Line::from(vec![
-        Span::styled("/speckit.plan", Style::default().fg(crate::colors::primary())),
+        Span::styled(
+            "/speckit.plan",
+            Style::default().fg(crate::colors::primary()),
+        ),
         Span::from(" - "),
         Span::from(SlashCommand::SpecKitPlan.description())
             .style(Style::default().add_modifier(Modifier::DIM)),
     ]));
     lines.push(Line::from(vec![
-        Span::styled("/speckit.implement", Style::default().fg(crate::colors::primary())),
+        Span::styled(
+            "/speckit.implement",
+            Style::default().fg(crate::colors::primary()),
+        ),
         Span::from(" - "),
         Span::from(SlashCommand::SpecKitImplement.description())
             .style(Style::default().add_modifier(Modifier::DIM)),

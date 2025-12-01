@@ -9,7 +9,7 @@
 use super::super::super::ChatWidget;
 use super::super::command_registry::SpecKitCommand;
 use crate::app_event::BackgroundPlacement;
-use crate::templates::{all_template_status, install_templates, TemplateSource};
+use crate::templates::{TemplateSource, all_template_status, install_templates};
 
 /// Command: /speckit.install-templates
 /// Copies embedded templates to ~/.config/code/templates/ for customization

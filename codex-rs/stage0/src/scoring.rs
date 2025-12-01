@@ -139,11 +139,7 @@ pub fn calculate_dynamic_score(
 }
 
 /// Calculate just the final dynamic score (convenience function)
-pub fn calculate_score(
-    input: &ScoringInput,
-    config: &ScoringConfig,
-    now: DateTime<Utc>,
-) -> f64 {
+pub fn calculate_score(input: &ScoringInput, config: &ScoringConfig, now: DateTime<Utc>) -> f64 {
     calculate_dynamic_score(input, config, now).final_score
 }
 

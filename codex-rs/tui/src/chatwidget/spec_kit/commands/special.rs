@@ -332,8 +332,8 @@ impl SpecKitCommand for SpecKitSeedCommand {
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
-        use super::super::stage0_seeding::{run_shadow_seeding, SeedingConfig};
-        use crate::stage0_adapters::{has_local_memory_server, LocalMemoryMcpAdapter};
+        use super::super::stage0_seeding::{SeedingConfig, run_shadow_seeding};
+        use crate::stage0_adapters::{LocalMemoryMcpAdapter, has_local_memory_server};
         use std::sync::Arc;
 
         // Parse optional arguments
@@ -354,11 +354,11 @@ impl SpecKitCommand for SpecKitSeedCommand {
         widget.history_push(crate::history_cell::PlainHistoryCell::new(
             vec![
                 ratatui::text::Line::from("🌱 Stage0 NotebookLM Seeder"),
+                ratatui::text::Line::from(format!("   Output: {}", output_dir.display())),
                 ratatui::text::Line::from(format!(
-                    "   Output: {}",
-                    output_dir.display()
+                    "   Max memories per artifact: {}",
+                    max_memories
                 )),
-                ratatui::text::Line::from(format!("   Max memories per artifact: {}", max_memories)),
                 ratatui::text::Line::from("   Scanning local-memory and codebase..."),
             ],
             crate::history_cell::HistoryCellType::Notice,
@@ -561,7 +561,7 @@ impl SpecKitCommand for Stage0IndexCommand {
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
         use super::super::code_index::CodeUnitExtractor;
-        use crate::stage0_adapters::{has_local_memory_server, LocalMemoryMcpAdapter};
+        use crate::stage0_adapters::{LocalMemoryMcpAdapter, has_local_memory_server};
         use crate::vector_state::{IndexingStats, VECTOR_STATE};
         use codex_stage0::{
             DocumentKind, DocumentMetadata, Iqo, LocalMemoryClient, LocalMemorySearchParams,
@@ -592,7 +592,10 @@ impl SpecKitCommand for Stage0IndexCommand {
             vec![
                 ratatui::text::Line::from("🔍 Stage0 Vector Backend Indexing (P85)"),
                 ratatui::text::Line::from(format!("   Max memories: {}", max_memories)),
-                ratatui::text::Line::from(format!("   Code indexing: {}", if index_code { "enabled" } else { "disabled" })),
+                ratatui::text::Line::from(format!(
+                    "   Code indexing: {}",
+                    if index_code { "enabled" } else { "disabled" }
+                )),
                 ratatui::text::Line::from("   Fetching memories from local-memory..."),
             ],
             crate::history_cell::HistoryCellType::Notice,
@@ -636,11 +639,8 @@ impl SpecKitCommand for Stage0IndexCommand {
             let mut docs: Vec<VectorDocument> = memories
                 .iter()
                 .map(|m| {
-                    let mut doc = VectorDocument::new(
-                        m.id.clone(),
-                        DocumentKind::Memory,
-                        m.snippet.clone(),
-                    );
+                    let mut doc =
+                        VectorDocument::new(m.id.clone(), DocumentKind::Memory, m.snippet.clone());
 
                     if let Some(domain) = &m.domain {
                         doc = doc.with_domain(domain.as_str());
@@ -673,8 +673,12 @@ impl SpecKitCommand for Stage0IndexCommand {
                             if let Some(sym) = &cu.symbol {
                                 extra.insert("symbol".to_string(), serde_json::json!(sym));
                             }
-                            extra.insert("unit_kind".to_string(), serde_json::json!(cu.kind.as_str()));
-                            extra.insert("line_start".to_string(), serde_json::json!(cu.line_start));
+                            extra.insert(
+                                "unit_kind".to_string(),
+                                serde_json::json!(cu.kind.as_str()),
+                            );
+                            extra
+                                .insert("line_start".to_string(), serde_json::json!(cu.line_start));
                             extra.insert("text".to_string(), serde_json::json!(cu.text.clone()));
 
                             let metadata = DocumentMetadata {
@@ -684,11 +688,8 @@ impl SpecKitCommand for Stage0IndexCommand {
                                 ..Default::default()
                             };
 
-                            VectorDocument::new(
-                                cu.id.clone(),
-                                DocumentKind::Code,
-                                cu.text.clone(),
-                            ).with_metadata(metadata)
+                            VectorDocument::new(cu.id.clone(), DocumentKind::Code, cu.text.clone())
+                                .with_metadata(metadata)
                         })
                         .collect();
 
@@ -739,9 +740,7 @@ impl SpecKitCommand for Stage0IndexCommand {
                 let total = memory_count + code_count;
                 if total == 0 {
                     widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                        vec![ratatui::text::Line::from(
-                            "⚠ No documents found to index",
-                        )],
+                        vec![ratatui::text::Line::from("⚠ No documents found to index")],
                         crate::history_cell::HistoryCellType::Notice,
                     ));
                 } else {
@@ -830,8 +829,8 @@ impl SpecKitCommand for Stage0EvalBackendCommand {
     fn execute(&self, widget: &mut ChatWidget, args: String) {
         use crate::vector_state::VECTOR_STATE;
         use codex_stage0::{
-            built_in_eval_cases, built_in_test_documents, combined_eval_cases,
-            evaluate_backend, EvalLane, TfIdfBackend, VectorBackend, VectorFilters,
+            EvalLane, TfIdfBackend, VectorBackend, VectorFilters, built_in_eval_cases,
+            built_in_test_documents, combined_eval_cases, evaluate_backend,
         };
         use std::path::PathBuf;
 
@@ -892,7 +891,11 @@ impl SpecKitCommand for Stage0EvalBackendCommand {
                 ratatui::text::Line::from("📊 Stage0 Baseline vs Hybrid Evaluation"),
                 ratatui::text::Line::from(format!("   Top K: {}", top_k)),
                 ratatui::text::Line::from(format!("   Lane: {}", lane_str)),
-                ratatui::text::Line::from(if strict_mode { "   Mode: strict" } else { "   Mode: normal" }),
+                ratatui::text::Line::from(if strict_mode {
+                    "   Mode: strict"
+                } else {
+                    "   Mode: normal"
+                }),
                 ratatui::text::Line::from(match &cases_file {
                     Some(p) => format!("   Cases: {}", p.display()),
                     None => "   Cases: Built-in test cases".to_string(),
@@ -914,10 +917,7 @@ impl SpecKitCommand for Stage0EvalBackendCommand {
             .map_err(|e| format!("Failed to load eval cases: {}", e))?;
 
             if cases.is_empty() {
-                return Err(format!(
-                    "No eval cases found for lane '{}'",
-                    lane_str
-                ));
+                return Err(format!("No eval cases found for lane '{}'", lane_str));
             }
 
             // Index test documents in a fresh backend (for baseline)
@@ -940,10 +940,9 @@ impl SpecKitCommand for Stage0EvalBackendCommand {
 
             let hybrid_result = if let Some(ref hybrid_backend) = *backend_lock {
                 // Run hybrid evaluation with shared backend
-                let result =
-                    evaluate_backend(hybrid_backend, &cases, &VectorFilters::new(), top_k)
-                        .await
-                        .map_err(|e| format!("Hybrid evaluation failed: {}", e))?;
+                let result = evaluate_backend(hybrid_backend, &cases, &VectorFilters::new(), top_k)
+                    .await
+                    .map_err(|e| format!("Hybrid evaluation failed: {}", e))?;
                 Some(result)
             } else {
                 None
@@ -1043,14 +1042,20 @@ impl SpecKitCommand for Stage0EvalBackendCommand {
                         "{:<20} {:>12.2} {:>12}",
                         "Mean P@k",
                         baseline.mean_precision,
-                        format_delta(baseline.mean_precision, hybrid_opt.as_ref().map(|h| h.mean_precision))
+                        format_delta(
+                            baseline.mean_precision,
+                            hybrid_opt.as_ref().map(|h| h.mean_precision)
+                        )
                     )));
 
                     lines.push(ratatui::text::Line::from(format!(
                         "{:<20} {:>12.2} {:>12}",
                         "Mean R@k",
                         baseline.mean_recall,
-                        format_delta(baseline.mean_recall, hybrid_opt.as_ref().map(|h| h.mean_recall))
+                        format_delta(
+                            baseline.mean_recall,
+                            hybrid_opt.as_ref().map(|h| h.mean_recall)
+                        )
                     )));
 
                     lines.push(ratatui::text::Line::from(format!(

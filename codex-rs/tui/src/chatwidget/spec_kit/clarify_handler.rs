@@ -6,7 +6,7 @@ use ratatui::text::Line;
 
 use crate::bottom_pane::clarify_modal::ClarifyQuestion;
 use crate::chatwidget::ChatWidget;
-use crate::history_cell::{new_error_event, HistoryCellType, PlainHistoryCell};
+use crate::history_cell::{HistoryCellType, PlainHistoryCell, new_error_event};
 
 /// Called when user completes the clarify modal with all answers
 pub fn on_clarify_submitted(
@@ -57,7 +57,10 @@ pub fn on_clarify_submitted(
                         .file_name()
                         .map(|s| s.to_string_lossy().to_string())
                         .unwrap_or_else(|| "unknown".to_string());
-                    lines.push(Line::from(format!("  {} ({}:{})", q.id, filename, q.line_number)));
+                    lines.push(Line::from(format!(
+                        "  {} ({}:{})",
+                        q.id, filename, q.line_number
+                    )));
                     lines.push(Line::from(format!("    Q: {}", truncate(&q.question, 50))));
                     lines.push(Line::from(format!("    A: {}", truncate(answer, 50))));
                     lines.push(Line::from(""));
@@ -72,7 +75,9 @@ pub fn on_clarify_submitted(
                 lines.push(Line::from(""));
             }
 
-            lines.push(Line::from("Files updated. Run /speckit.clarify again to check for remaining markers."));
+            lines.push(Line::from(
+                "Files updated. Run /speckit.clarify again to check for remaining markers.",
+            ));
 
             widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));
         }

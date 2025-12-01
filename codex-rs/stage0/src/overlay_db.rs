@@ -442,9 +442,11 @@ impl OverlayDb {
 
         let mut ids = Vec::new();
         for row in rows {
-            ids.push(row.map_err(|e| {
-                Stage0Error::overlay_db_with_source("failed to read memory id", e)
-            })?);
+            ids.push(
+                row.map_err(|e| {
+                    Stage0Error::overlay_db_with_source("failed to read memory id", e)
+                })?,
+            );
         }
         Ok(ids)
     }
@@ -601,14 +603,14 @@ impl OverlayDb {
         synthesis_result: &str,
         links: &[crate::tier2::CausalLinkSuggestion],
     ) -> Result<()> {
-        let links_json = if links.is_empty() {
-            None
-        } else {
-            Some(
-                serde_json::to_string(links)
-                    .map_err(|e| Stage0Error::overlay_db_with_source("failed to serialize links", e))?,
-            )
-        };
+        let links_json =
+            if links.is_empty() {
+                None
+            } else {
+                Some(serde_json::to_string(links).map_err(|e| {
+                    Stage0Error::overlay_db_with_source("failed to serialize links", e)
+                })?)
+            };
 
         self.upsert_tier2_cache(
             input_hash,
@@ -628,16 +630,12 @@ impl OverlayDb {
     }
 
     /// Parse suggested links from cached JSON
-    pub fn parse_cached_links(
-        json_str: Option<&str>,
-    ) -> Vec<crate::tier2::CausalLinkSuggestion> {
+    pub fn parse_cached_links(json_str: Option<&str>) -> Vec<crate::tier2::CausalLinkSuggestion> {
         match json_str {
-            Some(s) if !s.is_empty() => {
-                serde_json::from_str(s).unwrap_or_else(|e| {
-                    tracing::warn!(error = %e, "Failed to parse cached links JSON");
-                    vec![]
-                })
-            }
+            Some(s) if !s.is_empty() => serde_json::from_str(s).unwrap_or_else(|e| {
+                tracing::warn!(error = %e, "Failed to parse cached links JSON");
+                vec![]
+            }),
             _ => vec![],
         }
     }
@@ -831,7 +829,8 @@ impl OverlayDb {
         let mut results = Vec::with_capacity(memories.len());
 
         for (memory_id, priority, created_at) in memories {
-            let score = self.record_memory_usage(memory_id, *priority, *created_at, scoring_config)?;
+            let score =
+                self.record_memory_usage(memory_id, *priority, *created_at, scoring_config)?;
             results.push((memory_id.clone(), score));
         }
 
@@ -1056,7 +1055,9 @@ impl OverlayDb {
                     content_raw: row.get(6)?,
                 })
             })
-            .map_err(|e| Stage0Error::overlay_db_with_source("failed to query constitution memories", e))?;
+            .map_err(|e| {
+                Stage0Error::overlay_db_with_source("failed to query constitution memories", e)
+            })?;
 
         let mut memories = Vec::new();
         for row in rows {
@@ -1077,7 +1078,9 @@ impl OverlayDb {
                 [],
                 |row| row.get(0),
             )
-            .map_err(|e| Stage0Error::overlay_db_with_source("failed to count constitution memories", e))
+            .map_err(|e| {
+                Stage0Error::overlay_db_with_source("failed to count constitution memories", e)
+            })
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -1402,8 +1405,14 @@ mod tests {
             .expect("exists");
 
         // Verify hit was recorded by querying raw entry
-        let raw1 = db.get_tier2_cache("hash-hits").expect("lookup").expect("exists");
-        assert_eq!(raw1.hit_count, 1, "First TTL-checked read should record hit");
+        let raw1 = db
+            .get_tier2_cache("hash-hits")
+            .expect("lookup")
+            .expect("exists");
+        assert_eq!(
+            raw1.hit_count, 1,
+            "First TTL-checked read should record hit"
+        );
 
         // Second read should increment again
         let _entry2 = db
@@ -1411,8 +1420,14 @@ mod tests {
             .expect("lookup")
             .expect("exists");
 
-        let raw2 = db.get_tier2_cache("hash-hits").expect("lookup").expect("exists");
-        assert_eq!(raw2.hit_count, 2, "Second TTL-checked read should record hit");
+        let raw2 = db
+            .get_tier2_cache("hash-hits")
+            .expect("lookup")
+            .expect("exists");
+        assert_eq!(
+            raw2.hit_count, 2,
+            "Second TTL-checked read should record hit"
+        );
     }
 
     #[test]

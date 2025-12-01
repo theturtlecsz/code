@@ -10,7 +10,7 @@
 mod common;
 
 use codex_tui::{
-    parse_spec_auto_args, ExecutionEvent, SpecStage, Stage0ExecutionConfig,
+    ExecutionEvent, SpecStage, Stage0ExecutionConfig, parse_spec_auto_args,
     write_divine_truth_to_evidence, write_task_brief_to_evidence,
 };
 use tempfile::TempDir;
@@ -90,10 +90,7 @@ fn write_task_brief_creates_file() {
 
     let path = result.unwrap();
     assert!(path.exists());
-    assert_eq!(
-        std::fs::read_to_string(&path).unwrap(),
-        task_brief
-    );
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), task_brief);
 }
 
 #[test]
@@ -107,10 +104,7 @@ fn write_divine_truth_creates_file() {
 
     let path = result.unwrap();
     assert!(path.exists());
-    assert_eq!(
-        std::fs::read_to_string(&path).unwrap(),
-        divine_truth
-    );
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), divine_truth);
 }
 
 #[test]
@@ -121,7 +115,8 @@ fn write_both_evidence_files() {
     let divine_truth = "Divine truth content";
 
     // Write both files
-    let task_brief_path = write_task_brief_to_evidence(spec_id, temp_dir.path(), task_brief).unwrap();
+    let task_brief_path =
+        write_task_brief_to_evidence(spec_id, temp_dir.path(), task_brief).unwrap();
     let divine_truth_path =
         write_divine_truth_to_evidence(spec_id, temp_dir.path(), divine_truth).unwrap();
 

@@ -16,9 +16,7 @@
 #![allow(clippy::expect_used)]
 
 use crate::errors::Result;
-use crate::vector::{
-    IndexStats, ScoredVector, VectorBackend, VectorDocument, VectorFilters,
-};
+use crate::vector::{IndexStats, ScoredVector, VectorBackend, VectorDocument, VectorFilters};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::RwLock;
@@ -269,7 +267,11 @@ impl VectorBackend for TfIdfBackend {
             .collect();
 
         // Sort by score descending
-        scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Return top_k
         scored.truncate(top_k);
@@ -327,12 +329,12 @@ fn is_stop_word(word: &str) -> bool {
         "the", "be", "to", "of", "and", "in", "that", "have", "it", "for", "not", "on", "with",
         "he", "as", "you", "do", "at", "this", "but", "his", "by", "from", "they", "we", "say",
         "her", "she", "or", "an", "will", "my", "one", "all", "would", "there", "their", "what",
-        "so", "up", "out", "if", "about", "who", "get", "which", "go", "me", "when", "make",
-        "can", "like", "time", "no", "just", "him", "know", "take", "people", "into", "year",
-        "your", "good", "some", "could", "them", "see", "other", "than", "then", "now", "look",
-        "only", "come", "its", "over", "think", "also", "back", "after", "use", "two", "how",
-        "our", "work", "first", "well", "way", "even", "new", "want", "because", "any", "these",
-        "give", "day", "most", "us", "is", "was", "are", "been", "being", "were", "am",
+        "so", "up", "out", "if", "about", "who", "get", "which", "go", "me", "when", "make", "can",
+        "like", "time", "no", "just", "him", "know", "take", "people", "into", "year", "your",
+        "good", "some", "could", "them", "see", "other", "than", "then", "now", "look", "only",
+        "come", "its", "over", "think", "also", "back", "after", "use", "two", "how", "our",
+        "work", "first", "well", "way", "even", "new", "want", "because", "any", "these", "give",
+        "day", "most", "us", "is", "was", "are", "been", "being", "were", "am",
     ];
 
     STOP_WORDS.contains(&word)
@@ -501,12 +503,9 @@ mod tests {
     async fn test_backend_get_document() {
         let backend = TfIdfBackend::new();
 
-        let docs = vec![VectorDocument::new(
-            "doc-1",
-            DocumentKind::Memory,
-            "test content",
-        )
-        .with_domain("test")];
+        let docs = vec![
+            VectorDocument::new("doc-1", DocumentKind::Memory, "test content").with_domain("test"),
+        ];
 
         backend.index_documents(docs).await.unwrap();
 
@@ -600,10 +599,7 @@ mod tests {
             .unwrap();
 
         // Empty query should return empty results
-        let results = backend
-            .search("", &VectorFilters::new(), 10)
-            .await
-            .unwrap();
+        let results = backend.search("", &VectorFilters::new(), 10).await.unwrap();
 
         assert!(results.is_empty());
     }

@@ -9,7 +9,6 @@
 pub mod ace_client; // ACE (Agentic Context Engine) MCP client
 pub mod ace_constitution; // ACE constitution pinning
 pub mod ace_curator; // ACE Curator - Strategic playbook management
-pub mod code_index; // P85: Code unit extraction for Shadow Code Brain
 pub mod ace_learning; // ACE learning from execution outcomes
 pub mod ace_orchestrator; // ACE Orchestrator - Full reflection-curation cycle
 pub mod ace_prompt_injector; // ACE prompt injection logic
@@ -19,7 +18,9 @@ pub mod agent_orchestrator; // Agent orchestration functions (extracted from han
 pub mod agent_retry; // SPEC-938: Agent spawn retry logic with exponential backoff
 pub mod analyze_native; // Native consistency checking (zero agents, zero cost)
 pub mod checklist_native; // Native quality scoring (zero agents, zero cost)
+pub mod clarify_handler; // SPEC-KIT-971: Clarify modal event handlers
 pub mod clarify_native; // Native ambiguity detection (zero agents, zero cost)
+pub mod code_index; // P85: Code unit extraction for Shadow Code Brain
 pub mod command_handlers; // Command entry points (status, consensus, guardrail)
 pub mod command_registry;
 pub mod commands;
@@ -45,17 +46,16 @@ pub mod native_guardrail; // SPEC-KIT-066, SPEC-KIT-902: Native guardrail valida
 pub mod native_quality_gate_orchestrator; // SPEC-KIT-900, I-003: Native quality gate orchestration (eliminates LLM plumbing)
 pub mod new_native; // SPEC-KIT-072: Native SPEC creation (eliminates 2 agents, $0.15 → $0)
 pub mod pipeline_config; // SPEC-948: Modular pipeline logic - stage filtering and configuration
-pub mod prd_builder_handler; // SPEC-KIT-970: PRD builder modal event handlers
-pub mod clarify_handler; // SPEC-KIT-971: Clarify modal event handlers
-pub mod project_detector; // SPEC-KIT-971: Project type detection for context-aware questions
-pub mod project_native; // SPEC-KIT-960: Native project scaffolding
 pub mod pipeline_configurator; // SPEC-947: Pipeline UI configurator - interactive stage selection
 pub mod pipeline_coordinator;
+pub mod prd_builder_handler; // SPEC-KIT-970: PRD builder modal event handlers
+pub mod project_detector; // SPEC-KIT-971: Project type detection for context-aware questions
+pub mod project_native; // SPEC-KIT-960: Native project scaffolding
 pub mod spec_directory;
-pub mod stage_details; // SPEC-947 Phase 3: Stage details widget (right pane)
-pub mod stage_selector; // SPEC-947 Phase 3: Stage selector widget (checkbox list) // SPEC-KIT-900 Session 3: ACID-compliant SPEC directory resolution // MAINT-3 Phase 5: Pipeline state machine (extracted from handler.rs)
 pub mod stage0_integration; // SPEC-KIT-102: Stage 0 context injection for /speckit.auto
-pub mod stage0_seeding; // SPEC-KIT-102: Shadow Notebook Seeder for NotebookLM
+pub mod stage0_seeding;
+pub mod stage_details; // SPEC-947 Phase 3: Stage details widget (right pane)
+pub mod stage_selector; // SPEC-947 Phase 3: Stage selector widget (checkbox list) // SPEC-KIT-900 Session 3: ACID-compliant SPEC directory resolution // MAINT-3 Phase 5: Pipeline state machine (extracted from handler.rs) // SPEC-KIT-102: Shadow Notebook Seeder for NotebookLM
 // FORK-SPECIFIC (just-every/code): local_memory_client.rs deleted 2025-10-18
 // Replaced by native MCP integration in consensus.rs
 pub mod quality;

@@ -9,13 +9,13 @@
 //! - V2.5b: Hybrid retrieval using shared TfIdfBackend
 
 use crate::stage0_adapters::{
+    LlmStubAdapter, LocalMemoryMcpAdapter, NoopTier2Client, Tier2McpAdapter,
     create_stage0_adapters, has_local_memory_server, has_notebooklm_server,
-    LocalMemoryMcpAdapter, LlmStubAdapter, NoopTier2Client, Tier2McpAdapter,
 };
 use crate::vector_state::VECTOR_STATE;
 use codex_core::mcp_connection_manager::McpConnectionManager;
-use codex_stage0::dcc::EnvCtx;
 use codex_stage0::Stage0Engine;
+use codex_stage0::dcc::EnvCtx;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -254,13 +254,33 @@ fn run_stage0_blocking(
                 (result, true)
             } else {
                 // Backend disappeared, fall back to noop
-                run_without_vector(&engine, &local_memory, &llm, tier2, &spec_id, &spec_content, &env, explain).await
+                run_without_vector(
+                    &engine,
+                    &local_memory,
+                    &llm,
+                    tier2,
+                    &spec_id,
+                    &spec_content,
+                    &env,
+                    explain,
+                )
+                .await
             }
         } else {
             // No backend available, run without hybrid retrieval
             drop(backend_lock);
             tracing::debug!("No TfIdfBackend available, running without hybrid retrieval");
-            run_without_vector(&engine, &local_memory, &llm, tier2, &spec_id, &spec_content, &env, explain).await
+            run_without_vector(
+                &engine,
+                &local_memory,
+                &llm,
+                tier2,
+                &spec_id,
+                &spec_content,
+                &env,
+                explain,
+            )
+            .await
         };
 
         result

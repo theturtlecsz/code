@@ -261,7 +261,7 @@ impl SpecKitCommand for GuardrailAutoCommand {
             spec_id,
             String::new(), // goal
             resume_from,
-            None, // hal_mode
+            None,                                                               // hal_mode
             None, // cli_overrides (SPEC-948: Phase 3 will add CLI parsing)
             super::super::stage0_integration::Stage0ExecutionConfig::default(), // SPEC-KIT-102
         );

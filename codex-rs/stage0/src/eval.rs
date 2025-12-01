@@ -110,7 +110,11 @@ pub struct EvalCase {
 
 impl EvalCase {
     /// Create a new eval case (defaults to Memory lane)
-    pub fn new(name: impl Into<String>, query: impl Into<String>, expected_ids: Vec<String>) -> Self {
+    pub fn new(
+        name: impl Into<String>,
+        query: impl Into<String>,
+        expected_ids: Vec<String>,
+    ) -> Self {
         Self {
             name: name.into(),
             query: query.into(),
@@ -122,7 +126,11 @@ impl EvalCase {
     }
 
     /// Create a new code lane eval case
-    pub fn new_code(name: impl Into<String>, query: impl Into<String>, expected_ids: Vec<String>) -> Self {
+    pub fn new_code(
+        name: impl Into<String>,
+        query: impl Into<String>,
+        expected_ids: Vec<String>,
+    ) -> Self {
         Self {
             name: name.into(),
             query: query.into(),
@@ -283,7 +291,11 @@ impl EvalSuiteResult {
             } else if result.hits.len() <= 3 {
                 result.hits.join(", ")
             } else {
-                format!("{}, ... (+{})", result.hits[..2].join(", "), result.hits.len() - 2)
+                format!(
+                    "{}, ... (+{})",
+                    result.hits[..2].join(", "),
+                    result.hits.len() - 2
+                )
             };
 
             out.push_str(&format!(
@@ -480,10 +492,7 @@ pub fn compute_suite_metrics(results: Vec<EvalResult>, top_k: usize) -> Result<E
     let cases_passed = results.iter().filter(|r| r.passes(0.5, 0.5)).count();
 
     // P86: Count total missing IDs across all cases
-    let total_missing_ids: usize = results
-        .iter()
-        .map(|r| r.missing_expected_ids.len())
-        .sum();
+    let total_missing_ids: usize = results.iter().map(|r| r.missing_expected_ids.len()).sum();
 
     Ok(EvalSuiteResult {
         mean_precision: sum_precision / total_cases as f64,
@@ -519,7 +528,6 @@ pub fn built_in_eval_cases() -> Vec<EvalCase> {
             ],
         )
         .with_description("Tests retrieval of Stage 0 architecture memories"),
-
         EvalCase::new(
             "tfidf-implementation",
             "TF-IDF vector search implementation BM25 scoring",
@@ -529,7 +537,6 @@ pub fn built_in_eval_cases() -> Vec<EvalCase> {
             ],
         )
         .with_description("Tests retrieval of TF-IDF implementation details"),
-
         EvalCase::new(
             "bug-pattern-resize",
             "resize window crash segfault memory corruption",
@@ -539,7 +546,6 @@ pub fn built_in_eval_cases() -> Vec<EvalCase> {
             ],
         )
         .with_description("Tests retrieval of bug pattern memories"),
-
         EvalCase::new(
             "spec-kit-notebooklm",
             "SPEC-KIT-102 NotebookLM integration Tier 2 synthesis",
@@ -549,7 +555,6 @@ pub fn built_in_eval_cases() -> Vec<EvalCase> {
             ],
         )
         .with_description("Tests SPEC-KIT-102 related memories"),
-
         EvalCase::new(
             "rust-error-handling",
             "Rust error handling Result thiserror anyhow",
@@ -559,7 +564,6 @@ pub fn built_in_eval_cases() -> Vec<EvalCase> {
             ],
         )
         .with_description("Tests Rust-specific pattern memories"),
-
         // ─────────────────────────────────────────────────────────────────────
         // P86: Code Lane Cases
         // ─────────────────────────────────────────────────────────────────────
@@ -567,26 +571,24 @@ pub fn built_in_eval_cases() -> Vec<EvalCase> {
             "code-handle-spec-auto",
             "handle_spec_auto speckit auto command implementation",
             vec![
-                "code:tui/src/chatwidget/spec_kit/pipeline_coordinator.rs::handle_spec_auto".to_string(),
+                "code:tui/src/chatwidget/spec_kit/pipeline_coordinator.rs::handle_spec_auto"
+                    .to_string(),
             ],
         )
         .with_description("Tests retrieval of handle_spec_auto function for /speckit.auto"),
-
         EvalCase::new_code(
             "code-spec-auto-state",
             "SpecAutoState pipeline state machine struct",
             vec![
-                "code:tui/src/chatwidget/spec_kit/pipeline_coordinator.rs::SpecAutoState".to_string(),
+                "code:tui/src/chatwidget/spec_kit/pipeline_coordinator.rs::SpecAutoState"
+                    .to_string(),
             ],
         )
         .with_description("Tests retrieval of SpecAutoState struct definition"),
-
         EvalCase::new_code(
             "code-dcc-compile-context",
             "compile_context DCC TASK_BRIEF generation function",
-            vec![
-                "code:stage0/src/dcc.rs::compile_context".to_string(),
-            ],
+            vec!["code:stage0/src/dcc.rs::compile_context".to_string()],
         )
         .with_description("Tests retrieval of DCC compile_context function"),
     ]
@@ -741,8 +743,12 @@ pub fn built_in_test_documents() -> Vec<crate::vector::VectorDocument> {
 ///
 /// Cases loaded from files are automatically marked with `source: External`
 pub fn load_eval_cases_from_file(path: &Path) -> Result<Vec<EvalCase>> {
-    let content = std::fs::read_to_string(path)
-        .map_err(|e| Stage0Error::config_with_source(format!("Failed to read eval cases file: {}", path.display()), e))?;
+    let content = std::fs::read_to_string(path).map_err(|e| {
+        Stage0Error::config_with_source(
+            format!("Failed to read eval cases file: {}", path.display()),
+            e,
+        )
+    })?;
 
     let mut cases: Vec<EvalCase> = serde_json::from_str(&content)
         .map_err(|e| Stage0Error::config_with_source("Failed to parse eval cases JSON", e))?;
@@ -760,8 +766,12 @@ pub fn save_eval_cases_to_file(cases: &[EvalCase], path: &Path) -> Result<()> {
     let content = serde_json::to_string_pretty(cases)
         .map_err(|e| Stage0Error::internal(format!("Failed to serialize eval cases: {e}")))?;
 
-    std::fs::write(path, content)
-        .map_err(|e| Stage0Error::config_with_source(format!("Failed to write eval cases file: {}", path.display()), e))?;
+    std::fs::write(path, content).map_err(|e| {
+        Stage0Error::config_with_source(
+            format!("Failed to write eval cases file: {}", path.display()),
+            e,
+        )
+    })?;
 
     Ok(())
 }
@@ -1120,8 +1130,7 @@ mod tests {
 
         // Check all expected IDs from MEMORY cases are present
         // (Code cases expect code: prefixed IDs from code index, not test documents)
-        let doc_ids: std::collections::HashSet<&str> =
-            docs.iter().map(|d| d.id.as_str()).collect();
+        let doc_ids: std::collections::HashSet<&str> = docs.iter().map(|d| d.id.as_str()).collect();
 
         let memory_cases = built_in_memory_eval_cases();
         for case in &memory_cases {
@@ -1202,16 +1211,14 @@ mod tests {
 
     #[test]
     fn test_eval_case_with_lane() {
-        let case = EvalCase::new("test", "query", vec!["id".to_string()])
-            .with_lane(EvalLane::Code);
+        let case = EvalCase::new("test", "query", vec!["id".to_string()]).with_lane(EvalLane::Code);
 
         assert_eq!(case.lane, EvalLane::Code);
     }
 
     #[test]
     fn test_eval_case_mark_external() {
-        let case = EvalCase::new("test", "query", vec!["id".to_string()])
-            .mark_external();
+        let case = EvalCase::new("test", "query", vec!["id".to_string()]).mark_external();
 
         assert_eq!(case.source, EvalCaseSource::External);
     }
@@ -1332,7 +1339,10 @@ mod tests {
     fn test_builtin_cases_include_code_lane() {
         let cases = built_in_eval_cases();
 
-        let memory_cases: Vec<_> = cases.iter().filter(|c| c.lane == EvalLane::Memory).collect();
+        let memory_cases: Vec<_> = cases
+            .iter()
+            .filter(|c| c.lane == EvalLane::Memory)
+            .collect();
         let code_cases: Vec<_> = cases.iter().filter(|c| c.lane == EvalLane::Code).collect();
 
         // Should have both memory and code cases

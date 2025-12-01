@@ -200,7 +200,6 @@ pub struct ContextCompilerConfig {
     // ─────────────────────────────────────────────────────────────────────────────
     // V2.5: Hybrid retrieval configuration
     // ─────────────────────────────────────────────────────────────────────────────
-
     /// Enable hybrid retrieval (TF-IDF + local-memory)
     #[serde(default = "default_hybrid_enabled")]
     pub hybrid_enabled: bool,
@@ -217,7 +216,6 @@ pub struct ContextCompilerConfig {
     // ─────────────────────────────────────────────────────────────────────────────
     // P85: Code lane configuration
     // ─────────────────────────────────────────────────────────────────────────────
-
     /// Enable code lane in TASK_BRIEF (requires indexed code units)
     #[serde(default = "default_code_lane_enabled")]
     pub code_lane_enabled: bool,

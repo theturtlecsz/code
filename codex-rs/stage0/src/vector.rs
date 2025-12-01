@@ -458,8 +458,8 @@ mod tests {
 
     #[test]
     fn test_vector_filters_matches_domain() {
-        let doc = VectorDocument::new("doc-1", DocumentKind::Memory, "test")
-            .with_domain("spec-kit");
+        let doc =
+            VectorDocument::new("doc-1", DocumentKind::Memory, "test").with_domain("spec-kit");
 
         let filters = VectorFilters::new().with_domain("spec-kit");
         assert!(filters.matches(&doc));

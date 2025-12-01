@@ -9,11 +9,13 @@
 
 use async_trait::async_trait;
 use codex_core::mcp_connection_manager::McpConnectionManager;
-use serde_json::json;
-use codex_stage0::dcc::{EnvCtx, Iqo, LocalMemoryClient, LocalMemorySearchParams, LocalMemorySummary};
+use codex_stage0::dcc::{
+    EnvCtx, Iqo, LocalMemoryClient, LocalMemorySearchParams, LocalMemorySummary,
+};
 use codex_stage0::errors::{Result, Stage0Error};
 use codex_stage0::guardians::{LlmClient, MemoryKind};
 use codex_stage0::tier2::{CausalLinkSuggestion, Tier2Client, Tier2Response};
+use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -151,10 +153,7 @@ fn parse_local_memory_search_response(
                 content
             };
 
-            let domain = m
-                .get("domain")
-                .and_then(|v| v.as_str())
-                .map(String::from);
+            let domain = m.get("domain").and_then(|v| v.as_str()).map(String::from);
 
             let tags: Vec<String> = m
                 .get("tags")
@@ -227,7 +226,9 @@ impl LlmClient for LlmStubAdapter {
     async fn classify_kind(&self, _input: &str) -> Result<MemoryKind> {
         // Return error to trigger heuristic fallback in Stage0
         // Stage0's apply_template_guardian_passthrough handles this gracefully
-        Err(Stage0Error::prompt("LLM stub: using heuristic classification"))
+        Err(Stage0Error::prompt(
+            "LLM stub: using heuristic classification",
+        ))
     }
 
     async fn restructure_template(&self, input: &str, _kind: MemoryKind) -> Result<String> {

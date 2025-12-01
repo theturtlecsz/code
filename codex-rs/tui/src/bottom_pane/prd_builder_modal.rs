@@ -72,30 +72,78 @@ impl PrdBuilderModal {
                 category: "Problem",
                 question: "What problem does this solve?",
                 options: vec![
-                    PrdOption { label: 'A', text: "Performance issue", is_custom: false },
-                    PrdOption { label: 'B', text: "Missing functionality", is_custom: false },
-                    PrdOption { label: 'C', text: "Developer experience", is_custom: false },
-                    PrdOption { label: 'D', text: "Custom...", is_custom: true },
+                    PrdOption {
+                        label: 'A',
+                        text: "Performance issue",
+                        is_custom: false,
+                    },
+                    PrdOption {
+                        label: 'B',
+                        text: "Missing functionality",
+                        is_custom: false,
+                    },
+                    PrdOption {
+                        label: 'C',
+                        text: "Developer experience",
+                        is_custom: false,
+                    },
+                    PrdOption {
+                        label: 'D',
+                        text: "Custom...",
+                        is_custom: true,
+                    },
                 ],
             },
             PrdQuestion {
                 category: "Target",
                 question: "Who is the primary user?",
                 options: vec![
-                    PrdOption { label: 'A', text: "Developer", is_custom: false },
-                    PrdOption { label: 'B', text: "End-user", is_custom: false },
-                    PrdOption { label: 'C', text: "Admin/Operator", is_custom: false },
-                    PrdOption { label: 'D', text: "Custom...", is_custom: true },
+                    PrdOption {
+                        label: 'A',
+                        text: "Developer",
+                        is_custom: false,
+                    },
+                    PrdOption {
+                        label: 'B',
+                        text: "End-user",
+                        is_custom: false,
+                    },
+                    PrdOption {
+                        label: 'C',
+                        text: "Admin/Operator",
+                        is_custom: false,
+                    },
+                    PrdOption {
+                        label: 'D',
+                        text: "Custom...",
+                        is_custom: true,
+                    },
                 ],
             },
             PrdQuestion {
                 category: "Success",
                 question: "How will you know it's complete?",
                 options: vec![
-                    PrdOption { label: 'A', text: "Tests pass", is_custom: false },
-                    PrdOption { label: 'B', text: "Feature works end-to-end", is_custom: false },
-                    PrdOption { label: 'C', text: "Performance target met", is_custom: false },
-                    PrdOption { label: 'D', text: "Custom...", is_custom: true },
+                    PrdOption {
+                        label: 'A',
+                        text: "Tests pass",
+                        is_custom: false,
+                    },
+                    PrdOption {
+                        label: 'B',
+                        text: "Feature works end-to-end",
+                        is_custom: false,
+                    },
+                    PrdOption {
+                        label: 'C',
+                        text: "Performance target met",
+                        is_custom: false,
+                    },
+                    PrdOption {
+                        label: 'D',
+                        text: "Custom...",
+                        is_custom: true,
+                    },
                 ],
             },
         ];
@@ -284,33 +332,36 @@ impl BottomPaneView<'_> for PrdBuilderModal {
         };
         lines.push(Line::from(vec![
             Span::styled("Project: ", Style::default().dim()),
-            Span::styled(&self.project_type_display, Style::default().fg(Color::Magenta).bold()),
+            Span::styled(
+                &self.project_type_display,
+                Style::default().fg(Color::Magenta).bold(),
+            ),
             Span::styled("  Feature: ", Style::default().dim()),
             Span::styled(desc_display, Style::default().fg(Color::White)),
         ]));
         lines.push(Line::from(""));
 
         // Category badge
-        lines.push(Line::from(vec![
-            Span::styled(
-                format!(" {} ", question.category.to_uppercase()),
-                Style::default().fg(Color::Black).bg(Color::Cyan).bold(),
-            ),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            format!(" {} ", question.category.to_uppercase()),
+            Style::default().fg(Color::Black).bg(Color::Cyan).bold(),
+        )]));
         lines.push(Line::from(""));
 
         // Question
         let question_text = question.question.to_string();
-        lines.push(Line::from(vec![
-            Span::styled(question_text, Style::default().fg(Color::Yellow).bold()),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            question_text,
+            Style::default().fg(Color::Yellow).bold(),
+        )]));
         lines.push(Line::from(""));
 
         if self.custom_mode {
             // Custom input mode
-            lines.push(Line::from(vec![
-                Span::styled("Your answer: ", Style::default().fg(Color::Cyan).bold()),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                "Your answer: ",
+                Style::default().fg(Color::Cyan).bold(),
+            )]));
             lines.push(Line::from(vec![
                 Span::styled(&self.current_input, Style::default().fg(Color::White)),
                 Span::styled("_", Style::default().fg(Color::Gray)), // Cursor

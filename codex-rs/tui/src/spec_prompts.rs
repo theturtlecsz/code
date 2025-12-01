@@ -9,7 +9,7 @@ use serde::Deserialize;
 use std::fmt::Write as _;
 
 use crate::local_memory_util;
-use crate::templates::{resolve_template_source, TemplateSource};
+use crate::templates::{TemplateSource, resolve_template_source};
 
 const PROMPTS_JSON: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -188,9 +188,8 @@ pub fn orchestrator_notes(stage: &str) -> Option<Vec<String>> {
 pub fn expand_template_refs(text: &str) -> String {
     // Lazy static regex for ${TEMPLATE:name} pattern
     static TEMPLATE_RE: once_cell::sync::OnceCell<Regex> = once_cell::sync::OnceCell::new();
-    let re = TEMPLATE_RE.get_or_init(|| {
-        Regex::new(r"\$\{TEMPLATE:(\w+)\}").expect("valid template regex")
-    });
+    let re = TEMPLATE_RE
+        .get_or_init(|| Regex::new(r"\$\{TEMPLATE:(\w+)\}").expect("valid template regex"));
 
     re.replace_all(text, |caps: &regex_lite::Captures| {
         let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");

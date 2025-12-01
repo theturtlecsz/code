@@ -7,7 +7,7 @@
 
 use super::super::super::ChatWidget;
 use super::super::command_registry::SpecKitCommand;
-use super::super::project_native::{create_project, ProjectType};
+use super::super::project_native::{ProjectType, create_project};
 
 /// Command: /speckit.project
 /// Create new project with spec-kit workflow infrastructure
@@ -97,10 +97,7 @@ impl SpecKitCommand for SpecKitProjectCommand {
                     )),
                     Line::from(""),
                     Line::from(format!("   Directory: {}", result.directory.display())),
-                    Line::from(format!(
-                        "   Files created: {}",
-                        result.files_created.len()
-                    )),
+                    Line::from(format!("   Files created: {}", result.files_created.len())),
                 ];
 
                 // List files
@@ -120,7 +117,9 @@ impl SpecKitCommand for SpecKitProjectCommand {
                 widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));
 
                 // Auto-switch to the new project directory
-                widget.app_event_tx.send(crate::app_event::AppEvent::SwitchCwd(project_dir, None));
+                widget
+                    .app_event_tx
+                    .send(crate::app_event::AppEvent::SwitchCwd(project_dir, None));
             }
             Err(err) => {
                 widget.history_push(crate::history_cell::new_error_event(format!(
