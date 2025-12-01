@@ -540,3 +540,349 @@ impl SpecKitCommand for SpecKitAceStatusCommand {
         false
     }
 }
+
+/// Command: /stage0.index
+/// Index local-memory contents into the in-memory TF-IDF vector backend
+/// SPEC-KIT-102 V2: Vector backend indexing command
+pub struct Stage0IndexCommand;
+
+impl SpecKitCommand for Stage0IndexCommand {
+    fn name(&self) -> &'static str {
+        "stage0.index"
+    }
+
+    fn aliases(&self) -> &[&'static str] {
+        &[]
+    }
+
+    fn description(&self) -> &'static str {
+        "index local-memory contents into Stage0 vector backend"
+    }
+
+    fn execute(&self, widget: &mut ChatWidget, args: String) {
+        use crate::stage0_adapters::{has_local_memory_server, LocalMemoryMcpAdapter};
+        use codex_stage0::{
+            DocumentKind, Iqo, LocalMemoryClient, LocalMemorySearchParams,
+            TfIdfBackend, VectorBackend, VectorDocument,
+        };
+        use std::sync::Arc;
+
+        // Parse optional arguments
+        let mut max_results = 100usize;
+
+        for arg in args.split_whitespace() {
+            if arg.starts_with("--max=") {
+                if let Ok(n) = arg.trim_start_matches("--max=").parse() {
+                    max_results = n;
+                }
+            }
+        }
+
+        // Show starting message
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![
+                ratatui::text::Line::from("🔍 Stage0 Vector Backend Indexing"),
+                ratatui::text::Line::from(format!("   Max memories: {}", max_results)),
+                ratatui::text::Line::from("   Fetching memories from local-memory..."),
+            ],
+            crate::history_cell::HistoryCellType::Notice,
+        ));
+        widget.request_redraw();
+
+        let mcp_manager = widget.mcp_manager.clone();
+
+        // Run indexing in async context
+        let result = super::super::consensus_coordinator::block_on_sync(|| async move {
+            let mcp_lock = mcp_manager.lock().await;
+            let Some(mcp) = mcp_lock.as_ref() else {
+                return Err("MCP manager not available".to_string());
+            };
+
+            if !has_local_memory_server(mcp) {
+                return Err("local-memory MCP server not available".to_string());
+            }
+
+            let local_mem = LocalMemoryMcpAdapter::new(Arc::clone(mcp));
+
+            // Search for memories using wildcard IQO
+            let iqo = Iqo {
+                keywords: vec!["*".to_string()],
+                domains: vec![],
+                max_candidates: max_results,
+                ..Default::default()
+            };
+            let params = LocalMemorySearchParams {
+                iqo,
+                max_results,
+            };
+
+            let memories = local_mem
+                .search_memories(params)
+                .await
+                .map_err(|e| format!("Failed to fetch memories: {}", e))?;
+
+            if memories.is_empty() {
+                return Ok((0, 0, 0, 0));
+            }
+
+            // Convert to VectorDocuments
+            let docs: Vec<VectorDocument> = memories
+                .iter()
+                .map(|m| {
+                    let mut doc = VectorDocument::new(
+                        m.id.clone(),
+                        DocumentKind::Memory,
+                        m.snippet.clone(),
+                    );
+
+                    if let Some(domain) = &m.domain {
+                        doc = doc.with_domain(domain.as_str());
+                    }
+
+                    for tag in &m.tags {
+                        doc = doc.with_tag(tag.as_str());
+                    }
+
+                    doc
+                })
+                .collect();
+
+            let doc_count = docs.len();
+
+            // Create backend and index
+            let backend = TfIdfBackend::new();
+            let stats = backend
+                .index_documents(docs)
+                .await
+                .map_err(|e| format!("Indexing failed: {}", e))?;
+
+            Ok((
+                doc_count,
+                stats.unique_tokens,
+                stats.total_tokens,
+                stats.duration_ms,
+            ))
+        });
+
+        match result {
+            Ok((doc_count, unique_tokens, total_tokens, duration_ms)) => {
+                if doc_count == 0 {
+                    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                        vec![ratatui::text::Line::from(
+                            "⚠ No memories found in local-memory",
+                        )],
+                        crate::history_cell::HistoryCellType::Notice,
+                    ));
+                } else {
+                    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                        vec![
+                            ratatui::text::Line::from(""),
+                            ratatui::text::Line::from(format!(
+                                "✅ Stage0 indexing complete ({} ms)",
+                                duration_ms
+                            )),
+                            ratatui::text::Line::from(format!(
+                                "   Documents indexed: {}",
+                                doc_count
+                            )),
+                            ratatui::text::Line::from(format!(
+                                "   Unique tokens: {}",
+                                unique_tokens
+                            )),
+                            ratatui::text::Line::from(format!(
+                                "   Total tokens: {}",
+                                total_tokens
+                            )),
+                            ratatui::text::Line::from(""),
+                            ratatui::text::Line::from(
+                                "   Note: Index is ephemeral (in-memory). Run /stage0.eval-backend to evaluate.",
+                            ),
+                        ],
+                        crate::history_cell::HistoryCellType::Notice,
+                    ));
+                }
+            }
+            Err(e) => {
+                widget.history_push(crate::history_cell::new_error_event(format!(
+                    "Stage0 indexing failed: {}",
+                    e
+                )));
+            }
+        }
+
+        widget.request_redraw();
+    }
+
+    fn requires_args(&self) -> bool {
+        false
+    }
+}
+
+/// Command: /stage0.eval-backend
+/// Run evaluation harness against vector backend with built-in test cases
+/// SPEC-KIT-102 V2: Vector backend evaluation command
+pub struct Stage0EvalBackendCommand;
+
+impl SpecKitCommand for Stage0EvalBackendCommand {
+    fn name(&self) -> &'static str {
+        "stage0.eval-backend"
+    }
+
+    fn aliases(&self) -> &[&'static str] {
+        &["stage0.eval"]
+    }
+
+    fn description(&self) -> &'static str {
+        "run evaluation harness against Stage0 vector backend"
+    }
+
+    fn execute(&self, widget: &mut ChatWidget, args: String) {
+        use codex_stage0::{
+            built_in_eval_cases, built_in_test_documents, evaluate_backend,
+            TfIdfBackend, VectorBackend, VectorFilters,
+        };
+        use std::path::PathBuf;
+
+        // Parse optional arguments
+        let mut top_k = 10usize;
+        let mut use_json_file = false;
+        let mut json_path = widget
+            .config
+            .cwd
+            .join("evidence")
+            .join("vector_eval_cases.json");
+
+        for arg in args.split_whitespace() {
+            if arg.starts_with("--top-k=") || arg.starts_with("--k=") {
+                if let Ok(n) = arg
+                    .trim_start_matches("--top-k=")
+                    .trim_start_matches("--k=")
+                    .parse()
+                {
+                    top_k = n;
+                }
+            } else if arg == "--json" {
+                use_json_file = true;
+            } else if arg.starts_with("--json=") {
+                use_json_file = true;
+                json_path = PathBuf::from(arg.trim_start_matches("--json="));
+            }
+        }
+
+        // Show starting message
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![
+                ratatui::text::Line::from("📊 Stage0 Vector Backend Evaluation"),
+                ratatui::text::Line::from(format!("   Top K: {}", top_k)),
+                ratatui::text::Line::from(if use_json_file {
+                    format!("   Cases: {}", json_path.display())
+                } else {
+                    "   Cases: Built-in test cases".to_string()
+                }),
+                ratatui::text::Line::from("   Running evaluation..."),
+            ],
+            crate::history_cell::HistoryCellType::Notice,
+        ));
+        widget.request_redraw();
+
+        // Run evaluation in async context
+        let result = super::super::consensus_coordinator::block_on_sync(|| async move {
+            // Load eval cases
+            let cases = if use_json_file {
+                codex_stage0::load_eval_cases_from_file(&json_path)
+                    .map_err(|e| format!("Failed to load eval cases: {}", e))?
+            } else {
+                built_in_eval_cases()
+            };
+
+            if cases.is_empty() {
+                return Err("No eval cases to run".to_string());
+            }
+
+            // Create backend and index test documents
+            let backend = TfIdfBackend::new();
+            let docs = built_in_test_documents();
+            backend
+                .index_documents(docs)
+                .await
+                .map_err(|e| format!("Indexing failed: {}", e))?;
+
+            // Run evaluation
+            let suite_result = evaluate_backend(&backend, &cases, &VectorFilters::new(), top_k)
+                .await
+                .map_err(|e| format!("Evaluation failed: {}", e))?;
+
+            Ok(suite_result)
+        });
+
+        match result {
+            Ok(suite_result) => {
+                let mut lines = vec![
+                    ratatui::text::Line::from(""),
+                    ratatui::text::Line::from(format!(
+                        "{:<30} {:>8} {:>8} {:>8}",
+                        "Case", "P@k", "R@k", "RR"
+                    )),
+                    ratatui::text::Line::from("-".repeat(60)),
+                ];
+
+                for result in &suite_result.results {
+                    let pass_marker = if result.passes(0.5, 0.5) {
+                        "✓"
+                    } else {
+                        "✗"
+                    };
+                    lines.push(ratatui::text::Line::from(format!(
+                        "{} {:<28} {:>8.2} {:>8.2} {:>8.2}",
+                        pass_marker,
+                        truncate_str(&result.case_name, 28),
+                        result.precision_at_k,
+                        result.recall_at_k,
+                        result.reciprocal_rank,
+                    )));
+                }
+
+                lines.push(ratatui::text::Line::from("-".repeat(60)));
+                lines.push(ratatui::text::Line::from(format!(
+                    "Summary: {}/{} passed ({:.1}%)",
+                    suite_result.cases_passed,
+                    suite_result.total_cases,
+                    suite_result.pass_rate() * 100.0
+                )));
+                lines.push(ratatui::text::Line::from(format!(
+                    "Mean P@{}: {:.2}, Mean R@{}: {:.2}, MRR: {:.2}",
+                    top_k,
+                    suite_result.mean_precision,
+                    top_k,
+                    suite_result.mean_recall,
+                    suite_result.mrr
+                )));
+
+                widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                    lines,
+                    crate::history_cell::HistoryCellType::Notice,
+                ));
+            }
+            Err(e) => {
+                widget.history_push(crate::history_cell::new_error_event(format!(
+                    "Stage0 evaluation failed: {}",
+                    e
+                )));
+            }
+        }
+
+        widget.request_redraw();
+    }
+
+    fn requires_args(&self) -> bool {
+        false
+    }
+}
+
+fn truncate_str(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max_len.saturating_sub(3)])
+    }
+}

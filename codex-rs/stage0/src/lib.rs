@@ -16,10 +16,13 @@
 pub mod config;
 pub mod dcc;
 pub mod errors;
+pub mod eval;
 pub mod guardians;
 pub mod overlay_db;
 pub mod scoring;
+pub mod tfidf;
 pub mod tier2;
+pub mod vector;
 
 pub use config::Stage0Config;
 pub use errors::{ErrorCategory, Result, Stage0Error};
@@ -37,6 +40,16 @@ pub use tier2::{
     CausalLinkSuggestion, DivineTruth, Tier2Client, Tier2Response,
     build_fallback_divine_truth, build_tier2_prompt, parse_divine_truth,
     validate_causal_links,
+};
+pub use vector::{
+    DocumentKind, DocumentMetadata, IndexStats, ScoredVector, VectorBackend,
+    VectorDocument, VectorFilters,
+};
+pub use tfidf::{TfIdfBackend, TfIdfConfig};
+pub use eval::{
+    EvalCase, EvalResult, EvalSuiteResult, built_in_eval_cases, built_in_test_documents,
+    compute_metrics, compute_suite_metrics, evaluate_backend, evaluate_case,
+    load_eval_cases_from_file, save_eval_cases_to_file,
 };
 
 use sha2::{Digest, Sha256};
