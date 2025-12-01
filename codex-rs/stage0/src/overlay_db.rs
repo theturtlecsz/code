@@ -1705,4 +1705,97 @@ mod tests {
         let count = db.constitution_memory_count().expect("count");
         assert_eq!(count, 2, "Regular memories should not be counted");
     }
+
+    // P92/SPEC-KIT-105: Tier 2 cache invalidation tests
+    #[test]
+    fn test_invalidate_tier2_by_constitution_no_dependencies() {
+        let db = OverlayDb::connect_in_memory().expect("should connect");
+
+        // Add some cache entries with no dependencies
+        db.upsert_tier2_cache("cache-1", "spec", "brief", "result", None)
+            .expect("insert");
+
+        // Add constitution memory
+        db.upsert_constitution_memory("const-1", ConstitutionType::Guardrail, "G1")
+            .expect("insert");
+
+        // No dependencies linked - should invalidate 0
+        let invalidated = db.invalidate_tier2_by_constitution().expect("invalidate");
+        assert_eq!(invalidated, 0);
+
+        // Cache should still exist
+        assert!(db.get_tier2_cache("cache-1").expect("get").is_some());
+    }
+
+    #[test]
+    fn test_invalidate_tier2_by_constitution_with_dependencies() {
+        let db = OverlayDb::connect_in_memory().expect("should connect");
+
+        // Add constitution memory (priority 10 = guardrail)
+        db.upsert_constitution_memory("const-guardrail", ConstitutionType::Guardrail, "G1")
+            .expect("insert");
+
+        // Add cache entry that depends on constitution memory
+        db.upsert_tier2_cache("cache-const", "spec", "brief", "result", None)
+            .expect("insert");
+        db.add_cache_dependency("cache-const", "const-guardrail")
+            .expect("add dep");
+
+        // Add cache entry that depends on regular memory
+        db.ensure_memory_row("regular-mem", 5).expect("insert");
+        db.upsert_tier2_cache("cache-regular", "spec2", "brief2", "result2", None)
+            .expect("insert");
+        db.add_cache_dependency("cache-regular", "regular-mem")
+            .expect("add dep");
+
+        // Verify both caches exist
+        assert!(db.get_tier2_cache("cache-const").expect("get").is_some());
+        assert!(db.get_tier2_cache("cache-regular").expect("get").is_some());
+
+        // Invalidate constitution-dependent caches
+        let invalidated = db.invalidate_tier2_by_constitution().expect("invalidate");
+        assert_eq!(invalidated, 1);
+
+        // Constitution-dependent cache should be gone
+        assert!(db.get_tier2_cache("cache-const").expect("get").is_none());
+
+        // Regular cache should still exist
+        assert!(db.get_tier2_cache("cache-regular").expect("get").is_some());
+    }
+
+    #[test]
+    fn test_invalidate_tier2_by_constitution_multiple_types() {
+        let db = OverlayDb::connect_in_memory().expect("should connect");
+
+        // Add various constitution types
+        db.upsert_constitution_memory("const-g", ConstitutionType::Guardrail, "Guardrail")
+            .expect("insert");
+        db.upsert_constitution_memory("const-p", ConstitutionType::Principle, "Principle")
+            .expect("insert");
+        db.upsert_constitution_memory("const-goal", ConstitutionType::Goal, "Goal")
+            .expect("insert");
+
+        // Add caches depending on different constitution types
+        db.upsert_tier2_cache("cache-g", "spec", "brief", "result", None)
+            .expect("insert");
+        db.add_cache_dependency("cache-g", "const-g").expect("dep");
+
+        db.upsert_tier2_cache("cache-p", "spec", "brief", "result", None)
+            .expect("insert");
+        db.add_cache_dependency("cache-p", "const-p").expect("dep");
+
+        db.upsert_tier2_cache("cache-goal", "spec", "brief", "result", None)
+            .expect("insert");
+        db.add_cache_dependency("cache-goal", "const-goal")
+            .expect("dep");
+
+        // Invalidate - should remove all 3
+        let invalidated = db.invalidate_tier2_by_constitution().expect("invalidate");
+        assert_eq!(invalidated, 3);
+
+        // All should be gone
+        assert!(db.get_tier2_cache("cache-g").expect("get").is_none());
+        assert!(db.get_tier2_cache("cache-p").expect("get").is_none());
+        assert!(db.get_tier2_cache("cache-goal").expect("get").is_none());
+    }
 }
