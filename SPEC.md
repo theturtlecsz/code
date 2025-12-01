@@ -371,6 +371,54 @@ docs/SPEC-OPS-004-integrated-coder-hooks/evidence/
 
 ---
 
+## Stage 0 / NotebookLM Integration (SPEC-KIT-102)
+
+**STATUS**: V1/V2 Complete, V3/V4 Roadmap
+
+The Shadow Stage 0 overlay provides deep context and code awareness for `/speckit.auto`, backed by NotebookLM and seeded knowledge.
+
+### Implementation Status
+
+| Spec | Status | Description | Sessions |
+|------|--------|-------------|----------|
+| **SPEC-KIT-102** | Superseded | Original design spec | P72 |
+| **SPEC-KIT-102R** | Implementation-Ready | Documents current architecture | P86 |
+| **SPEC-KIT-103** | Roadmap | Librarian & Repair Jobs (Phase 3) | - |
+| **SPEC-KIT-104** | Roadmap | Metrics & Learning (Phase 4) | - |
+
+### Phase Completion
+
+| Phase | Status | Key Deliverables |
+|-------|--------|------------------|
+| V1: Foundation | **DONE** | Stage0Engine, overlay DB, DCC, Tier2 cache, /speckit.auto integration |
+| V2: Hybrid | **DONE** | TF-IDF backend, memory+code lanes, NotebookLM seeding, eval harness |
+| V3: Librarian | Roadmap | Local LLM (qwen2.5:3b), auto-restructure, meta-memories, causal inference |
+| V4: Learning | Roadmap | Parameter tuning, weight optimization, config versioning |
+
+### Test Coverage
+
+- **Stage0 crate**: 127 tests passing
+- **TUI integration**: 507 tests passing
+- **Commands**: `/stage0.index`, `/stage0.eval-backend`, `/stage0.eval-code`, `/speckit.seed`
+
+### Key Commits (P72-P86)
+
+| Commit | Description |
+|--------|-------------|
+| `4659863e0` | P85 Shadow Code Brain V1 + P86 Handoff |
+| `165439ed6` | P84 Hardening |
+| `78f3ca8b8` | V2.5b TF-IDF Backend Wiring |
+| `fb8caa4a8` | V2.5 Hybrid Retrieval Integration |
+| `079318695` | P86 Eval Harness for Code Lane & Metrics |
+
+### Documentation
+
+- `docs/SPEC-KIT-102R-implementation-report/spec.md` - Authoritative implementation report
+- `docs/SPEC-KIT-103-librarian/spec.md` - Phase 3 roadmap
+- `docs/SPEC-KIT-104-metrics-learning/spec.md` - Phase 4 roadmap
+
+---
+
 ## Next Steps
 
 **All Test Coverage Work COMPLETE** ✅ (as of 2025-10-19)
