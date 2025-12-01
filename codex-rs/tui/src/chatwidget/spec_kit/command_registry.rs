@@ -162,6 +162,7 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
     registry.register(Box::new(SpecKitConstitutionCommand));
     registry.register(Box::new(SpecKitAceStatusCommand));
     registry.register(Box::new(SpecKitSeedCommand)); // SPEC-KIT-102: Shadow Notebook Seeder
+    registry.register(Box::new(SpecKitPlanPipelineCommand)); // P92/SPEC-KIT-105: Planning pipeline
     registry.register(Box::new(Stage0IndexCommand)); // SPEC-KIT-102 V2: Vector indexing
     registry.register(Box::new(Stage0EvalBackendCommand)); // SPEC-KIT-102 V2: Vector eval
     registry.register(Box::new(Stage0EvalCodeCommand)); // P86: Code lane eval shortcut
@@ -308,10 +309,11 @@ mod tests {
         // Test that the global registry has all expected commands
         let registry = SPEC_KIT_REGISTRY.lock().unwrap();
 
-        // 34 commands: 13 special + 6 stage + 3 quality + 7 guardrail + 1 evidence + 1 search + 2 templates
+        // 35 commands: 14 special + 6 stage + 3 quality + 7 guardrail + 1 evidence + 1 search + 2 templates
         // SPEC-KIT-102 V2: Added stage0.index and stage0.eval-backend (2 new)
         // P86: Added stage0.eval-code (1 new)
-        assert_eq!(registry.len(), 34, "Registry should have 34 commands");
+        // P92/SPEC-KIT-105: Added speckit.plan-pipeline (1 new)
+        assert_eq!(registry.len(), 35, "Registry should have 35 commands");
 
         // Verify key commands are registered
         assert!(registry.find("speckit.status").is_some());
@@ -527,12 +529,13 @@ mod tests {
         // SPEC-KIT-102: Added speckit.seed with 'notebooklm-seed' alias
         // SPEC-KIT-102 V2: Added stage0.index (no alias) + stage0.eval-backend with 'stage0.eval' alias
         // P86: Added stage0.eval-code (no alias)
-        // 34 primary names + 16 aliases = 50 total names
+        // P92/SPEC-KIT-105: Added speckit.plan-pipeline with 'speckit.planning' and 'plan-pipeline' aliases
+        // 35 primary names + 18 aliases = 53 total names
         let all_names = registry.all_names();
         assert_eq!(
             all_names.len(),
-            50,
-            "Should have 50 total command names (34 primary + 16 aliases)"
+            53,
+            "Should have 53 total command names (35 primary + 18 aliases)"
         );
     }
 

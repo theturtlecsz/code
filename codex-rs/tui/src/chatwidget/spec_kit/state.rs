@@ -1027,6 +1027,94 @@ impl SpecAutoState {
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────────
+    // P92/SPEC-KIT-105: Planning-only pipeline constructor
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// Create a new SpecAutoState for planning-only pipeline (Plan → Tasks only)
+    ///
+    /// This constructor creates a state that stops after Tasks stage,
+    /// never executing Implement/Validate/Audit/Unlock.
+    ///
+    /// # Arguments
+    /// * `spec_id` - SPEC ID
+    /// * `goal` - Goal description (can be empty)
+    /// * `pipeline_config` - Pipeline configuration
+    pub fn new_planning_only(
+        spec_id: String,
+        goal: String,
+        pipeline_config: super::pipeline_config::PipelineConfig,
+    ) -> Self {
+        // P92: Planning-only stages - Plan and Tasks only
+        let stages: Vec<SpecStage> = vec![SpecStage::Plan, SpecStage::Tasks];
+
+        // Start from Plan stage (index 0)
+        let start_index = 0;
+
+        // Always start with Guardrail phase
+        let initial_phase = SpecAutoPhase::Guardrail;
+
+        let lifecycle = ValidateLifecycle::new(spec_id.clone());
+        let logger = Arc::new(super::execution_logger::ExecutionLogger::new());
+        let run_id = super::execution_logger::generate_run_id(&spec_id);
+
+        // Initialize logger
+        if let Err(e) = logger.init(&spec_id, run_id.clone()) {
+            tracing::warn!("Failed to initialize execution logger: {}", e);
+        }
+
+        // P6-SYNC Phase 4: Create branch before spec_id moves
+        let current_branch = Some(PipelineBranch::new(&spec_id));
+
+        Self {
+            spec_id,
+            goal,
+            stages,
+            current_index: start_index,
+            phase: initial_phase,
+            waiting_guardrail: None,
+            pending_prompt_summary: None,
+            hal_mode: None,
+            quality_gates_enabled: false, // No quality gates for planning-only
+            completed_checkpoints: HashSet::new(),
+            quality_gate_processing: None,
+            quality_modifications: Vec::new(),
+            quality_auto_resolved: Vec::new(),
+            quality_escalated: Vec::new(),
+            quality_checkpoint_outcomes: Vec::new(),
+            quality_checkpoint_degradations: HashMap::new(),
+            degraded_followups: std::collections::HashSet::new(),
+            validate_lifecycle: lifecycle,
+            cost_recorded_agents: HashMap::new(),
+            aggregator_effort_notes: HashMap::new(),
+            escalation_reason_notes: HashMap::new(),
+            // ACE Framework Integration
+            ace_bullets_cache: None,
+            ace_bullet_ids_used: None,
+            // Execution logging
+            execution_logger: logger,
+            run_id: Some(run_id),
+            // Agent response cache
+            agent_responses_cache: None,
+            // Pipeline configuration (SPEC-948)
+            pipeline_config,
+            // P6-SYNC: Consensus sequence tracking
+            consensus_sequence: ConsensusSequence::new(),
+            // P6-SYNC Phase 2: Session metrics for token tracking
+            session_metrics: super::session_metrics::SessionMetrics::default(),
+            // P6-SYNC Phase 6: Per-stage metrics and model tracking
+            stage_metrics: HashMap::new(),
+            current_model: None,
+            // P6-SYNC Phase 4: Branch tracking for resume filtering
+            current_branch,
+            // SPEC-KIT-102: Stage 0 context injection
+            stage0_result: None,
+            stage0_skip_reason: None,
+            stage0_disabled: false,
+            stage0_explain: false,
+        }
+    }
+
     pub fn current_stage(&self) -> Option<SpecStage> {
         self.stages.get(self.current_index).copied()
     }

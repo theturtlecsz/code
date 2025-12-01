@@ -336,6 +336,163 @@ pub fn handle_spec_auto(
     advance_spec_auto(widget);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// P92/SPEC-KIT-105: Planning Pipeline Handler
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Handle /speckit.plan-pipeline command - planning-only pipeline
+///
+/// Runs Stage 0 → Specify → Plan → Tasks stages only, stopping before Implement.
+/// Respects constitution gate - will abort in Block mode if constitution incomplete.
+///
+/// # Arguments
+/// * `widget` - Chat widget reference
+/// * `spec_id` - SPEC ID to process (e.g., "SPEC-KIT-105")
+pub fn handle_spec_plan(widget: &mut ChatWidget, spec_id: String) {
+    let mut header: Vec<ratatui::text::Line<'static>> = Vec::new();
+    header.push(ratatui::text::Line::from(format!(
+        "/speckit.plan-pipeline {}",
+        spec_id
+    )));
+    header.push(ratatui::text::Line::from(
+        "Pipeline: Stage 0 → Specify → Plan → Tasks (P92)",
+    ));
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+        header,
+        HistoryCellType::Notice,
+    ));
+
+    // Validate configuration before starting pipeline
+    if let Err(err) = super::config_validator::SpecKitConfigValidator::validate(&widget.config) {
+        widget.history_push(crate::history_cell::new_error_event(format!(
+            "Configuration validation failed: {}",
+            err
+        )));
+        return;
+    }
+
+    // P92/SPEC-KIT-105: Run constitution readiness gate (Block mode can abort)
+    if !run_constitution_readiness_gate(widget) {
+        // Gate blocked execution - abort pipeline
+        return;
+    }
+
+    // Check evidence size limit
+    if let Err(err) = check_evidence_size_limit(&spec_id, &widget.config.cwd) {
+        widget.history_push(crate::history_cell::new_error_event(format!(
+            "Evidence size check failed: {}",
+            err
+        )));
+        return;
+    }
+
+    // Load pipeline configuration (planning stages only)
+    let pipeline_config = match super::pipeline_config::PipelineConfig::load(&spec_id, None) {
+        Ok(config) => config,
+        Err(err) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Pipeline configuration error: {}",
+                err
+            )));
+            return;
+        }
+    };
+
+    let lifecycle = widget.ensure_validate_lifecycle(&spec_id);
+
+    // Create state with planning stages only: Specify → Plan → Tasks
+    let mut state = super::state::SpecAutoState::new_planning_only(
+        spec_id.clone(),
+        String::new(), // No goal for plan pipeline
+        pipeline_config,
+    );
+    state.set_validate_lifecycle(lifecycle);
+
+    // Run Stage 0 context injection
+    let spec_path = widget.config.cwd.join(format!("docs/{}/spec.md", spec_id));
+    let spec_content = std::fs::read_to_string(&spec_path).unwrap_or_default();
+
+    if !spec_content.is_empty() {
+        // Log Stage0Start event
+        if let Some(run_id) = &state.run_id {
+            state.execution_logger.log_event(
+                super::execution_logger::ExecutionEvent::Stage0Start {
+                    run_id: run_id.clone(),
+                    spec_id: spec_id.clone(),
+                    tier2_enabled: true,
+                    explain_enabled: false,
+                    timestamp: super::execution_logger::ExecutionEvent::now(),
+                },
+            );
+        }
+
+        // Run Stage0 with default config
+        let stage0_config = super::stage0_integration::Stage0ExecutionConfig::default();
+        let result = super::stage0_integration::run_stage0_for_spec(
+            &widget.mcp_manager,
+            &spec_id,
+            &spec_content,
+            &widget.config.cwd,
+            &stage0_config,
+        );
+
+        if let Some(stage0_result) = result.result {
+            // Write TASK_BRIEF.md to evidence directory
+            let _ = super::stage0_integration::write_task_brief_to_evidence(
+                &spec_id,
+                &widget.config.cwd,
+                &stage0_result.task_brief_md,
+            );
+
+            // Write DIVINE_TRUTH.md to evidence directory
+            if let Err(e) = super::stage0_integration::write_divine_truth_to_evidence(
+                &spec_id,
+                &widget.config.cwd,
+                &stage0_result.divine_truth.raw_markdown,
+            ) {
+                tracing::warn!("Failed to write DIVINE_TRUTH.md: {}", e);
+            }
+
+            // Log Stage0Complete event
+            if let Some(run_id) = &state.run_id {
+                state.execution_logger.log_event(
+                    super::execution_logger::ExecutionEvent::Stage0Complete {
+                        run_id: run_id.clone(),
+                        spec_id: spec_id.clone(),
+                        duration_ms: result.duration_ms,
+                        tier2_used: result.tier2_used,
+                        cache_hit: result.cache_hit,
+                        hybrid_used: result.hybrid_retrieval_used,
+                        memories_used: stage0_result.memories_used.len(),
+                        task_brief_written: true,
+                        skip_reason: None,
+                        timestamp: super::execution_logger::ExecutionEvent::now(),
+                    },
+                );
+            }
+
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![ratatui::text::Line::from(format!(
+                    "Stage 0: Context compiled ({} memories, tier2={}, {}ms)",
+                    stage0_result.memories_used.len(),
+                    stage0_result.tier2_used,
+                    stage0_result.latency_ms
+                ))],
+                crate::history_cell::HistoryCellType::Notice,
+            ));
+
+            state.stage0_result = Some(stage0_result);
+        } else if let Some(skip_reason) = result.skip_reason {
+            state.stage0_skip_reason = Some(skip_reason);
+        }
+    } else {
+        state.stage0_skip_reason = Some("spec.md is empty or not found".to_string());
+    }
+
+    widget.spec_auto_state = Some(state);
+    advance_spec_auto(widget);
+}
+
 /// Advance spec-auto pipeline to next stage
 pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
     if widget.spec_auto_state.is_none() {

@@ -1613,6 +1613,49 @@ impl SpecKitCommand for Stage0EvalCodeCommand {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// P92/SPEC-KIT-105: Planning Pipeline Command
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Command: /speckit.plan-pipeline
+/// Planning-only pipeline: Stage 0 → Specify → Plan → Tasks (NO Implement/Validate/Audit)
+///
+/// P92/SPEC-KIT-105: Provides parity with `/plan + /tasks` without implementation stages.
+/// Respects constitution gate - will abort in Block mode if constitution incomplete.
+pub struct SpecKitPlanPipelineCommand;
+
+impl SpecKitCommand for SpecKitPlanPipelineCommand {
+    fn name(&self) -> &'static str {
+        "speckit.plan-pipeline"
+    }
+
+    fn aliases(&self) -> &[&'static str] {
+        &["speckit.planning", "plan-pipeline"]
+    }
+
+    fn description(&self) -> &'static str {
+        "planning-only pipeline: Stage 0 → Specify → Plan → Tasks (P92)"
+    }
+
+    fn execute(&self, widget: &mut ChatWidget, args: String) {
+        let spec_id = args.split_whitespace().next().unwrap_or("");
+        if spec_id.is_empty() {
+            widget.history_push(crate::history_cell::new_error_event(
+                "Missing SPEC ID. Usage: /speckit.plan-pipeline SPEC-ID".to_string(),
+            ));
+            widget.request_redraw();
+            return;
+        }
+
+        // Delegate to pipeline_coordinator
+        super::super::pipeline_coordinator::handle_spec_plan(widget, spec_id.to_string());
+    }
+
+    fn requires_args(&self) -> bool {
+        true
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // P85: Helper Functions for Code Indexing
 // ─────────────────────────────────────────────────────────────────────────────
 
