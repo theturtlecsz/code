@@ -118,16 +118,19 @@ pub trait Tier2Client: Send + Sync {
 /// Build the Tier2 prompt for NotebookLM
 ///
 /// Implements the "Shadow Staff Engineer" prompt from STAGE0_TIER2_PROMPT.md
+///
+/// P84: Updated to explicitly reference NL_* artifact names for better
+/// NotebookLM retrieval (seeded artifacts use these exact filenames).
 pub fn build_tier2_prompt(spec_id: &str, spec_content: &str, task_brief_md: &str) -> String {
     format!(
         r#"You are the "Shadow Staff Engineer" for the codex-rs project.
 
-You have access to seeded knowledge files:
-- Architecture Bible (system design, module boundaries)
-- Stack Justification (tech choices, dependency rationale)
-- Bug Retrospectives (failure patterns, anti-patterns)
-- Technical Debt Landscape (TODO clusters, known issues)
-- Project Diary (session history, progress patterns)
+You have access to these seeded knowledge files (use these exact names in your search):
+- **NL_ARCHITECTURE_BIBLE.md** - System design, module boundaries, design decisions
+- **NL_STACK_JUSTIFICATION.md** - Tech choices, dependency rationale
+- **NL_BUG_RETROS_01.md** - Failure patterns, anti-patterns, post-mortems
+- **NL_DEBT_LANDSCAPE.md** - TODO/FIXME/HACK clusters, known issues by module
+- **NL_PROJECT_DIARY_01.md** - Session history, progress patterns, milestones
 
 Your job is to synthesize a "Divine Truth" brief for the /speckit.auto pipeline.
 This brief guides multiple agents to plan, implement, and validate the spec.
@@ -570,6 +573,13 @@ mod tests {
         assert!(prompt.contains("Historical Context"));
         assert!(prompt.contains("Risks & Open Questions"));
         assert!(prompt.contains("Suggested Causal Links"));
+
+        // P84: Verify NL_* artifact names are explicitly referenced
+        assert!(prompt.contains("NL_ARCHITECTURE_BIBLE.md"));
+        assert!(prompt.contains("NL_STACK_JUSTIFICATION.md"));
+        assert!(prompt.contains("NL_BUG_RETROS_01.md"));
+        assert!(prompt.contains("NL_DEBT_LANDSCAPE.md"));
+        assert!(prompt.contains("NL_PROJECT_DIARY_01.md"));
     }
 
     #[test]

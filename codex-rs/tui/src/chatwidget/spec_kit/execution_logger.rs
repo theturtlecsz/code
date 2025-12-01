@@ -54,14 +54,29 @@ pub enum ExecutionEvent {
         timestamp: String,
     },
     /// SPEC-KIT-102: Stage 0 context injection completed
+    ///
+    /// P84: Extended with hybrid_used field for V2.5b hybrid retrieval signaling.
+    ///
+    /// Future metrics integration (documented shape, no crate dependency):
+    /// - `stage0_runs_total{result=success|error|skipped}` - Total Stage0 runs
+    /// - `stage0_tier2_calls_total{outcome=success|fallback|error}` - Tier2 call outcomes
+    /// - `stage0_hybrid_used_total{value=true|false}` - Hybrid retrieval usage
+    /// - `stage0_cache_hits_total` - Cache hit count
     Stage0Complete {
         run_id: RunId,
         spec_id: String,
         duration_ms: u64,
+        /// Whether Tier2 (NotebookLM) was used for Divine Truth synthesis
         tier2_used: bool,
+        /// Whether Tier2 cache was hit
         cache_hit: bool,
+        /// V2.5b: Whether hybrid retrieval (TfIdfBackend) was used
+        hybrid_used: bool,
+        /// Number of memories included in TASK_BRIEF
         memories_used: usize,
+        /// Whether TASK_BRIEF.md was written to evidence directory
         task_brief_written: bool,
+        /// Reason Stage0 was skipped (None if executed)
         skip_reason: Option<String>,
         timestamp: String,
     },

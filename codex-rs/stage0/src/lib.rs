@@ -1000,38 +1000,55 @@ mod tests {
 
         #[tokio::test]
         async fn test_run_stage0_cache_ttl_respected() {
-            // Test that cache entries are only used when within TTL
+            // P84: Test cache TTL semantics with fixed timestamps
+            // This test verifies that cache entries are correctly filtered by TTL
+            // using the OverlayDb methods directly (avoids wall-clock flakiness)
+            use chrono::TimeZone;
+
             let mut cfg = Stage0Config::default();
             cfg.tier2.cache_ttl_hours = 24;
 
             let engine = Stage0Engine::with_config(cfg).expect("create");
-            let local_mem = MockLocalMemoryClient::with_sample_memories();
-            let llm = MockLlmClient;
-            let tier2 = MockTier2Client::success();
-            let noop_vector: Option<&NoopVectorBackend> = None;
 
-            // First call - creates cache entry
-            let result1 = engine
-                .run_stage0(
-                    &local_mem,
-                    &llm,
-                    noop_vector,
-                    &tier2,
-                    "SPEC-TTL-TEST",
-                    "Test TTL spec content",
-                    &EnvCtx::default(),
-                    false,
+            // Fixed timestamps for deterministic testing
+            let base_time = chrono::Utc.with_ymd_and_hms(2025, 1, 1, 12, 0, 0).unwrap();
+            let ttl_hours = 24u64;
+
+            // Insert a cache entry with known created_at timestamp
+            let input_hash = "test-ttl-hash";
+            engine
+                .db()
+                .upsert_tier2_cache_at(
+                    input_hash,
+                    "spec-hash",
+                    "brief-hash",
+                    "cached divine truth",
+                    None,
+                    base_time,
                 )
-                .await
-                .expect("first run");
+                .expect("insert cache entry");
 
-            assert!(!result1.cache_hit);
-            assert!(result1.tier2_used);
+            // Query within TTL (23 hours later) -> should return entry
+            let within_ttl = base_time + chrono::Duration::hours(23);
+            let result = engine
+                .db()
+                .get_tier2_cache_with_ttl(input_hash, ttl_hours, within_ttl)
+                .expect("lookup");
+            assert!(
+                result.is_some(),
+                "Cache entry should be valid 23h after creation"
+            );
 
-            // Verify cache entry exists
-            let input_hash = compute_cache_key("Test TTL spec content", &result1.task_brief_md);
-            let cached = engine.db().get_tier2_cache(&input_hash).expect("lookup");
-            assert!(cached.is_some());
+            // Query past TTL (25 hours later) -> should return None
+            let past_ttl = base_time + chrono::Duration::hours(25);
+            let result = engine
+                .db()
+                .get_tier2_cache_with_ttl(input_hash, ttl_hours, past_ttl)
+                .expect("lookup");
+            assert!(
+                result.is_none(),
+                "Cache entry should be stale 25h after creation"
+            );
         }
 
         #[tokio::test]

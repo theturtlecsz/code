@@ -433,7 +433,29 @@ impl OverlayDb {
         synthesis_result: &str,
         suggested_links: Option<&str>,
     ) -> Result<()> {
-        let now = Utc::now().to_rfc3339();
+        self.upsert_tier2_cache_at(
+            input_hash,
+            spec_hash,
+            brief_hash,
+            synthesis_result,
+            suggested_links,
+            Utc::now(),
+        )
+    }
+
+    /// Insert or replace a Tier 2 cache entry with specific created_at timestamp
+    ///
+    /// Used by tests to control cache timing. For production, use `upsert_tier2_cache`.
+    pub fn upsert_tier2_cache_at(
+        &self,
+        input_hash: &str,
+        spec_hash: &str,
+        brief_hash: &str,
+        synthesis_result: &str,
+        suggested_links: Option<&str>,
+        created_at: DateTime<Utc>,
+    ) -> Result<()> {
+        let created_str = created_at.to_rfc3339();
         self.conn
             .execute(
                 r#"
@@ -441,7 +463,7 @@ impl OverlayDb {
                 (input_hash, spec_hash, brief_hash, synthesis_result, suggested_links, created_at, hit_count, last_hit_at)
                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, NULL)
                 "#,
-                params![input_hash, spec_hash, brief_hash, synthesis_result, suggested_links, now],
+                params![input_hash, spec_hash, brief_hash, synthesis_result, suggested_links, created_str],
             )
             .map_err(|e| Stage0Error::overlay_db_with_source("failed to upsert tier2 cache", e))?;
         Ok(())
@@ -1019,5 +1041,105 @@ mod tests {
             .expect("recalc");
 
         assert!(result.is_none());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // P84: TTL-aware cache tests with fixed timestamps (no wall-clock dependency)
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_tier2_cache_ttl_with_fixed_timestamps() {
+        use chrono::TimeZone;
+
+        let db = OverlayDb::connect_in_memory().expect("should connect");
+
+        // Fixed base time: 2025-01-01T00:00:00Z
+        let base_time = Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap();
+        let ttl_hours = 24u64;
+
+        // Insert cache entry with known created_at
+        db.upsert_tier2_cache_at(
+            "hash-ttl-test",
+            "spec",
+            "brief",
+            "test content",
+            None,
+            base_time,
+        )
+        .expect("insert");
+
+        // Case 1: Query at base_time + 23 hours (within TTL) -> expect Some
+        let within_ttl = base_time + chrono::Duration::hours(23);
+        let result = db
+            .get_tier2_cache_with_ttl("hash-ttl-test", ttl_hours, within_ttl)
+            .expect("lookup");
+        assert!(
+            result.is_some(),
+            "Entry should be valid 23h after creation (TTL=24h)"
+        );
+
+        // Case 2: Query at base_time + 25 hours (past TTL) -> expect None
+        let past_ttl = base_time + chrono::Duration::hours(25);
+        let result = db
+            .get_tier2_cache_with_ttl("hash-ttl-test", ttl_hours, past_ttl)
+            .expect("lookup");
+        assert!(
+            result.is_none(),
+            "Entry should be stale 25h after creation (TTL=24h)"
+        );
+
+        // Case 3: Query at exact TTL boundary (24h) -> expect Some (boundary is inclusive)
+        let at_boundary = base_time + chrono::Duration::hours(24);
+        let result = db
+            .get_tier2_cache_with_ttl("hash-ttl-test", ttl_hours, at_boundary)
+            .expect("lookup");
+        assert!(
+            result.is_some(),
+            "Entry should still be valid at exact TTL boundary"
+        );
+    }
+
+    #[test]
+    fn test_tier2_cache_ttl_hit_count_increment() {
+        use chrono::TimeZone;
+
+        let db = OverlayDb::connect_in_memory().expect("should connect");
+        let base_time = Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap();
+
+        // Insert cache entry
+        db.upsert_tier2_cache_at("hash-hits", "spec", "brief", "content", None, base_time)
+            .expect("insert");
+
+        let query_time = base_time + chrono::Duration::hours(1);
+
+        // First TTL-checked read increments hit_count in DB
+        let _entry1 = db
+            .get_tier2_cache_with_ttl("hash-hits", 24, query_time)
+            .expect("lookup")
+            .expect("exists");
+
+        // Verify hit was recorded by querying raw entry
+        let raw1 = db.get_tier2_cache("hash-hits").expect("lookup").expect("exists");
+        assert_eq!(raw1.hit_count, 1, "First TTL-checked read should record hit");
+
+        // Second read should increment again
+        let _entry2 = db
+            .get_tier2_cache_with_ttl("hash-hits", 24, query_time)
+            .expect("lookup")
+            .expect("exists");
+
+        let raw2 = db.get_tier2_cache("hash-hits").expect("lookup").expect("exists");
+        assert_eq!(raw2.hit_count, 2, "Second TTL-checked read should record hit");
+    }
+
+    #[test]
+    fn test_tier2_cache_ttl_nonexistent_returns_none() {
+        let db = OverlayDb::connect_in_memory().expect("should connect");
+        let now = Utc::now();
+
+        let result = db
+            .get_tier2_cache_with_ttl("nonexistent-hash", 24, now)
+            .expect("lookup");
+        assert!(result.is_none(), "Nonexistent entry should return None");
     }
 }

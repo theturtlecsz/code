@@ -166,6 +166,7 @@ fn execution_event_stage0_complete_serializes() {
         duration_ms: 150,
         tier2_used: true,
         cache_hit: false,
+        hybrid_used: true, // P84: Added for V2.5b hybrid retrieval signaling
         memories_used: 5,
         task_brief_written: true,
         skip_reason: None,
@@ -176,6 +177,7 @@ fn execution_event_stage0_complete_serializes() {
     assert!(json.contains("stage0_complete"));
     assert!(json.contains("SPEC-102"));
     assert!(json.contains("tier2_used"));
+    assert!(json.contains("hybrid_used")); // P84: Verify hybrid_used is serialized
     assert!(json.contains("memories_used"));
     assert!(json.contains("task_brief_written"));
 }
@@ -188,6 +190,7 @@ fn execution_event_stage0_complete_with_skip_reason() {
         duration_ms: 0,
         tier2_used: false,
         cache_hit: false,
+        hybrid_used: false, // P84: Added for V2.5b hybrid retrieval signaling
         memories_used: 0,
         task_brief_written: false,
         skip_reason: Some("Stage 0 disabled by flag".to_string()),

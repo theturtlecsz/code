@@ -188,20 +188,37 @@ pub fn handle_spec_auto(
                 }
 
                 // Log Stage0Complete event (success)
+                // P84: Added hybrid_used and structured tracing for Stage0 signaling
                 if let Some(run_id) = &state.run_id {
-                    state.execution_logger.log_event(
-                        super::execution_logger::ExecutionEvent::Stage0Complete {
-                            run_id: run_id.clone(),
-                            spec_id: spec_id.clone(),
-                            duration_ms: result.duration_ms,
-                            tier2_used: result.tier2_used,
-                            cache_hit: result.cache_hit,
-                            memories_used: stage0_result.memories_used.len(),
-                            task_brief_written,
-                            skip_reason: None,
-                            timestamp: super::execution_logger::ExecutionEvent::now(),
-                        },
+                    let event = super::execution_logger::ExecutionEvent::Stage0Complete {
+                        run_id: run_id.clone(),
+                        spec_id: spec_id.clone(),
+                        duration_ms: result.duration_ms,
+                        tier2_used: result.tier2_used,
+                        cache_hit: result.cache_hit,
+                        hybrid_used: result.hybrid_retrieval_used,
+                        memories_used: stage0_result.memories_used.len(),
+                        task_brief_written,
+                        skip_reason: None,
+                        timestamp: super::execution_logger::ExecutionEvent::now(),
+                    };
+
+                    // P84: Structured tracing for future metrics integration
+                    tracing::info!(
+                        target: "stage0",
+                        event_type = "Stage0Complete",
+                        spec_id = %spec_id,
+                        result = "success",
+                        duration_ms = result.duration_ms,
+                        tier2_used = result.tier2_used,
+                        cache_hit = result.cache_hit,
+                        hybrid_used = result.hybrid_retrieval_used,
+                        memories_used = stage0_result.memories_used.len(),
+                        task_brief_written = task_brief_written,
+                        "Stage 0 completed successfully"
                     );
+
+                    state.execution_logger.log_event(event);
                 }
 
                 // Log Stage0 success to UI
@@ -219,60 +236,93 @@ pub fn handle_spec_auto(
             } else if let Some(skip_reason) = result.skip_reason {
                 // Log Stage0Complete event (skipped)
                 if let Some(run_id) = &state.run_id {
-                    state.execution_logger.log_event(
-                        super::execution_logger::ExecutionEvent::Stage0Complete {
-                            run_id: run_id.clone(),
-                            spec_id: spec_id.clone(),
-                            duration_ms: result.duration_ms,
-                            tier2_used: false,
-                            cache_hit: false,
-                            memories_used: 0,
-                            task_brief_written: false,
-                            skip_reason: Some(skip_reason.clone()),
-                            timestamp: super::execution_logger::ExecutionEvent::now(),
-                        },
+                    let event = super::execution_logger::ExecutionEvent::Stage0Complete {
+                        run_id: run_id.clone(),
+                        spec_id: spec_id.clone(),
+                        duration_ms: result.duration_ms,
+                        tier2_used: false,
+                        cache_hit: false,
+                        hybrid_used: false,
+                        memories_used: 0,
+                        task_brief_written: false,
+                        skip_reason: Some(skip_reason.clone()),
+                        timestamp: super::execution_logger::ExecutionEvent::now(),
+                    };
+
+                    // P84: Structured tracing for skip case
+                    tracing::info!(
+                        target: "stage0",
+                        event_type = "Stage0Complete",
+                        spec_id = %spec_id,
+                        result = "skipped",
+                        duration_ms = result.duration_ms,
+                        skip_reason = %skip_reason,
+                        "Stage 0 skipped"
                     );
+
+                    state.execution_logger.log_event(event);
                 }
                 state.stage0_skip_reason = Some(skip_reason.clone());
-                tracing::info!("Stage 0 skipped: {}", skip_reason);
             }
         } else {
             // Log Stage0Complete event (skipped - no spec content)
+            let skip_reason = "spec.md is empty or not found";
             if let Some(run_id) = &state.run_id {
-                state.execution_logger.log_event(
-                    super::execution_logger::ExecutionEvent::Stage0Complete {
-                        run_id: run_id.clone(),
-                        spec_id: spec_id.clone(),
-                        duration_ms: 0,
-                        tier2_used: false,
-                        cache_hit: false,
-                        memories_used: 0,
-                        task_brief_written: false,
-                        skip_reason: Some("spec.md is empty or not found".to_string()),
-                        timestamp: super::execution_logger::ExecutionEvent::now(),
-                    },
-                );
-            }
-            state.stage0_skip_reason = Some("spec.md is empty or not found".to_string());
-        }
-    } else {
-        // Log Stage0Complete event (disabled by flag)
-        if let Some(run_id) = &state.run_id {
-            state.execution_logger.log_event(
-                super::execution_logger::ExecutionEvent::Stage0Complete {
+                let event = super::execution_logger::ExecutionEvent::Stage0Complete {
                     run_id: run_id.clone(),
                     spec_id: spec_id.clone(),
                     duration_ms: 0,
                     tier2_used: false,
                     cache_hit: false,
+                    hybrid_used: false,
                     memories_used: 0,
                     task_brief_written: false,
-                    skip_reason: Some("Stage 0 disabled by flag".to_string()),
+                    skip_reason: Some(skip_reason.to_string()),
                     timestamp: super::execution_logger::ExecutionEvent::now(),
-                },
-            );
+                };
+
+                tracing::info!(
+                    target: "stage0",
+                    event_type = "Stage0Complete",
+                    spec_id = %spec_id,
+                    result = "skipped",
+                    skip_reason = skip_reason,
+                    "Stage 0 skipped - no spec content"
+                );
+
+                state.execution_logger.log_event(event);
+            }
+            state.stage0_skip_reason = Some(skip_reason.to_string());
         }
-        state.stage0_skip_reason = Some("Stage 0 disabled by flag".to_string());
+    } else {
+        // Log Stage0Complete event (disabled by flag)
+        let skip_reason = "Stage 0 disabled by flag";
+        if let Some(run_id) = &state.run_id {
+            let event = super::execution_logger::ExecutionEvent::Stage0Complete {
+                run_id: run_id.clone(),
+                spec_id: spec_id.clone(),
+                duration_ms: 0,
+                tier2_used: false,
+                cache_hit: false,
+                hybrid_used: false,
+                memories_used: 0,
+                task_brief_written: false,
+                skip_reason: Some(skip_reason.to_string()),
+                timestamp: super::execution_logger::ExecutionEvent::now(),
+            };
+
+            tracing::info!(
+                target: "stage0",
+                event_type = "Stage0Complete",
+                spec_id = %spec_id,
+                result = "skipped",
+                skip_reason = skip_reason,
+                "Stage 0 disabled by flag"
+            );
+
+            state.execution_logger.log_event(event);
+        }
+        state.stage0_skip_reason = Some(skip_reason.to_string());
     }
 
     widget.spec_auto_state = Some(state);
