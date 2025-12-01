@@ -1,7 +1,7 @@
 # SPEC-KIT-102 V2 Handoff: Stage 0 Overlay Engine
 
-**Status**: Research Phase - Integration & Prompts Complete | Spec Gaps Remaining
-**Last Session**: P73 (2025-12-01)
+**Status**: Implementation In Progress | V1.1+V1.2 Complete, V1.3 Next
+**Last Session**: P75 (2025-12-01)
 **Architecture**: Rust Overlay Engine (treats local-memory as black-box backend)
 
 ---
@@ -20,6 +20,17 @@ SPEC-KIT-102 V2 defines a **Stage 0 Overlay Engine** in Rust that:
 - Designed `/speckit.auto` integration contract
 - Created IQO and Tier 2 prompt specifications
 - Identified remaining spec gaps (TASK_BRIEF template, error taxonomy, metrics)
+
+**Session P74 Progress**:
+- Completed all spec gaps: TASK_BRIEF template, error taxonomy, metrics
+- All 12 spec documents now complete
+- Research phase finished; ready for V1.1 implementation
+
+**Session P75 Progress**:
+- **V1.1 Complete**: Created `codex-rs/stage0/` crate with overlay DB + config
+- **V1.2 Complete**: Implemented MetadataGuardian + TemplateGuardian + LlmClient trait
+- 26 tests passing, clippy clean
+- Ready for V1.3 Dynamic Scoring
 
 ---
 
@@ -44,12 +55,12 @@ All spec files are in repo root (`/home/thetu/code/`):
 | `STAGE0_IQO_PROMPT.md` | IQO generation prompt, schema, validation | **Complete** |
 | `STAGE0_TIER2_PROMPT.md` | Divine Truth prompt, parsing, fallbacks | **Complete** |
 
-### Spec Gaps (To Be Created)
+### Spec Gaps (Completed - P74)
 | File | Purpose | Status |
 |------|---------|--------|
-| `STAGE0_TASK_BRIEF_TEMPLATE.md` | DCC output format specification | **TODO** |
-| `STAGE0_ERROR_TAXONOMY.md` | Stage0Error types, recovery strategies | **TODO** |
-| `STAGE0_METRICS.md` | Telemetry, dashboards, alerting | **TODO** |
+| `STAGE0_TASK_BRIEF_TEMPLATE.md` | DCC output format specification | **Complete** |
+| `STAGE0_ERROR_TAXONOMY.md` | Stage0Error types, recovery strategies | **Complete** |
+| `STAGE0_METRICS.md` | Telemetry, dashboards, alerting | **Complete** |
 
 ### Reference Documents
 | File | Purpose |
@@ -113,20 +124,28 @@ All spec files are in repo root (`/home/thetu/code/`):
 ## Implementation Phases (V1.1 → V1.5)
 
 ```
-V1.1: Overlay DB & Basic Plumbing
-  - Create codex-rs/stage0/ crate
-  - Initialize schema from STAGE0_SCHEMA.sql
-  - Basic CRUD operations
+V1.1: Overlay DB & Basic Plumbing ✅ COMPLETE (P75)
+  - Created codex-rs/stage0/ crate
+  - Schema init from STAGE0_SCHEMA.sql via include_str!
+  - Stage0Config loading from ~/.config/codex/stage0.toml
+  - OverlayDb with full CRUD for 3 tables
+  - Stage0Error taxonomy (7 categories)
+  - 11 tests passing
 
-V1.2: Guardians
-  - MetadataGuardian (timestamp/agent_type validation)
-  - TemplateGuardian (LLM restructuring via Ollama)
-  - OTHER category with best-effort classification
+V1.2: Guardians ✅ COMPLETE (P75)
+  - MemoryKind enum (Pattern/Decision/Problem/Insight/Other)
+  - MemoryDraft (input) + GuardedMemory (output) structs
+  - MetadataGuardian: strict/lenient validation
+  - TemplateGuardian: LlmClient trait + async restructuring
+  - Stage0Engine::guard_memory() + guard_memory_sync()
+  - MockLlmClient for testing
+  - 26 tests passing (15 new guardian tests)
 
-V1.3: Dynamic Scoring
+V1.3: Dynamic Scoring ⏳ NEXT
   - Implement scoring formula (usage/recency/priority/novelty)
-  - Config-driven weights
-  - Usage tracking on DCC retrievals
+  - Config-driven weights from Stage0Config.scoring
+  - Real-time score updates on memory selection
+  - record_selected_memories_usage() for DCC integration
 
 V1.4: DCC (Dynamic Context Compiler)
   - IQO generation (from STAGE0_IQO_PROMPT.md)
@@ -145,11 +164,13 @@ V1.5: Tier 2 Orchestration
 
 ## Remaining Research Tasks
 
-### Priority 1: Spec Gaps (Next Session)
+### Priority 1: Spec Gaps (Completed P74)
+- [x] Design TASK_BRIEF.md template specification
+- [x] Design Stage0 error taxonomy
+- [x] Design Stage0 metrics/telemetry spec
+
+### Priority 1.5: Pre-Implementation Setup
 - [ ] Create NotebookLM notebook: "codex-rs – Shadow Stage 0"
-- [ ] Design TASK_BRIEF.md template specification
-- [ ] Design Stage0 error taxonomy
-- [ ] Design Stage0 metrics/telemetry spec
 
 ### Priority 2: Deferred Decisions
 - [ ] Bootstrap strategy for 1000+ memories (decide during V1.1)
@@ -176,35 +197,55 @@ V1.5: Tier 2 Orchestration
 
 ---
 
-## Resume Prompt
+## Resume Prompt (V1.3 Dynamic Scoring)
 
 ```
 Load docs/HANDOFF-SPEC-KIT-102-V2.md
 
-Resuming SPEC-KIT-102 Stage 0 Overlay Engine research.
+Resuming SPEC-KIT-102 Stage 0 Overlay Engine - V1.3 Dynamic Scoring.
 
 Current state:
-- Core architecture specs complete
-- Integration contract designed (STAGE0_SPECKITAUTO_INTEGRATION.md)
-- IQO and Tier 2 prompts specified
-- Implementation deferred (completing other SPECs first)
+- V1.1 Complete: codex-rs/stage0/ crate with overlay DB + config (11 tests)
+- V1.2 Complete: Guardians (MetadataGuardian + TemplateGuardian + LlmClient trait, 26 tests)
+- V1.3 Next: Dynamic Scoring
 
-Remaining design tasks:
-1. Create NotebookLM notebook "codex-rs – Shadow Stage 0"
-2. Design TASK_BRIEF.md template specification
-3. Design Stage0 error taxonomy
-4. Design Stage0 metrics/telemetry spec
+V1.3 Implementation Tasks:
+1. Create scoring.rs with ScoringInput, ScoringParams, calculate_dynamic_score()
+2. Extend OverlayDb with get_overlay_memory() and record_memory_usage()
+3. Add Stage0Engine::record_selected_memories_usage() for DCC integration
+4. Unit tests for scoring formula behavior
 
-Key spec files to reference:
-- STAGE0_SPECKITAUTO_INTEGRATION.md (integration contract)
-- STAGE0_IQO_PROMPT.md (IQO generation)
-- STAGE0_TIER2_PROMPT.md (Divine Truth prompt)
-- STAGE0_IMPLEMENTATION_GUIDE.md (phases A-F)
+Key files to reference:
+- STAGE0_SCORING_AND_DCC.md (scoring formula spec)
+- codex-rs/stage0/src/config.rs (ScoringConfig already defined)
+- codex-rs/stage0/src/overlay_db.rs (extend with scoring updates)
 
-[Continue with remaining design tasks]
+Design decisions (from P75):
+- Real-time scoring on memory selection (not batch)
+- Defer Ollama LlmClient adapter to V1.4+
+- No global background recalculation yet
+
+[Continue with V1.3 implementation]
 ```
 
 ---
 
-*Handoff updated: 2025-12-01 (Session P73)*
-*Status: Research phase - completing spec gaps before implementation*
+## Crate Structure (Post V1.2)
+
+```
+codex-rs/stage0/
+├── Cargo.toml
+├── STAGE0_SCHEMA.sql        # Embedded via include_str!
+└── src/
+    ├── lib.rs               # Stage0Engine, exports
+    ├── config.rs            # Stage0Config (TOML loading)
+    ├── errors.rs            # Stage0Error (7 categories)
+    ├── guardians.rs         # MemoryKind, MemoryDraft, GuardedMemory, LlmClient
+    ├── overlay_db.rs        # OverlayDb (SQLite wrapper)
+    └── scoring.rs           # V1.3: NEW - scoring formula
+```
+
+---
+
+*Handoff updated: 2025-12-01 (Session P75)*
+*Status: V1.1+V1.2 complete; V1.3 Dynamic Scoring next*
