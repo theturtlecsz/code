@@ -188,6 +188,35 @@ impl VisionBuilderModal {
                 ],
                 allow_multiple: false,
             },
+            // P94/SPEC-KIT-105: 6th question for guardrails (priority 10)
+            VisionQuestion {
+                category: "Guardrails",
+                question: "What are your hard constraints?",
+                hint: "Security, privacy, data residency, compliance requirements",
+                options: vec![
+                    VisionOption {
+                        label: 'A',
+                        text: "No PII in logs; GDPR compliance; Data encryption at rest",
+                        is_custom: false,
+                    },
+                    VisionOption {
+                        label: 'B',
+                        text: "No external API calls; Air-gapped deployment; Local-only data",
+                        is_custom: false,
+                    },
+                    VisionOption {
+                        label: 'C',
+                        text: "SOC2 compliance; Audit logging; Role-based access control",
+                        is_custom: false,
+                    },
+                    VisionOption {
+                        label: 'D',
+                        text: "Custom...",
+                        is_custom: true,
+                    },
+                ],
+                allow_multiple: false,
+            },
         ];
 
         Self {

@@ -19,6 +19,8 @@ pub fn on_vision_builder_submitted(widget: &mut ChatWidget, answers: HashMap<Str
     let goals_raw = answers.get("Goals").cloned().unwrap_or_default();
     let nongoals_raw = answers.get("NonGoals").cloned().unwrap_or_default();
     let principles_raw = answers.get("Principles").cloned().unwrap_or_default();
+    // P94/SPEC-KIT-105: 6th question for guardrails
+    let guardrails_raw = answers.get("Guardrails").cloned().unwrap_or_default();
 
     // Parse semicolon-separated lists
     let goals: Vec<String> = goals_raw
@@ -34,6 +36,13 @@ pub fn on_vision_builder_submitted(widget: &mut ChatWidget, answers: HashMap<Str
         .collect();
 
     let principles: Vec<String> = principles_raw
+        .split(';')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    // P94/SPEC-KIT-105: Parse guardrails
+    let guardrails: Vec<String> = guardrails_raw
         .split(';')
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
@@ -100,6 +109,18 @@ pub fn on_vision_builder_submitted(widget: &mut ChatWidget, answers: HashMap<Str
         }
     }
 
+    // P94/SPEC-KIT-105: Store guardrails as ConstitutionType::Guardrail (priority 10)
+    for (i, guardrail) in guardrails.iter().enumerate() {
+        let memory_id = format!("vision-guardrail-{}", uuid::Uuid::new_v4());
+        if let Err(e) = db.upsert_constitution_memory(
+            &memory_id,
+            codex_stage0::ConstitutionType::Guardrail,
+            guardrail,
+        ) {
+            errors.push(format!("Guardrail {}: {}", i + 1, e));
+        }
+    }
+
     // Compute content hash and increment constitution version
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     target_users.hash(&mut hasher);
@@ -107,6 +128,7 @@ pub fn on_vision_builder_submitted(widget: &mut ChatWidget, answers: HashMap<Str
     goals_raw.hash(&mut hasher);
     nongoals_raw.hash(&mut hasher);
     principles_raw.hash(&mut hasher);
+    guardrails_raw.hash(&mut hasher); // P94: include guardrails in hash
     let hash = format!("{:016x}", hasher.finish());
 
     let new_version = match db.increment_constitution_version(Some(&hash)) {
@@ -134,6 +156,7 @@ pub fn on_vision_builder_submitted(widget: &mut ChatWidget, answers: HashMap<Str
         &goals,
         &nongoals,
         &principles,
+        &guardrails, // P94
     );
 
     // Build result message
@@ -148,10 +171,11 @@ pub fn on_vision_builder_submitted(widget: &mut ChatWidget, answers: HashMap<Str
         &hash[..8]
     )));
     lines.push(Line::from(format!(
-        "   Stored: {} goals, {} non-goals, {} principles",
+        "   Stored: {} goals, {} non-goals, {} principles, {} guardrails",
         goals.len(),
         nongoals.len(),
-        principles.len()
+        principles.len(),
+        guardrails.len()
     )));
 
     if cache_invalidated > 0 {
@@ -182,11 +206,9 @@ pub fn on_vision_builder_submitted(widget: &mut ChatWidget, answers: HashMap<Str
 
     lines.push(Line::from(""));
     lines.push(Line::from("Next steps:"));
-    lines.push(Line::from(
-        "   /speckit.constitution add guardrail <text> - Add hard constraints (required for gate)",
-    ));
     lines.push(Line::from("   /speckit.constitution view - Review stored constitution"));
     lines.push(Line::from("   /speckit.constitution sync - Regenerate constitution.md"));
+    lines.push(Line::from("   /speckit.new <description> - Create a new spec (gate-ready)"));
 
     widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));
     widget.request_redraw();
@@ -213,6 +235,7 @@ fn generate_nl_vision(
     goals: &[String],
     nongoals: &[String],
     principles: &[String],
+    guardrails: &[String], // P94
 ) -> Result<std::path::PathBuf, String> {
     let memory_dir = cwd.join("memory");
     std::fs::create_dir_all(&memory_dir)
@@ -245,6 +268,13 @@ fn generate_nl_vision(
     md.push_str("## Principles\n\n");
     for principle in principles {
         md.push_str(&format!("- {}\n", principle));
+    }
+    md.push('\n');
+
+    // P94/SPEC-KIT-105: Add guardrails section
+    md.push_str("## Guardrails\n\n");
+    for guardrail in guardrails {
+        md.push_str(&format!("- {}\n", guardrail));
     }
 
     let vision_path = memory_dir.join("NL_VISION.md");
