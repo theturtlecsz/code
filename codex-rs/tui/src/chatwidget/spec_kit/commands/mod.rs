@@ -7,6 +7,7 @@
 
 mod configure; // SPEC-947 Phase 4: Pipeline configurator command
 mod guardrail;
+mod librarian; // SPEC-KIT-103: Librarian memory quality engine
 mod plan;
 mod project; // SPEC-KIT-960: Project scaffolding command
 mod quality;
@@ -19,6 +20,7 @@ pub mod verify;
 // Re-export all commands
 pub use configure::*;
 pub use guardrail::*;
+pub use librarian::*;
 pub use plan::*;
 pub use project::*;
 pub use quality::*;

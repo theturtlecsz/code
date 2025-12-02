@@ -18,6 +18,7 @@ pub mod dcc;
 pub mod errors;
 pub mod eval;
 pub mod guardians;
+pub mod librarian;
 pub mod overlay_db;
 pub mod scoring;
 pub mod tfidf;

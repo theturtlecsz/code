@@ -168,6 +168,7 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
     registry.register(Box::new(Stage0IndexCommand)); // SPEC-KIT-102 V2: Vector indexing
     registry.register(Box::new(Stage0EvalBackendCommand)); // SPEC-KIT-102 V2: Vector eval
     registry.register(Box::new(Stage0EvalCodeCommand)); // P86: Code lane eval shortcut
+    registry.register(Box::new(Stage0LibrarianCommand)); // SPEC-KIT-103: Librarian
 
     // Stage commands (plan → unlock)
     registry.register(Box::new(SpecKitPlanCommand));
@@ -311,12 +312,13 @@ mod tests {
         // Test that the global registry has all expected commands
         let registry = SPEC_KIT_REGISTRY.lock().unwrap();
 
-        // 36 commands: 15 special + 6 stage + 3 quality + 7 guardrail + 1 evidence + 1 search + 2 templates
+        // 38 commands: 18 special + 6 stage + 3 quality + 7 guardrail + 1 evidence + 1 search + 2 templates
         // SPEC-KIT-102 V2: Added stage0.index and stage0.eval-backend (2 new)
         // P86: Added stage0.eval-code (1 new)
         // P92/SPEC-KIT-105: Added speckit.plan-pipeline (1 new)
         // P93/SPEC-KIT-105: Added speckit.vision (1 new)
-        assert_eq!(registry.len(), 36, "Registry should have 36 commands");
+        // P97/SPEC-KIT-103: Added stage0.librarian (1 new)
+        assert_eq!(registry.len(), 38, "Registry should have 38 commands");
 
         // Verify key commands are registered
         assert!(registry.find("speckit.status").is_some());
@@ -535,12 +537,13 @@ mod tests {
         // P86: Added stage0.eval-code (no alias)
         // P92/SPEC-KIT-105: Added speckit.plan-pipeline with 'speckit.planning' and 'plan-pipeline' aliases
         // P93/SPEC-KIT-105: Added speckit.vision with 'vision' alias
-        // 36 primary names + 19 aliases = 55 total names
+        // P97/SPEC-KIT-103: Added stage0.librarian with 'librarian' alias
+        // 38 primary names + 21 aliases = 59 total names
         let all_names = registry.all_names();
         assert_eq!(
             all_names.len(),
-            55,
-            "Should have 55 total command names (36 primary + 19 aliases)"
+            59,
+            "Should have 59 total command names (38 primary + 21 aliases)"
         );
     }
 
