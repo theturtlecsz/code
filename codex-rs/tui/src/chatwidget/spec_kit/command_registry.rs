@@ -169,6 +169,7 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
     registry.register(Box::new(Stage0EvalBackendCommand)); // SPEC-KIT-102 V2: Vector eval
     registry.register(Box::new(Stage0EvalCodeCommand)); // P86: Code lane eval shortcut
     registry.register(Box::new(Stage0LibrarianCommand)); // SPEC-KIT-103: Librarian
+    registry.register(Box::new(Stage0ProjectIntelCommand)); // SPEC-KIT-2XX: Project Intel
 
     // Stage commands (plan → unlock)
     registry.register(Box::new(SpecKitPlanCommand));

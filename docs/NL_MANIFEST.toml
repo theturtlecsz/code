@@ -1,0 +1,48 @@
+# NotebookLM Source Manifest
+# SPEC-KIT-2XX: Defines NL_* docs for NotebookLM sync
+
+[notebook]
+# NotebookLM notebook identifier
+id = "codex-rs-main"
+# Share URL (get from NotebookLM > Share > Anyone with link)
+# url = "https://notebooklm.google.com/notebook/..."
+
+[sync]
+# Auto-sync on curate-nl
+auto_sync = false
+# Batch size for uploads
+batch_size = 5
+
+# NL Source Documents
+# Each source will be synced to NotebookLM as a separate document
+
+[[sources]]
+path = "docs/NL_ARCHITECTURE_BIBLE.md"
+title = "Architecture Bible"
+description = "Code topology, crates, key modules, and system architecture"
+
+[[sources]]
+path = "docs/NL_WORKFLOW_MAP.md"
+title = "Workflow Map"
+description = "Spec-kit commands, /speckit.auto pipeline, and Stage 0 flows"
+
+[[sources]]
+path = "docs/NL_GOVERNANCE_AND_DRIFT.md"
+title = "Governance and Drift"
+description = "Constitution, guardrails, principles, goals, and drift detection"
+
+[[sources]]
+path = "docs/NL_MEMORY_AND_LIBRARIAN.md"
+title = "Memory and Librarian"
+description = "Tiered memory system, local-memory stats, Librarian sweep status"
+
+[[sources]]
+path = "docs/NL_SESSION_LINEAGE.md"
+title = "Session Lineage"
+description = "P72-P97 evolution, key milestones, and session timeline"
+
+# The overview is auto-generated and added after sync
+# [[sources]]
+# path = "docs/NL_PROJECT_OVERVIEW.md"
+# title = "Project Overview"
+# description = "Global mental model synthesized by NotebookLM"

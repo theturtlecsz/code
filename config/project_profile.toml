@@ -1,0 +1,58 @@
+# Project Intel Configuration
+# SPEC-KIT-2XX: Configures project intelligence gathering
+
+[project]
+name = "codex-rs"
+root = "."
+
+[project.code]
+# Source code roots to scan for topology
+roots = [
+    "stage0/src",
+    "tui/src",
+    "core/src",
+]
+# Directories to ignore during scanning
+ignore = [
+    "target",
+    "tests/fixtures",
+    "node_modules",
+    ".git",
+]
+
+[project.docs]
+# Documentation roots for spec discovery
+roots = [
+    "docs",
+    ".speckit",
+]
+
+[project.memory]
+# Memory domains to include in stats
+domains = [
+    "spec-kit",
+    "constitution",
+    "librarian",
+    "project-notes",
+]
+
+[project.specs]
+# Glob patterns for spec files
+index_files = [
+    "docs/SPEC-KIT-101/*.md",
+    "docs/SPEC-KIT-102/*.md",
+    "docs/SPEC-KIT-103/*.md",
+    "docs/SPEC-KIT-105/*.md",
+]
+
+[notebooklm]
+# NotebookLM configuration for sync
+notebook_id = "codex-rs-main"
+# Auto-sync NL docs when changed
+auto_sync = false
+
+[output]
+# Output directory for intel artifacts
+intel_dir = "var/intel"
+# Directory for NL docs
+nl_docs_dir = "docs"

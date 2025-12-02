@@ -20,6 +20,7 @@ pub mod eval;
 pub mod guardians;
 pub mod librarian;
 pub mod overlay_db;
+pub mod project_intel;
 pub mod scoring;
 pub mod tfidf;
 pub mod tier2;
