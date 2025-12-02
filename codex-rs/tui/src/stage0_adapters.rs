@@ -774,6 +774,74 @@ pub fn create_librarian_memory_client(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// RelationshipsMcpAdapter (SPEC-KIT-103 P98 Task 6)
+// ─────────────────────────────────────────────────────────────────────────────
+
+use codex_stage0::librarian::{RelationshipInput, RelationshipsClient};
+
+/// Adapter that implements RelationshipsClient using MCP
+///
+/// SPEC-KIT-103 P98 Task 6: Creates causal relationship edges in local-memory
+/// via the `mcp__local-memory__relationships` tool.
+pub struct RelationshipsMcpAdapter {
+    mcp_manager: Arc<McpConnectionManager>,
+}
+
+impl RelationshipsMcpAdapter {
+    /// Create a new adapter wrapping the MCP connection manager
+    pub fn new(mcp_manager: Arc<McpConnectionManager>) -> Self {
+        Self { mcp_manager }
+    }
+
+    /// Async implementation of create_relationship
+    async fn create_relationship_async(&self, input: &RelationshipInput) -> Result<()> {
+        let args = json!({
+            "relationship_type": "create",
+            "source_memory_id": input.source_id,
+            "target_memory_id": input.target_id,
+            "relationship_type_enum": input.relationship_type,
+            "strength": input.strength,
+            "context": input.context,
+        });
+
+        self.mcp_manager
+            .call_tool(
+                LOCAL_MEMORY_SERVER,
+                "relationships",
+                Some(args),
+                Some(DEFAULT_MCP_TIMEOUT),
+            )
+            .await
+            .map_err(|e| {
+                Stage0Error::local_memory(format!("MCP create_relationship failed: {e}"))
+            })?;
+
+        Ok(())
+    }
+}
+
+impl RelationshipsClient for RelationshipsMcpAdapter {
+    fn create_relationship(&self, input: &RelationshipInput) -> Result<()> {
+        block_on_sync(self.create_relationship_async(input))
+    }
+}
+
+/// Create a Librarian relationships client from an MCP connection manager
+///
+/// SPEC-KIT-103 P98 Task 6: Factory function for creating the relationships adapter.
+/// Returns None if the local-memory MCP server is unavailable.
+pub fn create_relationships_client(
+    mcp_manager: Arc<McpConnectionManager>,
+) -> Option<RelationshipsMcpAdapter> {
+    if has_local_memory_server(&mcp_manager) {
+        Some(RelationshipsMcpAdapter::new(mcp_manager))
+    } else {
+        tracing::warn!("local-memory MCP server not available for relationships");
+        None
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Factory Functions
 // ─────────────────────────────────────────────────────────────────────────────
 

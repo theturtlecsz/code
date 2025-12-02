@@ -156,6 +156,57 @@ pub trait LocalMemoryClient: Send + Sync {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Relationships Client (SPEC-KIT-103 P98 Task 6)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Input for creating a relationship between memories
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelationshipInput {
+    /// Source memory ID
+    pub source_id: String,
+    /// Target memory ID
+    pub target_id: String,
+    /// Type of relationship (causes, blocks, enables, relates_to)
+    pub relationship_type: String,
+    /// Strength of the relationship (0.0 - 1.0)
+    pub strength: f32,
+    /// Explanation for why this relationship exists
+    pub context: Option<String>,
+}
+
+impl RelationshipInput {
+    /// Create a new relationship input
+    pub fn new(
+        source_id: impl Into<String>,
+        target_id: impl Into<String>,
+        relationship_type: impl Into<String>,
+        strength: f32,
+    ) -> Self {
+        Self {
+            source_id: source_id.into(),
+            target_id: target_id.into(),
+            relationship_type: relationship_type.into(),
+            strength,
+            context: None,
+        }
+    }
+
+    /// Add context explaining the relationship
+    pub fn with_context(mut self, context: impl Into<String>) -> Self {
+        self.context = Some(context.into());
+        self
+    }
+}
+
+/// Client interface for memory relationship operations
+///
+/// Creates causal edges between memories in local-memory.
+pub trait RelationshipsClient: Send + Sync {
+    /// Create a relationship between two memories
+    fn create_relationship(&self, input: &RelationshipInput) -> Result<()>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Mock implementation for tests
 // ─────────────────────────────────────────────────────────────────────────────
 

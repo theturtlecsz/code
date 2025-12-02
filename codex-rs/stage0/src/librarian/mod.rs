@@ -30,7 +30,10 @@ pub use causal::{CausalConfig, CausalEdge, CausalRelation, detect_causal_languag
 pub use classifier::{
     ClassificationResult, ClassifierConfig, MemoryType, classify_memory, has_type_tag,
 };
-pub use client::{ListParams, LocalMemoryClient, Memory, MemoryChange, MemoryMeta};
+pub use client::{
+    ListParams, LocalMemoryClient, Memory, MemoryChange, MemoryMeta, RelationshipInput,
+    RelationshipsClient,
+};
 pub use templater::{TemplatedMemory, TemplaterConfig, apply_template, apply_template_with_config};
 
 // Test utilities
