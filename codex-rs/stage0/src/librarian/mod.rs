@@ -17,6 +17,7 @@
 
 pub mod causal;
 pub mod classifier;
+pub mod client;
 pub mod templater;
 
 // Re-export main types and functions
@@ -24,7 +25,12 @@ pub use causal::{CausalConfig, CausalEdge, CausalRelation, detect_causal_languag
 pub use classifier::{
     ClassificationResult, ClassifierConfig, MemoryType, classify_memory, has_type_tag,
 };
+pub use client::{ListParams, LocalMemoryClient, Memory, MemoryChange, MemoryMeta};
 pub use templater::{TemplatedMemory, TemplaterConfig, apply_template, apply_template_with_config};
+
+// Test utilities
+#[cfg(any(test, feature = "test-utils"))]
+pub use client::mock::MockLocalMemoryClient;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
