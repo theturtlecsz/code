@@ -22,6 +22,8 @@ pub struct SpecCreationResult {
     pub files_created: Vec<String>,
     pub feature_name: String,
     pub slug: String,
+    /// P94/SPEC-KIT-105: Constitution version at time of spec creation
+    pub constitution_version_at_creation: Option<u32>,
 }
 
 /// Create a new SPEC natively with instant template filling
@@ -68,6 +70,9 @@ pub fn create_spec(description: &str, cwd: &Path) -> Result<SpecCreationResult, 
         source: e,
     })?;
 
+    // P94/SPEC-KIT-105: Get constitution version at creation time
+    let constitution_version = get_current_constitution_version();
+
     // Step 4: Fill PRD template
     let prd_path = spec_dir.join("PRD.md");
     let prd_content = fill_prd_template(&spec_id, &feature_name, description)?;
@@ -77,9 +82,9 @@ pub fn create_spec(description: &str, cwd: &Path) -> Result<SpecCreationResult, 
         source: e,
     })?;
 
-    // Step 5: Create spec.md
+    // Step 5: Create spec.md (with constitution version)
     let spec_path = spec_dir.join("spec.md");
-    let spec_content = fill_spec_template(&spec_id, &feature_name, description)?;
+    let spec_content = fill_spec_template(&spec_id, &feature_name, description, constitution_version)?;
 
     fs::write(&spec_path, spec_content).map_err(|e| SpecKitError::FileWrite {
         path: spec_path.clone(),
@@ -95,6 +100,7 @@ pub fn create_spec(description: &str, cwd: &Path) -> Result<SpecCreationResult, 
         files_created: vec!["PRD.md".to_string(), "spec.md".to_string()],
         feature_name,
         slug,
+        constitution_version_at_creation: constitution_version,
     })
 }
 
@@ -138,6 +144,9 @@ pub fn create_spec_with_context(
         source: e,
     })?;
 
+    // P94/SPEC-KIT-105: Get constitution version at creation time
+    let constitution_version = get_current_constitution_version();
+
     // Step 4: Fill PRD template with enhanced context
     let prd_path = spec_dir.join("PRD.md");
     let prd_content =
@@ -148,9 +157,9 @@ pub fn create_spec_with_context(
         source: e,
     })?;
 
-    // Step 5: Create spec.md with enhanced description
+    // Step 5: Create spec.md with enhanced description (with constitution version)
     let spec_path = spec_dir.join("spec.md");
-    let spec_content = fill_spec_template(&spec_id, &feature_name, enhanced_description)?;
+    let spec_content = fill_spec_template(&spec_id, &feature_name, enhanced_description, constitution_version)?;
 
     fs::write(&spec_path, spec_content).map_err(|e| SpecKitError::FileWrite {
         path: spec_path.clone(),
@@ -166,7 +175,23 @@ pub fn create_spec_with_context(
         files_created: vec!["PRD.md".to_string(), "spec.md".to_string()],
         feature_name,
         slug,
+        constitution_version_at_creation: constitution_version,
     })
+}
+
+/// P94/SPEC-KIT-105: Get current constitution version from overlay DB
+///
+/// Returns None if DB unavailable or no constitution exists.
+fn get_current_constitution_version() -> Option<u32> {
+    let config = codex_stage0::Stage0Config::load().ok()?;
+    let db = codex_stage0::OverlayDb::connect_and_init(&config).ok()?;
+    let version = db.get_constitution_version().ok()?;
+    // Version 0 means no constitution
+    if version == 0 {
+        None
+    } else {
+        Some(version)
+    }
 }
 
 /// Fill PRD template with enhanced context from modal (SPEC-KIT-970)
@@ -476,15 +501,22 @@ fn fill_spec_template(
     spec_id: &str,
     feature_name: &str,
     description: &str,
+    constitution_version: Option<u32>, // P94/SPEC-KIT-105
 ) -> Result<String, SpecKitError> {
     let template = read_template_or_embedded("spec-template.md")?;
 
     let date = Local::now().format("%Y-%m-%d").to_string();
 
+    // P94: Format constitution version for template
+    let constitution_ver_str = constitution_version
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| "-".to_string());
+
     let content = template
         .replace("[SPEC_ID]", spec_id)
         .replace("[FEATURE_NAME]", feature_name)
         .replace("[CREATION_DATE]", &date)
+        .replace("[CONSTITUTION_VERSION]", &constitution_ver_str) // P94
         .replace("[BRANCH_NAME]", "TBD")
         .replace("[OWNER]", "Code")
         .replace("[BACKGROUND_PROBLEM_STATEMENT]", description)
@@ -619,6 +651,7 @@ const EMBEDDED_SPEC_TEMPLATE: &str = r#"**SPEC-ID**: [SPEC_ID]
 **Created**: [CREATION_DATE]
 **Branch**: [BRANCH_NAME]
 **Owner**: [OWNER]
+**Constitution-Version**: [CONSTITUTION_VERSION]
 
 **Context**: [BACKGROUND_PROBLEM_STATEMENT]
 

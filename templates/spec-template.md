@@ -4,6 +4,7 @@
 **Created**: [CREATION_DATE]
 **Branch**: [BRANCH_NAME]
 **Owner**: [OWNER]
+**Constitution-Version**: [CONSTITUTION_VERSION]
 
 **Context**: [BACKGROUND_PROBLEM_STATEMENT]
 
