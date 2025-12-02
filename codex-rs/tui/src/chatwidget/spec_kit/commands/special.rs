@@ -1050,6 +1050,11 @@ impl SpecKitCommand for SpecKitVisionCommand {
 /// P94/SPEC-KIT-105: Command: /speckit.check-alignment
 /// Check drift between specs and current constitution version
 /// Compares Constitution-Version at spec creation vs current version
+///
+/// P95: Extended with --deep mode for content-level drift detection
+/// - --deep: Run Stage 0 for each spec to detect actual conflicts (uses Tier-2)
+/// - --spec SPEC-ID: Check single spec (reduces Tier-2 usage in --deep mode)
+/// - --json: Output in JSON format for CI
 pub struct SpecKitCheckAlignmentCommand;
 
 impl SpecKitCommand for SpecKitCheckAlignmentCommand {
@@ -1062,23 +1067,75 @@ impl SpecKitCommand for SpecKitCheckAlignmentCommand {
     }
 
     fn description(&self) -> &'static str {
-        "check spec alignment with current constitution (P94 drift detection)"
+        "check spec alignment with constitution (--deep for content analysis)"
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
-        use std::fs;
-        use ratatui::text::Line;
-        use crate::history_cell::{HistoryCellType, PlainHistoryCell};
+        execute_alignment_check(widget, args);
+    }
 
-        let json_mode = args.contains("--json");
-        let cwd = &widget.config.cwd;
-        let docs_dir = cwd.join("docs");
+    fn requires_args(&self) -> bool {
+        false
+    }
+}
 
-        // Get current constitution version
-        let current_version = get_current_constitution_version_for_check();
+/// P95: Execute alignment check with optional --deep mode
+fn execute_alignment_check(widget: &mut ChatWidget, args: String) {
+    use std::fs;
+    use ratatui::text::Line;
+    use crate::history_cell::{HistoryCellType, PlainHistoryCell};
 
-        // Scan for SPEC directories
-        let spec_dirs: Vec<_> = if docs_dir.exists() {
+    // P95: Parse flags
+    let json_mode = args.contains("--json");
+    let deep_mode = args.contains("--deep");
+
+    // P95: Parse --spec SPEC-ID flag
+    let single_spec: Option<String> = {
+        let args_vec: Vec<&str> = args.split_whitespace().collect();
+        args_vec.iter().position(|&a| a == "--spec").and_then(|pos| {
+            args_vec.get(pos + 1).map(|s| s.to_string())
+        })
+    };
+
+    let cwd = &widget.config.cwd;
+    let docs_dir = cwd.join("docs");
+
+    // Get current constitution version
+    let current_version = get_current_constitution_version_for_check();
+
+    // P95: Get exception count from overlay DB
+    let exception_count = get_exception_count();
+
+    // Scan for SPEC directories (or single spec)
+    let spec_entries: Vec<_> = if let Some(ref spec_id) = single_spec {
+        // Single spec mode
+        let spec_dir = docs_dir.join(spec_id);
+        if spec_dir.exists() && spec_dir.is_dir() {
+            vec![spec_dir]
+        } else {
+            // Try finding by prefix
+            if docs_dir.exists() {
+                fs::read_dir(&docs_dir)
+                    .ok()
+                    .map(|entries| {
+                        entries
+                            .filter_map(|e| e.ok())
+                            .filter(|e| {
+                                e.file_name()
+                                    .to_string_lossy()
+                                    .starts_with(spec_id)
+                            })
+                            .map(|e| e.path())
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            }
+        }
+    } else {
+        // All specs mode
+        if docs_dir.exists() {
             fs::read_dir(&docs_dir)
                 .ok()
                 .map(|entries| {
@@ -1089,110 +1146,218 @@ impl SpecKitCommand for SpecKitCheckAlignmentCommand {
                                 .to_string_lossy()
                                 .starts_with("SPEC-KIT-")
                         })
+                        .map(|e| e.path())
                         .collect()
                 })
                 .unwrap_or_default()
         } else {
             Vec::new()
+        }
+    };
+
+    if spec_entries.is_empty() {
+        let msg = if single_spec.is_some() {
+            format!("Spec '{}' not found in docs/ directory", single_spec.unwrap())
+        } else {
+            "No specs found in docs/ directory".to_string()
         };
 
-        if spec_dirs.is_empty() {
-            if json_mode {
-                widget.history_push(PlainHistoryCell::new(
-                    vec![Line::from("[]")],
-                    HistoryCellType::Notice,
-                ));
-            } else {
-                widget.history_push(PlainHistoryCell::new(
-                    vec![
-                        Line::from("No specs found in docs/ directory"),
-                        Line::from(""),
-                        Line::from("Create a spec with: /speckit.new <description>"),
-                    ],
-                    HistoryCellType::Notice,
-                ));
-            }
-            widget.request_redraw();
-            return;
-        }
-
-        // Collect alignment info for each spec
-        let mut results: Vec<AlignmentResult> = Vec::new();
-
-        for entry in spec_dirs {
-            let dir_name = entry.file_name().to_string_lossy().to_string();
-            let spec_id = extract_spec_id(&dir_name);
-            let spec_md_path = entry.path().join("spec.md");
-
-            let created_version = if spec_md_path.exists() {
-                extract_constitution_version(&spec_md_path)
-            } else {
-                None
-            };
-
-            let status = match (created_version, current_version) {
-                (Some(created), Some(current)) if created == current => AlignmentStatus::Fresh,
-                (Some(_), Some(_)) => AlignmentStatus::Stale,
-                _ => AlignmentStatus::Unknown,
-            };
-
-            results.push(AlignmentResult {
-                spec_id,
-                created_version,
-                current_version,
-                status,
-            });
-        }
-
-        // Count statuses
-        let fresh_count = results.iter().filter(|r| matches!(r.status, AlignmentStatus::Fresh)).count();
-        let stale_count = results.iter().filter(|r| matches!(r.status, AlignmentStatus::Stale)).count();
-        let unknown_count = results.iter().filter(|r| matches!(r.status, AlignmentStatus::Unknown)).count();
-
-        // P94/SPEC-KIT-105: AlignmentCheckRun event for telemetry
-        tracing::info!(
-            event_type = "AlignmentCheckRun",
-            total_specs = results.len(),
-            fresh_count,
-            stale_count,
-            unknown_count,
-            "Alignment check completed"
-        );
-
-        // Output results
         if json_mode {
-            // JSON output for CI
-            let json_entries: Vec<String> = results
-                .iter()
-                .map(|r| {
-                    format!(
-                        r#"  {{"spec_id": "{}", "constitution_version_at_creation": {}, "current_constitution_version": {}, "staleness": "{}"}}"#,
-                        r.spec_id,
-                        r.created_version.map(|v| v.to_string()).unwrap_or_else(|| "null".to_string()),
-                        r.current_version.map(|v| v.to_string()).unwrap_or_else(|| "null".to_string()),
-                        r.status.as_str()
-                    )
-                })
-                .collect();
-
-            let json_output = format!("[\n{}\n]", json_entries.join(",\n"));
             widget.history_push(PlainHistoryCell::new(
-                vec![Line::from(json_output)],
+                vec![Line::from("[]")],
                 HistoryCellType::Notice,
             ));
         } else {
-            // TUI table output
-            let mut lines = vec![
-                Line::from("Constitution Alignment Check"),
-                Line::from(""),
-                Line::from(format!(
-                    "Current constitution version: {}",
-                    current_version.map(|v| v.to_string()).unwrap_or_else(|| "-".to_string())
-                )),
-                Line::from(""),
-                Line::from("SPEC ID          | Created Ver | Current Ver | Status"),
-                Line::from("-----------------+-------------+-------------+--------"),
-            ];
+            widget.history_push(PlainHistoryCell::new(
+                vec![
+                    Line::from(msg),
+                    Line::from(""),
+                    Line::from("Create a spec with: /speckit.new <description>"),
+                ],
+                HistoryCellType::Notice,
+            ));
+        }
+        widget.request_redraw();
+        return;
+    }
+
+    // P95: Track Tier-2 calls for deep mode telemetry
+    let mut tier2_calls = 0u32;
+
+    // Collect alignment info for each spec
+    let mut results: Vec<DeepAlignmentResult> = Vec::new();
+
+    for spec_path in spec_entries {
+        let dir_name = spec_path.file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let spec_id = extract_spec_id(&dir_name);
+        let spec_md_path = spec_path.join("spec.md");
+
+        let created_version = if spec_md_path.exists() {
+            extract_constitution_version(&spec_md_path)
+        } else {
+            None
+        };
+
+        let version_status = match (created_version, current_version) {
+            (Some(created), Some(current)) if created == current => AlignmentStatus::Fresh,
+            (Some(_), Some(_)) => AlignmentStatus::Stale,
+            _ => AlignmentStatus::Unknown,
+        };
+
+        // P95: Deep mode - run Stage 0 for content-level conflict detection
+        let (content_conflicts, content_aligned) = if deep_mode {
+            tier2_calls += 1;
+            let conflicts = run_stage0_for_constitution_check(widget, &spec_id);
+            let has_conflicts = conflicts.as_ref().map(|c| !c.is_empty()).unwrap_or(false);
+            (conflicts, !has_conflicts)
+        } else {
+            (None, true) // Assume aligned in non-deep mode
+        };
+
+        results.push(DeepAlignmentResult {
+            spec_id,
+            created_version,
+            current_version,
+            version_status,
+            content_aligned,
+            content_conflicts,
+        });
+    }
+
+    // Count statuses
+    let fresh_count = results.iter().filter(|r| matches!(r.version_status, AlignmentStatus::Fresh)).count();
+    let stale_count = results.iter().filter(|r| matches!(r.version_status, AlignmentStatus::Stale)).count();
+    let unknown_count = results.iter().filter(|r| matches!(r.version_status, AlignmentStatus::Unknown)).count();
+    let content_conflict_count = if deep_mode {
+        results.iter().filter(|r| !r.content_aligned).count()
+    } else {
+        0
+    };
+
+    // P95: DeepAlignmentCheckRun event for telemetry
+    tracing::info!(
+        event_type = "DeepAlignmentCheckRun",
+        total_specs = results.len(),
+        fresh_count,
+        stale_count,
+        unknown_count,
+        content_conflict_count,
+        exception_count,
+        deep_mode,
+        tier2_calls,
+        "Deep alignment check completed"
+    );
+
+    // Output results
+    if json_mode {
+        // P95: JSON output with deep mode fields
+        let json_entries: Vec<String> = results
+            .iter()
+            .map(|r| {
+                let base = format!(
+                    r#"    "spec_id": "{}",
+    "constitution_version_at_creation": {},
+    "current_constitution_version": {},
+    "version_staleness": "{}""#,
+                    r.spec_id,
+                    r.created_version.map(|v| v.to_string()).unwrap_or_else(|| "null".to_string()),
+                    r.current_version.map(|v| v.to_string()).unwrap_or_else(|| "null".to_string()),
+                    r.version_status.as_str()
+                );
+
+                if deep_mode {
+                    let conflicts_json = r.content_conflicts
+                        .as_ref()
+                        .map(|c| format!("\"{}\"", c.replace('\"', "\\\"").replace('\n', "\\n")))
+                        .unwrap_or_else(|| "null".to_string());
+
+                    format!(
+                        "  {{\n{},\n    \"content_aligned\": {},\n    \"content_conflicts\": {}\n  }}",
+                        base,
+                        r.content_aligned,
+                        conflicts_json
+                    )
+                } else {
+                    format!("  {{\n{}\n  }}", base)
+                }
+            })
+            .collect();
+
+        let metadata = format!(
+            r#"{{
+  "deep_mode": {},
+  "tier2_calls": {},
+  "exception_count": {},
+  "summary": {{
+    "total": {},
+    "fresh": {},
+    "stale": {},
+    "unknown": {},
+    "content_conflicts": {}
+  }},
+  "specs": [
+{}
+  ]
+}}"#,
+            deep_mode,
+            tier2_calls,
+            exception_count,
+            results.len(),
+            fresh_count,
+            stale_count,
+            unknown_count,
+            content_conflict_count,
+            json_entries.join(",\n")
+        );
+
+        widget.history_push(PlainHistoryCell::new(
+            vec![Line::from(metadata)],
+            HistoryCellType::Notice,
+        ));
+    } else {
+        // TUI table output
+        let mode_indicator = if deep_mode { " (--deep)" } else { "" };
+        let mut lines = vec![
+            Line::from(format!("Constitution Alignment Check{}", mode_indicator)),
+            Line::from(""),
+            Line::from(format!(
+                "Current constitution version: {} | Exceptions: {}",
+                current_version.map(|v| v.to_string()).unwrap_or_else(|| "-".to_string()),
+                exception_count
+            )),
+            Line::from(""),
+        ];
+
+        if deep_mode {
+            lines.push(Line::from("SPEC ID          | Ver Drift | Content | Conflicts"));
+            lines.push(Line::from("-----------------+-----------+---------+----------"));
+
+            for r in &results {
+                let ver_drift = match r.version_status {
+                    AlignmentStatus::Fresh => "fresh",
+                    AlignmentStatus::Stale => "stale",
+                    AlignmentStatus::Unknown => "unknown",
+                };
+                let content = if r.content_aligned { "OK" } else { "CONFLICT" };
+                let conflicts = if r.content_conflicts.is_some() && !r.content_aligned {
+                    "yes"
+                } else {
+                    "-"
+                };
+
+                lines.push(Line::from(format!(
+                    "{:<16} | {:>9} | {:>7} | {}",
+                    r.spec_id,
+                    ver_drift,
+                    content,
+                    conflicts
+                )));
+            }
+        } else {
+            lines.push(Line::from("SPEC ID          | Created Ver | Current Ver | Status"));
+            lines.push(Line::from("-----------------+-------------+-------------+--------"));
 
             for r in &results {
                 let created = r.created_version
@@ -1207,30 +1372,67 @@ impl SpecKitCommand for SpecKitCheckAlignmentCommand {
                     r.spec_id,
                     created,
                     current,
-                    r.status.as_str()
+                    r.version_status.as_str()
                 )));
             }
-
-            lines.push(Line::from(""));
-            lines.push(Line::from(format!(
-                "Summary: {} fresh, {} stale, {} unknown",
-                fresh_count, stale_count, unknown_count
-            )));
-
-            if stale_count > 0 {
-                lines.push(Line::from(""));
-                lines.push(Line::from("Stale specs may benefit from re-specification with updated constitution."));
-            }
-
-            widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));
         }
 
-        widget.request_redraw();
+        lines.push(Line::from(""));
+        lines.push(Line::from(format!(
+            "Summary: {} fresh, {} stale, {} unknown{}",
+            fresh_count,
+            stale_count,
+            unknown_count,
+            if deep_mode {
+                format!(", {} content conflicts", content_conflict_count)
+            } else {
+                String::new()
+            }
+        )));
+
+        if deep_mode {
+            lines.push(Line::from(format!("Tier-2 calls: {}", tier2_calls)));
+        }
+
+        if stale_count > 0 || content_conflict_count > 0 {
+            lines.push(Line::from(""));
+            if content_conflict_count > 0 {
+                lines.push(Line::from("Use /speckit.specify SPEC-ID --force to proceed with conflicts."));
+            } else {
+                lines.push(Line::from("Stale specs may benefit from re-specification with updated constitution."));
+            }
+        }
+
+        if !deep_mode {
+            lines.push(Line::from(""));
+            lines.push(Line::from("Use --deep for content-level conflict detection (requires Tier-2)."));
+        }
+
+        widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));
     }
 
-    fn requires_args(&self) -> bool {
-        false
-    }
+    widget.request_redraw();
+}
+
+/// P95: Get count of Exception constitution memories
+fn get_exception_count() -> u32 {
+    let config = match codex_stage0::Stage0Config::load() {
+        Ok(c) => c,
+        Err(_) => return 0,
+    };
+
+    let db = match codex_stage0::OverlayDb::connect_and_init(&config) {
+        Ok(d) => d,
+        Err(_) => return 0,
+    };
+
+    // Get all constitution memories and filter for exceptions (priority 7)
+    let memories = match db.get_constitution_memories(100) {
+        Ok(m) => m,
+        Err(_) => return 0,
+    };
+
+    memories.iter().filter(|m| m.initial_priority == 7).count() as u32
 }
 
 /// Alignment status for a spec
@@ -1251,13 +1453,27 @@ impl AlignmentStatus {
     }
 }
 
-/// Result of alignment check for a single spec
+/// Result of alignment check for a single spec (legacy P94)
 #[derive(Debug)]
+#[allow(dead_code)]
 struct AlignmentResult {
     spec_id: String,
     created_version: Option<u32>,
     current_version: Option<u32>,
     status: AlignmentStatus,
+}
+
+/// P95: Extended alignment result with deep mode fields
+#[derive(Debug)]
+struct DeepAlignmentResult {
+    spec_id: String,
+    created_version: Option<u32>,
+    current_version: Option<u32>,
+    version_status: AlignmentStatus,
+    /// P95: Whether content passes constitution alignment (deep mode only)
+    content_aligned: bool,
+    /// P95: Raw conflict text from Stage 0 (deep mode only)
+    content_conflicts: Option<String>,
 }
 
 /// Extract SPEC-KIT-### from directory name like "SPEC-KIT-105-drift-detection"
