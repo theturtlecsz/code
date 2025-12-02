@@ -397,13 +397,14 @@ impl SpecKitCommand for SpecConsensusCommand {
 }
 
 /// Command: /speckit.constitution
-/// Manage project constitution (view/add/sync)
+/// Manage project constitution (view/add/sync/add-exception)
 ///
 /// P91/SPEC-KIT-105: Constitution management command with subcommands:
 /// - view (default): Display current constitution from overlay DB
 /// - add: Interactive entry to add constitution items
 /// - sync: Regenerate NL_CONSTITUTION.md and memory/constitution.md
 /// - ace: Extract and pin bullets to ACE playbook (legacy behavior)
+/// - add-exception (P95): Create sanctioned exception to guardrails/principles
 pub struct SpecKitConstitutionCommand;
 
 impl SpecKitCommand for SpecKitConstitutionCommand {
@@ -416,7 +417,7 @@ impl SpecKitCommand for SpecKitConstitutionCommand {
     }
 
     fn description(&self) -> &'static str {
-        "manage constitution (view/add/sync)"
+        "manage constitution (view/add/sync/add-exception)"
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
@@ -432,9 +433,10 @@ impl SpecKitCommand for SpecKitConstitutionCommand {
             "add" => execute_constitution_add(widget, rest.trim()),
             "sync" => execute_constitution_sync(widget),
             "ace" => execute_constitution_ace(widget),
+            "add-exception" => execute_constitution_add_exception(widget, rest.trim()),
             _ => {
                 widget.history_push(crate::history_cell::new_error_event(format!(
-                    "Unknown subcommand '{}'. Use: view, add, sync, or ace",
+                    "Unknown subcommand '{}'. Use: view, add, sync, ace, or add-exception",
                     subcommand
                 )));
                 widget.request_redraw();
@@ -527,6 +529,8 @@ fn execute_constitution_view(widget: &mut ChatWidget) {
         .iter()
         .filter(|m| m.initial_priority == 8 && m.memory_id.contains("nongoal"))
         .collect();
+    // P95: Exceptions have priority 7
+    let exceptions: Vec<_> = memories.iter().filter(|m| m.initial_priority == 7).collect();
 
     // Count vision-created content
     let vision_count = memories
@@ -611,6 +615,25 @@ fn execute_constitution_view(widget: &mut ChatWidget) {
             content.to_string()
         };
         lines.push(ratatui::text::Line::from(format!("  • {}", truncated)));
+    }
+
+    // P95: Exceptions (sanctioned violations)
+    if !exceptions.is_empty() {
+        lines.push(ratatui::text::Line::from(format!(
+            "⚠️ Exceptions ({})",
+            exceptions.len()
+        )));
+        for m in &exceptions {
+            let content = m.content_raw.as_deref().unwrap_or("[no content]");
+            // Extract the first line (title) from exception content
+            let title = content.lines().next().unwrap_or("[no title]");
+            let truncated = if title.len() > 60 {
+                format!("{}...", &title[..60])
+            } else {
+                title.to_string()
+            };
+            lines.push(ratatui::text::Line::from(format!("  • {}", truncated)));
+        }
     }
 
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
@@ -1020,6 +1043,218 @@ fn execute_constitution_ace(widget: &mut ChatWidget) {
         }
     }
 
+    widget.request_redraw();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P95/SPEC-KIT-105: Constitution Exception Management
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// P95/Task 5: Add a sanctioned exception to the constitution
+///
+/// Exceptions document approved violations of guardrails or principles.
+/// They have priority 7 (below guardrails/principles) to ensure base rules
+/// remain visible in DCC output.
+///
+/// Usage:
+///   /speckit.constitution add-exception --guardrail "G1" --spec SPEC-ID --reason "justification"
+///   /speckit.constitution add-exception --principle "P2" --spec SPEC-ID --reason "justification"
+///
+/// Or without flags for form-based input.
+fn execute_constitution_add_exception(widget: &mut ChatWidget, args: &str) {
+    use ratatui::text::Line;
+    use crate::history_cell::{HistoryCellType, PlainHistoryCell};
+
+    // Parse flags: --guardrail, --principle, --spec, --reason
+    let args_vec: Vec<&str> = args.split_whitespace().collect();
+
+    let mut exempts: Option<String> = None;
+    let mut exempts_type = "guardrail"; // Default to guardrail
+    let mut spec_id: Option<String> = None;
+    let mut reason: Option<String> = None;
+
+    let mut i = 0;
+    while i < args_vec.len() {
+        match args_vec[i] {
+            "--guardrail" | "-g" => {
+                if i + 1 < args_vec.len() {
+                    exempts = Some(args_vec[i + 1].to_string());
+                    exempts_type = "guardrail";
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "--principle" | "-p" => {
+                if i + 1 < args_vec.len() {
+                    exempts = Some(args_vec[i + 1].to_string());
+                    exempts_type = "principle";
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "--spec" | "-s" => {
+                if i + 1 < args_vec.len() {
+                    spec_id = Some(args_vec[i + 1].to_string());
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "--reason" | "-r" => {
+                // Collect all remaining args as reason
+                if i + 1 < args_vec.len() {
+                    reason = Some(args_vec[i + 1..].join(" "));
+                    break;
+                } else {
+                    i += 1;
+                }
+            }
+            _ => {
+                i += 1;
+            }
+        }
+    }
+
+    // If missing required args, show usage
+    if exempts.is_none() || spec_id.is_none() || reason.is_none() {
+        widget.history_push(PlainHistoryCell::new(
+            vec![
+                Line::from("📋 Constitution Add Exception (P95)"),
+                Line::from(""),
+                Line::from("Usage:"),
+                Line::from("  /speckit.constitution add-exception --guardrail <ID> --spec <SPEC-ID> --reason <text>"),
+                Line::from("  /speckit.constitution add-exception --principle <ID> --spec <SPEC-ID> --reason <text>"),
+                Line::from(""),
+                Line::from("Options:"),
+                Line::from("  --guardrail, -g  Guardrail ID being exempted (e.g., G1)"),
+                Line::from("  --principle, -p  Principle ID being exempted (e.g., P2)"),
+                Line::from("  --spec, -s       SPEC ID this exception applies to"),
+                Line::from("  --reason, -r     Justification for the exception"),
+                Line::from(""),
+                Line::from("Example:"),
+                Line::from("  /speckit.constitution add-exception --guardrail G1 --spec SPEC-KIT-105 --reason \"Debug mode requires direct file access\""),
+            ],
+            HistoryCellType::Notice,
+        ));
+        widget.request_redraw();
+        return;
+    }
+
+    let exempts = exempts.unwrap();
+    let spec_id = spec_id.unwrap();
+    let reason = reason.unwrap();
+
+    // Connect to DB
+    let config = match codex_stage0::Stage0Config::load() {
+        Ok(c) => c,
+        Err(e) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Failed to load Stage0 config: {}",
+                e
+            )));
+            widget.request_redraw();
+            return;
+        }
+    };
+
+    let db = match codex_stage0::OverlayDb::connect_and_init(&config) {
+        Ok(d) => d,
+        Err(e) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Failed to connect to overlay DB: {}",
+                e
+            )));
+            widget.request_redraw();
+            return;
+        }
+    };
+
+    // Build exception content using template structure
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let exception_content = format!(
+        r#"[EXCEPTION]: Exemption for {} in {}
+
+CONTEXT: Exempts {} {} from constitution enforcement
+RATIONALE: {}
+SCOPE:
+- spec_id: {}
+- code_units: []
+- expires_after_version: null
+
+APPROVED_BY: user on {}"#,
+        exempts,
+        spec_id,
+        exempts_type,
+        exempts,
+        reason,
+        spec_id,
+        today
+    );
+
+    // Generate unique memory ID
+    let memory_id = format!(
+        "exception-{}-{}-{}",
+        spec_id.to_lowercase().replace(' ', "-"),
+        exempts.to_lowercase().replace(' ', "-"),
+        uuid::Uuid::new_v4().to_string().split('-').next().unwrap_or("0000")
+    );
+
+    // Upsert the exception memory
+    if let Err(e) = db.upsert_constitution_memory(
+        &memory_id,
+        codex_stage0::ConstitutionType::Exception,
+        &exception_content,
+    ) {
+        widget.history_push(crate::history_cell::new_error_event(format!(
+            "Failed to create exception: {}",
+            e
+        )));
+        widget.request_redraw();
+        return;
+    }
+
+    // Increment constitution version
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    exception_content.hash(&mut hasher);
+    let hash = format!("{:016x}", hasher.finish());
+    if let Err(e) = db.increment_constitution_version(Some(&hash)) {
+        widget.history_push(crate::history_cell::new_error_event(format!(
+            "Failed to increment version: {}",
+            e
+        )));
+        widget.request_redraw();
+        return;
+    }
+
+    // P95/Task 4: Log ConstitutionExceptionCreated event
+    tracing::info!(
+        event_type = "ConstitutionExceptionCreated",
+        spec_id = %spec_id,
+        exempts = %exempts,
+        exempts_type = %exempts_type,
+        memory_id = %memory_id,
+        "Exception created for constitution violation"
+    );
+
+    // Show success message
+    widget.history_push(PlainHistoryCell::new(
+        vec![
+            Line::from("✅ Exception created successfully"),
+            Line::from(""),
+            Line::from(format!("   Exempts: {} {}", exempts_type, exempts)),
+            Line::from(format!("   Spec: {}", spec_id)),
+            Line::from(format!("   Reason: {}", reason)),
+            Line::from(""),
+            Line::from(format!("   Memory ID: {}", memory_id)),
+            Line::from("   Priority: 7 (below guardrails/principles)"),
+            Line::from(""),
+            Line::from("   Run /speckit.constitution view to see all exceptions."),
+        ],
+        HistoryCellType::Notice,
+    ));
     widget.request_redraw();
 }
 
