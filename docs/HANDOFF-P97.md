@@ -123,27 +123,38 @@ Turn Librarian from a **simulator** into a **real maintenance tool**:
 
 ## P98 Continuation Prompt
 
-See `docs/PROMPT-P98-LIBRARIAN.md` for the full prompt.
+See `docs/PROMPT-P98-LIBRARIAN.md` for the full prompt with:
+- 6 detailed tasks with code snippets
+- SQLite schema for audit trail
+- Test plan and success criteria
+- Commit strategy
 
-Quick version:
+**Design Decisions Confirmed**:
+| Decision | Choice |
+|----------|--------|
+| Rollback | Audit trail only (SQLite tables, no `--rollback`) |
+| MCP Client | Hybrid trait (stage0 trait, TUI impl, mock tests) |
+| Progress | Both modes (quiet default, `--verbose` streaming) |
+| Optional | None (keep minimal) |
+
+Quick start:
 
 ```
 **Ultrathink** P98 Session: SPEC-KIT-103 Librarian v1 Integration
 
-Read docs/HANDOFF-P97.md for implementation context.
-Read docs/PROMPT-P98-LIBRARIAN.md for task breakdown.
+Read docs/PROMPT-P98-LIBRARIAN.md for full task breakdown.
 
-**Goal**: Wire Librarian v1 to live local-memory corpus with safety guardrails
+**Goal**: Wire Librarian v1 to live local-memory corpus
 
-Constraints: No algorithm changes, dry-run default, domain/limit enforcement, idempotent
+Tasks (6):
+1. LocalMemoryClient trait in stage0
+2. MCP implementation in TUI
+3. Audit trail SQLite tables
+4. --apply mode for memory writes
+5. --verbose progress + output modes
+6. RelationshipsClient for causal edges
 
-Tasks:
-1. MCP query integration (list_memories + get_memory)
-2. Apply mode (--apply → update_memory)
-3. Causal edges (--apply-causal → create_relationship)
-4. JSON report schema standardization
-
-Session Lineage: P89 → ... → P97 → **P98**
+Commit after each task.
 
 **ultrathink**
 ```
