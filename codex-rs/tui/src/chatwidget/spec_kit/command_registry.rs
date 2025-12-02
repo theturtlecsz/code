@@ -161,6 +161,7 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
     registry.register(Box::new(SpecConsensusCommand));
     registry.register(Box::new(SpecKitConstitutionCommand));
     registry.register(Box::new(SpecKitVisionCommand)); // P93/SPEC-KIT-105: Vision Q&A wizard
+    registry.register(Box::new(SpecKitCheckAlignmentCommand)); // P94/SPEC-KIT-105: Drift detection
     registry.register(Box::new(SpecKitAceStatusCommand));
     registry.register(Box::new(SpecKitSeedCommand)); // SPEC-KIT-102: Shadow Notebook Seeder
     registry.register(Box::new(SpecKitPlanPipelineCommand)); // P92/SPEC-KIT-105: Planning pipeline

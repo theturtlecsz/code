@@ -856,6 +856,245 @@ impl SpecKitCommand for SpecKitVisionCommand {
     }
 }
 
+/// P94/SPEC-KIT-105: Command: /speckit.check-alignment
+/// Check drift between specs and current constitution version
+/// Compares Constitution-Version at spec creation vs current version
+pub struct SpecKitCheckAlignmentCommand;
+
+impl SpecKitCommand for SpecKitCheckAlignmentCommand {
+    fn name(&self) -> &'static str {
+        "speckit.check-alignment"
+    }
+
+    fn aliases(&self) -> &[&'static str] {
+        &["check-alignment"]
+    }
+
+    fn description(&self) -> &'static str {
+        "check spec alignment with current constitution (P94 drift detection)"
+    }
+
+    fn execute(&self, widget: &mut ChatWidget, args: String) {
+        use std::fs;
+        use ratatui::text::Line;
+        use crate::history_cell::{HistoryCellType, PlainHistoryCell};
+
+        let json_mode = args.contains("--json");
+        let cwd = &widget.config.cwd;
+        let docs_dir = cwd.join("docs");
+
+        // Get current constitution version
+        let current_version = get_current_constitution_version_for_check();
+
+        // Scan for SPEC directories
+        let spec_dirs: Vec<_> = if docs_dir.exists() {
+            fs::read_dir(&docs_dir)
+                .ok()
+                .map(|entries| {
+                    entries
+                        .filter_map(|e| e.ok())
+                        .filter(|e| {
+                            e.file_name()
+                                .to_string_lossy()
+                                .starts_with("SPEC-KIT-")
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        if spec_dirs.is_empty() {
+            if json_mode {
+                widget.history_push(PlainHistoryCell::new(
+                    vec![Line::from("[]")],
+                    HistoryCellType::Notice,
+                ));
+            } else {
+                widget.history_push(PlainHistoryCell::new(
+                    vec![
+                        Line::from("No specs found in docs/ directory"),
+                        Line::from(""),
+                        Line::from("Create a spec with: /speckit.new <description>"),
+                    ],
+                    HistoryCellType::Notice,
+                ));
+            }
+            widget.request_redraw();
+            return;
+        }
+
+        // Collect alignment info for each spec
+        let mut results: Vec<AlignmentResult> = Vec::new();
+
+        for entry in spec_dirs {
+            let dir_name = entry.file_name().to_string_lossy().to_string();
+            let spec_id = extract_spec_id(&dir_name);
+            let spec_md_path = entry.path().join("spec.md");
+
+            let created_version = if spec_md_path.exists() {
+                extract_constitution_version(&spec_md_path)
+            } else {
+                None
+            };
+
+            let status = match (created_version, current_version) {
+                (Some(created), Some(current)) if created == current => AlignmentStatus::Fresh,
+                (Some(_), Some(_)) => AlignmentStatus::Stale,
+                _ => AlignmentStatus::Unknown,
+            };
+
+            results.push(AlignmentResult {
+                spec_id,
+                created_version,
+                current_version,
+                status,
+            });
+        }
+
+        // Count statuses
+        let fresh_count = results.iter().filter(|r| matches!(r.status, AlignmentStatus::Fresh)).count();
+        let stale_count = results.iter().filter(|r| matches!(r.status, AlignmentStatus::Stale)).count();
+        let unknown_count = results.iter().filter(|r| matches!(r.status, AlignmentStatus::Unknown)).count();
+
+        // Output results
+        if json_mode {
+            // JSON output for CI
+            let json_entries: Vec<String> = results
+                .iter()
+                .map(|r| {
+                    format!(
+                        r#"  {{"spec_id": "{}", "constitution_version_at_creation": {}, "current_constitution_version": {}, "staleness": "{}"}}"#,
+                        r.spec_id,
+                        r.created_version.map(|v| v.to_string()).unwrap_or_else(|| "null".to_string()),
+                        r.current_version.map(|v| v.to_string()).unwrap_or_else(|| "null".to_string()),
+                        r.status.as_str()
+                    )
+                })
+                .collect();
+
+            let json_output = format!("[\n{}\n]", json_entries.join(",\n"));
+            widget.history_push(PlainHistoryCell::new(
+                vec![Line::from(json_output)],
+                HistoryCellType::Notice,
+            ));
+        } else {
+            // TUI table output
+            let mut lines = vec![
+                Line::from("Constitution Alignment Check"),
+                Line::from(""),
+                Line::from(format!(
+                    "Current constitution version: {}",
+                    current_version.map(|v| v.to_string()).unwrap_or_else(|| "-".to_string())
+                )),
+                Line::from(""),
+                Line::from("SPEC ID          | Created Ver | Current Ver | Status"),
+                Line::from("-----------------+-------------+-------------+--------"),
+            ];
+
+            for r in &results {
+                let created = r.created_version
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "-".to_string());
+                let current = r.current_version
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "-".to_string());
+
+                lines.push(Line::from(format!(
+                    "{:<16} | {:>11} | {:>11} | {}",
+                    r.spec_id,
+                    created,
+                    current,
+                    r.status.as_str()
+                )));
+            }
+
+            lines.push(Line::from(""));
+            lines.push(Line::from(format!(
+                "Summary: {} fresh, {} stale, {} unknown",
+                fresh_count, stale_count, unknown_count
+            )));
+
+            if stale_count > 0 {
+                lines.push(Line::from(""));
+                lines.push(Line::from("Stale specs may benefit from re-specification with updated constitution."));
+            }
+
+            widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));
+        }
+
+        widget.request_redraw();
+    }
+
+    fn requires_args(&self) -> bool {
+        false
+    }
+}
+
+/// Alignment status for a spec
+#[derive(Debug)]
+enum AlignmentStatus {
+    Fresh,
+    Stale,
+    Unknown,
+}
+
+impl AlignmentStatus {
+    fn as_str(&self) -> &'static str {
+        match self {
+            AlignmentStatus::Fresh => "fresh",
+            AlignmentStatus::Stale => "stale",
+            AlignmentStatus::Unknown => "unknown",
+        }
+    }
+}
+
+/// Result of alignment check for a single spec
+#[derive(Debug)]
+struct AlignmentResult {
+    spec_id: String,
+    created_version: Option<u32>,
+    current_version: Option<u32>,
+    status: AlignmentStatus,
+}
+
+/// Extract SPEC-KIT-### from directory name like "SPEC-KIT-105-drift-detection"
+fn extract_spec_id(dir_name: &str) -> String {
+    // Pattern: SPEC-KIT-### followed by optional suffix
+    let parts: Vec<&str> = dir_name.splitn(4, '-').collect();
+    if parts.len() >= 3 {
+        format!("{}-{}-{}", parts[0], parts[1], parts[2])
+    } else {
+        dir_name.to_string()
+    }
+}
+
+/// Extract Constitution-Version from spec.md frontmatter
+fn extract_constitution_version(spec_md_path: &std::path::Path) -> Option<u32> {
+    let content = std::fs::read_to_string(spec_md_path).ok()?;
+
+    for line in content.lines() {
+        if line.starts_with("**Constitution-Version**:") || line.starts_with("**Constitution-Version**: ") {
+            let version_str = line
+                .trim_start_matches("**Constitution-Version**:")
+                .trim_start_matches(" ")
+                .trim();
+            return version_str.parse().ok();
+        }
+    }
+
+    None
+}
+
+/// Get current constitution version from overlay DB (for check-alignment command)
+fn get_current_constitution_version_for_check() -> Option<u32> {
+    let config = codex_stage0::Stage0Config::load().ok()?;
+    let db = codex_stage0::OverlayDb::connect_and_init(&config).ok()?;
+    let version = db.get_constitution_version().ok()?;
+    if version == 0 { None } else { Some(version) }
+}
+
 /// Command: /speckit.seed
 /// Generate NotebookLM-ready Markdown files from local-memory and codebase
 /// SPEC-KIT-102: Shadow Notebook Seeder V1
