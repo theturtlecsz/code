@@ -307,10 +307,24 @@ fn execute_constitution_view(widget: &mut ChatWidget) {
         }
     };
 
-    // Group by type (priority)
+    // Group by type (priority) and distinguish goals from non-goals
     let guardrails: Vec<_> = memories.iter().filter(|m| m.initial_priority == 10).collect();
     let principles: Vec<_> = memories.iter().filter(|m| m.initial_priority == 9).collect();
-    let goals: Vec<_> = memories.iter().filter(|m| m.initial_priority == 8).collect();
+    // P93: Distinguish goals from non-goals by memory_id prefix
+    let goals: Vec<_> = memories
+        .iter()
+        .filter(|m| m.initial_priority == 8 && !m.memory_id.contains("nongoal"))
+        .collect();
+    let nongoals: Vec<_> = memories
+        .iter()
+        .filter(|m| m.initial_priority == 8 && m.memory_id.contains("nongoal"))
+        .collect();
+
+    // Count vision-created content
+    let vision_count = memories
+        .iter()
+        .filter(|m| m.memory_id.starts_with("vision-"))
+        .count();
 
     let mut lines: Vec<ratatui::text::Line<'static>> = Vec::new();
     lines.push(ratatui::text::Line::from("📋 Constitution Status"));
@@ -324,6 +338,12 @@ fn execute_constitution_view(widget: &mut ChatWidget) {
         lines.push(ratatui::text::Line::from(format!(
             "Updated: {}",
             dt.format("%Y-%m-%d %H:%M UTC")
+        )));
+    }
+    if vision_count > 0 {
+        lines.push(ratatui::text::Line::from(format!(
+            "Source: {} from /speckit.vision",
+            vision_count
         )));
     }
     lines.push(ratatui::text::Line::from(""));
@@ -358,12 +378,24 @@ fn execute_constitution_view(widget: &mut ChatWidget) {
         lines.push(ratatui::text::Line::from(format!("  • {}", truncated)));
     }
 
-    // Goals
-    lines.push(ratatui::text::Line::from(format!(
-        "🎯 Goals/Non-Goals ({})",
-        goals.len()
-    )));
+    // Goals (P93: now separate from non-goals)
+    lines.push(ratatui::text::Line::from(format!("🎯 Goals ({})", goals.len())));
     for m in &goals {
+        let content = m.content_raw.as_deref().unwrap_or("[no content]");
+        let truncated = if content.len() > 60 {
+            format!("{}...", &content[..60])
+        } else {
+            content.to_string()
+        };
+        lines.push(ratatui::text::Line::from(format!("  • {}", truncated)));
+    }
+
+    // Non-Goals (P93: now shown separately)
+    lines.push(ratatui::text::Line::from(format!(
+        "🚫 Non-Goals ({})",
+        nongoals.len()
+    )));
+    for m in &nongoals {
         let content = m.content_raw.as_deref().unwrap_or("[no content]");
         let truncated = if content.len() > 60 {
             format!("{}...", &content[..60])

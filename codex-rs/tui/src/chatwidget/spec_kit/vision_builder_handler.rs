@@ -182,6 +182,9 @@ pub fn on_vision_builder_submitted(widget: &mut ChatWidget, answers: HashMap<Str
 
     lines.push(Line::from(""));
     lines.push(Line::from("Next steps:"));
+    lines.push(Line::from(
+        "   /speckit.constitution add guardrail <text> - Add hard constraints (required for gate)",
+    ));
     lines.push(Line::from("   /speckit.constitution view - Review stored constitution"));
     lines.push(Line::from("   /speckit.constitution sync - Regenerate constitution.md"));
 
