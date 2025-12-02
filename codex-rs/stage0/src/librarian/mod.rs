@@ -15,12 +15,17 @@
 //! let templated = apply_template(content, classification.memory_type);
 //! ```
 
+pub mod audit;
 pub mod causal;
 pub mod classifier;
 pub mod client;
 pub mod templater;
 
 // Re-export main types and functions
+pub use audit::{
+    ChangeInput, ChangeRecord, ChangeType, EdgeInput, EdgeRecord, LibrarianAudit,
+    SweepRecord, SweepStatus,
+};
 pub use causal::{CausalConfig, CausalEdge, CausalRelation, detect_causal_language, infer_relationships};
 pub use classifier::{
     ClassificationResult, ClassifierConfig, MemoryType, classify_memory, has_type_tag,

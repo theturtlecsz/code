@@ -62,4 +62,67 @@ CREATE INDEX IF NOT EXISTS idx_constitution_version
 INSERT OR IGNORE INTO constitution_meta (id, version, updated_at)
 VALUES (1, 0, datetime('now'));
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- SPEC-KIT-103 P98: Librarian Audit Trail Tables
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Sweep metadata: records each librarian sweep run
+CREATE TABLE IF NOT EXISTS librarian_sweeps (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id          TEXT NOT NULL UNIQUE,       -- Format: LRB-YYYYMMDD-NNN
+    started_at      TEXT NOT NULL,              -- ISO 8601 timestamp
+    finished_at     TEXT,                        -- NULL if running/failed
+    args_json       TEXT NOT NULL,              -- Serialized SweepConfig
+    stats_json      TEXT,                        -- Serialized SweepSummary
+    status          TEXT DEFAULT 'running'       -- running/completed/failed
+);
+
+CREATE INDEX IF NOT EXISTS idx_librarian_sweeps_run_id
+    ON librarian_sweeps(run_id);
+
+CREATE INDEX IF NOT EXISTS idx_librarian_sweeps_status
+    ON librarian_sweeps(status);
+
+-- Per-memory changes: records each memory modification proposed/applied
+CREATE TABLE IF NOT EXISTS librarian_changes (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    sweep_id        INTEGER NOT NULL REFERENCES librarian_sweeps(id),
+    memory_id       TEXT NOT NULL,
+    change_type     TEXT NOT NULL,              -- retype/template/both
+    old_type        TEXT,                        -- Previous type tag
+    new_type        TEXT,                        -- Suggested new type
+    old_content     TEXT,                        -- Original content (if templated)
+    new_content     TEXT,                        -- Templated content
+    confidence      REAL,                        -- Classification confidence
+    applied         INTEGER NOT NULL DEFAULT 0,  -- 0=dry-run, 1=applied
+    created_at      TEXT NOT NULL               -- ISO 8601 timestamp
+);
+
+CREATE INDEX IF NOT EXISTS idx_librarian_changes_sweep_id
+    ON librarian_changes(sweep_id);
+
+CREATE INDEX IF NOT EXISTS idx_librarian_changes_memory_id
+    ON librarian_changes(memory_id);
+
+-- Causal edges: records relationship edges proposed/created
+CREATE TABLE IF NOT EXISTS librarian_edges (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    sweep_id        INTEGER NOT NULL REFERENCES librarian_sweeps(id),
+    from_id         TEXT NOT NULL,              -- Source memory ID
+    to_id           TEXT NOT NULL,              -- Target memory ID
+    relation_type   TEXT NOT NULL,              -- causes/blocks/enables/etc.
+    reason          TEXT,                        -- Why this relationship
+    applied         INTEGER NOT NULL DEFAULT 0,  -- 0=proposed, 1=created
+    created_at      TEXT NOT NULL               -- ISO 8601 timestamp
+);
+
+CREATE INDEX IF NOT EXISTS idx_librarian_edges_sweep_id
+    ON librarian_edges(sweep_id);
+
+CREATE INDEX IF NOT EXISTS idx_librarian_edges_from_id
+    ON librarian_edges(from_id);
+
+CREATE INDEX IF NOT EXISTS idx_librarian_edges_to_id
+    ON librarian_edges(to_id);
+
 COMMIT;
