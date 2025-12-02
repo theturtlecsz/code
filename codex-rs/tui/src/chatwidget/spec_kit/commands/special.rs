@@ -958,6 +958,16 @@ impl SpecKitCommand for SpecKitCheckAlignmentCommand {
         let stale_count = results.iter().filter(|r| matches!(r.status, AlignmentStatus::Stale)).count();
         let unknown_count = results.iter().filter(|r| matches!(r.status, AlignmentStatus::Unknown)).count();
 
+        // P94/SPEC-KIT-105: AlignmentCheckRun event for telemetry
+        tracing::info!(
+            event_type = "AlignmentCheckRun",
+            total_specs = results.len(),
+            fresh_count,
+            stale_count,
+            unknown_count,
+            "Alignment check completed"
+        );
+
         // Output results
         if json_mode {
             // JSON output for CI

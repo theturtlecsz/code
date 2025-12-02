@@ -139,6 +139,17 @@ pub fn on_vision_builder_submitted(widget: &mut ChatWidget, answers: HashMap<Str
         }
     };
 
+    // P94/SPEC-KIT-105: VisionDefined event for telemetry
+    tracing::info!(
+        event_type = "VisionDefined",
+        constitution_version = new_version,
+        goals_count = goals.len(),
+        nongoals_count = nongoals.len(),
+        principles_count = principles.len(),
+        guardrails_count = guardrails.len(),
+        "Vision defined for project"
+    );
+
     // P92/SPEC-KIT-105: Invalidate Tier 2 cache
     let cache_invalidated = match db.invalidate_tier2_by_constitution() {
         Ok(count) => count,
