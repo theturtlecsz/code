@@ -277,7 +277,16 @@ fn execute_constitution_aware_specify(widget: &mut ChatWidget, args: String) {
 
         widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));
 
-        // P95: Log ConstitutionConflictDetected event
+        // P95/Task 4: Log ConstitutionConflictDetected event for telemetry
+        // This event enables:
+        // - Tracking conflict frequency across specs
+        // - Identifying commonly conflicted guardrails
+        // - Measuring constitution drift impact
+        let conflict_summary = constitution_conflicts
+            .as_ref()
+            .map(|c| c.lines().next().unwrap_or("").to_string())
+            .unwrap_or_default();
+
         tracing::warn!(
             event_type = "ConstitutionConflictDetected",
             spec_id = %spec_id,
@@ -285,6 +294,7 @@ fn execute_constitution_aware_specify(widget: &mut ChatWidget, args: String) {
             has_version_drift,
             spec_version = ?spec_constitution_version,
             current_version = ?current_version,
+            conflict_summary = %conflict_summary,
             "Constitution conflict detected at specify time"
         );
 
@@ -292,13 +302,20 @@ fn execute_constitution_aware_specify(widget: &mut ChatWidget, args: String) {
         return;
     }
 
-    // P95: If --force was used with conflicts, log the override
+    // P95/Task 4: If --force was used with conflicts, log the override event
+    // This event tracks when users acknowledge conflicts and proceed anyway
+    // Useful for:
+    // - Auditing intentional guardrail bypasses
+    // - Identifying specs that may need exception documentation
+    // - Measuring force-override frequency by spec type
     if force_mode && (has_conflicts || has_version_drift) {
         tracing::info!(
             event_type = "ConstitutionOverride",
             spec_id = %spec_id,
             has_conflicts,
             has_version_drift,
+            spec_version = ?spec_constitution_version,
+            current_version = ?current_version,
             "Proceeding with --force despite constitution conflicts"
         );
 
@@ -1236,7 +1253,11 @@ fn execute_alignment_check(widget: &mut ChatWidget, args: String) {
         0
     };
 
-    // P95: DeepAlignmentCheckRun event for telemetry
+    // P95/Task 4: DeepAlignmentCheckRun event for telemetry
+    // This event tracks alignment check operations for:
+    // - Monitoring constitution drift across the codebase
+    // - Tracking Tier-2 API usage costs in --deep mode
+    // - Measuring exception adoption rate
     tracing::info!(
         event_type = "DeepAlignmentCheckRun",
         total_specs = results.len(),
@@ -1247,6 +1268,7 @@ fn execute_alignment_check(widget: &mut ChatWidget, args: String) {
         exception_count,
         deep_mode,
         tier2_calls,
+        single_spec_mode = single_spec.is_some(),
         "Deep alignment check completed"
     );
 
