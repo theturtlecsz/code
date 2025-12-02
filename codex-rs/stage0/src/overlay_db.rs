@@ -44,6 +44,26 @@ pub enum ConstitutionType {
     Goal,
     /// Explicit exclusions - what we don't build (priority: 8)
     NonGoal,
+    /// P95/SPEC-KIT-105: Sanctioned exceptions to guardrails/principles (priority: 7)
+    ///
+    /// Exceptions are documented violations that have been explicitly approved.
+    /// They have lower priority than the guardrails/principles they exempt,
+    /// ensuring the base rules are still visible in DCC output.
+    ///
+    /// Exception memory structure (Template Guardian enforced):
+    /// ```text
+    /// [EXCEPTION]: <Brief title>
+    ///
+    /// CONTEXT: <Which guardrail/principle this exempts>
+    /// RATIONALE: <Why this exception is acceptable>
+    /// SCOPE:
+    /// - spec_id: <SPEC-ID>
+    /// - code_units: [optional list of affected code]
+    /// - expires_after_version: <optional>
+    ///
+    /// APPROVED_BY: <owner> on <date>
+    /// ```
+    Exception,
 }
 
 impl ConstitutionType {
@@ -53,11 +73,13 @@ impl ConstitutionType {
     /// - Guardrail: 10 (highest - hard constraints)
     /// - Principle: 9 (architectural values)
     /// - Goal/NonGoal: 8 (objectives and exclusions)
+    /// - Exception: 7 (P95: sanctioned violations, below what they exempt)
     pub fn priority(&self) -> i32 {
         match self {
             Self::Guardrail => 10,
             Self::Principle => 9,
             Self::Goal | Self::NonGoal => 8,
+            Self::Exception => 7,
         }
     }
 
@@ -70,6 +92,7 @@ impl ConstitutionType {
             Self::Principle => "type:principle",
             Self::Goal => "type:goal",
             Self::NonGoal => "type:non-goal",
+            Self::Exception => "type:exception",
         }
     }
 
@@ -83,6 +106,7 @@ impl ConstitutionType {
             "principle" => Some(Self::Principle),
             "goal" => Some(Self::Goal),
             "non-goal" | "nongoal" => Some(Self::NonGoal),
+            "exception" => Some(Self::Exception),
             _ => None,
         }
     }
@@ -1537,6 +1561,26 @@ mod tests {
         assert_eq!(ConstitutionType::Principle.priority(), 9);
         assert_eq!(ConstitutionType::Goal.priority(), 8);
         assert_eq!(ConstitutionType::NonGoal.priority(), 8);
+        // P95: Exception has lower priority than guardrails/principles it exempts
+        assert_eq!(ConstitutionType::Exception.priority(), 7);
+    }
+
+    // P95/SPEC-KIT-105: Test Exception priority ordering
+    #[test]
+    fn test_constitution_type_exception_priority_ordering() {
+        // Exceptions must have lower priority than what they exempt
+        assert!(
+            ConstitutionType::Exception.priority() < ConstitutionType::Guardrail.priority(),
+            "Exception must be lower priority than Guardrail"
+        );
+        assert!(
+            ConstitutionType::Exception.priority() < ConstitutionType::Principle.priority(),
+            "Exception must be lower priority than Principle"
+        );
+        assert!(
+            ConstitutionType::Exception.priority() < ConstitutionType::Goal.priority(),
+            "Exception must be lower priority than Goal"
+        );
     }
 
     #[test]
@@ -1545,6 +1589,7 @@ mod tests {
         assert_eq!(ConstitutionType::Principle.as_tag(), "type:principle");
         assert_eq!(ConstitutionType::Goal.as_tag(), "type:goal");
         assert_eq!(ConstitutionType::NonGoal.as_tag(), "type:non-goal");
+        assert_eq!(ConstitutionType::Exception.as_tag(), "type:exception");
     }
 
     #[test]
@@ -1566,6 +1611,10 @@ mod tests {
             ConstitutionType::parse("type:non-goal"),
             Some(ConstitutionType::NonGoal)
         );
+        assert_eq!(
+            ConstitutionType::parse("type:exception"),
+            Some(ConstitutionType::Exception)
+        );
 
         // Short format
         assert_eq!(
@@ -1575,6 +1624,10 @@ mod tests {
         assert_eq!(
             ConstitutionType::parse("nongoal"),
             Some(ConstitutionType::NonGoal)
+        );
+        assert_eq!(
+            ConstitutionType::parse("exception"),
+            Some(ConstitutionType::Exception)
         );
 
         // Unknown
@@ -1619,6 +1672,26 @@ mod tests {
 
         let mem = db.get_memory("const-003").expect("get").expect("exists");
         assert_eq!(mem.initial_priority, 8);
+
+        // P95: Insert an exception (priority 7)
+        let exception_content = r#"[EXCEPTION]: Debug mode file writes allowed
+
+CONTEXT: Exempts guardrail G1 (sandboxed file operations)
+RATIONALE: Debug mode requires direct file access for logging
+SCOPE:
+- spec_id: SPEC-KIT-999
+- code_units: [debug.rs]
+- expires_after_version: 5
+
+APPROVED_BY: architect on 2025-01-15"#;
+
+        db.upsert_constitution_memory("const-exception-001", ConstitutionType::Exception, exception_content)
+            .expect("upsert exception");
+
+        let mem = db.get_memory("const-exception-001").expect("get").expect("exists");
+        assert_eq!(mem.initial_priority, 7, "Exception should have priority 7");
+        assert_eq!(mem.structure_status, Some(StructureStatus::Structured));
+        assert!(mem.content_raw.as_ref().unwrap().contains("[EXCEPTION]"));
     }
 
     #[test]
