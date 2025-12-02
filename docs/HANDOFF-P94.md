@@ -36,82 +36,152 @@ P89 (Data Model) → P90 (TASK_BRIEF + Tier-2) → P91 (Conflict Detection + Gat
 - `0c9b7c3a6` - feat(tui): add /speckit.vision Q&A wizard (P93 Tasks 1-3)
 - `0b59e12be` - test(stage0): add P93 vision front door tests (P93 Task 4)
 - `071725ec8` - docs(SPEC-KIT-105): add P94 session handoff
-- `078488d41` - refactor(tui): enhance constitution view (P93 refinement)
+- `e80a57705` - refactor(tui): enhance constitution view (P93 refinement)
+
+---
 
 ## P94 Scope: Drift Detection Foundation
 
-### Primary Goal
-Pivot from "front door and enforcement" to **maintenance and drift**. Add tooling to detect when specs are out of alignment with the current constitution version.
+### Design Decisions (from P93 review)
 
-### Task 1: Track constitution_version at spec creation
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Vision guardrails | **Add 6th question** | Single wizard achieves gate-ready state |
+| Report format | **TUI + JSON** | Human dashboard + CI automation |
+| Drift depth | **Version-only (fast)** | Cheap/scalable; content analysis as future `--deep` mode |
+| Task scope | **Tasks 1-4** | Core + logging; `/speckit.specify` deferred to P95 |
+
+### Task 1: Add Guardrail Question to `/speckit.vision`
+**Files**: `codex-rs/tui/src/bottom_pane/vision_builder_modal.rs`, `vision_builder_handler.rs`
+- Add 6th question: "What are your hard constraints? (security, privacy, data residency, etc.)"
+- Map answers to `ConstitutionType::Guardrail` (priority 10)
+- Single `/speckit.vision` run now achieves "constitution-ready" state
+- Update tests to cover new flow
+
+### Task 2: Track `constitution_version` at Spec Creation
 **Files**: `codex-rs/tui/src/chatwidget/spec_kit/new_native.rs`
-- Add `constitution_version` field to spec metadata at `/speckit.new` time
-- Store in spec header (SPEC.md) or separate metadata file
+- Add `constitution_version_at_creation` field to spec metadata
+- Store in spec header (SPEC.md frontmatter) or sidecar JSON
 - Query current version from `get_constitution_version()`
+- Ensure Task Brief metadata includes both versions
 
-### Task 2: Implement `/speckit.check-alignment`
+### Task 3: Implement `/speckit.check-alignment`
 **Files**: `codex-rs/tui/src/chatwidget/spec_kit/commands/special.rs`, `command_registry.rs`
-- New command that scans specs vs current constitution_version
-- Report specs created under earlier versions
-- Surface specs with recorded `constitution_conflicts` from Stage0Result
-- Read-only dashboard/report (no auto-fixes)
 
-### Task 3: Add VisionDefined event logging
-**Files**: `codex-rs/tui/src/chatwidget/spec_kit/vision_builder_handler.rs`
-- Log distinct event when vision is (re)defined:
-  - `event_type=VisionDefined`
-  - `constitution_version`
-  - counts of goals/non-goals/principles
-- Prepares for future drift detection tooling
+**Default mode (TUI table):**
+```
+SPEC ID          | Created Ver | Current Ver | Status
+-----------------|-------------|-------------|--------
+SPEC-KIT-102     | 1           | 3           | stale
+SPEC-KIT-103     | 3           | 3           | fresh
+SPEC-OLD-001     | -           | 3           | unknown
+```
 
-### Task 4: Constitution-aware `/speckit.specify` (stretch)
-**Files**: `codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs`
-- Pull relevant principles/guardrails into spec refinement
-- Dynamic questions like: "This spec proposes X; Guardrail G2 says Y. How will you reconcile?"
-- Uses conflict detection wired in P91–P92
+**JSON mode (`--json` flag):**
+```json
+[
+  {
+    "spec_id": "SPEC-KIT-102",
+    "project": "codex-rs",
+    "constitution_version_at_creation": 1,
+    "current_constitution_version": 3,
+    "staleness": "stale"
+  }
+]
+```
 
-## Out of Scope (P95+)
+- Version-only comparison: `fresh | stale | unknown`
+- No Tier-2 calls (fast, cheap, CI-friendly)
+- Content analysis deferred to future `--deep` mode (P95+)
+
+### Task 4: Add Event Logging
+**Files**: `codex-rs/tui/src/chatwidget/spec_kit/vision_builder_handler.rs`, `handler.rs`
+
+**VisionDefined event:**
+```rust
+tracing::info!(
+    event_type = "VisionDefined",
+    constitution_version = new_version,
+    goals_count = goals.len(),
+    nongoals_count = nongoals.len(),
+    principles_count = principles.len(),
+    guardrails_count = guardrails.len(),  // New in P94
+    "Vision defined for project"
+);
+```
+
+**AlignmentCheckRun event:**
+```rust
+tracing::info!(
+    event_type = "AlignmentCheckRun",
+    total_specs = specs.len(),
+    fresh_count,
+    stale_count,
+    unknown_count,
+    "Alignment check completed"
+);
+```
+
+---
+
+## Out of Scope (P95)
+
+- Constitution-aware `/speckit.specify` with conflict prompts
+- Content-level drift detection (`--deep` mode)
 - Auto-fix for drifted specs
 - Constitution sync from external files
-- Multi-project constitution federation
+
+---
 
 ## Tests
 
 ```bash
 cd codex-rs && cargo test -p codex-stage0 -- --test-threads=1
+cargo test -p codex-tui --lib command_registry
 ~/code/build-fast.sh
 ```
+
+### New Tests to Add
+- `test_vision_creates_guardrail_memories` - Guardrail question → priority 10
+- `test_spec_records_constitution_version` - Version tracking at creation
+- `test_check_alignment_detects_stale_specs` - Drift detection logic
+- `test_check_alignment_json_output` - JSON export format
+
+---
 
 ## Key Files Reference
 
 | File | Purpose |
 |------|---------|
-| `codex-rs/stage0/src/overlay_db.rs` | Constitution CRUD, cache invalidation |
-| `codex-rs/stage0/src/tier2.rs` | Alignment checking, conflict detection |
-| `codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs` | Stage0 context injection |
-| `codex-rs/tui/src/chatwidget/spec_kit/commands/special.rs` | Command implementations |
+| `codex-rs/stage0/src/overlay_db.rs` | Constitution CRUD, version tracking |
 | `codex-rs/tui/src/chatwidget/spec_kit/new_native.rs` | Spec creation logic |
+| `codex-rs/tui/src/chatwidget/spec_kit/commands/special.rs` | Commands |
 | `codex-rs/tui/src/bottom_pane/vision_builder_modal.rs` | Vision Q&A modal |
-| `codex-rs/tui/src/chatwidget/spec_kit/vision_builder_handler.rs` | Vision event handler |
+| `codex-rs/tui/src/chatwidget/spec_kit/vision_builder_handler.rs` | Vision handler |
 
 ## Constitution Type Reference
 
-| Type | Priority | Description |
-|------|----------|-------------|
-| Guardrail | 10 | Hard constraints that must never be violated |
-| Principle | 9 | Architectural values and design principles |
-| Goal | 8 | Mid-term objectives and success criteria |
-| NonGoal | 8 | Explicit exclusions - what we don't build |
+| Type | Priority | Source |
+|------|----------|--------|
+| Guardrail | 10 | `/speckit.vision` Q6 or `/speckit.constitution add` |
+| Principle | 9 | `/speckit.vision` Q5 |
+| Goal | 8 | `/speckit.vision` Q3 |
+| NonGoal | 8 | `/speckit.vision` Q4 |
 
-## Why Drift Detection Now?
+---
+
+## Why This Scope?
 
 With P89–P93 complete:
-- Constitution data model is stable
-- Vision capture feeds real goals/principles
-- Gates and conflict detection are wired
-- NL_VISION/NL_CONSTITUTION stay in sync
+- Constitution data model is stable ✓
+- Vision capture feeds real goals/principles ✓
+- Gates and conflict detection are wired ✓
+- NL_VISION/NL_CONSTITUTION stay in sync ✓
 
-P94 is the natural pivot point to answer: **"Which specs are out of date with the constitution?"** This makes SPEC-KIT-105 feel complete:
-- Vision and constitution can be captured/refined ✓
-- Gates and alignment enforced at plan/auto time ✓
-- Tools to see which specs are drifting ← P94
+P94 completes the "constitution lifecycle":
+1. **Capture** - `/speckit.vision` now creates gate-ready constitution (with guardrails)
+2. **Track** - Specs record which constitution version they were created under
+3. **Monitor** - `/speckit.check-alignment` shows drift status across all specs
+4. **Audit** - Event logging provides telemetry for CI and dashboards
+
+After P94, SPEC-KIT-105 is functionally complete. P95 can focus on UX polish (`/speckit.specify` with conflict prompts) or move to the next spec (SPEC-KIT-103/104).
