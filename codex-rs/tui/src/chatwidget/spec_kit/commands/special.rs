@@ -128,6 +128,11 @@ impl SpecKitCommand for SpecKitNewCommand {
 
 /// Command: /speckit.specify
 /// Generate PRD with single-agent refinement (SPEC-KIT-957: Tier 1)
+///
+/// P95/SPEC-KIT-105: Constitution-Aware Refinement
+/// - Runs Stage 0 to detect constitution conflicts
+/// - Soft blocks if conflicts detected (requires --force to proceed)
+/// - Shows options: Modify spec, Create exception, or --force
 pub struct SpecKitSpecifyCommand;
 
 impl SpecKitCommand for SpecKitSpecifyCommand {
@@ -140,17 +145,11 @@ impl SpecKitCommand for SpecKitSpecifyCommand {
     }
 
     fn description(&self) -> &'static str {
-        "refine PRD with single-agent (Tier 1, ~$0.10)"
+        "refine PRD with constitution-aware conflict detection (Tier 1, ~$0.10)"
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
-        // SPEC-KIT-957: Direct execution, no longer uses orchestrator pattern
-        super::plan::execute_stage_command(
-            widget,
-            args,
-            crate::spec_prompts::SpecStage::Specify,
-            "speckit.specify",
-        );
+        execute_constitution_aware_specify(widget, args);
     }
 
     fn expand_prompt(&self, _args: &str) -> Option<String> {
@@ -160,6 +159,198 @@ impl SpecKitCommand for SpecKitSpecifyCommand {
     fn requires_args(&self) -> bool {
         true
     }
+}
+
+/// P95/SPEC-KIT-105: Constitution-aware /speckit.specify execution
+///
+/// 1. Parse args for SPEC-ID and --force flag
+/// 2. Load spec's Constitution-Version vs current
+/// 3. Run Stage 0 to detect conflicts
+/// 4. If conflicts AND no --force: soft block with options
+/// 5. Otherwise proceed with normal specify flow
+fn execute_constitution_aware_specify(widget: &mut ChatWidget, args: String) {
+    use ratatui::text::Line;
+    use crate::history_cell::{HistoryCellType, PlainHistoryCell};
+
+    // Parse args: SPEC-ID [--force]
+    let mut force_mode = false;
+    let mut spec_id = String::new();
+
+    for arg in args.split_whitespace() {
+        if arg == "--force" {
+            force_mode = true;
+        } else if spec_id.is_empty() {
+            spec_id = arg.to_string();
+        }
+    }
+
+    if spec_id.is_empty() {
+        widget.history_push(crate::history_cell::new_error_event(
+            "Usage: /speckit.specify SPEC-ID [--force]".to_string(),
+        ));
+        widget.request_redraw();
+        return;
+    }
+
+    // Run native guardrail validation first
+    let guardrail_result = super::super::native_guardrail::run_native_guardrail(
+        &widget.config.cwd,
+        &spec_id,
+        crate::spec_prompts::SpecStage::Specify,
+        false,
+    );
+
+    if !guardrail_result.success {
+        for error in &guardrail_result.errors {
+            widget.history_push(crate::history_cell::new_error_event(error.clone()));
+        }
+        widget.request_redraw();
+        return;
+    }
+
+    for warning in &guardrail_result.warnings {
+        widget.history_push(crate::history_cell::new_warning_event(warning.clone()));
+    }
+
+    // P95: Load spec Constitution-Version and current version
+    let spec_path = widget.config.cwd.join(format!("docs/{}/spec.md", spec_id));
+    let spec_constitution_version = if spec_path.exists() {
+        extract_constitution_version(&spec_path)
+    } else {
+        None
+    };
+    let current_version = get_current_constitution_version_for_check();
+
+    // P95: Run Stage 0 to detect constitution conflicts
+    let constitution_conflicts = run_stage0_for_constitution_check(widget, &spec_id);
+
+    // P95: Version drift check
+    let has_version_drift = match (spec_constitution_version, current_version) {
+        (Some(spec_ver), Some(curr_ver)) => spec_ver != curr_ver,
+        _ => false,
+    };
+
+    // P95: Check if we have conflicts or version drift
+    let has_conflicts = constitution_conflicts.is_some() && !constitution_conflicts.as_ref().unwrap().is_empty();
+
+    if (has_conflicts || has_version_drift) && !force_mode {
+        // Soft block: show conflict UI
+        let mut lines = vec![
+            Line::from("⚠ Constitution Conflict Detected (P95)"),
+            Line::from(""),
+        ];
+
+        // Version drift warning
+        if has_version_drift {
+            lines.push(Line::from(format!(
+                "Version drift: spec created at v{}, current constitution v{}",
+                spec_constitution_version.unwrap_or(0),
+                current_version.unwrap_or(0)
+            )));
+            lines.push(Line::from(""));
+        }
+
+        // Constitution conflicts
+        if let Some(ref conflicts) = constitution_conflicts {
+            lines.push(Line::from("Conflicts:"));
+            for line in conflicts.lines() {
+                lines.push(Line::from(format!("  {}", line)));
+            }
+            lines.push(Line::from(""));
+        }
+
+        lines.push(Line::from("Options:"));
+        lines.push(Line::from("  [A] Modify spec to resolve conflicts"));
+        lines.push(Line::from("      Edit docs/{}/spec.md and re-run /speckit.specify"));
+        lines.push(Line::from("  [B] Create exception for this conflict"));
+        lines.push(Line::from(format!(
+            "      /speckit.constitution add-exception --spec {} --reason \"<justification>\"",
+            spec_id
+        )));
+        lines.push(Line::from("  [C] Force proceed (acknowledge conflict)"));
+        lines.push(Line::from(format!(
+            "      /speckit.specify {} --force",
+            spec_id
+        )));
+        lines.push(Line::from(""));
+        lines.push(Line::from("Soft block: use --force to proceed without resolution."));
+
+        widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));
+
+        // P95: Log ConstitutionConflictDetected event
+        tracing::warn!(
+            event_type = "ConstitutionConflictDetected",
+            spec_id = %spec_id,
+            has_conflicts,
+            has_version_drift,
+            spec_version = ?spec_constitution_version,
+            current_version = ?current_version,
+            "Constitution conflict detected at specify time"
+        );
+
+        widget.request_redraw();
+        return;
+    }
+
+    // P95: If --force was used with conflicts, log the override
+    if force_mode && (has_conflicts || has_version_drift) {
+        tracing::info!(
+            event_type = "ConstitutionOverride",
+            spec_id = %spec_id,
+            has_conflicts,
+            has_version_drift,
+            "Proceeding with --force despite constitution conflicts"
+        );
+
+        widget.history_push(PlainHistoryCell::new(
+            vec![
+                Line::from("⚡ Proceeding with --force (constitution conflict acknowledged)"),
+            ],
+            HistoryCellType::Notice,
+        ));
+    }
+
+    // Proceed with normal specify flow
+    super::super::agent_orchestrator::auto_submit_spec_stage_prompt(
+        widget,
+        crate::spec_prompts::SpecStage::Specify,
+        &spec_id,
+    );
+}
+
+/// P95: Run Stage 0 specifically for constitution conflict detection
+///
+/// Returns the constitution_conflicts string if any conflicts detected
+fn run_stage0_for_constitution_check(widget: &ChatWidget, spec_id: &str) -> Option<String> {
+    use super::super::stage0_integration::{Stage0ExecutionConfig, run_stage0_for_spec};
+
+    // Load spec content
+    let spec_path = widget.config.cwd.join(format!("docs/{}/spec.md", spec_id));
+    let spec_content = match std::fs::read_to_string(&spec_path) {
+        Ok(content) => content,
+        Err(_) => return None,
+    };
+
+    if spec_content.is_empty() {
+        return None;
+    }
+
+    // Run Stage 0 with explain disabled (we just need conflicts)
+    let config = Stage0ExecutionConfig {
+        disabled: false,
+        explain: false,
+    };
+
+    let result = run_stage0_for_spec(
+        &widget.mcp_manager,
+        spec_id,
+        &spec_content,
+        &widget.config.cwd,
+        &config,
+    );
+
+    // Extract constitution_conflicts from Stage0Result
+    result.result.and_then(|r| r.constitution_conflicts)
 }
 
 /// Command: /spec-consensus
