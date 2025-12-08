@@ -9,6 +9,7 @@ use codex_chatgpt::apply_command::ApplyCommand;
 use codex_chatgpt::apply_command::run_apply_command;
 use codex_cli::LandlockCommand;
 use codex_cli::SeatbeltCommand;
+use codex_cli::architect_cmd::ArchitectCli;
 use codex_cli::login::run_login_status;
 use codex_cli::login::run_login_with_api_key;
 use codex_cli::login::run_login_with_chatgpt;
@@ -113,6 +114,10 @@ enum Subcommand {
 
     /// Side-channel LLM utilities (no TUI events).
     Llm(LlmCli),
+
+    /// Architect Sidecar - forensic intelligence with budget-aware caching.
+    #[clap(visible_alias = "arch")]
+    Architect(ArchitectCli),
 }
 
 #[derive(Debug, Parser)]
@@ -350,6 +355,9 @@ async fn cli_main(codex_linux_sandbox_exe: Option<PathBuf>) -> anyhow::Result<()
         Some(Subcommand::Llm(mut llm_cli)) => {
             prepend_config_flags(&mut llm_cli.config_overrides, root_config_overrides.clone());
             run_llm(llm_cli).await?;
+        }
+        Some(Subcommand::Architect(architect_cli)) => {
+            architect_cli.run().await?;
         }
     }
 
