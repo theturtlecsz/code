@@ -11,8 +11,10 @@
 //! - [`graph_bridge`] - CodeGraphContext MCP bridge (Python only)
 //! - [`budget`] - Query budget tracking with hourly granularity
 //! - [`nlm_service`] - NotebookLM HTTP service client
+//! - [`chunker`] - Artifact chunking for NotebookLM upload limits
 
 pub mod budget;
+pub mod chunker;
 pub mod churn;
 pub mod complexity;
 pub mod graph_bridge;

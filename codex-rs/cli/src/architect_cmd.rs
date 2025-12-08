@@ -12,10 +12,12 @@ use clap::Parser;
 use codex_core::architect::{
     self,
     budget::BudgetTracker,
+    chunker::{self, ChunkType, MAX_CHUNK_SIZE},
     mermaid,
     nlm_service::{Artifact, NlmService},
     HarvesterConfig,
 };
+// ChunkedPart is used internally by chunker, we use Artifact from nlm_service
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::io::{self, Write};
@@ -877,25 +879,32 @@ async fn run_sources(vault: &Path, cmd: SourcesCommand) -> Result<()> {
             }
 
             let mut artifacts = Vec::new();
-            const MAX_SIZE: usize = 500_000; // 500KB limit per source
 
-            // Load churn matrix (usually small)
+            // Load churn matrix (usually small, no chunking needed)
             let churn_path = ingest_dir.join("churn_matrix.md");
             if churn_path.exists() {
                 let content = fs::read_to_string(&churn_path).await?;
-                artifacts.push(Artifact::new("Churn Matrix", content));
+                if content.len() <= MAX_CHUNK_SIZE {
+                    artifacts.push(Artifact::new("Churn Matrix", content));
+                } else {
+                    let chunks = chunker::chunk_content("Churn Matrix", &content, ChunkType::Lines);
+                    println!("  Note: Churn matrix chunked into {} parts", chunks.len());
+                    for chunk in chunks {
+                        artifacts.push(Artifact::new(&chunk.name, chunk.content));
+                    }
+                }
             }
 
             // Load complexity map - filter to critical/high only if too large
             let complexity_path = ingest_dir.join("complexity_map.json");
             if complexity_path.exists() {
                 let full_content = fs::read_to_string(&complexity_path).await?;
-                if full_content.len() > MAX_SIZE {
+                if full_content.len() > MAX_CHUNK_SIZE {
                     // Filter to critical/high complexity files only
                     let filtered = filter_complexity_map(&full_content)?;
                     println!("  Note: Complexity map filtered to critical/high ({} bytes -> {} bytes)",
                         full_content.len(), filtered.len());
-                    if filtered.len() <= MAX_SIZE {
+                    if filtered.len() <= MAX_CHUNK_SIZE {
                         artifacts.push(Artifact::new("Complexity Map (Critical/High)", filtered));
                     } else {
                         println!("  Warning: Filtered complexity map still too large, skipping");
@@ -905,41 +914,53 @@ async fn run_sources(vault: &Path, cmd: SourcesCommand) -> Result<()> {
                 }
             }
 
-            // Load repo skeleton (usually moderate size)
+            // Load repo skeleton - chunk if too large (XML chunking)
             let skeleton_path = ingest_dir.join("repo_skeleton.xml");
             if skeleton_path.exists() {
                 let content = fs::read_to_string(&skeleton_path).await?;
-                if content.len() <= MAX_SIZE {
+                if content.len() <= MAX_CHUNK_SIZE {
                     artifacts.push(Artifact::new("Repo Skeleton", content));
                 } else {
-                    println!("  Warning: Repo skeleton too large ({} bytes), skipping", content.len());
+                    let chunks = chunker::chunk_content("Repo Skeleton", &content, ChunkType::Xml);
+                    println!("  Note: Repo skeleton chunked into {} parts ({} bytes)", chunks.len(), content.len());
+                    for chunk in chunks {
+                        artifacts.push(Artifact::new(&chunk.name, chunk.content));
+                    }
                 }
             }
 
-            // Load call graph if present (can be large)
+            // Load call graph - chunk if too large (Mermaid chunking)
             let graph_path = ingest_dir.join("call_graph.mmd");
             if graph_path.exists() {
                 let content = fs::read_to_string(&graph_path).await?;
-                if content.len() <= MAX_SIZE {
+                if content.len() <= MAX_CHUNK_SIZE {
                     artifacts.push(Artifact::new("Call Graph", content));
                 } else {
-                    println!("  Warning: Call graph too large ({} bytes), skipping", content.len());
+                    let chunks = chunker::chunk_content("Call Graph", &content, ChunkType::Mermaid);
+                    println!("  Note: Call graph chunked into {} parts ({} bytes)", chunks.len(), content.len());
+                    for chunk in chunks {
+                        artifacts.push(Artifact::new(&chunk.name, chunk.content));
+                    }
                 }
             }
 
-            // Load module deps if present (usually moderate)
+            // Load module deps - chunk if too large (Mermaid chunking)
             let deps_path = ingest_dir.join("module_deps.mmd");
             if deps_path.exists() {
                 let content = fs::read_to_string(&deps_path).await?;
-                if content.len() <= MAX_SIZE {
+                if content.len() <= MAX_CHUNK_SIZE {
                     artifacts.push(Artifact::new("Module Dependencies", content));
                 } else {
-                    println!("  Warning: Module deps too large ({} bytes), skipping", content.len());
+                    let chunks = chunker::chunk_content("Module Dependencies", &content, ChunkType::Mermaid);
+                    println!("  Note: Module deps chunked into {} parts ({} bytes)", chunks.len(), content.len());
+                    for chunk in chunks {
+                        artifacts.push(Artifact::new(&chunk.name, chunk.content));
+                    }
                 }
             }
 
             if artifacts.is_empty() {
-                bail!("No artifacts small enough to upload (max {} bytes each).", MAX_SIZE);
+                bail!("No artifacts found to upload.");
             }
 
             println!("Artifacts to upload:");
