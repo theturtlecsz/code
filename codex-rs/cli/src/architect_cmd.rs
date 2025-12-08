@@ -9,6 +9,7 @@
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
+use codex_core::architect::{self, HarvesterConfig};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::io::{self, Write};
@@ -54,6 +55,10 @@ pub struct RefreshArgs {
     /// Skip skeleton extraction.
     #[arg(long)]
     pub skip_skeleton: bool,
+
+    /// Use legacy Python scripts instead of native Rust implementation.
+    #[arg(long)]
+    pub legacy: bool,
 }
 
 #[derive(Debug, Parser)]
@@ -175,15 +180,98 @@ async fn run_refresh(vault: &Path, args: RefreshArgs) -> Result<()> {
     let ingest = vault.join("ingest");
     fs::create_dir_all(&ingest).await?;
 
-    println!("Refreshing forensic data in {:?}", ingest);
-
-    // For MVP, we'll call the existing Python scripts.
-    // TODO: Rewrite in Rust using git2 and syn crates.
     let project_root = vault.parent().and_then(|p| p.parent()).unwrap_or(vault);
-    let intel_snapshot = project_root.join("_intel_snapshot");
+
+    if args.legacy {
+        // Legacy mode: use Python scripts
+        println!("Refreshing forensic data (legacy mode) in {:?}", ingest);
+        run_refresh_legacy(vault, &args, project_root).await?;
+    } else {
+        // Native mode: use Rust harvester modules
+        println!("Refreshing forensic data (native) in {:?}", ingest);
+        run_refresh_native(vault, &args, project_root).await?;
+    }
+
+    // Generate a freshness hash
+    let hash = generate_repo_hash(project_root).await?;
+    fs::write(ingest.join(".repo_hash"), hash).await?;
+
+    println!("Refresh complete.");
+    Ok(())
+}
+
+/// Native Rust implementation of refresh using codex_core::architect modules.
+async fn run_refresh_native(vault: &Path, args: &RefreshArgs, project_root: &Path) -> Result<()> {
+    let ingest = vault.join("ingest");
+    let config = HarvesterConfig::new();
 
     if !args.skip_git {
-        println!("  [1/3] Generating churn matrix...");
+        println!("  [1/3] Generating churn matrix (native)...");
+        match architect::churn::analyze(project_root, &config) {
+            Ok(report) => {
+                let markdown = report.to_markdown();
+                fs::write(ingest.join("churn_matrix.md"), markdown).await?;
+                println!(
+                    "    Analyzed {} files, {} commits, {} coupled pairs",
+                    report.file_count,
+                    report.commit_count,
+                    report.coupling.len()
+                );
+            }
+            Err(e) => {
+                println!("    Error: {}. Try --legacy for Python fallback.", e);
+            }
+        }
+    }
+
+    if !args.skip_complexity {
+        println!("  [2/3] Generating complexity map (native)...");
+        match architect::complexity::analyze(project_root, &config) {
+            Ok(report) => {
+                let json = report.to_json()?;
+                fs::write(ingest.join("complexity_map.json"), json).await?;
+                println!(
+                    "    Analyzed {} files (critical: {}, high: {}, medium: {}, low: {})",
+                    report.file_count,
+                    report.by_risk.critical,
+                    report.by_risk.high,
+                    report.by_risk.medium,
+                    report.by_risk.low
+                );
+            }
+            Err(e) => {
+                println!("    Error: {}. Try --legacy for Python fallback.", e);
+            }
+        }
+    }
+
+    if !args.skip_skeleton {
+        println!("  [3/3] Generating repo skeleton (native)...");
+        match architect::skeleton::extract(project_root) {
+            Ok(report) => {
+                let xml = report.to_xml();
+                fs::write(ingest.join("repo_skeleton.xml"), xml).await?;
+                println!(
+                    "    Extracted {} declarations from {} files",
+                    report.declaration_count, report.file_count
+                );
+            }
+            Err(e) => {
+                println!("    Error: {}. Try --legacy for Python fallback.", e);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Legacy Python script implementation of refresh.
+async fn run_refresh_legacy(vault: &Path, args: &RefreshArgs, project_root: &Path) -> Result<()> {
+    let ingest = vault.join("ingest");
+    let intel_snapshot = project_root.join("scripts").join("architect");
+
+    if !args.skip_git {
+        println!("  [1/3] Generating churn matrix (legacy)...");
         let script = intel_snapshot.join("generate_churn.py");
         if script.exists() {
             let status = Command::new("python3")
@@ -192,19 +280,18 @@ async fn run_refresh(vault: &Path, args: RefreshArgs) -> Result<()> {
                 .status()
                 .context("Failed to run churn analysis")?;
             if status.success() {
-                // Copy to vault
                 let src = intel_snapshot.join("churn_matrix.md");
                 if src.exists() {
                     fs::copy(&src, ingest.join("churn_matrix.md")).await?;
                 }
             }
         } else {
-            println!("    (skipped - script not found)");
+            println!("    (skipped - script not found at {:?})", script);
         }
     }
 
     if !args.skip_complexity {
-        println!("  [2/3] Generating complexity map...");
+        println!("  [2/3] Generating complexity map (legacy)...");
         let script = intel_snapshot.join("generate_complexity.py");
         if script.exists() {
             let status = Command::new("python3")
@@ -224,7 +311,7 @@ async fn run_refresh(vault: &Path, args: RefreshArgs) -> Result<()> {
     }
 
     if !args.skip_skeleton {
-        println!("  [3/3] Generating repo skeleton...");
+        println!("  [3/3] Generating repo skeleton (legacy)...");
         let script = intel_snapshot.join("generate_skeleton.py");
         if script.exists() {
             let status = Command::new("python3")
@@ -243,11 +330,6 @@ async fn run_refresh(vault: &Path, args: RefreshArgs) -> Result<()> {
         }
     }
 
-    // Generate a freshness hash
-    let hash = generate_repo_hash(project_root).await?;
-    fs::write(ingest.join(".repo_hash"), hash).await?;
-
-    println!("Refresh complete.");
     Ok(())
 }
 

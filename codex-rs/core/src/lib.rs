@@ -25,6 +25,7 @@ pub mod token_data;
 pub use codex_conversation::CodexConversation;
 pub mod acp;
 pub mod agent_defaults;
+pub mod architect;
 pub mod agent_tool; // Made public for native consensus orchestration
 pub mod async_agent_executor; // SPEC-936: Async agent execution without tmux
 mod command_safety;

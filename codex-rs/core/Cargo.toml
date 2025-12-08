@@ -70,6 +70,11 @@ toml_edit = "0.23.4"
 tracing = { version = "0.1.41", features = ["log"] }
 tree-sitter = "0.25.9"
 tree-sitter-bash = "0.25.0"
+tree-sitter-rust = "0.24"
+tree-sitter-typescript = "0.23"
+tree-sitter-python = "0.25"
+git2 = { version = "0.20", default-features = false }
+walkdir = "2.5.0"
 uuid = { version = "1", features = ["serde", "v4"] }
 which = "6"
 wildmatch = "2.5.0"
