@@ -9,11 +9,15 @@
 //! - [`skeleton`] - API extraction using tree-sitter for Rust/TS/Python
 //! - [`mermaid`] - Call graph and module dependency visualization
 //! - [`graph_bridge`] - CodeGraphContext MCP bridge (Python only)
+//! - [`budget`] - Query budget tracking with hourly granularity
+//! - [`nlm_service`] - NotebookLM HTTP service client
 
+pub mod budget;
 pub mod churn;
 pub mod complexity;
 pub mod graph_bridge;
 pub mod mermaid;
+pub mod nlm_service;
 pub mod skeleton;
 
 use anyhow::Result;

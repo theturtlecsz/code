@@ -7,9 +7,15 @@
 //! - `code architect ask <query>` - Get cached answer or query NotebookLM
 //! - `code architect audit <crate>` - Investigate a dependency
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use clap::Parser;
-use codex_core::architect::{self, mermaid, HarvesterConfig};
+use codex_core::architect::{
+    self,
+    budget::BudgetTracker,
+    mermaid,
+    nlm_service::{Artifact, NlmService},
+    HarvesterConfig,
+};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::io::{self, Write};
@@ -35,11 +41,52 @@ pub enum ArchitectCommand {
     /// Audit a Rust crate for security and maintenance. Cached.
     Audit(AuditArgs),
 
-    /// Show vault status (cached answers, freshness).
+    /// Show vault status and budget (with hourly breakdown).
     Status,
+
+    /// Manage NotebookLM service daemon.
+    Service {
+        #[command(subcommand)]
+        cmd: ServiceCommand,
+    },
+
+    /// Manage notebook sources.
+    Sources {
+        #[command(subcommand)]
+        cmd: SourcesCommand,
+    },
 
     /// Clear all cached answers (keeps ingest data).
     ClearCache,
+}
+
+#[derive(Debug, clap::Subcommand)]
+pub enum ServiceCommand {
+    /// Start the NotebookLM service daemon.
+    Start {
+        /// Port to run the service on.
+        #[arg(long, default_value = "3456")]
+        port: u16,
+        /// Run in foreground (don't daemonize).
+        #[arg(long)]
+        foreground: bool,
+    },
+    /// Stop the running service.
+    Stop,
+    /// Check service status and health.
+    Status,
+}
+
+#[derive(Debug, clap::Subcommand)]
+pub enum SourcesCommand {
+    /// List sources in the notebook.
+    List,
+    /// Upload artifacts (atomic swap with [ARCH] prefix).
+    Upload {
+        /// Skip confirmation prompt.
+        #[arg(long, short = 'y')]
+        force: bool,
+    },
 }
 
 #[derive(Debug, Parser)]
@@ -105,6 +152,9 @@ pub struct AuditArgs {
     pub yes: bool,
 }
 
+/// Default notebook name for architect operations.
+const DEFAULT_NOTEBOOK: &str = "codex-rs-architect";
+
 impl ArchitectCli {
     pub async fn run(self) -> Result<()> {
         let vault = find_vault_root()?;
@@ -114,6 +164,8 @@ impl ArchitectCli {
             ArchitectCommand::Ask(args) => run_ask(&vault, args).await,
             ArchitectCommand::Audit(args) => run_audit(&vault, args).await,
             ArchitectCommand::Status => run_status(&vault).await,
+            ArchitectCommand::Service { cmd } => run_service(cmd).await,
+            ArchitectCommand::Sources { cmd } => run_sources(&vault, cmd).await,
             ArchitectCommand::ClearCache => run_clear_cache(&vault).await,
         }
     }
@@ -414,41 +466,49 @@ async fn run_ask(vault: &Path, args: AskArgs) -> Result<()> {
         return Ok(());
     }
 
+    // Load budget tracker for status display
+    let budget = BudgetTracker::load(vault)?;
+
+    // Check if budget is exhausted
+    if budget.is_exhausted() {
+        bail!(
+            "Daily query limit ({}) reached. Resets in {}.\n\
+             Use cached answers or wait for reset.",
+            budget.limit(),
+            budget.time_until_reset()
+        );
+    }
+
+    // Show budget warning if past threshold
+    if budget.needs_confirmation() && !args.yes {
+        println!(
+            "WARNING: {} - past 80% threshold",
+            budget.format_status()
+        );
+    }
+
     // Cache miss - need to query NotebookLM
     if !args.yes {
-        if !confirm("Answer not cached. This will use 1 NotebookLM query. Proceed?") {
+        let msg = format!(
+            "Answer not cached. This will use 1 query. ({})",
+            budget.format_status()
+        );
+        if !confirm(&msg) {
             println!("Aborted.");
             return Ok(());
         }
     }
 
-    println!("Querying Architect notebook...");
-
-    // Call notebooklm-mcp CLI
-    let nlm_cli = dirs::home_dir()
-        .unwrap_or_default()
-        .join("notebooklm-mcp/dist/cli/index.js");
-
-    if !nlm_cli.exists() {
-        bail!(
-            "NotebookLM CLI not found at {:?}. Install with: \
-             cd ~ && git clone https://github.com/anthropics/notebooklm-mcp && npm install && npm run build",
-            nlm_cli
-        );
-    }
-
-    let output = Command::new("node")
-        .arg(&nlm_cli)
-        .args(["ask", "-n", "codex-rs-architect", &query])
-        .output()
-        .context("Failed to run NotebookLM CLI")?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("NotebookLM query failed: {}", stderr);
-    }
-
-    let answer = String::from_utf8_lossy(&output.stdout);
+    // Try HTTP service first, fall back to CLI
+    let mut service = NlmService::new(vault, DEFAULT_NOTEBOOK)?;
+    let answer = if service.is_running().await {
+        println!("Querying via HTTP service...");
+        service.ask(&query).await?
+    } else {
+        println!("Service not running, using CLI (slower)...");
+        println!("Tip: Start service with 'code architect service start' for faster queries.");
+        ask_via_cli(vault, &query).await?
+    };
 
     // Cache the answer
     fs::create_dir_all(cache_path.parent().unwrap()).await?;
@@ -464,6 +524,39 @@ async fn run_ask(vault: &Path, args: AskArgs) -> Result<()> {
     println!("\n(answer cached to: {})", cache_path.display());
 
     Ok(())
+}
+
+/// Ask a question using the CLI (fallback when service isn't running).
+/// Also records the query in the budget tracker.
+async fn ask_via_cli(vault: &Path, query: &str) -> Result<String> {
+    let nlm_cli = dirs::home_dir()
+        .unwrap_or_default()
+        .join("notebooklm-mcp/dist/cli/index.js");
+
+    if !nlm_cli.exists() {
+        bail!(
+            "NotebookLM CLI not found at {:?}. Install with:\n\
+             cd ~ && git clone https://github.com/thetu/notebooklm-mcp && npm install && npm run build",
+            nlm_cli
+        );
+    }
+
+    let output = Command::new("node")
+        .arg(&nlm_cli)
+        .args(["ask", "-n", DEFAULT_NOTEBOOK, query])
+        .output()
+        .context("Failed to run NotebookLM CLI")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        bail!("NotebookLM query failed: {}", stderr);
+    }
+
+    // Record the query in budget tracker
+    let mut budget = BudgetTracker::load(vault)?;
+    budget.record_query()?;
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 async fn run_audit(vault: &Path, args: AuditArgs) -> Result<()> {
@@ -542,7 +635,53 @@ async fn run_status(vault: &Path) -> Result<()> {
     println!("======================\n");
     println!("Location: {}", vault.display());
 
+    // Budget tracking
+    println!("\n--- Budget ---");
+    match BudgetTracker::load(vault) {
+        Ok(tracker) => {
+            println!("{}", tracker.format_status());
+            if tracker.is_exhausted() {
+                println!("LIMIT REACHED - Resets in {}", tracker.time_until_reset());
+            } else if tracker.needs_confirmation() {
+                println!("WARNING: Past 80% threshold");
+            }
+            println!("\n{}", tracker.hourly_breakdown());
+            if !tracker.history_summary().contains("No historical") {
+                println!("\n{}", tracker.history_summary());
+            }
+        }
+        Err(e) => {
+            println!("Budget tracking unavailable: {}", e);
+        }
+    }
+
+    // Check service status
+    println!("\n--- Service ---");
+    let service = NlmService::new(vault, DEFAULT_NOTEBOOK);
+    match service {
+        Ok(svc) => {
+            if svc.is_running().await {
+                println!("NotebookLM service: RUNNING");
+                if let Ok(health) = svc.health().await {
+                    if let Some(q) = health.queue {
+                        println!("  Queue: {} pending, {} processing", q.pending, q.processing);
+                    }
+                    if let Some(s) = health.sessions {
+                        println!("  Sessions: {}/{}", s.active, s.max);
+                    }
+                }
+            } else {
+                println!("NotebookLM service: NOT RUNNING");
+                println!("  Start with: code architect service start");
+            }
+        }
+        Err(_) => {
+            println!("NotebookLM service: UNAVAILABLE");
+        }
+    }
+
     // Check ingest freshness
+    println!("\n--- Ingest ---");
     let hash_file = vault.join("ingest").join(".repo_hash");
     if hash_file.exists() {
         let stored_hash = fs::read_to_string(&hash_file).await?;
@@ -559,6 +698,7 @@ async fn run_status(vault: &Path) -> Result<()> {
     }
 
     // Count cached answers
+    println!("\n--- Cache ---");
     let answers_dir = vault.join("answers");
     let answer_count = if answers_dir.exists() {
         count_files(&answers_dir).await?
@@ -636,8 +776,242 @@ async fn run_clear_cache(vault: &Path) -> Result<()> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Service Commands
+// ─────────────────────────────────────────────────────────────────────────────
+
+async fn run_service(cmd: ServiceCommand) -> Result<()> {
+    match cmd {
+        ServiceCommand::Start { port, foreground } => {
+            println!("Starting NotebookLM service on port {}...", port);
+            NlmService::start_service(port, foreground)?;
+
+            if !foreground {
+                // Wait a bit and check if it started
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                let test_url = format!("http://127.0.0.1:{}/health", port);
+                let client = reqwest::Client::new();
+                match client
+                    .get(&test_url)
+                    .timeout(std::time::Duration::from_secs(2))
+                    .send()
+                    .await
+                {
+                    Ok(resp) if resp.status().is_success() => {
+                        println!("Service started successfully.");
+                    }
+                    _ => {
+                        println!("Service may be starting... check with: code architect service status");
+                    }
+                }
+            }
+            Ok(())
+        }
+        ServiceCommand::Stop => {
+            println!("Stopping NotebookLM service...");
+            NlmService::stop_service()?;
+            println!("Service stopped.");
+            Ok(())
+        }
+        ServiceCommand::Status => {
+            let status = NlmService::service_status()?;
+            println!("{}", status);
+            Ok(())
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sources Commands
+// ─────────────────────────────────────────────────────────────────────────────
+
+async fn run_sources(vault: &Path, cmd: SourcesCommand) -> Result<()> {
+    let service = NlmService::new(vault, DEFAULT_NOTEBOOK)?;
+
+    if !service.is_running().await {
+        bail!(
+            "NotebookLM service is not running.\n\
+             Start it with: code architect service start"
+        );
+    }
+
+    match cmd {
+        SourcesCommand::List => {
+            println!("Sources in notebook '{}':", DEFAULT_NOTEBOOK);
+            println!("─────────────────────────────────");
+
+            let sources = service.list_sources().await?;
+            if sources.is_empty() {
+                println!("  (no sources)");
+            } else {
+                for source in &sources {
+                    let managed = if source.title.starts_with("[ARCH]") {
+                        " (managed)"
+                    } else {
+                        ""
+                    };
+                    println!(
+                        "  [{}] {}{}",
+                        source.index,
+                        source.title,
+                        managed
+                    );
+                }
+                println!("\nTotal: {} sources", sources.len());
+                let managed_count = sources
+                    .iter()
+                    .filter(|s| s.title.starts_with("[ARCH]"))
+                    .count();
+                if managed_count > 0 {
+                    println!("Managed ([ARCH]): {}", managed_count);
+                }
+            }
+            Ok(())
+        }
+        SourcesCommand::Upload { force } => {
+            // Load artifacts from ingest directory
+            let ingest_dir = vault.join("ingest");
+            if !ingest_dir.exists() {
+                bail!(
+                    "No ingest data found. Run 'code architect refresh' first."
+                );
+            }
+
+            let mut artifacts = Vec::new();
+            const MAX_SIZE: usize = 500_000; // 500KB limit per source
+
+            // Load churn matrix (usually small)
+            let churn_path = ingest_dir.join("churn_matrix.md");
+            if churn_path.exists() {
+                let content = fs::read_to_string(&churn_path).await?;
+                artifacts.push(Artifact::new("Churn Matrix", content));
+            }
+
+            // Load complexity map - filter to critical/high only if too large
+            let complexity_path = ingest_dir.join("complexity_map.json");
+            if complexity_path.exists() {
+                let full_content = fs::read_to_string(&complexity_path).await?;
+                if full_content.len() > MAX_SIZE {
+                    // Filter to critical/high complexity files only
+                    let filtered = filter_complexity_map(&full_content)?;
+                    println!("  Note: Complexity map filtered to critical/high ({} bytes -> {} bytes)",
+                        full_content.len(), filtered.len());
+                    if filtered.len() <= MAX_SIZE {
+                        artifacts.push(Artifact::new("Complexity Map (Critical/High)", filtered));
+                    } else {
+                        println!("  Warning: Filtered complexity map still too large, skipping");
+                    }
+                } else {
+                    artifacts.push(Artifact::new("Complexity Map", full_content));
+                }
+            }
+
+            // Load repo skeleton (usually moderate size)
+            let skeleton_path = ingest_dir.join("repo_skeleton.xml");
+            if skeleton_path.exists() {
+                let content = fs::read_to_string(&skeleton_path).await?;
+                if content.len() <= MAX_SIZE {
+                    artifacts.push(Artifact::new("Repo Skeleton", content));
+                } else {
+                    println!("  Warning: Repo skeleton too large ({} bytes), skipping", content.len());
+                }
+            }
+
+            // Load call graph if present (can be large)
+            let graph_path = ingest_dir.join("call_graph.mmd");
+            if graph_path.exists() {
+                let content = fs::read_to_string(&graph_path).await?;
+                if content.len() <= MAX_SIZE {
+                    artifacts.push(Artifact::new("Call Graph", content));
+                } else {
+                    println!("  Warning: Call graph too large ({} bytes), skipping", content.len());
+                }
+            }
+
+            // Load module deps if present (usually moderate)
+            let deps_path = ingest_dir.join("module_deps.mmd");
+            if deps_path.exists() {
+                let content = fs::read_to_string(&deps_path).await?;
+                if content.len() <= MAX_SIZE {
+                    artifacts.push(Artifact::new("Module Dependencies", content));
+                } else {
+                    println!("  Warning: Module deps too large ({} bytes), skipping", content.len());
+                }
+            }
+
+            if artifacts.is_empty() {
+                bail!("No artifacts small enough to upload (max {} bytes each).", MAX_SIZE);
+            }
+
+            println!("Artifacts to upload:");
+            for artifact in &artifacts {
+                println!("  - {} ({} bytes)", artifact.title, artifact.content.len());
+            }
+
+            if !force {
+                println!("\nThis will:");
+                println!("  1. Delete all existing [ARCH] sources");
+                println!("  2. Upload {} fresh artifacts", artifacts.len());
+                if !confirm("Proceed with atomic swap?") {
+                    println!("Aborted.");
+                    return Ok(());
+                }
+            }
+
+            println!("\nPerforming atomic swap...");
+            let result = service.refresh_context(&artifacts).await?;
+
+            println!("Done!");
+            println!("  Deleted: {} old [ARCH] sources", result.deleted);
+            println!("  Uploaded: {} new artifacts", result.uploaded);
+            println!("  Total sources now: {}", result.total_sources - result.deleted + result.uploaded);
+
+            Ok(())
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
+
+/// Filter complexity map to only critical/high risk entries.
+fn filter_complexity_map(json_content: &str) -> Result<String> {
+    let value: serde_json::Value = serde_json::from_str(json_content)
+        .context("Failed to parse complexity map JSON")?;
+
+    // The complexity map has structure:
+    // { "files": [...], "by_risk": { "critical": N, "high": N, ... }, ... }
+    if let Some(files) = value.get("files").and_then(|f| f.as_array()) {
+        let filtered: Vec<&serde_json::Value> = files
+            .iter()
+            .filter(|f| {
+                f.get("risk")
+                    .and_then(|r| r.as_str())
+                    .map(|r| r == "critical" || r == "high")
+                    .unwrap_or(false)
+            })
+            .collect();
+
+        // Build filtered output
+        let mut output = serde_json::Map::new();
+        output.insert("files".to_string(), serde_json::Value::Array(
+            filtered.into_iter().cloned().collect()
+        ));
+        output.insert("note".to_string(), serde_json::Value::String(
+            "Filtered to critical/high risk files only".to_string()
+        ));
+
+        // Preserve summary if present
+        if let Some(by_risk) = value.get("by_risk") {
+            output.insert("by_risk".to_string(), by_risk.clone());
+        }
+
+        Ok(serde_json::to_string_pretty(&output)?)
+    } else {
+        // Unknown structure, return as-is
+        Ok(json_content.to_string())
+    }
+}
 
 async fn generate_repo_hash(project_root: &Path) -> Result<String> {
     // Simple hash based on git HEAD and dirty status

@@ -1289,6 +1289,7 @@ dependencies = [
  "tree-sitter-rust",
  "tree-sitter-typescript",
  "url",
+ "urlencoding",
  "uuid",
  "walkdir",
  "webbrowser",
