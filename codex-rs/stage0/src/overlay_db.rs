@@ -221,6 +221,13 @@ impl OverlayDb {
         Ok(())
     }
 
+    /// Get a reference to the underlying SQLite connection
+    ///
+    /// P99/SPEC-KIT-103: Exposed for LibrarianAudit integration
+    pub fn conn(&self) -> &Connection {
+        &self.conn
+    }
+
     // ─────────────────────────────────────────────────────────────────────────────
     // overlay_memories CRUD
     // ─────────────────────────────────────────────────────────────────────────────
