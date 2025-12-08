@@ -1,51 +1,58 @@
-# P105 Continuation Prompt - NotebookLM Service Integration
+# P105 Continuation Prompt - NotebookLM HTTP Service Integration
 
 ## Context
 
-- **P103 Complete** (commit 4042be45d): Native Rust harvester modules
-- **P104 Complete** (this session): Mermaid.js call graph + graph_bridge cleanup
-- **Key Discovery**: CodeGraphContext MCP only parses Python, not Rust
-- **Architecture Shift**: notebooklm-mcp now supports HTTP Service mode (port 3456)
+### Completed Work
+| Phase | Commit | Deliverables |
+|-------|--------|--------------|
+| P103 | 4042be45d | churn.rs, complexity.rs, skeleton.rs (native Rust harvester) |
+| P104 | ee8bf5b48 | mermaid.rs (call graph), graph_bridge.rs (Python-only docs) |
+
+### Key Discovery (P104)
+CodeGraphContext MCP only parses Python, not Rust. We use native tree-sitter for Rust analysis.
+
+### Architecture Shift
+notebooklm-mcp v2+ has HTTP Service mode (port 3456). Eliminates cold-start latency.
 
 ---
 
-## Primary Objective: NotebookLM HTTP Service Bridge
+## Scope Decisions (User Confirmed)
 
-Implement `nlm_service.rs` with full HTTP API integration, replacing CLI spawning.
-
-### Scope Decisions (User Confirmed)
-
-| Decision | Choice | Implication |
-|----------|--------|-------------|
-| API Scope | **Full research** | Include /api/ask, /api/sources, /api/research/fast, /api/research/deep |
-| Service Mgmt | **Full lifecycle** | Add `code architect service start/stop/status` commands |
-| Auto-upload | **Auto on refresh** | `code architect refresh` uploads artifacts if service running |
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Module Location | `core/src/architect/` | Quota gatekeeper, cohesive with harvester |
+| Budget Tracking | **Hourly breakdown** | Maximum visibility for usage patterns |
+| Research API | **Defer to P106** | Focus on core ask/sources/budget first |
+| Source Strategy | **Full Replace (Atomic Swap)** | Prevents context rot, fixed slot usage |
 
 ---
 
 ## Pre-flight Checklist
 
 ```bash
-# 1. Verify P104 build
+# 1. Build and verify P104 work
 ./build-fast.sh
+./codex-rs/target/dev-fast/code architect refresh --graph
 
-# 2. Test existing architect
-./codex-rs/target/dev-fast/code architect refresh --graph --mermaid
-
-# 3. Check notebooklm-mcp version (need v2+ for service mode)
+# 2. Check notebooklm-mcp version (need v2+ for service mode)
 notebooklm --version
+# Expected: 1.3.0 or higher
 
-# 4. Verify service mode works
+# 3. Verify service mode works
 notebooklm service start
 curl http://127.0.0.1:3456/health
 notebooklm service stop
+
+# 4. Check existing architect structure
+ls -la codex-rs/core/src/architect/
+# Should see: churn.rs, complexity.rs, skeleton.rs, mermaid.rs, graph_bridge.rs, mod.rs
 ```
 
 ---
 
 ## Implementation Tasks
 
-### Phase 1: Core HTTP Client (`nlm_service.rs`)
+### Phase 1: HTTP Client (`nlm_service.rs`)
 
 Create `core/src/architect/nlm_service.rs`:
 
@@ -53,45 +60,175 @@ Create `core/src/architect/nlm_service.rs`:
 //! NotebookLM HTTP Service client.
 //!
 //! Connects to notebooklm-mcp service (default: http://127.0.0.1:3456)
-//! with lazy service spawning and health monitoring.
+//! with lazy service spawning and budget tracking.
+//!
+//! # Architecture
+//! This module is the SOLE GATEKEEPER for NotebookLM quota.
+//! Other parts of codex-rs should not access NotebookLM directly.
+
+use anyhow::{Context, Result, bail};
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use std::path::Path;
+use std::time::Duration;
+
+const DEFAULT_PORT: u16 = 3456;
+const DEFAULT_HOST: &str = "127.0.0.1";
+const HEALTH_TIMEOUT: Duration = Duration::from_secs(2);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 
 pub struct NlmService {
     base_url: String,
-    client: reqwest::Client,
+    client: Client,
+    budget: BudgetTracker,
 }
 
 impl NlmService {
     /// Ensure service is running, spawn if needed.
-    pub async fn ensure_running() -> Result<Self>;
+    pub async fn ensure_running(vault_path: &Path) -> Result<Self>;
 
     /// Health check with queue/session stats.
     pub async fn health(&self) -> Result<HealthStatus>;
 
-    /// Ask a question to a notebook.
-    pub async fn ask(&self, notebook: &str, question: &str) -> Result<AskResponse>;
+    /// Ask a question (budget-tracked, cached).
+    pub async fn ask(&mut self, notebook: &str, question: &str) -> Result<AskResponse>;
 
-    /// Add a source (website, file, text) to a notebook.
-    pub async fn add_source(&self, notebook: &str, source: Source) -> Result<()>;
+    /// List sources in a notebook.
+    pub async fn list_sources(&self, notebook: &str) -> Result<Vec<Source>>;
 
-    /// Fast research (parallel web search).
-    pub async fn fast_research(&self, notebook: &str, query: &str) -> Result<ResearchResults>;
+    /// Delete a source by index.
+    pub async fn delete_source(&self, notebook: &str, index: usize) -> Result<()>;
 
-    /// Deep research (multi-step autonomous).
-    pub async fn deep_research(&self, notebook: &str, query: &str) -> Result<ResearchResults>;
+    /// Add sources (text content).
+    pub async fn add_text_source(&self, notebook: &str, title: &str, content: &str) -> Result<()>;
+
+    /// Atomic swap: delete [ARCH] sources, upload fresh artifacts.
+    pub async fn refresh_context(&mut self, notebook: &str, artifacts: &[Artifact]) -> Result<()>;
 }
 ```
 
-### Phase 2: Service Lifecycle Commands
+### Phase 2: Budget Tracking (`budget.rs`)
 
-Add to `cli/src/architect_cmd.rs`:
+Create `core/src/architect/budget.rs`:
+
+```rust
+//! Budget tracking with hourly granularity.
+//!
+//! Stores usage in .codex/architect/usage.json
+
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UsageData {
+    /// Current date (YYYY-MM-DD)
+    pub date: String,
+    /// Queries per hour (0-23 keys)
+    pub hourly: HashMap<u8, u32>,
+    /// Total queries today
+    pub total: u32,
+    /// 7-day history for trends
+    pub history: Vec<DailyUsage>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DailyUsage {
+    pub date: String,
+    pub total: u32,
+}
+
+pub struct BudgetTracker {
+    usage: UsageData,
+    file_path: std::path::PathBuf,
+    daily_limit: u32,  // 500 for Plus tier
+    warn_threshold: u32,  // 400 (80%)
+}
+
+impl BudgetTracker {
+    pub fn load(vault_path: &Path) -> Result<Self>;
+    pub fn record_query(&mut self) -> Result<()>;
+    pub fn remaining(&self) -> u32;
+    pub fn needs_confirmation(&self) -> bool;  // true if > 400 used
+    pub fn format_status(&self) -> String;     // "Used: 23/500 (4.6%)"
+    pub fn hourly_breakdown(&self) -> String;  // For status display
+}
+```
+
+### Phase 3: Source Management (Atomic Swap)
+
+The "[ARCH]" prefix protocol:
+
+```rust
+/// Artifact with [ARCH] prefix for namespace isolation.
+pub struct Artifact {
+    /// Title with [ARCH] prefix (e.g., "[ARCH] Churn Metrics")
+    pub title: String,
+    /// Content to upload
+    pub content: String,
+}
+
+impl Artifact {
+    pub fn new(name: &str, content: String) -> Self {
+        Self {
+            title: format!("[ARCH] {}", name),
+            content,
+        }
+    }
+}
+
+/// Atomic swap implementation
+pub async fn refresh_context(&mut self, notebook: &str, artifacts: &[Artifact]) -> Result<()> {
+    // 1. List all sources
+    let sources = self.list_sources(notebook).await?;
+
+    // 2. Identify managed sources (stale artifacts)
+    let stale_indices: Vec<usize> = sources
+        .iter()
+        .filter(|s| s.title.starts_with("[ARCH]"))
+        .map(|s| s.index)
+        .collect();
+
+    // 3. Delete highest index first (avoids shifting)
+    for index in stale_indices.iter().rev() {
+        self.delete_source(notebook, *index).await?;
+    }
+
+    // 4. Upload fresh artifacts
+    for artifact in artifacts {
+        self.add_text_source(notebook, &artifact.title, &artifact.content).await?;
+    }
+
+    Ok(())
+}
+```
+
+### Phase 4: CLI Commands
+
+Update `cli/src/architect_cmd.rs`:
 
 ```rust
 #[derive(Debug, clap::Subcommand)]
 pub enum ArchitectCommand {
-    // ... existing commands ...
+    /// Update local forensic maps (churn, complexity, skeleton).
+    Refresh(RefreshArgs),
+
+    /// Ask a question (cached, budget-tracked).
+    Ask(AskArgs),
+
+    /// Audit a Rust crate.
+    Audit(AuditArgs),
+
+    /// Show vault status and budget.
+    Status,
 
     /// Manage NotebookLM service daemon.
     Service(ServiceArgs),
+
+    /// Manage notebook sources.
+    Sources(SourcesArgs),
+
+    /// Clear cached answers.
+    ClearCache,
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -105,22 +242,21 @@ pub enum ServiceCommand {
     },
     /// Stop the running service.
     Stop,
-    /// Check service status.
+    /// Check service status and health.
     Status,
 }
+
+#[derive(Debug, clap::Subcommand)]
+pub enum SourcesCommand {
+    /// List sources in notebook.
+    List,
+    /// Upload artifacts (atomic swap with [ARCH] prefix).
+    Upload {
+        #[arg(long)]
+        force: bool,  // Skip confirmation
+    },
+}
 ```
-
-### Phase 3: Auto-Upload on Refresh
-
-Modify `run_refresh_native()` to:
-
-1. Check if NLM service is running (non-blocking health check)
-2. If running, upload new artifacts as sources:
-   - `churn_matrix.md` → text source
-   - `complexity_map.json` → text source
-   - `repo_skeleton.xml` → text source
-   - `call_graph.mmd` → text source (if --graph)
-3. Log upload status, continue even if upload fails
 
 ---
 
@@ -129,51 +265,71 @@ Modify `run_refresh_native()` to:
 | File | Action | Description |
 |------|--------|-------------|
 | `core/src/architect/nlm_service.rs` | CREATE | HTTP client + service manager |
-| `core/src/architect/mod.rs` | MODIFY | Add `pub mod nlm_service;` |
-| `cli/src/architect_cmd.rs` | MODIFY | Add Service subcommand, auto-upload |
-| `core/Cargo.toml` | MODIFY | Add `reqwest` dependency if missing |
+| `core/src/architect/budget.rs` | CREATE | Hourly usage tracking |
+| `core/src/architect/mod.rs` | MODIFY | Add `pub mod nlm_service; pub mod budget;` |
+| `cli/src/architect_cmd.rs` | MODIFY | Add Service, Sources subcommands |
+| `core/Cargo.toml` | MODIFY | Add `reqwest = { version = "0.11", features = ["json"] }` |
 
 ---
 
-## API Reference (from notebooklm-mcp README)
+## API Reference (notebooklm-mcp)
 
 ### Health Check
 ```bash
 GET http://127.0.0.1:3456/health
-# Returns: { status, queue: { pending, processing }, sessions: { active, max } }
+# Returns: { status, version, uptime, queue: { pending, processing }, sessions: { active, max } }
 ```
 
 ### Ask Question
 ```bash
 POST http://127.0.0.1:3456/api/ask
 Content-Type: application/json
-{ "question": "...", "notebook": "notebook-id" }
+{ "question": "...", "notebook": "notebook-id-or-name" }
 # Returns: { success, data: { answer, sessionId } }
 ```
 
-### Add Source
+### List Sources
+```bash
+GET http://127.0.0.1:3456/api/sources?notebook=notebook-id
+# Returns: { success, data: { sources: [{ index, title, status }], sourceCount } }
+```
+
+### Add Source (Text)
 ```bash
 POST http://127.0.0.1:3456/api/sources
 Content-Type: application/json
-{ "source_type": "text|website|file", "content": "...", "notebook": "notebook-id" }
+{ "source_type": "text", "content": "...", "notebook": "notebook-id" }
 ```
 
-### Fast Research
+### Delete Source
 ```bash
-POST http://127.0.0.1:3456/api/research/fast
-Content-Type: application/json
-{ "query": "...", "notebook": "notebook-id", "wait": true, "timeout_ms": 120000 }
+# Note: Check API for exact endpoint - may need index in body or URL
+DELETE http://127.0.0.1:3456/api/sources/:index?notebook=notebook-id
 ```
 
 ---
 
 ## Success Criteria
 
-1. `code architect service start` spawns notebooklm daemon
-2. `code architect service status` shows health + queue stats
-3. `code architect ask "question"` uses HTTP API (no CLI spawn)
-4. `code architect refresh` uploads artifacts when service running
-5. All existing functionality preserved (cache-first, legacy mode)
+1. **Service Lifecycle**
+   - `code architect service start` spawns daemon (or confirms running)
+   - `code architect service status` shows health + queue stats
+   - `code architect service stop` cleanly shuts down
+
+2. **Budget Tracking**
+   - `code architect status` shows hourly breakdown
+   - Warning at 80% (400 queries)
+   - Blocks at 100% with clear message
+
+3. **Ask Flow**
+   - Cache hit → instant, no query used
+   - Cache miss → HTTP request, budget decremented
+   - Confirmation prompt if >400 used
+
+4. **Source Management**
+   - `code architect sources list` shows current sources
+   - `code architect sources upload` performs atomic swap
+   - Only [ARCH] prefixed sources are touched
 
 ---
 
@@ -181,10 +337,11 @@ Content-Type: application/json
 
 | Scenario | Behavior |
 |----------|----------|
-| Service not running | Prompt user to run `code architect service start` |
-| Service start fails | Show error, suggest `notebooklm service start --foreground` |
-| Network timeout | Retry once, then fail with actionable error |
-| Upload fails | Log warning, continue with refresh (non-blocking) |
+| Service not running | Prompt: "Start service with `code architect service start`" |
+| Service start fails | Show error, suggest `--foreground` for debugging |
+| Budget exceeded | Block with: "Daily limit (500) reached. Resets at midnight UTC." |
+| Network timeout | Retry once (2s), then fail with actionable error |
+| Source delete fails | Log warning, continue with uploads |
 
 ---
 
@@ -193,31 +350,66 @@ Content-Type: application/json
 ```bash
 # 1. Service lifecycle
 code architect service start
-code architect service status  # Should show "running"
+code architect service status  # Health: ok, Queries: 0/500
 code architect service stop
 
-# 2. Ask with service
+# 2. Budget tracking
 code architect service start
-code architect ask "What is the architecture?"  # Should use HTTP
-code architect ask "Same question"              # Should be cached
+code architect ask "What is the main architecture?"
+code architect status  # Should show 1 query used, hourly breakdown
 
-# 3. Auto-upload
-code architect service start
-code architect refresh  # Should show "Uploading artifacts..."
-# Verify sources appear in NotebookLM web UI
+# 3. Atomic swap
+code architect sources list              # Show current sources
+code architect refresh                   # Generate artifacts
+code architect sources upload            # Atomic swap
+code architect sources list              # Verify [ARCH] sources updated
 
-# 4. Graceful degradation
-code architect service stop
-code architect ask "Question"  # Should prompt to start service
+# 4. Cache behavior
+code architect ask "Same question"       # Should be cached (0 queries)
+code architect ask "Same question" -f    # Force fresh (1 query)
 ```
 
 ---
 
-## Key References
+## Deferred to P106
 
-| Document | Purpose |
-|----------|---------|
-| `~/notebooklm-mcp/README.md` | Full API reference |
-| `docs/ARCHITECT-FEATURE-PARITY.md` | Gap analysis |
-| `core/src/architect/mod.rs` | Current module structure |
-| P104 session | Mermaid + graph_bridge implementation |
+- `/api/research/fast` - Quick parallel web search
+- `/api/research/deep` - Multi-step autonomous research
+- Research result import to notebook
+- Research caching and history
+
+---
+
+## Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         codex-rs CLI                            │
+│  code architect ask / refresh / sources / service / status      │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   core/src/architect/                           │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
+│  │  churn.rs    │  │ skeleton.rs  │  │    nlm_service.rs    │  │
+│  │  (P103) ✓    │  │  (P103) ✓    │  │    (P105) ← NEW      │  │
+│  └──────────────┘  └──────────────┘  └──────────────────────┘  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
+│  │ complexity.rs│  │  mermaid.rs  │  │     budget.rs        │  │
+│  │  (P103) ✓    │  │  (P104) ✓    │  │    (P105) ← NEW      │  │
+│  └──────────────┘  └──────────────┘  └──────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼ HTTP (localhost:3456)
+┌─────────────────────────────────────────────────────────────────┐
+│                    notebooklm-mcp service                       │
+│                    (Browser automation)                         │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   Google NotebookLM (Plus)                      │
+│                   500 queries/day, 300 sources                  │
+└─────────────────────────────────────────────────────────────────┘
+```
