@@ -1,15 +1,22 @@
 //! Bridge to CodeGraphContext MCP server for semantic code analysis.
 //!
 //! Provides async interface to query the Neo4j code graph for:
-//! - Call graph analysis
-//! - Dead code detection
-//! - Complexity metrics from indexed code
-//! - Module dependencies
+//! - Call graph analysis (Python only)
+//! - Dead code detection (Python only)
+//! - Complexity metrics from indexed code (Python only)
+//! - Module dependencies (Python only)
+//!
+//! # Language Support
+//!
+//! **Important**: CodeGraphContext currently only parses Python files.
+//! For Rust analysis, use the native `skeleton.rs` and `mermaid.rs` modules instead.
+//!
+//! This bridge is useful for mixed-language repos or Python-heavy projects.
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 use std::process::Command;
+use tracing::debug;
 
 /// Results from the code graph.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,23 +27,52 @@ pub struct GraphQueryResult {
 }
 
 /// Interface to CodeGraphContext MCP server.
+///
+/// # Architecture Note
+///
+/// MCP (Model Context Protocol) tools are designed to be invoked by AI assistants
+/// like Claude, not directly from Rust code. This bridge provides:
+///
+/// 1. **Data structures** that match CodeGraphContext MCP responses
+/// 2. **Helper methods** for formatting queries and parsing results
+/// 3. **CLI integration** via the `cgc` helper script (if available)
+///
+/// For direct Rust code analysis (especially for Rust files), use the native
+/// `mermaid.rs` module which uses tree-sitter parsing.
 pub struct GraphBridge {
-    /// Whether the MCP server is available
+    /// Whether the MCP server appears configured
     available: bool,
+    /// Path to cgc helper script (if found)
+    cgc_path: Option<std::path::PathBuf>,
 }
 
 impl GraphBridge {
     /// Create a new graph bridge, checking MCP availability.
     pub fn new() -> Self {
         // Check if MCP server is configured by looking for the Neo4j connection
-        let available = std::env::var("NEO4J_URI").is_ok()
-            || Path::new(&format!(
-                "{}/.config/claude/claude_desktop_config.json",
-                dirs::home_dir().unwrap_or_default().display()
-            ))
-            .exists();
+        let neo4j_configured = std::env::var("NEO4J_URI").is_ok();
+        let claude_config = dirs::home_dir()
+            .map(|h| h.join(".config/claude/claude_desktop_config.json"))
+            .filter(|p| p.exists());
 
-        Self { available }
+        // Look for cgc helper script in common locations
+        let cgc_path = dirs::home_dir()
+            .map(|h| h.join(".local/bin/cgc"))
+            .filter(|p| p.exists());
+
+        let available = neo4j_configured || claude_config.is_some();
+
+        debug!(
+            "GraphBridge: neo4j={}, claude_config={}, cgc={}",
+            neo4j_configured,
+            claude_config.is_some(),
+            cgc_path.is_some()
+        );
+
+        Self {
+            available,
+            cgc_path,
+        }
     }
 
     /// Check if the graph bridge is available.
@@ -44,36 +80,43 @@ impl GraphBridge {
         self.available
     }
 
-    /// Find code related to a query.
-    pub async fn find_code(&self, query: &str) -> Result<Vec<CodeSnippet>> {
-        if !self.available {
-            return Ok(Vec::new());
-        }
-
-        // Use the MCP CLI directly since we can't invoke MCP tools from Rust easily
-        // This is a placeholder - in production, use proper MCP client
-        let output = Command::new("node")
-            .args([
-                "--eval",
-                &format!(
-                    r#"
-                    const {{ exec }} = require('child_process');
-                    console.log(JSON.stringify({{ query: "{}", results: [] }}));
-                "#,
-                    query.replace('"', r#"\""#)
-                ),
-            ])
-            .output()
-            .context("Failed to query code graph")?;
-
-        if !output.status.success() {
-            return Ok(Vec::new());
-        }
-
-        Ok(Vec::new()) // Placeholder
+    /// Check if the cgc CLI helper is available for direct queries.
+    pub fn has_cli(&self) -> bool {
+        self.cgc_path.is_some()
     }
 
-    /// Analyze code relationships.
+    /// Find code related to a query (Python files only).
+    ///
+    /// For Rust code, use `skeleton::extract()` instead.
+    pub async fn find_code(&self, query: &str) -> Result<Vec<CodeSnippet>> {
+        if !self.available {
+            debug!("GraphBridge not available, returning empty results");
+            return Ok(Vec::new());
+        }
+
+        // Try cgc CLI if available
+        if let Some(ref cgc) = self.cgc_path {
+            let output = Command::new(cgc)
+                .args(["find", query])
+                .output()
+                .context("Failed to run cgc find")?;
+
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                if let Ok(snippets) = serde_json::from_str::<Vec<CodeSnippet>>(&stdout) {
+                    return Ok(snippets);
+                }
+            }
+        }
+
+        // Without CLI, return empty - MCP integration happens at AI layer
+        debug!("No cgc CLI, MCP integration deferred to AI layer");
+        Ok(Vec::new())
+    }
+
+    /// Analyze code relationships (Python files only).
+    ///
+    /// For Rust code, use `mermaid::extract_call_graph()` instead.
     pub async fn analyze_relationships(
         &self,
         target: &str,
@@ -83,18 +126,27 @@ impl GraphBridge {
             return Ok(RelationshipResult::default());
         }
 
-        // Query types map to MCP tool parameters
-        let _query_type_str = match query_type {
-            RelationshipQuery::FindCallers => "find_callers",
-            RelationshipQuery::FindCallees => "find_callees",
-            RelationshipQuery::FindAllCallers => "find_all_callers",
-            RelationshipQuery::FindAllCallees => "find_all_callees",
-            RelationshipQuery::FindImporters => "find_importers",
-            RelationshipQuery::ClassHierarchy => "class_hierarchy",
-            RelationshipQuery::ModuleDeps => "module_deps",
-        };
+        let query_type_str = query_type.as_str();
 
-        // Placeholder - would invoke MCP tool in production
+        // Try cgc CLI if available
+        if let Some(ref cgc) = self.cgc_path {
+            let output = Command::new(cgc)
+                .args(["analyze", query_type_str, target])
+                .output()
+                .context("Failed to run cgc analyze")?;
+
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                if let Ok(entries) = serde_json::from_str::<Vec<RelationshipEntry>>(&stdout) {
+                    return Ok(RelationshipResult {
+                        target: target.to_string(),
+                        query_type,
+                        results: entries,
+                    });
+                }
+            }
+        }
+
         Ok(RelationshipResult {
             target: target.to_string(),
             query_type,
@@ -102,36 +154,78 @@ impl GraphBridge {
         })
     }
 
-    /// Find dead code across the indexed codebase.
+    /// Find dead code across the indexed codebase (Python files only).
     pub async fn find_dead_code(&self, exclude_decorators: &[&str]) -> Result<Vec<DeadCodeEntry>> {
         if !self.available {
             return Ok(Vec::new());
         }
 
-        // Placeholder - would invoke mcp__CodeGraphContext__find_dead_code
-        let _ = exclude_decorators;
+        if let Some(ref cgc) = self.cgc_path {
+            let mut args = vec!["dead-code".to_string()];
+            for dec in exclude_decorators {
+                args.push("--exclude".to_string());
+                args.push(dec.to_string());
+            }
+
+            let output = Command::new(cgc)
+                .args(&args)
+                .output()
+                .context("Failed to run cgc dead-code")?;
+
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                if let Ok(entries) = serde_json::from_str(&stdout) {
+                    return Ok(entries);
+                }
+            }
+        }
+
         Ok(Vec::new())
     }
 
-    /// Get complexity metrics for a function.
+    /// Get complexity metrics for a function (Python files only).
     pub async fn get_complexity(&self, function_name: &str) -> Result<Option<ComplexityInfo>> {
         if !self.available {
             return Ok(None);
         }
 
-        // Placeholder - would invoke mcp__CodeGraphContext__calculate_cyclomatic_complexity
-        let _ = function_name;
+        if let Some(ref cgc) = self.cgc_path {
+            let output = Command::new(cgc)
+                .args(["complexity", function_name])
+                .output()
+                .context("Failed to run cgc complexity")?;
+
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                if let Ok(info) = serde_json::from_str(&stdout) {
+                    return Ok(Some(info));
+                }
+            }
+        }
+
         Ok(None)
     }
 
-    /// Find the most complex functions in the codebase.
+    /// Find the most complex functions in the codebase (Python files only).
     pub async fn find_most_complex(&self, limit: usize) -> Result<Vec<ComplexityInfo>> {
         if !self.available {
             return Ok(Vec::new());
         }
 
-        // Placeholder - would invoke mcp__CodeGraphContext__find_most_complex_functions
-        let _ = limit;
+        if let Some(ref cgc) = self.cgc_path {
+            let output = Command::new(cgc)
+                .args(["most-complex", "--limit", &limit.to_string()])
+                .output()
+                .context("Failed to run cgc most-complex")?;
+
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                if let Ok(entries) = serde_json::from_str(&stdout) {
+                    return Ok(entries);
+                }
+            }
+        }
+
         Ok(Vec::new())
     }
 
@@ -141,8 +235,20 @@ impl GraphBridge {
             return Ok(serde_json::Value::Null);
         }
 
-        // Placeholder - would invoke mcp__CodeGraphContext__execute_cypher_query
-        let _ = query;
+        if let Some(ref cgc) = self.cgc_path {
+            let output = Command::new(cgc)
+                .args(["cypher", query])
+                .output()
+                .context("Failed to run cgc cypher")?;
+
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                if let Ok(value) = serde_json::from_str(&stdout) {
+                    return Ok(value);
+                }
+            }
+        }
+
         Ok(serde_json::Value::Null)
     }
 }
@@ -174,6 +280,21 @@ pub enum RelationshipQuery {
     FindImporters,
     ClassHierarchy,
     ModuleDeps,
+}
+
+impl RelationshipQuery {
+    /// Get the MCP parameter string for this query type.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::FindCallers => "find_callers",
+            Self::FindCallees => "find_callees",
+            Self::FindAllCallers => "find_all_callers",
+            Self::FindAllCallees => "find_all_callees",
+            Self::FindImporters => "find_importers",
+            Self::ClassHierarchy => "class_hierarchy",
+            Self::ModuleDeps => "module_deps",
+        }
+    }
 }
 
 /// Result of a relationship query.
@@ -232,6 +353,7 @@ mod tests {
     async fn test_find_code_empty() {
         let bridge = GraphBridge {
             available: false, // Force unavailable for test
+            cgc_path: None,
         };
         let results = bridge.find_code("test").await.unwrap();
         assert!(results.is_empty());

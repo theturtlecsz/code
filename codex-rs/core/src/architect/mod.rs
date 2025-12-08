@@ -7,10 +7,13 @@
 //! - [`churn`] - Git forensics: churn hotspots and logical coupling analysis
 //! - [`complexity`] - Code complexity metrics: LOC, indentation, function count
 //! - [`skeleton`] - API extraction using tree-sitter for Rust/TS/Python
+//! - [`mermaid`] - Call graph and module dependency visualization
+//! - [`graph_bridge`] - CodeGraphContext MCP bridge (Python only)
 
 pub mod churn;
 pub mod complexity;
 pub mod graph_bridge;
+pub mod mermaid;
 pub mod skeleton;
 
 use anyhow::Result;

@@ -6,7 +6,13 @@ _Generated: 2025-12-08 | Reference: Advanced Repository Ingestion for LLM Contex
 
 This document compares our current Architect Sidecar implementation against the reference architecture for "god-level" codebase understanding in LLM contexts. The reference defines a 6-stage pipeline using specialized tools for structural mapping, visualization, forensics, and semantic linking.
 
-**Current State**: Phase 2 complete - native Rust harvester with churn, complexity, and skeleton modules.
+**Current State**: Phase 2.5 complete - native Rust harvester + Mermaid visualization.
+
+**Completed**:
+- P103: Native Rust harvester (churn.rs, complexity.rs, skeleton.rs)
+- P104: Mermaid call graph + graph_bridge documentation (CodeGraphContext is Python-only)
+
+**Next**: P105 - NotebookLM HTTP Service integration (see `docs/PROMPT-P105-NLM-SERVICE.md`)
 
 ---
 
@@ -26,8 +32,9 @@ This document compares our current Architect Sidecar implementation against the 
 
 | Feature | Reference Tool | Our Implementation | Status | Gap Analysis |
 |---------|---------------|-------------------|--------|--------------|
-| Control flow graphs | Sirens Call | Not implemented | Missing | Need Mermaid.js CFG generation |
-| Class diagrams | Pymermaider | Not implemented | Missing | Need Rust/TS/Python class extraction |
+| Control flow graphs | Sirens Call | `mermaid.rs` (P104) | **Complete** | Call graph extraction via tree-sitter |
+| Module dependencies | Pymermaider | `mermaid.rs` (P104) | **Complete** | Module import analysis |
+| Class diagrams | Pymermaider | Not implemented | Missing | Need Rust struct/impl hierarchy |
 | C4 model DSL | Structurizr | Not implemented | Missing | Need architectural boundary inference |
 | Symbol bindings | Stack Graphs | Not implemented | Missing | Need precise name resolution |
 
@@ -45,8 +52,9 @@ This document compares our current Architect Sidecar implementation against the 
 
 | Feature | Reference Tool | Our Implementation | Status | Gap Analysis |
 |---------|---------------|-------------------|--------|--------------|
-| LOC/SLOC counting | SCC | `complexity.rs` | Complete | Native implementation |
-| Cyclomatic complexity | rust-code-analysis | `graph_bridge.rs` (stub) | Placeholder | Need CodeGraphContext MCP |
+| LOC/SLOC counting | SCC | `complexity.rs` | **Complete** | Native implementation |
+| Cyclomatic complexity | rust-code-analysis | `graph_bridge.rs` (Python only) | Partial | CodeGraphContext only parses Python |
+| Call graph complexity | Custom | `mermaid.rs` (P104) | **Complete** | Edge count per function |
 | Cognitive complexity | Complexipy | Not implemented | Missing | Need human-readability scoring |
 | Halstead metrics | rust-code-analysis | Not implemented | Missing | Low priority |
 | COCOMO estimation | SCC | Not implemented | Missing | Low priority |
@@ -74,39 +82,45 @@ This document compares our current Architect Sidecar implementation against the 
 
 Based on gap analysis and value/effort ratio:
 
-### P0 - Critical (Next Session)
-1. **CodeGraphContext MCP Integration** - `graph_bridge.rs` full implementation
-   - Cyclomatic complexity queries
-   - Call graph analysis
-   - Dead code detection
-   - Replaces need for external rust-code-analysis
+### P0 - Critical (COMPLETED in P103/P104)
+1. ~~**CodeGraphContext MCP Integration**~~ - `graph_bridge.rs` documented as Python-only
+   - Discovery: CodeGraphContext only parses Python files
+   - For Rust: Use native `mermaid.rs` instead
 
-2. **Mermaid.js CFG Generation** - Control flow visualization
-   - Leverage existing tree-sitter infrastructure
-   - Output: `call_graph.mmd` for NotebookLM
+2. ~~**Mermaid.js Call Graph Generation**~~ - `mermaid.rs` **COMPLETE**
+   - Call graph extraction via tree-sitter
+   - Module dependency analysis
+   - Output: `call_graph.mmd`, `module_deps.mmd`
+
+### P0.5 - Critical (Next Session: P105)
+3. **NotebookLM HTTP Service Integration** - `nlm_service.rs`
+   - HTTP client replacing CLI spawning
+   - Service lifecycle management (start/stop/status)
+   - Auto-upload artifacts on refresh
+   - See: `docs/PROMPT-P105-NLM-SERVICE.md`
 
 ### P1 - High Value
-3. **PageRank Symbol Ranking** - Aider-style importance scoring
-   - Use CodeGraphContext call graph data
+4. **PageRank Symbol Ranking** - Aider-style importance scoring
+   - Use `mermaid.rs` call graph data
    - Output: Ranked symbol list with centrality scores
 
-4. **Class Diagram Generation** - Pymermaider equivalent
-   - Extract inheritance relationships via tree-sitter
+5. **Class Diagram Generation** - Pymermaider equivalent
+   - Extract struct/impl hierarchy via tree-sitter
    - Output: `class_hierarchy.mmd`
 
 ### P2 - Medium Value
-5. **Author/Ownership Analysis** - Bus factor calculation
+6. **Author/Ownership Analysis** - Bus factor calculation
    - Extend `churn.rs` with author tracking
    - Output: Knowledge silo warnings
 
-6. **Secret Detection** - Security hardening
+7. **Secret Detection** - Security hardening
    - Integrate with existing lint infrastructure
    - Block sensitive content from NotebookLM uploads
 
 ### P3 - Future
-7. **Stack Graphs Integration** - Precise name binding
-8. **Cognitive Complexity** - Human-readability scoring
-9. **C4 Model Inference** - Architectural boundary detection
+8. **Stack Graphs Integration** - Precise name binding
+9. **Cognitive Complexity** - Human-readability scoring
+10. **C4 Model Inference** - Architectural boundary detection
 
 ---
 
@@ -115,16 +129,17 @@ Based on gap analysis and value/effort ratio:
 ```
 Reference Pipeline          Our Implementation
 ─────────────────────────────────────────────────────
-[Repomix]          ──────►  skeleton.rs (partial)
-[Aider repo-map]   ──────►  NOT IMPLEMENTED (P1)
-[Sirens Call]      ──────►  graph_bridge.rs (planned)
-[Pymermaider]      ──────►  NOT IMPLEMENTED (P1)
+[Repomix]          ──────►  skeleton.rs (complete)
+[Aider repo-map]   ──────►  mermaid.rs (complete) - call graph ranking
+[Sirens Call]      ──────►  mermaid.rs (complete) - call graph viz
+[Pymermaider]      ──────►  mermaid.rs (partial) - module deps done
 [Structurizr]      ──────►  NOT IMPLEMENTED (P3)
 [Hercules]         ──────►  churn.rs (complete)
 [AskGit]           ──────►  NOT IMPLEMENTED (P2)
 [SCC]              ──────►  complexity.rs (complete)
 [Stack Graphs]     ──────►  NOT IMPLEMENTED (P3)
 [Complexipy]       ──────►  NOT IMPLEMENTED (P2)
+[NotebookLM]       ──────►  nlm_service.rs (P105 - next)
 ```
 
 ---
@@ -148,12 +163,31 @@ Reference Pipeline          Our Implementation
 
 ---
 
-## Next Session Objectives (P104)
+## Session History
 
-1. Implement `graph_bridge.rs` with full CodeGraphContext MCP integration
-2. Add Mermaid.js call graph output to harvester
-3. Create unified artifact format for NotebookLM synthesis
-4. Performance benchmark: native Rust vs. Python scripts
+### P104 (Completed - 2025-12-08)
+**Objective**: Mermaid visualization + CodeGraphContext integration
+
+**Discoveries**:
+- CodeGraphContext MCP only parses Python (not Rust)
+- Need native tree-sitter approach for Rust call graphs
+
+**Deliverables**:
+- `mermaid.rs` - Call graph extraction (5885 functions, 36537 edges from codex-rs)
+- `mermaid.rs` - Module dependency analysis (366 modules, 1042 imports)
+- CLI flags: `--graph`, `--mermaid`, `--focus`, `--depth`
+- `graph_bridge.rs` documented as Python-only
+
+### P105 (Next Session)
+**Objective**: NotebookLM HTTP Service Integration
+
+See `docs/PROMPT-P105-NLM-SERVICE.md` for full continuation prompt.
+
+**Key Tasks**:
+1. `nlm_service.rs` - HTTP client with lazy service spawning
+2. `code architect service start/stop/status` - Lifecycle management
+3. Auto-upload artifacts on refresh
+4. Full research API (fast + deep)
 
 ---
 

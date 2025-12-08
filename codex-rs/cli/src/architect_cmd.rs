@@ -9,7 +9,7 @@
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
-use codex_core::architect::{self, HarvesterConfig};
+use codex_core::architect::{self, mermaid, HarvesterConfig};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::io::{self, Write};
@@ -55,6 +55,22 @@ pub struct RefreshArgs {
     /// Skip skeleton extraction.
     #[arg(long)]
     pub skip_skeleton: bool,
+
+    /// Generate Mermaid call graph diagram.
+    #[arg(long)]
+    pub graph: bool,
+
+    /// Generate Mermaid module dependency diagram.
+    #[arg(long)]
+    pub mermaid: bool,
+
+    /// Focus call graph on a specific function.
+    #[arg(long, value_name = "FUNCTION")]
+    pub focus: Option<String>,
+
+    /// Depth for focused call graph (default: 2).
+    #[arg(long, default_value = "2")]
+    pub depth: usize,
 
     /// Use legacy Python scripts instead of native Rust implementation.
     #[arg(long)]
@@ -258,6 +274,54 @@ async fn run_refresh_native(vault: &Path, args: &RefreshArgs, project_root: &Pat
             }
             Err(e) => {
                 println!("    Error: {}. Try --legacy for Python fallback.", e);
+            }
+        }
+    }
+
+    // Generate Mermaid call graph if requested
+    if args.graph {
+        println!("  [+] Generating call graph (Mermaid)...");
+        match mermaid::extract_call_graph(project_root) {
+            Ok(graph) => {
+                let mermaid_content = if let Some(ref focus) = args.focus {
+                    println!("    Focused on: {} (depth {})", focus, args.depth);
+                    graph.to_mermaid_focused(focus, args.depth)
+                } else {
+                    graph.to_mermaid()
+                };
+
+                let graph_path = ingest.join("call_graph.mmd");
+                fs::write(&graph_path, &mermaid_content).await?;
+                println!(
+                    "    Call graph: {} functions, {} edges → {}",
+                    graph.functions.len(),
+                    graph.calls.len(),
+                    graph_path.display()
+                );
+            }
+            Err(e) => {
+                println!("    Error generating call graph: {}", e);
+            }
+        }
+    }
+
+    // Generate Mermaid module dependencies if requested
+    if args.mermaid {
+        println!("  [+] Generating module dependencies (Mermaid)...");
+        match mermaid::extract_module_deps(project_root) {
+            Ok(deps) => {
+                let mermaid_content = deps.to_mermaid();
+                let deps_path = ingest.join("module_deps.mmd");
+                fs::write(&deps_path, &mermaid_content).await?;
+                println!(
+                    "    Module deps: {} modules, {} imports → {}",
+                    deps.modules.len(),
+                    deps.imports.len(),
+                    deps_path.display()
+                );
+            }
+            Err(e) => {
+                println!("    Error generating module deps: {}", e);
             }
         }
     }
