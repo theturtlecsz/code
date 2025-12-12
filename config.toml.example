@@ -234,38 +234,17 @@ tool_timeout_sec = 120
 file-opener = "vscode"  # Options: vscode, vscode-insiders, windsurf, cursor, none
 
 # Subagent Commands
-# Configure built-in and custom multi-agent slash commands.
-# Each entry overrides defaults when the `name` matches a built-in: plan | solve | code.
+# Configure optional custom multi-agent slash commands.
+# Planner does not ship built-in legacy commands like /plan, /solve, or /code.
 #
 # Fields:
-# - name: command name (e.g., "plan")
-# - read-only: true for read-only (default: plan/solve=true, code=false)
-# - agents: array of agent names; if empty, falls back to enabled [[agents]] or built-ins
+# - name: command name (e.g., "review")
+# - read-only: true for read-only
+# - agents: array of agent names; if empty, falls back to enabled [[agents]]
 # - orchestrator-instructions: extra instructions appended to Code (the coordinator)
 # - agent-instructions: extra instructions appended to each agent’s prompt
 
 [subagents]
-
-[[subagents.commands]]
-name = "plan"
-read-only = true
-agents = ["claude", "gemini", "qwen", "codex"]
-orchestrator-instructions = "Focus on discovering project layout and risks. Prefer small, verifiable steps."
-agent-instructions = "Summarize assumptions explicitly. Cite files you read."
-
-[[subagents.commands]]
-name = "solve"
-read-only = true
-agents = ["claude", "gemini", "qwen", "codex"]
-orchestrator-instructions = "Run multiple approaches in parallel and compare. Defer cancellation until a tested fix exists."
-agent-instructions = "Propose a concrete fix with steps to validate."
-
-[[subagents.commands]]
-name = "code"
-read-only = false
-agents = ["claude", "gemini", "qwen", "codex"]
-orchestrator-instructions = "Coordinate implementations across agents; surface worktree locations and branches."
-agent-instructions = "Write minimal, focused changes with clear rationale. Include test or validation steps."
 
 # Custom example
 [[subagents.commands]]
