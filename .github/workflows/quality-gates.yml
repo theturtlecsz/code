@@ -1,0 +1,41 @@
+name: Quality Gates
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+          cache-workspaces: codex-rs
+
+      - name: Rustfmt
+        working-directory: codex-rs
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        working-directory: codex-rs
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - name: Tests (core)
+        working-directory: codex-rs
+        run: cargo test -p codex-core
+
+      - name: Docs link check
+        run: python3 scripts/check_doc_links.py
+
