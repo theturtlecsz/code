@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This is a fork of [just-every/code](https://github.com/just-every/code) (community OpenAI Codex fork).
+This repository is a fork with fork-specific markers and an upstream sync workflow (see `UPSTREAM-SYNC.md`).
 Not related to Anthropic's Claude Code.
 
 ## Commands
