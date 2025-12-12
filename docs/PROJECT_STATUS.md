@@ -1,6 +1,6 @@
 # Project Status
 
-**Repository**: theturtlecsz/code (fork of just-every/code)
+**Repository**: theturtlecsz/code (fork; see `UPSTREAM-SYNC.md`)
 **Last Updated**: 2025-10-29
 **Current Branch**: feature/spec-kit-069-complete
 

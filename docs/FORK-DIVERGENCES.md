@@ -2,7 +2,7 @@
 
 **Status**: Current
 **Created**: 2025-11-28 (SPEC-958 Session 12)
-**Repository**: theturtlecsz/code (fork of just-every/code)
+**Repository**: theturtlecsz/code (fork; see `UPSTREAM-SYNC.md`)
 
 This document describes where fork behavior differs from upstream in ways that affect tests and development.
 

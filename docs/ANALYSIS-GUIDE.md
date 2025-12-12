@@ -11,7 +11,7 @@
 ### What This Is
 
 **Repository**: https://github.com/theturtlecsz/code (FORK)
-**Upstream**: https://github.com/just-every/code (community fork of OpenAI Codex)
+**Upstream**: see `UPSTREAM-SYNC.md`
 **NOT**: Anthropic's Claude Code (different product)
 
 **Fork-Specific Additions**:
@@ -247,7 +247,7 @@ docs/SPEC-OPS-004-integrated-coder-hooks/evidence/
 - ⚠️ Synthesis output size (tiny files despite correct agent count)
 
 ### Gaps to Assess
-- Integration with upstream (just-every/code)
+- Integration with upstream
 - Testing coverage (unit vs integration)
 - Error recovery and degraded mode
 - Documentation completeness

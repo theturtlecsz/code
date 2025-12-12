@@ -1,6 +1,6 @@
 # Fork Enhancements (Initial, Not Exhaustive)
 
-This fork extends upstream `openai/codex` in several areas. These bullets are a starting point — not a complete list. Before merging, scan the codebase and history (CHANGELOG.md, recent commits) to discover additional or newer fork‑only behavior and preserve it.
+This fork extends the upstream project in several areas. These bullets are a starting point — not a complete list. Before merging, scan the codebase and history (CHANGELOG.md, recent commits) to discover additional or newer fork‑only behavior and preserve it.
 
 - Browser Integration (codex-rs/browser, TUI + core wiring)
   - Internal CDP browser manager with global access and /browser command.
@@ -36,4 +36,3 @@ This fork extends upstream `openai/codex` in several areas. These bullets are a 
   - Upstream merge guards and policy to prefer our core files; static verify checks (handlers↔tools parity, UA/version) to prevent regressions.
 
 Note: These are representative areas. You must still scan for newer fork‑only behavior (e.g., additional TUI UX, new tools, rollout metrics, protocol fields) and preserve them when resolving conflicts.
-

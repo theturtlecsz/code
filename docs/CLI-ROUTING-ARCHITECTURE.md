@@ -1,6 +1,6 @@
 # CLI Routing Architecture for Claude & Gemini
 
-**Source**: theturtlecsz/code (fork of just-every/code)
+**Source**: theturtlecsz/code (fork; see `UPSTREAM-SYNC.md`)
 **Purpose**: Multi-provider LLM support via CLI routing with session persistence
 
 ---

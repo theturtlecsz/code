@@ -2,8 +2,7 @@
 
 ## Context
 
-Upstream PR [openai/codex#1707](https://github.com/openai/codex/pull/1707) introduces an
-experimental Agent Client Protocol (ACP) bridge so Zed can drive Codex via the
+Upstream PR #1707 introduces an experimental Agent Client Protocol (ACP) bridge so Zed can drive the upstream CLI via the
 `session/new` and `session/prompt` tool calls. The branch (fetched locally as
 `upstream-pr-1707`) rewrites large portions of `codex-rs/core`, the MCP server,
 and the TypeScript CLI/TUI to accommodate the new workflow.
@@ -14,7 +13,7 @@ and the TypeScript CLI/TUI to accommodate the new workflow.
   shim, preserving Code’s validation harness and approval prompts while
   emitting ACP tool-call metadata for downstream consumers.
 - **MCP Server** – `session/new` and `session/prompt` are available alongside
-  existing Codex tools. The new `acp_tool_runner` bridges Codex events to ACP
+  existing tools. The new `acp_tool_runner` bridges events to ACP
   `session/update` notifications and reuses the existing conversation manager to track live
   sessions.
 - **Configuration** – `ConfigOverrides` and the TOML schema understand
@@ -32,7 +31,7 @@ capabilities.
 ## What Upstream Added
 
 - **Core (`codex-rs/core`)**
-  - New `acp.rs` module with helpers for translating Codex exec/patch events
+  - New `acp.rs` module with helpers for translating exec/patch events
     into ACP `ToolCall` updates, including an ACP-backed `FileSystem` shim and a
     permission-request flow (`acp::request_permission`).
   - `codex.rs` rewritten around `agent_client_protocol`, removing many existing
@@ -41,10 +40,10 @@ capabilities.
   - `protocol.rs` pared down to match the simplified upstream surface (fewer
     `Op` variants, different `AskForApproval` options, new MCP call events).
 - **MCP server (`codex-rs/mcp-server`)**
-  - New `acp_tool_runner.rs` that spawns Codex sessions on demand, relays MCP
+  - New `acp_tool_runner.rs` that spawns sessions on demand, relays MCP
     notifications, and surfaces ACP updates.
   - `message_processor.rs` extended to expose `session/new` and
-    `session/prompt`, and to translate Codex events into ACP notifications (`session/update`).
+    `session/prompt`, and to translate events into ACP notifications (`session/update`).
 - **CLI/TUI (Node + Rust)**
   - TypeScript terminal UI completely replaced with ACP-first experience.
   - Rust TUI and associated tests removed.
@@ -59,7 +58,7 @@ capabilities.
 - **TUI** – Entire Rust TUI stack (`codex-rs/tui/src/chatwidget.rs:1`,
   `codex-rs/tui/src/history_cell.rs:1`, etc.) must remain functional and ignore
   unknown ACP events gracefully.
-- **CLI Footprint** – Our trimmed `codex-cli` structure and scripts differ from
+- **CLI Footprint** – Our trimmed CLI structure and scripts differ from
   upstream’s wholesale replacement; we will not adopt the TypeScript overhaul.
 - **Config Schema** – Existing TOML fields (confirm guards, validation toggles,
   sandbox defaults) must stay intact.
@@ -110,7 +109,7 @@ capabilities.
 
 ## Open Questions
 
-- How should ACP be surfaced in Code’s configuration (auto-enabled vs per
+- How should ACP be surfaced in Planner’s configuration (auto-enabled vs per
   server flag)?
 - Do we expose ACP status in the Rust TUI, or treat it as headless-only? (Lean
   toward headless-first with optional UI indicators.)
