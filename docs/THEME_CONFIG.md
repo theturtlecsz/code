@@ -171,7 +171,7 @@ info = "#2aa198"         # Cyan
 2. Use a color picker tool to find exact hex values
 3. Test your theme in different lighting conditions
 4. Consider accessibility - ensure sufficient contrast between text and background colors
-5. The theme takes effect immediately when you save the config file and restart Codex
+5. The theme takes effect immediately when you save the config file and restart Planner
 
 ## Color Meanings
 

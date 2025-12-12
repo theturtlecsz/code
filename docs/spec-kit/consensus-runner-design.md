@@ -18,7 +18,7 @@ Shell entry point `scripts/spec_ops_004/consensus_runner.sh` that:
    - `${MODEL_ID}`, `${MODEL_RELEASE}`, `${REASONING_MODE}` → looked up from `docs/spec-kit/model-strategy.md` (default table) or environment overrides (e.g. `SPEC_KIT_MODEL_GEMINI`).
    - `${CONTEXT}` → combination of `docs/SPEC-<area>-<slug>/spec.md`, latest plan/tasks docs, and local-memory exports (retrieved via MCP shell-lite or local-memory CLI dump when available).
    - `${PREVIOUS_OUTPUTS.*}` → previous agent JSON payloads saved under `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/consensus/<SPEC-ID>/` for the current stage run (Gemini → Claude, Gemini+Claude → GPT). On first agent we pass empty object.
-4. Invokes each agent sequentially using the Codex CLI binary (`codex-rs/target/dev-fast/code` or configured path) with `code exec --sandbox read-only --model <model> --reasoning <mode> -- <prompt>`.
+4. Invokes each agent sequentially using the Planner (`code`) binary (`codex-rs/target/dev-fast/code` or configured path) with `code exec --sandbox read-only --model <model> --reasoning <mode> -- <prompt>`.
 5. Writes each agent response to:
    - `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/consensus/<SPEC-ID>/<stage>_<timestamp>_<agent>.json`
    - Local-memory (`spec-tracker` domain) with the same payload for future retrieval.
@@ -47,7 +47,7 @@ Shell entry point `scripts/spec_ops_004/consensus_runner.sh` that:
 - `--context-file <path>`: inject additional context (concatenated before prompts).
 - `--output-dir <path>`: defaults to `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/consensus/<SPEC-ID>`.
 - `--dry-run`: render prompts only (default when `/speckit.plan --consensus` is used).
-- `--execute`: run Codex CLI for each agent; requires credentials and write access to evidence directories.
+- `--execute`: run `code` for each agent; requires credentials and write access to evidence directories.
 - `--allow-conflict`: exit 0 even if conflicts detected (synthesis still records `status: "conflict"`).
 
 ## Integration Points (Phase 3 Status)
@@ -60,9 +60,8 @@ Shell entry point `scripts/spec_ops_004/consensus_runner.sh` that:
 - `/spec-consensus <SPEC-ID> <stage>` displays automation results
 
 **Guardrail Commands:**
-- `/guardrail.plan|tasks|implement|validate|audit|unlock` - validation wrappers (separate from multi-agent) (note: legacy `/spec-ops-*` commands still work)
-- `/guardrail.auto` - full pipeline wrapper with telemetry (note: legacy `/spec-ops-auto` still works)
-- Legacy `/spec-*` commands still functional, map to `/speckit.*` internally
+- `/guardrail.plan|tasks|implement|validate|audit|unlock` - validation wrappers (separate from multi-agent)
+- `/guardrail.auto` - full pipeline wrapper with telemetry
 
 **Agent Allocation:**
 - **Tier 0:** `/speckit.status` - 0 agents (native Rust)
@@ -96,7 +95,7 @@ Shell entry point `scripts/spec_ops_004/consensus_runner.sh` that:
 - Previous outputs handling: Empty JSON object supplied on first run
 - SPEC directory mapping: Convention-based (`docs/SPEC-<AREA>-<slug>/`)
 - Smoke test SPEC: SPEC-KIT-045-mini validates full pipeline
-- Full pipeline automation: Implemented via `/speckit.auto` or `/guardrail.auto` (note: legacy `/spec-ops-auto` still works)
+- Full pipeline automation: Implemented via `/speckit.auto` or `/guardrail.auto`
 - Credential requirements: Documented in CLAUDE.md and AGENTS.md
 
 **Open Questions (Future):**

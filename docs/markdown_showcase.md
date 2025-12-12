@@ -72,9 +72,9 @@ A quick tour of many common Markdown elements so you can verify rendering.
 
 - Inline: [OpenAI](https://openai.com)
 - Title: [Rust](https://www.rust-lang.org "Rust language")
-- Reference: [Codex CLI][codex] and [CommonMark][cm]
+- Reference: [Planner][planner] and [CommonMark][cm]
 
-[codex]: https://github.com/openai/codex
+[planner]: ../README.md
 [cm]: https://commonmark.org
 
 ---
@@ -97,7 +97,7 @@ fn greet(name: &str) -> String {
 }
 
 fn main() {
-    println!("{}", greet("Codex"));
+    println!("{}", greet("Planner"));
 }
 ```
 
@@ -110,7 +110,7 @@ echo "Build finished."
 
 ```json
 {
-  "name": "codex-demo",
+  "name": "planner-demo",
   "version": "1.0.0",
   "private": true
 }
@@ -248,4 +248,3 @@ flowchart TD
 ---
 
 If you want more of any specific element (e.g., longer tables, nested lists, or additional code languages), tell me what to stress-test next.
-

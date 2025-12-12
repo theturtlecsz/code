@@ -148,7 +148,7 @@ to ensure hermetic agent isolation and reproducible behavior.
 | `analyze-template.md` | Quality gates | Consistency checking |
 | `checklist-template.md` | Quality gates | Quality scoring |
 | `CLAUDE-template.md` | `/speckit.project` | Claude Code instructions |
-| `AGENTS-template.md` | `/speckit.project` | Codex agent instructions |
+| `AGENTS-template.md` | `/speckit.project` | Planner agent instructions |
 | `GEMINI-template.md` | `/speckit.project` | Gemini CLI instructions |
 
 **SPEC-KIT-961**: All three instruction file templates are scaffolded by `/speckit.project` for hermetic agent isolation.
@@ -161,11 +161,11 @@ to ensure hermetic agent isolation and reproducible behavior.
 |---------|-----------------|---------------|
 | Claude Code | `~/.claude/` | claude-opus-4-5 |
 | Gemini CLI | `.gemini/settings.json` | gemini-2.5-flash |
-| Codex TUI | `~/.config/code/` | gpt-5 |
+| Planner TUI | `~/.config/code/` | gpt-5 |
 
 ### Agent Routing by IDE
 
-| Stage | Claude Code | Gemini CLI | Codex TUI |
+| Stage | Claude Code | Gemini CLI | Planner TUI |
 |-------|-------------|------------|-----------|
 | Tier 0 | Native | Native | Native |
 | Tier 1-2 | Spawns agents | Uses gemini-flash | Spawns agents |

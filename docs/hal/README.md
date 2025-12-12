@@ -13,11 +13,11 @@ Required project files:
 - `docs/hal/hal_profile.json` in the product repo: defines the smoke requests
   (health/list_movies/indexer_test/graphql_ping) invoked through the HAL MCP
   server. The example in this repo already wires `{secrets.kavedarr.api_key}`
-  placeholders so credentials stay in the Codex secret store.
+  placeholders so credentials stay in the Planner secret store.
 
 Remember to generate the API key once (watch the server bootstrap output) and
 store it as `HAL_SECRET_KAVEDARR_API_KEY` (or the project-specific equivalent)
-in the Codex secret store. The bundled `hal_profile.json` references
+in the Planner secret store. The bundled `hal_profile.json` references
 `{secrets.HAL_SECRET_KAVEDARR_API_KEY}`, so the MCP client will inject the
 value automatically. Never commit the actual key.
 
@@ -44,7 +44,7 @@ with timestamped filenames, for example:
 20250929-114708Z-hal-health.json      # HAL offline failure
 ```
 
-When recording guardrail telemetry, export `SPEC_OPS_TELEMETRY_HAL=1` so `/spec-ops-validate`
+When recording guardrail telemetry, export `SPEC_OPS_TELEMETRY_HAL=1` so `/guardrail.validate`
 adds `hal.summary` metadata pointing to each artifact. Downstream docs (slash commands,
 AGENTS, getting started) reference these filenames directly, so refresh the captures whenever
 HAL behavior changes.

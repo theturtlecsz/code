@@ -284,7 +284,7 @@ These commands have **no legacy equivalent** and are new in Phase 3:
 
 ### 1. Consistent Naming
 - All spec-kit commands under `/speckit.*` namespace
-- Clear separation from general Codex commands
+- Clear separation from non–Spec-Kit commands
 - Follows GitHub spec-kit convention
 
 ### 2. Right-Sized Agents (Tiered Strategy)
