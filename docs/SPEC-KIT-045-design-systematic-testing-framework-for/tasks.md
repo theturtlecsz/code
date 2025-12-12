@@ -7,7 +7,7 @@
 ## Task Slices (2025-10-11)
 
 - **Validation**:
-  1. From the TUI, run `/spec-auto <SPEC-ID> --from plan` (or `/spec-ops-plan <SPEC-ID>`) — HAL defaults to mock.
+  1. From the TUI, run `/speckit.auto <SPEC-ID> --from plan` (or `/guardrail.plan <SPEC-ID>`) — HAL defaults to mock.
   2. Confirm all four agents (Gemini, Claude, GPT Pro, GPT Codex) appear in the transcript and capture the log path under `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/consensus/`.
 - **Evidence**: TUI transcript showing model roster, updated config diff, local-memory note on remediation.
 - **Docs**: Update `docs/spec-kit/model-strategy.md` appendix with confirmed model IDs and escalation guidance.
@@ -20,11 +20,11 @@
 - **Docs**: Add regeneration instructions to `docs/spec-kit/systematic-testing-guide.md`.
 - **Risks**: Fixture rot when prompts or schemas change; schedule refresh cadence.
 
-- **Goal**: Define playbooks for running `/spec-ops-<stage>` against fixtures from the TUI, asserting acceptance criteria and evidence writes without the full pipeline.
+- **Goal**: Define playbooks for running `/guardrail.<stage>` against fixtures from the TUI, asserting acceptance criteria and evidence writes without the full pipeline.
 - **Dependencies**: Tasks 1–2, guardrail scripts in `scripts/spec_ops_004/commands/`.
 - **Validation**:
-  1. From the TUI, run `/spec-ops-plan SPEC-KIT-045-mini` (mock HAL) and capture log + telemetry paths. Launch the TUI with `--sandbox danger-full-access` to avoid Landlock panics when listing evidence.
-  2. Repeat for tasks, implement, validate, audit, unlock. For resumable flows, run `/spec-auto SPEC-KIT-045-mini --from <stage>` and document behaviour.
+  1. From the TUI, run `/guardrail.plan SPEC-KIT-045-mini` (mock HAL) and capture log + telemetry paths. Launch the TUI with `--sandbox danger-full-access` to avoid Landlock panics when listing evidence.
+  2. Repeat for tasks, implement, validate, audit, unlock. For resumable flows, run `/speckit.auto SPEC-KIT-045-mini --from <stage>` and document behaviour.
 - **Evidence**: Stage-specific log files, acceptance checklist stored in docs, annotated transcripts.
 - **Docs**: Update `docs/spec-kit/systematic-testing-guide.md` with detailed stage instructions.
 - **Risks**: `--from <stage>` resume behaviour may diverge; include regression test for resumptions.
@@ -45,12 +45,12 @@
   2. Capture halt evidence (logs, telemetry, transcript snippets) and document recommended remediation steps.
 - **Evidence**: Error scenario logs, telemetry snippets demonstrating halt conditions, documented remediation steps.
 - **Docs**: Update troubleshooting section with error matrices and recovery playbook.
-- **Risks**: HAL outages masking other failures; default HAL mode is mocked (no network). Document how to flip to live by adding `--hal live` to the relevant `/spec-ops-*` or `/spec-auto` command.
+- **Risks**: HAL outages masking other failures; default HAL mode is mocked (no network). Document how to flip to live by adding `--hal live` to the relevant `/guardrail.*` or `/speckit.auto` command.
 
 - **Goal**: Document the sub-90-minute workflow, update SPEC tracker, and wire commands into CI.
 - **Dependencies**: Tasks 1–5 complete with evidence.
 - **Validation**:
-  1. Execute the full TUI rehearsal (`/spec-ops-plan|tasks|implement|validate|audit|unlock`) with fixture SPEC and mock HAL.
+  1. Execute the full TUI rehearsal (`/guardrail.plan|tasks|implement|validate|audit|unlock`) with fixture SPEC and mock HAL.
   2. Update docs, run `scripts/doc-structure-validate.sh --mode=templates` and `python3 scripts/spec-kit/lint_tasks.py`, then record the command list in SPEC.md notes.
 - **Evidence**: Consolidated log bundle, CI plan snippet (documented steps), dated SPEC.md note with command list.
 - **Docs**: Finalise `docs/spec-kit/systematic-testing-guide.md` + troubleshooting companion; add SPEC.md evidence note referencing logs.

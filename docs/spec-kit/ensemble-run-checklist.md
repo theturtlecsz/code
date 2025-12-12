@@ -14,7 +14,7 @@ Execute `/speckit.implement` with the GPT-5-Codex ⊕ Claude 4.5 ensemble (Tier 
 ## Preconditions
 
 - SPEC has Plan/Tasks consensus with prompt versions recorded in local-memory
-- Guardrail baseline (`/spec-ops-auto <SPEC-ID> --from plan`) executed successfully
+- Guardrail baseline (`/guardrail.auto <SPEC-ID> --from plan`) executed successfully
 - Local-memory contains stage entries for prior runs
 - All 5 agent types configured in `~/.code/config.toml` (gemini, claude, gpt_pro, gpt_codex, code)
 
@@ -22,7 +22,7 @@ Execute `/speckit.implement` with the GPT-5-Codex ⊕ Claude 4.5 ensemble (Tier 
 
 ## Steps
 
-1. **Trigger guardrail:** `/spec-ops-implement <SPEC-ID>` to lock workspace and collect telemetry
+1. **Trigger guardrail:** `/guardrail.implement <SPEC-ID>` to lock workspace and collect telemetry
 2. **Run multi-agent:** `/speckit.implement <SPEC-ID> [goal]` in TUI, confirm composer prompt shows expected `PROMPT_VERSION` strings
 3. **Verify agents:** Confirm Gemini, Claude, GPT-5-Codex, and GPT-5 outputs land in local-memory with matching prompt versions
 4. **Check consensus:** Verify `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/consensus/<SPEC-ID>/` contains new JSON verdict with correct `prompt_version` and agent metadata
@@ -34,7 +34,7 @@ Execute `/speckit.implement` with the GPT-5-Codex ⊕ Claude 4.5 ensemble (Tier 
 ## Artifacts
 
 **Guardrail telemetry:**
-- `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/<SPEC-ID>/spec-ops-implement_*.json`
+- `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/<SPEC-ID>/spec-implement_*.json`
 
 **Consensus evidence:**
 - `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/consensus/<SPEC-ID>/implement_*_gemini.json`

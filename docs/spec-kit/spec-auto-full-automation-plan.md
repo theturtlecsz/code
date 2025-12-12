@@ -1,6 +1,6 @@
-# `/spec-auto` Full Automation Implementation Plan
+# `/speckit.auto` Full Automation Implementation Plan
 
-> **Goal:** Make `/spec-auto` fully automated with zero user interaction. Only pause for errors or decision-requiring conflicts.
+> **Goal:** Make `/speckit.auto` fully automated with zero user interaction. Only pause for errors or decision-requiring conflicts.
 
 **Status:** Planning phase
 **Owner:** Code
@@ -232,7 +232,7 @@ fn auto_submit_for_spec_auto(&mut self, prompt: String, stage: SpecStage) {
     // Create user message
     let user_msg = UserMessage {
         display_text: format!(
-            "/spec-{} auto-submitted by /spec-auto pipeline",
+            "/spec-{} auto-submitted by /speckit.auto pipeline",
             stage.command_name()
         ),
         ordered_items: vec![InputItem::Text { text: prompt }],
@@ -419,12 +419,12 @@ fn check_consensus_and_advance_spec_auto(&mut self) {
 fn halt_spec_auto_with_error(&mut self, reason: String) {
     self.history_push(crate::history_cell::PlainHistoryCell::new(
         vec![
-            ratatui::text::Line::from("⚠ /spec-auto halted"),
+            ratatui::text::Line::from("⚠ /speckit.auto halted"),
             ratatui::text::Line::from(reason),
             ratatui::text::Line::from(""),
             ratatui::text::Line::from("Resolve the issue and re-run with:"),
             ratatui::text::Line::from(format!(
-                "/spec-auto {} --from <stage>",
+                "/speckit.auto {} --from <stage>",
                 self.spec_auto_state.as_ref().map(|s| s.spec_id.as_str()).unwrap_or("SPEC-ID")
             )),
         ],
@@ -486,7 +486,7 @@ fn check_spec_auto_timeout(&mut self) {
 // On quit/cancel:
 if self.spec_auto_state.is_some() {
     self.history_push(crate::history_cell::PlainHistoryCell::new(
-        vec![ratatui::text::Line::from("/spec-auto interrupted by user")],
+        vec![ratatui::text::Line::from("/speckit.auto interrupted by user")],
         crate::history_cell::HistoryCellType::Warning,
     ));
     self.spec_auto_state = None;
@@ -596,7 +596,7 @@ fn spec_auto_executes_plan_stage_automatically() {
         ("gpt_pro", AgentStatus::Running),
     ]);
 
-    // Trigger /spec-auto
+    // Trigger /speckit.auto
     chat.handle_spec_auto_command(SpecAutoInvocation {
         spec_id: "SPEC-AUTO-TEST".to_string(),
         goal: "test".to_string(),
@@ -679,7 +679,7 @@ fn spec_auto_halts_when_agent_fails() {
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ /spec-auto SPEC-ID --from <stage>                          │
+│ /speckit.auto SPEC-ID --from <stage>                          │
 └───────────────────────┬─────────────────────────────────────┘
                         ▼
             ┌───────────────────────┐
@@ -688,7 +688,7 @@ fn spec_auto_halts_when_agent_fails() {
             └───────┬───────────────┘
                     ▼
             ┌───────────────────────┐
-            │ Run /spec-ops-<stage> │
+            │ Run /guardrail.<stage> │
             │ (shell command)        │
             └───────┬───────────────┘
                     ▼
@@ -775,7 +775,7 @@ fn spec_auto_halts_when_agent_fails() {
 **All halt conditions show:**
 - Clear error message
 - Evidence file paths (if available)
-- Resume command: `/spec-auto SPEC-ID --from <stage>`
+- Resume command: `/speckit.auto SPEC-ID --from <stage>`
 
 ---
 
@@ -858,9 +858,9 @@ expected_agents: vec!["gemini", "claude", "gpt"]
 - Agents can't complete before message is sent
 - Sequential execution prevents race
 
-### Risk 3: Multiple /spec-auto Sessions
+### Risk 3: Multiple /speckit.auto Sessions
 
-**Problem:** User runs two `/spec-auto` commands in different TUI instances
+**Problem:** User runs two `/speckit.auto` commands in different TUI instances
 
 **Mitigation:**
 - Evidence writes use timestamps (no collision)
@@ -905,7 +905,7 @@ match self.run_spec_consensus(&spec_id, current_stage) {
 
 ### Manual Validation (Real Usage)
 
-1. Run `/spec-auto SPEC-KIT-DEMO --from plan`
+1. Run `/speckit.auto SPEC-KIT-DEMO --from plan`
 2. Watch TUI for:
    - Auto-submission confirmations
    - Agent execution progress
@@ -943,7 +943,7 @@ match self.run_spec_consensus(&spec_id, current_stage) {
 ## Success Criteria
 
 ### Must Have (MVP)
-- [ ] `/spec-auto SPEC-ID` runs all stages without user input
+- [ ] `/speckit.auto SPEC-ID` runs all stages without user input
 - [ ] Evidence written for each stage (per-agent + synthesis + telemetry)
 - [ ] Pipeline halts on consensus conflict with clear error
 - [ ] Pipeline halts on missing agents
@@ -953,7 +953,7 @@ match self.run_spec_consensus(&spec_id, current_stage) {
 ### Nice to Have (V2)
 - [ ] Progress indicator (Stage 2/6: tasks - agents running)
 - [ ] Estimated time remaining
-- [ ] Pauseable/resumable (Ctrl+Z to pause, /spec-auto resume)
+- [ ] Pauseable/resumable (Ctrl+Z to pause, /speckit.auto resume)
 - [ ] Parallel stage execution (where possible)
 - [ ] Cost tracking display during execution
 
@@ -961,7 +961,7 @@ match self.run_spec_consensus(&spec_id, current_stage) {
 
 ## Alternative: Simpler Approach (If Timeline Too Long)
 
-**Use `/spec-ops-auto` wrapper that calls consensus_runner.sh:**
+**Use `/guardrail.auto` wrapper that calls consensus_runner.sh:**
 
 **Modify:** `scripts/spec_ops_004/spec_auto.sh`
 
@@ -1005,7 +1005,7 @@ fi
 - Better long-term architecture
 
 **For ship-fast approach:**
-- Enhance `/spec-ops-auto` bash script
+- Enhance `/guardrail.auto` bash script
 - Working in 1 day
 - Can migrate to TUI later
 

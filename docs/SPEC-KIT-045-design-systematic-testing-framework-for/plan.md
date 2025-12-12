@@ -6,12 +6,12 @@
 ## Work Breakdown
 1. Agent spawn audit & fixes
    - Inspect orchestrator config, prompts, and credentials to ensure Gemini, Claude, GPT Pro, and GPT Codex launch for every stage when triggered from the TUI.
-   - Capture remediation steps and log outputs so `/spec-auto` transcripts clearly show the four-model roster, and document the `--hal live` toggle for real HAL runs when needed.
+   - Capture remediation steps and log outputs so `/speckit.auto` transcripts clearly show the four-model roster, and document the `--hal live` toggle for real HAL runs when needed.
 2. Minimal fixture kit
    - Maintain a synthetic SPEC bundle (`docs/SPEC-KIT-045-mini/`) plus mocked agent/telemetry snapshots under 100 KB for fast stage rehearsal.
    - Document a lightweight copy/regeneration workflow (manual or future xtask) with checksum notes to detect drift. (2025-10-12 update: fixture created at 36 KB with checksums in `docs/SPEC-KIT-045-mini/checksums.sha256`.)
 3. Stage execution playbooks (plan → unlock)
-   - Define repeatable TUI sequences for `/spec-ops-plan|tasks|implement|validate|audit|unlock` against the fixture SPEC, including expected prompts, evidence locations, and resume (`--from`) behaviour.
+   - Define repeatable TUI sequences for `/guardrail.plan|tasks|implement|validate|audit|unlock` against the fixture SPEC, including expected prompts, evidence locations, and resume (`--from`) behaviour.
    - Ensure each playbook records agent roster confirmation and stage-specific acceptance criteria.
 4. Telemetry & evidence review
    - Build manual checklists for verifying telemetry JSON, logs, and SPEC.md/task patches after each stage run.
@@ -26,8 +26,8 @@
 ## Acceptance Mapping
 | Requirement (Spec) | Validation Step | Test/Check Artifact |
 | --- | --- | --- |
-| All four agents spawn reliably | Run `/spec-auto <SPEC>` (or `/spec-ops-plan`) in TUI with transcripts archived | TUI transcript + agent roster note |
-| Stage tests run independently | Execute `/spec-ops-<stage> SPEC-KIT-045-mini` for each stage with fixture docs | Evidence logs + acceptance checklist |
+| All four agents spawn reliably | Run `/speckit.auto <SPEC>` (or `/guardrail.plan`) in TUI with transcripts archived | TUI transcript + agent roster note |
+| Stage tests run independently | Execute `/guardrail.<stage> SPEC-KIT-045-mini` for each stage with fixture docs | Evidence logs + acceptance checklist |
 | File-writing behavior verified | Compare generated telemetry/logs vs documented manifest checklist | Operator checklist + evidence diff notes |
 | Error handling covered | Trigger documented failure scenarios (env flags/fixture tweaks) via TUI commands | Halt transcript + remediation log |
 | Fixtures stay minimal & fast | Recorded fixture size check & checksum note in doc appendix | Fixture report (<100 KB) |
@@ -44,7 +44,7 @@
 - Gemini 2.5 Pro and Claude 4.5 Sonnet agreed on the lean, fixture-first approach with agent spawn remediation and stage-by-stage validation; GPT Pro/GPT Codex alignment pending until access is restored and checked via task 1.
 
 ## Exit Criteria (Done)
-- Agent spawn rehearsal (via `/spec-auto` or `/spec-ops-plan`) confirms all four models and records evidence.
+- Agent spawn rehearsal (via `/speckit.auto` or `/guardrail.plan`) confirms all four models and records evidence.
 - Each stage playbook executes via TUI without running the full 90-minute pipeline.
 - File-writing checklist shows expected telemetry/log outputs for success and failure scenarios.
 - Error scenarios produce documented halt messages and evidence bundles.
