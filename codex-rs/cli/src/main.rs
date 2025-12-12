@@ -36,7 +36,7 @@ use crate::proto::ProtoCli;
 
 const CLI_COMMAND_NAME: &str = "code";
 
-/// Codex CLI
+/// Planner
 ///
 /// If no subcommand is specified, options will be forwarded to the interactive CLI.
 #[derive(Debug, Parser)]
@@ -64,7 +64,7 @@ struct MultitoolCli {
 
 #[derive(Debug, clap::Subcommand)]
 enum Subcommand {
-    /// Run Codex non-interactively.
+    /// Run Planner non-interactively.
     #[clap(visible_alias = "e")]
     Exec(ExecCli),
 
@@ -74,7 +74,7 @@ enum Subcommand {
     /// Remove stored authentication credentials.
     Logout(LogoutCommand),
 
-    /// [experimental] Run Codex as an MCP server and manage MCP servers.
+    /// [experimental] Run Planner as an MCP server and manage MCP servers.
     #[clap(visible_alias = "acp")]
     Mcp(McpCli),
 
@@ -95,7 +95,7 @@ enum Subcommand {
     #[clap(hide = false)]
     OrderReplay(OrderReplayArgs),
 
-    /// Apply the latest diff produced by Codex agent as a `git apply` to your local working tree.
+    /// Apply the latest diff produced by Planner as a `git apply` to your local working tree.
     #[clap(visible_alias = "a")]
     Apply(ApplyCommand),
 
@@ -493,8 +493,8 @@ fn resolve_resume_path(session_id: Option<&str>, last: bool) -> anyhow::Result<O
         return Ok(None);
     }
 
-    let codex_home =
-        codex_core::config::find_codex_home().context("failed to locate Codex home directory")?;
+    let codex_home = codex_core::config::find_codex_home()
+        .context("failed to locate Planner home directory")?;
 
     // Build the async work once, then execute it either on the existing
     // runtime (from a helper thread) or a fresh current-thread runtime.

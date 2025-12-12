@@ -1995,8 +1995,8 @@ impl App<'_> {
                     // === END FORK-SPECIFIC ===
 
                     // Persist UI-only slash commands to cross-session history.
-                    // For prompt-expanding commands (/plan, /solve, /code) we let the
-                    // expanded prompt be recorded by the normal submission path.
+                    // Commands that rewrite input (if any) should let the submission path
+                    // record the rewritten prompt instead.
                     if !command.is_prompt_expanding() {
                         self.app_event_tx.send(AppEvent::CodexOp(Op::AddToHistory {
                             text: command_text.clone(),

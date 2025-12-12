@@ -172,7 +172,7 @@ pub(crate) enum AppEvent {
     /// initial prompt once the new session is ready.
     SwitchCwd(std::path::PathBuf, Option<String>),
 
-    /// Signal that agents are about to start (triggered when /plan, /solve, /code commands are entered)
+    /// Signal that agents are about to start (triggered by multi-agent workflows)
     PrepareAgents,
 
     /// Update the model and optional reasoning effort preset
