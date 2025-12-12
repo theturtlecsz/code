@@ -8,28 +8,27 @@ from pathlib import Path
 
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 
+CANONICAL_MARKDOWN_FILES = [
+    "README.md",
+    "CONTRIBUTING.md",
+    "docs/SUMMARY.md",
+    "docs/VISION.md",
+    "docs/GETTING_STARTED.md",
+    "docs/CONFIG.md",
+    "docs/ARCHITECTURE.md",
+    "docs/DEPRECATIONS.md",
+    "docs/MAINTAINER_ANSWERS.md",
+    "docs/slash-commands.md",
+]
+
 
 def is_external(href: str) -> bool:
     return href.startswith(("http://", "https://", "mailto:"))
 
 
 def iter_markdown_files(repo_root: Path):
-    candidates = []
-    candidates.append(repo_root / "README.md")
-
-    docs_root = repo_root / "docs"
-    if docs_root.exists():
-        for path in docs_root.rglob("*.md"):
-            rel = path.relative_to(repo_root).as_posix()
-            if rel.startswith("docs/archive/"):
-                continue
-            if "/evidence/" in rel:
-                continue
-            if rel.startswith("docs/SPEC-OPS-004-integrated-coder-hooks/evidence/"):
-                continue
-            candidates.append(path)
-
-    for path in candidates:
+    for rel in CANONICAL_MARKDOWN_FILES:
+        path = repo_root / rel
         if path.exists():
             yield path
 
@@ -82,4 +81,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
