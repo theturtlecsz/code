@@ -118,7 +118,7 @@ pub fn handle_spec_consensus(widget: &mut ChatWidget, raw_args: String) {
     super::consensus_coordinator::handle_spec_consensus_impl(widget, raw_args);
 }
 
-/// Handle /guardrail.* and /spec-ops-* commands (guardrail validation)
+/// Handle /guardrail.* commands (guardrail validation)
 ///
 /// Delegates to guardrail module for actual implementation.
 /// This handler just provides the entry point routing.

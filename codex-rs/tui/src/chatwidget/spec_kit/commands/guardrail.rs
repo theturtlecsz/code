@@ -6,7 +6,7 @@ use super::super::super::ChatWidget;
 use super::super::command_registry::SpecKitCommand;
 use crate::slash_command::HalMode;
 
-/// Command: /guardrail.plan (and /spec-ops-plan)
+/// Command: /guardrail.plan
 pub struct GuardrailPlanCommand;
 
 impl SpecKitCommand for GuardrailPlanCommand {
@@ -15,7 +15,7 @@ impl SpecKitCommand for GuardrailPlanCommand {
     }
 
     fn aliases(&self) -> &[&'static str] {
-        &["spec-ops-plan"]
+        &[]
     }
 
     fn description(&self) -> &'static str {
@@ -54,7 +54,7 @@ impl GuardrailPlanCommand {
     }
 }
 
-/// Command: /guardrail.tasks (and /spec-ops-tasks)
+/// Command: /guardrail.tasks
 pub struct GuardrailTasksCommand;
 
 impl SpecKitCommand for GuardrailTasksCommand {
@@ -63,7 +63,7 @@ impl SpecKitCommand for GuardrailTasksCommand {
     }
 
     fn aliases(&self) -> &[&'static str] {
-        &["spec-ops-tasks"]
+        &[]
     }
 
     fn description(&self) -> &'static str {
@@ -87,7 +87,7 @@ impl SpecKitCommand for GuardrailTasksCommand {
     }
 }
 
-/// Command: /guardrail.implement (and /spec-ops-implement)
+/// Command: /guardrail.implement
 pub struct GuardrailImplementCommand;
 
 impl SpecKitCommand for GuardrailImplementCommand {
@@ -96,7 +96,7 @@ impl SpecKitCommand for GuardrailImplementCommand {
     }
 
     fn aliases(&self) -> &[&'static str] {
-        &["spec-ops-implement"]
+        &[]
     }
 
     fn description(&self) -> &'static str {
@@ -120,7 +120,7 @@ impl SpecKitCommand for GuardrailImplementCommand {
     }
 }
 
-/// Command: /guardrail.validate (and /spec-ops-validate)
+/// Command: /guardrail.validate
 pub struct GuardrailValidateCommand;
 
 impl SpecKitCommand for GuardrailValidateCommand {
@@ -129,7 +129,7 @@ impl SpecKitCommand for GuardrailValidateCommand {
     }
 
     fn aliases(&self) -> &[&'static str] {
-        &["spec-ops-validate"]
+        &[]
     }
 
     fn description(&self) -> &'static str {
@@ -153,7 +153,7 @@ impl SpecKitCommand for GuardrailValidateCommand {
     }
 }
 
-/// Command: /guardrail.audit (and /spec-ops-audit)
+/// Command: /guardrail.audit
 pub struct GuardrailAuditCommand;
 
 impl SpecKitCommand for GuardrailAuditCommand {
@@ -162,7 +162,7 @@ impl SpecKitCommand for GuardrailAuditCommand {
     }
 
     fn aliases(&self) -> &[&'static str] {
-        &["spec-ops-audit"]
+        &[]
     }
 
     fn description(&self) -> &'static str {
@@ -186,7 +186,7 @@ impl SpecKitCommand for GuardrailAuditCommand {
     }
 }
 
-/// Command: /guardrail.unlock (and /spec-ops-unlock)
+/// Command: /guardrail.unlock
 pub struct GuardrailUnlockCommand;
 
 impl SpecKitCommand for GuardrailUnlockCommand {
@@ -195,7 +195,7 @@ impl SpecKitCommand for GuardrailUnlockCommand {
     }
 
     fn aliases(&self) -> &[&'static str] {
-        &["spec-ops-unlock"]
+        &[]
     }
 
     fn description(&self) -> &'static str {
@@ -219,7 +219,7 @@ impl SpecKitCommand for GuardrailUnlockCommand {
     }
 }
 
-/// Command: /guardrail.auto (and /spec-ops-auto)
+/// Command: /guardrail.auto
 pub struct GuardrailAutoCommand;
 
 impl SpecKitCommand for GuardrailAutoCommand {
@@ -228,7 +228,7 @@ impl SpecKitCommand for GuardrailAutoCommand {
     }
 
     fn aliases(&self) -> &[&'static str] {
-        &["spec-ops-auto"]
+        &[]
     }
 
     fn description(&self) -> &'static str {
