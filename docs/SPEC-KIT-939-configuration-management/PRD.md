@@ -260,7 +260,7 @@ fn validate_agent_response(response: &AgentResponse) -> ValidationResult {
 // config.schema.json
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Codex Configuration",
+  "title": "Planner Configuration",
   "type": "object",
   "properties": {
     "agents": {
@@ -658,7 +658,7 @@ pub enum ConfigError {
 // config.schema.json
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Codex Configuration",
+  "title": "Planner Configuration",
   "description": "Configuration for codex-tui multi-agent orchestration",
   "type": "object",
   "properties": {

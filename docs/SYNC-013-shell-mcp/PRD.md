@@ -15,7 +15,7 @@
 
 ### P1: MCP Client Integration
 
-**Story**: As a user of Claude Desktop, I want to use Codex shell capabilities so that I have consistent tooling across MCP-compatible clients.
+**Story**: As a user of Claude Desktop, I want to use Planner shell capabilities so that I have consistent tooling across MCP-compatible clients.
 
 **Priority Rationale**: MCP is an emerging standard; supporting it increases adoption.
 

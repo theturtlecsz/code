@@ -18,7 +18,7 @@ The current Spec-Auto verification loop depends on long manual runs and ad-hoc i
 - Mocked agent outputs (success, degraded, conflict) aligned with current prompt metadata fields (`model`, `model_release`, `reasoning_mode`, `consensus`).
 - Schema validation tooling for telemetry JSON, synthesis bundles, and evidence directories.
 - Documentation and runbooks describing setup, execution, evidence capture, and failure triage.
-- Integration with existing guardrail helpers (`scripts/spec_ops_004/common.sh`, telemetry validators) and Codex CLI tests (`codex-rs/tui`).
+- Integration with existing guardrail helpers (`scripts/spec_ops_004/common.sh`, telemetry validators) and Planner tests (`codex-rs/tui`).
 
 ## Non-Goals
 - Replacing the orchestrator or guardrail implementations.
@@ -28,7 +28,7 @@ The current Spec-Auto verification loop depends on long manual runs and ad-hoc i
 
 ## Stakeholders
 - Spec Kit maintainers responsible for guardrails, telemetry, and orchestrator prompts.
-- Codex CLI engineers maintaining `chatwidget.rs`, stage state machines, and slash commands.
+- Planner engineers maintaining `chatwidget.rs`, stage state machines, and slash commands.
 - QA and release engineering teams who rely on reproducible evidence bundles.
 - Agent operations managing model availability and fallback policies.
 - Documentation owners updating SPEC.md, CLAUDE.md, AGENTS.md, and related runbooks.
@@ -89,7 +89,7 @@ The current Spec-Auto verification loop depends on long manual runs and ad-hoc i
 
 ## Dependencies
 - `scripts/spec_ops_004/commands/*` guardrail scripts and shared helpers (`common.sh`).
-- Codex CLI orchestrator integration within `codex-rs/tui/src/chatwidget.rs` and `slash_command.rs`.
+- Planner orchestrator integration within `codex-rs/tui/src/chatwidget.rs` and `slash_command.rs`.
 - Prompt metadata defined in `docs/spec-kit/prompts.json` and model lineup in `docs/spec-kit/model-strategy.md`.
 - Telemetry schema documentation (`docs/SPEC-KIT-013-telemetry-schema-guard/spec.md`, `docs/spec-kit/telemetry-schema-v2.md`).
 - Existing validation utilities (`scripts/spec-kit/lint_tasks.py`, consensus parsers, HAL mock helpers`).

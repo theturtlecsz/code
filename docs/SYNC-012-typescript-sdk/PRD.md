@@ -5,7 +5,7 @@
 **Branch**: feature/sync-012
 **Owner**: Code
 
-**Context**: Port the TypeScript SDK (`@openai/codex-sdk`) from upstream enabling external tooling integration. This SDK provides thread management, event streaming, and execution control for building VS Code extensions, web interfaces, and other integrations with the Codex/TUI backend.
+**Context**: Port the TypeScript SDK (`@upstream repository-sdk`) from upstream enabling external tooling integration. This SDK provides thread management, event streaming, and execution control for building VS Code extensions, web interfaces, and other integrations with the Planner/TUI backend.
 
 **Source**: `~/old/code/sdk/typescript/`
 
@@ -15,7 +15,7 @@
 
 ### P1: VS Code Extension Development
 
-**Story**: As an extension developer, I want a TypeScript SDK so that I can build VS Code integrations with Codex.
+**Story**: As an extension developer, I want a TypeScript SDK so that I can build VS Code integrations with Planner.
 
 **Priority Rationale**: VS Code is the primary editor for many users; SDK enables rich integrations.
 
@@ -106,7 +106,7 @@ npm run test
 # Local usage test
 npm link
 cd /tmp/test-project
-npm link @openai/codex-sdk
+npm link @upstream repository-sdk
 # Create test script using SDK
 ```
 
@@ -122,7 +122,7 @@ npm link @openai/codex-sdk
 
 ## Notes
 
-- Upstream uses `@openai/codex-sdk` name - consider fork-specific name
+- Upstream uses `@upstream repository-sdk` name - consider fork-specific name
 - May need to adapt for fork's API differences (CLI routing, etc.)
 - Consider WebSocket support in addition to SSE for bidirectional communication
 - VS Code extension is separate project that uses this SDK

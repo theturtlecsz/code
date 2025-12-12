@@ -9,7 +9,7 @@
 
 ## Problem Statement
 
-**Current State**: The Codex TUI renders ongoing multi-agent conversations inside `codex-rs/tui/src/chatwidget/`, but there is no in-product search. Users must manually scroll through hundreds of messages to rediscover earlier context, decisions, or error output.
+**Current State**: The Planner TUI renders ongoing multi-agent conversations inside `codex-rs/tui/src/chatwidget/`, but there is no in-product search. Users must manually scroll through hundreds of messages to rediscover earlier context, decisions, or error output.
 
 **Pain Points**:
 - Manual scrolling wastes 5–10 minutes whenever users need to revisit prior discussion.

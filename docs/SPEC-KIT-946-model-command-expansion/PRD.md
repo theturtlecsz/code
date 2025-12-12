@@ -83,7 +83,7 @@ Implement full access to all 13 models in the `/model` command.
 **Measurable Criteria**:
 - All 3 Gemini models selectable (Flash, 2.5 Pro, 3 Pro)
 - All 3 Claude models selectable (Haiku 4.5, Sonnet 4.5, Opus 4.1)
-- All GPT-5.1 variants selectable (Mini, Standard, Codex with reasoning levels)
+- All GPT-5.1 variants selectable (Mini, Standard, Planner with reasoning levels)
 - Total: ~18-20 presets available (13 models × reasoning variants)
 
 ### Goal 2: User Experience Quality
@@ -406,7 +406,7 @@ None - all dependencies are internal and already satisfied.
    - ✅ All 13 models selectable via `/model`
    - ✅ Gemini 2.5 Flash, 2.5 Pro, 3 Pro available
    - ✅ Claude Haiku 4.5, Sonnet 4.5, Opus 4.1 available
-   - ✅ GPT-5.1 Mini, Standard, Codex available
+   - ✅ GPT-5.1 Mini, Standard, Planner available
    - ✅ Reasoning levels work for GPT-5.1
 
 2. **Quality Gates**:
@@ -843,9 +843,9 @@ ModelPreset {
 │    GPT-5.1 Low — light reasoning ($1.25/$10)             │
 │    GPT-5.1 Medium — balanced (default) ($1.25/$10)       │
 │    GPT-5.1 High — deep reasoning ($1.25/$10)             │
-│    GPT-5.1 Codex Low — code specialist ($1.25/$10)       │
-│    GPT-5.1 Codex Medium — code specialist ($1.25/$10)    │
-│    GPT-5.1 Codex High — code specialist ($1.25/$10)      │
+│    GPT-5.1 Planner Low — code specialist ($1.25/$10)       │
+│    GPT-5.1 Planner Medium — code specialist ($1.25/$10)    │
+│    GPT-5.1 Planner High — code specialist ($1.25/$10)      │
 │                                                          │
 │  [↑↓ Navigate | Enter Select | Esc Cancel]               │
 └──────────────────────────────────────────────────────────┘

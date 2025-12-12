@@ -13,7 +13,7 @@
 - **Automation/observability engineers** want predictable cues surfaced in the TUI so they can mirror alerts manually until automation hooks are defined.
 
 ## Goals
-1. Deliver a `/spec-status <SPEC-ID>` dashboard rendered directly in the Codex TUI that summarizes guardrail baseline outcomes, consensus verdicts, agent participation, and freshness cues.
+1. Deliver a `/spec-status <SPEC-ID>` dashboard rendered directly in the Planner TUI that summarizes guardrail baseline outcomes, consensus verdicts, agent participation, and freshness cues.
 2. Differentiate `passed`, `failed`, and `stale` states per stage so operators know whether action is required.
 3. Surface packet scaffolding issues (missing PRD/spec/plan/tasks or SPEC.md tracker entry) with actionable guidance.
 4. Surface evidence footprint warnings (≥20 MB/≥25 MB) inside the TUI, highlighting the directories most responsible.
@@ -24,7 +24,7 @@
 - Building CLI or JSON export parity; this work focuses solely on the TUI experience.
 
 ## Scope & Assumptions
-- Dashboard remains markdown-style to fit the 1024×768 Codex viewport and 80×24 fallback, using concise tables and callouts.
+- Dashboard remains markdown-style to fit the 1024×768 Planner viewport and 80×24 fallback, using concise tables and callouts.
 - Aggregation must degrade gracefully: missing guardrail or consensus telemetry should surface as "pending" instead of crashing.
 - Evidence directories may be large; implementation should avoid full rescans by selecting the latest artifact per stage.
 

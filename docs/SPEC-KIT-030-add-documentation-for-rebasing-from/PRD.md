@@ -1,7 +1,7 @@
 # PRD: SPEC-KIT-030 Add Documentation for Rebasing from Fork Main Branch
 
 ## Summary
-This spec codifies how just-every/code documents fork rebasing against upstream master while supplying nightly drift validation. It balances evidence-driven guardrails (per the constitution) with tooling-first guidance drawn from `FORK_DEVIATIONS.md`, `docs/slash-commands.md`, and `scripts/spec-kit/nightly_sync_detect.py`.
+This spec codifies how upstream repository documents fork rebasing against upstream master while supplying nightly drift validation. It balances evidence-driven guardrails (per the constitution) with tooling-first guidance drawn from `FORK_DEVIATIONS.md`, `docs/slash-commands.md`, and `scripts/spec-kit/nightly_sync_detect.py`.
 
 ## Users & Goals
 - Spec Kit maintainers – maintain accurate operational runbooks for upstream drift management.

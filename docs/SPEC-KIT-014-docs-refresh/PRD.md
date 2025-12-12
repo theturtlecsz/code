@@ -6,7 +6,7 @@
 - **Outcome.** Repository docs clearly describe the `/spec-ops-*` vs `/spec-*` pairing, model lineup, telemetry schema expectations, and guardrail evidence flows, reducing onboarding time and avoiding stale CLI usage.
 
 ## Users & Jobs
-- **New Codex operators** need accurate slash-command usage and onboarding steps for configuring Spec Kit pipelines.
+- **New Planner operators** need accurate slash-command usage and onboarding steps for configuring Spec Kit pipelines.
 - **Maintainers** require reference docs to validate telemetry/evidence expectations and understand model fallbacks.
 - **Reviewers** expect SPEC documentation to state how consensus verdicts, telemetry, and guardrails interplay.
 

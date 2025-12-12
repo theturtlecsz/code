@@ -1,4 +1,4 @@
-# PRD: Migrate Spec-Kit Commands to Native Codex Tools
+# PRD: Migrate Spec-Kit Commands to Native Planner Tools
 
 **SPEC-ID**: SPEC-KIT-066
 **Created**: 2025-10-20
@@ -42,7 +42,7 @@
 ### Phase 2: Implement Native Replacements (3-6 hours)
 
 **For each SIMPLE/MEDIUM command**:
-1. Rewrite orchestrator-instructions to use native Codex tools
+1. Rewrite orchestrator-instructions to use native Planner tools
 2. Test with real execution
 3. Verify output matches bash/python version
 4. Document any limitations
@@ -87,7 +87,7 @@
 
 ### Native Tool Capabilities
 
-**Available Codex Tools**:
+**Available Planner Tools**:
 - **Glob**: Find files by pattern (replacement for `ls docs/SPEC-KIT-*`)
 - **Read**: Read file contents (replacement for `cat`)
 - **Write**: Create files with parent dirs (replacement for `mkdir -p` + `echo >`)

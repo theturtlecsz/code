@@ -1,7 +1,7 @@
 # PRD: Simple Config Validation Utility (SPEC-KIT-040-add-simple-config-validation-utility)
 
 ## Problem Statement
-- Codex CLI surfaces misconfigured values during runtime, often after expensive startup or guardrail execution, producing opaque stack traces and blocking `/spec-auto` runs.
+- Planner surfaces misconfigured values during runtime, often after expensive startup or guardrail execution, producing opaque stack traces and blocking `/spec-auto` runs.
 - Operators and contributors lack a pre-flight mechanism to validate `config.toml`, profile overrides, and CLI `-c key=value` flags before invoking automation.
 - Existing guardrail scripts (`scripts/spec-kit/lint_tasks.py`, `scripts/doc-structure-validate.sh`) do not cover configuration drift, allowing mismatches between documented options and the Rust data models in `codex-rs/core/src/config.rs`.
 

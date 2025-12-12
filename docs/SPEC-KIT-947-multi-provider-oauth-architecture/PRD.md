@@ -16,7 +16,7 @@ Enable automatic multi-provider OAuth authentication switching in the TUI, with 
 - SPEC-KIT-946 expanded `/model` command to show all 13 models (Gemini, Claude, GPT-5.1)
 - AuthMode enum only supports ApiKey and ChatGPT OAuth
 - Users with Claude/Gemini OAuth subscriptions cannot use those models in chat
-- Error when selecting Claude Opus: "The 'claude-opus-4.1' model is not supported when using Codex with a ChatGPT account"
+- Error when selecting Claude Opus: "The 'claude-opus-4.1' model is not supported when using Planner with a ChatGPT account"
 
 **Proposed Solution**:
 - Expand AuthMode enum to support Claude and Gemini OAuth

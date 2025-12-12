@@ -8,7 +8,7 @@
 
 ## Problem Statement
 
-This fork (theturtlecsz/code) retains upstream (just-every/code) slash commands that conflict with the spec-kit workflow:
+This fork (theturtlecsz/code) retains upstream (upstream repository) slash commands that conflict with the spec-kit workflow:
 
 | Command | Description (upstream) | Conflict |
 |---------|----------------------|----------|

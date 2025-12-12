@@ -23,7 +23,7 @@
 ## Requirements
 1. Provide a CLI command or script with dry-run and apply modes that fetches Byterover entries, normalises them, and writes to local-memory.
 2. Generate machine-readable (JSON) and human-readable summaries under `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-010/` each time the migration runs.
-3. Update Codex CLI/TUI flows (slash commands, consensus verdict storage, Spec Ops hooks) to read from local-memory, invoking Byterover only when local results are missing and persisting those fallbacks.
+3. Update Planner/TUI flows (slash commands, consensus verdict storage, Spec Ops hooks) to read from local-memory, invoking Byterover only when local results are missing and persisting those fallbacks.
 4. Document the execution workflow (prerequisites, commands, verification, rollback) and ensure SPEC tracker + lint are updated.
 
 ## Success Metrics
