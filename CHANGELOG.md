@@ -3,6 +3,12 @@
 > [!TIP]
 > We're constantly improving Planner! This page documents the core changes.
 
+## [Unreleased]
+
+- Spec-Kit: remove legacy `/plan`, `/solve`, and `/code` (use `/speckit.*`).
+- Docs: make Planner + Spec-Kit workflow canonical (`docs/SUMMARY.md`, `docs/VISION.md`, `docs/DEPRECATIONS.md`).
+- Distribution: source-build only; remove npm/Homebrew packaging and update `/update` guidance.
+
 ## [0.2.166] - 2025-09-25
 
 - TUI/History: refresh the popular commands lineup so quick actions match current workflows. (03af55d1)
