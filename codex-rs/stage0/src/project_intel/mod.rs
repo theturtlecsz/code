@@ -12,5 +12,5 @@
 pub mod snapshot;
 pub mod types;
 
-pub use snapshot::{load_governance_from_db, ProjectSnapshotBuilder, SnapshotConfig};
+pub use snapshot::{ProjectSnapshotBuilder, SnapshotConfig, load_governance_from_db};
 pub use types::*;

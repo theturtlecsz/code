@@ -1692,10 +1692,17 @@ SCOPE:
 
 APPROVED_BY: architect on 2025-01-15"#;
 
-        db.upsert_constitution_memory("const-exception-001", ConstitutionType::Exception, exception_content)
-            .expect("upsert exception");
+        db.upsert_constitution_memory(
+            "const-exception-001",
+            ConstitutionType::Exception,
+            exception_content,
+        )
+        .expect("upsert exception");
 
-        let mem = db.get_memory("const-exception-001").expect("get").expect("exists");
+        let mem = db
+            .get_memory("const-exception-001")
+            .expect("get")
+            .expect("exists");
         assert_eq!(mem.initial_priority, 7, "Exception should have priority 7");
         assert_eq!(mem.structure_status, Some(StructureStatus::Structured));
         assert!(mem.content_raw.as_ref().unwrap().contains("[EXCEPTION]"));

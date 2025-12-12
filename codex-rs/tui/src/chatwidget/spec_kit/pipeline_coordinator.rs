@@ -2058,9 +2058,6 @@ pub fn run_constitution_readiness_gate(widget: &mut ChatWidget) -> bool {
         return false;
     }
 
-    tracing::warn!(
-        "Constitution readiness gate: {} warning(s)",
-        warnings.len()
-    );
+    tracing::warn!("Constitution readiness gate: {} warning(s)", warnings.len());
     true
 }

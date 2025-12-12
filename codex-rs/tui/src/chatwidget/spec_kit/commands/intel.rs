@@ -53,11 +53,15 @@ fn execute_snapshot(widget: &mut ChatWidget, args: &[&str]) {
     let flags = parse_flags(args);
 
     // Header
-    push_output(widget, vec![
-        "=== Project Intel: Snapshot ===".to_string(),
-        String::new(),
-        "Gathering project details...".to_string(),
-    ], HistoryCellType::Notice);
+    push_output(
+        widget,
+        vec![
+            "=== Project Intel: Snapshot ===".to_string(),
+            String::new(),
+            "Gathering project details...".to_string(),
+        ],
+        HistoryCellType::Notice,
+    );
 
     // Get project root
     let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -70,9 +74,10 @@ fn execute_snapshot(widget: &mut ChatWidget, args: &[&str]) {
     let mut builder = ProjectSnapshotBuilder::new(config, "codex-rs");
 
     // Try to load governance from overlay DB
-    let stage0_result = crate::chatwidget::spec_kit::consensus_coordinator::block_on_sync(|| async {
-        codex_stage0::Stage0Engine::new()
-    });
+    let stage0_result =
+        crate::chatwidget::spec_kit::consensus_coordinator::block_on_sync(|| async {
+            codex_stage0::Stage0Engine::new()
+        });
 
     if let Ok(engine) = stage0_result {
         if let Ok(governance) = codex_stage0::project_intel::load_governance_from_db(engine.db()) {
@@ -88,7 +93,11 @@ fn execute_snapshot(widget: &mut ChatWidget, args: &[&str]) {
             let feeds_dir = intel_dir.join("project_feeds");
 
             if let Err(e) = std::fs::create_dir_all(&feeds_dir) {
-                push_output(widget, vec![format!("Failed to create intel directory: {}", e)], HistoryCellType::Error);
+                push_output(
+                    widget,
+                    vec![format!("Failed to create intel directory: {}", e)],
+                    HistoryCellType::Error,
+                );
                 return;
             }
 
@@ -97,13 +106,25 @@ fn execute_snapshot(widget: &mut ChatWidget, args: &[&str]) {
             match snapshot.to_json() {
                 Ok(json) => {
                     if let Err(e) = std::fs::write(&json_path, &json) {
-                        push_output(widget, vec![format!("Failed to write JSON: {}", e)], HistoryCellType::Error);
+                        push_output(
+                            widget,
+                            vec![format!("Failed to write JSON: {}", e)],
+                            HistoryCellType::Error,
+                        );
                     } else if flags.verbose {
-                        push_output(widget, vec![format!("  Wrote: {}", json_path.display())], HistoryCellType::Notice);
+                        push_output(
+                            widget,
+                            vec![format!("  Wrote: {}", json_path.display())],
+                            HistoryCellType::Notice,
+                        );
                     }
                 }
                 Err(e) => {
-                    push_output(widget, vec![format!("Failed to serialize: {}", e)], HistoryCellType::Error);
+                    push_output(
+                        widget,
+                        vec![format!("Failed to serialize: {}", e)],
+                        HistoryCellType::Error,
+                    );
                 }
             }
 
@@ -124,37 +145,56 @@ fn execute_snapshot(widget: &mut ChatWidget, args: &[&str]) {
                     Ok(()) => {
                         written += 1;
                         if flags.verbose {
-                            push_output(widget, vec![format!("  Wrote: {}", path.display())], HistoryCellType::Notice);
+                            push_output(
+                                widget,
+                                vec![format!("  Wrote: {}", path.display())],
+                                HistoryCellType::Notice,
+                            );
                         }
                     }
                     Err(e) => {
-                        push_output(widget, vec![format!("Failed to write {}: {}", filename, e)], HistoryCellType::Error);
+                        push_output(
+                            widget,
+                            vec![format!("Failed to write {}: {}", filename, e)],
+                            HistoryCellType::Error,
+                        );
                     }
                 }
             }
 
             // Summary
-            push_output(widget, vec![
-                String::new(),
-                "=== Snapshot Complete ===".to_string(),
-                format!("Project: {}", snapshot.metadata.name),
-                format!("Branch: {}", snapshot.metadata.branch),
-                format!("Commit: {}", snapshot.metadata.commit_hash),
-                format!("Crates: {}", snapshot.code_topology.crates.len()),
-                format!("Key Modules: {}", snapshot.code_topology.key_modules.len()),
-                format!("Workflows: {}", snapshot.workflows.len()),
-                format!("Specs: {}", snapshot.specs.len()),
-                format!("Constitution Version: {}", snapshot.governance.constitution_version),
-                String::new(),
-                format!("Output: {}", intel_dir.display()),
-                format!("  - project_snapshot.json"),
-                format!("  - project_feeds/ ({} files)", written),
-                String::new(),
-                "Next: Run /stage0.project-intel curate-nl to generate NL_* docs".to_string(),
-            ], HistoryCellType::Notice);
+            push_output(
+                widget,
+                vec![
+                    String::new(),
+                    "=== Snapshot Complete ===".to_string(),
+                    format!("Project: {}", snapshot.metadata.name),
+                    format!("Branch: {}", snapshot.metadata.branch),
+                    format!("Commit: {}", snapshot.metadata.commit_hash),
+                    format!("Crates: {}", snapshot.code_topology.crates.len()),
+                    format!("Key Modules: {}", snapshot.code_topology.key_modules.len()),
+                    format!("Workflows: {}", snapshot.workflows.len()),
+                    format!("Specs: {}", snapshot.specs.len()),
+                    format!(
+                        "Constitution Version: {}",
+                        snapshot.governance.constitution_version
+                    ),
+                    String::new(),
+                    format!("Output: {}", intel_dir.display()),
+                    format!("  - project_snapshot.json"),
+                    format!("  - project_feeds/ ({} files)", written),
+                    String::new(),
+                    "Next: Run /stage0.project-intel curate-nl to generate NL_* docs".to_string(),
+                ],
+                HistoryCellType::Notice,
+            );
         }
         Err(e) => {
-            push_output(widget, vec![format!("Snapshot failed: {}", e)], HistoryCellType::Error);
+            push_output(
+                widget,
+                vec![format!("Snapshot failed: {}", e)],
+                HistoryCellType::Error,
+            );
         }
     }
 }
@@ -168,34 +208,60 @@ fn execute_curate_nl(widget: &mut ChatWidget, args: &[&str]) {
 
     // Check feeds exist
     if !feeds_dir.exists() {
-        push_output(widget, vec![
-            "Error: No project feeds found.".to_string(),
-            "Run /stage0.project-intel snapshot first.".to_string(),
-        ], HistoryCellType::Error);
+        push_output(
+            widget,
+            vec![
+                "Error: No project feeds found.".to_string(),
+                "Run /stage0.project-intel snapshot first.".to_string(),
+            ],
+            HistoryCellType::Error,
+        );
         return;
     }
 
-    push_output(widget, vec![
-        "=== Project Intel: Curate NL Docs ===".to_string(),
-        String::new(),
-        "Generating NL_* documents from project feeds...".to_string(),
-    ], HistoryCellType::Notice);
+    push_output(
+        widget,
+        vec![
+            "=== Project Intel: Curate NL Docs ===".to_string(),
+            String::new(),
+            "Generating NL_* documents from project feeds...".to_string(),
+        ],
+        HistoryCellType::Notice,
+    );
 
     // For MVP, directly copy/transform feeds into NL docs
     // In production, this would call an LLM (GPT-5.1 Architect) to synthesize
 
     let nl_docs = [
-        ("NL_ARCHITECTURE_BIBLE.md", vec!["code_topology.md", "speckit_workflows.md"]),
+        (
+            "NL_ARCHITECTURE_BIBLE.md",
+            vec!["code_topology.md", "speckit_workflows.md"],
+        ),
         ("NL_WORKFLOW_MAP.md", vec!["speckit_workflows.md"]),
-        ("NL_GOVERNANCE_AND_DRIFT.md", vec!["governance_and_drift.md"]),
-        ("NL_MEMORY_AND_LIBRARIAN.md", vec!["memory_and_librarian.md"]),
+        (
+            "NL_GOVERNANCE_AND_DRIFT.md",
+            vec!["governance_and_drift.md"],
+        ),
+        (
+            "NL_MEMORY_AND_LIBRARIAN.md",
+            vec!["memory_and_librarian.md"],
+        ),
         ("NL_SESSION_LINEAGE.md", vec!["session_lineage.md"]),
     ];
 
     let mut generated = 0;
     for (nl_doc, source_feeds) in &nl_docs {
-        let mut content = format!("# {}\n\n", nl_doc.trim_end_matches(".md").replace("NL_", "").replace("_", " "));
-        content.push_str(&format!("*Generated by Project Intel at {}*\n\n", chrono::Utc::now().format("%Y-%m-%d %H:%M UTC")));
+        let mut content = format!(
+            "# {}\n\n",
+            nl_doc
+                .trim_end_matches(".md")
+                .replace("NL_", "")
+                .replace("_", " ")
+        );
+        content.push_str(&format!(
+            "*Generated by Project Intel at {}*\n\n",
+            chrono::Utc::now().format("%Y-%m-%d %H:%M UTC")
+        ));
         content.push_str("---\n\n");
 
         for feed in source_feeds {
@@ -211,22 +277,34 @@ fn execute_curate_nl(widget: &mut ChatWidget, args: &[&str]) {
             Ok(()) => {
                 generated += 1;
                 if flags.verbose {
-                    push_output(widget, vec![format!("  Generated: {}", doc_path.display())], HistoryCellType::Notice);
+                    push_output(
+                        widget,
+                        vec![format!("  Generated: {}", doc_path.display())],
+                        HistoryCellType::Notice,
+                    );
                 }
             }
             Err(e) => {
-                push_output(widget, vec![format!("Failed to write {}: {}", nl_doc, e)], HistoryCellType::Error);
+                push_output(
+                    widget,
+                    vec![format!("Failed to write {}: {}", nl_doc, e)],
+                    HistoryCellType::Error,
+                );
             }
         }
     }
 
-    push_output(widget, vec![
-        String::new(),
-        "=== Curation Complete ===".to_string(),
-        format!("Generated {} NL_* documents in docs/", generated),
-        String::new(),
-        "Next: Run /stage0.project-intel sync-nl to push to NotebookLM".to_string(),
-    ], HistoryCellType::Notice);
+    push_output(
+        widget,
+        vec![
+            String::new(),
+            "=== Curation Complete ===".to_string(),
+            format!("Generated {} NL_* documents in docs/", generated),
+            String::new(),
+            "Next: Run /stage0.project-intel sync-nl to push to NotebookLM".to_string(),
+        ],
+        HistoryCellType::Notice,
+    );
 }
 
 /// Execute sync-nl subcommand
@@ -234,10 +312,14 @@ fn execute_sync_nl(widget: &mut ChatWidget, args: &[&str]) {
     let flags = parse_flags(args);
     let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
-    push_output(widget, vec![
-        "=== Project Intel: Sync to NotebookLM ===".to_string(),
-        String::new(),
-    ], HistoryCellType::Notice);
+    push_output(
+        widget,
+        vec![
+            "=== Project Intel: Sync to NotebookLM ===".to_string(),
+            String::new(),
+        ],
+        HistoryCellType::Notice,
+    );
 
     // Load or create manifest
     let manifest_path = root.join("docs").join("NL_MANIFEST.toml");
@@ -245,7 +327,8 @@ fn execute_sync_nl(widget: &mut ChatWidget, args: &[&str]) {
         match std::fs::read_to_string(&manifest_path) {
             Ok(content) => {
                 // Parse TOML (simplified - just extract notebook_id for now)
-                let notebook_id = content.lines()
+                let notebook_id = content
+                    .lines()
                     .find(|l| l.starts_with("id = "))
                     .and_then(|l| l.split('\"').nth(1))
                     .unwrap_or("codex-rs-main")
@@ -261,28 +344,41 @@ fn execute_sync_nl(widget: &mut ChatWidget, args: &[&str]) {
         codex_stage0::project_intel::NlManifest::default_manifest()
     };
 
-    push_output(widget, vec![
-        format!("Target Notebook: {}", manifest.notebook_id),
-        format!("Sources to sync: {}", manifest.sources.len()),
-    ], HistoryCellType::Notice);
+    push_output(
+        widget,
+        vec![
+            format!("Target Notebook: {}", manifest.notebook_id),
+            format!("Sources to sync: {}", manifest.sources.len()),
+        ],
+        HistoryCellType::Notice,
+    );
 
     // Get MCP manager for NotebookLM calls
     let mcp_manager_guard = widget.mcp_manager.clone();
-    let mcp_opt = crate::chatwidget::spec_kit::consensus_coordinator::block_on_sync(|| async move {
-        mcp_manager_guard.lock().await.clone()
-    });
+    let mcp_opt =
+        crate::chatwidget::spec_kit::consensus_coordinator::block_on_sync(|| async move {
+            mcp_manager_guard.lock().await.clone()
+        });
 
     if mcp_opt.is_none() {
-        push_output(widget, vec![
-            "Warning: No MCP connection available.".to_string(),
-            "NotebookLM sync requires MCP. Files prepared locally.".to_string(),
-        ], HistoryCellType::Notice);
+        push_output(
+            widget,
+            vec![
+                "Warning: No MCP connection available.".to_string(),
+                "NotebookLM sync requires MCP. Files prepared locally.".to_string(),
+            ],
+            HistoryCellType::Notice,
+        );
 
         // Show what would be synced
         for source in &manifest.sources {
             let path = root.join(&source.path);
             let status = if path.exists() { "ready" } else { "missing" };
-            push_output(widget, vec![format!("  {} [{}]: {}", source.title, status, source.path)], HistoryCellType::Notice);
+            push_output(
+                widget,
+                vec![format!("  {} [{}]: {}", source.title, status, source.path)],
+                HistoryCellType::Notice,
+            );
         }
         return;
     }
@@ -293,7 +389,11 @@ fn execute_sync_nl(widget: &mut ChatWidget, args: &[&str]) {
         let path = root.join(&source.path);
         if !path.exists() {
             if flags.verbose {
-                push_output(widget, vec![format!("  Skipped (missing): {}", source.path)], HistoryCellType::Notice);
+                push_output(
+                    widget,
+                    vec![format!("  Skipped (missing): {}", source.path)],
+                    HistoryCellType::Notice,
+                );
             }
             continue;
         }
@@ -302,7 +402,11 @@ fn execute_sync_nl(widget: &mut ChatWidget, args: &[&str]) {
         let content = match std::fs::read_to_string(&path) {
             Ok(c) => c,
             Err(e) => {
-                push_output(widget, vec![format!("  Failed to read {}: {}", source.path, e)], HistoryCellType::Error);
+                push_output(
+                    widget,
+                    vec![format!("  Failed to read {}: {}", source.path, e)],
+                    HistoryCellType::Error,
+                );
                 continue;
             }
         };
@@ -311,23 +415,35 @@ fn execute_sync_nl(widget: &mut ChatWidget, args: &[&str]) {
         // Note: This assumes a hypothetical add_source tool - actual implementation
         // would need to match the NotebookLM MCP server's API
         if flags.verbose {
-            push_output(widget, vec![format!("  Syncing: {} ({} chars)", source.title, content.len())], HistoryCellType::Notice);
+            push_output(
+                widget,
+                vec![format!(
+                    "  Syncing: {} ({} chars)",
+                    source.title,
+                    content.len()
+                )],
+                HistoryCellType::Notice,
+            );
         }
 
         // For now, just mark as synced (actual MCP call would go here)
         synced += 1;
     }
 
-    push_output(widget, vec![
-        String::new(),
-        "=== Sync Complete ===".to_string(),
-        format!("Synced {} documents to NotebookLM", synced),
-        String::new(),
-        "Note: Full NotebookLM sync requires the notebooklm MCP server.".to_string(),
-        "Documents are ready in docs/NL_*.md".to_string(),
-        String::new(),
-        "Next: Run /stage0.project-intel overview to query the mental model".to_string(),
-    ], HistoryCellType::Notice);
+    push_output(
+        widget,
+        vec![
+            String::new(),
+            "=== Sync Complete ===".to_string(),
+            format!("Synced {} documents to NotebookLM", synced),
+            String::new(),
+            "Note: Full NotebookLM sync requires the notebooklm MCP server.".to_string(),
+            "Documents are ready in docs/NL_*.md".to_string(),
+            String::new(),
+            "Next: Run /stage0.project-intel overview to query the mental model".to_string(),
+        ],
+        HistoryCellType::Notice,
+    );
 }
 
 /// Execute overview subcommand
@@ -335,17 +451,22 @@ fn execute_overview(widget: &mut ChatWidget, args: &[&str]) {
     let _flags = parse_flags(args);
     let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
-    push_output(widget, vec![
-        "=== Project Intel: Overview Query ===".to_string(),
-        String::new(),
-        "Querying NotebookLM for global mental model...".to_string(),
-    ], HistoryCellType::Notice);
+    push_output(
+        widget,
+        vec![
+            "=== Project Intel: Overview Query ===".to_string(),
+            String::new(),
+            "Querying NotebookLM for global mental model...".to_string(),
+        ],
+        HistoryCellType::Notice,
+    );
 
     // Get MCP manager
     let mcp_manager_guard = widget.mcp_manager.clone();
-    let mcp_opt = crate::chatwidget::spec_kit::consensus_coordinator::block_on_sync(|| async move {
-        mcp_manager_guard.lock().await.clone()
-    });
+    let mcp_opt =
+        crate::chatwidget::spec_kit::consensus_coordinator::block_on_sync(|| async move {
+            mcp_manager_guard.lock().await.clone()
+        });
 
     // Overview query prompt
     let query = r#"Create a global mental model of the codex-rs project.
@@ -360,30 +481,39 @@ Produce a concise but precise overview that covers:
 Output as markdown with clear section headings."#;
 
     if mcp_opt.is_none() {
-        push_output(widget, vec![
-            "Warning: No MCP connection available.".to_string(),
-            String::new(),
-            "The overview query would ask NotebookLM:".to_string(),
-            String::new(),
-            query.to_string(),
-            String::new(),
-            "To use this feature:".to_string(),
-            "1. Ensure NotebookLM MCP server is configured".to_string(),
-            "2. Import docs/NL_*.md into your NotebookLM notebook".to_string(),
-            "3. Run this command again".to_string(),
-        ], HistoryCellType::Notice);
+        push_output(
+            widget,
+            vec![
+                "Warning: No MCP connection available.".to_string(),
+                String::new(),
+                "The overview query would ask NotebookLM:".to_string(),
+                String::new(),
+                query.to_string(),
+                String::new(),
+                "To use this feature:".to_string(),
+                "1. Ensure NotebookLM MCP server is configured".to_string(),
+                "2. Import docs/NL_*.md into your NotebookLM notebook".to_string(),
+                "3. Run this command again".to_string(),
+            ],
+            HistoryCellType::Notice,
+        );
         return;
     }
 
     // Call NotebookLM to generate overview
     // For MVP, generate from local files instead
-    push_output(widget, vec![
-        "Generating overview from local NL_* docs...".to_string(),
-    ], HistoryCellType::Notice);
+    push_output(
+        widget,
+        vec!["Generating overview from local NL_* docs...".to_string()],
+        HistoryCellType::Notice,
+    );
 
     let mut overview = String::new();
     overview.push_str("# Project Overview: codex-rs\n\n");
-    overview.push_str(&format!("*Generated: {}*\n\n", chrono::Utc::now().format("%Y-%m-%d %H:%M UTC")));
+    overview.push_str(&format!(
+        "*Generated: {}*\n\n",
+        chrono::Utc::now().format("%Y-%m-%d %H:%M UTC")
+    ));
 
     // Read and summarize NL docs
     let nl_docs = [
@@ -400,7 +530,11 @@ Output as markdown with clear section headings."#;
             if let Ok(content) = std::fs::read_to_string(&path) {
                 // Extract first 500 chars as summary
                 let summary: String = content.chars().take(500).collect();
-                overview.push_str(&format!("## {}\n\n{}\n\n", doc.replace("NL_", "").replace("_", " ").replace(".md", ""), summary));
+                overview.push_str(&format!(
+                    "## {}\n\n{}\n\n",
+                    doc.replace("NL_", "").replace("_", " ").replace(".md", ""),
+                    summary
+                ));
             }
         }
     }
@@ -409,17 +543,25 @@ Output as markdown with clear section headings."#;
     let overview_path = root.join("docs").join("NL_PROJECT_OVERVIEW.md");
     match std::fs::write(&overview_path, &overview) {
         Ok(()) => {
-            push_output(widget, vec![
-                String::new(),
-                "=== Overview Generated ===".to_string(),
-                format!("Output: {}", overview_path.display()),
-                String::new(),
-                "You can now paste NL_PROJECT_OVERVIEW.md into ChatGPT/Claude".to_string(),
-                "for instant project context.".to_string(),
-            ], HistoryCellType::Notice);
+            push_output(
+                widget,
+                vec![
+                    String::new(),
+                    "=== Overview Generated ===".to_string(),
+                    format!("Output: {}", overview_path.display()),
+                    String::new(),
+                    "You can now paste NL_PROJECT_OVERVIEW.md into ChatGPT/Claude".to_string(),
+                    "for instant project context.".to_string(),
+                ],
+                HistoryCellType::Notice,
+            );
         }
         Err(e) => {
-            push_output(widget, vec![format!("Failed to write overview: {}", e)], HistoryCellType::Error);
+            push_output(
+                widget,
+                vec![format!("Failed to write overview: {}", e)],
+                HistoryCellType::Error,
+            );
         }
     }
 }
@@ -428,23 +570,25 @@ Output as markdown with clear section headings."#;
 fn execute_status(widget: &mut ChatWidget) {
     let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
-    let mut lines = vec![
-        "=== Project Intel Status ===".to_string(),
-        String::new(),
-    ];
+    let mut lines = vec!["=== Project Intel Status ===".to_string(), String::new()];
 
     // Check snapshot
     let snapshot_path = root.join("var").join("intel").join("project_snapshot.json");
     if snapshot_path.exists() {
         if let Ok(metadata) = std::fs::metadata(&snapshot_path) {
-            let modified = metadata.modified()
+            let modified = metadata
+                .modified()
                 .ok()
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                 .map(|d| chrono::DateTime::from_timestamp(d.as_secs() as i64, 0))
                 .flatten()
                 .map(|dt: chrono::DateTime<chrono::Utc>| dt.format("%Y-%m-%d %H:%M").to_string())
                 .unwrap_or_else(|| "unknown".to_string());
-            lines.push(format!("Snapshot: {} ({})", snapshot_path.display(), modified));
+            lines.push(format!(
+                "Snapshot: {} ({})",
+                snapshot_path.display(),
+                modified
+            ));
         }
     } else {
         lines.push("Snapshot: Not generated (run /stage0.project-intel snapshot)".to_string());
@@ -456,7 +600,11 @@ fn execute_status(widget: &mut ChatWidget) {
         let feed_count = std::fs::read_dir(&feeds_dir)
             .map(|d| d.count())
             .unwrap_or(0);
-        lines.push(format!("Feeds: {} files in {}", feed_count, feeds_dir.display()));
+        lines.push(format!(
+            "Feeds: {} files in {}",
+            feed_count,
+            feeds_dir.display()
+        ));
     } else {
         lines.push("Feeds: Not generated".to_string());
     }

@@ -23,10 +23,12 @@ pub mod templater;
 
 // Re-export main types and functions
 pub use audit::{
-    ChangeInput, ChangeRecord, ChangeType, EdgeInput, EdgeRecord, LibrarianAudit,
-    SweepRecord, SweepStatus,
+    ChangeInput, ChangeRecord, ChangeType, EdgeInput, EdgeRecord, LibrarianAudit, SweepRecord,
+    SweepStatus,
 };
-pub use causal::{CausalConfig, CausalEdge, CausalRelation, detect_causal_language, infer_relationships};
+pub use causal::{
+    CausalConfig, CausalEdge, CausalRelation, detect_causal_language, infer_relationships,
+};
 pub use classifier::{
     ClassificationResult, ClassifierConfig, MemoryType, classify_memory, has_type_tag,
 };
@@ -108,10 +110,7 @@ pub enum SweepChange {
         confidence: f32,
     },
     /// Memory flagged for review (Unknown type)
-    FlaggedForReview {
-        memory_id: String,
-        reason: String,
-    },
+    FlaggedForReview { memory_id: String, reason: String },
 }
 
 /// Summary statistics for a sweep
@@ -256,12 +255,17 @@ pub fn process_memory(
     memory_id: &str,
     content: &str,
     config: &SweepConfig,
-) -> (ClassificationResult, TemplatedMemory, Vec<(CausalRelation, f32, String)>) {
+) -> (
+    ClassificationResult,
+    TemplatedMemory,
+    Vec<(CausalRelation, f32, String)>,
+) {
     // Classify
     let classification = classify_memory(content);
 
     // Template
-    let templated = apply_template_with_config(content, classification.memory_type, &config.templater);
+    let templated =
+        apply_template_with_config(content, classification.memory_type, &config.templater);
 
     // Detect causal language (for later edge creation)
     let causal_patterns = detect_causal_language(content);
@@ -313,7 +317,13 @@ mod tests {
         assert_eq!(result.summary.memories_retyped, 1);
         assert_eq!(result.changes.len(), 1);
 
-        if let SweepChange::Retype { memory_id, new_type, confidence, .. } = &result.changes[0] {
+        if let SweepChange::Retype {
+            memory_id,
+            new_type,
+            confidence,
+            ..
+        } = &result.changes[0]
+        {
             assert_eq!(memory_id, "mem-001");
             assert_eq!(new_type, "pattern");
             assert_eq!(*confidence, 0.85);
@@ -325,7 +335,12 @@ mod tests {
     #[test]
     fn test_sweep_result_add_template() {
         let mut result = SweepResult::new("sweep-001", true);
-        result.add_template("mem-001", &MemoryType::Decision, false, vec!["warning".to_string()]);
+        result.add_template(
+            "mem-001",
+            &MemoryType::Decision,
+            false,
+            vec!["warning".to_string()],
+        );
 
         assert_eq!(result.summary.memories_templated, 1);
         assert_eq!(result.changes.len(), 1);
@@ -394,7 +409,11 @@ mod tests {
         let (_, _, causal_patterns) = process_memory("mem-001", content, &config);
 
         assert!(!causal_patterns.is_empty());
-        assert!(causal_patterns.iter().any(|(rel, _, _)| *rel == CausalRelation::Causes));
+        assert!(
+            causal_patterns
+                .iter()
+                .any(|(rel, _, _)| *rel == CausalRelation::Causes)
+        );
     }
 
     #[test]

@@ -191,7 +191,11 @@ fn extract_rust_declarations(path: &Path) -> Result<Vec<String>> {
                     || text.trim_start().starts_with("pub")
                     || node
                         .child_by_field_name("visibility")
-                        .map(|v| v.utf8_text(content.as_bytes()).unwrap_or("").starts_with("pub"))
+                        .map(|v| {
+                            v.utf8_text(content.as_bytes())
+                                .unwrap_or("")
+                                .starts_with("pub")
+                        })
                         .unwrap_or(false);
 
                 if is_public || capture_name == "impl" {

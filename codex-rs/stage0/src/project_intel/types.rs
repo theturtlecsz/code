@@ -74,7 +74,10 @@ impl ProjectSnapshot {
         // Binaries
         out.push_str("\n## Binaries\n\n");
         for bin in &self.code_topology.binaries {
-            out.push_str(&format!("- **{}**: {} (`{}`)\n", bin.name, bin.description, bin.entry_point));
+            out.push_str(&format!(
+                "- **{}**: {} (`{}`)\n",
+                bin.name, bin.description, bin.entry_point
+            ));
         }
 
         out
@@ -99,7 +102,10 @@ impl ProjectSnapshot {
             }
 
             if !workflow.models_used.is_empty() {
-                out.push_str(&format!("**Models:** {}\n\n", workflow.models_used.join(", ")));
+                out.push_str(&format!(
+                    "**Models:** {}\n\n",
+                    workflow.models_used.join(", ")
+                ));
             }
         }
 
@@ -114,10 +120,7 @@ impl ProjectSnapshot {
         // Group by phase
         let mut by_phase: HashMap<String, Vec<&SpecSummary>> = HashMap::new();
         for spec in &self.specs {
-            by_phase
-                .entry(spec.phase.clone())
-                .or_default()
-                .push(spec);
+            by_phase.entry(spec.phase.clone()).or_default().push(spec);
         }
 
         for (phase, specs) in by_phase.iter() {
@@ -138,7 +141,10 @@ impl ProjectSnapshot {
         let mut out = String::new();
         out.push_str("# Governance & Constitution\n\n");
 
-        out.push_str(&format!("**Constitution Version:** {}\n\n", self.governance.constitution_version));
+        out.push_str(&format!(
+            "**Constitution Version:** {}\n\n",
+            self.governance.constitution_version
+        ));
 
         // Guardrails
         out.push_str("## Guardrails\n\n");
@@ -165,12 +171,25 @@ impl ProjectSnapshot {
         }
 
         // Gate mode
-        out.push_str(&format!("\n**Gate Mode:** {:?}\n", self.governance.gate_mode));
+        out.push_str(&format!(
+            "\n**Gate Mode:** {:?}\n",
+            self.governance.gate_mode
+        ));
 
         // Drift detection
         out.push_str("\n## Drift Detection\n\n");
-        out.push_str(&format!("- Last check: {}\n", self.governance.drift_status.last_check.map(|d| d.to_string()).unwrap_or_else(|| "Never".to_string())));
-        out.push_str(&format!("- Drift detected: {}\n", self.governance.drift_status.drift_detected));
+        out.push_str(&format!(
+            "- Last check: {}\n",
+            self.governance
+                .drift_status
+                .last_check
+                .map(|d| d.to_string())
+                .unwrap_or_else(|| "Never".to_string())
+        ));
+        out.push_str(&format!(
+            "- Drift detected: {}\n",
+            self.governance.drift_status.drift_detected
+        ));
         if !self.governance.drift_status.violations.is_empty() {
             out.push_str("- Violations:\n");
             for v in &self.governance.drift_status.violations {
@@ -188,12 +207,18 @@ impl ProjectSnapshot {
 
         // Overall stats
         out.push_str("## Memory Stats\n\n");
-        out.push_str(&format!("- Total memories: {}\n", self.memory_stats.total_memories));
-        out.push_str(&format!("- Templated: {} ({:.1}%)\n",
-            self.memory_stats.templated_count,
-            self.memory_stats.templated_percent
+        out.push_str(&format!(
+            "- Total memories: {}\n",
+            self.memory_stats.total_memories
         ));
-        out.push_str(&format!("- Legacy (unstructured): {}\n", self.memory_stats.legacy_count));
+        out.push_str(&format!(
+            "- Templated: {} ({:.1}%)\n",
+            self.memory_stats.templated_count, self.memory_stats.templated_percent
+        ));
+        out.push_str(&format!(
+            "- Legacy (unstructured): {}\n",
+            self.memory_stats.legacy_count
+        ));
 
         // By domain
         out.push_str("\n## Memories by Domain\n\n");
@@ -203,11 +228,22 @@ impl ProjectSnapshot {
 
         // Librarian status
         out.push_str("\n## Librarian Status\n\n");
-        out.push_str(&format!("- Last sweep: {}\n",
-            self.memory_stats.librarian.last_sweep.map(|d| d.to_string()).unwrap_or_else(|| "Never".to_string())
+        out.push_str(&format!(
+            "- Last sweep: {}\n",
+            self.memory_stats
+                .librarian
+                .last_sweep
+                .map(|d| d.to_string())
+                .unwrap_or_else(|| "Never".to_string())
         ));
-        out.push_str(&format!("- Memories processed: {}\n", self.memory_stats.librarian.memories_processed));
-        out.push_str(&format!("- Causal edges created: {}\n", self.memory_stats.librarian.causal_edges_created));
+        out.push_str(&format!(
+            "- Memories processed: {}\n",
+            self.memory_stats.librarian.memories_processed
+        ));
+        out.push_str(&format!(
+            "- Causal edges created: {}\n",
+            self.memory_stats.librarian.causal_edges_created
+        ));
 
         out
     }
@@ -217,12 +253,16 @@ impl ProjectSnapshot {
         let mut out = String::new();
         out.push_str("# Session Lineage\n\n");
 
-        out.push_str(&format!("**Current Session:** {}\n\n", self.sessions.current_session));
+        out.push_str(&format!(
+            "**Current Session:** {}\n\n",
+            self.sessions.current_session
+        ));
 
         // Milestones
         out.push_str("## Key Milestones\n\n");
         for milestone in &self.sessions.milestones {
-            out.push_str(&format!("### {} ({})\n\n{}\n\n",
+            out.push_str(&format!(
+                "### {} ({})\n\n{}\n\n",
                 milestone.session_id,
                 milestone.date.format("%Y-%m-%d"),
                 milestone.summary
@@ -239,7 +279,8 @@ impl ProjectSnapshot {
         // Timeline
         out.push_str("## Evolution Timeline\n\n");
         for entry in &self.sessions.timeline {
-            out.push_str(&format!("- **{}** ({}): {}\n",
+            out.push_str(&format!(
+                "- **{}** ({}): {}\n",
                 entry.session_id,
                 entry.date.format("%Y-%m-%d"),
                 entry.event

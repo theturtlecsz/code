@@ -62,8 +62,8 @@ impl BudgetTracker {
     pub fn load(vault_path: &Path) -> Result<Self> {
         let file_path = vault_path.join("usage.json");
         let usage = if file_path.exists() {
-            let content = std::fs::read_to_string(&file_path)
-                .context("Failed to read usage.json")?;
+            let content =
+                std::fs::read_to_string(&file_path).context("Failed to read usage.json")?;
             serde_json::from_str(&content).unwrap_or_default()
         } else {
             UsageData::default()

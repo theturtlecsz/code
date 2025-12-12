@@ -100,7 +100,6 @@ pub struct Stage0Result {
     // ─────────────────────────────────────────────────────────────────────────────
     // P91/SPEC-KIT-105: Constitution conflict detection fields
     // ─────────────────────────────────────────────────────────────────────────────
-
     /// P91: Raw constitution conflict text from Divine Truth Section 2
     ///
     /// Populated when Tier-2 identifies conflicts between spec requirements
@@ -189,7 +188,9 @@ pub fn check_constitution_readiness(db: &OverlayDb) -> Vec<String> {
     };
 
     if memory_count == 0 {
-        warnings.push("Constitution defined but has no memories. Add principles or guardrails.".to_string());
+        warnings.push(
+            "Constitution defined but has no memories. Add principles or guardrails.".to_string(),
+        );
         return warnings;
     }
 
@@ -1364,7 +1365,10 @@ mod tests {
                 .expect("increment");
 
             let warnings = check_constitution_readiness(&db);
-            assert!(warnings.is_empty(), "Should have no warnings with complete constitution");
+            assert!(
+                warnings.is_empty(),
+                "Should have no warnings with complete constitution"
+            );
         }
 
         // P92/SPEC-KIT-105: Gate mode behavior tests
@@ -1445,10 +1449,16 @@ mod tests {
             .expect("upsert goal 2");
 
             // Goals should have priority 8
-            let mem = db.get_memory("vision-goal-001").expect("get").expect("exists");
+            let mem = db
+                .get_memory("vision-goal-001")
+                .expect("get")
+                .expect("exists");
             assert_eq!(mem.initial_priority, 8, "Goal should have priority 8");
 
-            let mem = db.get_memory("vision-goal-002").expect("get").expect("exists");
+            let mem = db
+                .get_memory("vision-goal-002")
+                .expect("get")
+                .expect("exists");
             assert_eq!(mem.initial_priority, 8, "Goal should have priority 8");
         }
 
@@ -1465,7 +1475,10 @@ mod tests {
             .expect("upsert non-goal");
 
             // Non-goals should have priority 8
-            let mem = db.get_memory("vision-nongoal-001").expect("get").expect("exists");
+            let mem = db
+                .get_memory("vision-nongoal-001")
+                .expect("get")
+                .expect("exists");
             assert_eq!(mem.initial_priority, 8, "NonGoal should have priority 8");
         }
 
@@ -1488,10 +1501,16 @@ mod tests {
             .expect("upsert principle 2");
 
             // Principles should have priority 9
-            let mem = db.get_memory("vision-principle-001").expect("get").expect("exists");
+            let mem = db
+                .get_memory("vision-principle-001")
+                .expect("get")
+                .expect("exists");
             assert_eq!(mem.initial_priority, 9, "Principle should have priority 9");
 
-            let mem = db.get_memory("vision-principle-002").expect("get").expect("exists");
+            let mem = db
+                .get_memory("vision-principle-002")
+                .expect("get")
+                .expect("exists");
             assert_eq!(mem.initial_priority, 9, "Principle should have priority 9");
         }
 
@@ -1554,7 +1573,10 @@ mod tests {
 
             // Now invalidate based on constitution change
             let invalidated = db.invalidate_tier2_by_constitution().expect("invalidate");
-            assert!(invalidated > 0, "Should have invalidated at least one entry");
+            assert!(
+                invalidated > 0,
+                "Should have invalidated at least one entry"
+            );
 
             // Verify cache is gone
             let cached_after = db.get_tier2_cache("test-hash").expect("get");

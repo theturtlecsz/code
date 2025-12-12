@@ -218,8 +218,13 @@ fn extract_file_calls(path: &Path, codex_root: &Path, graph: &mut CallGraph) -> 
             let capture_name = ctx_q.capture_names()[capture.index as usize];
             match capture_name {
                 "ctx_fn" => {
-                    ctx_fn_name =
-                        Some(capture.node.utf8_text(content.as_bytes()).unwrap_or("").to_string())
+                    ctx_fn_name = Some(
+                        capture
+                            .node
+                            .utf8_text(content.as_bytes())
+                            .unwrap_or("")
+                            .to_string(),
+                    )
                 }
                 "body" => body_node = Some(capture.node),
                 _ => {}
@@ -256,7 +261,9 @@ fn extract_file_calls(path: &Path, codex_root: &Path, graph: &mut CallGraph) -> 
                         }
                     };
 
-                    graph.calls.insert((caller_qualified.clone(), callee_qualified));
+                    graph
+                        .calls
+                        .insert((caller_qualified.clone(), callee_qualified));
                 }
             }
         }
@@ -275,7 +282,10 @@ fn derive_module_path(file_path: &str) -> String {
 
     // Handle lib.rs and mod.rs
     if path.ends_with("::lib") || path.ends_with("::mod") {
-        path.rsplit_once("::").map(|(p, _)| p).unwrap_or(&path).to_string()
+        path.rsplit_once("::")
+            .map(|(p, _)| p)
+            .unwrap_or(&path)
+            .to_string()
     } else {
         path
     }
@@ -350,7 +360,10 @@ impl CallGraph {
 
         for (_, from, to) in prioritized {
             if edge_count >= MAX_EDGES {
-                lines.push(format!("    %% ... and {} more edges", self.calls.len() - MAX_EDGES));
+                lines.push(format!(
+                    "    %% ... and {} more edges",
+                    self.calls.len() - MAX_EDGES
+                ));
                 break;
             }
 
@@ -380,7 +393,10 @@ impl CallGraph {
         }
 
         if frontier.is_empty() {
-            return format!("flowchart LR\n    error[\"Function '{}' not found\"]", target);
+            return format!(
+                "flowchart LR\n    error[\"Function '{}' not found\"]",
+                target
+            );
         }
 
         // BFS to find neighbors up to depth

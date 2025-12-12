@@ -464,7 +464,10 @@ mod tests {
             CouplingStrength::from_cochanges(20),
             CouplingStrength::VeryStrong
         );
-        assert_eq!(CouplingStrength::from_cochanges(12), CouplingStrength::Strong);
+        assert_eq!(
+            CouplingStrength::from_cochanges(12),
+            CouplingStrength::Strong
+        );
         assert_eq!(
             CouplingStrength::from_cochanges(8),
             CouplingStrength::Moderate

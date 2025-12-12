@@ -226,7 +226,10 @@ fn extract_pattern_sections(lines: &[&str], sections: &mut ExtractedSections) {
     // Pattern: [WHEN to use] [HOW to apply] [EXPECTED result]
     let content = lines.join("\n");
 
-    sections.context = Some(format!("Applies when: {}", content.lines().next().unwrap_or("")));
+    sections.context = Some(format!(
+        "Applies when: {}",
+        content.lines().next().unwrap_or("")
+    ));
     if content.lines().count() > 1 {
         sections.reasoning = Some(
             content
@@ -244,7 +247,10 @@ fn extract_insight_sections(lines: &[&str], sections: &mut ExtractedSections) {
     // Insight: [OBSERVATION] [IMPLICATION/learning]
     let content = lines.join("\n");
 
-    sections.context = Some(format!("Observed: {}", content.lines().next().unwrap_or("")));
+    sections.context = Some(format!(
+        "Observed: {}",
+        content.lines().next().unwrap_or("")
+    ));
     if content.lines().count() > 1 {
         sections.outcome = Some(format!(
             "Implication: {}",
@@ -262,13 +268,7 @@ fn extract_exception_sections(lines: &[&str], sections: &mut ExtractedSections) 
     // Exception: [WHAT rule is bypassed] [WHY it's allowed] [SCOPE]
     let content = lines.join("\n");
 
-    let bypass_markers = [
-        "bypass",
-        "override",
-        "exemption",
-        "exception",
-        "sanctioned",
-    ];
+    let bypass_markers = ["bypass", "override", "exemption", "exception", "sanctioned"];
 
     for marker in bypass_markers {
         if let Some(pos) = content.to_lowercase().find(marker) {
@@ -368,7 +368,8 @@ mod tests {
 
     #[test]
     fn test_has_canonical_structure() {
-        let structured = "## CONTEXT\nSome context\n\n## REASONING\nSome reasoning\n\n## OUTCOME\nSome outcome";
+        let structured =
+            "## CONTEXT\nSome context\n\n## REASONING\nSome reasoning\n\n## OUTCOME\nSome outcome";
         assert!(has_canonical_structure(structured));
 
         let partial = "## CONTEXT\nSome context\n\n## OUTCOME\nSome outcome";
@@ -405,7 +406,8 @@ mod tests {
 
     #[test]
     fn test_apply_template_unstructured_decision() {
-        let content = "Decision: Use SQLite because we need embedded storage. Trade-off is less scalability.";
+        let content =
+            "Decision: Use SQLite because we need embedded storage. Trade-off is less scalability.";
         let result = apply_template(content, MemoryType::Decision);
         assert!(!result.preserved_original);
         assert!(result.content.contains("## CONTEXT"));
@@ -415,7 +417,8 @@ mod tests {
 
     #[test]
     fn test_apply_template_unstructured_problem() {
-        let content = "Bug in cache layer causing memory leak. Fixed by adding explicit cleanup on timeout.";
+        let content =
+            "Bug in cache layer causing memory leak. Fixed by adding explicit cleanup on timeout.";
         let result = apply_template(content, MemoryType::Problem);
         assert!(!result.preserved_original);
         assert!(result.content.contains("## CONTEXT"));

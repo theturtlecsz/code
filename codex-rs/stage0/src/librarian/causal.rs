@@ -285,9 +285,18 @@ mod tests {
 
     #[test]
     fn test_causal_relation_from_str() {
-        assert_eq!(CausalRelation::from_str("causes").unwrap(), CausalRelation::Causes);
-        assert_eq!(CausalRelation::from_str("BLOCKS").unwrap(), CausalRelation::Blocks);
-        assert_eq!(CausalRelation::from_str("similar").unwrap(), CausalRelation::RelatesTo);
+        assert_eq!(
+            CausalRelation::from_str("causes").unwrap(),
+            CausalRelation::Causes
+        );
+        assert_eq!(
+            CausalRelation::from_str("BLOCKS").unwrap(),
+            CausalRelation::Blocks
+        );
+        assert_eq!(
+            CausalRelation::from_str("similar").unwrap(),
+            CausalRelation::RelatesTo
+        );
         assert!(CausalRelation::from_str("invalid").is_err());
     }
 
@@ -303,7 +312,11 @@ mod tests {
         let detections = detect_causal_language(content);
 
         assert!(!detections.is_empty());
-        assert!(detections.iter().any(|(rel, _, _)| *rel == CausalRelation::Causes));
+        assert!(
+            detections
+                .iter()
+                .any(|(rel, _, _)| *rel == CausalRelation::Causes)
+        );
     }
 
     #[test]
@@ -312,7 +325,11 @@ mod tests {
         let detections = detect_causal_language(content);
 
         assert!(!detections.is_empty());
-        assert!(detections.iter().any(|(rel, _, _)| *rel == CausalRelation::Blocks));
+        assert!(
+            detections
+                .iter()
+                .any(|(rel, _, _)| *rel == CausalRelation::Blocks)
+        );
     }
 
     #[test]
@@ -321,7 +338,11 @@ mod tests {
         let detections = detect_causal_language(content);
 
         assert!(!detections.is_empty());
-        assert!(detections.iter().any(|(rel, _, _)| *rel == CausalRelation::Enables));
+        assert!(
+            detections
+                .iter()
+                .any(|(rel, _, _)| *rel == CausalRelation::Enables)
+        );
     }
 
     #[test]
@@ -358,10 +379,7 @@ mod tests {
     fn test_infer_relationships_skips_self() {
         let source_id = "mem-001";
         let source_content = "This caused the issue.";
-        let candidates = vec![(
-            "mem-001".to_string(),
-            "Same content".to_string(),
-        )];
+        let candidates = vec![("mem-001".to_string(), "Same content".to_string())];
 
         let edges = infer_relationships(source_id, source_content, &candidates);
         assert!(edges.is_empty()); // Should skip self-reference
@@ -382,13 +400,7 @@ mod tests {
 
     #[test]
     fn test_causal_edge_creation() {
-        let edge = CausalEdge::new(
-            "src-001",
-            "tgt-001",
-            CausalRelation::Causes,
-            0.85,
-            "caused",
-        );
+        let edge = CausalEdge::new("src-001", "tgt-001", CausalRelation::Causes, 0.85, "caused");
 
         assert_eq!(edge.source_id, "src-001");
         assert_eq!(edge.target_id, "tgt-001");

@@ -8,7 +8,7 @@
 //! Other parts of codex-rs should not access NotebookLM directly.
 
 use super::budget::BudgetTracker;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -193,9 +193,7 @@ impl NlmService {
             bail!("Health check failed: {}", resp.status());
         }
 
-        resp.json()
-            .await
-            .context("Failed to parse health response")
+        resp.json().await.context("Failed to parse health response")
     }
 
     /// Start the service daemon.
@@ -206,7 +204,13 @@ impl NlmService {
             // Run in foreground (blocking)
             let status = Command::new("node")
                 .arg(&nlm_cli)
-                .args(["service", "start", "--foreground", "--port", &port.to_string()])
+                .args([
+                    "service",
+                    "start",
+                    "--foreground",
+                    "--port",
+                    &port.to_string(),
+                ])
                 .status()
                 .context("Failed to start NotebookLM service")?;
 
@@ -293,10 +297,7 @@ impl NlmService {
             bail!("Ask request failed: {}", resp.status());
         }
 
-        let result: AskResponse = resp
-            .json()
-            .await
-            .context("Failed to parse ask response")?;
+        let result: AskResponse = resp.json().await.context("Failed to parse ask response")?;
 
         if !result.success {
             bail!(
@@ -426,7 +427,9 @@ impl NlmService {
         if !result.success {
             bail!(
                 "Add source failed: {}",
-                result.error.unwrap_or_else(|| format!("Unknown error: {}", body))
+                result
+                    .error
+                    .unwrap_or_else(|| format!("Unknown error: {}", body))
             );
         }
 

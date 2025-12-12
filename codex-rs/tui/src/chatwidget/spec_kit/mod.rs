@@ -50,13 +50,13 @@ pub mod pipeline_configurator; // SPEC-947: Pipeline UI configurator - interacti
 pub mod pipeline_coordinator;
 pub mod prd_builder_handler; // SPEC-KIT-970: PRD builder modal event handlers
 pub mod project_detector; // SPEC-KIT-971: Project type detection for context-aware questions
-pub mod vision_builder_handler; // P93/SPEC-KIT-105: Vision builder modal event handlers
 pub mod project_native; // SPEC-KIT-960: Native project scaffolding
 pub mod spec_directory;
 pub mod stage0_integration; // SPEC-KIT-102: Stage 0 context injection for /speckit.auto
 pub mod stage0_seeding;
 pub mod stage_details; // SPEC-947 Phase 3: Stage details widget (right pane)
-pub mod stage_selector; // SPEC-947 Phase 3: Stage selector widget (checkbox list) // SPEC-KIT-900 Session 3: ACID-compliant SPEC directory resolution // MAINT-3 Phase 5: Pipeline state machine (extracted from handler.rs) // SPEC-KIT-102: Shadow Notebook Seeder for NotebookLM
+pub mod stage_selector;
+pub mod vision_builder_handler; // P93/SPEC-KIT-105: Vision builder modal event handlers // SPEC-947 Phase 3: Stage selector widget (checkbox list) // SPEC-KIT-900 Session 3: ACID-compliant SPEC directory resolution // MAINT-3 Phase 5: Pipeline state machine (extracted from handler.rs) // SPEC-KIT-102: Shadow Notebook Seeder for NotebookLM
 // FORK-SPECIFIC (just-every/code): local_memory_client.rs deleted 2025-10-18
 // Replaced by native MCP integration in consensus.rs
 pub mod quality;

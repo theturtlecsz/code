@@ -493,8 +493,8 @@ fn resolve_resume_path(session_id: Option<&str>, last: bool) -> anyhow::Result<O
         return Ok(None);
     }
 
-    let codex_home = codex_core::config::find_codex_home()
-        .context("failed to locate Planner home directory")?;
+    let codex_home =
+        codex_core::config::find_codex_home().context("failed to locate Planner home directory")?;
 
     // Build the async work once, then execute it either on the existing
     // runtime (from a helper thread) or a fresh current-thread runtime.

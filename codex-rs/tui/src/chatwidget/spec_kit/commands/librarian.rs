@@ -74,7 +74,10 @@ fn parse_sweep_flags(args: &[&str]) -> SweepFlags {
         } else if *arg == "--verbose" || *arg == "-v" {
             flags.verbose = true;
         } else if let Some(domains_str) = arg.strip_prefix("--domains=") {
-            flags.domains = domains_str.split(',').map(|s| s.trim().to_string()).collect();
+            flags.domains = domains_str
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .collect();
         } else if let Some(limit_str) = arg.strip_prefix("--limit=") {
             flags.limit = limit_str.parse().unwrap_or(100);
         } else if let Some(min_str) = arg.strip_prefix("--min-importance=") {
@@ -95,9 +98,9 @@ fn push_output(widget: &mut ChatWidget, lines: Vec<String>, cell_type: HistoryCe
 fn execute_sweep(widget: &mut ChatWidget, args: &[&str]) {
     use crate::stage0_adapters::{create_librarian_memory_client, create_relationships_client};
     use codex_stage0::librarian::{
-        apply_template, classify_memory, detect_causal_language, infer_relationships,
         ChangeInput, ChangeType, EdgeInput, LibrarianAudit, LocalMemoryClient, MemoryChange,
         MemoryType, RelationshipInput, RelationshipsClient, SweepConfig, SweepResult,
+        apply_template, classify_memory, detect_causal_language, infer_relationships,
     };
 
     let flags = parse_sweep_flags(args);
@@ -146,9 +149,10 @@ fn execute_sweep(widget: &mut ChatWidget, args: &[&str]) {
 
     // Try to get MCP manager for live data
     let mcp_manager_guard = widget.mcp_manager.clone();
-    let mcp_opt = crate::chatwidget::spec_kit::consensus_coordinator::block_on_sync(|| async move {
-        mcp_manager_guard.lock().await.clone()
-    });
+    let mcp_opt =
+        crate::chatwidget::spec_kit::consensus_coordinator::block_on_sync(|| async move {
+            mcp_manager_guard.lock().await.clone()
+        });
 
     let mut result = SweepResult::new(&sweep_id, dry_run);
     result.config = Some(config.clone());
@@ -162,7 +166,11 @@ fn execute_sweep(widget: &mut ChatWidget, args: &[&str]) {
         format!("Min Importance: {}", flags.min_importance),
         format!(
             "Domains: {}",
-            if flags.domains.is_empty() { "all".to_string() } else { flags.domains.join(", ") }
+            if flags.domains.is_empty() {
+                "all".to_string()
+            } else {
+                flags.domains.join(", ")
+            }
         ),
         String::new(),
     ];
@@ -189,7 +197,9 @@ fn execute_sweep(widget: &mut ChatWidget, args: &[&str]) {
     });
 
     // Get memory client (live or fallback to sample data)
-    let memory_client = mcp_opt.as_ref().and_then(|mcp| create_librarian_memory_client(mcp.clone()));
+    let memory_client = mcp_opt
+        .as_ref()
+        .and_then(|mcp| create_librarian_memory_client(mcp.clone()));
 
     // P99: Get relationships client for writing causal edges
     let relationships_client = mcp_opt
@@ -200,26 +210,50 @@ fn execute_sweep(widget: &mut ChatWidget, args: &[&str]) {
         let list_params = codex_stage0::librarian::ListParams {
             domains: flags.domains.clone(),
             limit: flags.limit,
-            min_importance: if flags.min_importance > 0 { Some(flags.min_importance) } else { None },
+            min_importance: if flags.min_importance > 0 {
+                Some(flags.min_importance)
+            } else {
+                None
+            },
         };
 
         match client.list_memories(&list_params) {
             Ok(mems) => {
                 if flags.verbose {
-                    push_output(widget, vec![format!("Fetched {} memories from local-memory", mems.len())], HistoryCellType::Notice);
+                    push_output(
+                        widget,
+                        vec![format!("Fetched {} memories from local-memory", mems.len())],
+                        HistoryCellType::Notice,
+                    );
                 }
-                mems.into_iter().map(|m| (m.id, m.content, m.tags)).collect::<Vec<_>>()
+                mems.into_iter()
+                    .map(|m| (m.id, m.content, m.tags))
+                    .collect::<Vec<_>>()
             }
             Err(e) => {
-                push_output(widget, vec![format!("MCP error: {}. Using sample data.", e)], HistoryCellType::Error);
-                get_sample_memories().into_iter().map(|(id, content)| (id, content, Vec::new())).collect()
+                push_output(
+                    widget,
+                    vec![format!("MCP error: {}. Using sample data.", e)],
+                    HistoryCellType::Error,
+                );
+                get_sample_memories()
+                    .into_iter()
+                    .map(|(id, content)| (id, content, Vec::new()))
+                    .collect()
             }
         }
     } else {
         if flags.verbose {
-            push_output(widget, vec!["No MCP connection, using sample data...".to_string()], HistoryCellType::Notice);
+            push_output(
+                widget,
+                vec!["No MCP connection, using sample data...".to_string()],
+                HistoryCellType::Notice,
+            );
         }
-        get_sample_memories().into_iter().map(|(id, content)| (id, content, Vec::new())).collect()
+        get_sample_memories()
+            .into_iter()
+            .map(|(id, content)| (id, content, Vec::new()))
+            .collect()
     };
 
     // Process each memory
@@ -233,7 +267,8 @@ fn execute_sweep(widget: &mut ChatWidget, args: &[&str]) {
         let classification = classify_memory(content);
 
         // Check if already has correct type tag (idempotency)
-        let existing_type = existing_tags.iter()
+        let existing_type = existing_tags
+            .iter()
             .find(|t| t.starts_with("type:"))
             .and_then(|t| t.strip_prefix("type:"))
             .and_then(|t| MemoryType::from_str(t).ok());
@@ -243,7 +278,8 @@ fn execute_sweep(widget: &mut ChatWidget, args: &[&str]) {
 
         // Template
         let templated = apply_template(content, classification.memory_type);
-        let needs_template = !templated.preserved_original && classification.memory_type != MemoryType::Unknown;
+        let needs_template =
+            !templated.preserved_original && classification.memory_type != MemoryType::Unknown;
 
         // Skip if already correct
         if !needs_retype && !needs_template {
@@ -254,10 +290,20 @@ fn execute_sweep(widget: &mut ChatWidget, args: &[&str]) {
         // Record changes
         if needs_retype {
             let old_type_str = existing_type.map(|t| t.as_str());
-            result.add_retype(memory_id, old_type_str, &classification.memory_type, classification.confidence);
+            result.add_retype(
+                memory_id,
+                old_type_str,
+                &classification.memory_type,
+                classification.confidence,
+            );
         }
         if needs_template {
-            result.add_template(memory_id, &classification.memory_type, templated.preserved_original, templated.warnings.clone());
+            result.add_template(
+                memory_id,
+                &classification.memory_type,
+                templated.preserved_original,
+                templated.warnings.clone(),
+            );
         }
 
         // Apply changes if not dry-run
@@ -268,7 +314,11 @@ fn execute_sweep(widget: &mut ChatWidget, args: &[&str]) {
                 new_tags.push(format!("type:{}", classification.memory_type.as_str()));
 
                 let change = MemoryChange {
-                    content: if needs_template { Some(templated.content.clone()) } else { None },
+                    content: if needs_template {
+                        Some(templated.content.clone())
+                    } else {
+                        None
+                    },
                     tags: Some(new_tags),
                     importance: None,
                 };
@@ -277,14 +327,26 @@ fn execute_sweep(widget: &mut ChatWidget, args: &[&str]) {
                     Ok(()) => {
                         changes_applied += 1;
                         if flags.verbose {
-                            push_output(widget, vec![format!("  Applied: {} -> type:{}", memory_id, classification.memory_type.as_str())], HistoryCellType::Notice);
+                            push_output(
+                                widget,
+                                vec![format!(
+                                    "  Applied: {} -> type:{}",
+                                    memory_id,
+                                    classification.memory_type.as_str()
+                                )],
+                                HistoryCellType::Notice,
+                            );
                         }
                         true
                     }
                     Err(e) => {
                         tracing::warn!("Failed to update memory {}: {}", memory_id, e);
                         if flags.verbose {
-                            push_output(widget, vec![format!("  Failed: {} - {}", memory_id, e)], HistoryCellType::Error);
+                            push_output(
+                                widget,
+                                vec![format!("  Failed: {} - {}", memory_id, e)],
+                                HistoryCellType::Error,
+                            );
                         }
                         false
                     }
@@ -311,8 +373,16 @@ fn execute_sweep(widget: &mut ChatWidget, args: &[&str]) {
                 change_type,
                 old_type: existing_type.map(|t| t.as_str().to_string()),
                 new_type: Some(classification.memory_type.as_str().to_string()),
-                old_content: if needs_template { Some(content.clone()) } else { None },
-                new_content: if needs_template { Some(templated.content.clone()) } else { None },
+                old_content: if needs_template {
+                    Some(content.clone())
+                } else {
+                    None
+                },
+                new_content: if needs_template {
+                    Some(templated.content.clone())
+                } else {
+                    None
+                },
                 confidence: Some(classification.confidence as f64),
                 applied: was_applied,
             };
@@ -325,13 +395,18 @@ fn execute_sweep(widget: &mut ChatWidget, args: &[&str]) {
         // Detect causal language
         let causal_patterns = detect_causal_language(content);
         if !causal_patterns.is_empty() && flags.verbose {
-            tracing::debug!(memory_id = memory_id, patterns = causal_patterns.len(), "Detected causal language");
+            tracing::debug!(
+                memory_id = memory_id,
+                patterns = causal_patterns.len(),
+                "Detected causal language"
+            );
         }
     }
 
     // Process causal relationships
     // For each memory with causal language, find relationships to other memories
-    let candidates: Vec<_> = memories.iter()
+    let candidates: Vec<_> = memories
+        .iter()
         .map(|(id, content, _)| (id.clone(), content.clone()))
         .collect();
 
@@ -372,7 +447,9 @@ fn execute_sweep(widget: &mut ChatWidget, args: &[&str]) {
                             Err(e) => {
                                 tracing::warn!(
                                     "Failed to create relationship {} -> {}: {}",
-                                    edge.source_id, edge.target_id, e
+                                    edge.source_id,
+                                    edge.target_id,
+                                    e
                                 );
                                 false
                             }
@@ -409,29 +486,54 @@ fn execute_sweep(widget: &mut ChatWidget, args: &[&str]) {
     if flags.json_report {
         match result.to_json() {
             Ok(json) => push_output(widget, vec![json], HistoryCellType::Notice),
-            Err(e) => push_output(widget, vec![format!("Error generating JSON: {}", e)], HistoryCellType::Error),
+            Err(e) => push_output(
+                widget,
+                vec![format!("Error generating JSON: {}", e)],
+                HistoryCellType::Error,
+            ),
         }
     } else {
-        let mut summary_lines = vec![String::new(), "=== Results ===".to_string(), result.summary_text()];
+        let mut summary_lines = vec![
+            String::new(),
+            "=== Results ===".to_string(),
+            result.summary_text(),
+        ];
         if !dry_run {
             summary_lines.push(format!("Changes applied: {}", changes_applied));
             if edges_applied > 0 {
                 summary_lines.push(format!("Edges created: {}", edges_applied));
             }
         }
-        if changes_skipped > 0 { summary_lines.push(format!("Skipped (already correct): {}", changes_skipped)); }
+        if changes_skipped > 0 {
+            summary_lines.push(format!("Skipped (already correct): {}", changes_skipped));
+        }
         push_output(widget, summary_lines, HistoryCellType::Notice);
 
         if !result.changes.is_empty() && (flags.verbose || result.changes.len() <= 10) {
             let mut change_lines = vec![String::new(), "Changes:".to_string()];
-            let max_show = if flags.verbose { result.changes.len() } else { 5 };
+            let max_show = if flags.verbose {
+                result.changes.len()
+            } else {
+                5
+            };
 
             for change in result.changes.iter().take(max_show) {
                 match change {
-                    codex_stage0::librarian::SweepChange::Retype { memory_id, new_type, confidence, .. } => {
-                        change_lines.push(format!("  - {}: {} (confidence: {:.2})", memory_id, new_type, confidence));
+                    codex_stage0::librarian::SweepChange::Retype {
+                        memory_id,
+                        new_type,
+                        confidence,
+                        ..
+                    } => {
+                        change_lines.push(format!(
+                            "  - {}: {} (confidence: {:.2})",
+                            memory_id, new_type, confidence
+                        ));
                     }
-                    codex_stage0::librarian::SweepChange::FlaggedForReview { memory_id, reason } => {
+                    codex_stage0::librarian::SweepChange::FlaggedForReview {
+                        memory_id,
+                        reason,
+                    } => {
                         change_lines.push(format!("  - {}: Flagged - {}", memory_id, reason));
                     }
                     _ => {}
@@ -439,13 +541,23 @@ fn execute_sweep(widget: &mut ChatWidget, args: &[&str]) {
             }
 
             if result.changes.len() > max_show {
-                change_lines.push(format!("  ... and {} more changes", result.changes.len() - max_show));
+                change_lines.push(format!(
+                    "  ... and {} more changes",
+                    result.changes.len() - max_show
+                ));
             }
             push_output(widget, change_lines, HistoryCellType::Notice);
         }
 
         if dry_run {
-            push_output(widget, vec![String::new(), "Note: This was a dry run. Use --apply to write changes.".to_string()], HistoryCellType::Notice);
+            push_output(
+                widget,
+                vec![
+                    String::new(),
+                    "Note: This was a dry run. Use --apply to write changes.".to_string(),
+                ],
+                HistoryCellType::Notice,
+            );
         }
     }
 
@@ -594,10 +706,22 @@ fn execute_history(widget: &mut ChatWidget, args: &[&str]) {
             // Parse and show stats if available
             if let Some(ref stats) = sweep.stats_json {
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(stats) {
-                    let scanned = json.get("memories_scanned").and_then(|v| v.as_u64()).unwrap_or(0);
-                    let retyped = json.get("memories_retyped").and_then(|v| v.as_u64()).unwrap_or(0);
-                    let edges = json.get("causal_edges_created").and_then(|v| v.as_u64()).unwrap_or(0);
-                    let applied = json.get("changes_applied").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let scanned = json
+                        .get("memories_scanned")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    let retyped = json
+                        .get("memories_retyped")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    let edges = json
+                        .get("causal_edges_created")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    let applied = json
+                        .get("changes_applied")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
 
                     lines.push(format!(
                         "    Scanned: {} | Retyped: {} | Edges: {} | Applied: {}",
@@ -607,12 +731,14 @@ fn execute_history(widget: &mut ChatWidget, args: &[&str]) {
             }
 
             // Show change/edge counts from audit tables
-            if let (Ok(changes), Ok(edges)) = (
-                audit.count_changes(sweep.id),
-                audit.count_edges(sweep.id),
-            ) {
+            if let (Ok(changes), Ok(edges)) =
+                (audit.count_changes(sweep.id), audit.count_edges(sweep.id))
+            {
                 if changes > 0 || edges > 0 {
-                    lines.push(format!("    Audit: {} changes, {} edges logged", changes, edges));
+                    lines.push(format!(
+                        "    Audit: {} changes, {} edges logged",
+                        changes, edges
+                    ));
                 }
             }
         }

@@ -9,7 +9,7 @@ use std::hash::{Hash, Hasher};
 use ratatui::text::Line;
 
 use crate::chatwidget::ChatWidget;
-use crate::history_cell::{new_error_event, HistoryCellType, PlainHistoryCell};
+use crate::history_cell::{HistoryCellType, PlainHistoryCell, new_error_event};
 
 /// Called when user completes the vision builder modal with all answers
 pub fn on_vision_builder_submitted(widget: &mut ChatWidget, answers: HashMap<String, String>) {
@@ -171,10 +171,7 @@ pub fn on_vision_builder_submitted(widget: &mut ChatWidget, answers: HashMap<Str
     );
 
     // Build result message
-    let mut lines = vec![
-        Line::from("Project Vision captured!"),
-        Line::from(""),
-    ];
+    let mut lines = vec![Line::from("Project Vision captured!"), Line::from("")];
 
     lines.push(Line::from(format!(
         "   Constitution version: {} | Hash: {}",
@@ -217,9 +214,15 @@ pub fn on_vision_builder_submitted(widget: &mut ChatWidget, answers: HashMap<Str
 
     lines.push(Line::from(""));
     lines.push(Line::from("Next steps:"));
-    lines.push(Line::from("   /speckit.constitution view - Review stored constitution"));
-    lines.push(Line::from("   /speckit.constitution sync - Regenerate constitution.md"));
-    lines.push(Line::from("   /speckit.new <description> - Create a new spec (gate-ready)"));
+    lines.push(Line::from(
+        "   /speckit.constitution view - Review stored constitution",
+    ));
+    lines.push(Line::from(
+        "   /speckit.constitution sync - Regenerate constitution.md",
+    ));
+    lines.push(Line::from(
+        "   /speckit.new <description> - Create a new spec (gate-ready)",
+    ));
 
     widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));
     widget.request_redraw();

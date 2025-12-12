@@ -585,7 +585,9 @@ where
         Ok(handle) => {
             // We're in an async context, use spawn_blocking to avoid blocking
             std::thread::scope(|s| {
-                s.spawn(|| handle.block_on(f)).join().expect("thread panicked")
+                s.spawn(|| handle.block_on(f))
+                    .join()
+                    .expect("thread panicked")
             })
         }
         Err(_) => {
@@ -653,7 +655,10 @@ fn parse_librarian_list_response(
                 .unwrap_or("")
                 .to_string();
 
-            let importance = m.get("importance").and_then(|v| v.as_i64()).map(|i| i as i32);
+            let importance = m
+                .get("importance")
+                .and_then(|v| v.as_i64())
+                .map(|i| i as i32);
 
             // Apply min_importance filter
             if let Some(min) = min_importance {
@@ -739,7 +744,10 @@ fn parse_librarian_get_response(
         })
         .unwrap_or_default();
 
-    let importance = mem.get("importance").and_then(|v| v.as_i64()).map(|i| i as i32);
+    let importance = mem
+        .get("importance")
+        .and_then(|v| v.as_i64())
+        .map(|i| i as i32);
 
     let domain = mem.get("domain").and_then(|v| v.as_str()).map(String::from);
 

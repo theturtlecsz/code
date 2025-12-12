@@ -169,8 +169,8 @@ impl SpecKitCommand for SpecKitSpecifyCommand {
 /// 4. If conflicts AND no --force: soft block with options
 /// 5. Otherwise proceed with normal specify flow
 fn execute_constitution_aware_specify(widget: &mut ChatWidget, args: String) {
-    use ratatui::text::Line;
     use crate::history_cell::{HistoryCellType, PlainHistoryCell};
+    use ratatui::text::Line;
 
     // Parse args: SPEC-ID [--force]
     let mut force_mode = false;
@@ -231,7 +231,8 @@ fn execute_constitution_aware_specify(widget: &mut ChatWidget, args: String) {
     };
 
     // P95: Check if we have conflicts or version drift
-    let has_conflicts = constitution_conflicts.is_some() && !constitution_conflicts.as_ref().unwrap().is_empty();
+    let has_conflicts =
+        constitution_conflicts.is_some() && !constitution_conflicts.as_ref().unwrap().is_empty();
 
     if (has_conflicts || has_version_drift) && !force_mode {
         // Soft block: show conflict UI
@@ -261,7 +262,9 @@ fn execute_constitution_aware_specify(widget: &mut ChatWidget, args: String) {
 
         lines.push(Line::from("Options:"));
         lines.push(Line::from("  [A] Modify spec to resolve conflicts"));
-        lines.push(Line::from("      Edit docs/{}/spec.md and re-run /speckit.specify"));
+        lines.push(Line::from(
+            "      Edit docs/{}/spec.md and re-run /speckit.specify",
+        ));
         lines.push(Line::from("  [B] Create exception for this conflict"));
         lines.push(Line::from(format!(
             "      /speckit.constitution add-exception --spec {} --reason \"<justification>\"",
@@ -273,7 +276,9 @@ fn execute_constitution_aware_specify(widget: &mut ChatWidget, args: String) {
             spec_id
         )));
         lines.push(Line::from(""));
-        lines.push(Line::from("Soft block: use --force to proceed without resolution."));
+        lines.push(Line::from(
+            "Soft block: use --force to proceed without resolution.",
+        ));
 
         widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));
 
@@ -320,9 +325,9 @@ fn execute_constitution_aware_specify(widget: &mut ChatWidget, args: String) {
         );
 
         widget.history_push(PlainHistoryCell::new(
-            vec![
-                Line::from("⚡ Proceeding with --force (constitution conflict acknowledged)"),
-            ],
+            vec![Line::from(
+                "⚡ Proceeding with --force (constitution conflict acknowledged)",
+            )],
             HistoryCellType::Notice,
         ));
     }
@@ -518,8 +523,14 @@ fn execute_constitution_view(widget: &mut ChatWidget) {
     };
 
     // Group by type (priority) and distinguish goals from non-goals
-    let guardrails: Vec<_> = memories.iter().filter(|m| m.initial_priority == 10).collect();
-    let principles: Vec<_> = memories.iter().filter(|m| m.initial_priority == 9).collect();
+    let guardrails: Vec<_> = memories
+        .iter()
+        .filter(|m| m.initial_priority == 10)
+        .collect();
+    let principles: Vec<_> = memories
+        .iter()
+        .filter(|m| m.initial_priority == 9)
+        .collect();
     // P93: Distinguish goals from non-goals by memory_id prefix
     let goals: Vec<_> = memories
         .iter()
@@ -530,7 +541,10 @@ fn execute_constitution_view(widget: &mut ChatWidget) {
         .filter(|m| m.initial_priority == 8 && m.memory_id.contains("nongoal"))
         .collect();
     // P95: Exceptions have priority 7
-    let exceptions: Vec<_> = memories.iter().filter(|m| m.initial_priority == 7).collect();
+    let exceptions: Vec<_> = memories
+        .iter()
+        .filter(|m| m.initial_priority == 7)
+        .collect();
 
     // Count vision-created content
     let vision_count = memories
@@ -591,7 +605,10 @@ fn execute_constitution_view(widget: &mut ChatWidget) {
     }
 
     // Goals (P93: now separate from non-goals)
-    lines.push(ratatui::text::Line::from(format!("🎯 Goals ({})", goals.len())));
+    lines.push(ratatui::text::Line::from(format!(
+        "🎯 Goals ({})",
+        goals.len()
+    )));
     for m in &goals {
         let content = m.content_raw.as_deref().unwrap_or("[no content]");
         let truncated = if content.len() > 60 {
@@ -1062,8 +1079,8 @@ fn execute_constitution_ace(widget: &mut ChatWidget) {
 ///
 /// Or without flags for form-based input.
 fn execute_constitution_add_exception(widget: &mut ChatWidget, args: &str) {
-    use ratatui::text::Line;
     use crate::history_cell::{HistoryCellType, PlainHistoryCell};
+    use ratatui::text::Line;
 
     // Parse flags: --guardrail, --principle, --spec, --reason
     let args_vec: Vec<&str> = args.split_whitespace().collect();
@@ -1184,13 +1201,7 @@ SCOPE:
 - expires_after_version: null
 
 APPROVED_BY: user on {}"#,
-        exempts,
-        spec_id,
-        exempts_type,
-        exempts,
-        reason,
-        spec_id,
-        today
+        exempts, spec_id, exempts_type, exempts, reason, spec_id, today
     );
 
     // Generate unique memory ID
@@ -1198,7 +1209,11 @@ APPROVED_BY: user on {}"#,
         "exception-{}-{}-{}",
         spec_id.to_lowercase().replace(' ', "-"),
         exempts.to_lowercase().replace(' ', "-"),
-        uuid::Uuid::new_v4().to_string().split('-').next().unwrap_or("0000")
+        uuid::Uuid::new_v4()
+            .to_string()
+            .split('-')
+            .next()
+            .unwrap_or("0000")
     );
 
     // Upsert the exception memory
@@ -1333,9 +1348,9 @@ impl SpecKitCommand for SpecKitCheckAlignmentCommand {
 
 /// P95: Execute alignment check with optional --deep mode
 fn execute_alignment_check(widget: &mut ChatWidget, args: String) {
-    use std::fs;
-    use ratatui::text::Line;
     use crate::history_cell::{HistoryCellType, PlainHistoryCell};
+    use ratatui::text::Line;
+    use std::fs;
 
     // P95: Parse flags
     let json_mode = args.contains("--json");
@@ -1344,9 +1359,10 @@ fn execute_alignment_check(widget: &mut ChatWidget, args: String) {
     // P95: Parse --spec SPEC-ID flag
     let single_spec: Option<String> = {
         let args_vec: Vec<&str> = args.split_whitespace().collect();
-        args_vec.iter().position(|&a| a == "--spec").and_then(|pos| {
-            args_vec.get(pos + 1).map(|s| s.to_string())
-        })
+        args_vec
+            .iter()
+            .position(|&a| a == "--spec")
+            .and_then(|pos| args_vec.get(pos + 1).map(|s| s.to_string()))
     };
 
     let cwd = &widget.config.cwd;
@@ -1372,11 +1388,7 @@ fn execute_alignment_check(widget: &mut ChatWidget, args: String) {
                     .map(|entries| {
                         entries
                             .filter_map(|e| e.ok())
-                            .filter(|e| {
-                                e.file_name()
-                                    .to_string_lossy()
-                                    .starts_with(spec_id)
-                            })
+                            .filter(|e| e.file_name().to_string_lossy().starts_with(spec_id))
                             .map(|e| e.path())
                             .collect()
                     })
@@ -1393,11 +1405,7 @@ fn execute_alignment_check(widget: &mut ChatWidget, args: String) {
                 .map(|entries| {
                     entries
                         .filter_map(|e| e.ok())
-                        .filter(|e| {
-                            e.file_name()
-                                .to_string_lossy()
-                                .starts_with("SPEC-KIT-")
-                        })
+                        .filter(|e| e.file_name().to_string_lossy().starts_with("SPEC-KIT-"))
                         .map(|e| e.path())
                         .collect()
                 })
@@ -1409,7 +1417,10 @@ fn execute_alignment_check(widget: &mut ChatWidget, args: String) {
 
     if spec_entries.is_empty() {
         let msg = if single_spec.is_some() {
-            format!("Spec '{}' not found in docs/ directory", single_spec.unwrap())
+            format!(
+                "Spec '{}' not found in docs/ directory",
+                single_spec.unwrap()
+            )
         } else {
             "No specs found in docs/ directory".to_string()
         };
@@ -1440,7 +1451,8 @@ fn execute_alignment_check(widget: &mut ChatWidget, args: String) {
     let mut results: Vec<DeepAlignmentResult> = Vec::new();
 
     for spec_path in spec_entries {
-        let dir_name = spec_path.file_name()
+        let dir_name = spec_path
+            .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
         let spec_id = extract_spec_id(&dir_name);
@@ -1479,9 +1491,18 @@ fn execute_alignment_check(widget: &mut ChatWidget, args: String) {
     }
 
     // Count statuses
-    let fresh_count = results.iter().filter(|r| matches!(r.version_status, AlignmentStatus::Fresh)).count();
-    let stale_count = results.iter().filter(|r| matches!(r.version_status, AlignmentStatus::Stale)).count();
-    let unknown_count = results.iter().filter(|r| matches!(r.version_status, AlignmentStatus::Unknown)).count();
+    let fresh_count = results
+        .iter()
+        .filter(|r| matches!(r.version_status, AlignmentStatus::Fresh))
+        .count();
+    let stale_count = results
+        .iter()
+        .filter(|r| matches!(r.version_status, AlignmentStatus::Stale))
+        .count();
+    let unknown_count = results
+        .iter()
+        .filter(|r| matches!(r.version_status, AlignmentStatus::Unknown))
+        .count();
     let content_conflict_count = if deep_mode {
         results.iter().filter(|r| !r.content_aligned).count()
     } else {
@@ -1581,15 +1602,21 @@ fn execute_alignment_check(widget: &mut ChatWidget, args: String) {
             Line::from(""),
             Line::from(format!(
                 "Current constitution version: {} | Exceptions: {}",
-                current_version.map(|v| v.to_string()).unwrap_or_else(|| "-".to_string()),
+                current_version
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "-".to_string()),
                 exception_count
             )),
             Line::from(""),
         ];
 
         if deep_mode {
-            lines.push(Line::from("SPEC ID          | Ver Drift | Content | Conflicts"));
-            lines.push(Line::from("-----------------+-----------+---------+----------"));
+            lines.push(Line::from(
+                "SPEC ID          | Ver Drift | Content | Conflicts",
+            ));
+            lines.push(Line::from(
+                "-----------------+-----------+---------+----------",
+            ));
 
             for r in &results {
                 let ver_drift = match r.version_status {
@@ -1606,21 +1633,24 @@ fn execute_alignment_check(widget: &mut ChatWidget, args: String) {
 
                 lines.push(Line::from(format!(
                     "{:<16} | {:>9} | {:>7} | {}",
-                    r.spec_id,
-                    ver_drift,
-                    content,
-                    conflicts
+                    r.spec_id, ver_drift, content, conflicts
                 )));
             }
         } else {
-            lines.push(Line::from("SPEC ID          | Created Ver | Current Ver | Status"));
-            lines.push(Line::from("-----------------+-------------+-------------+--------"));
+            lines.push(Line::from(
+                "SPEC ID          | Created Ver | Current Ver | Status",
+            ));
+            lines.push(Line::from(
+                "-----------------+-------------+-------------+--------",
+            ));
 
             for r in &results {
-                let created = r.created_version
+                let created = r
+                    .created_version
                     .map(|v| v.to_string())
                     .unwrap_or_else(|| "-".to_string());
-                let current = r.current_version
+                let current = r
+                    .current_version
                     .map(|v| v.to_string())
                     .unwrap_or_else(|| "-".to_string());
 
@@ -1654,15 +1684,21 @@ fn execute_alignment_check(widget: &mut ChatWidget, args: String) {
         if stale_count > 0 || content_conflict_count > 0 {
             lines.push(Line::from(""));
             if content_conflict_count > 0 {
-                lines.push(Line::from("Use /speckit.specify SPEC-ID --force to proceed with conflicts."));
+                lines.push(Line::from(
+                    "Use /speckit.specify SPEC-ID --force to proceed with conflicts.",
+                ));
             } else {
-                lines.push(Line::from("Stale specs may benefit from re-specification with updated constitution."));
+                lines.push(Line::from(
+                    "Stale specs may benefit from re-specification with updated constitution.",
+                ));
             }
         }
 
         if !deep_mode {
             lines.push(Line::from(""));
-            lines.push(Line::from("Use --deep for content-level conflict detection (requires Tier-2)."));
+            lines.push(Line::from(
+                "Use --deep for content-level conflict detection (requires Tier-2).",
+            ));
         }
 
         widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));
@@ -1749,7 +1785,9 @@ fn extract_constitution_version(spec_md_path: &std::path::Path) -> Option<u32> {
     let content = std::fs::read_to_string(spec_md_path).ok()?;
 
     for line in content.lines() {
-        if line.starts_with("**Constitution-Version**:") || line.starts_with("**Constitution-Version**: ") {
+        if line.starts_with("**Constitution-Version**:")
+            || line.starts_with("**Constitution-Version**: ")
+        {
             let version_str = line
                 .trim_start_matches("**Constitution-Version**:")
                 .trim_start_matches(" ")

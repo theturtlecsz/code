@@ -84,7 +84,8 @@ pub fn create_spec(description: &str, cwd: &Path) -> Result<SpecCreationResult, 
 
     // Step 5: Create spec.md (with constitution version)
     let spec_path = spec_dir.join("spec.md");
-    let spec_content = fill_spec_template(&spec_id, &feature_name, description, constitution_version)?;
+    let spec_content =
+        fill_spec_template(&spec_id, &feature_name, description, constitution_version)?;
 
     fs::write(&spec_path, spec_content).map_err(|e| SpecKitError::FileWrite {
         path: spec_path.clone(),
@@ -159,7 +160,12 @@ pub fn create_spec_with_context(
 
     // Step 5: Create spec.md with enhanced description (with constitution version)
     let spec_path = spec_dir.join("spec.md");
-    let spec_content = fill_spec_template(&spec_id, &feature_name, enhanced_description, constitution_version)?;
+    let spec_content = fill_spec_template(
+        &spec_id,
+        &feature_name,
+        enhanced_description,
+        constitution_version,
+    )?;
 
     fs::write(&spec_path, spec_content).map_err(|e| SpecKitError::FileWrite {
         path: spec_path.clone(),
@@ -187,11 +193,7 @@ fn get_current_constitution_version() -> Option<u32> {
     let db = codex_stage0::OverlayDb::connect_and_init(&config).ok()?;
     let version = db.get_constitution_version().ok()?;
     // Version 0 means no constitution
-    if version == 0 {
-        None
-    } else {
-        Some(version)
-    }
+    if version == 0 { None } else { Some(version) }
 }
 
 /// Fill PRD template with enhanced context from modal (SPEC-KIT-970)

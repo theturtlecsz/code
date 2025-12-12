@@ -306,9 +306,10 @@ pub mod mock {
 
         fn get_memory(&self, id: &str) -> Result<Memory> {
             let store = self.memories.read().unwrap();
-            store.get(id).cloned().ok_or_else(|| {
-                Stage0Error::local_memory(format!("memory not found: {}", id))
-            })
+            store
+                .get(id)
+                .cloned()
+                .ok_or_else(|| Stage0Error::local_memory(format!("memory not found: {}", id)))
         }
 
         fn update_memory(&self, id: &str, change: &MemoryChange) -> Result<()> {
@@ -320,9 +321,9 @@ pub mod mock {
 
             // Apply the change
             let mut store = self.memories.write().unwrap();
-            let memory = store.get_mut(id).ok_or_else(|| {
-                Stage0Error::local_memory(format!("memory not found: {}", id))
-            })?;
+            let memory = store
+                .get_mut(id)
+                .ok_or_else(|| Stage0Error::local_memory(format!("memory not found: {}", id)))?;
 
             if let Some(ref content) = change.content {
                 memory.content = content.clone();
@@ -341,8 +342,8 @@ pub mod mock {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::mock::MockLocalMemoryClient;
+    use super::*;
 
     fn sample_memory(id: &str, domain: &str, importance: i32) -> Memory {
         Memory {
@@ -398,7 +399,11 @@ mod tests {
         let params = ListParams::domain("spec-kit").with_limit(10);
         let results = client.list_memories(&params).expect("should work");
         assert_eq!(results.len(), 2);
-        assert!(results.iter().all(|m| m.domain.as_deref() == Some("spec-kit")));
+        assert!(
+            results
+                .iter()
+                .all(|m| m.domain.as_deref() == Some("spec-kit"))
+        );
     }
 
     #[test]
@@ -438,7 +443,9 @@ mod tests {
         client.add_memory(sample_memory("mem-001", "spec-kit", 8));
 
         let change = MemoryChange::content("Updated content");
-        client.update_memory("mem-001", &change).expect("should work");
+        client
+            .update_memory("mem-001", &change)
+            .expect("should work");
 
         // Verify update was recorded
         let updates = client.get_updates();
@@ -456,7 +463,9 @@ mod tests {
         client.add_memory(sample_memory("mem-001", "spec-kit", 8));
 
         let change = MemoryChange::tags(vec!["type:decision".to_string()]);
-        client.update_memory("mem-001", &change).expect("should work");
+        client
+            .update_memory("mem-001", &change)
+            .expect("should work");
 
         let mem = client.get_memory("mem-001").expect("should exist");
         assert_eq!(mem.tags, vec!["type:decision".to_string()]);
@@ -469,9 +478,14 @@ mod tests {
 
         let change = MemoryChange::content_and_tags(
             "New structured content",
-            vec!["type:decision".to_string(), "component:librarian".to_string()],
+            vec![
+                "type:decision".to_string(),
+                "component:librarian".to_string(),
+            ],
         );
-        client.update_memory("mem-001", &change).expect("should work");
+        client
+            .update_memory("mem-001", &change)
+            .expect("should work");
 
         let mem = client.get_memory("mem-001").expect("should exist");
         assert_eq!(mem.content, "New structured content");

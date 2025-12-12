@@ -67,10 +67,7 @@ pub fn analyze(repo_root: &Path, config: &HarvesterConfig) -> Result<ComplexityR
         }
 
         // Check extension
-        let ext = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
         if !config.extensions.iter().any(|e| e == ext) {
             continue;
@@ -396,14 +393,7 @@ mod tests {
     #[test]
     fn test_risk_levels() {
         // Test Rust thresholds
-        assert_eq!(
-            if 250.0 >= 200.0 {
-                "critical"
-            } else {
-                "low"
-            },
-            "critical"
-        );
+        assert_eq!(if 250.0 >= 200.0 { "critical" } else { "low" }, "critical");
         assert_eq!(
             if 150.0 >= 100.0 && 150.0 < 200.0 {
                 "high"

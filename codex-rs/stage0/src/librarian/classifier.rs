@@ -36,13 +36,13 @@ impl MemoryType {
     /// - Everything else: 5-7 based on type
     pub fn default_priority(&self) -> i32 {
         match self {
-            Self::Exception => 7,  // Constitution exception level
-            Self::Decision => 7,   // High-value architectural decisions
-            Self::Pattern => 6,    // Established patterns
-            Self::Problem => 6,    // Issue tracking
-            Self::Insight => 5,    // Learnings (lower priority)
-            Self::Reference => 4,  // External references
-            Self::Unknown => 3,    // Unclassified (lowest)
+            Self::Exception => 7, // Constitution exception level
+            Self::Decision => 7,  // High-value architectural decisions
+            Self::Pattern => 6,   // Established patterns
+            Self::Problem => 6,   // Issue tracking
+            Self::Insight => 5,   // Learnings (lower priority)
+            Self::Reference => 4, // External references
+            Self::Unknown => 3,   // Unclassified (lowest)
         }
     }
 
@@ -298,8 +298,14 @@ mod tests {
 
     #[test]
     fn test_memory_type_from_str() {
-        assert_eq!(MemoryType::from_str("pattern").unwrap(), MemoryType::Pattern);
-        assert_eq!(MemoryType::from_str("DECISION").unwrap(), MemoryType::Decision);
+        assert_eq!(
+            MemoryType::from_str("pattern").unwrap(),
+            MemoryType::Pattern
+        );
+        assert_eq!(
+            MemoryType::from_str("DECISION").unwrap(),
+            MemoryType::Decision
+        );
         assert!(MemoryType::from_str("invalid").is_err());
     }
 
@@ -319,7 +325,8 @@ mod tests {
 
     #[test]
     fn test_classify_pattern() {
-        let content = "Pattern: Always use dependency injection for services. This is our standard approach.";
+        let content =
+            "Pattern: Always use dependency injection for services. This is our standard approach.";
         let result = classify_memory(content);
         assert_eq!(result.memory_type, MemoryType::Pattern);
         assert!(result.confidence > 0.5);
@@ -368,7 +375,8 @@ mod tests {
 
     #[test]
     fn test_classify_unknown() {
-        let content = "Some random text without any clear signals about what type of memory this is.";
+        let content =
+            "Some random text without any clear signals about what type of memory this is.";
         let result = classify_memory(content);
         assert_eq!(result.memory_type, MemoryType::Unknown);
         assert_eq!(result.confidence, 0.0);
@@ -384,8 +392,14 @@ mod tests {
 
     #[test]
     fn test_has_type_tag() {
-        assert_eq!(has_type_tag("type:pattern content"), Some(MemoryType::Pattern));
-        assert_eq!(has_type_tag("type:decision rationale"), Some(MemoryType::Decision));
+        assert_eq!(
+            has_type_tag("type:pattern content"),
+            Some(MemoryType::Pattern)
+        );
+        assert_eq!(
+            has_type_tag("type:decision rationale"),
+            Some(MemoryType::Decision)
+        );
         assert_eq!(has_type_tag("no tag here"), None);
     }
 

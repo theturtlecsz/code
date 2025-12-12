@@ -21,7 +21,7 @@
 
 use crate::errors::{Result, Stage0Error};
 use chrono::{DateTime, Utc};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
 /// Status of a librarian sweep
@@ -258,9 +258,7 @@ impl<'a> LibrarianAudit<'a> {
                         id: row.get(0)?,
                         run_id: row.get(1)?,
                         started_at: parse_datetime(row.get::<_, String>(2)?),
-                        finished_at: row
-                            .get::<_, Option<String>>(3)?
-                            .map(parse_datetime),
+                        finished_at: row.get::<_, Option<String>>(3)?.map(parse_datetime),
                         args_json: row.get(4)?,
                         stats_json: row.get(5)?,
                         status: SweepStatus::parse(&row.get::<_, String>(6)?)
@@ -287,9 +285,7 @@ impl<'a> LibrarianAudit<'a> {
                         id: row.get(0)?,
                         run_id: row.get(1)?,
                         started_at: parse_datetime(row.get::<_, String>(2)?),
-                        finished_at: row
-                            .get::<_, Option<String>>(3)?
-                            .map(parse_datetime),
+                        finished_at: row.get::<_, Option<String>>(3)?.map(parse_datetime),
                         args_json: row.get(4)?,
                         stats_json: row.get(5)?,
                         status: SweepStatus::parse(&row.get::<_, String>(6)?)
@@ -321,9 +317,7 @@ impl<'a> LibrarianAudit<'a> {
                     id: row.get(0)?,
                     run_id: row.get(1)?,
                     started_at: parse_datetime(row.get::<_, String>(2)?),
-                    finished_at: row
-                        .get::<_, Option<String>>(3)?
-                        .map(parse_datetime),
+                    finished_at: row.get::<_, Option<String>>(3)?.map(parse_datetime),
                     args_json: row.get(4)?,
                     stats_json: row.get(5)?,
                     status: SweepStatus::parse(&row.get::<_, String>(6)?)
@@ -592,11 +586,19 @@ mod tests {
         let audit = LibrarianAudit::new(&conn);
 
         let sweep_id = audit.start_sweep("LRB-20251202-002", "{}").expect("start");
-        audit.fail_sweep(sweep_id, "MCP connection failed").expect("fail");
+        audit
+            .fail_sweep(sweep_id, "MCP connection failed")
+            .expect("fail");
 
         let sweep = audit.get_sweep(sweep_id).expect("get").expect("exists");
         assert_eq!(sweep.status, SweepStatus::Failed);
-        assert!(sweep.stats_json.as_ref().unwrap().contains("MCP connection failed"));
+        assert!(
+            sweep
+                .stats_json
+                .as_ref()
+                .unwrap()
+                .contains("MCP connection failed")
+        );
     }
 
     #[test]

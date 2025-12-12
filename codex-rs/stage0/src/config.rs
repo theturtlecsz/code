@@ -65,7 +65,6 @@ pub struct Stage0Config {
     // ─────────────────────────────────────────────────────────────────────────────
     // P91/SPEC-KIT-105: Constitution gate settings
     // ─────────────────────────────────────────────────────────────────────────────
-
     /// Phase -1 readiness gate mode
     ///
     /// Controls behavior when constitution is missing before /speckit.auto, /speckit.plan, or /speckit.new

@@ -7,15 +7,14 @@
 //! - `code architect ask <query>` - Get cached answer or query NotebookLM
 //! - `code architect audit <crate>` - Investigate a dependency
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Parser;
 use codex_core::architect::{
-    self,
+    self, HarvesterConfig,
     budget::BudgetTracker,
     chunker::{self, ChunkType, MAX_CHUNK_SIZE},
     mermaid,
     nlm_service::{Artifact, NlmService},
-    HarvesterConfig,
 };
 // ChunkedPart is used internally by chunker, we use Artifact from nlm_service
 use std::collections::hash_map::DefaultHasher;
@@ -483,10 +482,7 @@ async fn run_ask(vault: &Path, args: AskArgs) -> Result<()> {
 
     // Show budget warning if past threshold
     if budget.needs_confirmation() && !args.yes {
-        println!(
-            "WARNING: {} - past 80% threshold",
-            budget.format_status()
-        );
+        println!("WARNING: {} - past 80% threshold", budget.format_status());
     }
 
     // Cache miss - need to query NotebookLM
@@ -562,9 +558,7 @@ async fn ask_via_cli(vault: &Path, query: &str) -> Result<String> {
 }
 
 async fn run_audit(vault: &Path, args: AuditArgs) -> Result<()> {
-    let cache_path = vault
-        .join("audits")
-        .join(format!("{}.md", args.crate_name));
+    let cache_path = vault.join("audits").join(format!("{}.md", args.crate_name));
 
     // Check cache first
     if !args.force && cache_path.exists() {
@@ -666,7 +660,10 @@ async fn run_status(vault: &Path) -> Result<()> {
                 println!("NotebookLM service: RUNNING");
                 if let Ok(health) = svc.health().await {
                     if let Some(q) = health.queue {
-                        println!("  Queue: {} pending, {} processing", q.pending, q.processing);
+                        println!(
+                            "  Queue: {} pending, {} processing",
+                            q.pending, q.processing
+                        );
                     }
                     if let Some(s) = health.sessions {
                         println!("  Sessions: {}/{}", s.active, s.max);
@@ -802,7 +799,9 @@ async fn run_service(cmd: ServiceCommand) -> Result<()> {
                         println!("Service started successfully.");
                     }
                     _ => {
-                        println!("Service may be starting... check with: code architect service status");
+                        println!(
+                            "Service may be starting... check with: code architect service status"
+                        );
                     }
                 }
             }
@@ -851,12 +850,7 @@ async fn run_sources(vault: &Path, cmd: SourcesCommand) -> Result<()> {
                     } else {
                         ""
                     };
-                    println!(
-                        "  [{}] {}{}",
-                        source.index,
-                        source.title,
-                        managed
-                    );
+                    println!("  [{}] {}{}", source.index, source.title, managed);
                 }
                 println!("\nTotal: {} sources", sources.len());
                 let managed_count = sources
@@ -873,9 +867,7 @@ async fn run_sources(vault: &Path, cmd: SourcesCommand) -> Result<()> {
             // Load artifacts from ingest directory
             let ingest_dir = vault.join("ingest");
             if !ingest_dir.exists() {
-                bail!(
-                    "No ingest data found. Run 'code architect refresh' first."
-                );
+                bail!("No ingest data found. Run 'code architect refresh' first.");
             }
 
             let mut artifacts = Vec::new();
@@ -902,8 +894,11 @@ async fn run_sources(vault: &Path, cmd: SourcesCommand) -> Result<()> {
                 if full_content.len() > MAX_CHUNK_SIZE {
                     // Filter to critical/high complexity files only
                     let filtered = filter_complexity_map(&full_content)?;
-                    println!("  Note: Complexity map filtered to critical/high ({} bytes -> {} bytes)",
-                        full_content.len(), filtered.len());
+                    println!(
+                        "  Note: Complexity map filtered to critical/high ({} bytes -> {} bytes)",
+                        full_content.len(),
+                        filtered.len()
+                    );
                     if filtered.len() <= MAX_CHUNK_SIZE {
                         artifacts.push(Artifact::new("Complexity Map (Critical/High)", filtered));
                     } else {
@@ -922,7 +917,11 @@ async fn run_sources(vault: &Path, cmd: SourcesCommand) -> Result<()> {
                     artifacts.push(Artifact::new("Repo Skeleton", content));
                 } else {
                     let chunks = chunker::chunk_content("Repo Skeleton", &content, ChunkType::Xml);
-                    println!("  Note: Repo skeleton chunked into {} parts ({} bytes)", chunks.len(), content.len());
+                    println!(
+                        "  Note: Repo skeleton chunked into {} parts ({} bytes)",
+                        chunks.len(),
+                        content.len()
+                    );
                     for chunk in chunks {
                         artifacts.push(Artifact::new(&chunk.name, chunk.content));
                     }
@@ -937,7 +936,11 @@ async fn run_sources(vault: &Path, cmd: SourcesCommand) -> Result<()> {
                     artifacts.push(Artifact::new("Call Graph", content));
                 } else {
                     let chunks = chunker::chunk_content("Call Graph", &content, ChunkType::Mermaid);
-                    println!("  Note: Call graph chunked into {} parts ({} bytes)", chunks.len(), content.len());
+                    println!(
+                        "  Note: Call graph chunked into {} parts ({} bytes)",
+                        chunks.len(),
+                        content.len()
+                    );
                     for chunk in chunks {
                         artifacts.push(Artifact::new(&chunk.name, chunk.content));
                     }
@@ -951,8 +954,13 @@ async fn run_sources(vault: &Path, cmd: SourcesCommand) -> Result<()> {
                 if content.len() <= MAX_CHUNK_SIZE {
                     artifacts.push(Artifact::new("Module Dependencies", content));
                 } else {
-                    let chunks = chunker::chunk_content("Module Dependencies", &content, ChunkType::Mermaid);
-                    println!("  Note: Module deps chunked into {} parts ({} bytes)", chunks.len(), content.len());
+                    let chunks =
+                        chunker::chunk_content("Module Dependencies", &content, ChunkType::Mermaid);
+                    println!(
+                        "  Note: Module deps chunked into {} parts ({} bytes)",
+                        chunks.len(),
+                        content.len()
+                    );
                     for chunk in chunks {
                         artifacts.push(Artifact::new(&chunk.name, chunk.content));
                     }
@@ -984,7 +992,10 @@ async fn run_sources(vault: &Path, cmd: SourcesCommand) -> Result<()> {
             println!("Done!");
             println!("  Deleted: {} old [ARCH] sources", result.deleted);
             println!("  Uploaded: {} new artifacts", result.uploaded);
-            println!("  Total sources now: {}", result.total_sources - result.deleted + result.uploaded);
+            println!(
+                "  Total sources now: {}",
+                result.total_sources - result.deleted + result.uploaded
+            );
 
             Ok(())
         }
@@ -997,8 +1008,8 @@ async fn run_sources(vault: &Path, cmd: SourcesCommand) -> Result<()> {
 
 /// Filter complexity map to only critical/high risk entries.
 fn filter_complexity_map(json_content: &str) -> Result<String> {
-    let value: serde_json::Value = serde_json::from_str(json_content)
-        .context("Failed to parse complexity map JSON")?;
+    let value: serde_json::Value =
+        serde_json::from_str(json_content).context("Failed to parse complexity map JSON")?;
 
     // The complexity map has structure:
     // { "files": [...], "by_risk": { "critical": N, "high": N, ... }, ... }
@@ -1015,12 +1026,14 @@ fn filter_complexity_map(json_content: &str) -> Result<String> {
 
         // Build filtered output
         let mut output = serde_json::Map::new();
-        output.insert("files".to_string(), serde_json::Value::Array(
-            filtered.into_iter().cloned().collect()
-        ));
-        output.insert("note".to_string(), serde_json::Value::String(
-            "Filtered to critical/high risk files only".to_string()
-        ));
+        output.insert(
+            "files".to_string(),
+            serde_json::Value::Array(filtered.into_iter().cloned().collect()),
+        );
+        output.insert(
+            "note".to_string(),
+            serde_json::Value::String("Filtered to critical/high risk files only".to_string()),
+        );
 
         // Preserve summary if present
         if let Some(by_risk) = value.get("by_risk") {
@@ -1068,8 +1081,14 @@ mod tests {
     #[test]
     fn test_slugify() {
         assert_eq!(slugify("Hello World"), "hello-world");
-        assert_eq!(slugify("What is the architecture?"), "what-is-the-architecture");
-        assert_eq!(slugify("How do I refactor the ChatWidget?"), "how-do-i-refactor-the-chatwidget");
+        assert_eq!(
+            slugify("What is the architecture?"),
+            "what-is-the-architecture"
+        );
+        assert_eq!(
+            slugify("How do I refactor the ChatWidget?"),
+            "how-do-i-refactor-the-chatwidget"
+        );
         assert_eq!(slugify("  spaces  everywhere  "), "spaces-everywhere");
     }
 }

@@ -40,19 +40,14 @@ impl Default for SnapshotConfig {
                 "tests/fixtures".to_string(),
                 "node_modules".to_string(),
             ],
-            doc_roots: vec![
-                "docs".to_string(),
-                ".speckit".to_string(),
-            ],
+            doc_roots: vec!["docs".to_string(), ".speckit".to_string()],
             memory_domains: vec![
                 "spec-kit".to_string(),
                 "constitution".to_string(),
                 "librarian".to_string(),
                 "project-notes".to_string(),
             ],
-            spec_patterns: vec![
-                "docs/SPEC-KIT-*/*.md".to_string(),
-            ],
+            spec_patterns: vec!["docs/SPEC-KIT-*/*.md".to_string()],
         }
     }
 }
@@ -111,9 +106,8 @@ impl ProjectSnapshotBuilder {
             .output()
         {
             if output.status.success() {
-                self.snapshot.metadata.branch = String::from_utf8_lossy(&output.stdout)
-                    .trim()
-                    .to_string();
+                self.snapshot.metadata.branch =
+                    String::from_utf8_lossy(&output.stdout).trim().to_string();
             }
         }
 
@@ -123,9 +117,8 @@ impl ProjectSnapshotBuilder {
             .output()
         {
             if output.status.success() {
-                self.snapshot.metadata.commit_hash = String::from_utf8_lossy(&output.stdout)
-                    .trim()
-                    .to_string();
+                self.snapshot.metadata.commit_hash =
+                    String::from_utf8_lossy(&output.stdout).trim().to_string();
             }
         }
 
@@ -135,9 +128,8 @@ impl ProjectSnapshotBuilder {
             .output()
         {
             if output.status.success() {
-                self.snapshot.metadata.latest_tag = Some(
-                    String::from_utf8_lossy(&output.stdout).trim().to_string()
-                );
+                self.snapshot.metadata.latest_tag =
+                    Some(String::from_utf8_lossy(&output.stdout).trim().to_string());
             }
         }
 
@@ -249,7 +241,10 @@ impl ProjectSnapshotBuilder {
         if let Some(packages) = metadata.get("packages").and_then(|p| p.as_array()) {
             for pkg in packages {
                 let name = pkg.get("name").and_then(|n| n.as_str()).unwrap_or("");
-                let manifest_path = pkg.get("manifest_path").and_then(|p| p.as_str()).unwrap_or("");
+                let manifest_path = pkg
+                    .get("manifest_path")
+                    .and_then(|p| p.as_str())
+                    .unwrap_or("");
 
                 // Extract path relative to workspace
                 let path = PathBuf::from(manifest_path)
@@ -257,23 +252,31 @@ impl ProjectSnapshotBuilder {
                     .map(|p| p.to_string_lossy().to_string())
                     .unwrap_or_default();
 
-                let crate_type = if pkg.get("targets")
+                let crate_type = if pkg
+                    .get("targets")
                     .and_then(|t| t.as_array())
-                    .map(|targets| targets.iter().any(|t| {
-                        t.get("kind").and_then(|k| k.as_array())
-                            .map(|kinds| kinds.iter().any(|k| k.as_str() == Some("bin")))
-                            .unwrap_or(false)
-                    }))
+                    .map(|targets| {
+                        targets.iter().any(|t| {
+                            t.get("kind")
+                                .and_then(|k| k.as_array())
+                                .map(|kinds| kinds.iter().any(|k| k.as_str() == Some("bin")))
+                                .unwrap_or(false)
+                        })
+                    })
                     .unwrap_or(false)
                 {
                     CrateType::Binary
-                } else if pkg.get("targets")
+                } else if pkg
+                    .get("targets")
                     .and_then(|t| t.as_array())
-                    .map(|targets| targets.iter().any(|t| {
-                        t.get("kind").and_then(|k| k.as_array())
-                            .map(|kinds| kinds.iter().any(|k| k.as_str() == Some("proc-macro")))
-                            .unwrap_or(false)
-                    }))
+                    .map(|targets| {
+                        targets.iter().any(|t| {
+                            t.get("kind")
+                                .and_then(|k| k.as_array())
+                                .map(|kinds| kinds.iter().any(|k| k.as_str() == Some("proc-macro")))
+                                .unwrap_or(false)
+                        })
+                    })
                     .unwrap_or(false)
                 {
                     CrateType::ProcMacro
@@ -282,7 +285,8 @@ impl ProjectSnapshotBuilder {
                 };
 
                 // Get dependencies
-                let deps = pkg.get("dependencies")
+                let deps = pkg
+                    .get("dependencies")
                     .and_then(|d| d.as_array())
                     .map(|deps| {
                         deps.iter()
@@ -302,7 +306,6 @@ impl ProjectSnapshotBuilder {
             }
         }
     }
-
 
     /// Gather workflow information
     fn gather_workflows(&mut self) -> Result<()> {
@@ -427,7 +430,8 @@ impl ProjectSnapshotBuilder {
                 title: "Librarian".to_string(),
                 phase: "P97-P99".to_string(),
                 status: SpecStatus::Partial,
-                summary: "Memory corpus quality engine with classification and causal inference".to_string(),
+                summary: "Memory corpus quality engine with classification and causal inference"
+                    .to_string(),
                 deliverables: vec![
                     "Memory classifier".to_string(),
                     "Template restructurer".to_string(),
@@ -466,9 +470,10 @@ fn count_files_recursive(
             let entry_path = entry.path();
 
             // Skip ignored patterns
-            if ignore_patterns.iter().any(|p| {
-                entry_path.to_string_lossy().contains(p)
-            }) {
+            if ignore_patterns
+                .iter()
+                .any(|p| entry_path.to_string_lossy().contains(p))
+            {
                 continue;
             }
 
