@@ -1003,56 +1003,20 @@ async fn doctor_main() -> anyhow::Result<()> {
     show_versions("code --version by path", &code_paths).await;
     show_versions("coder --version by path", &coder_paths).await;
 
-    // Detect Bun shims
-    let bun_home = env::var("BUN_INSTALL")
-        .ok()
-        .or_else(|| env::var("HOME").ok().map(|h| format!("{h}/.bun")));
-    if let Some(bun) = bun_home {
-        let bun_bin = format!("{bun}/bin");
-        let bun_coder = format!("{bun_bin}/coder");
-        if coder_paths.iter().any(|p| p == &bun_coder) {
-            println!("\nBun shim detected for 'coder': {bun_coder}");
-            println!("Suggestion: remove old Bun global with: bun remove -g @just-every/code");
-        }
-        let bun_code = format!("{bun_bin}/code");
-        if code_paths.iter().any(|p| p == &bun_code) {
-            println!("Bun shim detected for 'code': {bun_code}");
-            println!("Suggestion: prefer 'coder' or remove Bun shim if it conflicts.");
-        }
-    }
-
-    // Detect Homebrew overshadow of VS Code
+    // Detect a potential PATH conflict with VS Code's `code` script.
     #[cfg(target_os = "macos")]
     {
-        let brew_code = code_paths
-            .iter()
-            .find(|p| p.contains("/homebrew/bin/code") || p.contains("/Cellar/code/"));
         let vscode_code = code_paths.iter().find(|p| {
             p.contains("/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code")
         });
-        if brew_code.is_some() && vscode_code.is_some() {
-            println!("\nHomebrew 'code' precedes VS Code CLI in PATH.");
-            println!(
-                "Suggestion: uninstall Homebrew formula 'code' (brew uninstall code) or reorder PATH so /usr/local/bin comes before /usr/local/homebrew/bin."
-            );
+        if vscode_code.is_some() && code_paths.len() > 1 {
+            println!("\nMultiple 'code' binaries detected; ensure PATH prefers the intended one.");
         }
     }
 
-    // npm global hints
-    let npm_root = run_cmd("npm", &["root", "-g"]).await;
-    let npm_prefix = run_cmd("npm", &["prefix", "-g"]).await;
-    if !npm_root.is_empty() {
-        println!("\nnpm root -g: {npm_root}");
-    }
-    if !npm_prefix.is_empty() {
-        println!("npm prefix -g: {npm_prefix}");
-    }
-
-    println!("\nIf versions differ, remove older installs and keep one package manager:");
-    println!("  - Bun: bun remove -g @just-every/code");
-    println!("  - npm/pnpm: npm uninstall -g @just-every/code");
-    println!("  - Homebrew: brew uninstall code");
-    println!("  - Prefer using 'coder' to avoid conflicts with VS Code's 'code'.");
+    println!(
+        "\nIf versions differ, remove older installs or reorder PATH so the intended binary comes first."
+    );
 
     Ok(())
 }

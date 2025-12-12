@@ -1379,7 +1379,7 @@ impl ChatComposer {
             } => {
                 // Suppress Tab completion only while the cursor is within the
                 // slash command head (before the first space). Allow Tab-based
-                // file search in the arguments of /plan, /solve, etc.
+                // file search in the arguments of slash commands (e.g. /speckit.*).
                 if self.is_cursor_in_slash_command_head() {
                     return (InputResult::None, false);
                 }

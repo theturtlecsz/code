@@ -131,10 +131,8 @@ pub struct Config {
     /// who have opted into Zero Data Retention (ZDR).
     pub disable_response_storage: bool,
 
-    /// When true, Code will silently install updates on startup whenever a newer
-    /// release is available. Upgrades are performed using the package manager
-    /// that originally installed the CLI (Homebrew or npm). Manual installs are
-    /// never upgraded automatically.
+    /// When true, Planner may install updates on startup when a managed install
+    /// method is detected. Source builds are never upgraded automatically.
     pub auto_upgrade_enabled: bool,
 
     /// User-provided instructions from AGENTS.md.

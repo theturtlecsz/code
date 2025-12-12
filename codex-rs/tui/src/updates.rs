@@ -19,6 +19,9 @@ use codex_core::default_client::create_client;
 use tokio::process::Command;
 use tracing::{info, warn};
 
+const UPDATE_CHECKS_ENV: &str = "PLANNER_ENABLE_UPDATE_CHECKS";
+const LATEST_RELEASE_URL_ENV: &str = "PLANNER_LATEST_RELEASE_URL";
+
 static FORCE_UPGRADE_PREVIEW: Lazy<bool> = Lazy::new(|| {
     std::env::var("SHOW_UPGRADE")
         .map(|value| {
@@ -36,7 +39,15 @@ pub fn auto_upgrade_runtime_enabled() -> bool {
     !cfg!(debug_assertions)
 }
 
+fn update_checks_enabled() -> bool {
+    std::env::var_os(UPDATE_CHECKS_ENV).is_some()
+}
+
 pub fn get_upgrade_version(config: &Config) -> Option<String> {
+    if !update_checks_enabled() {
+        return None;
+    }
+
     let version_file = version_filepath(config);
     let read_path = resolve_codex_path_for_read(&config.codex_home, Path::new(VERSION_FILENAME));
     let info = read_version_info(&read_path).ok();
@@ -67,6 +78,12 @@ pub struct UpdateCheckInfo {
 }
 
 pub async fn check_for_updates_now(config: &Config) -> anyhow::Result<UpdateCheckInfo> {
+    if !update_checks_enabled() {
+        return Ok(UpdateCheckInfo {
+            latest_version: None,
+        });
+    }
+
     let version_file = version_filepath(config);
     let originator = config.responses_originator_header.clone();
     let info = check_for_update(&version_file, &originator).await?;
@@ -93,8 +110,6 @@ struct ReleaseInfo {
 }
 
 const VERSION_FILENAME: &str = "version.json";
-const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/just-every/code/releases/latest";
-pub const CODE_RELEASE_URL: &str = "https://github.com/just-every/code/releases/latest";
 
 const AUTO_UPGRADE_LOCK_FILE: &str = "auto-upgrade.lock";
 const AUTO_UPGRADE_LOCK_TTL: Duration = Duration::from_secs(900); // 15 minutes
@@ -115,37 +130,13 @@ fn version_filepath(config: &Config) -> PathBuf {
 }
 
 pub fn resolve_upgrade_resolution() -> UpgradeResolution {
-    if std::env::var_os("CODEX_MANAGED_BY_NPM").is_some() {
-        return UpgradeResolution::Command {
-            command: vec![
-                "npm".to_string(),
-                "install".to_string(),
-                "-g".to_string(),
-                "@just-every/code@latest".to_string(),
-            ],
-            display: "npm install -g @just-every/code@latest".to_string(),
-        };
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        if let Ok(exe_path) = std::env::current_exe() {
-            if exe_path.starts_with("/opt/homebrew") || exe_path.starts_with("/usr/local") {
-                return UpgradeResolution::Command {
-                    command: vec![
-                        "brew".to_string(),
-                        "upgrade".to_string(),
-                        "code".to_string(),
-                    ],
-                    display: "brew upgrade code".to_string(),
-                };
-            }
-        }
-    }
-
     UpgradeResolution::Manual {
         instructions: format!(
-            "Download the latest release from {CODE_RELEASE_URL} and replace the installed binary."
+            "This fork is built from source.\n\n\
+To update:\n\
+- Pull the latest commits\n\
+- Rebuild with `./build-fast.sh` (or `./build-fast.sh run`)\n\n\
+Optional: set {UPDATE_CHECKS_ENV}=1 and {LATEST_RELEASE_URL_ENV}=... to enable update checks."
         ),
     }
 }
@@ -328,7 +319,10 @@ async fn check_for_update(version_file: &Path, originator: &str) -> anyhow::Resu
     let ReleaseInfo {
         tag_name: latest_tag_name,
     } = create_client(originator)
-        .get(LATEST_RELEASE_URL)
+        .get(
+            std::env::var(LATEST_RELEASE_URL_ENV)
+                .map_err(|_| anyhow::anyhow!("{LATEST_RELEASE_URL_ENV} is not set"))?,
+        )
         .send()
         .await?
         .error_for_status()?
