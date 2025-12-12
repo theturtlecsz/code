@@ -90,10 +90,10 @@
 - ✅ Evidence footprint monitoring
 
 **Integration:**
-- ✅ Codex CLI/TUI native commands
+- ✅ Planner native commands (CLI + TUI)
 - ✅ MCP server ecosystem (local-memory, repo-search, doc-index, hal)
 - ✅ Git-based evidence storage
-- ✅ Backward compatibility (/spec-* commands still work)
+- ✅ Backward compatibility for non-removed commands
 
 ## 5. Functional Requirements
 
@@ -177,7 +177,7 @@
 ## 7. Technology Stack
 
 **Core:**
-- Rust (Codex CLI fork - theturtlecsz/code, upstream: just-every/code)
+- Rust (Planner, implemented as the `code` binary in this repository)
 - Bash (guardrail scripts)
 - Python (telemetry utilities)
 

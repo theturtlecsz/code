@@ -14,7 +14,7 @@
 - Use MCP/LLM tooling; avoid bespoke shell scripts for runtime operations
 - Wrap shell scripts with TUI slash commands for user-facing operations
 - Data access and automation must flow through MCP/LLM tooling; avoid bespoke shell scripts for runtime evidence or API calls unless MCP cannot satisfy the requirement.
-- All user-facing operations (guardrails, telemetry snapshots, evidence collection) must be invocable via Codex TUI slash commands; add wrappers when a capability is only available as a shell script.
+- All user-facing operations (guardrails, telemetry snapshots, evidence collection) must be invocable via Planner TUI slash commands; add wrappers when a capability is only available as a shell script.
 
 ## Governance & Workflow
 - Keep SPEC.md canonical; one In Progress entry per thread with dated notes
