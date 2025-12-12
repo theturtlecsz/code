@@ -93,6 +93,5 @@ grep -r "specific topic" docs/archive/
 
 ## See Also
 
-- [Main Documentation Index](../SUMMARY.md)
-- [Active SPECs](../SUMMARY.md#-active-specs)
+- [Key docs](../KEY_DOCS.md)
 - [Spec-Kit Framework](../spec-kit/README.md)

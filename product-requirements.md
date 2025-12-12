@@ -266,7 +266,7 @@
 
 ## 📚 Related Documentation
 
-- **[Documentation Index](docs/SUMMARY.md)** - Complete documentation navigation
+- **[Key docs](docs/KEY_DOCS.md)** - Canonical documentation map
 - **[Planning Document](PLANNING.md)** - Architecture and technical details
 - **[Project Status](docs/PROJECT_STATUS.md)** - Current state and roadmap
 - **[SPEC.md](SPEC.md)** - Task tracker

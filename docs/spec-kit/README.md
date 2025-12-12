@@ -103,6 +103,6 @@ docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/<SPEC-ID>/
 
 ## See Also
 
-- [Main Documentation Index](../SUMMARY.md)
+- [Key docs](../KEY_DOCS.md)
 - [SPEC.md](../../SPEC.md) - Task tracker
 - [Product Requirements](../../product-requirements.md)

@@ -52,8 +52,8 @@ In the TUI:
 
 ## Documentation
 
-- Start here: `docs/SUMMARY.md`
-- Vision / truth: `docs/VISION.md`
+- Start here: `docs/KEY_DOCS.md`
+- Vision: `docs/VISION.md`
 - Removed commands: `docs/DEPRECATIONS.md`
 
 ## Development
