@@ -452,6 +452,29 @@ fn lines_to_single_string(lines: &[ratatui::text::Line<'static>]) -> String {
     s
 }
 
+#[test]
+fn legacy_plan_solve_code_commands_show_migration_message() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual();
+
+    for cmd in ["/plan do it", "/solve debug it", "/code ship it"] {
+        chat.submit_user_message(UserMessage::from(cmd.to_string()));
+        let cells = drain_insert_history(&mut rx);
+        let combined = cells
+            .iter()
+            .flat_map(|c| c.iter())
+            .map(|lines| lines_to_single_string(lines))
+            .collect::<String>();
+        assert!(
+            combined.contains("Removed command:"),
+            "expected migration warning for {cmd}\n{combined}"
+        );
+        assert!(
+            combined.contains("/speckit."),
+            "expected speckit guidance for {cmd}\n{combined}"
+        );
+    }
+}
+
 #[derive(Clone, Copy)]
 enum ScriptStep {
     Key(KeyCode, KeyModifiers),

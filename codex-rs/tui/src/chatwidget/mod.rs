@@ -5041,17 +5041,13 @@ impl ChatWidget<'_> {
             }
         }
 
-        // Save the prompt if it's a multi-agent command
+        // Save the prompt if it's a spec-kit pipeline/agent command.
         let original_trimmed = original_text.trim();
-        if original_trimmed.starts_with("/plan ")
-            || original_trimmed.starts_with("/solve ")
-            || original_trimmed.starts_with("/code ")
-            || original_trimmed.starts_with("/spec-plan ")
-            || original_trimmed.starts_with("/spec-tasks ")
-            || original_trimmed.starts_with("/spec-implement ")
-            || original_trimmed.starts_with("/spec-validate ")
-            || original_trimmed.starts_with("/spec-review ")
-            || original_trimmed.starts_with("/spec-unlock ")
+        if original_trimmed.starts_with("/speckit.")
+            || original_trimmed.starts_with("/guardrail.")
+            || original_trimmed.starts_with("/spec-consensus ")
+            || original_trimmed.starts_with("/spec-status")
+            || original_trimmed.starts_with("/spec-evidence-stats")
         {
             self.last_agent_prompt = Some(original_text.clone());
         }
@@ -5070,13 +5066,28 @@ impl ChatWidget<'_> {
                     .subagent_commands
                     .iter()
                     .any(|c| c.name.eq_ignore_ascii_case(cmd_name));
-                // Treat built-ins via the standard path below to preserve existing ack flow,
-                // but allow any other saved subagent command to be executed here.
-                let is_builtin = matches!(
-                    cmd_name.to_ascii_lowercase().as_str(),
-                    "plan" | "solve" | "code"
-                );
-                if has_custom && !is_builtin {
+
+                // Legacy upstream prompt-expanding commands were removed in this fork.
+                // If the user hasn't explicitly reintroduced them via custom config,
+                // show a crisp migration message instead of sending "/plan ..." as plain text.
+                let cmd_name_lc = cmd_name.to_ascii_lowercase();
+                if matches!(cmd_name_lc.as_str(), "plan" | "solve" | "code") && !has_custom {
+                    let message = match cmd_name_lc.as_str() {
+                        "plan" => {
+                            "Removed command: /plan\nUse Spec-Kit: /speckit.new <description>, then /speckit.plan SPEC-ID (or /speckit.auto SPEC-ID)."
+                        }
+                        "solve" => {
+                            "Removed command: /solve\nUse Spec-Kit: /speckit.new <description>, then /speckit.implement SPEC-ID (or /speckit.auto SPEC-ID)."
+                        }
+                        _ => {
+                            "Removed command: /code\nUse Spec-Kit: /speckit.new <description>, then /speckit.auto SPEC-ID."
+                        }
+                    };
+                    self.history_push(history_cell::new_warning_event(message.to_string()));
+                    return;
+                }
+
+                if has_custom {
                     let res = codex_core::slash_commands::format_subagent_command(
                         cmd_name,
                         &args,
@@ -5123,59 +5134,10 @@ impl ChatWidget<'_> {
         let processed = crate::slash_command::process_slash_command_message(&text_only);
         match processed {
             crate::slash_command::ProcessedCommand::ExpandedPrompt(expanded) => {
-                // If a built-in multi-agent slash command was used, resolve
-                // configured subagent settings and show an acknowledgement in history.
-                let trimmed = original_trimmed;
-                let (cmd_name, args_opt) = if let Some(rest) = trimmed.strip_prefix("/plan ") {
-                    ("plan", Some(rest.trim().to_string()))
-                } else if let Some(rest) = trimmed.strip_prefix("/solve ") {
-                    ("solve", Some(rest.trim().to_string()))
-                } else if let Some(rest) = trimmed.strip_prefix("/code ") {
-                    ("code", Some(rest.trim().to_string()))
-                } else {
-                    ("", None)
-                };
-
-                if let Some(task) = args_opt {
-                    let res = codex_core::slash_commands::format_subagent_command(
-                        cmd_name,
-                        &task,
-                        Some(&self.config.agents),
-                        Some(&self.config.subagent_commands),
-                    );
-
-                    // Acknowledge the command and show which agents will run.
-                    use ratatui::text::Line;
-                    let mode = if res.read_only { "read-only" } else { "write" };
-                    let mut lines: Vec<Line<'static>> = Vec::new();
-                    lines.push(Line::from(format!("/{} configured", cmd_name)));
-                    lines.push(Line::from(format!("mode: {}", mode)));
-                    lines.push(Line::from(format!(
-                        "agents: {}",
-                        if res.models.is_empty() {
-                            "<none>".to_string()
-                        } else {
-                            res.models.join(", ")
-                        }
-                    )));
-                    lines.push(Line::from(format!("command: {}", original_text.trim())));
-                    self.history_push(crate::history_cell::PlainHistoryCell::new(
-                        lines,
-                        crate::history_cell::HistoryCellType::Notice,
-                    ));
-
-                    // Replace the message with the resolved prompt
-                    message.ordered_items.clear();
-                    message
-                        .ordered_items
-                        .push(InputItem::Text { text: res.prompt });
-                } else {
-                    // Fallback to default expansion behavior
-                    message.ordered_items.clear();
-                    message
-                        .ordered_items
-                        .push(InputItem::Text { text: expanded });
-                }
+                message.ordered_items.clear();
+                message
+                    .ordered_items
+                    .push(InputItem::Text { text: expanded });
             }
             crate::slash_command::ProcessedCommand::RegularCommand {
                 command: cmd,
