@@ -348,13 +348,13 @@
 
 **Start new feature**:
 ```bash
-/new-spec <description>
-/spec-auto SPEC-KIT-###
+/speckit.new <description>   # (alias: /new-spec)
+/speckit.auto SPEC-KIT-###   # (legacy pipeline: /spec-auto)
 ```
 
 **Check status**:
 ```bash
-/spec-status SPEC-KIT-###
+/speckit.status SPEC-KIT-###  # (alias: /spec-status)
 ```
 
 **Analyze agents**:
@@ -471,4 +471,35 @@ The Shadow Stage 0 overlay provides deep context and code awareness for `/specki
 - **Flow Diagram**: SPEC_AUTO_FLOW.md
 - **Agent Analysis**: AGENT_ANALYSIS_GUIDE.md
 - **Performance**: OPTIMIZATION_ANALYSIS.md
+
+### Archived Spec Directories (Present In `docs/`, Not In Active Tables)
+
+- `docs/SPEC-945C-sqlite-retry-mechanism/code-review-checklist.md`
+- `docs/SPEC-945D-config-hot-reload/IMPLEMENTATION-PLAN.md`
+- `docs/SPEC-947/README.md`
+- `docs/SPEC-KIT-010-local-memory-migration/spec.md`
+- `docs/SPEC-KIT-013-telemetry-schema-guard/spec.md`
+- `docs/SPEC-KIT-014-docs-refresh/spec.md`
+- `docs/SPEC-KIT-015-nightly-sync/spec.md`
+- `docs/SPEC-KIT-018-hal-http-mcp/spec.md`
+- `docs/SPEC-KIT-025-add-automated-conflict-resolution-with/spec.md`
+- `docs/SPEC-KIT-030-add-documentation-for-rebasing-from/spec.md`
+- `docs/SPEC-KIT-035-spec-status-diagnostics/spec.md`
+- `docs/SPEC-KIT-040-add-simple-config-validation-utility/spec.md`
+- `docs/SPEC-KIT-045-design-systematic-testing-framework-for/spec.md`
+- `docs/SPEC-KIT-067-add-search-command-to-find-text-in-conversation-history/spec.md`
+- `docs/SPEC-KIT-072-consensus-storage-separation/PRD.md`
+- `docs/SPEC-KIT-099-context-bridge/spec.md`
+- `docs/SPEC-KIT-101-branch-enforcement/spec.md`
+- `docs/SPEC-KIT-102-notebooklm-integration/spec.md`
+- `docs/SPEC-KIT-103/spec.md`
+- `docs/SPEC-KIT-105-constitution-workflow/spec.md`
+- `docs/SPEC-KIT-904-deprecate-manual-quality/spec.md`
+- `docs/SPEC-KIT-906-config-migration-warning/spec.md`
+- `docs/SPEC-KIT-927-premature-output-collection/spec.md`
+- `docs/SPEC-KIT-932-implementation-planning/NEXT-SESSION-IMPLEMENTATION-RESEARCH.md`
+- `docs/SPEC-KIT-945-implementation-research/spec.md`
+- `docs/SPEC-KIT-956-message-interleaving-fix/spec.md`
+- `docs/SPEC-KIT-964-config-isolation/PRD.md`
+- `docs/SPEC-KIT-DEMO/spec.md`
 | 7 | SPEC-KIT-920 | TUI Automation Support | **DONE** | Code | docs/SPEC-KIT-920-tui-automation/spec.md | main | N/A | 2025-11-09 | **COMPLETE** (2025-11-09, ~6 hours): Delivered tmux automation system (superior to original headless approach). **Implementation**: Created scripts/tmux-automation.sh (7.7 KB) with session management, command execution via tmux send-keys, completion detection ("Ctrl+H help" marker), timeout handling (configurable, default 300s), evidence capture to evidence/tmux-automation/. **Integration**: Uses /home/thetu/code/build-fast.sh for builds, /home/thetu/code/codex-rs/target/dev-fast/code binary. **Tests**: 100% pass rate - 6 fast smoke tests (18 assertions, 5-10s), real TUI integration test (12s startup, 4-6s execution). **Key Advantages**: Zero output contamination (complete isolation), no TUI code changes required, full observability (can attach to watch), uses standard tmux (no custom modes), supports concurrent operations (unique session names). **Documentation**: scripts/TMUX-AUTOMATION-README.md (12 KB comprehensive guide), TMUX-AUTOMATION-SUMMARY.md (6.4 KB executive summary). **Performance**: 12s TUI startup delay, 4-6s command execution, ~20-25s total per command. **Evidence**: All tests pass, ready for SPEC-KIT-900 validation. **Decision**: Reverted SPEC-920 headless implementation (output piping caused contamination), tmux approach is simpler and more robust. |
