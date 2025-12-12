@@ -639,7 +639,7 @@ claude /status
 
 ---
 
-### 1.4.4 OpenAI Codex CLI
+### 1.4.4 OpenAI Planner
 
 **Authentication Methods**:
 1. **API Key** (simplest): `OPENAI_API_KEY` environment variable
@@ -667,7 +667,7 @@ Waiting for authorization...
 - API key: User-managed environment variable
 
 **Known Issues**:
-- Issue: [Enable Headless Authentication for Codex CLI](https://github.com/openai/codex/issues/3820)
+- Issue: [Enable Headless Authentication for Planner](upstream issue #3820)
 - Status: Device code flow experimental, not fully supported for ChatGPT plans
 
 **Implementation Complexity**: **SIMPLE-MEDIUM** (1-2h)

@@ -7,7 +7,7 @@
 ## Session Context: SPEC-952 Complete, SPEC-952-B Ready
 
 **Date**: 2025-11-20
-**Repository**: theturtlecsz/code (fork of just-every/code)
+**Repository**: theturtlecsz/code (fork; see `UPSTREAM-SYNC.md`)
 **Location**: /home/thetu/code
 **Branch**: main
 

@@ -1,7 +1,7 @@
 # Interrupt → Resume Postmortem
 
 This document summarizes the root cause, symptoms, and fixes for the
-"Esc then send never resumes" issue in the Code (Codex CLI, Rust) TUI/core
+"Esc then send never resumes" issue in the Code (Planner, Rust) TUI/core
 stack.
 
 ## Summary

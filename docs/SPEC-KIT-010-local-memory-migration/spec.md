@@ -7,7 +7,7 @@
 
 ## Objectives
 1. Provide a deterministic migration path that copies existing Byterover memories into local-memory domains (spec-tracker, impl-notes, docs-ops, infra-ci, governance) without data loss.
-2. Update Codex CLI/TUI flows so local-memory is the primary read/write store and Byterover is only used as a fallback when a key is genuinely absent.
+2. Update Planner CLI/TUI flows so local-memory is the primary read/write store and Byterover is only used as a fallback when a key is genuinely absent.
 3. Capture the migration and new write-back hooks in documentation so operators can rerun the sync, audit results, and understand domain mappings.
 
 ## Scope

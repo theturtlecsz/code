@@ -1,6 +1,6 @@
 # HAL Integration Templates
 
-This directory contains reusable scaffolding for wiring the HAL HTTP MCP into projects that use the just-every/code toolchain. All values are placeholders—projects must copy these files into their own repositories (for example `~/kavedarr`) and fill in concrete hosts, secrets, and request payloads.
+This directory contains reusable scaffolding for wiring the HAL HTTP MCP into projects that use the upstream repository toolchain. All values are placeholders—projects must copy these files into their own repositories (for example `~/kavedarr`) and fill in concrete hosts, secrets, and request payloads.
 
 ## Files
 - `spec.md` / `plan.md` / `tasks.md`: governance artifacts describing the template workstream (no project-specific data).

@@ -6,7 +6,7 @@
 
 # Context: Multi-Provider CLI Routing - Phase 2 (SPEC-KIT-952)
 
-You are continuing work on implementing **production-grade CLI routing** for Claude and Gemini models in the **codex-rs TUI project** (fork of just-every/code). CLI routing is the **primary and intended method** for these providers.
+You are continuing work on implementing **production-grade CLI routing** for Claude and Gemini models in the **codex-rs TUI project** (fork; see `UPSTREAM-SYNC.md`). CLI routing is the **primary and intended method** for these providers.
 
 **Phase 1 Status**: ✅ **COMPLETE** - Streaming CLI executors implemented
 **Phase 2 Goal**: Wire into router, test end-to-end, verify all 6 models work in production
@@ -15,7 +15,7 @@ You are continuing work on implementing **production-grade CLI routing** for Cla
 
 ## Project Context
 
-**Repository**: theturtlecsz/code (fork of just-every/code)
+**Repository**: theturtlecsz/code (fork; see `UPSTREAM-SYNC.md`)
 **Location**: /home/thetu/code
 **Current Branch**: main
 **Spec ID**: SPEC-KIT-952 (cli-routing-multi-provider)

@@ -1,7 +1,7 @@
 # Spec: Simple Config Validation Utility (SPEC-KIT-040-add-simple-config-validation-utility)
 
 ## Context
-- Codex CLI currently detects invalid configuration values late in execution, disrupting guardrail automation and confusing operators.
+- Planner currently detects invalid configuration values late in execution, disrupting guardrail automation and confusing operators.
 - The Rust workspace already centralises config types under `codex-rs/core/src/config.rs` and related modules, providing a foundation for reusable validation logic.
 
 ## Objectives

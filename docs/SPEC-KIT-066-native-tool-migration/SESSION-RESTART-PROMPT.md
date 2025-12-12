@@ -1,7 +1,7 @@
 # Session Restart Prompt: SPEC-KIT-066 Native Tool Migration
 
 **Created**: 2025-10-20
-**Purpose**: Resume work on migrating spec-kit orchestrator commands from bash/python to native Codex tools
+**Purpose**: Resume work on migrating spec-kit orchestrator commands from bash/python to native tools
 **Prior Session**: 2025-10-19/20 (11 hours, 15 commits, routing bug fixed)
 
 ---
@@ -45,7 +45,7 @@ You are an analytic peer, not a service persona.
 
 ## PROJECT CONTEXT
 
-**Repository**: https://github.com/theturtlecsz/code (FORK of just-every/code)
+**Repository**: https://github.com/theturtlecsz/code (FORK of upstream repository)
 **Working Directory**: /home/thetu/code/codex-rs
 **Branch**: main (15 commits ahead)
 **Binary**: /home/thetu/code/codex-rs/target/dev-fast/code (in PATH)
@@ -88,7 +88,7 @@ Use mcp__local-memory__get_memory_by_id:
 
 ## SPEC-KIT-066: Task Overview
 
-**Goal**: Migrate orchestrator instructions from bash/python to native Codex tools
+**Goal**: Migrate orchestrator instructions from bash/python to native tools
 
 **Problem**:
 - ~/.code/config.toml orchestrator-instructions reference "Run: python3..." and "bash scripts/..."
@@ -189,7 +189,7 @@ Create SPEC from feature description. EXECUTE these steps using your tools:
 
 CRITICAL: Actually USE your tools (Glob, Read, Write, Edit). Do NOT just describe steps.
 Do NOT invoke other slash commands (/specify, /plan) - those are separate stages.
-Do NOT use bash/python - use native Codex tools only.
+Do NOT use bash/python - use native tools only.
 ```
 
 **Steps to Apply**:
@@ -386,7 +386,7 @@ MANDATORY FIRST STEPS:
    Read: codex-rs/tui/src/chatwidget/spec_kit/routing.rs (lines 58-80)
    Confirm: format_subagent_command gets Some(&widget.config.agents)
 
-TASK: Migrate orchestrator commands from bash/python to native Codex tools.
+TASK: Migrate orchestrator commands from bash/python to native tools.
 
 Start with Phase 1: Create inventory of all 9 [[subagents.commands]] entries in ~/.code/config.toml, identify bash/python references, design native replacements.
 

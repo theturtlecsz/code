@@ -19,4 +19,4 @@ env = {
 # export HAL_PROFILE="$HOME/<project>/config/hal_profile.json"
 ```
 
-> Replace `${HAL_BASE_URL}` and `HAL_SECRET_API_KEY` with project-provided values in your own repository (e.g., `/home/thetu/kavedarr`). This template stays generic inside the just-every/code repo.
+> Replace `${HAL_BASE_URL}` and `HAL_SECRET_API_KEY` with project-provided values in your own repository (e.g., `/home/thetu/kavedarr`). This template stays generic inside the upstream repository repo.

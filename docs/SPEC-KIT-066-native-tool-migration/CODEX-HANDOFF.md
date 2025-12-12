@@ -1,6 +1,6 @@
-# Codex Investigation Prompt: Guardrail Subprocess Hang
+# Planner Investigation Prompt: Guardrail Subprocess Hang
 
-**Copy this into Codex TUI to continue debugging**
+**Copy this into Planner TUI to continue debugging**
 
 ---
 

@@ -5,7 +5,7 @@
 **Branch**: (pending)
 **Owner**: Code
 
-**Context**: The Codex TUI currently lacks an in-session search capability, forcing users to scroll through long conversation histories to rediscover decisions, agent outputs, or error logs. This SPEC anchors delivery of the `/search` command defined in `docs/SPEC-KIT-067-add-search-command-to-find-text-in-conversation-history/PRD.md`.
+**Context**: The Planner TUI currently lacks an in-session search capability, forcing users to scroll through long conversation histories to rediscover decisions, agent outputs, or error logs. This SPEC anchors delivery of the `/search` command defined in `docs/SPEC-KIT-067-add-search-command-to-find-text-in-conversation-history/PRD.md`.
 
 ---
 

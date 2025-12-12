@@ -6,13 +6,13 @@
 
 # Context: Multi-Provider CLI Wrapper Implementation (SPEC-KIT-952)
 
-You are continuing work on implementing production-grade CLI wrapper support for Claude and Gemini models in the **codex-rs TUI project** (fork of just-every/code). This allows users to route model requests through native `claude` and `gemini` CLIs instead of using direct API/OAuth integration.
+You are continuing work on implementing production-grade CLI wrapper support for Claude and Gemini models in the **codex-rs TUI project** (fork; see `UPSTREAM-SYNC.md`). This allows users to route model requests through native `claude` and `gemini` CLIs instead of using direct API/OAuth integration.
 
 ---
 
 ## Project Context
 
-**Repository**: theturtlecsz/code (fork of just-every/code)
+**Repository**: theturtlecsz/code (fork; see `UPSTREAM-SYNC.md`)
 **Location**: /home/thetu/code
 **Current Branch**: main
 **Spec ID**: SPEC-KIT-952 (cli-routing-multi-provider)

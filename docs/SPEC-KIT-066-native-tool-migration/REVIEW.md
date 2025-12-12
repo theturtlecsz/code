@@ -376,7 +376,7 @@ git checkout 803399c41  # Last commit before this session
 
 ## Environment
 
-**Repository**: https://github.com/theturtlecsz/code (fork of just-every/code)
+**Repository**: https://github.com/theturtlecsz/code (fork; see `UPSTREAM-SYNC.md`)
 **Working Dir**: /home/thetu/code
 **Rust**: 1.90.0
 **Build Profile**: dev-fast
@@ -390,7 +390,7 @@ git checkout 803399c41  # Last commit before this session
 
 ## Recommendations
 
-### For Next Session (Codex TUI)
+### For Next Session (Planner TUI)
 
 **Priority 1: Unblock Testing**
 1. Investigate guardrail hang:
@@ -589,5 +589,5 @@ grep -A20 "\\[agents\\]" ~/.code/config.toml | grep gpt-5
 
 ---
 
-**Status**: Paused for Codex investigation
+**Status**: Paused for Planner investigation
 **Next**: Debug guardrail hang with clearer model/API context

@@ -2,7 +2,7 @@
 
 Date: 2025-10-27 20:04 UTC
 
-Purpose: Confirm which models are runnable with current credentials for Gemini, Claude Code, and Codex (OpenAI) so Phase 1 routing uses only models we actually have access to.
+Purpose: Confirm which models are runnable with current credentials for Gemini, Claude Code, and OpenAI (via Planner) so Phase 1 routing uses only models we actually have access to.
 
 Notes:
 - Tests are 1–2 token “ping” probes to avoid cost and secrets exposure.
@@ -21,16 +21,16 @@ Notes:
 | Anthropic | claude 2.0.27 | haiku (Claude 3.5 Haiku) | ✅ responded ("Pong! 👋") |
 | Anthropic | claude 2.0.27 | sonnet (Claude 4.5 Sonnet) | ✅ responded ("pong") |
 | Anthropic | claude 2.0.27 | opus | ⚠️ no response; treated as unavailable under current plan |
-| OpenAI (via Codex) | code (Codex CLI) | gpt-5 | ✅ responded ("pong — ready.") |
-| OpenAI (via Codex) | code (Codex CLI) | gpt-5-codex | ✅ responded ("pong") |
-| OpenAI (via Codex) | code (Codex CLI) | gpt-5-codex-high | ❌ 400: not supported for ChatGPT account |
-| OpenAI (via Codex) | code (Codex CLI) | gpt-5-codex-medium | ❌ 400: not supported for ChatGPT account |
-| OpenAI (via Codex) | code (Codex CLI) | gpt-5-codex-low | ❌ 400: not supported for ChatGPT account |
-| OpenAI (via Codex) | code (Codex CLI) | gpt-5-mini | ❌ 400: not supported for ChatGPT account |
-| OpenAI (via Codex) | code (Codex CLI) | gpt-4o-mini | ❌ 400: not supported for ChatGPT account |
-| OpenAI (via Codex) | code (Codex CLI) | gpt-4o | ❌ 400: not supported for ChatGPT account |
-| OpenAI (via Codex) | code (Codex CLI) | gpt-4.1 / gpt-4.1-mini | ❌ 400: not supported for ChatGPT account |
-| OpenAI (via Codex) | code (Codex CLI) | o4-mini-high / o3 / o3-mini | ❌ 400: not supported for ChatGPT account |
+| OpenAI (via Planner) | code (Planner) | gpt-5 | ✅ responded ("pong — ready.") |
+| OpenAI (via Planner) | code (Planner) | gpt-5-codex | ✅ responded ("pong") |
+| OpenAI (via Planner) | code (Planner) | gpt-5-codex-high | ❌ 400: not supported for ChatGPT account |
+| OpenAI (via Planner) | code (Planner) | gpt-5-codex-medium | ❌ 400: not supported for ChatGPT account |
+| OpenAI (via Planner) | code (Planner) | gpt-5-codex-low | ❌ 400: not supported for ChatGPT account |
+| OpenAI (via Planner) | code (Planner) | gpt-5-mini | ❌ 400: not supported for ChatGPT account |
+| OpenAI (via Planner) | code (Planner) | gpt-4o-mini | ❌ 400: not supported for ChatGPT account |
+| OpenAI (via Planner) | code (Planner) | gpt-4o | ❌ 400: not supported for ChatGPT account |
+| OpenAI (via Planner) | code (Planner) | gpt-4.1 / gpt-4.1-mini | ❌ 400: not supported for ChatGPT account |
+| OpenAI (via Planner) | code (Planner) | o4-mini-high / o3 / o3-mini | ❌ 400: not supported for ChatGPT account |
 
 ---
 
@@ -58,7 +58,7 @@ Interpretation:
 Interpretation:
 - Haiku (3.5) and Sonnet (4.5) are accessible under "Claude Max"; Opus appears unavailable.
 
-### OpenAI via Codex (code exec)
+### OpenAI via Planner (code exec)
 
 - `code exec --sandbox read-only --skip-git-repo-check --model gpt-4o-mini 'ping'` →
   - 400 Bad Request: `{"detail":"The 'gpt-4o-mini' model is not supported when using Codex with a ChatGPT account."}`
@@ -110,7 +110,7 @@ printf 'ping' | gemini -m gemini-2.5-flash-lite -y -p ' '
 claude --model haiku -p 'ping'
 claude --model sonnet -p 'ping'
 
-# OpenAI via Codex
+# OpenAI via Planner
 /home/thetu/code/codex-rs/target/dev-fast/code exec --sandbox read-only --skip-git-repo-check --model gpt-4o-mini 'ping'
 ```
 
@@ -122,12 +122,12 @@ This section documents whether the CLI supports explicit “reasoning effort” 
 
 | Provider | CLI | Effort Flag | Values | Status |
 |---|---|---|---|---|
-| OpenAI | code (Codex CLI) | `-c model_reasoning_effort=…` | `minimal`, `low`, `medium`, `high` | ✅ Accepted for `gpt-5`, `gpt-5-codex` (verified). |
-| OpenAI | code (Codex CLI) | `-c model_reasoning_summary=…` | `auto`, `concise`, `detailed`, `none` | ✅ Accepted (verified prints current setting). |
+| OpenAI | code (Planner) | `-c model_reasoning_effort=…` | `minimal`, `low`, `medium`, `high` | ✅ Accepted for `gpt-5`, `gpt-5-codex` (verified). |
+| OpenAI | code (Planner) | `-c model_reasoning_summary=…` | `auto`, `concise`, `detailed`, `none` | ✅ Accepted (verified prints current setting). |
 | Anthropic | claude | n/a | n/a | ❌ No per‑request “effort” flag exposed by CLI; selection is by model (haiku/sonnet). |
 | Google | gemini | n/a | n/a | ⚠️ No “effort” flag in CLI help; “thinking” variants are separate models (e.g., 2.0 flash‑thinking) and were not enabled for this key. |
 
-Examples (Codex CLI):
+Examples (Planner):
 
 ```
 # Minimal effort
@@ -143,4 +143,4 @@ code exec --sandbox read-only --skip-git-repo-check \
 ```
 
 Notes:
-- Reasoning effort flags are client‑side controls that Codex forwards to the provider; availability of the underlying behavior depends on the model. Under ChatGPT account login, only `gpt-5`/`gpt-5-codex` responded; others returned 400.
+- Reasoning effort flags are client‑side controls that Planner forwards to the provider; availability of the underlying behavior depends on the model. Under ChatGPT account login, only `gpt-5`/`gpt-5-codex` responded; others returned 400.
