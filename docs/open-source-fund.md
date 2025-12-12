@@ -1,6 +1,6 @@
-## Codex open source fund
+## Open source fund (legacy)
 
-We're excited to launch a **$1 million initiative** supporting open source projects that use Codex CLI and other OpenAI models.
+This document is retained for historical context and is not maintained for this fork.
 
 - Grants are awarded up to **$25,000** API credits.
 - Applications are reviewed **on a rolling basis**.
