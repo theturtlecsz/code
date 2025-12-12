@@ -536,9 +536,9 @@ pub struct SpecAutoInvocation {
 
 #[derive(Debug, Error)]
 pub enum SpecAutoParseError {
-    #[error("`/spec-auto` requires a SPEC ID (e.g. `/spec-auto SPEC-OPS-005`)")]
+    #[error("`/speckit.auto` requires a SPEC ID (e.g. `/speckit.auto SPEC-KIT-900`)")]
     MissingSpecId,
-    #[error("`/spec-auto --from` requires a stage name")]
+    #[error("`/speckit.auto --from` requires a stage name")]
     MissingFromStage,
     #[error("Unknown stage '{0}'. Expected plan, tasks, implement, validate, review, or unlock.")]
     UnknownStage(String),

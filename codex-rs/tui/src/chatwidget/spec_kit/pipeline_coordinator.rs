@@ -39,7 +39,7 @@ pub fn handle_spec_auto(
     stage0_config: super::stage0_integration::Stage0ExecutionConfig, // SPEC-KIT-102: Stage 0 config
 ) {
     let mut header: Vec<ratatui::text::Line<'static>> = Vec::new();
-    header.push(ratatui::text::Line::from(format!("/spec-auto {}", spec_id)));
+    header.push(ratatui::text::Line::from(format!("/speckit.auto {}", spec_id)));
     if !goal.trim().is_empty() {
         header.push(ratatui::text::Line::from(format!("Goal: {}", goal)));
     }
@@ -707,7 +707,7 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
                 }
 
                 widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                    vec![ratatui::text::Line::from("/spec-auto pipeline complete")],
+                    vec![ratatui::text::Line::from("/speckit.auto pipeline complete")],
                     HistoryCellType::Notice,
                 ));
 

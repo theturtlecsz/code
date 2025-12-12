@@ -152,7 +152,7 @@ pub fn cleanup_spec_auto_with_cancel(widget: &mut ChatWidget, reason: &str) {
     // Log cancellation reason for debugging
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
         vec![ratatui::text::Line::from(format!(
-            "Spec-auto pipeline cancelled: {}",
+            "/speckit.auto pipeline cancelled: {}",
             reason
         ))],
         HistoryCellType::Error,

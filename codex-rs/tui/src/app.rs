@@ -592,7 +592,7 @@ impl App<'_> {
             ProcessedCommand::ExpandedPrompt(_) | ProcessedCommand::SpecAuto(_) => {
                 // These are handled by the normal command processing flow
                 tracing::info!(
-                    "SPEC-KIT-920: Submitting expanded/spec-auto command: {}",
+                    "SPEC-KIT-920: Submitting expanded/speckit.auto command: {}",
                     cmd_text
                 );
                 // Parse and dispatch as a regular slash command

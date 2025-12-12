@@ -5169,7 +5169,7 @@ impl ChatWidget<'_> {
 
                 // Submit as expanded prompt - orchestrator executes visibly
                 self.submit_user_message(UserMessage {
-                    display_text: format!("/spec-auto {}", invocation.spec_id),
+                    display_text: format!("/speckit.auto {}", invocation.spec_id),
                     ordered_items: vec![InputItem::Text {
                         text: expanded.prompt,
                     }],
