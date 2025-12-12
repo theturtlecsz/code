@@ -46,7 +46,7 @@
 - Success signal: Checklist artifact matches template; scoring present and consistent.
 - Est. effort: 1 day.
 
-### Step 5: Ensure /spec-auto uses templates for plan/tasks
+### Step 5: Ensure /speckit.auto uses templates for plan/tasks
 - Verify `plan` uses `templates/plan-template.md`; `tasks` uses `templates/tasks-template.md`.
 - Success signal: Auto pipeline writes correctly structured plan/tasks artifacts for any SPEC.
 - Est. effort: 1 day.
@@ -110,7 +110,7 @@
 
 ### Agreements
 - Adopt templates due to 50% speed improvement with no quality loss.
-- Port `/speckit.clarify`, `/speckit.analyze`, `/speckit.checklist`; ensure `/spec-auto` uses `plan/tasks` templates.
+- Port `/speckit.clarify`, `/speckit.analyze`, `/speckit.checklist`; ensure `/speckit.auto` uses `plan/tasks` templates.
 - Keep local‑memory as the sole curated knowledge system; persist consensus artifacts with importance ≥ 8.
 
 ### Conflicts Resolved
@@ -122,7 +122,7 @@
 ## Exit Criteria
 
 - All three commands produce template‑conformant artifacts with zero placeholders.
-- `/spec-auto` generates template‑conformant plan/tasks artifacts.
+- `/speckit.auto` generates template‑conformant plan/tasks artifacts.
 - Consensus verdicts and telemetry stored; no evidence policy violations.
 - One confirmatory timing run shows no regression vs validated 50% improvement.
 - Plan approved; ready to proceed to `/speckit.tasks` for SPEC‑KIT‑060.

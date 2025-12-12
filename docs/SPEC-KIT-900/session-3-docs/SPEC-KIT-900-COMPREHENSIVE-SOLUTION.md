@@ -25,7 +25,7 @@
 ```
 ✖ Quality Gate: before-specify broker error — Only found 2/3 agents
 ✖ Quality gate before-specify failed – missing artefacts after 1 attempts
-Resume with: /spec-auto SPEC-KIT-900 --from spec-plan
+Resume with: /speckit.auto SPEC-KIT-900 --from spec-plan
 ```
 
 **Root Cause**:
@@ -42,7 +42,7 @@ Resume with: /spec-auto SPEC-KIT-900 --from spec-plan
 1. Fix JSON parsing to handle malformed code agent output
 2. Make quality gates tolerant (2/3 passing = proceed)
 3. Add bypass flag: `SPEC_OPS_SKIP_QUALITY_GATES=1`
-4. Use resume mechanism: `/spec-auto --from spec-plan`
+4. Use resume mechanism: `/speckit.auto --from spec-plan`
 
 **Recommended**: Option 4 (resume from plan) - Tests our changes immediately
 
@@ -128,7 +128,7 @@ AppEvent::RegularStageAgentsComplete => {
 **Action**: Document resume command
 ```bash
 # In TUI:
-/spec-auto SPEC-KIT-900 --from spec-plan
+/speckit.auto SPEC-KIT-900 --from spec-plan
 
 # This skips quality gates and starts at Plan stage
 ```
@@ -164,7 +164,7 @@ rm -f docs/SPEC-KIT-900-generic-smoke/plan.md ~/.code/consensus_artifacts.db
 
 # 2. Run with resume
 ./codex-rs/target/dev-fast/code
-# Then: /spec-auto SPEC-KIT-900 --from spec-plan
+# Then: /speckit.auto SPEC-KIT-900 --from spec-plan
 
 # 3. Monitor audit trail
 tail -f ~/.code/log/codex-tui.log | grep "AUDIT:"
@@ -208,7 +208,7 @@ head -100 docs/SPEC-KIT-900-generic-smoke/plan.md
 ## 📋 Immediate Action Items
 
 1. **NOW**: Test with resume mechanism
-   - Command: `/spec-auto SPEC-KIT-900 --from spec-plan`
+   - Command: `/speckit.auto SPEC-KIT-900 --from spec-plan`
    - Monitor: `tail -f ~/.code/log/codex-tui.log`
    - Observe: Does Plan stage spawn? Do agents complete?
 
@@ -280,7 +280,7 @@ head -100 docs/SPEC-KIT-900-generic-smoke/plan.md
 
 A. **Resume from Plan** (Recommended - Immediate testing)
    ```
-   /spec-auto SPEC-KIT-900 --from spec-plan
+   /speckit.auto SPEC-KIT-900 --from spec-plan
    ```
 
 B. **Add bypass flag** (Requires code change)

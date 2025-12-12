@@ -29,7 +29,7 @@ Systematically validate whether templates improve spec quality vs free-form gene
 ```
 
 **Capture metrics for both:**
-- Execution time (start to "Run /spec-auto..." message)
+- Execution time (start to "Run /speckit.auto..." message)
 - Sections present (grep "^##" count)
 - Has user scenarios? (grep "User Scenario\|Story:")
 - Has edge cases? (grep "Edge Case")

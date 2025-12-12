@@ -1,9 +1,9 @@
 # Spec: Telemetry Schema Guard (T13)
 
 ## Context
-- Branch: `feat/spec-auto-telemetry`
+- Branch: `feat/speckit.auto-telemetry`
 - Guardrail scripts already emit per-stage telemetry JSON under `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/<SPEC-ID>/<stage>_*.json`.
-- `/spec-auto` currently verifies artifact existence but not telemetry structure, allowing silent drift.
+- `/speckit.auto` currently verifies artifact existence but not telemetry structure, allowing silent drift.
 
 ## Objectives
 1. Introduce stage-aware telemetry schema validation before evidence checks inside `collect_guardrail_outcome`.

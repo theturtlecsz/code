@@ -20,4 +20,4 @@
 ## Recommendation
 - **Hold unlock** until HAL validation, lint, screenshot, and consensus refresh are complete.
 - Maintain SPEC.md T26 status `In Progress`; update notes with follow-up progress.
-- Re-run `/spec-ops-unlock SPEC-KIT-DEMO` after outstanding items close to record final telemetry bundle and revise this memo.
+- Re-run `/guardrail.unlock SPEC-KIT-DEMO` after outstanding items close to record final telemetry bundle and revise this memo.

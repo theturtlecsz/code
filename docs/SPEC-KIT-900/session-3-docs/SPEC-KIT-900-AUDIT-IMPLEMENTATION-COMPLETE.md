@@ -186,7 +186,7 @@ GROUP BY run_id;"
 
 **User Experience**:
 ```
-/spec-auto pipeline complete
+/speckit.auto pipeline complete
 
 [Verification report automatically displayed]
 

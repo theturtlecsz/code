@@ -13,17 +13,17 @@
 ## Acceptance Mapping
 | Requirement (Spec) | Validation Step | Test/Check Artifact |
 | --- | --- | --- |
-| R1: Baseline audit failure blocks plan | Force a failing audit and run `/spec-ops-plan SPEC-KIT-018`; expect non-zero exit and telemetry `baseline.status="failed"`; rerun with `--allow-fail` to confirm override | Telemetry JSON + CLI exit status |
-| R2: HAL smoke failures surface | Stop HAL service and run `/spec-ops-validate SPEC-KIT-018)`; expect command failure, log entry, and telemetry with `hal.summary.status="failed"` | spec-validate log + evidence JSON |
-| R3: Cargo manifest honored | From repo root run `/spec-ops-validate SPEC-KIT-018)`; inspect logs for `cargo run --manifest-path codex-rs/Cargo.toml` and ensure success | Guardrail log snippet |
+| R1: Baseline audit failure blocks plan | Force a failing audit and run `/guardrail.plan SPEC-KIT-018`; expect non-zero exit and telemetry `baseline.status="failed"`; rerun with `--allow-fail` to confirm override | Telemetry JSON + CLI exit status |
+| R2: HAL smoke failures surface | Stop HAL service and run `/guardrail.validate SPEC-KIT-018)`; expect command failure, log entry, and telemetry with `hal.summary.status="failed"` | spec-validate log + evidence JSON |
+| R3: Cargo manifest honored | From repo root run `/guardrail.validate SPEC-KIT-018)`; inspect logs for `cargo run --manifest-path codex-rs/Cargo.toml` and ensure success | Guardrail log snippet |
 | R4: GraphQL payload valid | Run HAL smoke with healthy API; inspect `*-hal-graphql_ping.json` for valid response and zero parsing errors | HAL artifact JSON |
-| R5: Telemetry extension behind flag | Set `SPEC_OPS_TELEMETRY_HAL=1` and rerun `/spec-ops-validate`; lint via `scripts/spec-kit/lint_tasks.py` to ensure new fields pass schema | Lint output + telemetry JSON |
+| R5: Telemetry extension behind flag | Set `SPEC_OPS_TELEMETRY_HAL=1` and rerun `/guardrail.validate`; lint via `scripts/spec-kit/lint_tasks.py` to ensure new fields pass schema | Lint output + telemetry JSON |
 | R6: Documentation & CI guidance updated | Review docs/slash-commands.md & AGENTS.md diffs; validate doc structure; capture migration notes for dependent tasks | Doc diffs + `scripts/doc-structure-validate.sh --mode=templates` |
 
 ## Risks & Unknowns
 - HAL availability in CI/local can block validation; document `SPEC_OPS_HAL_SKIP=1` fallback and plan for a mock server follow-up.
 - Stricter exits may break downstream automation; stage rollout with communication to T18/T14 owners and allow temporary overrides.
-- Telemetry schema changes impact analytics and `/spec-auto`; ensure consumer teams review before enabling `SPEC_OPS_TELEMETRY_HAL` by default.
+- Telemetry schema changes impact analytics and `/speckit.auto`; ensure consumer teams review before enabling `SPEC_OPS_TELEMETRY_HAL` by default.
 - Shell changes risk regressions across multiple scripts; require integration tests and dry-run evidence before adoption.
 
 ## Consensus & Risks (Multi-AI)

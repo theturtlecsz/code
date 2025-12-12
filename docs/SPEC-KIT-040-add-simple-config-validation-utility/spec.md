@@ -11,5 +11,5 @@
 ## Acceptance Criteria
 - Running `codex config validate` against default configs exits zero with a success summary.
 - Invalid values, missing files, or unresolved environment keys produce descriptive diagnostics and appropriate exit codes/severity.
-- `/spec-auto SPEC-KIT-040` records validator telemetry compliant with schema v1.
+- `/speckit.auto SPEC-KIT-040` records validator telemetry compliant with schema v1.
 - Documentation updates describing validator usage pass doc-structure and tracker lint checks.

@@ -75,7 +75,7 @@
 #### /speckit.plan
 - **Struct:** `SpecKitPlanCommand`
 - **Module:** `commands/plan.rs`
-- **Aliases:** `/spec-plan`, `/spec-ops-plan`
+- **Aliases:** `/spec-plan`, `/guardrail.plan`
 - **Type:** Prompt-expanding (multi-agent)
 - **Description:** Create work breakdown with multi-agent consensus
 - **Requires Args:** Yes
@@ -88,7 +88,7 @@
 #### /speckit.tasks
 - **Struct:** `SpecKitTasksCommand`
 - **Module:** `commands/plan.rs`
-- **Aliases:** `/spec-tasks`, `/spec-ops-tasks`
+- **Aliases:** `/spec-tasks`, `/guardrail.tasks`
 - **Type:** Prompt-expanding (multi-agent)
 - **Description:** Generate task list with validation mapping
 - **Requires Args:** Yes
@@ -101,7 +101,7 @@
 #### /speckit.implement
 - **Struct:** `SpecKitImplementCommand`
 - **Module:** `commands/plan.rs`
-- **Aliases:** `/spec-implement`, `/spec-ops-implement`
+- **Aliases:** `/spec-implement`, `/guardrail.implement`
 - **Type:** Prompt-expanding (multi-agent)
 - **Description:** Write code with multi-agent consensus
 - **Requires Args:** Yes
@@ -114,7 +114,7 @@
 #### /speckit.validate
 - **Struct:** `SpecKitValidateCommand`
 - **Module:** `commands/plan.rs`
-- **Aliases:** `/spec-validate`, `/spec-ops-validate`
+- **Aliases:** `/spec-validate`, `/guardrail.validate`
 - **Type:** Prompt-expanding (multi-agent)
 - **Description:** Run test strategy with validation
 - **Requires Args:** Yes
@@ -127,7 +127,7 @@
 #### /speckit.audit
 - **Struct:** `SpecKitAuditCommand`
 - **Module:** `commands/plan.rs`
-- **Aliases:** `/spec-audit`, `/spec-ops-audit`
+- **Aliases:** `/spec-audit`, `/guardrail.audit`
 - **Type:** Prompt-expanding (multi-agent)
 - **Description:** Compliance review with multi-agent
 - **Requires Args:** Yes
@@ -140,7 +140,7 @@
 #### /speckit.unlock
 - **Struct:** `SpecKitUnlockCommand`
 - **Module:** `commands/plan.rs`
-- **Aliases:** `/spec-unlock`, `/spec-ops-unlock`
+- **Aliases:** `/spec-unlock`, `/guardrail.unlock`
 - **Type:** Prompt-expanding (multi-agent)
 - **Description:** Final approval for merge
 - **Requires Args:** Yes
@@ -157,7 +157,7 @@
 #### /speckit.auto
 - **Struct:** `SpecKitAutoCommand`
 - **Module:** `commands/special.rs`
-- **Aliases:** `/spec-auto`
+- **Aliases:** `/speckit.auto`
 - **Type:** Pipeline automation
 - **Description:** Full 6-stage pipeline with auto-advancement
 - **Requires Args:** Yes (SPEC-ID, optional --from stage)
@@ -186,7 +186,7 @@
 #### /guardrail.plan
 - **Struct:** `GuardrailPlanCommand`
 - **Module:** `commands/guardrail.rs`
-- **Aliases:** `/spec-ops-plan`
+- **Aliases:** `/guardrail.plan`
 - **Type:** Guardrail validation
 - **Description:** Run guardrail validation for plan stage
 - **Requires Args:** Yes (SPEC-ID)
@@ -196,7 +196,7 @@
 #### /guardrail.tasks
 - **Struct:** `GuardrailTasksCommand`
 - **Module:** `commands/guardrail.rs`
-- **Aliases:** `/spec-ops-tasks`
+- **Aliases:** `/guardrail.tasks`
 - **Type:** Guardrail validation
 - **Description:** Run guardrail validation for tasks stage
 - **Requires Args:** Yes
@@ -206,7 +206,7 @@
 #### /guardrail.implement
 - **Struct:** `GuardrailImplementCommand`
 - **Module:** `commands/guardrail.rs`
-- **Aliases:** `/spec-ops-implement`
+- **Aliases:** `/guardrail.implement`
 - **Type:** Guardrail validation
 - **Description:** Run guardrail validation for implement stage
 - **Requires Args:** Yes
@@ -216,7 +216,7 @@
 #### /guardrail.validate
 - **Struct:** `GuardrailValidateCommand`
 - **Module:** `commands/guardrail.rs`
-- **Aliases:** `/spec-ops-validate`
+- **Aliases:** `/guardrail.validate`
 - **Type:** Guardrail validation
 - **Description:** Run guardrail validation for validate stage
 - **Requires Args:** Yes
@@ -226,7 +226,7 @@
 #### /guardrail.audit
 - **Struct:** `GuardrailAuditCommand`
 - **Module:** `commands/guardrail.rs`
-- **Aliases:** `/spec-ops-audit`
+- **Aliases:** `/guardrail.audit`
 - **Type:** Guardrail validation
 - **Description:** Run guardrail validation for audit stage
 - **Requires Args:** Yes
@@ -236,7 +236,7 @@
 #### /guardrail.unlock
 - **Struct:** `GuardrailUnlockCommand`
 - **Module:** `commands/guardrail.rs`
-- **Aliases:** `/spec-ops-unlock`
+- **Aliases:** `/guardrail.unlock`
 - **Type:** Guardrail validation
 - **Description:** Run guardrail validation for unlock stage
 - **Requires Args:** Yes
@@ -246,7 +246,7 @@
 #### /guardrail.auto
 - **Struct:** `GuardrailAutoCommand`
 - **Module:** `commands/guardrail.rs`
-- **Aliases:** `/spec-ops-auto`
+- **Aliases:** `/guardrail.auto`
 - **Type:** Guardrail automation
 - **Description:** Run full guardrail pipeline with telemetry
 - **Requires Args:** Yes
@@ -396,15 +396,15 @@ Commands for inspection and debugging:
 | /spec-validate | /speckit.validate | Stage |
 | /spec-audit | /speckit.audit | Stage |
 | /spec-unlock | /speckit.unlock | Stage |
-| /spec-auto | /speckit.auto | Automation |
+| /speckit.auto | /speckit.auto | Automation |
 | /spec-status | /speckit.status | Automation |
-| /spec-ops-plan | /guardrail.plan | Guardrail |
-| /spec-ops-tasks | /guardrail.tasks | Guardrail |
-| /spec-ops-implement | /guardrail.implement | Guardrail |
-| /spec-ops-validate | /guardrail.validate | Guardrail |
-| /spec-ops-audit | /guardrail.audit | Guardrail |
-| /spec-ops-unlock | /guardrail.unlock | Guardrail |
-| /spec-ops-auto | /guardrail.auto | Guardrail |
+| /guardrail.plan | /guardrail.plan | Guardrail |
+| /guardrail.tasks | /guardrail.tasks | Guardrail |
+| /guardrail.implement | /guardrail.implement | Guardrail |
+| /guardrail.validate | /guardrail.validate | Guardrail |
+| /guardrail.audit | /guardrail.audit | Guardrail |
+| /guardrail.unlock | /guardrail.unlock | Guardrail |
+| /guardrail.auto | /guardrail.auto | Guardrail |
 | /project | /speckit.project | Project |
 
 **All legacy names work for backward compatibility** ✅

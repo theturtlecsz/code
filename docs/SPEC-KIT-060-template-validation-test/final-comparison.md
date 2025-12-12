@@ -113,7 +113,7 @@
 **Phase 2 (proceed):**
 - Keep template approach
 - Port /clarify, /analyze, /checklist
-- Update /spec-auto stages to use templates (plan, tasks)
+- Update /speckit.auto stages to use templates (plan, tasks)
 
 **Phase 3 (later):**
 - Command naming standardization (/speckit.*)

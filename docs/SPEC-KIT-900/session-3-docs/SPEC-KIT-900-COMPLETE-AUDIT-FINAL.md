@@ -228,7 +228,7 @@ Synthesis Records: 6
 
 **User Experience**:
 ```
-/spec-auto pipeline complete
+/speckit.auto pipeline complete
 
 [Verification report automatically displayed]
 

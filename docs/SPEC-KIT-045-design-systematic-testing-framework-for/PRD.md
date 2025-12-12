@@ -96,6 +96,6 @@ The current Spec-Auto verification loop depends on long manual runs and ad-hoc i
 
 ## Open Questions
 - Should HAL smoke coverage run automatically in CI when credentials are configured, or remain developer-triggered with evidence upload?
-- Do we persist summarised run metadata into local-memory after each automated suite to support `/spec-auto` resumability?
+- Do we persist summarised run metadata into local-memory after each automated suite to support `/speckit.auto` resumability?
 - How should evidence diffs be surfaced to operators (CI artifact viewer, TUI notifications, or SPEC.md notes)?
 - Is additional tooling needed to replay historical evidence bundles against new validators to detect regressions retroactively?

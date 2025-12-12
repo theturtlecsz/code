@@ -1,12 +1,12 @@
 # PRD: Automated Conflict Resolution Arbiter (T36)
 
 ## Summary
-- **Objective.** Automate consensus conflict resolution across `/spec-plan`, `/spec-tasks`, `/spec-implement`, and `/spec-auto` by invoking a dedicated GPT-5 arbiter agent whenever agent outputs disagree.
-- **Problem.** Today consensus runner halts on conflicts and waits for a human to adjudicate, stretching `/spec-auto` lead time and leaving telemetry without a final verdict.
+- **Objective.** Automate consensus conflict resolution across `/spec-plan`, `/spec-tasks`, `/spec-implement`, and `/speckit.auto` by invoking a dedicated GPT-5 arbiter agent whenever agent outputs disagree.
+- **Problem.** Today consensus runner halts on conflicts and waits for a human to adjudicate, stretching `/speckit.auto` lead time and leaving telemetry without a final verdict.
 - **Outcome.** Conflicted stages resolve without manual intervention, telemetry v1 captures arbiter verdict metadata, and operators retain an auditable override path.
 
 ## Users & Jobs
-- **Spec Kit operators** want `/spec-*` and `/spec-auto` to finish without babysitting stalled consensus stages.
+- **Spec Kit operators** want `/spec-*` and `/speckit.auto` to finish without babysitting stalled consensus stages.
 - **Governance & audit reviewers** need durable artefacts showing how conflicts were resolved, which model acted, and why.
 - **Reliability engineers** must detect degraded runs quickly and confirm telemetry schema compliance.
 
@@ -18,7 +18,7 @@
 ## Non-Goals
 - Replacing the current Gemini research or Claude synthesis agents.
 - Introducing telemetry schema v2; all updates must fit within schema v1 envelopes.
-- Altering guardrail hook ordering or `/spec-ops-*` script behavior outside the new arbiter flow.
+- Altering guardrail hook ordering or `/guardrail.*` script behavior outside the new arbiter flow.
 
 ## Requirements
 | ID | Description | Acceptance |
@@ -27,7 +27,7 @@
 | R2 | **Complete artefact bundle.** Arbiter input includes Gemini research output, Claude synthesis, prior arbiter verdict JSON (if any), and guardrail context digests. | Evidence directory `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/<SPEC-ID>/` stores a manifest listing each artefact with checksum references. |
 | R3 | **Telemetry enrichment.** Telemetry schema v1 payload gains an `arbiter` block (`model`, `model_release`, `reasoning_mode`, `verdict`, `rationale_digest`, `escalated`). | `jq '.arbiter.model' telemetry.jsonl` returns `gpt-5`; existing schema validator passes without modifications. |
 | R4 | **Consensus artefact update.** Arbiter verdict merges into stage synthesis JSON with explicit status (`resolved`, `degraded`, `manual_override`) and links back to telemetry artefact IDs. | New consensus files include `arbiter` section; consensus checker accepts them and highlights degraded states. |
-| R5 | **Degraded handling + halt.** When arbiter cannot reconcile (missing artefacts, policy breach), mark run `degraded`, halt `/spec-auto`, and surface CLI guidance pointing to evidence + override docs. | Simulated failure produces CLI banner referencing evidence path and records `status="degraded"` in telemetry. |
+| R5 | **Degraded handling + halt.** When arbiter cannot reconcile (missing artefacts, policy breach), mark run `degraded`, halt `/speckit.auto`, and surface CLI guidance pointing to evidence + override docs. | Simulated failure produces CLI banner referencing evidence path and records `status="degraded"` in telemetry. |
 | R6 | **Manual override logging.** Provide documented override flag (e.g. `/spec-consensus --override`) that records operator, timestamp, reason, and artefact diffs under evidence tree. | Override run writes `override.json` in evidence directory and updates SPEC.md task notes per constitution governance. |
 | R7 | **Model strategy compliance.** Implementation obeys `docs/spec-kit/model-strategy.md`; consensus metadata continues to list Gemini → Claude → GPT-5 stack. | Consensus validator rejects any run with unexpected model IDs; smoke tests confirm success path. |
 | R8 | **Validation & docs.** Add automated tests (unit/integration) covering resolved conflict, degraded halt, and manual override; update CLAUDE.md and slash-command docs to explain arbiter automation. | `cargo test -p codex-tui spec_auto` (or equivalent suite) passes with new cases; docs mention feature flag and telemetry fields. |
@@ -45,6 +45,6 @@
 - Capture run metrics inside HAL telemetry summaries for governance cost tracking.
 
 ## Open Questions
-- What retry budget should `/spec-auto` allocate before declaring a run degraded?
+- What retry budget should `/speckit.auto` allocate before declaring a run degraded?
 - Should manual overrides require secondary approval for production specs?
 - How will cost and latency telemetry surface in governance dashboards to flag regression?

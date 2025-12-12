@@ -1,7 +1,7 @@
 # Spec: Systematic Testing Framework for Spec-Auto Orchestrator (SPEC-KIT-045)
 
 ## Context
-Spec-Auto currently requires long manual runs to validate guardrail stages, consensus agents, and telemetry bundles. Recent orchestrator upgrades demand a faster, fixture-driven regression suite that can be run locally, in CI, and before `/spec-auto` automation kicks off.
+Spec-Auto currently requires long manual runs to validate guardrail stages, consensus agents, and telemetry bundles. Recent orchestrator upgrades demand a faster, fixture-driven regression suite that can be run locally, in CI, and before `/speckit.auto` automation kicks off.
 
 ## Objectives
 - Deliver stage-isolated harnesses that exercise plan, tasks, implement, validate, audit, and unlock without full pipeline execution.
@@ -9,7 +9,7 @@ Spec-Auto currently requires long manual runs to validate guardrail stages, cons
 - Validate agent spawning, telemetry schema v1 payloads, and evidence directory structure with deterministic results.
 
 ## Acceptance Criteria
-- Stage rehearsal playbooks executed via TUI (`/spec-ops-*` and `/spec-auto --from <stage>`) confirm guardrail exits, consensus artefacts, and agent metadata per stage.
+- Stage rehearsal playbooks executed via TUI (`/guardrail.*` and `/speckit.auto --from <stage>`) confirm guardrail exits, consensus artefacts, and agent metadata per stage.
 - Error injections (guardrail failure, missing telemetry, agent dropout) triggered through documented environment flags halt runs with actionable summaries and evidence diffs.
 - Documentation describes how to maintain fixtures, execute the fast rehearsal workflow, and capture artefacts for SPEC tracker updates without a 90-minute run.
 

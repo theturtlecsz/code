@@ -9,7 +9,7 @@
 3. Expose validator via `codex config validate` CLI/TUI surfaces with flags (`--config-path`, `--profile`, `--json`, `--strict`, `--skip-path-checks`) and wire optional startup warning hook toggled by `CODEX_CONFIG_STRICT`.
 4. Add CLI integration and core unit tests for clean, warning, and strict failure scenarios, ensuring fixtures under `codex-rs/cli/tests` and `codex-rs/core/tests` remain deterministic and CI-safe.
 5. Integrate validator into guardrail telemetry by invoking it during `spec_ops_validate` execution, emitting schema v1 artifact `validator.json`, updating SPEC.md T48 status/evidence, and capturing tool.status metadata.
-6. Update documentation (`docs/config.md`, `config.toml.example`, hook guidance) and rerun doc/tracker lint plus `/spec-ops-validate` smoke to confirm evidence; record summary in changelog.
+6. Update documentation (`docs/config.md`, `config.toml.example`, hook guidance) and rerun doc/tracker lint plus `/guardrail.validate` smoke to confirm evidence; record summary in changelog.
 
 ## Acceptance Mapping
 | Requirement (Spec) | Validation Step | Test/Check Artifact |
@@ -17,7 +17,7 @@
 | AC1: `codex config validate` exits zero on default config | `cargo test -p codex-cli --test config_validate_default` | `codex-rs/cli/tests/config_validate.rs` |
 | AC2: Invalid values surface descriptive diagnostics | `cargo test -p codex-core config_validator::invalid_values` | `codex-rs/core/src/config_validator.rs` |
 | AC3: Missing files/env keys produce actionable messages | `cargo test -p codex-cli --test config_validate_strict -- --ignored` | `codex-rs/cli/tests/config_validate.rs` |
-| AC4: `/spec-auto SPEC-KIT-040` captures validator telemetry | `SPEC_OPS_ALLOW_DIRTY=0 scripts/spec_ops_004/commands/spec_ops_validate.sh SPEC-KIT-040-add-simple-config-validation-utility` | `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-040-add-simple-config-validation-utility/validator.json` |
+| AC4: `/speckit.auto SPEC-KIT-040` captures validator telemetry | `SPEC_OPS_ALLOW_DIRTY=0 scripts/spec_ops_004/commands/spec_ops_validate.sh SPEC-KIT-040-add-simple-config-validation-utility` | `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-040-add-simple-config-validation-utility/validator.json` |
 | AC5: Documentation updates pass validation scripts | `scripts/doc-structure-validate.sh --mode=templates && python3 scripts/spec-kit/lint_tasks.py` | `docs/config.md`, `config.toml.example` |
 
 ## Risks & Unknowns

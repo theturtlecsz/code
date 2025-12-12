@@ -2,7 +2,7 @@
 **Feature**: Template-Based Spec Generation Validation
 **Status**: In Progress
 **Created**: 2025-10-14
-**Branch**: feat/spec-auto-telemetry
+**Branch**: feat/speckit.auto-telemetry
 **Owner**: Code
 
 **Context**: Testing whether GitHub spec-kit templates improve spec quality and consistency compared to free-form generation. This SPEC validates Phase 1 of template integration strategy.

@@ -13,7 +13,7 @@
 ## Acceptance Mapping
 | Requirement (Spec) | Validation Step | Test/Check Artifact |
 | --- | --- | --- |
-| R1: Slash command reference updated | Manual diff review ensuring `/spec-ops-*` entries list schema v1 fields, new flags, and model metadata pointers | docs/slash-commands.md |
+| R1: Slash command reference updated | Manual diff review ensuring `/guardrail.*` entries list schema v1 fields, new flags, and model metadata pointers | docs/slash-commands.md |
 | R2: Guardrail constitution covers telemetry schema | Confirm AGENTS.md lists envelope + per-stage keys and links to docs/SPEC-KIT-013-telemetry-schema-guard/spec.md and docs/spec-kit/model-strategy.md | AGENTS.md |
 | R3: Onboarding references evidence + validation commands | Verify docs/getting-started.md (and cross-link from RESTART.md) include evidence paths, HAL helper commands, and validation checklist | docs/getting-started.md |
 | R4: Troubleshooting guidance added | Ensure consolidated troubleshooting section covers telemetry failures, degraded consensus, and HAL smoke fallbacks with actionable steps | docs/getting-started.md section + RESTART.md pointer |

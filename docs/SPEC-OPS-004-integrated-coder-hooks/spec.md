@@ -6,8 +6,8 @@
 - T18 HAL integration and T14 documentation refresh both depend on hardened guardrails.
 
 ## Objectives
-1. Enforce baseline audit outcomes so `/spec-ops-plan` fails when audits detect issues.
-2. Ensure `/spec-ops-validate` and `/spec-ops-audit` propagate HAL smoke failures with non-zero exits and accurate telemetry.
+1. Enforce baseline audit outcomes so `/guardrail.plan` fails when audits detect issues.
+2. Ensure `/guardrail.validate` and `/guardrail.audit` propagate HAL smoke failures with non-zero exits and accurate telemetry.
 3. Make guardrail scripts resilient to repository layout changes (manifest-awareness) and fix malformed GraphQL payloads.
 4. Extend telemetry with optional HAL summary data without breaking schema v1 consumers.
 5. Document new flags/env vars and rollout plan for teams consuming guardrail automation.
@@ -37,8 +37,8 @@
 - CI capacity to run new regression tests.
 
 **Validation**
-- `/spec-ops-plan SPEC-KIT-018` with forced baseline failure vs `--allow-fail` override.
-- `/spec-ops-validate SPEC-KIT-018` with HAL offline to confirm `hal.summary.status="failed"` and non-zero exit.
+- `/guardrail.plan SPEC-KIT-018` with forced baseline failure vs `--allow-fail` override.
+- `/guardrail.validate SPEC-KIT-018` with HAL offline to confirm `hal.summary.status="failed"` and non-zero exit.
 - Targeted regression test covering GraphQL payload success and manifest-path usage.
 - `SPEC_OPS_TELEMETRY_HAL=1` run followed by `python3 scripts/spec-kit/lint_tasks.py`.
 - `scripts/doc-structure-validate.sh --mode=templates --dry-run` before documentation handoff.

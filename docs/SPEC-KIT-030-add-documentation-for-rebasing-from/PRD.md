@@ -15,7 +15,7 @@ This spec codifies how upstream repository documents fork rebasing against upstr
    - Documentation references `FORK_DEVIATIONS.md`, identifies `// === FORK-SPECIFIC` sentinels, and outlines commands such as `git log upstream/master ^master`.  
    - `scripts/doc-structure-validate.sh --mode=templates` passes for the new documentation folder.
 2. **R2 – Rebase workflow guidance**  
-   Provide a numbered rebase procedure that uses documented slash commands (`/spec-ops-plan`, `/spec-ops-auto`, `/spec-evidence-stats`) and records required telemetry envelopes.  
+   Provide a numbered rebase procedure that uses documented slash commands (`/guardrail.plan`, `/guardrail.auto`, `/spec-evidence-stats`) and records required telemetry envelopes.  
    **Acceptance Conditions:**  
    - Guide covers preparation (branch hygiene, SPEC.md lock state), execution (rebasing feat/* against `master`), and post-run validation using guardrail commands.  
    - Dry-run evidence path (`docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-030/`) is referenced for operators to attach artifacts.

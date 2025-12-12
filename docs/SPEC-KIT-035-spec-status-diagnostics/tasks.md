@@ -35,7 +35,7 @@
 - **Docs**: Document CLI options in `docs/slash-commands.md`; add JSON schema excerpt to operator guide.
 
 ### 5. HAL & Policy Messaging
-- **Goal**: Surface HAL/policy states with remediation hints (`SPEC_OPS_TELEMETRY_HAL=1`, `/spec-ops-validate`) while defaulting to warning-only messaging when telemetry is skipped.
+- **Goal**: Surface HAL/policy states with remediation hints (`SPEC_OPS_TELEMETRY_HAL=1`, `/guardrail.validate`) while defaulting to warning-only messaging when telemetry is skipped.
 - **Dependencies**: HAL telemetry artifacts when available, policy results emitted by guardrail scripts, credentials (`HAL_SECRET_KAVEDARR_API_KEY`).
 - **Validation**: Dedicated fixtures (`hal_failed.json`, `policy_failed.json`), `cargo test -p codex-tui spec_status::tests::hal_policy_blockers`, manual HAL-enabled run.
 - **Evidence**: Dashboard capture showing HAL failure vs skipped; log snippet documenting remediation guidance.
@@ -57,7 +57,7 @@
 
 ### 8. Release Validation & Evidence Ledger
 - **Goal**: Execute fmt/clippy/test suite, demonstrate `/spec-status` (TUI + CLI), run footprint audit, and update SPEC.md tracker with dated evidence references.
-- **Dependencies**: All prior slices, clean branch `feat/spec-auto-telemetry`.
+- **Dependencies**: All prior slices, clean branch `feat/speckit.auto-telemetry`.
 - **Validation**:
   ```bash
   scripts/env_run.sh cargo fmt --all -- --check

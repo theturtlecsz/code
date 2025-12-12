@@ -1,7 +1,7 @@
 # Spec: Automated Conflict Resolution Arbiter (T36)
 
 ## Context
-- Consensus runner currently halts on conflicts and requires manual review before `/spec-auto` continues, increasing turnaround time and leaving telemetry without final verdicts.
+- Consensus runner currently halts on conflicts and requires manual review before `/speckit.auto` continues, increasing turnaround time and leaving telemetry without final verdicts.
 - Guardrails already capture multi-agent artefacts (Gemini research, Claude synthesis, consensus synthesis) under `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/<SPEC-ID>/`, but there is no automated arbiter step.
 - Model strategy mandates GPT-5 (high reasoning) as the arbiter for consensus stages; automation must respect telemetry schema v1 and existing guardrail layering.
 

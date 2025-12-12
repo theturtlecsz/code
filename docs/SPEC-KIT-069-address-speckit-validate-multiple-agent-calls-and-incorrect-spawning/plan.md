@@ -135,7 +135,7 @@ retry/cancel paths -> state.reset_validate_run & remember_validate_lifecycle(can
 
 **Probability**: Low — TUI resets state on new /speckit command but panic mid-session possible.
 
-**Mitigation**: Reset lifecycle inside global error handlers (`halt_spec_auto_with_error`), add inactivity timeout in Step 3, document manual `/spec-auto reset` fallback.
+**Mitigation**: Reset lifecycle inside global error handlers (`halt_spec_auto_with_error`), add inactivity timeout in Step 3, document manual `/speckit.auto reset` fallback.
 
 ### Risk 2: Telemetry schema change breaks downstream tooling
 

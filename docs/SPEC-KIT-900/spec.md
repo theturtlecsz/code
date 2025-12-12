@@ -86,7 +86,7 @@ Acceptance checks:
 - **Deliverable**: Zip + README bundling plan synopsis, PRD excerpts, governance checklist, and retry guidance for `/speckit.tasks` runs.
 - **Definition of Done**: (1) Context kit published under `docs/SPEC-KIT-900-generic-smoke/context/`; (2) Retry guidance embedded in prompts with version stamp; (3) Dry-run shows no degraded consensus when kit supplied.
 - **Validation Hooks**: `/speckit.plan` + `/speckit.tasks` dry-run using kit; record degradation metrics.
-- **Documentation Updates**: Update this spec (context section) and `docs/spec-kit/spec-auto-automation.md` with kit usage note.
+- **Documentation Updates**: Update this spec (context section) and `docs/spec-kit/speckit.auto-automation.md` with kit usage note.
 - **Cross-Team Touchpoints**: ACE bulletin update for prompt injectors.
 - **Risks/Assumptions**: Analysts must download the latest kit—timestamp release notes to minimise drift.
 - **Security Review**: Not required.

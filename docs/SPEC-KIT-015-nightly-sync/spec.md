@@ -1,7 +1,7 @@
 # Spec: Nightly Sync Drift Detector (T15)
 
 ## Context
-- Branch: `feat/spec-auto-telemetry`
+- Branch: `feat/speckit.auto-telemetry`
 - Local-memory stores Spec Kit decisions (domains like `spec-kit`, `telemetry`, `docs-ops`).
 - Evidence artifacts live under `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/<SPEC-ID>/`.
 - No existing tooling cross-checks that every evidence artifact has a matching memory entry (and vice versa).

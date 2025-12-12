@@ -767,8 +767,8 @@ INSERT INTO schema_version (version) VALUES (1);
 
 **Example**:
 ```
-$ /spec-ops-plan SPEC-123
-⚠️  Warning: /spec-ops-plan is deprecated. Use /speckit.plan instead.
+$ /guardrail.plan SPEC-123
+⚠️  Warning: /guardrail.plan is deprecated. Use /speckit.plan instead.
    This alias will be removed in v2.0 (releasing 2026-01-01).
    See migration guide: docs/migration/v1-to-v2.md
 ```
@@ -790,9 +790,9 @@ $ /spec-ops-plan SPEC-123
 ```bash
 $ code migrate check-commands script.sh
 Found 3 deprecated commands:
-  - /spec-ops-plan → /speckit.plan (line 12)
+  - /guardrail.plan → /speckit.plan (line 12)
   - /new-spec → /speckit.new (line 24)
-  - /spec-auto → /speckit.auto (line 45)
+  - /speckit.auto → /speckit.auto (line 45)
 
 $ code migrate update-commands script.sh --dry-run
 $ code migrate update-commands script.sh --in-place

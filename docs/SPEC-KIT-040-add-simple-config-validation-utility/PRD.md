@@ -1,7 +1,7 @@
 # PRD: Simple Config Validation Utility (SPEC-KIT-040-add-simple-config-validation-utility)
 
 ## Problem Statement
-- Planner surfaces misconfigured values during runtime, often after expensive startup or guardrail execution, producing opaque stack traces and blocking `/spec-auto` runs.
+- Planner surfaces misconfigured values during runtime, often after expensive startup or guardrail execution, producing opaque stack traces and blocking `/speckit.auto` runs.
 - Operators and contributors lack a pre-flight mechanism to validate `config.toml`, profile overrides, and CLI `-c key=value` flags before invoking automation.
 - Existing guardrail scripts (`scripts/spec-kit/lint_tasks.py`, `scripts/doc-structure-validate.sh`) do not cover configuration drift, allowing mismatches between documented options and the Rust data models in `codex-rs/core/src/config.rs`.
 
@@ -19,7 +19,7 @@
 - Record validator results in `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/…` telemetry artifacts (populated `tool.status`, optional `hal.summary`, model metadata per `docs/spec-kit/model-strategy.md`).
 - Update documentation (`docs/config.md`, `config.toml.example`, new quick-start snippet) describing validator usage, strict mode, and integration into hooks or CI.
 - Supply developer-facing APIs/tests so downstream SPEC automation can invoke validation helpers without duplicating logic.
-- Optional but encouraged: surface guardrail wiring so pre-commit/pre-push and `/spec-ops-*` stages can run the validator; ensure configuration keeps existing workflows opt-in to avoid regressions.
+- Optional but encouraged: surface guardrail wiring so pre-commit/pre-push and `/guardrail.*` stages can run the validator; ensure configuration keeps existing workflows opt-in to avoid regressions.
 
 ## Non-Goals
 - Refactoring the full configuration loading pipeline or introducing automatic fixes.
@@ -43,7 +43,7 @@
 - AC1: `codex config validate` against the default `config.toml` exits zero and reports a clean summary (CLI integration test).
 - AC2: Invalid enum/boolean values surface descriptive diagnostics listing allowed options and exit non-zero in strict mode (unit + CLI tests).
 - AC3: Missing files or environment variables referenced in config produce actionable messages with severity levels respected by strict/warn modes (unit tests with mocked filesystem/env).
-- AC4: `/spec-auto SPEC-KIT-040` captures a validator telemetry artifact that passes schema v1 checks and, when applicable, populates `hal.summary`.
+- AC4: `/speckit.auto SPEC-KIT-040` captures a validator telemetry artifact that passes schema v1 checks and, when applicable, populates `hal.summary`.
 - AC5: Documentation (`docs/config.md`, `config.toml.example`) references the validator and passes `scripts/doc-structure-validate.sh --mode=templates` and `python3 scripts/spec-kit/lint_tasks.py`.
 
 ## Risks

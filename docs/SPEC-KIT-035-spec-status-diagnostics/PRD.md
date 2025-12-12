@@ -8,7 +8,7 @@
 - Without a concise TUI snapshot, teams lack a shared understanding of SPEC progress across plan→unlock stages.
 
 ## Target Users & Use Cases
-- **Spec Ops operators** need a single dashboard to verify guardrail outcomes, consensus verdicts, freshness, and blockers before advancing `/spec-auto`.
+- **Spec Ops operators** need a single dashboard to verify guardrail outcomes, consensus verdicts, freshness, and blockers before advancing `/speckit.auto`.
 - **Guardrail maintainers** require fast visibility into telemetry gaps (missing JSON, stale timestamps) to triage failures.
 - **Automation/observability engineers** want predictable cues surfaced in the TUI so they can mirror alerts manually until automation hooks are defined.
 

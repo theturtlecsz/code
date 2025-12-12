@@ -301,7 +301,7 @@ Every agent response used for consensus must include:
 - `/speckit.auto`
 
 **Guardrails (Shell):**
-- `/guardrail.*` commands (use gpt-5-codex → gpt-5 layering) (note: legacy `/spec-ops-*` commands still work)
+- `/guardrail.*` commands (use gpt-5-codex → gpt-5 layering) (note: legacy `/guardrail.*` commands still work)
 
 ---
 

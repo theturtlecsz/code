@@ -32,9 +32,9 @@
 
 ## Task Breakdown (2025-09-28)
 ### Task Slices
-- **Guardrail engineer (Code)** – Pair with T20 owners to verify baseline and HAL failure propagation fixes by forcing failing `/spec-ops-plan SPEC-KIT-018` runs and confirming telemetry now marks `baseline.status`/`hal.summary.status` as `failed`.
+- **Guardrail engineer (Code)** – Pair with T20 owners to verify baseline and HAL failure propagation fixes by forcing failing `/guardrail.plan SPEC-KIT-018` runs and confirming telemetry now marks `baseline.status`/`hal.summary.status` as `failed`.
 - **HAL integrator (Gemini)** – Finalize `docs/hal/hal_config.toml.example` and `docs/hal/hal_profile.json` templates with secret placeholders and manifest-aware instructions for syncing into the product repo.
-- **HAL integrator (Gemini)** – Execute `/spec-ops-validate SPEC-KIT-018` against unhealthy and healthy HAL states; archive artifacts under `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-018/` with scenario metadata.
+- **HAL integrator (Gemini)** – Execute `/guardrail.validate SPEC-KIT-018` against unhealthy and healthy HAL states; archive artifacts under `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-018/` with scenario metadata.
 - **Docs lead (Claude)** – Update `/spec-*` documentation (slash commands, AGENTS, onboarding) to embed HAL smoke prerequisites, evidence expectations, and consensus telemetry reminders.
 - **Tracker steward (Code)** – Update SPEC.md row T18 with refreshed evidence links, rerun lint scripts, and document telemetry artifacts in review notes.
 
@@ -45,7 +45,7 @@
 
 **Validation**
 - `cargo run --manifest-path codex-rs/Cargo.toml -p codex-mcp-client --bin call_tool -- --tool http-get --args '{"url":"http://127.0.0.1:7878/health"}' -- npx -y hal-mcp` (healthy run).
-- `/spec-ops-validate SPEC-KIT-018` in degraded & healthy modes with telemetry inspection for `hal.summary`.
+- `/guardrail.validate SPEC-KIT-018` in degraded & healthy modes with telemetry inspection for `hal.summary`.
 - `scripts/doc-structure-validate.sh --mode=templates --dry-run` and `python3 scripts/spec-kit/lint_tasks.py` before finalizing docs/tracker updates.
 
 **Docs**

@@ -42,8 +42,8 @@
 - **Docs**: Update `docs/config.md`, `config.toml.example`, changelog entry, and ensure tasks.md cross-links to plan & spec.
 
 ### 6. Release Validation & Evidence Ledger
-- **Goal**: Run workspace fmt/clippy/tests, perform `/spec-auto SPEC-KIT-040` smoke, archive logs, and prepare final PR body with acceptance mapping.
-- **Dependencies**: Clean branch `feat/spec-auto-telemetry`, env secrets for HAL when available, slices 1–5 complete.
+- **Goal**: Run workspace fmt/clippy/tests, perform `/speckit.auto SPEC-KIT-040` smoke, archive logs, and prepare final PR body with acceptance mapping.
+- **Dependencies**: Clean branch `feat/speckit.auto-telemetry`, env secrets for HAL when available, slices 1–5 complete.
 - **Validation**:
   ```bash
   cd codex-rs
@@ -61,7 +61,7 @@
 - **AC1**: Slices 1, 3, and 6 via CLI happy-path tests (`cargo test -p codex-cli config_validate_default`).
 - **AC2**: Slice 2 ensures descriptive diagnostics for invalid enums/booleans with regression fixtures.
 - **AC3**: Slice 2 + 3 cover missing files/env keys and strict-mode exit handling.
-- **AC4**: Slice 4 runs validator inside `spec_ops_validate` and captures schema v1 telemetry artifact `validator.json` for `/spec-auto`.
+- **AC4**: Slice 4 runs validator inside `spec_ops_validate` and captures schema v1 telemetry artifact `validator.json` for `/speckit.auto`.
 - **AC5**: Slice 5 executes doc + tracker lint and documents validator usage in `docs/config.md` & `config.toml.example`.
 
 ## Command Plan & Checks

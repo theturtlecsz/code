@@ -20,8 +20,8 @@
 ### Guardrail Commands (Shell Wrappers)
 
 **✅ Fully Operational:**
-- `/guardrail.plan`, `/guardrail.tasks`, `/guardrail.implement`, `/guardrail.validate`, `/guardrail.audit`, `/guardrail.unlock` - Run directly from TUI (note: legacy `/spec-ops-*` commands still work)
-- `/guardrail.auto` - Wrapper for `scripts/spec_ops_004/spec_auto.sh` (note: legacy `/spec-ops-auto` still works)
+- `/guardrail.plan`, `/guardrail.tasks`, `/guardrail.implement`, `/guardrail.validate`, `/guardrail.audit`, `/guardrail.unlock` - Run directly from TUI (note: legacy `/guardrail.*` commands still work)
+- `/guardrail.auto` - Wrapper for `scripts/spec_ops_004/spec_auto.sh` (note: legacy `/guardrail.auto` still works)
 - All emit telemetry to `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/<SPEC-ID>/`
 
 ### Consensus Runner
@@ -152,7 +152,7 @@
 - ✅ Progress indicators show stage X/6
 
 **Guardrail Integration:**
-- ✅ `/guardrail.*` commands run independently (note: legacy `/spec-ops-*` commands still work)
+- ✅ `/guardrail.*` commands run independently (note: legacy `/guardrail.*` commands still work)
 - ✅ Telemetry schema v1 validated
 - ✅ HAL validation optional (`SPEC_OPS_HAL_SKIP=1`)
 - ✅ Clean tree enforcement (`SPEC_OPS_ALLOW_DIRTY=1` override)
@@ -195,7 +195,7 @@
 ## Future Enhancements
 
 **Planned (Phase 3 Week 2):**
-- Guardrail namespace: `/spec-ops-*` → `/guardrail.*`
+- Guardrail namespace: `/guardrail.*` → `/guardrail.*`
 - Final testing and release notes
 - Migration documentation complete
 

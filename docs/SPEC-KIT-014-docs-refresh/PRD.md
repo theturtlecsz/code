@@ -3,7 +3,7 @@
 ## Summary
 - **Objective.** Align public/operator-facing docs with the new Spec Kit multi-agent pipeline, telemetry guardrails, and model strategy so teams can follow `/spec-*` workflows without stale guidance.
 - **Problem.** Existing docs (AGENTS.md, docs/slash-commands.md, onboarding materials) pre-date the consensus diff reviewer, telemetry schema enforcement, and updated model map; they still reference deprecated aliases and omit telemetry requirements.
-- **Outcome.** Repository docs clearly describe the `/spec-ops-*` vs `/spec-*` pairing, model lineup, telemetry schema expectations, and guardrail evidence flows, reducing onboarding time and avoiding stale CLI usage.
+- **Outcome.** Repository docs clearly describe the `/guardrail.*` vs `/spec-*` pairing, model lineup, telemetry schema expectations, and guardrail evidence flows, reducing onboarding time and avoiding stale CLI usage.
 
 ## Users & Jobs
 - **New Planner operators** need accurate slash-command usage and onboarding steps for configuring Spec Kit pipelines.
@@ -24,7 +24,7 @@
 ## Requirements
 | ID | Description | Acceptance |
 | --- | --- | --- |
-| R1 | Slash command reference reflects `/spec-ops-*` + `/spec-*` roles, model metadata, and telemetry schema. | Updated table/section with explicit schema reminders and consensus behavior. |
+| R1 | Slash command reference reflects `/guardrail.*` + `/spec-*` roles, model metadata, and telemetry schema. | Updated table/section with explicit schema reminders and consensus behavior. |
 | R2 | Guardrail Constitution (AGENTS.md) documents telemetry schema expectations and references model strategy. | AGENTS.md includes telemetry schema summary + link to Spec Kit model doc. |
 | R3 | Onboarding/getting-started docs highlight telemetry evidence location and validation commands. | docs/getting-started.md or onboarding section includes updated steps. |
 | R4 | Add troubleshooting section for degraded consensus/telemetry failures with actionable steps. | New subsection in relevant doc detailing how to resolve failed schema checks. |
@@ -34,7 +34,7 @@
 - Constitution/product requirement files still absent from repo root; note limitation or restore references.
 
 ## Rollout & Success Metrics
-- Merge doc changes alongside T13 code updates on `feat/spec-auto-telemetry`.
+- Merge doc changes alongside T13 code updates on `feat/speckit.auto-telemetry`.
 - After merge, run `scripts/spec-kit/lint_tasks.py` and have operators confirm docs cover new flow.
 - Success measured by updated docs being cited in upcoming Spec Ops runs without confusion.
 

@@ -5,7 +5,7 @@
 
 ## Work Breakdown
 1. Codify stage-aware telemetry schema in Rust (`codex-rs/tui/src/chatwidget.rs`), including reusable validators and error aggregation.
-2. Update guardrail outcome handling to enforce schema prior to artifact checks; surface failures in `/spec-auto` history with actionable messages.
+2. Update guardrail outcome handling to enforce schema prior to artifact checks; surface failures in `/speckit.auto` history with actionable messages.
 3. Extend unit tests for each stage (Plan/Tasks/Implement/Validate/Audit/Unlock) covering valid and malformed telemetry scenarios.
 4. Document schema tables and troubleshooting guidance (spec.md already drafted) and wire future maintainers via TODOs/comments.
 

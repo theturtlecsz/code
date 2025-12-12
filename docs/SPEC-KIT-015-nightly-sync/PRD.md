@@ -1,7 +1,7 @@
 # PRD: Nightly Sync Drift Detector (T15)
 
 ## Summary
-- **Objective.** Detect when local-memory entries and guardrail telemetry evidence drift out of sync so `/spec-auto` audits remain trustworthy.
+- **Objective.** Detect when local-memory entries and guardrail telemetry evidence drift out of sync so `/speckit.auto` audits remain trustworthy.
 - **Problem.** Local-memory is now the primary context store, but operators may forget to mirror telemetry evidence into memory or remove stale entries. We lack an automated check to highlight divergence.
 - **Outcome.** A nightly job (or manual command) compares local-memory facts against evidence logs (`docs/SPEC-OPS-004-integrated-coder-hooks/evidence/`) and reports mismatches with actionable remediation steps.
 

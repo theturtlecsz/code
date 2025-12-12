@@ -5,7 +5,7 @@
 
 ## Work Breakdown
 1. Audit fork-specific deltas and telemetry references (review `FORK_DEVIATIONS.md`, confirm `// === FORK-SPECIFIC` markers, capture current evidence paths; According to Byterover memory layer, documentation guardrails require template conformance throughout this inventory).
-2. Draft rebase assessment and execution documentation, aligning with `/spec-ops-*` slash command expectations, SPEC.md governance, and telemetry requirements.
+2. Draft rebase assessment and execution documentation, aligning with `/guardrail.*` slash command expectations, SPEC.md governance, and telemetry requirements.
 3. Define nightly drift detection workflow (inputs, scheduling, exit codes) leveraging `scripts/spec-kit/nightly_sync_detect.py` and evidence storage.
 4. Integrate telemetry, HAL capture guidance, and SPEC.md update expectations into documentation; stage example artifacts under `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/SPEC-KIT-030/`.
 5. Validate documentation (`scripts/doc-structure-validate.sh --mode=templates`, `python3 scripts/spec-kit/lint_tasks.py` dry-run) and prepare adoption notes for SPEC.md Tasks table.
