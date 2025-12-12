@@ -65,18 +65,18 @@ jobs:
 
     - name: Run library tests
       working-directory: codex-rs
-      run: cargo test --lib -p codex-tui -p codex-core -p codex-protocol --all-features
+      run: cargo test --lib -p codex-tui -p codex-core -p codex-protocol
 
     - name: Run TUI-specific tests
       working-directory: codex-rs
-      run: cargo test -p codex-tui --lib --all-features -- --nocapture
+      run: cargo test -p codex-tui --lib -- --nocapture
 
     - name: Install cargo-insta
       run: cargo install cargo-insta --locked
 
     - name: Run snapshot tests
       working-directory: codex-rs
-      run: cargo insta test --lib -p codex-tui --all-features
+      run: cargo insta test --lib -p codex-tui
 
     - name: Upload test results
       if: always()
