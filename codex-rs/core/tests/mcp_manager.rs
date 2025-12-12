@@ -3,18 +3,25 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::process::Command;
+use std::sync::Once;
 
 use codex_core::config_types::McpServerConfig;
 use codex_core::mcp_connection_manager::McpConnectionManager;
 
-fn server_bin_path() -> PathBuf {
-    // Compute workspace root from this crate dir
+static BUILD_TEST_SERVER: Once = Once::new();
+
+fn workspace_root() -> PathBuf {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
     let mut root = PathBuf::from(manifest_dir);
     // codex-rs/core -> codex-rs
     root.pop();
+    root
+}
+
+fn server_bin_path() -> PathBuf {
     // prefer debug profile location for tests
-    let mut p = root;
+    let mut p = workspace_root();
     p.push("target");
     p.push("debug");
     #[cfg(windows)]
@@ -24,15 +31,35 @@ fn server_bin_path() -> PathBuf {
     p
 }
 
-#[tokio::test]
-async fn mcp_manager_skips_slow_server_on_timeout() {
-    // Ensure test server binary exists
+fn ensure_test_server() -> PathBuf {
+    let root = workspace_root();
     let server = server_bin_path();
+
+    BUILD_TEST_SERVER.call_once(|| {
+        if server.exists() {
+            return;
+        }
+
+        let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+        let status = Command::new(cargo)
+            .current_dir(root)
+            .args(["build", "-p", "codex-mcp-test-server"])
+            .status()
+            .expect("build codex-mcp-test-server");
+        assert!(status.success(), "build codex-mcp-test-server failed");
+    });
+
     assert!(
         server.exists(),
         "expected test server at {}",
         server.display()
     );
+    server
+}
+
+#[tokio::test]
+async fn mcp_manager_skips_slow_server_on_timeout() {
+    let server = ensure_test_server();
 
     // Slow server exceeds timeout (init/list 200ms vs 100ms timeout)
     let slow_cfg = McpServerConfig {
@@ -72,13 +99,7 @@ async fn mcp_manager_skips_slow_server_on_timeout() {
 
 #[tokio::test]
 async fn mcp_manager_respects_extended_startup_timeout() {
-    // Ensure test server binary exists
-    let server = server_bin_path();
-    assert!(
-        server.exists(),
-        "expected test server at {}",
-        server.display()
-    );
+    let server = ensure_test_server();
 
     // Slow server within extended timeout (init/list 200ms vs 500ms)
     let slow_ok = McpServerConfig {
