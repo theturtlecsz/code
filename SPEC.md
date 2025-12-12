@@ -26,7 +26,7 @@
 ✅ **Evidence tracking**: Telemetry, consensus synthesis, audit trails
 ✅ **Parallel agent spawning**: 30% faster than sequential
 ✅ **Context caching**: Reduces redundant file reads
-✅ **Backward compatibility**: All /spec-* and /spec-ops-* commands still work
+✅ **Spec-Kit only**: legacy `/plan`, `/solve`, `/code` are removed; use `/speckit.*` (and `/guardrail.*` where applicable)
 
 ---
 
