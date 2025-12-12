@@ -1,4 +1,6 @@
-# Codex CLI (Rust Implementation)
+# Planner (Rust Implementation)
+
+Canonical docs live at `docs/SUMMARY.md` (repo root).
 
 ## Fork Lineage
 
@@ -16,22 +18,15 @@
 
 ---
 
-We provide Codex CLI as a standalone, native executable to ensure a zero-dependency install.
+This repository builds the `code` binary (Planner) from source.
 
-## Installing This Fork
+## Build & Run (Recommended)
 
-**Build from source**:
-```shell
-cd codex-rs
-cargo build --release -p codex-cli
-./target/release/code
+From the repo root:
+
+```bash
+./build-fast.sh run
 ```
-
-**Note**: This fork is not published to npm. The original `@openai/codex@native` package is unrelated.
-
-## Upstream Installation
-
-For the upstream `just-every/code` project, see their repository for installation instructions.
 
 ## What's New in This Fork
 
@@ -92,15 +87,11 @@ See `ACE_LEARNING_USAGE.md` for integration details.
 
 Codex supports a rich set of configuration options. Note that the Rust CLI uses `config.toml` instead of `config.json`. Configuration is loaded from `~/.code/config.toml` (or legacy `~/.codex/config.toml`).
 
-### Model Context Protocol Support
+### Model Context Protocol Support (Optional)
 
 Codex CLI functions as an MCP client that can connect to MCP servers on startup. See the [`mcp_servers`](../docs/config.md#mcp_servers) section in the configuration documentation for details.
 
-It is still experimental, but you can also launch Codex as an MCP _server_ by running `codex mcp`. Use the [`@modelcontextprotocol/inspector`](https://github.com/modelcontextprotocol/inspector) to try it out:
-
-```shell
-npx @modelcontextprotocol/inspector codex mcp
-```
+Planner can also launch as an MCP server via the CLI `mcp` subcommand.
 
 ### Notifications
 

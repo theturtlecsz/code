@@ -1,7 +1,7 @@
 # Changelog
 
 > [!TIP]
-> We're constantly improving Code! This page documents the core changes. You can also check our [releases page](https://github.com/just-every/code/releases) for additional information.
+> We're constantly improving Planner! This page documents the core changes.
 
 ## [0.2.166] - 2025-09-25
 
@@ -81,7 +81,7 @@
 
 - TUI/Input: fix Shift+Tab crash. (354a6faa)
 - TUI/Agents: improve visibility for multi‑agent commands. (8add2c42)
-- TUI/Slash: make @ shortcut work with /solve and /plan. (db324a6c)
+- TUI/Slash: make @ shortcut work with removed legacy commands. (db324a6c)
 
 ## [0.2.153] - 2025-09-18
 
@@ -122,7 +122,7 @@
 ## [0.2.148] - 2025-09-14
 
 - Core/Agents: mirror Qwen/DashScope API vars; respect QWEN_MODEL; add qwen examples in config.toml.example. (8a935c18)
-- Shortcuts: set Qwen-coder as default for /plan and related commands. (d1272d5e)
+- Shortcuts: set Qwen-coder as default for removed legacy commands. (d1272d5e)
 
 ## [0.2.147] - 2025-09-14
 

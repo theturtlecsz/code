@@ -1,349 +1,74 @@
-# CODE
+# Planner
 
 &ensp;
 
 <p align="center">
-  <img src="docs/logo.png" alt="Code Logo" width="400">
+  <img src="docs/logo.png" alt="Planner Logo" width="400">
 </p>
 
 &ensp;
 
-[![TUI Tests](https://github.com/theturtlecsz/code/workflows/TUI%20Tests/badge.svg)](https://github.com/theturtlecsz/code/actions/workflows/tui-tests.yml)
-[![Code Coverage](https://github.com/theturtlecsz/code/workflows/Code%20Coverage/badge.svg)](https://github.com/theturtlecsz/code/actions/workflows/coverage.yml)
+Planner is a terminal TUI focused on **Spec-Kit workflows** (slash commands under `/speckit.*`).
 
-**Code** is a fast, local coding agent for your terminal. It's a community-driven fork of `openai/codex` focused on real developer ergonomics: Browser integration, multi-agents, theming, and reasoning control — all while staying compatible with upstream.
+The executable name remains `code` (this repo is not distributed via npm/brew).
 
-## ✨ Recent Updates (October 2025)
+## What Is Spec-Kit?
 
-**Spec-Kit Refactoring Complete:** Extracted 1,222 lines of spec-kit automation into isolated modules (`tui/src/chatwidget/spec_kit/`), achieving 98.2% isolation from upstream conflicts. 100% test coverage maintained. See [refactoring summary](docs/spec-kit/REFACTORING_COMPLETE_SUMMARY.md).
+Spec-Kit is a structured workflow for turning a feature description into a SPEC directory and running staged execution (plan → tasks → implement → validate → audit → unlock) with artifacts stored under `docs/`.
 
-&ensp;
-## Why Code
+## What Problems It Solves
 
-  - 🌐 **Browser Integration** - CDP support, headless browsing, screenshots
-  - 📝 **Diff Viewer** - Side-by-side diffs with syntax highlighting
-  - 🤖 **Multi-Agent Commands** - /plan, /solve, /code with agent panels
-  - 🎨 **Theme System** - /themes with live preview and accessibility
-  - 🧠 **Reasoning Control** - /reasoning for dynamic effort adjustment
-  - 🔌 **MCP support** – Extend with filesystem, DBs, APIs, or your own tools.
-  - 🔒 **Safety modes** – Read-only, approvals, and workspace sandboxing.
-  - 🔁 **Backwards compatible** – Reads both `~/.code/*` (primary) and legacy `~/.codex/*`; writes only to `~/.code/*`
+- Scaffold new projects with Spec-Kit workflow files
+- Create SPEC directories and stage artifacts (spec/plan/tasks)
+- Run an end-to-end pipeline with evidence captured under `docs/`
 
-&ensp;
-| <img src="docs/screenshots/simple.png" alt="Simple interface" width="100%"><br>Simple interface | <img src="docs/screenshots/diff.png" alt="Unified diff viewer" width="100%"><br>Unified diffs |
-|:--:|:--:|
-
-| <br><img src="docs/screenshots/browser.png" alt="Browser control" width="100%"><br>Browser control | <br><img src="docs/screenshots/agents.png" alt="Assist with Claude & Gemini" width="100%"><br>Assist with Claude & Gemini |
-|:--:|:--:|
-
-
-&ensp;
 ## Quickstart
 
-### Run
-
 ```bash
-npx -y @just-every/code
+bash scripts/setup-hooks.sh
+./build-fast.sh run
 ```
 
-### Install & Run
+In the TUI:
 
-```bash
-npm install -g @just-every/code
-code // or `coder` if you're using VS Code
+```text
+/speckit.project rust my-rust-lib   (optional)
+/speckit.new <feature description>
+/speckit.auto SPEC-KIT-###
 ```
 
-Note: If another tool already provides a `code` command (e.g. VS Code), our CLI is also installed as `coder`. Use `coder` to avoid conflicts.
+## How It Works
 
-**Authenticate** (one of the following):
-- **Sign in with ChatGPT** (Plus/Pro/Team; uses models available to your plan)
-  - Run `code` and pick "Sign in with ChatGPT"
-  - Stores creds locally at `~/.code/auth.json` (still reads legacy `~/.codex/auth.json` if present)
-- **API key** (usage-based)
-  - Set `export OPENAI_API_KEY=xyz` and run `code`
+- Spec-Kit is exposed as `/speckit.*` slash commands.
+- The implementation lives in `codex-rs/tui/src/chatwidget/spec_kit/` (TUI + orchestration) and `codex-rs/spec-kit/` (shared library).
 
-### Install Claude & Gemini (optional)
+## Safety Model
 
-Code supports orchestrating other AI CLI tools. Install these and config to use alongside Code.
+- Removed legacy commands (`/plan`, `/solve`, `/code`) show a migration message and do not run tools.
 
-```bash
-
-npm install -g @anthropic-ai/claude-code @google/gemini-cli && claude "Just checking you're working! Let me know how I can exit." && gemini -i "Just checking you're working! Let me know how I can exit."
-```
-
-&ensp;
-## Commands
-
-### Browser
-```bash
-# Connect code to external Chrome browser (running CDP)
-/chrome        # Connect with auto-detect port
-/chrome 9222   # Connect to specific port
-
-# Switch to internal browser mode
-/browser       # Use internal headless browser
-/browser https://example.com  # Open URL in internal browser
-```
-
-### Agents
-```bash
-# Plan code changes (Claude, Gemini and GPT-5 consensus)
-# All agents review task and create a consolidated plan
-/plan "Stop the AI from ordering pizza at 3AM"
-
-# Solve complex problems (Claude, Gemini and GPT-5 race)
-# Fastest preferred (see https://arxiv.org/abs/2505.17813)
-/solve "Why does deleting one user drop the whole database?"
-
-# Write code! (Claude, Gemini and GPT-5 consensus)
-# Creates multiple worktrees then implements the optimal solution
-/code "Show dark mode when I feel cranky"
-```
-
-### General
-```bash
-# Try a new theme!
-/themes
-
-# Change reasoning level
-/reasoning low|medium|high
-
-# Switch models or effort presets
-/model
-
-# Start new conversation
-/new
-```
-
-## CLI reference
-
-```shell
-code [options] [prompt]
-
-Options:
-  --model <name>        Override the model (gpt-5, claude-opus, etc.)
-  --read-only          Prevent file modifications
-  --no-approval        Skip approval prompts (use with caution)
-  --config <key=val>   Override config values
-  --oss                Use local open source models
-  --sandbox <mode>     Set sandbox level (read-only, workspace-write, etc.)
-  --help              Show help information
-  --debug             Log API requests and responses to file
-  --version           Show version number
-```
-
-&ensp;
-## Memory & project docs
-
-Code can remember context across sessions:
-
-1. **Create an `AGENTS.md` or `CLAUDE.md` file** in your project root:
-```markdown
-# Project Context
-This is a React TypeScript application with:
-- Authentication via JWT
-- PostgreSQL database
-- Express.js backend
-
-## Key files:
-- `/src/auth/` - Authentication logic
-- `/src/api/` - API client code  
-- `/server/` - Backend services
-```
-
-2. **Session memory**: Code maintains conversation history
-3. **Codebase analysis**: Automatically understands project structure
-
-&ensp;
-## Non-interactive / CI mode
-
-For automation and CI/CD:
-
-```shell
-# Run a specific task
-code --no-approval "run tests and fix any failures"
-
-# Generate reports
-code --read-only "analyze code quality and generate report"
-
-# Batch processing
-code --config output_format=json "list all TODO comments"
-```
-
-&ensp;
-## Model Context Protocol (MCP)
-
-Code supports MCP for extended capabilities:
-
-- **File operations**: Advanced file system access
-- **Database connections**: Query and modify databases
-- **API integrations**: Connect to external services
-- **Custom tools**: Build your own extensions
-
-Configure MCP in `~/.code/config.toml` (legacy `~/.codex/config.toml` is still read if present). Define each server under a named table like `[mcp_servers.<name>]` (this maps to the JSON `mcpServers` object used by other clients):
-
-```toml
-[mcp_servers.filesystem]
-command = "npx"
-args = ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/project"]
-```
-
-&ensp;
 ## Configuration
 
-Main config file: `~/.code/config.toml`
+- See `docs/CONFIG.md`.
 
-> [!NOTE]
-> Code reads from both `~/.code/` and `~/.codex/` for backwards compatibility, but it only writes updates to `~/.code/`. If you switch back to Codex and it fails to start, remove `~/.codex/config.toml`. If Code appears to miss settings after upgrading, copy your legacy `~/.codex/config.toml` into `~/.code/`.
+## Documentation
 
-```toml
-# Model settings
-model = "gpt-5"
-model_provider = "openai"
+- Start here: `docs/SUMMARY.md`
+- Vision / truth: `docs/VISION.md`
+- Removed commands: `docs/DEPRECATIONS.md`
 
-# Behavior
-approval_policy = "on_request"  # untrusted | on-failure | on-request | never
-model_reasoning_effort = "medium" # low | medium | high
-sandbox_mode = "workspace_write"
+## Development
 
-# UI preferences see THEME_CONFIG.md
-[tui.theme]
-name = "light-photon"
-
-# Add config for specific models
-[profiles.gpt-5]
-model = "gpt-5"
-model_provider = "openai"
-approval_policy = "never"
-model_reasoning_effort = "high"
-model_reasoning_summary = "detailed"
-```
-
-### Quality Gate Customization (SPEC-939)
-
-Customize multi-agent quality gates per checkpoint to balance cost and quality:
-
-```toml
-[quality_gates]
-# Configurable agent selection per stage
-plan = ["gemini", "claude", "code"]        # Multi-agent consensus for planning
-tasks = ["gemini"]                          # Single cheap agent for simple tasks
-validate = ["gemini", "claude", "code"]     # Full consensus for validation
-audit = ["gemini", "claude", "gpt_codex"]   # Premium agents for critical audit
-unlock = ["gemini", "claude", "gpt_codex"]  # Premium agents for ship decision
-
-[hot_reload]
-enabled = true
-debounce_ms = 2000              # Debounce window (prevents reload storms)
-watch_paths = ["config.toml"]   # Paths to watch for changes
-```
-
-**Benefits**:
-- **Cost Control**: Use cheaper agents (`gemini`) for simple stages, premium (`gpt_codex`) for critical
-- **Experimentation**: Try different agent combinations per checkpoint
-- **No Restarts**: Hot-reload config changes while preserving session state
-
-See [Authentication Guide](docs/authentication.md) for API key setup.
-
-### Environment variables
-
-- `CODEX_HOME`: Override config directory location
-- `OPENAI_API_KEY`: Use API key instead of ChatGPT auth
-- `OPENAI_BASE_URL`: Use alternative API endpoints
-- `OPENAI_WIRE_API`: Force the built-in OpenAI provider to use `chat` or `responses` wiring
-
-&ensp;
-## FAQ
-
-**How is this different from the original?**
-> This fork adds browser integration, multi-agent commands (`/plan`, `/solve`, `/code`), theme system, and enhanced reasoning controls while maintaining full compatibility.
-
-**Can I use my existing Codex configuration?**
-> Yes. Code reads from both `~/.code/` (primary) and legacy `~/.codex/` directories. We only write to `~/.code/`, so Codex will keep running if you switch back; copy or remove legacy files if you notice conflicts.
-
-**Does this work with ChatGPT Plus?**
-> Absolutely. Use the same "Sign in with ChatGPT" flow as the original.
-
-**Is my data secure?**
-> Yes. Authentication stays on your machine, and we don't proxy your credentials or conversations.
-
-&ensp;
-## Contributing
-
-We welcome contributions! This fork maintains compatibility with upstream while adding community-requested features.
-
-### Development workflow
+Build:
 
 ```bash
-# Clone and setup
-git clone https://github.com/just-every/code.git
-cd code
-npm install
-
-# **REQUIRED**: Setup git hooks (policy compliance - SPEC-KIT-072)
-bash scripts/setup-hooks.sh
-
-# Build (use fast build for development)
 ./build-fast.sh
-
-# Run locally
-./codex-rs/target/dev-fast/code
+./build-fast.sh run
+PROFILE=release ./build-fast.sh
 ```
 
-### Opening a pull request
+Tests:
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Make your changes
-4. Run tests: `cargo test`
-5. Build successfully: `./build-fast.sh`
-6. Submit a pull request
-
-
-&ensp;
-## 📚 Documentation
-
-### Quick Links
-- **[Documentation Index](docs/SUMMARY.md)** - Complete navigation hub for all project documentation
-- **[Getting Started](docs/getting-started.md)** - Installation and basic usage
-- **[Configuration Guide](docs/config.md)** - Detailed configuration options
-- **[Project Status](docs/PROJECT_STATUS.md)** - Current state and roadmap
-
-### For Contributors
-- **[CLAUDE.md](CLAUDE.md)** - How Claude Code works in this repo (fork-specific)
-- **[SPEC.md](SPEC.md)** - Task tracker and work-in-progress
-- **[Spec-Kit Framework](docs/spec-kit/README.md)** - Multi-agent automation (fork feature)
-- **[Architecture Analysis](ANALYSIS_SUMMARY.md)** - Technical deep dive
-
----
-
-## Legal & Use
-
-### License & attribution
-- This project is a community fork of `openai/codex` under **Apache-2.0**. We preserve upstream LICENSE and NOTICE files.
-- **Code** is **not** affiliated with, sponsored by, or endorsed by OpenAI.
-
-### Your responsibilities
-Using OpenAI, Anthropic or Google services through Code means you agree to **their Terms and policies**. In particular:
-- **Don't** programmatically scrape/extract content outside intended flows.
-- **Don't** bypass or interfere with rate limits, quotas, or safety mitigations.
-- Use your **own** account; don't share or rotate accounts to evade limits.
-- If you configure other model providers, you're responsible for their terms.
-
-### Privacy
-- Your auth file lives at `~/.code/auth.json` (legacy `~/.codex/auth.json` is still read).
-- Inputs/outputs you send to AI providers are handled under their Terms and Privacy Policy; consult those documents (and any org-level data-sharing settings).
-
-### Subject to change
-AI providers can change eligibility, limits, models, or authentication flows. Code supports **both** ChatGPT sign-in and API-key modes so you can pick what fits (local/hobby vs CI/automation).
-
-&ensp;
-## License
-
-Apache 2.0 - See [LICENSE](LICENSE) file for details.
-
-This project is a community fork of the original Codex CLI. We maintain compatibility while adding enhanced features requested by the developer community.
-
-&ensp;
----
-**Need help?** Open an issue on [GitHub](https://github.com/just-every/code/issues) or check our documentation.
+```bash
+cd codex-rs
+cargo test -p codex-core
+```

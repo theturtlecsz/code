@@ -1,3 +1,5 @@
+> Canonical configuration reference: `docs/CONFIG.md`.
+
 # Config
 
 <!-- markdownlint-disable MD012 MD013 MD028 MD033 -->
