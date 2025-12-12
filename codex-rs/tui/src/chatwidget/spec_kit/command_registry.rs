@@ -313,13 +313,14 @@ mod tests {
         // Test that the global registry has all expected commands
         let registry = SPEC_KIT_REGISTRY.lock().unwrap();
 
-        // 38 commands: 18 special + 6 stage + 3 quality + 7 guardrail + 1 evidence + 1 search + 2 templates
+        // 39 commands: 19 special + 6 stage + 3 quality + 7 guardrail + 1 evidence + 1 search + 2 templates
         // SPEC-KIT-102 V2: Added stage0.index and stage0.eval-backend (2 new)
         // P86: Added stage0.eval-code (1 new)
         // P92/SPEC-KIT-105: Added speckit.plan-pipeline (1 new)
         // P93/SPEC-KIT-105: Added speckit.vision (1 new)
         // P97/SPEC-KIT-103: Added stage0.librarian (1 new)
-        assert_eq!(registry.len(), 38, "Registry should have 38 commands");
+        // SPEC-KIT-2XX: Added stage0.project-intel (1 new)
+        assert_eq!(registry.len(), 39, "Registry should have 39 commands");
 
         // Verify key commands are registered
         assert!(registry.find("speckit.status").is_some());
