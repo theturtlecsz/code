@@ -2,13 +2,16 @@
 
 ## 1) Canonical spec / source of truth
 
-Unknown (no single explicit precedence doc found). Evidence suggests `SPEC.md` is used as a task tracker and there is substantial fork-specific documentation drift.
+The canonical development tracker is `SPEC.md` (single source of truth for work items). Product identity lives in `docs/VISION.md`. Additional canonical docs are listed in `docs/KEY_DOCS.md`.
 
-Recommended next step: treat `docs/VISION.md` + `docs/SUMMARY.md` as canonical going forward, and keep docs aligned to runtime behavior.
+Precedence (recommended):
+1) `SPEC.md` (what to do / what’s done)
+2) `product-requirements.md` + `docs/SPEC-KIT-*/PRD.md` (what to build)
+3) `docs/VISION.md` + `memory/constitution.md` (why / principles)
 
 ## 2) Fork or independent distribution?
 
-Fork. Evidence: `AGENTS.md` at repo root describes this as a fork of `just-every/code`.
+Fork. Evidence: fork-specific markers and upstream sync notes exist in-repo (see `UPSTREAM-SYNC.md`).
 
 ## 3) What does “any provider” mean today?
 
@@ -43,4 +46,3 @@ Unknown. Evidence: multiple docs reference evidence/telemetry, but there is no s
 ## 10) Are non-OpenAI providers supported directly or via CLIs?
 
 Unknown. Evidence: optional CLI/tool integrations exist, but the supported matrix is not yet consolidated.
-

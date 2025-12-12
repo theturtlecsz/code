@@ -10,8 +10,14 @@ LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 
 CANONICAL_MARKDOWN_FILES = [
     "README.md",
+    "SPEC.md",
+    "product-requirements.md",
     "CONTRIBUTING.md",
-    "docs/SUMMARY.md",
+    "CLAUDE.md",
+    "memory/constitution.md",
+    "memory/local-notes.md",
+    "templates/PRD-template.md",
+    "docs/KEY_DOCS.md",
     "docs/VISION.md",
     "docs/GETTING_STARTED.md",
     "docs/CONFIG.md",
