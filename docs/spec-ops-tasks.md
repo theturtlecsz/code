@@ -2,7 +2,7 @@
 
 ## Purpose
 - Seed Spec Kit task automation by collecting `tool.status` telemetry before multi-agent planning.
-- Lock in housekeeping (hooks, lint scaffolding) so `/spec-tasks` can write `docs/SPEC-*/tasks.md` without conflicts.
+- Lock in housekeeping (hooks, lint scaffolding) so `/speckit.tasks` can write `docs/SPEC-*/tasks.md` without conflicts.
 - capture evidence JSON under `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/<SPEC-ID>/` for downstream validation.
 
 ## Required Environment
@@ -17,7 +17,7 @@
 ## Execution Flow
 1. Run from the template repo root: `scripts/spec_ops_004/commands/spec_ops_tasks.sh <SPEC-ID>`.
 2. Inspect log + telemetry paths announced in stdout.
-3. Validate schema via `python3 scripts/spec_ops_004/validate_schema.py` (see SPEC-KIT-013) before continuing to `/spec-tasks`.
+3. Validate schema via `python3 scripts/spec_ops_004/validate_schema.py` (see SPEC-KIT-013) before continuing to `/speckit.tasks`.
 
 ## HAL Integration
 - Enable `SPEC_OPS_TELEMETRY_HAL=1` whenever `/guardrail.validate` or `/guardrail.audit` will be run later in the flow so telemetry remains consistent.
