@@ -63,7 +63,6 @@ Maybe tests should use `codex_op_tx.send(Op::Submit)` instead of `handle_codex_e
 - 📖 `SPEC-955-SESSION-2-PROMPT.md` - Comprehensive guide (300+ lines)
 - 🚀 `SPEC-955-SESSION-2-QUICKSTART.md` - Quick start (detailed debugging)
 - 📊 `SPEC-955-PROGRESS-TRACKER.md` - Visual progress tracking
-- 🤝 `SPEC-955-SESSION-HANDOFF.md` - Session handoff checklist
 
 ---
 

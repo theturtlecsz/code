@@ -33,7 +33,6 @@ mkdir -p docs/archive/completed-specs
 **Root Level → Archive** (12 files to move):
 ```bash
 # Session summaries and handoffs
-mv SESSION-HANDOFF-2025-10-18.md docs/archive/2025-sessions/
 mv agent_execution_log_*.md docs/archive/2025-sessions/  # 5 files
 mv telemetry-tasks.md docs/archive/2025-sessions/
 mv CONFIG_FIX_SUMMARY.md docs/archive/2025-sessions/

@@ -6,7 +6,7 @@ Copy this to start the next session:
 
 **Ultrathink** P98 Session: SPEC-KIT-103 Librarian v1 Integration
 
-Read `docs/HANDOFF-P97.md` for implementation context.
+Read `docs/SPEC-KIT-103/spec.md` for implementation context.
 
 **Primary Goal**: Wire Librarian v1 to live local-memory corpus with safety guardrails
 
