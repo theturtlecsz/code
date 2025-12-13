@@ -6,10 +6,10 @@
 - **This Repository:** https://github.com/theturtlecsz/code (FORK of just-every/code)
 - **Upstream:** https://github.com/just-every/code (community OpenAI Codex successor)
 - **NOT RELATED TO:** Anthropic's Claude Code (different product)
-- **Primary language:** Rust (Codex CLI fork with spec-kit extensions)
+- **Primary language:** Rust (fork with Spec-Kit extensions)
 - **Secondary tooling:** Bash guardrail scripts, MCP (Model Context Protocol) servers, Python utilities
 - **Key directories:**
-  - `codex-rs/` – Rust workspace containing Codex CLI/TUI, native spec-kit commands, MCP clients
+  - `codex-rs/` – Rust workspace containing the `code` binary (Planner TUI), native spec-kit commands, and MCP clients
   - `templates/` – GitHub-inspired spec/PRD/plan/tasks templates (validated 55% faster)
   - `scripts/spec_ops_004/` – Shell automation for guardrail stages and support utilities
   - `docs/spec-kit/` – Prompt versions, model strategy, automation runbooks, evidence policies
@@ -41,7 +41,7 @@
 
 ### 2.2 Multi-Agent Orchestration Layer
 **Implementation:** `scripts/spec_ops_004/consensus_runner.sh`
-- **Agent spawning:** Parallel execution via Codex CLI subagent framework
+- **Agent spawning:** Parallel execution via the subagent CLI executors
 - **Consensus synthesis:** Automatic comparison, conflict detection, arbiter invocation
 - **Status:** ✅ Fully operational (October 2025)
 - **Evidence:** All agent outputs captured in `evidence/consensus/<SPEC-ID>/`
@@ -77,7 +77,7 @@
 - Common: `command`, `specId`, `sessionId`, `timestamp`, `schemaVersion`, `artifacts[]`
 - Stage-specific: `baseline`, `lock_status`, `scenarios[]`, `unlock_status`, `hal.summary`
 
-### 2.5 Codex CLI / TUI Integration
+### 2.5 code binary / TUI Integration
 **Slash command routing** (`codex-rs/tui/src/slash_command.rs`):
 - 13 SpecKit* enum variants for `/speckit.*` commands
 - Legacy variants for backward compatibility (`/spec-*` → SpecPlan, etc.)
@@ -135,11 +135,11 @@ See `codex-rs/ARCHITECTURE-TASKS.md` and `codex-rs/REVIEW.md` for full details.
 
 **Core Infrastructure:**
 - **Rust Toolchain:** Stable 1.80+ (configured via `rust-toolchain.toml`)
-- **Codex CLI:** just-every/code upstream, theturtlecsz/code fork (rebase strategy in FORK_DEVIATIONS.md)
+- **Upstream base:** just-every/code upstream, theturtlecsz/code fork (rebase strategy in FORK_DEVIATIONS.md)
 - **Package Management:** Cargo workspaces (`codex-rs/Cargo.toml`)
 - **Shell Environment:** Bash 5+, `env_run.sh` ensures `.env` secrets respected
 
-**AI Models (via Codex CLI):**
+**AI Models (used by Planner workflows):**
 - **Gemini 2.5 Pro** – Research, breadth (Tier 2/3/4)
 - **Claude 4.5 Sonnet** – Synthesis, precision (Tier 2/3/4)
 - **GPT-5** – Validation, arbitration (Tier 2/3/4)
