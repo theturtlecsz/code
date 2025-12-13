@@ -1523,16 +1523,6 @@ impl ChatComposer {
                 if text.is_empty() {
                     (InputResult::None, true)
                 } else {
-                    // Check if this is a prompt-expanding command that will trigger agents
-                    let trimmed = original_text.trim();
-                    if trimmed.starts_with("/plan ")
-                        || trimmed.starts_with("/solve ")
-                        || trimmed.starts_with("/code ")
-                    {
-                        self.app_event_tx
-                            .send(crate::app_event::AppEvent::PrepareAgents);
-                    }
-
                     self.history.record_local_submission(&original_text);
                     (InputResult::Submitted(text), true)
                 }
@@ -1627,7 +1617,7 @@ impl ChatComposer {
         let input_starts_with_slash = first_line.starts_with('/');
         // Keep the slash popup only while the cursor is within the command head
         // (before the first space). This allows @-file completion for arguments
-        // in commands like "/plan" and "/solve".
+        // in slash commands with arguments (e.g. "/speckit.plan ...").
         let in_slash_head = self.is_cursor_in_slash_command_head();
         match &mut self.active_popup {
             ActivePopup::Command(popup) => {
@@ -1652,10 +1642,7 @@ impl ChatComposer {
                             .filter(|n| {
                                 let l = n.to_ascii_lowercase();
                                 // SPEC-KIT-070 Phase 2+3: Filter out native commands (no agents)
-                                l != "plan"
-                                    && l != "solve"
-                                    && l != "code"
-                                    && l != "speckit.clarify"
+                                l != "speckit.clarify"
                                     && l != "speckit.analyze"
                                     && l != "speckit.checklist"
                                     && l != "speckit.new"
