@@ -2,7 +2,7 @@
 
 ### OpenAI released a model called Codex in 2021 - is this related?
 
-In 2021, OpenAI released Codex, an AI system designed to generate code from natural language prompts. That original Codex model was deprecated as of March 2023 and is separate from the CLI tool.
+In 2021, OpenAI released Codex, an AI system designed to generate code from natural language prompts. That original Codex model was deprecated as of March 2023 and is separate from Planner.
 
 ### Which models are supported?
 

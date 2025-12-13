@@ -1,6 +1,6 @@
 # Planner (Rust Implementation)
 
-Canonical docs live at `docs/SUMMARY.md` (repo root).
+Canonical docs live at `docs/KEY_DOCS.md` (repo root).
 
 ## Fork Lineage
 

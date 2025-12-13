@@ -6,8 +6,8 @@
 ## [Unreleased]
 
 - Spec-Kit: remove legacy `/plan`, `/solve`, and `/code` (use `/speckit.*`).
-- Docs: make Planner + Spec-Kit workflow canonical (`docs/SUMMARY.md`, `docs/VISION.md`, `docs/DEPRECATIONS.md`).
-- Distribution: source-build only; remove npm/Homebrew packaging and update `/update` guidance.
+- Docs: make Planner + Spec-Kit workflow canonical (`docs/KEY_DOCS.md`, `docs/VISION.md`, `docs/DEPRECATIONS.md`).
+- Distribution: source-build only; remove packaging docs and update `/update` guidance.
 
 ## [0.2.166] - 2025-09-25
 
@@ -193,7 +193,7 @@
 
 ## [0.2.133] - 2025-09-12
 
-- Release/Homebrew: compute `sha256` from local artifacts; add retry/backoff when fetching remote bottles; avoid failing during CDN propagation. (fd38d777b)
+- Release: compute `sha256` from local artifacts; add retry/backoff when fetching remote artifacts; avoid failing during CDN propagation. (fd38d777b)
 - CI/Triage: remove OpenAI proxy and Rust/Code caches; call API directly in safety screen to simplify and speed up runs. (7a28af813)
 - Dev: add `scripts/openai-proxy.js` for local testing with SSE‑safe header handling; mirrors CI proxy behavior. (7e9203c22)
 
@@ -241,7 +241,7 @@
 
 ## [0.2.123] - 2025-09-11
 
-- Upstream merge: reconcile with `openai/codex@main` while restoring fork features and keeping local CLI/TUI improvements. (742ddc152, a0de41bac)
+- Upstream merge: reconcile with upstream main while restoring fork features and keeping local CLI/TUI improvements. (742ddc152, a0de41bac)
 - Windows bootstrap: always print bootstrap error; remove debug gate. (74785d58b)
 
 ## [0.2.122] - 2025-09-11

@@ -330,7 +330,7 @@ Document owner: @just-every/automation
 
 ## 📚 Related Documentation
 
-- **[Documentation Index](docs/SUMMARY.md)** - Complete documentation navigation
+- **[Documentation Index](docs/KEY_DOCS.md)** - Complete documentation navigation
 - **[Product Requirements](product-requirements.md)** - Canonical product scope
 - **[Project Status](docs/PROJECT_STATUS.md)** - Current state and metrics
 - **[SPEC.md](SPEC.md)** - Task tracker
