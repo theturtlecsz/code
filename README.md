@@ -10,7 +10,7 @@
 
 Planner is a terminal TUI focused on **Spec-Kit workflows** (slash commands under `/speckit.*`).
 
-The executable name remains `code` (this repo is not distributed via npm/brew).
+The executable name remains `code` and is built from source.
 
 ## What Is Spec-Kit?
 
