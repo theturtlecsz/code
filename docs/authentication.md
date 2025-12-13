@@ -110,7 +110,7 @@ Then, in that SSH session, run `code` and select "Sign in with ChatGPT". When pr
 
 ## Multi-Provider Setup (SPEC-939)
 
-Code supports orchestrating multiple AI providers for quality gates and multi-agent workflows.
+Planner supports orchestrating multiple AI providers for quality gates and Spec-Kit workflows.
 
 ### Supported Providers
 
@@ -134,7 +134,7 @@ Get API key: https://ai.google.dev/
 
 ### Install CLI Tools
 
-For multi-agent commands (`/plan`, `/solve`, `/code`), install provider CLI tools:
+For multi-provider workflows (e.g. `/speckit.auto`), install provider CLI tools:
 
 ```bash
 npm install -g @anthropic-ai/claude-code @google/gemini-cli
