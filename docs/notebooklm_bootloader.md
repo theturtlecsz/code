@@ -6,7 +6,7 @@
 
 ## The Prompt
 
-I have uploaded a forensic analysis packet for the **Codex-RS** project. It contains:
+I have uploaded a forensic analysis packet for the **Planner** codebase (`codex-rs/`). It contains:
 
 1. **`structure_part_[1-4].md`**: The full AST structure of the Rust core and TUI, split into 4 parts (~2M tokens total).
 2. **`metrics.md`**: Code complexity scores by language with risk ratings.

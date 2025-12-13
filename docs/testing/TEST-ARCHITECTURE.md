@@ -306,7 +306,7 @@ async fn my_new_test() {
     ]);
     mount_sse_once(&server, any(), body).await;
 
-    // Build test Codex
+    // Build test instance
     let codex = test_codex()
         .with_config(|c| c.model = "test-model".to_string())
         .build(&server)

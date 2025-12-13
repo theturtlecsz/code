@@ -15,7 +15,7 @@ env = {
     # Replace <project-root> with the absolute path to the product repository.
     HAL_PROFILE = "/<project-root>/docs/hal/hal_profile.json",
 
-    # Secret is resolved through the Codex secret store. Run `code secrets set` to
+    # Secret is resolved through the `code` secret store. Run `code secrets set` to
     # provision HAL_SECRET_KAVEDARR_API_KEY before starting the MCP server.
     HAL_SECRET_KAVEDARR_API_KEY = "{secrets.HAL_SECRET_KAVEDARR_API_KEY}"
 }

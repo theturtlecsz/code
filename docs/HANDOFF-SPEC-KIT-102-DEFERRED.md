@@ -90,9 +90,9 @@ Phase 4: Synthesis Manager
   - Cache with dependency-aware invalidation
   - NotebookLM integration
 
-Phase 5: Observability
-  - Logging for V3 learning
-  - Codex-RS integration
+  Phase 5: Observability
+    - Logging for V3 learning
+    - codex-rs integration
 ```
 
 ---
