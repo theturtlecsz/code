@@ -170,8 +170,8 @@ pub struct AskArgs {
     /// The question to ask the Architect.
     pub query: Vec<String>,
 
-    /// Force a fresh query even if cached.
-    #[arg(long, short)]
+    /// Force a fresh query even if cached (bypass cache).
+    #[arg(long, short, visible_alias = "no-cache")]
     pub force: bool,
 
     /// Skip confirmation prompt for API calls.
@@ -184,8 +184,8 @@ pub struct AuditArgs {
     /// The crate name to audit.
     pub crate_name: String,
 
-    /// Force a fresh audit even if cached.
-    #[arg(long, short)]
+    /// Force a fresh audit even if cached (bypass cache).
+    #[arg(long, short, visible_alias = "no-cache")]
     pub force: bool,
 
     /// Skip confirmation prompt for API calls.
