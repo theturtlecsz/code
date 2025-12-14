@@ -91,3 +91,15 @@ For detailed guidance beyond commands and structure:
 | Multi-agent architecture | `docs/spec-kit/MULTI-AGENT-ARCHITECTURE.md` |
 | Memory policy | `MEMORY-POLICY.md` |
 | Project charter | `memory/constitution.md` |
+
+## Policy Pointers
+
+- **Authoritative policy**: `docs/MODEL-POLICY.md` (v1.0.0)
+- **Guardrails**: GR-001 through GR-013
+- **No consensus by default** — single-owner pipeline (Architect → Implementer → Judge)
+- **Routing thresholds**: Architect escalation at `confidence < 0.75`, Implementer escalation after 2 failed loops
+- **Kimi/DeepSeek**: escalation-only (never default path)
+
+---
+
+Back to [Key Docs](docs/KEY_DOCS.md)
