@@ -1,6 +1,7 @@
 # SPEC-KIT-102 Implementation Plan
 
 **Date**: 2025-11-30 | **Status**: Ready for Approval
+**Updated**: 2025-12-14 | **Changes**: Updated for notebooklm-mcp v2.0.0 (MCP → HTTP API)
 
 ---
 
@@ -46,8 +47,8 @@
                             │
           ┌─────────────────┼─────────────────┐
           ▼                 ▼                 ▼
-    [local-memory]    [Ollama]         [NotebookLM MCP]
-       (MCP)        (qwen2.5:3b)          (Tier 2)
+    [local-memory]    [Ollama]         [NotebookLM HTTP]
+       (MCP)        (qwen2.5:3b)       (localhost:3456)
 ```
 
 ---
@@ -152,7 +153,7 @@ spec-kit-102-orchestrator/
 │   │   └── notebooklm.py       # Tier 2 integration
 │   └── local_memory/
 │       ├── __init__.py
-│       └── client.py           # MCP/CLI wrapper
+│       └── client.py           # CLI wrapper for local-memory
 └── tests/
 ```
 
@@ -160,7 +161,7 @@ spec-kit-102-orchestrator/
 
 1. **Local Memory Client** (`local_memory/client.py`)
    - Wrapper around `local-memory` CLI for fastest operations
-   - Fallback to MCP for complex operations
+   - Direct SQLite access for complex queries
    - Connection pooling for SQLite direct access
 
 2. **Configuration** (`config.py`)
@@ -393,18 +394,28 @@ class SynthesisCache:
 
 **NotebookLM Integration** (`synthesis/notebooklm.py`):
 ```python
+import httpx
+
+NOTEBOOKLM_URL = "http://localhost:3456"
+
 class NotebookLMSynthesizer:
     TIER2_PROMPT = """You are the "Staff Engineer" (Tier 2 Reasoning Layer)...
     [Full prompt from Artifact D]
     """
 
     async def synthesize(self, spec: str, task_brief: str) -> SynthesisResult:
-        # Use existing MCP bridge
-        response = await mcp_notebooklm_ask_question(
-            question=self._format_synthesis_request(spec, task_brief),
-            notebook_id=self.config.SPECKIT_NOTEBOOK_ID
-        )
-        return self._parse_response(response)
+        # Use HTTP API (v2.0.0)
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{NOTEBOOKLM_URL}/api/ask",
+                json={
+                    "notebookId": self.config.SPECKIT_NOTEBOOK_ID,
+                    "question": self._format_synthesis_request(spec, task_brief)
+                },
+                timeout=60.0
+            )
+            response.raise_for_status()
+            return self._parse_response(response.json())
 ```
 
 **Main Endpoint** (`main.py`):
@@ -451,7 +462,7 @@ async def request_synthesis(request: SynthesisRequest) -> SynthesisResponse:
 
 **Deliverables**:
 - SynthesisCache with dependency-aware invalidation
-- NotebookLM integration via MCP
+- NotebookLM integration via HTTP API (localhost:3456)
 - `/api/v1/request_synthesis` endpoint
 - Fallback handling
 
@@ -487,10 +498,19 @@ async def health():
         "status": "ok",
         "local_memory": await check_local_memory(),
         "ollama": await check_ollama(),
-        "notebooklm": await check_notebooklm_mcp(),
+        "notebooklm": await check_notebooklm_http(),  # HTTP API health
         "cache_stats": cache.get_stats(),
         "tier2_budget": notebooklm.get_remaining_budget()
     }
+
+async def check_notebooklm_http() -> dict:
+    """Check NotebookLM HTTP service health."""
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get("http://localhost:3456/health", timeout=5.0)
+            return resp.json()
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 ```
 
 **Deliverables**:

@@ -43,6 +43,33 @@ Use **local-memory MCP exclusively** for high-value knowledge (importance ≥8).
 3. **During Work**: Store key decisions, architecture changes, bug discoveries (importance ≥7)
 4. **After Milestones**: Store outcomes, file locations, validation results, lessons learned
 
+## NotebookLM Integration (SPEC-KIT-102)
+
+NotebookLM provides "Tier 2" reasoning for complex synthesis queries.
+
+**When to Use**: Stage 0 planning, deep context synthesis, "WHY" questions.
+**Rate Limit**: 50 queries/day (free tier). Cache aggressively.
+
+**Quick reference**:
+```bash
+# Verify service (must be running)
+curl -s localhost:3456/health | jq .authenticated
+
+# Ask a question
+curl -X POST localhost:3456/api/ask \
+  -H "Content-Type: application/json" \
+  -d '{"notebookId": "...", "question": "..."}'
+```
+
+**Service Management**:
+```bash
+notebooklm service start   # Start HTTP daemon
+notebooklm service status  # Check status
+notebooklm health --deep   # Verify authentication
+```
+
+**Full documentation**: See `docs/SPEC-KIT-102-notebooklm-integration/`.
+
 ## Evidence & Validation Ritual
 
 - Guardrail runs must have a clean tree unless specifically allowed (`SPEC_OPS_ALLOW_DIRTY=1`)
@@ -137,4 +164,4 @@ Load these every session:
 
 ---
 
-_Last Updated: 2025-11-30_
+_Last Updated: 2025-12-14_

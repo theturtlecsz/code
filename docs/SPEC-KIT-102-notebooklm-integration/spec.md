@@ -2,9 +2,9 @@
 
 **Status**: Research & Planning Complete | Implementation Ready
 **Created**: 2025-11-30
-**Updated**: 2025-11-30 (P72 - Research Complete)
+**Updated**: 2025-12-14 (P87 - Updated for notebooklm-mcp v2.0.0)
 **Authors**: Research synthesis from PPP Framework analysis
-**Dependencies**: local-memory daemon (closed-source), NotebookLM MCP bridge
+**Dependencies**: local-memory daemon (closed-source), NotebookLM HTTP Service (v2.0.0)
 
 ### Related Documentation
 
@@ -13,8 +13,16 @@
 | `IMPLEMENTATION-PLAN.md` | Full 5-phase implementation plan with code examples |
 | `research/data-integrity-analysis.md` | Database issues & SQL remediation scripts |
 | `research/local-llm-requirements.md` | Hardware analysis, qwen2.5:3b benchmark results |
-| `research/mcp-bridge-analysis.md` | NotebookLM MCP architecture & integration details |
+| `research/http-service-analysis.md` | NotebookLM HTTP API architecture & integration details |
 | `artifacts/HISTORY_ROLLUP.md` | 393k word export for NotebookLM seeding |
+
+### Breaking Change Notice (v2.0.0)
+
+**As of December 2025**, `notebooklm-mcp` v2.0.0 removed the MCP server interface entirely.
+- ❌ MCP tools (`mcp__notebooklm__*`) no longer available
+- ✅ HTTP API on `localhost:3456` is the primary interface
+- ✅ CLI (`notebooklm`) available for direct commands
+- See `research/http-service-analysis.md` for updated integration details
 
 ### Critical Architectural Discovery (P72)
 
@@ -123,8 +131,9 @@ Analysis of the local-memory environment (n=1,161 memories) revealed:
 │  │                         │ TASK_BRIEF.md                    │  │
 │  │                         ▼                                  │  │
 │  │  ┌─────────────────────────────────────────────────────┐  │  │
-│  │  │           NOTEBOOKLM (Tier 2 - MCP Bridge)          │  │  │
+│  │  │           NOTEBOOKLM (Tier 2 - HTTP API)            │  │  │
 │  │  │                                                     │  │  │
+│  │  │  • HTTP: POST http://localhost:3456/api/ask         │  │  │
 │  │  │  • Receives: spec.md + TASK_BRIEF.md                │  │  │
 │  │  │  • Returns: "Divine Truth" brief                    │  │  │
 │  │  │  • Returns: Suggested causal relationships          │  │  │
@@ -492,9 +501,9 @@ pub async fn request_synthesis(
         });
     }
 
-    // 3. Call NotebookLM via MCP bridge
+    // 3. Call NotebookLM via HTTP API (localhost:3456)
     let start = std::time::Instant::now();
-    let synthesis = call_notebooklm(&task_brief, spec_content, config).await?;
+    let synthesis = call_notebooklm_http(&task_brief, spec_content, config).await?;
     let latency = start.elapsed().as_millis() as u64;
 
     // 4. Cache result
@@ -699,15 +708,55 @@ CREATE INDEX idx_cache_expiry ON tier2_synthesis_cache(expires_at);
 
 ## 10. Appendices
 
-### A. NotebookLM MCP Bridge Details
+### A. NotebookLM HTTP Service Details (v2.0.0)
 
-The integration uses `pleaseprompto/notebooklm-mcp` which operates via headless Chromium (patchright), not REST API.
+The integration uses `notebooklm-mcp` v2.0.0 HTTP service running on `localhost:3456`.
 
-**Implications**:
-- Authentication requires stateful browser session (cookies)
-- Runtime: ~300MB RAM per instance
-- Parallelism impossible (single browser instance)
+**Architecture** (as of v2.0.0):
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                   NotebookLM HTTP Service                        │
+├─────────────────────────────────────────────────────────────────┤
+│  HTTP API (localhost:3456)     CLI (notebooklm)                  │
+│  ├── POST /api/ask             ├── notebooklm ask               │
+│  ├── GET /api/notebooks        ├── notebooklm notebooks         │
+│  ├── POST /api/sources         ├── notebooklm add-source        │
+│  └── POST /api/research/fast   └── notebooklm fast-research     │
+├─────────────────────────────────────────────────────────────────┤
+│                   Request Queue (serializes browser ops)         │
+├─────────────────────────────────────────────────────────────────┤
+│                   SessionManager + BrowserSession                │
+│                   SharedContextManager (single fingerprint)      │
+├─────────────────────────────────────────────────────────────────┤
+│                   Patchright (stealth Playwright)                │
+│                   Chrome Profile (~/.local/share/notebooklm-mcp/)│
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key Endpoints for Integration**:
+```
+POST /api/ask
+  Body: { "notebookId": "...", "question": "..." }
+  Returns: { "answer": "...", "sources": [...] }
+
+GET /health
+  Returns: { "authenticated": true, "sessions": {...} }
+```
+
+**Operational Characteristics**:
+- Authentication: Chrome profile with persistent cookies
+- Runtime: ~300MB RAM per Chrome instance
+- Parallelism: Request queue serializes browser operations
 - Latency: 5-15 seconds per query
+- Service mode: `notebooklm service start` (recommended)
+
+**Installation** (local development):
+```bash
+cd ~/notebooklm-mcp
+npm link                          # Global symlink
+notebooklm service start          # Start HTTP daemon
+curl localhost:3456/health        # Verify
+```
 
 ### B. Seeding Artifacts (Deprecated)
 
@@ -731,11 +780,11 @@ The original strategy of static aggregated artifacts has been **deprecated** in 
 ## 11. References
 
 1. **PPP Framework**: "Training Proactive and Personalized LLM Agents" (Research Paper)
-2. **NotebookLM MCP**: github.com/pleaseprompto/notebooklm-mcp
+2. **NotebookLM HTTP Service**: Local installation at `~/notebooklm-mcp` (v2.0.0)
 3. **Local Memory Environment**: docs/LOCAL-MEMORY-ENVIRONMENT.md
 4. **Pipeline Analysis**: docs/SPECKIT-AUTO-PIPELINE-ANALYSIS.md
 
 ---
 
-*Draft Version 1.0 - 2025-11-30*
-*Ready for offline analysis and refinement*
+*Version 1.0 - 2025-11-30: Initial draft*
+*Version 1.1 - 2025-12-14: Updated for notebooklm-mcp v2.0.0 (MCP → HTTP API)*
