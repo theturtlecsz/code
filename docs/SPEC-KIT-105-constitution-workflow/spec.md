@@ -798,3 +798,36 @@ Use `ferris-test` benchmark project at `/home/thetu/benchmark/ferris-test/`:
 ---
 
 *This spec enhances the foundational workflow for spec-driven development by ensuring all specs are grounded in project-wide principles and guardrails, with full parity to GitHub spec-kit plus Stage 0 + NotebookLM integration.*
+
+---
+
+## Appendix: Model & Runtime (Spec Overrides)
+
+Policy: docs/MODEL-POLICY.md (version: 1.0.0)
+
+Roles exercised by this spec:
+- Stage0 Tier2 (NotebookLM): YES (constitution-grounded synthesis)
+- Architect/Planner: YES (via /speckit.plan)
+- Implementer/Rust Ace: NO
+- Librarian: NO
+- Tutor: NO
+- Auditor/Judge: YES (constitution audit)
+
+Routing mode: local-first with escalation
+Architect escalation: confidence < 0.75
+NotebookLM: Used for constitution-grounded synthesis (must be citation-based)
+
+Primary tiers:
+- fast_local: Local 14B planner (vLLM on RTX 5090)
+- tier2_synthesis: NotebookLM (cloud, citation-grounded)
+- premium_judge: GPT-5.1 High / Claude Opus (HR required)
+
+Privacy:
+- local_only = false (NotebookLM integration requires cloud access)
+
+High-risk:
+- HR = YES (constitution changes affect all downstream specs)
+- Cloud Judge required for constitution modifications
+
+Overrides:
+- NotebookLM must be citation-grounded (GR-008)

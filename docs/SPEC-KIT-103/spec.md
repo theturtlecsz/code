@@ -286,3 +286,34 @@ cargo test -p codex-tui --lib command_registry
 ## Appendix B: Session Lineage
 
 P89 (Data Model) → P90 (TASK_BRIEF + Tier-2) → P91 (Conflict Detection) → P92 (Block + Cache) → P93 (Vision Q&A) → P94 (Drift Detection) → P95 (Constitution-Aware Refinement) → P96 (Context Freeze) → **P97** (Librarian v1)
+
+---
+
+## Appendix C: Model & Runtime (Spec Overrides)
+
+Policy: docs/MODEL-POLICY.md (version: 1.0.0)
+
+Roles exercised by this spec:
+- Stage0 Tier2 (NotebookLM): NO (heuristic-first)
+- Architect/Planner: NO
+- Implementer/Rust Ace: NO
+- Librarian: YES (this spec defines the Librarian)
+- Tutor: NO
+- Auditor/Judge: NO
+
+Routing mode: local-first with Kimi escalation-only
+Librarian default: Local 8–14B synth (Llama 3.1 8B / Qwen 14B)
+Kimi escalation: Hard sweeps only (>100k context, contradictions, tool-heavy, full sweep)
+
+Primary tiers:
+- fast_local: Local 8B (vLLM on RTX 5090)
+- librarian_deep: Local 14B with Kimi escalation predicate
+
+Privacy:
+- local_only = true (default; Kimi escalation requires explicit override)
+
+High-risk:
+- HR = NO (corpus quality operations are low-risk)
+
+Overrides:
+- Kimi escalation requires hard-sweep predicate to be true

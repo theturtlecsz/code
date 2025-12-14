@@ -297,7 +297,7 @@ Incoming Memory
         ▼                 ▼
    Store as-is    ┌──────────────────┐
                   │ LOCAL LLM        │
-                  │ (qwen2.5:3b)     │
+                  │ (see POLICY.md)  │
                   │ Auto-restructure │
                   └────────┬─────────┘
                            │
@@ -422,8 +422,8 @@ def infer_relationship_type(mem_a: str, mem_b: str, similarity: float) -> str:
 
     Respond with only the relationship type.
     """
-
-    return ollama_query("qwen2.5:3b", prompt).strip().lower()
+    # Model selection per docs/MODEL-POLICY.md (Librarian: local 8-14B)
+    return local_llm_query(prompt).strip().lower()
 ```
 
 **B. Tier 2 Feedback Ingestion**
@@ -544,7 +544,7 @@ pub async fn request_synthesis(
 ┌─────────────────────────────────────────┐
 │ STAGE 1: SPECIFY                        │
 │ • Receives divine_truth as context      │
-│ • Standard consensus flow               │
+│ • Single-owner execution (no consensus) │
 └─────────────────┬───────────────────────┘
                   │
                   ▼
@@ -570,8 +570,9 @@ top_k = 15
 include_domains = ["spec-kit", "infrastructure"]
 
 [tier2.local_llm]
-model = "qwen2.5:3b"
-endpoint = "http://localhost:11434"
+# Model selection per docs/MODEL-POLICY.md (Librarian: local 8-14B)
+model = "Qwen/Qwen2.5-14B-Instruct"  # or Llama-3.1-8B-Instruct
+endpoint = "http://localhost:8000/v1"  # vLLM default
 ```
 
 ---
@@ -777,7 +778,39 @@ The original strategy of static aggregated artifacts has been **deprecated** in 
 
 ---
 
-## 11. References
+## 11. Model & Runtime (Spec Overrides)
+
+Policy: docs/MODEL-POLICY.md (version: 1.0.0)
+
+Roles exercised by this spec:
+- Stage0 Tier2 (NotebookLM): YES (primary integration target)
+- Architect/Planner: YES (via Stage 0 planning)
+- Implementer/Rust Ace: NO
+- Librarian: YES (local LLM synthesis)
+- Tutor: NO
+- Auditor/Judge: NO
+
+Routing mode: local-first with NotebookLM cloud integration
+Librarian default: Local 8–14B synth (per MODEL-POLICY.md, not qwen2.5:3b)
+NotebookLM: Stage 0 Tier 2 synthesis (citation-grounded)
+
+Primary tiers:
+- fast_local: Local 8–14B synth (vLLM on RTX 5090)
+- tier2_synthesis: NotebookLM (cloud, citation-grounded)
+
+Privacy:
+- local_only = false (NotebookLM integration requires cloud access)
+
+High-risk:
+- HR = NO (read-only synthesis, no code changes)
+
+Overrides:
+- NotebookLM must be citation-grounded (GR-008)
+- No hallucinated citations allowed
+
+---
+
+## 12. References
 
 1. **PPP Framework**: "Training Proactive and Personalized LLM Agents" (Research Paper)
 2. **NotebookLM HTTP Service**: Local installation at `~/notebooklm-mcp` (v2.0.0)
@@ -788,3 +821,4 @@ The original strategy of static aggregated artifacts has been **deprecated** in 
 
 *Version 1.0 - 2025-11-30: Initial draft*
 *Version 1.1 - 2025-12-14: Updated for notebooklm-mcp v2.0.0 (MCP → HTTP API)*
+*Version 1.2 - 2025-12-14: Added Model & Runtime section, fixed consensus language*

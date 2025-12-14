@@ -587,7 +587,18 @@ These fields are already in `Stage0Event::Complete`. SPEC-KIT-105 will use them 
 
 ---
 
-## 12. Related Specifications
+## 12. Model & Runtime (Spec Overrides)
+
+Policy: docs/MODEL-POLICY.md (version: 1.0.0)
+
+This spec is **infrastructure-only** (parameter tuning for scoring weights) and does not invoke model routing directly.
+Roles exercised: none (no Architect/Implementer/Librarian/Tutor/Judge).
+Privacy: local_only = true (deterministic parameter tuning, no LLM calls)
+Guardrails still apply: sandboxing, evidence/logging, config versioning.
+
+---
+
+## 13. Related Specifications
 
 | Spec | Relationship |
 |------|--------------|

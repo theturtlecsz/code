@@ -157,6 +157,17 @@ Modify `/speckit.new` handler in `tui/src/chatwidget/spec_kit/`:
 
 ---
 
+## Model & Runtime (Spec Overrides)
+
+Policy: docs/MODEL-POLICY.md (version: 1.0.0)
+
+This spec is **infrastructure-only** (TUI modal component) and does not invoke model routing directly.
+Roles exercised: none (no Architect/Implementer/Librarian/Tutor/Judge).
+Privacy: local_only = true (UI only, no LLM calls)
+Guardrails still apply: sandboxing, evidence/logging.
+
+---
+
 ## Research
 
 See `docs/SPEC-KIT-970-interactive-prd/research.md` for:

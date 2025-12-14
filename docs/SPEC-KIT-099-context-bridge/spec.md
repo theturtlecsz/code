@@ -1,9 +1,14 @@
 # SPEC-KIT-099: Research-to-Code Context Bridge
 
-**Status**: Draft
+**Status**: Legacy (Partially Superseded)
 **Author**: Claude (Opus 4.5)
 **Created**: 2025-11-30
 **Effort**: Large (multi-session implementation)
+
+> **Legacy Notice**: Parts of this spec are superseded by SPEC-KIT-102 (NotebookLM v2.0.0 HTTP API).
+> The MCP-based integration described here has been replaced by HTTP API calls.
+> Current execution uses single-owner pipeline (Architect → Implementer → Judge); no consensus.
+> See `docs/MODEL-POLICY.md` for current model routing policy.
 
 ---
 
@@ -2153,6 +2158,41 @@ async fn test_auth_error_pauses_pipeline() {
     assert!(matches!(result, ResearchStageResult::PauseForConfirmation { .. }));
 }
 ```
+
+---
+
+## Appendix: Model & Runtime (Spec Overrides)
+
+Policy: docs/MODEL-POLICY.md (version: 1.0.0)
+
+> **Note**: This spec is partially superseded by SPEC-KIT-102 (NotebookLM v2.0.0).
+> See legacy notice at top of document.
+
+Roles exercised by this spec:
+- Stage0 Tier2 (NotebookLM): YES (via MCP - now HTTP API per 102)
+- Architect/Planner: YES (receives "Divine Truth" injection)
+- Implementer/Rust Ace: YES (receives "Divine Truth" injection)
+- Librarian: NO
+- Tutor: NO
+- Auditor/Judge: YES (validation stage)
+
+Routing mode: single-owner pipeline (Architect → Implementer → Judge)
+Execution: No consensus; quality enforced by compiler/tests and guardrails
+
+Primary tiers:
+- fast_local: Local 14B planner + Local 32B coder (vLLM)
+- tier2_synthesis: NotebookLM (cloud, citation-grounded)
+- premium_judge: GPT-5.1 High / Claude Opus
+
+Privacy:
+- local_only = false (NotebookLM integration requires cloud)
+
+High-risk:
+- HR = NO (context injection is read-only)
+
+Overrides:
+- "Divine Truth" injection is legislative (binding on all stages)
+- Reference Rot detection required before execution
 
 ---
 

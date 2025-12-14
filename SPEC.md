@@ -1,8 +1,25 @@
 # Spec-Kit Multi-Agent Framework - Task Tracker
 
-**Last Updated**: 2025-11-27
+**Last Updated**: 2025-12-14
 **Branch**: main
 **Status**: ✅ **PHASE 3 COMPLETE** - Production ready
+
+---
+
+## Model & Runtime Policy
+
+**Authoritative Documents**:
+- **Model Routing Policy**: `docs/MODEL-POLICY.md` (version: 1.0.0)
+- **Guardrails**: `docs/MODEL-POLICY.md` Section 7 (GR-001 through GR-013)
+
+**Spec Compliance Requirement**:
+All SPECKIT specs MUST include a `Model & Runtime (Spec Overrides)` section that references MODEL-POLICY.md version. Infrastructure-only specs may use the minimal template.
+
+**Key Policy Points**:
+- **No consensus**: Single-owner pipeline (Architect → Implementer → Judge); no voting/swarm
+- **Local-first**: Default to local models; cloud escalation-only (Kimi for Librarian, DeepSeek for Implementer)
+- **HR requires cloud Judge**: High-risk changes require GPT-5.1 High / Claude Opus approval
+- **NotebookLM must be citation-grounded**: No hallucinated citations (GR-008)
 
 ---
 

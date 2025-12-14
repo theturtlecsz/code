@@ -287,7 +287,18 @@ Isolation violations detected at:
 - **Isolation levels**: Strict (error) vs Permissive (warn)
 - **Audit log**: Track isolation violations for debugging
 
-## 8. References
+## 8. Model & Runtime (Spec Overrides)
+
+Policy: docs/MODEL-POLICY.md (version: 1.0.0)
+
+This spec is **infrastructure-only** (config isolation/hermetic sandboxing) and does not invoke model routing directly.
+Roles exercised: none (no Architect/Implementer/Librarian/Tutor/Judge).
+Privacy: local_only = true (enforces isolation, no cloud calls from this component)
+Guardrails still apply: sandboxing (this spec defines sandboxing), evidence/logging.
+
+---
+
+## 9. References
 
 - SPEC-KIT-961: Template Ecosystem (parity requirements)
 - SPEC-KIT-962: Template Installation Architecture

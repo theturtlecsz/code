@@ -200,45 +200,64 @@ The LLM backend must satisfy:
 
 ## 4. Reference Implementation
 
-### 4.1 Ollama + qwen2.5:3b
+> **Policy Compliance**: See `docs/MODEL-POLICY.md` for authoritative model routing.
+> Librarian uses local 8–14B synth with Kimi escalation-only for hard sweeps.
+
+### 4.1 Local LLM Backend (Policy-Aligned)
 
 The reference implementation uses:
 
-- **Runtime**: Ollama (local model server)
-- **Model**: qwen2.5:3b (4.67s latency, good structured output)
-- **Endpoint**: `http://localhost:11434`
+- **Runtime**: vLLM (default) or llama.cpp (fallback)
+- **Model**: Llama 3.1 8B / Qwen 14B instruct (8–14B range per policy)
+- **Endpoint**: OpenAI-compatible local API
 
 ```rust
-pub struct OllamaLibrarianBackend {
+pub struct LocalLibrarianBackend {
     client: reqwest::Client,
     endpoint: String,
     model: String,
     timeout: Duration,
 }
 
-impl OllamaLibrarianBackend {
+impl LocalLibrarianBackend {
     pub fn new() -> Self {
         Self {
             client: reqwest::Client::new(),
-            endpoint: "http://localhost:11434".to_string(),
-            model: "qwen2.5:3b".to_string(),
+            endpoint: "http://localhost:8000/v1".to_string(),  // vLLM default
+            model: "Qwen/Qwen2.5-14B-Instruct".to_string(),    // Policy-aligned
             timeout: Duration::from_secs(30),
         }
     }
 }
 ```
 
-### 4.2 Backend Profiles
+### 4.2 Backend Profiles (Policy-Aligned)
 
-Librarian and Stage 0 may use different profiles of the same backend:
+Librarian and Stage 0 use tiered profiles with escalation:
 
-| Profile | Use Case | Model | Timeout | Concurrency |
-|---------|----------|-------|---------|-------------|
-| `stage0_fast` | IQO extraction, hot path | qwen2.5:1.5b | 5s | High |
-| `librarian_batch` | Restructure, summarize | qwen2.5:3b | 30s | Low |
-| `librarian_deep` | Complex relationship inference | qwen2.5:7b | 60s | 1 |
+| Profile | Use Case | Model | Timeout | Escalation |
+|---------|----------|-------|---------|------------|
+| `stage0_fast` | IQO extraction, hot path | Local 8B (Llama 3.1 8B) | 10s | None |
+| `librarian_batch` | Restructure, summarize | Local 8–14B (Qwen 14B) | 30s | None |
+| `librarian_deep` | Complex relationship inference | Local 14B | 60s | Kimi K2 on hard-sweep predicate |
 
-Both profiles implement the same interface but point at different models/endpoints.
+### 4.3 Kimi Escalation (Hard Sweeps Only)
+
+Escalate to Kimi K2 when ANY of:
+- `context_estimate > 100k`
+- `contradictions_detected == true`
+- `tool_heavy == true`
+- `full_sweep == true`
+- `local_synth_confidence < threshold`
+
+```rust
+pub struct KimiEscalationBackend {
+    // Used only for hard sweeps per MODEL-POLICY.md
+    model: String,  // "kimi-k2-instruct" or "kimi-k2-thinking"
+}
+```
+
+All profiles implement the same `LibrarianLlmBackend` trait.
 
 ---
 
@@ -488,7 +507,39 @@ Jobs are designed for resumability:
 
 ---
 
-## 12. Related Specifications
+## 12. Model & Runtime (Spec Overrides)
+
+Policy: docs/MODEL-POLICY.md (version: 1.0.0)
+
+Roles exercised by this spec:
+- Stage0 Tier2 (NotebookLM): NO
+- Architect/Planner: NO
+- Implementer/Rust Ace: NO
+- Librarian: YES (this spec defines Librarian jobs)
+- Tutor: NO
+- Auditor/Judge: NO
+
+Routing mode: local-first with Kimi escalation-only
+Librarian default: Local 8–14B synth (Llama 3.1 8B / Qwen 14B)
+Kimi escalation: Hard sweeps only (see Section 4.3 for triggers)
+
+Primary tiers:
+- stage0_fast: Local 8B (vLLM)
+- librarian_batch: Local 8–14B (vLLM)
+- librarian_deep: Local 14B + Kimi K2 escalation
+
+Privacy:
+- local_only = true (default; Kimi escalation requires explicit override)
+
+High-risk:
+- HR = NO (repair jobs are reversible)
+
+Overrides:
+- Kimi escalation on hard-sweep predicate (documented in Section 4.3)
+
+---
+
+## 13. Related Specifications
 
 | Spec | Relationship |
 |------|--------------|

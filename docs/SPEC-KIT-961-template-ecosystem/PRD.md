@@ -227,29 +227,35 @@ Create `scripts/validate-template-parity.sh`:
 - Validation script prevents drift
 - Template changes propagate through variable expansion
 
-## 6. Multi-Agent Consensus Tasks
+## 6. Multi-Agent Validation Tasks (Non-Authoritative)
 
-### Task 1: Template Structure Audit
-**Agents**: gemini, claude, code (all three - parity testing)
-**Question**: Review current templates for:
-- Consistent section headers across templates
-- Variable naming patterns
+> **Policy Compliance (GR-001)**: These agents are *non-authoritative*. They do not vote, merge, or decide.
+> They only produce critiques/checklists. The phase owner remains responsible for incorporating feedback.
+> See `docs/MODEL-POLICY.md` for current model routing policy.
+
+### Task 1: Template Structure Audit (Critic-Only)
+**Agents**: gemini, claude, code (parallel validation - not consensus)
+**Output**: Each agent produces independent critique containing:
+- Inconsistent section headers across templates
+- Variable naming pattern violations
 - Missing sections compared to stage requirements
-- Alignment with expected JSON output schemas
+- Misalignment with expected JSON output schemas
 
-### Task 2: Agent Parity Verification
-**Agents**: gemini, claude, code
-**Question**: Each agent analyzes prompts.json for their own template access:
+### Task 2: Agent Parity Verification (Validator-Only)
+**Agents**: gemini, claude, code (independent analysis)
+**Output**: Each agent reports its own template access:
 - What template context do I receive?
 - What stages am I missing template refs?
 - What would make my template awareness equal to other agents?
 
-### Task 3: prompts.json Enhancement Design
-**Agents**: gemini, claude, code
-**Question**: Propose standardized `template_context` structure:
+### Task 3: prompts.json Enhancement Review (Critic-Only)
+**Agents**: gemini, claude, code (independent proposals)
+**Output**: Each agent proposes `template_context` structure:
 - What fields should be included?
 - How should stage-to-template mapping work?
 - What variable schema format is most useful?
+
+**Note**: No synthesis or voting. Phase owner reviews all critiques and decides.
 
 ## 7. Implementation Phases
 
@@ -346,6 +352,36 @@ Create `scripts/validate-template-parity.sh`:
 1. **Critical**: spec-clarify, spec-analyze, spec-checklist (used frequently)
 2. **Important**: quality-gate-* variants (mirror of above)
 3. **Minor**: spec-tasks/code (less impactful)
+
+---
+
+## Appendix B: Model & Runtime (Spec Overrides)
+
+Policy: docs/MODEL-POLICY.md (version: 1.0.0)
+
+Roles exercised by this spec:
+- Stage0 Tier2 (NotebookLM): NO
+- Architect/Planner: NO
+- Implementer/Rust Ace: NO
+- Librarian: NO
+- Tutor: NO
+- Auditor/Judge: NO
+
+This spec is **primarily infrastructure** (template ecosystem, prompts.json parity).
+
+Section 6 "Multi-Agent Validation Tasks" uses **non-authoritative sidecars** only:
+- Agents produce independent critiques (no voting/consensus)
+- Phase owner incorporates feedback (single owner decides)
+- Pattern compliant with GR-001 (no consensus)
+
+Privacy:
+- local_only = true (template operations are local)
+
+High-risk:
+- HR = NO (template changes are reversible)
+
+Overrides:
+- None
 
 ---
 

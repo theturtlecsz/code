@@ -115,4 +115,15 @@ Show active SPEC in TUI status bar or header when detected.
 
 ---
 
+## Model & Runtime (Spec Overrides)
+
+Policy: docs/MODEL-POLICY.md (version: 1.0.0)
+
+This spec is **infrastructure-only** and does not invoke model routing directly.
+Roles exercised: none (no Architect/Implementer/Librarian/Tutor/Judge).
+Privacy: local_only = true (git operations only)
+Guardrails still apply: sandboxing, evidence/logging.
+
+---
+
 *Deferred: Focus on completing SPEC-KIT-971 (clarify) first. Revisit after clarify is working.*
