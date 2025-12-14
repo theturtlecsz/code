@@ -20,6 +20,7 @@ pub mod complexity;
 pub mod graph_bridge;
 pub mod mermaid;
 pub mod nlm_service;
+pub mod research;
 pub mod skeleton;
 
 use anyhow::Result;

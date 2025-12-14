@@ -15,6 +15,7 @@ use codex_core::architect::{
     chunker::{self, ChunkType, MAX_CHUNK_SIZE},
     mermaid,
     nlm_service::{Artifact, NlmService},
+    research::ResearchClient,
 };
 // ChunkedPart is used internally by chunker, we use Artifact from nlm_service
 use std::collections::hash_map::DefaultHasher;
@@ -57,6 +58,12 @@ pub enum ArchitectCommand {
         cmd: SourcesCommand,
     },
 
+    /// Research operations (web search via NotebookLM).
+    Research {
+        #[command(subcommand)]
+        cmd: ResearchCommand,
+    },
+
     /// Clear all cached answers (keeps ingest data).
     ClearCache,
 }
@@ -88,6 +95,39 @@ pub enum SourcesCommand {
         #[arg(long, short = 'y')]
         force: bool,
     },
+}
+
+#[derive(Debug, clap::Subcommand)]
+pub enum ResearchCommand {
+    /// Quick parallel web search. Returns results immediately.
+    Fast {
+        /// The research query.
+        query: Vec<String>,
+        /// Wait for completion (default: true).
+        #[arg(long, default_value = "true")]
+        wait: bool,
+    },
+    /// Deep multi-step autonomous research. May take longer.
+    Deep {
+        /// The research query.
+        query: Vec<String>,
+        /// Wait for completion (default: true).
+        #[arg(long, default_value = "true")]
+        wait: bool,
+        /// Allow editing the research plan before execution.
+        #[arg(long)]
+        edit_plan: bool,
+    },
+    /// Check the status of running research.
+    Status,
+    /// Get the results of completed research.
+    Results {
+        /// Output format: summary, full, or sources_only.
+        #[arg(long, default_value = "summary")]
+        format: String,
+    },
+    /// Import research results as notebook sources.
+    Import,
 }
 
 #[derive(Debug, Parser)]
@@ -167,6 +207,7 @@ impl ArchitectCli {
             ArchitectCommand::Status => run_status(&vault).await,
             ArchitectCommand::Service { cmd } => run_service(cmd).await,
             ArchitectCommand::Sources { cmd } => run_sources(&vault, cmd).await,
+            ArchitectCommand::Research { cmd } => run_research(cmd).await,
             ArchitectCommand::ClearCache => run_clear_cache(&vault).await,
         }
     }
@@ -816,6 +857,178 @@ async fn run_service(cmd: ServiceCommand) -> Result<()> {
         ServiceCommand::Status => {
             let status = NlmService::service_status()?;
             println!("{}", status);
+            Ok(())
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Research Commands
+// ─────────────────────────────────────────────────────────────────────────────
+
+async fn run_research(cmd: ResearchCommand) -> Result<()> {
+    let client = ResearchClient::with_port(3456, DEFAULT_NOTEBOOK)?;
+
+    if !client.is_running().await {
+        bail!(
+            "NotebookLM service is not running.\n\
+             Start it with: code architect service start"
+        );
+    }
+
+    match cmd {
+        ResearchCommand::Fast { query, wait } => {
+            let query_str = query.join(" ");
+            if query_str.is_empty() {
+                bail!("No query provided. Usage: code architect research fast <query>");
+            }
+
+            println!("Starting fast research: \"{}\"", query_str);
+            if !wait {
+                println!("(running in background)");
+            }
+
+            let result = client.fast(&query_str, wait).await?;
+
+            if let Some(status) = &result.status {
+                println!("Status: {}", status);
+            }
+            if let Some(progress) = result.progress {
+                println!("Progress: {}%", progress);
+            }
+
+            if let Some(results) = &result.results {
+                if let Some(summary) = &results.summary {
+                    println!("\n--- Results ---\n{}", summary);
+                }
+                if let Some(sources) = &results.sources {
+                    println!("\n--- Sources ({}) ---", sources.len());
+                    for source in sources.iter().take(10) {
+                        if let Some(title) = &source.title {
+                            println!("  • {}", title);
+                            if let Some(url) = &source.url {
+                                println!("    {}", url);
+                            }
+                        }
+                    }
+                    if sources.len() > 10 {
+                        println!("  ... and {} more", sources.len() - 10);
+                    }
+                }
+            }
+
+            Ok(())
+        }
+        ResearchCommand::Deep {
+            query,
+            wait,
+            edit_plan,
+        } => {
+            let query_str = query.join(" ");
+            if query_str.is_empty() {
+                bail!("No query provided. Usage: code architect research deep <query>");
+            }
+
+            println!("Starting deep research: \"{}\"", query_str);
+            if edit_plan {
+                println!("(edit_plan mode enabled)");
+            }
+            if !wait {
+                println!("(running in background)");
+            }
+
+            let result = client.deep(&query_str, wait, edit_plan).await?;
+
+            if let Some(status) = &result.status {
+                println!("Status: {}", status);
+            }
+            if let Some(progress) = result.progress {
+                println!("Progress: {}%", progress);
+            }
+
+            if let Some(results) = &result.results {
+                if let Some(summary) = &results.summary {
+                    println!("\n--- Results ---\n{}", summary);
+                }
+                if let Some(count) = results.source_count {
+                    println!("\nSources found: {}", count);
+                }
+            }
+
+            println!("\nTip: Use 'code architect research results' for full output.");
+            println!("Tip: Use 'code architect research import' to add as notebook sources.");
+
+            Ok(())
+        }
+        ResearchCommand::Status => {
+            println!("Checking research status...");
+
+            let status = client.status().await?;
+            println!("Status: {}", status.status);
+
+            if let Some(query) = &status.query {
+                println!("Query: \"{}\"", query);
+            }
+            if let Some(progress) = status.progress {
+                println!("Progress: {}%", progress);
+            }
+            if let Some(started) = &status.started_at {
+                println!("Started: {}", started);
+            }
+            if let Some(completed) = &status.completed_at {
+                println!("Completed: {}", completed);
+            }
+            if let Some(error) = &status.error {
+                println!("Error: {}", error);
+            }
+
+            Ok(())
+        }
+        ResearchCommand::Results { format } => {
+            println!("Fetching research results (format: {})...", format);
+
+            let result = client.results(&format).await?;
+
+            if let Some(results) = &result.results {
+                if let Some(summary) = &results.summary {
+                    println!("\n{}", summary);
+                }
+                if let Some(sources) = &results.sources {
+                    println!("\n--- Sources ({}) ---", sources.len());
+                    for source in sources {
+                        if let Some(title) = &source.title {
+                            println!("\n• {}", title);
+                        }
+                        if let Some(url) = &source.url {
+                            println!("  URL: {}", url);
+                        }
+                        if let Some(snippet) = &source.snippet {
+                            println!("  {}", snippet);
+                        }
+                    }
+                }
+            } else {
+                println!("No results available. Run research first.");
+            }
+
+            Ok(())
+        }
+        ResearchCommand::Import => {
+            println!("Importing research results as notebook sources...");
+
+            let result = client.import().await?;
+
+            if let Some(count) = result.imported {
+                println!("Imported {} sources.", count);
+            }
+            if let Some(sources) = &result.sources {
+                for name in sources {
+                    println!("  • {}", name);
+                }
+            }
+
+            println!("\nTip: Use 'code architect sources list' to see all sources.");
+
             Ok(())
         }
     }
