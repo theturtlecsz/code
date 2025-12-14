@@ -1,14 +1,26 @@
 # SPEC-KIT-099: Research-to-Code Context Bridge
 
-**Status**: Legacy (Partially Superseded)
+**Status**: ⛔ DEPRECATED
 **Author**: Claude (Opus 4.5)
 **Created**: 2025-11-30
+**Deprecated**: 2025-12-14
 **Effort**: Large (multi-session implementation)
 
-> **Legacy Notice**: Parts of this spec are superseded by SPEC-KIT-102 (NotebookLM v2.0.0 HTTP API).
-> The MCP-based integration described here has been replaced by HTTP API calls.
-> Current execution uses single-owner pipeline (Architect → Implementer → Judge); no consensus.
-> See `docs/MODEL-POLICY.md` for current model routing policy.
+> ## ⚠️ DEPRECATION NOTICE
+>
+> **This specification is DEPRECATED and should NOT be used for new implementation.**
+>
+> **For current implementation, see: [SPEC-KIT-102](../SPEC-KIT-102-notebooklm-integration/spec.md)**
+>
+> Key changes since this spec:
+> - MCP-based integration → HTTP API (v2.0.0)
+> - Multi-agent consensus → Single-owner pipeline (GR-001)
+> - Execution: Architect → Implementer → Judge (no voting)
+>
+> Policy reference: `docs/MODEL-POLICY.md` (v1.0.0)
+>
+> This document is retained for historical context only. All "consensus synthesis"
+> and "multi-agent debate" patterns described below are explicitly forbidden per GR-001.
 
 ---
 
