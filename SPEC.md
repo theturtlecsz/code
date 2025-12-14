@@ -218,6 +218,16 @@ All SPECKIT specs MUST include a `Model & Runtime (Spec Overrides)` section that
 | 27 | SPEC-KIT-963 | Upstream Command Deprecation | **Done** | Code | docs/SPEC-KIT-963-upstream-deprecation/PRD.md | main | - | 2025-11-30 | P62 complete | **COMPLETE** (2025-11-30, P62): Removed upstream /plan, /solve, /code commands. **Problem**: Upstream commands conflicted with /speckit.* namespace. **Changes**: (1) Removed Plan/Solve/Code enum variants from slash_command.rs, (2) Removed format_plan/solve/code_command() from codex-core slash_commands.rs, (3) Removed handle_slash_command() (only handled removed commands), (4) Updated default_read_only_for() and default_instructions_for() to return defaults for custom commands only, (5) Updated prompts help to show /speckit.plan and /speckit.implement. **Tests**: All pass (codex-core + codex-tui). **Result**: Fork uses /speckit.* namespace exclusively. Clean break from upstream. |
 | 28 | SPEC-KIT-970 | Interactive PRD Builder | **Done** | Code | docs/SPEC-KIT-970-interactive-prd/spec.md | main | - | 2025-11-30 | P67 complete | **COMPLETE** (2025-11-30, P67): Modal-based interactive Q&A for /speckit.new. **Changes**: (1) PrdBuilderModal in bottom_pane/prd_builder_modal.rs, (2) AppEvent::PrdBuilderSubmitted/Cancelled, (3) prd_builder_handler.rs with on_prd_builder_submitted/cancelled, (4) create_spec_with_context() in new_native.rs, (5) Modified /speckit.new to show modal. **UX**: 3 required questions (Problem, Target, Success) with A-D options + custom input. Modal renders with progress [1/3], ESC cancels, Enter confirms. Answers incorporated into PRD template. |
 
+### Policy Alignment (2025-12-14 Audit)
+
+**Context**: P108 audit follow-up identified consensus.rs as requiring GR-001 alignment. The module still expects multi-agent participation and synthesizer agent patterns that are explicitly forbidden.
+
+**STATUS**: 1 task tracked (not started)
+
+| Order | Task ID | Title | Status | Owners | PRD | Branch | PR | Last Validation | Evidence | Notes |
+|-------|---------|-------|--------|--------|-----|--------|----|-----------------|----------|-------|
+| 1 | GR001-001 | Disable consensus.rs multi-agent patterns | **Tracked** | Code | docs/MODEL-POLICY.md (GR-001) | - | - | 2025-12-14 | P108 audit | **ANALYSIS** (2025-12-14): consensus.rs currently expects multi-agent participation per stage (L155-172 `expected_agents_for_stage`), looks for GptPro aggregator/synthesizer (L740-752), and gates on consensus status (L811-821: ok/conflict/degraded). Per GR-001: no 3-agent debate/voting/swarm synthesis, no committee merges, no "consensus synthesis" steps. **Changes Required**: (1) Disable consensus flow by default (`SPEC_KIT_CONSENSUS=false`), (2) Preserve critic-only path as optional sidecar, (3) Update CLI flags/config.toml to match GR-001, (4) Add deprecation notices to consensus terminology. **NOT fixing inline** per A4 scope - create separate SPEC if implementing. **Effort**: ~4-8 hours. |
+
 ### Upstream Sync (2025-11-27 Analysis)
 
 **Context**: Comprehensive upstream analysis comparing fork (`~/code`) with upstream (`~/old/code`). Two reports generated: `docs/UPSTREAM-ANALYSIS-2025-11-27.md` (patch plan) and `docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md` (product gaps).
