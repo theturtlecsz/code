@@ -1005,3 +1005,7 @@ SPEC-939 improves configuration management through hot-reload, canonical naming,
 1. Review and approve SPEC-939
 2. Schedule Week 1 kickoff (hot-reload + configurable agents)
 3. Coordinate JSON Schema release with v1.2.0
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

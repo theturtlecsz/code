@@ -356,11 +356,11 @@ CLAUDE_PROVIDER.get_or_init(|| ClaudePipesProvider::with_cwd("", &cwd))
 - [x] Estimate effort for future fix (~2-3 hours)
 
 **Deliverables** (Commit d70d05cb1):
-- ✅ Created KNOWN-LIMITATIONS.md in SPEC-952 docs
+- ✅ Documented model-switching limitation in SPEC-KIT-952 PRD
 - ✅ Documented root cause (global OnceLock provider singleton)
 - ✅ Workaround documented (use ChatGPT account for model switching)
 - ✅ Fix estimate (2-3 hours, HashMap<String, Provider> refactor)
-- ✅ Linked from SPEC-952 README.md Known Limitations section
+- ✅ Documented follow-up fix direction (multi-instance providers keyed by model)
 
 **Actual Effort**: 6 minutes (vs 15 estimated)
 

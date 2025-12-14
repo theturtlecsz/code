@@ -28,7 +28,7 @@
 | R2 | Guardrail telemetry must include common metadata: `command`, `specId`, `sessionId`, ISO8601 UTC `timestamp`. | Missing metadata triggers schema failure; valid metadata is surfaced in history notice. |
 | R3 | Stage payload requirements: Plan captures `baseline.mode`, `baseline.artifact`, `baseline.status`, and `hooks.session.start`; Tasks report `tool.status`; Implement includes `lock_status` + `hook_status`; Validate/Audit require scenario arrays; Unlock reports `unlock_status`. | Tests cover each stage with malformed payload to ensure failure. |
 | R4 | Schema validator differentiates between parse errors (invalid JSON) and schema violations, logging precise reasons. | Unit tests assert error strings contain root cause; history notice summarises failure. |
-| R5 | Documentation summarises telemetry schema and troubleshooting steps. | `docs/SPEC-KIT-013-telemetry-schema-guard/spec.md` includes schema tables + operator guidance. |
+| R5 | Documentation summarises telemetry schema and troubleshooting steps. | `docs/spec-kit/telemetry-schema-v2.md` includes schema tables + operator guidance. |
 
 ## Dependencies & Risks
 - Depends on existing guardrail shell scripts continuing to emit JSON; future shell changes must update schema tables.
@@ -39,3 +39,7 @@
 - Roll out on `feat/speckit.auto-telemetry` branch; run `cargo test -p codex-tui spec_auto` and new schema tests.
 - Success metric: malformed telemetry fixtures cause `/speckit.auto` to abort within guardrail summary; no regressions for valid telemetry runs (existing integration tests pass).
 - Post-merge: document schema in slash-command docs (tracked by T14 docs refresh).
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

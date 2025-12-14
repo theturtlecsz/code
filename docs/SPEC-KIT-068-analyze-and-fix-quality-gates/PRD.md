@@ -169,3 +169,6 @@ The `/speckit.auto` pipeline currently skips the Clarify, Checklist, and Analyze
 - [ ] Evidence strategy reviewed by documentation owners
 - [ ] Testing plan validated by QA stakeholders
 
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

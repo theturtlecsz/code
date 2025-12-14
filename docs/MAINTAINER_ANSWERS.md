@@ -17,7 +17,7 @@ Fork. Evidence: fork-specific markers and upstream sync notes exist in-repo (see
 
 Unknown. Evidence: the codebase contains integrations for multiple providers/tools (e.g., device-code OAuth providers), but a single “provider contract” and explicit support matrix are not consolidated in one canonical doc.
 
-Recommended next step: document supported providers in `docs/CONFIG.md` once confirmed from `codex-rs/*` provider modules and config schema.
+Recommended next step: document supported providers in `docs/config.md` once confirmed from `codex-rs/*` provider modules and config schema.
 
 ## 4) How is “reasoning effort” represented?
 

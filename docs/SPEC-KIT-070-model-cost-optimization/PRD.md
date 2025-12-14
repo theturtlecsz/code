@@ -728,3 +728,7 @@ systemctl restart codex-tui
 - Sustainable scaling to 100s of SPECs
 
 **Priority**: **P0 CRITICAL** - This blocks sustainable scaling and should be addressed BEFORE SPEC-KIT-066, 067, 068.
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

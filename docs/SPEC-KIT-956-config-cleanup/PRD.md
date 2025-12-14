@@ -228,3 +228,7 @@ Once SPEC-KIT-957 nativizes speckit.specify:
 - Will remove ~200 additional lines
 - Full [[subagents.commands]] cleanup for speckit.*
 - Requires speckit.specify nativization first
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

@@ -1012,3 +1012,7 @@ local-memory analysis --type summarize --timeframe month
 **Priority**: **P1 HIGH** - Not as urgent as SPEC-KIT-070 (cost crisis), but important for long-term health and good use of GPT downtime for cleanup work.
 
 **Effort**: 16-23 hours over 2 weeks, mostly manual review (can't fully automate without risking deletion of valuable content)
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

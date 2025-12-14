@@ -1,7 +1,7 @@
 # PRD: CLI Routing for Multi-Provider Model Support
 
 **SPEC-ID**: SPEC-KIT-952
-**Status**: Backlog
+**Status**: COMPLETE
 **Created**: 2025-11-19
 **Author**: Code
 **Priority**: P1 - HIGH
@@ -19,6 +19,12 @@ Implement CLI routing to enable multi-provider model support (ChatGPT, Claude, G
 **Downstream Impact**: Enables SPEC-KIT-946 (/model command expansion) and unblocks SPEC-KIT-947 (master validation)
 
 ---
+
+## Shipped Implementation Notes
+
+- Implemented CLI executors in `codex-rs/core/src/cli_executor/` and integrated routing via `codex-rs/tui/src/model_router.rs`.
+- TUI streaming providers live in `codex-rs/tui/src/providers/`.
+- Known limitation: some CLI test/smoke paths only validate a single model due to singleton CLI executor/provider behavior (model switching coverage is limited).
 
 ## Problem Statement
 
@@ -208,8 +214,7 @@ gemini -p "Write a hello world function" -m "gemini-2.0-flash"
 #### Phase 1: CLI Infrastructure (3-4 hours)
 
 **Files to Create**:
-- `codex-rs/tui/src/cli_executor.rs` (new module)
-- `codex-rs/tui/src/model_router.rs` (new module)
+- `codex-rs/tui/src/model_router.rs` (routing integration)
 
 **Tasks**:
 1. Create `CliExecutor` trait
@@ -503,3 +508,7 @@ After authentication, retry your command.
 ---
 
 **END OF PRD**
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

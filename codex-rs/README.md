@@ -1,24 +1,8 @@
-# Planner (Rust Implementation)
+# Planner (Rust Workspace)
 
-Canonical docs live at `docs/KEY_DOCS.md` (repo root).
+This directory is the Rust workspace that builds the `code` binary (Planner).
 
-## Fork Lineage
-
-**This Repository**: https://github.com/theturtlecsz/code
-**Upstream**: https://github.com/just-every/code
-**Origin**: OpenAI Codex (community-maintained fork)
-
-**NOT RELATED TO**: Anthropic's Claude Code (different product entirely)
-
-**Fork-Specific Features**:
-- **Spec-Kit Automation**: Multi-agent PRD workflows (Plan→Tasks→Implement→Validate→Audit→Unlock)
-- **Consensus Synthesis**: Multi-model result aggregation via local-memory MCP
-- **Quality Gates**: Automated requirement validation framework
-- **Native MCP Integration**: 5.3x faster consensus checks vs subprocess baseline
-
----
-
-This repository builds the `code` binary (Planner) from source.
+Canonical docs live at `../docs/KEY_DOCS.md`.
 
 ## Build & Run (Recommended)
 
@@ -28,96 +12,30 @@ From the repo root:
 ./build-fast.sh run
 ```
 
-## What's New in This Fork
+## Command Surface (High Level)
 
-This fork extends the Rust CLI with a **spec-kit automation framework** for multi-agent product requirements workflows. See `CLAUDE.md` and `REVIEW.md` for architecture details.
+- Default UX: interactive TUI (run `code` with no subcommand).
+- Primary workflows: TUI slash commands under `/speckit.*` (and `/guardrail.*` where applicable).
+- Non-interactive mode: `code exec "PROMPT"` (prints output to stdout/stderr and exits).
 
-### Enabling ACE (Local Strategy Memory)
+## Configuration
 
-**ACE (Agentic Context Engine)** provides compounding strategy memory for spec-kit workflows. It learns from execution outcomes and injects relevant heuristics into prompts.
+- Configuration is loaded from `~/.code/config.toml` (some legacy reads from `~/.codex/` exist for compatibility).
+- Configuration reference: `../docs/config.md`.
 
-**Quick Start**:
-1. Install ACE MCP server: `pip install ace-mcp-server` (or your ACE installation method)
-2. Enable in `~/.code/config.toml`:
+## MCP (Model Context Protocol)
 
-```toml
-[ace]
-enabled = true
-mode = "auto"  # auto|always|never
-slice_size = 8
+- Planner can act as an MCP client and connect to MCP servers on startup (see `../docs/config.md#mcp_servers`).
+- Planner can also launch as an MCP server via the `code mcp` subcommand.
 
-[mcp_servers.ace]
-command = "python"
-args = ["-m", "ace_mcp_server"]
-```
+## ACE (Local Strategy Memory) (Optional)
 
-3. Pin constitution bullets: `/speckit.constitution`
-4. Run spec-kit commands - ACE automatically injects learned heuristics
+ACE (Agentic Context Engine) provides data-only “playbook” memory for Spec‑Kit workflows via MCP.
 
-**How It Works** (ACE is data-only, does NOT call LLMs):
-- **Playbook Injection**: Adds ≤8 relevant bullets to prompts (e.g., "[helpful] Use X pattern")
-- **Enhanced Context**: For complex tasks (reruns, failures, high file count), uses more bullets/heuristics
-- **Learning**: Stores outcomes in SQLite after execution for continuous improvement
-- **Constitution**: `/speckit.constitution` pins imperative bullets from `memory/constitution.md`
+- Usage and configuration: `ACE_LEARNING_USAGE.md`
+- Pin constitution bullets: `/speckit.constitution`
 
-**Important**: ACE is a data-only SQLite store accessed via MCP. It retrieves/stores playbook heuristics but does NOT call LLMs. The CODE orchestrator calls LLMs using your configured API keys.
-
-**Configuration Options**:
-```toml
-[ace]
-enabled = true                    # Enable/disable ACE integration
-mode = "auto"                     # auto|always|never
-slice_size = 8                    # Max bullets per injection (≤8 recommended)
-db_path = "~/.code/ace/playbooks_normalized.sqlite3"  # SQLite database path
-use_for = ["speckit.specify", "speckit.tasks", "speckit.implement"]  # Commands to augment
-complex_task_files_threshold = 4  # File count threshold for enhanced context
-rerun_window_minutes = 30         # Rerun detection window
-```
-
-**Modes**:
-- `auto` (default): Uses ACE for commands in `use_for` list
-- `always`: Uses ACE for all spec-kit commands
-- `never`: Disables ACE (behavior identical to `enabled = false`)
-
-**Graceful Fallback**: If ACE is unavailable or disabled, all commands work normally without augmentation. One log message is emitted: `INFO ACE: disabled`.
-
-See `ACE_LEARNING_USAGE.md` for integration details.
-
-### Config
-
-Codex supports a rich set of configuration options. Note that the Rust CLI uses `config.toml` instead of `config.json`. Configuration is loaded from `~/.code/config.toml` (or legacy `~/.codex/config.toml`).
-
-### Model Context Protocol Support (Optional)
-
-Codex CLI functions as an MCP client that can connect to MCP servers on startup. See the [`mcp_servers`](../docs/config.md#mcp_servers) section in the configuration documentation for details.
-
-Planner can also launch as an MCP server via the CLI `mcp` subcommand.
-
-### Notifications
-
-You can enable notifications by configuring a script that is run whenever the agent finishes a turn. The [notify documentation](../docs/config.md#notify) includes a detailed example that explains how to get desktop notifications via [terminal-notifier](https://github.com/julienXX/terminal-notifier) on macOS.
-
-### `codex exec` to run Codex programmatically/non-interactively
-
-To run Codex non-interactively, run `codex exec PROMPT` (you can also pass the prompt via `stdin`) and Codex will work on your task until it decides that it is done and exits. Output is printed to the terminal directly. You can set the `RUST_LOG` environment variable to see more about what's going on.
-
-### Use `@` for file search
-
-Typing `@` triggers a fuzzy-filename search over the workspace root. Use up/down to select among the results and Tab or Enter to replace the `@` with the selected path. You can use Esc to cancel the search.
-
-### Esc–Esc to edit a previous message
-
-When the chat composer is empty, press Esc to prime “backtrack” mode. Press Esc again to open a transcript preview highlighting the last user message; press Esc repeatedly to step to older user messages. Press Enter to confirm and Codex will fork the conversation from that point, trim the visible transcript accordingly, and pre‑fill the composer with the selected user message so you can edit and resubmit it.
-
-In the transcript preview, the footer shows an `Esc edit prev` hint while editing is active.
-
-### `--cd`/`-C` flag
-
-Sometimes it is not convenient to `cd` to the directory you want Codex to use as the "working root" before running Codex. Fortunately, `codex` supports a `--cd` option so you can specify whatever folder you want. You can confirm that Codex is honoring `--cd` by double-checking the **workdir** it reports in the TUI at the start of a new session.
-
-### Shell completions
-
-Generate shell completion scripts via:
+## Shell Completions
 
 ```shell
 code completion bash
@@ -125,45 +43,36 @@ code completion zsh
 code completion fish
 ```
 
-### Experimenting with the Codex Sandbox
+## Sandbox + Debug Helpers
 
-To test to see what happens when a command is run under the sandbox provided by Codex, we provide the following subcommands in Codex CLI:
+### Experimenting with sandboxing
 
-```
+On supported platforms, you can run sandbox debug helpers:
+
+```text
 # macOS
-codex debug seatbelt [--full-auto] [COMMAND]...
+code debug seatbelt [--full-auto] [COMMAND]...
 
 # Linux
-codex debug landlock [--full-auto] [COMMAND]...
+code debug landlock [--full-auto] [COMMAND]...
 ```
 
 ### Selecting a sandbox policy via `--sandbox`
 
-The Rust CLI exposes a dedicated `--sandbox` (`-s`) flag that lets you pick the sandbox policy **without** having to reach for the generic `-c/--config` option:
-
 ```shell
-# Run Codex with the default, read-only sandbox
-codex --sandbox read-only
+# Default sandbox
+code --sandbox read-only
 
-# Allow the agent to write within the current workspace while still blocking network access
-codex --sandbox workspace-write
+# Allow writes inside workspace
+code --sandbox workspace-write
 
-# Danger! Disable sandboxing entirely (only do this if you are already running in a container or other isolated env)
-codex --sandbox danger-full-access
+# Danger: disable sandboxing (use only in an isolated environment)
+code --sandbox danger-full-access
 ```
 
-The same setting can be persisted in `~/.code/config.toml` via the top-level `sandbox_mode = "MODE"` key (Code will also read legacy `~/.codex/config.toml`), e.g. `sandbox_mode = "workspace-write"`.
+The same setting can be persisted in `~/.code/config.toml` via `sandbox_mode = "MODE"`.
 
-If you want to prevent the agent from updating Git metadata (e.g., local safety), you can opt‑out with a workspace‑write tweak:
-
-```toml
-sandbox_mode = "workspace-write"
-
-[sandbox_workspace_write]
-allow_git_writes = false   # default is true; set false to protect .git
-```
-
-### Debugging Virtual Cursor
+## Debugging Virtual Cursor
 
 Use these console helpers to diagnose motion/cancellation behavior when testing in a real browser:
 
@@ -181,9 +90,16 @@ Use these console helpers to diagnose motion/cancellation behavior when testing 
 
 ## Code Organization
 
-This folder is the root of a Cargo workspace. It contains quite a bit of experimental code, but here are the key crates:
+This folder is the root of a Cargo workspace. Many crates retain upstream naming (`codex-*`) even though the product is Planner.
 
-- [`core/`](./core) contains the business logic for Codex. Ultimately, we hope this to be a library crate that is generally useful for building other Rust/native applications that use Codex.
-- [`exec/`](./exec) "headless" CLI for use in automation.
-- [`tui/`](./tui) CLI that launches a fullscreen TUI built with [Ratatui](https://ratatui.rs/).
-- [`cli/`](./cli) CLI multitool that provides the aforementioned CLIs via subcommands.
+- [`cli/`](./cli): builds the `code` multitool binary (interactive by default).
+- [`tui/`](./tui): fullscreen TUI built with [Ratatui](https://ratatui.rs/).
+- [`exec/`](./exec): “headless” execution mode for automation.
+- [`spec-kit/`](./spec-kit): shared Spec‑Kit library crate.
+- [`core/`](./core): core business logic and protocol/types used by the CLI/TUI.
+
+## Fork Lineage
+
+- Repo: https://github.com/theturtlecsz/code
+- Upstream: https://github.com/just-every/code
+- Note: “Codex” refers to model naming and historical lineage; the product/CLI in this repo is Planner (binary: `code`).

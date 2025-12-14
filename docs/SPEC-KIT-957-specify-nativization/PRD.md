@@ -272,3 +272,7 @@ fn command_to_scope(command: &str) -> Option<&'static str> {
 - All 7 speckit stage commands use consistent native routing
 - Zero config.toml dependencies for speckit.* commands
 - No runtime behavior change for users
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

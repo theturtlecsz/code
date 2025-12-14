@@ -530,3 +530,7 @@ SPEC-934 restores SPEC-KIT-072 policy compliance, eliminates MCP from agent orch
 2. Schedule implementation (5 day sprint)
 3. Optional: Decide on MCP artifact migration
 4. Coordinate with SPEC-933 (transactions enable safe migration)
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

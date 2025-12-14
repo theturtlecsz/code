@@ -2,7 +2,7 @@
 
 Planner is a terminal TUI focused on **Spec-Kit workflows**.
 
-This document captures product identity at a glance. For governance and scope, treat `memory/constitution.md` (charter) and `product-requirements.md` (requirements) as authoritative; `SPEC.md` is the canonical work tracker. When in doubt, treat **runtime behavior** as truth and update docs to match.
+This document captures product identity at a glance. For governance and scope, treat `memory/constitution.md` (charter) and `product-requirements.md` (requirements) as authoritative; `SPEC.md` is the canonical work tracker. If runtime behavior conflicts with this doc, treat it as a migration gap or code regression candidate (don’t “fix docs to match” without explicitly calling out the divergence).
 
 ## Product Surface Area (from code)
 
@@ -22,3 +22,7 @@ This document captures product identity at a glance. For governance and scope, t
 
 - Build and run locally via `./build-fast.sh run`
 - Use `/speckit.project` (optional) to scaffold a new project, then `/speckit.new` + `/speckit.auto` for end-to-end runs
+
+---
+
+Back to [Key Docs](KEY_DOCS.md)

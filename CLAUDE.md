@@ -91,3 +91,7 @@ For detailed guidance beyond commands and structure:
 | Multi-agent architecture | `docs/spec-kit/MULTI-AGENT-ARCHITECTURE.md` |
 | Memory policy | `MEMORY-POLICY.md` |
 | Project charter | `memory/constitution.md` |
+
+---
+
+Back to [Key Docs](docs/KEY_DOCS.md)

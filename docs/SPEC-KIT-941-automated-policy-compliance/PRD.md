@@ -685,3 +685,7 @@ SPEC-941 automates policy compliance validation through CI checks, static analys
 2. Schedule Day 1 (storage validation + CI)
 3. Coordinate with SPEC-934 (validate fixes, prevent regression)
 4. Document policy enforcement in MEMORY-POLICY.md
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

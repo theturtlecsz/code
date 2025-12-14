@@ -1,7 +1,7 @@
 //! Stage0 configuration loading
 //!
 //! Loads configuration from `~/.config/codex/stage0.toml` (or `CODEX_STAGE0_CONFIG` env).
-//! See STAGE0_CONFIG_AND_PROMPTS.md for the full schema.
+//! See docs/stage0/STAGE0_CONFIG_AND_PROMPTS.md for the full schema.
 
 use crate::errors::{Result, Stage0Error};
 use serde::Deserialize;

@@ -423,3 +423,7 @@ cat my-rust-lib/Cargo.toml
 - Full 11-template directory (currently 2)
 - Interactive mode
 - `--git` flag for git init
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

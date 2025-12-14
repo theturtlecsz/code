@@ -49,7 +49,7 @@
 ## Dependencies
 - `codex-rs/tui` for rendering, slash-command plumbing, and unit testing harness.
 - Guardrail helpers in `scripts/spec_ops_004/common.sh` for consistent telemetry locations and baseline metadata.
-- Telemetry schema references (`docs/SPEC-KIT-013-telemetry-schema-guard/spec.md`, `docs/spec-kit/telemetry-schema-v2.md`).
+- Telemetry schema reference (`docs/spec-kit/telemetry-schema-v2.md`).
 - Local-memory context for documenting remediation and operational playbooks.
 
 ## Risks & Mitigations
@@ -81,3 +81,7 @@
 2. Should evidence thresholds stay fixed at 20/25 MB or become configurable per SPEC/area?
 3. Should we surface delta comparisons when consecutive runs flip between pass/fail, or reserve that for a later iteration?
 4. Do we need export hooks for external dashboards, or is the TUI view sufficient for operators?
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

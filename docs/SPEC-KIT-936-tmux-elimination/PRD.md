@@ -825,3 +825,7 @@ SPEC-936 eliminates tmux orchestration overhead, removes filesystem collection d
 4. Plan SPEC-940 (performance instrumentation) for validation
 
 **Risk Acceptance**: Proceed despite measurement gap (even 50% error yields significant speedup).
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

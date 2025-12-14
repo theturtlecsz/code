@@ -26,7 +26,7 @@
 | --- | --- | --- |
 | R1 | Slash command reference reflects `/guardrail.*` + `/spec-*` roles, model metadata, and telemetry schema. | Updated table/section with explicit schema reminders and consensus behavior. |
 | R2 | Guardrail Constitution (AGENTS.md) documents telemetry schema expectations and references model strategy. | AGENTS.md includes telemetry schema summary + link to Spec Kit model doc. |
-| R3 | Onboarding/getting-started docs highlight telemetry evidence location and validation commands. | docs/getting-started.md or onboarding section includes updated steps. |
+| R3 | Onboarding/getting-started docs highlight telemetry evidence location and validation commands. | docs/GETTING_STARTED.md or onboarding section includes updated steps. |
 | R4 | Add troubleshooting section for degraded consensus/telemetry failures with actionable steps. | New subsection in relevant doc detailing how to resolve failed schema checks. |
 
 ## Dependencies & Risks
@@ -38,3 +38,6 @@
 - After merge, run `scripts/spec-kit/lint_tasks.py` and have operators confirm docs cover new flow.
 - Success measured by updated docs being cited in upcoming Spec Ops runs without confusion.
 
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

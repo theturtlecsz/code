@@ -91,7 +91,7 @@ The current Spec-Auto verification loop depends on long manual runs and ad-hoc i
 - `scripts/spec_ops_004/commands/*` guardrail scripts and shared helpers (`common.sh`).
 - Planner orchestrator integration within `codex-rs/tui/src/chatwidget.rs` and `slash_command.rs`.
 - Prompt metadata defined in `docs/spec-kit/prompts.json` and model lineup in `docs/spec-kit/model-strategy.md`.
-- Telemetry schema documentation (`docs/SPEC-KIT-013-telemetry-schema-guard/spec.md`, `docs/spec-kit/telemetry-schema-v2.md`).
+- Telemetry schema documentation (`docs/spec-kit/telemetry-schema-v2.md`).
 - Existing validation utilities (`scripts/spec-kit/lint_tasks.py`, consensus parsers, HAL mock helpers`).
 
 ## Open Questions
@@ -99,3 +99,7 @@ The current Spec-Auto verification loop depends on long manual runs and ad-hoc i
 - Do we persist summarised run metadata into local-memory after each automated suite to support `/speckit.auto` resumability?
 - How should evidence diffs be surfaced to operators (CI artifact viewer, TUI notifications, or SPEC.md notes)?
 - Is additional tooling needed to replay historical evidence bundles against new validators to detect regressions retroactively?
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

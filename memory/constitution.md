@@ -39,3 +39,7 @@ These short imperatives are extracted by `/speckit.constitution` for ACE playboo
 - Keep SPEC.md canonical; one In Progress entry per thread with dated notes
 - Update docs and pass tests when changing templates
 - Keep guardrail scripts agent-friendly with model metadata
+
+---
+
+Back to [Key Docs](../docs/KEY_DOCS.md)

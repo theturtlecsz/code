@@ -25,7 +25,7 @@ pub struct PipelineConfig {
     pub quality_gates: QualityGateConfig,
 
     /// Model overrides per stage (optional)
-    /// TODO: Add reasoning level support - see MODEL_ASSESSMENT_SPEC_PROMPT.md Phase 3
+    /// TODO: Add reasoning level support (spec pending).
     /// Future: Either encode as "model:reasoning" or add stage_reasoning_levels HashMap
     #[serde(default)]
     pub stage_models: HashMap<StageType, Vec<String>>,

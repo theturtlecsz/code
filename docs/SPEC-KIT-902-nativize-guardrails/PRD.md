@@ -259,3 +259,7 @@ scripts/spec_ops_004/
 - `agent_orchestrator.rs:969` - `auto_submit_spec_stage_prompt()` (entry point)
 - `native_consensus_executor.rs:1-27` - Comments explaining the elimination of orchestrator
 - `mod.rs:5173-5176` - Current orchestrator pattern (to be removed)
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

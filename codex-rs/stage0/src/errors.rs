@@ -1,6 +1,6 @@
 //! Stage0 error types
 //!
-//! Implements the error taxonomy from STAGE0_ERROR_TAXONOMY.md.
+//! Implements the error taxonomy from docs/stage0/STAGE0_ERROR_TAXONOMY.md.
 //! Default policy: soft failure (log + skip Stage 0) unless otherwise specified.
 
 use thiserror::Error;

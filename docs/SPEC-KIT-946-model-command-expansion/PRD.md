@@ -979,3 +979,7 @@ ModelPreset {
 3. **Reasoning**: Separate presets for each level over dynamic picker
 4. **Scope**: Core functionality first, defer search/filter to Phase 2
 5. **Priority**: P2 - MEDIUM (UX enhancement, not blocking)
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

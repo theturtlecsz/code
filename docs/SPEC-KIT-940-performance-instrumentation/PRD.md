@@ -715,3 +715,7 @@ SPEC-940 adds comprehensive performance instrumentation, statistical benchmarkin
 2. **CRITICAL**: Measure baselines BEFORE implementing SPEC-936
 3. Schedule Day 1 (timing infrastructure)
 4. Coordinate with SPEC-936 (validate claims post-implementation)
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

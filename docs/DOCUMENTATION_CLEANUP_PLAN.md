@@ -99,7 +99,7 @@ mv docs/spec-kit/REMAINING_OPPORTUNITIES.md docs/archive/design-docs/
 - ✅ SPEC_AUTO_FLOW.md - Pipeline flow
 - ✅ IMPLEMENTATION_CONSENSUS.md - Implementation details
 - ✅ SPEC_KIT_ALIGNMENT_ANALYSIS.md - Alignment analysis
-- ✅ TUI.md - TUI documentation
+- ✅ docs/TUI.md - TUI documentation
 - ✅ FORK_DEVIATIONS.md - Fork-specific changes
 
 **Analysis** (Could Archive):

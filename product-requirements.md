@@ -1,9 +1,9 @@
-# Spec-Kit Automation Framework - Product Requirements
+# Planner — Product Requirements (Spec‑Kit Workflows)
 
 > Status: v1.1 (2025-10-15) — Phase 3 complete: /speckit.* namespace, tiered model strategy, GitHub quality commands
 
 ## 1. Product Summary
-- **Product name:** Spec-Kit Automation Framework
+- **Product name:** Planner
 - **Domain:** Multi-agent development workflow automation
 - **Mission:** Enable AI-driven feature development through consensus-based planning, implementation, and validation with full evidence tracking
 
@@ -73,8 +73,8 @@
 - ✅ `/speckit.status` - Native TUI dashboard (Tier 0: instant, no agents, <1s, $0)
 
 **Guardrails (Shell wrappers):**
-- ✅ `/guardrail.{plan,tasks,implement,validate,audit,unlock}` - Validation scripts per stage (note: legacy `/spec-ops-*` commands still work)
-- ✅ `/guardrail.auto` - Full pipeline wrapper with telemetry (note: legacy `/spec-ops-auto` still works)
+- ✅ `/guardrail.{plan,tasks,implement,validate,audit,unlock}` - Validation scripts per stage
+- ✅ `/guardrail.auto` - Full pipeline wrapper with telemetry
 - ✅ Baseline audits per stage
 - ✅ Policy compliance checks (constitution, model strategy)
 - ✅ HAL validation (mock mode, optional live mode)
@@ -272,4 +272,8 @@
 - **[SPEC.md](SPEC.md)** - Task tracker
 - **[CLAUDE.md](CLAUDE.md)** - Operational guidelines
 - **[Spec-Kit README](docs/spec-kit/README.md)** - User guide and quick start
-- **[Getting Started](docs/getting-started.md)** - Installation and basic usage
+- **[Getting Started](docs/GETTING_STARTED.md)** - Installation and basic usage
+
+---
+
+Back to [Key Docs](docs/KEY_DOCS.md)

@@ -343,3 +343,7 @@ pub async fn run_daily_cleanup() -> Result<CleanupSummary, SpecKitError> {
 ---
 
 **END OF PRD**
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

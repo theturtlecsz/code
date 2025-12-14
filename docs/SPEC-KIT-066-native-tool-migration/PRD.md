@@ -231,3 +231,7 @@ cat template.md | sed "s/\[FEATURE_NAME\]/$feature/g"
 - MAINT-1: Subprocess migration completion
 - ~/.code/config.toml: Current orchestrator instructions (lines 214-523)
 - Session findings: 2025-10-20 real-world testing
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

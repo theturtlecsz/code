@@ -51,3 +51,7 @@ This spec codifies how upstream repository documents fork rebasing against upstr
 - Where should the nightly job run (existing CI workflow vs. new cron harness) to balance visibility and cost?
 - Should we snapshot upstream commit hashes within the documentation to simplify regression triage?
 - Do we need an allowlist for known noisy evidence files in the nightly drift detector before rollout?
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

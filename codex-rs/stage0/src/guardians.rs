@@ -1,6 +1,6 @@
 //! Guardians for Stage0 memory ingestion
 //!
-//! Implements MetadataGuardian and TemplateGuardian per STAGE0_GUARDIANS_AND_ORCHESTRATION.md.
+//! Implements MetadataGuardian and TemplateGuardian per docs/stage0/STAGE0_GUARDIANS_AND_ORCHESTRATION.md.
 //! These guardians validate and structure memories before they are written to local-memory.
 
 use crate::config::Stage0Config;
@@ -169,7 +169,7 @@ pub trait LlmClient: Send + Sync {
 
     /// Restructure content into the standard template format
     ///
-    /// The template format is defined in STAGE0_CONFIG_AND_PROMPTS.md:
+    /// The template format is defined in docs/stage0/STAGE0_CONFIG_AND_PROMPTS.md:
     /// ```text
     /// [KIND]: <One-line Summary>
     ///
@@ -183,7 +183,7 @@ pub trait LlmClient: Send + Sync {
 
     /// Generate an Intent Query Object (IQO) from spec content and environment
     ///
-    /// Used by DCC to shape local-memory queries. See STAGE0_IQO_PROMPT.md.
+    /// Used by DCC to shape local-memory queries. See docs/stage0/STAGE0_IQO_PROMPT.md.
     /// Implementations should parse spec content and environment context to
     /// produce relevant domains, tags, and keywords for memory retrieval.
     async fn generate_iqo(

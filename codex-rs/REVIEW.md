@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-**Product**: Codex CLI is a Rust-based conversational AI assistant with an interactive TUI, forked from `just-every/code` (community OpenAI Codex successor). This fork adds **Spec-Kit**, a 7,883-line multi-agent workflow automation framework for product requirement document (PRD) generation and validation through consensus-driven quality gates.
+**Product**: Planner is a Rust-based conversational AI assistant with an interactive TUI, forked from `just-every/code` (community-maintained OpenAI Codex lineage). This fork adds **Spec-Kit**, a 7,883-line multi-agent workflow automation framework for product requirement document (PRD) generation and validation through consensus-driven quality gates.
 
 **Architecture Health**: **CONCERNING** (was Critical, improved to Concerning via recent ARCH-001 through ARCH-009 fixes)
 
@@ -43,7 +43,7 @@
 
 **MCP Infrastructure** (Client + Server):
 - `mcp-client` - JSON-RPC client, stdio transport
-- `mcp-server` - MCP server implementation (can run Codex as MCP server)
+- `mcp-server` - MCP server implementation (can run Planner as an MCP server)
 - `mcp-types` - Shared protocol types
 
 **Platform Support**:

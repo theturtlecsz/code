@@ -293,3 +293,7 @@ Isolation violations detected at:
 - SPEC-KIT-962: Template Installation Architecture
 - `codex-rs/tui/src/templates/mod.rs`: Current implementation
 - `docs/spec-kit/prompts.json`: Agent prompt definitions
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

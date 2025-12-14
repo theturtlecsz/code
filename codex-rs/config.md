@@ -48,7 +48,7 @@ wire_api = "chat"
 query_params = {}
 ```
 
-Note this makes it possible to use Codex CLI with non-OpenAI models, so long as they use a wire API that is compatible with the OpenAI chat completions API. For example, you could define the following provider to use Codex CLI with Ollama running locally:
+Note this makes it possible to use Planner with non-OpenAI models, so long as they use a wire API that is compatible with the OpenAI chat completions API. For example, you could define the following provider to use Planner with Ollama running locally:
 
 ```toml
 [model_providers.ollama]
@@ -235,7 +235,7 @@ Users can specify config values at multiple levels. **Order of precedence** (hig
 2. **Shell environment policy** (`shell_environment_policy.set.*` in `config.toml`) - Runtime per-command overrides
 3. **Config profiles**, where `--profile` is specified via CLI or in `config.toml`
 4. **config.toml** entries, e.g., `model = "o3"`
-5. **Built-in defaults** that come with Codex CLI (e.g., `gpt-5`)
+5. **Built-in defaults** that come with Planner (e.g., `gpt-5`)
 
 **Important**: `shell_environment_policy.set` values override TOML config values at runtime. This can affect security-sensitive settings like `approval_policy`. See [shell_environment_policy](#shell_environment_policy) for details.
 
@@ -527,7 +527,7 @@ notify = ["python3", "/Users/mbolin/.codex/notify.py"]
 
 ## history
 
-By default, Codex CLI records messages sent to the model in `$CODEX_HOME/history.jsonl`. Note that on UNIX, the file permissions are set to `o600`, so it should only be readable and writable by the owner.
+By default, Planner records messages sent to the model in `$CODEX_HOME/history.jsonl`. Note that on UNIX, the file permissions are set to `o600`, so it should only be readable and writable by the owner.
 
 To disable this behavior, configure `[history]` as follows:
 
@@ -581,7 +581,7 @@ show_raw_agent_reasoning = true  # defaults to false
 
 The size of the context window for the model, in tokens.
 
-In general, Codex knows the context window for the most common OpenAI models, but if you are using a new model with an old version of the Codex CLI, then you can use `model_context_window` to tell Codex what value to use to determine how much context is left during a conversation.
+In general, Codex knows the context window for the most common OpenAI models, but if you are using a new model with an old version of Planner, then you can use `model_context_window` to tell Codex what value to use to determine how much context is left during a conversation.
 
 ## model_max_output_tokens
 

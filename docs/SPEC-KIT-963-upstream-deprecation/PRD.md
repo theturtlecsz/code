@@ -171,3 +171,7 @@ After this change, upstream syncs that touch `/plan`, `/solve`, `/code`:
 | Date | Change |
 |------|--------|
 | 2025-11-30 | PRD created |
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

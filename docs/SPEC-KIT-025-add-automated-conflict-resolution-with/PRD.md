@@ -48,3 +48,7 @@
 - What retry budget should `/speckit.auto` allocate before declaring a run degraded?
 - Should manual overrides require secondary approval for production specs?
 - How will cost and latency telemetry surface in governance dashboards to flag regression?
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

@@ -48,7 +48,7 @@ In the TUI:
 
 ## Configuration
 
-- See `docs/CONFIG.md`.
+- See `docs/config.md`.
 
 ## Documentation
 

@@ -143,3 +143,7 @@ The evidence repository grows unbounded without lifecycle management, creating:
 - SPEC-KIT-902 (guardrail nativization needs predictable evidence size)
 
 **Depends On**: None (can start immediately)
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

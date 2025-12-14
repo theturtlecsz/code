@@ -346,7 +346,7 @@ impl PipelineConfiguratorState {
 
     /// Assign model to a specific slot
     ///
-    /// TODO: Add reasoning level support (see MODEL_ASSESSMENT_SPEC_PROMPT.md Phase 3)
+    /// TODO: Add reasoning level support (spec pending).
     /// - Add reasoning_level parameter (e.g., "high", "medium", "low", "auto")
     /// - Store as "model:reasoning" in stage_models (e.g., "gpt5_1:high")
     /// - Or add separate stage_reasoning_levels HashMap

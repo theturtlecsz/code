@@ -246,3 +246,7 @@
 ## Changelog
 
 - **2025-10-20**: Initial PRD drafted via multi-agent consensus; consensus confirmed with no conflicts.
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

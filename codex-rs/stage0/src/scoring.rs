@@ -1,6 +1,6 @@
 //! Dynamic scoring for Stage0 memories
 //!
-//! Implements the scoring formula from STAGE0_SCORING_AND_DCC.md:
+//! Implements the scoring formula from docs/stage0/STAGE0_SCORING_AND_DCC.md:
 //!
 //! ```text
 //! usage_score   = min(1.0, log(1 + U) / log(6))

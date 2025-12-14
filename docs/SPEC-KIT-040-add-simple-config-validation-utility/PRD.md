@@ -58,3 +58,7 @@
 - Spec-Ops smoke run (`scripts/spec_ops_004/spec_auto.sh SPEC-KIT-040`) ensuring telemetry integration and guardrail visibility remain intact.
 - Documentation validation via `scripts/doc-structure-validate.sh --mode=templates` and tracker lint `python3 scripts/spec-kit/lint_tasks.py` after doc updates.
 - Manual TUI/headless UX review confirming warnings do not block workflows unless strict enforcement is enabled.
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

@@ -537,3 +537,7 @@ Research and validate the technical feasibility of multi-provider OAuth architec
 ---
 
 **END OF RESEARCH PRD**
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

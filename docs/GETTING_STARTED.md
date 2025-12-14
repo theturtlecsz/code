@@ -22,5 +22,4 @@ In the TUI:
 3. Run the pipeline:
    - `/speckit.auto SPEC-KIT-###`
 
-See `docs/CONFIG.md` for configuration and templates.
-
+See `docs/config.md` for configuration and templates.

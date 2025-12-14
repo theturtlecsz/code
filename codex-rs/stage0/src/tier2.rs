@@ -1,7 +1,7 @@
 //! Tier 2 (NotebookLM) orchestration for Stage0
 //!
 //! V1.5: Implements Divine Truth synthesis via NotebookLM MCP.
-//! See STAGE0_TIER2_PROMPT.md for prompt specification.
+//! See docs/stage0/STAGE0_TIER2_PROMPT.md for prompt specification.
 //!
 //! Key components:
 //! - `Tier2Client` trait: abstraction for NotebookLM calls
@@ -131,7 +131,7 @@ pub trait Tier2Client: Send + Sync {
 
 /// Build the Tier2 prompt for NotebookLM
 ///
-/// Implements the "Shadow Staff Engineer" prompt from STAGE0_TIER2_PROMPT.md
+/// Implements the "Shadow Staff Engineer" prompt from docs/stage0/STAGE0_TIER2_PROMPT.md
 ///
 /// P84: Updated to explicitly reference NL_* artifact names for better
 /// NotebookLM retrieval (seeded artifacts use these exact filenames).

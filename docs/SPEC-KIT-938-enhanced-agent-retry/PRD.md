@@ -579,3 +579,7 @@ SPEC-938 enhances agent retry logic with error classification, exponential backo
 1. Review and approve SPEC-938
 2. Schedule 1-day implementation sprint
 3. Coordinate with SPEC-933 (transactions enable safe retry within quality gates)
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

@@ -248,3 +248,6 @@
 - Drafted by multi-agent consensus.
 - Defined single-flight guard, telemetry, and retry alignment scope.
 
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

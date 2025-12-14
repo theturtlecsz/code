@@ -228,3 +228,7 @@ mcp.relationships(memory_id, relationship_type: "find_related");
 - Clean, manageable, high-value
 
 **Your preference for knowledge base size?** A, B, or C?
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

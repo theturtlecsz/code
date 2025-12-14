@@ -15,6 +15,10 @@
 The spec-kit template system is **broken by design**:
 
 ```
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)
 ┌─────────────────────────────────────────────────────────────┐
 │ CURRENT STATE: Distribution Failure                         │
 ├─────────────────────────────────────────────────────────────┤

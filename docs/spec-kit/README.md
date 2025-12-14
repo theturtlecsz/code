@@ -32,19 +32,18 @@ Or use `/speckit.auto` for full pipeline automation.
 ## Documentation
 
 ### User Guides
-- [CLAUDE.md](../../CLAUDE.md) - How Claude Code works in this repo
+- [CLAUDE.md](../../CLAUDE.md) - Agent instructions for this repo
 - [Evidence Policy](evidence-policy.md) - Evidence retention and archival
 - [Testing Policy](testing-policy.md) - Testing strategy and standards
 
 ### Architecture
 - [Consensus Runner Design](consensus-runner-design.md) - Multi-agent consensus architecture
 - [Command Registry Design](COMMAND_REGISTRY_DESIGN.md) - Dynamic command system
-- [Service Traits Analysis](SERVICE_TRAITS_DEEP_ANALYSIS.md) - Service trait design
+- [Multi-Agent Architecture](MULTI-AGENT-ARCHITECTURE.md) - System overview and roles
 
 ### Maintenance
-- [MAINT-10 Extraction Plan](MAINT-10-EXTRACTION-PLAN.md) - Spec-kit crate extraction (future)
-- [MAINT-10 Execution Plan](MAINT-10-EXECUTION-PLAN.md) - Execution details
-- [Refactoring Status](REFACTORING_FINAL_STATUS.md) - Refactoring completion
+- [Migration Guide](MIGRATION_GUIDE.md) - Operational migration notes
+- [Templates](TEMPLATES.md) - Template structure and conventions
 
 ### Operations
 - [Consensus Cost Audit](consensus-cost-audit-packet.md) - Cost analysis
@@ -55,8 +54,7 @@ Or use `/speckit.auto` for full pipeline automation.
 - [Security Review Template](security-review-template.md) - Security review process
 
 ### Testing
-- [Phase 3 Test Plan](PHASE_3_DAY_4_TESTING_PLAN.md) - Integration testing
-- [Phase 4 Test Plan](PHASE4_TEST_PLAN.md) - System testing
+- [Testing Infrastructure](TESTING_INFRASTRUCTURE.md) - Integration/system test notes
 - [Rebase Safety Matrix](REBASE_SAFETY_MATRIX_T80-T90.md) - Rebase guidelines
 
 ---

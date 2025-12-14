@@ -346,3 +346,7 @@ Create `scripts/validate-template-parity.sh`:
 1. **Critical**: spec-clarify, spec-analyze, spec-checklist (used frequently)
 2. **Important**: quality-gate-* variants (mirror of above)
 3. **Minor**: spec-tasks/code (less impactful)
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

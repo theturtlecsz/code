@@ -36,3 +36,7 @@
 - Implement as a Rust or Python tool under `scripts/spec-kit/`. Run manually first, then integrate into nightly automation.
 - Success measured by nightly drift report running clean once memory/evidence are aligned.
 - Document deployment in SPEC tracker notes.
+
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

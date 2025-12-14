@@ -1,4 +1,4 @@
-> Canonical configuration reference: `docs/CONFIG.md`.
+> Canonical configuration reference: `docs/config.md` (this file). Older references to `docs/CONFIG.md` are stale.
 
 # Config
 

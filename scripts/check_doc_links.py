@@ -20,7 +20,7 @@ CANONICAL_MARKDOWN_FILES = [
     "docs/KEY_DOCS.md",
     "docs/VISION.md",
     "docs/GETTING_STARTED.md",
-    "docs/CONFIG.md",
+    "docs/config.md",
     "docs/ARCHITECTURE.md",
     "docs/DEPRECATIONS.md",
     "docs/MAINTAINER_ANSWERS.md",

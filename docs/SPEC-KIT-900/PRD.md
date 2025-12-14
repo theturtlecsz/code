@@ -28,7 +28,7 @@
 
 | ID | Requirement | Validation |
 |----|-------------|------------|
-| FR1 | Provide canonical prompts for plan/tasks/validate stages. | Prompts stored below and mirrored in spec.md; reviewers confirm wording. |
+| FR1 | Provide canonical prompts for plan/tasks/validate stages. | Prompts stored below; reviewers confirm wording. |
 | FR2 | Drive multi-agent output of 4–6k tokens per stage. | Measure token usage in `~/.code/logs/codex-tui.log` (or cost summary) ≥ specified range. |
 | FR3 | Generate consensus artefacts and cost summary automatically. | After run, `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/consensus/SPEC-KIT-900/` and `costs/SPEC-KIT-900_cost_summary.json` exist. |
 | FR4 | Achieve ≥90% agent agreement in standard routing. | Consensus verdicts show `consensus_ok: true` and conflicts array empty when using reference configuration. |
@@ -218,3 +218,6 @@ Output sections for Test Matrix, Observability, Rollback, and Launch Readiness C
 1. Should we add a dedicated `/speckit.auto` scenario (Implement + Validate) for longer benchmarks? — TBD.
 2. Do we need a CI harness to run this nightly with stubbed agents? — Out of scope for now.
 
+---
+
+Back to [Key Docs](../KEY_DOCS.md)

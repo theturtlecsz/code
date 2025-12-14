@@ -1515,7 +1515,7 @@ mod tests {
         println!("\n=== Claude Smoke Test Summary ===");
         println!("Passed: {}/3, Failed: {}/3", passed, failed);
 
-        // Note: We only test one model due to CLI singleton limitation (KNOWN-LIMITATIONS.md)
+        // Note: We only test one model due to the CLI executor/provider singleton limitation.
         // All 3 models use the same CLI default, so we verify the CLI works, not model switching
         assert!(
             passed >= 1,

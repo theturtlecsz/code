@@ -7,7 +7,7 @@
 //! 4. Apply MMR diversity reranking
 //! 5. Assemble TASK_BRIEF.md
 //!
-//! See STAGE0_SCORING_AND_DCC.md and STAGE0_IQO_PROMPT.md for specifications.
+//! See docs/stage0/STAGE0_SCORING_AND_DCC.md and docs/stage0/STAGE0_IQO_PROMPT.md for specifications.
 
 use crate::config::Stage0Config;
 use crate::errors::Result;
@@ -1005,7 +1005,7 @@ type ConstitutionMeta = (u32, Option<String>, Option<DateTime<Utc>>);
 
 /// Assemble TASK_BRIEF.md from selected memories and code candidates
 ///
-/// Follows STAGE0_TASK_BRIEF_TEMPLATE.md structure with P85 Code Context.
+/// Follows docs/stage0/STAGE0_TASK_BRIEF_TEMPLATE.md structure with P85 Code Context.
 /// P90: Adds Section 0 (Project Constitution Summary) before Section 1.
 fn assemble_task_brief(
     spec_id: &str,
