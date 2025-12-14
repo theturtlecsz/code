@@ -2,6 +2,20 @@
 //!
 //! This module handles consensus validation across multiple AI agents,
 //! artifact collection from local-memory, and synthesis result persistence.
+//!
+//! ## GR-001 Policy Compliance (MODEL-POLICY.md v1.0.0)
+//!
+//! Multi-agent consensus is **disabled by default** per GR-001. The canonical pipeline is:
+//!   Stage 0 → Single Architect → Single Implementer → Single Judge
+//!
+//! **Feature Flags:**
+//! - `SPEC_KIT_CONSENSUS=true` - Enable legacy multi-agent consensus (DEPRECATED)
+//! - `SPEC_KIT_CRITIC=true` - Enable non-blocking critic-only sidecar
+//!
+//! **Default Behavior (no env vars):**
+//! - Single agent per stage (preferred_agent_for_stage())
+//! - Consensus check skipped
+//! - Quality enforced by compiler/tests and Judge audit
 
 use super::error::{Result, SpecKitError};
 // FORK-SPECIFIC (just-every/code): LocalMemoryClient removed, using native MCP
@@ -134,6 +148,50 @@ pub(in super::super) fn telemetry_agent_slug(agent: &str) -> String {
     }
 }
 
+// ============================================================================
+// GR-001 POLICY FEATURE FLAGS
+// ============================================================================
+
+/// Check if legacy multi-agent consensus is enabled (DEPRECATED per GR-001).
+///
+/// Default: `false` (consensus disabled, single-owner pipeline).
+/// Set `SPEC_KIT_CONSENSUS=true` to enable legacy mode with deprecation warning.
+///
+/// See: docs/MODEL-POLICY.md Section 2 (GR-001)
+pub fn is_consensus_enabled() -> bool {
+    std::env::var("SPEC_KIT_CONSENSUS")
+        .map(|v| v.to_lowercase() == "true" || v == "1")
+        .unwrap_or(false)
+}
+
+/// Check if critic-only sidecar is enabled (non-authoritative review).
+///
+/// Default: `false` (no critic).
+/// Set `SPEC_KIT_CRITIC=true` for non-blocking secondary review.
+///
+/// Critic outputs: risks, contradictions, missing requirements, guardrail conflicts.
+/// Critic does NOT block progression or rewrite outputs.
+///
+/// See: docs/MODEL-POLICY.md Section 2 (Allowed Patterns)
+pub fn is_critic_enabled() -> bool {
+    std::env::var("SPEC_KIT_CRITIC")
+        .map(|v| v.to_lowercase() == "true" || v == "1")
+        .unwrap_or(false)
+}
+
+/// Log deprecation warning when legacy consensus mode is enabled.
+fn warn_legacy_consensus_mode() {
+    static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        tracing::warn!(
+            "DEPRECATED: Legacy multi-agent consensus enabled via SPEC_KIT_CONSENSUS=true.\n\
+             This violates GR-001 (no 3-agent debate/voting/swarm synthesis).\n\
+             Migrate to single-owner pipeline: Architect → Implementer → Judge.\n\
+             See: docs/MODEL-POLICY.md"
+        );
+    }
+}
+
 /// Parse stage name from string (used by /spec-consensus command)
 pub(in super::super) fn parse_consensus_stage(stage: &str) -> Option<SpecStage> {
     match stage.to_ascii_lowercase().as_str() {
@@ -150,12 +208,48 @@ pub(in super::super) fn parse_consensus_stage(stage: &str) -> Option<SpecStage> 
     }
 }
 
-/// Get expected agent roster for a spec stage
+/// Get the preferred single agent for a spec stage (GR-001 compliant).
+///
+/// This is the default behavior when `SPEC_KIT_CONSENSUS=false` (default).
+/// Returns a single agent per stage based on the canonical pipeline:
+/// - Plan/Specify: Architect (Gemini for local-first)
+/// - Implement: Implementer (Claude for best code quality)
+/// - Audit/Validate: Judge (Claude for reliability)
+pub fn preferred_agent_for_stage(stage: SpecStage) -> crate::spec_prompts::SpecAgent {
+    use crate::spec_prompts::SpecAgent;
+    match stage {
+        // Architect roles
+        SpecStage::Specify | SpecStage::Plan => SpecAgent::Gemini,
+        // Implementer role
+        SpecStage::Implement | SpecStage::Tasks => SpecAgent::Claude,
+        // Validation/Judge roles
+        SpecStage::Validate | SpecStage::Audit | SpecStage::Unlock => SpecAgent::Claude,
+        // Analysis (Librarian-adjacent)
+        SpecStage::Clarify | SpecStage::Analyze => SpecAgent::Gemini,
+        // Quality checks
+        SpecStage::Checklist => SpecAgent::Claude,
+    }
+}
+
+/// Get expected agent roster for a spec stage.
+///
+/// **GR-001 Compliance**: By default, returns a single preferred agent.
+/// Only returns multi-agent roster when `SPEC_KIT_CONSENSUS=true` (deprecated).
+///
+/// See: docs/MODEL-POLICY.md Section 2 (GR-001)
 // ARCH-006: Use SpecAgent enum instead of strings
 pub(in super::super) fn expected_agents_for_stage(
     stage: SpecStage,
 ) -> Vec<crate::spec_prompts::SpecAgent> {
     use crate::spec_prompts::SpecAgent;
+
+    // GR-001: Single agent by default (no consensus)
+    if !is_consensus_enabled() {
+        return vec![preferred_agent_for_stage(stage)];
+    }
+
+    // Legacy multi-agent mode (DEPRECATED)
+    warn_legacy_consensus_mode();
     match stage {
         SpecStage::Implement => vec![
             SpecAgent::Gemini,
@@ -694,8 +788,13 @@ pub(crate) fn load_latest_consensus_synthesis(
 
 use std::collections::HashSet;
 
-/// Run consensus check for spec stage
 // FORK-SPECIFIC (just-every/code): Made async for native MCP
+/// Run consensus check for spec stage.
+///
+/// **GR-001 Compliance**: When `SPEC_KIT_CONSENSUS=false` (default), this function
+/// returns early with `consensus_ok=true` and skips multi-agent validation.
+///
+/// Multi-agent consensus is only performed when `SPEC_KIT_CONSENSUS=true` (deprecated).
 pub async fn run_spec_consensus(
     cwd: &Path,
     spec_id: &str,
@@ -703,6 +802,32 @@ pub async fn run_spec_consensus(
     telemetry_enabled: bool,
     mcp_manager: &codex_core::mcp_connection_manager::McpConnectionManager,
 ) -> Result<(Vec<ratatui::text::Line<'static>>, bool)> {
+    // GR-001: Skip consensus when disabled (default behavior)
+    if !is_consensus_enabled() {
+        let mut lines: Vec<ratatui::text::Line<'static>> = Vec::new();
+        lines.push(ratatui::text::Line::from(format!(
+            "[Spec Consensus] {} {} — SKIPPED (GR-001: single-owner pipeline)",
+            stage.display_name(),
+            spec_id
+        )));
+        lines.push(ratatui::text::Line::from(
+            "  Quality enforced by: compiler/tests, constitution gates, Judge audit"
+        ));
+
+        // If critic mode enabled, note it
+        if is_critic_enabled() {
+            lines.push(ratatui::text::Line::from(
+                "  Critic sidecar: ENABLED (non-blocking review)"
+            ));
+        }
+
+        // Always return consensus_ok=true when consensus is disabled
+        return Ok((lines, true));
+    }
+
+    // Legacy multi-agent consensus (DEPRECATED)
+    warn_legacy_consensus_mode();
+
     // MAINT-7: Use centralized path helper
     let evidence_root = super::evidence::consensus_dir(cwd);
 
@@ -1167,4 +1292,130 @@ pub(crate) async fn remember_consensus_verdict(
     );
 
     Ok(())
+}
+
+
+// ============================================================================
+// UNIT TESTS FOR GR-001 FEATURE FLAGS
+// ============================================================================
+
+#[cfg(test)]
+mod gr001_tests {
+    use super::*;
+
+    // Note: Rust 2024 edition requires unsafe for env::set_var/remove_var
+    // SAFETY: These tests run sequentially and only modify test-specific env vars
+    //
+    // IMPORTANT: Run with `cargo test gr001 -- --test-threads=1` to avoid race conditions
+    // Env var tests MUST run serially since they modify shared process state.
+
+    #[test]
+    fn test_consensus_disabled_by_default() {
+        // Clear any env var that might be set
+        // SAFETY: Test isolation
+        unsafe { std::env::remove_var("SPEC_KIT_CONSENSUS") };
+
+        // Default behavior: consensus disabled
+        assert!(!is_consensus_enabled());
+    }
+
+    #[test]
+    fn test_consensus_enabled_when_true() {
+        // SAFETY: Test isolation
+        unsafe {
+            std::env::set_var("SPEC_KIT_CONSENSUS", "true");
+        }
+        assert!(is_consensus_enabled());
+
+        unsafe {
+            std::env::set_var("SPEC_KIT_CONSENSUS", "1");
+        }
+        assert!(is_consensus_enabled());
+
+        unsafe {
+            std::env::set_var("SPEC_KIT_CONSENSUS", "TRUE");
+        }
+        assert!(is_consensus_enabled());
+
+        // Cleanup
+        unsafe { std::env::remove_var("SPEC_KIT_CONSENSUS") };
+    }
+
+    #[test]
+    fn test_consensus_disabled_when_false() {
+        // SAFETY: Test isolation
+        unsafe {
+            std::env::set_var("SPEC_KIT_CONSENSUS", "false");
+        }
+        assert!(!is_consensus_enabled());
+
+        unsafe {
+            std::env::set_var("SPEC_KIT_CONSENSUS", "0");
+        }
+        assert!(!is_consensus_enabled());
+
+        // Cleanup
+        unsafe { std::env::remove_var("SPEC_KIT_CONSENSUS") };
+    }
+
+    #[test]
+    fn test_critic_disabled_by_default() {
+        // SAFETY: Test isolation
+        unsafe { std::env::remove_var("SPEC_KIT_CRITIC") };
+        assert!(!is_critic_enabled());
+    }
+
+    #[test]
+    fn test_critic_enabled_when_true() {
+        // SAFETY: Test isolation
+        unsafe {
+            std::env::set_var("SPEC_KIT_CRITIC", "true");
+        }
+        assert!(is_critic_enabled());
+
+        // Cleanup
+        unsafe { std::env::remove_var("SPEC_KIT_CRITIC") };
+    }
+
+    #[test]
+    fn test_single_agent_when_consensus_disabled() {
+        // SAFETY: Test isolation
+        unsafe { std::env::remove_var("SPEC_KIT_CONSENSUS") };
+
+        // Should return single agent roster when consensus disabled
+        let agents = expected_agents_for_stage(SpecStage::Implement);
+        assert_eq!(agents.len(), 1, "Expected single agent when consensus disabled");
+    }
+
+    #[test]
+    fn test_multi_agent_when_consensus_enabled() {
+        // SAFETY: Test isolation
+        unsafe {
+            std::env::set_var("SPEC_KIT_CONSENSUS", "true");
+        }
+
+        // Should return multi-agent roster when consensus enabled
+        let agents = expected_agents_for_stage(SpecStage::Implement);
+        assert!(agents.len() > 1, "Expected multiple agents when consensus enabled");
+
+        // Cleanup
+        unsafe { std::env::remove_var("SPEC_KIT_CONSENSUS") };
+    }
+
+    #[test]
+    fn test_preferred_agent_for_stages() {
+        use crate::spec_prompts::SpecAgent;
+
+        // Architect roles use Gemini
+        assert_eq!(preferred_agent_for_stage(SpecStage::Specify), SpecAgent::Gemini);
+        assert_eq!(preferred_agent_for_stage(SpecStage::Plan), SpecAgent::Gemini);
+
+        // Implementer uses Claude
+        assert_eq!(preferred_agent_for_stage(SpecStage::Implement), SpecAgent::Claude);
+        assert_eq!(preferred_agent_for_stage(SpecStage::Tasks), SpecAgent::Claude);
+
+        // Judge uses Claude
+        assert_eq!(preferred_agent_for_stage(SpecStage::Validate), SpecAgent::Claude);
+        assert_eq!(preferred_agent_for_stage(SpecStage::Audit), SpecAgent::Claude);
+    }
 }

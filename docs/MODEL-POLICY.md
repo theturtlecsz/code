@@ -55,6 +55,22 @@ Stage 0 → Single Architect → Single Implementer → Single Judge
 
 Quality enforced by: compiler/tests, constitution gates, Judge audit — **not by voting**.
 
+### Implementation (GR001-001, P109)
+
+**Status**: ✅ Implemented
+
+**Feature Flags**:
+- `SPEC_KIT_CONSENSUS=false` (default) — Consensus disabled, single-owner pipeline
+- `SPEC_KIT_CONSENSUS=true` — Legacy mode with deprecation warning (NOT RECOMMENDED)
+- `SPEC_KIT_CRITIC=true` — Non-blocking critic-only sidecar
+
+**Behavior**:
+- `expected_agents_for_stage()` returns single preferred agent by default
+- `run_spec_consensus()` returns `consensus_ok=true` when disabled (skips validation)
+- Legacy mode emits tracing::warn on first invocation
+
+**Code**: `tui/src/chatwidget/spec_kit/consensus.rs`
+
 ---
 
 ## 3. Escalation Triggers

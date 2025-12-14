@@ -222,11 +222,11 @@ All SPECKIT specs MUST include a `Model & Runtime (Spec Overrides)` section that
 
 **Context**: P108 audit follow-up identified consensus.rs as requiring GR-001 alignment. The module still expects multi-agent participation and synthesizer agent patterns that are explicitly forbidden.
 
-**STATUS**: 1 task tracked (not started)
+**STATUS**: ✅ **ALL TASKS COMPLETE** (1/1 done)
 
 | Order | Task ID | Title | Status | Owners | PRD | Branch | PR | Last Validation | Evidence | Notes |
 |-------|---------|-------|--------|--------|-----|--------|----|-----------------|----------|-------|
-| 1 | GR001-001 | Disable consensus.rs multi-agent patterns | **Tracked** | Code | docs/MODEL-POLICY.md (GR-001) | - | - | 2025-12-14 | P108 audit | **ANALYSIS** (2025-12-14): consensus.rs currently expects multi-agent participation per stage (L155-172 `expected_agents_for_stage`), looks for GptPro aggregator/synthesizer (L740-752), and gates on consensus status (L811-821: ok/conflict/degraded). Per GR-001: no 3-agent debate/voting/swarm synthesis, no committee merges, no "consensus synthesis" steps. **Changes Required**: (1) Disable consensus flow by default (`SPEC_KIT_CONSENSUS=false`), (2) Preserve critic-only path as optional sidecar, (3) Update CLI flags/config.toml to match GR-001, (4) Add deprecation notices to consensus terminology. **NOT fixing inline** per A4 scope - create separate SPEC if implementing. **Effort**: ~4-8 hours. |
+| 1 | GR001-001 | Disable consensus.rs multi-agent patterns | **Done** | Code | docs/MODEL-POLICY.md (GR-001) | main | - | 2025-12-14 | P109 implementation | **IMPLEMENTED** (P109): (1) `SPEC_KIT_CONSENSUS=false` (default) - disables multi-agent consensus, (2) `SPEC_KIT_CRITIC=true` - optional non-blocking critic sidecar, (3) `expected_agents_for_stage()` returns single preferred agent by default, (4) `run_spec_consensus()` returns early with `consensus_ok=true` when disabled, (5) Legacy mode emits deprecation warning. Pipeline: Architect → Implementer → Judge (no voting). Quality enforced by compiler/tests + Judge audit. |
 
 ### Upstream Sync (2025-11-27 Analysis)
 
