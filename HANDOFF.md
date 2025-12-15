@@ -1,6 +1,6 @@
-# P113 Session Handoff
+# P114 Session Handoff
 Date: 2025-12-15
-Scope: ChatWidget refactor (MAINT-11) + Stage0 clippy cleanup
+Scope: ChatWidget refactor (MAINT-11 Phase 3) + TUI clippy cleanup
 
 ---
 
@@ -8,27 +8,92 @@ Scope: ChatWidget refactor (MAINT-11) + Stage0 clippy cleanup
 
 Planner is a Rust workspace building the `code` binary with TUI focused on Spec-Kit workflows.
 
-**P112 Completed**:
-- Regression fix in `mcp_consensus_benchmark.rs` (missing struct fields)
-- MAINT-15 entry added to SPEC.md
-- PRD/GR-001 messaging conflict resolved
-- Full test suite verification: 2230 tests pass
+**P113 Completed**:
+- Extracted `agent_status.rs` (~65 LOC, 3 tests) from ChatWidget
+- Fixed 49 stage0 clippy warnings via auto-fix
+- Added `test-utils` feature to stage0/Cargo.toml
+- Updated MAINT-11 and MAINT-15 in SPEC.md
 
-**Commit**: `c521f9c36 fix(test): add missing McpServerConfig fields + align PRD with GR-001`
+**Commit**: `09f78f6c9 refactor(tui): extract agent_status module + fix stage0 clippy (MAINT-11 Phase 2)`
 
 ---
 
-## 2. P113 Primary Task: MAINT-11 ChatWidget Refactor
+## 2. P114 Primary Task: MAINT-11 Phase 3 (Submit Helpers)
+
+### Goal
+Extract submit helper functions from `mod.rs` to a new `submit_helpers.rs` module.
 
 ### Current State
-- `mod.rs`: 23,215 LOC (967KB) — the "gravity well"
-- **Phase 1 done (P110)**: Extracted `command_render.rs` (~200 LOC, 8 tests)
-- **Remaining targets**: Input submission, slash-command routing, agent status helpers
+- `mod.rs`: 23,151 LOC (reduced from 23,413)
+- **Phase 1 (P110)**: `command_render.rs` (~200 LOC, 8 tests)
+- **Phase 2 (P113)**: `agent_status.rs` (~65 LOC, 3 tests)
 
-### Existing Extracted Modules
+### Target Functions (lines ~15208-15432)
+
+| Function | Lines | Description |
+|----------|-------|-------------|
+| `submit_text_message` | 5 | Simple text message wrapper |
+| `submit_prompt_with_display` | 94 | Display differs from prompt (slash commands) |
+| `submit_prompt_with_ace` | 77 | ACE bullet injection (async) |
+| `submit_text_message_with_preface` | 18 | Hidden instruction preface |
+| `queue_agent_note` | 6 | Queue note for next submission |
+
+**Total**: ~200 LOC (cohesive API surface)
+
+### Key Dependencies
+These functions call `self.submit_user_message(...)` which stays in mod.rs.
+Pattern: Create methods that take `&mut ChatWidget` or use a trait.
+
+### Extraction Protocol
+1. Read target functions: `mod.rs:15208-15432`
+2. Identify imports needed (UserMessage, InputItem, ValidateLifecycle, etc.)
+3. Create `submit_helpers.rs` with free functions or helper trait
+4. Add module declaration after `agent_status` in mod.rs
+5. Add `use self::submit_helpers::*` import
+6. Remove original functions from mod.rs
+7. Test: `cargo test -p codex-tui`
+8. Verify: `cargo clippy -p codex-tui`
+
+### Alternative: Trait-based extraction
+If free functions don't work (due to `&mut self` patterns), consider:
+```rust
+// In submit_helpers.rs
+pub(crate) trait SubmitHelpers {
+    fn submit_text_message(&mut self, text: String);
+    fn submit_prompt_with_display(&mut self, display: String, prompt: String);
+    // ...
+}
+
+impl SubmitHelpers for ChatWidget { ... }
+```
+
+---
+
+## 3. P114 Secondary Task: TUI Clippy Auto-fix
+
+### Issue
+12 pre-existing clippy warnings in `codex-tui`:
+- `uninlined_format_args`
+- `redundant_closure`
+- `pass_by_ref_vs_value`
+
+### Fix Strategy
+```bash
+# Auto-fix where possible
+cargo clippy --fix -p codex-tui --allow-dirty --allow-staged
+
+# Manual review for remaining
+cargo clippy -p codex-tui 2>&1 | grep "warning:"
+```
+
+---
+
+## 4. Extracted Modules (Current State)
+
 ```
 chatwidget/
 ├── agent_install.rs      (24KB)
+├── agent_status.rs       (5KB)  ← P113 NEW
 ├── agent.rs              (3KB)
 ├── command_render.rs     (10KB) ← P110
 ├── diff_handlers.rs      (6KB)
@@ -41,94 +106,46 @@ chatwidget/
 ├── limits_overlay.rs     (7KB)
 ├── perf.rs               (6KB)
 ├── rate_limit_refresh.rs (4KB)
-└── mod.rs                (967KB) ← TARGET
-```
-
-### Extraction Candidates (P113)
-
-1. **Input Submission** (~500-800 LOC estimated)
-   - `handle_input_submission()`
-   - `process_user_input()`
-   - Related validation and preprocessing
-
-2. **Slash-Command Routing** (~300-500 LOC estimated)
-   - `route_slash_command()`
-   - Command parsing and dispatch logic
-   - Autocomplete handlers
-
-3. **Agent Status Helpers** (~200-400 LOC estimated)
-   - Status display formatting
-   - Progress indicators
-   - Agent lifecycle helpers
-
-### Extraction Protocol
-1. Identify function boundaries with `grep -n "pub fn\|fn "`
-2. Check dependencies (what it calls, what calls it)
-3. Create new module with minimal public API
-4. Update `mod.rs` to re-export if needed
-5. Run tests: `cargo test -p codex-tui`
-6. Verify: `cargo clippy -p codex-tui`
-
----
-
-## 3. P113 Secondary Task: Stage0 Clippy Cleanup
-
-### Issue
-49 pre-existing clippy warnings in `stage0` test modules:
-- `uninlined_format_args` (most common)
-- `redundant_closure_for_method_calls`
-- `field_reassign_with_default`
-
-### Files Affected
-```
-codex-rs/stage0/src/lib.rs          (test module ~line 686+)
-codex-rs/stage0/src/tier2.rs        (test code)
-codex-rs/stage0/src/librarian/client.rs (test code)
-```
-
-### Fix Strategy
-```bash
-# Auto-fix where possible
-cargo clippy --fix -p codex-stage0 --allow-dirty --allow-staged
-
-# Manual review for remaining
-cargo clippy -p codex-stage0 2>&1 | grep "error\|warning"
+├── submit_helpers.rs     (TBD)  ← P114 TARGET
+└── mod.rs                (949KB) ← 23,151 LOC
 ```
 
 ---
 
-## 4. Verification Commands
+## 5. Verification Commands
 
 ```bash
 # Full test suite
 cd codex-rs && cargo test --workspace
 
-# Clippy (should be clean after fixes)
-cargo clippy --workspace --all-targets -- -D warnings
+# TUI-specific tests
+cargo test -p codex-tui
+
+# New module tests
+cargo test -p codex-tui --lib -- submit_helpers
+
+# Clippy
+cargo clippy -p codex-tui
 
 # Build
 ~/code/build-fast.sh
-
-# Specific package tests
-cargo test -p codex-tui
-cargo test -p codex-stage0
 ```
 
 ---
 
-## 5. Key File References
+## 6. Key File References
 
 | Component | File | Lines |
 |-----------|------|-------|
-| ChatWidget Monolith | `tui/src/chatwidget/mod.rs` | 23,215 |
-| P110 Extraction | `tui/src/chatwidget/command_render.rs` | ~200 |
-| Stage0 Tests | `stage0/src/lib.rs` | 686+ |
-| MAINT-11 Tracker | `SPEC.md` | 186 |
-| MAINT-15 Tracker | `SPEC.md` | 190 |
+| ChatWidget Monolith | `tui/src/chatwidget/mod.rs` | 23,151 |
+| Submit Functions | `mod.rs:15208-15432` | ~220 |
+| P110 Extraction | `command_render.rs` | ~200 |
+| P113 Extraction | `agent_status.rs` | ~120 |
+| MAINT-11 Tracker | `SPEC.md:186` | - |
 
 ---
 
-## 6. Open Items (Not P113 Scope)
+## 7. Open Items (Not P114 Scope)
 
 | ID | Title | Status | Notes |
 |----|-------|--------|-------|
@@ -138,17 +155,28 @@ cargo test -p codex-stage0
 
 ---
 
-## 7. P113 Checklist
+## 8. P114 Checklist
 
-- [ ] Extract input submission module from `mod.rs`
-- [ ] Extract slash-command routing module from `mod.rs`
-- [ ] Extract agent status helpers module from `mod.rs`
-- [ ] Fix 49 clippy warnings in `stage0` test modules
-- [ ] Run `cargo test --workspace` — all pass
-- [ ] Run `cargo clippy --workspace` — no warnings
-- [ ] Update MAINT-11 in SPEC.md with progress
+- [ ] Extract submit helper functions to `submit_helpers.rs`
+- [ ] Add tests for extracted functions
+- [ ] Fix 12 clippy warnings in `codex-tui`
+- [ ] Run `cargo test -p codex-tui` — all pass
+- [ ] Run `cargo clippy -p codex-tui` — no warnings
+- [ ] Update MAINT-11 in SPEC.md with Phase 3 progress
 - [ ] Commit with conventional format
 
 ---
 
-_Generated: 2025-12-15 after commit c521f9c36_
+## 9. Session Summary
+
+| Session | Commit | Key Deliverable |
+|---------|--------|-----------------|
+| P110 | - | command_render.rs extraction |
+| P111 | 424990cc3 | MCP timeout_sec + per-model providers |
+| P112 | c521f9c36 | Regression fix + HANDOFF.md |
+| P113 | 09f78f6c9 | agent_status.rs + stage0 clippy |
+| P114 | — | submit_helpers.rs + tui clippy |
+
+---
+
+_Generated: 2025-12-15 after commit 09f78f6c9_
