@@ -59,7 +59,7 @@ impl RiskLevel {
         }
     }
 
-    fn emoji(&self) -> &'static str {
+    fn emoji(self) -> &'static str {
         match self {
             Self::Critical => "🔴 Critical",
             Self::High => "🟠 High",
@@ -90,7 +90,7 @@ impl CouplingStrength {
         }
     }
 
-    fn emoji(&self) -> &'static str {
+    fn emoji(self) -> &'static str {
         match self {
             Self::VeryStrong => "🔴 Very Strong",
             Self::Strong => "🟠 Strong",
@@ -107,7 +107,7 @@ pub fn analyze(repo_root: &Path, config: &HarvesterConfig) -> Result<ChurnReport
     // Calculate cutoff time (months ago)
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .map_err(|e| anyhow::anyhow!("system time before UNIX_EPOCH: {e}"))?
         .as_secs() as i64;
     let seconds_per_month = 30 * 24 * 60 * 60i64;
     let cutoff = Time::new(now - (config.churn_months as i64 * seconds_per_month), 0);
@@ -210,11 +210,10 @@ fn get_changed_files(
             if let Some(path) = delta.new_file().path() {
                 let path_str = path.to_string_lossy();
                 // Filter by extension
-                if let Some(ext) = path.extension() {
-                    if extensions.iter().any(|e| e == ext.to_str().unwrap_or("")) {
+                if let Some(ext) = path.extension()
+                    && extensions.iter().any(|e| e == ext.to_str().unwrap_or("")) {
                         files.push(path_str.to_string());
                     }
-                }
             }
             true
         },
@@ -352,14 +351,14 @@ impl ChurnReport {
 
         for (file, connections) in sorted_clusters.into_iter().take(10) {
             let file_short = truncate_path(&file, 57);
-            lines.push(format!("### `{}`", file_short));
+            lines.push(format!("### `{file_short}`"));
             lines.push(String::new());
 
             let mut sorted_conns = connections;
             sorted_conns.sort_by(|a, b| b.1.cmp(&a.1));
             for (conn, count) in sorted_conns.into_iter().take(5) {
                 let conn_short = truncate_path(&conn, 47);
-                lines.push(format!("- `{}` ({} co-changes)", conn_short, count));
+                lines.push(format!("- `{conn_short}` ({count} co-changes)"));
             }
             lines.push(String::new());
         }
@@ -427,8 +426,7 @@ impl ChurnReport {
                     .map(|c| c.cochanges)
                     .sum();
                 lines.push(format!(
-                    "- `{}` (churn: {}, total coupling: {})",
-                    file, churn_count, coupling_total
+                    "- `{file}` (churn: {churn_count}, total coupling: {coupling_total})"
                 ));
             }
         }

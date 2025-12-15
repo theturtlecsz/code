@@ -162,16 +162,19 @@ impl BudgetTracker {
     /// Get time until midnight UTC reset.
     pub fn time_until_reset(&self) -> String {
         let now = Utc::now();
-        let tomorrow = (now + chrono::Duration::days(1))
+        let Some(tomorrow) = (now + chrono::Duration::days(1))
             .date_naive()
             .and_hms_opt(0, 0, 0)
-            .unwrap();
+        else {
+            // Midnight is always valid, but guard defensively
+            return "Unknown".to_string();
+        };
         let tomorrow_utc: DateTime<Utc> = DateTime::from_naive_utc_and_offset(tomorrow, Utc);
         let remaining = tomorrow_utc.signed_duration_since(now);
 
         let hours = remaining.num_hours();
         let minutes = remaining.num_minutes() % 60;
-        format!("{}h {}m", hours, minutes)
+        format!("{hours}h {minutes}m")
     }
 
     /// Format hourly breakdown for display.
@@ -192,7 +195,7 @@ impl BudgetTracker {
         for hour in hours {
             let count = self.usage.hourly.get(&hour).unwrap_or(&0);
             let bar = "█".repeat((*count).min(20) as usize);
-            lines.push(format!("  {:02}:00  {:>3}  {}", hour, count, bar));
+            lines.push(format!("  {hour:02}:00  {count:>3}  {bar}"));
         }
 
         lines.join("\n")

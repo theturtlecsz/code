@@ -31,7 +31,7 @@ impl ChunkedPart {
     /// Create a numbered part.
     pub fn part(name: &str, part: usize, total: usize, content: String) -> Self {
         Self {
-            name: format!("{} (Part {}/{})", name, part, total),
+            name: format!("{name} (Part {part}/{total})"),
             content,
         }
     }
@@ -118,7 +118,7 @@ fn chunk_xml(name: &str, content: &str) -> Vec<ChunkedPart> {
             element_depth = element_depth.saturating_sub(1);
         }
 
-        let line_with_newline = format!("{}\n", line);
+        let line_with_newline = format!("{line}\n");
 
         // Check if we need to start a new chunk BEFORE adding this line
         // At element boundaries (depth == 0) or forced split if too large
@@ -127,7 +127,7 @@ fn chunk_xml(name: &str, content: &str) -> Vec<ChunkedPart> {
 
         if would_exceed && !current_chunk.is_empty() {
             // Push current chunk before it gets too big
-            chunks.push(format!("{}{}{}", header, current_chunk, footer));
+            chunks.push(format!("{header}{current_chunk}{footer}"));
             current_chunk = String::new();
         }
 
@@ -136,18 +136,18 @@ fn chunk_xml(name: &str, content: &str) -> Vec<ChunkedPart> {
         // Also check after adding if we're at a boundary and over limit
         // This handles the case where we just closed an element
         if at_boundary && current_chunk.len() > effective_max {
-            chunks.push(format!("{}{}{}", header, current_chunk, footer));
+            chunks.push(format!("{header}{current_chunk}{footer}"));
             current_chunk = String::new();
         }
     }
 
     // Push remaining content
     if !current_chunk.is_empty() {
-        chunks.push(format!("{}{}{}", header, current_chunk, footer));
+        chunks.push(format!("{header}{current_chunk}{footer}"));
     }
 
     // If any chunk is still too big, fall back to line-based chunking
-    let max_chunk_size = chunks.iter().map(|c| c.len()).max().unwrap_or(0);
+    let max_chunk_size = chunks.iter().map(std::string::String::len).max().unwrap_or(0);
     if max_chunk_size > MAX_CHUNK_SIZE {
         // Fall back to simple line-based chunking
         return chunk_by_lines(name, content);
@@ -173,7 +173,7 @@ fn chunk_mermaid(name: &str, content: &str) -> Vec<ChunkedPart> {
     // Extract header (graph type declaration)
     let header = if let Some(first) = lines.first() {
         if first.trim().starts_with("graph") || first.trim().starts_with("flowchart") {
-            format!("{}\n", first)
+            format!("{first}\n")
         } else {
             String::new()
         }
@@ -195,14 +195,14 @@ fn chunk_mermaid(name: &str, content: &str) -> Vec<ChunkedPart> {
             in_subgraph = false;
         }
 
-        let line_with_newline = format!("{}\n", line);
+        let line_with_newline = format!("{line}\n");
 
         // Check BEFORE adding if this would exceed the limit
         let would_exceed = current_chunk.len() + line_with_newline.len() > effective_max;
 
         if would_exceed && !current_chunk.trim().is_empty() {
             // Push current chunk before it gets too big
-            chunks.push(format!("{}{}", header, current_chunk));
+            chunks.push(format!("{header}{current_chunk}"));
             current_chunk = String::new();
         }
 
@@ -210,18 +210,18 @@ fn chunk_mermaid(name: &str, content: &str) -> Vec<ChunkedPart> {
 
         // Also check after adding if we're at a boundary and over limit
         if !in_subgraph && current_chunk.len() > effective_max && !current_chunk.trim().is_empty() {
-            chunks.push(format!("{}{}", header, current_chunk));
+            chunks.push(format!("{header}{current_chunk}"));
             current_chunk = String::new();
         }
     }
 
     // Push remaining content
     if !current_chunk.trim().is_empty() {
-        chunks.push(format!("{}{}", header, current_chunk));
+        chunks.push(format!("{header}{current_chunk}"));
     }
 
     // If any chunk is still too big, fall back to line-based chunking
-    let max_chunk_size = chunks.iter().map(|c| c.len()).max().unwrap_or(0);
+    let max_chunk_size = chunks.iter().map(std::string::String::len).max().unwrap_or(0);
     if max_chunk_size > MAX_CHUNK_SIZE {
         return chunk_by_lines(name, content);
     }
@@ -242,7 +242,7 @@ fn chunk_by_lines(name: &str, content: &str) -> Vec<ChunkedPart> {
     let mut current_chunk = String::new();
 
     for line in lines {
-        let line_with_newline = format!("{}\n", line);
+        let line_with_newline = format!("{line}\n");
 
         if current_chunk.len() + line_with_newline.len() > MAX_CHUNK_SIZE
             && !current_chunk.is_empty()

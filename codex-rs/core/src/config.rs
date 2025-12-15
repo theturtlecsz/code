@@ -1693,7 +1693,7 @@ fn resolve_project_override_entry<'a>(
         }
         if resolved_cwd.starts_with(key_path) {
             let depth = key_path.components().count();
-            if best.map_or(true, |(_, _, best_depth)| depth > best_depth) {
+            if best.is_none_or(|(_, _, best_depth)| depth > best_depth) {
                 best = Some((key, cfg, depth));
             }
         }

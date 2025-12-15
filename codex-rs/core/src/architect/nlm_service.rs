@@ -33,7 +33,7 @@ impl Artifact {
     /// Create a new artifact with automatic [ARCH] prefix.
     pub fn new(name: &str, content: String) -> Self {
         Self {
-            title: format!("[ARCH] {}", name),
+            title: format!("[ARCH] {name}"),
             content,
         }
     }
@@ -148,7 +148,7 @@ impl NlmService {
             .context("Failed to create HTTP client")?;
 
         Ok(Self {
-            base_url: format!("http://{}:{}", DEFAULT_HOST, DEFAULT_PORT),
+            base_url: format!("http://{DEFAULT_HOST}:{DEFAULT_PORT}"),
             client,
             budget,
             notebook: notebook.to_string(),
@@ -158,7 +158,7 @@ impl NlmService {
     /// Create with custom port.
     pub fn with_port(vault_path: &Path, notebook: &str, port: u16) -> Result<Self> {
         let mut service = Self::new(vault_path, notebook)?;
-        service.base_url = format!("http://{}:{}", DEFAULT_HOST, port);
+        service.base_url = format!("http://{DEFAULT_HOST}:{port}");
         Ok(service)
     }
 
@@ -422,14 +422,14 @@ impl NlmService {
 
         let body = resp.text().await.context("Failed to read response")?;
         let result: ApiResponse = serde_json::from_str(&body)
-            .with_context(|| format!("Failed to parse response: {}", body))?;
+            .with_context(|| format!("Failed to parse response: {body}"))?;
 
         if !result.success {
             bail!(
                 "Add source failed: {}",
                 result
                     .error
-                    .unwrap_or_else(|| format!("Unknown error: {}", body))
+                    .unwrap_or_else(|| format!("Unknown error: {body}"))
             );
         }
 
@@ -458,7 +458,7 @@ impl NlmService {
                 Ok(_) => {}
                 Err(e) => {
                     // Log but continue
-                    eprintln!("Warning: Failed to delete source {}: {}", index, e);
+                    tracing::warn!("Failed to delete source {index}: {e}");
                 }
             }
         }

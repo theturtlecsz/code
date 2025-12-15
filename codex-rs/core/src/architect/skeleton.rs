@@ -54,7 +54,7 @@ pub fn extract(repo_root: &Path) -> Result<SkeletonReport> {
         for entry in WalkDir::new(&target_dir)
             .follow_links(false)
             .into_iter()
-            .filter_map(|e| e.ok())
+            .filter_map(std::result::Result::ok)
         {
             let path = entry.path();
 
@@ -246,7 +246,7 @@ fn extract_declaration_head(text: &str) -> String {
     // Clean up: collapse whitespace, remove doc comments
     let cleaned: String = decl
         .lines()
-        .map(|l| l.trim())
+        .map(str::trim)
         .filter(|l| !l.starts_with("///") && !l.starts_with("//!") && !l.starts_with("#["))
         .collect::<Vec<_>>()
         .join(" ");
@@ -298,7 +298,7 @@ impl SkeletonReport {
 
                 for decl in &file.declarations {
                     let escaped = escape_xml(decl);
-                    lines.push(format!("      <decl>{}</decl>", escaped));
+                    lines.push(format!("      <decl>{escaped}</decl>"));
                 }
 
                 lines.push("    </file>".to_string());

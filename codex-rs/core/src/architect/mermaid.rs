@@ -87,7 +87,7 @@ pub fn extract_call_graph(repo_root: &Path) -> Result<CallGraph> {
         for entry in WalkDir::new(target_dir)
             .follow_links(false)
             .into_iter()
-            .filter_map(|e| e.ok())
+            .filter_map(std::result::Result::ok)
         {
             let path = entry.path();
 
@@ -166,7 +166,7 @@ fn extract_file_calls(path: &Path, codex_root: &Path, graph: &mut CallGraph) -> 
         }
 
         if let Some(name) = fn_name {
-            let qualified = format!("{}::{}", module_path, name);
+            let qualified = format!("{module_path}::{name}");
             graph.functions.insert(
                 qualified.clone(),
                 FunctionNode {
@@ -235,7 +235,7 @@ fn extract_file_calls(path: &Path, codex_root: &Path, graph: &mut CallGraph) -> 
             continue;
         };
 
-        let caller_qualified = format!("{}::{}", module_path, caller_name);
+        let caller_qualified = format!("{module_path}::{caller_name}");
 
         // Find calls within this function body
         let mut call_matches = call_cursor.matches(&call_q, body, content.as_bytes());
@@ -253,7 +253,7 @@ fn extract_file_calls(path: &Path, codex_root: &Path, graph: &mut CallGraph) -> 
                         callee
                     } else {
                         // Check if it's defined in the same module
-                        let same_module = format!("{}::{}", module_path, callee);
+                        let same_module = format!("{module_path}::{callee}");
                         if graph.functions.contains_key(&same_module) {
                             same_module
                         } else {
@@ -322,7 +322,7 @@ impl CallGraph {
         // Generate subgraphs
         for module in modules {
             let safe_id = sanitize_mermaid_id(module);
-            lines.push(format!("    subgraph {} [\"📦 {}\"]", safe_id, module));
+            lines.push(format!("    subgraph {safe_id} [\"📦 {module}\"]"));
 
             let mut fns = by_module[module].clone();
             fns.sort();
@@ -372,7 +372,7 @@ impl CallGraph {
 
             // Only show edges where the target is a known function
             if self.functions.contains_key(to) {
-                lines.push(format!("    {} --> {}", from_id, to_id));
+                lines.push(format!("    {from_id} --> {to_id}"));
                 edge_count += 1;
             }
         }
@@ -387,15 +387,14 @@ impl CallGraph {
 
         // Find functions matching the target
         for qualified in self.functions.keys() {
-            if qualified.ends_with(&format!("::{}", target)) || qualified == target {
+            if qualified.ends_with(&format!("::{target}")) || qualified == target {
                 frontier.insert(qualified.clone());
             }
         }
 
         if frontier.is_empty() {
             return format!(
-                "flowchart LR\n    error[\"Function '{}' not found\"]",
-                target
+                "flowchart LR\n    error[\"Function '{target}' not found\"]"
             );
         }
 
@@ -440,7 +439,7 @@ impl CallGraph {
                 lines.push(format!("    {}[\"{}:{}\"]", fn_id, icon, node.name));
             } else {
                 // External function
-                lines.push(format!("    {}([\"🔗 {}\"])", fn_id, qualified));
+                lines.push(format!("    {fn_id}([\"🔗 {qualified}\"])"));
             }
         }
 
@@ -449,7 +448,7 @@ impl CallGraph {
             if included.contains(from) && included.contains(to) {
                 let from_id = sanitize_mermaid_id(from);
                 let to_id = sanitize_mermaid_id(to);
-                lines.push(format!("    {} --> {}", from_id, to_id));
+                lines.push(format!("    {from_id} --> {to_id}"));
             }
         }
 
@@ -483,7 +482,7 @@ pub fn extract_module_deps(repo_root: &Path) -> Result<ModuleDeps> {
         for entry in WalkDir::new(target_dir)
             .follow_links(false)
             .into_iter()
-            .filter_map(|e| e.ok())
+            .filter_map(std::result::Result::ok)
         {
             let path = entry.path();
 
@@ -592,16 +591,16 @@ impl ModuleDeps {
         ];
 
         // Nodes
-        for (path, _node) in &self.modules {
+        for path in self.modules.keys() {
             let id = sanitize_mermaid_id(path);
-            lines.push(format!("    {}[\"📁 {}\"]", id, path));
+            lines.push(format!("    {id}[\"📁 {path}\"]"));
         }
 
         // Edges
         for (from, to) in &self.imports {
             let from_id = sanitize_mermaid_id(from);
             let to_id = sanitize_mermaid_id(to);
-            lines.push(format!("    {} -.-> {}", from_id, to_id));
+            lines.push(format!("    {from_id} -.-> {to_id}"));
         }
 
         lines.join("\n")

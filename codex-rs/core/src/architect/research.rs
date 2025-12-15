@@ -134,7 +134,7 @@ impl ResearchClient {
 
     /// Create with custom port.
     pub fn with_port(port: u16, notebook: &str) -> Result<Self> {
-        Self::new(&format!("http://127.0.0.1:{}", port), notebook)
+        Self::new(&format!("http://127.0.0.1:{port}"), notebook)
     }
 
     /// Check if service is running.

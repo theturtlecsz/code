@@ -46,7 +46,7 @@ pub fn analyze(repo_root: &Path, config: &HarvesterConfig) -> Result<ComplexityR
     for entry in WalkDir::new(repo_root)
         .follow_links(false)
         .into_iter()
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
     {
         let path = entry.path();
 
@@ -87,7 +87,11 @@ pub fn analyze(repo_root: &Path, config: &HarvesterConfig) -> Result<ComplexityR
     }
 
     // Sort by complexity score descending
-    files.sort_by(|a, b| b.complexity_score.partial_cmp(&a.complexity_score).unwrap());
+    files.sort_by(|a, b| {
+        b.complexity_score
+            .partial_cmp(&a.complexity_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     let by_risk = RiskBreakdown {
         critical: files.iter().filter(|f| f.risk_level == "critical").count(),
