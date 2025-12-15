@@ -1,6 +1,6 @@
-# P114 Session Handoff
+# P115 Session Handoff
 Date: 2025-12-15
-Scope: ChatWidget refactor (MAINT-11 Phase 3) + TUI clippy cleanup
+Scope: ChatWidget refactor (MAINT-11 Phase 4) + dead code cleanup
 
 ---
 
@@ -8,83 +8,74 @@ Scope: ChatWidget refactor (MAINT-11 Phase 3) + TUI clippy cleanup
 
 Planner is a Rust workspace building the `code` binary with TUI focused on Spec-Kit workflows.
 
-**P113 Completed**:
-- Extracted `agent_status.rs` (~65 LOC, 3 tests) from ChatWidget
-- Fixed 49 stage0 clippy warnings via auto-fix
-- Added `test-utils` feature to stage0/Cargo.toml
-- Updated MAINT-11 and MAINT-15 in SPEC.md
+**P114 Completed**:
+- Extracted `submit_helpers.rs` (~300 LOC, 4 tests) from ChatWidget
+- Fixed 6 manual + auto clippy errors in codex-core (unwrap/expect removal, eprintln replacement)
+- mod.rs: 23,151 → 22,911 LOC (~240 LOC extracted)
+- Updated MAINT-11 Phase 3 in SPEC.md
 
-**Commit**: `09f78f6c9 refactor(tui): extract agent_status module + fix stage0 clippy (MAINT-11 Phase 2)`
+**Commit**: `83ae857d1 refactor(tui): extract submit_helpers module + fix core clippy (MAINT-11 Phase 3)`
 
 ---
 
-## 2. P114 Primary Task: MAINT-11 Phase 3 (Submit Helpers)
+## 2. P115 Primary Task: MAINT-11 Phase 4 (Slash-Command Routing)
 
 ### Goal
-Extract submit helper functions from `mod.rs` to a new `submit_helpers.rs` module.
+Extract slash-command routing/dispatch logic from `mod.rs` to a new module.
 
 ### Current State
-- `mod.rs`: 23,151 LOC (reduced from 23,413)
+- `mod.rs`: 22,911 LOC
 - **Phase 1 (P110)**: `command_render.rs` (~200 LOC, 8 tests)
 - **Phase 2 (P113)**: `agent_status.rs` (~65 LOC, 3 tests)
+- **Phase 3 (P114)**: `submit_helpers.rs` (~300 LOC, 4 tests)
 
-### Target Functions (lines ~15208-15432)
+### Target Functions (to identify)
+Search for slash-command routing patterns:
+```bash
+# Find command dispatch logic
+grep -n "handle_slash_command\|dispatch_command\|slash_command" tui/src/chatwidget/mod.rs | head -20
 
-| Function | Lines | Description |
-|----------|-------|-------------|
-| `submit_text_message` | 5 | Simple text message wrapper |
-| `submit_prompt_with_display` | 94 | Display differs from prompt (slash commands) |
-| `submit_prompt_with_ace` | 77 | ACE bullet injection (async) |
-| `submit_text_message_with_preface` | 18 | Hidden instruction preface |
-| `queue_agent_note` | 6 | Queue note for next submission |
+# Find command matching patterns
+grep -n "starts_with(\"/\"\|match.*command" tui/src/chatwidget/mod.rs | head -20
+```
 
-**Total**: ~200 LOC (cohesive API surface)
-
-### Key Dependencies
-These functions call `self.submit_user_message(...)` which stays in mod.rs.
-Pattern: Create methods that take `&mut ChatWidget` or use a trait.
+### Estimated Extraction
+- ~400 LOC of command routing logic
+- Pattern matching for /speckit.*, /help, /new, etc.
+- Command validation and argument parsing
 
 ### Extraction Protocol
-1. Read target functions: `mod.rs:15208-15432`
-2. Identify imports needed (UserMessage, InputItem, ValidateLifecycle, etc.)
-3. Create `submit_helpers.rs` with free functions or helper trait
-4. Add module declaration after `agent_status` in mod.rs
-5. Add `use self::submit_helpers::*` import
-6. Remove original functions from mod.rs
-7. Test: `cargo test -p codex-tui`
-8. Verify: `cargo clippy -p codex-tui`
-
-### Alternative: Trait-based extraction
-If free functions don't work (due to `&mut self` patterns), consider:
-```rust
-// In submit_helpers.rs
-pub(crate) trait SubmitHelpers {
-    fn submit_text_message(&mut self, text: String);
-    fn submit_prompt_with_display(&mut self, display: String, prompt: String);
-    // ...
-}
-
-impl SubmitHelpers for ChatWidget { ... }
-```
+1. Search mod.rs for slash-command handling patterns
+2. Identify cohesive function groups for extraction
+3. Create `command_routing.rs` or `slash_commands.rs`
+4. Add module declaration in mod.rs
+5. Test: `cargo test -p codex-tui`
+6. Verify: `cargo clippy -p codex-tui`
 
 ---
 
-## 3. P114 Secondary Task: TUI Clippy Auto-fix
+## 3. P115 Secondary Task: Dead Code Cleanup
 
 ### Issue
-12 pre-existing clippy warnings in `codex-tui`:
-- `uninlined_format_args`
-- `redundant_closure`
-- `pass_by_ref_vs_value`
+8 dead_code warnings in `codex-tui`:
+
+| Location | Item | Type |
+|----------|------|------|
+| `bottom_pane/mod.rs:649` | `show_prd_builder` | method |
+| `bottom_pane/prd_builder_modal.rs:69` | `PrdBuilderModal::new` | function |
+| `bottom_pane/vision_builder_modal.rs:25` | `allow_multiple` field | field |
+| `chatwidget/mod.rs:5654` | `show_prd_builder` | method |
+| `chatwidget/spec_kit/code_index.rs:127` | `with_max_snippet_chars` | method |
+| `chatwidget/spec_kit/code_index.rs:133` | `with_max_context_lines` | method |
+| `chatwidget/spec_kit/stage0_integration.rs:396` | `build_stage0_context_prefix` | function |
+| `updates.rs:119` | `UpgradeResolution::Command` | variant |
 
 ### Fix Strategy
-```bash
-# Auto-fix where possible
-cargo clippy --fix -p codex-tui --allow-dirty --allow-staged
-
-# Manual review for remaining
-cargo clippy -p codex-tui 2>&1 | grep "warning:"
-```
+For each item:
+1. Check if it's planned for future use (search for TODO/FIXME comments)
+2. If unused and no planned use → remove
+3. If planned use → add `#[allow(dead_code)]` with comment explaining future use
+4. Verify with `cargo clippy -p codex-tui`
 
 ---
 
@@ -93,7 +84,7 @@ cargo clippy -p codex-tui 2>&1 | grep "warning:"
 ```
 chatwidget/
 ├── agent_install.rs      (24KB)
-├── agent_status.rs       (5KB)  ← P113 NEW
+├── agent_status.rs       (5KB)  ← P113
 ├── agent.rs              (3KB)
 ├── command_render.rs     (10KB) ← P110
 ├── diff_handlers.rs      (6KB)
@@ -106,8 +97,8 @@ chatwidget/
 ├── limits_overlay.rs     (7KB)
 ├── perf.rs               (6KB)
 ├── rate_limit_refresh.rs (4KB)
-├── submit_helpers.rs     (TBD)  ← P114 TARGET
-└── mod.rs                (949KB) ← 23,151 LOC
+├── submit_helpers.rs     (11KB) ← P114 NEW
+└── mod.rs                (936KB) ← 22,911 LOC
 ```
 
 ---
@@ -121,10 +112,7 @@ cd codex-rs && cargo test --workspace
 # TUI-specific tests
 cargo test -p codex-tui
 
-# New module tests
-cargo test -p codex-tui --lib -- submit_helpers
-
-# Clippy
+# Clippy (should show only 8 dead_code warnings before cleanup)
 cargo clippy -p codex-tui
 
 # Build
@@ -133,36 +121,40 @@ cargo clippy -p codex-tui
 
 ---
 
-## 6. Key File References
+## 6. Unstaged Files (MAINT-12 Related)
+
+These 6 files were modified in prior sessions for MAINT-12 (Stage0 HTTP-only):
+- `tui/src/chatwidget/spec_kit/code_index.rs`
+- `tui/src/chatwidget/spec_kit/commands/intel.rs`
+- `tui/src/chatwidget/spec_kit/commands/special.rs`
+- `tui/src/chatwidget/spec_kit/project_native.rs`
+- `tui/src/chatwidget/spec_kit/stage0_integration.rs`
+- `tui/src/stage0_adapters.rs`
+
+**Not P115 scope** - review and commit separately if MAINT-12 work is complete.
+
+---
+
+## 7. Key File References
 
 | Component | File | Lines |
 |-----------|------|-------|
-| ChatWidget Monolith | `tui/src/chatwidget/mod.rs` | 23,151 |
-| Submit Functions | `mod.rs:15208-15432` | ~220 |
-| P110 Extraction | `command_render.rs` | ~200 |
-| P113 Extraction | `agent_status.rs` | ~120 |
+| ChatWidget Monolith | `tui/src/chatwidget/mod.rs` | 22,911 |
+| P114 Extraction | `submit_helpers.rs` | ~300 |
 | MAINT-11 Tracker | `SPEC.md:186` | - |
+| Dead Code Locations | See Section 3 | 8 items |
 
 ---
 
-## 7. Open Items (Not P114 Scope)
+## 8. P115 Checklist
 
-| ID | Title | Status | Notes |
-|----|-------|--------|-------|
-| MAINT-12 | Stage0 HTTP-only | IN PROGRESS | NotebookLM + local-memory without MCP |
-| MAINT-13 | Config inheritance | PENDING | Subdirectory project config |
-| SPEC-KIT-900 | E2E validation | IN PROGRESS | Full pipeline test |
-
----
-
-## 8. P114 Checklist
-
-- [ ] Extract submit helper functions to `submit_helpers.rs`
+- [ ] Identify slash-command routing functions in mod.rs
+- [ ] Extract to `command_routing.rs` or similar
 - [ ] Add tests for extracted functions
-- [ ] Fix 12 clippy warnings in `codex-tui`
+- [ ] Remove/annotate 8 dead_code items
 - [ ] Run `cargo test -p codex-tui` — all pass
 - [ ] Run `cargo clippy -p codex-tui` — no warnings
-- [ ] Update MAINT-11 in SPEC.md with Phase 3 progress
+- [ ] Update MAINT-11 in SPEC.md with Phase 4 progress
 - [ ] Commit with conventional format
 
 ---
@@ -175,8 +167,9 @@ cargo clippy -p codex-tui
 | P111 | 424990cc3 | MCP timeout_sec + per-model providers |
 | P112 | c521f9c36 | Regression fix + HANDOFF.md |
 | P113 | 09f78f6c9 | agent_status.rs + stage0 clippy |
-| P114 | — | submit_helpers.rs + tui clippy |
+| P114 | 83ae857d1 | submit_helpers.rs + core clippy |
+| P115 | — | command routing + dead code cleanup |
 
 ---
 
-_Generated: 2025-12-15 after commit 09f78f6c9_
+_Generated: 2025-12-15 after commit 83ae857d1_
