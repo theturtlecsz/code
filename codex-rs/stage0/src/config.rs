@@ -324,17 +324,29 @@ pub struct Tier2Config {
     #[serde(default = "default_tier2_enabled")]
     pub enabled: bool,
 
-    /// NotebookLM notebook ID for the "Shadow Stage 0" notebook
+    /// Notebook identifier (ID or URL) for the "Shadow Stage 0" notebook.
+    ///
+    /// notebooklm-mcp HTTP service accepts `notebook`, `notebook_id`, or `notebook_url`.
+    #[serde(
+        default,
+        alias = "notebook_id_shadow",
+        alias = "notebook_id",
+        alias = "notebook_url"
+    )]
+    pub notebook: String,
+
+    /// Optional HTTP service base URL (default: http://127.0.0.1:3456)
     #[serde(default)]
-    pub notebook_id_shadow: String,
+    pub base_url: Option<String>,
 
     /// Cache TTL in hours
     #[serde(default = "default_cache_ttl_hours")]
     pub cache_ttl_hours: u64,
 
-    /// MCP tool name for NotebookLM
-    #[serde(default = "default_mcp_tool_name")]
-    pub mcp_tool_name: String,
+    /// Deprecated (v2.0.0+): notebooklm-mcp no longer exposes MCP tools.
+    /// Kept for backward-compatible config parsing only.
+    #[serde(default)]
+    pub mcp_tool_name: Option<String>,
 
     /// Call timeout (e.g., "30s")
     #[serde(default = "default_call_timeout")]
@@ -347,9 +359,6 @@ fn default_tier2_enabled() -> bool {
 fn default_cache_ttl_hours() -> u64 {
     24
 }
-fn default_mcp_tool_name() -> String {
-    "notebooklm-mcp".to_string()
-}
 fn default_call_timeout() -> String {
     "30s".to_string()
 }
@@ -358,9 +367,10 @@ impl Default for Tier2Config {
     fn default() -> Self {
         Self {
             enabled: default_tier2_enabled(),
-            notebook_id_shadow: String::new(),
+            notebook: String::new(),
+            base_url: None,
             cache_ttl_hours: default_cache_ttl_hours(),
-            mcp_tool_name: default_mcp_tool_name(),
+            mcp_tool_name: None,
             call_timeout: default_call_timeout(),
         }
     }
@@ -510,10 +520,10 @@ impl Stage0Config {
             );
         }
 
-        // Warn if Tier2 enabled but no notebook ID
-        if self.tier2.enabled && self.tier2.notebook_id_shadow.is_empty() {
+        // Warn if Tier2 enabled but no notebook configured
+        if self.tier2.enabled && self.tier2.notebook.trim().is_empty() {
             tracing::warn!(
-                "Tier2 enabled but notebook_id_shadow is empty; Tier2 will fail at runtime"
+                "Tier2 enabled but notebook is empty; Tier2 will fail at runtime"
             );
         }
 
@@ -643,7 +653,7 @@ mod tests {
         assert_eq!(cfg.scoring.recalculation_interval, "12h0m0s");
         assert_eq!(cfg.scoring.weights.usage, 0.25);
         assert_eq!(cfg.context_compiler.max_tokens, 4000);
-        assert!(!cfg.tier2.enabled);
-        assert_eq!(cfg.tier2.notebook_id_shadow, "test-notebook-id");
+            assert!(!cfg.tier2.enabled);
+            assert_eq!(cfg.tier2.notebook, "test-notebook-id");
+        }
     }
-}

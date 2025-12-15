@@ -101,14 +101,14 @@ Examples:
 
 ---
 
-### 5. TIER2_ERROR (NotebookLM / MCP)
+### 5. TIER2_ERROR (NotebookLM HTTP Service)
 
-**Definition:** Errors calling NotebookLM via MCP.
+**Definition:** Errors calling NotebookLM via the HTTP service.
 
 Examples:
 
 - network issues,
-- MCP tool not registered,
+- service not running / unreachable,
 - timeout,
 - invalid response.
 

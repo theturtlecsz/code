@@ -4,46 +4,75 @@
 //! Provides fallback/alternative to native API approach.
 //!
 //! UPDATED: Now uses ClaudePipesProvider for session-based multi-turn conversations.
-//! Uses global provider instance to maintain sessions across messages.
+//! Maintains per-model provider instances to honor model selection from UI.
 
 #![allow(dead_code)] // Streaming provider helpers
 
 use codex_core::cli_executor::{ClaudePipesProvider, CliError, ConversationId, StreamEvent};
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use std::sync::OnceLock;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use crate::app_event_sender::AppEventSender;
 use crate::providers::{ProviderError, ProviderResult};
 
-/// Global Claude provider instance (shared across all messages)
-static CLAUDE_PROVIDER: OnceLock<ClaudePipesProvider> = OnceLock::new();
+/// Per-model Claude provider cache (model_name -> provider)
+/// Empty string key represents default model (CLI's default behavior)
+static CLAUDE_PROVIDERS: OnceLock<Mutex<HashMap<String, Arc<ClaudePipesProvider>>>> =
+    OnceLock::new();
 
-/// Get or create the global Claude provider
-fn get_claude_provider() -> &'static ClaudePipesProvider {
-    CLAUDE_PROVIDER.get_or_init(|| {
-        // Get actual working directory for CLAUDE.md context
-        let cwd = std::env::current_dir()
-            .ok()
-            .and_then(|p| p.to_str().map(String::from))
-            .unwrap_or_else(|| {
-                tracing::warn!("Failed to get current directory, using '.'");
-                String::from(".")
-            });
+/// Get or create a Claude provider for the specified model
+fn get_claude_provider_for_model(model: &str) -> Arc<ClaudePipesProvider> {
+    let providers = CLAUDE_PROVIDERS.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut cache = providers.lock().unwrap();
 
-        tracing::info!("Initializing global Claude pipes provider with cwd={}", cwd);
-        ClaudePipesProvider::with_cwd("", &cwd)
-    })
+    // Normalize model name (empty string = default)
+    let model_key = model.to_string();
+
+    if let Some(provider) = cache.get(&model_key) {
+        return Arc::clone(provider);
+    }
+
+    // Create new provider for this model
+    let cwd = std::env::current_dir()
+        .ok()
+        .and_then(|p| p.to_str().map(String::from))
+        .unwrap_or_else(|| {
+            tracing::warn!("Failed to get current directory, using '.'");
+            String::from(".")
+        });
+
+    tracing::info!(
+        "Creating Claude pipes provider for model='{}' with cwd={}",
+        if model.is_empty() { "(default)" } else { model },
+        cwd
+    );
+
+    let provider = Arc::new(ClaudePipesProvider::with_cwd(model, &cwd));
+    cache.insert(model_key, Arc::clone(&provider));
+    provider
+}
+
+/// Get the default Claude provider (for backwards compatibility)
+fn get_claude_provider() -> Arc<ClaudePipesProvider> {
+    get_claude_provider_for_model("")
 }
 
 /// Claude CLI provider with streaming support (session-based)
 pub struct ClaudeStreamingProvider {
-    // No longer stores provider - uses global instance
+    /// Model to use (empty string = CLI default)
+    model: String,
 }
 
 impl ClaudeStreamingProvider {
-    /// Create a new Claude streaming provider (uses global instance)
+    /// Create a new Claude streaming provider with default model
     pub fn new() -> ProviderResult<Self> {
+        Self::with_model("")
+    }
+
+    /// Create provider with specific model
+    pub fn with_model(model: &str) -> ProviderResult<Self> {
         // Check if claude CLI is available
         if !Self::is_available() {
             return Err(ProviderError::Provider {
@@ -53,17 +82,12 @@ impl ClaudeStreamingProvider {
             });
         }
 
-        // Initialize global provider (happens once)
-        let _ = get_claude_provider();
+        // Initialize provider for this model (cached per-model)
+        let _ = get_claude_provider_for_model(model);
 
-        Ok(Self {})
-    }
-
-    /// Create provider with specific model
-    pub fn with_model(_model: &str) -> ProviderResult<Self> {
-        // Note: Global provider uses empty model (CLI default)
-        // Model-specific configuration not currently supported with global instance
-        Self::new()
+        Ok(Self {
+            model: model.to_string(),
+        })
     }
 
     /// Execute prompt with streaming to AppEventSender
@@ -71,12 +95,22 @@ impl ClaudeStreamingProvider {
     /// Streams response deltas in real-time to the TUI via event sender.
     /// Accumulates full response text for conversation history.
     /// Uses session-based API for O(1) data transfer per turn.
+    ///
+    /// The `model` parameter allows overriding the model for this specific call.
+    /// If empty, uses the model configured when the provider was created.
     pub async fn execute_streaming(
         &self,
         prompt: &str,
         model: &str,
         tx: AppEventSender,
     ) -> ProviderResult<String> {
+        // Use provided model or fall back to instance model
+        let effective_model = if model.is_empty() {
+            &self.model
+        } else {
+            model
+        };
+
         // Derive conversation ID from prompt hash
         let conv_id = Self::derive_conversation_id(prompt);
 
@@ -88,8 +122,8 @@ impl ClaudeStreamingProvider {
             .as_millis();
         let message_id = format!("{}-msg{}", conv_id, timestamp);
 
-        // Send message via global session-based provider (creates/reuses session)
-        let provider = get_claude_provider();
+        // Send message via model-specific provider (creates/reuses per-model session)
+        let provider = get_claude_provider_for_model(effective_model);
         let mut rx = provider
             .send_message(conv_id, prompt.to_string())
             .await
@@ -201,9 +235,14 @@ impl ClaudeStreamingProvider {
          Follow the prompts to complete authentication."
     }
 
-    /// Get access to the global Claude provider (for session management)
-    pub fn global_provider() -> &'static ClaudePipesProvider {
+    /// Get access to the default Claude provider (for session management)
+    pub fn global_provider() -> Arc<ClaudePipesProvider> {
         get_claude_provider()
+    }
+
+    /// Get access to a model-specific Claude provider
+    pub fn provider_for_model(model: &str) -> Arc<ClaudePipesProvider> {
+        get_claude_provider_for_model(model)
     }
 }
 

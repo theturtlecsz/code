@@ -4,20 +4,16 @@
 //!
 //! This module handles:
 //! - Running Stage0Engine before the main pipeline
-//! - Creating adapters from MCP connections
+//! - Creating adapters from local services (CLI/REST + HTTP)
 //! - Injecting Divine Truth + TASK_BRIEF into agent prompts
 //! - V2.5b: Hybrid retrieval using shared TfIdfBackend
 
-use crate::stage0_adapters::{
-    LlmStubAdapter, LocalMemoryMcpAdapter, NoopTier2Client, Tier2McpAdapter,
-    create_stage0_adapters, has_local_memory_server, has_notebooklm_server,
-};
+use crate::stage0_adapters::{LlmStubAdapter, LocalMemoryCliAdapter, NoopTier2Client, Tier2HttpAdapter};
 use crate::vector_state::VECTOR_STATE;
-use codex_core::mcp_connection_manager::McpConnectionManager;
 use codex_stage0::Stage0Engine;
 use codex_stage0::dcc::EnvCtx;
+use std::time::Duration;
 use std::path::Path;
-use std::sync::Arc;
 
 /// Result of Stage 0 execution for pipeline consumption
 #[derive(Debug, Clone)]
@@ -50,7 +46,7 @@ pub struct Stage0ExecutionConfig {
 /// This is called synchronously from handle_spec_auto before the pipeline starts.
 /// Uses block_on_sync internally to run async Stage0 code.
 pub fn run_stage0_for_spec(
-    mcp_manager: &Arc<tokio::sync::Mutex<Option<Arc<McpConnectionManager>>>>,
+    planner_config: &codex_core::config::Config,
     spec_id: &str,
     spec_content: &str,
     cwd: &Path,
@@ -70,28 +66,10 @@ pub fn run_stage0_for_spec(
 
     let start = std::time::Instant::now();
 
-    // Try to get MCP manager synchronously
-    let mcp_manager_clone = mcp_manager.clone();
-    let mcp_opt = super::consensus_coordinator::block_on_sync(|| async move {
-        mcp_manager_clone.lock().await.clone()
-    });
-
-    let Some(mcp) = mcp_opt else {
+    if !crate::local_memory_cli::local_memory_daemon_healthy_blocking(Duration::from_millis(750)) {
         return Stage0ExecutionResult {
             result: None,
-            skip_reason: Some("MCP manager not available".to_string()),
-            duration_ms: start.elapsed().as_millis() as u64,
-            tier2_used: false,
-            cache_hit: false,
-            hybrid_retrieval_used: false,
-        };
-    };
-
-    // Check for required MCP servers
-    if !has_local_memory_server(&mcp) {
-        return Stage0ExecutionResult {
-            result: None,
-            skip_reason: Some("local-memory MCP server not available".to_string()),
+            skip_reason: Some("local-memory daemon not available at http://localhost:3002".to_string()),
             duration_ms: start.elapsed().as_millis() as u64,
             tier2_used: false,
             cache_hit: false,
@@ -99,20 +77,46 @@ pub fn run_stage0_for_spec(
         };
     }
 
-    let _tier2_available = has_notebooklm_server(&mcp);
+    // Load Stage0Config and apply per-project Tier2 overrides from Planner config.
+    let mut stage0_cfg = match codex_stage0::Stage0Config::load() {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            return Stage0ExecutionResult {
+                result: None,
+                skip_reason: Some(format!("Failed to load Stage0 config: {e}")),
+                duration_ms: start.elapsed().as_millis() as u64,
+                tier2_used: false,
+                cache_hit: false,
+                hybrid_retrieval_used: false,
+            };
+        }
+    };
 
-    // Create adapters
-    let (local_memory_opt, llm, tier2_opt) = create_stage0_adapters(mcp);
+    let (tier2_notebook, tier2_base_url) = resolve_tier2_overrides(planner_config);
+    if let Some(notebook) = tier2_notebook.clone() {
+        stage0_cfg.tier2.enabled = true;
+        stage0_cfg.tier2.notebook = notebook;
+    } else if stage0_cfg.tier2.notebook.trim().is_empty() {
+        stage0_cfg.tier2.enabled = false;
+    }
+    if let Some(base_url) = tier2_base_url {
+        stage0_cfg.tier2.base_url = Some(base_url);
+    }
 
-    let Some(local_memory) = local_memory_opt else {
-        return Stage0ExecutionResult {
-            result: None,
-            skip_reason: Some("Failed to create local-memory adapter".to_string()),
-            duration_ms: start.elapsed().as_millis() as u64,
-            tier2_used: false,
-            cache_hit: false,
-            hybrid_retrieval_used: false,
-        };
+    // Create adapters (no MCP dependencies).
+    let local_memory = LocalMemoryCliAdapter::new();
+    let llm = LlmStubAdapter::new();
+    let tier2_opt = if stage0_cfg.tier2.enabled && !stage0_cfg.tier2.notebook.trim().is_empty() {
+        Some(Tier2HttpAdapter::new(
+            stage0_cfg
+                .tier2
+                .base_url
+                .clone()
+                .unwrap_or_else(|| "http://127.0.0.1:3456".to_string()),
+            stage0_cfg.tier2.notebook.clone(),
+        ))
+    } else {
+        None
     };
 
     // Build environment context
@@ -131,6 +135,7 @@ pub fn run_stage0_for_spec(
         env,
         local_memory,
         llm,
+        stage0_cfg,
         tier2_opt,
         config.explain,
     );
@@ -185,9 +190,10 @@ fn run_stage0_blocking(
     spec_id: String,
     spec_content: String,
     env: EnvCtx,
-    local_memory: LocalMemoryMcpAdapter,
+    local_memory: LocalMemoryCliAdapter,
     llm: LlmStubAdapter,
-    tier2: Option<Tier2McpAdapter>,
+    stage0_cfg: codex_stage0::Stage0Config,
+    tier2: Option<Tier2HttpAdapter>,
     explain: bool,
 ) -> (Result<codex_stage0::Stage0Result, String>, bool) {
     // Create a dedicated runtime for Stage0 (single-threaded to avoid Send requirements)
@@ -201,7 +207,7 @@ fn run_stage0_blocking(
 
     rt.block_on(async {
         // Create Stage0Engine inside the async block
-        let engine = match Stage0Engine::new() {
+        let engine = match Stage0Engine::with_config(stage0_cfg) {
             Ok(e) => e,
             Err(e) => return (Err(format!("Failed to create Stage0Engine: {e}")), false),
         };
@@ -290,9 +296,9 @@ fn run_stage0_blocking(
 /// Helper to run Stage0 without vector backend
 async fn run_without_vector(
     engine: &Stage0Engine,
-    local_memory: &LocalMemoryMcpAdapter,
+    local_memory: &LocalMemoryCliAdapter,
     llm: &LlmStubAdapter,
-    tier2: Option<Tier2McpAdapter>,
+    tier2: Option<Tier2HttpAdapter>,
     spec_id: &str,
     spec_content: &str,
     env: &EnvCtx,
@@ -332,6 +338,19 @@ async fn run_without_vector(
     };
 
     (result, false)
+}
+
+fn resolve_tier2_overrides(
+    planner_config: &codex_core::config::Config,
+) -> (Option<String>, Option<String>) {
+    let tier2 = &planner_config.stage0;
+    let notebook = tier2
+        .notebook
+        .clone()
+        .or(tier2.notebook_url.clone())
+        .or(tier2.notebook_id.clone())
+        .filter(|v| !v.trim().is_empty());
+    (notebook, tier2.notebooklm_base_url.clone())
 }
 
 /// Get current git branch

@@ -12,7 +12,7 @@ use crate::app_event::BackgroundPlacement;
 use crate::templates::{TemplateSource, all_template_status, install_templates};
 
 /// Command: /speckit.install-templates
-/// Copies embedded templates to ~/.config/code/templates/ for customization
+/// Copies embedded templates to `./templates/` for customization
 pub struct SpecKitInstallTemplatesCommand;
 
 impl SpecKitCommand for SpecKitInstallTemplatesCommand {
@@ -25,7 +25,7 @@ impl SpecKitCommand for SpecKitInstallTemplatesCommand {
     }
 
     fn description(&self) -> &'static str {
-        "install templates to user config for customization"
+        "install templates to ./templates for customization"
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {

@@ -591,7 +591,7 @@ notify = ["python3", "/Users/mbolin/.codex/notify.py"]
 
 ## history
 
-By default, Planner records messages sent to the model in `$CODEX_HOME/history.jsonl`. Note that on UNIX, the file permissions are set to `o600`, so it should only be readable and writable by the owner.
+By default, Planner records messages sent to the model in `~/.code/history.jsonl`. For backwards compatibility, Planner also reads from the legacy path `~/.codex/history.jsonl` if present. Note that on UNIX, the file permissions are set to `0600`, so it should only be readable and writable by the owner.
 
 To disable this behavior, configure `[history]` as follows:
 
@@ -678,7 +678,7 @@ notifications = [ "agent-turn-complete", "approval-requested" ]
 
 ## Project Hooks
 
-Use the `[projects]` table to scope settings to a specific workspace path. In addition to `trust_level`, `approval_policy`, and `always_allow_commands`, you can attach lifecycle hooks that run commands automatically when notable events occur.
+Use the `[projects]` table to scope settings to a specific workspace path. Entries apply to the directory and its subdirectories; when multiple entries match, Planner uses the most specific (deepest) matching path. In addition to `trust_level`, `approval_policy`, and `always_allow_commands`, you can attach lifecycle hooks that run commands automatically when notable events occur.
 
 ```toml
 [projects."/Users/me/src/my-app"]
@@ -738,6 +738,20 @@ run = "cargo test --lib"
 ```
 
 Project commands appear in the TUI via `/cmd <name>` and run through the standard execution pipeline. During execution Planner sets `CODE_PROJECT_COMMAND_NAME`, `CODE_PROJECT_COMMAND_DESCRIPTION` (when provided), and `CODE_SESSION_CWD` so scripts can tailor their behaviour.
+
+## Stage0 (NotebookLM)
+
+Planner’s Stage0 Tier2 (NotebookLM) integration reads its notebook identifier from the active project config:
+
+```toml
+[projects."/Users/me/src/my-app".stage0]
+# Accepts a NotebookLM notebook ID or a share URL.
+# Compatibility aliases: `notebook_id`, `notebook_url`.
+notebook = "your-notebook-id-or-url"
+
+# Optional override for the notebooklm-mcp HTTP service.
+notebooklm_base_url = "http://127.0.0.1:3456"
+```
 
 ## Config reference
 

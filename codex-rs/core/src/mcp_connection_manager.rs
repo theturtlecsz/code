@@ -132,7 +132,7 @@ impl McpConnectionManager {
             }
 
             let timeout = cfg
-                .startup_timeout_ms
+                .effective_startup_timeout_ms()
                 .map(Duration::from_millis)
                 .unwrap_or(DEFAULT_STARTUP_TIMEOUT);
             per_server_timeout.insert(server_name.clone(), timeout);

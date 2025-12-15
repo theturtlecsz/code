@@ -8,6 +8,7 @@
 //! These adapters bridge Stage0's trait-based design with codex-rs's MCP infrastructure.
 
 use async_trait::async_trait;
+use crate::local_memory_cli;
 use codex_core::mcp_connection_manager::McpConnectionManager;
 use codex_stage0::dcc::{
     EnvCtx, Iqo, LocalMemoryClient, LocalMemorySearchParams, LocalMemorySummary,
@@ -15,6 +16,7 @@ use codex_stage0::dcc::{
 use codex_stage0::errors::{Result, Stage0Error};
 use codex_stage0::guardians::{LlmClient, MemoryKind};
 use codex_stage0::tier2::{CausalLinkSuggestion, Tier2Client, Tier2Response};
+use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
@@ -31,6 +33,184 @@ const NOTEBOOKLM_SERVER: &str = "notebooklm";
 
 /// Default timeout for MCP tool calls
 const DEFAULT_MCP_TIMEOUT: Duration = Duration::from_secs(30);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LocalMemoryCliAdapter
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Adapter that implements `LocalMemoryClient` using local-memory CLI (and REST health upstream).
+///
+/// This is the default path for Planner; Stage0 should not require MCP.
+pub struct LocalMemoryCliAdapter {
+    max_content_length: usize,
+}
+
+impl LocalMemoryCliAdapter {
+    pub fn new() -> Self {
+        Self {
+            max_content_length: 50_000,
+        }
+    }
+}
+
+impl Default for LocalMemoryCliAdapter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl LocalMemoryClient for LocalMemoryCliAdapter {
+    async fn search_memories(
+        &self,
+        params: LocalMemorySearchParams,
+    ) -> Result<Vec<LocalMemorySummary>> {
+        let mut query_parts: Vec<String> = Vec::new();
+
+        if !params.iqo.keywords.is_empty() {
+            query_parts.push(params.iqo.keywords.join(" "));
+        }
+        if !params.iqo.domains.is_empty() {
+            query_parts.push(params.iqo.domains.join(" "));
+        }
+        let query = if query_parts.is_empty() {
+            "*".to_string()
+        } else {
+            query_parts.join(" ")
+        };
+
+        let mut tags: Vec<String> = params.iqo.required_tags.clone();
+        tags.extend(params.iqo.optional_tags.iter().cloned());
+
+        let domain = params.iqo.domains.first().map(|s| s.as_str());
+
+        let results = local_memory_cli::search(
+            &query,
+            params.max_results.min(100),
+            &tags,
+            domain,
+            self.max_content_length,
+        )
+        .await
+        .map_err(|e| Stage0Error::local_memory(format!("local-memory search failed: {e}")))?;
+
+        Ok(results
+            .into_iter()
+            .filter_map(|r| {
+                let id = r.memory.id?;
+                let snippet = if r.memory.content.len() > 200 {
+                    format!("{}...", &r.memory.content[..200])
+                } else {
+                    r.memory.content.clone()
+                };
+                Some(LocalMemorySummary {
+                    id,
+                    domain: r.memory.domain,
+                    tags: r.memory.tags.unwrap_or_default(),
+                    created_at: r.memory.created_at,
+                    snippet,
+                    similarity_score: r.relevance_score.unwrap_or(0.0),
+                })
+            })
+            .collect())
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tier2HttpAdapter
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+struct NotebooklmAskResponse {
+    pub success: bool,
+    pub data: Option<NotebooklmAskData>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NotebooklmAskData {
+    pub answer: String,
+}
+
+/// Adapter that implements `Tier2Client` using notebooklm-mcp HTTP service.
+pub struct Tier2HttpAdapter {
+    client: reqwest::Client,
+    base_url: String,
+    notebook: String,
+}
+
+impl Tier2HttpAdapter {
+    pub fn new(base_url: String, notebook: String) -> Self {
+        Self {
+            client: reqwest::Client::new(),
+            base_url,
+            notebook,
+        }
+    }
+
+    pub async fn is_healthy(&self, timeout: Duration) -> bool {
+        let url = format!("{}/health", self.base_url);
+        self.client
+            .get(&url)
+            .timeout(timeout)
+            .send()
+            .await
+            .map(|r| r.status().is_success())
+            .unwrap_or(false)
+    }
+}
+
+#[async_trait]
+impl Tier2Client for Tier2HttpAdapter {
+    async fn generate_divine_truth(
+        &self,
+        spec_id: &str,
+        spec_content: &str,
+        task_brief_md: &str,
+    ) -> Result<Tier2Response> {
+        let prompt = codex_stage0::build_tier2_prompt(spec_id, spec_content, task_brief_md);
+
+        let url = format!("{}/api/ask", self.base_url);
+        let body = json!({
+            "question": prompt,
+            "notebook": self.notebook,
+        });
+
+        let resp = self
+            .client
+            .post(&url)
+            .json(&body)
+            .timeout(Duration::from_secs(120))
+            .send()
+            .await
+            .map_err(|e| Stage0Error::tier2(format!("NotebookLM HTTP request failed: {e}")))?;
+
+        if !resp.status().is_success() {
+            return Err(Stage0Error::tier2(format!(
+                "NotebookLM HTTP error: {}",
+                resp.status()
+            )));
+        }
+
+        let parsed: NotebooklmAskResponse = resp
+            .json()
+            .await
+            .map_err(|e| Stage0Error::tier2(format!("Failed to parse NotebookLM response: {e}")))?;
+
+        if !parsed.success {
+            return Err(Stage0Error::tier2(format!(
+                "NotebookLM error: {}",
+                parsed.error.unwrap_or_else(|| "Unknown error".to_string())
+            )));
+        }
+
+        let data = parsed
+            .data
+            .ok_or_else(|| Stage0Error::tier2("NotebookLM response missing data"))?;
+        parse_tier2_answer_text(&data.answer, spec_id)
+    }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LocalMemoryMcpAdapter
@@ -311,35 +491,21 @@ impl Tier2Client for Tier2McpAdapter {
     }
 }
 
-/// Parse NotebookLM MCP response into Tier2Response
-fn parse_tier2_response(
-    result: &mcp_types::CallToolResult,
-    spec_id: &str,
-) -> Result<Tier2Response> {
-    // Extract text content from MCP result
-    let text = result
-        .content
-        .iter()
-        .filter_map(|c| match c {
-            mcp_types::ContentBlock::TextContent(tc) => Some(tc.text.as_str()),
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-
+fn parse_tier2_answer_text(text: &str, spec_id: &str) -> Result<Tier2Response> {
+    let text = text.trim();
     if text.is_empty() {
         return Err(Stage0Error::tier2("Empty response from NotebookLM"));
     }
 
     // Try to parse as JSON first (structured response)
-    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(text) {
         // Extract answer/response field
         let divine_truth_md = json
             .get("answer")
             .or_else(|| json.get("response"))
             .or_else(|| json.get("text"))
             .and_then(|v| v.as_str())
-            .unwrap_or(&text)
+            .unwrap_or(text)
             .to_string();
 
         // Try to parse causal links from response
@@ -354,7 +520,7 @@ fn parse_tier2_response(
     // Plain text response - wrap in Divine Truth format
     let divine_truth_md = if text.contains("# Divine Truth") || text.contains("## 1.") {
         // Already formatted as Divine Truth
-        text
+        text.to_string()
     } else {
         // Wrap raw response in minimal Divine Truth structure
         format!(
@@ -369,6 +535,20 @@ fn parse_tier2_response(
         divine_truth_md,
         suggested_links,
     })
+}
+
+/// Parse NotebookLM MCP response into Tier2Response
+fn parse_tier2_response(result: &mcp_types::CallToolResult, spec_id: &str) -> Result<Tier2Response> {
+    let text = result
+        .content
+        .iter()
+        .filter_map(|c| match c {
+            mcp_types::ContentBlock::TextContent(tc) => Some(tc.text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    parse_tier2_answer_text(&text, spec_id)
 }
 
 /// Parse causal link suggestions from Divine Truth markdown

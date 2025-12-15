@@ -148,7 +148,9 @@ fn run_add(config_overrides: &CliConfigOverrides, add_args: AddArgs) -> Result<(
         command: command_bin,
         args: command_args,
         env: env_map,
+        startup_timeout_sec: None,
         startup_timeout_ms: None,
+        tool_timeout_sec: None,
     };
 
     servers.insert(name.clone(), new_entry);
@@ -210,7 +212,9 @@ fn run_list(config_overrides: &CliConfigOverrides, list_args: ListArgs) -> Resul
                     "command": cfg.command,
                     "args": cfg.args,
                     "env": env,
+                    "startup_timeout_sec": cfg.startup_timeout_sec,
                     "startup_timeout_ms": cfg.startup_timeout_ms,
+                    "tool_timeout_sec": cfg.tool_timeout_sec,
                 })
             })
             .collect();
@@ -305,7 +309,9 @@ fn run_get(config_overrides: &CliConfigOverrides, get_args: GetArgs) -> Result<(
             "command": server.command,
             "args": server.args,
             "env": env,
+            "startup_timeout_sec": server.startup_timeout_sec,
             "startup_timeout_ms": server.startup_timeout_ms,
+            "tool_timeout_sec": server.tool_timeout_sec,
         }))?;
         println!("{output}");
         return Ok(());
@@ -333,8 +339,13 @@ fn run_get(config_overrides: &CliConfigOverrides, get_args: GetArgs) -> Result<(
         }
     };
     println!("  env: {env_display}");
-    if let Some(timeout_ms) = server.startup_timeout_ms {
+    if let Some(timeout_sec) = server.startup_timeout_sec {
+        println!("  startup_timeout_sec: {timeout_sec}");
+    } else if let Some(timeout_ms) = server.startup_timeout_ms {
         println!("  startup_timeout_ms: {timeout_ms}");
+    }
+    if let Some(timeout_sec) = server.tool_timeout_sec {
+        println!("  tool_timeout_sec: {timeout_sec}");
     }
     println!("  remove: codex mcp remove {}", get_args.name);
 

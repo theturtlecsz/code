@@ -4,11 +4,13 @@
 //! - ✅ Types: Used by MCP native calls (spec_prompts.rs, consensus.rs)
 //! - ✅ Subprocess functions deleted (migrated to native MCP)
 //!
-//! All local-memory access now via McpConnectionManager::call_tool()
+//! Local-memory access in this repo may use CLI/REST or MCP, depending on the
+//! integration point.
 
 #![allow(dead_code)] // Response types used by MCP parsing
 
 use serde::Deserialize;
+use chrono::{DateTime, Utc};
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct LocalMemorySearchResponse {
@@ -28,6 +30,8 @@ pub struct LocalMemorySearchData {
 #[derive(Debug, Deserialize, Clone)]
 pub struct LocalMemorySearchResult {
     pub memory: LocalMemoryRecord,
+    #[serde(default)]
+    pub relevance_score: Option<f64>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -35,4 +39,16 @@ pub struct LocalMemoryRecord {
     #[serde(default)]
     pub id: Option<String>,
     pub content: String,
+    #[serde(default)]
+    pub importance: Option<u8>,
+    #[serde(default)]
+    pub tags: Option<Vec<String>>,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub domain: Option<String>,
+    #[serde(default)]
+    pub created_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub updated_at: Option<DateTime<Utc>>,
 }

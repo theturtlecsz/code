@@ -406,18 +406,13 @@ pub(crate) async fn collect_consensus_artifacts(
             .push("SQLite database initialization failed - check ~/.code/ permissions".to_string());
     }
 
-    // DEPRECATED: local-memory fallback (Phase 2 removed agent MCP tool usage)
-    // Keeping temporarily for migration period, but should not be needed
-    tracing::warn!(
-        "DEPRECATED: Falling back to local-memory MCP (should not happen after Phase 2)"
-    );
+    tracing::warn!("Falling back to local-memory (CLI/REST) for artifacts");
 
-    // ARCH-002: Fallback to local-memory MCP (DEPRECATED in Phase 2)
     match fetch_memory_entries(spec_id, stage, mcp_manager).await {
         Ok((entries, mut memory_warnings)) => {
             warnings.append(&mut memory_warnings);
 
-            // Parse MCP results into artifacts
+            // Parse local-memory results into artifacts
             let mut artifacts: Vec<ConsensusArtifactData> = Vec::new();
 
             for result in entries {
@@ -497,13 +492,12 @@ pub(crate) async fn collect_consensus_artifacts(
             return Ok((artifacts, warnings));
         }
         Err(mcp_err) => {
-            // ARCH-002: Fallback to file-based evidence if MCP unavailable
             tracing::warn!(
-                "MCP fetch failed, falling back to file-based evidence: {}",
+                "local-memory fetch failed, falling back to file-based evidence: {}",
                 mcp_err
             );
             warnings.push(format!(
-                "⚠ Using file-based evidence (local-memory MCP unavailable: {})",
+                "⚠ Using file-based evidence (local-memory unavailable: {})",
                 mcp_err
             ));
 
@@ -522,7 +516,7 @@ pub(crate) async fn collect_consensus_artifacts(
         }
     }
 
-    // If both MCP and file-based evidence failed
+    // If both local-memory and file-based evidence failed
     Err(SpecKitError::NoConsensusFound {
         spec_id: spec_id.to_string(),
         stage: stage.command_name().to_string(),
@@ -615,10 +609,8 @@ fn load_artifacts_from_evidence(
 async fn fetch_memory_entries(
     spec_id: &str,
     stage: SpecStage,
-    mcp_manager: &codex_core::mcp_connection_manager::McpConnectionManager,
+    _mcp_manager: &codex_core::mcp_connection_manager::McpConnectionManager,
 ) -> Result<(Vec<LocalMemorySearchResult>, Vec<String>)> {
-    use serde_json::json;
-
     let query = format!("{} {}", spec_id, stage.command_name());
     // Note: Agents may tag with either "stage:plan" or "stage:spec-plan"
     // Currently using query-based search; tag filtering available if needed:
@@ -636,25 +628,18 @@ async fn fetch_memory_entries(
         })
         .unwrap_or_else(|| "project:unknown".to_string());
 
-    let args = json!({
-        "query": query,
-        "limit": 20,
-        "tags": [format!("spec:{}", spec_id), project_tag],
-        "search_type": "hybrid"
-    });
-
-    let result = mcp_manager
-        .call_tool(
-            "local-memory",
-            "search",
-            Some(args),
-            Some(std::time::Duration::from_secs(30)),
-        )
+    if !crate::local_memory_cli::local_memory_daemon_healthy(std::time::Duration::from_millis(750))
         .await
-        .map_err(|e| SpecKitError::from_string(format!("MCP local-memory search failed: {}", e)))?;
+    {
+        return Err(SpecKitError::from_string(
+            "local-memory daemon not available at http://localhost:3002".to_string(),
+        ));
+    }
 
-    let results = parse_mcp_search_results(&result)
-        .map_err(|e| SpecKitError::from_string(format!("Failed to parse MCP results: {}", e)))?;
+    let tags = vec![format!("spec:{spec_id}"), project_tag];
+    let results = crate::local_memory_cli::search(&query, 20, &tags, None, 50_000)
+        .await
+        .map_err(|e| SpecKitError::from_string(format!("local-memory search failed: {}", e)))?;
 
     if results.is_empty() {
         Err(SpecKitError::NoConsensusFound {
@@ -665,33 +650,6 @@ async fn fetch_memory_entries(
     } else {
         Ok((results, Vec::new()))
     }
-}
-
-// FORK-SPECIFIC (just-every/code): Parse MCP search results
-fn parse_mcp_search_results(
-    result: &mcp_types::CallToolResult,
-) -> Result<Vec<LocalMemorySearchResult>> {
-    if result.content.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let mut all_results = Vec::new();
-    for content_item in &result.content {
-        if let mcp_types::ContentBlock::TextContent(text_content) = content_item {
-            let text = &text_content.text;
-            if let Ok(json_results) = serde_json::from_str::<Vec<serde_json::Value>>(text) {
-                for json_result in json_results {
-                    if let Ok(parsed) =
-                        serde_json::from_value::<LocalMemorySearchResult>(json_result)
-                    {
-                        all_results.push(parsed);
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(all_results)
 }
 
 /// Load latest consensus synthesis file for spec/stage

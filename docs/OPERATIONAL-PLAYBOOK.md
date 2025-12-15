@@ -58,7 +58,7 @@ curl -s localhost:3456/health | jq .authenticated
 # Ask a question
 curl -X POST localhost:3456/api/ask \
   -H "Content-Type: application/json" \
-  -d '{"notebookId": "...", "question": "..."}'
+  -d '{"notebook": "...", "question": "..."}'  # aliases: notebook_id, notebook_url
 ```
 
 **Service Management**:

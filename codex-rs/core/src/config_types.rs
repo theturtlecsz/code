@@ -402,11 +402,40 @@ pub struct McpServerConfig {
     #[serde(default)]
     pub env: Option<HashMap<String, String>>,
 
-    /// Optional per-server startup timeout in milliseconds.
+    /// Optional per-server startup timeout in seconds.
     /// Applies to both the initial `initialize` handshake and the first
-    /// `tools/list` request during startup. If unset, defaults to 10_000ms.
+    /// `tools/list` request during startup. If unset, defaults to 10 seconds.
+    /// Takes precedence over `startup_timeout_ms` if both are set.
+    #[serde(default)]
+    pub startup_timeout_sec: Option<u64>,
+
+    /// Optional per-server startup timeout in milliseconds (legacy).
+    /// Prefer `startup_timeout_sec` for new configurations.
+    /// Only used if `startup_timeout_sec` is not set.
     #[serde(default)]
     pub startup_timeout_ms: Option<u64>,
+
+    /// Optional per-tool invocation timeout in seconds.
+    /// Limits how long individual MCP tool calls may run.
+    /// If unset, defaults to 60 seconds.
+    #[serde(default)]
+    pub tool_timeout_sec: Option<u64>,
+}
+
+impl McpServerConfig {
+    /// Returns the effective startup timeout, preferring `_sec` over `_ms`.
+    /// Returns `None` if neither is set (caller should use default).
+    pub fn effective_startup_timeout_ms(&self) -> Option<u64> {
+        self.startup_timeout_sec
+            .map(|s| s * 1000)
+            .or(self.startup_timeout_ms)
+    }
+
+    /// Returns the effective tool timeout in milliseconds.
+    /// Returns `None` if not set (caller should use default).
+    pub fn effective_tool_timeout_ms(&self) -> Option<u64> {
+        self.tool_timeout_sec.map(|s| s * 1000)
+    }
 }
 
 #[derive(Deserialize, Debug, Copy, Clone, PartialEq)]

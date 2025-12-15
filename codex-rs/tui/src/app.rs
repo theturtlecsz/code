@@ -379,50 +379,9 @@ impl App<'_> {
             });
         }
 
-        // FORK-SPECIFIC (just-every/code): Initialize shared MCP manager for local-memory
-        // Spawn once at App level instead of per-widget to prevent process multiplication
+        // Local-memory integration uses CLI + REST (not MCP). Keep the slot for
+        // compatibility with older codepaths, but do not initialize it.
         let mcp_manager = Arc::new(tokio::sync::Mutex::new(None));
-        {
-            let mcp_manager_slot = mcp_manager.clone();
-            let app_event_tx_for_mcp = app_event_tx.clone();
-
-            tokio::spawn(async move {
-                use codex_core::config_types::McpServerConfig;
-                use codex_core::mcp_connection_manager::McpConnectionManager;
-                use std::collections::{HashMap, HashSet};
-
-                let mcp_config = HashMap::from([(
-                    "local-memory".to_string(),
-                    McpServerConfig {
-                        command: "local-memory".to_string(),
-                        args: vec![],
-                        env: None,
-                        startup_timeout_ms: Some(5000), // 5 second timeout
-                    },
-                )]);
-
-                match McpConnectionManager::new(mcp_config, HashSet::new()).await {
-                    Ok((manager, errors)) => {
-                        if !errors.is_empty() {
-                            tracing::warn!("MCP local-memory connection had errors: {:?}", errors);
-                            app_event_tx_for_mcp.send_background_event(format!(
-                                "⚠ MCP local-memory initialized with warnings: {:?}",
-                                errors
-                            ));
-                        }
-                        *mcp_manager_slot.lock().await = Some(Arc::new(manager));
-                        tracing::info!("MCP local-memory connection initialized successfully");
-                    }
-                    Err(e) => {
-                        tracing::error!("Failed to initialize MCP local-memory connection: {}", e);
-                        app_event_tx_for_mcp.send_background_event(format!(
-                            "❌ MCP local-memory initialization failed: {}\n  Consensus checks will fail until local-memory MCP server is available.",
-                            e
-                        ));
-                    }
-                }
-            });
-        }
 
         let login_status = get_login_status(&config);
         let should_show_onboarding =

@@ -36,7 +36,9 @@ async fn main() -> Result<()> {
         command: server.to_string_lossy().to_string(),
         args: vec![],
         env: None,
+        startup_timeout_sec: None,
         startup_timeout_ms: Some(500),
+        tool_timeout_sec: None,
     };
     // Slow-one: 2s but we allow 3s
     let slow_ok = McpServerConfig {
@@ -46,7 +48,9 @@ async fn main() -> Result<()> {
             format!("SLOW_INIT_MS=500 SLOW_LIST_MS=2000 {}", server.display()),
         ],
         env: None,
+        startup_timeout_sec: None,
         startup_timeout_ms: Some(3000),
+        tool_timeout_sec: None,
     };
     // Slow-two: 3s but we allow 1s (should fail)
     let slow_fail = McpServerConfig {
@@ -56,7 +60,9 @@ async fn main() -> Result<()> {
             format!("SLOW_INIT_MS=500 SLOW_LIST_MS=3000 {}", server.display()),
         ],
         env: None,
+        startup_timeout_sec: None,
         startup_timeout_ms: Some(1000),
+        tool_timeout_sec: None,
     };
 
     let mut servers = HashMap::new();

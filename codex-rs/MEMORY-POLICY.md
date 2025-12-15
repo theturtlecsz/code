@@ -5,9 +5,9 @@
 
 ---
 
-## Single Memory System: local-memory MCP
+## Single Memory System: local-memory (CLI + REST)
 
-**Policy**: Use **local-memory MCP** exclusively for all knowledge persistence and retrieval.
+**Policy**: Use **local-memory CLI + REST** for all knowledge persistence and retrieval (do not depend on MCP).
 
 **Deprecated**:
 - ~~byterover-mcp~~ (DO NOT USE)
@@ -18,10 +18,10 @@
 ## Rationale
 
 **Why local-memory only**:
-1. **Native MCP Integration**: Validated 5.3x faster than subprocess baseline
-2. **Spec-Kit Dependency**: Consensus framework requires local-memory for multi-agent synthesis
+1. **Matches real environment**: Session hooks use REST health + CLI search/remember
+2. **Low coupling**: Avoids MCP manager lifecycle and config drift
 3. **Single Source of Truth**: Eliminates memory conflicts and divergence
-4. **Tested & Reliable**: 141 passing tests validate MCP integration path
+4. **Simple failure mode**: If REST health fails, degrade gracefully
 
 **Why not byterover**:
 - Adds unnecessary complexity
@@ -35,15 +35,7 @@
 
 ### Store Knowledge
 ```bash
-# Via MCP tool (in code)
-mcp_manager.call_tool("local-memory", "store_memory", {
-  "content": "...",
-  "domain": "spec-kit",
-  "tags": ["spec:SPEC-ID", "stage:plan"],
-  "importance": 8
-})
-
-# Via CLI (manual)
+# Via CLI
 local-memory remember "knowledge here" \
   --importance 8 \
   --domain spec-kit \
@@ -52,15 +44,7 @@ local-memory remember "knowledge here" \
 
 ### Retrieve Knowledge
 ```bash
-# Via MCP tool (in code)
-mcp_manager.call_tool("local-memory", "search", {
-  "query": "consensus plan",
-  "limit": 20,
-  "tags": ["spec:SPEC-ID", "stage:plan"],
-  "search_type": "hybrid"
-})
-
-# Via CLI (manual)
+# Via CLI
 local-memory search "consensus" --tags spec:SPEC-123
 ```
 
@@ -75,12 +59,12 @@ local-memory search "consensus" --tags spec:SPEC-123
 ## Integration Points
 
 **Spec-Kit Consensus** (`tui/spec_kit/consensus.rs`):
-- `fetch_memory_entries()`: Searches local-memory for agent artifacts
-- `remember_consensus_verdict()`: Stores synthesis results
-- **Fallback**: File-based evidence if MCP unavailable (see ARCH-002)
+- `fetch_memory_entries()`: Searches local-memory for agent artifacts (CLI)
+- `remember_consensus_verdict()`: Stores verdict to SQLite (SPEC-934)
+- **Fallback**: File-based evidence if local-memory unavailable
 
 **Session Context** (`tui/spec_prompts.rs`):
-- `gather_local_memory_context()`: Retrieves historical context for agents
+- `gather_local_memory_context()`: Retrieves historical context for agents (CLI)
 - Used by all 6 spec-kit stages (plan, tasks, implement, validate, audit, unlock)
 
 **Evidence Repository** (`tui/spec_kit/evidence.rs`):
@@ -94,15 +78,13 @@ local-memory search "consensus" --tags spec:SPEC-123
 **Status**: Byterover migration to local-memory **COMPLETE** as of 2025-10-18
 
 **What Changed**:
-- Subprocess `Command::new("local-memory")` → Native MCP
-- Performance: 5.3x faster (46ms → 8.7ms measured)
-- Reliability: 3-retry logic with exponential backoff
-- Testing: 3 integration tests validate MCP path
+- Replaced Byterover usage with local-memory (CLI + REST health checks)
+- Standardized tags and domains for Spec-Kit memory entries
 
 **Removed**:
 - ~~Byterover MCP tool calls~~
 - ~~Byterover fallback logic~~
-- ~~Subprocess local-memory wrapper~~ (deprecated, pending deletion)
+- ~~Byterover-specific fallback logic~~
 
 ---
 

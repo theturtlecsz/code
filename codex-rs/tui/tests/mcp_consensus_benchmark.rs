@@ -81,7 +81,9 @@ async fn bench_mcp_search_calls() {
             command: "local-memory".to_string(),
             args: vec![],
             env: None,
+            startup_timeout_sec: None,
             startup_timeout_ms: Some(5000),
+            tool_timeout_sec: None,
         },
     )]);
 
@@ -202,7 +204,9 @@ async fn bench_mcp_vs_subprocess() {
             command: "local-memory".to_string(),
             args: vec![],
             env: None,
+            startup_timeout_sec: None,
             startup_timeout_ms: Some(5000),
+            tool_timeout_sec: None,
         },
     )]);
 

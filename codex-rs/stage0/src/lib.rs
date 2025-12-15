@@ -946,6 +946,12 @@ mod tests {
         async fn test_run_stage0_disabled_returns_error() {
             let mut cfg = Stage0Config::default();
             cfg.enabled = false;
+            let temp = tempfile::tempdir().expect("tempdir");
+            cfg.db_path = temp
+                .path()
+                .join("stage0-overlay.db")
+                .to_string_lossy()
+                .into_owned();
 
             let engine = Stage0Engine::with_config(cfg).expect("create");
             let local_mem = MockLocalMemoryClient::with_sample_memories();
@@ -975,6 +981,12 @@ mod tests {
         async fn test_run_stage0_tier2_disabled_uses_fallback() {
             let mut cfg = Stage0Config::default();
             cfg.tier2.enabled = false;
+            let temp = tempfile::tempdir().expect("tempdir");
+            cfg.db_path = temp
+                .path()
+                .join("stage0-overlay.db")
+                .to_string_lossy()
+                .into_owned();
 
             let engine = Stage0Engine::with_config(cfg).expect("create");
             let local_mem = MockLocalMemoryClient::with_sample_memories();

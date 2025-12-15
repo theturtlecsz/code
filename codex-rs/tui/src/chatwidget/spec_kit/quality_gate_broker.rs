@@ -9,7 +9,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use codex_core::mcp_connection_manager::McpConnectionManager;
-use serde_json::json;
 use tokio::sync::{Mutex, mpsc};
 use tokio::time::{Duration, sleep};
 
@@ -581,7 +580,7 @@ async fn fetch_agent_payloads_from_filesystem(
 }
 
 async fn fetch_validation_payload(
-    mcp_manager: Arc<Mutex<Option<Arc<McpConnectionManager>>>>,
+    _mcp_manager: Arc<Mutex<Option<Arc<McpConnectionManager>>>>,
     spec_id: &str,
     checkpoint: QualityCheckpoint,
 ) -> QualityGateValidationResult {
@@ -593,71 +592,48 @@ async fn fetch_validation_payload(
     for (idx, delay_ms) in RETRY_DELAYS_MS.iter().enumerate() {
         attempts = idx as u32 + 1;
 
-        let manager = {
-            let guard = mcp_manager.lock().await;
-            guard.as_ref().cloned()
-        };
+        if !crate::local_memory_cli::local_memory_daemon_healthy(Duration::from_millis(750)).await {
+            last_error = Some("local-memory daemon not available at http://localhost:3002".into());
+        } else {
+            let tags = vec![
+                "quality-gate".to_string(),
+                format!("spec:{spec_id}"),
+                format!("checkpoint:{}", checkpoint.name()),
+                "stage:gpt5-validation".to_string(),
+            ];
 
-        if let Some(manager) = manager {
-            let args = json!({
-                "query": format!("{} gpt5-validation", spec_id),
-                "limit": 10,
-                "tags": [
-                    "quality-gate",
-                    format!("spec:{}", spec_id),
-                    format!("checkpoint:{}", checkpoint.name()),
-                    "stage:gpt5-validation",
-                ],
-                "search_type": "hybrid"
-            });
-
-            match manager
-                .call_tool(
-                    "local-memory",
-                    "search",
-                    Some(args),
-                    Some(Duration::from_secs(10)),
-                )
-                .await
+            match crate::local_memory_cli::search(
+                &format!("{spec_id} gpt5-validation"),
+                10,
+                &tags,
+                None,
+                50_000,
+            )
+            .await
             {
-                Ok(call_result) => {
-                    match crate::spec_prompts::parse_mcp_results_to_local_memory(&call_result) {
-                        Ok(results) => {
-                            if let Some(first) = results.first() {
-                                match serde_json::from_str::<serde_json::Value>(
-                                    &first.memory.content,
-                                ) {
-                                    Ok(value) => {
-                                        validation_json = Some(value);
-                                        info_lines.push("Validation artefact located".to_string());
-                                        break;
-                                    }
-                                    Err(err) => {
-                                        last_error = Some(format!(
-                                            "failed to decode GPT-5.1 validation JSON: {}",
-                                            err
-                                        ));
-                                    }
-                                }
-                            } else {
-                                last_error =
-                                    Some("No GPT-5.1 validation artefacts found".to_string());
+                Ok(results) => {
+                    if let Some(first) = results.first() {
+                        match serde_json::from_str::<serde_json::Value>(&first.memory.content) {
+                            Ok(value) => {
+                                validation_json = Some(value);
+                                info_lines.push("Validation artefact located".to_string());
+                                break;
+                            }
+                            Err(err) => {
+                                last_error = Some(format!(
+                                    "failed to decode GPT-5.1 validation JSON: {}",
+                                    err
+                                ));
                             }
                         }
-                        Err(err) => {
-                            last_error = Some(format!(
-                                "failed to parse local-memory search results: {}",
-                                err
-                            ));
-                        }
+                    } else {
+                        last_error = Some("No GPT-5.1 validation artefacts found".to_string());
                     }
                 }
                 Err(err) => {
                     last_error = Some(format!("local-memory search failed: {err}"));
                 }
             }
-        } else {
-            last_error = Some("MCP manager not available".to_string());
         }
 
         if validation_json.is_some() {

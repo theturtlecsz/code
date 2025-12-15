@@ -4,7 +4,7 @@
 //! to generate NotebookLM-ready Markdown files.
 //!
 //! V1 Implementation (No Vector DB):
-//! - Uses local-memory MCP search with tag/domain filtering
+//! - Uses local-memory CLI/REST search with tag/domain filtering
 //! - Prioritizes by overlay dynamic_score
 //! - Generates 5 artifact types:
 //!   - NL_ARCHITECTURE_BIBLE.md
@@ -13,7 +13,6 @@
 //!   - NL_DEBT_LANDSCAPE.md
 //!   - NL_PROJECT_DIARY_01.md
 
-use crate::stage0_adapters::LocalMemoryMcpAdapter;
 use codex_stage0::dcc::{Iqo, LocalMemoryClient, LocalMemorySearchParams, LocalMemorySummary};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -116,7 +115,7 @@ pub struct SeedingResult {
 ///
 /// Generates all 5 NotebookLM artifact types and writes them to disk.
 pub async fn run_shadow_seeding(
-    local_mem: &LocalMemoryMcpAdapter,
+    local_mem: &impl LocalMemoryClient,
     config: &SeedingConfig,
 ) -> SeedingResult {
     let start = std::time::Instant::now();
@@ -176,7 +175,7 @@ pub async fn run_shadow_seeding(
 
 /// Generate Architecture Bible from decision and pattern memories
 async fn seed_architecture_bible(
-    local_mem: &LocalMemoryMcpAdapter,
+    local_mem: &impl LocalMemoryClient,
     config: &SeedingConfig,
 ) -> Result<SeedArtifact, String> {
     // Search for architecture-related memories
@@ -243,7 +242,7 @@ async fn seed_architecture_bible(
 
 /// Generate Stack Justification from dependency-related memories
 async fn seed_stack_justification(
-    local_mem: &LocalMemoryMcpAdapter,
+    local_mem: &impl LocalMemoryClient,
     config: &SeedingConfig,
 ) -> Result<SeedArtifact, String> {
     // Search for dependency decisions
@@ -295,7 +294,7 @@ async fn seed_stack_justification(
 
 /// Generate Bug Retros from bug/incident/postmortem memories
 async fn seed_bug_retros(
-    local_mem: &LocalMemoryMcpAdapter,
+    local_mem: &impl LocalMemoryClient,
     config: &SeedingConfig,
 ) -> Result<SeedArtifact, String> {
     // Search for bug-related memories
@@ -386,7 +385,7 @@ fn seed_debt_landscape(config: &SeedingConfig) -> Result<SeedArtifact, String> {
 
 /// Generate Project Diary from session summaries and chronological memories
 async fn seed_project_diary(
-    local_mem: &LocalMemoryMcpAdapter,
+    local_mem: &impl LocalMemoryClient,
     config: &SeedingConfig,
 ) -> Result<SeedArtifact, String> {
     // Search for session-related memories

@@ -2,46 +2,86 @@
 //!
 //! Uses GeminiPipesProvider for session-based multi-turn conversations.
 //! Replaces PTY mode with one-shot + resume pattern.
-//! Uses global provider instance to maintain sessions across messages.
+//! Maintains per-model provider instances to honor model selection from UI.
 
 #![allow(dead_code)] // Streaming provider helpers
 
 use codex_core::cli_executor::{CliError, ConversationId, GeminiPipesProvider, StreamEvent};
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use std::sync::OnceLock;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use crate::app_event_sender::AppEventSender;
 use crate::providers::{ProviderError, ProviderResult};
 
-/// Global Gemini provider instance (shared across all messages)
-static GEMINI_PROVIDER: OnceLock<GeminiPipesProvider> = OnceLock::new();
+/// Default model when none specified
+const DEFAULT_GEMINI_MODEL: &str = "gemini-2.5-flash";
 
-/// Get or create the global Gemini provider
-fn get_gemini_provider() -> &'static GeminiPipesProvider {
-    GEMINI_PROVIDER.get_or_init(|| {
-        // Get actual working directory for project context
-        let cwd = std::env::current_dir()
-            .ok()
-            .and_then(|p| p.to_str().map(String::from))
-            .unwrap_or_else(|| {
-                tracing::warn!("Failed to get current directory, using '.'");
-                String::from(".")
-            });
+/// Per-model Gemini provider cache (model_name -> provider)
+static GEMINI_PROVIDERS: OnceLock<Mutex<HashMap<String, Arc<GeminiPipesProvider>>>> =
+    OnceLock::new();
 
-        tracing::info!("Initializing global Gemini pipes provider with cwd={}", cwd);
-        GeminiPipesProvider::with_cwd("gemini-2.5-flash", &cwd)
-    })
+/// Get or create a Gemini provider for the specified model
+fn get_gemini_provider_for_model(model: &str) -> Arc<GeminiPipesProvider> {
+    let providers = GEMINI_PROVIDERS.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut cache = providers.lock().unwrap();
+
+    // Use default model if empty
+    let effective_model = if model.is_empty() {
+        DEFAULT_GEMINI_MODEL
+    } else {
+        model
+    };
+
+    // Map preset names to actual API model names
+    let mapped_model = GeminiStreamingProvider::map_model_name(effective_model);
+    let model_key = mapped_model.to_string();
+
+    if let Some(provider) = cache.get(&model_key) {
+        return Arc::clone(provider);
+    }
+
+    // Create new provider for this model
+    let cwd = std::env::current_dir()
+        .ok()
+        .and_then(|p| p.to_str().map(String::from))
+        .unwrap_or_else(|| {
+            tracing::warn!("Failed to get current directory, using '.'");
+            String::from(".")
+        });
+
+    tracing::info!(
+        "Creating Gemini pipes provider for model='{}' (mapped from '{}') with cwd={}",
+        mapped_model,
+        effective_model,
+        cwd
+    );
+
+    let provider = Arc::new(GeminiPipesProvider::with_cwd(mapped_model, &cwd));
+    cache.insert(model_key, Arc::clone(&provider));
+    provider
+}
+
+/// Get the default Gemini provider (for backwards compatibility)
+fn get_gemini_provider() -> Arc<GeminiPipesProvider> {
+    get_gemini_provider_for_model(DEFAULT_GEMINI_MODEL)
 }
 
 /// Gemini CLI provider with pipes streaming support (session-based)
 pub struct GeminiStreamingProvider {
-    // No longer stores provider - uses global instance
+    /// Model to use (empty string = default)
+    model: String,
 }
 
 impl GeminiStreamingProvider {
-    /// Create a new Gemini pipes streaming provider (uses global instance)
+    /// Create a new Gemini pipes streaming provider with default model
     pub fn new() -> ProviderResult<Self> {
+        Self::with_model(DEFAULT_GEMINI_MODEL)
+    }
+
+    /// Create provider with specific model
+    pub fn with_model(model: &str) -> ProviderResult<Self> {
         // Check if gemini CLI is available
         if !Self::is_available() {
             return Err(ProviderError::Provider {
@@ -51,17 +91,12 @@ impl GeminiStreamingProvider {
             });
         }
 
-        // Initialize global provider (happens once)
-        let _ = get_gemini_provider();
+        // Initialize provider for this model (cached per-model)
+        let _ = get_gemini_provider_for_model(model);
 
-        Ok(Self {})
-    }
-
-    /// Create provider with specific model
-    pub fn with_model(_model: &str) -> ProviderResult<Self> {
-        // Note: Global provider uses default model (gemini-2.5-flash)
-        // Model-specific configuration not currently supported with global instance
-        Self::new()
+        Ok(Self {
+            model: model.to_string(),
+        })
     }
 
     /// Execute prompt with streaming to AppEventSender
@@ -69,17 +104,27 @@ impl GeminiStreamingProvider {
     /// Streams response deltas in real-time to the TUI via event sender.
     /// Accumulates full response text for conversation history.
     /// Uses session-based API for O(1) data transfer per turn.
+    ///
+    /// The `model` parameter allows overriding the model for this specific call.
+    /// If empty, uses the model configured when the provider was created.
     pub async fn execute_streaming(
         &self,
         prompt: &str,
         model: &str,
         tx: AppEventSender,
     ) -> ProviderResult<String> {
+        // Use provided model or fall back to instance model
+        let effective_model = if model.is_empty() {
+            &self.model
+        } else {
+            model
+        };
+
         // Derive conversation ID from prompt hash
         let conv_id = Self::derive_conversation_id(prompt);
 
-        // Send message via global session-based provider (creates/reuses session)
-        let provider = get_gemini_provider();
+        // Send message via model-specific provider (creates/reuses per-model session)
+        let provider = get_gemini_provider_for_model(effective_model);
         let mut rx = provider
             .send_message(conv_id, prompt.to_string())
             .await
@@ -97,7 +142,7 @@ impl GeminiStreamingProvider {
             .as_millis();
         let message_id = format!("gemini-msg{}", timestamp);
 
-        tx.send_native_stream_start("Gemini Pipes", model.to_string(), message_id);
+        tx.send_native_stream_start("Gemini Pipes", effective_model.to_string(), message_id);
 
         while let Some(event) = rx.recv().await {
             match event {
@@ -145,7 +190,7 @@ impl GeminiStreamingProvider {
     }
 
     /// Map preset model name to actual Gemini API model name
-    fn map_model_name(preset: &str) -> &str {
+    pub fn map_model_name(preset: &str) -> &str {
         let preset_lower = preset.to_ascii_lowercase();
 
         if preset_lower.contains("3-pro") {
@@ -211,9 +256,14 @@ impl GeminiStreamingProvider {
          Follow the OAuth prompts to complete authentication."
     }
 
-    /// Get access to the global Gemini provider (for session management)
-    pub fn global_provider() -> &'static GeminiPipesProvider {
+    /// Get access to the default Gemini provider (for session management)
+    pub fn global_provider() -> Arc<GeminiPipesProvider> {
         get_gemini_provider()
+    }
+
+    /// Get access to a model-specific Gemini provider
+    pub fn provider_for_model(model: &str) -> Arc<GeminiPipesProvider> {
+        get_gemini_provider_for_model(model)
     }
 }
 
@@ -238,5 +288,26 @@ mod tests {
         let instructions = GeminiStreamingProvider::install_instructions();
         assert!(instructions.contains("npm install"));
         assert!(instructions.contains("gemini"));
+    }
+
+    #[test]
+    fn test_model_mapping() {
+        assert_eq!(
+            GeminiStreamingProvider::map_model_name("gemini-3-pro"),
+            "gemini-3-pro-preview"
+        );
+        assert_eq!(
+            GeminiStreamingProvider::map_model_name("gemini-2.5-flash"),
+            "gemini-2.5-flash"
+        );
+        assert_eq!(
+            GeminiStreamingProvider::map_model_name("gemini-2.5-pro"),
+            "gemini-2.5-pro"
+        );
+        // Unknown model returns as-is
+        assert_eq!(
+            GeminiStreamingProvider::map_model_name("custom-model"),
+            "custom-model"
+        );
     }
 }

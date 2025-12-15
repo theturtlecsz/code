@@ -69,14 +69,18 @@ async fn mcp_manager_skips_slow_server_on_timeout() {
             format!("SLOW_INIT_MS=200 SLOW_LIST_MS=200 {}", server.display()),
         ],
         env: None,
+        startup_timeout_sec: None,
         startup_timeout_ms: Some(100),
+        tool_timeout_sec: None,
     };
     // Fast server responds immediately
     let fast_cfg = McpServerConfig {
         command: server.to_string_lossy().to_string(),
         args: vec![],
         env: None,
+        startup_timeout_sec: None,
         startup_timeout_ms: Some(500),
+        tool_timeout_sec: None,
     };
 
     let mut servers = HashMap::new();
@@ -109,7 +113,9 @@ async fn mcp_manager_respects_extended_startup_timeout() {
             format!("SLOW_INIT_MS=200 SLOW_LIST_MS=200 {}", server.display()),
         ],
         env: None,
+        startup_timeout_sec: None,
         startup_timeout_ms: Some(500),
+        tool_timeout_sec: None,
     };
     let mut servers = HashMap::new();
     servers.insert("slow_ok".to_string(), slow_ok);

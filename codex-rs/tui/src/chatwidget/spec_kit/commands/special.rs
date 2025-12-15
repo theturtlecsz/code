@@ -364,7 +364,7 @@ fn run_stage0_for_constitution_check(widget: &ChatWidget, spec_id: &str) -> Opti
     };
 
     let result = run_stage0_for_spec(
-        &widget.mcp_manager,
+        &widget.config,
         spec_id,
         &spec_content,
         &widget.config.cwd,
@@ -1827,8 +1827,8 @@ impl SpecKitCommand for SpecKitSeedCommand {
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
         use super::super::stage0_seeding::{SeedingConfig, run_shadow_seeding};
-        use crate::stage0_adapters::{LocalMemoryMcpAdapter, has_local_memory_server};
-        use std::sync::Arc;
+        use crate::stage0_adapters::LocalMemoryCliAdapter;
+        use std::time::Duration;
 
         // Parse optional arguments
         let mut max_memories = 50usize;
@@ -1859,22 +1859,17 @@ impl SpecKitCommand for SpecKitSeedCommand {
         ));
         widget.request_redraw();
 
-        // Get MCP manager
-        let mcp_manager = widget.mcp_manager.clone();
         let cwd = widget.config.cwd.clone();
 
         // Run seeding in async context
         let result = super::super::consensus_coordinator::block_on_sync(|| async move {
-            let mcp_lock = mcp_manager.lock().await;
-            let Some(mcp) = mcp_lock.as_ref() else {
-                return Err("MCP manager not available".to_string());
-            };
-
-            if !has_local_memory_server(mcp) {
-                return Err("local-memory MCP server not available".to_string());
+            if !crate::local_memory_cli::local_memory_daemon_healthy(Duration::from_millis(750))
+                .await
+            {
+                return Err("local-memory daemon not available at http://localhost:3002".to_string());
             }
 
-            let local_mem = LocalMemoryMcpAdapter::new(Arc::clone(mcp));
+            let local_mem = LocalMemoryCliAdapter::new();
             let config = SeedingConfig {
                 max_memories_per_artifact: max_memories,
                 output_dir,
@@ -2055,13 +2050,13 @@ impl SpecKitCommand for Stage0IndexCommand {
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
         use super::super::code_index::CodeUnitExtractor;
-        use crate::stage0_adapters::{LocalMemoryMcpAdapter, has_local_memory_server};
+        use crate::stage0_adapters::LocalMemoryCliAdapter;
         use crate::vector_state::{IndexingStats, VECTOR_STATE};
         use codex_stage0::{
             DocumentKind, DocumentMetadata, Iqo, LocalMemoryClient, LocalMemorySearchParams,
             TfIdfBackend, VectorBackend, VectorDocument,
         };
-        use std::sync::Arc;
+        use std::time::Duration;
 
         // Parse optional arguments
         let mut max_memories = 100usize;
@@ -2096,21 +2091,17 @@ impl SpecKitCommand for Stage0IndexCommand {
         ));
         widget.request_redraw();
 
-        let mcp_manager = widget.mcp_manager.clone();
         let cwd = widget.config.cwd.clone();
 
         // Run indexing in async context
         let result = super::super::consensus_coordinator::block_on_sync(|| async move {
-            let mcp_lock = mcp_manager.lock().await;
-            let Some(mcp) = mcp_lock.as_ref() else {
-                return Err("MCP manager not available".to_string());
-            };
-
-            if !has_local_memory_server(mcp) {
-                return Err("local-memory MCP server not available".to_string());
+            if !crate::local_memory_cli::local_memory_daemon_healthy(Duration::from_millis(750))
+                .await
+            {
+                return Err("local-memory daemon not available at http://localhost:3002".to_string());
             }
 
-            let local_mem = LocalMemoryMcpAdapter::new(Arc::clone(mcp));
+            let local_mem = LocalMemoryCliAdapter::new();
 
             // Search for memories using wildcard IQO
             let iqo = Iqo {

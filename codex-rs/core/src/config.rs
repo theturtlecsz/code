@@ -113,6 +113,9 @@ pub struct Config {
     /// Project-specific commands available in the active workspace.
     pub project_commands: Vec<ProjectCommand>,
 
+    /// Stage0 configuration derived from the active project scope.
+    pub stage0: Stage0ProjectConfig,
+
     pub shell_environment_policy: ShellEnvironmentPolicy,
     /// Patterns requiring an explicit confirm prefix before running.
     pub confirm_guard: ConfirmGuardConfig,
@@ -278,6 +281,14 @@ pub struct Config {
     pub output_schema: Option<serde_json::Value>,
 }
 
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Stage0ProjectConfig {
+    pub notebook: Option<String>,
+    pub notebook_id: Option<String>,
+    pub notebook_url: Option<String>,
+    pub notebooklm_base_url: Option<String>,
+}
+
 impl Config {
     /// Load configuration with *generic* CLI overrides (`-c key=value`) applied
     /// **in between** the values parsed from `config.toml` and the
@@ -416,7 +427,15 @@ pub fn write_global_mcp_servers(
                 entry["env"] = TomlItem::Table(env_table);
             }
 
-            if let Some(timeout) = config.startup_timeout_ms {
+            if let Some(timeout) = config.startup_timeout_sec {
+                let timeout = i64::try_from(timeout).map_err(|_| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "startup_timeout_sec exceeds supported range",
+                    )
+                })?;
+                entry["startup_timeout_sec"] = toml_edit::value(timeout);
+            } else if let Some(timeout) = config.startup_timeout_ms {
                 let timeout = i64::try_from(timeout).map_err(|_| {
                     std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
@@ -424,6 +443,16 @@ pub fn write_global_mcp_servers(
                     )
                 })?;
                 entry["startup_timeout_ms"] = toml_edit::value(timeout);
+            }
+
+            if let Some(timeout) = config.tool_timeout_sec {
+                let timeout = i64::try_from(timeout).map_err(|_| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "tool_timeout_sec exceeds supported range",
+                    )
+                })?;
+                entry["tool_timeout_sec"] = toml_edit::value(timeout);
             }
 
             doc["mcp_servers"][name.as_str()] = TomlItem::Table(entry);
@@ -1188,8 +1217,16 @@ pub fn list_mcp_servers(
                             .filter_map(|(k, v)| v.as_str().map(|s| (k.to_string(), s.to_string())))
                             .collect()
                     });
+                let startup_timeout_sec = t
+                    .get("startup_timeout_sec")
+                    .and_then(toml_edit::Item::as_integer)
+                    .map(|i| i as u64);
                 let startup_timeout_ms = t
                     .get("startup_timeout_ms")
+                    .and_then(toml_edit::Item::as_integer)
+                    .map(|i| i as u64);
+                let tool_timeout_sec = t
+                    .get("tool_timeout_sec")
                     .and_then(toml_edit::Item::as_integer)
                     .map(|i| i as u64);
 
@@ -1199,7 +1236,9 @@ pub fn list_mcp_servers(
                         command,
                         args,
                         env,
+                        startup_timeout_sec,
                         startup_timeout_ms,
+                        tool_timeout_sec,
                     },
                 ));
             }
@@ -1271,10 +1310,21 @@ pub fn add_mcp_server(codex_home: &Path, name: &str, cfg: McpServerConfig) -> an
         }
         server_tbl.insert("env", TomlItem::Value(toml_edit::Value::InlineTable(it)));
     }
-    if let Some(ms) = cfg.startup_timeout_ms {
+    if let Some(sec) = cfg.startup_timeout_sec {
+        server_tbl.insert(
+            "startup_timeout_sec",
+            TomlItem::Value(toml_edit::Value::from(sec as i64)),
+        );
+    } else if let Some(ms) = cfg.startup_timeout_ms {
         server_tbl.insert(
             "startup_timeout_ms",
             TomlItem::Value(toml_edit::Value::from(ms as i64)),
+        );
+    }
+    if let Some(sec) = cfg.tool_timeout_sec {
+        server_tbl.insert(
+            "tool_timeout_sec",
+            TomlItem::Value(toml_edit::Value::from(sec as i64)),
         );
     }
 
@@ -1605,6 +1655,50 @@ pub struct ProjectConfig {
     pub hooks: Vec<ProjectHookConfig>,
     #[serde(default)]
     pub commands: Vec<ProjectCommandConfig>,
+    #[serde(default)]
+    pub stage0: Option<ProjectStage0Toml>,
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct ProjectStage0Toml {
+    #[serde(default)]
+    pub notebook: Option<String>,
+    #[serde(default)]
+    pub notebook_id: Option<String>,
+    #[serde(default)]
+    pub notebook_url: Option<String>,
+    #[serde(default)]
+    pub notebooklm_base_url: Option<String>,
+}
+
+fn resolve_project_override<'a>(
+    projects: &'a HashMap<String, ProjectConfig>,
+    resolved_cwd: &Path,
+) -> Option<&'a ProjectConfig> {
+    resolve_project_override_entry(projects, resolved_cwd).map(|(_, cfg)| cfg)
+}
+
+fn resolve_project_override_entry<'a>(
+    projects: &'a HashMap<String, ProjectConfig>,
+    resolved_cwd: &Path,
+) -> Option<(&'a String, &'a ProjectConfig)> {
+    let mut best: Option<(&String, &ProjectConfig, usize)> = None;
+    for (key, cfg) in projects {
+        let key_path = Path::new(key);
+        if key_path.as_os_str().is_empty() {
+            continue;
+        }
+        if resolved_cwd == key_path {
+            return Some((key, cfg));
+        }
+        if resolved_cwd.starts_with(key_path) {
+            let depth = key_path.components().count();
+            if best.map_or(true, |(_, _, best_depth)| depth > best_depth) {
+                best = Some((key, cfg, depth));
+            }
+        }
+    }
+    best.map(|(k, cfg, _)| (k, cfg))
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -1658,16 +1752,13 @@ impl ConfigToml {
     pub fn is_cwd_trusted(&self, resolved_cwd: &Path) -> bool {
         let projects = self.projects.clone().unwrap_or_default();
 
-        let is_path_trusted = |path: &Path| {
-            let path_str = path.to_string_lossy().to_string();
-            projects
-                .get(&path_str)
-                .map(|p| p.trust_level.as_deref() == Some("trusted"))
-                .unwrap_or(false)
+        let is_override_trusted = |override_cfg: Option<&ProjectConfig>| {
+            override_cfg
+                .and_then(|p| p.trust_level.as_deref())
+                .is_some_and(|v| v == "trusted")
         };
 
-        // Fast path: exact cwd match
-        if is_path_trusted(resolved_cwd) {
+        if is_override_trusted(resolve_project_override(&projects, resolved_cwd)) {
             return true;
         }
 
@@ -1675,7 +1766,7 @@ impl ConfigToml {
         // (the primary repository working directory) is trusted. This lets
         // worktrees inherit trust from the main project.
         if let Some(root_project) = resolve_root_git_project_for_trust(resolved_cwd) {
-            return is_path_trusted(&root_project);
+            return is_override_trusted(resolve_project_override(&projects, &root_project));
         }
 
         false
@@ -1841,9 +1932,11 @@ impl Config {
         // Honor the exact directory the program was started in (or provided via -C/--cd).
         // Any Git-aware features should resolve the repo root on demand.
 
-        // Project-specific overrides based on final resolved cwd (exact match)
-        let project_key = resolved_cwd.to_string_lossy().to_string();
-        let project_override = cfg.projects.as_ref().and_then(|m| m.get(&project_key));
+        // Project-specific overrides based on final resolved cwd (closest ancestor match)
+        let project_override = cfg
+            .projects
+            .as_ref()
+            .and_then(|m| resolve_project_override(m, &resolved_cwd));
         // Resolve sandbox mode with correct precedence:
         // CLI override > per-project override > global config.toml > default
         let effective_sandbox_mode = sandbox_mode
@@ -1910,6 +2003,15 @@ impl Config {
             .unwrap_or_default();
         let project_commands = project_override
             .map(|cfg| load_project_commands(&cfg.commands, &resolved_cwd))
+            .unwrap_or_default();
+        let stage0 = project_override
+            .and_then(|cfg| cfg.stage0.clone())
+            .map(|cfg| Stage0ProjectConfig {
+                notebook: cfg.notebook,
+                notebook_id: cfg.notebook_id,
+                notebook_url: cfg.notebook_url,
+                notebooklm_base_url: cfg.notebooklm_base_url,
+            })
             .unwrap_or_default();
 
         let tools_web_search_request = override_tools_web_search_request
@@ -2016,6 +2118,7 @@ impl Config {
             always_allow_commands,
             project_hooks,
             project_commands,
+            stage0,
             shell_environment_policy,
             confirm_guard,
             disable_response_storage: config_profile
@@ -2547,6 +2650,45 @@ persistence = "none"
     }
 
     #[test]
+    fn project_trust_inherits_to_subdirectories() {
+        let root = TempDir::new().unwrap();
+        let child = root.path().join("child");
+        std::fs::create_dir_all(&child).unwrap();
+
+        let root_path = root.path().to_string_lossy();
+        let toml = format!(
+            r#"[projects."{root_path}"]
+trust_level = "trusted"
+"#
+        );
+
+        let cfg: ConfigToml = toml::from_str(&toml).unwrap();
+        assert!(cfg.is_cwd_trusted(&child));
+    }
+
+    #[test]
+    fn project_trust_prefers_most_specific_match() {
+        let root = TempDir::new().unwrap();
+        let child = root.path().join("child");
+        let grandchild = child.join("grandchild");
+        std::fs::create_dir_all(&grandchild).unwrap();
+
+        let root_path = root.path().to_string_lossy();
+        let child_path = child.to_string_lossy();
+        let toml = format!(
+            r#"[projects."{root_path}"]
+trust_level = "trusted"
+
+[projects."{child_path}"]
+trust_level = "untrusted"
+"#
+        );
+
+        let cfg: ConfigToml = toml::from_str(&toml).unwrap();
+        assert!(!cfg.is_cwd_trusted(&grandchild));
+    }
+
+    #[test]
     fn auto_upgrade_enabled_accepts_string_boolean() {
         let cfg_true = r#"auto_upgrade_enabled = "true""#;
         let parsed_true =
@@ -2659,7 +2801,9 @@ exclude_slash_tmp = true
                 command: "echo".to_string(),
                 args: vec!["hello".to_string()],
                 env: None,
+                startup_timeout_sec: None,
                 startup_timeout_ms: None,
+                tool_timeout_sec: None,
             },
         );
 
@@ -2999,6 +3143,7 @@ model_text_verbosity = "high"
                 always_allow_commands: Vec::new(),
                 project_hooks: ProjectHooks::default(),
                 project_commands: Vec::new(),
+                stage0: Stage0ProjectConfig::default(),
                 shell_environment_policy: ShellEnvironmentPolicy::default(),
                 disable_response_storage: false,
                 auto_upgrade_enabled: false,
@@ -3081,6 +3226,7 @@ model_text_verbosity = "high"
             always_allow_commands: Vec::new(),
             project_hooks: ProjectHooks::default(),
             project_commands: Vec::new(),
+            stage0: Stage0ProjectConfig::default(),
             shell_environment_policy: ShellEnvironmentPolicy::default(),
             disable_response_storage: false,
             auto_upgrade_enabled: false,
@@ -3178,6 +3324,7 @@ model_text_verbosity = "high"
             always_allow_commands: Vec::new(),
             project_hooks: ProjectHooks::default(),
             project_commands: Vec::new(),
+            stage0: Stage0ProjectConfig::default(),
             shell_environment_policy: ShellEnvironmentPolicy::default(),
             disable_response_storage: true,
             auto_upgrade_enabled: false,
@@ -3261,6 +3408,7 @@ model_text_verbosity = "high"
             always_allow_commands: Vec::new(),
             project_hooks: ProjectHooks::default(),
             project_commands: Vec::new(),
+            stage0: Stage0ProjectConfig::default(),
             shell_environment_policy: ShellEnvironmentPolicy::default(),
             disable_response_storage: false,
             auto_upgrade_enabled: false,

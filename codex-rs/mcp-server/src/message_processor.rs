@@ -1416,7 +1416,9 @@ fn convert_mcp_servers(
                         command: command.display().to_string(),
                         args,
                         env: env_map,
+                        startup_timeout_sec: None,
                         startup_timeout_ms: None,
+                        tool_timeout_sec: None,
                     },
                 );
             }

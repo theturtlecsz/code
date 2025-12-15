@@ -8,7 +8,6 @@ use regex_lite::Regex;
 use serde::Deserialize;
 use std::fmt::Write as _;
 
-use crate::local_memory_util;
 use crate::templates::{TemplateSource, resolve_template_source};
 
 const PROMPTS_JSON: &str = include_str!(concat!(
@@ -421,7 +420,7 @@ pub fn build_stage_prompt_with_mcp(
     let remainder = trimmed[spec_id.len()..].trim().to_string();
 
     let context_hint = format!(
-        "Use local-memory search (domains: spec-tracker, docs-ops, impl-notes, infra-ci) to gather current context for {spec_id}. Summaries must cite memory IDs or MCP transcripts."
+        "Use local-memory search (domains: spec-tracker, docs-ops, impl-notes, infra-ci) to gather current context for {spec_id}. Summaries must cite memory IDs or captured CLI output."
     );
 
     let goal_hint = if !remainder.is_empty() {
@@ -600,44 +599,18 @@ pub fn build_stage_prompt_with_mcp(
 fn gather_local_memory_context(
     spec_id: &str,
     stage: SpecStage,
-    mcp_manager: Option<Arc<codex_core::mcp_connection_manager::McpConnectionManager>>,
+    _mcp_manager: Option<Arc<codex_core::mcp_connection_manager::McpConnectionManager>>,
 ) -> Result<Vec<String>, String> {
-    use serde_json::json;
+    if !crate::local_memory_cli::local_memory_daemon_healthy_blocking(
+        std::time::Duration::from_millis(750),
+    ) {
+        return Err("local-memory daemon not available at http://localhost:3002".to_string());
+    }
 
-    // Use native MCP if available (ARCH-002 pattern)
-    let results = if let Some(manager_arc) = mcp_manager {
-        let spec_id_owned = spec_id.to_string();
-        let stage_name = stage.command_name().to_string();
-        block_on_sync(move || {
-            let manager = manager_arc.clone();
-            let spec_id = spec_id_owned.clone();
-            let stage_name = stage_name.clone();
-            async move {
-                let query = format!("{} {}", spec_id, stage_name);
-                let args = json!({
-                    "query": query,
-                    "limit": 8,
-                    "tags": [format!("spec:{}", spec_id), format!("stage:{}", stage_name)],
-                    "search_type": "hybrid"
-                });
-
-                manager
-                    .call_tool(
-                        "local-memory",
-                        "search",
-                        Some(args),
-                        Some(std::time::Duration::from_secs(10)),
-                    )
-                    .await
-                    .ok()
-                    .and_then(|result| parse_mcp_results_to_local_memory(&result).ok())
-                    .unwrap_or_default()
-            }
-        })
-    } else {
-        // Fallback: Return empty (graceful degradation when mcp_manager not passed)
-        Vec::new()
-    };
+    let stage_name = stage.command_name().to_string();
+    let query = format!("{} {}", spec_id, stage_name);
+    let tags = vec![format!("spec:{spec_id}"), format!("stage:{stage_name}")];
+    let results = crate::local_memory_cli::search_blocking(&query, 8, &tags, None, 500)?;
 
     let mut entries: Vec<String> = Vec::new();
 
@@ -659,34 +632,6 @@ fn gather_local_memory_context(
     }
 
     Ok(entries)
-}
-
-// Helper: Parse MCP CallToolResult to LocalMemorySearchResult format (pub for handler.rs usage)
-pub fn parse_mcp_results_to_local_memory(
-    result: &mcp_types::CallToolResult,
-) -> Result<Vec<local_memory_util::LocalMemorySearchResult>, String> {
-    if result.content.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let mut all_results = Vec::new();
-    for content_item in &result.content {
-        if let mcp_types::ContentBlock::TextContent(text_content) = content_item {
-            let text = &text_content.text;
-            if let Ok(json_results) = serde_json::from_str::<Vec<serde_json::Value>>(text) {
-                for json_result in json_results {
-                    if let Ok(parsed) = serde_json::from_value::<
-                        local_memory_util::LocalMemorySearchResult,
-                    >(json_result)
-                    {
-                        all_results.push(parsed);
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(all_results)
 }
 
 #[cfg(test)]
@@ -713,7 +658,7 @@ mod tests {
             script.push_str("    'default': {'success': True, 'data': {'results': []}},\n");
         }
         script.push_str(
-            "}\nstage = next((arg for arg in sys.argv if arg.startswith('stage:')), 'default')\n",
+            "}\nstage = 'default'\nfor arg in sys.argv:\n  if 'stage:' in arg:\n    for token in arg.split(','):\n      if token.startswith('stage:'):\n        stage = token\n        break\n",
         );
         script.push_str(
             "payload = responses.get(stage, responses.get('default', {'success': True, 'data': {'results': []}}))\n",
@@ -740,10 +685,12 @@ mod tests {
         }
         unsafe {
             std::env::set_var("LOCAL_MEMORY_BIN", &script_path);
+            std::env::set_var("LOCAL_MEMORY_SKIP_HEALTHCHECK", "1");
         }
         let result = f();
         unsafe {
             std::env::remove_var("LOCAL_MEMORY_BIN");
+            std::env::remove_var("LOCAL_MEMORY_SKIP_HEALTHCHECK");
         }
         drop(temp_dir);
         result
@@ -801,23 +748,28 @@ mod tests {
 
     #[test]
     fn gather_local_memory_context_returns_empty_without_mcp() {
-        // ARCH-004: Subprocess mocking removed, native MCP path tested via integration tests
-        // When mcp_manager is None (no MCP available), gracefully returns empty
-        let entries = gather_local_memory_context("SPEC-OPS-123", SpecStage::Plan, None).unwrap();
+        let entries = with_local_memory_stub(
+            &[("default", r#"{"success": true, "data": {"results": []}}"#)],
+            || gather_local_memory_context("SPEC-OPS-123", SpecStage::Plan, None).unwrap(),
+        );
         assert!(entries.is_empty());
     }
 
     #[test]
     fn gather_local_memory_context_handles_no_runtime() {
-        // When called outside tokio runtime, returns empty gracefully
-        let entries = gather_local_memory_context("SPEC-OPS-123", SpecStage::Plan, None).unwrap();
+        let entries = with_local_memory_stub(
+            &[("default", r#"{"success": true, "data": {"results": []}}"#)],
+            || gather_local_memory_context("SPEC-OPS-123", SpecStage::Plan, None).unwrap(),
+        );
         assert!(entries.is_empty());
     }
 
     #[test]
     fn build_stage_prompt_works_without_mcp() {
-        // ARCH-004: Without MCP manager, prompt still builds (context section empty)
-        let prompt = build_stage_prompt(SpecStage::Plan, "SPEC-OPS-123 Align migration").unwrap();
+        let prompt = with_local_memory_stub(
+            &[("default", r#"{"success": true, "data": {"results": []}}"#)],
+            || build_stage_prompt(SpecStage::Plan, "SPEC-OPS-123 Align migration").unwrap(),
+        );
 
         assert!(prompt.contains("## Local-memory context"));
         assert!(prompt.contains("No stage-specific local-memory entries"));
@@ -837,8 +789,10 @@ mod tests {
 
     #[test]
     fn build_stage_prompt_includes_version_for_tasks() {
-        // ARCH-004: Native MCP path tested via integration tests, unit test verifies basic structure
-        let prompt = build_stage_prompt(SpecStage::Tasks, "SPEC-OPS-123").unwrap();
+        let prompt = with_local_memory_stub(
+            &[("default", r#"{"success": true, "data": {"results": []}}"#)],
+            || build_stage_prompt(SpecStage::Tasks, "SPEC-OPS-123").unwrap(),
+        );
 
         assert!(prompt.contains("## Local-memory context"));
         assert!(prompt.contains("Prompt version: 20251002-tasks-a"));

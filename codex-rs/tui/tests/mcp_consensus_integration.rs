@@ -17,7 +17,9 @@ async fn is_local_memory_available() -> bool {
             command: "local-memory".to_string(),
             args: vec![],
             env: None,
+            startup_timeout_sec: None,
             startup_timeout_ms: Some(2000),
+            tool_timeout_sec: None,
         },
     )]);
 
@@ -36,7 +38,9 @@ async fn test_mcp_connection_initialization() {
             command: "local-memory".to_string(),
             args: vec![],
             env: None,
+            startup_timeout_sec: None,
             startup_timeout_ms: Some(5000),
+            tool_timeout_sec: None,
         },
     )]);
 
@@ -92,7 +96,9 @@ async fn test_mcp_retry_logic_handles_delayed_initialization() {
                 command: "local-memory".to_string(),
                 args: vec![],
                 env: None,
+                startup_timeout_sec: None,
                 startup_timeout_ms: Some(5000),
+                tool_timeout_sec: None,
             },
         )]);
 
@@ -144,7 +150,9 @@ async fn test_mcp_tool_call_format() {
             command: "local-memory".to_string(),
             args: vec![],
             env: None,
+            startup_timeout_sec: None,
             startup_timeout_ms: Some(5000),
+            tool_timeout_sec: None,
         },
     )]);
 
@@ -209,7 +217,9 @@ async fn test_full_consensus_workflow_with_mcp() {
             command: "local-memory".to_string(),
             args: vec![],
             env: None,
+            startup_timeout_sec: None,
             startup_timeout_ms: Some(5000),
+            tool_timeout_sec: None,
         },
     )]);
 
