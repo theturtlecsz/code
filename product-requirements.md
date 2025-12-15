@@ -38,11 +38,11 @@
 ```
 
 **Key Features:**
-- **Multi-model consensus:** Gemini (research), Claude (synthesis), GPT-5 (validation), GPT-5-Codex (code generation)
+- **Multi-model pipeline:** Single-owner stages with specialized models — Gemini (research), Claude (synthesis), GPT-5 (validation), GPT-5-Codex (code generation). Quality enforced by compiler/tests and constitution gates, not by voting (see GR-001).
 - **Tiered model strategy:** Right-sized agent usage (0-4 agents per command type), 40% cost reduction
 - **Template-based generation:** GitHub-inspired templates with 55% speed improvement
-- **Automatic conflict resolution:** Arbiter agent resolves disagreements without human intervention
-- **Evidence-driven:** Every stage produces telemetry, consensus synthesis, audit trails
+- **Automatic conflict resolution:** Constitution gates and Judge audit resolve quality issues without human intervention
+- **Evidence-driven:** Every stage produces telemetry, stage artifacts, audit trails
 - **Visible execution:** All agent work shown in TUI, no black boxes
 - **Progressive validation:** Each stage validates previous work before advancing
 - **Native TUI status:** Instant dashboard (<1s) with no API calls
