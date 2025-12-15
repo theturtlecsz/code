@@ -2314,7 +2314,7 @@ impl SpecKitCommand for Stage0EvalBackendCommand {
     fn execute(&self, widget: &mut ChatWidget, args: String) {
         use crate::vector_state::VECTOR_STATE;
         use codex_stage0::{
-            EvalLane, TfIdfBackend, VectorBackend, VectorFilters, built_in_eval_cases,
+            EvalLane, TfIdfBackend, VectorBackend, VectorFilters,
             built_in_test_documents, combined_eval_cases, evaluate_backend,
         };
         use std::path::PathBuf;

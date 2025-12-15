@@ -104,6 +104,8 @@ pub fn validate_agent_isolation_with_skip(cwd: &Path) -> Result<(), IsolationErr
 }
 
 /// Get list of missing instruction files (for error reporting)
+/// Useful helper for detailed error messages when isolation check fails
+#[allow(dead_code)]
 pub fn find_missing_instruction_files(cwd: &Path) -> Vec<String> {
     REQUIRED_INSTRUCTION_FILES
         .iter()

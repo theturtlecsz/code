@@ -22,6 +22,8 @@ pub(crate) struct VisionQuestion {
     pub question: &'static str,
     pub hint: &'static str,
     pub options: Vec<VisionOption>,
+    /// Planned: multi-select support for questions with multiple valid answers
+    #[allow(dead_code)]
     pub allow_multiple: bool,
 }
 

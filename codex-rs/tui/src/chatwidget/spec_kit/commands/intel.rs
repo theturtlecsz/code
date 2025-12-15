@@ -580,8 +580,7 @@ fn execute_status(widget: &mut ChatWidget) {
                 .modified()
                 .ok()
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| chrono::DateTime::from_timestamp(d.as_secs() as i64, 0))
-                .flatten()
+                .and_then(|d| chrono::DateTime::from_timestamp(d.as_secs() as i64, 0))
                 .map(|dt: chrono::DateTime<chrono::Utc>| dt.format("%Y-%m-%d %H:%M").to_string())
                 .unwrap_or_else(|| "unknown".to_string());
             lines.push(format!(

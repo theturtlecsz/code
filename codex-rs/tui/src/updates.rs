@@ -116,6 +116,8 @@ const AUTO_UPGRADE_LOCK_TTL: Duration = Duration::from_secs(900); // 15 minutes
 
 #[derive(Debug, Clone)]
 pub enum UpgradeResolution {
+    /// Automated upgrade via shell command (reserved for future use)
+    #[allow(dead_code)]
     Command {
         command: Vec<String>,
         display: String,

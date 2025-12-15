@@ -644,15 +644,6 @@ impl BottomPane<'_> {
         self.request_redraw();
     }
 
-    /// Show PRD builder modal for interactive spec creation (SPEC-KIT-970)
-    /// Uses generic questions - prefer show_prd_builder_with_context for project-aware questions
-    pub fn show_prd_builder(&mut self, description: String) {
-        let modal = prd_builder_modal::PrdBuilderModal::new(description, self.app_event_tx.clone());
-        self.active_view = Some(Box::new(modal));
-        self.status_view_active = false;
-        self.request_redraw();
-    }
-
     /// Show PRD builder modal with project-specific questions (SPEC-KIT-971)
     pub fn show_prd_builder_with_context(
         &mut self,

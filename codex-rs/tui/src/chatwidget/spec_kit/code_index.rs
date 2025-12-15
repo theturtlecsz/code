@@ -9,7 +9,7 @@
 //! - `CodeUnitExtractor`: Tree-sitter based extractor
 
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tree_sitter::{Node, Parser};
 use walkdir::WalkDir;
 
@@ -124,12 +124,16 @@ impl CodeUnitExtractor {
     }
 
     /// Set maximum snippet length
+    /// API completeness: available for future configuration needs
+    #[allow(dead_code)]
     pub fn with_max_snippet_chars(mut self, max: usize) -> Self {
         self.max_snippet_chars = max;
         self
     }
 
     /// Set maximum context lines
+    /// API completeness: available for future configuration needs
+    #[allow(dead_code)]
     pub fn with_max_context_lines(mut self, max: usize) -> Self {
         self.max_context_lines = max;
         self

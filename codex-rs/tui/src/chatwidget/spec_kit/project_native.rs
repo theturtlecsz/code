@@ -893,7 +893,7 @@ fn create_go_files(
     files: &mut Vec<String>,
 ) -> Result<(), SpecKitError> {
     // Convert project name to Go module name (lowercase, no special chars)
-    let module_name = project_name.replace('-', "").replace('_', "");
+    let module_name = project_name.replace(['-', '_'], "");
 
     // go.mod
     let go_mod = format!(

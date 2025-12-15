@@ -216,7 +216,9 @@ fn run_stage0_blocking(
         let backend_handle = VECTOR_STATE.backend_handle();
         let backend_lock = backend_handle.read().await;
 
-        let result = if backend_lock.is_some() {
+        
+
+        if backend_lock.is_some() {
             // Use shared TfIdfBackend for hybrid retrieval
             tracing::debug!("Using shared TfIdfBackend for hybrid retrieval");
             drop(backend_lock);
@@ -287,9 +289,7 @@ fn run_stage0_blocking(
                 explain,
             )
             .await
-        };
-
-        result
+        }
     })
 }
 
@@ -387,15 +387,6 @@ fn get_recent_files(cwd: &Path) -> Vec<String> {
         })
         .map(|s| s.lines().take(20).map(String::from).collect())
         .unwrap_or_default()
-}
-
-/// Build context injection prefix for agent prompts
-///
-/// Returns a string to prepend to agent system prompts containing
-/// Divine Truth and Task Brief from Stage 0.
-pub fn build_stage0_context_prefix(stage0_result: &codex_stage0::Stage0Result) -> String {
-    // Use the built-in combined_context_md() helper
-    stage0_result.combined_context_md()
 }
 
 /// Write TASK_BRIEF.md to spec evidence directory
