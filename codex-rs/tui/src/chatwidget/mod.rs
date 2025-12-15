@@ -84,6 +84,7 @@ mod terminal_handlers;
 mod tools;
 
 // MAINT-11: Extracted rendering helpers
+mod agent_status;
 mod command_render;
 
 #[cfg(test)]
@@ -99,6 +100,10 @@ mod test_support;
 use self::agent_install::{
     start_agent_install_session, start_direct_terminal_session, start_prompt_terminal_session,
     wrap_command,
+};
+use self::agent_status::{
+    agent_log_color, agent_log_label, agent_status_color, agent_status_from_str,
+    agent_status_label, AgentLogEntry, AgentLogKind, AgentStatus,
 };
 use self::history_render::{CachedLayout, HistoryRenderState, LayoutRef};
 use self::limits_overlay::{LimitsOverlay, LimitsOverlayContent, LimitsTab};
@@ -773,21 +778,6 @@ impl AgentTerminalEntry {
     }
 }
 
-#[derive(Debug, Clone)]
-struct AgentLogEntry {
-    timestamp: DateTime<Local>,
-    kind: AgentLogKind,
-    message: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum AgentLogKind {
-    Status,
-    Progress,
-    Result,
-    Error,
-}
-
 struct AgentsTerminalState {
     active: bool,
     selected_index: usize,
@@ -908,60 +898,6 @@ struct AgentInfo {
     error: Option<String>,
     // Most recent progress line from core
     last_progress: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum AgentStatus {
-    Pending,
-    Running,
-    Completed,
-    Failed,
-}
-
-fn agent_status_from_str(status: &str) -> AgentStatus {
-    match status {
-        "pending" => AgentStatus::Pending,
-        "running" => AgentStatus::Running,
-        "completed" => AgentStatus::Completed,
-        "failed" => AgentStatus::Failed,
-        _ => AgentStatus::Pending,
-    }
-}
-
-fn agent_status_label(status: AgentStatus) -> &'static str {
-    match status {
-        AgentStatus::Pending => "Pending",
-        AgentStatus::Running => "Running",
-        AgentStatus::Completed => "Completed",
-        AgentStatus::Failed => "Failed",
-    }
-}
-
-fn agent_status_color(status: AgentStatus) -> ratatui::style::Color {
-    match status {
-        AgentStatus::Pending => crate::colors::warning(),
-        AgentStatus::Running => crate::colors::info(),
-        AgentStatus::Completed => crate::colors::success(),
-        AgentStatus::Failed => crate::colors::error(),
-    }
-}
-
-fn agent_log_label(kind: AgentLogKind) -> &'static str {
-    match kind {
-        AgentLogKind::Status => "status",
-        AgentLogKind::Progress => "progress",
-        AgentLogKind::Result => "result",
-        AgentLogKind::Error => "error",
-    }
-}
-
-fn agent_log_color(kind: AgentLogKind) -> ratatui::style::Color {
-    match kind {
-        AgentLogKind::Status => crate::colors::info(),
-        AgentLogKind::Progress => crate::colors::primary(),
-        AgentLogKind::Result => crate::colors::success(),
-        AgentLogKind::Error => crate::colors::error(),
-    }
 }
 
 use self::message::create_initial_user_message;

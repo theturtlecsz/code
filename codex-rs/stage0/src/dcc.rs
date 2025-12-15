@@ -727,7 +727,7 @@ where
                                     .metadata
                                     .extra
                                     .get("line_start")
-                                    .and_then(|v| v.as_u64())
+                                    .and_then(serde_json::Value::as_u64)
                                     .unwrap_or(0)
                                     as usize,
                                 why_relevant,
@@ -795,7 +795,7 @@ fn generate_code_relevance_heuristic(id: &str, path: Option<&str>, keywords: &[S
 
     // Check if ID/path contains any keywords
     let id_lower = id.to_lowercase();
-    let path_lower = path.map(|p| p.to_lowercase()).unwrap_or_default();
+    let path_lower = path.map(str::to_lowercase).unwrap_or_default();
 
     let matching_keywords: Vec<&String> = keywords
         .iter()
@@ -1175,7 +1175,7 @@ fn assemble_task_brief(
                 out.push_str(&format!("#### Code Unit {}\n\n", idx + 1));
                 out.push_str(&format!("- **Location:** `{}`", code.path));
                 if let Some(sym) = &code.symbol {
-                    out.push_str(&format!(" (symbol: `{}`)", sym));
+                    out.push_str(&format!(" (symbol: `{sym}`)"));
                 }
                 out.push('\n');
                 out.push_str(&format!("- **Type:** {}\n", code.unit_kind));

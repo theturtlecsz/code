@@ -5,6 +5,10 @@ version = { workspace = true }
 license = { workspace = true }
 description = "Stage 0 Overlay Engine for SPEC-KIT memory retrieval and Tier 2 synthesis"
 
+[features]
+default = []
+test-utils = []
+
 [lib]
 name = "codex_stage0"
 path = "src/lib.rs"

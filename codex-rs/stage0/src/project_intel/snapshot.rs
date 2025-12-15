@@ -104,34 +104,28 @@ impl ProjectSnapshotBuilder {
             .args(["rev-parse", "--abbrev-ref", "HEAD"])
             .current_dir(root)
             .output()
-        {
-            if output.status.success() {
+            && output.status.success() {
                 self.snapshot.metadata.branch =
                     String::from_utf8_lossy(&output.stdout).trim().to_string();
             }
-        }
 
         if let Ok(output) = std::process::Command::new("git")
             .args(["rev-parse", "--short", "HEAD"])
             .current_dir(root)
             .output()
-        {
-            if output.status.success() {
+            && output.status.success() {
                 self.snapshot.metadata.commit_hash =
                     String::from_utf8_lossy(&output.stdout).trim().to_string();
             }
-        }
 
         if let Ok(output) = std::process::Command::new("git")
             .args(["describe", "--tags", "--abbrev=0"])
             .current_dir(root)
             .output()
-        {
-            if output.status.success() {
+            && output.status.success() {
                 self.snapshot.metadata.latest_tag =
                     Some(String::from_utf8_lossy(&output.stdout).trim().to_string());
             }
-        }
 
         Ok(())
     }
@@ -148,13 +142,10 @@ impl ProjectSnapshotBuilder {
             .args(["metadata", "--format-version=1", "--no-deps"])
             .current_dir(root.join("codex-rs"))
             .output()
-        {
-            if output.status.success() {
-                if let Ok(metadata) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+            && output.status.success()
+                && let Ok(metadata) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
                     self.parse_cargo_metadata(&metadata);
                 }
-            }
-        }
 
         // Add well-known modules (hardcoded for now, could be config-driven)
         self.snapshot.code_topology.key_modules = vec![
@@ -484,11 +475,10 @@ fn count_files_recursive(
                 *counts.entry(ext_str).or_insert(0) += 1;
 
                 // Count lines for .rs files
-                if ext == "rs" {
-                    if let Ok(content) = fs::read_to_string(&entry_path) {
+                if ext == "rs"
+                    && let Ok(content) = fs::read_to_string(&entry_path) {
                         *total_loc += content.lines().count();
                     }
-                }
             }
         }
     }

@@ -96,7 +96,7 @@ impl ProjectSnapshot {
             if !workflow.stages.is_empty() {
                 out.push_str("**Stages:**\n");
                 for stage in &workflow.stages {
-                    out.push_str(&format!("1. {}\n", stage));
+                    out.push_str(&format!("1. {stage}\n"));
                 }
                 out.push('\n');
             }
@@ -124,7 +124,7 @@ impl ProjectSnapshot {
         }
 
         for (phase, specs) in by_phase.iter() {
-            out.push_str(&format!("## {}\n\n", phase));
+            out.push_str(&format!("## {phase}\n\n"));
             for spec in specs {
                 out.push_str(&format!(
                     "### {}: {}\n\n**Status:** {:?}\n\n{}\n\n",
@@ -161,13 +161,13 @@ impl ProjectSnapshot {
         // Goals
         out.push_str("\n## Goals\n\n");
         for g in &self.governance.goals {
-            out.push_str(&format!("- {}\n", g));
+            out.push_str(&format!("- {g}\n"));
         }
 
         // Non-goals
         out.push_str("\n## Non-Goals\n\n");
         for ng in &self.governance.non_goals {
-            out.push_str(&format!("- {}\n", ng));
+            out.push_str(&format!("- {ng}\n"));
         }
 
         // Gate mode
@@ -193,7 +193,7 @@ impl ProjectSnapshot {
         if !self.governance.drift_status.violations.is_empty() {
             out.push_str("- Violations:\n");
             for v in &self.governance.drift_status.violations {
-                out.push_str(&format!("  - {}\n", v));
+                out.push_str(&format!("  - {v}\n"));
             }
         }
 
@@ -223,7 +223,7 @@ impl ProjectSnapshot {
         // By domain
         out.push_str("\n## Memories by Domain\n\n");
         for (domain, count) in &self.memory_stats.by_domain {
-            out.push_str(&format!("- {}: {}\n", domain, count));
+            out.push_str(&format!("- {domain}: {count}\n"));
         }
 
         // Librarian status
@@ -270,7 +270,7 @@ impl ProjectSnapshot {
             if !milestone.key_achievements.is_empty() {
                 out.push_str("**Achievements:**\n");
                 for a in &milestone.key_achievements {
-                    out.push_str(&format!("- {}\n", a));
+                    out.push_str(&format!("- {a}\n"));
                 }
                 out.push('\n');
             }

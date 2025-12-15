@@ -511,7 +511,7 @@ impl<'a> LibrarianAudit<'a> {
     /// Format: LRB-YYYYMMDD-NNN where NNN is a sequential number
     pub fn generate_run_id(&self) -> Result<String> {
         let today = Utc::now().format("%Y%m%d").to_string();
-        let prefix = format!("LRB-{}-", today);
+        let prefix = format!("LRB-{today}-");
 
         // Find the highest sequence number for today
         let max_seq: Option<i32> = self
@@ -530,7 +530,7 @@ impl<'a> LibrarianAudit<'a> {
             .flatten();
 
         let next_seq = max_seq.unwrap_or(0) + 1;
-        Ok(format!("{}{:03}", prefix, next_seq))
+        Ok(format!("{prefix}{next_seq:03}"))
     }
 }
 

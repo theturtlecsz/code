@@ -166,7 +166,7 @@ pub fn check_constitution_readiness(db: &OverlayDb) -> Vec<String> {
     let version = match db.get_constitution_version() {
         Ok(v) => v,
         Err(e) => {
-            warnings.push(format!("Failed to check constitution: {}", e));
+            warnings.push(format!("Failed to check constitution: {e}"));
             return warnings;
         }
     };
@@ -182,7 +182,7 @@ pub fn check_constitution_readiness(db: &OverlayDb) -> Vec<String> {
     let memory_count = match db.constitution_memory_count() {
         Ok(c) => c,
         Err(e) => {
-            warnings.push(format!("Failed to count constitution memories: {}", e));
+            warnings.push(format!("Failed to count constitution memories: {e}"));
             return warnings;
         }
     };
@@ -199,7 +199,7 @@ pub fn check_constitution_readiness(db: &OverlayDb) -> Vec<String> {
     let memories = match db.get_constitution_memories(50) {
         Ok(m) => m,
         Err(e) => {
-            warnings.push(format!("Failed to get constitution memories: {}", e));
+            warnings.push(format!("Failed to get constitution memories: {e}"));
             return warnings;
         }
     };

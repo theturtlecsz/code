@@ -83,7 +83,7 @@ impl FromStr for MemoryType {
             "exception" => Ok(Self::Exception),
             "reference" => Ok(Self::Reference),
             "unknown" => Ok(Self::Unknown),
-            _ => Err(format!("Unknown memory type: {}", s)),
+            _ => Err(format!("Unknown memory type: {s}")),
         }
     }
 }
@@ -224,11 +224,10 @@ pub fn classify_memory(content: &str) -> ClassificationResult {
     scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     // Return highest scoring type, or Unknown if no significant signals
-    if let Some((mem_type, confidence, signals)) = scores.into_iter().next() {
-        if confidence > 0.0 {
+    if let Some((mem_type, confidence, signals)) = scores.into_iter().next()
+        && confidence > 0.0 {
             return ClassificationResult::new(mem_type, confidence.min(1.0), signals);
         }
-    }
 
     ClassificationResult::new(MemoryType::Unknown, 0.0, vec![])
 }

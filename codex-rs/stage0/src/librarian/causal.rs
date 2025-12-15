@@ -56,7 +56,7 @@ impl FromStr for CausalRelation {
             "blocks" => Ok(Self::Blocks),
             "enables" => Ok(Self::Enables),
             "relates_to" | "similar" | "relatesto" => Ok(Self::RelatesTo),
-            _ => Err(format!("Unknown causal relation: {}", s)),
+            _ => Err(format!("Unknown causal relation: {s}")),
         }
     }
 }

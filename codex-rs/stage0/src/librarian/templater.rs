@@ -124,12 +124,12 @@ fn ensure_type_tag(content: &str, memory_type: MemoryType) -> String {
             // Insert before next section
             let insert_pos = tags_pos + 7 + next_section;
             let mut result = content[..insert_pos].to_string();
-            result.push_str(&format!("\n- {}", type_tag));
+            result.push_str(&format!("\n- {type_tag}"));
             result.push_str(&content[insert_pos..]);
             return result;
         } else {
             // Append to end of TAGS section
-            return format!("{}\n- {}", content, type_tag);
+            return format!("{content}\n- {type_tag}");
         }
     }
 
@@ -292,7 +292,7 @@ fn extract_reference_sections(lines: &[&str], sections: &mut ExtractedSections) 
             .map(|pos| url_start + pos)
             .unwrap_or(content.len());
         let url = &content[url_start..url_end];
-        sections.outcome = Some(format!("Link: {}", url));
+        sections.outcome = Some(format!("Link: {url}"));
 
         let non_url = format!(
             "{}{}",
