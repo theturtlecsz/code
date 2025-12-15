@@ -1,6 +1,5 @@
 # AGENTS.md
 
-This repository is a fork with fork-specific markers and an upstream sync workflow (see `UPSTREAM-SYNC.md`).
 Not related to Anthropic's Claude Code.
 
 ## Commands
@@ -77,8 +76,6 @@ SPEC.md                      # Task tracking (single source of truth)
 ## Git
 
 - Default branch: **main**
-- Upstream sync: `git fetch upstream && git merge --no-ff --no-commit upstream/main`
-- See `docs/UPSTREAM-SYNC.md` for details
 
 ## Extended Documentation
 
