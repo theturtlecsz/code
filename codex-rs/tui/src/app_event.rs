@@ -14,7 +14,6 @@ use ratatui::text::Line;
 use std::time::Duration;
 
 use crate::app::ChatWidgetArgs;
-use crate::bottom_pane::chrome_selection_view::ChromeLaunchOption;
 use crate::chatwidget::spec_kit::{QualityGateBrokerResult, QualityGateValidationResult};
 use crate::slash_command::SlashCommand;
 use codex_protocol::models::ResponseItem;
@@ -472,12 +471,6 @@ pub(crate) enum AppEvent {
         provider: codex_login::DeviceCodeProvider,
     },
     // === END FORK-SPECIFIC: Device Code OAuth Events ===
-    /// Show Chrome launch options dialog
-    #[allow(dead_code)]
-    ShowChromeOptions(Option<u16>),
-
-    /// Chrome launch option selected by user
-    ChromeLaunchOptionSelected(ChromeLaunchOption, Option<u16>),
 
     /// Start a new chat session by resuming from the given rollout file
     ResumeFrom(std::path::PathBuf),

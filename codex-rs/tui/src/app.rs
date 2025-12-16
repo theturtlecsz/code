@@ -2251,17 +2251,8 @@ impl App<'_> {
                             }
                         }
                         // SPEC-KIT-963: /plan, /solve, /code removed. Use /speckit.* commands.
-                        SlashCommand::Browser => {
-                            if let AppState::Chat { widget } = &mut self.app_state {
-                                widget.handle_browser_command(command_args);
-                            }
-                        }
-                        SlashCommand::Chrome => {
-                            if let AppState::Chat { widget } = &mut self.app_state {
-                                tracing::info!("[cdp] /chrome invoked, args='{}'", command_args);
-                                widget.handle_chrome_command(command_args);
-                            }
-                        }
+                        // Browser/Chrome commands removed (MAINT-11 Phase 6)
+                        SlashCommand::Browser | SlashCommand::Chrome => {}
                         #[cfg(debug_assertions)]
                         SlashCommand::TestApproval => {
                             use codex_core::protocol::EventMsg;
@@ -2964,16 +2955,6 @@ impl App<'_> {
                 AppEvent::FileSearchResult { query, matches } => {
                     if let AppState::Chat { widget } = &mut self.app_state {
                         widget.apply_file_search_result(query, matches);
-                    }
-                }
-                AppEvent::ShowChromeOptions(port) => {
-                    if let AppState::Chat { widget } = &mut self.app_state {
-                        widget.show_chrome_options(port);
-                    }
-                }
-                AppEvent::ChromeLaunchOptionSelected(option, port) => {
-                    if let AppState::Chat { widget } = &mut self.app_state {
-                        widget.handle_chrome_launch_option(option, port);
                     }
                 }
                 AppEvent::JumpBack { nth, prefill } => {

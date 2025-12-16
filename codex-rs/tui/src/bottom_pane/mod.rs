@@ -22,7 +22,6 @@ mod approval_modal_view;
 mod bottom_pane_view;
 mod chat_composer;
 mod chat_composer_history;
-pub mod chrome_selection_view;
 pub(crate) mod clarify_modal;
 mod command_popup;
 mod custom_prompt_view;
@@ -577,16 +576,6 @@ impl BottomPane<'_> {
     /// Show the theme selection UI
     pub fn show_theme_selection(&mut self, current_theme: ThemeName) {
         let view = ThemeSelectionView::new(current_theme, self.app_event_tx.clone());
-        self.active_view = Some(Box::new(view));
-        // Status shown in composer title now
-        self.status_view_active = false;
-        self.request_redraw()
-    }
-
-    /// Show the Chrome launch options UI
-    pub fn show_chrome_selection(&mut self, port: Option<u16>) {
-        use chrome_selection_view::ChromeSelectionView;
-        let view = ChromeSelectionView::new(self.app_event_tx.clone(), port);
         self.active_view = Some(Box::new(view));
         // Status shown in composer title now
         self.status_view_active = false;

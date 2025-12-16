@@ -1599,7 +1599,6 @@ dependencies = [
  "clap",
  "codex-ansi-escape",
  "codex-arg0",
- "codex-browser",
  "codex-common",
  "codex-core",
  "codex-feedback",
