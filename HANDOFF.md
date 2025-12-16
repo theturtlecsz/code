@@ -19,39 +19,45 @@ Planner is a Rust workspace building the `code` binary with TUI focused on Spec-
 
 ---
 
-## 2. P119 Primary Task: MAINT-11 Phase 8 (Session Handlers)
+## 2. P119 Tasks (3 Objectives)
 
-### Goal
+### Task A: MAINT-11 Phase 8 - Session Handlers (Primary)
 Extract session save/load/resume functionality from `mod.rs` into `session_handlers.rs`.
+
+**Target**: ~800 LOC extraction
+
+### Task B: Fix Pre-existing Test Failure (Secondary)
+Fix `suite::exec_stream_events::test_aggregated_output_interleaves_in_order` in codex-core.
+
+**Error**:
+```
+left: "O1\nO2\nE1\nE2\n"
+right: "O1\nE1\nO2\nE2\n"
+```
+
+### Task C: Architecture Diagram (Tertiary)
+Create Mermaid diagram of chatwidget module structure in `docs/architecture/chatwidget-structure.md`.
 
 ### Current State
 - `mod.rs`: 20,350 LOC
 - **Phase 7 (P118)**: `review_handlers.rs` (~408 LOC extracted, 462 LOC total with tests)
 
-### Investigation Steps
+### Investigation Steps for Session Handlers
 ```bash
 cd codex-rs
 
 # Find session-related functions
-grep -n "fn.*session\|Session\|session_" tui/src/chatwidget/mod.rs | head -40
+grep -n "fn.*session\|Session\|session_" tui/src/chatwidget/mod.rs | head -50
 
 # Find save/load/resume functions
-grep -n "save_session\|load_session\|resume_session\|rollout" tui/src/chatwidget/mod.rs | head -20
+grep -n "save_session\|load_session\|resume\|rollout" tui/src/chatwidget/mod.rs | head -30
 
 # Check session data structures
-grep -n "SessionData\|session_path" tui/src/chatwidget/mod.rs
+grep -n "SessionData\|RolloutPath\|session_path" tui/src/chatwidget/mod.rs | head -20
 ```
 
-### Expected Extraction Targets
-```rust
-// Functions to potentially extract
-pub(crate) fn save_session(&self)
-pub(crate) fn load_session(&mut self, path: PathBuf)
-pub(crate) fn resume_session(&mut self, rollout: PathBuf)
-fn session_path(&self) -> PathBuf
-fn serialize_session(&self) -> SessionData
-fn deserialize_session(data: SessionData) -> Self
-```
+### Detailed Session Prompt
+See `docs/handoffs/P119-PROMPT.md` for complete investigation steps and checklists.
 
 ---
 
@@ -171,11 +177,26 @@ Extracted functions:
 
 | Target | Est. LOC | Complexity | Session |
 |--------|----------|------------|---------|
-| Session handlers | ~800 | Medium | P119 |
+| Session handlers | ~800 | Medium | **P119** |
 | Agents terminal | ~300 | Low | P120 |
 | History handlers | ~600 | Medium | P121 |
 | Event handlers | ~1,000 | High | P122+ |
 
 ---
 
-_Generated: 2025-12-16 after P118 review_handlers.rs extraction_
+## 10. P119 Expected Deliverables
+
+| Category | Deliverable | Status |
+|----------|-------------|--------|
+| **Extraction** | session_handlers.rs (~800 LOC) | Pending |
+| **Extraction** | mod.rs → ~19,550 LOC | Pending |
+| **Test Fix** | exec_stream interleave test fixed | Pending |
+| **Architecture** | chatwidget-structure.md diagram | Pending |
+| **Testing** | Session handler unit tests | Pending |
+| **Testing** | Integration test for save/load | Pending |
+| **Docs** | MAINT-11 plan updated | Pending |
+| **Docs** | HANDOFF.md for P120 | Pending |
+
+---
+
+_Generated: 2025-12-16 after P118 (updated for P119 planning)_
