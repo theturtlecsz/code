@@ -1,6 +1,6 @@
-# P117 Session Handoff
+# P118 Session Handoff
 Date: 2025-12-16
-Scope: ChatWidget refactor (MAINT-11) - Next extraction phase
+Scope: ChatWidget refactor (MAINT-11) - Post browser code removal
 
 ---
 
@@ -8,28 +8,30 @@ Scope: ChatWidget refactor (MAINT-11) - Next extraction phase
 
 Planner is a Rust workspace building the `code` binary with TUI focused on Spec-Kit workflows.
 
-**P116 Completed**:
-- Extracted `input_helpers.rs` module (175 LOC, 5 tests)
-- Consolidated duplicate `IMAGE_EXTENSIONS` constant from 2 locations
-- Simplified `handle_paste()` using new helper functions
-- mod.rs: 22,906 → 22,852 LOC (-54 LOC)
+**P117 Completed**:
+- Removed browser/chrome integration dead code from upstream
+- Deleted `chrome_selection_view.rs` (229 LOC)
+- Removed browser handlers, events, fields, screenshot rendering
+- Cleaned up unused imports and dependencies
+- mod.rs: 22,852 → 20,758 LOC (-2,094 LOC, -9.2%)
 
-**Commit**: `d5c58634c refactor(tui): extract input_helpers module (MAINT-11 Phase 5)`
+**Commit**: `15aa783a7 refactor(tui): remove browser/chrome dead code (MAINT-11 Phase 6)`
 
 ---
 
-## 2. P117 Primary Task: MAINT-11 Phase 6 (Continued Extraction)
+## 2. P118 Primary Task: MAINT-11 Phase 7 (Continued Extraction)
 
 ### Goal
-Continue extracting cohesive functionality from `mod.rs` to reduce its 22,852 LOC.
+Continue extracting cohesive functionality from `mod.rs` to reduce its 20,758 LOC.
 
 ### Current State
-- `mod.rs`: 22,852 LOC
+- `mod.rs`: 20,758 LOC
 - **Phase 1 (P110)**: `command_render.rs` (~200 LOC, 8 tests)
 - **Phase 2 (P113)**: `agent_status.rs` (~65 LOC, 3 tests)
 - **Phase 3 (P114)**: `submit_helpers.rs` (~300 LOC, 4 tests)
 - **Phase 4 (P115)**: Dead code cleanup (8 warnings → 0)
 - **Phase 5 (P116)**: `input_helpers.rs` (175 LOC, 5 tests)
+- **Phase 6 (P117)**: Browser/chrome dead code removal (-2,094 LOC)
 
 ### Extraction Candidates for Next Phase
 Search for cohesive function groups:
@@ -48,9 +50,9 @@ grep -n "session\|Session" tui/src/chatwidget/mod.rs | head -20
 
 ### Potential Extraction Targets
 1. **Session handling** - session-related methods
-2. **Browser/Chrome handling** - browser integration methods
-3. **Agent terminal handling** - agents terminal mode methods
-4. **History management** - history cell management
+2. **Agent terminal handling** - agents terminal mode methods
+3. **History management** - history cell management
+4. **Review/merge handlers** - PR review functionality
 
 ---
 
@@ -92,7 +94,7 @@ chatwidget/
 ├── exec_tools.rs         (29KB)
 ├── gh_actions.rs         (10KB)
 ├── history_render.rs     (5KB)
-├── input_helpers.rs      (6KB)  ← P116 (NEW)
+├── input_helpers.rs      (6KB)  ← P116
 ├── interrupts.rs         (7KB)
 ├── layout_scroll.rs      (8KB)
 ├── limits_handlers.rs    (3KB)
@@ -100,7 +102,7 @@ chatwidget/
 ├── perf.rs               (6KB)
 ├── rate_limit_refresh.rs (4KB)
 ├── submit_helpers.rs     (11KB) ← P114
-└── mod.rs                (928KB) ← 22,852 LOC
+└── mod.rs                (845KB) ← 20,758 LOC (P117)
 ```
 
 ---
@@ -123,17 +125,29 @@ cargo clippy -p codex-tui
 
 ---
 
-## 6. input_helpers.rs Contents (P116)
+## 6. P117 Removed Code Summary
 
-New module contains:
-| Function | Description |
-|----------|-------------|
-| `IMAGE_EXTENSIONS` | Consolidated constant (was duplicated) |
-| `is_image_extension()` | Check for image file extensions |
-| `is_likely_file_path()` | Detect file path patterns |
-| `unescape_terminal_path()` | Remove terminal escape backslashes |
-| `url_decode_file_path()` | Decode file:// URL encoding |
-| `normalize_pasted_path()` | Combined path normalization |
+| Component | LOC Removed |
+|-----------|-------------|
+| `chrome_selection_view.rs` | 229 |
+| Browser handlers in `mod.rs` | ~1,500 |
+| Screenshot rendering methods | ~170 |
+| Unused imports/fields | ~195 |
+| **Total** | ~2,094 |
+
+Removed items:
+- `handle_browser_command()`
+- `handle_chrome_command()`
+- `show_chrome_options()`
+- `handle_chrome_launch_option()`
+- `toggle_browser_hud()`
+- `render_screenshot_highlevel()`
+- `render_screenshot_placeholder()`
+- `ChromeLaunchOption`, `ShowChromeOptions` events
+- `browser_is_external`, `browser_hud_expanded` fields
+- `cached_image_protocol`, `cached_picker` fields
+- `BG_SHOT_IN_FLIGHT`, `BG_SHOT_LAST_START_MS` statics
+- `codex_browser` dependency
 
 ---
 
@@ -141,7 +155,7 @@ New module contains:
 
 | Component | File | Lines |
 |-----------|------|-------|
-| ChatWidget Monolith | `tui/src/chatwidget/mod.rs` | 22,852 |
+| ChatWidget Monolith | `tui/src/chatwidget/mod.rs` | 20,758 |
 | Input Helpers | `tui/src/chatwidget/input_helpers.rs` | 175 |
 | Slash Command Parsing | `tui/src/slash_command.rs` | 786 |
 | Command Dispatch | `tui/src/app.rs:1943-2300` | ~350 |
@@ -160,22 +174,24 @@ New module contains:
 | P114 | 83ae857d1 | submit_helpers.rs + core clippy |
 | P115 | e82064d50 | dead_code cleanup (8→0 warnings) |
 | P116 | d5c58634c | input_helpers.rs extraction |
-| P117 | — | next extraction phase |
+| P117 | 15aa783a7 | Browser/chrome dead code removal |
+| P118 | — | next extraction phase |
 
 ---
 
 ## 9. MAINT-11 Progress Summary
 
-| Phase | Session | LOC Extracted | Total mod.rs |
-|-------|---------|---------------|--------------|
-| 1 | P110 | ~200 | 23,213 |
-| 2 | P113 | ~65 | 23,151 |
-| 3 | P114 | ~300 | 22,911 |
-| 4 | P115 | ~5 (removed) | 22,906 |
-| 5 | P116 | ~54 (+ 175 new) | 22,852 |
+| Phase | Session | LOC Change | Total mod.rs |
+|-------|---------|------------|--------------|
+| 1 | P110 | -200 extracted | 23,213 |
+| 2 | P113 | -65 extracted | 23,151 |
+| 3 | P114 | -300 extracted | 22,911 |
+| 4 | P115 | -5 removed | 22,906 |
+| 5 | P116 | -54 extracted | 22,852 |
+| 6 | P117 | -2,094 removed | 20,758 |
 
-**Cumulative**: 23,413 → 22,852 = ~561 LOC extracted/removed
+**Cumulative**: 23,413 → 20,758 = **-2,655 LOC** (-11.3%)
 
 ---
 
-_Generated: 2025-12-16 after commit d5c58634c_
+_Generated: 2025-12-16 after commit 15aa783a7_
