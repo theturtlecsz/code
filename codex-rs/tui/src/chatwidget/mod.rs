@@ -86,6 +86,7 @@ mod tools;
 // MAINT-11: Extracted rendering helpers
 mod agent_status;
 mod command_render;
+mod input_helpers;
 mod submit_helpers;
 
 #[cfg(test)]
@@ -2289,10 +2290,6 @@ impl ChatWidget<'_> {
     fn parse_message_with_images(&mut self, text: String) -> UserMessage {
         use std::path::Path;
 
-        // Common image extensions
-        const IMAGE_EXTENSIONS: &[&str] = &[
-            ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico", ".tiff", ".tif",
-        ];
         // We keep a visible copy of the original (normalized) text for history
         let mut display_text = text.clone();
         let mut ordered_items: Vec<InputItem> = Vec::new();
@@ -2352,10 +2349,7 @@ impl ChatWidget<'_> {
             if word.starts_with("[image:") {
                 continue;
             }
-            let is_image_path = IMAGE_EXTENSIONS
-                .iter()
-                .any(|ext| word.to_lowercase().ends_with(ext));
-            if !is_image_path {
+            if !input_helpers::is_image_extension(word) {
                 continue;
             }
             let path = Path::new(word);
@@ -4298,60 +4292,12 @@ impl ChatWidget<'_> {
 
         tracing::info!("Paste received: {:?}", trimmed);
 
-        const IMAGE_EXTENSIONS: &[&str] = &[
-            ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico", ".tiff", ".tif",
-        ];
-
-        // Check if it looks like a file path
-        let is_likely_path = trimmed.starts_with("file://")
-            || trimmed.starts_with("/")
-            || trimmed.starts_with("~/")
-            || trimmed.starts_with("./");
-
-        if is_likely_path {
-            // Remove escape backslashes that terminals add for special characters
-            let unescaped = trimmed
-                .replace("\\ ", " ")
-                .replace("\\(", "(")
-                .replace("\\)", ")");
-
-            // Handle file:// URLs (common when dragging from Finder)
-            let path_str = if unescaped.starts_with("file://") {
-                // URL decode to handle spaces and special characters
-                // Simple decoding for common cases (spaces as %20, etc.)
-                unescaped
-                    .strip_prefix("file://")
-                    .map(|s| {
-                        s.replace("%20", " ")
-                            .replace("%28", "(")
-                            .replace("%29", ")")
-                            .replace("%5B", "[")
-                            .replace("%5D", "]")
-                            .replace("%2C", ",")
-                            .replace("%27", "'")
-                            .replace("%26", "&")
-                            .replace("%23", "#")
-                            .replace("%40", "@")
-                            .replace("%2B", "+")
-                            .replace("%3D", "=")
-                            .replace("%24", "$")
-                            .replace("%21", "!")
-                            .replace("%2D", "-")
-                            .replace("%2E", ".")
-                    })
-                    .unwrap_or_else(|| unescaped.clone())
-            } else {
-                unescaped
-            };
-
+        // Try to normalize as a file path (handles file:// URLs and terminal escapes)
+        if let Some(path_str) = input_helpers::normalize_pasted_path(trimmed) {
             tracing::info!("Decoded path: {:?}", path_str);
 
             // Check if it has an image extension
-            let is_image = IMAGE_EXTENSIONS
-                .iter()
-                .any(|ext| path_str.to_lowercase().ends_with(ext));
-
-            if is_image {
+            if input_helpers::is_image_extension(&path_str) {
                 let path = PathBuf::from(&path_str);
                 tracing::info!("Checking if path exists: {:?}", path);
                 if path.exists() {
