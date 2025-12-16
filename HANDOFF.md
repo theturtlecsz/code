@@ -1,6 +1,6 @@
-# P116 Session Handoff
+# P117 Session Handoff
 Date: 2025-12-16
-Scope: ChatWidget refactor (MAINT-11 Phase 5) - Input helpers extraction
+Scope: ChatWidget refactor (MAINT-11) - Next extraction phase
 
 ---
 
@@ -8,56 +8,49 @@ Scope: ChatWidget refactor (MAINT-11 Phase 5) - Input helpers extraction
 
 Planner is a Rust workspace building the `code` binary with TUI focused on Spec-Kit workflows.
 
-**P115 Completed**:
-- Fixed 8 dead_code warnings (removed unused code, annotated planned features)
-- Verified `/speckit.new` code path intact (SPEC-KIT-970/971)
-- Included 4 clippy auto-fixes from MAINT-12 staging
-- mod.rs: 22,911 → 22,906 LOC (5 LOC removed)
-- **Key finding**: Slash-command routing already well-modularized in `slash_command.rs` + `app.rs`
+**P116 Completed**:
+- Extracted `input_helpers.rs` module (175 LOC, 5 tests)
+- Consolidated duplicate `IMAGE_EXTENSIONS` constant from 2 locations
+- Simplified `handle_paste()` using new helper functions
+- mod.rs: 22,906 → 22,852 LOC (-54 LOC)
 
-**Commit**: `e82064d50 refactor(tui): fix dead_code warnings + clippy cleanup (MAINT-11 Phase 4)`
+**Commit**: `d5c58634c refactor(tui): extract input_helpers module (MAINT-11 Phase 5)`
 
 ---
 
-## 2. P116 Primary Task: MAINT-11 Phase 5 (Input Helpers Extraction)
+## 2. P117 Primary Task: MAINT-11 Phase 6 (Continued Extraction)
 
 ### Goal
-Extract input handling logic from `mod.rs` to new module(s).
+Continue extracting cohesive functionality from `mod.rs` to reduce its 22,852 LOC.
 
 ### Current State
-- `mod.rs`: 22,906 LOC
+- `mod.rs`: 22,852 LOC
 - **Phase 1 (P110)**: `command_render.rs` (~200 LOC, 8 tests)
 - **Phase 2 (P113)**: `agent_status.rs` (~65 LOC, 3 tests)
 - **Phase 3 (P114)**: `submit_helpers.rs` (~300 LOC, 4 tests)
 - **Phase 4 (P115)**: Dead code cleanup (8 warnings → 0)
+- **Phase 5 (P116)**: `input_helpers.rs` (175 LOC, 5 tests)
 
-### Target Functions (to identify)
-Search for input handling patterns:
+### Extraction Candidates for Next Phase
+Search for cohesive function groups:
 ```bash
 cd codex-rs
 
-# Find paste/input handling
-grep -n "handle_paste\|handle_input\|handle_key" tui/src/chatwidget/mod.rs | head -20
+# Find handler functions that could be grouped
+grep -n "pub(crate) fn handle_" tui/src/chatwidget/mod.rs | head -30
 
-# Find compose field operations
-grep -n "compose\|bottom_pane.*input\|insert_str" tui/src/chatwidget/mod.rs | head -20
+# Find free functions at module level
+grep -n "^fn " tui/src/chatwidget/mod.rs | head -20
 
-# Find keyboard event handling
-grep -n "KeyCode::\|KeyEvent\|on_key" tui/src/chatwidget/mod.rs | head -20
+# Find session-related functions
+grep -n "session\|Session" tui/src/chatwidget/mod.rs | head -20
 ```
 
-### Extraction Candidates
-1. **Paste handling** (`handle_paste` + image detection logic) - ~100 LOC
-2. **Keyboard event routing** (key dispatch logic) - ~200 LOC
-3. **Compose field helpers** (text manipulation) - ~100 LOC
-
-### Extraction Protocol
-1. Search mod.rs for cohesive input handling functions
-2. Identify dependencies and shared state
-3. Create `input_handlers.rs` or similar
-4. Add module declaration in mod.rs
-5. Test: `cargo test -p codex-tui`
-6. Verify: `cargo clippy -p codex-tui`
+### Potential Extraction Targets
+1. **Session handling** - session-related methods
+2. **Browser/Chrome handling** - browser integration methods
+3. **Agent terminal handling** - agents terminal mode methods
+4. **History management** - history cell management
 
 ---
 
@@ -99,6 +92,7 @@ chatwidget/
 ├── exec_tools.rs         (29KB)
 ├── gh_actions.rs         (10KB)
 ├── history_render.rs     (5KB)
+├── input_helpers.rs      (6KB)  ← P116 (NEW)
 ├── interrupts.rs         (7KB)
 ├── layout_scroll.rs      (8KB)
 ├── limits_handlers.rs    (3KB)
@@ -106,7 +100,7 @@ chatwidget/
 ├── perf.rs               (6KB)
 ├── rate_limit_refresh.rs (4KB)
 ├── submit_helpers.rs     (11KB) ← P114
-└── mod.rs                (935KB) ← 22,906 LOC
+└── mod.rs                (928KB) ← 22,852 LOC
 ```
 
 ---
@@ -120,7 +114,7 @@ cd codex-rs && cargo test --workspace
 # TUI-specific tests
 cargo test -p codex-tui
 
-# Clippy (should show 0 warnings after P115)
+# Clippy (should show 0 warnings)
 cargo clippy -p codex-tui
 
 # Build
@@ -129,17 +123,17 @@ cargo clippy -p codex-tui
 
 ---
 
-## 6. Dead Code Status (P115 Resolved)
+## 6. input_helpers.rs Contents (P116)
 
-| Item | Resolution |
-|------|------------|
-| `show_prd_builder` (2 locations) | Removed (dead fallback) |
-| `PrdBuilderModal::new` | Removed (~96 LOC) |
-| `build_stage0_context_prefix` | Removed (trivial wrapper) |
-| `allow_multiple` field | `#[allow(dead_code)]` - planned multi-select |
-| `with_max_snippet_chars/lines` | `#[allow(dead_code)]` - API completeness |
-| `find_missing_instruction_files` | `#[allow(dead_code)]` - error helper |
-| `UpgradeResolution::Command` | `#[allow(dead_code)]` - future automation |
+New module contains:
+| Function | Description |
+|----------|-------------|
+| `IMAGE_EXTENSIONS` | Consolidated constant (was duplicated) |
+| `is_image_extension()` | Check for image file extensions |
+| `is_likely_file_path()` | Detect file path patterns |
+| `unescape_terminal_path()` | Remove terminal escape backslashes |
+| `url_decode_file_path()` | Decode file:// URL encoding |
+| `normalize_pasted_path()` | Combined path normalization |
 
 ---
 
@@ -147,28 +141,15 @@ cargo clippy -p codex-tui
 
 | Component | File | Lines |
 |-----------|------|-------|
-| ChatWidget Monolith | `tui/src/chatwidget/mod.rs` | 22,906 |
+| ChatWidget Monolith | `tui/src/chatwidget/mod.rs` | 22,852 |
+| Input Helpers | `tui/src/chatwidget/input_helpers.rs` | 175 |
 | Slash Command Parsing | `tui/src/slash_command.rs` | 786 |
 | Command Dispatch | `tui/src/app.rs:1943-2300` | ~350 |
 | MAINT-11 Tracker | `SPEC.md:186` | - |
 
 ---
 
-## 8. P116 Checklist
-
-- [ ] Search mod.rs for input handling patterns
-- [ ] Identify cohesive function groups for extraction
-- [ ] Create `input_handlers.rs` or similar module
-- [ ] Move handle_paste and related functions
-- [ ] Add tests for extracted functions
-- [ ] Run `cargo test -p codex-tui` — all pass
-- [ ] Run `cargo clippy -p codex-tui` — no warnings
-- [ ] Update MAINT-11 in SPEC.md with Phase 5 progress
-- [ ] Commit with conventional format
-
----
-
-## 9. Session Summary
+## 8. Session Summary
 
 | Session | Commit | Key Deliverable |
 |---------|--------|-----------------|
@@ -178,11 +159,12 @@ cargo clippy -p codex-tui
 | P113 | 09f78f6c9 | agent_status.rs + stage0 clippy |
 | P114 | 83ae857d1 | submit_helpers.rs + core clippy |
 | P115 | e82064d50 | dead_code cleanup (8→0 warnings) |
-| P116 | — | input_handlers extraction |
+| P116 | d5c58634c | input_helpers.rs extraction |
+| P117 | — | next extraction phase |
 
 ---
 
-## 10. MAINT-11 Progress Summary
+## 9. MAINT-11 Progress Summary
 
 | Phase | Session | LOC Extracted | Total mod.rs |
 |-------|---------|---------------|--------------|
@@ -190,10 +172,10 @@ cargo clippy -p codex-tui
 | 2 | P113 | ~65 | 23,151 |
 | 3 | P114 | ~300 | 22,911 |
 | 4 | P115 | ~5 (removed) | 22,906 |
-| 5 | P116 | ~400 (target) | ~22,500 |
+| 5 | P116 | ~54 (+ 175 new) | 22,852 |
 
-**Cumulative**: 23,413 → 22,906 = ~507 LOC extracted/removed
+**Cumulative**: 23,413 → 22,852 = ~561 LOC extracted/removed
 
 ---
 
-_Generated: 2025-12-16 after commit e82064d50_
+_Generated: 2025-12-16 after commit d5c58634c_
