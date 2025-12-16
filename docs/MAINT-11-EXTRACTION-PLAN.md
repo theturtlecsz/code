@@ -2,7 +2,7 @@
 
 **Status**: IN PROGRESS
 **Goal**: Reduce `chatwidget/mod.rs` from 23,413 LOC to <15,000 LOC
-**Current**: 20,758 LOC (-2,655 cumulative, -11.3%)
+**Current**: 20,350 LOC (-3,063 cumulative, -13.1%)
 
 ---
 
@@ -16,8 +16,9 @@
 | 4 | P115 | (cleanup) | ~5 | Dead code removal, 8 warnings fixed |
 | 5 | P116 | `input_helpers.rs` | ~54 (+175 new) | 5 tests, input normalization |
 | 6 | P117 | (removal) | ~2,094 | Browser/chrome dead code deletion |
+| 7 | P118 | `review_handlers.rs` | ~408 | 2 tests, review/code review functions |
 
-**Subtotal**: -2,655 LOC
+**Subtotal**: -3,063 LOC
 
 ---
 
@@ -25,44 +26,45 @@
 
 | Phase | Target Module | Est. LOC | Priority | Dependencies |
 |-------|---------------|----------|----------|--------------|
-| 7 | `review_handlers.rs` | ~500 | **P118** | None |
-| 8 | `session_handlers.rs` | ~800 | P119 | None |
+| 8 | `session_handlers.rs` | ~800 | **P119** | None |
 | 9 | `agents_terminal.rs` | ~300 | P120 | None |
 | 10 | `history_handlers.rs` | ~600 | P121 | None |
-| 11 | `event_handlers.rs` | ~1,000 | P122+ | Phases 7-10 |
+| 11 | `event_handlers.rs` | ~1,000 | P122+ | Phases 8-10 |
 
-**Projected**: Additional -3,200 LOC → mod.rs ~17,500 LOC
+**Projected**: Additional -2,700 LOC → mod.rs ~17,650 LOC
 
 ---
 
-## Phase 7: Review/Merge Handlers (P118)
+## Phase 7: Review/Merge Handlers (P118) ✅ COMPLETE
 
 ### Scope
-Extract PR review and merge functionality into `review_handlers.rs`.
+Extracted PR review and code review functionality into `review_handlers.rs`.
 
-### Functions to Extract
+### Functions Extracted
 ```rust
-// From mod.rs → review_handlers.rs
+// mod.rs → review_handlers.rs (462 LOC with tests)
 pub(crate) fn open_review_dialog(&mut self)
-fn handle_review_mode_entered(&mut self, request: ReviewRequest)
-fn handle_review_mode_exited(&mut self, output: ReviewOutputEvent)
-fn start_review_commit_picker(&mut self)
-fn start_review_branch_picker(&mut self)
-fn handle_review_findings(&mut self, findings: Vec<ReviewFinding>)
+pub(crate) fn show_review_custom_prompt(&mut self)
+pub(crate) fn show_review_commit_loading(&mut self)
+pub(crate) fn present_review_commit_picker(&mut self, commits: Vec<CommitLogEntry>)
+pub(crate) fn show_review_branch_loading(&mut self)
+pub(crate) fn present_review_branch_picker(&mut self, current_branch: Option<String>, branches: Vec<String>)
+pub(crate) fn handle_review_command(&mut self, args: String)
+pub(crate) fn start_review_with_scope(&mut self, prompt: String, hint: String, ...)
+pub(crate) fn is_review_flow_active(&self) -> bool
+pub(crate) fn build_review_summary_cell(&self, hint: Option<&str>, ...) -> AssistantMarkdownCell
 ```
 
 ### Events Involved
-- `EventMsg::EnteredReviewMode`
-- `EventMsg::ExitedReviewMode`
+- Event handlers remain in mod.rs (call extracted methods)
 - `AppEvent::RunReviewCommand`
 - `AppEvent::StartReviewCommitPicker`
 - `AppEvent::StartReviewBranchPicker`
 
-### Verification Steps
-1. `cargo test -p codex-tui`
-2. `cargo clippy -p codex-tui -- -D warnings`
-3. `cargo test --workspace`
-4. Manual: `/review` command still works
+### Results
+- mod.rs: 20,758 → 20,350 LOC (-408 LOC)
+- review_handlers.rs: 462 LOC (includes 2 tests)
+- All TUI tests pass, clippy clean
 
 ---
 
@@ -157,8 +159,8 @@ pub(crate) use new_module::*;  // Re-export if needed
 
 | Metric | Start | Current | Target | Progress |
 |--------|-------|---------|--------|----------|
-| mod.rs LOC | 23,413 | 20,758 | <15,000 | 31% |
-| Extracted modules | 0 | 5 | 10+ | 50% |
+| mod.rs LOC | 23,413 | 20,350 | <15,000 | 36% |
+| Extracted modules | 0 | 6 | 10+ | 60% |
 | Test coverage | N/A | Passing | Passing | ✅ |
 | Clippy warnings | 8 | 0 | 0 | ✅ |
 
@@ -183,4 +185,4 @@ pub(crate) use new_module::*;  // Re-export if needed
 
 ---
 
-_Last Updated: 2025-12-16 (P117 complete)_
+_Last Updated: 2025-12-16 (P118 complete - review_handlers.rs extracted)_
