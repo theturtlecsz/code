@@ -17,7 +17,7 @@ pub(super) fn is_write_cycle_active(chat: &ChatWidget<'_>) -> bool {
 // Note: direct streaming is triggered from ChatWidget with explicit sequence numbers
 
 // New facade: begin a stream for a kind, with optional id
-pub(super) fn begin(chat: &mut ChatWidget<'_>, kind: StreamKind, id: Option<String>) {
+pub(crate) fn begin(chat: &mut ChatWidget<'_>, kind: StreamKind, id: Option<String>) {
     chat.stream_state.current_kind = Some(kind);
     let sink = AppEventHistorySink(chat.app_event_tx.clone());
     chat.stream.begin_with_id(kind, id, &sink);
