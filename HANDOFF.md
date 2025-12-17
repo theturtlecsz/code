@@ -1,6 +1,6 @@
-# P120 Session Handoff
+# P121 Session Handoff
 Date: 2025-12-16
-Scope: ChatWidget refactor (MAINT-11) - Post session handlers extraction
+Scope: ChatWidget refactor (MAINT-11) - Post agents terminal extraction
 
 ---
 
@@ -8,60 +8,60 @@ Scope: ChatWidget refactor (MAINT-11) - Post session handlers extraction
 
 Planner is a Rust workspace building the `code` binary with TUI focused on Spec-Kit workflows.
 
-**P119 Completed**:
-- Extracted session handlers from mod.rs into `session_handlers.rs` (624 LOC with tests)
-- 10 functions extracted: handle_sessions_command, show_resume_picker, render_replay_item, etc.
-- 6 unit tests added for human_ago timestamp formatting
-- mod.rs: 20,350 → 19,792 LOC (-558 LOC)
-- exec_stream interleave test verified passing (was listed as failing but passes consistently)
-- Created architecture diagram at docs/architecture/chatwidget-structure.md
-- All TUI tests pass (543 passing), clippy clean
+**P120 Completed**:
+- Extracted agents terminal overlay from mod.rs into `agents_terminal.rs` (759 LOC)
+- 3 types extracted: `AgentTerminalEntry`, `AgentsTerminalState`, `AgentsTerminalFocus`
+- 8 functions extracted including render_agents_terminal_overlay (~425 LOC)
+- mod.rs: 19,792 → 19,073 LOC (-719 LOC)
+- Cumulative MAINT-11: -4,340 LOC (-18.5%)
+- All TUI tests pass (541/544, 3 pre-existing spec-kit failures), clippy clean
 
 **Commit**: (to be created)
 
 ---
 
-## 2. P120 Tasks (Recommended)
+## 2. P121 Tasks (Recommended)
 
-### Task A: MAINT-11 Phase 9 - Agents Terminal (Primary)
-Extract agents terminal functionality from `mod.rs` into `agents_terminal.rs`.
+### Task A: MAINT-11 Phase 10 - History Handlers (Primary)
+Extract history cell management from `mod.rs` into `history_handlers.rs`.
 
-**Target**: ~300 LOC extraction
+**Target**: ~600 LOC extraction
 
-### Task B: History Handlers Preparation (Secondary)
-Analyze and plan history-related function extraction (~600 LOC potential).
+### Task B: Investigation for Event Handlers (Secondary)
+Analyze event handler code for Phase 11 planning (~1,000 LOC potential).
 
-### Task C: Documentation Update (Tertiary)
-Update MAINT-11-EXTRACTION-PLAN.md with P119 completion.
+### Task C: Fix Pre-existing Spec-Kit Test Failures (Optional)
+3 environment-related test failures in `consensus::gr001_tests`.
 
 ---
 
 ## 3. Current State
 
-- `mod.rs`: 19,792 LOC
-- **Phase 8 (P119)**: `session_handlers.rs` (~558 LOC extracted, 624 LOC total with tests)
+- `mod.rs`: 19,073 LOC
+- **Phase 9 (P120)**: `agents_terminal.rs` (759 LOC, -719 mod.rs reduction)
 
-### Investigation Steps for Agents Terminal
+### Investigation Steps for History Handlers
 ```bash
 cd codex-rs
 
-# Find agents_terminal related code
-grep -n "agents_terminal\|AgentsTerminal" tui/src/chatwidget/mod.rs | head -30
+# Find history-related functions
+grep -n "fn history_\|fn.*history" tui/src/chatwidget/mod.rs | head -30
 
-# Find agent terminal overlay functions
-grep -n "fn.*agent.*terminal\|show_agents" tui/src/chatwidget/mod.rs | head -20
+# Find history cell management
+grep -n "history\.push\|history\.replace\|history_cells" tui/src/chatwidget/mod.rs | head -20
 ```
 
 ---
 
 ## 4. Architecture Context
 
-### ChatWidget Module Structure (Post-P119)
+### ChatWidget Module Structure (Post-P120)
 ```
 chatwidget/
 ├── agent_install.rs      (24KB)
 ├── agent_status.rs       (4KB)  ← P113
 ├── agent.rs              (4KB)
+├── agents_terminal.rs    (31KB) ← P120 (NEW)
 ├── command_render.rs     (10KB) ← P110
 ├── diff_handlers.rs      (7KB)
 ├── exec_tools.rs         (29KB)
@@ -75,9 +75,9 @@ chatwidget/
 ├── perf.rs               (6KB)
 ├── rate_limit_refresh.rs (4KB)
 ├── review_handlers.rs    (17KB) ← P118
-├── session_handlers.rs   (23KB) ← P119 (NEW)
+├── session_handlers.rs   (23KB) ← P119
 ├── submit_helpers.rs     (11KB) ← P114
-└── mod.rs                (812KB) ← 19,792 LOC
+└── mod.rs                (781KB) ← 19,073 LOC
 ```
 
 See full diagram: `docs/architecture/chatwidget-structure.md`
@@ -102,27 +102,24 @@ cargo clippy -p codex-tui -- -D warnings
 
 ---
 
-## 6. P119 Extraction Summary
+## 6. P120 Extraction Summary
 
 | Component | LOC |
 |-----------|-----|
-| Functions extracted | 10 |
-| Tests added | 6 |
-| session_handlers.rs total | 624 |
-| mod.rs reduction | -558 |
+| Types extracted | 3 (AgentTerminalEntry, AgentsTerminalState, AgentsTerminalFocus) |
+| Functions extracted | 8 |
+| agents_terminal.rs total | 759 |
+| mod.rs reduction | -719 |
 
 Extracted functions:
-- `human_ago()` - Format timestamps as relative time
-- `list_cli_sessions_impl()` - List active CLI sessions (async)
-- `kill_cli_session_impl()` - Kill specific session (async)
-- `kill_all_cli_sessions_impl()` - Kill all sessions (async)
-- `handle_sessions_command()` - Process /sessions command
-- `show_resume_picker()` - Resume session picker UI
-- `render_replay_item()` - Render replayed session items
-- `export_response_items()` - Export history as ResponseItems
-- `handle_feedback_command()` - Export session logs
-- `export_transcript_lines_for_buffer()` - Export transcript
-- `render_lines_for_terminal()` - Terminal render helper
+- `update_agents_terminal_state()` - Sync agent info to terminal state
+- `enter_agents_terminal_mode()` - Activate agents overlay
+- `exit_agents_terminal_mode()` - Deactivate agents overlay
+- `toggle_agents_hud()` - Toggle agents overlay on/off (Ctrl+A)
+- `record_current_agent_scroll()` - Save scroll position for agent
+- `restore_selected_agent_scroll()` - Restore scroll position
+- `navigate_agents_terminal_selection()` - Navigate agent list
+- `render_agents_terminal_overlay()` - Render split-pane overlay (~425 LOC)
 
 ---
 
@@ -130,7 +127,8 @@ Extracted functions:
 
 | Component | File | Lines |
 |-----------|------|-------|
-| ChatWidget Monolith | `tui/src/chatwidget/mod.rs` | 19,792 |
+| ChatWidget Monolith | `tui/src/chatwidget/mod.rs` | 19,073 |
+| Agents Terminal | `tui/src/chatwidget/agents_terminal.rs` | 759 |
 | Session Handlers | `tui/src/chatwidget/session_handlers.rs` | 624 |
 | Review Handlers | `tui/src/chatwidget/review_handlers.rs` | ~580 |
 | Architecture Diagram | `docs/architecture/chatwidget-structure.md` | - |
@@ -152,8 +150,9 @@ Extracted functions:
 | P116 | d5c58634c | input_helpers.rs extraction |
 | P117 | 15aa783a7 | Browser/chrome dead code removal |
 | P118 | 5584713cb | review_handlers.rs extraction |
-| P119 | — | session_handlers.rs extraction |
-| P120 | — | next: agents_terminal.rs |
+| P119 | 7ce0d4111 | session_handlers.rs extraction |
+| P120 | — | agents_terminal.rs extraction |
+| P121 | — | next: history_handlers.rs |
 
 ---
 
@@ -169,8 +168,9 @@ Extracted functions:
 | 6 | P117 | -2,094 removed | 20,758 |
 | 7 | P118 | -408 extracted | 20,350 |
 | 8 | P119 | -558 extracted | 19,792 |
+| 9 | P120 | -719 extracted | 19,073 |
 
-**Cumulative**: 23,413 → 19,792 = **-3,621 LOC** (-15.5%)
+**Cumulative**: 23,413 → 19,073 = **-4,340 LOC** (-18.5%)
 
 ---
 
@@ -178,32 +178,31 @@ Extracted functions:
 
 | Target | Est. LOC | Complexity | Session |
 |--------|----------|------------|---------|
-| Agents terminal | ~300 | Low | **P120** |
-| History handlers | ~600 | Medium | P121 |
+| History handlers | ~600 | Medium | **P121** |
 | Event handlers | ~1,000 | High | P122+ |
 | Config handlers | ~400 | Medium | P123+ |
 
 ---
 
-## 11. P120 Expected Deliverables
+## 11. P121 Expected Deliverables
 
 | Category | Deliverable | Status |
 |----------|-------------|--------|
-| **Extraction** | agents_terminal.rs (~300 LOC) | Pending |
-| **Extraction** | mod.rs → ~19,500 LOC | Pending |
+| **Extraction** | history_handlers.rs (~600 LOC) | Pending |
+| **Extraction** | mod.rs → ~18,500 LOC | Pending |
 | **Testing** | All TUI tests pass | Pending |
 | **Testing** | Clippy clean | Pending |
 | **Docs** | MAINT-11 plan updated | Pending |
-| **Docs** | HANDOFF.md for P121 | Pending |
+| **Docs** | HANDOFF.md for P122 | Pending |
 
 ---
 
 ## 12. Notes
 
-- The exec_stream interleave test (`test_aggregated_output_interleaves_in_order`) was listed as failing in P118 handoff but passes consistently in P119. It may have been a flaky test or machine-specific issue.
-- streaming.rs visibility changed: `begin` function changed from `pub(super)` to `pub(crate)` to allow session_handlers.rs to call it.
-- Architecture diagram created at docs/architecture/chatwidget-structure.md with Mermaid diagrams.
+- Agents terminal extraction was larger than initial ~300 LOC estimate (759 LOC actual) due to the large render function (~425 LOC).
+- 3 pre-existing test failures in spec_kit consensus tests (environment variable related, not from extraction).
+- The extraction pattern is now well-established: investigate → create module → extract types → extract functions → update imports → verify.
 
 ---
 
-_Generated: 2025-12-16 after P119_
+_Generated: 2025-12-16 after P120_

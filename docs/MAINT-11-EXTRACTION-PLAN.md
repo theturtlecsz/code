@@ -2,7 +2,7 @@
 
 **Status**: IN PROGRESS
 **Goal**: Reduce `chatwidget/mod.rs` from 23,413 LOC to <15,000 LOC
-**Current**: 20,350 LOC (-3,063 cumulative, -13.1%)
+**Current**: 19,073 LOC (-4,340 cumulative, -18.5%)
 
 ---
 
@@ -17,8 +17,10 @@
 | 5 | P116 | `input_helpers.rs` | ~54 (+175 new) | 5 tests, input normalization |
 | 6 | P117 | (removal) | ~2,094 | Browser/chrome dead code deletion |
 | 7 | P118 | `review_handlers.rs` | ~408 | 2 tests, review/code review functions |
+| 8 | P119 | `session_handlers.rs` | ~558 | 6 tests, session save/load/resume |
+| 9 | P120 | `agents_terminal.rs` | ~719 | Agents terminal overlay |
 
-**Subtotal**: -3,063 LOC
+**Subtotal**: -4,340 LOC
 
 ---
 
@@ -26,77 +28,70 @@
 
 | Phase | Target Module | Est. LOC | Priority | Dependencies |
 |-------|---------------|----------|----------|--------------|
-| 8 | `session_handlers.rs` | ~800 | **P119** | None |
-| 9 | `agents_terminal.rs` | ~300 | P120 | None |
 | 10 | `history_handlers.rs` | ~600 | P121 | None |
 | 11 | `event_handlers.rs` | ~1,000 | P122+ | Phases 8-10 |
 
-**Projected**: Additional -2,700 LOC → mod.rs ~17,650 LOC
+**Projected**: Additional -1,600 LOC → mod.rs ~17,500 LOC
 
 ---
 
-## Phase 7: Review/Merge Handlers (P118) ✅ COMPLETE
+## Phase 8: Session Handlers (P119) ✅ COMPLETE
 
 ### Scope
-Extracted PR review and code review functionality into `review_handlers.rs`.
+Extracted session save/load/resume functionality into `session_handlers.rs`.
 
 ### Functions Extracted
 ```rust
-// mod.rs → review_handlers.rs (462 LOC with tests)
-pub(crate) fn open_review_dialog(&mut self)
-pub(crate) fn show_review_custom_prompt(&mut self)
-pub(crate) fn show_review_commit_loading(&mut self)
-pub(crate) fn present_review_commit_picker(&mut self, commits: Vec<CommitLogEntry>)
-pub(crate) fn show_review_branch_loading(&mut self)
-pub(crate) fn present_review_branch_picker(&mut self, current_branch: Option<String>, branches: Vec<String>)
-pub(crate) fn handle_review_command(&mut self, args: String)
-pub(crate) fn start_review_with_scope(&mut self, prompt: String, hint: String, ...)
-pub(crate) fn is_review_flow_active(&self) -> bool
-pub(crate) fn build_review_summary_cell(&self, hint: Option<&str>, ...) -> AssistantMarkdownCell
+// mod.rs → session_handlers.rs (624 LOC with tests)
+pub(crate) fn human_ago(ts: SystemTime) -> String
+pub(crate) fn list_cli_sessions_impl(&self) -> impl Future
+pub(crate) fn kill_cli_session_impl(&self, uuid: &str) -> impl Future
+pub(crate) fn kill_all_cli_sessions_impl(&self) -> impl Future
+pub(crate) fn handle_sessions_command(&mut self, args: String)
+pub(crate) fn show_resume_picker(&mut self)
+pub(crate) fn render_replay_item(&mut self, ...) -> ResponseItems
+pub(crate) fn export_response_items(&self, ...) -> Vec<ResponseItem>
+pub(crate) fn handle_feedback_command(&self, args: String)
+pub(crate) fn export_transcript_lines_for_buffer(&self) -> Vec<String>
+pub(crate) fn render_lines_for_terminal(&self, ...) -> String
 ```
 
-### Events Involved
-- Event handlers remain in mod.rs (call extracted methods)
-- `AppEvent::RunReviewCommand`
-- `AppEvent::StartReviewCommitPicker`
-- `AppEvent::StartReviewBranchPicker`
-
 ### Results
-- mod.rs: 20,758 → 20,350 LOC (-408 LOC)
-- review_handlers.rs: 462 LOC (includes 2 tests)
+- mod.rs: 20,350 → 19,792 LOC (-558 LOC)
+- session_handlers.rs: 624 LOC (includes 6 tests)
 - All TUI tests pass, clippy clean
 
 ---
 
-## Phase 8: Session Handlers (P119)
+## Phase 9: Agents Terminal (P120) ✅ COMPLETE
 
 ### Scope
-Extract session save/load/resume functionality.
+Extracted agents terminal overlay state, types, and rendering into `agents_terminal.rs`.
 
-### Functions to Extract
+### Types Extracted
 ```rust
-pub(crate) fn save_session(&self)
-pub(crate) fn load_session(&mut self, path: PathBuf)
-pub(crate) fn resume_session(&mut self, rollout: PathBuf)
-fn session_path(&self) -> PathBuf
-fn serialize_session(&self) -> SessionData
-fn deserialize_session(data: SessionData) -> Self
+// mod.rs → agents_terminal.rs (759 LOC)
+pub(crate) struct AgentTerminalEntry
+pub(crate) struct AgentsTerminalState
+pub(crate) enum AgentsTerminalFocus
 ```
 
----
-
-## Phase 9: Agents Terminal (P120)
-
-### Scope
-Extract `AgentsTerminalState` and related handlers.
-
-### Types to Extract
+### Functions Extracted
 ```rust
-struct AgentsTerminalState
-enum AgentsTerminalFocus
-fn toggle_agents_hud(&mut self)
-fn render_agents_terminal(&self, ...)
+pub(crate) fn update_agents_terminal_state(&mut self, ...)
+pub(crate) fn enter_agents_terminal_mode(&mut self)
+pub(crate) fn exit_agents_terminal_mode(&mut self)
+pub(crate) fn toggle_agents_hud(&mut self)
+pub(crate) fn record_current_agent_scroll(&mut self)
+pub(crate) fn restore_selected_agent_scroll(&mut self)
+pub(crate) fn navigate_agents_terminal_selection(&mut self, delta: isize)
+pub(crate) fn render_agents_terminal_overlay(&self, ...)
 ```
+
+### Results
+- mod.rs: 19,792 → 19,073 LOC (-719 LOC)
+- agents_terminal.rs: 759 LOC
+- All TUI tests pass (541/544, 3 pre-existing spec-kit failures), clippy clean
 
 ---
 
@@ -159,8 +154,8 @@ pub(crate) use new_module::*;  // Re-export if needed
 
 | Metric | Start | Current | Target | Progress |
 |--------|-------|---------|--------|----------|
-| mod.rs LOC | 23,413 | 20,350 | <15,000 | 36% |
-| Extracted modules | 0 | 6 | 10+ | 60% |
+| mod.rs LOC | 23,413 | 19,073 | <15,000 | 52% |
+| Extracted modules | 0 | 8 | 10+ | 80% |
 | Test coverage | N/A | Passing | Passing | ✅ |
 | Clippy warnings | 8 | 0 | 0 | ✅ |
 
@@ -185,4 +180,4 @@ pub(crate) use new_module::*;  // Re-export if needed
 
 ---
 
-_Last Updated: 2025-12-16 (P118 complete - review_handlers.rs extracted)_
+_Last Updated: 2025-12-16 (P120 complete - agents_terminal.rs extracted)_
