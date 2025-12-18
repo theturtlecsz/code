@@ -1,7 +1,7 @@
-# Pair Programming Review — Gate Policy Alignment (2025-12-18)
+# Gate Policy Alignment — Session Handoff
 
-This note is intended as an implementation target you can hand to a coder.
-Scope: vocabulary + architectural alignment between **Gate Policy** docs and the current **consensus.rs** implementation.
+**Last updated:** 2025-12-18
+**Status:** PR2 complete, PR3 ready to implement
 
 ---
 
@@ -14,155 +14,190 @@ Scope: vocabulary + architectural alignment between **Gate Policy** docs and the
 | **PR2** | ✅ Complete | Config alias (`consensus_threshold` → `min_confidence_for_auto_apply`) |
 | **PR3** | 🔲 Pending | Env var alias (`SPEC_KIT_CRITIC` → `SPEC_KIT_SIDECAR_CRITIC`) |
 | **PR4** | 🔲 Pending | Module rename (`consensus.rs` → `gate_policy.rs`) + callsite migrations |
-| **PR6** | 🔲 Pending | Delete or feature-gate legacy voting path |
+| **PR6** | 🔲 Pending | Delete legacy voting path |
 
-### Commits
-- `f930c4643` - feat(spec-kit): config alias consensus_threshold -> min_confidence_for_auto_apply (PR2)
-- `a29f9668e` - fix(spec-kit): make gate policy deterministic, align thresholds (PR1.1)
-- `89b7a83e6` - feat(spec-kit): add gate policy and router contracts (PR1)
-
-### Files Created
-- `codex-rs/spec-kit/src/gate_policy.rs` — Domain vocabulary (Stage, Role, Signal, Verdict, etc.)
-- `codex-rs/spec-kit/src/router.rs` — Router trait and WorkerSpec
-- Updated `codex-rs/spec-kit/src/lib.rs` — Re-exports
-- Updated `docs/spec-kit/GATE_POLICY.md` — Added §11 Wiring Guidance
+### Commits (chronological)
+```
+959ccbeb7 docs: update HANDOFF.md with PR2 completion
+f930c4643 feat(spec-kit): config alias consensus_threshold -> min_confidence_for_auto_apply (PR2)
+e0097d802 docs: update HANDOFF.md with gate policy alignment target
+a29f9668e fix(spec-kit): make gate policy deterministic, align thresholds (PR1.1)
+89b7a83e6 feat(spec-kit): add gate policy and router contracts (PR1)
+```
 
 ---
 
-## 1) What's already true (design intent)
+## PR2 Architectural Review — Action Items
 
-- **Single-owner pipeline is the default**: one stage owner produces the artifact, gates evaluate signals, and escalation is deterministic.
-- **No voting / no committee synthesis**: sidecars can contribute *signals* (block/advisory), but do not produce "competing answers" that get compared/merged.
-- **Policy is separated from routing**:
-  - **Gate Policy** = what must happen (signals, decision rules, escalation triggers).
-  - **Model Policy** = who executes it (role → worker → model/provider mapping).
+### 🔴 P0: Verify Schema Validation Order
 
----
+**Risk:** Schema validation may reject legacy config files if it validates *input* (pre-deserialize) against a schema that doesn't allow `consensus_threshold`.
 
-## 2) What landed (confirmed in main)
+**Required verification:**
+1. Schema validation happens **after** deserialization/normalization (validates canonical struct), OR
+2. Schema accepts `consensus_threshold` temporarily (marked deprecated)
 
-- `docs/spec-kit/GATE_POLICY.md` added with explicit "This is not voting" callout.
-- Confidence is defined as computed from `owner_confidence` plus evidence/counter-signals, with explicit thresholds.
-- "Quorum" renamed to "Decision Rule" to avoid voting semantics.
-- Checkpoint naming table now matches actual pipeline boundaries (with a legacy naming note).
+**Files to check:**
+- `codex-rs/spec-kit/src/config/validator.rs` — when is `validate()` called?
+- `codex-rs/spec-kit/src/config/loader.rs:424-427` — validation happens after `try_deserialize()`
+- `codex-rs/spec-kit/src/config/schemas/quality_gates.schema.json` — does it accept legacy key?
 
----
+**Current state:** Validation appears to happen after deserialization (line 424-427), but schemas were updated to canonical-only. Need to verify a legacy config file doesn't fail validation.
 
-## 3) The remaining mismatch (doc vs code)
+### 🟡 Warning Text Improvement (Minor)
 
-Today, the implementation still uses **"consensus" vocabulary** in the runtime path (e.g., `run_spec_consensus`, `consensus_ok`, `/spec-consensus`, `SPEC_KIT_CRITIC`).
+Cross-layer case: file sets canonical, env sets deprecated → warning says "both keys present" but env override changes value after warning.
 
-That's okay as a transition, but the mismatch causes confusion and slows onboarding.
+**Recommendation:** Rephrase to "Both keys present; precedence will be applied; remove deprecated key."
 
-**Goal:** rename + reshape the code so "gate evaluation" is the primary concept and "legacy consensus voting" becomes a quarantined, deprecated optional mode.
+### 🟡 Defaults Layer Masking (Document)
 
----
+Lines 379-385 strip canonical key from defaults layer to prevent false "both present" detection. This is correct but affects config debugging/dumping.
 
-## 4) Target architecture for the coder (minimal, crisp)
-
-### 4.1. Core types
-
-- `Signal`: structured observation produced by stage owner, tests, or sidecars.
-  - fields: `source`, `severity {advisory|block}`, `kind`, `summary`, `evidence_refs[]`
-- `CounterSignal`: same shape as Signal, but used specifically to reduce confidence / trigger escalation.
-
-- `GateVerdict`:
-  - `resolution {AutoApply|Escalate}`
-  - `confidence_level {High|Medium|Low}`
-  - `effective_confidence: f32` (optional but recommended)
-  - `signals[]` and `counter_signals[]`
-  - `reason`
-
-### 4.2. Decision rule (deterministic)
-
-Inputs:
-- `owner_confidence` (0..1)
-- `counter_signals` (block/advisory)
-- evidence (tests pass/fail, policy violations, high-risk flags)
-
-Compute:
-- **effective_confidence**
-  - simplest rule: start at `owner_confidence`, subtract penalties for counter-signals/tests, clamp 0..1
-- **confidence_level**
-  - High: >= 0.80 and no block-level counter-signal
-  - Medium: >= 0.60 and no block-level counter-signal
-  - Low: otherwise
-
-Resolution:
-- `Escalate` if any block-level counter-signal OR tests fail OR High-Risk flag OR confidence_level=Low.
-- `AutoApply` only when confidence_level in {High, Medium} and no block-level counter-signals.
-
-### 4.3. Routing separation (important)
-
-Gate evaluation should NOT hardcode "Gemini vs Claude" (or any model names).
-Instead:
-- map stage -> **role** (Architect/Implementer/Validator/Judge)
-- ask the router/policy engine to pick a worker for that role (per `docs/MODEL-POLICY.md`)
-
-This prevents "Model Policy duplication" and keeps gate policy stable.
+**Mitigation:** Any "effective config" display should use deserialized canonical struct, not raw merged map.
 
 ---
 
-## 5) Migration plan (don't break users)
+## PR3 Design Specification
 
-### 5.1 Env vars
-- New: `SPEC_KIT_SIDECAR_CRITIC`
-- Deprecated: `SPEC_KIT_CRITIC` (still honored, warn once)
+### Goal
+Rename `SPEC_KIT_CRITIC` → `SPEC_KIT_SIDECAR_CRITIC` with backward compatibility and warn-once.
 
-### 5.2 Config keys
-- New: `min_confidence_for_auto_apply`
-- Deprecated: `consensus_threshold` (still parsed, warn)
+### Design Decisions (confirmed)
 
-### 5.3 JSON evidence schema
-- Keep reading old fields.
-- Emit new fields going forward.
-- Add a schema version so dashboards can handle both.
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| **Precedence** | Env overrides file | Consistent with PR2 and standard layering |
+| **Both set** | Canonical wins + warn | Same pattern as PR2 |
+| **Warn-once location** | Config loader module | Single boundary for env reads |
+| **PolicyToggles wiring** | Already done in PR1.1 | Gate policy reads from context, not env |
+
+### Precedence Policy
+
+```
+Layer order: defaults < file < env
+
+If SPEC_KIT_SIDECAR_CRITIC is set → use it (canonical)
+Else if SPEC_KIT_CRITIC is set → use it + warn once (deprecated)
+Else → use file config or default (false)
+```
+
+### Warn-Once Helper Location
+
+Recommend centralizing in `codex-rs/spec-kit/src/config/loader.rs` alongside existing `warn_once_deprecated_consensus_threshold()`.
+
+Pattern:
+```rust
+fn warn_once_deprecated_spec_kit_critic() {
+    use std::sync::Once;
+    static WARN_ONCE: Once = Once::new();
+    WARN_ONCE.call_once(|| {
+        eprintln!("WARNING: Env var 'SPEC_KIT_CRITIC' is deprecated. Use 'SPEC_KIT_SIDECAR_CRITIC' instead.");
+    });
+}
+```
+
+### Test Matrix for PR3
+
+| Scenario | Expected Result |
+|----------|-----------------|
+| Neither env var set | sidecar disabled (default) |
+| Legacy `SPEC_KIT_CRITIC=true` | enabled + warn once |
+| Canonical `SPEC_KIT_SIDECAR_CRITIC=true` | enabled, no warning |
+| Both set, same value | canonical wins + warn once |
+| Both set, conflicting | canonical wins + warn once |
+| Hot reload | no repeated warnings (process-wide Once) |
+
+### Product Gotcha: local_only Constraint
+
+Verify sidecar critic respects `local_only` flag:
+- If `local_only=true` and sidecar requires cloud → sidecar should be disabled
+- Check `roles_for_stage()` in `gate_policy.rs` already handles this via `ctx.local_only`
+
+### Files to Modify
+
+1. `codex-rs/spec-kit/src/config/loader.rs` — env var alias + warn-once
+2. `codex-rs/spec-kit/src/config/registry.rs` — add canonical env var to known list
+3. Possibly `codex-rs/tui/` initialization — if env is read there (should be centralized)
+
+### Verification Before Merge
+
+1. `grep -r "SPEC_KIT_CRITIC" codex-rs/` — should only appear in config loader
+2. Schema/validation doesn't reject legacy env-driven config
 
 ---
 
-## 6) Acceptance criteria (what "done" looks like)
+## PR4 Planning Notes
 
-1. UI and logs say **"Gate evaluation"** not "consensus" in the default path.
-2. There is a single place where:
-   - signals are gathered
-   - effective confidence is computed
-   - decision rule produces a verdict
-3. Model selection is handled by the model-policy/router (no stage->model hardcoding in gate-policy module).
-4. Deprecated env vars/config keys still work with a warning.
-5. Unit tests cover:
-   - default path (no env vars) = gate evaluation only
-   - sidecar enabled = signals captured, decisions unchanged unless block-level
-   - legacy voting mode (if kept) is explicitly isolated + warns
+After PR3, PR4 does module rename + callsite migrations:
+
+### Interface Contract (must exist before PR4)
+```rust
+// Gate Policy → Orchestrator
+fn roles_for_stage(stage: Stage, ctx: &StageContext) -> RoleAssignment;
+fn checkpoints_for_stage_transition(from: Stage, to: Stage) -> Vec<Checkpoint>;
+
+// Router → Orchestrator
+trait Router {
+    fn select_worker(&self, role: Role, ctx: &RoutingContext) -> WorkerSpec;
+}
+
+// Gate → Orchestrator
+fn evaluate_gate(signals: &[Signal], rule: &DecisionRule, ctx: &GateContext) -> GateVerdict;
+```
+
+### Rename Mapping
+| Old | New |
+|-----|-----|
+| `consensus.rs` | `gate_policy.rs` (re-export old path temporarily) |
+| `run_spec_consensus()` | `evaluate_gate()` (wrapper for old fn) |
+| `preferred_agent_for_stage()` | `preferred_role_for_stage()` |
+| UI "consensus" labels | "gate evaluation" |
 
 ---
 
-## 7) What NOT to build
+## PR6 Planning Notes
 
-- No "debate loop," no multi-answer comparison, no "best of N outputs."
-- No implicit compromises or synthesis when sources disagree.
-- No dynamic agent swarm/orchestration — this is a pipeline with optional sidecars.
+Decision: **Delete** legacy voting path (not feature-gate).
+
+Rationale:
+- Simpler maintenance
+- No feature flag complexity
+- Legacy voting was never the intended design
+
+Keep **read compatibility** for historical evidence (old artifact directories/JSON fields).
 
 ---
 
-## 8) Remaining PRs (ordered by dependency)
+## Key Files Reference
 
-### PR2: Config Alias (consensus_threshold → min_confidence_for_auto_apply)
-- Add serde alias to config struct
-- Implement warn-once on deprecated key usage
-- Files: `codex-rs/spec-kit/src/config.rs`, any config loading code
+| File | Purpose |
+|------|---------|
+| `codex-rs/spec-kit/src/gate_policy.rs` | Domain vocabulary (Stage, Role, Signal, Verdict, etc.) |
+| `codex-rs/spec-kit/src/router.rs` | Router trait and WorkerSpec |
+| `codex-rs/spec-kit/src/config/loader.rs` | Config loading + alias handling |
+| `codex-rs/spec-kit/src/config/registry.rs` | Known env vars + config paths |
+| `docs/spec-kit/GATE_POLICY.md` | Canonical vocabulary spec |
+| `docs/MODEL-POLICY.md` | Role → worker mapping policy |
 
-### PR3: Env Var Alias (SPEC_KIT_CRITIC → SPEC_KIT_SIDECAR_CRITIC)
-- Add env var alias with warn-once deprecation
-- Consuming code should read from `PolicyToggles` (already wired in PR1.1)
-- Files: Config loading, possibly `codex-tui/` initialization
+---
 
-### PR4: Module Rename + Callsite Migrations
-- Rename `consensus.rs` → `gate_policy.rs` (re-export old module path temporarily)
-- Rename `run_spec_consensus()` → `evaluate_gate()` (keep old fn as wrapper)
-- Replace `preferred_agent_for_stage()` with `preferred_role_for_stage()` (router handles worker/model)
-- Update UI labels from "consensus" to "gate evaluation"
+## Next Session Start Command
 
-### PR6: Delete or Feature-Gate Legacy Voting
-- Compile-time feature `#[cfg(feature = "legacy_voting")]` or full deletion
-- Quarantine voting code so it cannot drift back into default behavior
-- Decision: recommend deletion over feature-gating (simpler, less maintenance)
+```
+Load HANDOFF.md. First verify PR2 schema validation (P0 item), then implement PR3 (env var alias). Run tests after each change.
+```
+
+---
+
+## Design Intent Summary
+
+**Single-owner pipeline**: One stage owner produces the artifact, gates evaluate signals, escalation is deterministic.
+
+**No voting**: Sidecars contribute signals (block/advisory), not competing answers.
+
+**Policy separation**:
+- Gate Policy = what must happen (signals, decision rules, escalation)
+- Model Policy = who executes it (role → worker → model/provider)
+
+**Migration strategy**: Compatibility aliases with warn-once, then rename, then delete legacy.
