@@ -73,6 +73,19 @@ Rename `SPEC_KIT_CRITIC` → `SPEC_KIT_SIDECAR_CRITIC` with backward compatibili
 - **Tests added**: 4 tests covering canonical, deprecated, default, and precedence scenarios
 - **Clippy clean**: No new warnings introduced
 
+### Architectural Feedback (from review)
+
+**A) Test isolation risk**: Tests mutate process-global env vars and require `--test-threads=1`.
+- **Fix in PR4**: Extract pure decision function, unit test that, keep one integration test for env wiring.
+
+**B) Config boundary leakage**: `consensus.rs` owns env parsing, but it should be centralized.
+- **Fix in PR4**: Move policy toggles IO to `spec-kit/src/config/policy_toggles.rs`.
+
+**C) Deprecation signaling**: Need user-facing docs listing renamed knobs.
+- **Action**: Create `docs/DEPRECATIONS.md` listing:
+  - `consensus_threshold` → `min_confidence_for_auto_apply` (PR2)
+  - `SPEC_KIT_CRITIC` → `SPEC_KIT_SIDECAR_CRITIC` (PR3)
+
 ### Design Decisions (confirmed)
 
 | Decision | Choice | Rationale |
@@ -139,7 +152,36 @@ Verify sidecar critic respects `local_only` flag:
 
 ## PR4 Planning Notes
 
-After PR3, PR4 does module rename + callsite migrations:
+After PR3, PR4 does module rename + callsite migrations.
+
+### Acceptance Checklist (Hard Constraints)
+
+- [ ] **No DB schema migrations** — tables stay named as-is
+- [ ] **No evidence dir moves** — read compatibility intact for historical artifacts
+- [ ] **No model routing logic moved** — router remains thin-waist
+- [ ] **All user-facing "consensus" wording removed** — logs, tooltips, help text say "gate evaluation" / "stage review" / "sidecar critic"
+- [ ] **One canonical "policy toggles" boundary** — env/config read happens once, not scattered
+
+### Boundary Decisions
+
+| Layer | Responsibility |
+|-------|----------------|
+| `spec-kit/src/gate_policy.rs` | Domain vocabulary (Stage, Role, Signal, etc.) — **data only, no IO** |
+| `spec-kit/src/config/policy_toggles.rs` | Pure decision logic + env/config resolution (NEW) |
+| TUI orchestration | Calls `PolicyToggles::from_env_and_config()` once at startup |
+
+**Key insight**: Separate "policy decision" from "env IO" to enable pure-function unit tests.
+
+```rust
+// Pure decision logic (unit testable, no env IO)
+fn resolve_sidecar_critic(
+    canonical: Option<&str>,
+    deprecated: Option<&str>,
+) -> (bool, Option<DeprecationWarning>)
+
+// Thin IO wrapper (one integration test)
+pub fn load_policy_toggles() -> PolicyToggles { ... }
+```
 
 ### Interface Contract (must exist before PR4)
 ```rust
@@ -159,10 +201,19 @@ fn evaluate_gate(signals: &[Signal], rule: &DecisionRule, ctx: &GateContext) -> 
 ### Rename Mapping
 | Old | New |
 |-----|-----|
-| `consensus.rs` | `gate_policy.rs` (re-export old path temporarily) |
+| `tui/.../consensus.rs` | `tui/.../gate_evaluation.rs` (re-export old path temporarily) |
 | `run_spec_consensus()` | `evaluate_gate()` (wrapper for old fn) |
 | `preferred_agent_for_stage()` | `preferred_role_for_stage()` |
-| UI "consensus" labels | "gate evaluation" |
+| `is_critic_enabled()` | Move to `policy_toggles.rs` in spec-kit |
+| UI "consensus" labels | "gate evaluation" / "stage review" |
+
+### Vocabulary (lock in for PR4+)
+| Term | Meaning |
+|------|---------|
+| **Role** | Responsibility (Architect, Implementer, Judge, SidecarCritic) |
+| **Worker** | Implementation/model/tooling pack |
+| **Sidecar** | Signal-producing reviewer (non-authoritative) |
+| **Gate** | Decision point between stages |
 
 ---
 
@@ -195,7 +246,12 @@ Keep **read compatibility** for historical evidence (old artifact directories/JS
 ## Next Session Start Command
 
 ```
-Load HANDOFF.md. Implement PR4 (module rename consensus.rs → gate_policy.rs + callsite migrations). Run tests after each change.
+Load HANDOFF.md. PR4 implementation:
+1. Create spec-kit/src/config/policy_toggles.rs (pure decision functions + env/config loader)
+2. Move is_critic_enabled() logic there, extract pure function for unit tests
+3. Rename tui/.../consensus.rs → gate_evaluation.rs with re-exports
+4. Update user-facing strings ("consensus" → "gate evaluation")
+5. Run tests after each step. Use acceptance checklist.
 ```
 
 ---
