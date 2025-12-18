@@ -1,208 +1,137 @@
-# P121 Session Handoff
-Date: 2025-12-16
-Scope: ChatWidget refactor (MAINT-11) - Post agents terminal extraction
+# Pair Programming Review — Gate Policy Alignment (2025-12-18)
+
+This note is intended as an implementation target you can hand to a coder.
+Scope: vocabulary + architectural alignment between **Gate Policy** docs and the current **consensus.rs** implementation.
 
 ---
 
-## 1. Executive Summary
+## 1) What's already true (design intent)
 
-Planner is a Rust workspace building the `code` binary with TUI focused on Spec-Kit workflows.
-
-**P120 Completed**:
-- Extracted agents terminal overlay from mod.rs into `agents_terminal.rs` (759 LOC)
-- 3 types extracted: `AgentTerminalEntry`, `AgentsTerminalState`, `AgentsTerminalFocus`
-- 8 functions extracted including render_agents_terminal_overlay (~425 LOC)
-- mod.rs: 19,792 → 19,073 LOC (-719 LOC)
-- Cumulative MAINT-11: -4,340 LOC (-18.5%)
-- All TUI tests pass (541/544, 3 pre-existing spec-kit failures), clippy clean
-
-**Commit**: (to be created)
+- **Single-owner pipeline is the default**: one stage owner produces the artifact, gates evaluate signals, and escalation is deterministic.
+- **No voting / no committee synthesis**: sidecars can contribute *signals* (block/advisory), but do not produce "competing answers" that get compared/merged.
+- **Policy is separated from routing**:
+  - **Gate Policy** = what must happen (signals, decision rules, escalation triggers).
+  - **Model Policy** = who executes it (role → worker → model/provider mapping).
 
 ---
 
-## 2. P121 Tasks (Recommended)
+## 2) What landed (confirmed in main)
 
-### Task A: MAINT-11 Phase 10 - History Handlers (Primary)
-Extract history cell management from `mod.rs` into `history_handlers.rs`.
-
-**Target**: ~600 LOC extraction
-
-### Task B: Investigation for Event Handlers (Secondary)
-Analyze event handler code for Phase 11 planning (~1,000 LOC potential).
-
-### Task C: Fix Pre-existing Spec-Kit Test Failures (Optional)
-3 environment-related test failures in `consensus::gr001_tests`.
+- `docs/spec-kit/GATE_POLICY.md` added with explicit "This is not voting" callout.
+- Confidence is defined as computed from `owner_confidence` plus evidence/counter-signals, with explicit thresholds.
+- "Quorum" renamed to "Decision Rule" to avoid voting semantics.
+- Checkpoint naming table now matches actual pipeline boundaries (with a legacy naming note).
 
 ---
 
-## 3. Current State
+## 3) The remaining mismatch (doc vs code)
 
-- `mod.rs`: 19,073 LOC
-- **Phase 9 (P120)**: `agents_terminal.rs` (759 LOC, -719 mod.rs reduction)
+Today, the implementation still uses **"consensus" vocabulary** in the runtime path (e.g., `run_spec_consensus`, `consensus_ok`, `/spec-consensus`, `SPEC_KIT_CRITIC`).
 
-### Investigation Steps for History Handlers
-```bash
-cd codex-rs
+That's okay as a transition, but the mismatch causes confusion and slows onboarding.
 
-# Find history-related functions
-grep -n "fn history_\|fn.*history" tui/src/chatwidget/mod.rs | head -30
-
-# Find history cell management
-grep -n "history\.push\|history\.replace\|history_cells" tui/src/chatwidget/mod.rs | head -20
-```
+**Goal:** rename + reshape the code so "gate evaluation" is the primary concept and "legacy consensus voting" becomes a quarantined, deprecated optional mode.
 
 ---
 
-## 4. Architecture Context
+## 4) Target architecture for the coder (minimal, crisp)
 
-### ChatWidget Module Structure (Post-P120)
-```
-chatwidget/
-├── agent_install.rs      (24KB)
-├── agent_status.rs       (4KB)  ← P113
-├── agent.rs              (4KB)
-├── agents_terminal.rs    (31KB) ← P120 (NEW)
-├── command_render.rs     (10KB) ← P110
-├── diff_handlers.rs      (7KB)
-├── exec_tools.rs         (29KB)
-├── gh_actions.rs         (10KB)
-├── history_render.rs     (5KB)
-├── input_helpers.rs      (6KB)  ← P116
-├── interrupts.rs         (7KB)
-├── layout_scroll.rs      (8KB)
-├── limits_handlers.rs    (4KB)
-├── limits_overlay.rs     (7KB)
-├── perf.rs               (6KB)
-├── rate_limit_refresh.rs (4KB)
-├── review_handlers.rs    (17KB) ← P118
-├── session_handlers.rs   (23KB) ← P119
-├── submit_helpers.rs     (11KB) ← P114
-└── mod.rs                (781KB) ← 19,073 LOC
-```
+### 4.1. Core types
 
-See full diagram: `docs/architecture/chatwidget-structure.md`
+- `Signal`: structured observation produced by stage owner, tests, or sidecars.
+  - fields: `source`, `severity {advisory|block}`, `kind`, `summary`, `evidence_refs[]`
+- `CounterSignal`: same shape as Signal, but used specifically to reduce confidence / trigger escalation.
 
----
+- `GateVerdict`:
+  - `resolution {AutoApply|Escalate}`
+  - `confidence_level {High|Medium|Low}`
+  - `effective_confidence: f32` (optional but recommended)
+  - `signals[]` and `counter_signals[]`
+  - `reason`
 
-## 5. Verification Commands
+### 4.2. Decision rule (deterministic)
 
-```bash
-# Full test suite
-cd codex-rs && cargo test --workspace
+Inputs:
+- `owner_confidence` (0..1)
+- `counter_signals` (block/advisory)
+- evidence (tests pass/fail, policy violations, high-risk flags)
 
-# TUI-specific tests
-cargo test -p codex-tui
+Compute:
+- **effective_confidence**
+  - simplest rule: start at `owner_confidence`, subtract penalties for counter-signals/tests, clamp 0..1
+- **confidence_level**
+  - High: >= 0.80 and no block-level counter-signal
+  - Medium: >= 0.60 and no block-level counter-signal
+  - Low: otherwise
 
-# Clippy (should show 0 warnings)
-cargo clippy -p codex-tui -- -D warnings
+Resolution:
+- `Escalate` if any block-level counter-signal OR tests fail OR High-Risk flag OR confidence_level=Low.
+- `AutoApply` only when confidence_level in {High, Medium} and no block-level counter-signals.
 
-# Build
-~/code/build-fast.sh
-```
+### 4.3. Routing separation (important)
+
+Gate evaluation should NOT hardcode "Gemini vs Claude" (or any model names).
+Instead:
+- map stage -> **role** (Architect/Implementer/Validator/Judge)
+- ask the router/policy engine to pick a worker for that role (per `docs/MODEL-POLICY.md`)
+
+This prevents "Model Policy duplication" and keeps gate policy stable.
 
 ---
 
-## 6. P120 Extraction Summary
+## 5) Migration plan (don't break users)
 
-| Component | LOC |
-|-----------|-----|
-| Types extracted | 3 (AgentTerminalEntry, AgentsTerminalState, AgentsTerminalFocus) |
-| Functions extracted | 8 |
-| agents_terminal.rs total | 759 |
-| mod.rs reduction | -719 |
+### 5.1 Env vars
+- New: `SPEC_KIT_SIDECAR_CRITIC`
+- Deprecated: `SPEC_KIT_CRITIC` (still honored, warn once)
 
-Extracted functions:
-- `update_agents_terminal_state()` - Sync agent info to terminal state
-- `enter_agents_terminal_mode()` - Activate agents overlay
-- `exit_agents_terminal_mode()` - Deactivate agents overlay
-- `toggle_agents_hud()` - Toggle agents overlay on/off (Ctrl+A)
-- `record_current_agent_scroll()` - Save scroll position for agent
-- `restore_selected_agent_scroll()` - Restore scroll position
-- `navigate_agents_terminal_selection()` - Navigate agent list
-- `render_agents_terminal_overlay()` - Render split-pane overlay (~425 LOC)
+### 5.2 Config keys
+- New: `min_confidence_for_auto_apply`
+- Deprecated: `consensus_threshold` (still parsed, warn)
+
+### 5.3 JSON evidence schema
+- Keep reading old fields.
+- Emit new fields going forward.
+- Add a schema version so dashboards can handle both.
 
 ---
 
-## 7. Key File References
+## 6) Acceptance criteria (what "done" looks like)
 
-| Component | File | Lines |
-|-----------|------|-------|
-| ChatWidget Monolith | `tui/src/chatwidget/mod.rs` | 19,073 |
-| Agents Terminal | `tui/src/chatwidget/agents_terminal.rs` | 759 |
-| Session Handlers | `tui/src/chatwidget/session_handlers.rs` | 624 |
-| Review Handlers | `tui/src/chatwidget/review_handlers.rs` | ~580 |
-| Architecture Diagram | `docs/architecture/chatwidget-structure.md` | - |
-| MAINT-11 Plan | `docs/MAINT-11-EXTRACTION-PLAN.md` | - |
-| MAINT-11 Tracker | `SPEC.md:186` | - |
-
----
-
-## 8. Session Summary
-
-| Session | Commit | Key Deliverable |
-|---------|--------|-----------------|
-| P110 | - | command_render.rs extraction |
-| P111 | 424990cc3 | MCP timeout_sec + per-model providers |
-| P112 | c521f9c36 | Regression fix + HANDOFF.md |
-| P113 | 09f78f6c9 | agent_status.rs + stage0 clippy |
-| P114 | 83ae857d1 | submit_helpers.rs + core clippy |
-| P115 | e82064d50 | dead_code cleanup (8→0 warnings) |
-| P116 | d5c58634c | input_helpers.rs extraction |
-| P117 | 15aa783a7 | Browser/chrome dead code removal |
-| P118 | 5584713cb | review_handlers.rs extraction |
-| P119 | 7ce0d4111 | session_handlers.rs extraction |
-| P120 | — | agents_terminal.rs extraction |
-| P121 | — | next: history_handlers.rs |
+1. UI and logs say **"Gate evaluation"** not "consensus" in the default path.
+2. There is a single place where:
+   - signals are gathered
+   - effective confidence is computed
+   - decision rule produces a verdict
+3. Model selection is handled by the model-policy/router (no stage->model hardcoding in gate-policy module).
+4. Deprecated env vars/config keys still work with a warning.
+5. Unit tests cover:
+   - default path (no env vars) = gate evaluation only
+   - sidecar enabled = signals captured, decisions unchanged unless block-level
+   - legacy voting mode (if kept) is explicitly isolated + warns
 
 ---
 
-## 9. MAINT-11 Progress Summary
+## 7) What NOT to build
 
-| Phase | Session | LOC Change | Total mod.rs |
-|-------|---------|------------|--------------|
-| 1 | P110 | -200 extracted | 23,213 |
-| 2 | P113 | -65 extracted | 23,151 |
-| 3 | P114 | -300 extracted | 22,911 |
-| 4 | P115 | -5 removed | 22,906 |
-| 5 | P116 | -54 extracted | 22,852 |
-| 6 | P117 | -2,094 removed | 20,758 |
-| 7 | P118 | -408 extracted | 20,350 |
-| 8 | P119 | -558 extracted | 19,792 |
-| 9 | P120 | -719 extracted | 19,073 |
-
-**Cumulative**: 23,413 → 19,073 = **-4,340 LOC** (-18.5%)
+- No "debate loop," no multi-answer comparison, no "best of N outputs."
+- No implicit compromises or synthesis when sources disagree.
+- No dynamic agent swarm/orchestration — this is a pipeline with optional sidecars.
 
 ---
 
-## 10. Remaining Extraction Candidates
+## 8) Recommended next PRs
 
-| Target | Est. LOC | Complexity | Session |
-|--------|----------|------------|---------|
-| History handlers | ~600 | Medium | **P121** |
-| Event handlers | ~1,000 | High | P122+ |
-| Config handlers | ~400 | Medium | P123+ |
+1. **Rename + compatibility layer**
+   - `SPEC_KIT_CRITIC` -> `SPEC_KIT_SIDECAR_CRITIC` (+warn-once)
+   - `consensus_threshold` -> `min_confidence_for_auto_apply` (+warn-once)
 
----
+2. **Refactor naming**
+   - `consensus.rs` -> `gate_policy.rs` (re-export old module path temporarily)
+   - `run_spec_consensus()` -> `evaluate_gate()` (keep old fn as wrapper)
 
-## 11. P121 Expected Deliverables
+3. **Remove model routing duplication**
+   - replace `preferred_agent_for_stage()` with `preferred_role_for_stage()` (router handles worker/model)
 
-| Category | Deliverable | Status |
-|----------|-------------|--------|
-| **Extraction** | history_handlers.rs (~600 LOC) | Pending |
-| **Extraction** | mod.rs → ~18,500 LOC | Pending |
-| **Testing** | All TUI tests pass | Pending |
-| **Testing** | Clippy clean | Pending |
-| **Docs** | MAINT-11 plan updated | Pending |
-| **Docs** | HANDOFF.md for P122 | Pending |
-
----
-
-## 12. Notes
-
-- Agents terminal extraction was larger than initial ~300 LOC estimate (759 LOC actual) due to the large render function (~425 LOC).
-- 3 pre-existing test failures in spec_kit consensus tests (environment variable related, not from extraction).
-- The extraction pattern is now well-established: investigate → create module → extract types → extract functions → update imports → verify.
-
----
-
-_Generated: 2025-12-16 after P120_
+4. **Quarantine or delete legacy voting path**
+   - compile-time feature or deeply isolated module so it cannot drift back into default behavior
