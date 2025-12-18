@@ -172,7 +172,7 @@ pub struct RoutingContext {
 impl From<&StageContext> for RoutingContext {
     fn from(ctx: &StageContext) -> Self {
         Self {
-            stage: None, // Set separately if needed
+            stage: ctx.stage, // Preserved from StageContext if set
             is_high_risk: ctx.is_high_risk,
             local_only: ctx.local_only,
             retry_count: ctx.retry_count,
@@ -210,13 +210,23 @@ pub trait Router: Send + Sync {
 }
 
 // ============================================================================
-// Default Router Implementation
+// Default Router Implementation (Example/Development Fallback)
 // ============================================================================
 
-/// Default router that maps roles to sensible defaults.
+/// Example router with hardcoded role→model mappings for development.
 ///
-/// This is a fallback implementation. Production use should
-/// configure a router based on MODEL-POLICY.md.
+/// **WARNING: This is NOT the canonical routing policy.**
+///
+/// This implementation provides sensible defaults for local development
+/// and testing. Production deployments should:
+///
+/// 1. Use a config-driven router that reads from `MODEL-POLICY.md` or
+///    structured configuration files.
+/// 2. Implement the `Router` trait in the orchestration layer (TUI/CLI)
+///    where runtime configuration is available.
+///
+/// The hardcoded provider/model values here are examples only and may
+/// diverge from the actual MODEL-POLICY.md routing tables.
 #[derive(Clone, Debug, Default)]
 pub struct DefaultRouter {
     /// If true, prefer local models when available
@@ -236,7 +246,7 @@ impl DefaultRouter {
 
 impl Router for DefaultRouter {
     fn select_worker(&self, role: Role, ctx: &RoutingContext) -> WorkerSpec {
-        // Default mappings per MODEL-POLICY.md guidance
+        // Example mappings for development (NOT canonical - see struct docs)
         let (provider, model) = if ctx.local_only || self.prefer_local {
             match role {
                 Role::Architect | Role::Judge => ("local", "claude-code"),
@@ -402,15 +412,20 @@ mod tests {
 
     #[test]
     fn test_routing_context_from_stage_context() {
+        use crate::gate_policy::PolicyToggles;
+
         let stage_ctx = StageContext {
             spec_id: "SPEC-001".into(),
+            stage: Some(Stage::Implement),
             local_only: true,
             is_high_risk: true,
             retry_count: 2,
             artifact_paths: vec![],
+            policy: PolicyToggles::default(),
         };
 
         let routing_ctx = RoutingContext::from(&stage_ctx);
+        assert_eq!(routing_ctx.stage, Some(Stage::Implement)); // Stage is preserved
         assert!(routing_ctx.local_only);
         assert!(routing_ctx.is_high_risk);
         assert_eq!(routing_ctx.retry_count, 2);

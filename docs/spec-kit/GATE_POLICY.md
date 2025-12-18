@@ -80,8 +80,8 @@ Confidence is a **computed gate signal** derived from the stage owner's self-rep
 | Level | Condition | Behavior |
 |-------|-----------|----------|
 | `High` | `owner_confidence >= 0.80` AND no critical counter-signals | Can auto-apply |
-| `Medium` | `owner_confidence >= 0.60` AND only minor counter-signals | Conditional auto-apply |
-| `Low` | `owner_confidence < 0.60` OR any critical counter-signal present | Must escalate |
+| `Medium` | `owner_confidence >= 0.65` AND only minor counter-signals | Conditional auto-apply |
+| `Low` | `owner_confidence < 0.65` OR any critical counter-signal present | Must escalate |
 
 **Counter-signals** (from sidecars/validators):
 - `risk_flags`: Security, architecture, or scope concerns
@@ -308,7 +308,7 @@ Quality is enforced by:
 
 ```json
 {
-  "min_confidence_for_auto_apply": 0.60,
+  "min_confidence_for_auto_apply": 0.65,
   "min_test_coverage": null,
   "schema_validation": true,
   "enabled": true

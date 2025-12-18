@@ -46,8 +46,8 @@ pub use types::{SpecAgent, SpecStage};
 // PR1: Gate Policy canonical vocabulary
 pub use gate_policy::{
     Checkpoint, ConfidenceLevel, CounterSignal, CounterSignalKind, DecisionRule, EscalationTarget,
-    GateContext, GateVerdict, Role, RoleAssignment, RiskLevel, Signal, SignalSeverity, Stage,
-    StageContext, ToolTruth, ToolTruthKind, Verdict,
+    GateContext, GateVerdict, PolicyToggles, Role, RoleAssignment, RiskLevel, Signal,
+    SignalSeverity, Stage, StageContext, ToolTruth, ToolTruthKind, Verdict,
 };
 
 // PR1: Router interface

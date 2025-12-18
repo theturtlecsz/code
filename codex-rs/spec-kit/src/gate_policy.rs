@@ -313,8 +313,12 @@ pub struct DecisionRule {
     pub escalate_on_tool_failure: bool,
 }
 
+/// Default minimum confidence for auto-apply.
+///
+/// Set slightly above the Medium threshold (0.65) to provide margin.
+/// This is the canonical default; override via config if needed.
 fn default_min_confidence() -> f32 {
-    0.67
+    0.65
 }
 fn default_allow_advisory() -> bool {
     true
@@ -459,6 +463,10 @@ pub struct RoleAssignment {
 /// This is the Gate Policy's interface to the orchestrator.
 /// It returns who should own the stage and what sidecars to run.
 ///
+/// **Important**: This function is deterministic and does NOT read env vars.
+/// The orchestration layer is responsible for populating `ctx.policy` from
+/// environment variables and configuration.
+///
 /// **Important**: This function does NOT return model/provider names.
 /// The Router handles that mapping separately.
 pub fn roles_for_stage(stage: Stage, ctx: &StageContext) -> RoleAssignment {
@@ -470,20 +478,17 @@ pub fn roles_for_stage(stage: Stage, ctx: &StageContext) -> RoleAssignment {
         Stage::Audit | Stage::Unlock => Role::Judge,
     };
 
-    // Determine sidecars based on context
+    // Determine sidecars based on context (deterministic, no env reads)
     let mut sidecars = Vec::new();
 
-    // Critic sidecar if enabled via env
-    if std::env::var("SPEC_KIT_SIDECAR_CRITIC")
-        .or_else(|_| std::env::var("SPEC_KIT_CRITIC")) // legacy fallback
-        .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
-        .unwrap_or(false)
-    {
+    // Critic sidecar if enabled via policy toggles
+    if ctx.policy.sidecar_critic_enabled {
         sidecars.push(Role::SidecarCritic);
     }
 
-    // High-risk stages get security review
-    if ctx.is_high_risk && matches!(stage, Stage::Implement | Stage::Validate) {
+    // High-risk stages get security review if enabled
+    let security_review_stages = matches!(stage, Stage::Implement | Stage::Validate);
+    if ctx.is_high_risk && security_review_stages && ctx.policy.security_reviewer_enabled {
         sidecars.push(Role::SecurityReviewer);
     }
 
@@ -507,14 +512,32 @@ pub fn checkpoints_for_stage_transition(from: Stage, to: Stage) -> Vec<Checkpoin
 // Stage Context (shared with Router)
 // ============================================================================
 
+/// Policy toggles that control gate behavior.
+///
+/// These are determined by the orchestration layer (reading env vars, config, etc.)
+/// and passed into gate policy functions. Gate policy itself does NOT read env vars.
+#[derive(Clone, Debug, Default)]
+pub struct PolicyToggles {
+    /// Enable non-blocking critic sidecar (env: SPEC_KIT_SIDECAR_CRITIC)
+    pub sidecar_critic_enabled: bool,
+    /// Enable security reviewer for high-risk stages
+    pub security_reviewer_enabled: bool,
+}
+
 /// Context passed to both Gate Policy and Router.
+///
+/// **Design**: This struct carries policy-level context, not filesystem-level details.
+/// Artifact paths are identifiers, not absolute filesystem paths.
 #[derive(Clone, Debug, Default)]
 pub struct StageContext {
     pub spec_id: String,
+    pub stage: Option<Stage>,
     pub local_only: bool,
     pub is_high_risk: bool,
     pub retry_count: u32,
     pub artifact_paths: Vec<PathBuf>,
+    /// Policy toggles (sidecars, etc.) - set by orchestration layer
+    pub policy: PolicyToggles,
 }
 
 // ============================================================================
@@ -576,10 +599,31 @@ mod tests {
 
         let plan = roles_for_stage(Stage::Plan, &ctx);
         assert_eq!(plan.owner, Role::Architect);
-        assert!(plan.sidecars.is_empty()); // No env var set
+        assert!(plan.sidecars.is_empty()); // No policy toggles enabled
 
         let impl_stage = roles_for_stage(Stage::Implement, &ctx);
         assert_eq!(impl_stage.owner, Role::Implementer);
+    }
+
+    #[test]
+    fn test_roles_for_stage_with_sidecars() {
+        let ctx = StageContext {
+            policy: PolicyToggles {
+                sidecar_critic_enabled: true,
+                security_reviewer_enabled: true,
+            },
+            is_high_risk: true,
+            ..Default::default()
+        };
+
+        let plan = roles_for_stage(Stage::Plan, &ctx);
+        assert_eq!(plan.owner, Role::Architect);
+        assert_eq!(plan.sidecars, vec![Role::SidecarCritic]); // Critic only (Plan not security-reviewed)
+
+        let impl_stage = roles_for_stage(Stage::Implement, &ctx);
+        assert_eq!(impl_stage.owner, Role::Implementer);
+        assert!(impl_stage.sidecars.contains(&Role::SidecarCritic));
+        assert!(impl_stage.sidecars.contains(&Role::SecurityReviewer)); // High-risk + Implement
     }
 
     #[test]
@@ -605,7 +649,7 @@ mod tests {
     #[test]
     fn test_decision_rule_defaults() {
         let rule = DecisionRule::default();
-        assert!((rule.min_confidence_for_auto_apply - 0.67).abs() < 0.001);
+        assert!((rule.min_confidence_for_auto_apply - 0.65).abs() < 0.001);
         assert!(rule.allow_advisory_auto_apply);
         assert!(rule.escalate_on_tool_failure);
     }
