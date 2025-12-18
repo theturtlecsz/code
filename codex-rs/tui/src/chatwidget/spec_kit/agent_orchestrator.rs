@@ -11,7 +11,7 @@
 
 use super::super::ChatWidget;
 use super::command_handlers::halt_spec_auto_with_error;
-use super::consensus::expected_agents_for_stage;
+use super::gate_evaluation::expected_agents_for_stage;
 use super::consensus_coordinator::block_on_sync;
 use super::handler::check_consensus_and_advance_spec_auto;
 use super::quality_gate_handler::on_quality_gate_agents_complete;

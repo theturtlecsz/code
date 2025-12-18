@@ -1629,13 +1629,13 @@ use codex_core::config_types::ShellEnvironmentPolicy;
 /// Check if spec-kit telemetry is enabled via env or config
 pub fn spec_kit_telemetry_enabled(env_policy: &ShellEnvironmentPolicy) -> bool {
     if let Ok(value) = std::env::var("SPEC_KIT_TELEMETRY_ENABLED")
-        && super::consensus::telemetry_value_truthy(&value)
+        && super::gate_evaluation::telemetry_value_truthy(&value)
     {
         return true;
     }
 
     if let Some(value) = env_policy.r#set.get("SPEC_KIT_TELEMETRY_ENABLED")
-        && super::consensus::telemetry_value_truthy(value)
+        && super::gate_evaluation::telemetry_value_truthy(value)
     {
         return true;
     }
@@ -1648,12 +1648,12 @@ pub fn spec_kit_telemetry_enabled(env_policy: &ShellEnvironmentPolicy) -> bool {
 pub fn spec_kit_auto_commit_enabled(env_policy: &ShellEnvironmentPolicy) -> bool {
     // Check environment variable first (explicit override)
     if let Ok(value) = std::env::var("SPEC_KIT_AUTO_COMMIT") {
-        return super::consensus::telemetry_value_truthy(&value);
+        return super::gate_evaluation::telemetry_value_truthy(&value);
     }
 
     // Check config override
     if let Some(value) = env_policy.r#set.get("SPEC_KIT_AUTO_COMMIT") {
-        return super::consensus::telemetry_value_truthy(value);
+        return super::gate_evaluation::telemetry_value_truthy(value);
     }
 
     // Default to true (enabled by default for clean tree maintenance)

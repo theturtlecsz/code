@@ -26,7 +26,9 @@ pub mod command_registry;
 pub mod commands;
 pub mod config_reload; // SPEC-945D Phase 2.2: Config hot-reload handler
 pub mod config_validator;
-pub mod consensus;
+pub mod gate_evaluation; // Gate evaluation (renamed from consensus - PR4)
+#[allow(deprecated)]
+pub mod consensus; // Deprecated shim for backward compatibility
 pub mod consensus_coordinator; // Consensus checking with MCP retry logic
 pub mod consensus_db; // SPEC-KIT-072: SQLite storage for consensus artifacts (replaces local-memory)
 pub mod context;

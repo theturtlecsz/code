@@ -252,9 +252,9 @@ pub mod test_mock {
             _spec_id: &str,
             _stage: SpecStage,
         ) -> Result<(Vec<ratatui::text::Line<'static>>, bool)> {
-            // Mock: Return consensus OK
+            // Mock: Return review OK
             use ratatui::text::Line;
-            Ok((vec![Line::from("Mock consensus OK")], true))
+            Ok((vec![Line::from("Mock stage review OK")], true))
         }
 
         // === T82: Extended Operations ===

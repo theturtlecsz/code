@@ -26,7 +26,7 @@ use crate::slash_command::HalMode;
 use crate::slash_command::SlashCommand;
 use crate::slash_command::SpecAutoInvocation;
 use crate::spec_prompts::SpecStage;
-use spec_kit::consensus::{
+use spec_kit::gate_evaluation::{
     ConsensusEvidenceHandle, ConsensusSynthesisRaw, ConsensusSynthesisSummary,
     ConsensusTelemetryPaths, ConsensusVerdict, telemetry_agent_slug,
 };
@@ -13122,7 +13122,7 @@ impl ChatWidget<'_> {
 
     // FORK-SPECIFIC (just-every/code): Temporarily disabled during async migration
     // This function is being migrated to async in Phase 3/4
-    // Use spec_kit::consensus::run_spec_consensus() async function instead
+    // Use spec_kit::gate_evaluation::run_spec_consensus() async function instead
     #[allow(dead_code)]
     fn run_spec_consensus(
         &mut self,

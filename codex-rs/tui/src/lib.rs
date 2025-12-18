@@ -207,8 +207,8 @@ pub use chatwidget::spec_kit::state::{
     require_string_field, spec_ops_stage_prefix, validate_guardrail_evidence,
 };
 
-// FORK-SPECIFIC (just-every/code): Re-export consensus for MCP integration testing
-pub use chatwidget::spec_kit::consensus::run_spec_consensus;
+// FORK-SPECIFIC (just-every/code): Re-export gate_evaluation for MCP integration testing
+pub use chatwidget::spec_kit::gate_evaluation::run_spec_consensus;
 
 // FORK-SPECIFIC (just-every/code): SPEC-KIT-070 - Re-export native SPEC-ID generation
 pub use chatwidget::spec_kit::spec_id_generator;

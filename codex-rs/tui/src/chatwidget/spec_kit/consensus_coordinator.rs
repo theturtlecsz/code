@@ -10,7 +10,7 @@
 //! handling MCP connection timing and transient failures.
 
 use super::super::ChatWidget;
-use super::consensus::{parse_consensus_stage, run_spec_consensus};
+use super::gate_evaluation::{parse_consensus_stage, run_spec_consensus};
 use crate::history_cell::HistoryCellType;
 use crate::spec_prompts::SpecStage;
 use std::sync::Arc;

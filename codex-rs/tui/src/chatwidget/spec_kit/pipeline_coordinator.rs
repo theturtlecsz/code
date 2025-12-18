@@ -601,10 +601,10 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
                         // Log stage start and add TUI boundary marker
                         if let Some(run_id) = &state.run_id {
                             let tier = super::execution_logger::tier_from_agent_count(
-                                super::consensus::expected_agents_for_stage(stage).len(),
+                                super::gate_evaluation::expected_agents_for_stage(stage).len(),
                             );
                             let expected_agents: Vec<String> =
-                                super::consensus::expected_agents_for_stage(stage)
+                                super::gate_evaluation::expected_agents_for_stage(stage)
                                     .into_iter()
                                     .map(|a| a.canonical_name().to_string())
                                     .collect();
@@ -1485,10 +1485,10 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                 if let Some(state) = widget.spec_auto_state.as_ref() {
                     state.consensus_sequence.ack_processed(consensus_seq);
                 }
-                // Consensus failed - halt (no retries)
+                // Stage review failed - halt (no retries)
                 halt_spec_auto_with_error(
                     widget,
-                    format!("Consensus failed for {}", current_stage.display_name()),
+                    format!("Stage review failed for {}", current_stage.display_name()),
                 );
             }
         }
