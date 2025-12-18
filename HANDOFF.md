@@ -11,12 +11,13 @@ Scope: vocabulary + architectural alignment between **Gate Policy** docs and the
 |----|--------|-------------|
 | **PR1** | ✅ Complete | Define canonical types (Role, Stage, Signal, Verdict, Router trait) in `codex-rs/spec-kit/` |
 | **PR1.1** | ✅ Complete | Fix P0 env boundary leak, align thresholds to 0.65, add PolicyToggles |
-| **PR2** | 🔲 Pending | Config alias (`consensus_threshold` → `min_confidence_for_auto_apply`) |
+| **PR2** | ✅ Complete | Config alias (`consensus_threshold` → `min_confidence_for_auto_apply`) |
 | **PR3** | 🔲 Pending | Env var alias (`SPEC_KIT_CRITIC` → `SPEC_KIT_SIDECAR_CRITIC`) |
 | **PR4** | 🔲 Pending | Module rename (`consensus.rs` → `gate_policy.rs`) + callsite migrations |
 | **PR6** | 🔲 Pending | Delete or feature-gate legacy voting path |
 
-### PR1 + PR1.1 Commits
+### Commits
+- `f930c4643` - feat(spec-kit): config alias consensus_threshold -> min_confidence_for_auto_apply (PR2)
 - `a29f9668e` - fix(spec-kit): make gate policy deterministic, align thresholds (PR1.1)
 - `89b7a83e6` - feat(spec-kit): add gate policy and router contracts (PR1)
 
