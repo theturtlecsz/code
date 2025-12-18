@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 /// Root application configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
-    /// Model configurations (provider → model settings)
+    /// Model configurations (provider -> model settings)
     #[serde(default)]
     pub models: HashMap<String, ModelConfig>,
 
@@ -76,23 +76,122 @@ pub struct RetryConfig {
 }
 
 /// Quality gate configuration
+///
+/// **Vocabulary note**: This replaces legacy `consensus_threshold` naming.
+/// The deprecated key is still accepted for backward compatibility, but will
+/// emit a warn-once notice when used.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(from = "QualityGateConfigRaw")]
 pub struct QualityGateConfig {
     /// Enable quality gates
-    #[serde(default = "default_true")]
     pub enabled: bool,
 
-    /// Minimum consensus agreement threshold (0.0-1.0)
-    #[serde(default = "default_consensus_threshold")]
-    pub consensus_threshold: f32,
+    /// Minimum effective confidence required to auto-apply a gate verdict (0.0-1.0).
+    ///
+    /// Canonical replacement for legacy `consensus_threshold`.
+    pub min_confidence_for_auto_apply: f32,
 
     /// Minimum test coverage percentage
-    #[serde(default)]
     pub min_test_coverage: Option<f32>,
 
     /// Enable schema validation
-    #[serde(default = "default_true")]
     pub schema_validation: bool,
+}
+
+/// Backward-compatible deserialization shape.
+///
+/// Accepts both:
+/// - `min_confidence_for_auto_apply` (canonical)
+/// - `consensus_threshold` (deprecated alias)
+#[derive(Debug, Clone, Deserialize)]
+struct QualityGateConfigRaw {
+    /// Enable quality gates
+    #[serde(default = "default_true")]
+    enabled: bool,
+
+    /// Canonical key (preferred)
+    #[serde(default)]
+    min_confidence_for_auto_apply: Option<f32>,
+
+    /// Deprecated key (legacy)
+    #[serde(default)]
+    consensus_threshold: Option<f32>,
+
+    /// Minimum test coverage percentage
+    #[serde(default)]
+    min_test_coverage: Option<f32>,
+
+    /// Enable schema validation
+    #[serde(default = "default_true")]
+    schema_validation: bool,
+}
+
+impl From<QualityGateConfigRaw> for QualityGateConfig {
+    fn from(raw: QualityGateConfigRaw) -> Self {
+        let effective = match (raw.min_confidence_for_auto_apply, raw.consensus_threshold) {
+            (Some(new), Some(_old)) => {
+                warn_once_deprecated_consensus_threshold(true);
+                new
+            }
+            (Some(new), None) => new,
+            (None, Some(old)) => {
+                warn_once_deprecated_consensus_threshold(false);
+                old
+            }
+            (None, None) => default_min_confidence_for_auto_apply(),
+        };
+
+        Self {
+            enabled: raw.enabled,
+            min_confidence_for_auto_apply: effective,
+            min_test_coverage: raw.min_test_coverage,
+            schema_validation: raw.schema_validation,
+        }
+    }
+}
+
+/// Warn once per process when deprecated consensus_threshold is used.
+#[allow(clippy::print_stderr)]
+fn warn_once_deprecated_consensus_threshold(both_keys_present: bool) {
+    use std::sync::Once;
+    static WARN_ONCE: Once = Once::new();
+
+    WARN_ONCE.call_once(|| {
+        if both_keys_present {
+            eprintln!(
+                "WARNING: Both 'quality_gates.consensus_threshold' (deprecated) and 'quality_gates.min_confidence_for_auto_apply' are set. Remove the deprecated key to avoid ambiguity."
+            );
+        } else {
+            eprintln!(
+                "WARNING: Config key 'quality_gates.consensus_threshold' is deprecated. Use 'quality_gates.min_confidence_for_auto_apply' instead."
+            );
+        }
+
+        eprintln!(
+            "         Env var alias: SPECKIT_QUALITY_GATES__CONSENSUS_THRESHOLD (deprecated) -> SPECKIT_QUALITY_GATES__MIN_CONFIDENCE_FOR_AUTO_APPLY"
+        );
+    });
+}
+
+
+/// Ensure the deprecated env var can still override file-based config during the transition.
+///
+/// Without this, a file that sets the canonical key and an env var that sets the deprecated key
+/// would result in *both* keys being present, and source precedence (env > file) would be lost.
+fn apply_deprecated_quality_gates_threshold_env_override(app_config: &mut AppConfig) {
+    const NEW_ENV: &str = "SPECKIT_QUALITY_GATES__MIN_CONFIDENCE_FOR_AUTO_APPLY";
+    const OLD_ENV: &str = "SPECKIT_QUALITY_GATES__CONSENSUS_THRESHOLD";
+
+    // If the canonical env var is set, config crate already applied it with the correct precedence.
+    if std::env::var(NEW_ENV).is_ok() {
+        return;
+    }
+
+    if let Ok(raw) = std::env::var(OLD_ENV) {
+        if let Ok(v) = raw.parse::<f32>() {
+            app_config.quality_gates.min_confidence_for_auto_apply = v;
+        }
+    }
 }
 
 /// Cost tracking configuration
@@ -167,7 +266,7 @@ fn default_max_delay_ms() -> u64 {
 fn default_true() -> bool {
     true
 }
-fn default_consensus_threshold() -> f32 {
+fn default_min_confidence_for_auto_apply() -> f32 {
     0.67
 }
 fn default_alert_threshold() -> f32 {
@@ -207,7 +306,7 @@ impl Default for QualityGateConfig {
     fn default() -> Self {
         Self {
             enabled: default_true(),
-            consensus_threshold: default_consensus_threshold(),
+            min_confidence_for_auto_apply: default_min_confidence_for_auto_apply(),
             min_test_coverage: None,
             schema_validation: default_true(),
         }
@@ -272,7 +371,20 @@ impl ConfigLoader {
 
         // Layer 1: Defaults (serialize defaults to JSON and load as base)
         let defaults = AppConfig::default();
-        let defaults_json = serde_json::to_string(&defaults)?;
+
+        // NOTE: During the `consensus_threshold` -> `min_confidence_for_auto_apply` transition,
+        // we intentionally omit the new key from the defaults layer so that legacy configs
+        // using `consensus_threshold` don't end up with *both* keys set (which would make
+        // precedence ambiguous).
+        let mut defaults_value = serde_json::to_value(&defaults)?;
+        if let Some(qg) = defaults_value
+            .get_mut("quality_gates")
+            .and_then(|v| v.as_object_mut())
+        {
+            qg.remove("min_confidence_for_auto_apply");
+        }
+        let defaults_json = serde_json::to_string(&defaults_value)?;
+
         builder = builder.add_source(config::File::from_str(
             &defaults_json,
             config::FileFormat::Json,
@@ -301,7 +413,9 @@ impl ConfigLoader {
 
         // Build and deserialize
         let config = builder.build()?;
-        let app_config: AppConfig = config.try_deserialize()?;
+        let mut app_config: AppConfig = config.try_deserialize()?;
+
+        apply_deprecated_quality_gates_threshold_env_override(&mut app_config);
 
         // Check for unknown environment variables (warn only, don't fail)
         Self::check_unknown_env_vars();
@@ -402,7 +516,7 @@ mod tests {
     fn test_default_config() {
         let config = AppConfig::default();
         assert!(config.quality_gates.enabled);
-        assert_eq!(config.quality_gates.consensus_threshold, 0.67);
+        assert_eq!(config.quality_gates.min_confidence_for_auto_apply, 0.67);
         assert!(config.cost.enabled);
         assert_eq!(config.evidence.max_size_per_spec_mb, 25);
         assert_eq!(config.consensus.min_agents, 2);
@@ -472,7 +586,7 @@ max_agents = 7
         let config = loader.load().expect("Failed to load config");
 
         assert!(!config.quality_gates.enabled);
-        assert_eq!(config.quality_gates.consensus_threshold, 0.8);
+        assert_eq!(config.quality_gates.min_confidence_for_auto_apply, 0.8);
         assert_eq!(config.cost.daily_limit_usd, Some(10.0));
         assert_eq!(config.consensus.min_agents, 3);
         assert_eq!(config.consensus.max_agents, 7);
@@ -503,11 +617,41 @@ consensus_threshold = 0.8
         // Env var should win over file
         assert!(config.quality_gates.enabled);
         // File value should be preserved for non-overridden fields
-        assert_eq!(config.quality_gates.consensus_threshold, 0.8);
+        assert_eq!(config.quality_gates.min_confidence_for_auto_apply, 0.8);
 
         // Cleanup
         unsafe {
             env::remove_var("SPECKIT_QUALITY_GATES__ENABLED");
+        }
+    }
+
+
+    #[test]
+    #[serial]
+    fn test_deprecated_env_var_overrides_file_canonical_key() {
+        // File sets canonical key
+        let toml_content = r#"
+[quality_gates]
+min_confidence_for_auto_apply = 0.6
+"#;
+
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let config_path = temp_dir.path().join("test_config.toml");
+        std::fs::write(&config_path, toml_content).expect("Failed to write temp file");
+
+        // Deprecated env var should override file (env > file), even though it's the legacy name.
+        unsafe {
+            env::set_var("SPECKIT_QUALITY_GATES__CONSENSUS_THRESHOLD", "0.9");
+        }
+
+        let loader = ConfigLoader::new().with_file(&config_path);
+        let config = loader.load().expect("Failed to load config");
+
+        assert_eq!(config.quality_gates.min_confidence_for_auto_apply, 0.9);
+
+        // Cleanup
+        unsafe {
+            env::remove_var("SPECKIT_QUALITY_GATES__CONSENSUS_THRESHOLD");
         }
     }
 
@@ -668,8 +812,8 @@ schema_validation = true
         );
         let err_msg = err.to_string();
         assert!(
-            err_msg.contains("consensus_threshold") || err_msg.contains("quality_gates"),
-            "Error should mention consensus_threshold, got: {err_msg}"
+            err_msg.contains("min_confidence_for_auto_apply") || err_msg.contains("quality_gates"),
+            "Error should mention min_confidence_for_auto_apply, got: {err_msg}"
         );
     }
 
@@ -696,7 +840,7 @@ schema_validation = false
             "Config should load when validation is disabled: {result:?}"
         );
         let config = result.unwrap();
-        assert_eq!(config.quality_gates.consensus_threshold, 1.5);
+        assert_eq!(config.quality_gates.min_confidence_for_auto_apply, 1.5);
         assert!(!config.quality_gates.schema_validation);
     }
 
@@ -768,7 +912,8 @@ min_agents = 1
         );
 
         // Should mention at least one of the invalid fields
-        let has_field_mention = err_msg.contains("consensus_threshold")
+        let has_field_mention = err_msg.contains("min_confidence_for_auto_apply")
+            || err_msg.contains("consensus_threshold")
             || err_msg.contains("min_agents")
             || err_msg.contains("quality_gates")
             || err_msg.contains("consensus");

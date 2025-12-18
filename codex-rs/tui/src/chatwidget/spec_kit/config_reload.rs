@@ -178,7 +178,7 @@ pub fn detect_config_changes(old: &AppConfig, new: &AppConfig) -> (usize, bool, 
 
     // Check if quality gates changed
     let quality_gates_changed = old.quality_gates.enabled != new.quality_gates.enabled
-        || (old.quality_gates.consensus_threshold - new.quality_gates.consensus_threshold).abs()
+        || (old.quality_gates.min_confidence_for_auto_apply - new.quality_gates.min_confidence_for_auto_apply).abs()
             > f32::EPSILON;
 
     // Check if cost settings changed
@@ -257,7 +257,7 @@ mod tests {
             models: HashMap::new(),
             quality_gates: QualityGateConfig {
                 enabled: true,
-                consensus_threshold: 0.7,
+                min_confidence_for_auto_apply: 0.7,
                 min_test_coverage: Some(80.0),
                 schema_validation: true,
             },

@@ -593,7 +593,7 @@ max_agents = 5
 
         let config = watcher.get_config();
         assert!(config.quality_gates.enabled);
-        assert_eq!(config.quality_gates.consensus_threshold, 0.7);
+        assert_eq!(config.quality_gates.min_confidence_for_auto_apply, 0.7);
     }
 
     #[tokio::test]
@@ -695,7 +695,7 @@ max_agents = 5
         // Config should be updated
         let config = watcher.get_config();
         assert!(!config.quality_gates.enabled); // Changed from true to false
-        assert_eq!(config.quality_gates.consensus_threshold, 0.9);
+        assert_eq!(config.quality_gates.min_confidence_for_auto_apply, 0.9);
     }
 
     // ====================
@@ -737,7 +737,7 @@ max_agents = 5
         // Old config should be preserved
         let current_config = watcher.get_config();
         assert!(current_config.quality_gates.enabled);
-        assert_eq!(current_config.quality_gates.consensus_threshold, 0.7);
+        assert_eq!(current_config.quality_gates.min_confidence_for_auto_apply, 0.7);
     }
 
     #[tokio::test]
@@ -821,7 +821,7 @@ max_agents = 5
 
         // Original config preserved
         let config = watcher.get_config();
-        assert_eq!(config.quality_gates.consensus_threshold, 0.7);
+        assert_eq!(config.quality_gates.min_confidence_for_auto_apply, 0.7);
     }
 
     // ====================

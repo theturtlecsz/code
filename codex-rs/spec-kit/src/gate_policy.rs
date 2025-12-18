@@ -300,7 +300,7 @@ pub enum Signal {
 /// `consensus_threshold` (handled via serde alias in config layer).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DecisionRule {
-    /// Minimum effective confidence to auto-apply (replaces consensus_threshold)
+    /// Minimum effective confidence to auto-apply (replaces legacy consensus_threshold)
     #[serde(default = "default_min_confidence")]
     pub min_confidence_for_auto_apply: f32,
 

@@ -109,9 +109,9 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_consensus_threshold_high() {
+    fn test_invalid_min_confidence_for_auto_apply_high() {
         let mut config = AppConfig::default();
-        config.quality_gates.consensus_threshold = 1.5;
+        config.quality_gates.min_confidence_for_auto_apply = 1.5;
 
         let validator = SchemaValidator::new().expect("Failed to create validator");
         let result = validator.validate(&config);
@@ -121,15 +121,15 @@ mod tests {
         assert!(matches!(err, ConfigError::SchemaValidationError(_)));
         let err_msg = err.to_string();
         assert!(
-            err_msg.contains("consensus_threshold") || err_msg.contains("quality_gates"),
-            "Error should mention consensus_threshold or quality_gates, got: {err_msg}"
+            err_msg.contains("min_confidence_for_auto_apply") || err_msg.contains("quality_gates"),
+            "Error should mention min_confidence_for_auto_apply or quality_gates, got: {err_msg}"
         );
     }
 
     #[test]
-    fn test_invalid_consensus_threshold_low() {
+    fn test_invalid_min_confidence_for_auto_apply_low() {
         let mut config = AppConfig::default();
-        config.quality_gates.consensus_threshold = -0.1;
+        config.quality_gates.min_confidence_for_auto_apply = -0.1;
 
         let validator = SchemaValidator::new().expect("Failed to create validator");
         let result = validator.validate(&config);
@@ -265,7 +265,7 @@ mod tests {
     #[test]
     fn test_multiple_validation_errors() {
         let mut config = AppConfig::default();
-        config.quality_gates.consensus_threshold = 1.5; // Invalid: > 1.0
+        config.quality_gates.min_confidence_for_auto_apply = 1.5; // Invalid: > 1.0
         config.consensus.min_agents = 1; // Invalid: < 2
         config.cost.alert_threshold = -0.1; // Invalid: < 0.0
 
@@ -285,7 +285,7 @@ mod tests {
     #[test]
     fn test_error_message_quality() {
         let mut config = AppConfig::default();
-        config.quality_gates.consensus_threshold = 1.5;
+        config.quality_gates.min_confidence_for_auto_apply = 1.5;
 
         let validator = SchemaValidator::new().expect("Failed to create validator");
         let result = validator.validate(&config);

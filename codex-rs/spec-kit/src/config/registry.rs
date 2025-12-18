@@ -58,12 +58,12 @@
 //! ```
 //! use codex_spec_kit::config::registry::{FieldPath, ValueType};
 //!
-//! let path = FieldPath::QualityGates_ConsensusThreshold;
+//! let path = FieldPath::QualityGates_MinConfidenceForAutoApply;
 //!
 //! // Get human-readable description
 //! assert_eq!(
 //!     path.description(),
-//!     "Minimum consensus agreement threshold (0.0-1.0)"
+//!     "Minimum effective confidence required to auto-apply (0.0-1.0)"
 //! );
 //!
 //! // Check expected type
@@ -108,7 +108,10 @@ use std::fmt;
 pub enum FieldPath {
     // Quality Gates
     QualityGates_Enabled,
+    /// Deprecated legacy naming. Prefer `QualityGates_MinConfidenceForAutoApply`.
+    #[deprecated(note = "Use QualityGates_MinConfidenceForAutoApply (renamed from consensus_threshold)")]
     QualityGates_ConsensusThreshold,
+    QualityGates_MinConfidenceForAutoApply,
     QualityGates_MinTestCoverage,
     QualityGates_SchemaValidation,
 
@@ -163,6 +166,9 @@ impl FieldPath {
         match self {
             // Quality Gates
             Self::QualityGates_Enabled => "SPECKIT_QUALITY_GATES__ENABLED".into(),
+            Self::QualityGates_MinConfidenceForAutoApply => {
+                "SPECKIT_QUALITY_GATES__MIN_CONFIDENCE_FOR_AUTO_APPLY".into()
+            }
             Self::QualityGates_ConsensusThreshold => {
                 "SPECKIT_QUALITY_GATES__CONSENSUS_THRESHOLD".into()
             }
@@ -249,6 +255,9 @@ impl FieldPath {
         match self {
             // Quality Gates
             Self::QualityGates_Enabled => "quality_gates.enabled".into(),
+            Self::QualityGates_MinConfidenceForAutoApply => {
+                "quality_gates.min_confidence_for_auto_apply".into()
+            }
             Self::QualityGates_ConsensusThreshold => "quality_gates.consensus_threshold".into(),
             Self::QualityGates_MinTestCoverage => "quality_gates.min_test_coverage".into(),
             Self::QualityGates_SchemaValidation => "quality_gates.schema_validation".into(),
@@ -315,7 +324,8 @@ impl FieldPath {
         match s {
             // Quality Gates
             "QUALITY_GATES__ENABLED" => Some(Self::QualityGates_Enabled),
-            "QUALITY_GATES__CONSENSUS_THRESHOLD" => Some(Self::QualityGates_ConsensusThreshold),
+            "QUALITY_GATES__MIN_CONFIDENCE_FOR_AUTO_APPLY" => Some(Self::QualityGates_MinConfidenceForAutoApply),
+            "QUALITY_GATES__CONSENSUS_THRESHOLD" => Some(Self::QualityGates_MinConfidenceForAutoApply),
             "QUALITY_GATES__MIN_TEST_COVERAGE" => Some(Self::QualityGates_MinTestCoverage),
             "QUALITY_GATES__SCHEMA_VALIDATION" => Some(Self::QualityGates_SchemaValidation),
 
@@ -361,7 +371,8 @@ impl FieldPath {
         match s {
             // Quality Gates
             "quality_gates.enabled" => Some(Self::QualityGates_Enabled),
-            "quality_gates.consensus_threshold" => Some(Self::QualityGates_ConsensusThreshold),
+            "quality_gates.min_confidence_for_auto_apply" => Some(Self::QualityGates_MinConfidenceForAutoApply),
+            "quality_gates.consensus_threshold" => Some(Self::QualityGates_MinConfidenceForAutoApply),
             "quality_gates.min_test_coverage" => Some(Self::QualityGates_MinTestCoverage),
             "quality_gates.schema_validation" => Some(Self::QualityGates_SchemaValidation),
 
@@ -538,9 +549,15 @@ impl QualityGatesPath {
         FieldPath::QualityGates_Enabled
     }
 
-    /// Consensus agreement threshold (0.0-1.0).
+    /// Minimum effective confidence required to auto-apply (0.0-1.0).
+    pub fn min_confidence_for_auto_apply(&self) -> FieldPath {
+        FieldPath::QualityGates_MinConfidenceForAutoApply
+    }
+
+    /// Deprecated: legacy alias for `min_confidence_for_auto_apply()`.
+    #[deprecated(note = "Use min_confidence_for_auto_apply()")]
     pub fn consensus_threshold(&self) -> FieldPath {
-        FieldPath::QualityGates_ConsensusThreshold
+        FieldPath::QualityGates_MinConfidenceForAutoApply
     }
 
     /// Minimum test coverage percentage.
@@ -742,6 +759,7 @@ impl FieldPath {
         vec![
             // Quality Gates
             "SPECKIT_QUALITY_GATES__ENABLED",
+            "SPECKIT_QUALITY_GATES__MIN_CONFIDENCE_FOR_AUTO_APPLY",
             "SPECKIT_QUALITY_GATES__CONSENSUS_THRESHOLD",
             "SPECKIT_QUALITY_GATES__MIN_TEST_COVERAGE",
             "SPECKIT_QUALITY_GATES__SCHEMA_VALIDATION",
@@ -794,8 +812,11 @@ impl FieldPath {
         match self {
             // Quality Gates
             Self::QualityGates_Enabled => "Enable quality gate validation",
+            Self::QualityGates_MinConfidenceForAutoApply => {
+                "Minimum effective confidence required to auto-apply (0.0-1.0)"
+            }
             Self::QualityGates_ConsensusThreshold => {
-                "Minimum consensus agreement threshold (0.0-1.0)"
+                "DEPRECATED: use min_confidence_for_auto_apply (0.0-1.0)"
             }
             Self::QualityGates_MinTestCoverage => "Minimum test coverage percentage required",
             Self::QualityGates_SchemaValidation => "Enable JSON schema validation",
@@ -849,7 +870,8 @@ impl FieldPath {
             | Self::Evidence_Enabled => ValueType::Bool,
 
             // Floats
-            Self::QualityGates_ConsensusThreshold
+            Self::QualityGates_MinConfidenceForAutoApply
+            | Self::QualityGates_ConsensusThreshold
             | Self::QualityGates_MinTestCoverage
             | Self::Cost_DailyLimitUsd
             | Self::Cost_MonthlyLimitUsd
@@ -885,7 +907,7 @@ impl FieldPath {
     ///
     /// ```
     /// # use codex_spec_kit::config::registry::FieldPath;
-    /// let constraints = FieldPath::QualityGates_ConsensusThreshold.constraints();
+    /// let constraints = FieldPath::QualityGates_MinConfidenceForAutoApply.constraints();
     /// assert!(constraints.is_some());
     ///
     /// let c = constraints.unwrap();
@@ -895,7 +917,9 @@ impl FieldPath {
     pub fn constraints(&self) -> Option<Constraints> {
         match self {
             // Threshold fields: 0.0-1.0
-            Self::QualityGates_ConsensusThreshold | Self::Cost_AlertThreshold => {
+            Self::QualityGates_MinConfidenceForAutoApply
+            | Self::QualityGates_ConsensusThreshold
+            | Self::Cost_AlertThreshold => {
                 Some(Constraints {
                     min: Some(0.0),
                     max: Some(1.0),
@@ -992,11 +1016,34 @@ mod tests {
 
     #[test]
     fn test_quality_gates_toml_conversion() {
-        let path = FieldPath::QualityGates_ConsensusThreshold;
-        assert_eq!(path.to_toml_key(), "quality_gates.consensus_threshold");
+        let path = FieldPath::QualityGates_MinConfidenceForAutoApply;
+        assert_eq!(
+            path.to_toml_key(),
+            "quality_gates.min_confidence_for_auto_apply"
+        );
+        assert_eq!(
+            FieldPath::from_toml_key("quality_gates.min_confidence_for_auto_apply"),
+            Some(FieldPath::QualityGates_MinConfidenceForAutoApply)
+        );
+    }
+
+    #[test]
+    fn test_quality_gates_toml_deprecated_alias() {
         assert_eq!(
             FieldPath::from_toml_key("quality_gates.consensus_threshold"),
-            Some(FieldPath::QualityGates_ConsensusThreshold)
+            Some(FieldPath::QualityGates_MinConfidenceForAutoApply)
+        );
+    }
+
+    #[test]
+    fn test_quality_gates_env_var_deprecated_alias() {
+        assert_eq!(
+            FieldPath::from_env_var("SPECKIT_QUALITY_GATES__MIN_CONFIDENCE_FOR_AUTO_APPLY"),
+            Some(FieldPath::QualityGates_MinConfidenceForAutoApply)
+        );
+        assert_eq!(
+            FieldPath::from_env_var("SPECKIT_QUALITY_GATES__CONSENSUS_THRESHOLD"),
+            Some(FieldPath::QualityGates_MinConfidenceForAutoApply)
         );
     }
 
@@ -1108,9 +1155,16 @@ mod tests {
         assert_eq!(path, FieldPath::QualityGates_Enabled);
         assert_eq!(path.to_env_var(), "SPECKIT_QUALITY_GATES__ENABLED");
 
-        let path = ConfigPath::quality_gates().consensus_threshold();
-        assert_eq!(path, FieldPath::QualityGates_ConsensusThreshold);
-        assert_eq!(path.to_toml_key(), "quality_gates.consensus_threshold");
+        let path = ConfigPath::quality_gates().min_confidence_for_auto_apply();
+        assert_eq!(path, FieldPath::QualityGates_MinConfidenceForAutoApply);
+        assert_eq!(
+            path.to_toml_key(),
+            "quality_gates.min_confidence_for_auto_apply"
+        );
+        assert_eq!(
+            path.to_env_var(),
+            "SPECKIT_QUALITY_GATES__MIN_CONFIDENCE_FOR_AUTO_APPLY"
+        );
     }
 
     #[test]
@@ -1243,7 +1297,7 @@ mod tests {
         // Floats
         assert_eq!(FieldPath::Cost_DailyLimitUsd.value_type(), ValueType::Float);
         assert_eq!(
-            FieldPath::QualityGates_ConsensusThreshold.value_type(),
+            FieldPath::QualityGates_MinConfidenceForAutoApply.value_type(),
             ValueType::Float
         );
         assert_eq!(
@@ -1281,8 +1335,8 @@ mod tests {
 
     #[test]
     fn test_constraints_thresholds() {
-        // Consensus threshold: 0.0-1.0
-        let c = FieldPath::QualityGates_ConsensusThreshold
+        // Min confidence for auto-apply: 0.0-1.0
+        let c = FieldPath::QualityGates_MinConfidenceForAutoApply
             .constraints()
             .unwrap();
         assert_eq!(c.min, Some(0.0));

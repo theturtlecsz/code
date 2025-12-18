@@ -68,7 +68,7 @@
           "type": "boolean",
           "default": true
         },
-        "consensus_threshold": {
+        "min_confidence_for_auto_apply": {
           "type": "number",
           "minimum": 0.0,
           "maximum": 1.0,
@@ -84,7 +84,7 @@
           "default": true
         }
       },
-      "required": ["enabled", "consensus_threshold", "schema_validation"]
+      "required": ["enabled", "min_confidence_for_auto_apply", "schema_validation"]
     },
     "CostConfig": {
       "type": "object",

@@ -9,12 +9,12 @@
       "default": true,
       "description": "Enable quality gates globally"
     },
-    "consensus_threshold": {
+    "min_confidence_for_auto_apply": {
       "type": "number",
       "minimum": 0.0,
       "maximum": 1.0,
       "default": 0.67,
-      "description": "Minimum consensus agreement threshold (0.0-1.0)"
+      "description": "Minimum effective confidence required to auto-apply (0.0-1.0)"
     },
     "min_test_coverage": {
       "type": ["number", "null"],
@@ -28,5 +28,5 @@
       "description": "Enable JSON schema validation for configurations"
     }
   },
-  "required": ["enabled", "consensus_threshold", "schema_validation"]
+  "required": ["enabled", "min_confidence_for_auto_apply", "schema_validation"]
 }

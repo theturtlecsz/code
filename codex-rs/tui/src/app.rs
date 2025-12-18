@@ -3291,8 +3291,8 @@ impl App<'_> {
                                     }
                                 );
                                 info!(
-                                    "   Consensus threshold: {}",
-                                    new_spec_config.quality_gates.consensus_threshold
+                                    "   Min confidence for auto-apply: {}",
+                                    new_spec_config.quality_gates.min_confidence_for_auto_apply
                                 );
 
                                 // SPEC-945D Phase 2.4: Check if we should defer reload
