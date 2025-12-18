@@ -14,7 +14,7 @@
 | **PR2** | ✅ Complete | Config alias (`consensus_threshold` → `min_confidence_for_auto_apply`) |
 | **PR3** | ✅ Complete | Env var alias (`SPEC_KIT_CRITIC` → `SPEC_KIT_SIDECAR_CRITIC`) |
 | **PR4** | ✅ Complete | Module rename (`consensus.rs` → `gate_evaluation.rs`) + vocabulary migration |
-| **PR6** | 🔲 Ready | Delete legacy voting path (behavioral change) |
+| **PR6** | ✅ Complete | Delete legacy voting path (behavioral change) |
 | **PR7** | 🔲 Future | Internal vocabulary alignment (struct renames with serde compat) |
 | **PR8** | 🔲 Future | Clippy cleanup across spec-kit + tui |
 | **PR9** | 🔲 Future | Command UX: `/spec-consensus` → `/spec-review` (with deprecated alias) |
@@ -262,7 +262,6 @@ Keep **read compatibility** for historical evidence (old artifact directories/JS
 | `codex-rs/spec-kit/src/config/registry.rs` | Known env vars + config paths |
 | `codex-rs/spec-kit/src/config/policy_toggles.rs` | **NEW (PR4)** — PolicyToggles boundary, pure decision functions |
 | `codex-rs/tui/src/chatwidget/spec_kit/gate_evaluation.rs` | **RENAMED (PR4)** — Gate evaluation logic (was consensus.rs) |
-| `codex-rs/tui/src/chatwidget/spec_kit/consensus.rs` | **DEPRECATED (PR4)** — Re-export shim, delete in PR6 |
 | `docs/spec-kit/GATE_POLICY.md` | Canonical vocabulary spec |
 | `docs/MODEL-POLICY.md` | Role → worker mapping policy |
 

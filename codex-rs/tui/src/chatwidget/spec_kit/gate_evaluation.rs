@@ -161,16 +161,21 @@ pub(in super::super) fn telemetry_agent_slug(agent: &str) -> String {
 // - Warn-once logic is handled centrally
 // - Pure decision functions are unit-testable without env mutation
 
-/// Check if legacy multi-agent consensus is enabled (DEPRECATED per GR-001).
+/// Check if legacy multi-agent consensus is enabled.
 ///
-/// Default: `false` (consensus disabled, single-owner pipeline).
-/// Set `SPEC_KIT_CONSENSUS=true` to enable legacy mode with deprecation warning.
+/// **REMOVED in PR6**: This function always returns `false`.
+/// Legacy voting has been removed. The single-owner pipeline is now the only
+/// supported mode.
 ///
-/// **Note**: Delegates to `PolicyToggles::from_env_and_config()`.
+/// If `SPEC_KIT_CONSENSUS` is set, `PolicyToggles::from_env_and_config()` will
+/// emit a deprecation warning, but voting remains disabled.
 ///
 /// See: docs/MODEL-POLICY.md Section 2 (GR-001)
+#[deprecated(since = "0.1.0", note = "Legacy voting removed in PR6. Always returns false.")]
 pub fn is_consensus_enabled() -> bool {
-    PolicyToggles::from_env_and_config().legacy_voting_enabled
+    // PR6: Trigger the warning if env var is set, but always return false
+    let _ = PolicyToggles::from_env_and_config();
+    false
 }
 
 /// Check if critic-only sidecar is enabled (non-authoritative review).
@@ -229,36 +234,16 @@ pub fn preferred_agent_for_stage(stage: SpecStage) -> crate::spec_prompts::SpecA
 
 /// Get expected agent roster for a spec stage.
 ///
-/// **GR-001 Compliance**: By default, returns a single preferred agent.
-/// Only returns multi-agent roster when `SPEC_KIT_CONSENSUS=true` (deprecated).
+/// **PR6**: Always returns a single preferred agent. Legacy multi-agent
+/// voting has been removed.
 ///
 /// See: docs/MODEL-POLICY.md Section 2 (GR-001)
 // ARCH-006: Use SpecAgent enum instead of strings
 pub(in super::super) fn expected_agents_for_stage(
     stage: SpecStage,
 ) -> Vec<crate::spec_prompts::SpecAgent> {
-    use crate::spec_prompts::SpecAgent;
-
-    // GR-001: Single agent by default (no consensus)
-    if !is_consensus_enabled() {
-        return vec![preferred_agent_for_stage(stage)];
-    }
-
-    // Legacy multi-agent mode (DEPRECATED)
-    // Warning is emitted by PolicyToggles::from_env_and_config()
-    match stage {
-        SpecStage::Implement => vec![
-            SpecAgent::Gemini,
-            SpecAgent::Claude,
-            SpecAgent::GptCodex,
-            SpecAgent::GptPro,
-        ],
-        SpecStage::Clarify | SpecStage::Analyze => {
-            vec![SpecAgent::Gemini, SpecAgent::Claude, SpecAgent::Code]
-        }
-        SpecStage::Checklist => vec![SpecAgent::Claude, SpecAgent::Code],
-        _ => vec![SpecAgent::Gemini, SpecAgent::Claude, SpecAgent::GptPro],
-    }
+    // PR6: Always return single agent - multi-agent voting removed
+    vec![preferred_agent_for_stage(stage)]
 }
 
 /// Extract string array from JSON value
@@ -748,7 +733,10 @@ use std::collections::HashSet;
 /// **GR-001 Compliance**: When `SPEC_KIT_CONSENSUS=false` (default), this function
 /// returns early with `consensus_ok=true` and skips multi-agent validation.
 ///
-/// Multi-agent consensus is only performed when `SPEC_KIT_CONSENSUS=true` (deprecated).
+/// **PR6**: Multi-agent consensus has been removed. This function now always
+/// returns early with `consensus_ok=true`. The legacy code path below is retained
+/// for reference but is unreachable.
+#[allow(deprecated)] // is_consensus_enabled() is deprecated
 pub async fn run_spec_consensus(
     cwd: &Path,
     spec_id: &str,
@@ -1268,49 +1256,35 @@ mod gr001_tests {
     // Env var tests MUST run serially since they modify shared process state.
 
     #[test]
+    #[allow(deprecated)]
     fn test_consensus_disabled_by_default() {
         // Clear any env var that might be set
         // SAFETY: Test isolation
         unsafe { std::env::remove_var("SPEC_KIT_CONSENSUS") };
 
-        // Default behavior: consensus disabled
+        // Default behavior: consensus disabled (always, after PR6)
         assert!(!is_consensus_enabled());
     }
 
     #[test]
-    fn test_consensus_enabled_when_true() {
+    #[allow(deprecated)]
+    fn test_consensus_always_disabled_pr6() {
+        // PR6: Even when env var is set to "true", consensus is always disabled
         // SAFETY: Test isolation
         unsafe {
             std::env::set_var("SPEC_KIT_CONSENSUS", "true");
         }
-        assert!(is_consensus_enabled());
+        assert!(!is_consensus_enabled(), "PR6: voting always disabled");
 
         unsafe {
             std::env::set_var("SPEC_KIT_CONSENSUS", "1");
         }
-        assert!(is_consensus_enabled());
+        assert!(!is_consensus_enabled(), "PR6: voting always disabled");
 
-        unsafe {
-            std::env::set_var("SPEC_KIT_CONSENSUS", "TRUE");
-        }
-        assert!(is_consensus_enabled());
-
-        // Cleanup
-        unsafe { std::env::remove_var("SPEC_KIT_CONSENSUS") };
-    }
-
-    #[test]
-    fn test_consensus_disabled_when_false() {
-        // SAFETY: Test isolation
         unsafe {
             std::env::set_var("SPEC_KIT_CONSENSUS", "false");
         }
-        assert!(!is_consensus_enabled());
-
-        unsafe {
-            std::env::set_var("SPEC_KIT_CONSENSUS", "0");
-        }
-        assert!(!is_consensus_enabled());
+        assert!(!is_consensus_enabled(), "PR6: voting always disabled");
 
         // Cleanup
         unsafe { std::env::remove_var("SPEC_KIT_CONSENSUS") };
@@ -1371,25 +1345,21 @@ mod gr001_tests {
     }
 
     #[test]
-    fn test_single_agent_when_consensus_disabled() {
+    fn test_always_single_agent_pr6() {
+        // PR6: Always returns single agent, even if env var is set
         // SAFETY: Test isolation
         unsafe { std::env::remove_var("SPEC_KIT_CONSENSUS") };
 
-        // Should return single agent roster when consensus disabled
         let agents = expected_agents_for_stage(SpecStage::Implement);
-        assert_eq!(agents.len(), 1, "Expected single agent when consensus disabled");
-    }
+        assert_eq!(agents.len(), 1, "PR6: always single agent");
 
-    #[test]
-    fn test_multi_agent_when_consensus_enabled() {
-        // SAFETY: Test isolation
+        // Even with env var set, still single agent
         unsafe {
             std::env::set_var("SPEC_KIT_CONSENSUS", "true");
         }
 
-        // Should return multi-agent roster when consensus enabled
         let agents = expected_agents_for_stage(SpecStage::Implement);
-        assert!(agents.len() > 1, "Expected multiple agents when consensus enabled");
+        assert_eq!(agents.len(), 1, "PR6: always single agent even with env var");
 
         // Cleanup
         unsafe { std::env::remove_var("SPEC_KIT_CONSENSUS") };

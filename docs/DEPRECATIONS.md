@@ -9,7 +9,12 @@ This document tracks deprecated features, renamed configuration, and migration p
 | Deprecated | Canonical | Behavior | Since |
 |------------|-----------|----------|-------|
 | `SPEC_KIT_CRITIC` | `SPEC_KIT_SIDECAR_CRITIC` | Canonical wins if both set; warn-once | PR3 |
-| `SPEC_KIT_CONSENSUS` | *(removed in PR6)* | Enables legacy multi-agent voting (violates GR-001) | PR1 |
+
+## Removed Environment Variables
+
+| Env Var | Status | Behavior | Since |
+|---------|--------|----------|-------|
+| `SPEC_KIT_CONSENSUS` | **REMOVED** | Ignored with warning; legacy voting deleted | PR6 |
 
 **Example:**
 ```bash
@@ -68,8 +73,9 @@ These will **not** be renamed. New code uses canonical vocabulary (gate, signal,
 
 | Item | Status | Target |
 |------|--------|--------|
-| Legacy multi-agent voting path | Deprecated | Removed in PR6 |
-| `SPEC_KIT_CONSENSUS` env var | Deprecated | Removed in PR6 |
+| Legacy multi-agent voting path | **REMOVED** | PR6 |
+| `SPEC_KIT_CONSENSUS` env var | **REMOVED** | PR6 |
+| `consensus.rs` shim module | **REMOVED** | PR6 |
 | `consensus_threshold` alias | Deprecated | Keep indefinitely (low maintenance) |
 | `SPEC_KIT_CRITIC` alias | Deprecated | Keep indefinitely (low maintenance) |
 

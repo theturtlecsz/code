@@ -65,15 +65,15 @@ impl DeprecationWarning {
         }
     }
 
-    /// Create a warning for the SPEC_KIT_CONSENSUS env var.
-    pub fn spec_kit_consensus() -> Self {
+    /// Create a warning for the SPEC_KIT_CONSENSUS env var (REMOVED in PR6).
+    pub fn spec_kit_consensus_removed() -> Self {
         Self {
             deprecated_key: "SPEC_KIT_CONSENSUS".to_string(),
-            canonical_key: "(none - feature removed)".to_string(),
+            canonical_key: "(removed)".to_string(),
             both_present: false,
-            message: "DEPRECATED: Legacy multi-agent consensus enabled via SPEC_KIT_CONSENSUS=true.\n\
-                      This violates GR-001 (no 3-agent debate/voting/swarm synthesis).\n\
-                      Migrate to single-owner pipeline: Architect -> Implementer -> Judge.\n\
+            message: "SPEC_KIT_CONSENSUS is deprecated and ignored. \
+                      Legacy multi-agent voting has been removed (PR6). \
+                      The single-owner pipeline is now the only supported mode. \
                       See: docs/MODEL-POLICY.md"
                 .to_string(),
         }
@@ -185,16 +185,21 @@ pub fn resolve_sidecar_critic(
 
 /// Resolve legacy voting setting from env value.
 ///
-/// This feature is deprecated per GR-001. When enabled, a warning is emitted.
+/// **REMOVED in PR6**: Legacy voting is no longer supported. This function
+/// always returns `(false, warning)` if the env var is set, warning the user
+/// that the setting is ignored.
 ///
 /// # Arguments
 /// * `val` - Value of `SPEC_KIT_CONSENSUS` env var (if set)
 ///
 /// # Returns
-/// Tuple of (enabled, optional deprecation warning)
+/// Tuple of (enabled=false, optional deprecation warning)
 pub fn resolve_legacy_voting(val: Option<&str>) -> (bool, Option<DeprecationWarning>) {
     match val {
-        Some(v) if parse_bool(v) => (true, Some(DeprecationWarning::spec_kit_consensus())),
+        // PR6: Always return false, but warn if any value is set
+        Some(v) if !v.trim().is_empty() => {
+            (false, Some(DeprecationWarning::spec_kit_consensus_removed()))
+        }
         _ => (false, None),
     }
 }
@@ -314,7 +319,7 @@ mod tests {
     }
 
     // -------------------------------------------------------------------------
-    // resolve_legacy_voting tests
+    // resolve_legacy_voting tests (PR6: feature removed, always returns false)
     // -------------------------------------------------------------------------
 
     #[test]
@@ -325,26 +330,38 @@ mod tests {
     }
 
     #[test]
-    fn test_resolve_voting_true() {
+    fn test_resolve_voting_true_warns_and_ignores() {
+        // PR6: Even "true" returns false, but warns
         let (enabled, warning) = resolve_legacy_voting(Some("true"));
-        assert!(enabled);
-        assert!(warning.is_some());
+        assert!(!enabled, "PR6: voting should always be disabled");
+        assert!(warning.is_some(), "PR6: should warn when env var is set");
         let w = warning.unwrap();
         assert_eq!(w.deprecated_key, "SPEC_KIT_CONSENSUS");
+        assert!(w.message.contains("ignored"));
     }
 
     #[test]
-    fn test_resolve_voting_false() {
+    fn test_resolve_voting_false_no_warning() {
+        // PR6: "false" returns false with no warning (expected behavior)
         let (enabled, warning) = resolve_legacy_voting(Some("false"));
         assert!(!enabled);
-        assert!(warning.is_none()); // No warning when disabled
+        assert!(warning.is_some(), "PR6: still warn to encourage removal of env var");
     }
 
     #[test]
-    fn test_resolve_voting_one() {
+    fn test_resolve_voting_one_warns_and_ignores() {
+        // PR6: Even "1" returns false, but warns
         let (enabled, warning) = resolve_legacy_voting(Some("1"));
-        assert!(enabled);
+        assert!(!enabled, "PR6: voting should always be disabled");
         assert!(warning.is_some());
+    }
+
+    #[test]
+    fn test_resolve_voting_empty_no_warning() {
+        // Empty string is treated as not set
+        let (enabled, warning) = resolve_legacy_voting(Some(""));
+        assert!(!enabled);
+        assert!(warning.is_none());
     }
 
     // -------------------------------------------------------------------------
@@ -368,10 +385,10 @@ mod tests {
     }
 
     #[test]
-    fn test_deprecation_warning_consensus() {
-        let w = DeprecationWarning::spec_kit_consensus();
-        assert!(w.message.contains("DEPRECATED"));
-        assert!(w.message.contains("GR-001"));
+    fn test_deprecation_warning_consensus_removed() {
+        let w = DeprecationWarning::spec_kit_consensus_removed();
+        assert!(w.message.contains("ignored"));
+        assert!(w.message.contains("removed"));
     }
 
     // -------------------------------------------------------------------------
