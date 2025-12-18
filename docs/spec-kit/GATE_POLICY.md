@@ -319,6 +319,64 @@ Quality is enforced by:
 
 ---
 
+## 11. Wiring Guidance (Router Contract)
+
+**Added in PR1 (2025-12-18)**: The Gate Policy and Router are now explicitly separated with a "thin waist" interface.
+
+### Separation of Concerns
+
+| Component | Decides | Does NOT Decide |
+|-----------|---------|-----------------|
+| **Gate Policy** | Roles, signals, decision rules, verdicts | Model names, providers, budgets |
+| **Router** | Worker implementation (model/provider/budget) | Gate logic, escalation rules |
+
+### Interface Contract
+
+**Gate Policy → Orchestrator**:
+```rust
+// codex-rs/spec-kit/src/gate_policy.rs
+pub fn roles_for_stage(stage: Stage, ctx: &StageContext) -> RoleAssignment;
+pub fn checkpoints_for_stage_transition(from: Stage, to: Stage) -> Vec<Checkpoint>;
+```
+
+**Router → Orchestrator**:
+```rust
+// codex-rs/spec-kit/src/router.rs
+pub trait Router {
+    fn select_worker(&self, role: Role, ctx: &RoutingContext) -> WorkerSpec;
+}
+```
+
+### Consumption Pattern
+
+```rust
+// Pipeline Coordinator (simplified)
+let assignment = gate_policy::roles_for_stage(stage, &stage_ctx);
+let owner_worker = router.select_worker(assignment.owner, &routing_ctx);
+
+// Execute owner, collect signals
+let signals = execute_worker(&owner_worker).await?;
+
+// Run sidecars (if any)
+for sidecar_role in assignment.sidecars {
+    let sidecar_worker = router.select_worker(sidecar_role, &routing_ctx);
+    let counter_signals = execute_worker(&sidecar_worker).await?;
+    signals.extend(counter_signals);
+}
+
+// Evaluate gate deterministically
+let verdict = evaluate_gate(checkpoint, &signals, &decision_rule, &gate_ctx);
+```
+
+### Why This Matters
+
+- **No model spaghetti**: Gate policy never mentions "claude", "gemini", etc.
+- **Policy is pluggable**: Swap providers by changing Router config, not gate logic
+- **Testable**: Gate evaluation is pure function of signals + rules
+- **Auditable**: GateVerdict contains all inputs for compliance review
+
+---
+
 ## Change Log
 
 | Version | Date | Changes |
