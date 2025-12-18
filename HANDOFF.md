@@ -1,7 +1,7 @@
 # Gate Policy Alignment — Session Handoff
 
 **Last updated:** 2025-12-18
-**Status:** PR2 complete, PR3 ready to implement
+**Status:** PR3 complete, PR4 ready to implement
 
 ---
 
@@ -12,7 +12,7 @@
 | **PR1** | ✅ Complete | Define canonical types (Role, Stage, Signal, Verdict, Router trait) in `codex-rs/spec-kit/` |
 | **PR1.1** | ✅ Complete | Fix P0 env boundary leak, align thresholds to 0.65, add PolicyToggles |
 | **PR2** | ✅ Complete | Config alias (`consensus_threshold` → `min_confidence_for_auto_apply`) |
-| **PR3** | 🔲 Pending | Env var alias (`SPEC_KIT_CRITIC` → `SPEC_KIT_SIDECAR_CRITIC`) |
+| **PR3** | ✅ Complete | Env var alias (`SPEC_KIT_CRITIC` → `SPEC_KIT_SIDECAR_CRITIC`) |
 | **PR4** | 🔲 Pending | Module rename (`consensus.rs` → `gate_policy.rs`) + callsite migrations |
 | **PR6** | 🔲 Pending | Delete legacy voting path |
 
@@ -29,20 +29,23 @@ a29f9668e fix(spec-kit): make gate policy deterministic, align thresholds (PR1.1
 
 ## PR2 Architectural Review — Action Items
 
-### 🔴 P0: Verify Schema Validation Order
+### ✅ P0: Schema Validation Order (VERIFIED)
 
 **Risk:** Schema validation may reject legacy config files if it validates *input* (pre-deserialize) against a schema that doesn't allow `consensus_threshold`.
 
-**Required verification:**
-1. Schema validation happens **after** deserialization/normalization (validates canonical struct), OR
-2. Schema accepts `consensus_threshold` temporarily (marked deprecated)
+**Verification result:** SAFE ✓
 
-**Files to check:**
-- `codex-rs/spec-kit/src/config/validator.rs` — when is `validate()` called?
-- `codex-rs/spec-kit/src/config/loader.rs:424-427` — validation happens after `try_deserialize()`
-- `codex-rs/spec-kit/src/config/schemas/quality_gates.schema.json` — does it accept legacy key?
+The schema validation is safe due to a two-layer deserialization pattern:
+1. **Raw layer** (`QualityGateConfigRaw`): Accepts both `consensus_threshold` AND `min_confidence_for_auto_apply`
+2. **Canonical layer** (`QualityGateConfig`): Only has `min_confidence_for_auto_apply`
 
-**Current state:** Validation appears to happen after deserialization (line 424-427), but schemas were updated to canonical-only. Need to verify a legacy config file doesn't fail validation.
+**Flow:**
+1. TOML/ENV → `QualityGateConfigRaw` (accepts legacy key)
+2. `From` impl → `QualityGateConfig` (canonical only)
+3. `serde_json::to_value(config)` → JSON with canonical field
+4. Schema validates canonical JSON ✓
+
+**Evidence:** All 20 loader tests pass, including `test_deprecated_env_var_overrides_file_canonical_key`.
 
 ### 🟡 Warning Text Improvement (Minor)
 
@@ -58,10 +61,17 @@ Lines 379-385 strip canonical key from defaults layer to prevent false "both pre
 
 ---
 
-## PR3 Design Specification
+## PR3 Design Specification (COMPLETE)
 
 ### Goal
 Rename `SPEC_KIT_CRITIC` → `SPEC_KIT_SIDECAR_CRITIC` with backward compatibility and warn-once.
+
+### Implementation Summary
+- **File modified**: `codex-rs/tui/src/chatwidget/spec_kit/consensus.rs`
+- **Function updated**: `is_critic_enabled()` now checks both env vars with precedence logic
+- **Warn-once helper**: `warn_once_deprecated_spec_kit_critic()` added
+- **Tests added**: 4 tests covering canonical, deprecated, default, and precedence scenarios
+- **Clippy clean**: No new warnings introduced
 
 ### Design Decisions (confirmed)
 
@@ -185,7 +195,7 @@ Keep **read compatibility** for historical evidence (old artifact directories/JS
 ## Next Session Start Command
 
 ```
-Load HANDOFF.md. First verify PR2 schema validation (P0 item), then implement PR3 (env var alias). Run tests after each change.
+Load HANDOFF.md. Implement PR4 (module rename consensus.rs → gate_policy.rs + callsite migrations). Run tests after each change.
 ```
 
 ---

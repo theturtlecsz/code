@@ -10,7 +10,8 @@
 //!
 //! **Feature Flags:**
 //! - `SPEC_KIT_CONSENSUS=true` - Enable legacy multi-agent consensus (DEPRECATED)
-//! - `SPEC_KIT_CRITIC=true` - Enable non-blocking critic-only sidecar
+//! - `SPEC_KIT_SIDECAR_CRITIC=true` - Enable non-blocking critic-only sidecar
+//!   (legacy alias: `SPEC_KIT_CRITIC` - deprecated)
 //!
 //! **Default Behavior (no env vars):**
 //! - Single agent per stage (preferred_agent_for_stage())
@@ -167,16 +168,58 @@ pub fn is_consensus_enabled() -> bool {
 /// Check if critic-only sidecar is enabled (non-authoritative review).
 ///
 /// Default: `false` (no critic).
-/// Set `SPEC_KIT_CRITIC=true` for non-blocking secondary review.
+/// Set `SPEC_KIT_SIDECAR_CRITIC=true` for non-blocking secondary review.
 ///
 /// Critic outputs: risks, contradictions, missing requirements, guardrail conflicts.
 /// Critic does NOT block progression or rewrite outputs.
 ///
+/// ## Env Var Precedence
+/// 1. `SPEC_KIT_SIDECAR_CRITIC` (canonical) - use if set
+/// 2. `SPEC_KIT_CRITIC` (deprecated) - use if canonical not set, emit warning
+/// 3. Default: `false`
+///
 /// See: docs/MODEL-POLICY.md Section 2 (Allowed Patterns)
 pub fn is_critic_enabled() -> bool {
-    std::env::var("SPEC_KIT_CRITIC")
-        .map(|v| v.to_lowercase() == "true" || v == "1")
-        .unwrap_or(false)
+    let canonical = std::env::var("SPEC_KIT_SIDECAR_CRITIC").ok();
+    let deprecated = std::env::var("SPEC_KIT_CRITIC").ok();
+
+    fn parse_bool(val: &str) -> bool {
+        val.to_lowercase() == "true" || val == "1"
+    }
+
+    match (canonical, deprecated) {
+        (Some(c), Some(_d)) => {
+            // Both set: canonical wins, warn about deprecated
+            warn_once_deprecated_spec_kit_critic(true);
+            parse_bool(&c)
+        }
+        (Some(c), None) => parse_bool(&c),
+        (None, Some(d)) => {
+            // Only deprecated set: use it, warn
+            warn_once_deprecated_spec_kit_critic(false);
+            parse_bool(&d)
+        }
+        (None, None) => false,
+    }
+}
+
+/// Warn once per process when deprecated SPEC_KIT_CRITIC env var is used.
+fn warn_once_deprecated_spec_kit_critic(both_present: bool) {
+    static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+
+    if both_present {
+        tracing::warn!(
+            "Both 'SPEC_KIT_CRITIC' (deprecated) and 'SPEC_KIT_SIDECAR_CRITIC' are set. \
+             Using canonical 'SPEC_KIT_SIDECAR_CRITIC'. Remove the deprecated env var."
+        );
+    } else {
+        tracing::warn!(
+            "Env var 'SPEC_KIT_CRITIC' is deprecated. Use 'SPEC_KIT_SIDECAR_CRITIC' instead."
+        );
+    }
 }
 
 /// Log deprecation warning when legacy consensus mode is enabled.
@@ -1318,21 +1361,56 @@ mod gr001_tests {
 
     #[test]
     fn test_critic_disabled_by_default() {
-        // SAFETY: Test isolation
-        unsafe { std::env::remove_var("SPEC_KIT_CRITIC") };
+        // SAFETY: Test isolation - clear both env vars
+        unsafe {
+            std::env::remove_var("SPEC_KIT_CRITIC");
+            std::env::remove_var("SPEC_KIT_SIDECAR_CRITIC");
+        }
         assert!(!is_critic_enabled());
     }
 
     #[test]
-    fn test_critic_enabled_when_true() {
+    fn test_critic_enabled_canonical_var() {
         // SAFETY: Test isolation
         unsafe {
-            std::env::set_var("SPEC_KIT_CRITIC", "true");
+            std::env::remove_var("SPEC_KIT_CRITIC");
+            std::env::set_var("SPEC_KIT_SIDECAR_CRITIC", "true");
         }
         assert!(is_critic_enabled());
 
         // Cleanup
+        unsafe { std::env::remove_var("SPEC_KIT_SIDECAR_CRITIC") };
+    }
+
+    #[test]
+    fn test_critic_enabled_deprecated_var() {
+        // SAFETY: Test isolation
+        unsafe {
+            std::env::remove_var("SPEC_KIT_SIDECAR_CRITIC");
+            std::env::set_var("SPEC_KIT_CRITIC", "true");
+        }
+        // Deprecated var still works (with warning)
+        assert!(is_critic_enabled());
+
+        // Cleanup
         unsafe { std::env::remove_var("SPEC_KIT_CRITIC") };
+    }
+
+    #[test]
+    fn test_critic_canonical_wins_over_deprecated() {
+        // SAFETY: Test isolation
+        unsafe {
+            std::env::set_var("SPEC_KIT_SIDECAR_CRITIC", "false");
+            std::env::set_var("SPEC_KIT_CRITIC", "true");
+        }
+        // Canonical (false) wins over deprecated (true)
+        assert!(!is_critic_enabled());
+
+        // Cleanup
+        unsafe {
+            std::env::remove_var("SPEC_KIT_SIDECAR_CRITIC");
+            std::env::remove_var("SPEC_KIT_CRITIC");
+        }
     }
 
     #[test]
