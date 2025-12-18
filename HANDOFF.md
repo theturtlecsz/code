@@ -163,6 +163,16 @@ After PR3, PR4 does module rename + callsite migrations.
 - [ ] **No model routing logic moved** — router remains thin-waist
 - [ ] **All user-facing "consensus" wording removed** — logs, tooltips, help text say "gate evaluation" / "stage review" / "sidecar critic"
 - [ ] **One canonical "policy toggles" boundary** — env/config read happens once, not scattered
+- [ ] **Test module names unchanged** — avoid churn, rename in post-PR6 cleanup
+
+### Scope Decisions (Finalized)
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| `is_consensus_enabled()` refactor | **Yes, together with critic** | Both toggles belong in PolicyToggles boundary; makes PR6 deletion trivial |
+| Module rename style | **Full rename + re-export shim** | Blast-radius control; shim marked `#[deprecated]`, removed in PR6 |
+| Log/tracing messages | **Yes, update all** | Logs are user-facing; checklist requires "consensus" wording removed |
+| Test file renames | **No, keep stable** | Developer-facing, not operator-facing; reduces PR4 churn |
 
 ### Boundary Decisions
 
@@ -248,12 +258,47 @@ Keep **read compatibility** for historical evidence (old artifact directories/JS
 ## Next Session Start Command
 
 ```
-Load HANDOFF.md. PR4 implementation:
-1. Create spec-kit/src/config/policy_toggles.rs (pure decision functions + env/config loader)
-2. Move is_critic_enabled() logic there, extract pure function for unit tests
-3. Rename tui/.../consensus.rs → gate_evaluation.rs with re-exports
-4. Update user-facing strings ("consensus" → "gate evaluation")
-5. Run tests after each step. Use acceptance checklist.
+Load HANDOFF.md. Execute PR4 (Gate Policy Vocabulary Migration).
+
+## PR4 Implementation Steps (execute in order)
+
+### Phase 1: Create PolicyToggles Boundary
+1. Create `codex-rs/spec-kit/src/config/policy_toggles.rs`
+2. Implement pure decision functions:
+   - `resolve_sidecar_critic(canonical: Option<&str>, deprecated: Option<&str>) -> (bool, Option<DeprecationWarning>)`
+   - `resolve_legacy_voting(val: Option<&str>) -> (bool, Option<DeprecationWarning>)`
+3. Implement `PolicyToggles::from_env_and_config()` as single IO boundary
+4. Add unit tests for pure functions (no env mutation needed)
+5. Export from `spec-kit/src/config/mod.rs`
+6. Run: `cargo test -p codex-spec-kit`
+
+### Phase 2: Migrate TUI to New Boundary
+7. Update TUI to call `PolicyToggles::from_env_and_config()` once at startup
+8. Remove `is_critic_enabled()` and `is_consensus_enabled()` from consensus.rs
+9. Run: `cargo test -p codex-tui -- --test-threads=1`
+
+### Phase 3: Module Rename
+10. Rename `tui/.../consensus.rs` → `tui/.../gate_evaluation.rs`
+11. Add re-export shim: `mod consensus { #[deprecated] pub use super::gate_evaluation::*; }`
+12. Update internal imports progressively
+13. Run: `cargo test -p codex-tui`
+
+### Phase 4: Vocabulary Cleanup
+14. Update log/tracing messages: "consensus" → "gate evaluation"
+15. Update UI strings, tooltips, help text
+16. Verify no user-facing "consensus" wording remains (except DEPRECATIONS.md)
+17. Run full test suite: `cargo test --workspace`
+
+### Phase 5: Validation
+18. Run clippy: `cargo clippy --workspace -- -D warnings` (allow known deprecation warnings)
+19. Verify acceptance checklist in HANDOFF.md
+20. Commit with message: `feat(spec-kit): gate policy vocabulary migration (PR4)`
+
+## Key Files
+- NEW: `codex-rs/spec-kit/src/config/policy_toggles.rs`
+- RENAME: `tui/.../consensus.rs` → `gate_evaluation.rs`
+- UPDATE: `tui/.../mod.rs` (re-export shim)
+- UPDATE: All files with "consensus" in logs/UI strings
 ```
 
 ---
