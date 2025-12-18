@@ -14,10 +14,14 @@
 | **PR2** | ✅ Complete | Config alias (`consensus_threshold` → `min_confidence_for_auto_apply`) |
 | **PR3** | ✅ Complete | Env var alias (`SPEC_KIT_CRITIC` → `SPEC_KIT_SIDECAR_CRITIC`) |
 | **PR4** | ✅ Complete | Module rename (`consensus.rs` → `gate_evaluation.rs`) + vocabulary migration |
-| **PR6** | 🔲 Pending | Delete legacy voting path |
+| **PR6** | 🔲 Ready | Delete legacy voting path (behavioral change) |
+| **PR7** | 🔲 Future | Internal vocabulary alignment (struct renames with serde compat) |
+| **PR8** | 🔲 Future | Clippy cleanup across spec-kit + tui |
+| **PR9** | 🔲 Future | Command UX: `/spec-consensus` → `/spec-review` (with deprecated alias) |
 
 ### Commits (chronological)
 ```
+b3c073b5d docs: update HANDOFF.md with PR4 completion status
 d9fa6313d feat(spec-kit): gate policy vocabulary migration (PR4)
 a2efa21f5 docs: finalize PR4 scope decisions and implementation plan
 184ca7ca4 docs: extend DEPRECATIONS.md with gate policy renames (PR3.5)
@@ -273,35 +277,58 @@ Load HANDOFF.md. Execute PR6 (Delete Legacy Voting Path).
 - PR1-PR4 complete (canonical types, config/env aliases, vocabulary migration)
 - All deprecation warnings in place
 - Legacy voting path ready for removal
+- Scope decision: NO struct renames, NO clippy cleanup, NO command renames (separate PRs)
+
+## PR6 Acceptance Criteria (Reviewer-Ready)
+
+1. **Voting is impossible**: No code path can enable multi-agent consensus
+2. **Env var handled gracefully**: If SPEC_KIT_CONSENSUS is set, warn and ignore (don't silently fail)
+3. **Tests updated**: All gr001_tests related to consensus_enabled removed/updated
+4. **Shim deleted**: `consensus.rs` shim file removed entirely
+5. **No wire format changes**: Internal struct names (ConsensusVerdict, etc.) unchanged
+6. **No cosmetic churn**: No clippy fixes, no style changes beyond deletion scope
 
 ## PR6 Implementation Steps
 
 ### Phase 1: Delete Legacy Voting Code
-1. Remove `is_consensus_enabled()` from gate_evaluation.rs
-2. Remove `resolve_legacy_voting()` from policy_toggles.rs
-3. Remove SPEC_KIT_CONSENSUS env var handling
-4. Remove multi-agent roster logic from `expected_agents_for_stage()`
+1. Update `resolve_legacy_voting()` in policy_toggles.rs to warn-and-ignore
+   - If SPEC_KIT_CONSENSUS is set to "true", log warning: "SPEC_KIT_CONSENSUS is deprecated and ignored. Legacy voting has been removed."
+   - Always return (false, warning) regardless of env value
+2. Remove `is_consensus_enabled()` from gate_evaluation.rs (replace with `false` constant)
+3. Simplify `expected_agents_for_stage()` to always return single agent
+4. Remove multi-agent roster logic entirely
 5. Run: `cargo test -p codex-spec-kit -p codex-tui -- --test-threads=1`
 
 ### Phase 2: Clean Up Deprecation Shim
-6. Delete `tui/.../consensus.rs` shim file
-7. Remove `mod consensus` from `tui/.../spec_kit/mod.rs`
+6. Delete `tui/src/chatwidget/spec_kit/consensus.rs` shim file
+7. Remove `mod consensus` from `tui/src/chatwidget/spec_kit/mod.rs`
 8. Update any remaining imports in external code
 9. Run: `cargo test --workspace -- --test-threads=1`
 
-### Phase 3: Update Documentation
-10. Remove legacy voting mentions from docs/MODEL-POLICY.md
-11. Update docs/DEPRECATIONS.md to mark SPEC_KIT_CONSENSUS as removed
-12. Run: `cargo clippy --workspace -- -D warnings -A deprecated`
+### Phase 3: Clean Up Tests
+10. Remove/update gr001_tests that test consensus_enabled behavior
+11. Keep tests for is_critic_enabled() (still valid feature)
+12. Verify no test references deleted code paths
 
-### Phase 4: Commit
-13. Commit with message: `chore(spec-kit): delete legacy voting path (PR6)`
+### Phase 4: Update Documentation
+13. Update docs/DEPRECATIONS.md to mark SPEC_KIT_CONSENSUS as REMOVED
+14. Note: Do NOT fix unrelated clippy warnings (PR8 scope)
+15. Run: `cargo clippy -p codex-spec-kit -p codex-tui -- -D warnings -A deprecated`
+
+### Phase 5: Commit
+16. Commit with message: `chore(spec-kit): delete legacy voting path (PR6)`
 
 ## Files to Delete/Modify
-- DELETE: `tui/.../consensus.rs` (shim)
-- MODIFY: `spec-kit/src/config/policy_toggles.rs` (remove legacy_voting_enabled)
-- MODIFY: `tui/.../gate_evaluation.rs` (remove is_consensus_enabled, multi-agent roster)
-- MODIFY: `tui/.../spec_kit/mod.rs` (remove consensus shim)
+- DELETE: `tui/src/chatwidget/spec_kit/consensus.rs` (shim)
+- MODIFY: `spec-kit/src/config/policy_toggles.rs` (warn-and-ignore legacy voting)
+- MODIFY: `tui/src/chatwidget/spec_kit/gate_evaluation.rs` (remove voting code paths)
+- MODIFY: `tui/src/chatwidget/spec_kit/mod.rs` (remove consensus shim)
+- MODIFY: `docs/DEPRECATIONS.md` (mark SPEC_KIT_CONSENSUS as removed)
+
+## Post-PR6 Roadmap
+- PR7: Internal vocabulary alignment (struct renames with serde compat)
+- PR8: Clippy cleanup across spec-kit + tui
+- PR9: Command UX: /spec-consensus → /spec-review (with deprecated alias)
 ```
 
 ---
