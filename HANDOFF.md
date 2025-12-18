@@ -5,6 +5,29 @@ Scope: vocabulary + architectural alignment between **Gate Policy** docs and the
 
 ---
 
+## Progress Tracker
+
+| PR | Status | Description |
+|----|--------|-------------|
+| **PR1** | ✅ Complete | Define canonical types (Role, Stage, Signal, Verdict, Router trait) in `codex-rs/spec-kit/` |
+| **PR1.1** | ✅ Complete | Fix P0 env boundary leak, align thresholds to 0.65, add PolicyToggles |
+| **PR2** | 🔲 Pending | Config alias (`consensus_threshold` → `min_confidence_for_auto_apply`) |
+| **PR3** | 🔲 Pending | Env var alias (`SPEC_KIT_CRITIC` → `SPEC_KIT_SIDECAR_CRITIC`) |
+| **PR4** | 🔲 Pending | Module rename (`consensus.rs` → `gate_policy.rs`) + callsite migrations |
+| **PR6** | 🔲 Pending | Delete or feature-gate legacy voting path |
+
+### PR1 + PR1.1 Commits
+- `a29f9668e` - fix(spec-kit): make gate policy deterministic, align thresholds (PR1.1)
+- `89b7a83e6` - feat(spec-kit): add gate policy and router contracts (PR1)
+
+### Files Created
+- `codex-rs/spec-kit/src/gate_policy.rs` — Domain vocabulary (Stage, Role, Signal, Verdict, etc.)
+- `codex-rs/spec-kit/src/router.rs` — Router trait and WorkerSpec
+- Updated `codex-rs/spec-kit/src/lib.rs` — Re-exports
+- Updated `docs/spec-kit/GATE_POLICY.md` — Added §11 Wiring Guidance
+
+---
+
 ## 1) What's already true (design intent)
 
 - **Single-owner pipeline is the default**: one stage owner produces the artifact, gates evaluate signals, and escalation is deterministic.
@@ -120,18 +143,25 @@ This prevents "Model Policy duplication" and keeps gate policy stable.
 
 ---
 
-## 8) Recommended next PRs
+## 8) Remaining PRs (ordered by dependency)
 
-1. **Rename + compatibility layer**
-   - `SPEC_KIT_CRITIC` -> `SPEC_KIT_SIDECAR_CRITIC` (+warn-once)
-   - `consensus_threshold` -> `min_confidence_for_auto_apply` (+warn-once)
+### PR2: Config Alias (consensus_threshold → min_confidence_for_auto_apply)
+- Add serde alias to config struct
+- Implement warn-once on deprecated key usage
+- Files: `codex-rs/spec-kit/src/config.rs`, any config loading code
 
-2. **Refactor naming**
-   - `consensus.rs` -> `gate_policy.rs` (re-export old module path temporarily)
-   - `run_spec_consensus()` -> `evaluate_gate()` (keep old fn as wrapper)
+### PR3: Env Var Alias (SPEC_KIT_CRITIC → SPEC_KIT_SIDECAR_CRITIC)
+- Add env var alias with warn-once deprecation
+- Consuming code should read from `PolicyToggles` (already wired in PR1.1)
+- Files: Config loading, possibly `codex-tui/` initialization
 
-3. **Remove model routing duplication**
-   - replace `preferred_agent_for_stage()` with `preferred_role_for_stage()` (router handles worker/model)
+### PR4: Module Rename + Callsite Migrations
+- Rename `consensus.rs` → `gate_policy.rs` (re-export old module path temporarily)
+- Rename `run_spec_consensus()` → `evaluate_gate()` (keep old fn as wrapper)
+- Replace `preferred_agent_for_stage()` with `preferred_role_for_stage()` (router handles worker/model)
+- Update UI labels from "consensus" to "gate evaluation"
 
-4. **Quarantine or delete legacy voting path**
-   - compile-time feature or deeply isolated module so it cannot drift back into default behavior
+### PR6: Delete or Feature-Gate Legacy Voting
+- Compile-time feature `#[cfg(feature = "legacy_voting")]` or full deletion
+- Quarantine voting code so it cannot drift back into default behavior
+- Decision: recommend deletion over feature-gating (simpler, less maintenance)
