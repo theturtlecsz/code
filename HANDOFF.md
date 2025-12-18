@@ -1,7 +1,7 @@
 # Gate Policy Alignment — Session Handoff
 
 **Last updated:** 2025-12-18
-**Status:** PR3 complete, PR4 ready to implement
+**Status:** PR4 complete, PR6 ready to implement
 
 ---
 
@@ -13,11 +13,17 @@
 | **PR1.1** | ✅ Complete | Fix P0 env boundary leak, align thresholds to 0.65, add PolicyToggles |
 | **PR2** | ✅ Complete | Config alias (`consensus_threshold` → `min_confidence_for_auto_apply`) |
 | **PR3** | ✅ Complete | Env var alias (`SPEC_KIT_CRITIC` → `SPEC_KIT_SIDECAR_CRITIC`) |
-| **PR4** | 🔲 Pending | Module rename (`consensus.rs` → `gate_policy.rs`) + callsite migrations |
+| **PR4** | ✅ Complete | Module rename (`consensus.rs` → `gate_evaluation.rs`) + vocabulary migration |
 | **PR6** | 🔲 Pending | Delete legacy voting path |
 
 ### Commits (chronological)
 ```
+d9fa6313d feat(spec-kit): gate policy vocabulary migration (PR4)
+a2efa21f5 docs: finalize PR4 scope decisions and implementation plan
+184ca7ca4 docs: extend DEPRECATIONS.md with gate policy renames (PR3.5)
+7f7a3e8f6 docs: incorporate PR3 architectural review into PR4 plan
+a5fd5b681 feat(spec-kit): env var alias SPEC_KIT_CRITIC -> SPEC_KIT_SIDECAR_CRITIC (PR3)
+2a4fbb8b8 docs: comprehensive HANDOFF.md for gate policy alignment next session
 959ccbeb7 docs: update HANDOFF.md with PR2 completion
 f930c4643 feat(spec-kit): config alias consensus_threshold -> min_confidence_for_auto_apply (PR2)
 e0097d802 docs: update HANDOFF.md with gate policy alignment target
@@ -152,18 +158,18 @@ Verify sidecar critic respects `local_only` flag:
 
 ---
 
-## PR4 Planning Notes
+## PR4 Implementation Notes (COMPLETE)
 
-After PR3, PR4 does module rename + callsite migrations.
+PR4 implemented gate policy vocabulary migration.
 
-### Acceptance Checklist (Hard Constraints)
+### Acceptance Checklist (All Verified ✅)
 
-- [ ] **No DB schema migrations** — tables stay named as-is
-- [ ] **No evidence dir moves** — read compatibility intact for historical artifacts
-- [ ] **No model routing logic moved** — router remains thin-waist
-- [ ] **All user-facing "consensus" wording removed** — logs, tooltips, help text say "gate evaluation" / "stage review" / "sidecar critic"
-- [ ] **One canonical "policy toggles" boundary** — env/config read happens once, not scattered
-- [ ] **Test module names unchanged** — avoid churn, rename in post-PR6 cleanup
+- [x] **No DB schema migrations** — tables stay named as-is
+- [x] **No evidence dir moves** — read compatibility intact for historical artifacts
+- [x] **No model routing logic moved** — router remains thin-waist
+- [x] **All user-facing "consensus" wording removed** — "[Stage Review]", "REVIEW OK/CONFLICT/DEGRADED"
+- [x] **One canonical "policy toggles" boundary** — `spec-kit/src/config/policy_toggles.rs`
+- [x] **Test module names unchanged** — tests remain in `gate_evaluation.rs`
 
 ### Scope Decisions (Finalized)
 
@@ -250,6 +256,9 @@ Keep **read compatibility** for historical evidence (old artifact directories/JS
 | `codex-rs/spec-kit/src/router.rs` | Router trait and WorkerSpec |
 | `codex-rs/spec-kit/src/config/loader.rs` | Config loading + alias handling |
 | `codex-rs/spec-kit/src/config/registry.rs` | Known env vars + config paths |
+| `codex-rs/spec-kit/src/config/policy_toggles.rs` | **NEW (PR4)** — PolicyToggles boundary, pure decision functions |
+| `codex-rs/tui/src/chatwidget/spec_kit/gate_evaluation.rs` | **RENAMED (PR4)** — Gate evaluation logic (was consensus.rs) |
+| `codex-rs/tui/src/chatwidget/spec_kit/consensus.rs` | **DEPRECATED (PR4)** — Re-export shim, delete in PR6 |
 | `docs/spec-kit/GATE_POLICY.md` | Canonical vocabulary spec |
 | `docs/MODEL-POLICY.md` | Role → worker mapping policy |
 
@@ -258,47 +267,41 @@ Keep **read compatibility** for historical evidence (old artifact directories/JS
 ## Next Session Start Command
 
 ```
-Load HANDOFF.md. Execute PR4 (Gate Policy Vocabulary Migration).
+Load HANDOFF.md. Execute PR6 (Delete Legacy Voting Path).
 
-## PR4 Implementation Steps (execute in order)
+## Context
+- PR1-PR4 complete (canonical types, config/env aliases, vocabulary migration)
+- All deprecation warnings in place
+- Legacy voting path ready for removal
 
-### Phase 1: Create PolicyToggles Boundary
-1. Create `codex-rs/spec-kit/src/config/policy_toggles.rs`
-2. Implement pure decision functions:
-   - `resolve_sidecar_critic(canonical: Option<&str>, deprecated: Option<&str>) -> (bool, Option<DeprecationWarning>)`
-   - `resolve_legacy_voting(val: Option<&str>) -> (bool, Option<DeprecationWarning>)`
-3. Implement `PolicyToggles::from_env_and_config()` as single IO boundary
-4. Add unit tests for pure functions (no env mutation needed)
-5. Export from `spec-kit/src/config/mod.rs`
-6. Run: `cargo test -p codex-spec-kit`
+## PR6 Implementation Steps
 
-### Phase 2: Migrate TUI to New Boundary
-7. Update TUI to call `PolicyToggles::from_env_and_config()` once at startup
-8. Remove `is_critic_enabled()` and `is_consensus_enabled()` from consensus.rs
-9. Run: `cargo test -p codex-tui -- --test-threads=1`
+### Phase 1: Delete Legacy Voting Code
+1. Remove `is_consensus_enabled()` from gate_evaluation.rs
+2. Remove `resolve_legacy_voting()` from policy_toggles.rs
+3. Remove SPEC_KIT_CONSENSUS env var handling
+4. Remove multi-agent roster logic from `expected_agents_for_stage()`
+5. Run: `cargo test -p codex-spec-kit -p codex-tui -- --test-threads=1`
 
-### Phase 3: Module Rename
-10. Rename `tui/.../consensus.rs` → `tui/.../gate_evaluation.rs`
-11. Add re-export shim: `mod consensus { #[deprecated] pub use super::gate_evaluation::*; }`
-12. Update internal imports progressively
-13. Run: `cargo test -p codex-tui`
+### Phase 2: Clean Up Deprecation Shim
+6. Delete `tui/.../consensus.rs` shim file
+7. Remove `mod consensus` from `tui/.../spec_kit/mod.rs`
+8. Update any remaining imports in external code
+9. Run: `cargo test --workspace -- --test-threads=1`
 
-### Phase 4: Vocabulary Cleanup
-14. Update log/tracing messages: "consensus" → "gate evaluation"
-15. Update UI strings, tooltips, help text
-16. Verify no user-facing "consensus" wording remains (except DEPRECATIONS.md)
-17. Run full test suite: `cargo test --workspace`
+### Phase 3: Update Documentation
+10. Remove legacy voting mentions from docs/MODEL-POLICY.md
+11. Update docs/DEPRECATIONS.md to mark SPEC_KIT_CONSENSUS as removed
+12. Run: `cargo clippy --workspace -- -D warnings -A deprecated`
 
-### Phase 5: Validation
-18. Run clippy: `cargo clippy --workspace -- -D warnings` (allow known deprecation warnings)
-19. Verify acceptance checklist in HANDOFF.md
-20. Commit with message: `feat(spec-kit): gate policy vocabulary migration (PR4)`
+### Phase 4: Commit
+13. Commit with message: `chore(spec-kit): delete legacy voting path (PR6)`
 
-## Key Files
-- NEW: `codex-rs/spec-kit/src/config/policy_toggles.rs`
-- RENAME: `tui/.../consensus.rs` → `gate_evaluation.rs`
-- UPDATE: `tui/.../mod.rs` (re-export shim)
-- UPDATE: All files with "consensus" in logs/UI strings
+## Files to Delete/Modify
+- DELETE: `tui/.../consensus.rs` (shim)
+- MODIFY: `spec-kit/src/config/policy_toggles.rs` (remove legacy_voting_enabled)
+- MODIFY: `tui/.../gate_evaluation.rs` (remove is_consensus_enabled, multi-agent roster)
+- MODIFY: `tui/.../spec_kit/mod.rs` (remove consensus shim)
 ```
 
 ---
