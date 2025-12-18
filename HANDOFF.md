@@ -82,9 +82,11 @@ Rename `SPEC_KIT_CRITIC` → `SPEC_KIT_SIDECAR_CRITIC` with backward compatibili
 - **Fix in PR4**: Move policy toggles IO to `spec-kit/src/config/policy_toggles.rs`.
 
 **C) Deprecation signaling**: Need user-facing docs listing renamed knobs.
-- **Action**: Create `docs/DEPRECATIONS.md` listing:
-  - `consensus_threshold` → `min_confidence_for_auto_apply` (PR2)
-  - `SPEC_KIT_CRITIC` → `SPEC_KIT_SIDECAR_CRITIC` (PR3)
+- **Done**: Extended `docs/DEPRECATIONS.md` with:
+  - Renamed env vars (PR3)
+  - Renamed config keys (PR2)
+  - Legacy storage naming (intentionally preserved)
+  - Removal timeline
 
 ### Design Decisions (confirmed)
 
