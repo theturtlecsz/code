@@ -1441,4 +1441,115 @@ mod gr001_tests {
         assert_eq!(preferred_agent_for_stage(SpecStage::Validate), SpecAgent::Claude);
         assert_eq!(preferred_agent_for_stage(SpecStage::Audit), SpecAgent::Claude);
     }
+
+    // =========================================================================
+    // PR7: Golden Evidence Tests - Wire Format Stability
+    // =========================================================================
+
+    /// Golden test: Ensure ConsensusVerdict serializes with LEGACY key names.
+    /// This prevents accidental wire format changes that would break evidence files.
+    #[test]
+    fn test_consensus_verdict_serializes_legacy_keys() {
+        let verdict = ConsensusVerdict {
+            spec_id: "SPEC-GOLDEN-001".to_string(),
+            stage: "plan".to_string(),
+            recorded_at: "2025-01-01T00:00:00Z".to_string(),
+            prompt_version: Some("v1.0".to_string()),
+            consensus_ok: true, // Legacy field name
+            degraded: false,
+            required_fields_ok: true,
+            missing_agents: vec![],
+            agreements: vec!["agreement1".to_string()],
+            conflicts: vec![],
+            aggregator_agent: Some("gemini".to_string()),
+            aggregator_version: Some("1.5".to_string()),
+            aggregator: None,
+            synthesis_path: Some("/evidence/synthesis.json".to_string()),
+            artifacts: vec![],
+        };
+
+        let json = serde_json::to_string(&verdict).expect("serialize");
+
+        // CRITICAL: Assert JSON uses LEGACY key name "consensus_ok"
+        // This is the wire format contract - do NOT change without migration
+        assert!(
+            json.contains("\"consensus_ok\":true"),
+            "Wire format MUST use legacy key 'consensus_ok', got: {}",
+            json
+        );
+
+        // Should NOT contain new key names in serialized output
+        assert!(
+            !json.contains("\"gate_ok\""),
+            "Wire format should NOT use 'gate_ok' (alias is for reading only)"
+        );
+        assert!(
+            !json.contains("\"review_ok\""),
+            "Wire format should NOT use 'review_ok' (alias is for reading only)"
+        );
+    }
+
+    /// Golden test: Ensure ConsensusVerdict deserializes NEW key names via aliases.
+    /// This enables forward compatibility - new evidence writers can use new names.
+    #[test]
+    fn test_consensus_verdict_deserializes_new_keys() {
+        // JSON using new key name "gate_ok" (via serde alias)
+        let json_gate_ok = r#"{
+            "spec_id": "SPEC-GOLDEN-002",
+            "stage": "plan",
+            "recorded_at": "2025-01-01T00:00:00Z",
+            "gate_ok": true,
+            "degraded": false,
+            "required_fields_ok": true,
+            "missing_agents": [],
+            "agreements": [],
+            "conflicts": [],
+            "artifacts": []
+        }"#;
+
+        let verdict: ConsensusVerdict =
+            serde_json::from_str(json_gate_ok).expect("deserialize with gate_ok alias");
+        assert!(verdict.consensus_ok, "gate_ok alias should map to consensus_ok");
+
+        // JSON using alternate new key name "review_ok" (via serde alias)
+        let json_review_ok = r#"{
+            "spec_id": "SPEC-GOLDEN-003",
+            "stage": "plan",
+            "recorded_at": "2025-01-01T00:00:00Z",
+            "review_ok": false,
+            "degraded": true,
+            "required_fields_ok": true,
+            "missing_agents": ["claude"],
+            "agreements": [],
+            "conflicts": ["conflict1"],
+            "artifacts": []
+        }"#;
+
+        let verdict: ConsensusVerdict =
+            serde_json::from_str(json_review_ok).expect("deserialize with review_ok alias");
+        assert!(!verdict.consensus_ok, "review_ok alias should map to consensus_ok");
+        assert!(verdict.degraded);
+    }
+
+    /// Golden test: Legacy JSON (with consensus_ok) still deserializes correctly.
+    #[test]
+    fn test_consensus_verdict_deserializes_legacy_keys() {
+        let json_legacy = r#"{
+            "spec_id": "SPEC-GOLDEN-004",
+            "stage": "implement",
+            "recorded_at": "2024-12-01T00:00:00Z",
+            "consensus_ok": true,
+            "degraded": false,
+            "required_fields_ok": true,
+            "missing_agents": [],
+            "agreements": ["all_good"],
+            "conflicts": [],
+            "artifacts": []
+        }"#;
+
+        let verdict: ConsensusVerdict =
+            serde_json::from_str(json_legacy).expect("deserialize legacy format");
+        assert!(verdict.consensus_ok);
+        assert_eq!(verdict.spec_id, "SPEC-GOLDEN-004");
+    }
 }
