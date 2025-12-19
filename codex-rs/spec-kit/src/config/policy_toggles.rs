@@ -186,8 +186,13 @@ pub fn resolve_sidecar_critic(
 /// Resolve legacy voting setting from env value.
 ///
 /// **REMOVED in PR6**: Legacy voting is no longer supported. This function
-/// always returns `(false, warning)` if the env var is set, warning the user
-/// that the setting is ignored.
+/// always returns `false`. A deprecation warning is emitted **only** when
+/// the env var is set to a truthy value (attempting to enable removed feature).
+///
+/// Warning behavior:
+/// - `SPEC_KIT_CONSENSUS` not set → no warning, no spam
+/// - `SPEC_KIT_CONSENSUS=false` → no warning (explicit disable is fine)
+/// - `SPEC_KIT_CONSENSUS=true` → warn-once: "deprecated and ignored"
 ///
 /// # Arguments
 /// * `val` - Value of `SPEC_KIT_CONSENSUS` env var (if set)
@@ -196,10 +201,11 @@ pub fn resolve_sidecar_critic(
 /// Tuple of (enabled=false, optional deprecation warning)
 pub fn resolve_legacy_voting(val: Option<&str>) -> (bool, Option<DeprecationWarning>) {
     match val {
-        // PR6: Always return false, but warn if any value is set
-        Some(v) if !v.trim().is_empty() => {
+        // PR6: Only warn if user is trying to ENABLE the removed feature
+        Some(v) if parse_bool(v) => {
             (false, Some(DeprecationWarning::spec_kit_consensus_removed()))
         }
+        // Not set, empty, or explicitly disabled → no warning, no spam
         _ => (false, None),
     }
 }
@@ -323,18 +329,19 @@ mod tests {
     // -------------------------------------------------------------------------
 
     #[test]
-    fn test_resolve_voting_none() {
+    fn test_resolve_voting_none_no_warning() {
+        // Not set → no warning, no spam
         let (enabled, warning) = resolve_legacy_voting(None);
         assert!(!enabled);
-        assert!(warning.is_none());
+        assert!(warning.is_none(), "No warning when env var not set");
     }
 
     #[test]
     fn test_resolve_voting_true_warns_and_ignores() {
-        // PR6: Even "true" returns false, but warns
+        // Truthy value → warn (user trying to enable removed feature)
         let (enabled, warning) = resolve_legacy_voting(Some("true"));
-        assert!(!enabled, "PR6: voting should always be disabled");
-        assert!(warning.is_some(), "PR6: should warn when env var is set");
+        assert!(!enabled, "PR6: voting always disabled");
+        assert!(warning.is_some(), "Warn when trying to enable removed feature");
         let w = warning.unwrap();
         assert_eq!(w.deprecated_key, "SPEC_KIT_CONSENSUS");
         assert!(w.message.contains("ignored"));
@@ -342,26 +349,34 @@ mod tests {
 
     #[test]
     fn test_resolve_voting_false_no_warning() {
-        // PR6: "false" returns false with no warning (expected behavior)
+        // Explicit disable → no warning (not trying to enable)
         let (enabled, warning) = resolve_legacy_voting(Some("false"));
         assert!(!enabled);
-        assert!(warning.is_some(), "PR6: still warn to encourage removal of env var");
+        assert!(warning.is_none(), "No warning for explicit disable");
     }
 
     #[test]
     fn test_resolve_voting_one_warns_and_ignores() {
-        // PR6: Even "1" returns false, but warns
+        // "1" is truthy → warn
         let (enabled, warning) = resolve_legacy_voting(Some("1"));
-        assert!(!enabled, "PR6: voting should always be disabled");
-        assert!(warning.is_some());
+        assert!(!enabled, "PR6: voting always disabled");
+        assert!(warning.is_some(), "Warn for truthy value");
+    }
+
+    #[test]
+    fn test_resolve_voting_zero_no_warning() {
+        // "0" is falsy → no warning
+        let (enabled, warning) = resolve_legacy_voting(Some("0"));
+        assert!(!enabled);
+        assert!(warning.is_none(), "No warning for falsy value");
     }
 
     #[test]
     fn test_resolve_voting_empty_no_warning() {
-        // Empty string is treated as not set
+        // Empty string → no warning
         let (enabled, warning) = resolve_legacy_voting(Some(""));
         assert!(!enabled);
-        assert!(warning.is_none());
+        assert!(warning.is_none(), "No warning for empty string");
     }
 
     // -------------------------------------------------------------------------
