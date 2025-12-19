@@ -269,86 +269,35 @@ Keep **read compatibility** for historical evidence (old artifact directories/JS
 
 ## Next Session Start Command
 
+See **`docs/NEXT_SESSION_PROMPT.md`** for the complete continuation prompt.
+
+**Summary:**
 ```
-Load HANDOFF.md. Execute PR7-PR9 (Internal Vocabulary Alignment).
-
-## Context
-- PR1-PR6 complete (canonical types, config/env aliases, vocabulary migration, voting path deleted)
-- SPEC_KIT_CONSENSUS now warns-once for truthy values only (no spam)
-- consensus.rs shim deleted, expected_agents_for_stage() simplified
-- Ready for internal vocabulary cleanup
-
-## PR7: Internal Vocabulary Alignment (Wire/Domain Separation)
-
-### Architectural Pattern (per architect review)
-Separate "wire types" (serde-focused, backward compatible) from "domain types" (clean code).
-
-**Wire module** (serialization layer):
-- Keeps legacy JSON field names for read compatibility
-- Uses `#[serde(alias = "...")]` for both old and new formats
-- Located in existing files, no moves
-
-**Domain module** (what code uses):
-- `GateVerdict`, `GateRun`, `StageReviewStatus`
-- Clean vocabulary, no legacy naming
-- Conversion functions between wire ↔ domain
-
-### PR7 Scope (Minimal - Recommended)
-1. Introduce domain type aliases in gate_policy.rs:
-   - `type GateVerdict = ConsensusVerdict;` (with deprecation note)
-   - `type GateArtifact = ConsensusArtifactData;`
-2. Add serde aliases for new field names (don't remove old ones)
-3. Migrate internal callsites to domain types gradually
-4. Keep wire types stable for persistence/readers
-
-### PR7 Anti-Patterns (Avoid)
-- Don't rename everything everywhere in one PR
-- Don't break JSON serialization of historical evidence
-- Don't touch consensus_db or consensus_coordinator modules (wire compatibility)
-
-### Transitional API Note
-`expected_agents_for_stage()` is legacy scaffolding. It should not be used as
-routing source of truth. Plan removal once all routing goes stage→role→router.
-
-## PR8: Clippy Cleanup (Pure Mechanical)
-
-### Scope
-- Fix all clippy warnings across spec-kit + tui
-- Focus on deprecated `QualityGates_ConsensusThreshold` warnings (5 occurrences)
-- No behavior changes, no refactoring
-- Easy to review, safe to git bisect across
-
-### Command
-```bash
-cargo clippy --workspace --all-targets --all-features -- -D warnings
+Load HANDOFF.md and NEXT_FOCUS_ROADMAP.md. Execute SPEC-KIT-920 (Automation MVP).
 ```
 
-## PR9: Command UX (/spec-consensus → /spec-review)
+**Key context:**
+- PR7-PR9 COMPLETE (vocabulary migration, clippy cleanup, command UX)
+- CI hardening COMPLETE (vocabulary drift canary + golden wire-format tests)
+- SPEC-KIT-900 created but is heavyweight — use for quarterly integration only
+- **P0 = SPEC-KIT-920** (automation/`--exit-on-complete`)
+- Then create lightweight smoke spec, then SPEC-KIT-926 (progress visibility)
 
-### Rollout Pattern
-1. `/spec-review` becomes canonical command
-2. `/spec-consensus` remains as deprecated alias (one release window)
-3. Warn-once when alias is used
-4. Update help, docs, command palette
+## PR7-PR9 Completion Summary
 
-### Scope (Command Alias Only - Recommended)
-- Add `/spec-review` as primary
-- Keep `/spec-consensus` as deprecated alias with warn-once
-- Don't rename handler functions (keep handle_spec_consensus)
+| PR | Status | Description |
+|----|--------|-------------|
+| **PR7** | ✅ Complete | Internal vocabulary alignment (type aliases, serde aliases, deprecation notes) |
+| **PR8** | ✅ Complete | Clippy cleanup across spec-kit + stage0 + tui |
+| **PR9** | ✅ Complete | Command UX: `/spec-review` canonical, `/spec-consensus` deprecated alias |
 
-## Acceptance Criteria (All PRs)
-
-| Criterion | PR7 | PR8 | PR9 |
-|-----------|-----|-----|-----|
-| No wire format changes | ✓ | N/A | N/A |
-| Historical evidence readable | ✓ | N/A | N/A |
-| No behavior changes | N/A | ✓ | N/A |
-| Warn-once for deprecated | N/A | N/A | ✓ |
-| Tests pass | ✓ | ✓ | ✓ |
-
-## Commits (chronological, this session)
-- 6d718a008: chore(spec-kit): delete legacy voting path (PR6)
-- 397139091: fix(spec-kit): only warn for truthy SPEC_KIT_CONSENSUS values (PR6 polish)
+## Commits (this session)
+```
+6fc0dbbd1 docs: add SPEC-KIT-900 gold run spec and playbook (P0)
+9a5e5a743 docs: add NEXT_FOCUS_ROADMAP.md (post-PR7 architect review)
+379030a13 feat(spec-kit): add vocabulary audit script and golden evidence tests (PR7 hardening)
+08d1a8610 chore(spec-kit): suppress dead_code warnings on transitional type aliases (PR7 polish)
+5e1e0a7dc feat(spec-kit): vocabulary alignment and command UX (PR7-PR9)
 ```
 
 ---

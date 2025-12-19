@@ -1,11 +1,51 @@
 # Planner / Spec-Kit — Next Focus Roadmap (Architect Review)
 
-**Date:** 2025-12-19
+**Date:** 2025-12-19 (Updated: post-automation-review)
 **Context:** Post PR7-PR9 (gate/review vocabulary migration + CI hardening complete)
 
 This roadmap is written from an architect / product posture perspective. It assumes:
 - Gate/Review vocabulary migration + legacy voting deletion are complete.
 - CI hardening is in place (vocabulary drift canary + golden wire-format tests).
+
+---
+
+## CRITICAL UPDATE: Automation Before Gold Run
+
+**Key insight:** Claude Code can implement changes but cannot drive `/speckit.auto` without manual TUI interaction. This blocks CI/CD and repeatable testing.
+
+**Re-prioritization:**
+- **P0 = SPEC-KIT-920** (automation/headless command injection) — enables everything else
+- **P0.5 = Smoke Spec** (lightweight, not SPEC-KIT-900)
+- **P1 = SPEC-KIT-926** (progress visibility)
+
+**Why SPEC-KIT-900 is wrong for gold run:**
+- It's a heavyweight integration benchmark (Stage0, NotebookLM, external deps)
+- Too many moving parts for a "does it work?" test
+- Keep it as quarterly/release-candidate integration test
+
+**Smoke Spec criteria:**
+1. In-repo (no external benchmark workspace)
+2. No Stage0 dependency for happy path
+3. Deterministic acceptance (clear pass/fail)
+4. Small surface area
+5. Exercises pipeline enough to validate gating + evidence
+
+---
+
+## SPEC-KIT-920 Status (Automation)
+
+**Current state:**
+- `--initial-command` EXISTS and works (dispatches slash command after first redraw)
+- `--exit-on-complete` EXISTS in CLI but **NOT IMPLEMENTED** (app never reads it)
+
+**Minimum viable scope:**
+1. Implement `--exit-on-complete` to actually exit after command completes
+2. Exit code reflects success (0) / failure (non-zero)
+3. Optional: `--json` for structured progress output
+
+**Files:**
+- `tui/src/cli.rs:113` - flag defined
+- `tui/src/app.rs` - needs implementation to detect pipeline completion and exit
 
 ---
 
