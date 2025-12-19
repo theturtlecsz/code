@@ -183,6 +183,8 @@ pub(crate) struct App<'a> {
     initial_command: Option<String>,
     /// Track if initial_command has been dispatched (prevents duplicate dispatches).
     initial_command_dispatched: bool,
+    /// Exit after initial command completes (for CI/CD automation).
+    exit_on_complete: bool,
 
     // === FORK-SPECIFIC (just-every/code): SPEC-945D Config hot-reload ===
     /// Configuration hot-reload watcher for live config updates.
@@ -247,7 +249,8 @@ impl App<'_> {
         resume_picker: bool,
         startup_footer_notice: Option<String>,
         latest_upgrade_version: Option<String>,
-        initial_command: Option<String>, // SPEC-KIT-920
+        initial_command: Option<String>,  // SPEC-KIT-920
+        exit_on_complete: bool,           // SPEC-KIT-920
         config_watcher: Option<Arc<codex_spec_kit::config::HotReloadWatcher>>, // SPEC-945D
     ) -> Self {
         // SPEC-KIT-920: Log initial_command at startup
@@ -483,6 +486,7 @@ impl App<'_> {
             // SPEC-KIT-920: TUI automation support
             initial_command,
             initial_command_dispatched: false,
+            exit_on_complete,
 
             // SPEC-945D: Config hot-reload
             config_watcher: config_watcher.clone(),
@@ -575,6 +579,29 @@ impl App<'_> {
                 );
             }
         }
+    }
+
+    /// SPEC-KIT-920: Check if automation mode should trigger exit.
+    /// Returns true when: initial command was dispatched, exit_on_complete is set,
+    /// and the widget is no longer running any task.
+    fn should_exit_on_automation_complete(&self) -> bool {
+        // Only check if we're in automation mode
+        if !self.exit_on_complete || !self.initial_command_dispatched {
+            return false;
+        }
+
+        // Check if widget is idle (no running tasks)
+        if let AppState::Chat { widget } = &self.app_state {
+            let is_idle = !widget.is_task_running();
+            if is_idle {
+                tracing::info!(
+                    "SPEC-KIT-920: Automation complete - widget is idle, triggering exit"
+                );
+                return true;
+            }
+        }
+
+        false
     }
 
     fn apply_terminal_title(&self) {
@@ -1647,6 +1674,10 @@ impl App<'_> {
                 }
                 AppEvent::CodexEvent(event) => {
                     self.dispatch_codex_event(event);
+                    // SPEC-KIT-920: Check if automation should trigger exit
+                    if self.should_exit_on_automation_complete() {
+                        self.app_event_tx.send(AppEvent::ExitRequest);
+                    }
                 }
                 AppEvent::ExitRequest => {
                     // Stop background threads and break the UI loop.

@@ -269,19 +269,58 @@ Keep **read compatibility** for historical evidence (old artifact directories/JS
 
 ## Next Session Start Command
 
-See **`docs/NEXT_SESSION_PROMPT.md`** for the complete continuation prompt.
-
 **Summary:**
 ```
-Load HANDOFF.md and NEXT_FOCUS_ROADMAP.md. Execute SPEC-KIT-920 (Automation MVP).
+Load HANDOFF.md and docs/SPEC-KIT-921.md. Begin Phase B extraction (status + review).
 ```
 
 **Key context:**
 - PR7-PR9 COMPLETE (vocabulary migration, clippy cleanup, command UX)
 - CI hardening COMPLETE (vocabulary drift canary + golden wire-format tests)
 - SPEC-KIT-900 created but is heavyweight — use for quarterly integration only
-- **P0 = SPEC-KIT-920** (automation/`--exit-on-complete`)
-- Then create lightweight smoke spec, then SPEC-KIT-926 (progress visibility)
+- **SPEC-KIT-920 superseded** — PTY-based TUI automation is fundamentally wrong
+- **P0 = SPEC-KIT-921** (CLI Adapter + Shared SpeckitExecutor Core)
+
+---
+
+## SPEC-KIT-921: CLI Adapter + Shared Core (P0)
+
+**Problem:** TUI slash commands depend on `&mut ChatWidget`, making CLI impossible without re-implementing logic. PTY automation (SPEC-KIT-920 approach) fails in CI/Proxmox.
+
+**Solution:** Extract a shared `SpeckitExecutor` that:
+- Accepts typed `SpeckitCommand`
+- Emits `SpeckitEvent` to an event sink
+- Uses ports/traits for IO (not ChatWidget)
+
+**Architectural Rule:**
+> No function that advances a Spec-Kit stage may take `&mut ChatWidget`.
+
+### SPEC-KIT-920 Partial Work (Not Wasted)
+
+The following was implemented and compiles:
+- `--initial-command` flag (working, dispatches after first redraw)
+- `--exit-on-complete` flag (wired through CLI/App, but triggers require PTY)
+- `should_exit_on_automation_complete()` helper (ready for CLI mode)
+
+This provides a pattern for the executor's `Outcome` handling once CLI exists.
+
+### Phase B Starting Point
+
+Recommended extraction targets (lowest risk, highest leverage):
+1. `handle_spec_status()` — read-only, proves pattern
+2. `gate_evaluation.rs` — bounded side effects
+3. These immediately unlock CI automation
+
+**Next session:** Map `handle_spec_status()` call graph, identify "pure core" vs "UI adapter" code, define minimal port traits.
+
+### Files to Examine for Cut-Line
+
+| File | Role |
+|------|------|
+| `tui/src/chatwidget/spec_kit/commands/status.rs` | Status command implementation |
+| `tui/src/chatwidget/spec_kit/gate_evaluation.rs` | Gate/review evaluation |
+| `spec-kit/src/gate_policy.rs` | Domain vocabulary (already clean) |
+| `spec-kit/src/config/policy_toggles.rs` | Policy toggles (already centralized) |
 
 ## PR7-PR9 Completion Summary
 
