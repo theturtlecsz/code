@@ -270,65 +270,105 @@ Keep **read compatibility** for historical evidence (old artifact directories/JS
 ## Next Session Start Command
 
 ```
-Load HANDOFF.md. Execute PR6 (Delete Legacy Voting Path).
+Load HANDOFF.md. Execute PR7-PR9 (Internal Vocabulary Alignment).
 
 ## Context
-- PR1-PR4 complete (canonical types, config/env aliases, vocabulary migration)
-- All deprecation warnings in place
-- Legacy voting path ready for removal
-- Scope decision: NO struct renames, NO clippy cleanup, NO command renames (separate PRs)
+- PR1-PR6 complete (canonical types, config/env aliases, vocabulary migration, voting path deleted)
+- SPEC_KIT_CONSENSUS now warns-once for truthy values only (no spam)
+- consensus.rs shim deleted, expected_agents_for_stage() simplified
+- Ready for internal vocabulary cleanup
 
-## PR6 Acceptance Criteria (Reviewer-Ready)
+## PR7: Internal Vocabulary Alignment (Wire/Domain Separation)
 
-1. **Voting is impossible**: No code path can enable multi-agent consensus
-2. **Env var handled gracefully**: If SPEC_KIT_CONSENSUS is set, warn and ignore (don't silently fail)
-3. **Tests updated**: All gr001_tests related to consensus_enabled removed/updated
-4. **Shim deleted**: `consensus.rs` shim file removed entirely
-5. **No wire format changes**: Internal struct names (ConsensusVerdict, etc.) unchanged
-6. **No cosmetic churn**: No clippy fixes, no style changes beyond deletion scope
+### Architectural Pattern (per architect review)
+Separate "wire types" (serde-focused, backward compatible) from "domain types" (clean code).
 
-## PR6 Implementation Steps
+**Wire module** (serialization layer):
+- Keeps legacy JSON field names for read compatibility
+- Uses `#[serde(alias = "...")]` for both old and new formats
+- Located in existing files, no moves
 
-### Phase 1: Delete Legacy Voting Code
-1. Update `resolve_legacy_voting()` in policy_toggles.rs to warn-and-ignore
-   - If SPEC_KIT_CONSENSUS is set to "true", log warning: "SPEC_KIT_CONSENSUS is deprecated and ignored. Legacy voting has been removed."
-   - Always return (false, warning) regardless of env value
-2. Remove `is_consensus_enabled()` from gate_evaluation.rs (replace with `false` constant)
-3. Simplify `expected_agents_for_stage()` to always return single agent
-4. Remove multi-agent roster logic entirely
-5. Run: `cargo test -p codex-spec-kit -p codex-tui -- --test-threads=1`
+**Domain module** (what code uses):
+- `GateVerdict`, `GateRun`, `StageReviewStatus`
+- Clean vocabulary, no legacy naming
+- Conversion functions between wire ↔ domain
 
-### Phase 2: Clean Up Deprecation Shim
-6. Delete `tui/src/chatwidget/spec_kit/consensus.rs` shim file
-7. Remove `mod consensus` from `tui/src/chatwidget/spec_kit/mod.rs`
-8. Update any remaining imports in external code
-9. Run: `cargo test --workspace -- --test-threads=1`
+### PR7 Scope (Minimal - Recommended)
+1. Introduce domain type aliases in gate_policy.rs:
+   - `type GateVerdict = ConsensusVerdict;` (with deprecation note)
+   - `type GateArtifact = ConsensusArtifactData;`
+2. Add serde aliases for new field names (don't remove old ones)
+3. Migrate internal callsites to domain types gradually
+4. Keep wire types stable for persistence/readers
 
-### Phase 3: Clean Up Tests
-10. Remove/update gr001_tests that test consensus_enabled behavior
-11. Keep tests for is_critic_enabled() (still valid feature)
-12. Verify no test references deleted code paths
+### PR7 Anti-Patterns (Avoid)
+- Don't rename everything everywhere in one PR
+- Don't break JSON serialization of historical evidence
+- Don't touch consensus_db or consensus_coordinator modules (wire compatibility)
 
-### Phase 4: Update Documentation
-13. Update docs/DEPRECATIONS.md to mark SPEC_KIT_CONSENSUS as REMOVED
-14. Note: Do NOT fix unrelated clippy warnings (PR8 scope)
-15. Run: `cargo clippy -p codex-spec-kit -p codex-tui -- -D warnings -A deprecated`
+### Transitional API Note
+`expected_agents_for_stage()` is legacy scaffolding. It should not be used as
+routing source of truth. Plan removal once all routing goes stage→role→router.
 
-### Phase 5: Commit
-16. Commit with message: `chore(spec-kit): delete legacy voting path (PR6)`
+## PR8: Clippy Cleanup (Pure Mechanical)
 
-## Files to Delete/Modify
-- DELETE: `tui/src/chatwidget/spec_kit/consensus.rs` (shim)
-- MODIFY: `spec-kit/src/config/policy_toggles.rs` (warn-and-ignore legacy voting)
-- MODIFY: `tui/src/chatwidget/spec_kit/gate_evaluation.rs` (remove voting code paths)
-- MODIFY: `tui/src/chatwidget/spec_kit/mod.rs` (remove consensus shim)
-- MODIFY: `docs/DEPRECATIONS.md` (mark SPEC_KIT_CONSENSUS as removed)
+### Scope
+- Fix all clippy warnings across spec-kit + tui
+- Focus on deprecated `QualityGates_ConsensusThreshold` warnings (5 occurrences)
+- No behavior changes, no refactoring
+- Easy to review, safe to git bisect across
 
-## Post-PR6 Roadmap
-- PR7: Internal vocabulary alignment (struct renames with serde compat)
-- PR8: Clippy cleanup across spec-kit + tui
-- PR9: Command UX: /spec-consensus → /spec-review (with deprecated alias)
+### Command
+```bash
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
+
+## PR9: Command UX (/spec-consensus → /spec-review)
+
+### Rollout Pattern
+1. `/spec-review` becomes canonical command
+2. `/spec-consensus` remains as deprecated alias (one release window)
+3. Warn-once when alias is used
+4. Update help, docs, command palette
+
+### Scope (Command Alias Only - Recommended)
+- Add `/spec-review` as primary
+- Keep `/spec-consensus` as deprecated alias with warn-once
+- Don't rename handler functions (keep handle_spec_consensus)
+
+## Acceptance Criteria (All PRs)
+
+| Criterion | PR7 | PR8 | PR9 |
+|-----------|-----|-----|-----|
+| No wire format changes | ✓ | N/A | N/A |
+| Historical evidence readable | ✓ | N/A | N/A |
+| No behavior changes | N/A | ✓ | N/A |
+| Warn-once for deprecated | N/A | N/A | ✓ |
+| Tests pass | ✓ | ✓ | ✓ |
+
+## Commits (chronological, this session)
+- 6d718a008: chore(spec-kit): delete legacy voting path (PR6)
+- 397139091: fix(spec-kit): only warn for truthy SPEC_KIT_CONSENSUS values (PR6 polish)
+```
+
+---
+
+## Optional: Strict Mode for CI (Future)
+
+Per architect suggestion, consider adding strict mode for CI environments:
+
+```rust
+// If SPEC_KIT_CONSENSUS=true in strict mode (CI), return non-zero exit
+// This prevents "stale config" silently masking intent
+pub fn resolve_legacy_voting_strict(val: Option<&str>, strict: bool) -> Result<(), ConfigError> {
+    if strict && val.map(parse_bool).unwrap_or(false) {
+        return Err(ConfigError::RemovedFeature("SPEC_KIT_CONSENSUS"));
+    }
+    Ok(())
+}
+```
+
+This is optional operator ergonomics, not required for PR7-PR9.
 
 ---
 
