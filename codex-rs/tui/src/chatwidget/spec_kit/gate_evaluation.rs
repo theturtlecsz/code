@@ -48,6 +48,8 @@ pub(crate) struct ConsensusArtifactData {
 }
 
 /// Type alias for gradual migration to gate vocabulary.
+/// TODO(PR10+): Migrate callsites to use this alias, then convert to newtype.
+#[allow(dead_code)]
 pub(crate) type GateArtifactData = ConsensusArtifactData;
 
 /// Wire type for evidence file handles.
@@ -61,6 +63,7 @@ pub(crate) struct ConsensusEvidenceHandle {
 }
 
 /// Type alias for gradual migration to gate vocabulary.
+#[allow(dead_code)]
 pub(crate) type GateEvidenceHandle = ConsensusEvidenceHandle;
 
 /// Wire type for telemetry path tracking.
@@ -74,6 +77,7 @@ pub(crate) struct ConsensusTelemetryPaths {
 }
 
 /// Type alias for gradual migration to gate vocabulary.
+#[allow(dead_code)]
 pub(crate) type GateTelemetryPaths = ConsensusTelemetryPaths;
 
 /// Wire type for artifact verdict in JSON persistence.
@@ -91,6 +95,7 @@ pub(crate) struct ConsensusArtifactVerdict {
 }
 
 /// Type alias for gradual migration to gate vocabulary.
+#[allow(dead_code)]
 pub(crate) type GateArtifactVerdict = ConsensusArtifactVerdict;
 
 /// Wire type for stage review verdict in JSON persistence.
@@ -128,6 +133,7 @@ pub(crate) struct ConsensusVerdict {
 }
 
 /// Type alias for gradual migration to gate vocabulary.
+#[allow(dead_code)]
 pub(crate) type StageReviewVerdict = ConsensusVerdict;
 
 /// Wire type for synthesis summary (internal use).
@@ -144,6 +150,7 @@ pub(crate) struct ConsensusSynthesisSummary {
 }
 
 /// Type alias for gradual migration.
+#[allow(dead_code)]
 pub(crate) type StageReviewSummary = ConsensusSynthesisSummary;
 
 /// Wire type for reading raw synthesis JSON from disk.
