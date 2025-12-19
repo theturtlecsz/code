@@ -1000,6 +1000,7 @@ mod tests_removed {
     use crate::app_event::AppEvent;
     use ratatui::buffer::Buffer;
     use ratatui::layout::Rect;
+    use ratatui::text::Line;
     use tokio::sync::mpsc::unbounded_channel as channel;
 
     fn exec_request() -> ApprovalRequest {

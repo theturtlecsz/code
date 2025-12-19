@@ -375,9 +375,49 @@ fn run_stage0_for_constitution_check(widget: &ChatWidget, spec_id: &str) -> Opti
     result.result.and_then(|r| r.constitution_conflicts)
 }
 
-/// Command: /spec-consensus
+/// Command: /spec-review (PR9: canonical command)
+/// Check stage review status via local-memory
+///
+/// This is the canonical command. `/spec-consensus` is a deprecated alias.
+pub struct SpecReviewCommand;
+
+impl SpecKitCommand for SpecReviewCommand {
+    fn name(&self) -> &'static str {
+        "spec-review"
+    }
+
+    fn aliases(&self) -> &[&'static str] {
+        &[]
+    }
+
+    fn description(&self) -> &'static str {
+        "check stage review status (requires SPEC ID & stage)"
+    }
+
+    fn execute(&self, widget: &mut ChatWidget, args: String) {
+        handler::handle_spec_consensus(widget, args);
+    }
+
+    fn requires_args(&self) -> bool {
+        true
+    }
+}
+
+/// Command: /spec-consensus (PR9: deprecated alias)
 /// Check multi-agent consensus via local-memory
+///
+/// **DEPRECATED**: Use `/spec-review` instead. This alias will be removed
+/// in a future release.
 pub struct SpecConsensusCommand;
+
+/// Warn-once helper for deprecated /spec-consensus command (PR9)
+fn warn_once_deprecated_spec_consensus() {
+    use std::sync::Once;
+    static WARN_ONCE: Once = Once::new();
+    WARN_ONCE.call_once(|| {
+        eprintln!("WARNING: /spec-consensus is deprecated. Use /spec-review instead.");
+    });
+}
 
 impl SpecKitCommand for SpecConsensusCommand {
     fn name(&self) -> &'static str {
@@ -389,10 +429,11 @@ impl SpecKitCommand for SpecConsensusCommand {
     }
 
     fn description(&self) -> &'static str {
-        "check multi-agent consensus via local-memory (requires SPEC ID & stage)"
+        "[deprecated: use /spec-review] check stage review status"
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
+        warn_once_deprecated_spec_consensus();
         handler::handle_spec_consensus(widget, args);
     }
 

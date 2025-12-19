@@ -944,14 +944,16 @@ mod tests {
 
         #[tokio::test]
         async fn test_run_stage0_disabled_returns_error() {
-            let mut cfg = Stage0Config::default();
-            cfg.enabled = false;
             let temp = tempfile::tempdir().expect("tempdir");
-            cfg.db_path = temp
-                .path()
-                .join("stage0-overlay.db")
-                .to_string_lossy()
-                .into_owned();
+            let cfg = Stage0Config {
+                enabled: false,
+                db_path: temp
+                    .path()
+                    .join("stage0-overlay.db")
+                    .to_string_lossy()
+                    .into_owned(),
+                ..Default::default()
+            };
 
             let engine = Stage0Engine::with_config(cfg).expect("create");
             let local_mem = MockLocalMemoryClient::with_sample_memories();
@@ -1643,8 +1645,7 @@ mod tests {
             let warnings = check_constitution_readiness(&db);
             assert!(
                 warnings.is_empty(),
-                "Vision-created constitution should pass gate: {:?}",
-                warnings
+                "Vision-created constitution should pass gate: {warnings:?}"
             );
         }
 

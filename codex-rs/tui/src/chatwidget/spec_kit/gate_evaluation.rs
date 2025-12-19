@@ -28,8 +28,17 @@ use std::path::PathBuf;
 
 // ============================================================================
 // TYPES (moved from chatwidget/mod.rs)
+//
+// PR7 Note: These are "wire types" for JSON serialization backward compatibility.
+// Domain code should use types from `codex_spec_kit::gate_policy` where possible.
+// The "Consensus" prefix is legacy naming; prefer "Gate" or "StageReview" in new code.
 // ============================================================================
 
+/// Wire type for artifact data from consensus collection.
+///
+/// **Deprecation Note (PR7)**: This is a wire type for JSON serialization.
+/// For domain logic, prefer `codex_spec_kit::gate_policy` types.
+/// The "Consensus" naming is legacy; new code should use "Gate" or "Artifact".
 #[derive(Debug, Clone)]
 pub(crate) struct ConsensusArtifactData {
     pub memory_id: Option<String>,
@@ -38,6 +47,12 @@ pub(crate) struct ConsensusArtifactData {
     pub content: Value,
 }
 
+/// Type alias for gradual migration to gate vocabulary.
+pub(crate) type GateArtifactData = ConsensusArtifactData;
+
+/// Wire type for evidence file handles.
+///
+/// **Deprecation Note (PR7)**: Legacy naming. New code should use "GateEvidenceHandle".
 #[derive(Clone)]
 #[allow(dead_code)] // Used for evidence tracking, fields may be used in future
 pub(crate) struct ConsensusEvidenceHandle {
@@ -45,6 +60,12 @@ pub(crate) struct ConsensusEvidenceHandle {
     pub sha256: String,
 }
 
+/// Type alias for gradual migration to gate vocabulary.
+pub(crate) type GateEvidenceHandle = ConsensusEvidenceHandle;
+
+/// Wire type for telemetry path tracking.
+///
+/// **Deprecation Note (PR7)**: Legacy naming. New code should use "GateTelemetryPaths".
 #[allow(dead_code)] // Used for telemetry path tracking, fields consumed externally
 pub(crate) struct ConsensusTelemetryPaths {
     pub agent_paths: Vec<PathBuf>,
@@ -52,6 +73,13 @@ pub(crate) struct ConsensusTelemetryPaths {
     pub synthesis_path: PathBuf,
 }
 
+/// Type alias for gradual migration to gate vocabulary.
+pub(crate) type GateTelemetryPaths = ConsensusTelemetryPaths;
+
+/// Wire type for artifact verdict in JSON persistence.
+///
+/// **Deprecation Note (PR7)**: This is a wire type for JSON serialization.
+/// The "Consensus" naming is legacy; new code should use "GateArtifactVerdict".
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct ConsensusArtifactVerdict {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -62,6 +90,16 @@ pub(crate) struct ConsensusArtifactVerdict {
     pub content: Value,
 }
 
+/// Type alias for gradual migration to gate vocabulary.
+pub(crate) type GateArtifactVerdict = ConsensusArtifactVerdict;
+
+/// Wire type for stage review verdict in JSON persistence.
+///
+/// **Deprecation Note (PR7)**: This is a wire type for JSON serialization.
+/// The "Consensus" naming is legacy; prefer "StageReviewVerdict" in new code.
+///
+/// **Serde Compatibility (PR7)**: Fields use serde aliases to support both
+/// legacy ("consensus_ok") and new ("gate_ok", "review_ok") field names when reading.
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct ConsensusVerdict {
     pub spec_id: String,
@@ -69,6 +107,9 @@ pub(crate) struct ConsensusVerdict {
     pub recorded_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_version: Option<String>,
+    /// Whether the stage review passed. Legacy field name kept for wire compatibility.
+    /// New code should interpret this as "gate passed" or "review passed".
+    #[serde(alias = "gate_ok", alias = "review_ok")]
     pub consensus_ok: bool,
     pub degraded: bool,
     pub required_fields_ok: bool,
@@ -86,6 +127,12 @@ pub(crate) struct ConsensusVerdict {
     pub artifacts: Vec<ConsensusArtifactVerdict>,
 }
 
+/// Type alias for gradual migration to gate vocabulary.
+pub(crate) type StageReviewVerdict = ConsensusVerdict;
+
+/// Wire type for synthesis summary (internal use).
+///
+/// **Deprecation Note (PR7)**: Legacy naming. Consider "StageReviewSummary" for new code.
 #[derive(Debug)]
 pub(crate) struct ConsensusSynthesisSummary {
     pub status: String,
@@ -96,6 +143,12 @@ pub(crate) struct ConsensusSynthesisSummary {
     pub path: PathBuf,
 }
 
+/// Type alias for gradual migration.
+pub(crate) type StageReviewSummary = ConsensusSynthesisSummary;
+
+/// Wire type for reading raw synthesis JSON from disk.
+///
+/// **Deprecation Note (PR7)**: Legacy naming. Consider "StageReviewRaw" for new code.
 #[derive(Debug, Deserialize)]
 pub(crate) struct ConsensusSynthesisRaw {
     pub stage: Option<String>,

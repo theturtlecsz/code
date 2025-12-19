@@ -1,7 +1,7 @@
 # Gate Policy Alignment — Session Handoff
 
-**Last updated:** 2025-12-18
-**Status:** PR4 complete, PR6 ready to implement
+**Last updated:** 2025-12-19
+**Status:** PR7-PR9 complete
 
 ---
 
@@ -15,9 +15,9 @@
 | **PR3** | ✅ Complete | Env var alias (`SPEC_KIT_CRITIC` → `SPEC_KIT_SIDECAR_CRITIC`) |
 | **PR4** | ✅ Complete | Module rename (`consensus.rs` → `gate_evaluation.rs`) + vocabulary migration |
 | **PR6** | ✅ Complete | Delete legacy voting path (behavioral change) |
-| **PR7** | 🔲 Future | Internal vocabulary alignment (struct renames with serde compat) |
-| **PR8** | 🔲 Future | Clippy cleanup across spec-kit + tui |
-| **PR9** | 🔲 Future | Command UX: `/spec-consensus` → `/spec-review` (with deprecated alias) |
+| **PR7** | ✅ Complete | Internal vocabulary alignment (deprecation notes + serde aliases + type aliases) |
+| **PR8** | ✅ Complete | Clippy cleanup across spec-kit + stage0 + tui |
+| **PR9** | ✅ Complete | Command UX: `/spec-review` canonical, `/spec-consensus` deprecated alias with warn-once |
 
 ### Commits (chronological)
 ```

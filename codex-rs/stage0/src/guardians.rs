@@ -415,19 +415,21 @@ mod tests {
     }
 
     fn strict_config() -> Stage0Config {
-        let mut cfg = Stage0Config::default();
-        cfg.ingestion = IngestionConfig {
-            strict_metadata: true,
-        };
-        cfg
+        Stage0Config {
+            ingestion: IngestionConfig {
+                strict_metadata: true,
+            },
+            ..Default::default()
+        }
     }
 
     fn lenient_config() -> Stage0Config {
-        let mut cfg = Stage0Config::default();
-        cfg.ingestion = IngestionConfig {
-            strict_metadata: false,
-        };
-        cfg
+        Stage0Config {
+            ingestion: IngestionConfig {
+                strict_metadata: false,
+            },
+            ..Default::default()
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

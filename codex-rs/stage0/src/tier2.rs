@@ -716,7 +716,7 @@ None identified.
         ];
 
         let valid_ids: std::collections::HashSet<String> =
-            ["mem-1", "mem-2"].iter().map(|s| s.to_string()).collect();
+            ["mem-1", "mem-2"].into_iter().map(String::from).collect();
 
         let validated = validate_causal_links(links, &valid_ids);
         assert_eq!(validated.len(), 1);

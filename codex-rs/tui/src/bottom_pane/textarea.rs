@@ -1742,7 +1742,6 @@ mod tests {
                                     }
                                     ta.replace_range(s..e, &srep);
                                 }
-                                ta.replace_range(s..e, &srep);
                             }
                         }
                     }

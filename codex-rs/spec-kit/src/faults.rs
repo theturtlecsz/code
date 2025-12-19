@@ -18,6 +18,7 @@
 //! Pattern source: Auto Drive `faults.rs`
 
 #![cfg(feature = "dev-faults")]
+#![allow(clippy::unwrap_used)] // Fault injection: panicking on poisoned lock is acceptable
 
 use anyhow::anyhow;
 use std::collections::HashMap;

@@ -158,7 +158,8 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
     registry.register(Box::new(SpecKitConfigureCommand)); // SPEC-947 Phase 4
     registry.register(Box::new(SpecKitProjectCommand)); // SPEC-KIT-960
     registry.register(Box::new(VerifyCommand));
-    registry.register(Box::new(SpecConsensusCommand));
+    registry.register(Box::new(SpecReviewCommand)); // PR9: canonical command
+    registry.register(Box::new(SpecConsensusCommand)); // PR9: deprecated alias
     registry.register(Box::new(SpecKitConstitutionCommand));
     registry.register(Box::new(SpecKitVisionCommand)); // P93/SPEC-KIT-105: Vision Q&A wizard
     registry.register(Box::new(SpecKitCheckAlignmentCommand)); // P94/SPEC-KIT-105: Drift detection
@@ -320,7 +321,8 @@ mod tests {
         // P93/SPEC-KIT-105: Added speckit.vision (1 new)
         // P97/SPEC-KIT-103: Added stage0.librarian (1 new)
         // SPEC-KIT-2XX: Added stage0.project-intel (1 new)
-        assert_eq!(registry.len(), 39, "Registry should have 39 commands");
+        // PR9: Added spec-review (1 new) - spec-consensus is deprecated alias
+        assert_eq!(registry.len(), 40, "Registry should have 40 commands");
 
         // Verify key commands are registered
         assert!(registry.find("speckit.status").is_some());
@@ -329,6 +331,7 @@ mod tests {
         assert!(registry.find("speckit.auto").is_some());
         assert!(registry.find("speckit.constitution").is_some());
         assert!(registry.find("speckit.vision").is_some()); // P93
+        assert!(registry.find("spec-review").is_some()); // PR9
         assert!(registry.find("guardrail.plan").is_some());
     }
 
@@ -437,7 +440,8 @@ mod tests {
         assert!(registry.find("speckit.auto").is_some());
         assert!(registry.find("speckit.status").is_some());
         assert!(registry.find("speckit.project").is_some()); // SPEC-KIT-960
-        assert!(registry.find("spec-consensus").is_some());
+        assert!(registry.find("spec-review").is_some()); // PR9: canonical
+        assert!(registry.find("spec-consensus").is_some()); // PR9: deprecated alias
         assert!(registry.find("speckit.constitution").is_some());
         assert!(registry.find("spec-evidence-stats").is_some());
     }

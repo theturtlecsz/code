@@ -102,7 +102,7 @@ impl WorkerSpec {
     pub fn new(role: Role, provider: impl Into<String>, model: impl Into<String>) -> Self {
         let provider = provider.into();
         let model = model.into();
-        let id = format!("{}:{}:{}", role_to_id(&role), provider, model);
+        let id = format!("{}:{}:{}", role_to_id(role), provider, model);
 
         Self {
             id,
@@ -141,7 +141,7 @@ impl WorkerSpec {
     }
 }
 
-fn role_to_id(role: &Role) -> &'static str {
+fn role_to_id(role: Role) -> &'static str {
     match role {
         Role::Architect => "architect",
         Role::Implementer => "implementer",
@@ -320,7 +320,7 @@ impl Router for DefaultRouter {
         };
 
         // Label for UI
-        spec.label = Some(format!("{} ({})", role_to_id(&role), model));
+        spec.label = Some(format!("{} ({})", role_to_id(role), model));
 
         spec
     }

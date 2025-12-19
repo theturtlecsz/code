@@ -211,6 +211,7 @@ pub trait RelationshipsClient: Send + Sync {
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[cfg(any(test, feature = "test-utils"))]
+#[allow(clippy::unwrap_used)] // Mock code: panicking on poisoned lock is acceptable in tests
 pub mod mock {
     use super::*;
     use crate::errors::Stage0Error;
@@ -309,7 +310,7 @@ pub mod mock {
             store
                 .get(id)
                 .cloned()
-                .ok_or_else(|| Stage0Error::local_memory(format!("memory not found: {}", id)))
+                .ok_or_else(|| Stage0Error::local_memory(format!("memory not found: {id}")))
         }
 
         fn update_memory(&self, id: &str, change: &MemoryChange) -> Result<()> {
@@ -323,7 +324,7 @@ pub mod mock {
             let mut store = self.memories.write().unwrap();
             let memory = store
                 .get_mut(id)
-                .ok_or_else(|| Stage0Error::local_memory(format!("memory not found: {}", id)))?;
+                .ok_or_else(|| Stage0Error::local_memory(format!("memory not found: {id}")))?;
 
             if let Some(ref content) = change.content {
                 memory.content = content.clone();
@@ -348,7 +349,7 @@ mod tests {
     fn sample_memory(id: &str, domain: &str, importance: i32) -> Memory {
         Memory {
             id: id.to_string(),
-            content: format!("Content for {}", id),
+            content: format!("Content for {id}"),
             tags: vec!["type:pattern".to_string()],
             importance: Some(importance),
             domain: Some(domain.to_string()),

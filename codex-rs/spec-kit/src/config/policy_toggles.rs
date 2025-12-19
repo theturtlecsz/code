@@ -312,7 +312,7 @@ mod tests {
     fn test_resolve_critic_accepts_various_truthy_values() {
         for val in ["true", "TRUE", "True", "1", "yes", "YES", "on", "ON"] {
             let (enabled, _) = resolve_sidecar_critic(Some(val), None);
-            assert!(enabled, "Expected '{}' to be truthy", val);
+            assert!(enabled, "Expected '{val}' to be truthy");
         }
     }
 
@@ -320,7 +320,7 @@ mod tests {
     fn test_resolve_critic_rejects_various_falsy_values() {
         for val in ["false", "FALSE", "0", "no", "off", ""] {
             let (enabled, _) = resolve_sidecar_critic(Some(val), None);
-            assert!(!enabled, "Expected '{}' to be falsy", val);
+            assert!(!enabled, "Expected '{val}' to be falsy");
         }
     }
 
