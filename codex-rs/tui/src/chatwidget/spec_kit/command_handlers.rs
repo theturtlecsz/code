@@ -5,19 +5,28 @@
 //! and delegate to specialized modules for actual implementation.
 //!
 //! **Command Handlers:**
-//! - `/speckit.status` → handle_spec_status (native dashboard)
+//! - `/speckit.status` → handle_spec_status (native dashboard via executor)
 //! - `/spec-consensus` → handle_spec_consensus (inspect consensus artifacts)
 //! - `/guardrail.*` → handle_guardrail (guardrail validation)
 //! - Pipeline errors → halt_spec_auto_with_error (error handling)
+//!
+//! **SPEC-KIT-921**: Status command now uses shared SpeckitExecutor for CLI parity.
 
 use super::super::ChatWidget;
 use super::context::SpecKitContext;
 use super::state::ValidateCompletionReason;
 use crate::app_event::BackgroundPlacement;
 use crate::history_cell::HistoryCellType;
-use crate::spec_status::{SpecStatusArgs, collect_report, degraded_warning, render_dashboard};
+
+// SPEC-KIT-921: Use shared executor for status command (CLI/TUI parity)
+use codex_spec_kit::executor::{
+    ExecutionContext, Outcome, SpeckitCommand, SpeckitExecutor, render_status_dashboard,
+    status_degraded_warning,
+};
 
 /// Handle /speckit.status command (native dashboard)
+///
+/// **SPEC-KIT-921**: Uses shared SpeckitExecutor for CLI/TUI parity.
 ///
 /// Displays spec-kit status dashboard with:
 /// - Active specs and their stages
@@ -25,27 +34,33 @@ use crate::spec_status::{SpecStatusArgs, collect_report, degraded_warning, rende
 /// - HAL validation status
 /// - Degradation warnings
 pub fn handle_spec_status(widget: &mut ChatWidget, raw_args: String) {
-    let trimmed = raw_args.trim();
-    let args = match SpecStatusArgs::from_input(trimmed) {
-        Ok(args) => args,
+    // Parse command using shared parser
+    let command = match SpeckitCommand::parse_status(&raw_args) {
+        Ok(cmd) => cmd,
         Err(err) => {
-            widget.history_push(crate::history_cell::new_error_event(err.to_string()));
+            widget.history_push(crate::history_cell::new_error_event(err));
             widget.request_redraw();
             return;
         }
     };
 
-    match collect_report(&widget.config.cwd, args) {
-        Ok(report) => {
-            let mut lines = render_dashboard(&report);
-            if let Some(warning) = degraded_warning(&report) {
+    // Create executor with current working directory
+    let executor = SpeckitExecutor::new(ExecutionContext {
+        repo_root: widget.config.cwd.clone(),
+    });
+
+    // Execute via shared executor (same path as CLI)
+    match executor.execute(command) {
+        Outcome::Status(report) => {
+            let mut lines = render_status_dashboard(&report);
+            if let Some(warning) = status_degraded_warning(&report) {
                 lines.insert(1, warning);
             }
             let message = lines.join("\n");
             widget.insert_background_event_with_placement(message, BackgroundPlacement::Tail);
             widget.request_redraw();
         }
-        Err(err) => {
+        Outcome::Error(err) => {
             widget.history_push(crate::history_cell::new_error_event(format!(
                 "spec-status failed: {err}"
             )));

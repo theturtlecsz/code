@@ -31,6 +31,7 @@
 
 pub mod config; // SPEC-945D: Configuration management (layered config, hot-reload)
 pub mod error;
+pub mod executor; // SPEC-KIT-921: Shared executor for CLI/TUI parity
 #[cfg(feature = "dev-faults")]
 pub mod faults; // P6-SYNC Phase 3: Fault injection for testing error handling
 pub mod gate_policy; // PR1: Gate Policy domain types and contracts
@@ -46,12 +47,14 @@ pub use types::{SpecAgent, SpecStage};
 // PR1: Gate Policy canonical vocabulary
 pub use gate_policy::{
     Checkpoint, ConfidenceLevel, CounterSignal, CounterSignalKind, DecisionRule, EscalationTarget,
-    GateContext, GateVerdict, PolicyToggles, Role, RoleAssignment, RiskLevel, Signal,
+    GateContext, GateVerdict, PolicyToggles, RiskLevel, Role, RoleAssignment, Signal,
     SignalSeverity, Stage, StageContext, ToolTruth, ToolTruthKind, Verdict,
 };
 
 // PR1: Router interface
-pub use router::{Budget, DefaultRouter, Router, RoutingContext, ToolPermissions, WorkerKind, WorkerSpec};
+pub use router::{
+    Budget, DefaultRouter, Router, RoutingContext, ToolPermissions, WorkerKind, WorkerSpec,
+};
 
 // SPEC-940: Re-export timing macros for convenience
 pub use timing::Timer;
