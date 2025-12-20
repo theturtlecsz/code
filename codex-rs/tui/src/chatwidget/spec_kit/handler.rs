@@ -5,7 +5,8 @@
 
 // Re-export command handlers for backward compatibility
 pub use super::command_handlers::{
-    halt_spec_auto_with_error, handle_guardrail, handle_spec_consensus, handle_spec_status,
+    halt_spec_auto_with_error, handle_guardrail, handle_spec_consensus, handle_spec_review,
+    handle_spec_status,
 };
 
 // Re-export consensus coordination for use by command_handlers

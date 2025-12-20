@@ -376,9 +376,10 @@ fn run_stage0_for_constitution_check(widget: &ChatWidget, spec_id: &str) -> Opti
 }
 
 /// Command: /spec-review (PR9: canonical command)
-/// Check stage review status via local-memory
+/// Stage gate evaluation via shared executor (SPEC-KIT-921)
 ///
 /// This is the canonical command. `/spec-consensus` is a deprecated alias.
+/// Uses SpeckitExecutor for CLI/TUI parity.
 pub struct SpecReviewCommand;
 
 impl SpecKitCommand for SpecReviewCommand {
@@ -391,11 +392,11 @@ impl SpecKitCommand for SpecReviewCommand {
     }
 
     fn description(&self) -> &'static str {
-        "check stage review status (requires SPEC ID & stage)"
+        "evaluate stage gate (SPEC-ID, stage, optional flags)"
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
-        handler::handle_spec_consensus(widget, args);
+        handler::handle_spec_review(widget, args);
     }
 
     fn requires_args(&self) -> bool {

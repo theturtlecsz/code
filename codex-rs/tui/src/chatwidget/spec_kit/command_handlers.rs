@@ -6,11 +6,11 @@
 //!
 //! **Command Handlers:**
 //! - `/speckit.status` → handle_spec_status (native dashboard via executor)
-//! - `/spec-consensus` → handle_spec_consensus (inspect consensus artifacts)
+//! - `/spec-review` → handle_spec_review (stage gate evaluation via executor)
 //! - `/guardrail.*` → handle_guardrail (guardrail validation)
 //! - Pipeline errors → halt_spec_auto_with_error (error handling)
 //!
-//! **SPEC-KIT-921**: Status command now uses shared SpeckitExecutor for CLI parity.
+//! **SPEC-KIT-921**: Status and Review commands now use shared SpeckitExecutor for CLI parity.
 
 use super::super::ChatWidget;
 use super::context::SpecKitContext;
@@ -18,10 +18,10 @@ use super::state::ValidateCompletionReason;
 use crate::app_event::BackgroundPlacement;
 use crate::history_cell::HistoryCellType;
 
-// SPEC-KIT-921: Use shared executor for status command (CLI/TUI parity)
+// SPEC-KIT-921: Use shared executor for status and review commands (CLI/TUI parity)
 use codex_spec_kit::executor::{
-    ExecutionContext, Outcome, SpeckitCommand, SpeckitExecutor, render_status_dashboard,
-    status_degraded_warning,
+    ExecutionContext, Outcome, SpeckitCommand, SpeckitExecutor, render_review_dashboard,
+    render_status_dashboard, review_warning, status_degraded_warning,
 };
 
 /// Handle /speckit.status command (native dashboard)
@@ -69,6 +69,101 @@ pub fn handle_spec_status(widget: &mut ChatWidget, raw_args: String) {
         // Status command never returns Review variants
         Outcome::Review(_) | Outcome::ReviewSkipped { .. } => {
             unreachable!("Status command should never return Review outcome")
+        }
+    }
+}
+
+/// Handle /spec-review command (stage gate evaluation)
+///
+/// **SPEC-KIT-921**: Uses shared SpeckitExecutor for CLI/TUI parity.
+///
+/// Evaluates stage gate artifacts and displays:
+/// - Stage review result (Passed/PassedWithWarnings/Failed/Skipped)
+/// - Blocking signals (conflicts from consensus)
+/// - Advisory signals (errors, warnings)
+/// - Evidence refs (repo-relative paths)
+///
+/// Usage: /spec-review <SPEC-ID> <stage> [--strict-artifacts] [--strict-warnings]
+/// Stages: plan, tasks, implement, validate, audit, unlock
+pub fn handle_spec_review(widget: &mut ChatWidget, raw_args: String) {
+    let trimmed = raw_args.trim();
+    if trimmed.is_empty() {
+        widget.history_push(crate::history_cell::new_error_event(
+            "Usage: /spec-review <SPEC-ID> <stage> [--strict-artifacts] [--strict-warnings]"
+                .to_string(),
+        ));
+        widget.request_redraw();
+        return;
+    }
+
+    // Parse SPEC-ID from first argument
+    let mut parts = trimmed.split_whitespace();
+    let Some(spec_id) = parts.next() else {
+        widget.history_push(crate::history_cell::new_error_event(
+            "Usage: /spec-review <SPEC-ID> <stage>".to_string(),
+        ));
+        widget.request_redraw();
+        return;
+    };
+
+    // Remaining args are stage + flags
+    let remaining: String = parts.collect::<Vec<_>>().join(" ");
+    if remaining.is_empty() {
+        widget.history_push(crate::history_cell::new_error_event(
+            "Stage required. Valid stages: plan, tasks, implement, validate, audit, unlock"
+                .to_string(),
+        ));
+        widget.request_redraw();
+        return;
+    }
+
+    // Parse using shared parser (CLI/TUI parity)
+    let command = match SpeckitCommand::parse_review(spec_id, &remaining) {
+        Ok(cmd) => cmd,
+        Err(err) => {
+            widget.history_push(crate::history_cell::new_error_event(err));
+            widget.request_redraw();
+            return;
+        }
+    };
+
+    // Create executor with current working directory
+    let executor = SpeckitExecutor::new(ExecutionContext {
+        repo_root: widget.config.cwd.clone(),
+    });
+
+    // Execute via shared executor (same path as CLI)
+    match executor.execute(command) {
+        Outcome::Review(result) => {
+            let mut lines = render_review_dashboard(&result);
+            if let Some(warning) = review_warning(&result) {
+                lines.insert(1, warning);
+            }
+            let message = lines.join("\n");
+            widget.insert_background_event_with_placement(message, BackgroundPlacement::Tail);
+            widget.request_redraw();
+        }
+        Outcome::ReviewSkipped {
+            stage,
+            reason,
+            suggestion,
+        } => {
+            let mut msg = format!("⚠ Review skipped for {:?}: {:?}", stage, reason);
+            if let Some(hint) = suggestion {
+                msg.push_str(&format!("\n  Suggestion: {hint}"));
+            }
+            widget.history_push(crate::history_cell::new_warning_event(msg));
+            widget.request_redraw();
+        }
+        Outcome::Error(err) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "spec-review failed: {err}"
+            )));
+            widget.request_redraw();
+        }
+        // Review command never returns Status variant
+        Outcome::Status(_) => {
+            unreachable!("Review command should never return Status outcome")
         }
     }
 }
@@ -129,12 +224,14 @@ pub fn halt_spec_auto_with_error(widget: &mut impl SpecKitContext, reason: Strin
     widget.set_spec_auto_metrics(None);
 }
 
-/// Handle /spec-consensus command (inspect consensus artifacts)
+/// Handle /spec-consensus command (DEPRECATED)
 ///
-/// Thin wrapper that delegates to consensus_coordinator for implementation.
-/// Kept separate for potential future middleware/hooks.
+/// **DEPRECATED**: Use `/spec-review` instead.
+/// This is now a thin wrapper around `handle_spec_review` for backward compatibility.
+/// The old MCP-based consensus check has been replaced with the executor-based review.
 pub fn handle_spec_consensus(widget: &mut ChatWidget, raw_args: String) {
-    super::consensus_coordinator::handle_spec_consensus_impl(widget, raw_args);
+    // Delegate to the new executor-based review handler
+    handle_spec_review(widget, raw_args);
 }
 
 /// Handle /guardrail.* commands (guardrail validation)
