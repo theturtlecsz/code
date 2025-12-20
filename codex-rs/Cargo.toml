@@ -65,6 +65,7 @@ codex-ollama = { path = "ollama" }
 codex-process-hardening = { path = "process-hardening" }
 codex-protocol = { path = "protocol" }
 codex-protocol-ts = { path = "protocol-ts" }
+codex-spec-kit = { path = "spec-kit" }
 codex-stage0 = { path = "stage0" }
 codex-tui = { path = "tui" }
 codex-utils-readiness = { path = "utils/readiness" }

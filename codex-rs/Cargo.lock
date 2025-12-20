@@ -1173,6 +1173,7 @@ dependencies = [
  "codex-mcp-server",
  "codex-protocol",
  "codex-protocol-ts",
+ "codex-spec-kit",
  "codex-tui",
  "codex-version",
  "dirs 6.0.0",

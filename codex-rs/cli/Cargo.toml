@@ -25,6 +25,7 @@ codex-common = { workspace = true, features = ["cli"] }
 codex-core = { workspace = true }
 codex-exec = { workspace = true }
 codex-login = { workspace = true }
+codex-spec-kit = { workspace = true }
 codex-mcp-server = { workspace = true }
 codex-protocol = { workspace = true }
 codex-protocol-ts = { workspace = true }

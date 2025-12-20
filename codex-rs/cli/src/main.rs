@@ -29,10 +29,12 @@ use std::process;
 use tokio::runtime::{Builder as TokioRuntimeBuilder, Handle as TokioHandle};
 
 mod mcp_cmd;
+mod speckit_cmd;
 
 use crate::local_memory_cmd::LocalMemoryCli;
 use crate::mcp_cmd::McpCli;
 use crate::proto::ProtoCli;
+use crate::speckit_cmd::SpeckitCli;
 
 const CLI_COMMAND_NAME: &str = "code";
 
@@ -118,6 +120,10 @@ enum Subcommand {
     /// Architect Sidecar - forensic intelligence with budget-aware caching.
     #[clap(visible_alias = "arch")]
     Architect(ArchitectCli),
+
+    /// Spec-Kit CLI — headless commands for automation and CI.
+    #[clap(visible_alias = "sk")]
+    Speckit(SpeckitCli),
 }
 
 #[derive(Debug, Parser)]
@@ -358,6 +364,9 @@ async fn cli_main(codex_linux_sandbox_exe: Option<PathBuf>) -> anyhow::Result<()
         }
         Some(Subcommand::Architect(architect_cli)) => {
             architect_cli.run().await?;
+        }
+        Some(Subcommand::Speckit(speckit_cli)) => {
+            speckit_cli.run().await?;
         }
     }
 
