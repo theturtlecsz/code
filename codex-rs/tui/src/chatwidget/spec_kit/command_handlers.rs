@@ -66,6 +66,10 @@ pub fn handle_spec_status(widget: &mut ChatWidget, raw_args: String) {
             )));
             widget.request_redraw();
         }
+        // Status command never returns Review variants
+        Outcome::Review(_) | Outcome::ReviewSkipped { .. } => {
+            unreachable!("Status command should never return Review outcome")
+        }
     }
 }
 

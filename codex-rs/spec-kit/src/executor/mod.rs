@@ -18,9 +18,16 @@
 //! - Review command (after status proves the pattern)
 
 mod command;
+pub mod review;
 pub mod status;
 
 pub use command::SpeckitCommand;
+pub use review::{
+    ArtifactSource, CheckpointArtifactRequirements, DisplayVerdict, EvidenceRefs, PolicySnapshot,
+    ReviewOptions, ReviewRequest, ReviewResolution, ReviewSignal, SignalOrigin, SkipReason,
+    StageReviewResult, TelemetryMode, checkpoint_artifact_requirements, is_canonical_review_point,
+    is_diagnostic_review, resolve_review_request,
+};
 pub use status::{
     AgentCoverage, AgentOutcome, AgentStatus, EvidenceEntry, EvidenceMetrics, EvidenceThreshold,
     GuardrailRecord, PacketStatus, ScenarioStatus, SpecStatusArgs, SpecStatusReport,
@@ -32,6 +39,16 @@ pub use status::{
 pub enum Outcome {
     /// Status command completed successfully
     Status(SpecStatusReport),
+
+    /// Review command completed successfully
+    Review(StageReviewResult),
+
+    /// Review skipped (special case, not an error)
+    ReviewSkipped {
+        stage: crate::Stage,
+        reason: SkipReason,
+        suggestion: Option<&'static str>,
+    },
 
     /// Command failed with error
     Error(String),
@@ -68,6 +85,12 @@ impl SpeckitExecutor {
                 spec_id,
                 stale_hours,
             } => self.execute_status(&spec_id, stale_hours),
+            SpeckitCommand::Review {
+                spec_id,
+                stage,
+                strict_artifacts,
+                strict_warnings,
+            } => self.execute_review(&spec_id, stage, strict_artifacts, strict_warnings),
         }
     }
 
@@ -83,6 +106,55 @@ impl SpeckitExecutor {
             Err(e) => Outcome::Error(e.to_string()),
         }
     }
+
+    /// Execute review command
+    ///
+    /// This maps the stage to a checkpoint using `resolve_review_request()`,
+    /// then evaluates the gate artifacts and returns a `StageReviewResult`.
+    fn execute_review(
+        &self,
+        spec_id: &str,
+        stage: crate::Stage,
+        strict_artifacts: bool,
+        strict_warnings: bool,
+    ) -> Outcome {
+        // Resolve stage → checkpoint using canonical mapping
+        let resolution = review::resolve_review_request(stage);
+
+        match resolution {
+            ReviewResolution::NotApplicable { reason, suggestion } => Outcome::ReviewSkipped {
+                stage,
+                reason,
+                suggestion,
+            },
+            ReviewResolution::Alias {
+                actual_checkpoint,
+                message: _,
+            }
+            | ReviewResolution::Review {
+                checkpoint: actual_checkpoint,
+            } => {
+                let options = ReviewOptions {
+                    telemetry_mode: TelemetryMode::Disabled,
+                    include_diagnostic: review::is_diagnostic_review(stage),
+                    strict_artifacts,
+                    strict_warnings,
+                };
+
+                let request = ReviewRequest {
+                    repo_root: self.context.repo_root.clone(),
+                    spec_id: spec_id.to_string(),
+                    stage,
+                    options,
+                };
+
+                match review::evaluate_stage_review(request, actual_checkpoint) {
+                    Ok(result) => Outcome::Review(result),
+                    Err(e) => Outcome::Error(e.to_string()),
+                }
+            }
+        }
+    }
 }
 
 /// Render a status report as text lines (for TUI/CLI display)
@@ -95,6 +167,35 @@ pub fn render_status_dashboard(report: &SpecStatusReport) -> Vec<String> {
 /// Get degraded warning message if any issues detected
 pub fn status_degraded_warning(report: &SpecStatusReport) -> Option<String> {
     status::degraded_warning(report)
+}
+
+/// Render a review result as text lines (for TUI/CLI display)
+///
+/// This is a pure formatting function — no side effects.
+pub fn render_review_dashboard(result: &StageReviewResult) -> Vec<String> {
+    review::render_review(result)
+}
+
+/// Get review warning message if escalation needed
+pub fn review_warning(result: &StageReviewResult) -> Option<String> {
+    if !result.is_auto_apply() {
+        Some(format!(
+            "⚠ Stage {:?} requires human review: {}",
+            result.stage,
+            match &result.resolution {
+                crate::Verdict::Escalate { reason, .. } => reason.as_str(),
+                _ => "Unknown reason",
+            }
+        ))
+    } else if !result.advisory_signals.is_empty() {
+        Some(format!(
+            "⚠ Stage {:?} passed with {} advisory warning(s)",
+            result.stage,
+            result.advisory_signals.len()
+        ))
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -136,5 +237,88 @@ mod tests {
         };
 
         assert_eq!(slash_cmd, cli_cmd);
+    }
+
+    // === Review command parity tests ===
+
+    #[test]
+    fn test_command_parity_review_basic() {
+        // Slash: "/review plan" (with spec_id from context)
+        let slash_cmd = SpeckitCommand::parse_review("SPEC-123", "plan").unwrap();
+
+        // CLI: "code speckit review --spec SPEC-123 --stage plan"
+        let cli_cmd = SpeckitCommand::Review {
+            spec_id: "SPEC-123".to_string(),
+            stage: crate::Stage::Plan,
+            strict_artifacts: false,
+            strict_warnings: false,
+        };
+
+        assert_eq!(slash_cmd, cli_cmd);
+    }
+
+    #[test]
+    fn test_command_parity_review_with_options() {
+        // Slash: "/review audit --strict-artifacts --strict-warnings"
+        let slash_cmd =
+            SpeckitCommand::parse_review("SPEC-456", "audit --strict-artifacts --strict-warnings")
+                .unwrap();
+
+        // CLI: "code speckit review --spec SPEC-456 --stage audit --strict-artifacts --strict-warnings"
+        let cli_cmd = SpeckitCommand::Review {
+            spec_id: "SPEC-456".to_string(),
+            stage: crate::Stage::Audit,
+            strict_artifacts: true,
+            strict_warnings: true,
+        };
+
+        assert_eq!(slash_cmd, cli_cmd);
+    }
+
+    #[test]
+    fn test_executor_review_dispatch_skipped() {
+        // Test that Specify stage returns ReviewSkipped
+        let executor = SpeckitExecutor::new(ExecutionContext {
+            repo_root: std::path::PathBuf::from("/tmp/nonexistent"),
+        });
+
+        let cmd = SpeckitCommand::Review {
+            spec_id: "TEST".to_string(),
+            stage: crate::Stage::Specify,
+            strict_artifacts: false,
+            strict_warnings: false,
+        };
+
+        let outcome = executor.execute(cmd);
+        assert!(matches!(
+            outcome,
+            Outcome::ReviewSkipped {
+                reason: SkipReason::NoArtifactsFound,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_executor_review_dispatch_alias() {
+        // Test that Unlock aliases to BeforeUnlock and doesn't skip
+        let executor = SpeckitExecutor::new(ExecutionContext {
+            repo_root: std::path::PathBuf::from("/tmp/nonexistent"),
+        });
+
+        let cmd = SpeckitCommand::Review {
+            spec_id: "TEST".to_string(),
+            stage: crate::Stage::Unlock,
+            strict_artifacts: false,
+            strict_warnings: false,
+        };
+
+        let outcome = executor.execute(cmd);
+        // Should NOT be skipped — Unlock is an alias to BeforeUnlock
+        assert!(
+            matches!(outcome, Outcome::Review(_)),
+            "Unlock should alias to BeforeUnlock, got: {:?}",
+            outcome
+        );
     }
 }
