@@ -18,15 +18,39 @@
 //!        ↓
 //! Adapter: render_stage_review_tui(&result) → Vec<Line>
 //! ```
+//!
+//! ## Evidence Topology (REVIEW-CONTRACT.md)
+//!
+//! - Spec packet: `docs/<SPEC-ID>/{spec.md, plan.md, tasks.md}`
+//! - Review evidence: `evidence/consensus/<SPEC-ID>/spec-<stage>_*.json`
+//! - Telemetry: `evidence/commands/<SPEC-ID>/*_telemetry_*.json`
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use walkdir::WalkDir;
 
 use crate::gate_policy::{
     Checkpoint, ConfidenceLevel, CounterSignalKind, EscalationTarget, Role, SignalSeverity, Stage,
     ToolTruthKind, Verdict,
 };
+
+// ============================================================================
+// Path Constants (aligned with REVIEW-CONTRACT.md)
+// ============================================================================
+
+/// Root for spec packet docs
+const SPEC_PACKET_ROOT: &str = "docs";
+
+/// Root for evidence (consensus + commands)
+const EVIDENCE_ROOT: &str = "docs/SPEC-OPS-004-integrated-coder-hooks/evidence";
+
+/// Consensus evidence subdirectory (legacy name retained)
+const CONSENSUS_DIR: &str = "consensus";
+
+/// Commands telemetry subdirectory
+#[allow(dead_code)]
+const COMMANDS_DIR: &str = "commands";
 
 // ============================================================================
 // Stage → Checkpoint Mapping
@@ -390,6 +414,9 @@ pub struct ReviewOptions {
 
     /// Strict warnings mode: exit 1 on PassedWithWarnings
     pub strict_warnings: bool,
+
+    /// P0-B: Policy snapshot (resolved by adapter, not read from env in core)
+    pub policy_snapshot: PolicySnapshot,
 }
 
 impl Default for ReviewOptions {
@@ -399,6 +426,7 @@ impl Default for ReviewOptions {
             include_diagnostic: false,
             strict_artifacts: false,
             strict_warnings: false,
+            policy_snapshot: PolicySnapshot::default(),
         }
     }
 }
@@ -464,6 +492,57 @@ pub fn checkpoint_artifact_requirements(checkpoint: Checkpoint) -> CheckpointArt
 }
 
 // ============================================================================
+// ConsensusJson Parsing Types (aligned with status.rs)
+// ============================================================================
+
+/// JSON structure for consensus evidence files
+///
+/// Matches: `evidence/consensus/<SPEC-ID>/spec-<stage>_*.json`
+#[derive(Debug, Deserialize)]
+struct ConsensusJson {
+    /// Agent name (e.g., "claude", "architect")
+    pub agent: Option<String>,
+    /// Model identifier (retained for future enrichment)
+    #[allow(dead_code)]
+    pub model: Option<String>,
+    /// Error message if agent failed
+    pub error: Option<String>,
+    /// Consensus details (conflicts, synthesis status)
+    pub consensus: Option<ConsensusDetailJson>,
+}
+
+/// Consensus detail within a ConsensusJson file
+#[derive(Debug, Deserialize)]
+struct ConsensusDetailJson {
+    /// List of conflict descriptions (blocking if non-empty)
+    pub conflicts: Option<Vec<String>>,
+    /// Synthesis status string
+    #[allow(dead_code)]
+    pub synthesis_status: Option<String>,
+}
+
+/// Infer agent role from filename or agent field
+fn infer_agent_role(agent: Option<&str>, filename: &str) -> Role {
+    let agent_str = agent.unwrap_or(filename);
+    let lower = agent_str.to_lowercase();
+
+    if lower.contains("architect") {
+        Role::Architect
+    } else if lower.contains("implement") {
+        Role::Implementer
+    } else if lower.contains("valid") {
+        Role::Validator
+    } else if lower.contains("judge") || lower.contains("audit") {
+        Role::Judge
+    } else if lower.contains("sidecar") || lower.contains("critic") {
+        Role::SidecarCritic
+    } else {
+        // Default to architect for unknown agents
+        Role::Architect
+    }
+}
+
+// ============================================================================
 // Core Evaluation Function
 // ============================================================================
 
@@ -471,6 +550,11 @@ pub fn checkpoint_artifact_requirements(checkpoint: Checkpoint) -> CheckpointArt
 ///
 /// This is the core pure function that evaluates gate artifacts.
 /// No ratatui types — adapters render the result.
+///
+/// **P0-A**: Reads from correct evidence topology (REVIEW-CONTRACT.md)
+/// **P0-B**: No env reads — policy comes from request
+/// **P0-C**: Evidence refs are repo-relative
+/// **P0-D**: Parses ConsensusJson and derives signals
 ///
 /// # Arguments
 /// * `request` - The review request with repo root, spec id, stage, and options
@@ -483,20 +567,26 @@ pub fn evaluate_stage_review(
     request: ReviewRequest,
     checkpoint: Checkpoint,
 ) -> Result<StageReviewResult, String> {
-    let evidence_base = request
-        .repo_root
-        .join(crate::DEFAULT_EVIDENCE_BASE)
+    let repo_root = &request.repo_root;
+
+    // P0-A: Build correct paths per REVIEW-CONTRACT.md
+    let spec_packet_dir = repo_root.join(SPEC_PACKET_ROOT).join(&request.spec_id);
+    let consensus_dir = repo_root
+        .join(EVIDENCE_ROOT)
+        .join(CONSENSUS_DIR)
         .join(&request.spec_id);
 
-    // Collect artifacts from evidence directories
-    let (artifact_sources, artifacts_collected) = collect_artifacts(&evidence_base, checkpoint);
+    // Collect artifacts from spec packet + consensus evidence
+    let (artifact_sources, artifacts_collected, consensus_files) =
+        collect_artifacts_v2(repo_root, &spec_packet_dir, &consensus_dir, checkpoint);
 
-    // Collect signals (blocking and advisory)
-    let (blocking_signals, advisory_signals) = collect_signals(&evidence_base, checkpoint);
+    // P0-D: Parse ConsensusJson files and derive signals
+    let (blocking_signals, advisory_signals) =
+        collect_signals_from_consensus(&consensus_files, checkpoint);
 
     // Determine resolution based on blocking signals
+    // Invariant: resolution == AutoApply ⟹ blocking_signals.is_empty()
     let resolution = if blocking_signals.is_empty() {
-        // No blockers → AutoApply
         Verdict::AutoApply {
             effective_confidence: 0.9,
             confidence_level: ConfidenceLevel::High,
@@ -506,7 +596,6 @@ pub fn evaluate_stage_review(
             ),
         }
     } else {
-        // Blockers present → Escalate
         Verdict::Escalate {
             target: EscalationTarget::Human,
             effective_confidence: compute_effective_confidence(&blocking_signals),
@@ -518,15 +607,11 @@ pub fn evaluate_stage_review(
         }
     };
 
-    // Build evidence refs (paths to persisted evidence)
-    let evidence = build_evidence_refs(&evidence_base);
+    // P0-C: Build repo-relative evidence refs
+    let evidence = build_evidence_refs_relative(repo_root, &consensus_dir);
 
-    // Build policy snapshot
-    let policy_snapshot = PolicySnapshot {
-        sidecar_critic_enabled: std::env::var("SPEC_KIT_SIDECAR_CRITIC").is_ok(),
-        telemetry_mode: request.options.telemetry_mode,
-        legacy_voting_env_detected: std::env::var("SPEC_KIT_VOTING").is_ok(),
-    };
+    // P0-B: Policy snapshot from request (no env reads in core)
+    let policy_snapshot = request.options.policy_snapshot.clone();
 
     Ok(StageReviewResult {
         spec_id: request.spec_id,
@@ -542,49 +627,75 @@ pub fn evaluate_stage_review(
     })
 }
 
-/// Collect artifacts from evidence directory
-fn collect_artifacts(
-    evidence_base: &std::path::Path,
+/// Collect artifacts from spec packet and consensus evidence (P0-A fix)
+fn collect_artifacts_v2(
+    repo_root: &Path,
+    spec_packet_dir: &Path,
+    consensus_dir: &Path,
     checkpoint: Checkpoint,
-) -> (Vec<ArtifactSource>, usize) {
-    let requirements = checkpoint_artifact_requirements(checkpoint);
+) -> (Vec<ArtifactSource>, usize, Vec<PathBuf>) {
     let mut sources = Vec::new();
     let mut count = 0;
+    let mut consensus_files = Vec::new();
 
-    // Check SQLite consensus DB
-    let consensus_db = evidence_base.join("consensus.sqlite");
-    if consensus_db.exists() {
-        sources.push(ArtifactSource::SQLite);
-        count += 1;
-    }
+    let stage_slug = checkpoint_stage_slug(checkpoint);
+    let requirements = checkpoint_artifact_requirements(checkpoint);
 
-    // Check stage-specific artifact files
-    let stage_dir = evidence_base.join(checkpoint_stage_dir(checkpoint));
+    // Check spec packet docs (e.g., docs/<SPEC-ID>/plan.md)
     for required in &requirements.required {
-        if stage_dir.join(required).exists() {
+        if spec_packet_dir.join(required).exists() {
             count += 1;
         }
     }
     for optional in &requirements.optional {
-        if stage_dir.join(optional).exists() {
+        if spec_packet_dir.join(optional).exists() {
             count += 1;
         }
     }
 
-    // Check for filesystem fallback artifacts
-    if stage_dir.exists() && stage_dir.is_dir() && sources.is_empty() {
-        sources.push(ArtifactSource::FilesystemFallback);
+    // Check consensus evidence files: spec-<stage>_*.json
+    if consensus_dir.exists() && consensus_dir.is_dir() {
+        let pattern_prefix = format!("spec-{stage_slug}_");
+
+        for entry in WalkDir::new(consensus_dir)
+            .max_depth(1)
+            .into_iter()
+            .flatten()
+        {
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) != Some("json") {
+                continue;
+            }
+            let filename = entry.file_name().to_string_lossy();
+            if filename.starts_with(&pattern_prefix) {
+                consensus_files.push(path.to_path_buf());
+                count += 1;
+            }
+        }
+
+        if !consensus_files.is_empty() {
+            sources.push(ArtifactSource::FilesystemFallback);
+        }
+    }
+
+    // Check for SQLite consensus DB (future)
+    let consensus_db = repo_root.join(EVIDENCE_ROOT).join("consensus.sqlite");
+    if consensus_db.exists() {
+        sources.push(ArtifactSource::SQLite);
     }
 
     if sources.is_empty() {
         sources.push(ArtifactSource::None);
     }
 
-    (sources, count)
+    // Sort consensus files for deterministic "latest" selection (lexicographic max)
+    consensus_files.sort();
+
+    (sources, count, consensus_files)
 }
 
-/// Get stage directory name for a checkpoint
-fn checkpoint_stage_dir(checkpoint: Checkpoint) -> &'static str {
+/// Get stage slug for file matching
+fn checkpoint_stage_slug(checkpoint: Checkpoint) -> &'static str {
     match checkpoint {
         Checkpoint::BeforePlan => "specify",
         Checkpoint::AfterPlan => "plan",
@@ -595,36 +706,88 @@ fn checkpoint_stage_dir(checkpoint: Checkpoint) -> &'static str {
     }
 }
 
-/// Collect signals from evidence directory
+/// Collect signals by parsing ConsensusJson files (P0-D)
 ///
-/// In this initial implementation, we check for signal files in the evidence.
-/// Future: integrate with SQLite consensus and real gate evaluation.
-fn collect_signals(
-    evidence_base: &std::path::Path,
-    checkpoint: Checkpoint,
+/// - `consensus.conflicts` non-empty → blocking signals
+/// - `error` field present → advisory signals
+/// - Parse failures → advisory System signal
+fn collect_signals_from_consensus(
+    consensus_files: &[PathBuf],
+    _checkpoint: Checkpoint,
 ) -> (Vec<ReviewSignal>, Vec<ReviewSignal>) {
     let mut blocking = Vec::new();
     let mut advisory = Vec::new();
 
-    // Check for blocking signal file
-    let stage_dir = evidence_base.join(checkpoint_stage_dir(checkpoint));
-    let blocking_file = stage_dir.join("blocking_signals.json");
-    let advisory_file = stage_dir.join("advisory_signals.json");
+    for path in consensus_files {
+        let filename = path
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
 
-    // Parse blocking signals
-    if let Some(signals) = std::fs::read_to_string(&blocking_file)
-        .ok()
-        .and_then(|content| serde_json::from_str::<Vec<ReviewSignal>>(&content).ok())
-    {
-        blocking.extend(signals);
-    }
+        // Try to parse the consensus file
+        let content = match std::fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(e) => {
+                // Parse failure → advisory System signal
+                advisory.push(ReviewSignal {
+                    kind: CounterSignalKind::Other,
+                    severity: SignalSeverity::Advisory,
+                    origin: SignalOrigin::System,
+                    worker_id: None,
+                    message: format!("Failed to read consensus file {filename}: {e}"),
+                    evidence_path: Some(path.to_string_lossy().to_string()),
+                });
+                continue;
+            }
+        };
 
-    // Parse advisory signals
-    if let Some(signals) = std::fs::read_to_string(&advisory_file)
-        .ok()
-        .and_then(|content| serde_json::from_str::<Vec<ReviewSignal>>(&content).ok())
-    {
-        advisory.extend(signals);
+        let data: ConsensusJson = match serde_json::from_str(&content) {
+            Ok(d) => d,
+            Err(e) => {
+                // Parse failure → advisory System signal
+                advisory.push(ReviewSignal {
+                    kind: CounterSignalKind::Other,
+                    severity: SignalSeverity::Advisory,
+                    origin: SignalOrigin::System,
+                    worker_id: None,
+                    message: format!("Failed to parse consensus file {filename}: {e}"),
+                    evidence_path: Some(path.to_string_lossy().to_string()),
+                });
+                continue;
+            }
+        };
+
+        let role = infer_agent_role(data.agent.as_deref(), &filename);
+
+        // Check for conflicts → blocking signals
+        if let Some(consensus) = &data.consensus {
+            if let Some(conflicts) = &consensus.conflicts {
+                for conflict in conflicts {
+                    if !conflict.is_empty() {
+                        blocking.push(ReviewSignal {
+                            kind: CounterSignalKind::Contradiction,
+                            severity: SignalSeverity::Block,
+                            origin: SignalOrigin::Role(role),
+                            worker_id: data.agent.clone(),
+                            message: conflict.clone(),
+                            evidence_path: Some(path.to_string_lossy().to_string()),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Check for errors → advisory signals
+        if let Some(error) = &data.error {
+            advisory.push(ReviewSignal {
+                kind: CounterSignalKind::Other,
+                severity: SignalSeverity::Advisory,
+                origin: SignalOrigin::Role(role),
+                worker_id: data.agent.clone(),
+                message: error.clone(),
+                evidence_path: Some(path.to_string_lossy().to_string()),
+            });
+        }
     }
 
     (blocking, advisory)
@@ -640,6 +803,43 @@ fn compute_effective_confidence(signals: &[ReviewSignal]) -> f32 {
     // Each blocking signal reduces confidence
     let reduction = signals.len() as f32 * 0.15;
     (0.9 - reduction).max(0.1)
+}
+
+/// Build repo-relative evidence refs (P0-C)
+fn build_evidence_refs_relative(repo_root: &Path, consensus_dir: &Path) -> EvidenceRefs {
+    let mut refs = EvidenceRefs::default();
+
+    // Helper to make path repo-relative
+    let make_relative = |p: &Path| -> Option<String> {
+        p.strip_prefix(repo_root)
+            .ok()
+            .map(|rel| rel.to_string_lossy().to_string())
+    };
+
+    // Check for verdict JSON
+    let verdict_path = consensus_dir.join("verdict.json");
+    if verdict_path.exists() {
+        refs.verdict_json = make_relative(&verdict_path);
+    }
+
+    // Check for telemetry bundle
+    let telemetry_path = consensus_dir.join("telemetry.json");
+    if telemetry_path.exists() {
+        refs.telemetry_bundle = make_relative(&telemetry_path);
+    }
+
+    // Check for synthesis
+    let synthesis_path = consensus_dir.join("synthesis.md");
+    if synthesis_path.exists() {
+        refs.synthesis_path = make_relative(&synthesis_path);
+    }
+
+    // Set evidence directory (repo-relative)
+    if consensus_dir.exists() {
+        refs.evidence_dir = make_relative(consensus_dir);
+    }
+
+    refs
 }
 
 // ============================================================================
@@ -758,36 +958,6 @@ pub fn render_review(result: &StageReviewResult) -> Vec<String> {
     lines.push("└─────────────────────────".to_string());
 
     lines
-}
-
-/// Build evidence refs from evidence directory
-fn build_evidence_refs(evidence_base: &std::path::Path) -> EvidenceRefs {
-    let mut refs = EvidenceRefs::default();
-
-    // Check for verdict JSON
-    let verdict_path = evidence_base.join("verdict.json");
-    if verdict_path.exists() {
-        refs.verdict_json = Some(verdict_path.to_string_lossy().into_owned());
-    }
-
-    // Check for telemetry bundle
-    let telemetry_path = evidence_base.join("telemetry.json");
-    if telemetry_path.exists() {
-        refs.telemetry_bundle = Some(telemetry_path.to_string_lossy().into_owned());
-    }
-
-    // Check for synthesis
-    let synthesis_path = evidence_base.join("synthesis.md");
-    if synthesis_path.exists() {
-        refs.synthesis_path = Some(synthesis_path.to_string_lossy().into_owned());
-    }
-
-    // Set evidence directory
-    if evidence_base.exists() {
-        refs.evidence_dir = Some(evidence_base.to_string_lossy().into_owned());
-    }
-
-    refs
 }
 
 // ============================================================================
@@ -971,5 +1141,360 @@ mod tests {
         skipped.artifacts_collected = 0;
         assert_eq!(skipped.exit_code(&default_options), 0);
         assert_eq!(skipped.exit_code(&strict_options), 2);
+    }
+
+    // ========================================================================
+    // Fixture-based tests (P0-A through P0-D validation)
+    // ========================================================================
+
+    /// Helper: Create fixture directory structure for review tests
+    fn create_fixture_dir() -> tempfile::TempDir {
+        tempfile::tempdir().expect("Failed to create temp dir")
+    }
+
+    /// Helper: Create consensus JSON content with conflicts
+    fn consensus_with_conflicts(conflicts: &[&str]) -> String {
+        let conflicts_json: Vec<String> = conflicts.iter().map(|s| format!("\"{}\"", s)).collect();
+        format!(
+            r#"{{
+            "agent": "architect",
+            "model": "claude",
+            "consensus": {{
+                "conflicts": [{}],
+                "synthesis_status": "complete"
+            }}
+        }}"#,
+            conflicts_json.join(", ")
+        )
+    }
+
+    /// Helper: Create clean consensus JSON (no conflicts)
+    fn consensus_clean() -> String {
+        r#"{
+            "agent": "implementer",
+            "model": "claude",
+            "consensus": {
+                "conflicts": [],
+                "synthesis_status": "complete"
+            }
+        }"#
+        .to_string()
+    }
+
+    /// Helper: Create consensus JSON with error field
+    fn consensus_with_error(error: &str) -> String {
+        format!(
+            r#"{{
+            "agent": "validator",
+            "model": "claude",
+            "error": "{}",
+            "consensus": {{
+                "conflicts": [],
+                "synthesis_status": "failed"
+            }}
+        }}"#,
+            error
+        )
+    }
+
+    #[test]
+    fn test_fixture_conflicts_produce_escalate() {
+        // Setup: Create fixture with consensus file containing conflicts
+        let temp = create_fixture_dir();
+        let repo_root = temp.path();
+        let spec_id = "FIXTURE-001";
+
+        // Create consensus directory structure
+        let consensus_dir = repo_root
+            .join(EVIDENCE_ROOT)
+            .join(CONSENSUS_DIR)
+            .join(spec_id);
+        std::fs::create_dir_all(&consensus_dir).unwrap();
+
+        // Create spec packet directory with plan.md
+        let spec_packet_dir = repo_root.join(SPEC_PACKET_ROOT).join(spec_id);
+        std::fs::create_dir_all(&spec_packet_dir).unwrap();
+        std::fs::write(spec_packet_dir.join("plan.md"), "# Plan\nTest plan").unwrap();
+
+        // Create consensus file with conflict
+        let consensus_file = consensus_dir.join("spec-plan_architect_20251220.json");
+        std::fs::write(&consensus_file, consensus_with_conflicts(&["Requirement A contradicts requirement B"])).unwrap();
+
+        // Execute review
+        let request = ReviewRequest {
+            repo_root: repo_root.to_path_buf(),
+            spec_id: spec_id.to_string(),
+            stage: Stage::Plan,
+            options: ReviewOptions::default(),
+        };
+
+        let result = evaluate_stage_review(request, Checkpoint::AfterPlan).unwrap();
+
+        // Verify: Should escalate due to conflict
+        assert!(
+            matches!(result.resolution, Verdict::Escalate { .. }),
+            "Expected Escalate due to conflict, got: {:?}",
+            result.resolution
+        );
+        assert!(!result.blocking_signals.is_empty(), "Expected blocking signals");
+        assert!(result.blocking_signals[0].message.contains("contradicts"));
+    }
+
+    #[test]
+    fn test_fixture_clean_produces_autoapply() {
+        // Setup: Create fixture with clean consensus (no conflicts)
+        let temp = create_fixture_dir();
+        let repo_root = temp.path();
+        let spec_id = "FIXTURE-002";
+
+        // Create consensus directory structure
+        let consensus_dir = repo_root
+            .join(EVIDENCE_ROOT)
+            .join(CONSENSUS_DIR)
+            .join(spec_id);
+        std::fs::create_dir_all(&consensus_dir).unwrap();
+
+        // Create spec packet directory with plan.md
+        let spec_packet_dir = repo_root.join(SPEC_PACKET_ROOT).join(spec_id);
+        std::fs::create_dir_all(&spec_packet_dir).unwrap();
+        std::fs::write(spec_packet_dir.join("plan.md"), "# Plan\nTest plan").unwrap();
+
+        // Create clean consensus file
+        let consensus_file = consensus_dir.join("spec-plan_implementer_20251220.json");
+        std::fs::write(&consensus_file, consensus_clean()).unwrap();
+
+        // Execute review
+        let request = ReviewRequest {
+            repo_root: repo_root.to_path_buf(),
+            spec_id: spec_id.to_string(),
+            stage: Stage::Plan,
+            options: ReviewOptions::default(),
+        };
+
+        let result = evaluate_stage_review(request, Checkpoint::AfterPlan).unwrap();
+
+        // Verify: Should auto-apply (no conflicts)
+        assert!(
+            matches!(result.resolution, Verdict::AutoApply { .. }),
+            "Expected AutoApply with clean consensus, got: {:?}",
+            result.resolution
+        );
+        assert!(result.blocking_signals.is_empty(), "Expected no blocking signals");
+    }
+
+    #[test]
+    fn test_fixture_error_produces_advisory() {
+        // Setup: Create fixture with consensus containing error field
+        let temp = create_fixture_dir();
+        let repo_root = temp.path();
+        let spec_id = "FIXTURE-003";
+
+        // Create consensus directory structure
+        let consensus_dir = repo_root
+            .join(EVIDENCE_ROOT)
+            .join(CONSENSUS_DIR)
+            .join(spec_id);
+        std::fs::create_dir_all(&consensus_dir).unwrap();
+
+        // Create spec packet directory with plan.md
+        let spec_packet_dir = repo_root.join(SPEC_PACKET_ROOT).join(spec_id);
+        std::fs::create_dir_all(&spec_packet_dir).unwrap();
+        std::fs::write(spec_packet_dir.join("plan.md"), "# Plan\nTest plan").unwrap();
+
+        // Create consensus file with error (but no conflicts)
+        let consensus_file = consensus_dir.join("spec-plan_validator_20251220.json");
+        std::fs::write(
+            &consensus_file,
+            consensus_with_error("Agent timeout exceeded"),
+        )
+        .unwrap();
+
+        // Execute review
+        let request = ReviewRequest {
+            repo_root: repo_root.to_path_buf(),
+            spec_id: spec_id.to_string(),
+            stage: Stage::Plan,
+            options: ReviewOptions::default(),
+        };
+
+        let result = evaluate_stage_review(request, Checkpoint::AfterPlan).unwrap();
+
+        // Verify: Should auto-apply (error is advisory, not blocking)
+        assert!(
+            matches!(result.resolution, Verdict::AutoApply { .. }),
+            "Expected AutoApply (error is advisory), got: {:?}",
+            result.resolution
+        );
+        assert!(result.blocking_signals.is_empty(), "Error should not block");
+        assert!(!result.advisory_signals.is_empty(), "Expected advisory signal for error");
+        assert!(result.advisory_signals[0].message.contains("timeout"));
+    }
+
+    #[test]
+    fn test_fixture_parse_error_produces_advisory() {
+        // Setup: Create fixture with malformed JSON
+        let temp = create_fixture_dir();
+        let repo_root = temp.path();
+        let spec_id = "FIXTURE-004";
+
+        // Create consensus directory structure
+        let consensus_dir = repo_root
+            .join(EVIDENCE_ROOT)
+            .join(CONSENSUS_DIR)
+            .join(spec_id);
+        std::fs::create_dir_all(&consensus_dir).unwrap();
+
+        // Create spec packet directory with plan.md
+        let spec_packet_dir = repo_root.join(SPEC_PACKET_ROOT).join(spec_id);
+        std::fs::create_dir_all(&spec_packet_dir).unwrap();
+        std::fs::write(spec_packet_dir.join("plan.md"), "# Plan\nTest plan").unwrap();
+
+        // Create malformed consensus file
+        let consensus_file = consensus_dir.join("spec-plan_broken_20251220.json");
+        std::fs::write(&consensus_file, "{ this is not valid json }").unwrap();
+
+        // Execute review
+        let request = ReviewRequest {
+            repo_root: repo_root.to_path_buf(),
+            spec_id: spec_id.to_string(),
+            stage: Stage::Plan,
+            options: ReviewOptions::default(),
+        };
+
+        let result = evaluate_stage_review(request, Checkpoint::AfterPlan).unwrap();
+
+        // Verify: Should auto-apply (parse error is advisory, not blocking)
+        assert!(
+            matches!(result.resolution, Verdict::AutoApply { .. }),
+            "Expected AutoApply (parse error is advisory), got: {:?}",
+            result.resolution
+        );
+        assert!(result.blocking_signals.is_empty(), "Parse error should not block");
+        assert!(
+            !result.advisory_signals.is_empty(),
+            "Expected advisory signal for parse error"
+        );
+        assert!(result.advisory_signals[0].message.contains("Failed to parse"));
+    }
+
+    #[test]
+    fn test_fixture_no_artifacts_with_strict() {
+        // Setup: Create fixture with no consensus files
+        let temp = create_fixture_dir();
+        let repo_root = temp.path();
+        let spec_id = "FIXTURE-005";
+
+        // Create consensus directory (empty - no files)
+        let consensus_dir = repo_root
+            .join(EVIDENCE_ROOT)
+            .join(CONSENSUS_DIR)
+            .join(spec_id);
+        std::fs::create_dir_all(&consensus_dir).unwrap();
+
+        // Execute review with strict artifacts mode
+        let request = ReviewRequest {
+            repo_root: repo_root.to_path_buf(),
+            spec_id: spec_id.to_string(),
+            stage: Stage::Plan,
+            options: ReviewOptions {
+                strict_artifacts: true,
+                ..Default::default()
+            },
+        };
+
+        let result = evaluate_stage_review(request, Checkpoint::AfterPlan).unwrap();
+
+        // Verify: Should show skipped with no artifacts
+        assert_eq!(result.artifacts_collected, 0, "Expected no artifacts");
+        assert!(
+            matches!(
+                result.display_verdict(),
+                DisplayVerdict::Skipped {
+                    reason: SkipReason::NoArtifactsFound
+                }
+            ),
+            "Expected Skipped verdict"
+        );
+
+        // In strict mode, exit code should be 2
+        let strict_options = ReviewOptions {
+            strict_artifacts: true,
+            ..Default::default()
+        };
+        assert_eq!(result.exit_code(&strict_options), 2, "Strict mode: missing artifacts → exit 2");
+    }
+
+    #[test]
+    fn test_fixture_evidence_refs_are_repo_relative() {
+        // Setup: Create fixture with verdict.json
+        let temp = create_fixture_dir();
+        let repo_root = temp.path();
+        let spec_id = "FIXTURE-006";
+
+        // Create consensus directory structure
+        let consensus_dir = repo_root
+            .join(EVIDENCE_ROOT)
+            .join(CONSENSUS_DIR)
+            .join(spec_id);
+        std::fs::create_dir_all(&consensus_dir).unwrap();
+
+        // Create spec packet directory with plan.md
+        let spec_packet_dir = repo_root.join(SPEC_PACKET_ROOT).join(spec_id);
+        std::fs::create_dir_all(&spec_packet_dir).unwrap();
+        std::fs::write(spec_packet_dir.join("plan.md"), "# Plan\nTest plan").unwrap();
+
+        // Create consensus and verdict files
+        let consensus_file = consensus_dir.join("spec-plan_claude_20251220.json");
+        std::fs::write(&consensus_file, consensus_clean()).unwrap();
+
+        let verdict_file = consensus_dir.join("verdict.json");
+        std::fs::write(&verdict_file, r#"{"verdict": "pass"}"#).unwrap();
+
+        // Execute review
+        let request = ReviewRequest {
+            repo_root: repo_root.to_path_buf(),
+            spec_id: spec_id.to_string(),
+            stage: Stage::Plan,
+            options: ReviewOptions::default(),
+        };
+
+        let result = evaluate_stage_review(request, Checkpoint::AfterPlan).unwrap();
+
+        // Verify: Evidence refs should be repo-relative (P0-C)
+        if let Some(verdict_path) = &result.evidence.verdict_json {
+            assert!(
+                !verdict_path.starts_with('/'),
+                "Evidence path should be repo-relative, not absolute: {verdict_path}"
+            );
+            assert!(
+                verdict_path.starts_with("docs/"),
+                "Evidence path should start with docs/: {verdict_path}"
+            );
+        }
+
+        if let Some(evidence_dir) = &result.evidence.evidence_dir {
+            assert!(
+                !evidence_dir.starts_with('/'),
+                "Evidence dir should be repo-relative: {evidence_dir}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_infer_agent_role() {
+        // Test role inference from agent field
+        assert_eq!(infer_agent_role(Some("architect"), "file.json"), Role::Architect);
+        assert_eq!(infer_agent_role(Some("implementer"), "file.json"), Role::Implementer);
+        assert_eq!(infer_agent_role(Some("validator"), "file.json"), Role::Validator);
+        assert_eq!(infer_agent_role(Some("judge"), "file.json"), Role::Judge);
+        assert_eq!(infer_agent_role(Some("sidecar-critic"), "file.json"), Role::SidecarCritic);
+
+        // Test fallback to filename
+        assert_eq!(infer_agent_role(None, "spec-plan_architect_20251220.json"), Role::Architect);
+        assert_eq!(infer_agent_role(None, "implementer_response.json"), Role::Implementer);
+
+        // Test default
+        assert_eq!(infer_agent_role(None, "unknown.json"), Role::Architect);
+        assert_eq!(infer_agent_role(Some("claude"), "file.json"), Role::Architect);
     }
 }

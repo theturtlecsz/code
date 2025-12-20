@@ -134,11 +134,19 @@ impl SpeckitExecutor {
             | ReviewResolution::Review {
                 checkpoint: actual_checkpoint,
             } => {
+                // P0-B: Resolve policy in adapter, not in core
+                let policy_snapshot = PolicySnapshot {
+                    sidecar_critic_enabled: std::env::var("SPEC_KIT_SIDECAR_CRITIC").is_ok(),
+                    telemetry_mode: TelemetryMode::Disabled,
+                    legacy_voting_env_detected: std::env::var("SPEC_KIT_VOTING").is_ok(),
+                };
+
                 let options = ReviewOptions {
                     telemetry_mode: TelemetryMode::Disabled,
                     include_diagnostic: review::is_diagnostic_review(stage),
                     strict_artifacts,
                     strict_warnings,
+                    policy_snapshot,
                 };
 
                 let request = ReviewRequest {
