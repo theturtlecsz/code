@@ -163,7 +163,10 @@ pub fn resolve_sidecar_critic(
     match (canonical, deprecated) {
         (Some(c), Some(_d)) => {
             // Both set: canonical wins, warn about deprecated
-            (parse_bool(c), Some(DeprecationWarning::spec_kit_critic(true)))
+            (
+                parse_bool(c),
+                Some(DeprecationWarning::spec_kit_critic(true)),
+            )
         }
         (Some(c), None) => {
             // Only canonical set: use it, no warning
@@ -202,9 +205,10 @@ pub fn resolve_sidecar_critic(
 pub fn resolve_legacy_voting(val: Option<&str>) -> (bool, Option<DeprecationWarning>) {
     match val {
         // PR6: Only warn if user is trying to ENABLE the removed feature
-        Some(v) if parse_bool(v) => {
-            (false, Some(DeprecationWarning::spec_kit_consensus_removed()))
-        }
+        Some(v) if parse_bool(v) => (
+            false,
+            Some(DeprecationWarning::spec_kit_consensus_removed()),
+        ),
         // Not set, empty, or explicitly disabled → no warning, no spam
         _ => (false, None),
     }
@@ -341,7 +345,10 @@ mod tests {
         // Truthy value → warn (user trying to enable removed feature)
         let (enabled, warning) = resolve_legacy_voting(Some("true"));
         assert!(!enabled, "PR6: voting always disabled");
-        assert!(warning.is_some(), "Warn when trying to enable removed feature");
+        assert!(
+            warning.is_some(),
+            "Warn when trying to enable removed feature"
+        );
         let w = warning.unwrap();
         assert_eq!(w.deprecated_key, "SPEC_KIT_CONSENSUS");
         assert!(w.message.contains("ignored"));

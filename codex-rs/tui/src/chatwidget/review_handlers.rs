@@ -8,8 +8,8 @@ use codex_core::protocol::{ReviewContextMetadata, ReviewRequest};
 use codex_core::review_format::format_review_findings_block;
 
 // AppEvent accessed via crate::app_event::AppEvent inline
-use crate::bottom_pane::list_selection_view::{ListSelectionView, SelectionItem};
 use crate::bottom_pane::CustomPromptView;
+use crate::bottom_pane::list_selection_view::{ListSelectionView, SelectionItem};
 use crate::history_cell;
 
 use super::ChatWidget;

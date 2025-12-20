@@ -103,7 +103,7 @@ use self::agent_install::{
     start_agent_install_session, start_direct_terminal_session, start_prompt_terminal_session,
     wrap_command,
 };
-use self::agent_status::{agent_status_from_str, AgentStatus};
+use self::agent_status::{AgentStatus, agent_status_from_str};
 use self::agents_terminal::{AgentsTerminalFocus, AgentsTerminalState};
 use self::history_render::{CachedLayout, HistoryRenderState, LayoutRef};
 use self::limits_overlay::{LimitsOverlay, LimitsOverlayContent, LimitsTab};
@@ -15735,7 +15735,6 @@ impl ChatWidget<'_> {
             }
         }
     }
-
 
     fn render_pro_header(&self, area: Rect, buf: &mut Buffer) {
         use ratatui::layout::Margin;

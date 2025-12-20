@@ -211,9 +211,10 @@ fn get_changed_files(
                 let path_str = path.to_string_lossy();
                 // Filter by extension
                 if let Some(ext) = path.extension()
-                    && extensions.iter().any(|e| e == ext.to_str().unwrap_or("")) {
-                        files.push(path_str.to_string());
-                    }
+                    && extensions.iter().any(|e| e == ext.to_str().unwrap_or(""))
+                {
+                    files.push(path_str.to_string());
+                }
             }
             true
         },

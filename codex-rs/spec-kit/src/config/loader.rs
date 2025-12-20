@@ -173,7 +173,6 @@ fn warn_once_deprecated_consensus_threshold(both_keys_present: bool) {
     });
 }
 
-
 /// Ensure the deprecated env var can still override file-based config during the transition.
 ///
 /// Without this, a file that sets the canonical key and an env var that sets the deprecated key
@@ -624,7 +623,6 @@ consensus_threshold = 0.8
             env::remove_var("SPECKIT_QUALITY_GATES__ENABLED");
         }
     }
-
 
     #[test]
     #[serial]

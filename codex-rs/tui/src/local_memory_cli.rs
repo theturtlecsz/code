@@ -43,12 +43,14 @@ pub(crate) async fn local_memory_daemon_healthy(timeout: Duration) -> bool {
 }
 
 fn parse_search_stdout(stdout: &[u8]) -> Result<Vec<LocalMemorySearchResult>, String> {
-    let response: LocalMemorySearchResponse =
-        serde_json::from_slice(stdout).map_err(|e| format!("local-memory JSON parse failed: {e}"))?;
+    let response: LocalMemorySearchResponse = serde_json::from_slice(stdout)
+        .map_err(|e| format!("local-memory JSON parse failed: {e}"))?;
     if response.success {
         Ok(response.data.map(|d| d.results).unwrap_or_default())
     } else {
-        Err(response.error.unwrap_or_else(|| "local-memory search failed".to_string()))
+        Err(response
+            .error
+            .unwrap_or_else(|| "local-memory search failed".to_string()))
     }
 }
 

@@ -522,9 +522,7 @@ impl Stage0Config {
 
         // Warn if Tier2 enabled but no notebook configured
         if self.tier2.enabled && self.tier2.notebook.trim().is_empty() {
-            tracing::warn!(
-                "Tier2 enabled but notebook is empty; Tier2 will fail at runtime"
-            );
+            tracing::warn!("Tier2 enabled but notebook is empty; Tier2 will fail at runtime");
         }
 
         Ok(())
@@ -653,7 +651,7 @@ mod tests {
         assert_eq!(cfg.scoring.recalculation_interval, "12h0m0s");
         assert_eq!(cfg.scoring.weights.usage, 0.25);
         assert_eq!(cfg.context_compiler.max_tokens, 4000);
-            assert!(!cfg.tier2.enabled);
-            assert_eq!(cfg.tier2.notebook, "test-notebook-id");
-        }
+        assert!(!cfg.tier2.enabled);
+        assert_eq!(cfg.tier2.notebook, "test-notebook-id");
     }
+}

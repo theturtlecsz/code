@@ -109,7 +109,9 @@ pub enum FieldPath {
     // Quality Gates
     QualityGates_Enabled,
     /// Deprecated legacy naming. Prefer `QualityGates_MinConfidenceForAutoApply`.
-    #[deprecated(note = "Use QualityGates_MinConfidenceForAutoApply (renamed from consensus_threshold)")]
+    #[deprecated(
+        note = "Use QualityGates_MinConfidenceForAutoApply (renamed from consensus_threshold)"
+    )]
     QualityGates_ConsensusThreshold,
     QualityGates_MinConfidenceForAutoApply,
     QualityGates_MinTestCoverage,
@@ -324,8 +326,12 @@ impl FieldPath {
         match s {
             // Quality Gates
             "QUALITY_GATES__ENABLED" => Some(Self::QualityGates_Enabled),
-            "QUALITY_GATES__MIN_CONFIDENCE_FOR_AUTO_APPLY" => Some(Self::QualityGates_MinConfidenceForAutoApply),
-            "QUALITY_GATES__CONSENSUS_THRESHOLD" => Some(Self::QualityGates_MinConfidenceForAutoApply),
+            "QUALITY_GATES__MIN_CONFIDENCE_FOR_AUTO_APPLY" => {
+                Some(Self::QualityGates_MinConfidenceForAutoApply)
+            }
+            "QUALITY_GATES__CONSENSUS_THRESHOLD" => {
+                Some(Self::QualityGates_MinConfidenceForAutoApply)
+            }
             "QUALITY_GATES__MIN_TEST_COVERAGE" => Some(Self::QualityGates_MinTestCoverage),
             "QUALITY_GATES__SCHEMA_VALIDATION" => Some(Self::QualityGates_SchemaValidation),
 
@@ -371,8 +377,12 @@ impl FieldPath {
         match s {
             // Quality Gates
             "quality_gates.enabled" => Some(Self::QualityGates_Enabled),
-            "quality_gates.min_confidence_for_auto_apply" => Some(Self::QualityGates_MinConfidenceForAutoApply),
-            "quality_gates.consensus_threshold" => Some(Self::QualityGates_MinConfidenceForAutoApply),
+            "quality_gates.min_confidence_for_auto_apply" => {
+                Some(Self::QualityGates_MinConfidenceForAutoApply)
+            }
+            "quality_gates.consensus_threshold" => {
+                Some(Self::QualityGates_MinConfidenceForAutoApply)
+            }
             "quality_gates.min_test_coverage" => Some(Self::QualityGates_MinTestCoverage),
             "quality_gates.schema_validation" => Some(Self::QualityGates_SchemaValidation),
 
@@ -919,13 +929,11 @@ impl FieldPath {
             // Threshold fields: 0.0-1.0
             Self::QualityGates_MinConfidenceForAutoApply
             | Self::QualityGates_ConsensusThreshold
-            | Self::Cost_AlertThreshold => {
-                Some(Constraints {
-                    min: Some(0.0),
-                    max: Some(1.0),
-                    pattern: None,
-                })
-            }
+            | Self::Cost_AlertThreshold => Some(Constraints {
+                min: Some(0.0),
+                max: Some(1.0),
+                pattern: None,
+            }),
 
             // Test coverage: 0.0-100.0
             Self::QualityGates_MinTestCoverage => Some(Constraints {

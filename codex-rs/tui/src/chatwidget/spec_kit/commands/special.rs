@@ -1907,7 +1907,9 @@ impl SpecKitCommand for SpecKitSeedCommand {
             if !crate::local_memory_cli::local_memory_daemon_healthy(Duration::from_millis(750))
                 .await
             {
-                return Err("local-memory daemon not available at http://localhost:3002".to_string());
+                return Err(
+                    "local-memory daemon not available at http://localhost:3002".to_string()
+                );
             }
 
             let local_mem = LocalMemoryCliAdapter::new();
@@ -2139,7 +2141,9 @@ impl SpecKitCommand for Stage0IndexCommand {
             if !crate::local_memory_cli::local_memory_daemon_healthy(Duration::from_millis(750))
                 .await
             {
-                return Err("local-memory daemon not available at http://localhost:3002".to_string());
+                return Err(
+                    "local-memory daemon not available at http://localhost:3002".to_string()
+                );
             }
 
             let local_mem = LocalMemoryCliAdapter::new();
@@ -2355,8 +2359,8 @@ impl SpecKitCommand for Stage0EvalBackendCommand {
     fn execute(&self, widget: &mut ChatWidget, args: String) {
         use crate::vector_state::VECTOR_STATE;
         use codex_stage0::{
-            EvalLane, TfIdfBackend, VectorBackend, VectorFilters,
-            built_in_test_documents, combined_eval_cases, evaluate_backend,
+            EvalLane, TfIdfBackend, VectorBackend, VectorFilters, built_in_test_documents,
+            combined_eval_cases, evaluate_backend,
         };
         use std::path::PathBuf;
 

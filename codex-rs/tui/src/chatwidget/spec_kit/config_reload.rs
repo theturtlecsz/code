@@ -178,7 +178,9 @@ pub fn detect_config_changes(old: &AppConfig, new: &AppConfig) -> (usize, bool, 
 
     // Check if quality gates changed
     let quality_gates_changed = old.quality_gates.enabled != new.quality_gates.enabled
-        || (old.quality_gates.min_confidence_for_auto_apply - new.quality_gates.min_confidence_for_auto_apply).abs()
+        || (old.quality_gates.min_confidence_for_auto_apply
+            - new.quality_gates.min_confidence_for_auto_apply)
+            .abs()
             > f32::EPSILON;
 
     // Check if cost settings changed

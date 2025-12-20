@@ -393,9 +393,7 @@ impl CallGraph {
         }
 
         if frontier.is_empty() {
-            return format!(
-                "flowchart LR\n    error[\"Function '{target}' not found\"]"
-            );
+            return format!("flowchart LR\n    error[\"Function '{target}' not found\"]");
         }
 
         // BFS to find neighbors up to depth

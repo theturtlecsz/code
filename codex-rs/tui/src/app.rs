@@ -249,8 +249,8 @@ impl App<'_> {
         resume_picker: bool,
         startup_footer_notice: Option<String>,
         latest_upgrade_version: Option<String>,
-        initial_command: Option<String>,  // SPEC-KIT-920
-        exit_on_complete: bool,           // SPEC-KIT-920
+        initial_command: Option<String>, // SPEC-KIT-920
+        exit_on_complete: bool,          // SPEC-KIT-920
         config_watcher: Option<Arc<codex_spec_kit::config::HotReloadWatcher>>, // SPEC-945D
     ) -> Self {
         // SPEC-KIT-920: Log initial_command at startup

@@ -7,8 +7,8 @@
 #![allow(dead_code)] // Streaming provider helpers
 
 use codex_core::cli_executor::{CliError, ConversationId, GeminiPipesProvider, StreamEvent};
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -114,11 +114,7 @@ impl GeminiStreamingProvider {
         tx: AppEventSender,
     ) -> ProviderResult<String> {
         // Use provided model or fall back to instance model
-        let effective_model = if model.is_empty() {
-            &self.model
-        } else {
-            model
-        };
+        let effective_model = if model.is_empty() { &self.model } else { model };
 
         // Derive conversation ID from prompt hash
         let conv_id = Self::derive_conversation_id(prompt);

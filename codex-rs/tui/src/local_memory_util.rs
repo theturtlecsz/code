@@ -9,8 +9,8 @@
 
 #![allow(dead_code)] // Response types used by MCP parsing
 
-use serde::Deserialize;
 use chrono::{DateTime, Utc};
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct LocalMemorySearchResponse {

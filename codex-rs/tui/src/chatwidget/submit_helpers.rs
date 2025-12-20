@@ -9,12 +9,12 @@
 
 use codex_core::protocol::InputItem;
 
+use super::ChatWidget;
 use super::message::UserMessage;
 use super::spec_kit;
 use super::spec_kit::state::{
     ValidateBeginOutcome, ValidateLifecycle, ValidateLifecycleEvent, ValidateMode, ValidateRunInfo,
 };
-use super::ChatWidget;
 use crate::history_cell::{HistoryCellType, PlainHistoryCell};
 use crate::spec_prompts::SpecStage;
 

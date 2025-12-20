@@ -471,7 +471,6 @@ pub(crate) enum AppEvent {
         provider: codex_login::DeviceCodeProvider,
     },
     // === END FORK-SPECIFIC: Device Code OAuth Events ===
-
     /// Start a new chat session by resuming from the given rollout file
     ResumeFrom(std::path::PathBuf),
 

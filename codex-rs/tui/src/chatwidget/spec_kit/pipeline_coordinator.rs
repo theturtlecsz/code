@@ -157,22 +157,20 @@ pub fn handle_spec_auto(
                     super::execution_logger::ExecutionEvent::Stage0Start {
                         run_id: run_id.clone(),
                         spec_id: spec_id.clone(),
-                        tier2_enabled: codex_stage0::Stage0Config::load()
-                            .ok()
-                            .is_some_and(|cfg| {
-                                let notebook_override = widget
-                                    .config
-                                    .stage0
-                                    .notebook
-                                    .clone()
-                                    .or(widget.config.stage0.notebook_url.clone())
-                                    .or(widget.config.stage0.notebook_id.clone())
-                                    .unwrap_or_default();
-                                if !notebook_override.trim().is_empty() {
-                                    return true;
-                                }
-                                cfg.tier2.enabled && !cfg.tier2.notebook.trim().is_empty()
-                            }),
+                        tier2_enabled: codex_stage0::Stage0Config::load().ok().is_some_and(|cfg| {
+                            let notebook_override = widget
+                                .config
+                                .stage0
+                                .notebook
+                                .clone()
+                                .or(widget.config.stage0.notebook_url.clone())
+                                .or(widget.config.stage0.notebook_id.clone())
+                                .unwrap_or_default();
+                            if !notebook_override.trim().is_empty() {
+                                return true;
+                            }
+                            cfg.tier2.enabled && !cfg.tier2.notebook.trim().is_empty()
+                        }),
                         explain_enabled: stage0_config.explain,
                         timestamp: super::execution_logger::ExecutionEvent::now(),
                     },

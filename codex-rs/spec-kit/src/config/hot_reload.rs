@@ -737,7 +737,10 @@ max_agents = 5
         // Old config should be preserved
         let current_config = watcher.get_config();
         assert!(current_config.quality_gates.enabled);
-        assert_eq!(current_config.quality_gates.min_confidence_for_auto_apply, 0.7);
+        assert_eq!(
+            current_config.quality_gates.min_confidence_for_auto_apply,
+            0.7
+        );
     }
 
     #[tokio::test]

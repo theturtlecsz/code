@@ -8,12 +8,14 @@
 //! - Injecting Divine Truth + TASK_BRIEF into agent prompts
 //! - V2.5b: Hybrid retrieval using shared TfIdfBackend
 
-use crate::stage0_adapters::{LlmStubAdapter, LocalMemoryCliAdapter, NoopTier2Client, Tier2HttpAdapter};
+use crate::stage0_adapters::{
+    LlmStubAdapter, LocalMemoryCliAdapter, NoopTier2Client, Tier2HttpAdapter,
+};
 use crate::vector_state::VECTOR_STATE;
 use codex_stage0::Stage0Engine;
 use codex_stage0::dcc::EnvCtx;
-use std::time::Duration;
 use std::path::Path;
+use std::time::Duration;
 
 /// Result of Stage 0 execution for pipeline consumption
 #[derive(Debug, Clone)]
@@ -69,7 +71,9 @@ pub fn run_stage0_for_spec(
     if !crate::local_memory_cli::local_memory_daemon_healthy_blocking(Duration::from_millis(750)) {
         return Stage0ExecutionResult {
             result: None,
-            skip_reason: Some("local-memory daemon not available at http://localhost:3002".to_string()),
+            skip_reason: Some(
+                "local-memory daemon not available at http://localhost:3002".to_string(),
+            ),
             duration_ms: start.elapsed().as_millis() as u64,
             tier2_used: false,
             cache_hit: false,
@@ -215,8 +219,6 @@ fn run_stage0_blocking(
         // V2.5b: Check if shared TfIdfBackend is available
         let backend_handle = VECTOR_STATE.backend_handle();
         let backend_lock = backend_handle.read().await;
-
-        
 
         if backend_lock.is_some() {
             // Use shared TfIdfBackend for hybrid retrieval

@@ -13,11 +13,11 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::widgets::Widget;
 
-use super::agent_status::{
-    agent_log_color, agent_log_label, agent_status_color, agent_status_from_str,
-    agent_status_label, AgentLogEntry, AgentLogKind, AgentStatus,
-};
 use super::ChatWidget;
+use super::agent_status::{
+    AgentLogEntry, AgentLogKind, AgentStatus, agent_log_color, agent_log_label, agent_status_color,
+    agent_status_from_str, agent_status_label,
+};
 use crate::util::buffer::fill_rect;
 
 // =========================================================================

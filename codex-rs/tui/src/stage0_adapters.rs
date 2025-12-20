@@ -7,8 +7,8 @@
 //!
 //! These adapters bridge Stage0's trait-based design with codex-rs's MCP infrastructure.
 
-use async_trait::async_trait;
 use crate::local_memory_cli;
+use async_trait::async_trait;
 use codex_core::mcp_connection_manager::McpConnectionManager;
 use codex_stage0::dcc::{
     EnvCtx, Iqo, LocalMemoryClient, LocalMemorySearchParams, LocalMemorySummary,
@@ -538,7 +538,10 @@ fn parse_tier2_answer_text(text: &str, spec_id: &str) -> Result<Tier2Response> {
 }
 
 /// Parse NotebookLM MCP response into Tier2Response
-fn parse_tier2_response(result: &mcp_types::CallToolResult, spec_id: &str) -> Result<Tier2Response> {
+fn parse_tier2_response(
+    result: &mcp_types::CallToolResult,
+    spec_id: &str,
+) -> Result<Tier2Response> {
     let text = result
         .content
         .iter()

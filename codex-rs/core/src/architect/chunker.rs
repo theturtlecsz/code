@@ -147,7 +147,11 @@ fn chunk_xml(name: &str, content: &str) -> Vec<ChunkedPart> {
     }
 
     // If any chunk is still too big, fall back to line-based chunking
-    let max_chunk_size = chunks.iter().map(std::string::String::len).max().unwrap_or(0);
+    let max_chunk_size = chunks
+        .iter()
+        .map(std::string::String::len)
+        .max()
+        .unwrap_or(0);
     if max_chunk_size > MAX_CHUNK_SIZE {
         // Fall back to simple line-based chunking
         return chunk_by_lines(name, content);
@@ -221,7 +225,11 @@ fn chunk_mermaid(name: &str, content: &str) -> Vec<ChunkedPart> {
     }
 
     // If any chunk is still too big, fall back to line-based chunking
-    let max_chunk_size = chunks.iter().map(std::string::String::len).max().unwrap_or(0);
+    let max_chunk_size = chunks
+        .iter()
+        .map(std::string::String::len)
+        .max()
+        .unwrap_or(0);
     if max_chunk_size > MAX_CHUNK_SIZE {
         return chunk_by_lines(name, content);
     }

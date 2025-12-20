@@ -555,7 +555,7 @@ fn run_ratatui_app(
         resume_last: _,
         resume_session_id: _,
         initial_command,
-        exit_on_complete,  // SPEC-KIT-920
+        exit_on_complete, // SPEC-KIT-920
         ..
     } = cli;
     let mut app = App::new(
@@ -571,7 +571,7 @@ fn run_ratatui_app(
         startup_footer_notice,
         latest_upgrade_version,
         initial_command,
-        exit_on_complete,  // SPEC-KIT-920
+        exit_on_complete, // SPEC-KIT-920
         config_watcher,
     );
 

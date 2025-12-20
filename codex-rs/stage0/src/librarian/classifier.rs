@@ -225,9 +225,10 @@ pub fn classify_memory(content: &str) -> ClassificationResult {
 
     // Return highest scoring type, or Unknown if no significant signals
     if let Some((mem_type, confidence, signals)) = scores.into_iter().next()
-        && confidence > 0.0 {
-            return ClassificationResult::new(mem_type, confidence.min(1.0), signals);
-        }
+        && confidence > 0.0
+    {
+        return ClassificationResult::new(mem_type, confidence.min(1.0), signals);
+    }
 
     ClassificationResult::new(MemoryType::Unknown, 0.0, vec![])
 }

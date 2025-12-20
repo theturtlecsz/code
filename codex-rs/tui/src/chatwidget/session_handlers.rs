@@ -10,12 +10,12 @@ use codex_protocol::models::{ContentItem, ResponseItem};
 use ratatui::text::Line;
 use serde_json::Value as JsonValue;
 
+use super::streaming;
 use crate::app_event::AppEvent;
 use crate::bottom_pane::resume_selection_view::ResumeRow;
 use crate::history_cell::{self, HistoryCell, HistoryCellType, PlainHistoryCell};
 use crate::providers::claude_streaming::ClaudeStreamingProvider;
 use crate::providers::gemini_streaming::GeminiStreamingProvider;
-use super::streaming;
 use crate::streaming::StreamKind;
 
 use super::ChatWidget;
@@ -111,12 +111,7 @@ pub(crate) async fn list_cli_sessions_impl() -> String {
 
             lines.push(format!(
                 "{:<20} {:<12} {:<40} {:<8} {:<8} {}",
-                conv_id_short,
-                session.provider,
-                session_id_short,
-                session.turn_count,
-                pid_str,
-                age
+                conv_id_short, session.provider, session_id_short, session.turn_count, pid_str, age
             ));
         }
 
@@ -350,8 +345,7 @@ impl ChatWidget<'_> {
                     streaming::begin(self, StreamKind::Reasoning, None);
                     let _ = self.stream.apply_final_reasoning(&text, &sink);
                     // finalize immediately for static replay
-                    self.stream
-                        .finalize(StreamKind::Reasoning, true, &sink);
+                    self.stream.finalize(StreamKind::Reasoning, true, &sink);
                 }
             }
             ResponseItem::FunctionCallOutput {
@@ -553,10 +547,7 @@ impl ChatWidget<'_> {
     /// Render a single history cell into terminal-friendly lines:
     /// - Prepend a gutter icon (symbol + space) to the first line when defined.
     /// - Add a single blank line after the cell as a separator.
-    pub(crate) fn render_lines_for_terminal(
-        &self,
-        cell: &dyn HistoryCell,
-    ) -> Vec<Line<'static>> {
+    pub(crate) fn render_lines_for_terminal(&self, cell: &dyn HistoryCell) -> Vec<Line<'static>> {
         let mut lines = cell.display_lines();
         let _has_icon = cell.gutter_symbol().is_some();
         let first_prefix = if let Some(sym) = cell.gutter_symbol() {
@@ -614,7 +605,11 @@ mod tests {
         let ts = (Utc::now() - chrono::Duration::days(14)).to_rfc3339();
         // After 7 days, should show date
         let result = human_ago(&ts);
-        assert!(result.contains("-"), "Expected date format, got: {}", result);
+        assert!(
+            result.contains("-"),
+            "Expected date format, got: {}",
+            result
+        );
     }
 
     #[test]

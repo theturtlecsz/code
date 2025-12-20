@@ -231,7 +231,10 @@ pub(in super::super) fn telemetry_agent_slug(agent: &str) -> String {
 /// emit a deprecation warning, but voting remains disabled.
 ///
 /// See: docs/MODEL-POLICY.md Section 2 (GR-001)
-#[deprecated(since = "0.1.0", note = "Legacy voting removed in PR6. Always returns false.")]
+#[deprecated(
+    since = "0.1.0",
+    note = "Legacy voting removed in PR6. Always returns false."
+)]
 pub fn is_consensus_enabled() -> bool {
     // PR6: Trigger the warning if env var is set, but always return false
     let _ = PolicyToggles::from_env_and_config();
@@ -813,13 +816,13 @@ pub async fn run_spec_consensus(
             spec_id
         )));
         lines.push(ratatui::text::Line::from(
-            "  Quality enforced by: compiler/tests, constitution gates, Judge audit"
+            "  Quality enforced by: compiler/tests, constitution gates, Judge audit",
         ));
 
         // If critic mode enabled, note it
         if is_critic_enabled() {
             lines.push(ratatui::text::Line::from(
-                "  Critic sidecar: ENABLED (non-blocking review)"
+                "  Critic sidecar: ENABLED (non-blocking review)",
             ));
         }
 
@@ -1296,7 +1299,6 @@ pub(crate) async fn remember_consensus_verdict(
     Ok(())
 }
 
-
 // ============================================================================
 // INTEGRATION TESTS FOR GR-001 FEATURE FLAGS
 // ============================================================================
@@ -1419,7 +1421,11 @@ mod gr001_tests {
         }
 
         let agents = expected_agents_for_stage(SpecStage::Implement);
-        assert_eq!(agents.len(), 1, "PR6: always single agent even with env var");
+        assert_eq!(
+            agents.len(),
+            1,
+            "PR6: always single agent even with env var"
+        );
 
         // Cleanup
         unsafe { std::env::remove_var("SPEC_KIT_CONSENSUS") };
@@ -1430,16 +1436,34 @@ mod gr001_tests {
         use crate::spec_prompts::SpecAgent;
 
         // Architect roles use Gemini
-        assert_eq!(preferred_agent_for_stage(SpecStage::Specify), SpecAgent::Gemini);
-        assert_eq!(preferred_agent_for_stage(SpecStage::Plan), SpecAgent::Gemini);
+        assert_eq!(
+            preferred_agent_for_stage(SpecStage::Specify),
+            SpecAgent::Gemini
+        );
+        assert_eq!(
+            preferred_agent_for_stage(SpecStage::Plan),
+            SpecAgent::Gemini
+        );
 
         // Implementer uses Claude
-        assert_eq!(preferred_agent_for_stage(SpecStage::Implement), SpecAgent::Claude);
-        assert_eq!(preferred_agent_for_stage(SpecStage::Tasks), SpecAgent::Claude);
+        assert_eq!(
+            preferred_agent_for_stage(SpecStage::Implement),
+            SpecAgent::Claude
+        );
+        assert_eq!(
+            preferred_agent_for_stage(SpecStage::Tasks),
+            SpecAgent::Claude
+        );
 
         // Judge uses Claude
-        assert_eq!(preferred_agent_for_stage(SpecStage::Validate), SpecAgent::Claude);
-        assert_eq!(preferred_agent_for_stage(SpecStage::Audit), SpecAgent::Claude);
+        assert_eq!(
+            preferred_agent_for_stage(SpecStage::Validate),
+            SpecAgent::Claude
+        );
+        assert_eq!(
+            preferred_agent_for_stage(SpecStage::Audit),
+            SpecAgent::Claude
+        );
     }
 
     // =========================================================================
@@ -1509,7 +1533,10 @@ mod gr001_tests {
 
         let verdict: ConsensusVerdict =
             serde_json::from_str(json_gate_ok).expect("deserialize with gate_ok alias");
-        assert!(verdict.consensus_ok, "gate_ok alias should map to consensus_ok");
+        assert!(
+            verdict.consensus_ok,
+            "gate_ok alias should map to consensus_ok"
+        );
 
         // JSON using alternate new key name "review_ok" (via serde alias)
         let json_review_ok = r#"{
@@ -1527,7 +1554,10 @@ mod gr001_tests {
 
         let verdict: ConsensusVerdict =
             serde_json::from_str(json_review_ok).expect("deserialize with review_ok alias");
-        assert!(!verdict.consensus_ok, "review_ok alias should map to consensus_ok");
+        assert!(
+            !verdict.consensus_ok,
+            "review_ok alias should map to consensus_ok"
+        );
         assert!(verdict.degraded);
     }
 
