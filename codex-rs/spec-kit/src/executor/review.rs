@@ -1497,4 +1497,166 @@ mod tests {
         assert_eq!(infer_agent_role(None, "unknown.json"), Role::Architect);
         assert_eq!(infer_agent_role(Some("claude"), "file.json"), Role::Architect);
     }
+
+    #[test]
+    fn test_fixture_two_files_determinism() {
+        // Risk mitigation: Verify deterministic processing of multiple consensus files
+        // Files are sorted lexicographically; signals from all files are aggregated
+        let temp = create_fixture_dir();
+        let repo_root = temp.path();
+        let spec_id = "FIXTURE-DETERM";
+
+        // Create consensus directory structure
+        let consensus_dir = repo_root
+            .join(EVIDENCE_ROOT)
+            .join(CONSENSUS_DIR)
+            .join(spec_id);
+        std::fs::create_dir_all(&consensus_dir).unwrap();
+
+        // Create spec packet directory with plan.md
+        let spec_packet_dir = repo_root.join(SPEC_PACKET_ROOT).join(spec_id);
+        std::fs::create_dir_all(&spec_packet_dir).unwrap();
+        std::fs::write(spec_packet_dir.join("plan.md"), "# Plan\nTest plan").unwrap();
+
+        // Create TWO consensus files for the same stage with different timestamps
+        // File 1: older timestamp, has conflict A
+        let file_older = consensus_dir.join("spec-plan_architect_20251219.json");
+        std::fs::write(
+            &file_older,
+            consensus_with_conflicts(&["Conflict from older file"]),
+        )
+        .unwrap();
+
+        // File 2: newer timestamp, has conflict B
+        let file_newer = consensus_dir.join("spec-plan_implementer_20251220.json");
+        std::fs::write(
+            &file_newer,
+            consensus_with_conflicts(&["Conflict from newer file"]),
+        )
+        .unwrap();
+
+        // Execute review multiple times to verify determinism
+        let mut results = Vec::new();
+        for _ in 0..3 {
+            let request = ReviewRequest {
+                repo_root: repo_root.to_path_buf(),
+                spec_id: spec_id.to_string(),
+                stage: Stage::Plan,
+                options: ReviewOptions::default(),
+            };
+            results.push(evaluate_stage_review(request, Checkpoint::AfterPlan).unwrap());
+        }
+
+        // Verify: All runs produce identical results
+        for result in &results {
+            assert!(
+                matches!(result.resolution, Verdict::Escalate { .. }),
+                "Expected Escalate due to conflicts"
+            );
+            // Both files' conflicts should be aggregated
+            assert_eq!(
+                result.blocking_signals.len(),
+                2,
+                "Expected 2 blocking signals (one from each file)"
+            );
+        }
+
+        // Verify deterministic ordering: older file processed first (lexicographic)
+        let first_result = &results[0];
+        assert!(
+            first_result.blocking_signals[0]
+                .message
+                .contains("older file"),
+            "First signal should be from older file (lexicographic order)"
+        );
+        assert!(
+            first_result.blocking_signals[1]
+                .message
+                .contains("newer file"),
+            "Second signal should be from newer file (lexicographic order)"
+        );
+
+        // All runs identical
+        for i in 1..results.len() {
+            assert_eq!(
+                results[0].blocking_signals.len(),
+                results[i].blocking_signals.len(),
+                "All runs should have same signal count"
+            );
+            for j in 0..results[0].blocking_signals.len() {
+                assert_eq!(
+                    results[0].blocking_signals[j].message,
+                    results[i].blocking_signals[j].message,
+                    "Signal order must be deterministic across runs"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_fixture_multiple_agents_aggregation() {
+        // Verify that signals from multiple agents are correctly aggregated
+        // One file with conflict, one clean, one with error
+        let temp = create_fixture_dir();
+        let repo_root = temp.path();
+        let spec_id = "FIXTURE-MULTI";
+
+        let consensus_dir = repo_root
+            .join(EVIDENCE_ROOT)
+            .join(CONSENSUS_DIR)
+            .join(spec_id);
+        std::fs::create_dir_all(&consensus_dir).unwrap();
+
+        let spec_packet_dir = repo_root.join(SPEC_PACKET_ROOT).join(spec_id);
+        std::fs::create_dir_all(&spec_packet_dir).unwrap();
+        std::fs::write(spec_packet_dir.join("plan.md"), "# Plan").unwrap();
+
+        // Agent 1: Architect with conflict
+        std::fs::write(
+            consensus_dir.join("spec-plan_architect_20251220.json"),
+            consensus_with_conflicts(&["Scope creep detected"]),
+        )
+        .unwrap();
+
+        // Agent 2: Implementer clean (no conflicts)
+        std::fs::write(
+            consensus_dir.join("spec-plan_implementer_20251220.json"),
+            consensus_clean(),
+        )
+        .unwrap();
+
+        // Agent 3: Validator with error (advisory)
+        std::fs::write(
+            consensus_dir.join("spec-plan_validator_20251220.json"),
+            consensus_with_error("Timeout during validation"),
+        )
+        .unwrap();
+
+        let request = ReviewRequest {
+            repo_root: repo_root.to_path_buf(),
+            spec_id: spec_id.to_string(),
+            stage: Stage::Plan,
+            options: ReviewOptions::default(),
+        };
+
+        let result = evaluate_stage_review(request, Checkpoint::AfterPlan).unwrap();
+
+        // Verify aggregation
+        assert!(
+            matches!(result.resolution, Verdict::Escalate { .. }),
+            "Should escalate due to architect's conflict"
+        );
+        assert_eq!(
+            result.blocking_signals.len(),
+            1,
+            "One blocking signal from architect"
+        );
+        assert!(result.blocking_signals[0].message.contains("Scope creep"));
+        assert_eq!(
+            result.advisory_signals.len(),
+            1,
+            "One advisory signal from validator error"
+        );
+        assert!(result.advisory_signals[0].message.contains("Timeout"));
+    }
 }

@@ -26,6 +26,10 @@ const CONSENSUS_DIR: &str = "consensus";  // legacy name retained
 const COMMANDS_DIR: &str = "commands";
 ```
 
+**Known Limitation (P2):** Evidence root is hardcoded to a specific SPEC-OPS folder.
+If multiple SPEC-OPS folders exist, only `SPEC-OPS-004-integrated-coder-hooks` is read.
+Future: accept `--ops-packet` CLI override or discover newest folder dynamically.
+
 ---
 
 ## 2. Stage to Checkpoint Mapping
@@ -48,8 +52,13 @@ const COMMANDS_DIR: &str = "commands";
 
 ### File Selection
 - Pattern: `spec-<stage_slug>_*.json` (e.g., `spec-plan_claude_20251120.json`)
-- Selection: **Lexicographic max** of matching filenames (latest by naming convention)
+- Selection: **All matching files** for the stage are processed
+  - Files are sorted lexicographically for deterministic iteration order
+  - Signals from all matching files are aggregated (conflicts from any file → blocking)
+  - This supports multi-agent consensus (architect + implementer + validator)
 - Stage slug mapping: `plan`, `tasks`, `implement`, `validate`, `audit`
+
+**Determinism guarantee**: Given the same set of files, review always produces the same signals in the same order.
 
 ### Parse Failure Handling
 - Emit `ReviewSignal { kind: Other, origin: SignalOrigin::System, severity: Advisory }`
