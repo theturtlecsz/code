@@ -1,7 +1,7 @@
 # HANDOFF: SPEC-KIT-921 P7 Continuation
 
 **Generated**: 2025-12-21
-**Last Commit**: a2ef529fa (centralize prereq matrix with architect gate tests)
+**Last Commit**: 0ddd9e61e (P7 foundational improvements)
 **Branch**: main
 
 ---
@@ -11,29 +11,28 @@
 Copy this prompt to start the next session:
 
 ```
-# Continue SPEC-KIT-921 P7 Implementation
+# Continue SPEC-KIT-921 P7-B Implementation
 
 Continue from docs/spec-kit/HANDOFF.md
 
 ## Context
-- P0-P6 complete (with architectural improvements)
-- 53 CLI tests passing (50 speckit + 3 helpers)
-- All 7 stage commands have CLI support (specify, plan, tasks, implement, validate, audit, unlock)
-- --strict-prereqs flag available on all stage validation commands
-- Centralized prereq matrix in check_stage_prereqs() helper
-- Test helpers module available for reduced boilerplate
-- speckit specify creates SPEC directory with PRD.md (idempotent)
+- P0-P6 + P7 foundations complete
+- 57 CLI tests passing (54 speckit + 3 helpers)
+- Canonical packet contract defined (PRD.md → plan.md → tasks.md → ...)
+- Spec ID validation with path traversal protection
+- Suffix directory resolution (SPEC-ID-suffix patterns)
+- Prereq matrix aligned with artifact dependency DAG
 
-## P6 Completed Deliverables
+## P7 Foundational Deliverables (Complete)
 
 | Task | Status | Tests |
 |------|--------|-------|
-| P6-C: --strict-prereqs | ✅ | 6 tests |
-| P6-D: Test helpers | ✅ | 3 tests (speckit_helpers.rs) |
-| P6-A: speckit specify | ✅ | 7 tests (4 original + 3 architect gate) |
-| P6-B: speckit run batch | ⏳ Deferred | - |
+| Spec ID validation | ✅ | 2 tests (path traversal, format) |
+| Directory resolution | ✅ | 2 tests (suffix, determinism) |
+| Prereq matrix alignment | ✅ | Updated all stages |
+| Packet contract docs | ✅ | In executor/mod.rs |
 
-## P7 Priority Order
+## P7 Remaining Priority Order
 
 1. **P7-A: speckit run batch command** (--from/--to stage ranges)
 2. **P7-B: Template library** (built-in SPEC templates)
@@ -47,44 +46,64 @@ cargo test -p codex-cli --test speckit
 cargo test -p codex-cli --test speckit_helpers
 ```
 
-## Acceptance Criteria for P7
+## Acceptance Criteria for P7 (Remaining)
 
 - [ ] `speckit run` batch command with --from/--to support
 - [ ] Template library for common SPEC patterns
 - [ ] Full 8-stage pipeline test (specify→unlock)
-- [ ] 60+ CLI integration tests passing
+- [ ] 65+ CLI integration tests passing
 ```
 
 ---
 
-## Session Summary (P6 Completed + Architectural Improvements)
+## Session Summary (P7 Foundations)
 
-### P6 Deliverables
+### P7 Foundational Deliverables
 
 | Task | Status | Deliverable |
 |------|--------|-------------|
-| P6-C: --strict-prereqs flag | ✅ | `--strict-prereqs` on all 6 stage commands, 6 tests |
-| P6-D: Test helpers | ✅ | `speckit_helpers.rs` module with TestContext, CliResult, 3 tests |
-| P6-A: speckit specify | ✅ | `speckit specify --spec <ID> [--execute] [--json]`, 7 tests |
-| P6-B: speckit run batch | ⏳ Deferred | Complex orchestration, moved to P7 |
+| Canonical packet contract | ✅ | Artifact DAG documented in executor/mod.rs |
+| Spec ID validation | ✅ | Path traversal + format validation, 2 tests |
+| Directory resolution | ✅ | resolve_spec_dir() with suffix support, 2 tests |
+| Prereq matrix alignment | ✅ | Matches artifact DAG |
 
-**Tests**: 53 CLI tests passing (50 speckit + 3 helpers)
+**Tests**: 57 CLI tests passing (54 speckit + 3 helpers)
 
-### Architectural Improvements (P6 Continuation)
+### Canonical Packet Contract
 
-Centralized prereq checking into single `check_stage_prereqs()` helper:
-
-```rust
-/// Returns (required_missing, recommended_missing)
-/// Required: blocks with --strict-prereqs
-/// Recommended: never blocks, always advisory
-fn check_stage_prereqs(spec_dir, spec_id, stage) -> (Vec<String>, Vec<String>)
+```
+Stage     | Input Required       | Output Created
+----------|---------------------|------------------
+Specify   | (none)              | PRD.md
+Plan      | PRD.md              | plan.md
+Tasks     | plan.md             | tasks.md
+Implement | tasks.md            | implement.md
+Validate  | implement.md        | validate.md
+Audit     | validate.md         | audit.md
+Unlock    | audit.md            | (approval)
 ```
 
-Added 3 architect gate tests:
-1. `specify_idempotent_never_overwrites` - verify specify doesn't clobber existing PRD.md
-2. `specify_then_plan_strict_prereqs_succeeds` - verify specify→plan chain works
-3. `plan_strict_prereqs_blocks_without_spec_dir` - verify Plan blocks when SPEC dir missing
+### Key Utilities Added
+
+```rust
+// Spec ID validation (security)
+pub fn validate_spec_id(spec_id: &str) -> Result<(), SpecIdError>
+
+// Canonical directory resolution (supports suffixes)
+pub fn resolve_spec_dir(repo_root: &Path, spec_id: &str) -> Option<ResolvedSpecDir>
+
+// Creation path (no suffix)
+pub fn default_spec_dir_for_creation(repo_root: &Path, spec_id: &str) -> PathBuf
+```
+
+### P6 Session Summary (Previous)
+
+| Task | Status | Tests |
+|------|--------|-------|
+| P6-C: --strict-prereqs | ✅ | 6 tests |
+| P6-D: Test helpers | ✅ | 3 tests |
+| P6-A: speckit specify | ✅ | 7 tests |
+| Architect gate tests | ✅ | 3 tests |
 
 ### Key Additions
 
@@ -247,5 +266,6 @@ StageOutcome { spec_id, stage, resolution, blocking_reasons, advisory_signals, e
 | P0-P3 | ✅ | 22 | Status, Review commands |
 | P4 | ✅ | 25 | Tasks command, StageOutcome envelope |
 | P5 | ✅ | 37 | Implement/Validate/Audit/Unlock commands |
-| P6 | ✅ | 53 | --strict-prereqs, specify, test helpers, prereq matrix |
+| P6 | ✅ | 53 | --strict-prereqs, specify, test helpers |
+| P7 (foundations) | ✅ | 57 | Packet contract, spec ID validation, directory resolution |
 | P7+ | ⏳ | - | Run batch, templates, auto orchestration |
