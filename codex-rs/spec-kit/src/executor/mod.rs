@@ -115,7 +115,9 @@ impl StageOutcome {
     }
 
     /// Create a Blocked outcome
-    pub fn blocked(spec_id: String, stage: crate::Stage, errors: Vec<String>) -> Self {
+    ///
+    /// SPEC-KIT-921 P4: Preserves dry_run for metadata consistency
+    pub fn blocked(spec_id: String, stage: crate::Stage, errors: Vec<String>, dry_run: bool) -> Self {
         Self {
             spec_id,
             stage,
@@ -123,12 +125,14 @@ impl StageOutcome {
             blocking_reasons: errors,
             advisory_signals: Vec::new(),
             evidence_refs: None,
-            dry_run: false, // Blocked outcomes don't matter for dry_run
+            dry_run,
         }
     }
 
     /// Create a Skipped outcome
-    pub fn skipped(spec_id: String, stage: crate::Stage, reason: &str) -> Self {
+    ///
+    /// SPEC-KIT-921 P4: Preserves dry_run for metadata consistency
+    pub fn skipped(spec_id: String, stage: crate::Stage, reason: &str, dry_run: bool) -> Self {
         Self {
             spec_id,
             stage,
@@ -136,7 +140,7 @@ impl StageOutcome {
             blocking_reasons: Vec::new(),
             advisory_signals: vec![reason.to_string()],
             evidence_refs: None,
-            dry_run: false,
+            dry_run,
         }
     }
 
@@ -231,11 +235,11 @@ impl SpeckitExecutor {
                 strict_schema,
                 evidence_root,
             ),
-            SpeckitCommand::Plan {
+            SpeckitCommand::ValidateStage {
                 spec_id,
                 stage,
                 dry_run,
-            } => self.execute_plan(&spec_id, stage, dry_run),
+            } => self.execute_validate_stage(&spec_id, stage, dry_run),
         }
     }
 
@@ -309,13 +313,13 @@ impl SpeckitExecutor {
         }
     }
 
-    /// Execute plan command (validate prerequisites and guardrails)
+    /// Execute stage validation command (validate prerequisites and guardrails)
     ///
-    /// SPEC-KIT-921 P4-B: Returns StageOutcome with resolution.
+    /// SPEC-KIT-921 P4: Stage-neutral validation for any stage.
     ///
     /// The adapter (TUI) handles agent spawning when resolution is Ready.
     /// CLI with --dry-run reports outcome and exits.
-    fn execute_plan(&self, spec_id: &str, stage: crate::Stage, dry_run: bool) -> Outcome {
+    fn execute_validate_stage(&self, spec_id: &str, stage: crate::Stage, dry_run: bool) -> Outcome {
         let mut warnings: Vec<String> = Vec::new();
         let mut errors: Vec<String> = Vec::new();
 
@@ -326,6 +330,7 @@ impl SpeckitExecutor {
                 spec_id.to_string(),
                 stage,
                 errors,
+                dry_run,
             ));
         }
 
@@ -388,7 +393,7 @@ impl SpeckitExecutor {
 
         // If there are errors, return Blocked
         if !errors.is_empty() {
-            return Outcome::Stage(StageOutcome::blocked(spec_id.to_string(), stage, errors));
+            return Outcome::Stage(StageOutcome::blocked(spec_id.to_string(), stage, errors, dry_run));
         }
 
         // Validation passed

@@ -40,28 +40,15 @@ const SCHEMA_VERSION: u32 = 1;
 
 /// Get tool version string with git sha for debugging.
 /// Format: "{cargo_version}+{git_sha}" or just "{cargo_version}" if no git info.
+///
+/// SPEC-KIT-921 P4: Build-time only SHA injection (no runtime git).
+/// Set SPECKIT_GIT_SHA or GIT_SHA environment variable at build time for SHA suffix.
 fn tool_version() -> String {
     let base_version = codex_version::version();
-    // Try to get git sha from build-time or runtime
+    // Build-time only: no runtime git fallback for determinism
     let git_sha = option_env!("SPECKIT_GIT_SHA")
-        .or_else(|| option_env!("GIT_SHA"))
-        .unwrap_or_else(|| {
-            // Runtime fallback: execute git command
-            std::process::Command::new("git")
-                .args(["rev-parse", "--short", "HEAD"])
-                .output()
-                .ok()
-                .and_then(|o| {
-                    if o.status.success() {
-                        String::from_utf8(o.stdout).ok()
-                    } else {
-                        None
-                    }
-                })
-                .map(|s| s.trim().to_string())
-                .unwrap_or_default()
-                .leak()
-        });
+        .or(option_env!("GIT_SHA"))
+        .unwrap_or("");
 
     if git_sha.is_empty() {
         base_version.to_string()
@@ -533,7 +520,7 @@ fn run_plan(executor: SpeckitExecutor, args: PlanArgs) -> anyhow::Result<()> {
     // P4-A: Plan command always uses Stage::Plan
     let stage = Stage::Plan;
 
-    let command = SpeckitCommand::Plan {
+    let command = SpeckitCommand::ValidateStage {
         spec_id: args.spec_id.clone(),
         stage,
         dry_run: args.dry_run,
@@ -631,7 +618,7 @@ fn run_tasks(executor: SpeckitExecutor, args: TasksArgs) -> anyhow::Result<()> {
     // P4-C: Tasks command always uses Stage::Tasks
     let stage = Stage::Tasks;
 
-    let command = SpeckitCommand::Plan {
+    let command = SpeckitCommand::ValidateStage {
         spec_id: args.spec_id.clone(),
         stage,
         dry_run: args.dry_run,

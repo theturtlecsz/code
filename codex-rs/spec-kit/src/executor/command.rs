@@ -52,19 +52,19 @@ pub enum SpeckitCommand {
         evidence_root: Option<PathBuf>,
     },
 
-    /// Execute plan stage (validate prerequisites, run guardrails)
+    /// Validate stage prerequisites and run guardrails
     ///
-    /// TUI: `/speckit.plan <SPEC-ID>`
-    /// CLI: `code speckit plan --spec <SPEC-ID> [--dry-run]`
+    /// TUI: `/speckit.plan <SPEC-ID>`, `/speckit.tasks <SPEC-ID>`, etc.
+    /// CLI: `code speckit plan|tasks|implement|... --spec <SPEC-ID> [--dry-run]`
     ///
-    /// SPEC-KIT-921 P3-B: Migrated behind executor for TUI/CLI parity.
-    /// The executor validates prerequisites and guardrails.
+    /// SPEC-KIT-921 P4: Stage-neutral validation command.
+    /// The executor validates prerequisites and guardrails for any stage.
     /// The adapter (TUI) handles agent spawning after validation passes.
-    Plan {
+    ValidateStage {
         /// The SPEC identifier
         spec_id: String,
 
-        /// Stage to execute (defaults to Plan, but can be tasks/implement/etc)
+        /// Stage to validate (plan, tasks, implement, validate, audit, unlock)
         stage: Stage,
 
         /// Dry-run mode: validate only, don't trigger agent execution
@@ -198,11 +198,11 @@ impl SpeckitCommand {
         })
     }
 
-    /// Parse plan command from slash command arguments
+    /// Parse stage validation command from slash command arguments
     ///
     /// Used by TUI: `/speckit.plan <SPEC-ID>` or `/speckit.tasks <SPEC-ID>` etc.
     /// Stage is provided by the command variant (plan, tasks, implement, etc.)
-    pub fn parse_plan(raw_args: &str, stage: Stage, dry_run: bool) -> Result<Self, String> {
+    pub fn parse_validate_stage(raw_args: &str, stage: Stage, dry_run: bool) -> Result<Self, String> {
         let trimmed = raw_args.trim();
         if trimmed.is_empty() {
             return Err(format!(
@@ -227,7 +227,7 @@ impl SpeckitCommand {
             }
         }
 
-        Ok(SpeckitCommand::Plan {
+        Ok(SpeckitCommand::ValidateStage {
             spec_id,
             stage,
             dry_run,

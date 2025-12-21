@@ -18,7 +18,7 @@ use codex_spec_kit::executor::{
 use codex_spec_kit::Stage;
 
 /// Command: /speckit.plan
-/// Creates work breakdown with multi-agent consensus
+/// Creates work breakdown with gate review
 pub struct SpecKitPlanCommand;
 
 impl SpecKitCommand for SpecKitPlanCommand {
@@ -31,7 +31,7 @@ impl SpecKitCommand for SpecKitPlanCommand {
     }
 
     fn description(&self) -> &'static str {
-        "create work breakdown with multi-agent consensus"
+        "create work breakdown with gate review"
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
@@ -78,7 +78,7 @@ impl SpecKitCommand for SpecKitTasksCommand {
 }
 
 /// Command: /speckit.implement
-/// Code generation with multi-agent consensus
+/// Code generation with gate review
 pub struct SpecKitImplementCommand;
 
 impl SpecKitCommand for SpecKitImplementCommand {
@@ -91,7 +91,7 @@ impl SpecKitCommand for SpecKitImplementCommand {
     }
 
     fn description(&self) -> &'static str {
-        "write code with multi-agent consensus"
+        "write code with gate review"
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
@@ -108,7 +108,7 @@ impl SpecKitCommand for SpecKitImplementCommand {
 }
 
 /// Command: /speckit.validate
-/// Test strategy with multi-agent validation
+/// Test strategy with gate review
 pub struct SpecKitValidateCommand;
 
 impl SpecKitCommand for SpecKitValidateCommand {
@@ -121,7 +121,7 @@ impl SpecKitCommand for SpecKitValidateCommand {
     }
 
     fn description(&self) -> &'static str {
-        "run test strategy with validation"
+        "run test strategy with gate review"
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
@@ -138,7 +138,7 @@ impl SpecKitCommand for SpecKitValidateCommand {
 }
 
 /// Command: /speckit.audit
-/// Compliance review with multi-agent
+/// Compliance review with gate signals
 pub struct SpecKitAuditCommand;
 
 impl SpecKitCommand for SpecKitAuditCommand {
@@ -151,7 +151,7 @@ impl SpecKitCommand for SpecKitAuditCommand {
     }
 
     fn description(&self) -> &'static str {
-        "compliance review with multi-agent"
+        "compliance review with gate signals"
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
@@ -201,18 +201,21 @@ impl SpecKitCommand for SpecKitUnlockCommand {
 
 /// Convert TUI SpecStage to spec-kit Stage
 ///
-/// SPEC-KIT-921 P4-D: Enable executor integration
-fn spec_stage_to_stage(stage: SpecStage) -> Stage {
+/// SPEC-KIT-921 P4: Enable executor integration
+///
+/// Returns None for non-stage items (quality commands) to prevent silent bugs.
+/// Callers must handle the None case explicitly.
+fn spec_stage_to_stage(stage: SpecStage) -> Option<Stage> {
     match stage {
-        SpecStage::Specify => Stage::Specify,
-        SpecStage::Plan => Stage::Plan,
-        SpecStage::Tasks => Stage::Tasks,
-        SpecStage::Implement => Stage::Implement,
-        SpecStage::Validate => Stage::Validate,
-        SpecStage::Audit => Stage::Audit,
-        SpecStage::Unlock => Stage::Unlock,
+        SpecStage::Specify => Some(Stage::Specify),
+        SpecStage::Plan => Some(Stage::Plan),
+        SpecStage::Tasks => Some(Stage::Tasks),
+        SpecStage::Implement => Some(Stage::Implement),
+        SpecStage::Validate => Some(Stage::Validate),
+        SpecStage::Audit => Some(Stage::Audit),
+        SpecStage::Unlock => Some(Stage::Unlock),
         // Quality commands don't map to executor stages
-        SpecStage::Clarify | SpecStage::Analyze | SpecStage::Checklist => Stage::Plan, // fallback
+        SpecStage::Clarify | SpecStage::Analyze | SpecStage::Checklist => None,
     }
 }
 
@@ -239,8 +242,16 @@ pub fn execute_stage_command(
         return;
     }
 
-    // SPEC-KIT-921 P4-D: Use executor for validation (CLI/TUI parity)
-    let executor_stage = spec_stage_to_stage(stage);
+    // SPEC-KIT-921 P4: Use executor for validation (CLI/TUI parity)
+    let executor_stage = match spec_stage_to_stage(stage) {
+        Some(s) => s,
+        None => {
+            // Quality commands (Clarify/Analyze/Checklist) don't use executor
+            // Fall back to direct agent spawning without validation
+            super::super::agent_orchestrator::auto_submit_spec_stage_prompt(widget, stage, spec_id);
+            return;
+        }
+    };
 
     // Resolve policy from env/config at adapter boundary (not in executor)
     let toggles = PolicyToggles::from_env_and_config();
@@ -257,7 +268,7 @@ pub fn execute_stage_command(
     });
 
     // Execute validation via shared executor (same path as CLI)
-    let command = ExecutorCommand::Plan {
+    let command = ExecutorCommand::ValidateStage {
         spec_id: spec_id.to_string(),
         stage: executor_stage,
         dry_run: false, // TUI actually spawns agents
