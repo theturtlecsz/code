@@ -1844,16 +1844,17 @@ fn validate_strict_prereqs_blocks_when_impl_missing() -> Result<()> {
 
 #[test]
 fn plan_strict_prereqs_succeeds_when_dir_exists() -> Result<()> {
-    // P6-C: Plan stage with --strict-prereqs succeeds when SPEC dir exists
+    // P7: Plan stage with --strict-prereqs succeeds when PRD.md exists
     let codex_home = TempDir::new()?;
     let repo_root = TempDir::new()?;
 
-    // Create SPEC directory (plan stage only requires dir to exist)
+    // Create SPEC directory with PRD.md (canonical input artifact for Plan)
     let spec_dir = repo_root
         .path()
         .join("docs")
         .join("SPEC-TEST-PLAN-STRICT");
     fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("PRD.md"), "# Test PRD\n\n## Requirements\n")?;
 
     let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
     let output = cmd
@@ -2299,6 +2300,185 @@ fn plan_strict_prereqs_blocks_without_spec_dir() -> Result<()> {
         Some(2),
         "Plan --strict-prereqs should block when SPEC dir doesn't exist, got {:?}",
         output.status.code()
+    );
+
+    Ok(())
+}
+
+// =============================================================================
+// P7: Spec ID Validation Tests
+// =============================================================================
+
+#[test]
+fn spec_id_path_traversal_rejected() -> Result<()> {
+    // P7 Security: Spec IDs with path traversal should be rejected
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+    fs::create_dir_all(repo_root.path().join("docs"))?;
+
+    // Test ../ traversal
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args(["speckit", "plan", "--spec", "../etc/passwd", "--json"])
+        .output()?;
+
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "Path traversal spec ID should be blocked (exit 2)"
+    );
+
+    // Error should be in JSON output
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+    let errors = json.get("errors").and_then(|v| v.as_array());
+    let error_text = errors
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str())
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .unwrap_or_default();
+
+    assert!(
+        error_text.contains("invalid path characters"),
+        "Error should mention path characters: {}",
+        error_text
+    );
+
+    Ok(())
+}
+
+#[test]
+fn spec_id_format_validation() -> Result<()> {
+    // P7: Spec IDs must start with SPEC-
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+    fs::create_dir_all(repo_root.path().join("docs"))?;
+
+    // Test invalid format (doesn't start with SPEC-)
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args(["speckit", "plan", "--spec", "INVALID-001", "--json"])
+        .output()?;
+
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "Invalid spec ID format should be blocked (exit 2)"
+    );
+
+    // Error should be in JSON output
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+    let errors = json.get("errors").and_then(|v| v.as_array());
+    let error_text = errors
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str())
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .unwrap_or_default();
+
+    assert!(
+        error_text.contains("doesn't match expected format"),
+        "Error should mention format: {}",
+        error_text
+    );
+
+    Ok(())
+}
+
+#[test]
+fn suffix_directory_resolution() -> Result<()> {
+    // P7: Spec directories with suffixes (SPEC-KIT-900-gold-run) should resolve
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create suffixed directory with PRD.md
+    let spec_dir = repo_root
+        .path()
+        .join("docs")
+        .join("SPEC-TEST-SUFFIX-gold-run");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("PRD.md"), "# Test PRD\n")?;
+
+    // Plan command should find SPEC-TEST-SUFFIX even though dir is SPEC-TEST-SUFFIX-gold-run
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "plan",
+            "--spec",
+            "SPEC-TEST-SUFFIX",
+            "--dry-run",
+            "--json",
+        ])
+        .output()?;
+
+    assert!(
+        output.status.success(),
+        "Plan should succeed with suffixed directory, got {:?}\nstderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Verify JSON output shows the resolved directory
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+    let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
+    assert_eq!(status, "ready", "Plan should be ready with resolved dir");
+
+    Ok(())
+}
+
+#[test]
+fn suffix_directory_deterministic_resolution() -> Result<()> {
+    // P7: When multiple suffixed directories exist, resolution should be deterministic
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create two suffixed directories (sorted: alpha, beta)
+    let dir_alpha = repo_root.path().join("docs").join("SPEC-TEST-MULTI-alpha");
+    let dir_beta = repo_root.path().join("docs").join("SPEC-TEST-MULTI-beta");
+    fs::create_dir_all(&dir_alpha)?;
+    fs::create_dir_all(&dir_beta)?;
+    fs::write(dir_alpha.join("PRD.md"), "# Alpha PRD\n")?;
+    fs::write(dir_beta.join("PRD.md"), "# Beta PRD\n")?;
+
+    // Should resolve to alpha (lexicographically first)
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "plan",
+            "--spec",
+            "SPEC-TEST-MULTI",
+            "--dry-run",
+            "--json",
+        ])
+        .output()?;
+
+    assert!(
+        output.status.success(),
+        "Should resolve one of the directories"
+    );
+
+    // Verify warning in JSON mentions the resolved directory name
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+    let warnings = json.get("warnings").and_then(|v| v.as_array());
+    let warning_text = warnings
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str())
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .unwrap_or_default();
+
+    assert!(
+        warning_text.contains("SPEC-TEST-MULTI-alpha"),
+        "Should resolve to alphabetically first directory: {}",
+        warning_text
     );
 
     Ok(())

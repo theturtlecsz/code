@@ -12,20 +12,35 @@
 //! - **Single entrypoint**: All commands flow through `execute()`
 //! - **Adapters own rendering**: TUI/CLI render domain results into their format
 //!
-//! ## Prerequisite Matrix (SPEC-KIT-921 P6)
+//! ## Canonical Packet Contract (SPEC-KIT-921 P7)
 //!
-//! Canonical prerequisite table for stage sequencing. With `--strict-prereqs`,
-//! missing "required" prereqs become blocking errors (exit 2).
+//! Each stage produces a specific artifact that becomes input to the next stage.
+//! This is the artifact dependency DAG - the single source of truth for prereqs.
+//!
+//! | Stage     | Input Required       | Output Created     |
+//! |-----------|---------------------|-------------------|
+//! | Specify   | (none)              | PRD.md            |
+//! | Plan      | PRD.md              | plan.md           |
+//! | Tasks     | plan.md             | tasks.md          |
+//! | Implement | tasks.md            | implement.md      |
+//! | Validate  | implement.md        | validate.md       |
+//! | Audit     | validate.md         | audit.md          |
+//! | Unlock    | audit.md            | (approval)        |
+//!
+//! ## Prerequisite Matrix
+//!
+//! With `--strict-prereqs`, missing required prereqs become blocking errors (exit 2).
+//! Without it, missing prereqs generate advisory warnings but don't block.
 //!
 //! | Stage     | Required (blocks if missing)         | Recommended (warns) |
 //! |-----------|--------------------------------------|---------------------|
 //! | Specify   | (none - first stage)                 | -                   |
-//! | Plan      | SPEC directory exists                | PRD.md exists       |
+//! | Plan      | PRD.md exists                        | -                   |
 //! | Tasks     | plan.md exists                       | -                   |
-//! | Implement | plan.md exists                       | tasks.md exists     |
-//! | Validate  | tasks.md OR implement.md exists      | -                   |
-//! | Audit     | tasks.md OR implement.md exists      | -                   |
-//! | Unlock    | tasks.md OR implement.md exists      | -                   |
+//! | Implement | tasks.md exists                      | plan.md exists      |
+//! | Validate  | implement.md exists                  | tasks.md exists     |
+//! | Audit     | validate.md exists                   | implement.md exists |
+//! | Unlock    | audit.md exists                      | validate.md exists  |
 //!
 //! ## Phase B Scope
 //!
@@ -48,6 +63,137 @@ pub use status::{
     GuardrailRecord, PacketStatus, ScenarioStatus, SpecStatusArgs, SpecStatusReport,
     StageConsensus, StageCue, StageKind, StageSnapshot, TrackerRow,
 };
+
+use std::path::{Path, PathBuf};
+
+// =============================================================================
+// Spec ID Validation & Directory Resolution (SPEC-KIT-921 P7)
+// =============================================================================
+
+/// Error returned when spec ID validation fails
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SpecIdError {
+    /// Spec ID is empty
+    Empty,
+    /// Spec ID contains path traversal characters
+    PathTraversal,
+    /// Spec ID doesn't match naming convention
+    InvalidFormat(String),
+}
+
+impl std::fmt::Display for SpecIdError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SpecIdError::Empty => write!(f, "SPEC-ID is required"),
+            SpecIdError::PathTraversal => {
+                write!(f, "SPEC-ID contains invalid path characters (/, \\, or ..)")
+            }
+            SpecIdError::InvalidFormat(id) => {
+                write!(f, "SPEC-ID '{}' doesn't match expected format SPEC-XXX-nnn", id)
+            }
+        }
+    }
+}
+
+impl std::error::Error for SpecIdError {}
+
+/// Validate a spec ID for safety and format
+///
+/// Rejects:
+/// - Empty IDs
+/// - Path traversal attempts (/, \, ..)
+/// - IDs that don't match SPEC-* naming convention
+///
+/// Returns Ok(()) if valid, Err(SpecIdError) otherwise.
+pub fn validate_spec_id(spec_id: &str) -> Result<(), SpecIdError> {
+    if spec_id.is_empty() {
+        return Err(SpecIdError::Empty);
+    }
+
+    // Path traversal protection
+    if spec_id.contains('/') || spec_id.contains('\\') || spec_id.contains("..") {
+        return Err(SpecIdError::PathTraversal);
+    }
+
+    // Naming convention: must start with SPEC- (case-insensitive)
+    // Allow: SPEC-KIT-921, SPEC-001, SPEC-TEST-001, etc.
+    let upper = spec_id.to_ascii_uppercase();
+    if !upper.starts_with("SPEC-") {
+        return Err(SpecIdError::InvalidFormat(spec_id.to_string()));
+    }
+
+    Ok(())
+}
+
+/// Result of resolving a spec directory
+#[derive(Debug, Clone)]
+pub struct ResolvedSpecDir {
+    /// The resolved directory path
+    pub path: PathBuf,
+    /// Whether this was an exact match or prefix match
+    pub exact_match: bool,
+    /// The actual directory name (may differ from spec_id if suffix exists)
+    pub dir_name: String,
+}
+
+/// Resolve spec directory with deterministic matching
+///
+/// Resolution order:
+/// 1. Exact match: `docs/<SPEC-ID>`
+/// 2. Prefix match: `docs/<SPEC-ID>-*` (sorted lexicographically, first match wins)
+///
+/// Returns None if no matching directory exists.
+///
+/// This function is the canonical resolver - all commands should use it.
+pub fn resolve_spec_dir(repo_root: &Path, spec_id: &str) -> Option<ResolvedSpecDir> {
+    let docs_dir = repo_root.join("docs");
+    if !docs_dir.exists() {
+        return None;
+    }
+
+    // 1. Try exact match first
+    let exact_path = docs_dir.join(spec_id);
+    if exact_path.is_dir() {
+        return Some(ResolvedSpecDir {
+            path: exact_path,
+            exact_match: true,
+            dir_name: spec_id.to_string(),
+        });
+    }
+
+    // 2. Try prefix match (SPEC-ID-*)
+    let prefix = format!("{}-", spec_id.to_ascii_uppercase());
+    let mut matches: Vec<_> = std::fs::read_dir(&docs_dir)
+        .ok()?
+        .filter_map(Result::ok)
+        .filter(|e| {
+            e.file_type().map(|ft| ft.is_dir()).unwrap_or(false)
+                && e.file_name()
+                    .to_string_lossy()
+                    .to_ascii_uppercase()
+                    .starts_with(&prefix)
+        })
+        .collect();
+
+    // Sort lexicographically for determinism
+    matches.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+
+    matches.first().map(|entry| ResolvedSpecDir {
+        path: entry.path(),
+        exact_match: false,
+        dir_name: entry.file_name().to_string_lossy().to_string(),
+    })
+}
+
+/// Get the default path for creating a new spec directory
+///
+/// Always returns the exact path `docs/<SPEC-ID>` without suffix.
+/// Used by `speckit specify` when creating new directories.
+pub fn default_spec_dir_for_creation(repo_root: &Path, spec_id: &str) -> PathBuf {
+    repo_root.join("docs").join(spec_id)
+}
+
+// =============================================================================
 
 /// Resolution of a stage validation
 ///
@@ -376,9 +522,9 @@ impl SpeckitExecutor {
         let mut warnings: Vec<String> = Vec::new();
         let mut errors: Vec<String> = Vec::new();
 
-        // 1. Validate SPEC-ID format
-        if spec_id.is_empty() {
-            errors.push("SPEC-ID is required".to_string());
+        // 1. Validate SPEC-ID format and safety
+        if let Err(e) = validate_spec_id(spec_id) {
+            errors.push(e.to_string());
             return Outcome::Stage(StageOutcome::blocked(
                 spec_id.to_string(),
                 stage,
@@ -387,33 +533,29 @@ impl SpeckitExecutor {
             ));
         }
 
-        // 2. Check if SPEC directory exists (docs/SPEC-xxx or docs/SPEC-xxx/*)
-        let spec_dir = self.context.repo_root.join("docs").join(spec_id);
-        if !spec_dir.exists() {
-            // Also check for partial match (e.g., SPEC-KIT-921 might be in docs/SPEC-KIT-921-feature-name/)
-            let docs_dir = self.context.repo_root.join("docs");
-            if docs_dir.exists() {
-                let has_matching_dir = std::fs::read_dir(&docs_dir)
-                    .map(|entries| {
-                        entries.filter_map(Result::ok).any(|e| {
-                            e.file_name()
-                                .to_string_lossy()
-                                .starts_with(&format!("{spec_id}-"))
-                                || e.file_name().to_string_lossy() == spec_id
-                        })
-                    })
-                    .unwrap_or(false);
-
-                if !has_matching_dir {
+        // 2. Resolve SPEC directory using canonical resolver
+        // Supports both exact match (SPEC-ID) and prefix match (SPEC-ID-suffix)
+        let resolved = resolve_spec_dir(&self.context.repo_root, spec_id);
+        let spec_dir = match &resolved {
+            Some(r) => {
+                if !r.exact_match {
+                    // Inform user that we matched a suffixed directory
                     warnings.push(format!(
-                        "SPEC directory not found: docs/{spec_id} (will be created if needed)"
+                        "Resolved {} to directory: {}",
+                        spec_id, r.dir_name
                     ));
                 }
+                r.path.clone()
             }
-        }
+            None => {
+                // Directory doesn't exist - use default path for prereq checking
+                // (prereq check will fail if directory is required)
+                default_spec_dir_for_creation(&self.context.repo_root, spec_id)
+            }
+        };
 
         // 3. Check prerequisites using centralized matrix
-        // See module-level docs for the canonical prereq table
+        // See module-level docs for the canonical packet contract
         let (required_missing, recommended_missing) =
             check_stage_prereqs(&spec_dir, spec_id, stage);
 
@@ -466,16 +608,27 @@ impl SpeckitExecutor {
     /// Execute specify command (create SPEC directory structure)
     ///
     /// SPEC-KIT-921 P6-A: Minimal specify implementation.
-    /// Creates docs/<SPEC-ID>/ directory with optional PRD.md placeholder.
+    /// SPEC-KIT-921 P7: Uses canonical spec ID validation and directory resolution.
+    ///
+    /// Creates docs/<SPEC-ID>/ directory with PRD.md (the canonical input artifact).
+    /// Idempotent: never overwrites existing PRD.md content.
     fn execute_specify(&self, spec_id: &str, dry_run: bool) -> Outcome {
-        // Validate SPEC-ID format
-        if spec_id.is_empty() {
-            return Outcome::Error("SPEC-ID is required".to_string());
+        // Validate SPEC-ID format and safety
+        if let Err(e) = validate_spec_id(spec_id) {
+            return Outcome::Error(e.to_string());
         }
 
-        // Determine spec directory path
-        let spec_dir = self.context.repo_root.join("docs").join(spec_id);
-        let spec_dir_relative = format!("docs/{spec_id}");
+        // Check if a matching directory already exists (exact or suffixed)
+        let existing = resolve_spec_dir(&self.context.repo_root, spec_id);
+
+        // Determine spec directory path (use existing if found, otherwise create exact)
+        let (spec_dir, spec_dir_relative) = match &existing {
+            Some(resolved) => (resolved.path.clone(), format!("docs/{}", resolved.dir_name)),
+            None => {
+                let path = default_spec_dir_for_creation(&self.context.repo_root, spec_id);
+                (path, format!("docs/{spec_id}"))
+            }
+        };
         let already_existed = spec_dir.exists();
 
         let mut created_files = Vec::new();
@@ -568,14 +721,14 @@ pub fn review_warning(result: &StageReviewResult) -> Option<String> {
     }
 }
 
-/// Check stage prerequisites against the canonical prereq matrix
+/// Check stage prerequisites against the canonical packet contract
 ///
 /// Returns (required_missing, recommended_missing) where:
 /// - required_missing: prereqs that block with --strict-prereqs
 /// - recommended_missing: prereqs that warn but never block
 ///
-/// SPEC-KIT-921 P6: Centralized prereq matrix.
-/// See module-level docs for the full table.
+/// SPEC-KIT-921 P7: Aligned with artifact dependency DAG.
+/// See module-level docs for the canonical packet contract.
 fn check_stage_prereqs(
     spec_dir: &std::path::Path,
     spec_id: &str,
@@ -589,20 +742,15 @@ fn check_stage_prereqs(
             // First stage - no prerequisites
         }
         crate::Stage::Plan => {
-            // Required: SPEC directory exists
-            if !spec_dir.exists() {
+            // Required: PRD.md exists (output of Specify)
+            if !spec_dir.join("PRD.md").exists() {
                 required_missing.push(format!(
-                    "SPEC directory not found: docs/{spec_id} - run speckit specify first"
-                ));
-            } else if !spec_dir.join("PRD.md").exists() {
-                // Recommended: PRD.md exists (created by speckit specify)
-                recommended_missing.push(format!(
-                    "PRD.md not found for {spec_id} - consider running speckit specify first"
+                    "PRD.md not found for {spec_id} - run speckit specify first"
                 ));
             }
         }
         crate::Stage::Tasks => {
-            // Required: plan.md exists (implies SPEC dir exists)
+            // Required: plan.md exists (output of Plan)
             if !spec_dir.join("plan.md").exists() {
                 required_missing.push(format!(
                     "plan.md not found for {spec_id} - run /speckit.plan first"
@@ -610,27 +758,58 @@ fn check_stage_prereqs(
             }
         }
         crate::Stage::Implement => {
-            // Required: plan.md exists
-            if !spec_dir.join("plan.md").exists() {
+            // Required: tasks.md exists (output of Tasks)
+            if !spec_dir.join("tasks.md").exists() {
                 required_missing.push(format!(
-                    "plan.md not found for {spec_id} - run /speckit.plan first"
+                    "tasks.md not found for {spec_id} - run /speckit.tasks first"
                 ));
             }
-            // Recommended: tasks.md exists
+            // Recommended: plan.md exists (for context)
+            if spec_dir.exists() && !spec_dir.join("plan.md").exists() {
+                recommended_missing.push(format!(
+                    "plan.md not found for {spec_id} - consider running /speckit.plan first"
+                ));
+            }
+        }
+        crate::Stage::Validate => {
+            // Required: implement.md exists (output of Implement)
+            if !spec_dir.join("implement.md").exists() {
+                required_missing.push(format!(
+                    "implement.md not found for {spec_id} - run /speckit.implement first"
+                ));
+            }
+            // Recommended: tasks.md exists (for test mapping)
             if spec_dir.exists() && !spec_dir.join("tasks.md").exists() {
                 recommended_missing.push(format!(
                     "tasks.md not found for {spec_id} - consider running /speckit.tasks first"
                 ));
             }
         }
-        crate::Stage::Validate | crate::Stage::Audit | crate::Stage::Unlock => {
-            // Required: implement.md OR tasks.md exists (implies SPEC dir exists)
-            let has_impl = ["implement.md", "tasks.md"]
-                .iter()
-                .any(|f| spec_dir.join(f).exists());
-            if !has_impl {
+        crate::Stage::Audit => {
+            // Required: validate.md exists (output of Validate)
+            if !spec_dir.join("validate.md").exists() {
                 required_missing.push(format!(
-                    "No implementation artifacts (tasks.md or implement.md) found for {spec_id} - run earlier stages first"
+                    "validate.md not found for {spec_id} - run /speckit.validate first"
+                ));
+            }
+            // Recommended: implement.md exists (for audit context)
+            if spec_dir.exists() && !spec_dir.join("implement.md").exists() {
+                recommended_missing.push(format!(
+                    "implement.md not found for {spec_id} - consider running /speckit.implement first"
+                ));
+            }
+        }
+        crate::Stage::Unlock => {
+            // Required: audit.md exists (output of Audit)
+            if !spec_dir.join("audit.md").exists() {
+                required_missing.push(format!(
+                    "audit.md not found for {spec_id} - run /speckit.audit first"
+                ));
+            }
+            // Recommended: validate.md exists (for final check)
+            if spec_dir.exists() && !spec_dir.join("validate.md").exists() {
+                recommended_missing.push(format!(
+                    "validate.md not found for {spec_id} - consider running /speckit.validate first"
                 ));
             }
         }
