@@ -12,6 +12,21 @@
 //! - **Single entrypoint**: All commands flow through `execute()`
 //! - **Adapters own rendering**: TUI/CLI render domain results into their format
 //!
+//! ## Prerequisite Matrix (SPEC-KIT-921 P6)
+//!
+//! Canonical prerequisite table for stage sequencing. With `--strict-prereqs`,
+//! missing "required" prereqs become blocking errors (exit 2).
+//!
+//! | Stage     | Required (blocks if missing)         | Recommended (warns) |
+//! |-----------|--------------------------------------|---------------------|
+//! | Specify   | (none - first stage)                 | -                   |
+//! | Plan      | SPEC directory exists                | PRD.md exists       |
+//! | Tasks     | plan.md exists                       | -                   |
+//! | Implement | plan.md exists                       | tasks.md exists     |
+//! | Validate  | tasks.md OR implement.md exists      | -                   |
+//! | Audit     | tasks.md OR implement.md exists      | -                   |
+//! | Unlock    | tasks.md OR implement.md exists      | -                   |
+//!
 //! ## Phase B Scope
 //!
 //! - Status command (read-only, pure)
@@ -397,49 +412,32 @@ impl SpeckitExecutor {
             }
         }
 
-        // 3. Basic stage validation - check prerequisites per stage
-        match stage {
-            crate::Stage::Specify => {
-                // Specify is always allowed (first stage, no prerequisites)
-            }
-            crate::Stage::Plan => {
-                // Plan requires SPEC to exist or be created
-                // (handled by warning above if spec_dir doesn't exist)
-            }
-            crate::Stage::Tasks | crate::Stage::Implement => {
-                // These typically require plan.md to exist
-                let plan_path = spec_dir.join("plan.md");
-                if spec_dir.exists() && !plan_path.exists() {
-                    warnings.push(format!(
-                        "plan.md not found for {spec_id} - recommended to run /speckit.plan first"
-                    ));
-                }
-            }
-            crate::Stage::Validate | crate::Stage::Audit | crate::Stage::Unlock => {
-                // These require implementation to exist
-                if spec_dir.exists() {
-                    let has_impl = ["implement.md", "tasks.md"]
-                        .iter()
-                        .any(|f| spec_dir.join(f).exists());
-                    if !has_impl {
-                        warnings.push(format!(
-                            "No implementation artifacts found for {spec_id} - recommended to run earlier stages first"
-                        ));
-                    }
-                }
-            }
-        }
+        // 3. Check prerequisites using centralized matrix
+        // See module-level docs for the canonical prereq table
+        let (required_missing, recommended_missing) =
+            check_stage_prereqs(&spec_dir, spec_id, stage);
 
-        // P6-C: With --strict-prereqs, warnings become blocking errors
-        if strict_prereqs && !warnings.is_empty() {
-            // Move all warnings to errors
-            errors.extend(warnings.iter().map(|w| format!("[strict-prereqs] {w}")));
+        // P6-C: With --strict-prereqs, missing REQUIRED prereqs become blocking errors
+        if strict_prereqs && !required_missing.is_empty() {
+            errors.extend(
+                required_missing
+                    .iter()
+                    .map(|w| format!("[strict-prereqs] {w}")),
+            );
             return Outcome::Stage(StageOutcome::blocked(
                 spec_id.to_string(),
                 stage,
                 errors,
                 dry_run,
             ));
+        }
+
+        // Required prereqs generate warnings (advisory by default)
+        warnings.extend(required_missing);
+
+        // Recommended prereqs generate info-level warnings (never block, even with --strict-prereqs)
+        for rec in recommended_missing {
+            warnings.push(format!("[recommended] {rec}"));
         }
 
         // If there are errors, return Blocked
@@ -568,6 +566,77 @@ pub fn review_warning(result: &StageReviewResult) -> Option<String> {
     } else {
         None
     }
+}
+
+/// Check stage prerequisites against the canonical prereq matrix
+///
+/// Returns (required_missing, recommended_missing) where:
+/// - required_missing: prereqs that block with --strict-prereqs
+/// - recommended_missing: prereqs that warn but never block
+///
+/// SPEC-KIT-921 P6: Centralized prereq matrix.
+/// See module-level docs for the full table.
+fn check_stage_prereqs(
+    spec_dir: &std::path::Path,
+    spec_id: &str,
+    stage: crate::Stage,
+) -> (Vec<String>, Vec<String>) {
+    let mut required_missing = Vec::new();
+    let mut recommended_missing = Vec::new();
+
+    match stage {
+        crate::Stage::Specify => {
+            // First stage - no prerequisites
+        }
+        crate::Stage::Plan => {
+            // Required: SPEC directory exists
+            if !spec_dir.exists() {
+                required_missing.push(format!(
+                    "SPEC directory not found: docs/{spec_id} - run speckit specify first"
+                ));
+            } else if !spec_dir.join("PRD.md").exists() {
+                // Recommended: PRD.md exists (created by speckit specify)
+                recommended_missing.push(format!(
+                    "PRD.md not found for {spec_id} - consider running speckit specify first"
+                ));
+            }
+        }
+        crate::Stage::Tasks => {
+            // Required: plan.md exists (implies SPEC dir exists)
+            if !spec_dir.join("plan.md").exists() {
+                required_missing.push(format!(
+                    "plan.md not found for {spec_id} - run /speckit.plan first"
+                ));
+            }
+        }
+        crate::Stage::Implement => {
+            // Required: plan.md exists
+            if !spec_dir.join("plan.md").exists() {
+                required_missing.push(format!(
+                    "plan.md not found for {spec_id} - run /speckit.plan first"
+                ));
+            }
+            // Recommended: tasks.md exists
+            if spec_dir.exists() && !spec_dir.join("tasks.md").exists() {
+                recommended_missing.push(format!(
+                    "tasks.md not found for {spec_id} - consider running /speckit.tasks first"
+                ));
+            }
+        }
+        crate::Stage::Validate | crate::Stage::Audit | crate::Stage::Unlock => {
+            // Required: implement.md OR tasks.md exists (implies SPEC dir exists)
+            let has_impl = ["implement.md", "tasks.md"]
+                .iter()
+                .any(|f| spec_dir.join(f).exists());
+            if !has_impl {
+                required_missing.push(format!(
+                    "No implementation artifacts (tasks.md or implement.md) found for {spec_id} - run earlier stages first"
+                ));
+            }
+        }
+    }
+
+    (required_missing, recommended_missing)
 }
 
 #[cfg(test)]

@@ -2144,3 +2144,162 @@ fn specify_existing_dir_reports_already_existed() -> Result<()> {
 
     Ok(())
 }
+
+// =============================================================================
+// ARCHITECT GATE TESTS (P6 Review)
+// =============================================================================
+
+#[test]
+fn specify_idempotent_never_overwrites() -> Result<()> {
+    // ARCHITECT GATE: Running specify twice should be idempotent
+    // Second run should NOT overwrite existing PRD.md content
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    fs::create_dir_all(repo_root.path().join("docs"))?;
+
+    // First run: create SPEC
+    let mut cmd1 = codex_command(codex_home.path(), repo_root.path())?;
+    let output1 = cmd1
+        .args([
+            "speckit",
+            "specify",
+            "--spec",
+            "SPEC-IDEMPOTENT-TEST",
+            "--execute",
+        ])
+        .output()?;
+    assert!(output1.status.success(), "First specify should succeed");
+
+    // Verify PRD.md was created
+    let prd_path = repo_root
+        .path()
+        .join("docs")
+        .join("SPEC-IDEMPOTENT-TEST")
+        .join("PRD.md");
+    assert!(prd_path.exists(), "PRD.md should exist after first run");
+
+    // Modify PRD.md with custom content
+    let custom_content = "# Custom PRD Content\nThis should not be overwritten.";
+    fs::write(&prd_path, custom_content)?;
+
+    // Second run: should NOT overwrite
+    let mut cmd2 = codex_command(codex_home.path(), repo_root.path())?;
+    let output2 = cmd2
+        .args([
+            "speckit",
+            "specify",
+            "--spec",
+            "SPEC-IDEMPOTENT-TEST",
+            "--execute",
+            "--json",
+        ])
+        .output()?;
+    assert!(output2.status.success(), "Second specify should succeed");
+
+    // Verify PRD.md content was NOT overwritten
+    let final_content = fs::read_to_string(&prd_path)?;
+    assert_eq!(
+        final_content, custom_content,
+        "PRD.md content should NOT be overwritten on second run"
+    );
+
+    // Verify JSON reports already_existed and no files created
+    let json: JsonValue = serde_json::from_slice(&output2.stdout)?;
+    let already_existed = json.get("already_existed").and_then(|v| v.as_bool());
+    assert_eq!(already_existed, Some(true), "Should report already_existed");
+
+    let created_files = json.get("created_files").and_then(|v| v.as_array());
+    assert!(
+        created_files.map(|f| f.is_empty()).unwrap_or(true),
+        "Should not have created any files on second run"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn specify_then_plan_strict_prereqs_succeeds() -> Result<()> {
+    // ARCHITECT GATE: After specify, plan --strict-prereqs should succeed
+    // This tests the specify → plan prereq chain
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    fs::create_dir_all(repo_root.path().join("docs"))?;
+
+    // Run specify to create SPEC directory
+    let mut cmd1 = codex_command(codex_home.path(), repo_root.path())?;
+    let output1 = cmd1
+        .args([
+            "speckit",
+            "specify",
+            "--spec",
+            "SPEC-CHAIN-TEST",
+            "--execute",
+        ])
+        .output()?;
+    assert!(output1.status.success(), "Specify should succeed");
+
+    // Now plan --strict-prereqs should succeed (SPEC dir exists)
+    let mut cmd2 = codex_command(codex_home.path(), repo_root.path())?;
+    let output2 = cmd2
+        .args([
+            "speckit",
+            "plan",
+            "--spec",
+            "SPEC-CHAIN-TEST",
+            "--strict-prereqs",
+            "--json",
+        ])
+        .output()?;
+
+    // Plan should succeed because SPEC directory exists
+    assert!(
+        output2.status.success(),
+        "Plan --strict-prereqs should succeed after specify, got {:?}\nstderr: {}",
+        output2.status.code(),
+        String::from_utf8_lossy(&output2.stderr)
+    );
+
+    let json: JsonValue = serde_json::from_slice(&output2.stdout)?;
+    let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
+    assert_eq!(
+        status, "ready",
+        "Plan should be ready after specify creates SPEC directory"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn plan_strict_prereqs_blocks_without_spec_dir() -> Result<()> {
+    // ARCHITECT GATE: Without specify, plan --strict-prereqs should block
+    // because SPEC directory doesn't exist
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create docs directory but NOT the SPEC directory
+    fs::create_dir_all(repo_root.path().join("docs"))?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "plan",
+            "--spec",
+            "SPEC-NONEXISTENT",
+            "--strict-prereqs",
+            "--json",
+        ])
+        .output()?;
+
+    // Plan should fail with exit 2 because SPEC directory doesn't exist
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "Plan --strict-prereqs should block when SPEC dir doesn't exist, got {:?}",
+        output.status.code()
+    );
+
+    Ok(())
+}
