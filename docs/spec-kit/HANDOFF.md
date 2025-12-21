@@ -1,7 +1,7 @@
 # HANDOFF: SPEC-KIT-921 P7 Continuation
 
 **Generated**: 2025-12-21
-**Last Commit**: TBD (P6 completion commit)
+**Last Commit**: a2ef529fa (centralize prereq matrix with architect gate tests)
 **Branch**: main
 
 ---
@@ -16,12 +16,13 @@ Copy this prompt to start the next session:
 Continue from docs/spec-kit/HANDOFF.md
 
 ## Context
-- P0-P6 complete
-- 50 CLI tests passing (47 speckit + 3 helpers)
+- P0-P6 complete (with architectural improvements)
+- 53 CLI tests passing (50 speckit + 3 helpers)
 - All 7 stage commands have CLI support (specify, plan, tasks, implement, validate, audit, unlock)
 - --strict-prereqs flag available on all stage validation commands
+- Centralized prereq matrix in check_stage_prereqs() helper
 - Test helpers module available for reduced boilerplate
-- speckit specify creates SPEC directory with PRD.md
+- speckit specify creates SPEC directory with PRD.md (idempotent)
 
 ## P6 Completed Deliverables
 
@@ -29,7 +30,7 @@ Continue from docs/spec-kit/HANDOFF.md
 |------|--------|-------|
 | P6-C: --strict-prereqs | ✅ | 6 tests |
 | P6-D: Test helpers | ✅ | 3 tests (speckit_helpers.rs) |
-| P6-A: speckit specify | ✅ | 4 tests |
+| P6-A: speckit specify | ✅ | 7 tests (4 original + 3 architect gate) |
 | P6-B: speckit run batch | ⏳ Deferred | - |
 
 ## P7 Priority Order
@@ -56,7 +57,7 @@ cargo test -p codex-cli --test speckit_helpers
 
 ---
 
-## Session Summary (P6 Completed)
+## Session Summary (P6 Completed + Architectural Improvements)
 
 ### P6 Deliverables
 
@@ -64,10 +65,26 @@ cargo test -p codex-cli --test speckit_helpers
 |------|--------|-------------|
 | P6-C: --strict-prereqs flag | ✅ | `--strict-prereqs` on all 6 stage commands, 6 tests |
 | P6-D: Test helpers | ✅ | `speckit_helpers.rs` module with TestContext, CliResult, 3 tests |
-| P6-A: speckit specify | ✅ | `speckit specify --spec <ID> [--execute] [--json]`, 4 tests |
+| P6-A: speckit specify | ✅ | `speckit specify --spec <ID> [--execute] [--json]`, 7 tests |
 | P6-B: speckit run batch | ⏳ Deferred | Complex orchestration, moved to P7 |
 
-**Tests**: 50 CLI tests passing (47 speckit + 3 helpers)
+**Tests**: 53 CLI tests passing (50 speckit + 3 helpers)
+
+### Architectural Improvements (P6 Continuation)
+
+Centralized prereq checking into single `check_stage_prereqs()` helper:
+
+```rust
+/// Returns (required_missing, recommended_missing)
+/// Required: blocks with --strict-prereqs
+/// Recommended: never blocks, always advisory
+fn check_stage_prereqs(spec_dir, spec_id, stage) -> (Vec<String>, Vec<String>)
+```
+
+Added 3 architect gate tests:
+1. `specify_idempotent_never_overwrites` - verify specify doesn't clobber existing PRD.md
+2. `specify_then_plan_strict_prereqs_succeeds` - verify specify→plan chain works
+3. `plan_strict_prereqs_blocks_without_spec_dir` - verify Plan blocks when SPEC dir missing
 
 ### Key Additions
 
@@ -167,7 +184,7 @@ StageOutcome { spec_id, stage, resolution, blocking_reasons, advisory_signals, e
 | File | Purpose |
 |------|---------|
 | `cli/src/speckit_cmd.rs` | Added Specify subcommand, --strict-prereqs to all stages |
-| `cli/tests/speckit.rs` | 47 tests (37 P5 + 6 strict-prereqs + 4 specify) |
+| `cli/tests/speckit.rs` | 50 tests (37 P5 + 6 strict-prereqs + 7 specify) |
 | `cli/tests/speckit_helpers.rs` | NEW: 3 test helper tests |
 | `spec-kit/src/executor/command.rs` | Added Specify command variant, strict_prereqs to ValidateStage |
 | `spec-kit/src/executor/mod.rs` | Added execute_specify(), SpecifyOutcome, strict_prereqs handling |
@@ -197,6 +214,8 @@ StageOutcome { spec_id, stage, resolution, blocking_reasons, advisory_signals, e
 8. **Build-time determinism** — tool_version uses compile-time env vars only, no runtime git
 9. **Advisory by default** — missing prereqs warn but don't block (unless --strict-prereqs)
 10. **Specify is separate** — creation command, not validation (uses --execute, not --dry-run=false)
+11. **Centralized prereq matrix** — all prereq checks go through `check_stage_prereqs()`, not scattered logic
+12. **Idempotent scaffolding** — `speckit specify --execute` never overwrites existing PRD.md content
 
 ---
 
@@ -228,5 +247,5 @@ StageOutcome { spec_id, stage, resolution, blocking_reasons, advisory_signals, e
 | P0-P3 | ✅ | 22 | Status, Review commands |
 | P4 | ✅ | 25 | Tasks command, StageOutcome envelope |
 | P5 | ✅ | 37 | Implement/Validate/Audit/Unlock commands |
-| P6 | ✅ | 50 | --strict-prereqs, specify, test helpers |
+| P6 | ✅ | 53 | --strict-prereqs, specify, test helpers, prereq matrix |
 | P7+ | ⏳ | - | Run batch, templates, auto orchestration |
