@@ -11,7 +11,7 @@
 Copy this prompt to start the next session:
 
 ```
-# Continue SPEC-KIT-921 P7-B Implementation
+# Continue SPEC-KIT-921 P7-A Implementation
 
 Continue from docs/spec-kit/HANDOFF.md
 
@@ -22,6 +22,28 @@ Continue from docs/spec-kit/HANDOFF.md
 - Spec ID validation with path traversal protection
 - Suffix directory resolution (SPEC-ID-suffix patterns)
 - Prereq matrix aligned with artifact dependency DAG
+
+## P7-A Task: speckit run batch command
+
+Implement `speckit run --spec <ID> --from <stage> --to <stage> [--json]`
+
+### Architect-Approved Design
+1. **Validation only** - no agent spawning (readiness check for CI)
+2. **Named stages only** - specify/plan/tasks/implement/validate/audit/unlock
+3. **Aggregated output** - single JSON with per-stage outcomes
+4. **Exit codes** - 0=all ready, 2=any blocked, 3=infrastructure error
+
+### Implementation Steps
+1. Add `Run` subcommand to `cli/src/speckit_cmd.rs`
+2. Add `SpeckitCommand::Run { spec_id, from, to }` to executor
+3. Add `execute_run()` that iterates stages and collects outcomes
+4. Add `RunOutcome` with aggregated results
+5. Add spec.md fallback logic with deprecation warning
+6. Add 8+ tests for run command
+
+### Also in P7
+- spec.md fallback with `packet_source: "spec_md_legacy"` warning
+- Full 7-stage validation pipeline test
 
 ## P7 Foundational Deliverables (Complete)
 
@@ -34,9 +56,50 @@ Continue from docs/spec-kit/HANDOFF.md
 
 ## P7 Remaining Priority Order
 
-1. **P7-A: speckit run batch command** (--from/--to stage ranges)
-2. **P7-B: Template library** (built-in SPEC templates)
-3. **P7-C: Full /speckit.auto orchestration**
+1. **P7-A: speckit run batch command** (validation only, --from/--to)
+2. **P7-B: spec.md fallback** (legacy compatibility with deprecation warning)
+3. **P7-C: Full pipeline test** (specify→unlock validation chain)
+
+**Deferred to P8**: Template library, full auto orchestration with agent spawning
+
+## P7-A Design Decisions (Architect-Approved)
+
+### Run Command Semantics
+- **Validation only** - no agent spawning (that's /speckit.auto territory)
+- Iterate stages from `--from` to `--to`
+- Run executor validation for each stage
+- Optionally run canonical reviews at boundaries (AfterPlan, AfterTasks, BeforeUnlock)
+- Emit single aggregated JSON summary + per-stage outcomes
+- Deterministic readiness report + exit code (CI-friendly)
+
+### Stage Granularity
+- **Named stages only**: `--from plan --to validate`
+- No numeric IDs (prevents vocabulary drift)
+- Valid names: specify, plan, tasks, implement, validate, audit, unlock
+
+### Legacy Compatibility
+- PRD.md is canonical input to Plan
+- If PRD.md missing but spec.md exists:
+  - Proceed with warning (non-strict mode)
+  - Emit `packet_source: "spec_md_legacy"` in output
+  - Mark as deprecated
+- Future: `--strict-packet` flag to block on missing PRD.md
+
+### Output Schema
+```json
+{
+  "schema_version": 1,
+  "spec_id": "SPEC-XXX",
+  "from_stage": "plan",
+  "to_stage": "validate",
+  "overall_status": "ready|blocked|partial",
+  "stages": [
+    { "stage": "plan", "status": "ready", "warnings": [], "errors": [] },
+    { "stage": "tasks", "status": "blocked", "warnings": [], "errors": ["..."] }
+  ],
+  "exit_code": 0|2|3
+}
+```
 
 ## Start Commands
 
@@ -46,11 +109,12 @@ cargo test -p codex-cli --test speckit
 cargo test -p codex-cli --test speckit_helpers
 ```
 
-## Acceptance Criteria for P7 (Remaining)
+## Acceptance Criteria for P7
 
-- [ ] `speckit run` batch command with --from/--to support
-- [ ] Template library for common SPEC patterns
-- [ ] Full 8-stage pipeline test (specify→unlock)
+- [ ] `speckit run --spec <ID> --from <stage> --to <stage> [--json]`
+- [ ] spec.md fallback with deprecation warning
+- [ ] Full 7-stage validation test (specify→unlock)
+- [ ] Aggregated JSON output with per-stage outcomes
 - [ ] 65+ CLI integration tests passing
 ```
 
