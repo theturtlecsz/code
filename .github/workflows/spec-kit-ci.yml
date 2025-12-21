@@ -1,0 +1,201 @@
+name: Spec-Kit CI
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  spec-kit-review-contract:
+    name: Review Exit Code Contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          cache-workspaces: codex-rs
+
+      - name: Build CLI
+        working-directory: codex-rs
+        run: cargo build --release -p codex-cli
+
+      - name: Set up smoke test environment
+        run: |
+          echo "FIXTURE_ROOT=${{ github.workspace }}/codex-rs/spec-kit/tests/fixtures/SPEC-CI-001" >> $GITHUB_ENV
+          echo "CLI=${{ github.workspace }}/codex-rs/target/release/code" >> $GITHUB_ENV
+
+      # =========================================================================
+      # Exit Code Contract Tests (per REVIEW-CONTRACT.md / SPEC-CI-001 README)
+      # =========================================================================
+
+      - name: "[CLEAN] Expect exit 0 - no conflicts"
+        working-directory: ${{ env.FIXTURE_ROOT }}
+        run: |
+          ${{ env.CLI }} speckit review \
+            --spec SPEC-CI-001-clean \
+            --stage plan \
+            --json
+          echo "✓ SPEC-CI-001-clean: exit 0 (clean consensus)"
+
+      - name: "[CONFLICT] Expect exit 2 - blocking conflicts"
+        working-directory: ${{ env.FIXTURE_ROOT }}
+        run: |
+          set +e  # Don't fail immediately on non-zero exit
+          ${{ env.CLI }} speckit review \
+            --spec SPEC-CI-001-conflict \
+            --stage plan \
+            --json
+          EXIT_CODE=$?
+          set -e
+          if [ $EXIT_CODE -ne 2 ]; then
+            echo "::error::Expected exit 2 for conflict case, got $EXIT_CODE"
+            exit 1
+          fi
+          echo "✓ SPEC-CI-001-conflict: exit 2 (conflicts detected)"
+
+      - name: "[MALFORMED-DEFAULT] Expect exit 0 - parse error is advisory"
+        working-directory: ${{ env.FIXTURE_ROOT }}
+        run: |
+          ${{ env.CLI }} speckit review \
+            --spec SPEC-CI-001-malformed \
+            --stage plan \
+            --json
+          echo "✓ SPEC-CI-001-malformed (default): exit 0 (parse error advisory)"
+
+      - name: "[MALFORMED-STRICT] Expect exit 3 - parse error with --strict-schema"
+        working-directory: ${{ env.FIXTURE_ROOT }}
+        run: |
+          set +e
+          ${{ env.CLI }} speckit review \
+            --spec SPEC-CI-001-malformed \
+            --stage plan \
+            --strict-schema \
+            --json
+          EXIT_CODE=$?
+          set -e
+          if [ $EXIT_CODE -ne 3 ]; then
+            echo "::error::Expected exit 3 for malformed+strict-schema, got $EXIT_CODE"
+            exit 1
+          fi
+          echo "✓ SPEC-CI-001-malformed (--strict-schema): exit 3 (infrastructure error)"
+
+      # =========================================================================
+      # Additional Contract Validations
+      # =========================================================================
+
+      - name: "[STRICT-ARTIFACTS] Expect exit 2 for missing artifacts"
+        working-directory: ${{ env.FIXTURE_ROOT }}
+        run: |
+          set +e
+          ${{ env.CLI }} speckit review \
+            --spec SPEC-NONEXISTENT \
+            --stage plan \
+            --strict-artifacts \
+            --json
+          EXIT_CODE=$?
+          set -e
+          if [ $EXIT_CODE -ne 2 ]; then
+            echo "::error::Expected exit 2 for missing artifacts with --strict-artifacts, got $EXIT_CODE"
+            exit 1
+          fi
+          echo "✓ Missing artifacts with --strict-artifacts: exit 2"
+
+      - name: "[JSON-STRUCTURE] Validate JSON output fields"
+        working-directory: ${{ env.FIXTURE_ROOT }}
+        run: |
+          set -o pipefail
+          OUTPUT=$(${{ env.CLI }} speckit review \
+            --spec SPEC-CI-001-clean \
+            --stage plan \
+            --json)
+
+          # Validate required fields exist (pipefail ensures jq failures propagate)
+          echo "$OUTPUT" | jq -e '.spec_id' > /dev/null || { echo "::error::Missing spec_id field"; exit 1; }
+          echo "$OUTPUT" | jq -e '.stage' > /dev/null || { echo "::error::Missing stage field"; exit 1; }
+          echo "$OUTPUT" | jq -e '.verdict' > /dev/null || { echo "::error::Missing verdict field"; exit 1; }
+          echo "$OUTPUT" | jq -e '.exit_code' > /dev/null || { echo "::error::Missing exit_code field"; exit 1; }
+          echo "$OUTPUT" | jq -e '.blocking_signals' > /dev/null || { echo "::error::Missing blocking_signals field"; exit 1; }
+          echo "$OUTPUT" | jq -e '.advisory_signals' > /dev/null || { echo "::error::Missing advisory_signals field"; exit 1; }
+
+          echo "✓ JSON structure validated"
+
+      # =========================================================================
+      # Failure Diagnostics
+      # =========================================================================
+
+      - name: Capture diagnostic artifacts on failure
+        if: failure()
+        run: |
+          mkdir -p /tmp/spec-kit-debug
+
+          # Capture CLI version
+          ${{ env.CLI }} --version > /tmp/spec-kit-debug/cli-version.txt 2>&1 || true
+
+          # Capture environment (no secrets)
+          env | grep -E '^(CARGO|RUST|GITHUB_|CI)' > /tmp/spec-kit-debug/env.txt
+
+          # Run all cases with --explain for debugging gold
+          echo "=== CLEAN CASE ===" > /tmp/spec-kit-debug/all-cases.log
+          cd ${{ env.FIXTURE_ROOT }} && \
+            ${{ env.CLI }} speckit review --spec SPEC-CI-001-clean --stage plan --json --explain \
+            >> /tmp/spec-kit-debug/all-cases.log 2>&1 || true
+
+          echo -e "\n=== CONFLICT CASE ===" >> /tmp/spec-kit-debug/all-cases.log
+          cd ${{ env.FIXTURE_ROOT }} && \
+            ${{ env.CLI }} speckit review --spec SPEC-CI-001-conflict --stage plan --json --explain \
+            >> /tmp/spec-kit-debug/all-cases.log 2>&1 || true
+
+          echo -e "\n=== MALFORMED CASE ===" >> /tmp/spec-kit-debug/all-cases.log
+          cd ${{ env.FIXTURE_ROOT }} && \
+            ${{ env.CLI }} speckit review --spec SPEC-CI-001-malformed --stage plan --json --explain \
+            >> /tmp/spec-kit-debug/all-cases.log 2>&1 || true
+
+          echo -e "\n=== STATUS (for context) ===" >> /tmp/spec-kit-debug/all-cases.log
+          cd ${{ env.FIXTURE_ROOT }} && \
+            ${{ env.CLI }} speckit status --spec SPEC-CI-001-clean --json \
+            >> /tmp/spec-kit-debug/all-cases.log 2>&1 || true
+
+      - name: Upload diagnostic artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spec-kit-debug
+          path: /tmp/spec-kit-debug/
+          retention-days: 5
+
+  spec-kit-unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          cache-workspaces: codex-rs
+
+      - name: Run spec-kit unit tests
+        working-directory: codex-rs
+        run: cargo test -p codex-spec-kit
+
+      - name: Run CLI integration tests
+        working-directory: codex-rs
+        run: cargo test -p codex-cli --test speckit

@@ -413,10 +413,48 @@ fn status_json_output_structure() -> Result<()> {
 
     let json: JsonValue = serde_json::from_slice(&output.stdout)?;
 
-    // Verify expected fields
+    // Verify core fields
     assert!(json.get("spec_id").is_some(), "Missing spec_id");
     assert!(json.get("generated_at").is_some(), "Missing generated_at");
-    assert!(json.get("evidence").is_some(), "Missing evidence");
+    assert!(json.get("stale_hours").is_some(), "Missing stale_hours");
+
+    // Verify packet section
+    let packet = json.get("packet");
+    assert!(packet.is_some(), "Missing packet section");
+    assert!(packet.unwrap().get("docs").is_some(), "Missing packet.docs");
+
+    // Verify stages array
+    let stages = json.get("stages");
+    assert!(stages.is_some(), "Missing stages array");
+    assert!(
+        stages
+            .unwrap()
+            .as_array()
+            .map(std::vec::Vec::len)
+            .unwrap_or(0)
+            > 0,
+        "Stages array should not be empty"
+    );
+
+    // Verify evidence section (repo-relative paths)
+    let evidence = json.get("evidence");
+    assert!(evidence.is_some(), "Missing evidence section");
+    let evidence = evidence.unwrap();
+    assert!(
+        evidence.get("commands_bytes").is_some(),
+        "Missing evidence.commands_bytes"
+    );
+    assert!(
+        evidence.get("consensus_bytes").is_some(),
+        "Missing evidence.consensus_bytes"
+    );
+    assert!(
+        evidence.get("top_entries").is_some(),
+        "Missing evidence.top_entries (repo-relative paths)"
+    );
+
+    // Verify warnings array
+    assert!(json.get("warnings").is_some(), "Missing warnings array");
 
     Ok(())
 }
@@ -681,6 +719,107 @@ fn review_malformed_json_exits_0_without_strict_schema() -> Result<()> {
         advisory.map(|a| !a.is_empty()).unwrap_or(false),
         "Expected advisory signals for parse error"
     );
+
+    Ok(())
+}
+
+// =============================================================================
+// P2-C: --explain FLAG TESTS
+// =============================================================================
+
+#[test]
+fn review_explain_flag_adds_explanation_to_json() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    let evidence_dir = setup_evidence_dir(repo_root.path(), "SPEC-TEST-EXPLAIN")?;
+    create_consensus_file(
+        &evidence_dir,
+        "plan",
+        "architect",
+        "20251220",
+        &["Test conflict for explanation"],
+        "conflicts_present",
+    )?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "review",
+            "--spec",
+            "SPEC-TEST-EXPLAIN",
+            "--stage",
+            "plan",
+            "--explain",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Should have explanation section
+    let explanation = json.get("explanation");
+    assert!(explanation.is_some(), "Missing explanation section");
+
+    let explanation = explanation.unwrap();
+    assert!(
+        explanation.get("summary").is_some(),
+        "Missing explanation.summary"
+    );
+    assert!(
+        explanation.get("reasons").is_some(),
+        "Missing explanation.reasons"
+    );
+    assert!(
+        explanation.get("flags_active").is_some(),
+        "Missing explanation.flags_active"
+    );
+
+    // Verify conflict is in reasons
+    let reasons = explanation
+        .get("reasons")
+        .and_then(|v| v.as_array())
+        .expect("reasons array");
+    assert!(!reasons.is_empty(), "Expected reasons for conflict case");
+
+    Ok(())
+}
+
+#[test]
+fn review_explain_flag_works_without_json() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    let evidence_dir = setup_evidence_dir(repo_root.path(), "SPEC-TEST-EXPLAIN-TEXT")?;
+    create_consensus_file(&evidence_dir, "plan", "architect", "20251220", &[], "clean")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "review",
+            "--spec",
+            "SPEC-TEST-EXPLAIN-TEXT",
+            "--stage",
+            "plan",
+            "--explain",
+        ])
+        .output()?;
+
+    // Should succeed
+    assert!(
+        output.status.success(),
+        "Expected exit 0 for clean case with --explain"
+    );
+
+    // Should contain explanation text
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Exit Code Explanation"),
+        "Should contain explanation section, got: {stdout}"
+    );
+    assert!(stdout.contains("Exit code: 0"), "Should show exit code 0");
 
     Ok(())
 }

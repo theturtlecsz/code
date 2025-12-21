@@ -21,9 +21,9 @@ use clap::{Parser, Subcommand};
 use codex_spec_kit::Stage;
 use codex_spec_kit::config::policy_toggles::PolicyToggles;
 use codex_spec_kit::executor::{
-    ExecutionContext, Outcome, PolicySnapshot, ReviewOptions, SpeckitCommand, SpeckitExecutor,
-    TelemetryMode, render_review_dashboard, render_status_dashboard, review_warning,
-    status_degraded_warning,
+    ExecutionContext, Outcome, PolicySnapshot, ReviewOptions, ReviewSignal, SpeckitCommand,
+    SpeckitExecutor, TelemetryMode, render_review_dashboard, render_status_dashboard,
+    review_warning, status_degraded_warning,
 };
 use std::path::PathBuf;
 
@@ -92,6 +92,11 @@ pub struct ReviewArgs {
     #[arg(long = "evidence-root", value_name = "PATH")]
     pub evidence_root: Option<String>,
 
+    /// Show human-readable explanation of exit code decision
+    /// Explains why the review passed or failed
+    #[arg(long = "explain")]
+    pub explain: bool,
+
     /// Output as JSON instead of text
     #[arg(long = "json", short = 'j')]
     pub json: bool,
@@ -134,17 +139,59 @@ fn run_status(executor: SpeckitExecutor, args: StatusArgs) -> anyhow::Result<()>
     match executor.execute(command) {
         Outcome::Status(report) => {
             if args.json {
-                // JSON output for CI parsing
+                // JSON output for CI parsing - comprehensive structure
+                let stages: Vec<_> = report
+                    .stage_snapshots
+                    .iter()
+                    .map(|s| {
+                        serde_json::json!({
+                            "stage": s.stage.display(),
+                            "cue": format!("{:?}", s.cue),
+                            "is_stale": s.is_stale,
+                            "has_guardrail": s.guardrail.is_some(),
+                            "agent_count": s.consensus.agents.len(),
+                            "disagreement": s.consensus.disagreement,
+                            "notes": s.notes,
+                        })
+                    })
+                    .collect();
+
+                let top_entries: Vec<_> = report
+                    .evidence
+                    .top_entries
+                    .iter()
+                    .map(|e| {
+                        serde_json::json!({
+                            "path": e.path,
+                            "bytes": e.bytes,
+                        })
+                    })
+                    .collect();
+
                 let json = serde_json::json!({
                     "spec_id": report.spec_id,
                     "generated_at": report.generated_at.to_rfc3339(),
+                    "stale_hours": report.stale_cutoff.num_hours(),
+                    "packet": {
+                        "directory": report.packet.directory.as_ref().map(|p| p.display().to_string()),
+                        "docs": report.packet.docs.iter().map(|(k, v)| (*k, *v)).collect::<std::collections::HashMap<_, _>>(),
+                    },
+                    "tracker": report.tracker_row.as_ref().map(|row| {
+                        serde_json::json!({
+                            "status": row.status,
+                            "branch": row.branch,
+                            "last_validation": row.last_validation,
+                        })
+                    }),
+                    "stages": stages,
                     "evidence": {
                         "commands_bytes": report.evidence.commands_bytes,
                         "consensus_bytes": report.evidence.consensus_bytes,
                         "combined_bytes": report.evidence.combined_bytes,
                         "threshold": report.evidence.threshold.map(|t| format!("{t:?}")),
+                        "latest_artifact": report.evidence.latest_artifact.map(|dt| dt.to_rfc3339()),
+                        "top_entries": top_entries,
                     },
-                    "stage_count": report.stage_snapshots.len(),
                     "warnings": report.warnings,
                 });
                 println!("{}", serde_json::to_string_pretty(&json)?);
@@ -197,7 +244,7 @@ fn run_review(executor: SpeckitExecutor, args: ReviewArgs) -> anyhow::Result<()>
 
             if args.json {
                 // JSON output for CI parsing
-                let json = serde_json::json!({
+                let mut json = serde_json::json!({
                     "spec_id": result.spec_id,
                     "stage": format!("{:?}", result.stage),
                     "checkpoint": format!("{:?}", result.checkpoint),
@@ -225,6 +272,27 @@ fn run_review(executor: SpeckitExecutor, args: ReviewArgs) -> anyhow::Result<()>
                         "evidence_dir": result.evidence.evidence_dir,
                     },
                 });
+
+                // Add explanation if requested
+                if args.explain {
+                    let explanation = explain_review_exit_code(
+                        exit_code,
+                        &result.blocking_signals,
+                        &result.advisory_signals,
+                        &options,
+                    );
+                    if let Some(obj) = json.as_object_mut() {
+                        obj.insert(
+                            "explanation".to_string(),
+                            serde_json::json!({
+                                "summary": explanation.summary,
+                                "reasons": explanation.reasons,
+                                "flags_active": explanation.flags_active,
+                            }),
+                        );
+                    }
+                }
+
                 println!("{}", serde_json::to_string_pretty(&json)?);
             } else {
                 // Text output for human consumption
@@ -235,6 +303,29 @@ fn run_review(executor: SpeckitExecutor, args: ReviewArgs) -> anyhow::Result<()>
                 for line in lines {
                     println!("{line}");
                 }
+
+                // Add explanation if requested
+                if args.explain {
+                    println!();
+                    let explanation = explain_review_exit_code(
+                        exit_code,
+                        &result.blocking_signals,
+                        &result.advisory_signals,
+                        &options,
+                    );
+                    println!("## Exit Code Explanation");
+                    println!("Exit code: {exit_code}");
+                    println!("Summary: {}", explanation.summary);
+                    if !explanation.flags_active.is_empty() {
+                        println!("Flags: {}", explanation.flags_active.join(", "));
+                    }
+                    if !explanation.reasons.is_empty() {
+                        println!("Reasons:");
+                        for reason in &explanation.reasons {
+                            println!("  - {reason}");
+                        }
+                    }
+                }
             }
 
             std::process::exit(exit_code);
@@ -244,19 +335,56 @@ fn run_review(executor: SpeckitExecutor, args: ReviewArgs) -> anyhow::Result<()>
             reason,
             suggestion,
         } => {
+            let exit_code = if args.strict_artifacts { 2 } else { 0 };
+
             if args.json {
-                let json = serde_json::json!({
+                let mut json = serde_json::json!({
                     "stage": format!("{:?}", stage),
                     "verdict": "Skipped",
                     "reason": format!("{:?}", reason),
                     "suggestion": suggestion,
-                    "exit_code": if args.strict_artifacts { 2 } else { 0 },
+                    "exit_code": exit_code,
                 });
+
+                if args.explain
+                    && let Some(obj) = json.as_object_mut()
+                {
+                    obj.insert(
+                        "explanation".to_string(),
+                        serde_json::json!({
+                            "summary": if args.strict_artifacts {
+                                "Review skipped with --strict-artifacts: missing artifacts treated as failure"
+                            } else {
+                                "Review skipped: no artifacts to evaluate (exit 0 in default mode)"
+                            },
+                            "reasons": [format!("{reason:?}")],
+                            "flags_active": if args.strict_artifacts {
+                                vec!["--strict-artifacts"]
+                            } else {
+                                vec![]
+                            },
+                        }),
+                    );
+                }
+
                 println!("{}", serde_json::to_string_pretty(&json)?);
             } else {
                 eprintln!("⚠ Review skipped for {stage:?}: {reason:?}");
-                if let Some(hint) = suggestion {
+                if let Some(hint) = &suggestion {
                     eprintln!("  Suggestion: {hint}");
+                }
+
+                if args.explain {
+                    println!();
+                    println!("## Exit Code Explanation");
+                    println!("Exit code: {exit_code}");
+                    if args.strict_artifacts {
+                        println!(
+                            "Summary: --strict-artifacts enabled; missing artifacts treated as failure"
+                        );
+                    } else {
+                        println!("Summary: No artifacts found; skipped (exit 0 in default mode)");
+                    }
                 }
             }
 
@@ -298,5 +426,93 @@ fn parse_stage(input: &str) -> anyhow::Result<Stage> {
             "Unknown stage '{}'. Valid stages: specify, plan, tasks, implement, validate, audit, unlock",
             input
         ),
+    }
+}
+
+/// Explanation of exit code decision
+struct ExitCodeExplanation {
+    summary: String,
+    reasons: Vec<String>,
+    flags_active: Vec<&'static str>,
+}
+
+/// Generate human-readable explanation for review exit code
+fn explain_review_exit_code(
+    exit_code: i32,
+    blocking_signals: &[ReviewSignal],
+    advisory_signals: &[ReviewSignal],
+    options: &ReviewOptions,
+) -> ExitCodeExplanation {
+    let mut flags_active = Vec::new();
+    if options.strict_artifacts {
+        flags_active.push("--strict-artifacts");
+    }
+    if options.strict_warnings {
+        flags_active.push("--strict-warnings");
+    }
+    if options.strict_schema {
+        flags_active.push("--strict-schema");
+    }
+
+    let mut reasons = Vec::new();
+
+    match exit_code {
+        0 => ExitCodeExplanation {
+            summary: "Review passed with no blocking signals".to_string(),
+            reasons: if blocking_signals.is_empty() && advisory_signals.is_empty() {
+                vec!["No conflicts detected in consensus evidence".to_string()]
+            } else if blocking_signals.is_empty() {
+                vec![format!(
+                    "{} advisory signal(s) detected (not blocking without --strict-warnings)",
+                    advisory_signals.len()
+                )]
+            } else {
+                vec![]
+            },
+            flags_active,
+        },
+        1 => {
+            for signal in advisory_signals {
+                reasons.push(format!("[Advisory] {}", signal.message));
+            }
+            ExitCodeExplanation {
+                summary: "Review passed with warnings (exit 1 due to --strict-warnings)"
+                    .to_string(),
+                reasons,
+                flags_active,
+            }
+        }
+        2 => {
+            for signal in blocking_signals {
+                reasons.push(format!(
+                    "[{:?}] {} (from {})",
+                    signal.kind,
+                    signal.message,
+                    signal.origin.display_name()
+                ));
+            }
+            if reasons.is_empty() {
+                reasons.push("Missing required artifacts with --strict-artifacts".to_string());
+            }
+            ExitCodeExplanation {
+                summary: "Review failed - blocking signals or escalation required".to_string(),
+                reasons,
+                flags_active,
+            }
+        }
+        3 => ExitCodeExplanation {
+            summary: "Infrastructure error - parse/schema errors with --strict-schema".to_string(),
+            reasons: advisory_signals
+                .iter()
+                .filter(|s| s.message.contains("parse") || s.message.contains("Parse"))
+                .map(|s| format!("[ParseError] {}", s.message))
+                .collect(),
+            flags_active,
+        },
+        _ => ExitCodeExplanation {
+            summary: format!("Unknown exit code {exit_code}"),
+            reasons: vec![],
+            flags_active,
+        },
     }
 }
