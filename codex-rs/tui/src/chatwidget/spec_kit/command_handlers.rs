@@ -19,9 +19,10 @@ use crate::app_event::BackgroundPlacement;
 use crate::history_cell::HistoryCellType;
 
 // SPEC-KIT-921: Use shared executor for status and review commands (CLI/TUI parity)
+use codex_spec_kit::config::policy_toggles::PolicyToggles;
 use codex_spec_kit::executor::{
-    ExecutionContext, Outcome, SpeckitCommand, SpeckitExecutor, render_review_dashboard,
-    render_status_dashboard, review_warning, status_degraded_warning,
+    ExecutionContext, Outcome, PolicySnapshot, SpeckitCommand, SpeckitExecutor, TelemetryMode,
+    render_review_dashboard, render_status_dashboard, review_warning, status_degraded_warning,
 };
 
 /// Handle /speckit.status command (native dashboard)
@@ -44,9 +45,18 @@ pub fn handle_spec_status(widget: &mut ChatWidget, raw_args: String) {
         }
     };
 
-    // Create executor with current working directory
+    // Resolve policy from env/config at adapter boundary (not in executor)
+    let toggles = PolicyToggles::from_env_and_config();
+    let policy_snapshot = PolicySnapshot {
+        sidecar_critic_enabled: toggles.sidecar_critic_enabled,
+        telemetry_mode: TelemetryMode::Disabled,
+        legacy_voting_env_detected: toggles.legacy_voting_enabled,
+    };
+
+    // Create executor with current working directory and resolved policy
     let executor = SpeckitExecutor::new(ExecutionContext {
         repo_root: widget.config.cwd.clone(),
+        policy_snapshot: Some(policy_snapshot),
     });
 
     // Execute via shared executor (same path as CLI)
@@ -127,9 +137,18 @@ pub fn handle_spec_review(widget: &mut ChatWidget, raw_args: String) {
         }
     };
 
-    // Create executor with current working directory
+    // Resolve policy from env/config at adapter boundary (not in executor)
+    let toggles = PolicyToggles::from_env_and_config();
+    let policy_snapshot = PolicySnapshot {
+        sidecar_critic_enabled: toggles.sidecar_critic_enabled,
+        telemetry_mode: TelemetryMode::Disabled,
+        legacy_voting_env_detected: toggles.legacy_voting_enabled,
+    };
+
+    // Create executor with current working directory and resolved policy
     let executor = SpeckitExecutor::new(ExecutionContext {
         repo_root: widget.config.cwd.clone(),
+        policy_snapshot: Some(policy_snapshot),
     });
 
     // Execute via shared executor (same path as CLI)

@@ -430,3 +430,85 @@ fn review_rejects_invalid_stage() -> Result<()> {
 
     Ok(())
 }
+
+// =============================================================================
+// P0-3: REVIEW EVIDENCE SEMANTICS TESTS
+// =============================================================================
+
+#[test]
+fn review_spec_docs_only_no_consensus_exits_skipped() -> Result<()> {
+    // P0-3: spec docs (plan.md) existing WITHOUT review evidence (consensus files)
+    // should result in Skipped, not Passed
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create evidence dir structure (empty - no consensus files)
+    setup_evidence_dir(repo_root.path(), "SPEC-TEST-P03")?;
+
+    // Create a spec packet directory with plan.md (spec docs exist)
+    let spec_packet_dir = repo_root.path().join("docs").join("SPEC-TEST-P03");
+    fs::create_dir_all(&spec_packet_dir)?;
+    fs::write(spec_packet_dir.join("plan.md"), "# Plan\n\nThis is a plan.")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit", "review", "--spec", "SPEC-TEST-P03", "--stage", "plan", "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Should be Skipped because no review evidence (consensus files)
+    let verdict = json.get("verdict").and_then(|v| v.as_str()).unwrap_or("");
+    assert!(
+        verdict.contains("Skipped"),
+        "Expected Skipped verdict when no consensus evidence, got: {verdict}"
+    );
+
+    // Should indicate NoArtifactsFound reason
+    assert!(
+        verdict.contains("NoArtifactsFound"),
+        "Expected NoArtifactsFound reason, got: {verdict}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn review_spec_docs_only_no_consensus_strict_exits_2() -> Result<()> {
+    // P0-3: With --strict-artifacts, missing review evidence should exit 2
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create evidence dir structure (empty - no consensus files)
+    setup_evidence_dir(repo_root.path(), "SPEC-TEST-P03-STRICT")?;
+
+    // Create a spec packet directory with plan.md (spec docs exist)
+    let spec_packet_dir = repo_root.path().join("docs").join("SPEC-TEST-P03-STRICT");
+    fs::create_dir_all(&spec_packet_dir)?;
+    fs::write(spec_packet_dir.join("plan.md"), "# Plan\n\nThis is a plan.")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "review",
+            "--spec",
+            "SPEC-TEST-P03-STRICT",
+            "--stage",
+            "plan",
+            "--strict-artifacts",
+        ])
+        .output()?;
+
+    // With --strict-artifacts, missing review evidence should exit 2
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "Expected exit 2 with strict-artifacts and no consensus evidence, got {:?}",
+        output.status.code()
+    );
+
+    Ok(())
+}

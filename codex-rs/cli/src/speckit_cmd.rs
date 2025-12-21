@@ -18,9 +18,11 @@
 //! - 3: Infrastructure error
 
 use clap::{Parser, Subcommand};
+use codex_spec_kit::config::policy_toggles::PolicyToggles;
 use codex_spec_kit::executor::{
-    ExecutionContext, Outcome, ReviewOptions, SpeckitCommand, SpeckitExecutor,
-    render_review_dashboard, render_status_dashboard, review_warning, status_degraded_warning,
+    ExecutionContext, Outcome, PolicySnapshot, ReviewOptions, SpeckitCommand, SpeckitExecutor,
+    TelemetryMode, render_review_dashboard, render_status_dashboard, review_warning,
+    status_degraded_warning,
 };
 use codex_spec_kit::Stage;
 use std::path::PathBuf;
@@ -92,8 +94,17 @@ impl SpeckitCli {
             std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
         });
 
+        // Resolve policy from env/config at adapter boundary (not in executor)
+        let toggles = PolicyToggles::from_env_and_config();
+        let policy_snapshot = PolicySnapshot {
+            sidecar_critic_enabled: toggles.sidecar_critic_enabled,
+            telemetry_mode: TelemetryMode::Disabled,
+            legacy_voting_env_detected: toggles.legacy_voting_enabled,
+        };
+
         let executor = SpeckitExecutor::new(ExecutionContext {
             repo_root: cwd,
+            policy_snapshot: Some(policy_snapshot),
         });
 
         match self.command {

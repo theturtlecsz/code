@@ -161,8 +161,14 @@ pub struct StageReviewResult {
     /// Where artifacts came from
     pub artifact_sources: Vec<ArtifactSource>,
 
-    /// Number of artifacts collected
+    /// Number of artifacts collected (spec docs + review evidence)
     pub artifacts_collected: usize,
+
+    /// Number of review evidence files found (consensus files only)
+    ///
+    /// P0-3: This is what determines skip logic, not artifacts_collected.
+    /// Review can only proceed if review evidence exists.
+    pub review_evidence_count: usize,
 
     // === Evidence references (repo-relative paths) ===
     /// Paths to persisted evidence
@@ -178,8 +184,9 @@ impl StageReviewResult {
     ///
     /// NOT stored — derived on demand to prevent drift.
     pub fn display_verdict(&self) -> DisplayVerdict {
-        // Skip conditions first
-        if self.artifacts_collected == 0 {
+        // Skip conditions first - P0-3: use review_evidence_count, not artifacts_collected
+        // Review requires review evidence (consensus files), not just spec docs
+        if self.review_evidence_count == 0 {
             return DisplayVerdict::Skipped {
                 reason: SkipReason::NoArtifactsFound,
             };
@@ -577,12 +584,12 @@ pub fn evaluate_stage_review(
         .join(&request.spec_id);
 
     // Collect artifacts from spec packet + consensus evidence
-    let (artifact_sources, artifacts_collected, consensus_files) =
-        collect_artifacts_v2(repo_root, &spec_packet_dir, &consensus_dir, checkpoint);
+    let artifacts = collect_artifacts_v2(repo_root, &spec_packet_dir, &consensus_dir, checkpoint);
 
     // P0-D: Parse ConsensusJson files and derive signals
+    // P0-2: Pass repo_root for repo-relative evidence paths
     let (blocking_signals, advisory_signals) =
-        collect_signals_from_consensus(&consensus_files, checkpoint);
+        collect_signals_from_consensus(&artifacts.consensus_files, checkpoint, repo_root);
 
     // Determine resolution based on blocking signals
     // Invariant: resolution == AutoApply ⟹ blocking_signals.is_empty()
@@ -620,22 +627,36 @@ pub fn evaluate_stage_review(
         resolution,
         blocking_signals,
         advisory_signals,
-        artifact_sources,
-        artifacts_collected,
+        artifact_sources: artifacts.sources,
+        artifacts_collected: artifacts.total_count,
+        review_evidence_count: artifacts.review_evidence_count,
         evidence,
         policy_snapshot,
     })
 }
 
 /// Collect artifacts from spec packet and consensus evidence (P0-A fix)
+/// Artifact collection result
+///
+/// P0-3: Separate counts for spec docs vs review evidence.
+struct ArtifactCollection {
+    sources: Vec<ArtifactSource>,
+    /// Total artifacts (spec docs + review evidence)
+    total_count: usize,
+    /// Review evidence files only (consensus files)
+    review_evidence_count: usize,
+    /// Paths to consensus files for signal parsing
+    consensus_files: Vec<PathBuf>,
+}
+
 fn collect_artifacts_v2(
     repo_root: &Path,
     spec_packet_dir: &Path,
     consensus_dir: &Path,
     checkpoint: Checkpoint,
-) -> (Vec<ArtifactSource>, usize, Vec<PathBuf>) {
+) -> ArtifactCollection {
     let mut sources = Vec::new();
-    let mut count = 0;
+    let mut spec_docs_count = 0;
     let mut consensus_files = Vec::new();
 
     let stage_slug = checkpoint_stage_slug(checkpoint);
@@ -644,12 +665,12 @@ fn collect_artifacts_v2(
     // Check spec packet docs (e.g., docs/<SPEC-ID>/plan.md)
     for required in &requirements.required {
         if spec_packet_dir.join(required).exists() {
-            count += 1;
+            spec_docs_count += 1;
         }
     }
     for optional in &requirements.optional {
         if spec_packet_dir.join(optional).exists() {
-            count += 1;
+            spec_docs_count += 1;
         }
     }
 
@@ -669,7 +690,6 @@ fn collect_artifacts_v2(
             let filename = entry.file_name().to_string_lossy();
             if filename.starts_with(&pattern_prefix) {
                 consensus_files.push(path.to_path_buf());
-                count += 1;
             }
         }
 
@@ -691,7 +711,14 @@ fn collect_artifacts_v2(
     // Sort consensus files for deterministic "latest" selection (lexicographic max)
     consensus_files.sort();
 
-    (sources, count, consensus_files)
+    let review_evidence_count = consensus_files.len();
+
+    ArtifactCollection {
+        sources,
+        total_count: spec_docs_count + review_evidence_count,
+        review_evidence_count,
+        consensus_files,
+    }
 }
 
 /// Get stage slug for file matching
@@ -711,12 +738,22 @@ fn checkpoint_stage_slug(checkpoint: Checkpoint) -> &'static str {
 /// - `consensus.conflicts` non-empty → blocking signals
 /// - `error` field present → advisory signals
 /// - Parse failures → advisory System signal
+///
+/// P0-2: All evidence paths are made repo-relative for stable CI output.
 fn collect_signals_from_consensus(
     consensus_files: &[PathBuf],
     _checkpoint: Checkpoint,
+    repo_root: &Path,
 ) -> (Vec<ReviewSignal>, Vec<ReviewSignal>) {
     let mut blocking = Vec::new();
     let mut advisory = Vec::new();
+
+    // Helper to make path repo-relative (P0-2)
+    let make_relative = |p: &Path| -> String {
+        p.strip_prefix(repo_root)
+            .map(|rel| rel.to_string_lossy().to_string())
+            .unwrap_or_else(|_| p.to_string_lossy().to_string())
+    };
 
     for path in consensus_files {
         let filename = path
@@ -735,7 +772,7 @@ fn collect_signals_from_consensus(
                     origin: SignalOrigin::System,
                     worker_id: None,
                     message: format!("Failed to read consensus file {filename}: {e}"),
-                    evidence_path: Some(path.to_string_lossy().to_string()),
+                    evidence_path: Some(make_relative(path)),
                 });
                 continue;
             }
@@ -751,7 +788,7 @@ fn collect_signals_from_consensus(
                     origin: SignalOrigin::System,
                     worker_id: None,
                     message: format!("Failed to parse consensus file {filename}: {e}"),
-                    evidence_path: Some(path.to_string_lossy().to_string()),
+                    evidence_path: Some(make_relative(path)),
                 });
                 continue;
             }
@@ -770,7 +807,7 @@ fn collect_signals_from_consensus(
                             origin: SignalOrigin::Role(role),
                             worker_id: data.agent.clone(),
                             message: conflict.clone(),
-                            evidence_path: Some(path.to_string_lossy().to_string()),
+                            evidence_path: Some(make_relative(path)),
                         });
                     }
                 }
@@ -778,14 +815,16 @@ fn collect_signals_from_consensus(
         }
 
         // Check for errors → advisory signals
+        // P0-4: Per REVIEW-CONTRACT.md, error field → System origin
+        // (errors are infrastructure/execution issues, not role-specific feedback)
         if let Some(error) = &data.error {
             advisory.push(ReviewSignal {
                 kind: CounterSignalKind::Other,
                 severity: SignalSeverity::Advisory,
-                origin: SignalOrigin::Role(role),
+                origin: SignalOrigin::System,
                 worker_id: data.agent.clone(),
                 message: error.clone(),
-                evidence_path: Some(path.to_string_lossy().to_string()),
+                evidence_path: Some(make_relative(path)),
             });
         }
     }
@@ -1053,6 +1092,7 @@ mod tests {
             advisory_signals: vec![],
             artifact_sources: vec![ArtifactSource::SQLite],
             artifacts_collected: 3,
+            review_evidence_count: 3, // P0-3: Separate review evidence count
             evidence: EvidenceRefs::default(),
             policy_snapshot: PolicySnapshot::default(),
         };
@@ -1086,8 +1126,9 @@ mod tests {
         assert_eq!(escalated.display_verdict(), DisplayVerdict::Failed);
 
         // No artifacts → Skipped
+        // P0-3: Now uses review_evidence_count for skip logic
         let mut no_artifacts = base_result;
-        no_artifacts.artifacts_collected = 0;
+        no_artifacts.review_evidence_count = 0;
         assert!(matches!(
             no_artifacts.display_verdict(),
             DisplayVerdict::Skipped {
@@ -1118,6 +1159,7 @@ mod tests {
             advisory_signals: vec![],
             artifact_sources: vec![ArtifactSource::SQLite],
             artifacts_collected: 1,
+            review_evidence_count: 1, // P0-3: Separate review evidence count
             evidence: EvidenceRefs::default(),
             policy_snapshot: PolicySnapshot::default(),
         };
@@ -1137,8 +1179,9 @@ mod tests {
         assert_eq!(failed.exit_code(&strict_options), 2);
 
         // No artifacts: exit 0 normally, exit 2 in strict mode
+        // P0-3: Now uses review_evidence_count for skip logic
         let mut skipped = passed;
-        skipped.artifacts_collected = 0;
+        skipped.review_evidence_count = 0;
         assert_eq!(skipped.exit_code(&default_options), 0);
         assert_eq!(skipped.exit_code(&strict_options), 2);
     }

@@ -55,10 +55,19 @@ pub enum Outcome {
 }
 
 /// Execution context provided by the adapter
+///
+/// Adapters are responsible for resolving all env/config values before
+/// constructing this context. The executor should not perform any I/O.
 #[derive(Debug, Clone)]
 pub struct ExecutionContext {
     /// Repository root path
     pub repo_root: std::path::PathBuf,
+
+    /// Policy snapshot (resolved by adapter from env/config)
+    ///
+    /// If None, defaults are used (all features disabled).
+    /// Adapters should use `PolicyToggles::from_env_and_config()` to resolve.
+    pub policy_snapshot: Option<PolicySnapshot>,
 }
 
 /// Spec-Kit executor — the single entrypoint for all commands
@@ -134,15 +143,15 @@ impl SpeckitExecutor {
             | ReviewResolution::Review {
                 checkpoint: actual_checkpoint,
             } => {
-                // P0-B: Resolve policy in adapter, not in core
-                let policy_snapshot = PolicySnapshot {
-                    sidecar_critic_enabled: std::env::var("SPEC_KIT_SIDECAR_CRITIC").is_ok(),
-                    telemetry_mode: TelemetryMode::Disabled,
-                    legacy_voting_env_detected: std::env::var("SPEC_KIT_VOTING").is_ok(),
-                };
+                // Use policy snapshot from context (adapter-resolved) or defaults
+                let policy_snapshot = self
+                    .context
+                    .policy_snapshot
+                    .clone()
+                    .unwrap_or_default();
 
                 let options = ReviewOptions {
-                    telemetry_mode: TelemetryMode::Disabled,
+                    telemetry_mode: policy_snapshot.telemetry_mode.clone(),
                     include_diagnostic: review::is_diagnostic_review(stage),
                     strict_artifacts,
                     strict_warnings,
@@ -288,6 +297,7 @@ mod tests {
         // Test that Specify stage returns ReviewSkipped
         let executor = SpeckitExecutor::new(ExecutionContext {
             repo_root: std::path::PathBuf::from("/tmp/nonexistent"),
+            policy_snapshot: None, // Use defaults
         });
 
         let cmd = SpeckitCommand::Review {
@@ -312,6 +322,7 @@ mod tests {
         // Test that Unlock aliases to BeforeUnlock and doesn't skip
         let executor = SpeckitExecutor::new(ExecutionContext {
             repo_root: std::path::PathBuf::from("/tmp/nonexistent"),
+            policy_snapshot: None, // Use defaults
         });
 
         let cmd = SpeckitCommand::Review {
