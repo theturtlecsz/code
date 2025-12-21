@@ -76,9 +76,12 @@ pub fn handle_spec_status(widget: &mut ChatWidget, raw_args: String) {
             )));
             widget.request_redraw();
         }
-        // Status command never returns Review variants
+        // Status command never returns Review or Plan variants
         Outcome::Review(_) | Outcome::ReviewSkipped { .. } => {
             unreachable!("Status command should never return Review outcome")
+        }
+        Outcome::PlanReady { .. } | Outcome::PlanBlocked { .. } => {
+            unreachable!("Status command should never return Plan outcome")
         }
     }
 }
@@ -180,9 +183,12 @@ pub fn handle_spec_review(widget: &mut ChatWidget, raw_args: String) {
             )));
             widget.request_redraw();
         }
-        // Review command never returns Status variant
+        // Review command never returns Status or Plan variant
         Outcome::Status(_) => {
             unreachable!("Review command should never return Status outcome")
+        }
+        Outcome::PlanReady { .. } | Outcome::PlanBlocked { .. } => {
+            unreachable!("Review command should never return Plan outcome")
         }
     }
 }

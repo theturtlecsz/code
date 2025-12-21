@@ -51,6 +51,27 @@ pub enum SpeckitCommand {
         /// P1-D: Override evidence root path (relative to repo root)
         evidence_root: Option<PathBuf>,
     },
+
+    /// Execute plan stage (validate prerequisites, run guardrails)
+    ///
+    /// TUI: `/speckit.plan <SPEC-ID>`
+    /// CLI: `code speckit plan --spec <SPEC-ID> [--dry-run]`
+    ///
+    /// SPEC-KIT-921 P3-B: Migrated behind executor for TUI/CLI parity.
+    /// The executor validates prerequisites and guardrails.
+    /// The adapter (TUI) handles agent spawning after validation passes.
+    Plan {
+        /// The SPEC identifier
+        spec_id: String,
+
+        /// Stage to execute (defaults to Plan, but can be tasks/implement/etc)
+        stage: Stage,
+
+        /// Dry-run mode: validate only, don't trigger agent execution
+        /// CLI default: true (model-free CI)
+        /// TUI: false (actually spawn agents)
+        dry_run: bool,
+    },
     // Future variants (Phase B+):
     // Doctor { format: OutputFormat },
     // Run { spec_id: String, from_stage: Option<Stage>, to_stage: Option<Stage>, ... },
@@ -174,6 +195,42 @@ impl SpeckitCommand {
             strict_warnings,
             strict_schema,
             evidence_root,
+        })
+    }
+
+    /// Parse plan command from slash command arguments
+    ///
+    /// Used by TUI: `/speckit.plan <SPEC-ID>` or `/speckit.tasks <SPEC-ID>` etc.
+    /// Stage is provided by the command variant (plan, tasks, implement, etc.)
+    pub fn parse_plan(raw_args: &str, stage: Stage, dry_run: bool) -> Result<Self, String> {
+        let trimmed = raw_args.trim();
+        if trimmed.is_empty() {
+            return Err(format!(
+                "Usage: /speckit.{} <SPEC-ID>",
+                stage.display_name().to_lowercase()
+            ));
+        }
+
+        let tokens: Vec<&str> = trimmed.split_whitespace().collect();
+
+        // First non-flag token is the spec_id
+        let spec_id = tokens
+            .iter()
+            .find(|t| !t.starts_with('-'))
+            .ok_or_else(|| "SPEC-ID required".to_string())?
+            .to_string();
+
+        // Check for any unknown flags
+        for token in &tokens {
+            if token.starts_with('-') && *token != "--dry-run" {
+                return Err(format!("Unknown flag `{token}`"));
+            }
+        }
+
+        Ok(SpeckitCommand::Plan {
+            spec_id,
+            stage,
+            dry_run,
         })
     }
 

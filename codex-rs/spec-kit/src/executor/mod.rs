@@ -51,6 +51,31 @@ pub enum Outcome {
         suggestion: Option<&'static str>,
     },
 
+    /// Plan validation passed - ready for agent execution
+    ///
+    /// SPEC-KIT-921 P3-B: TUI adapter should spawn agents when receiving this.
+    /// CLI with --dry-run reports success and exits.
+    PlanReady {
+        /// The validated SPEC identifier
+        spec_id: String,
+        /// Stage to execute
+        stage: crate::Stage,
+        /// Warnings from guardrail validation (non-blocking)
+        warnings: Vec<String>,
+        /// Whether this was a dry-run (validation only)
+        dry_run: bool,
+    },
+
+    /// Plan validation blocked - guardrails failed
+    PlanBlocked {
+        /// The SPEC identifier
+        spec_id: String,
+        /// Stage that was attempted
+        stage: crate::Stage,
+        /// Errors from guardrail validation (blocking)
+        errors: Vec<String>,
+    },
+
     /// Command failed with error
     Error(String),
 }
@@ -110,6 +135,11 @@ impl SpeckitExecutor {
                 strict_schema,
                 evidence_root,
             ),
+            SpeckitCommand::Plan {
+                spec_id,
+                stage,
+                dry_run,
+            } => self.execute_plan(&spec_id, stage, dry_run),
         }
     }
 
@@ -180,6 +210,102 @@ impl SpeckitExecutor {
                     Err(e) => Outcome::Error(e),
                 }
             }
+        }
+    }
+
+    /// Execute plan command (validate prerequisites and guardrails)
+    ///
+    /// SPEC-KIT-921 P3-B: This validates the SPEC and runs basic guardrails.
+    /// Returns PlanReady if validation passes, PlanBlocked if it fails.
+    ///
+    /// The adapter (TUI) handles agent spawning after receiving PlanReady.
+    /// CLI with --dry-run reports success and exits.
+    fn execute_plan(&self, spec_id: &str, stage: crate::Stage, dry_run: bool) -> Outcome {
+        let mut warnings: Vec<String> = Vec::new();
+        let mut errors: Vec<String> = Vec::new();
+
+        // 1. Validate SPEC-ID format
+        if spec_id.is_empty() {
+            errors.push("SPEC-ID is required".to_string());
+            return Outcome::PlanBlocked {
+                spec_id: spec_id.to_string(),
+                stage,
+                errors,
+            };
+        }
+
+        // 2. Check if SPEC directory exists (docs/SPEC-xxx or docs/SPEC-xxx/*)
+        let spec_dir = self.context.repo_root.join("docs").join(spec_id);
+        if !spec_dir.exists() {
+            // Also check for partial match (e.g., SPEC-KIT-921 might be in docs/SPEC-KIT-921-feature-name/)
+            let docs_dir = self.context.repo_root.join("docs");
+            if docs_dir.exists() {
+                let has_matching_dir = std::fs::read_dir(&docs_dir)
+                    .map(|entries| {
+                        entries.filter_map(Result::ok).any(|e| {
+                            e.file_name()
+                                .to_string_lossy()
+                                .starts_with(&format!("{spec_id}-"))
+                                || e.file_name().to_string_lossy() == spec_id
+                        })
+                    })
+                    .unwrap_or(false);
+
+                if !has_matching_dir {
+                    warnings.push(format!(
+                        "SPEC directory not found: docs/{spec_id} (will be created if needed)"
+                    ));
+                }
+            }
+        }
+
+        // 3. Basic stage validation
+        match stage {
+            crate::Stage::Specify => {
+                // Specify is always allowed
+            }
+            crate::Stage::Plan => {
+                // Plan requires SPEC to exist or be created
+            }
+            crate::Stage::Tasks | crate::Stage::Implement => {
+                // These typically require plan.md to exist
+                let plan_path = spec_dir.join("plan.md");
+                if spec_dir.exists() && !plan_path.exists() {
+                    warnings.push(format!(
+                        "plan.md not found for {spec_id} - recommended to run /speckit.plan first"
+                    ));
+                }
+            }
+            crate::Stage::Validate | crate::Stage::Audit | crate::Stage::Unlock => {
+                // These require implementation to exist
+                if spec_dir.exists() {
+                    let has_impl = ["implement.md", "tasks.md"]
+                        .iter()
+                        .any(|f| spec_dir.join(f).exists());
+                    if !has_impl {
+                        warnings.push(format!(
+                            "No implementation artifacts found for {spec_id} - recommended to run earlier stages first"
+                        ));
+                    }
+                }
+            }
+        }
+
+        // If there are errors, return PlanBlocked
+        if !errors.is_empty() {
+            return Outcome::PlanBlocked {
+                spec_id: spec_id.to_string(),
+                stage,
+                errors,
+            };
+        }
+
+        // Validation passed
+        Outcome::PlanReady {
+            spec_id: spec_id.to_string(),
+            stage,
+            warnings,
+            dry_run,
         }
     }
 }

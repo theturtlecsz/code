@@ -313,6 +313,151 @@ fn review_deterministic_output() -> Result<()> {
 // =============================================================================
 
 #[test]
+fn review_json_includes_schema_version() -> Result<()> {
+    // P3-A: All JSON outputs must include schema_version and tool_version
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    let evidence_dir = setup_evidence_dir(repo_root.path(), "SPEC-TEST-SCHEMA")?;
+    create_consensus_file(&evidence_dir, "plan", "architect", "20251220", &[], "clean")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "review",
+            "--spec",
+            "SPEC-TEST-SCHEMA",
+            "--stage",
+            "plan",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Verify schema_version is present and is integer 1
+    let schema_version = json.get("schema_version");
+    assert!(
+        schema_version.is_some(),
+        "Missing schema_version in review JSON"
+    );
+    assert_eq!(
+        schema_version.and_then(|v| v.as_u64()),
+        Some(1),
+        "schema_version should be 1"
+    );
+
+    // Verify tool_version is present and has correct format (version+sha or just version)
+    let tool_version = json.get("tool_version");
+    assert!(
+        tool_version.is_some(),
+        "Missing tool_version in review JSON"
+    );
+    let version_str = tool_version
+        .and_then(|v| v.as_str())
+        .expect("tool_version string");
+    // Should be semver-ish: "0.0.0" or "0.0.0+abc1234"
+    assert!(
+        version_str.starts_with("0."),
+        "tool_version should start with version number, got: {version_str}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn status_json_includes_schema_version() -> Result<()> {
+    // P3-A: Status JSON must also include schema_version and tool_version
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    setup_evidence_dir(repo_root.path(), "SPEC-TEST-STATUS-SCHEMA")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "status",
+            "--spec",
+            "SPEC-TEST-STATUS-SCHEMA",
+            "--json",
+        ])
+        .output()?;
+
+    assert!(output.status.success(), "Status command should succeed");
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Verify schema_version is present and is integer 1
+    let schema_version = json.get("schema_version");
+    assert!(
+        schema_version.is_some(),
+        "Missing schema_version in status JSON"
+    );
+    assert_eq!(
+        schema_version.and_then(|v| v.as_u64()),
+        Some(1),
+        "schema_version should be 1"
+    );
+
+    // Verify tool_version is present
+    let tool_version = json.get("tool_version");
+    assert!(
+        tool_version.is_some(),
+        "Missing tool_version in status JSON"
+    );
+    let version_str = tool_version
+        .and_then(|v| v.as_str())
+        .expect("tool_version string");
+    assert!(
+        version_str.starts_with("0."),
+        "tool_version should start with version number, got: {version_str}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn review_skipped_json_includes_schema_version() -> Result<()> {
+    // P3-A: ReviewSkipped JSON must also include version fields
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // No evidence at all - will trigger Skipped
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "review",
+            "--spec",
+            "SPEC-NONEXISTENT-SCHEMA",
+            "--stage",
+            "plan",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Should have Skipped verdict
+    let verdict = json.get("verdict").and_then(|v| v.as_str()).unwrap_or("");
+    assert!(verdict.contains("Skipped"), "Expected Skipped verdict");
+
+    // Still should have version fields
+    assert!(
+        json.get("schema_version").is_some(),
+        "Missing schema_version in skipped review JSON"
+    );
+    assert!(
+        json.get("tool_version").is_some(),
+        "Missing tool_version in skipped review JSON"
+    );
+
+    Ok(())
+}
+
+#[test]
 fn review_json_output_structure() -> Result<()> {
     let codex_home = TempDir::new()?;
     let repo_root = TempDir::new()?;
@@ -820,6 +965,115 @@ fn review_explain_flag_works_without_json() -> Result<()> {
         "Should contain explanation section, got: {stdout}"
     );
     assert!(stdout.contains("Exit code: 0"), "Should show exit code 0");
+
+    Ok(())
+}
+
+// =============================================================================
+// P3-B: PLAN COMMAND TESTS
+// =============================================================================
+
+#[test]
+fn plan_validates_spec_and_exits_0() -> Result<()> {
+    // P3-B: Plan command validates SPEC and exits 0 when ready
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory with plan.md
+    let spec_dir = repo_root.path().join("docs").join("SPEC-TEST-PLAN");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("plan.md"), "# Plan\nTest plan.")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args(["speckit", "plan", "--spec", "SPEC-TEST-PLAN", "--dry-run"])
+        .output()?;
+
+    // Dry-run validation should succeed
+    assert!(
+        output.status.success(),
+        "Expected exit 0 for plan validation, got {:?}\nstderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    Ok(())
+}
+
+#[test]
+fn plan_json_includes_schema_version() -> Result<()> {
+    // P3-B: Plan JSON output includes schema versioning
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create minimal SPEC structure
+    let spec_dir = repo_root.path().join("docs").join("SPEC-TEST-PLAN-JSON");
+    fs::create_dir_all(&spec_dir)?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "plan",
+            "--spec",
+            "SPEC-TEST-PLAN-JSON",
+            "--dry-run",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Verify schema_version is present
+    assert!(
+        json.get("schema_version").is_some(),
+        "Missing schema_version in plan JSON"
+    );
+    assert!(
+        json.get("tool_version").is_some(),
+        "Missing tool_version in plan JSON"
+    );
+
+    // Verify expected fields
+    assert!(json.get("spec_id").is_some(), "Missing spec_id");
+    assert!(json.get("stage").is_some(), "Missing stage");
+    assert!(json.get("status").is_some(), "Missing status");
+    assert!(json.get("dry_run").is_some(), "Missing dry_run");
+
+    Ok(())
+}
+
+#[test]
+fn plan_accepts_all_valid_stages() -> Result<()> {
+    // P3-B: Plan command accepts all valid stages
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    fs::create_dir_all(repo_root.path().join("docs").join("SPEC-TEST-STAGES"))?;
+
+    let stages = ["plan", "tasks", "implement", "validate", "audit", "unlock"];
+
+    for stage in stages {
+        let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+        let output = cmd
+            .args([
+                "speckit",
+                "plan",
+                "--spec",
+                "SPEC-TEST-STAGES",
+                "--stage",
+                stage,
+                "--dry-run",
+            ])
+            .output()?;
+
+        // Should not exit with infrastructure error (3)
+        assert_ne!(
+            output.status.code(),
+            Some(3),
+            "Stage '{stage}' should be recognized, got exit 3"
+        );
+    }
 
     Ok(())
 }

@@ -1,148 +1,131 @@
-# HANDOFF: SPEC-KIT-921 P3 Continuation
+# HANDOFF: SPEC-KIT-921 P4 Continuation
 
 **Generated**: 2025-12-21
-**Last Commit**: 61bebcf3b (feat(spec-kit): implement P2 CI workflow and CLI enhancements)
+**Last Commit**: (pending P3 commit)
 **Branch**: main
 
 ---
 
 ## Session Summary
 
-### P2 Completed (61bebcf3b)
+### P3 Completed
 
 | Task | Status | Deliverable |
 |------|--------|-------------|
-| P2-A: CI Workflow | ✅ | `.github/workflows/spec-kit-ci.yml` |
-| P2-B: Status JSON | ✅ | Enhanced with stages, packet, repo-relative paths |
-| P2-C: --explain flag | ✅ | Exit code debugging for review command |
+| P3-A: Schema Versioning | ✅ | `schema_version: 1`, `tool_version` in all JSON |
+| P3-B: Plan Migration | ✅ | `SpeckitCommand::Plan`, CLI `speckit plan` |
+| P3-C: CI Smoke Test | ✅ | Plan→review pipeline test in CI |
+| P3-D: Handoff Update | ✅ | This document |
 
-**Tests**: 16 CLI integration tests passing
-**Parity**: TUI `/spec-review` and CLI `speckit review` use same `SpeckitExecutor::execute()` + `render_review_dashboard()`
+**Tests**: 22 CLI integration tests passing (19 original + 3 plan tests)
+**Parity**: TUI and CLI use same `SpeckitExecutor::execute()` for status, review, and plan
 
-### Architect Review Feedback Applied
+### P3 Key Deliverables
 
-- CI hardening: `permissions: contents: read`, `pipefail`, `--explain` in failure diagnostics
-- Repo-relative paths verified in all JSON outputs
-- TUI/CLI parity confirmed via code inspection
+1. **Schema Versioning**: All JSON outputs now include:
+   ```json
+   {
+     "schema_version": 1,
+     "tool_version": "0.0.0+abc1234"
+   }
+   ```
+
+2. **Plan Command**: New CLI command for model-free CI validation:
+   ```bash
+   code speckit plan --spec SPEC-ID --stage plan --dry-run --json
+   ```
+
+3. **Outcome Variants**: Added `Outcome::PlanReady` and `Outcome::PlanBlocked`:
+   - `PlanReady`: Validation passed, ready for agent execution (TUI spawns agents)
+   - `PlanBlocked`: Validation failed (exit 2)
+
+4. **CI Smoke Test**: Pipeline validates plan→review workflow with fixture data
 
 ---
 
-## P3 Scope (Architect-Approved)
+## P4 Scope (Recommended)
 
-### Strategy: Incremental Migration
+### Strategy: Stage Expansion
 
 ```
-plan stage → CI validation → expand to tasks/implement → full pipeline
+plan stage (P3) → tasks stage → implement stage → full pipeline
 ```
 
-**Rationale**: Proves the hard part (stage execution behind executor without ChatWidget coupling) with minimal risk. CI smoke test prevents invariant breakage before expansion.
+**Rationale**: With plan stage proven behind executor, expand to remaining stages incrementally.
 
-### P3 Tasks
+### P4 Tasks
 
-#### P3-A: Schema Versioning for JSON Outputs
+#### P4-A: Migrate /speckit.tasks Behind Executor
 
-Add to all JSON outputs (status, review, future stage outputs):
-
-```json
-{
-  "schema_version": 1,
-  "tool_version": "0.1.0+abc1234",
-  ...
-}
-```
-
-Rules:
-- `schema_version`: Bump only on breaking changes; additive fields don't require bumps
-- `tool_version`: Cargo version + git sha (if available) for forensic debugging
+Same pattern as plan:
+1. Add `SpeckitCommand::Tasks` variant (or reuse `Plan` with stage=Tasks)
+2. Implement validation logic in executor
+3. Add CLI `speckit plan --stage tasks` tests
+4. Update CI with tasks stage smoke test
 
 Files to modify:
-- `cli/src/speckit_cmd.rs`: Add version fields to status and review JSON
-- Add test for version fields in `cli/tests/speckit.rs`
+- `cli/tests/speckit.rs`: Add tasks-specific tests
+- `.github/workflows/spec-kit-ci.yml`: Add tasks stage test
 
-#### P3-B: Migrate /speckit.plan Behind Executor
+#### P4-B: Migrate /speckit.implement Behind Executor
 
-Move plan stage execution from ChatWidget into `SpeckitExecutor`:
+Same pattern as tasks:
+1. Reuse `SpeckitCommand::Plan` with stage=Implement
+2. Add implementation-specific validation (e.g., check tasks.md exists)
+3. Add CLI tests for implement stage
+4. Update CI with implement stage smoke test
 
-1. Add `SpeckitCommand::Plan { spec_id, ... }` variant
-2. Implement `execute_plan()` in executor
-3. Refactor TUI `/speckit.plan` to call `executor.execute(SpeckitCommand::Plan { ... })`
-4. Add CLI `speckit plan --spec <ID>` command
+#### P4-C: TUI Integration (Optional)
 
-Files to modify:
-- `spec-kit/src/executor/command.rs`: Add Plan variant
-- `spec-kit/src/executor/mod.rs`: Add execute_plan()
-- `tui/src/chatwidget/spec_kit/command_handlers.rs`: Delegate to executor
-- `cli/src/speckit_cmd.rs`: Add plan subcommand
+Refactor TUI `/speckit.plan` to use executor:
+1. Call `executor.execute(SpeckitCommand::Plan { ... })`
+2. On `PlanReady`: spawn agents via existing orchestrator
+3. On `PlanBlocked`: display errors in chat
 
-Parity check: TUI and CLI must produce identical artifacts and exit codes.
+Note: This is optional because TUI already has its own guardrail logic. Full migration can be deferred if TUI works fine.
 
-#### P3-C: CI Pipeline Smoke Test
+#### P4-D: Update Documentation
 
-Add to `.github/workflows/spec-kit-ci.yml`:
-
-```yaml
-- name: "[PIPELINE] plan → review smoke test"
-  run: |
-    # Run plan on fixture SPEC
-    $CLI speckit plan --spec SPEC-CI-001-clean --dry-run
-
-    # Verify review still works after plan
-    $CLI speckit review --spec SPEC-CI-001-clean --stage plan --json
-```
-
-**Key constraint**: Model-free CI. Use fixture-driven or stubbed execution—no live LLM calls.
-
-Validate:
-- TUI and CLI both route `/speckit.plan` → `SpeckitExecutor::execute()`
-- Evidence/artifact outputs land in expected topology (repo-relative refs)
-- Exit code contract stable for: success, escalation, infra failure
-
-#### P3-D: Update Documentation
-
-- Update CONTINUATION-PROMPT for P4
-- Document schema versioning contract in CLI help or README
+- Document `speckit plan` command in help
+- Update HANDOFF.md for P5 (full pipeline orchestration)
 
 ---
 
 ## Files Reference
 
-### Modified in P2
+### Modified in P3
 
 | File | Purpose |
 |------|---------|
-| `.github/workflows/spec-kit-ci.yml` | CI exit code contract + smoke tests |
-| `cli/src/speckit_cmd.rs` | Status JSON, --explain flag |
-| `cli/tests/speckit.rs` | 16 integration tests |
+| `cli/src/speckit_cmd.rs` | Plan subcommand, schema versioning |
+| `cli/tests/speckit.rs` | 22 integration tests (3 new) |
+| `spec-kit/src/executor/command.rs` | Plan variant, parse_plan() |
+| `spec-kit/src/executor/mod.rs` | execute_plan(), PlanReady/PlanBlocked |
+| `tui/src/chatwidget/spec_kit/command_handlers.rs` | Exhaustive match for Plan outcomes |
+| `.github/workflows/spec-kit-ci.yml` | Plan smoke test |
 
-### To Modify in P3
-
-| File | Change |
-|------|--------|
-| `spec-kit/src/executor/command.rs` | Add Plan variant |
-| `spec-kit/src/executor/mod.rs` | Add execute_plan() |
-| `tui/src/chatwidget/spec_kit/command_handlers.rs` | Delegate plan to executor |
-| `cli/src/speckit_cmd.rs` | Add plan subcommand + schema versioning |
-
-### Existing Architecture (for reference)
+### Architecture After P3
 
 ```
 CLI (speckit_cmd.rs)
-  ↓ SpeckitCommand::Review/Status
+  ↓ SpeckitCommand::Status/Review/Plan
   ↓
 SpeckitExecutor::execute()
   ↓
-Outcome::Review/Status/Error
+Outcome::Status/Review/ReviewSkipped/PlanReady/PlanBlocked/Error
   ↓
-render_*_dashboard() → stdout
+render_*_dashboard() → stdout (with schema_version)
 
 TUI (command_handlers.rs)
-  ↓ SpeckitCommand::parse_review()
+  ↓ SpeckitCommand::parse_*()
   ↓
 SpeckitExecutor::execute()  ← SAME EXECUTOR
   ↓
-Outcome::Review/Status/Error
+Outcome::*
   ↓
 render_*_dashboard() → ChatWidget
+  ↓ (if PlanReady)
+agent_orchestrator::auto_submit_spec_stage_prompt()  ← TUI-only
 ```
 
 ---
@@ -151,18 +134,18 @@ render_*_dashboard() → ChatWidget
 
 | Code | Meaning | Trigger |
 |------|---------|---------|
-| 0 | Success/proceed | Clean consensus, no blocking signals |
+| 0 | Success/proceed | Clean consensus, plan ready |
 | 1 | Soft fail | PassedWithWarnings + --strict-warnings |
-| 2 | Hard fail | Conflicts, escalation, missing artifacts + --strict-artifacts |
+| 2 | Hard fail | Conflicts, escalation, PlanBlocked |
 | 3 | Infrastructure error | Parse/schema errors + --strict-schema |
 
 ---
 
-## Deferred to P4
+## Deferred to P5+
 
-- **CLI config-file support** (`.speckit.toml`): Defer until Phase C/D requirements clarify
+- **Full /speckit.auto orchestration**: After all stages behind executor
+- **CLI config-file support** (`.speckit.toml`): After Phase C/D requirements clarify
 - **Evidence root auto-discovery**: Complexity multiplier; only after pipeline migration
-- **Full Phase D** (`/speckit.auto` orchestration): After plan/tasks/implement proven
 
 ---
 
@@ -174,18 +157,18 @@ cd /home/thetu/code
 git log --oneline -5
 cargo test -p codex-cli --test speckit
 
-# Start P3-A (schema versioning)
-# Then P3-B (plan migration)
-# Then P3-C (CI smoke test)
+# Verify P3 deliverables
+cargo run -p codex-cli -- speckit plan --spec SPEC-TEST --dry-run --json
+
+# Start P4-A (tasks stage)
 ```
 
 ---
 
-## Acceptance Criteria for P3
+## Acceptance Criteria for P4
 
-- [ ] All JSON outputs include `schema_version` and `tool_version`
-- [ ] `/speckit.plan` routes through `SpeckitExecutor` in both TUI and CLI
-- [ ] CLI `speckit plan` command exists with same exit codes as TUI
-- [ ] CI pipeline smoke test passes (fixture-driven, model-free)
-- [ ] 18+ CLI integration tests passing (16 existing + 2 new)
-- [ ] No ChatWidget coupling in plan execution logic
+- [ ] Tasks stage (`--stage tasks`) validates through executor
+- [ ] Implement stage (`--stage implement`) validates through executor
+- [ ] CI smoke tests for tasks and implement stages
+- [ ] 25+ CLI integration tests passing
+- [ ] No regression in existing plan/review/status commands

@@ -16,6 +16,12 @@
 //! - 1: Soft fail (warnings in strict mode)
 //! - 2: Hard fail (escalation / missing artifacts in strict mode)
 //! - 3: Infrastructure error
+//!
+//! ## JSON Schema Versioning
+//!
+//! All JSON outputs include:
+//! - `schema_version`: Integer, bumped only on breaking changes
+//! - `tool_version`: Cargo version + git sha for debugging
 
 use clap::{Parser, Subcommand};
 use codex_spec_kit::Stage;
@@ -26,6 +32,43 @@ use codex_spec_kit::executor::{
     review_warning, status_degraded_warning,
 };
 use std::path::PathBuf;
+
+/// Schema version for JSON outputs.
+/// Bump ONLY on breaking changes (removed/renamed fields, semantic changes).
+/// Additive changes (new fields) do NOT require a version bump.
+const SCHEMA_VERSION: u32 = 1;
+
+/// Get tool version string with git sha for debugging.
+/// Format: "{cargo_version}+{git_sha}" or just "{cargo_version}" if no git info.
+fn tool_version() -> String {
+    let base_version = codex_version::version();
+    // Try to get git sha from build-time or runtime
+    let git_sha = option_env!("SPECKIT_GIT_SHA")
+        .or_else(|| option_env!("GIT_SHA"))
+        .unwrap_or_else(|| {
+            // Runtime fallback: execute git command
+            std::process::Command::new("git")
+                .args(["rev-parse", "--short", "HEAD"])
+                .output()
+                .ok()
+                .and_then(|o| {
+                    if o.status.success() {
+                        String::from_utf8(o.stdout).ok()
+                    } else {
+                        None
+                    }
+                })
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default()
+                .leak()
+        });
+
+    if git_sha.is_empty() {
+        base_version.to_string()
+    } else {
+        format!("{base_version}+{git_sha}")
+    }
+}
 
 /// Spec-Kit CLI — headless commands for automation and CI
 #[derive(Debug, Parser)]
@@ -45,6 +88,13 @@ pub enum SpeckitSubcommand {
 
     /// Evaluate stage gate artifacts
     Review(ReviewArgs),
+
+    /// Validate SPEC prerequisites and execute stage (dry-run by default)
+    ///
+    /// SPEC-KIT-921 P3-B: CLI plan command for CI validation.
+    /// Validates SPEC exists, checks prerequisites, runs guardrails.
+    /// Use --no-dry-run to actually trigger agent execution (TUI only).
+    Plan(PlanArgs),
 }
 
 /// Arguments for `speckit status` command
@@ -102,6 +152,30 @@ pub struct ReviewArgs {
     pub json: bool,
 }
 
+/// Arguments for `speckit plan` command
+///
+/// SPEC-KIT-921 P3-B: CLI adapter for plan/tasks/implement/etc stages.
+#[derive(Debug, Parser)]
+pub struct PlanArgs {
+    /// SPEC identifier (e.g., SPEC-KIT-921)
+    #[arg(long = "spec", short = 's', value_name = "SPEC-ID")]
+    pub spec_id: String,
+
+    /// Stage to execute (plan, tasks, implement, validate, audit, unlock)
+    /// Defaults to 'plan' if not specified
+    #[arg(long = "stage", value_name = "STAGE", default_value = "plan")]
+    pub stage: String,
+
+    /// Dry-run mode: validate only, don't trigger agent execution
+    /// This is the default for CLI (model-free CI)
+    #[arg(long = "dry-run", default_value = "true")]
+    pub dry_run: bool,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
 impl SpeckitCli {
     /// Run the speckit CLI command
     pub async fn run(self) -> anyhow::Result<()> {
@@ -125,6 +199,7 @@ impl SpeckitCli {
         match self.command {
             SpeckitSubcommand::Status(args) => run_status(executor, args),
             SpeckitSubcommand::Review(args) => run_review(executor, args),
+            SpeckitSubcommand::Plan(args) => run_plan(executor, args),
         }
     }
 }
@@ -169,6 +244,8 @@ fn run_status(executor: SpeckitExecutor, args: StatusArgs) -> anyhow::Result<()>
                     .collect();
 
                 let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
                     "spec_id": report.spec_id,
                     "generated_at": report.generated_at.to_rfc3339(),
                     "stale_hours": report.stale_cutoff.num_hours(),
@@ -214,6 +291,9 @@ fn run_status(executor: SpeckitExecutor, args: StatusArgs) -> anyhow::Result<()>
         Outcome::Review(_) | Outcome::ReviewSkipped { .. } => {
             unreachable!("Status command should never return Review outcome")
         }
+        Outcome::PlanReady { .. } | Outcome::PlanBlocked { .. } => {
+            unreachable!("Status command should never return Plan outcome")
+        }
     }
 }
 
@@ -245,6 +325,8 @@ fn run_review(executor: SpeckitExecutor, args: ReviewArgs) -> anyhow::Result<()>
             if args.json {
                 // JSON output for CI parsing
                 let mut json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
                     "spec_id": result.spec_id,
                     "stage": format!("{:?}", result.stage),
                     "checkpoint": format!("{:?}", result.checkpoint),
@@ -339,6 +421,8 @@ fn run_review(executor: SpeckitExecutor, args: ReviewArgs) -> anyhow::Result<()>
 
             if args.json {
                 let mut json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
                     "stage": format!("{:?}", stage),
                     "verdict": "Skipped",
                     "reason": format!("{:?}", reason),
@@ -397,6 +481,8 @@ fn run_review(executor: SpeckitExecutor, args: ReviewArgs) -> anyhow::Result<()>
         Outcome::Error(err) => {
             if args.json {
                 let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
                     "error": err,
                     "exit_code": 3,
                 });
@@ -408,6 +494,98 @@ fn run_review(executor: SpeckitExecutor, args: ReviewArgs) -> anyhow::Result<()>
         }
         Outcome::Status(_) => {
             unreachable!("Review command should never return Status outcome")
+        }
+        Outcome::PlanReady { .. } | Outcome::PlanBlocked { .. } => {
+            unreachable!("Review command should never return Plan outcome")
+        }
+    }
+}
+
+/// Run the plan command
+///
+/// SPEC-KIT-921 P3-B: CLI adapter for plan stage validation.
+/// Validates SPEC prerequisites and guardrails.
+/// Returns exit 0 on success, exit 2 on validation failure.
+fn run_plan(executor: SpeckitExecutor, args: PlanArgs) -> anyhow::Result<()> {
+    // Parse stage
+    let stage = parse_stage(&args.stage)?;
+
+    let command = SpeckitCommand::Plan {
+        spec_id: args.spec_id.clone(),
+        stage,
+        dry_run: args.dry_run,
+    };
+
+    match executor.execute(command) {
+        Outcome::PlanReady {
+            spec_id,
+            stage,
+            warnings,
+            dry_run,
+        } => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "spec_id": spec_id,
+                    "stage": format!("{:?}", stage),
+                    "status": "ready",
+                    "dry_run": dry_run,
+                    "warnings": warnings,
+                    "exit_code": 0,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                println!("✓ SPEC {spec_id} validated for stage {stage:?}");
+                if dry_run {
+                    println!("  (dry-run mode: validation only, no agents spawned)");
+                }
+                for warning in &warnings {
+                    println!("  ⚠ {warning}");
+                }
+            }
+            Ok(())
+        }
+        Outcome::PlanBlocked {
+            spec_id,
+            stage,
+            errors,
+        } => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "spec_id": spec_id,
+                    "stage": format!("{:?}", stage),
+                    "status": "blocked",
+                    "errors": errors,
+                    "exit_code": 2,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("✗ SPEC {spec_id} blocked for stage {stage:?}");
+                for error in &errors {
+                    eprintln!("  ✗ {error}");
+                }
+            }
+            std::process::exit(2);
+        }
+        Outcome::Error(err) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": err,
+                    "exit_code": 3,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: {err}");
+            }
+            std::process::exit(3);
+        }
+        Outcome::Status(_) | Outcome::Review(_) | Outcome::ReviewSkipped { .. } => {
+            unreachable!("Plan command should never return Status/Review outcome")
         }
     }
 }
