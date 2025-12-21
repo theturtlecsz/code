@@ -10,12 +10,12 @@ use super::super::command_registry::SpecKitCommand;
 use crate::spec_prompts::SpecStage;
 
 // SPEC-KIT-921: Use shared executor for stage validation (CLI/TUI parity)
+use codex_spec_kit::Stage;
 use codex_spec_kit::config::policy_toggles::PolicyToggles;
 use codex_spec_kit::executor::{
-    ExecutionContext, Outcome, PolicySnapshot, SpeckitCommand as ExecutorCommand,
-    SpeckitExecutor, StageResolution, TelemetryMode,
+    ExecutionContext, Outcome, PolicySnapshot, SpeckitCommand as ExecutorCommand, SpeckitExecutor,
+    StageResolution, TelemetryMode,
 };
-use codex_spec_kit::Stage;
 
 /// Command: /speckit.plan
 /// Creates work breakdown with gate review
@@ -280,9 +280,8 @@ pub fn execute_stage_command(
                 StageResolution::Ready => {
                     // Report any warnings
                     for warning in &outcome.advisory_signals {
-                        widget.history_push(crate::history_cell::new_warning_event(
-                            warning.clone(),
-                        ));
+                        widget
+                            .history_push(crate::history_cell::new_warning_event(warning.clone()));
                     }
 
                     // Spawn agents directly (SPEC-KIT-902: eliminates orchestrator)
@@ -299,9 +298,7 @@ pub fn execute_stage_command(
                 StageResolution::Skipped => {
                     // Report skip reason as warning
                     for signal in &outcome.advisory_signals {
-                        widget.history_push(crate::history_cell::new_warning_event(
-                            signal.clone(),
-                        ));
+                        widget.history_push(crate::history_cell::new_warning_event(signal.clone()));
                     }
                 }
             }

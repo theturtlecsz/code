@@ -202,7 +202,11 @@ impl SpeckitCommand {
     ///
     /// Used by TUI: `/speckit.plan <SPEC-ID>` or `/speckit.tasks <SPEC-ID>` etc.
     /// Stage is provided by the command variant (plan, tasks, implement, etc.)
-    pub fn parse_validate_stage(raw_args: &str, stage: Stage, dry_run: bool) -> Result<Self, String> {
+    pub fn parse_validate_stage(
+        raw_args: &str,
+        stage: Stage,
+        dry_run: bool,
+    ) -> Result<Self, String> {
         let trimmed = raw_args.trim();
         if trimmed.is_empty() {
             return Err(format!(

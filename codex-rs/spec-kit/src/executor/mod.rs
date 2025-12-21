@@ -117,7 +117,12 @@ impl StageOutcome {
     /// Create a Blocked outcome
     ///
     /// SPEC-KIT-921 P4: Preserves dry_run for metadata consistency
-    pub fn blocked(spec_id: String, stage: crate::Stage, errors: Vec<String>, dry_run: bool) -> Self {
+    pub fn blocked(
+        spec_id: String,
+        stage: crate::Stage,
+        errors: Vec<String>,
+        dry_run: bool,
+    ) -> Self {
         Self {
             spec_id,
             stage,
@@ -393,7 +398,12 @@ impl SpeckitExecutor {
 
         // If there are errors, return Blocked
         if !errors.is_empty() {
-            return Outcome::Stage(StageOutcome::blocked(spec_id.to_string(), stage, errors, dry_run));
+            return Outcome::Stage(StageOutcome::blocked(
+                spec_id.to_string(),
+                stage,
+                errors,
+                dry_run,
+            ));
         }
 
         // Validation passed

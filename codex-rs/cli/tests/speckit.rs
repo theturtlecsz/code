@@ -1170,7 +1170,10 @@ fn tasks_warns_when_plan_missing() -> Result<()> {
     let repo_root = TempDir::new()?;
 
     // Create SPEC directory WITHOUT plan.md
-    let spec_dir = repo_root.path().join("docs").join("SPEC-TEST-TASKS-NO-PLAN");
+    let spec_dir = repo_root
+        .path()
+        .join("docs")
+        .join("SPEC-TEST-TASKS-NO-PLAN");
     fs::create_dir_all(&spec_dir)?;
 
     let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
@@ -1196,6 +1199,522 @@ fn tasks_warns_when_plan_missing() -> Result<()> {
     assert!(
         warnings.map(|w| !w.is_empty()).unwrap_or(false),
         "Expected warning about missing plan.md"
+    );
+
+    Ok(())
+}
+
+// =============================================================================
+// P5-A: IMPLEMENT COMMAND TESTS
+// =============================================================================
+
+#[test]
+fn implement_validates_spec_and_exits_0() -> Result<()> {
+    // P5-A: Implement command validates SPEC and exits 0 when ready
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory with plan.md (required for implement stage)
+    let spec_dir = repo_root.path().join("docs").join("SPEC-TEST-IMPLEMENT");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("plan.md"), "# Plan\nTest plan.")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "implement",
+            "--spec",
+            "SPEC-TEST-IMPLEMENT",
+            "--dry-run",
+        ])
+        .output()?;
+
+    // Dry-run validation should succeed
+    assert!(
+        output.status.success(),
+        "Expected exit 0 for implement validation, got {:?}\nstderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    Ok(())
+}
+
+#[test]
+fn implement_warns_when_plan_missing() -> Result<()> {
+    // P5-A: Implement command warns when plan.md is missing
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory WITHOUT plan.md
+    let spec_dir = repo_root
+        .path()
+        .join("docs")
+        .join("SPEC-TEST-IMPLEMENT-NO-PLAN");
+    fs::create_dir_all(&spec_dir)?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "implement",
+            "--spec",
+            "SPEC-TEST-IMPLEMENT-NO-PLAN",
+            "--dry-run",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Should still succeed (ready) but with warnings
+    let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
+    assert_eq!(status, "ready", "Expected ready status");
+
+    // Should have warning about missing plan.md
+    let warnings = json.get("warnings").and_then(|v| v.as_array());
+    assert!(
+        warnings.map(|w| !w.is_empty()).unwrap_or(false),
+        "Expected warning about missing plan.md"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn implement_json_includes_schema_version() -> Result<()> {
+    // P5-A: Implement JSON output includes schema versioning
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create minimal SPEC structure with plan.md
+    let spec_dir = repo_root
+        .path()
+        .join("docs")
+        .join("SPEC-TEST-IMPLEMENT-JSON");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("plan.md"), "# Plan\nTest plan.")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "implement",
+            "--spec",
+            "SPEC-TEST-IMPLEMENT-JSON",
+            "--dry-run",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Verify schema_version is present
+    assert!(
+        json.get("schema_version").is_some(),
+        "Missing schema_version in implement JSON"
+    );
+    assert!(
+        json.get("tool_version").is_some(),
+        "Missing tool_version in implement JSON"
+    );
+
+    // Verify expected fields
+    assert!(json.get("spec_id").is_some(), "Missing spec_id");
+    assert!(json.get("stage").is_some(), "Missing stage");
+    assert!(json.get("status").is_some(), "Missing status");
+    assert!(json.get("dry_run").is_some(), "Missing dry_run");
+
+    // Verify stage is Implement
+    let stage = json.get("stage").and_then(|v| v.as_str()).unwrap_or("");
+    assert!(
+        stage.contains("Implement"),
+        "Expected Implement stage, got: {stage}"
+    );
+
+    Ok(())
+}
+
+// =============================================================================
+// P5-B: VALIDATE STAGE COMMAND TESTS
+// =============================================================================
+
+#[test]
+fn stage_validate_validates_spec_and_exits_0() -> Result<()> {
+    // P5-B: Validate command validates SPEC and exits 0 when ready
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory with implementation artifacts
+    let spec_dir = repo_root.path().join("docs").join("SPEC-TEST-VALIDATE");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("tasks.md"), "# Tasks\nTest tasks.")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "validate",
+            "--spec",
+            "SPEC-TEST-VALIDATE",
+            "--dry-run",
+        ])
+        .output()?;
+
+    // Dry-run validation should succeed
+    assert!(
+        output.status.success(),
+        "Expected exit 0 for validate validation, got {:?}\nstderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    Ok(())
+}
+
+#[test]
+fn stage_validate_warns_when_impl_missing() -> Result<()> {
+    // P5-B: Validate command warns when implementation artifacts are missing
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory WITHOUT implementation artifacts
+    let spec_dir = repo_root
+        .path()
+        .join("docs")
+        .join("SPEC-TEST-VALIDATE-NO-IMPL");
+    fs::create_dir_all(&spec_dir)?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "validate",
+            "--spec",
+            "SPEC-TEST-VALIDATE-NO-IMPL",
+            "--dry-run",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Should still succeed (ready) but with warnings
+    let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
+    assert_eq!(status, "ready", "Expected ready status");
+
+    // Should have warning about missing implementation artifacts
+    let warnings = json.get("warnings").and_then(|v| v.as_array());
+    assert!(
+        warnings.map(|w| !w.is_empty()).unwrap_or(false),
+        "Expected warning about missing implementation artifacts"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn stage_validate_json_includes_schema_version() -> Result<()> {
+    // P5-B: Validate JSON output includes schema versioning
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create minimal SPEC structure with implementation artifacts
+    let spec_dir = repo_root
+        .path()
+        .join("docs")
+        .join("SPEC-TEST-VALIDATE-JSON");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("tasks.md"), "# Tasks\nTest tasks.")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "validate",
+            "--spec",
+            "SPEC-TEST-VALIDATE-JSON",
+            "--dry-run",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Verify schema_version is present
+    assert!(
+        json.get("schema_version").is_some(),
+        "Missing schema_version in validate JSON"
+    );
+    assert!(
+        json.get("tool_version").is_some(),
+        "Missing tool_version in validate JSON"
+    );
+
+    // Verify expected fields
+    assert!(json.get("spec_id").is_some(), "Missing spec_id");
+    assert!(json.get("stage").is_some(), "Missing stage");
+    assert!(json.get("status").is_some(), "Missing status");
+    assert!(json.get("dry_run").is_some(), "Missing dry_run");
+
+    // Verify stage is Validate
+    let stage = json.get("stage").and_then(|v| v.as_str()).unwrap_or("");
+    assert!(
+        stage.contains("Validate"),
+        "Expected Validate stage, got: {stage}"
+    );
+
+    Ok(())
+}
+
+// =============================================================================
+// P5-B: AUDIT COMMAND TESTS
+// =============================================================================
+
+#[test]
+fn audit_validates_spec_and_exits_0() -> Result<()> {
+    // P5-B: Audit command validates SPEC and exits 0 when ready
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory with implementation artifacts
+    let spec_dir = repo_root.path().join("docs").join("SPEC-TEST-AUDIT");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("tasks.md"), "# Tasks\nTest tasks.")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args(["speckit", "audit", "--spec", "SPEC-TEST-AUDIT", "--dry-run"])
+        .output()?;
+
+    // Dry-run validation should succeed
+    assert!(
+        output.status.success(),
+        "Expected exit 0 for audit validation, got {:?}\nstderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    Ok(())
+}
+
+#[test]
+fn audit_warns_when_impl_missing() -> Result<()> {
+    // P5-B: Audit command warns when implementation artifacts are missing
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory WITHOUT implementation artifacts
+    let spec_dir = repo_root
+        .path()
+        .join("docs")
+        .join("SPEC-TEST-AUDIT-NO-IMPL");
+    fs::create_dir_all(&spec_dir)?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "audit",
+            "--spec",
+            "SPEC-TEST-AUDIT-NO-IMPL",
+            "--dry-run",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Should still succeed (ready) but with warnings
+    let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
+    assert_eq!(status, "ready", "Expected ready status");
+
+    // Should have warning about missing implementation artifacts
+    let warnings = json.get("warnings").and_then(|v| v.as_array());
+    assert!(
+        warnings.map(|w| !w.is_empty()).unwrap_or(false),
+        "Expected warning about missing implementation artifacts"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn audit_json_includes_schema_version() -> Result<()> {
+    // P5-B: Audit JSON output includes schema versioning
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create minimal SPEC structure with implementation artifacts
+    let spec_dir = repo_root.path().join("docs").join("SPEC-TEST-AUDIT-JSON");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("tasks.md"), "# Tasks\nTest tasks.")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "audit",
+            "--spec",
+            "SPEC-TEST-AUDIT-JSON",
+            "--dry-run",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Verify schema_version is present
+    assert!(
+        json.get("schema_version").is_some(),
+        "Missing schema_version in audit JSON"
+    );
+    assert!(
+        json.get("tool_version").is_some(),
+        "Missing tool_version in audit JSON"
+    );
+
+    // Verify expected fields
+    assert!(json.get("spec_id").is_some(), "Missing spec_id");
+    assert!(json.get("stage").is_some(), "Missing stage");
+    assert!(json.get("status").is_some(), "Missing status");
+    assert!(json.get("dry_run").is_some(), "Missing dry_run");
+
+    // Verify stage is Audit
+    let stage = json.get("stage").and_then(|v| v.as_str()).unwrap_or("");
+    assert!(
+        stage.contains("Audit"),
+        "Expected Audit stage, got: {stage}"
+    );
+
+    Ok(())
+}
+
+// =============================================================================
+// P5-B: UNLOCK COMMAND TESTS
+// =============================================================================
+
+#[test]
+fn unlock_validates_spec_and_exits_0() -> Result<()> {
+    // P5-B: Unlock command validates SPEC and exits 0 when ready
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory with implementation artifacts
+    let spec_dir = repo_root.path().join("docs").join("SPEC-TEST-UNLOCK");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("tasks.md"), "# Tasks\nTest tasks.")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "unlock",
+            "--spec",
+            "SPEC-TEST-UNLOCK",
+            "--dry-run",
+        ])
+        .output()?;
+
+    // Dry-run validation should succeed
+    assert!(
+        output.status.success(),
+        "Expected exit 0 for unlock validation, got {:?}\nstderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    Ok(())
+}
+
+#[test]
+fn unlock_warns_when_impl_missing() -> Result<()> {
+    // P5-B: Unlock command warns when implementation artifacts are missing
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory WITHOUT implementation artifacts
+    let spec_dir = repo_root
+        .path()
+        .join("docs")
+        .join("SPEC-TEST-UNLOCK-NO-IMPL");
+    fs::create_dir_all(&spec_dir)?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "unlock",
+            "--spec",
+            "SPEC-TEST-UNLOCK-NO-IMPL",
+            "--dry-run",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Should still succeed (ready) but with warnings
+    let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
+    assert_eq!(status, "ready", "Expected ready status");
+
+    // Should have warning about missing implementation artifacts
+    let warnings = json.get("warnings").and_then(|v| v.as_array());
+    assert!(
+        warnings.map(|w| !w.is_empty()).unwrap_or(false),
+        "Expected warning about missing implementation artifacts"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn unlock_json_includes_schema_version() -> Result<()> {
+    // P5-B: Unlock JSON output includes schema versioning
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create minimal SPEC structure with implementation artifacts
+    let spec_dir = repo_root.path().join("docs").join("SPEC-TEST-UNLOCK-JSON");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("tasks.md"), "# Tasks\nTest tasks.")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "unlock",
+            "--spec",
+            "SPEC-TEST-UNLOCK-JSON",
+            "--dry-run",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Verify schema_version is present
+    assert!(
+        json.get("schema_version").is_some(),
+        "Missing schema_version in unlock JSON"
+    );
+    assert!(
+        json.get("tool_version").is_some(),
+        "Missing tool_version in unlock JSON"
+    );
+
+    // Verify expected fields
+    assert!(json.get("spec_id").is_some(), "Missing spec_id");
+    assert!(json.get("stage").is_some(), "Missing stage");
+    assert!(json.get("status").is_some(), "Missing status");
+    assert!(json.get("dry_run").is_some(), "Missing dry_run");
+
+    // Verify stage is Unlock
+    let stage = json.get("stage").and_then(|v| v.as_str()).unwrap_or("");
+    assert!(
+        stage.contains("Unlock"),
+        "Expected Unlock stage, got: {stage}"
     );
 
     Ok(())

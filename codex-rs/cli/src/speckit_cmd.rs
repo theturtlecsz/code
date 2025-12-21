@@ -89,6 +89,34 @@ pub enum SpeckitSubcommand {
     /// Validates SPEC exists, checks that plan.md exists, runs guardrails.
     /// Use --no-dry-run to actually trigger agent execution (TUI only).
     Tasks(TasksArgs),
+
+    /// Validate SPEC prerequisites and execute implement stage (dry-run by default)
+    ///
+    /// SPEC-KIT-921 P5-A: CLI implement command for CI validation.
+    /// Validates SPEC exists, checks that tasks.md exists, runs guardrails.
+    /// Use --no-dry-run to actually trigger agent execution (TUI only).
+    Implement(ImplementArgs),
+
+    /// Validate SPEC prerequisites and execute validate stage (dry-run by default)
+    ///
+    /// SPEC-KIT-921 P5-B: CLI validate command for CI validation.
+    /// Validates SPEC exists, checks implementation artifacts, runs guardrails.
+    /// Use --no-dry-run to actually trigger agent execution (TUI only).
+    Validate(ValidateStageArgs),
+
+    /// Validate SPEC prerequisites and execute audit stage (dry-run by default)
+    ///
+    /// SPEC-KIT-921 P5-B: CLI audit command for CI validation.
+    /// Validates SPEC exists, checks validation artifacts, runs guardrails.
+    /// Use --no-dry-run to actually trigger agent execution (TUI only).
+    Audit(AuditArgs),
+
+    /// Validate SPEC prerequisites and execute unlock stage (dry-run by default)
+    ///
+    /// SPEC-KIT-921 P5-B: CLI unlock command for CI validation.
+    /// Validates SPEC exists, checks audit artifacts, runs guardrails.
+    /// Use --no-dry-run to actually trigger agent execution (TUI only).
+    Unlock(UnlockArgs),
 }
 
 /// Arguments for `speckit status` command
@@ -185,6 +213,83 @@ pub struct TasksArgs {
     pub json: bool,
 }
 
+/// Arguments for `speckit implement` command
+///
+/// SPEC-KIT-921 P5-A: Implement command is locked to implement stage.
+#[derive(Debug, Parser)]
+pub struct ImplementArgs {
+    /// SPEC identifier (e.g., SPEC-KIT-921)
+    #[arg(long = "spec", short = 's', value_name = "SPEC-ID")]
+    pub spec_id: String,
+
+    /// Dry-run mode: validate only, don't trigger agent execution
+    /// This is the default for CLI (model-free CI)
+    #[arg(long = "dry-run", default_value = "true")]
+    pub dry_run: bool,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
+/// Arguments for `speckit validate` command
+///
+/// SPEC-KIT-921 P5-B: Validate command is locked to validate stage.
+/// Note: Named ValidateStageArgs to avoid conflict with other validation concepts.
+#[derive(Debug, Parser)]
+pub struct ValidateStageArgs {
+    /// SPEC identifier (e.g., SPEC-KIT-921)
+    #[arg(long = "spec", short = 's', value_name = "SPEC-ID")]
+    pub spec_id: String,
+
+    /// Dry-run mode: validate only, don't trigger agent execution
+    /// This is the default for CLI (model-free CI)
+    #[arg(long = "dry-run", default_value = "true")]
+    pub dry_run: bool,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
+/// Arguments for `speckit audit` command
+///
+/// SPEC-KIT-921 P5-B: Audit command is locked to audit stage.
+#[derive(Debug, Parser)]
+pub struct AuditArgs {
+    /// SPEC identifier (e.g., SPEC-KIT-921)
+    #[arg(long = "spec", short = 's', value_name = "SPEC-ID")]
+    pub spec_id: String,
+
+    /// Dry-run mode: validate only, don't trigger agent execution
+    /// This is the default for CLI (model-free CI)
+    #[arg(long = "dry-run", default_value = "true")]
+    pub dry_run: bool,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
+/// Arguments for `speckit unlock` command
+///
+/// SPEC-KIT-921 P5-B: Unlock command is locked to unlock stage.
+#[derive(Debug, Parser)]
+pub struct UnlockArgs {
+    /// SPEC identifier (e.g., SPEC-KIT-921)
+    #[arg(long = "spec", short = 's', value_name = "SPEC-ID")]
+    pub spec_id: String,
+
+    /// Dry-run mode: validate only, don't trigger agent execution
+    /// This is the default for CLI (model-free CI)
+    #[arg(long = "dry-run", default_value = "true")]
+    pub dry_run: bool,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
 impl SpeckitCli {
     /// Run the speckit CLI command
     pub async fn run(self) -> anyhow::Result<()> {
@@ -210,6 +315,10 @@ impl SpeckitCli {
             SpeckitSubcommand::Review(args) => run_review(executor, args),
             SpeckitSubcommand::Plan(args) => run_plan(executor, args),
             SpeckitSubcommand::Tasks(args) => run_tasks(executor, args),
+            SpeckitSubcommand::Implement(args) => run_implement(executor, args),
+            SpeckitSubcommand::Validate(args) => run_validate(executor, args),
+            SpeckitSubcommand::Audit(args) => run_audit(executor, args),
+            SpeckitSubcommand::Unlock(args) => run_unlock(executor, args),
         }
     }
 }
@@ -703,6 +812,398 @@ fn run_tasks(executor: SpeckitExecutor, args: TasksArgs) -> anyhow::Result<()> {
         }
         Outcome::Status(_) | Outcome::Review(_) | Outcome::ReviewSkipped { .. } => {
             unreachable!("Tasks command should never return Status/Review outcome")
+        }
+    }
+}
+
+/// Run the implement command
+///
+/// SPEC-KIT-921 P5-A: Implement command is locked to Stage::Implement.
+/// Validates SPEC prerequisites and guardrails for implement stage.
+/// Returns exit 0 on success, exit 2 on validation failure.
+fn run_implement(executor: SpeckitExecutor, args: ImplementArgs) -> anyhow::Result<()> {
+    // P5-A: Implement command always uses Stage::Implement
+    let stage = Stage::Implement;
+
+    let command = SpeckitCommand::ValidateStage {
+        spec_id: args.spec_id.clone(),
+        stage,
+        dry_run: args.dry_run,
+    };
+
+    match executor.execute(command) {
+        Outcome::Stage(outcome) => {
+            let exit_code = outcome.exit_code();
+
+            if args.json {
+                let status = match outcome.resolution {
+                    StageResolution::Ready => "ready",
+                    StageResolution::Blocked => "blocked",
+                    StageResolution::Skipped => "skipped",
+                };
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "spec_id": outcome.spec_id,
+                    "stage": format!("{:?}", outcome.stage),
+                    "status": status,
+                    "resolution": format!("{:?}", outcome.resolution),
+                    "dry_run": outcome.dry_run,
+                    "warnings": outcome.advisory_signals,
+                    "errors": outcome.blocking_reasons,
+                    "exit_code": exit_code,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                match outcome.resolution {
+                    StageResolution::Ready => {
+                        println!(
+                            "✓ SPEC {} validated for stage {:?}",
+                            outcome.spec_id, outcome.stage
+                        );
+                        if outcome.dry_run {
+                            println!("  (dry-run mode: validation only, no agents spawned)");
+                        }
+                        for warning in &outcome.advisory_signals {
+                            println!("  ⚠ {warning}");
+                        }
+                    }
+                    StageResolution::Blocked => {
+                        eprintln!(
+                            "✗ SPEC {} blocked for stage {:?}",
+                            outcome.spec_id, outcome.stage
+                        );
+                        for error in &outcome.blocking_reasons {
+                            eprintln!("  ✗ {error}");
+                        }
+                    }
+                    StageResolution::Skipped => {
+                        println!(
+                            "⊘ SPEC {} skipped for stage {:?}",
+                            outcome.spec_id, outcome.stage
+                        );
+                        for signal in &outcome.advisory_signals {
+                            println!("  {signal}");
+                        }
+                    }
+                }
+            }
+
+            if exit_code != 0 {
+                std::process::exit(exit_code);
+            }
+            Ok(())
+        }
+        Outcome::Error(err) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": err,
+                    "exit_code": 3,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: {err}");
+            }
+            std::process::exit(3);
+        }
+        Outcome::Status(_) | Outcome::Review(_) | Outcome::ReviewSkipped { .. } => {
+            unreachable!("Implement command should never return Status/Review outcome")
+        }
+    }
+}
+
+/// Run the validate command
+///
+/// SPEC-KIT-921 P5-B: Validate command is locked to Stage::Validate.
+/// Validates SPEC prerequisites and guardrails for validate stage.
+/// Returns exit 0 on success, exit 2 on validation failure.
+fn run_validate(executor: SpeckitExecutor, args: ValidateStageArgs) -> anyhow::Result<()> {
+    // P5-B: Validate command always uses Stage::Validate
+    let stage = Stage::Validate;
+
+    let command = SpeckitCommand::ValidateStage {
+        spec_id: args.spec_id.clone(),
+        stage,
+        dry_run: args.dry_run,
+    };
+
+    match executor.execute(command) {
+        Outcome::Stage(outcome) => {
+            let exit_code = outcome.exit_code();
+
+            if args.json {
+                let status = match outcome.resolution {
+                    StageResolution::Ready => "ready",
+                    StageResolution::Blocked => "blocked",
+                    StageResolution::Skipped => "skipped",
+                };
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "spec_id": outcome.spec_id,
+                    "stage": format!("{:?}", outcome.stage),
+                    "status": status,
+                    "resolution": format!("{:?}", outcome.resolution),
+                    "dry_run": outcome.dry_run,
+                    "warnings": outcome.advisory_signals,
+                    "errors": outcome.blocking_reasons,
+                    "exit_code": exit_code,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                match outcome.resolution {
+                    StageResolution::Ready => {
+                        println!(
+                            "✓ SPEC {} validated for stage {:?}",
+                            outcome.spec_id, outcome.stage
+                        );
+                        if outcome.dry_run {
+                            println!("  (dry-run mode: validation only, no agents spawned)");
+                        }
+                        for warning in &outcome.advisory_signals {
+                            println!("  ⚠ {warning}");
+                        }
+                    }
+                    StageResolution::Blocked => {
+                        eprintln!(
+                            "✗ SPEC {} blocked for stage {:?}",
+                            outcome.spec_id, outcome.stage
+                        );
+                        for error in &outcome.blocking_reasons {
+                            eprintln!("  ✗ {error}");
+                        }
+                    }
+                    StageResolution::Skipped => {
+                        println!(
+                            "⊘ SPEC {} skipped for stage {:?}",
+                            outcome.spec_id, outcome.stage
+                        );
+                        for signal in &outcome.advisory_signals {
+                            println!("  {signal}");
+                        }
+                    }
+                }
+            }
+
+            if exit_code != 0 {
+                std::process::exit(exit_code);
+            }
+            Ok(())
+        }
+        Outcome::Error(err) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": err,
+                    "exit_code": 3,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: {err}");
+            }
+            std::process::exit(3);
+        }
+        Outcome::Status(_) | Outcome::Review(_) | Outcome::ReviewSkipped { .. } => {
+            unreachable!("Validate command should never return Status/Review outcome")
+        }
+    }
+}
+
+/// Run the audit command
+///
+/// SPEC-KIT-921 P5-B: Audit command is locked to Stage::Audit.
+/// Validates SPEC prerequisites and guardrails for audit stage.
+/// Returns exit 0 on success, exit 2 on validation failure.
+fn run_audit(executor: SpeckitExecutor, args: AuditArgs) -> anyhow::Result<()> {
+    // P5-B: Audit command always uses Stage::Audit
+    let stage = Stage::Audit;
+
+    let command = SpeckitCommand::ValidateStage {
+        spec_id: args.spec_id.clone(),
+        stage,
+        dry_run: args.dry_run,
+    };
+
+    match executor.execute(command) {
+        Outcome::Stage(outcome) => {
+            let exit_code = outcome.exit_code();
+
+            if args.json {
+                let status = match outcome.resolution {
+                    StageResolution::Ready => "ready",
+                    StageResolution::Blocked => "blocked",
+                    StageResolution::Skipped => "skipped",
+                };
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "spec_id": outcome.spec_id,
+                    "stage": format!("{:?}", outcome.stage),
+                    "status": status,
+                    "resolution": format!("{:?}", outcome.resolution),
+                    "dry_run": outcome.dry_run,
+                    "warnings": outcome.advisory_signals,
+                    "errors": outcome.blocking_reasons,
+                    "exit_code": exit_code,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                match outcome.resolution {
+                    StageResolution::Ready => {
+                        println!(
+                            "✓ SPEC {} validated for stage {:?}",
+                            outcome.spec_id, outcome.stage
+                        );
+                        if outcome.dry_run {
+                            println!("  (dry-run mode: validation only, no agents spawned)");
+                        }
+                        for warning in &outcome.advisory_signals {
+                            println!("  ⚠ {warning}");
+                        }
+                    }
+                    StageResolution::Blocked => {
+                        eprintln!(
+                            "✗ SPEC {} blocked for stage {:?}",
+                            outcome.spec_id, outcome.stage
+                        );
+                        for error in &outcome.blocking_reasons {
+                            eprintln!("  ✗ {error}");
+                        }
+                    }
+                    StageResolution::Skipped => {
+                        println!(
+                            "⊘ SPEC {} skipped for stage {:?}",
+                            outcome.spec_id, outcome.stage
+                        );
+                        for signal in &outcome.advisory_signals {
+                            println!("  {signal}");
+                        }
+                    }
+                }
+            }
+
+            if exit_code != 0 {
+                std::process::exit(exit_code);
+            }
+            Ok(())
+        }
+        Outcome::Error(err) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": err,
+                    "exit_code": 3,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: {err}");
+            }
+            std::process::exit(3);
+        }
+        Outcome::Status(_) | Outcome::Review(_) | Outcome::ReviewSkipped { .. } => {
+            unreachable!("Audit command should never return Status/Review outcome")
+        }
+    }
+}
+
+/// Run the unlock command
+///
+/// SPEC-KIT-921 P5-B: Unlock command is locked to Stage::Unlock.
+/// Validates SPEC prerequisites and guardrails for unlock stage.
+/// Returns exit 0 on success, exit 2 on validation failure.
+fn run_unlock(executor: SpeckitExecutor, args: UnlockArgs) -> anyhow::Result<()> {
+    // P5-B: Unlock command always uses Stage::Unlock
+    let stage = Stage::Unlock;
+
+    let command = SpeckitCommand::ValidateStage {
+        spec_id: args.spec_id.clone(),
+        stage,
+        dry_run: args.dry_run,
+    };
+
+    match executor.execute(command) {
+        Outcome::Stage(outcome) => {
+            let exit_code = outcome.exit_code();
+
+            if args.json {
+                let status = match outcome.resolution {
+                    StageResolution::Ready => "ready",
+                    StageResolution::Blocked => "blocked",
+                    StageResolution::Skipped => "skipped",
+                };
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "spec_id": outcome.spec_id,
+                    "stage": format!("{:?}", outcome.stage),
+                    "status": status,
+                    "resolution": format!("{:?}", outcome.resolution),
+                    "dry_run": outcome.dry_run,
+                    "warnings": outcome.advisory_signals,
+                    "errors": outcome.blocking_reasons,
+                    "exit_code": exit_code,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                match outcome.resolution {
+                    StageResolution::Ready => {
+                        println!(
+                            "✓ SPEC {} validated for stage {:?}",
+                            outcome.spec_id, outcome.stage
+                        );
+                        if outcome.dry_run {
+                            println!("  (dry-run mode: validation only, no agents spawned)");
+                        }
+                        for warning in &outcome.advisory_signals {
+                            println!("  ⚠ {warning}");
+                        }
+                    }
+                    StageResolution::Blocked => {
+                        eprintln!(
+                            "✗ SPEC {} blocked for stage {:?}",
+                            outcome.spec_id, outcome.stage
+                        );
+                        for error in &outcome.blocking_reasons {
+                            eprintln!("  ✗ {error}");
+                        }
+                    }
+                    StageResolution::Skipped => {
+                        println!(
+                            "⊘ SPEC {} skipped for stage {:?}",
+                            outcome.spec_id, outcome.stage
+                        );
+                        for signal in &outcome.advisory_signals {
+                            println!("  {signal}");
+                        }
+                    }
+                }
+            }
+
+            if exit_code != 0 {
+                std::process::exit(exit_code);
+            }
+            Ok(())
+        }
+        Outcome::Error(err) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": err,
+                    "exit_code": 3,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: {err}");
+            }
+            std::process::exit(3);
+        }
+        Outcome::Status(_) | Outcome::Review(_) | Outcome::ReviewSkipped { .. } => {
+            unreachable!("Unlock command should never return Status/Review outcome")
         }
     }
 }

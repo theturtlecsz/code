@@ -208,6 +208,36 @@ jobs:
           echo "✓ Pipeline smoke test: plan→tasks→review completed successfully"
 
       # =========================================================================
+      # P5: Full 6-Stage Pipeline Smoke Test (SPEC-KIT-921)
+      # =========================================================================
+
+      - name: "[PIPELINE] full 6-stage progression test (specify deferred)"
+        working-directory: ${{ env.FIXTURE_ROOT }}
+        run: |
+          set -o pipefail
+          STAGES=("plan" "tasks" "implement" "validate" "audit" "unlock")
+
+          for STAGE in "${STAGES[@]}"; do
+            echo "Testing stage: $STAGE"
+            OUTPUT=$(${{ env.CLI }} speckit "$STAGE" \
+              --spec SPEC-CI-001-clean \
+              --dry-run \
+              --json)
+
+            # Verify status is ready and stage matches
+            echo "$OUTPUT" | jq -e '.status == "ready"' > /dev/null || { echo "::error::Stage $STAGE should have status='ready'"; exit 1; }
+            echo "$OUTPUT" | jq -e '.schema_version == 1' > /dev/null || { echo "::error::Stage $STAGE should have schema_version=1"; exit 1; }
+
+            # Verify stage matches (case-insensitive check via contains)
+            STAGE_UPPER=$(echo "$STAGE" | sed 's/^./\U&/')  # Capitalize first letter
+            echo "$OUTPUT" | jq -e --arg s "$STAGE_UPPER" '.stage | contains($s)' > /dev/null || { echo "::error::Stage output should contain '$STAGE_UPPER'"; exit 1; }
+
+            echo "  ✓ $STAGE: exit 0, status=ready"
+          done
+
+          echo "✓ Full pipeline smoke test: plan→tasks→implement→validate→audit→unlock completed successfully"
+
+      # =========================================================================
       # Failure Diagnostics
       # =========================================================================
 
