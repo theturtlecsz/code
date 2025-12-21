@@ -181,8 +181,30 @@ pub enum Outcome {
     /// Replaces PlanReady/PlanBlocked.
     Stage(StageOutcome),
 
+    /// Specify command outcome
+    ///
+    /// SPEC-KIT-921 P6-A: Specify creates SPEC directory structure.
+    Specify(SpecifyOutcome),
+
     /// Command failed with error
     Error(String),
+}
+
+/// Outcome from the specify command (create SPEC directory)
+///
+/// SPEC-KIT-921 P6-A: Specify is a creation command, not a validation.
+#[derive(Debug)]
+pub struct SpecifyOutcome {
+    /// The created SPEC identifier
+    pub spec_id: String,
+    /// Whether this was a dry-run (validation only)
+    pub dry_run: bool,
+    /// Path to the created SPEC directory (relative to repo root)
+    pub spec_dir: String,
+    /// Whether the directory already existed
+    pub already_existed: bool,
+    /// Created files (if any)
+    pub created_files: Vec<String>,
 }
 
 /// Execution context provided by the adapter
@@ -244,7 +266,11 @@ impl SpeckitExecutor {
                 spec_id,
                 stage,
                 dry_run,
-            } => self.execute_validate_stage(&spec_id, stage, dry_run),
+                strict_prereqs,
+            } => self.execute_validate_stage(&spec_id, stage, dry_run, strict_prereqs),
+            SpeckitCommand::Specify { spec_id, dry_run } => {
+                self.execute_specify(&spec_id, dry_run)
+            }
         }
     }
 
@@ -321,10 +347,17 @@ impl SpeckitExecutor {
     /// Execute stage validation command (validate prerequisites and guardrails)
     ///
     /// SPEC-KIT-921 P4: Stage-neutral validation for any stage.
+    /// SPEC-KIT-921 P6-C: Added strict_prereqs parameter.
     ///
     /// The adapter (TUI) handles agent spawning when resolution is Ready.
     /// CLI with --dry-run reports outcome and exits.
-    fn execute_validate_stage(&self, spec_id: &str, stage: crate::Stage, dry_run: bool) -> Outcome {
+    fn execute_validate_stage(
+        &self,
+        spec_id: &str,
+        stage: crate::Stage,
+        dry_run: bool,
+        strict_prereqs: bool,
+    ) -> Outcome {
         let mut warnings: Vec<String> = Vec::new();
         let mut errors: Vec<String> = Vec::new();
 
@@ -364,13 +397,14 @@ impl SpeckitExecutor {
             }
         }
 
-        // 3. Basic stage validation
+        // 3. Basic stage validation - check prerequisites per stage
         match stage {
             crate::Stage::Specify => {
-                // Specify is always allowed
+                // Specify is always allowed (first stage, no prerequisites)
             }
             crate::Stage::Plan => {
                 // Plan requires SPEC to exist or be created
+                // (handled by warning above if spec_dir doesn't exist)
             }
             crate::Stage::Tasks | crate::Stage::Implement => {
                 // These typically require plan.md to exist
@@ -396,6 +430,18 @@ impl SpeckitExecutor {
             }
         }
 
+        // P6-C: With --strict-prereqs, warnings become blocking errors
+        if strict_prereqs && !warnings.is_empty() {
+            // Move all warnings to errors
+            errors.extend(warnings.iter().map(|w| format!("[strict-prereqs] {w}")));
+            return Outcome::Stage(StageOutcome::blocked(
+                spec_id.to_string(),
+                stage,
+                errors,
+                dry_run,
+            ));
+        }
+
         // If there are errors, return Blocked
         if !errors.is_empty() {
             return Outcome::Stage(StageOutcome::blocked(
@@ -417,6 +463,69 @@ impl SpeckitExecutor {
                 dry_run,
             ))
         }
+    }
+
+    /// Execute specify command (create SPEC directory structure)
+    ///
+    /// SPEC-KIT-921 P6-A: Minimal specify implementation.
+    /// Creates docs/<SPEC-ID>/ directory with optional PRD.md placeholder.
+    fn execute_specify(&self, spec_id: &str, dry_run: bool) -> Outcome {
+        // Validate SPEC-ID format
+        if spec_id.is_empty() {
+            return Outcome::Error("SPEC-ID is required".to_string());
+        }
+
+        // Determine spec directory path
+        let spec_dir = self.context.repo_root.join("docs").join(spec_id);
+        let spec_dir_relative = format!("docs/{spec_id}");
+        let already_existed = spec_dir.exists();
+
+        let mut created_files = Vec::new();
+
+        // In dry-run mode, just report what would happen
+        if dry_run {
+            return Outcome::Specify(SpecifyOutcome {
+                spec_id: spec_id.to_string(),
+                dry_run: true,
+                spec_dir: spec_dir_relative,
+                already_existed,
+                created_files,
+            });
+        }
+
+        // Create directory if it doesn't exist
+        if !already_existed {
+            if let Err(e) = std::fs::create_dir_all(&spec_dir) {
+                return Outcome::Error(format!("Failed to create SPEC directory: {e}"));
+            }
+        }
+
+        // Create minimal PRD.md if it doesn't exist
+        let prd_path = spec_dir.join("PRD.md");
+        if !prd_path.exists() {
+            let prd_content = format!(
+                "# {spec_id}\n\n\
+                 ## Overview\n\n\
+                 <!-- Brief description of what this SPEC aims to accomplish -->\n\n\
+                 ## Requirements\n\n\
+                 <!-- Key requirements and acceptance criteria -->\n\n\
+                 ## Non-Goals\n\n\
+                 <!-- What is explicitly out of scope -->\n"
+            );
+
+            if let Err(e) = std::fs::write(&prd_path, prd_content) {
+                return Outcome::Error(format!("Failed to create PRD.md: {e}"));
+            }
+            created_files.push("PRD.md".to_string());
+        }
+
+        Outcome::Specify(SpecifyOutcome {
+            spec_id: spec_id.to_string(),
+            dry_run: false,
+            spec_dir: spec_dir_relative,
+            already_existed,
+            created_files,
+        })
     }
 }
 

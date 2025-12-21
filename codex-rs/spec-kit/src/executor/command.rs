@@ -55,11 +55,13 @@ pub enum SpeckitCommand {
     /// Validate stage prerequisites and run guardrails
     ///
     /// TUI: `/speckit.plan <SPEC-ID>`, `/speckit.tasks <SPEC-ID>`, etc.
-    /// CLI: `code speckit plan|tasks|implement|... --spec <SPEC-ID> [--dry-run]`
+    /// CLI: `code speckit plan|tasks|implement|... --spec <SPEC-ID> [--dry-run] [--strict-prereqs]`
     ///
     /// SPEC-KIT-921 P4: Stage-neutral validation command.
     /// The executor validates prerequisites and guardrails for any stage.
     /// The adapter (TUI) handles agent spawning after validation passes.
+    ///
+    /// SPEC-KIT-921 P6-C: --strict-prereqs makes missing prerequisites blocking.
     ValidateStage {
         /// The SPEC identifier
         spec_id: String,
@@ -71,8 +73,27 @@ pub enum SpeckitCommand {
         /// CLI default: true (model-free CI)
         /// TUI: false (actually spawn agents)
         dry_run: bool,
+
+        /// Strict prerequisite mode: treat missing prerequisites as blocking errors
+        /// Default: false (advisory warnings only)
+        /// With --strict-prereqs: missing prereqs → Blocked (exit 2)
+        strict_prereqs: bool,
     },
-    // Future variants (Phase B+):
+    /// Create a new SPEC directory (specify stage)
+    ///
+    /// CLI: `code speckit specify --spec <SPEC-ID> [--dry-run] [--json]`
+    ///
+    /// SPEC-KIT-921 P6-A: Specify command creates SPEC directory structure.
+    /// Unlike ValidateStage, this is a creation command that initializes a new SPEC.
+    Specify {
+        /// The SPEC identifier to create
+        spec_id: String,
+
+        /// Dry-run mode: validate only, don't create files
+        dry_run: bool,
+    },
+
+    // Future variants:
     // Doctor { format: OutputFormat },
     // Run { spec_id: String, from_stage: Option<Stage>, to_stage: Option<Stage>, ... },
 }
@@ -202,10 +223,13 @@ impl SpeckitCommand {
     ///
     /// Used by TUI: `/speckit.plan <SPEC-ID>` or `/speckit.tasks <SPEC-ID>` etc.
     /// Stage is provided by the command variant (plan, tasks, implement, etc.)
+    ///
+    /// SPEC-KIT-921 P6-C: Added strict_prereqs parameter.
     pub fn parse_validate_stage(
         raw_args: &str,
         stage: Stage,
         dry_run: bool,
+        strict_prereqs: bool,
     ) -> Result<Self, String> {
         let trimmed = raw_args.trim();
         if trimmed.is_empty() {
@@ -226,7 +250,7 @@ impl SpeckitCommand {
 
         // Check for any unknown flags
         for token in &tokens {
-            if token.starts_with('-') && *token != "--dry-run" {
+            if token.starts_with('-') && *token != "--dry-run" && *token != "--strict-prereqs" {
                 return Err(format!("Unknown flag `{token}`"));
             }
         }
@@ -235,6 +259,7 @@ impl SpeckitCommand {
             spec_id,
             stage,
             dry_run,
+            strict_prereqs,
         })
     }
 

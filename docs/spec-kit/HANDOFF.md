@@ -1,60 +1,89 @@
-# HANDOFF: SPEC-KIT-921 P6 Continuation
+# HANDOFF: SPEC-KIT-921 P7 Continuation
 
 **Generated**: 2025-12-21
-**Last Commit**: cf26d91e9 (feat(spec-kit): implement P5 CLI commands for all stages)
+**Last Commit**: TBD (P6 completion commit)
 **Branch**: main
 
 ---
 
-## Continue P6 Implementation
+## Continue P7 Implementation
 
 Copy this prompt to start the next session:
 
 ```
-# Continue SPEC-KIT-921 P6 Implementation
+# Continue SPEC-KIT-921 P7 Implementation
 
 Continue from docs/spec-kit/HANDOFF.md
 
 ## Context
-- P0-P5 complete (commit cf26d91e9)
-- 37 CLI tests passing (25 original + 12 new for implement/validate/audit/unlock)
-- All 6 stage commands have CLI support (plan, tasks, implement, validate, audit, unlock)
-- TUI already routes all stage commands through executor
-- Full 6-stage CI pipeline test passing
-- speckit specify deferred to P6 (different UX expectations)
+- P0-P6 complete
+- 50 CLI tests passing (47 speckit + 3 helpers)
+- All 7 stage commands have CLI support (specify, plan, tasks, implement, validate, audit, unlock)
+- --strict-prereqs flag available on all stage validation commands
+- Test helpers module available for reduced boilerplate
+- speckit specify creates SPEC directory with PRD.md
 
-## P6 Priority Order (Revised)
+## P6 Completed Deliverables
 
-Based on architectural analysis, P6 order is:
-1. **P6-C first**: --strict-prereqs flag (makes CI trustworthy)
-2. **P6-A second**: speckit specify (minimal, no templates)
-3. **P6-B third**: speckit run batch (benefits from strict prereqs)
-4. **P6-D**: Test helpers infrastructure (reduces boilerplate)
+| Task | Status | Tests |
+|------|--------|-------|
+| P6-C: --strict-prereqs | ✅ | 6 tests |
+| P6-D: Test helpers | ✅ | 3 tests (speckit_helpers.rs) |
+| P6-A: speckit specify | ✅ | 4 tests |
+| P6-B: speckit run batch | ⏳ Deferred | - |
 
-## Key Types Reference
+## P7 Priority Order
 
-```rust
-// spec-kit/src/executor/command.rs
-SpeckitCommand::ValidateStage { spec_id, stage, dry_run }
+1. **P7-A: speckit run batch command** (--from/--to stage ranges)
+2. **P7-B: Template library** (built-in SPEC templates)
+3. **P7-C: Full /speckit.auto orchestration**
 
-// spec-kit/src/executor/mod.rs
-StageOutcome { spec_id, stage, resolution, blocking_reasons, advisory_signals, evidence_refs, dry_run }
-StageResolution::Ready | Blocked | Skipped
-```
-
-## P6 Tasks (in priority order)
-
-### P6-C: --strict-prereqs flag (FIRST PRIORITY)
-
-**Rationale**: Existing pattern (--strict-artifacts, --strict-schema) + makes batch execution meaningful.
-
-Add --strict-prereqs to all stage commands:
+## Start Commands
 
 ```bash
-speckit implement --spec <ID> --strict-prereqs [--dry-run] [--json]
+git log --oneline -5
+cargo test -p codex-cli --test speckit
+cargo test -p codex-cli --test speckit_helpers
 ```
 
-Prereq matrix (stage → required artifacts):
+## Acceptance Criteria for P7
+
+- [ ] `speckit run` batch command with --from/--to support
+- [ ] Template library for common SPEC patterns
+- [ ] Full 8-stage pipeline test (specify→unlock)
+- [ ] 60+ CLI integration tests passing
+```
+
+---
+
+## Session Summary (P6 Completed)
+
+### P6 Deliverables
+
+| Task | Status | Deliverable |
+|------|--------|-------------|
+| P6-C: --strict-prereqs flag | ✅ | `--strict-prereqs` on all 6 stage commands, 6 tests |
+| P6-D: Test helpers | ✅ | `speckit_helpers.rs` module with TestContext, CliResult, 3 tests |
+| P6-A: speckit specify | ✅ | `speckit specify --spec <ID> [--execute] [--json]`, 4 tests |
+| P6-B: speckit run batch | ⏳ Deferred | Complex orchestration, moved to P7 |
+
+**Tests**: 50 CLI tests passing (47 speckit + 3 helpers)
+
+### Key Additions
+
+#### --strict-prereqs (P6-C)
+
+Added to all stage validation commands:
+
+```bash
+speckit tasks --spec <ID> --strict-prereqs [--dry-run] [--json]
+```
+
+Behavior:
+- Default: warnings are advisory, command succeeds
+- With --strict-prereqs: missing prereqs → Blocked (exit 2)
+
+Prereq matrix:
 | Stage     | Required Prereqs                    |
 |-----------|-------------------------------------|
 | Specify   | (none - first stage)                |
@@ -65,183 +94,94 @@ Prereq matrix (stage → required artifacts):
 | Audit     | tasks.md OR implement.md exists     |
 | Unlock    | tasks.md OR implement.md exists     |
 
-Implementation:
-1. Add --strict-prereqs flag to all stage Args structs
-2. Modify execute_validate_stage() to check strict_prereqs param
-3. Return Blocked (exit 2) instead of Ready+warnings when strict
-4. Add 6 tests: one per stage verifying strict behavior
+#### Test Helpers (P6-D)
 
-Files:
-- cli/src/speckit_cmd.rs (add --strict-prereqs to all Args)
-- spec-kit/src/executor/mod.rs (update execute_validate_stage)
-- cli/tests/speckit.rs (add strict_prereqs tests)
-
-### P6-D: Test helpers infrastructure (WITH P6-C)
-
-Add shared test helpers to reduce boilerplate:
+New `speckit_helpers.rs` module:
 
 ```rust
-// cli/tests/speckit_helpers.rs (new file)
+// Create test context with isolated dirs
+let ctx = TestContext::new()?;
 
-/// Create SPEC directory with optional files
-fn setup_spec_dir(root: &Path, spec_id: &str, files: &[(&str, &str)]) -> PathBuf;
+// Setup SPEC directory with files
+ctx.setup_spec_dir("SPEC-001", &[("plan.md", "# Plan")])?;
 
-/// Run CLI command and capture output
-fn run_cli(root: &Path, args: &[&str]) -> CliResult;
+// Run CLI and get result wrapper
+let result = ctx.run_cli(&["speckit", "tasks", "--spec", "SPEC-001", "--json"])?;
 
-/// Assert JSON has schema_version = 1
-fn assert_schema_version(json: &JsonValue, expected: u32);
-
-/// Assert stage field contains expected string
-fn assert_stage(json: &JsonValue, expected: &str);
+// Assertion helpers
+result.assert_success();
+result.assert_schema_version(1);
+result.assert_stage("Tasks");
+result.assert_status("ready");
 ```
 
-Files:
-- cli/tests/speckit_helpers.rs (new)
-- cli/tests/speckit.rs (use helpers, reduce duplication)
-
-### P6-A: speckit specify command (MINIMAL)
-
-First stage with minimal scope (no template library):
+#### speckit specify (P6-A)
 
 ```bash
-speckit specify --spec <ID> [--dry-run] [--json]
+# Dry-run (default): report what would be created
+speckit specify --spec SPEC-TEST-001 [--json]
+
+# Execute: actually create directory and PRD.md
+speckit specify --spec SPEC-TEST-001 --execute [--json]
 ```
 
-Behavior:
-1. Create docs/<SPEC-ID>/ directory if not exists
-2. Create minimal skeleton files for Plan prereqs:
-   - PRD.md (empty/placeholder)
-   - Or just validate directory structure
-3. Return Ready with spec_id
-
-NO template support in P6. Just establish minimum contract for downstream stages.
-
-Implementation:
-1. Add SpecifyArgs struct (no --template flag)
-2. Add run_specify() that creates directory structure
-3. Add SpeckitCommand::Specify variant (not ValidateStage)
-4. Add 3 tests: creates_dir, validates_existing_dir, json_includes_schema_version
-
-Files:
-- cli/src/speckit_cmd.rs (add Specify subcommand)
-- spec-kit/src/executor/mod.rs (add Specify command handling)
-- cli/tests/speckit.rs (add specify tests)
-
-### P6-B: speckit run batch command (LAST)
-
-Sequential execution with stage range:
-
-```bash
-speckit run --spec <ID> [--from <STAGE>] [--to <STAGE>] [--strict-prereqs] [--dry-run] [--json]
-```
-
-Edge cases:
-- --from without --to: run from specified stage to unlock
-- --to without --from: run from specify to specified stage
-- Neither: run full pipeline (specify→unlock)
-- Invalid stage order: error
-- Stops on first Blocked result
-
-Implementation:
-1. Add RunArgs struct with from/to/strict_prereqs options
-2. Add run_batch() that iterates stages in order
-3. JSON output: array of stage outcomes
-4. Add 5+ tests for stage range handling
-
-## Start Commands
-
-```bash
-git log --oneline -5
-cargo test -p codex-cli --test speckit
-cat codex-rs/spec-kit/src/executor/mod.rs | head -150  # See prereq checking
-```
-
-## Exit Code Contract (Reference)
-
-| Code | Meaning              |
-|------|----------------------|
-| 0    | Success / Ready      |
-| 2    | Blocked / Escalation |
-| 3    | Infrastructure error |
-
-## Acceptance Criteria for P6
-
-- [ ] --strict-prereqs flag on all 6 stage commands
-- [ ] Test helpers module reduces test duplication
-- [ ] `speckit specify` creates SPEC directory (minimal, no templates)
-- [ ] `speckit run` batch command with --from/--to support
-- [ ] 50+ CLI integration tests passing
-- [ ] CI smoke: full 7-stage pipeline test (specify→unlock)
-```
+Creates:
+- `docs/<SPEC-ID>/` directory
+- `docs/<SPEC-ID>/PRD.md` with template content
 
 ---
 
-## Session Summary (P5 Completed)
-
-### P5 Deliverables
-
-| Task | Status | Deliverable |
-|------|--------|-------------|
-| P5-A: Implement CLI command | ✅ | `speckit implement --spec <ID> [--dry-run] [--json]` with 3 tests |
-| P5-B: Validate CLI command | ✅ | `speckit validate --spec <ID> [--dry-run] [--json]` with 3 tests |
-| P5-B: Audit CLI command | ✅ | `speckit audit --spec <ID> [--dry-run] [--json]` with 3 tests |
-| P5-B: Unlock CLI command | ✅ | `speckit unlock --spec <ID> [--dry-run] [--json]` with 3 tests |
-| P5-C: TUI routing verification | ✅ | All 6 stage commands route through executor |
-| P5-D: CI 6-stage pipeline test | ✅ | plan→tasks→implement→validate→audit→unlock smoke test |
-| P5-E: Handoff update | ✅ | This document |
-
-**Tests**: 37 CLI integration tests passing (25 + 12 new)
-**Parity**: TUI and CLI use same `SpeckitExecutor::execute()` for all commands
-
----
-
-## Architecture After P5 (Current)
+## Architecture After P6 (Current)
 
 ```
 CLI (speckit_cmd.rs)
-  ↓ SpeckitSubcommand::Status/Review/Plan/Tasks/Implement/Validate/Audit/Unlock
-  ↓ → SpeckitCommand::ValidateStage { spec_id, stage, dry_run }
+  ↓ SpeckitSubcommand::Status/Review/Specify/Plan/Tasks/Implement/Validate/Audit/Unlock
   ↓
 SpeckitExecutor::execute()
+  ↓ SpeckitCommand::Specify { spec_id, dry_run }
+  ↓ SpeckitCommand::ValidateStage { spec_id, stage, dry_run, strict_prereqs }
   ↓
-Outcome::Status/Review/ReviewSkipped/Stage(StageOutcome)/Error
+Outcome::Status/Review/ReviewSkipped/Stage(StageOutcome)/Specify(SpecifyOutcome)/Error
   ↓
 render_*() → stdout (with schema_version)
+```
 
-TUI (commands/plan.rs)
-  ↓ execute_stage_command() for all stages
-  ↓ → SpeckitCommand::ValidateStage { spec_id, stage, dry_run: false }
-  ↓
-SpeckitExecutor::execute()  ← SAME EXECUTOR
-  ↓
-Outcome::Stage(StageOutcome)
-  ↓
-If Ready: agent_orchestrator::auto_submit_spec_stage_prompt()
-If Blocked: display errors in chat
+Key types:
+
+```rust
+// spec-kit/src/executor/command.rs
+SpeckitCommand::Specify { spec_id, dry_run }
+SpeckitCommand::ValidateStage { spec_id, stage, dry_run, strict_prereqs }
+
+// spec-kit/src/executor/mod.rs
+SpecifyOutcome { spec_id, dry_run, spec_dir, already_existed, created_files }
+StageOutcome { spec_id, stage, resolution, blocking_reasons, advisory_signals, evidence_refs, dry_run }
 ```
 
 ---
 
 ## Files Reference
 
-### Modified in P5
+### Modified in P6
 
 | File | Purpose |
 |------|---------|
-| `cli/src/speckit_cmd.rs` | Added Implement/Validate/Audit/Unlock subcommands |
-| `cli/tests/speckit.rs` | 37 integration tests (12 new for P5 stage commands) |
-| `.github/workflows/spec-kit-ci.yml` | Full 6-stage pipeline smoke test |
+| `cli/src/speckit_cmd.rs` | Added Specify subcommand, --strict-prereqs to all stages |
+| `cli/tests/speckit.rs` | 47 tests (37 P5 + 6 strict-prereqs + 4 specify) |
+| `cli/tests/speckit_helpers.rs` | NEW: 3 test helper tests |
+| `spec-kit/src/executor/command.rs` | Added Specify command variant, strict_prereqs to ValidateStage |
+| `spec-kit/src/executor/mod.rs` | Added execute_specify(), SpecifyOutcome, strict_prereqs handling |
+| `tui/src/chatwidget/spec_kit/commands/plan.rs` | Added Outcome::Specify handling |
+| `tui/src/chatwidget/spec_kit/command_handlers.rs` | Added Outcome::Specify handling |
 
-### To Modify in P6
+### To Modify in P7
 
 | File | Change |
 |------|--------|
-| `cli/src/speckit_cmd.rs` | Add --strict-prereqs to all, add Specify and Run |
-| `cli/tests/speckit_helpers.rs` | NEW: shared test helpers |
-| `cli/tests/speckit.rs` | Use helpers, add strict/specify/run tests |
-| `spec-kit/src/executor/mod.rs` | Add strict_prereqs handling, Specify command |
-| `.github/workflows/spec-kit-ci.yml` | Add specify to pipeline, strict-prereqs tests |
+| `cli/src/speckit_cmd.rs` | Add Run subcommand with --from/--to |
+| `spec-kit/src/executor/mod.rs` | Add execute_run_batch() |
+| `cli/tests/speckit.rs` | Add run batch tests |
+| `templates/` | Add built-in SPEC templates |
 
 ---
 
@@ -256,13 +196,37 @@ If Blocked: display errors in chat
 7. **ValidateStage is stage-neutral** — single command variant handles all stage validation
 8. **Build-time determinism** — tool_version uses compile-time env vars only, no runtime git
 9. **Advisory by default** — missing prereqs warn but don't block (unless --strict-prereqs)
+10. **Specify is separate** — creation command, not validation (uses --execute, not --dry-run=false)
+
+---
+
+## Exit Code Contract (Reference)
+
+| Code | Meaning              |
+|------|----------------------|
+| 0    | Success / Ready      |
+| 2    | Blocked / Escalation |
+| 3    | Infrastructure error |
 
 ---
 
 ## Deferred to P7+
 
+- **speckit run batch command**: Stage range execution with --from/--to
 - **Template library**: Built-in SPEC templates for common patterns
 - **Full /speckit.auto orchestration**: After run batch command proven
 - **CLI config-file support** (`.speckit.toml`): After Phase C/D requirements clarify
 - **Checkpoint persistence**: After orchestration proven
 - **Custom template directory**: User-defined templates in .speckit/templates/
+
+---
+
+## Progress Tracking
+
+| Phase | Status | Tests | Key Deliverable |
+|-------|--------|-------|-----------------|
+| P0-P3 | ✅ | 22 | Status, Review commands |
+| P4 | ✅ | 25 | Tasks command, StageOutcome envelope |
+| P5 | ✅ | 37 | Implement/Validate/Audit/Unlock commands |
+| P6 | ✅ | 50 | --strict-prereqs, specify, test helpers |
+| P7+ | ⏳ | - | Run batch, templates, auto orchestration |

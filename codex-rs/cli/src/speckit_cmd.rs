@@ -76,6 +76,12 @@ pub enum SpeckitSubcommand {
     /// Evaluate stage gate artifacts
     Review(ReviewArgs),
 
+    /// Create a new SPEC directory structure
+    ///
+    /// SPEC-KIT-921 P6-A: Specify command creates SPEC directory with PRD.md.
+    /// This is the first stage of the SPEC lifecycle.
+    Specify(SpecifyArgs),
+
     /// Validate SPEC prerequisites and execute plan stage (dry-run by default)
     ///
     /// SPEC-KIT-921 P3-B: CLI plan command for CI validation.
@@ -174,6 +180,25 @@ pub struct ReviewArgs {
     pub json: bool,
 }
 
+/// Arguments for `speckit specify` command
+///
+/// SPEC-KIT-921 P6-A: Specify command creates SPEC directory structure.
+#[derive(Debug, Parser)]
+pub struct SpecifyArgs {
+    /// SPEC identifier to create (e.g., SPEC-KIT-999)
+    #[arg(long = "spec", short = 's', value_name = "SPEC-ID")]
+    pub spec_id: String,
+
+    /// Actually create files (default is dry-run)
+    /// Use --execute to actually create the SPEC directory
+    #[arg(long = "execute")]
+    pub execute: bool,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
 /// Arguments for `speckit plan` command
 ///
 /// SPEC-KIT-921 P4-A: Plan command is locked to plan stage.
@@ -188,6 +213,12 @@ pub struct PlanArgs {
     /// This is the default for CLI (model-free CI)
     #[arg(long = "dry-run", default_value = "true")]
     pub dry_run: bool,
+
+    /// Strict prerequisite mode: treat missing prerequisites as blocking errors
+    /// Default: false (advisory warnings only)
+    /// With --strict-prereqs: missing prereqs → Blocked (exit 2)
+    #[arg(long = "strict-prereqs")]
+    pub strict_prereqs: bool,
 
     /// Output as JSON instead of text
     #[arg(long = "json", short = 'j')]
@@ -208,6 +239,10 @@ pub struct TasksArgs {
     #[arg(long = "dry-run", default_value = "true")]
     pub dry_run: bool,
 
+    /// Strict prerequisite mode: treat missing prerequisites as blocking errors
+    #[arg(long = "strict-prereqs")]
+    pub strict_prereqs: bool,
+
     /// Output as JSON instead of text
     #[arg(long = "json", short = 'j')]
     pub json: bool,
@@ -226,6 +261,10 @@ pub struct ImplementArgs {
     /// This is the default for CLI (model-free CI)
     #[arg(long = "dry-run", default_value = "true")]
     pub dry_run: bool,
+
+    /// Strict prerequisite mode: treat missing prerequisites as blocking errors
+    #[arg(long = "strict-prereqs")]
+    pub strict_prereqs: bool,
 
     /// Output as JSON instead of text
     #[arg(long = "json", short = 'j')]
@@ -247,6 +286,10 @@ pub struct ValidateStageArgs {
     #[arg(long = "dry-run", default_value = "true")]
     pub dry_run: bool,
 
+    /// Strict prerequisite mode: treat missing prerequisites as blocking errors
+    #[arg(long = "strict-prereqs")]
+    pub strict_prereqs: bool,
+
     /// Output as JSON instead of text
     #[arg(long = "json", short = 'j')]
     pub json: bool,
@@ -266,6 +309,10 @@ pub struct AuditArgs {
     #[arg(long = "dry-run", default_value = "true")]
     pub dry_run: bool,
 
+    /// Strict prerequisite mode: treat missing prerequisites as blocking errors
+    #[arg(long = "strict-prereqs")]
+    pub strict_prereqs: bool,
+
     /// Output as JSON instead of text
     #[arg(long = "json", short = 'j')]
     pub json: bool,
@@ -284,6 +331,10 @@ pub struct UnlockArgs {
     /// This is the default for CLI (model-free CI)
     #[arg(long = "dry-run", default_value = "true")]
     pub dry_run: bool,
+
+    /// Strict prerequisite mode: treat missing prerequisites as blocking errors
+    #[arg(long = "strict-prereqs")]
+    pub strict_prereqs: bool,
 
     /// Output as JSON instead of text
     #[arg(long = "json", short = 'j')]
@@ -313,6 +364,7 @@ impl SpeckitCli {
         match self.command {
             SpeckitSubcommand::Status(args) => run_status(executor, args),
             SpeckitSubcommand::Review(args) => run_review(executor, args),
+            SpeckitSubcommand::Specify(args) => run_specify(executor, args),
             SpeckitSubcommand::Plan(args) => run_plan(executor, args),
             SpeckitSubcommand::Tasks(args) => run_tasks(executor, args),
             SpeckitSubcommand::Implement(args) => run_implement(executor, args),
@@ -412,6 +464,9 @@ fn run_status(executor: SpeckitExecutor, args: StatusArgs) -> anyhow::Result<()>
         }
         Outcome::Stage(_) => {
             unreachable!("Status command should never return Stage outcome")
+        }
+        Outcome::Specify(_) => {
+            unreachable!("Status command should never return Specify outcome")
         }
     }
 }
@@ -617,6 +672,67 @@ fn run_review(executor: SpeckitExecutor, args: ReviewArgs) -> anyhow::Result<()>
         Outcome::Stage(_) => {
             unreachable!("Review command should never return Stage outcome")
         }
+        Outcome::Specify(_) => {
+            unreachable!("Review command should never return Specify outcome")
+        }
+    }
+}
+
+/// Run the specify command
+///
+/// SPEC-KIT-921 P6-A: Specify command creates SPEC directory structure.
+/// Creates docs/<SPEC-ID>/ directory with minimal PRD.md template.
+/// Returns exit 0 on success, exit 1 on error.
+fn run_specify(executor: SpeckitExecutor, args: SpecifyArgs) -> anyhow::Result<()> {
+    // Default is dry-run, --execute enables actual creation
+    let dry_run = !args.execute;
+
+    let command = SpeckitCommand::Specify {
+        spec_id: args.spec_id.clone(),
+        dry_run,
+    };
+
+    match executor.execute(command) {
+        Outcome::Specify(outcome) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "spec_id": outcome.spec_id,
+                    "spec_dir": outcome.spec_dir,
+                    "dry_run": outcome.dry_run,
+                    "already_existed": outcome.already_existed,
+                    "created_files": outcome.created_files,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else if outcome.dry_run {
+                if outcome.already_existed {
+                    println!(
+                        "[dry-run] SPEC directory {} already exists",
+                        outcome.spec_dir
+                    );
+                } else {
+                    println!(
+                        "[dry-run] Would create SPEC directory {}",
+                        outcome.spec_dir
+                    );
+                }
+            } else if outcome.already_existed {
+                println!("SPEC {} already exists at {}", outcome.spec_id, outcome.spec_dir);
+            } else {
+                println!("Created SPEC {} at {}", outcome.spec_id, outcome.spec_dir);
+                if !outcome.created_files.is_empty() {
+                    println!("  Created files: {}", outcome.created_files.join(", "));
+                }
+            }
+            Ok(())
+        }
+        Outcome::Error(msg) => {
+            anyhow::bail!("Specify command failed: {msg}")
+        }
+        _ => {
+            unreachable!("Specify command should return Specify or Error outcome")
+        }
     }
 }
 
@@ -633,6 +749,7 @@ fn run_plan(executor: SpeckitExecutor, args: PlanArgs) -> anyhow::Result<()> {
         spec_id: args.spec_id.clone(),
         stage,
         dry_run: args.dry_run,
+        strict_prereqs: args.strict_prereqs,
     };
 
     match executor.execute(command) {
@@ -715,6 +832,9 @@ fn run_plan(executor: SpeckitExecutor, args: PlanArgs) -> anyhow::Result<()> {
         Outcome::Status(_) | Outcome::Review(_) | Outcome::ReviewSkipped { .. } => {
             unreachable!("Plan command should never return Status/Review outcome")
         }
+        Outcome::Specify(_) => {
+            unreachable!("Plan command should never return Specify outcome")
+        }
     }
 }
 
@@ -731,6 +851,7 @@ fn run_tasks(executor: SpeckitExecutor, args: TasksArgs) -> anyhow::Result<()> {
         spec_id: args.spec_id.clone(),
         stage,
         dry_run: args.dry_run,
+        strict_prereqs: args.strict_prereqs,
     };
 
     match executor.execute(command) {
@@ -813,6 +934,9 @@ fn run_tasks(executor: SpeckitExecutor, args: TasksArgs) -> anyhow::Result<()> {
         Outcome::Status(_) | Outcome::Review(_) | Outcome::ReviewSkipped { .. } => {
             unreachable!("Tasks command should never return Status/Review outcome")
         }
+        Outcome::Specify(_) => {
+            unreachable!("Tasks command should never return Specify outcome")
+        }
     }
 }
 
@@ -829,6 +953,7 @@ fn run_implement(executor: SpeckitExecutor, args: ImplementArgs) -> anyhow::Resu
         spec_id: args.spec_id.clone(),
         stage,
         dry_run: args.dry_run,
+        strict_prereqs: args.strict_prereqs,
     };
 
     match executor.execute(command) {
@@ -911,6 +1036,9 @@ fn run_implement(executor: SpeckitExecutor, args: ImplementArgs) -> anyhow::Resu
         Outcome::Status(_) | Outcome::Review(_) | Outcome::ReviewSkipped { .. } => {
             unreachable!("Implement command should never return Status/Review outcome")
         }
+        Outcome::Specify(_) => {
+            unreachable!("Implement command should never return Specify outcome")
+        }
     }
 }
 
@@ -927,6 +1055,7 @@ fn run_validate(executor: SpeckitExecutor, args: ValidateStageArgs) -> anyhow::R
         spec_id: args.spec_id.clone(),
         stage,
         dry_run: args.dry_run,
+        strict_prereqs: args.strict_prereqs,
     };
 
     match executor.execute(command) {
@@ -1009,6 +1138,9 @@ fn run_validate(executor: SpeckitExecutor, args: ValidateStageArgs) -> anyhow::R
         Outcome::Status(_) | Outcome::Review(_) | Outcome::ReviewSkipped { .. } => {
             unreachable!("Validate command should never return Status/Review outcome")
         }
+        Outcome::Specify(_) => {
+            unreachable!("Validate command should never return Specify outcome")
+        }
     }
 }
 
@@ -1025,6 +1157,7 @@ fn run_audit(executor: SpeckitExecutor, args: AuditArgs) -> anyhow::Result<()> {
         spec_id: args.spec_id.clone(),
         stage,
         dry_run: args.dry_run,
+        strict_prereqs: args.strict_prereqs,
     };
 
     match executor.execute(command) {
@@ -1107,6 +1240,9 @@ fn run_audit(executor: SpeckitExecutor, args: AuditArgs) -> anyhow::Result<()> {
         Outcome::Status(_) | Outcome::Review(_) | Outcome::ReviewSkipped { .. } => {
             unreachable!("Audit command should never return Status/Review outcome")
         }
+        Outcome::Specify(_) => {
+            unreachable!("Audit command should never return Specify outcome")
+        }
     }
 }
 
@@ -1123,6 +1259,7 @@ fn run_unlock(executor: SpeckitExecutor, args: UnlockArgs) -> anyhow::Result<()>
         spec_id: args.spec_id.clone(),
         stage,
         dry_run: args.dry_run,
+        strict_prereqs: args.strict_prereqs,
     };
 
     match executor.execute(command) {
@@ -1204,6 +1341,9 @@ fn run_unlock(executor: SpeckitExecutor, args: UnlockArgs) -> anyhow::Result<()>
         }
         Outcome::Status(_) | Outcome::Review(_) | Outcome::ReviewSkipped { .. } => {
             unreachable!("Unlock command should never return Status/Review outcome")
+        }
+        Outcome::Specify(_) => {
+            unreachable!("Unlock command should never return Specify outcome")
         }
     }
 }

@@ -268,10 +268,12 @@ pub fn execute_stage_command(
     });
 
     // Execute validation via shared executor (same path as CLI)
+    // P6-C: TUI uses strict_prereqs: false (interactive mode, warnings are advisory)
     let command = ExecutorCommand::ValidateStage {
         spec_id: spec_id.to_string(),
         stage: executor_stage,
-        dry_run: false, // TUI actually spawns agents
+        dry_run: false,      // TUI actually spawns agents
+        strict_prereqs: false, // TUI is interactive, warnings don't block
     };
 
     match executor.execute(command) {
@@ -308,9 +310,12 @@ pub fn execute_stage_command(
                 "{command_name} failed: {err}"
             )));
         }
-        // Stage commands never return Status/Review variants
+        // Stage commands never return Status/Review/Specify variants
         Outcome::Status(_) | Outcome::Review(_) | Outcome::ReviewSkipped { .. } => {
             unreachable!("Stage command should never return Status/Review outcome")
+        }
+        Outcome::Specify(_) => {
+            unreachable!("Stage command should never return Specify outcome")
         }
     }
 }

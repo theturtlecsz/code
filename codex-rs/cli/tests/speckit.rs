@@ -1719,3 +1719,428 @@ fn unlock_json_includes_schema_version() -> Result<()> {
 
     Ok(())
 }
+
+// =============================================================================
+// P6-C: STRICT-PREREQS FLAG TESTS
+// =============================================================================
+
+#[test]
+fn tasks_strict_prereqs_blocks_when_plan_missing() -> Result<()> {
+    // P6-C: With --strict-prereqs, missing plan.md causes exit 2
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory WITHOUT plan.md
+    let spec_dir = repo_root
+        .path()
+        .join("docs")
+        .join("SPEC-TEST-STRICT-PREREQS");
+    fs::create_dir_all(&spec_dir)?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "tasks",
+            "--spec",
+            "SPEC-TEST-STRICT-PREREQS",
+            "--dry-run",
+            "--strict-prereqs",
+        ])
+        .output()?;
+
+    // With --strict-prereqs, missing plan.md should cause exit 2
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "Expected exit 2 with --strict-prereqs when plan.md missing, got {:?}\nstderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    Ok(())
+}
+
+#[test]
+fn tasks_strict_prereqs_json_shows_blocked() -> Result<()> {
+    // P6-C: JSON output shows blocked status with strict-prereqs
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory WITHOUT plan.md
+    let spec_dir = repo_root
+        .path()
+        .join("docs")
+        .join("SPEC-TEST-STRICT-JSON");
+    fs::create_dir_all(&spec_dir)?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "tasks",
+            "--spec",
+            "SPEC-TEST-STRICT-JSON",
+            "--dry-run",
+            "--strict-prereqs",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Status should be blocked
+    let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
+    assert_eq!(status, "blocked", "Expected blocked status with --strict-prereqs");
+
+    // Errors should contain the strict-prereqs prefix
+    let errors = json.get("errors").and_then(|v| v.as_array());
+    let has_strict_error = errors
+        .map(|e| e.iter().any(|err| {
+            err.as_str().map(|s| s.contains("[strict-prereqs]")).unwrap_or(false)
+        }))
+        .unwrap_or(false);
+    assert!(has_strict_error, "Expected [strict-prereqs] prefix in errors");
+
+    Ok(())
+}
+
+#[test]
+fn validate_strict_prereqs_blocks_when_impl_missing() -> Result<()> {
+    // P6-C: Validate stage with --strict-prereqs blocks when implementation missing
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory WITHOUT implementation artifacts
+    let spec_dir = repo_root
+        .path()
+        .join("docs")
+        .join("SPEC-TEST-VALIDATE-STRICT");
+    fs::create_dir_all(&spec_dir)?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "validate",
+            "--spec",
+            "SPEC-TEST-VALIDATE-STRICT",
+            "--dry-run",
+            "--strict-prereqs",
+        ])
+        .output()?;
+
+    // With --strict-prereqs, missing implementation artifacts should cause exit 2
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "Expected exit 2 with --strict-prereqs when impl missing, got {:?}\nstderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    Ok(())
+}
+
+#[test]
+fn plan_strict_prereqs_succeeds_when_dir_exists() -> Result<()> {
+    // P6-C: Plan stage with --strict-prereqs succeeds when SPEC dir exists
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory (plan stage only requires dir to exist)
+    let spec_dir = repo_root
+        .path()
+        .join("docs")
+        .join("SPEC-TEST-PLAN-STRICT");
+    fs::create_dir_all(&spec_dir)?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "plan",
+            "--spec",
+            "SPEC-TEST-PLAN-STRICT",
+            "--dry-run",
+            "--strict-prereqs",
+        ])
+        .output()?;
+
+    // Plan stage with existing dir should succeed even with --strict-prereqs
+    assert!(
+        output.status.success(),
+        "Expected exit 0 for plan with --strict-prereqs when dir exists, got {:?}\nstderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    Ok(())
+}
+
+#[test]
+fn tasks_without_strict_prereqs_warns_but_succeeds() -> Result<()> {
+    // P6-C: Without --strict-prereqs, missing prereqs show warnings but don't block
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory WITHOUT plan.md
+    let spec_dir = repo_root
+        .path()
+        .join("docs")
+        .join("SPEC-TEST-NO-STRICT");
+    fs::create_dir_all(&spec_dir)?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "tasks",
+            "--spec",
+            "SPEC-TEST-NO-STRICT",
+            "--dry-run",
+            "--json",
+            // Note: no --strict-prereqs
+        ])
+        .output()?;
+
+    // Without --strict-prereqs, should succeed with warnings
+    assert!(
+        output.status.success(),
+        "Expected exit 0 without --strict-prereqs, got {:?}",
+        output.status.code()
+    );
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+    let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
+    assert_eq!(status, "ready", "Expected ready status without --strict-prereqs");
+
+    // Should have warnings
+    let warnings = json.get("warnings").and_then(|v| v.as_array());
+    assert!(
+        warnings.map(|w| !w.is_empty()).unwrap_or(false),
+        "Expected warnings about missing plan.md"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn implement_strict_prereqs_blocks_when_plan_missing() -> Result<()> {
+    // P6-C: Implement stage with --strict-prereqs blocks when plan.md missing
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory WITHOUT plan.md
+    let spec_dir = repo_root
+        .path()
+        .join("docs")
+        .join("SPEC-TEST-IMPL-STRICT");
+    fs::create_dir_all(&spec_dir)?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "implement",
+            "--spec",
+            "SPEC-TEST-IMPL-STRICT",
+            "--dry-run",
+            "--strict-prereqs",
+        ])
+        .output()?;
+
+    // With --strict-prereqs, missing plan.md should cause exit 2
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "Expected exit 2 with --strict-prereqs when plan.md missing, got {:?}",
+        output.status.code()
+    );
+
+    Ok(())
+}
+
+// =============================================================================
+// P6-A: SPECIFY COMMAND TESTS
+// =============================================================================
+
+#[test]
+fn specify_dry_run_reports_would_create() -> Result<()> {
+    // P6-A: Dry-run specify (default mode) reports what would be created
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create docs directory only (not the SPEC dir)
+    fs::create_dir_all(repo_root.path().join("docs"))?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "specify",
+            "--spec",
+            "SPEC-TEST-SPECIFY-DRY",
+            // No --execute means dry-run mode
+        ])
+        .output()?;
+
+    assert!(
+        output.status.success(),
+        "Expected success, got {:?}\nstderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("dry-run") && stdout.contains("Would create"),
+        "Expected dry-run message about would create, got: {}",
+        stdout
+    );
+
+    // Verify directory was NOT created
+    let spec_dir = repo_root.path().join("docs").join("SPEC-TEST-SPECIFY-DRY");
+    assert!(!spec_dir.exists(), "Directory should not exist in dry-run");
+
+    Ok(())
+}
+
+#[test]
+fn specify_creates_directory_and_prd() -> Result<()> {
+    // P6-A: Actual specify creates directory and PRD.md
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create docs directory
+    fs::create_dir_all(repo_root.path().join("docs"))?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "specify",
+            "--spec",
+            "SPEC-TEST-SPECIFY-CREATE",
+            "--execute",
+        ])
+        .output()?;
+
+    assert!(
+        output.status.success(),
+        "Expected success, got {:?}\nstderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Verify directory was created
+    let spec_dir = repo_root
+        .path()
+        .join("docs")
+        .join("SPEC-TEST-SPECIFY-CREATE");
+    assert!(spec_dir.exists(), "SPEC directory should exist");
+
+    // Verify PRD.md was created
+    let prd_path = spec_dir.join("PRD.md");
+    assert!(prd_path.exists(), "PRD.md should exist");
+
+    // Verify PRD.md has expected content
+    let prd_content = fs::read_to_string(&prd_path)?;
+    assert!(
+        prd_content.contains("SPEC-TEST-SPECIFY-CREATE"),
+        "PRD.md should contain SPEC ID"
+    );
+    assert!(
+        prd_content.contains("## Overview"),
+        "PRD.md should contain Overview section"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn specify_json_output_structure() -> Result<()> {
+    // P6-A: JSON output has expected structure
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create docs directory
+    fs::create_dir_all(repo_root.path().join("docs"))?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "specify",
+            "--spec",
+            "SPEC-TEST-SPECIFY-JSON",
+            // Default is dry-run, no --execute
+            "--json",
+        ])
+        .output()?;
+
+    assert!(output.status.success());
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Verify schema version
+    let schema_version = json.get("schema_version").and_then(|v| v.as_u64());
+    assert_eq!(schema_version, Some(1), "Expected schema_version 1");
+
+    // Verify required fields
+    assert!(json.get("spec_id").is_some(), "Missing spec_id");
+    assert!(json.get("spec_dir").is_some(), "Missing spec_dir");
+    assert!(json.get("dry_run").is_some(), "Missing dry_run");
+    assert!(
+        json.get("already_existed").is_some(),
+        "Missing already_existed"
+    );
+    assert!(json.get("created_files").is_some(), "Missing created_files");
+
+    Ok(())
+}
+
+#[test]
+fn specify_existing_dir_reports_already_existed() -> Result<()> {
+    // P6-A: Specify on existing directory reports already_existed
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory with existing PRD.md
+    let spec_dir = repo_root.path().join("docs").join("SPEC-TEST-EXISTING");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("PRD.md"), "# Existing PRD")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "specify",
+            "--spec",
+            "SPEC-TEST-EXISTING",
+            "--execute",
+            "--json",
+        ])
+        .output()?;
+
+    assert!(output.status.success());
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Should report already_existed
+    let already_existed = json.get("already_existed").and_then(|v| v.as_bool());
+    assert_eq!(
+        already_existed,
+        Some(true),
+        "Expected already_existed: true"
+    );
+
+    // Should not have created any files
+    let created_files = json.get("created_files").and_then(|v| v.as_array());
+    assert!(
+        created_files.map(|f| f.is_empty()).unwrap_or(true),
+        "Expected no created_files when PRD already exists"
+    );
+
+    Ok(())
+}
