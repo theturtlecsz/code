@@ -125,6 +125,7 @@ If this invariant would be violated, resolution MUST be Escalate.
 ### Strict Mode Flags
 - `--strict-artifacts`: Missing artifacts → exit 2 (fail CI)
 - `--strict-warnings`: PassedWithWarnings → exit 1 (soft fail)
+- `--strict-schema`: Parse/schema failures → exit 3 (P1-C, prevents CI passing on corrupted evidence)
 
 ---
 
@@ -143,9 +144,18 @@ If this invariant would be violated, resolution MUST be Escalate.
 
 ## Implementation Checklist
 
-- [ ] P0-A: Read from `evidence/consensus/<SPEC-ID>/spec-<stage>_*.json`
-- [ ] P0-D: Parse ConsensusJson, extract conflicts → blocking, errors → advisory
-- [ ] P0-B: Remove `std::env::var()` calls; policy via request
-- [ ] P0-C: Evidence refs are repo-relative strings
-- [ ] Tests: Fixture-based with conflict/clean/parse-error cases
-- [ ] Tests: Strict mode (missing artifacts + strict → exit 2)
+### P0 (Complete - commit 76e62675f)
+- [x] P0-A: Read from `evidence/consensus/<SPEC-ID>/spec-<stage>_*.json`
+- [x] P0-D: Parse ConsensusJson, extract conflicts → blocking, errors → advisory
+- [x] P0-B: Remove `std::env::var()` calls; policy via request
+- [x] P0-C: Evidence refs are repo-relative strings
+- [x] P0-3: Split review_evidence_count from artifacts_collected
+- [x] P0-4: Error origin → System (per contract)
+- [x] Tests: Fixture-based with conflict/clean/parse-error cases (12 CLI tests)
+- [x] Tests: Strict mode (missing artifacts + strict → exit 2)
+
+### P1 (Next Session - see CONTINUATION-PROMPT-P1.md)
+- [ ] P1-A: TUI parity audit (verify /spec-review routes through executor)
+- [ ] P1-B: Create SPEC-CI-001 smoke packet (deterministic CI fixture)
+- [ ] P1-C: Add --strict-schema flag (parse failures → exit 3)
+- [ ] P1-D: Make evidence root configurable (config + CLI override)
