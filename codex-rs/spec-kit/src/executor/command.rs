@@ -6,6 +6,8 @@
 //! - Same business logic for equivalent user intent
 //! - Parity tests can verify slash commands match CLI commands
 
+use std::path::PathBuf;
+
 use crate::Stage;
 
 /// Spec-Kit command — the shared command model
@@ -28,8 +30,8 @@ pub enum SpeckitCommand {
 
     /// Review a specific stage's gate artifacts
     ///
-    /// TUI: `/review <STAGE> [--strict-artifacts] [--strict-warnings]`
-    /// CLI: `code speckit review --spec <SPEC-ID> --stage <STAGE> [--strict-*]`
+    /// TUI: `/review <STAGE> [--strict-artifacts] [--strict-warnings] [--strict-schema]`
+    /// CLI: `code speckit review --spec <SPEC-ID> --stage <STAGE> [--strict-*] [--evidence-root PATH]`
     Review {
         /// The SPEC identifier
         spec_id: String,
@@ -42,6 +44,12 @@ pub enum SpeckitCommand {
 
         /// Treat PassedWithWarnings as exit 1
         strict_warnings: bool,
+
+        /// Fail on parse/schema errors (exit 3)
+        strict_schema: bool,
+
+        /// P1-D: Override evidence root path (relative to repo root)
+        evidence_root: Option<PathBuf>,
     },
     // Future variants (Phase B+):
     // Doctor { format: OutputFormat },
@@ -103,13 +111,13 @@ impl SpeckitCommand {
 
     /// Parse review command from slash command arguments
     ///
-    /// Used by TUI: `/review <STAGE> [--strict-artifacts] [--strict-warnings]`
+    /// Used by TUI: `/review <STAGE> [--strict-artifacts] [--strict-warnings] [--strict-schema] [--evidence-root PATH]`
     /// Note: spec_id is provided separately (from active spec context)
     pub fn parse_review(spec_id: &str, raw_args: &str) -> Result<Self, String> {
         let trimmed = raw_args.trim();
         if trimmed.is_empty() {
             return Err(
-                "Usage: /review <stage> [--strict-artifacts] [--strict-warnings]\n\
+                "Usage: /review <stage> [--strict-artifacts] [--strict-warnings] [--strict-schema] [--evidence-root PATH]\n\
                  Stages: plan, tasks, implement, validate, audit"
                     .to_string(),
             );
@@ -118,12 +126,30 @@ impl SpeckitCommand {
         let mut stage: Option<Stage> = None;
         let mut strict_artifacts = false;
         let mut strict_warnings = false;
+        let mut strict_schema = false;
+        let mut evidence_root: Option<PathBuf> = None;
 
         let tokens: Vec<&str> = trimmed.split_whitespace().collect();
-        for token in tokens {
+        let mut idx = 0;
+
+        while idx < tokens.len() {
+            let token = tokens[idx];
             match token {
                 "--strict-artifacts" => strict_artifacts = true,
                 "--strict-warnings" => strict_warnings = true,
+                "--strict-schema" => strict_schema = true,
+                s if s.starts_with("--evidence-root") => {
+                    let value = if let Some(eq_pos) = s.find('=') {
+                        &s[(eq_pos + 1)..]
+                    } else {
+                        idx += 1;
+                        tokens
+                            .get(idx)
+                            .copied()
+                            .ok_or_else(|| "`--evidence-root` requires a value".to_string())?
+                    };
+                    evidence_root = Some(PathBuf::from(value));
+                }
                 s if s.starts_with('-') => {
                     return Err(format!("Unknown flag `{}`", s));
                 }
@@ -134,6 +160,7 @@ impl SpeckitCommand {
                     return Err(format!("Unexpected extra argument `{}`", s));
                 }
             }
+            idx += 1;
         }
 
         let stage = stage.ok_or_else(|| {
@@ -145,6 +172,8 @@ impl SpeckitCommand {
             stage,
             strict_artifacts,
             strict_warnings,
+            strict_schema,
+            evidence_root,
         })
     }
 
@@ -231,6 +260,8 @@ mod tests {
                 stage: Stage::Plan,
                 strict_artifacts: false,
                 strict_warnings: false,
+                strict_schema: false,
+                evidence_root: None,
             }
         );
     }
@@ -247,6 +278,58 @@ mod tests {
                 stage: Stage::Audit,
                 strict_artifacts: true,
                 strict_warnings: true,
+                strict_schema: false,
+                evidence_root: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_review_with_strict_schema() {
+        let cmd = SpeckitCommand::parse_review("SPEC-789", "plan --strict-schema").unwrap();
+        assert_eq!(
+            cmd,
+            SpeckitCommand::Review {
+                spec_id: "SPEC-789".to_string(),
+                stage: Stage::Plan,
+                strict_artifacts: false,
+                strict_warnings: false,
+                strict_schema: true,
+                evidence_root: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_review_with_evidence_root() {
+        // P1-D: --evidence-root with space
+        let cmd =
+            SpeckitCommand::parse_review("SPEC-001", "plan --evidence-root custom/evidence/path")
+                .unwrap();
+        assert_eq!(
+            cmd,
+            SpeckitCommand::Review {
+                spec_id: "SPEC-001".to_string(),
+                stage: Stage::Plan,
+                strict_artifacts: false,
+                strict_warnings: false,
+                strict_schema: false,
+                evidence_root: Some(std::path::PathBuf::from("custom/evidence/path")),
+            }
+        );
+
+        // P1-D: --evidence-root with equals sign
+        let cmd =
+            SpeckitCommand::parse_review("SPEC-002", "plan --evidence-root=another/path").unwrap();
+        assert_eq!(
+            cmd.clone(),
+            SpeckitCommand::Review {
+                spec_id: "SPEC-002".to_string(),
+                stage: Stage::Plan,
+                strict_artifacts: false,
+                strict_warnings: false,
+                strict_schema: false,
+                evidence_root: Some(std::path::PathBuf::from("another/path")),
             }
         );
     }

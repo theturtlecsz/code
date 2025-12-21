@@ -82,6 +82,16 @@ pub struct ReviewArgs {
     #[arg(long = "strict-warnings")]
     pub strict_warnings: bool,
 
+    /// Fail on parse/schema errors (exit 3)
+    /// Prevents CI from passing on corrupted evidence files
+    #[arg(long = "strict-schema")]
+    pub strict_schema: bool,
+
+    /// Override evidence root path (relative to repo root)
+    /// Default: docs/SPEC-OPS-004-integrated-coder-hooks/evidence
+    #[arg(long = "evidence-root", value_name = "PATH")]
+    pub evidence_root: Option<String>,
+
     /// Output as JSON instead of text
     #[arg(long = "json", short = 'j')]
     pub json: bool,
@@ -170,6 +180,8 @@ fn run_review(executor: SpeckitExecutor, args: ReviewArgs) -> anyhow::Result<()>
         stage,
         strict_artifacts: args.strict_artifacts,
         strict_warnings: args.strict_warnings,
+        strict_schema: args.strict_schema,
+        evidence_root: args.evidence_root.map(std::path::PathBuf::from),
     };
 
     match executor.execute(command) {
@@ -178,6 +190,7 @@ fn run_review(executor: SpeckitExecutor, args: ReviewArgs) -> anyhow::Result<()>
             let options = ReviewOptions {
                 strict_artifacts: args.strict_artifacts,
                 strict_warnings: args.strict_warnings,
+                strict_schema: args.strict_schema,
                 ..Default::default()
             };
             let exit_code = result.exit_code(&options);

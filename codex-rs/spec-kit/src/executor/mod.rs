@@ -99,7 +99,9 @@ impl SpeckitExecutor {
                 stage,
                 strict_artifacts,
                 strict_warnings,
-            } => self.execute_review(&spec_id, stage, strict_artifacts, strict_warnings),
+                strict_schema,
+                evidence_root,
+            } => self.execute_review(&spec_id, stage, strict_artifacts, strict_warnings, strict_schema, evidence_root),
         }
     }
 
@@ -126,6 +128,8 @@ impl SpeckitExecutor {
         stage: crate::Stage,
         strict_artifacts: bool,
         strict_warnings: bool,
+        strict_schema: bool,
+        evidence_root: Option<std::path::PathBuf>,
     ) -> Outcome {
         // Resolve stage → checkpoint using canonical mapping
         let resolution = review::resolve_review_request(stage);
@@ -155,6 +159,8 @@ impl SpeckitExecutor {
                     include_diagnostic: review::is_diagnostic_review(stage),
                     strict_artifacts,
                     strict_warnings,
+                    strict_schema,
+                    evidence_root,
                     policy_snapshot,
                 };
 
@@ -269,6 +275,8 @@ mod tests {
             stage: crate::Stage::Plan,
             strict_artifacts: false,
             strict_warnings: false,
+            strict_schema: false,
+            evidence_root: None,
         };
 
         assert_eq!(slash_cmd, cli_cmd);
@@ -287,6 +295,8 @@ mod tests {
             stage: crate::Stage::Audit,
             strict_artifacts: true,
             strict_warnings: true,
+            strict_schema: false,
+            evidence_root: None,
         };
 
         assert_eq!(slash_cmd, cli_cmd);
@@ -305,6 +315,8 @@ mod tests {
             stage: crate::Stage::Specify,
             strict_artifacts: false,
             strict_warnings: false,
+            strict_schema: false,
+            evidence_root: None,
         };
 
         let outcome = executor.execute(cmd);
@@ -330,6 +342,8 @@ mod tests {
             stage: crate::Stage::Unlock,
             strict_artifacts: false,
             strict_warnings: false,
+            strict_schema: false,
+            evidence_root: None,
         };
 
         let outcome = executor.execute(cmd);

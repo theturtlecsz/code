@@ -512,3 +512,97 @@ fn review_spec_docs_only_no_consensus_strict_exits_2() -> Result<()> {
 
     Ok(())
 }
+
+// =============================================================================
+// P1-C: --strict-schema TESTS
+// =============================================================================
+
+#[test]
+fn review_malformed_json_exits_3_with_strict_schema() -> Result<()> {
+    // P1-C: With --strict-schema, parse errors should exit 3
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create evidence directory
+    let evidence_dir = setup_evidence_dir(repo_root.path(), "SPEC-TEST-STRICT-SCHEMA")?;
+
+    // Create malformed JSON consensus file
+    let malformed_file = evidence_dir.join("spec-plan_broken_20251220.json");
+    fs::write(&malformed_file, "{ this is not valid json }")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "review",
+            "--spec",
+            "SPEC-TEST-STRICT-SCHEMA",
+            "--stage",
+            "plan",
+            "--strict-schema",
+        ])
+        .output()?;
+
+    // With --strict-schema, parse errors should exit 3 (infrastructure error)
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "Expected exit 3 with --strict-schema and malformed JSON, got {:?}\nstderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Error message should mention parse/schema errors
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Parse/schema errors") || stderr.contains("parse"),
+        "Expected error message about parse errors, got: {stderr}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn review_malformed_json_exits_0_without_strict_schema() -> Result<()> {
+    // P1-C: Without --strict-schema, parse errors are advisory (exit 0)
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create evidence directory
+    let evidence_dir = setup_evidence_dir(repo_root.path(), "SPEC-TEST-NO-STRICT")?;
+
+    // Create malformed JSON consensus file
+    let malformed_file = evidence_dir.join("spec-plan_broken_20251220.json");
+    fs::write(&malformed_file, "{ this is not valid json }")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "review",
+            "--spec",
+            "SPEC-TEST-NO-STRICT",
+            "--stage",
+            "plan",
+            "--json",
+        ])
+        .output()?;
+
+    // Without --strict-schema, should exit 0 (parse error is advisory)
+    assert!(
+        output.status.success(),
+        "Expected exit 0 without strict-schema, got {:?}\nstderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Should show advisory signal in output
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+    let advisory = json.get("advisory_signals").and_then(|v| v.as_array());
+    assert!(
+        advisory.map(|a| !a.is_empty()).unwrap_or(false),
+        "Expected advisory signals for parse error"
+    );
+
+    Ok(())
+}

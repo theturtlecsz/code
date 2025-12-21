@@ -422,6 +422,14 @@ pub struct ReviewOptions {
     /// Strict warnings mode: exit 1 on PassedWithWarnings
     pub strict_warnings: bool,
 
+    /// Strict schema mode: parse/schema failures → exit 3
+    /// Prevents CI passing on corrupted evidence
+    pub strict_schema: bool,
+
+    /// P1-D: Override evidence root path (relative to repo_root)
+    /// If None, uses default: docs/SPEC-OPS-004-integrated-coder-hooks/evidence
+    pub evidence_root: Option<PathBuf>,
+
     /// P0-B: Policy snapshot (resolved by adapter, not read from env in core)
     pub policy_snapshot: PolicySnapshot,
 }
@@ -433,6 +441,8 @@ impl Default for ReviewOptions {
             include_diagnostic: false,
             strict_artifacts: false,
             strict_warnings: false,
+            strict_schema: false,
+            evidence_root: None,
             policy_snapshot: PolicySnapshot::default(),
         }
     }
@@ -577,19 +587,35 @@ pub fn evaluate_stage_review(
     let repo_root = &request.repo_root;
 
     // P0-A: Build correct paths per REVIEW-CONTRACT.md
+    // P1-D: Use evidence_root override if provided, else default
     let spec_packet_dir = repo_root.join(SPEC_PACKET_ROOT).join(&request.spec_id);
-    let consensus_dir = repo_root
-        .join(EVIDENCE_ROOT)
-        .join(CONSENSUS_DIR)
-        .join(&request.spec_id);
+    let evidence_root = request
+        .options
+        .evidence_root
+        .as_ref()
+        .map(|p| repo_root.join(p))
+        .unwrap_or_else(|| repo_root.join(EVIDENCE_ROOT));
+    let consensus_dir = evidence_root.join(CONSENSUS_DIR).join(&request.spec_id);
 
     // Collect artifacts from spec packet + consensus evidence
     let artifacts = collect_artifacts_v2(repo_root, &spec_packet_dir, &consensus_dir, checkpoint);
 
     // P0-D: Parse ConsensusJson files and derive signals
     // P0-2: Pass repo_root for repo-relative evidence paths
-    let (blocking_signals, advisory_signals) =
+    // P1-C: Track parse errors separately for --strict-schema
+    let signal_result =
         collect_signals_from_consensus(&artifacts.consensus_files, checkpoint, repo_root);
+
+    // P1-C: In strict_schema mode, parse errors are infrastructure failures → exit 3
+    if request.options.strict_schema && !signal_result.parse_errors.is_empty() {
+        return Err(format!(
+            "Parse/schema errors in evidence files (--strict-schema enabled): {}",
+            signal_result.parse_errors.join("; ")
+        ));
+    }
+
+    let blocking_signals = signal_result.blocking;
+    let advisory_signals = signal_result.advisory;
 
     // Determine resolution based on blocking signals
     // Invariant: resolution == AutoApply ⟹ blocking_signals.is_empty()
@@ -733,20 +759,30 @@ fn checkpoint_stage_slug(checkpoint: Checkpoint) -> &'static str {
     }
 }
 
+/// Result of collecting signals from consensus files
+struct SignalCollectionResult {
+    blocking: Vec<ReviewSignal>,
+    advisory: Vec<ReviewSignal>,
+    /// Parse/read errors (tracked separately for --strict-schema)
+    parse_errors: Vec<String>,
+}
+
 /// Collect signals by parsing ConsensusJson files (P0-D)
 ///
 /// - `consensus.conflicts` non-empty → blocking signals
 /// - `error` field present → advisory signals
-/// - Parse failures → advisory System signal
+/// - Parse failures → advisory System signal (or error if strict_schema)
 ///
 /// P0-2: All evidence paths are made repo-relative for stable CI output.
+/// P1-C: Parse errors are tracked separately for --strict-schema handling.
 fn collect_signals_from_consensus(
     consensus_files: &[PathBuf],
     _checkpoint: Checkpoint,
     repo_root: &Path,
-) -> (Vec<ReviewSignal>, Vec<ReviewSignal>) {
+) -> SignalCollectionResult {
     let mut blocking = Vec::new();
     let mut advisory = Vec::new();
+    let mut parse_errors = Vec::new();
 
     // Helper to make path repo-relative (P0-2)
     let make_relative = |p: &Path| -> String {
@@ -765,13 +801,15 @@ fn collect_signals_from_consensus(
         let content = match std::fs::read_to_string(path) {
             Ok(c) => c,
             Err(e) => {
-                // Parse failure → advisory System signal
+                let error_msg = format!("Failed to read consensus file {filename}: {e}");
+                parse_errors.push(error_msg.clone());
+                // Also add as advisory for default (non-strict) mode
                 advisory.push(ReviewSignal {
                     kind: CounterSignalKind::Other,
                     severity: SignalSeverity::Advisory,
                     origin: SignalOrigin::System,
                     worker_id: None,
-                    message: format!("Failed to read consensus file {filename}: {e}"),
+                    message: error_msg,
                     evidence_path: Some(make_relative(path)),
                 });
                 continue;
@@ -781,13 +819,15 @@ fn collect_signals_from_consensus(
         let data: ConsensusJson = match serde_json::from_str(&content) {
             Ok(d) => d,
             Err(e) => {
-                // Parse failure → advisory System signal
+                let error_msg = format!("Failed to parse consensus file {filename}: {e}");
+                parse_errors.push(error_msg.clone());
+                // Also add as advisory for default (non-strict) mode
                 advisory.push(ReviewSignal {
                     kind: CounterSignalKind::Other,
                     severity: SignalSeverity::Advisory,
                     origin: SignalOrigin::System,
                     worker_id: None,
-                    message: format!("Failed to parse consensus file {filename}: {e}"),
+                    message: error_msg,
                     evidence_path: Some(make_relative(path)),
                 });
                 continue;
@@ -829,7 +869,11 @@ fn collect_signals_from_consensus(
         }
     }
 
-    (blocking, advisory)
+    SignalCollectionResult {
+        blocking,
+        advisory,
+        parse_errors,
+    }
 }
 
 /// Compute effective confidence from blocking signals
@@ -1701,5 +1745,356 @@ mod tests {
             "One advisory signal from validator error"
         );
         assert!(result.advisory_signals[0].message.contains("Timeout"));
+    }
+
+    // ========================================================================
+    // P1-C: --strict-schema tests
+    // ========================================================================
+
+    #[test]
+    fn test_fixture_strict_schema_parse_error_returns_err() {
+        // P1-C: With --strict-schema, parse errors should return Err (exit 3)
+        let temp = create_fixture_dir();
+        let repo_root = temp.path();
+        let spec_id = "FIXTURE-STRICT";
+
+        // Create consensus directory structure
+        let consensus_dir = repo_root
+            .join(EVIDENCE_ROOT)
+            .join(CONSENSUS_DIR)
+            .join(spec_id);
+        std::fs::create_dir_all(&consensus_dir).unwrap();
+
+        // Create spec packet directory with plan.md
+        let spec_packet_dir = repo_root.join(SPEC_PACKET_ROOT).join(spec_id);
+        std::fs::create_dir_all(&spec_packet_dir).unwrap();
+        std::fs::write(spec_packet_dir.join("plan.md"), "# Plan").unwrap();
+
+        // Create malformed consensus file
+        let consensus_file = consensus_dir.join("spec-plan_broken_20251220.json");
+        std::fs::write(&consensus_file, "{ this is not valid json }").unwrap();
+
+        // Execute review WITH strict_schema enabled
+        let request = ReviewRequest {
+            repo_root: repo_root.to_path_buf(),
+            spec_id: spec_id.to_string(),
+            stage: Stage::Plan,
+            options: ReviewOptions {
+                strict_schema: true,
+                ..Default::default()
+            },
+        };
+
+        let result = evaluate_stage_review(request, Checkpoint::AfterPlan);
+
+        // Verify: Should return Err due to parse error with strict_schema
+        assert!(
+            result.is_err(),
+            "Expected Err with --strict-schema and parse error, got: {:?}",
+            result
+        );
+        let error_msg = result.unwrap_err();
+        assert!(
+            error_msg.contains("Parse/schema errors"),
+            "Error should mention parse/schema errors: {error_msg}"
+        );
+        assert!(
+            error_msg.contains("--strict-schema"),
+            "Error should mention --strict-schema flag: {error_msg}"
+        );
+    }
+
+    #[test]
+    fn test_fixture_strict_schema_clean_succeeds() {
+        // P1-C: With --strict-schema but no parse errors, should succeed
+        let temp = create_fixture_dir();
+        let repo_root = temp.path();
+        let spec_id = "FIXTURE-STRICT-CLEAN";
+
+        // Create consensus directory structure
+        let consensus_dir = repo_root
+            .join(EVIDENCE_ROOT)
+            .join(CONSENSUS_DIR)
+            .join(spec_id);
+        std::fs::create_dir_all(&consensus_dir).unwrap();
+
+        // Create spec packet directory with plan.md
+        let spec_packet_dir = repo_root.join(SPEC_PACKET_ROOT).join(spec_id);
+        std::fs::create_dir_all(&spec_packet_dir).unwrap();
+        std::fs::write(spec_packet_dir.join("plan.md"), "# Plan").unwrap();
+
+        // Create clean consensus file (valid JSON)
+        let consensus_file = consensus_dir.join("spec-plan_clean_20251220.json");
+        std::fs::write(&consensus_file, consensus_clean()).unwrap();
+
+        // Execute review WITH strict_schema enabled
+        let request = ReviewRequest {
+            repo_root: repo_root.to_path_buf(),
+            spec_id: spec_id.to_string(),
+            stage: Stage::Plan,
+            options: ReviewOptions {
+                strict_schema: true,
+                ..Default::default()
+            },
+        };
+
+        let result = evaluate_stage_review(request, Checkpoint::AfterPlan);
+
+        // Verify: Should succeed (no parse errors)
+        assert!(
+            result.is_ok(),
+            "Expected Ok with --strict-schema and valid files, got: {:?}",
+            result
+        );
+    }
+
+    // ========================================================================
+    // P1-B: SPEC-CI-001 Smoke Packet Contract Tests
+    // ========================================================================
+
+    /// Get path to SPEC-CI-001 smoke packet fixture
+    fn get_smoke_packet_path() -> std::path::PathBuf {
+        // Fixture is at: spec-kit/tests/fixtures/SPEC-CI-001/
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        manifest_dir.join("tests/fixtures/SPEC-CI-001")
+    }
+
+    #[test]
+    fn smoke_packet_clean_exits_0() {
+        // P1-B: SPEC-CI-001-clean should exit 0 (AutoApply, no conflicts)
+        let repo_root = get_smoke_packet_path();
+        if !repo_root.exists() {
+            // Skip if fixture not found (graceful degradation)
+            eprintln!("Skipping smoke test: fixture not found at {:?}", repo_root);
+            return;
+        }
+
+        let request = ReviewRequest {
+            repo_root: repo_root.clone(),
+            spec_id: "SPEC-CI-001-clean".to_string(),
+            stage: Stage::Plan,
+            options: ReviewOptions::default(),
+        };
+
+        let result = evaluate_stage_review(request, Checkpoint::AfterPlan).unwrap();
+
+        // Contract: clean case → AutoApply, exit 0
+        assert!(
+            matches!(result.resolution, Verdict::AutoApply { .. }),
+            "SPEC-CI-001-clean should AutoApply, got: {:?}",
+            result.resolution
+        );
+        assert!(
+            result.blocking_signals.is_empty(),
+            "SPEC-CI-001-clean should have no blocking signals"
+        );
+        assert_eq!(
+            result.exit_code(&ReviewOptions::default()),
+            0,
+            "SPEC-CI-001-clean should exit 0"
+        );
+    }
+
+    #[test]
+    fn smoke_packet_conflict_exits_2() {
+        // P1-B: SPEC-CI-001-conflict should exit 2 (Escalate, has conflicts)
+        let repo_root = get_smoke_packet_path();
+        if !repo_root.exists() {
+            eprintln!("Skipping smoke test: fixture not found at {:?}", repo_root);
+            return;
+        }
+
+        let request = ReviewRequest {
+            repo_root: repo_root.clone(),
+            spec_id: "SPEC-CI-001-conflict".to_string(),
+            stage: Stage::Plan,
+            options: ReviewOptions::default(),
+        };
+
+        let result = evaluate_stage_review(request, Checkpoint::AfterPlan).unwrap();
+
+        // Contract: conflict case → Escalate, exit 2
+        assert!(
+            matches!(result.resolution, Verdict::Escalate { .. }),
+            "SPEC-CI-001-conflict should Escalate, got: {:?}",
+            result.resolution
+        );
+        assert!(
+            !result.blocking_signals.is_empty(),
+            "SPEC-CI-001-conflict should have blocking signals"
+        );
+        assert_eq!(
+            result.exit_code(&ReviewOptions::default()),
+            2,
+            "SPEC-CI-001-conflict should exit 2"
+        );
+
+        // Verify expected conflicts are present
+        let conflict_messages: Vec<&str> = result
+            .blocking_signals
+            .iter()
+            .map(|s| s.message.as_str())
+            .collect();
+        assert!(
+            conflict_messages.iter().any(|m| m.contains("contradicts")),
+            "Expected 'contradicts' conflict, got: {:?}",
+            conflict_messages
+        );
+    }
+
+    #[test]
+    fn smoke_packet_malformed_advisory_without_strict() {
+        // P1-B: SPEC-CI-001-malformed should exit 0 without --strict-schema
+        let repo_root = get_smoke_packet_path();
+        if !repo_root.exists() {
+            eprintln!("Skipping smoke test: fixture not found at {:?}", repo_root);
+            return;
+        }
+
+        let request = ReviewRequest {
+            repo_root: repo_root.clone(),
+            spec_id: "SPEC-CI-001-malformed".to_string(),
+            stage: Stage::Plan,
+            options: ReviewOptions::default(), // strict_schema: false
+        };
+
+        let result = evaluate_stage_review(request, Checkpoint::AfterPlan);
+
+        // Contract: malformed without strict → Ok with advisory
+        assert!(
+            result.is_ok(),
+            "SPEC-CI-001-malformed should succeed without strict, got: {:?}",
+            result
+        );
+        let result = result.unwrap();
+        assert!(
+            !result.advisory_signals.is_empty(),
+            "SPEC-CI-001-malformed should have advisory signal for parse error"
+        );
+    }
+
+    #[test]
+    fn smoke_packet_malformed_error_with_strict() {
+        // P1-B: SPEC-CI-001-malformed should exit 3 with --strict-schema
+        let repo_root = get_smoke_packet_path();
+        if !repo_root.exists() {
+            eprintln!("Skipping smoke test: fixture not found at {:?}", repo_root);
+            return;
+        }
+
+        let request = ReviewRequest {
+            repo_root: repo_root.clone(),
+            spec_id: "SPEC-CI-001-malformed".to_string(),
+            stage: Stage::Plan,
+            options: ReviewOptions {
+                strict_schema: true,
+                ..Default::default()
+            },
+        };
+
+        let result = evaluate_stage_review(request, Checkpoint::AfterPlan);
+
+        // Contract: malformed with strict → Err
+        assert!(
+            result.is_err(),
+            "SPEC-CI-001-malformed should fail with --strict-schema, got: {:?}",
+            result
+        );
+    }
+
+    // ========================================================================
+    // P1-D: evidence_root override tests
+    // ========================================================================
+
+    #[test]
+    fn test_evidence_root_override() {
+        // P1-D: --evidence-root should override the default path
+        let temp = create_fixture_dir();
+        let repo_root = temp.path();
+        let spec_id = "OVERRIDE-TEST";
+
+        // Create custom evidence root (not the default SPEC-OPS-004 path)
+        let custom_evidence = repo_root.join("custom").join("evidence");
+        let consensus_dir = custom_evidence.join(CONSENSUS_DIR).join(spec_id);
+        std::fs::create_dir_all(&consensus_dir).unwrap();
+
+        // Create spec packet
+        let spec_packet_dir = repo_root.join(SPEC_PACKET_ROOT).join(spec_id);
+        std::fs::create_dir_all(&spec_packet_dir).unwrap();
+        std::fs::write(spec_packet_dir.join("plan.md"), "# Plan").unwrap();
+
+        // Create consensus file in custom location
+        let consensus_file = consensus_dir.join("spec-plan_test_20251220.json");
+        std::fs::write(&consensus_file, consensus_clean()).unwrap();
+
+        // Request with evidence_root override
+        let request = ReviewRequest {
+            repo_root: repo_root.to_path_buf(),
+            spec_id: spec_id.to_string(),
+            stage: Stage::Plan,
+            options: ReviewOptions {
+                evidence_root: Some(PathBuf::from("custom/evidence")),
+                ..Default::default()
+            },
+        };
+
+        let result = evaluate_stage_review(request, Checkpoint::AfterPlan);
+
+        // Should find evidence at custom path
+        assert!(
+            result.is_ok(),
+            "Should find evidence at custom path, got: {:?}",
+            result
+        );
+        let result = result.unwrap();
+        assert!(
+            result.review_evidence_count > 0,
+            "Should have review evidence from custom path"
+        );
+        assert!(
+            matches!(result.resolution, Verdict::AutoApply { .. }),
+            "Should AutoApply with clean consensus"
+        );
+    }
+
+    #[test]
+    fn test_evidence_root_override_not_found() {
+        // P1-D: If evidence_root points to missing path, should skip (no evidence)
+        let temp = create_fixture_dir();
+        let repo_root = temp.path();
+        let spec_id = "OVERRIDE-MISSING";
+
+        // Create spec packet only (no evidence at custom path)
+        let spec_packet_dir = repo_root.join(SPEC_PACKET_ROOT).join(spec_id);
+        std::fs::create_dir_all(&spec_packet_dir).unwrap();
+        std::fs::write(spec_packet_dir.join("plan.md"), "# Plan").unwrap();
+
+        // Request with non-existent evidence_root
+        let request = ReviewRequest {
+            repo_root: repo_root.to_path_buf(),
+            spec_id: spec_id.to_string(),
+            stage: Stage::Plan,
+            options: ReviewOptions {
+                evidence_root: Some(PathBuf::from("nonexistent/evidence")),
+                ..Default::default()
+            },
+        };
+
+        let result = evaluate_stage_review(request, Checkpoint::AfterPlan).unwrap();
+
+        // Should produce Skipped (no review evidence found)
+        assert_eq!(
+            result.review_evidence_count, 0,
+            "Should have no review evidence from missing path"
+        );
+        assert!(
+            matches!(
+                result.display_verdict(),
+                DisplayVerdict::Skipped {
+                    reason: SkipReason::NoArtifactsFound
+                }
+            ),
+            "Should be Skipped with no artifacts"
+        );
     }
 }
