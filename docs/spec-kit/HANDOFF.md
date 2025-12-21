@@ -1,7 +1,7 @@
 # HANDOFF: SPEC-KIT-921 P5 Continuation
 
 **Generated**: 2025-12-21
-**Last Commit**: (pending P4 commit)
+**Last Commit**: b7549eb99 (docs: update HANDOFF.md for P5 continuation)
 **Branch**: main
 
 ---
@@ -16,11 +16,23 @@ Copy this prompt to start the next session:
 Continue from docs/spec-kit/HANDOFF.md
 
 ## Context
-- P0-P4 complete
+- P0-P4 complete (commits c127dee66, 1f216920a)
 - 25 CLI tests passing, CI workflow with plan/tasks smoke tests
-- StageOutcome envelope replaces PlanReady/PlanBlocked
+- StageOutcome envelope with Ready/Blocked/Skipped resolution
+- SpeckitCommand::ValidateStage is stage-neutral (handles all stages)
 - TUI routes /speckit.plan and /speckit.tasks through executor
-- Architect approved: Implement stage migration + remaining stages
+- Architectural review complete: naming, dry_run preservation, build-time determinism
+
+## Key Types Reference
+
+```rust
+// spec-kit/src/executor/command.rs
+SpeckitCommand::ValidateStage { spec_id, stage, dry_run }
+
+// spec-kit/src/executor/mod.rs
+StageOutcome { spec_id, stage, resolution, blocking_reasons, advisory_signals, evidence_refs, dry_run }
+StageResolution::Ready | Blocked | Skipped
+```
 
 ## P5 Tasks (in order)
 
@@ -30,6 +42,12 @@ New subcommand following plan/tasks pattern:
 ```bash
 speckit implement --spec <ID> [--dry-run] [--json]
 ```
+
+Implementation:
+1. Add ImplementArgs struct to cli/src/speckit_cmd.rs
+2. Add run_implement() following run_tasks() pattern
+3. Add to SpeckitSubcommand enum
+4. Add 3 tests: validates_spec_exits_0, warns_when_tasks_missing, json_includes_schema_version
 
 Files:
 - cli/src/speckit_cmd.rs (add Implement subcommand)
@@ -44,22 +62,26 @@ speckit audit --spec <ID> [--dry-run] [--json]
 speckit unlock --spec <ID> [--dry-run] [--json]
 ```
 
+Each follows same pattern: Args struct, run_* function, 3 tests.
+
 Files:
 - cli/src/speckit_cmd.rs (add subcommands)
-- cli/tests/speckit.rs (add tests)
+- cli/tests/speckit.rs (add tests per stage)
 
-### P5-C: Refactor TUI for all stages
-Ensure all stage commands route through executor:
-- /speckit.implement
-- /speckit.validate
-- /speckit.audit
-- /speckit.unlock
+NOTE: `speckit specify` deferred to P6 (scope creep risk, different UX expectations)
+
+### P5-C: TUI already routes all stages
+Verify existing TUI routing:
+- /speckit.implement already in plan.rs
+- /speckit.validate already in plan.rs
+- /speckit.audit already in plan.rs
+- /speckit.unlock already in plan.rs
 
 Files:
-- tui/src/chatwidget/spec_kit/commands/plan.rs
+- tui/src/chatwidget/spec_kit/commands/plan.rs (verify only)
 
 ### P5-D: CI smoke tests for all stages
-Add smoke tests for full pipeline:
+Add smoke tests for full pipeline (6 stages, specify deferred):
 
 ```yaml
 - name: "[PIPELINE] full stage progression test"
@@ -77,8 +99,9 @@ Add smoke tests for full pipeline:
 ## Start Commands
 
 ```bash
-git log --oneline -3
+git log --oneline -5
 cargo test -p codex-cli --test speckit
+cat codex-rs/cli/src/speckit_cmd.rs | head -100  # Understand current structure
 ```
 
 ## Exit Code Contract (Reference)
@@ -91,11 +114,20 @@ cargo test -p codex-cli --test speckit
 
 ## Acceptance Criteria for P5
 
-- [ ] `speckit implement` CLI command exists
-- [ ] `speckit validate/audit/unlock` CLI commands exist
-- [ ] TUI all stage commands route through executor
-- [ ] CI smoke: full pipeline test passes
-- [ ] 30+ CLI integration tests passing
+- [ ] `speckit implement` CLI command exists with 3 tests
+- [ ] `speckit validate` CLI command exists with 3 tests
+- [ ] `speckit audit` CLI command exists with 3 tests
+- [ ] `speckit unlock` CLI command exists with 3 tests
+- [ ] TUI all stage commands verified routing through executor
+- [ ] CI smoke: full 6-stage pipeline test passes (plan→tasks→implement→validate→audit→unlock)
+- [ ] 37+ CLI integration tests passing (25 current + 12 new = 37)
+
+## P5 Architectural Decisions
+
+1. **Defer `speckit specify` to P6**: First stage has different UX expectations and scope creep risk
+2. **Advisory signals only**: Stages add advisory warnings for missing prerequisites (e.g., "no tasks found"), but do NOT hard-block
+3. **Defer `speckit run` batch to P6**: Complete individual commands first; batch orchestration has complex edge cases
+4. **Single commit**: All 4 stage commands in one atomic commit for easier atomic rollback
 ```
 
 ---
@@ -126,6 +158,16 @@ cargo test -p codex-cli --test speckit
 3. **Tasks command**: New CLI command following plan pattern
 4. **TUI executor integration**: Stage commands now route through executor
 
+### P4 Architectural Fixes (commit 1f216920a)
+
+| Issue | Fix |
+|-------|-----|
+| P0: "consensus" vocabulary | Changed to "gate review" in TUI descriptions |
+| P1-A: Misleading naming | `SpeckitCommand::Plan` → `ValidateStage` |
+| P1-B: dry_run lost on Blocked/Skipped | Added dry_run param to blocked()/skipped() constructors |
+| P1-C: Runtime git in tool_version | Now build-time only via `SPECKIT_GIT_SHA`/`GIT_SHA` env vars |
+| P2: Lossy stage mapping | `spec_stage_to_stage()` returns `Option<Stage>`, None for quality commands |
+
 ---
 
 ## Architecture After P4 (Current)
@@ -133,6 +175,7 @@ cargo test -p codex-cli --test speckit
 ```
 CLI (speckit_cmd.rs)
   ↓ SpeckitSubcommand::Status/Review/Plan/Tasks
+  ↓ → SpeckitCommand::ValidateStage { spec_id, stage, dry_run }
   ↓
 SpeckitExecutor::execute()
   ↓
@@ -142,6 +185,7 @@ render_*() → stdout (with schema_version)
 
 TUI (commands/plan.rs)
   ↓ execute_stage_command()
+  ↓ → SpeckitCommand::ValidateStage { spec_id, stage, dry_run: false }
   ↓
 SpeckitExecutor::execute()  ← SAME EXECUTOR
   ↓
@@ -159,10 +203,11 @@ If Blocked: display errors in chat
 
 | File | Purpose |
 |------|---------|
-| `cli/src/speckit_cmd.rs` | Tasks subcommand, removed --stage, StageResolution handling |
+| `cli/src/speckit_cmd.rs` | Tasks subcommand, removed --stage, StageResolution handling, build-time tool_version |
 | `cli/tests/speckit.rs` | 25 integration tests (3 new for tasks) |
-| `spec-kit/src/executor/mod.rs` | StageOutcome, StageResolution, refactored execute_plan |
-| `tui/src/chatwidget/spec_kit/commands/plan.rs` | Executor integration |
+| `spec-kit/src/executor/mod.rs` | StageOutcome, StageResolution, execute_validate_stage |
+| `spec-kit/src/executor/command.rs` | Renamed Plan→ValidateStage, parse_validate_stage |
+| `tui/src/chatwidget/spec_kit/commands/plan.rs` | Executor integration, gate review descriptions, Option<Stage> mapping |
 | `tui/src/chatwidget/spec_kit/command_handlers.rs` | Updated match arms |
 | `.github/workflows/spec-kit-ci.yml` | Tasks smoke test, plan→tasks→review pipeline |
 
@@ -184,12 +229,16 @@ If Blocked: display errors in chat
 4. **Strict modes behave predictably**: artifacts→2, schema→3, escalation→2
 5. **TUI is an adapter** — slash commands call executor, not legacy implementations
 6. **Stage-specific commands** — each stage has its own CLI command (no generic `--stage` flag)
+7. **ValidateStage is stage-neutral** — single command variant handles all stage validation
+8. **Build-time determinism** — tool_version uses compile-time env vars only, no runtime git
 
 ---
 
 ## Deferred to P6+
 
+- **`speckit specify` command**: First stage has different UX expectations (template selection, spec materialization)
+- **`speckit run` batch command**: Sequential execution with `--from`/`--to` flags
 - **Full /speckit.auto orchestration**: After all stages behind executor
 - **CLI config-file support** (`.speckit.toml`): After Phase C/D requirements clarify
-- **Generic `speckit run` command**: After all stages migrated, as optional alias
 - **Checkpoint persistence**: After orchestration proven
+- **Prerequisite hard-blocking**: Currently advisory-only; hard-blocking requires defining "completed" semantics
