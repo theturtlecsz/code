@@ -136,7 +136,7 @@ jobs:
           echo "✓ JSON structure validated"
 
       # =========================================================================
-      # P3-C: Plan Command Smoke Test (SPEC-KIT-921)
+      # P4: Plan and Tasks Command Smoke Tests (SPEC-KIT-921)
       # =========================================================================
 
       - name: "[PLAN] Validate plan dry-run exits 0"
@@ -145,7 +145,6 @@ jobs:
           set -o pipefail
           OUTPUT=$(${{ env.CLI }} speckit plan \
             --spec SPEC-CI-001-clean \
-            --stage plan \
             --dry-run \
             --json)
 
@@ -157,7 +156,24 @@ jobs:
 
           echo "✓ Plan dry-run: exit 0, schema_version=1, status=ready"
 
-      - name: "[PIPELINE] plan → review smoke test"
+      - name: "[TASKS] Validate tasks dry-run exits 0"
+        working-directory: ${{ env.FIXTURE_ROOT }}
+        run: |
+          set -o pipefail
+          OUTPUT=$(${{ env.CLI }} speckit tasks \
+            --spec SPEC-CI-001-clean \
+            --dry-run \
+            --json)
+
+          # Validate schema versioning fields
+          echo "$OUTPUT" | jq -e '.schema_version == 1' > /dev/null || { echo "::error::schema_version should be 1"; exit 1; }
+          echo "$OUTPUT" | jq -e '.tool_version' > /dev/null || { echo "::error::Missing tool_version field"; exit 1; }
+          echo "$OUTPUT" | jq -e '.status == "ready"' > /dev/null || { echo "::error::status should be 'ready'"; exit 1; }
+          echo "$OUTPUT" | jq -e '.stage | contains("Tasks")' > /dev/null || { echo "::error::stage should contain 'Tasks'"; exit 1; }
+
+          echo "✓ Tasks dry-run: exit 0, schema_version=1, stage=Tasks"
+
+      - name: "[PIPELINE] plan → tasks → review smoke test"
         working-directory: ${{ env.FIXTURE_ROOT }}
         run: |
           set -o pipefail
@@ -165,23 +181,31 @@ jobs:
           # Run plan validation (dry-run, model-free)
           ${{ env.CLI }} speckit plan \
             --spec SPEC-CI-001-clean \
-            --stage plan \
             --dry-run \
             --json > /tmp/plan-output.json
 
           # Verify plan succeeded
           jq -e '.status == "ready"' /tmp/plan-output.json > /dev/null
 
-          # Verify review still works after plan
+          # Run tasks validation
+          ${{ env.CLI }} speckit tasks \
+            --spec SPEC-CI-001-clean \
+            --dry-run \
+            --json > /tmp/tasks-output.json
+
+          # Verify tasks succeeded
+          jq -e '.status == "ready"' /tmp/tasks-output.json > /dev/null
+
+          # Verify review still works after plan→tasks
           ${{ env.CLI }} speckit review \
             --spec SPEC-CI-001-clean \
-            --stage plan \
+            --stage tasks \
             --json > /tmp/review-output.json
 
           # Validate review has schema versioning
           jq -e '.schema_version == 1' /tmp/review-output.json > /dev/null
 
-          echo "✓ Pipeline smoke test: plan→review completed successfully"
+          echo "✓ Pipeline smoke test: plan→tasks→review completed successfully"
 
       # =========================================================================
       # Failure Diagnostics

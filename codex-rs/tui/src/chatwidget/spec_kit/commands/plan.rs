@@ -2,13 +2,20 @@
 //!
 //! FORK-SPECIFIC (just-every/code): Spec-kit multi-agent automation framework
 //!
-//! SPEC-KIT-902: These commands now use DIRECT agent spawning instead of
-//! the orchestrator pattern. They call auto_submit_spec_stage_prompt() directly.
+//! SPEC-KIT-921 P4-D: Stage commands now use SpeckitExecutor for CLI/TUI parity.
+//! The executor validates prerequisites; TUI handles agent spawning.
 
 use super::super::super::ChatWidget;
 use super::super::command_registry::SpecKitCommand;
-use super::super::native_guardrail::run_native_guardrail;
 use crate::spec_prompts::SpecStage;
+
+// SPEC-KIT-921: Use shared executor for stage validation (CLI/TUI parity)
+use codex_spec_kit::config::policy_toggles::PolicyToggles;
+use codex_spec_kit::executor::{
+    ExecutionContext, Outcome, PolicySnapshot, SpeckitCommand as ExecutorCommand,
+    SpeckitExecutor, StageResolution, TelemetryMode,
+};
+use codex_spec_kit::Stage;
 
 /// Command: /speckit.plan
 /// Creates work breakdown with multi-agent consensus
@@ -192,11 +199,29 @@ impl SpecKitCommand for SpecKitUnlockCommand {
 
 // === Shared Implementation ===
 
-/// Execute a stage command with direct agent spawning (SPEC-KIT-902)
+/// Convert TUI SpecStage to spec-kit Stage
+///
+/// SPEC-KIT-921 P4-D: Enable executor integration
+fn spec_stage_to_stage(stage: SpecStage) -> Stage {
+    match stage {
+        SpecStage::Specify => Stage::Specify,
+        SpecStage::Plan => Stage::Plan,
+        SpecStage::Tasks => Stage::Tasks,
+        SpecStage::Implement => Stage::Implement,
+        SpecStage::Validate => Stage::Validate,
+        SpecStage::Audit => Stage::Audit,
+        SpecStage::Unlock => Stage::Unlock,
+        // Quality commands don't map to executor stages
+        SpecStage::Clarify | SpecStage::Analyze | SpecStage::Checklist => Stage::Plan, // fallback
+    }
+}
+
+/// Execute a stage command with executor validation (SPEC-KIT-921 P4-D)
 ///
 /// 1. Validates SPEC-ID argument
-/// 2. Runs native guardrail validation
-/// 3. Spawns agents directly via auto_submit_spec_stage_prompt()
+/// 2. Uses SpeckitExecutor for CLI/TUI parity validation
+/// 3. If Ready: spawns agents directly via auto_submit_spec_stage_prompt()
+/// 4. If Blocked: displays errors in chat
 ///
 /// SPEC-KIT-957: Made public for use by SpecKitSpecifyCommand
 pub fn execute_stage_command(
@@ -214,22 +239,70 @@ pub fn execute_stage_command(
         return;
     }
 
-    // Run native guardrail validation
-    let result = run_native_guardrail(&widget.config.cwd, spec_id, stage, false);
+    // SPEC-KIT-921 P4-D: Use executor for validation (CLI/TUI parity)
+    let executor_stage = spec_stage_to_stage(stage);
 
-    if !result.success {
-        // Report guardrail failures
-        for error in &result.errors {
-            widget.history_push(crate::history_cell::new_error_event(error.clone()));
+    // Resolve policy from env/config at adapter boundary (not in executor)
+    let toggles = PolicyToggles::from_env_and_config();
+    let policy_snapshot = PolicySnapshot {
+        sidecar_critic_enabled: toggles.sidecar_critic_enabled,
+        telemetry_mode: TelemetryMode::Disabled,
+        legacy_voting_env_detected: toggles.legacy_voting_enabled,
+    };
+
+    // Create executor with current working directory and resolved policy
+    let executor = SpeckitExecutor::new(ExecutionContext {
+        repo_root: widget.config.cwd.clone(),
+        policy_snapshot: Some(policy_snapshot),
+    });
+
+    // Execute validation via shared executor (same path as CLI)
+    let command = ExecutorCommand::Plan {
+        spec_id: spec_id.to_string(),
+        stage: executor_stage,
+        dry_run: false, // TUI actually spawns agents
+    };
+
+    match executor.execute(command) {
+        Outcome::Stage(outcome) => {
+            match outcome.resolution {
+                StageResolution::Ready => {
+                    // Report any warnings
+                    for warning in &outcome.advisory_signals {
+                        widget.history_push(crate::history_cell::new_warning_event(
+                            warning.clone(),
+                        ));
+                    }
+
+                    // Spawn agents directly (SPEC-KIT-902: eliminates orchestrator)
+                    super::super::agent_orchestrator::auto_submit_spec_stage_prompt(
+                        widget, stage, spec_id,
+                    );
+                }
+                StageResolution::Blocked => {
+                    // Report blocking errors
+                    for error in &outcome.blocking_reasons {
+                        widget.history_push(crate::history_cell::new_error_event(error.clone()));
+                    }
+                }
+                StageResolution::Skipped => {
+                    // Report skip reason as warning
+                    for signal in &outcome.advisory_signals {
+                        widget.history_push(crate::history_cell::new_warning_event(
+                            signal.clone(),
+                        ));
+                    }
+                }
+            }
         }
-        return;
+        Outcome::Error(err) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "{command_name} failed: {err}"
+            )));
+        }
+        // Stage commands never return Status/Review variants
+        Outcome::Status(_) | Outcome::Review(_) | Outcome::ReviewSkipped { .. } => {
+            unreachable!("Stage command should never return Status/Review outcome")
+        }
     }
-
-    // Report any warnings
-    for warning in &result.warnings {
-        widget.history_push(crate::history_cell::new_warning_event(warning.clone()));
-    }
-
-    // Spawn agents directly (SPEC-KIT-902: eliminates orchestrator)
-    super::super::agent_orchestrator::auto_submit_spec_stage_prompt(widget, stage, spec_id);
 }

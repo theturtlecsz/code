@@ -34,6 +34,121 @@ pub use status::{
     StageConsensus, StageCue, StageKind, StageSnapshot, TrackerRow,
 };
 
+/// Resolution of a stage validation
+///
+/// SPEC-KIT-921 P4-B: Generic stage resolution for all stages.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StageResolution {
+    /// Validation passed, ready to proceed with agent execution
+    Ready,
+    /// Validation failed, needs intervention before proceeding
+    Blocked,
+    /// Stage not applicable (e.g., specify has no validation)
+    Skipped,
+}
+
+impl StageResolution {
+    /// Returns true if this is a blocking resolution
+    pub fn is_blocked(&self) -> bool {
+        matches!(self, StageResolution::Blocked)
+    }
+
+    /// Returns true if this is ready to proceed
+    pub fn is_ready(&self) -> bool {
+        matches!(self, StageResolution::Ready)
+    }
+}
+
+/// Outcome from a stage validation command (plan, tasks, implement, etc.)
+///
+/// SPEC-KIT-921 P4-B: Replaces PlanReady/PlanBlocked with generic envelope.
+/// TUI adapter should spawn agents when resolution is Ready.
+/// CLI with --dry-run reports outcome and exits.
+#[derive(Debug)]
+pub struct StageOutcome {
+    /// The validated SPEC identifier
+    pub spec_id: String,
+    /// Stage that was validated
+    pub stage: crate::Stage,
+    /// The resolution: Ready, Blocked, or Skipped
+    pub resolution: StageResolution,
+    /// Blocking reasons (errors that prevent proceeding)
+    pub blocking_reasons: Vec<String>,
+    /// Advisory signals (warnings that don't prevent proceeding)
+    pub advisory_signals: Vec<String>,
+    /// Optional evidence references (for stages that generate evidence)
+    pub evidence_refs: Option<EvidenceRefs>,
+    /// Whether this was a dry-run (validation only)
+    pub dry_run: bool,
+}
+
+impl StageOutcome {
+    /// Create a Ready outcome
+    pub fn ready(spec_id: String, stage: crate::Stage, dry_run: bool) -> Self {
+        Self {
+            spec_id,
+            stage,
+            resolution: StageResolution::Ready,
+            blocking_reasons: Vec::new(),
+            advisory_signals: Vec::new(),
+            evidence_refs: None,
+            dry_run,
+        }
+    }
+
+    /// Create a Ready outcome with warnings
+    pub fn ready_with_warnings(
+        spec_id: String,
+        stage: crate::Stage,
+        warnings: Vec<String>,
+        dry_run: bool,
+    ) -> Self {
+        Self {
+            spec_id,
+            stage,
+            resolution: StageResolution::Ready,
+            blocking_reasons: Vec::new(),
+            advisory_signals: warnings,
+            evidence_refs: None,
+            dry_run,
+        }
+    }
+
+    /// Create a Blocked outcome
+    pub fn blocked(spec_id: String, stage: crate::Stage, errors: Vec<String>) -> Self {
+        Self {
+            spec_id,
+            stage,
+            resolution: StageResolution::Blocked,
+            blocking_reasons: errors,
+            advisory_signals: Vec::new(),
+            evidence_refs: None,
+            dry_run: false, // Blocked outcomes don't matter for dry_run
+        }
+    }
+
+    /// Create a Skipped outcome
+    pub fn skipped(spec_id: String, stage: crate::Stage, reason: &str) -> Self {
+        Self {
+            spec_id,
+            stage,
+            resolution: StageResolution::Skipped,
+            blocking_reasons: Vec::new(),
+            advisory_signals: vec![reason.to_string()],
+            evidence_refs: None,
+            dry_run: false,
+        }
+    }
+
+    /// Exit code for CLI: 0 for Ready/Skipped, 2 for Blocked
+    pub fn exit_code(&self) -> i32 {
+        match self.resolution {
+            StageResolution::Ready | StageResolution::Skipped => 0,
+            StageResolution::Blocked => 2,
+        }
+    }
+}
+
 /// Execution outcome from the executor
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)] // Acceptable: Status/Review are both large, boxing adds complexity
@@ -51,30 +166,11 @@ pub enum Outcome {
         suggestion: Option<&'static str>,
     },
 
-    /// Plan validation passed - ready for agent execution
+    /// Stage validation outcome (plan, tasks, implement, etc.)
     ///
-    /// SPEC-KIT-921 P3-B: TUI adapter should spawn agents when receiving this.
-    /// CLI with --dry-run reports success and exits.
-    PlanReady {
-        /// The validated SPEC identifier
-        spec_id: String,
-        /// Stage to execute
-        stage: crate::Stage,
-        /// Warnings from guardrail validation (non-blocking)
-        warnings: Vec<String>,
-        /// Whether this was a dry-run (validation only)
-        dry_run: bool,
-    },
-
-    /// Plan validation blocked - guardrails failed
-    PlanBlocked {
-        /// The SPEC identifier
-        spec_id: String,
-        /// Stage that was attempted
-        stage: crate::Stage,
-        /// Errors from guardrail validation (blocking)
-        errors: Vec<String>,
-    },
+    /// SPEC-KIT-921 P4-B: Generic envelope for all stage validation commands.
+    /// Replaces PlanReady/PlanBlocked.
+    Stage(StageOutcome),
 
     /// Command failed with error
     Error(String),
@@ -215,11 +311,10 @@ impl SpeckitExecutor {
 
     /// Execute plan command (validate prerequisites and guardrails)
     ///
-    /// SPEC-KIT-921 P3-B: This validates the SPEC and runs basic guardrails.
-    /// Returns PlanReady if validation passes, PlanBlocked if it fails.
+    /// SPEC-KIT-921 P4-B: Returns StageOutcome with resolution.
     ///
-    /// The adapter (TUI) handles agent spawning after receiving PlanReady.
-    /// CLI with --dry-run reports success and exits.
+    /// The adapter (TUI) handles agent spawning when resolution is Ready.
+    /// CLI with --dry-run reports outcome and exits.
     fn execute_plan(&self, spec_id: &str, stage: crate::Stage, dry_run: bool) -> Outcome {
         let mut warnings: Vec<String> = Vec::new();
         let mut errors: Vec<String> = Vec::new();
@@ -227,11 +322,11 @@ impl SpeckitExecutor {
         // 1. Validate SPEC-ID format
         if spec_id.is_empty() {
             errors.push("SPEC-ID is required".to_string());
-            return Outcome::PlanBlocked {
-                spec_id: spec_id.to_string(),
+            return Outcome::Stage(StageOutcome::blocked(
+                spec_id.to_string(),
                 stage,
                 errors,
-            };
+            ));
         }
 
         // 2. Check if SPEC directory exists (docs/SPEC-xxx or docs/SPEC-xxx/*)
@@ -291,21 +386,21 @@ impl SpeckitExecutor {
             }
         }
 
-        // If there are errors, return PlanBlocked
+        // If there are errors, return Blocked
         if !errors.is_empty() {
-            return Outcome::PlanBlocked {
-                spec_id: spec_id.to_string(),
-                stage,
-                errors,
-            };
+            return Outcome::Stage(StageOutcome::blocked(spec_id.to_string(), stage, errors));
         }
 
         // Validation passed
-        Outcome::PlanReady {
-            spec_id: spec_id.to_string(),
-            stage,
-            warnings,
-            dry_run,
+        if warnings.is_empty() {
+            Outcome::Stage(StageOutcome::ready(spec_id.to_string(), stage, dry_run))
+        } else {
+            Outcome::Stage(StageOutcome::ready_with_warnings(
+                spec_id.to_string(),
+                stage,
+                warnings,
+                dry_run,
+            ))
         }
     }
 }

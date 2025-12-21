@@ -1044,36 +1044,159 @@ fn plan_json_includes_schema_version() -> Result<()> {
 }
 
 #[test]
-fn plan_accepts_all_valid_stages() -> Result<()> {
-    // P3-B: Plan command accepts all valid stages
+fn plan_rejects_stage_flag() -> Result<()> {
+    // P4-A: Plan command no longer accepts --stage flag
+    // Use `speckit tasks` for tasks stage, etc.
     let codex_home = TempDir::new()?;
     let repo_root = TempDir::new()?;
 
     fs::create_dir_all(repo_root.path().join("docs").join("SPEC-TEST-STAGES"))?;
 
-    let stages = ["plan", "tasks", "implement", "validate", "audit", "unlock"];
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "plan",
+            "--spec",
+            "SPEC-TEST-STAGES",
+            "--stage",
+            "tasks",
+            "--dry-run",
+        ])
+        .output()?;
 
-    for stage in stages {
-        let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
-        let output = cmd
-            .args([
-                "speckit",
-                "plan",
-                "--spec",
-                "SPEC-TEST-STAGES",
-                "--stage",
-                stage,
-                "--dry-run",
-            ])
-            .output()?;
+    // Should fail because --stage is no longer accepted
+    assert!(
+        !output.status.success(),
+        "Expected failure for --stage flag, got success"
+    );
 
-        // Should not exit with infrastructure error (3)
-        assert_ne!(
-            output.status.code(),
-            Some(3),
-            "Stage '{stage}' should be recognized, got exit 3"
-        );
-    }
+    // Error message should mention unexpected argument
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unexpected") || stderr.contains("--stage"),
+        "Should show error about unexpected --stage, got: {stderr}"
+    );
+
+    Ok(())
+}
+
+// =============================================================================
+// P4-C: TASKS COMMAND TESTS
+// =============================================================================
+
+#[test]
+fn tasks_validates_spec_and_exits_0() -> Result<()> {
+    // P4-C: Tasks command validates SPEC and exits 0 when ready
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory with plan.md (required for tasks stage)
+    let spec_dir = repo_root.path().join("docs").join("SPEC-TEST-TASKS");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("plan.md"), "# Plan\nTest plan.")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args(["speckit", "tasks", "--spec", "SPEC-TEST-TASKS", "--dry-run"])
+        .output()?;
+
+    // Dry-run validation should succeed
+    assert!(
+        output.status.success(),
+        "Expected exit 0 for tasks validation, got {:?}\nstderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    Ok(())
+}
+
+#[test]
+fn tasks_json_includes_schema_version() -> Result<()> {
+    // P4-C: Tasks JSON output includes schema versioning
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create minimal SPEC structure with plan.md
+    let spec_dir = repo_root.path().join("docs").join("SPEC-TEST-TASKS-JSON");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("plan.md"), "# Plan\nTest plan.")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "tasks",
+            "--spec",
+            "SPEC-TEST-TASKS-JSON",
+            "--dry-run",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Verify schema_version is present
+    assert!(
+        json.get("schema_version").is_some(),
+        "Missing schema_version in tasks JSON"
+    );
+    assert!(
+        json.get("tool_version").is_some(),
+        "Missing tool_version in tasks JSON"
+    );
+
+    // Verify expected fields
+    assert!(json.get("spec_id").is_some(), "Missing spec_id");
+    assert!(json.get("stage").is_some(), "Missing stage");
+    assert!(json.get("status").is_some(), "Missing status");
+    assert!(json.get("dry_run").is_some(), "Missing dry_run");
+
+    // Verify stage is Tasks
+    let stage = json.get("stage").and_then(|v| v.as_str()).unwrap_or("");
+    assert!(
+        stage.contains("Tasks"),
+        "Expected Tasks stage, got: {stage}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn tasks_warns_when_plan_missing() -> Result<()> {
+    // P4-C: Tasks command warns when plan.md is missing
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory WITHOUT plan.md
+    let spec_dir = repo_root.path().join("docs").join("SPEC-TEST-TASKS-NO-PLAN");
+    fs::create_dir_all(&spec_dir)?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "tasks",
+            "--spec",
+            "SPEC-TEST-TASKS-NO-PLAN",
+            "--dry-run",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Should still succeed (ready) but with warnings
+    let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
+    assert_eq!(status, "ready", "Expected ready status");
+
+    // Should have warning about missing plan.md
+    let warnings = json.get("warnings").and_then(|v| v.as_array());
+    assert!(
+        warnings.map(|w| !w.is_empty()).unwrap_or(false),
+        "Expected warning about missing plan.md"
+    );
 
     Ok(())
 }
