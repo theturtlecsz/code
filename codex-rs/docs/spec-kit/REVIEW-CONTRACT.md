@@ -154,8 +154,14 @@ If this invariant would be violated, resolution MUST be Escalate.
 - [x] Tests: Fixture-based with conflict/clean/parse-error cases (12 CLI tests)
 - [x] Tests: Strict mode (missing artifacts + strict → exit 2)
 
-### P1 (Next Session - see CONTINUATION-PROMPT-P1.md)
-- [ ] P1-A: TUI parity audit (verify /spec-review routes through executor)
-- [ ] P1-B: Create SPEC-CI-001 smoke packet (deterministic CI fixture)
-- [ ] P1-C: Add --strict-schema flag (parse failures → exit 3)
-- [ ] P1-D: Make evidence root configurable (config + CLI override)
+### P1 (Complete - commits f6daa0f0f, 0c61a9dad)
+- [x] P1-A: TUI parity audit (verified /spec-review routes through executor)
+- [x] P1-B: Create SPEC-CI-001 smoke packet (spec-kit/tests/fixtures/SPEC-CI-001/)
+- [x] P1-C: Add --strict-schema flag (parse failures → exit 3)
+- [x] P1-D: Make evidence root configurable (--evidence-root CLI override)
+
+### P2 (Planned)
+- [ ] P2-A: Dynamic evidence root discovery (detect newest SPEC-OPS folder)
+- [ ] P2-B: Phase C — Migrate guardrail stage ops behind executor
+- [ ] P2-C: Config file for evidence_root (spec-kit.toml or similar)
+- [ ] P2-D: CI GitHub Actions workflow using SPEC-CI-001 fixture
