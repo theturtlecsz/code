@@ -39,7 +39,10 @@ impl SpecStatusArgs {
         let mut spec_id: Option<String> = None;
         let mut stale_hours = DEFAULT_STALE_HOURS;
 
-        let tokens: Vec<String> = input.split_whitespace().map(|s| s.to_string()).collect();
+        let tokens: Vec<String> = input
+            .split_whitespace()
+            .map(std::string::ToString::to_string)
+            .collect();
 
         let mut idx = 0;
         while idx < tokens.len() {
@@ -276,7 +279,7 @@ pub fn collect_report(repo_root: &Path, args: SpecStatusArgs) -> Result<SpecStat
     } else {
         for (doc, present) in &packet.docs {
             if !present {
-                warnings.push(format!("{} missing in SPEC packet", doc));
+                warnings.push(format!("{doc} missing in SPEC packet"));
             }
         }
     }
@@ -398,7 +401,7 @@ pub fn render_dashboard(report: &SpecStatusReport) -> Vec<String> {
         lines.push(String::new());
         lines.push("## Warnings".into());
         for warning in &report.warnings {
-            lines.push(format!("- ⚠ {}", warning));
+            lines.push(format!("- ⚠ {warning}"));
         }
     }
 
@@ -416,7 +419,7 @@ fn render_packet_section(packet: &PacketStatus) -> Vec<String> {
     docs.sort_by_key(|(doc, _)| *doc);
     for (doc, &present) in docs {
         let icon = if present { "✅" } else { "⚠" };
-        lines.push(format!("- {} {doc}", icon));
+        lines.push(format!("- {icon} {doc}"));
     }
     lines
 }
@@ -430,17 +433,17 @@ fn render_tracker_section(report: &SpecStatusReport) -> Vec<String> {
             row.status.as_deref().unwrap_or("unknown")
         ));
         if let Some(branch) = row.branch.as_deref().filter(|b| !b.is_empty()) {
-            lines.push(format!("- Branch: {}", branch));
+            lines.push(format!("- Branch: {branch}"));
         }
         if let Some(last_validation) = row
             .last_validation
             .as_deref()
             .filter(|value| !value.is_empty())
         {
-            lines.push(format!("- Last validation: {}", last_validation));
+            lines.push(format!("- Last validation: {last_validation}"));
         }
         if let Some(notes) = row.notes.as_deref().filter(|value| !value.is_empty()) {
-            lines.push(format!("- Notes: {}", notes));
+            lines.push(format!("- Notes: {notes}"));
         }
         lines.push(format!("- Table row: {}", row.raw));
     } else {
@@ -564,11 +567,11 @@ fn render_stage_details(report: &SpecStatusReport, snapshot: &StageSnapshot) -> 
             })
             .collect::<Vec<_>>()
             .join(", ");
-        details.push(format!("  - Agents: {}", agents));
+        details.push(format!("  - Agents: {agents}"));
     }
 
     for note in &snapshot.notes {
-        details.push(format!("  - {}", note));
+        details.push(format!("  - {note}"));
     }
 
     details
@@ -578,7 +581,7 @@ fn render_evidence_section(evidence: &EvidenceMetrics) -> Vec<String> {
     let mut lines = Vec::new();
     lines.push("## Evidence".into());
     for banner in evidence_banners(evidence) {
-        lines.push(format!("- {}", banner));
+        lines.push(format!("- {banner}"));
     }
     if let Some(latest) = evidence.latest_artifact {
         lines.push(format!(
@@ -637,12 +640,12 @@ fn format_agent_outcome(outcome: &AgentOutcome) -> String {
     if let Some(model) = &outcome.model
         && !model.is_empty()
     {
-        chunk.push_str(&format!("•{}", model));
+        chunk.push_str(&format!("•{model}"));
     }
     if let Some(reasoning) = &outcome.reasoning_mode
         && !reasoning.is_empty()
     {
-        chunk.push_str(&format!("•{}", reasoning));
+        chunk.push_str(&format!("•{reasoning}"));
     }
     chunk
 }
@@ -667,7 +670,7 @@ fn evidence_banners(evidence: &EvidenceMetrics) -> Vec<String> {
             footprint,
             WARN_FOOTPRINT_BYTES / (1024 * 1024)
         )),
-        None => banners.push(format!("✅ {}", footprint)),
+        None => banners.push(format!("✅ {footprint}")),
     }
 
     banners
@@ -697,7 +700,7 @@ fn collect_packet_status(repo_root: &Path, spec_id: &str) -> Result<PacketStatus
     entry.directory = target_dir
         .as_ref()
         .and_then(|dir| dir.strip_prefix(repo_root).ok())
-        .map(|p| p.to_path_buf());
+        .map(std::path::Path::to_path_buf);
 
     let doc_map = [
         ("PRD.md", "PRD.md"),
@@ -758,7 +761,7 @@ fn parse_tracker_row(line: &str) -> Option<TrackerRow> {
 
     let cells: Vec<String> = trimmed
         .split('|')
-        .map(|cell| cell.trim())
+        .map(str::trim)
         .filter(|cell| !cell.is_empty())
         .map(String::from)
         .collect();
@@ -802,34 +805,34 @@ fn collect_stage_snapshot(
             && !status.eq_ignore_ascii_case("passed")
         {
             cue = StageCue::Warn;
-            notes.push(format!("policy final status: {}", status));
+            notes.push(format!("policy final status: {status}"));
         }
         if let Some(status) = &record.baseline_status
             && !status.eq_ignore_ascii_case("passed")
         {
             cue = StageCue::Warn;
-            notes.push(format!("baseline status: {}", status));
+            notes.push(format!("baseline status: {status}"));
         }
         if let Some(status) = &record.tool_status
             && !status.eq_ignore_ascii_case("passed")
             && !status.eq_ignore_ascii_case("ok")
         {
             cue = StageCue::Warn;
-            notes.push(format!("tool status: {}", status));
+            notes.push(format!("tool status: {status}"));
         }
         if let Some(status) = &record.lock_status
             && !status.eq_ignore_ascii_case("passed")
             && !status.eq_ignore_ascii_case("ok")
         {
             cue = StageCue::Warn;
-            notes.push(format!("lock status: {}", status));
+            notes.push(format!("lock status: {status}"));
         }
         if let Some(status) = &record.hook_status
             && !status.eq_ignore_ascii_case("passed")
             && !status.eq_ignore_ascii_case("ok")
         {
             cue = StageCue::Warn;
-            notes.push(format!("hook status: {}", status));
+            notes.push(format!("hook status: {status}"));
         }
         if let Some(status) = &record.hal_status {
             if status.eq_ignore_ascii_case("failed") {
@@ -967,7 +970,7 @@ fn parse_guardrail_record(path: &Path) -> Result<GuardrailRecord> {
 
     let schema_version = value
         .schema_version
-        .map(|v| v.into_string())
+        .map(StringOrInt::into_string)
         .unwrap_or_else(|| "1".into());
 
     Ok(GuardrailRecord {

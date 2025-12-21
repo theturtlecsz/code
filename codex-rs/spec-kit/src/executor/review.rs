@@ -837,19 +837,19 @@ fn collect_signals_from_consensus(
         let role = infer_agent_role(data.agent.as_deref(), &filename);
 
         // Check for conflicts → blocking signals
-        if let Some(consensus) = &data.consensus {
-            if let Some(conflicts) = &consensus.conflicts {
-                for conflict in conflicts {
-                    if !conflict.is_empty() {
-                        blocking.push(ReviewSignal {
-                            kind: CounterSignalKind::Contradiction,
-                            severity: SignalSeverity::Block,
-                            origin: SignalOrigin::Role(role),
-                            worker_id: data.agent.clone(),
-                            message: conflict.clone(),
-                            evidence_path: Some(make_relative(path)),
-                        });
-                    }
+        if let Some(consensus) = &data.consensus
+            && let Some(conflicts) = &consensus.conflicts
+        {
+            for conflict in conflicts {
+                if !conflict.is_empty() {
+                    blocking.push(ReviewSignal {
+                        kind: CounterSignalKind::Contradiction,
+                        severity: SignalSeverity::Block,
+                        origin: SignalOrigin::Role(role),
+                        worker_id: data.agent.clone(),
+                        message: conflict.clone(),
+                        evidence_path: Some(make_relative(path)),
+                    });
                 }
             }
         }
@@ -1241,7 +1241,7 @@ mod tests {
 
     /// Helper: Create consensus JSON content with conflicts
     fn consensus_with_conflicts(conflicts: &[&str]) -> String {
-        let conflicts_json: Vec<String> = conflicts.iter().map(|s| format!("\"{}\"", s)).collect();
+        let conflicts_json: Vec<String> = conflicts.iter().map(|s| format!("\"{s}\"")).collect();
         format!(
             r#"{{
             "agent": "architect",
@@ -1274,13 +1274,12 @@ mod tests {
             r#"{{
             "agent": "validator",
             "model": "claude",
-            "error": "{}",
+            "error": "{error}",
             "consensus": {{
                 "conflicts": [],
                 "synthesis_status": "failed"
             }}
-        }}"#,
-            error
+        }}"#
         )
     }
 
@@ -1305,7 +1304,11 @@ mod tests {
 
         // Create consensus file with conflict
         let consensus_file = consensus_dir.join("spec-plan_architect_20251220.json");
-        std::fs::write(&consensus_file, consensus_with_conflicts(&["Requirement A contradicts requirement B"])).unwrap();
+        std::fs::write(
+            &consensus_file,
+            consensus_with_conflicts(&["Requirement A contradicts requirement B"]),
+        )
+        .unwrap();
 
         // Execute review
         let request = ReviewRequest {
@@ -1323,7 +1326,10 @@ mod tests {
             "Expected Escalate due to conflict, got: {:?}",
             result.resolution
         );
-        assert!(!result.blocking_signals.is_empty(), "Expected blocking signals");
+        assert!(
+            !result.blocking_signals.is_empty(),
+            "Expected blocking signals"
+        );
         assert!(result.blocking_signals[0].message.contains("contradicts"));
     }
 
@@ -1366,7 +1372,10 @@ mod tests {
             "Expected AutoApply with clean consensus, got: {:?}",
             result.resolution
         );
-        assert!(result.blocking_signals.is_empty(), "Expected no blocking signals");
+        assert!(
+            result.blocking_signals.is_empty(),
+            "Expected no blocking signals"
+        );
     }
 
     #[test]
@@ -1413,7 +1422,10 @@ mod tests {
             result.resolution
         );
         assert!(result.blocking_signals.is_empty(), "Error should not block");
-        assert!(!result.advisory_signals.is_empty(), "Expected advisory signal for error");
+        assert!(
+            !result.advisory_signals.is_empty(),
+            "Expected advisory signal for error"
+        );
         assert!(result.advisory_signals[0].message.contains("timeout"));
     }
 
@@ -1456,12 +1468,19 @@ mod tests {
             "Expected AutoApply (parse error is advisory), got: {:?}",
             result.resolution
         );
-        assert!(result.blocking_signals.is_empty(), "Parse error should not block");
+        assert!(
+            result.blocking_signals.is_empty(),
+            "Parse error should not block"
+        );
         assert!(
             !result.advisory_signals.is_empty(),
             "Expected advisory signal for parse error"
         );
-        assert!(result.advisory_signals[0].message.contains("Failed to parse"));
+        assert!(
+            result.advisory_signals[0]
+                .message
+                .contains("Failed to parse")
+        );
     }
 
     #[test]
@@ -1508,7 +1527,11 @@ mod tests {
             strict_artifacts: true,
             ..Default::default()
         };
-        assert_eq!(result.exit_code(&strict_options), 2, "Strict mode: missing artifacts → exit 2");
+        assert_eq!(
+            result.exit_code(&strict_options),
+            2,
+            "Strict mode: missing artifacts → exit 2"
+        );
     }
 
     #[test]
@@ -1570,19 +1593,40 @@ mod tests {
     #[test]
     fn test_infer_agent_role() {
         // Test role inference from agent field
-        assert_eq!(infer_agent_role(Some("architect"), "file.json"), Role::Architect);
-        assert_eq!(infer_agent_role(Some("implementer"), "file.json"), Role::Implementer);
-        assert_eq!(infer_agent_role(Some("validator"), "file.json"), Role::Validator);
+        assert_eq!(
+            infer_agent_role(Some("architect"), "file.json"),
+            Role::Architect
+        );
+        assert_eq!(
+            infer_agent_role(Some("implementer"), "file.json"),
+            Role::Implementer
+        );
+        assert_eq!(
+            infer_agent_role(Some("validator"), "file.json"),
+            Role::Validator
+        );
         assert_eq!(infer_agent_role(Some("judge"), "file.json"), Role::Judge);
-        assert_eq!(infer_agent_role(Some("sidecar-critic"), "file.json"), Role::SidecarCritic);
+        assert_eq!(
+            infer_agent_role(Some("sidecar-critic"), "file.json"),
+            Role::SidecarCritic
+        );
 
         // Test fallback to filename
-        assert_eq!(infer_agent_role(None, "spec-plan_architect_20251220.json"), Role::Architect);
-        assert_eq!(infer_agent_role(None, "implementer_response.json"), Role::Implementer);
+        assert_eq!(
+            infer_agent_role(None, "spec-plan_architect_20251220.json"),
+            Role::Architect
+        );
+        assert_eq!(
+            infer_agent_role(None, "implementer_response.json"),
+            Role::Implementer
+        );
 
         // Test default
         assert_eq!(infer_agent_role(None, "unknown.json"), Role::Architect);
-        assert_eq!(infer_agent_role(Some("claude"), "file.json"), Role::Architect);
+        assert_eq!(
+            infer_agent_role(Some("claude"), "file.json"),
+            Role::Architect
+        );
     }
 
     #[test]
@@ -1672,8 +1716,7 @@ mod tests {
             );
             for j in 0..results[0].blocking_signals.len() {
                 assert_eq!(
-                    results[0].blocking_signals[j].message,
-                    results[i].blocking_signals[j].message,
+                    results[0].blocking_signals[j].message, results[i].blocking_signals[j].message,
                     "Signal order must be deterministic across runs"
                 );
             }
@@ -1790,8 +1833,7 @@ mod tests {
         // Verify: Should return Err due to parse error with strict_schema
         assert!(
             result.is_err(),
-            "Expected Err with --strict-schema and parse error, got: {:?}",
-            result
+            "Expected Err with --strict-schema and parse error, got: {result:?}"
         );
         let error_msg = result.unwrap_err();
         assert!(
@@ -1843,8 +1885,7 @@ mod tests {
         // Verify: Should succeed (no parse errors)
         assert!(
             result.is_ok(),
-            "Expected Ok with --strict-schema and valid files, got: {:?}",
-            result
+            "Expected Ok with --strict-schema and valid files, got: {result:?}"
         );
     }
 
@@ -1865,12 +1906,11 @@ mod tests {
         let repo_root = get_smoke_packet_path();
         if !repo_root.exists() {
             // Skip if fixture not found (graceful degradation)
-            eprintln!("Skipping smoke test: fixture not found at {:?}", repo_root);
             return;
         }
 
         let request = ReviewRequest {
-            repo_root: repo_root.clone(),
+            repo_root,
             spec_id: "SPEC-CI-001-clean".to_string(),
             stage: Stage::Plan,
             options: ReviewOptions::default(),
@@ -1900,12 +1940,12 @@ mod tests {
         // P1-B: SPEC-CI-001-conflict should exit 2 (Escalate, has conflicts)
         let repo_root = get_smoke_packet_path();
         if !repo_root.exists() {
-            eprintln!("Skipping smoke test: fixture not found at {:?}", repo_root);
+            // Skip if fixture not found (graceful degradation)
             return;
         }
 
         let request = ReviewRequest {
-            repo_root: repo_root.clone(),
+            repo_root,
             spec_id: "SPEC-CI-001-conflict".to_string(),
             stage: Stage::Plan,
             options: ReviewOptions::default(),
@@ -1937,8 +1977,7 @@ mod tests {
             .collect();
         assert!(
             conflict_messages.iter().any(|m| m.contains("contradicts")),
-            "Expected 'contradicts' conflict, got: {:?}",
-            conflict_messages
+            "Expected 'contradicts' conflict, got: {conflict_messages:?}"
         );
     }
 
@@ -1947,12 +1986,12 @@ mod tests {
         // P1-B: SPEC-CI-001-malformed should exit 0 without --strict-schema
         let repo_root = get_smoke_packet_path();
         if !repo_root.exists() {
-            eprintln!("Skipping smoke test: fixture not found at {:?}", repo_root);
+            // Skip if fixture not found (graceful degradation)
             return;
         }
 
         let request = ReviewRequest {
-            repo_root: repo_root.clone(),
+            repo_root,
             spec_id: "SPEC-CI-001-malformed".to_string(),
             stage: Stage::Plan,
             options: ReviewOptions::default(), // strict_schema: false
@@ -1963,8 +2002,7 @@ mod tests {
         // Contract: malformed without strict → Ok with advisory
         assert!(
             result.is_ok(),
-            "SPEC-CI-001-malformed should succeed without strict, got: {:?}",
-            result
+            "SPEC-CI-001-malformed should succeed without strict, got: {result:?}"
         );
         let result = result.unwrap();
         assert!(
@@ -1978,12 +2016,12 @@ mod tests {
         // P1-B: SPEC-CI-001-malformed should exit 3 with --strict-schema
         let repo_root = get_smoke_packet_path();
         if !repo_root.exists() {
-            eprintln!("Skipping smoke test: fixture not found at {:?}", repo_root);
+            // Skip if fixture not found (graceful degradation)
             return;
         }
 
         let request = ReviewRequest {
-            repo_root: repo_root.clone(),
+            repo_root,
             spec_id: "SPEC-CI-001-malformed".to_string(),
             stage: Stage::Plan,
             options: ReviewOptions {
@@ -1997,8 +2035,7 @@ mod tests {
         // Contract: malformed with strict → Err
         assert!(
             result.is_err(),
-            "SPEC-CI-001-malformed should fail with --strict-schema, got: {:?}",
-            result
+            "SPEC-CI-001-malformed should fail with --strict-schema, got: {result:?}"
         );
     }
 
@@ -2043,8 +2080,7 @@ mod tests {
         // Should find evidence at custom path
         assert!(
             result.is_ok(),
-            "Should find evidence at custom path, got: {:?}",
-            result
+            "Should find evidence at custom path, got: {result:?}"
         );
         let result = result.unwrap();
         assert!(

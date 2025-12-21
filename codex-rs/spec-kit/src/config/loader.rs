@@ -186,10 +186,10 @@ fn apply_deprecated_quality_gates_threshold_env_override(app_config: &mut AppCon
         return;
     }
 
-    if let Ok(raw) = std::env::var(OLD_ENV) {
-        if let Ok(v) = raw.parse::<f32>() {
-            app_config.quality_gates.min_confidence_for_auto_apply = v;
-        }
+    if let Ok(raw) = std::env::var(OLD_ENV)
+        && let Ok(v) = raw.parse::<f32>()
+    {
+        app_config.quality_gates.min_confidence_for_auto_apply = v;
     }
 }
 

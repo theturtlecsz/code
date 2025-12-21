@@ -164,6 +164,7 @@ impl FieldPath {
     ///     "SPECKIT_MODELS__OPENAI__TEMPERATURE"
     /// );
     /// ```
+    #[allow(deprecated)] // Intentional: backward compatibility for legacy consensus_threshold
     pub fn to_env_var(&self) -> String {
         match self {
             // Quality Gates
@@ -253,6 +254,7 @@ impl FieldPath {
     ///     "models.gemini.temperature"
     /// );
     /// ```
+    #[allow(deprecated)] // Intentional: backward compatibility for legacy consensus_threshold
     pub fn to_toml_key(&self) -> String {
         match self {
             // Quality Gates
@@ -818,6 +820,7 @@ impl FieldPath {
     /// let path = FieldPath::QualityGates_Enabled;
     /// assert_eq!(path.description(), "Enable quality gate validation");
     /// ```
+    #[allow(deprecated)] // Intentional: backward compatibility for legacy consensus_threshold
     pub fn description(&self) -> &'static str {
         match self {
             // Quality Gates
@@ -871,6 +874,7 @@ impl FieldPath {
     /// assert_eq!(FieldPath::Cost_DailyLimitUsd.value_type(), ValueType::Float);
     /// assert_eq!(FieldPath::Evidence_BaseDir.value_type(), ValueType::Path);
     /// ```
+    #[allow(deprecated)] // Intentional: backward compatibility for legacy consensus_threshold
     pub fn value_type(&self) -> ValueType {
         match self {
             // Booleans
@@ -924,6 +928,7 @@ impl FieldPath {
     /// assert_eq!(c.min, Some(0.0));
     /// assert_eq!(c.max, Some(1.0));
     /// ```
+    #[allow(deprecated)] // Intentional: backward compatibility for legacy consensus_threshold
     pub fn constraints(&self) -> Option<Constraints> {
         match self {
             // Threshold fields: 0.0-1.0

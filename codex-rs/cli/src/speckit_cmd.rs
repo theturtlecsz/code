@@ -18,13 +18,13 @@
 //! - 3: Infrastructure error
 
 use clap::{Parser, Subcommand};
+use codex_spec_kit::Stage;
 use codex_spec_kit::config::policy_toggles::PolicyToggles;
 use codex_spec_kit::executor::{
     ExecutionContext, Outcome, PolicySnapshot, ReviewOptions, SpeckitCommand, SpeckitExecutor,
     TelemetryMode, render_review_dashboard, render_status_dashboard, review_warning,
     status_degraded_warning,
 };
-use codex_spec_kit::Stage;
 use std::path::PathBuf;
 
 /// Spec-Kit CLI — headless commands for automation and CI
@@ -100,9 +100,9 @@ pub struct ReviewArgs {
 impl SpeckitCli {
     /// Run the speckit CLI command
     pub async fn run(self) -> anyhow::Result<()> {
-        let cwd = self.cwd.unwrap_or_else(|| {
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-        });
+        let cwd = self
+            .cwd
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
         // Resolve policy from env/config at adapter boundary (not in executor)
         let toggles = PolicyToggles::from_env_and_config();
@@ -254,7 +254,7 @@ fn run_review(executor: SpeckitExecutor, args: ReviewArgs) -> anyhow::Result<()>
                 });
                 println!("{}", serde_json::to_string_pretty(&json)?);
             } else {
-                eprintln!("⚠ Review skipped for {:?}: {:?}", stage, reason);
+                eprintln!("⚠ Review skipped for {stage:?}: {reason:?}");
                 if let Some(hint) = suggestion {
                     eprintln!("  Suggestion: {hint}");
                 }

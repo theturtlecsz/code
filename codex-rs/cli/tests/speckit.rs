@@ -76,7 +76,14 @@ fn review_no_artifacts_exits_0_without_strict() -> Result<()> {
 
     let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
     let output = cmd
-        .args(["speckit", "review", "--spec", "SPEC-TEST-001", "--stage", "plan"])
+        .args([
+            "speckit",
+            "review",
+            "--spec",
+            "SPEC-TEST-001",
+            "--stage",
+            "plan",
+        ])
         .output()?;
 
     // Without --strict-artifacts, missing artifacts should exit 0
@@ -137,7 +144,14 @@ fn review_clean_consensus_exits_0() -> Result<()> {
 
     let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
     let output = cmd
-        .args(["speckit", "review", "--spec", "SPEC-TEST-003", "--stage", "plan"])
+        .args([
+            "speckit",
+            "review",
+            "--spec",
+            "SPEC-TEST-003",
+            "--stage",
+            "plan",
+        ])
         .output()?;
 
     assert!(
@@ -166,7 +180,14 @@ fn review_conflicts_exits_2() -> Result<()> {
 
     let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
     let output = cmd
-        .args(["speckit", "review", "--spec", "SPEC-TEST-004", "--stage", "plan"])
+        .args([
+            "speckit",
+            "review",
+            "--spec",
+            "SPEC-TEST-004",
+            "--stage",
+            "plan",
+        ])
         .output()?;
 
     // Conflicts should cause exit 2 (hard fail / escalation)
@@ -213,14 +234,26 @@ fn review_deterministic_output() -> Result<()> {
     let mut cmd1 = codex_command(codex_home.path(), repo_root.path())?;
     let output1 = cmd1
         .args([
-            "speckit", "review", "--spec", "SPEC-TEST-005", "--stage", "plan", "--json",
+            "speckit",
+            "review",
+            "--spec",
+            "SPEC-TEST-005",
+            "--stage",
+            "plan",
+            "--json",
         ])
         .output()?;
 
     let mut cmd2 = codex_command(codex_home.path(), repo_root.path())?;
     let output2 = cmd2
         .args([
-            "speckit", "review", "--spec", "SPEC-TEST-005", "--stage", "plan", "--json",
+            "speckit",
+            "review",
+            "--spec",
+            "SPEC-TEST-005",
+            "--stage",
+            "plan",
+            "--json",
         ])
         .output()?;
 
@@ -254,8 +287,14 @@ fn review_deterministic_output() -> Result<()> {
 
     // Verify lexicographic ordering: architect (20251219) before implementer (20251220)
     if signals1.len() >= 2 {
-        let first_msg = signals1[0].get("message").and_then(|v| v.as_str()).unwrap_or("");
-        let second_msg = signals1[1].get("message").and_then(|v| v.as_str()).unwrap_or("");
+        let first_msg = signals1[0]
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let second_msg = signals1[1]
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         assert!(
             first_msg.contains("architect") || first_msg.contains("Conflict A"),
             "First signal should be from architect file (lexicographically first)"
@@ -284,7 +323,13 @@ fn review_json_output_structure() -> Result<()> {
     let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
     let output = cmd
         .args([
-            "speckit", "review", "--spec", "SPEC-TEST-006", "--stage", "plan", "--json",
+            "speckit",
+            "review",
+            "--spec",
+            "SPEC-TEST-006",
+            "--stage",
+            "plan",
+            "--json",
         ])
         .output()?;
 
@@ -295,8 +340,14 @@ fn review_json_output_structure() -> Result<()> {
     assert!(json.get("stage").is_some(), "Missing stage");
     assert!(json.get("verdict").is_some(), "Missing verdict");
     assert!(json.get("exit_code").is_some(), "Missing exit_code");
-    assert!(json.get("blocking_signals").is_some(), "Missing blocking_signals");
-    assert!(json.get("advisory_signals").is_some(), "Missing advisory_signals");
+    assert!(
+        json.get("blocking_signals").is_some(),
+        "Missing blocking_signals"
+    );
+    assert!(
+        json.get("advisory_signals").is_some(),
+        "Missing advisory_signals"
+    );
 
     // Verify spec_id matches
     assert_eq!(
@@ -316,7 +367,13 @@ fn review_skipped_json_output() -> Result<()> {
     let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
     let output = cmd
         .args([
-            "speckit", "review", "--spec", "SPEC-NONEXISTENT", "--stage", "plan", "--json",
+            "speckit",
+            "review",
+            "--spec",
+            "SPEC-NONEXISTENT",
+            "--stage",
+            "plan",
+            "--json",
         ])
         .output()?;
 
@@ -375,12 +432,27 @@ fn review_accepts_all_valid_stages() -> Result<()> {
 
     setup_evidence_dir(repo_root.path(), "SPEC-TEST-STAGES")?;
 
-    let stages = ["specify", "plan", "tasks", "implement", "validate", "audit", "unlock"];
+    let stages = [
+        "specify",
+        "plan",
+        "tasks",
+        "implement",
+        "validate",
+        "audit",
+        "unlock",
+    ];
 
     for stage in stages {
         let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
         let output = cmd
-            .args(["speckit", "review", "--spec", "SPEC-TEST-STAGES", "--stage", stage])
+            .args([
+                "speckit",
+                "review",
+                "--spec",
+                "SPEC-TEST-STAGES",
+                "--stage",
+                stage,
+            ])
             .output()?;
 
         // Should not exit with infrastructure error (3)
@@ -453,7 +525,13 @@ fn review_spec_docs_only_no_consensus_exits_skipped() -> Result<()> {
     let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
     let output = cmd
         .args([
-            "speckit", "review", "--spec", "SPEC-TEST-P03", "--stage", "plan", "--json",
+            "speckit",
+            "review",
+            "--spec",
+            "SPEC-TEST-P03",
+            "--stage",
+            "plan",
+            "--json",
         ])
         .output()?;
 

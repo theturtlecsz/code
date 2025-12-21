@@ -416,7 +416,7 @@ fn warn_once_deprecated_spec_consensus() {
     use std::sync::Once;
     static WARN_ONCE: Once = Once::new();
     WARN_ONCE.call_once(|| {
-        eprintln!("WARNING: /spec-consensus is deprecated. Use /spec-review instead.");
+        tracing::warn!("/spec-consensus is deprecated. Use /spec-review instead.");
     });
 }
 

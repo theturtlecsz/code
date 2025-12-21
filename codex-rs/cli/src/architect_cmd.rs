@@ -270,7 +270,7 @@ fn hash_string(s: &str) -> u64 {
 
 /// Prompt user for confirmation. Returns true if user confirms.
 fn confirm(prompt: &str) -> bool {
-    print!("{} [Y/n] ", prompt);
+    print!("{prompt} [Y/n] ");
     io::stdout().flush().ok();
 
     let mut input = String::new();
@@ -294,11 +294,11 @@ async fn run_refresh(vault: &Path, args: RefreshArgs) -> Result<()> {
 
     if args.legacy {
         // Legacy mode: use Python scripts
-        println!("Refreshing forensic data (legacy mode) in {:?}", ingest);
+        println!("Refreshing forensic data (legacy mode) in {ingest:?}");
         run_refresh_legacy(vault, &args, project_root).await?;
     } else {
         // Native mode: use Rust harvester modules
-        println!("Refreshing forensic data (native) in {:?}", ingest);
+        println!("Refreshing forensic data (native) in {ingest:?}");
         run_refresh_native(vault, &args, project_root).await?;
     }
 
@@ -329,7 +329,7 @@ async fn run_refresh_native(vault: &Path, args: &RefreshArgs, project_root: &Pat
                 );
             }
             Err(e) => {
-                println!("    Error: {}. Try --legacy for Python fallback.", e);
+                println!("    Error: {e}. Try --legacy for Python fallback.");
             }
         }
     }
@@ -350,7 +350,7 @@ async fn run_refresh_native(vault: &Path, args: &RefreshArgs, project_root: &Pat
                 );
             }
             Err(e) => {
-                println!("    Error: {}. Try --legacy for Python fallback.", e);
+                println!("    Error: {e}. Try --legacy for Python fallback.");
             }
         }
     }
@@ -367,7 +367,7 @@ async fn run_refresh_native(vault: &Path, args: &RefreshArgs, project_root: &Pat
                 );
             }
             Err(e) => {
-                println!("    Error: {}. Try --legacy for Python fallback.", e);
+                println!("    Error: {e}. Try --legacy for Python fallback.");
             }
         }
     }
@@ -394,7 +394,7 @@ async fn run_refresh_native(vault: &Path, args: &RefreshArgs, project_root: &Pat
                 );
             }
             Err(e) => {
-                println!("    Error generating call graph: {}", e);
+                println!("    Error generating call graph: {e}");
             }
         }
     }
@@ -415,7 +415,7 @@ async fn run_refresh_native(vault: &Path, args: &RefreshArgs, project_root: &Pat
                 );
             }
             Err(e) => {
-                println!("    Error generating module deps: {}", e);
+                println!("    Error generating module deps: {e}");
             }
         }
     }
@@ -444,7 +444,7 @@ async fn run_refresh_legacy(vault: &Path, args: &RefreshArgs, project_root: &Pat
                 }
             }
         } else {
-            println!("    (skipped - script not found at {:?})", script);
+            println!("    (skipped - script not found at {script:?})");
         }
     }
 
@@ -498,13 +498,13 @@ async fn run_ask(vault: &Path, args: AskArgs) -> Result<()> {
     }
 
     let slug = slugify(&query);
-    let cache_path = vault.join("answers").join(format!("{}.md", slug));
+    let cache_path = vault.join("answers").join(format!("{slug}.md"));
 
     // Check cache first (unless --force)
     if !args.force && cache_path.exists() {
         let content = fs::read_to_string(&cache_path).await?;
         println!("(cached: {})\n", cache_path.display());
-        println!("{}", content);
+        println!("{content}");
         return Ok(());
     }
 
@@ -550,7 +550,9 @@ async fn run_ask(vault: &Path, args: AskArgs) -> Result<()> {
     };
 
     // Cache the answer
-    fs::create_dir_all(cache_path.parent().unwrap()).await?;
+    if let Some(parent) = cache_path.parent() {
+        fs::create_dir_all(parent).await?;
+    }
     let cached_content = format!(
         "# {}\n\n_Cached: {}_\n\n---\n\n{}",
         query,
@@ -559,7 +561,7 @@ async fn run_ask(vault: &Path, args: AskArgs) -> Result<()> {
     );
     fs::write(&cache_path, &cached_content).await?;
 
-    println!("{}", answer);
+    println!("{answer}");
     println!("\n(answer cached to: {})", cache_path.display());
 
     Ok(())
@@ -605,19 +607,19 @@ async fn run_audit(vault: &Path, args: AuditArgs) -> Result<()> {
     if !args.force && cache_path.exists() {
         let content = fs::read_to_string(&cache_path).await?;
         println!("(cached: {})\n", cache_path.display());
-        println!("{}", content);
+        println!("{content}");
         return Ok(());
     }
 
     // Cache miss
-    if !args.yes {
-        if !confirm(&format!(
+    if !args.yes
+        && !confirm(&format!(
             "Audit for '{}' not cached. This will use 1 NotebookLM query. Proceed?",
             args.crate_name
-        )) {
-            println!("Aborted.");
-            return Ok(());
-        }
+        ))
+    {
+        println!("Aborted.");
+        return Ok(());
     }
 
     println!("Auditing crate: {}", args.crate_name);
@@ -652,7 +654,9 @@ async fn run_audit(vault: &Path, args: AuditArgs) -> Result<()> {
     let answer = String::from_utf8_lossy(&output.stdout);
 
     // Cache the audit
-    fs::create_dir_all(cache_path.parent().unwrap()).await?;
+    if let Some(parent) = cache_path.parent() {
+        fs::create_dir_all(parent).await?;
+    }
     let cached_content = format!(
         "# Crate Audit: {}\n\n_Audited: {}_\n\n---\n\n{}",
         args.crate_name,
@@ -661,7 +665,7 @@ async fn run_audit(vault: &Path, args: AuditArgs) -> Result<()> {
     );
     fs::write(&cache_path, &cached_content).await?;
 
-    println!("{}", answer);
+    println!("{answer}");
     println!("\n(audit cached to: {})", cache_path.display());
 
     Ok(())
@@ -688,7 +692,7 @@ async fn run_status(vault: &Path) -> Result<()> {
             }
         }
         Err(e) => {
-            println!("Budget tracking unavailable: {}", e);
+            println!("Budget tracking unavailable: {e}");
         }
     }
 
@@ -745,7 +749,7 @@ async fn run_status(vault: &Path) -> Result<()> {
     } else {
         0
     };
-    println!("Cached answers: {}", answer_count);
+    println!("Cached answers: {answer_count}");
 
     // Count audits
     let audits_dir = vault.join("audits");
@@ -754,7 +758,7 @@ async fn run_status(vault: &Path) -> Result<()> {
     } else {
         0
     };
-    println!("Cached audits: {}", audit_count);
+    println!("Cached audits: {audit_count}");
 
     // List recent answers
     if answer_count > 0 {
@@ -795,8 +799,7 @@ async fn run_clear_cache(vault: &Path) -> Result<()> {
     }
 
     if !confirm(&format!(
-        "Clear {} answers and {} audits?",
-        answer_count, audit_count
+        "Clear {answer_count} answers and {audit_count} audits?"
     )) {
         println!("Aborted.");
         return Ok(());
@@ -822,13 +825,13 @@ async fn run_clear_cache(vault: &Path) -> Result<()> {
 async fn run_service(cmd: ServiceCommand) -> Result<()> {
     match cmd {
         ServiceCommand::Start { port, foreground } => {
-            println!("Starting NotebookLM service on port {}...", port);
+            println!("Starting NotebookLM service on port {port}...");
             NlmService::start_service(port, foreground)?;
 
             if !foreground {
                 // Wait a bit and check if it started
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                let test_url = format!("http://127.0.0.1:{}/health", port);
+                let test_url = format!("http://127.0.0.1:{port}/health");
                 let client = reqwest::Client::new();
                 match client
                     .get(&test_url)
@@ -856,7 +859,7 @@ async fn run_service(cmd: ServiceCommand) -> Result<()> {
         }
         ServiceCommand::Status => {
             let status = NlmService::service_status()?;
-            println!("{}", status);
+            println!("{status}");
             Ok(())
         }
     }
@@ -883,7 +886,7 @@ async fn run_research(cmd: ResearchCommand) -> Result<()> {
                 bail!("No query provided. Usage: code architect research fast <query>");
             }
 
-            println!("Starting fast research: \"{}\"", query_str);
+            println!("Starting fast research: \"{query_str}\"");
             if !wait {
                 println!("(running in background)");
             }
@@ -891,23 +894,23 @@ async fn run_research(cmd: ResearchCommand) -> Result<()> {
             let result = client.fast(&query_str, wait).await?;
 
             if let Some(status) = &result.status {
-                println!("Status: {}", status);
+                println!("Status: {status}");
             }
             if let Some(progress) = result.progress {
-                println!("Progress: {}%", progress);
+                println!("Progress: {progress}%");
             }
 
             if let Some(results) = &result.results {
                 if let Some(summary) = &results.summary {
-                    println!("\n--- Results ---\n{}", summary);
+                    println!("\n--- Results ---\n{summary}");
                 }
                 if let Some(sources) = &results.sources {
                     println!("\n--- Sources ({}) ---", sources.len());
                     for source in sources.iter().take(10) {
                         if let Some(title) = &source.title {
-                            println!("  • {}", title);
+                            println!("  • {title}");
                             if let Some(url) = &source.url {
-                                println!("    {}", url);
+                                println!("    {url}");
                             }
                         }
                     }
@@ -929,7 +932,7 @@ async fn run_research(cmd: ResearchCommand) -> Result<()> {
                 bail!("No query provided. Usage: code architect research deep <query>");
             }
 
-            println!("Starting deep research: \"{}\"", query_str);
+            println!("Starting deep research: \"{query_str}\"");
             if edit_plan {
                 println!("(edit_plan mode enabled)");
             }
@@ -940,18 +943,18 @@ async fn run_research(cmd: ResearchCommand) -> Result<()> {
             let result = client.deep(&query_str, wait, edit_plan).await?;
 
             if let Some(status) = &result.status {
-                println!("Status: {}", status);
+                println!("Status: {status}");
             }
             if let Some(progress) = result.progress {
-                println!("Progress: {}%", progress);
+                println!("Progress: {progress}%");
             }
 
             if let Some(results) = &result.results {
                 if let Some(summary) = &results.summary {
-                    println!("\n--- Results ---\n{}", summary);
+                    println!("\n--- Results ---\n{summary}");
                 }
                 if let Some(count) = results.source_count {
-                    println!("\nSources found: {}", count);
+                    println!("\nSources found: {count}");
                 }
             }
 
@@ -967,43 +970,43 @@ async fn run_research(cmd: ResearchCommand) -> Result<()> {
             println!("Status: {}", status.status);
 
             if let Some(query) = &status.query {
-                println!("Query: \"{}\"", query);
+                println!("Query: \"{query}\"");
             }
             if let Some(progress) = status.progress {
-                println!("Progress: {}%", progress);
+                println!("Progress: {progress}%");
             }
             if let Some(started) = &status.started_at {
-                println!("Started: {}", started);
+                println!("Started: {started}");
             }
             if let Some(completed) = &status.completed_at {
-                println!("Completed: {}", completed);
+                println!("Completed: {completed}");
             }
             if let Some(error) = &status.error {
-                println!("Error: {}", error);
+                println!("Error: {error}");
             }
 
             Ok(())
         }
         ResearchCommand::Results { format } => {
-            println!("Fetching research results (format: {})...", format);
+            println!("Fetching research results (format: {format})...");
 
             let result = client.results(&format).await?;
 
             if let Some(results) = &result.results {
                 if let Some(summary) = &results.summary {
-                    println!("\n{}", summary);
+                    println!("\n{summary}");
                 }
                 if let Some(sources) = &results.sources {
                     println!("\n--- Sources ({}) ---", sources.len());
                     for source in sources {
                         if let Some(title) = &source.title {
-                            println!("\n• {}", title);
+                            println!("\n• {title}");
                         }
                         if let Some(url) = &source.url {
-                            println!("  URL: {}", url);
+                            println!("  URL: {url}");
                         }
                         if let Some(snippet) = &source.snippet {
-                            println!("  {}", snippet);
+                            println!("  {snippet}");
                         }
                     }
                 }
@@ -1019,11 +1022,11 @@ async fn run_research(cmd: ResearchCommand) -> Result<()> {
             let result = client.import().await?;
 
             if let Some(count) = result.imported {
-                println!("Imported {} sources.", count);
+                println!("Imported {count} sources.");
             }
             if let Some(sources) = &result.sources {
                 for name in sources {
-                    println!("  • {}", name);
+                    println!("  • {name}");
                 }
             }
 
@@ -1050,7 +1053,7 @@ async fn run_sources(vault: &Path, cmd: SourcesCommand) -> Result<()> {
 
     match cmd {
         SourcesCommand::List => {
-            println!("Sources in notebook '{}':", DEFAULT_NOTEBOOK);
+            println!("Sources in notebook '{DEFAULT_NOTEBOOK}':");
             println!("─────────────────────────────────");
 
             let sources = service.list_sources().await?;
@@ -1071,7 +1074,7 @@ async fn run_sources(vault: &Path, cmd: SourcesCommand) -> Result<()> {
                     .filter(|s| s.title.starts_with("[ARCH]"))
                     .count();
                 if managed_count > 0 {
-                    println!("Managed ([ARCH]): {}", managed_count);
+                    println!("Managed ([ARCH]): {managed_count}");
                 }
             }
             Ok(())
@@ -1227,7 +1230,7 @@ fn filter_complexity_map(json_content: &str) -> Result<String> {
     // The complexity map has structure:
     // { "files": [...], "by_risk": { "critical": N, "high": N, ... }, ... }
     if let Some(files) = value.get("files").and_then(|f| f.as_array()) {
-        let filtered: Vec<&serde_json::Value> = files
+        let filtered: Vec<serde_json::Value> = files
             .iter()
             .filter(|f| {
                 f.get("risk")
@@ -1235,14 +1238,12 @@ fn filter_complexity_map(json_content: &str) -> Result<String> {
                     .map(|r| r == "critical" || r == "high")
                     .unwrap_or(false)
             })
+            .cloned()
             .collect();
 
         // Build filtered output
         let mut output = serde_json::Map::new();
-        output.insert(
-            "files".to_string(),
-            serde_json::Value::Array(filtered.into_iter().cloned().collect()),
-        );
+        output.insert("files".to_string(), serde_json::Value::Array(filtered));
         output.insert(
             "note".to_string(),
             serde_json::Value::String("Filtered to critical/high risk files only".to_string()),

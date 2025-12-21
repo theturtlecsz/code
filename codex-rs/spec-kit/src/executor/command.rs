@@ -89,11 +89,11 @@ impl SpeckitCommand {
                     .parse::<i64>()
                     .map_err(|_| "invalid value for --stale-hours".to_string())?;
             } else if token.starts_with('-') {
-                return Err(format!("Unknown flag `{}`", token));
+                return Err(format!("Unknown flag `{token}`"));
             } else if spec_id.is_none() {
                 spec_id = Some(token.to_string());
             } else {
-                return Err(format!("Unexpected extra argument `{}`", token));
+                return Err(format!("Unexpected extra argument `{token}`"));
             }
 
             idx += 1;
@@ -151,13 +151,13 @@ impl SpeckitCommand {
                     evidence_root = Some(PathBuf::from(value));
                 }
                 s if s.starts_with('-') => {
-                    return Err(format!("Unknown flag `{}`", s));
+                    return Err(format!("Unknown flag `{s}`"));
                 }
                 s if stage.is_none() => {
                     stage = Some(Self::parse_stage(s)?);
                 }
                 s => {
-                    return Err(format!("Unexpected extra argument `{}`", s));
+                    return Err(format!("Unexpected extra argument `{s}`"));
                 }
             }
             idx += 1;
@@ -188,8 +188,7 @@ impl SpeckitCommand {
             "audit" => Ok(Stage::Audit),
             "unlock" => Ok(Stage::Unlock),
             _ => Err(format!(
-                "Unknown stage `{}`. Valid stages: specify, plan, tasks, implement, validate, audit, unlock",
-                input
+                "Unknown stage `{input}`. Valid stages: specify, plan, tasks, implement, validate, audit, unlock"
             )),
         }
     }
@@ -322,7 +321,7 @@ mod tests {
         let cmd =
             SpeckitCommand::parse_review("SPEC-002", "plan --evidence-root=another/path").unwrap();
         assert_eq!(
-            cmd.clone(),
+            cmd,
             SpeckitCommand::Review {
                 spec_id: "SPEC-002".to_string(),
                 stage: Stage::Plan,
@@ -369,8 +368,7 @@ mod tests {
             let cmd = SpeckitCommand::parse_review("TEST", input).unwrap();
             assert!(
                 matches!(cmd, SpeckitCommand::Review { stage, .. } if stage == expected),
-                "Failed for stage: {}",
-                input
+                "Failed for stage: {input}"
             );
         }
     }

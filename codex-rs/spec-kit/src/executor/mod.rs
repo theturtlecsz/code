@@ -36,6 +36,7 @@ pub use status::{
 
 /// Execution outcome from the executor
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)] // Acceptable: Status/Review are both large, boxing adds complexity
 pub enum Outcome {
     /// Status command completed successfully
     Status(SpecStatusReport),
@@ -101,7 +102,14 @@ impl SpeckitExecutor {
                 strict_warnings,
                 strict_schema,
                 evidence_root,
-            } => self.execute_review(&spec_id, stage, strict_artifacts, strict_warnings, strict_schema, evidence_root),
+            } => self.execute_review(
+                &spec_id,
+                stage,
+                strict_artifacts,
+                strict_warnings,
+                strict_schema,
+                evidence_root,
+            ),
         }
     }
 
@@ -148,14 +156,10 @@ impl SpeckitExecutor {
                 checkpoint: actual_checkpoint,
             } => {
                 // Use policy snapshot from context (adapter-resolved) or defaults
-                let policy_snapshot = self
-                    .context
-                    .policy_snapshot
-                    .clone()
-                    .unwrap_or_default();
+                let policy_snapshot = self.context.policy_snapshot.clone().unwrap_or_default();
 
                 let options = ReviewOptions {
-                    telemetry_mode: policy_snapshot.telemetry_mode.clone(),
+                    telemetry_mode: policy_snapshot.telemetry_mode,
                     include_diagnostic: review::is_diagnostic_review(stage),
                     strict_artifacts,
                     strict_warnings,
@@ -173,7 +177,7 @@ impl SpeckitExecutor {
 
                 match review::evaluate_stage_review(request, actual_checkpoint) {
                     Ok(result) => Outcome::Review(result),
-                    Err(e) => Outcome::Error(e.to_string()),
+                    Err(e) => Outcome::Error(e),
                 }
             }
         }
@@ -350,8 +354,7 @@ mod tests {
         // Should NOT be skipped — Unlock is an alias to BeforeUnlock
         assert!(
             matches!(outcome, Outcome::Review(_)),
-            "Unlock should alias to BeforeUnlock, got: {:?}",
-            outcome
+            "Unlock should alias to BeforeUnlock, got: {outcome:?}"
         );
     }
 }
