@@ -209,15 +209,21 @@ impl TestHarness {
     }
 
     /// Helper: Create minimal test configuration
+    ///
+    /// Note: We explicitly set `using_chatgpt_auth = true` to hide the "API key" status bar
+    /// indicator, making snapshot tests deterministic across environments with/without auth state.
     fn test_config() -> Config {
         let mut overrides = ConfigOverrides::default();
         overrides.cwd = Some(std::env::temp_dir());
-        codex_core::config::Config::load_from_base_config_with_overrides(
+        let mut config = codex_core::config::Config::load_from_base_config_with_overrides(
             ConfigToml::default(),
             overrides,
             std::env::temp_dir(),
         )
-        .expect("failed to create test config")
+        .expect("failed to create test config");
+        // Force deterministic auth state for snapshot tests
+        config.using_chatgpt_auth = true;
+        config
     }
 
     /// Simulate a complete streaming response from the Codex engine
