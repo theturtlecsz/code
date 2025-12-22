@@ -1,7 +1,7 @@
 # HANDOFF: Upstream Backport Program
 
 **Generated**: 2025-12-22
-**Last Commit**: 400e07916 (SYNC-019 to SYNC-031 roadmap)
+**Last Commit**: 12a3259f7 (PRD skeletons for SYNC-019 to SYNC-031)
 **Branch**: main
 
 ---
@@ -16,13 +16,15 @@
 | P7-B: spec.md→PRD.md migration tooling | ✅ Done | 70 CLI tests |
 | P7-C: Architectural watch-out fixes | ✅ Done | Watch-outs A, C, D |
 | SYNC-019 to SYNC-031 roadmap | ✅ Added | SPEC.md updated |
+| PRD skeletons (13 files) | ✅ Added | docs/SYNC-0XX-*/PRD.md |
 
 ### Key Commits
 ```
+12a3259f7 docs(sync): add SYNC-019 to SYNC-031 PRD skeletons
+6f759772e docs(spec-kit): update HANDOFF.md for upstream backport program
 400e07916 docs(spec): add SYNC-019 to SYNC-031 upstream backport roadmap
 ceb5b46ad docs: fix SPEC.md status line for P7-B completion
 e7ff5dc1a feat(spec-kit): P7-B migration tooling + P7-C architectural fixes
-d1836c6a8 feat(spec-kit): P7-A speckit run batch validation command
 ```
 
 ### Policy Decision (Documented)
@@ -45,16 +47,33 @@ Read docs/spec-kit/HANDOFF.md and SPEC.md section "Upstream Backport Program (20
 
 ## Context
 - SPEC-KIT-921 P7 complete (70 CLI tests, speckit run + migrate commands)
-- SYNC-019 to SYNC-031 roadmap added to SPEC.md (13 items, 0/13 started)
-- Policy: Legacy packets blocked until migrated
+- SYNC-019 to SYNC-031 roadmap in SPEC.md (13 items, 0/13 started)
+- PRD skeletons available: docs/SYNC-0XX-*/PRD.md (all 13 files)
+- Index: docs/SYNC-019-031-UPGRADE-INDEX.md
 
-## Execution Order (min risk, max value)
-1. SYNC-019: Central Feature Registry (P0, enabler for all others)
+## Session Scope (Confirmed)
+
+### SYNC Items (in order)
+1. SYNC-019: Central Feature Registry (P0, enabler)
 2. SYNC-023: TUI v1 UX/perf backports (P0, immediate benefit)
 3. SYNC-020: Skills v1 (P0, depends on SYNC-019)
 4. SYNC-025: Exec hardening (P0, reliability)
 
+### Architectural Debt (pair with SYNC work)
+- AD-006: Event channel backpressure (pairs with SYNC-023/025)
+  Scope: Bounded queues + drop/coalesce policy in UI/event hot paths
+- AD-001: Async blocking in TUI event loop (pairs with SYNC-023)
+  Scope: Targeted "no blocking on runtime threads" pass, fix top offenders
+
+### Docs Alignment (micro-task with SYNC-019)
+- Fix product-requirements.md narrative mismatch
+- Remove "consensus/arbiter" language, align with single-owner pipeline
+- Small diff, high leverage
+
 ## First Task: SYNC-019 Feature Registry
+
+### PRD
+docs/SYNC-019-features-registry/PRD.md (skeleton exists, fill in details)
 
 ### Goal
 Introduce centralized `Features` enum + config mapping as enabler for all feature-gated work.
@@ -66,23 +85,18 @@ Introduce centralized `Features` enum + config mapping as enabler for all featur
 - [ ] Feature checks at edges (CLI/TUI), not deep in domain logic
 - [ ] Unknown feature keys warn but don't crash
 - [ ] "Enabled features" visible in /debug or logs
-- [ ] Create docs/SYNC-019-features-registry/PRD.md
+- [ ] Update PRD.md with implementation details
 
 ### Architectural Notes
 - Pattern: enum-based feature gates with "stage" metadata
 - Resolution: config file < env var (standard layering)
 - Boundary: features.rs owns enum + resolution, adapters query it
 
-## Optional Additions (ask user)
-- Create PRD skeletons for all 13 SYNC items?
-- Include AD-006 (event backpressure) alongside SYNC work?
-- Address product-requirements.md narrative mismatch?
-
 ## Start Commands
 ```bash
 git log --oneline -5
 cargo test -p codex-cli --test speckit -- --test-threads=1
-grep -r "SYNC-019" SPEC.md
+cat docs/SYNC-019-features-registry/PRD.md
 ```
 
 ## Test Baseline
