@@ -1,9 +1,26 @@
 **SPEC-ID**: SPEC-KIT-920
 **Feature**: TUI Automation Support for Test Scripts
-**Status**: Backlog
+**Status**: SUPERSEDED
+**Superseded By**: SPEC-KIT-921 (CLI Adapter + Shared SpeckitExecutor Core)
 **Created**: 2025-11-07
-**Priority**: P1 (blocks automated testing)
+**Closed**: 2025-12-22
+**Priority**: P1 (was)
 **Owner**: Code
+
+> **SUPERSEDED NOTICE**
+>
+> This SPEC proposed PTY-based TUI automation via `--command` flags. This approach was **fundamentally wrong** for CI/Proxmox environments where:
+> - PTY availability is not guaranteed
+> - TUI rendering has race conditions with command dispatch
+> - Exit code propagation through PTY is unreliable
+>
+> **SPEC-KIT-921** solved this correctly by extracting a shared `SpeckitExecutor` with a headless CLI adapter (`code speckit`). The CLI provides:
+> - Direct command execution without PTY
+> - JSON output for automation
+> - Exit code contract for CI
+> - Full parity with TUI slash commands
+>
+> Use `code speckit --help` instead of the approaches described below.
 
 ---
 

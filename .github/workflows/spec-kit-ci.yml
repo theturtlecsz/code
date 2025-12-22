@@ -238,6 +238,51 @@ jobs:
           echo "✓ Full pipeline smoke test: plan→tasks→implement→validate→audit→unlock completed successfully"
 
       # =========================================================================
+      # P7: Batch Validation with 'run' Command (SPEC-KIT-921)
+      # =========================================================================
+
+      - name: "[RUN] Batch validate plan→audit (efficient CI check)"
+        working-directory: ${{ env.FIXTURE_ROOT }}
+        run: |
+          set -o pipefail
+          OUTPUT=$(${{ env.CLI }} speckit run \
+            --spec SPEC-CI-001-clean \
+            --from plan \
+            --to audit \
+            --json)
+
+          # Validate run command output structure
+          echo "$OUTPUT" | jq -e '.schema_version == 1' > /dev/null || { echo "::error::schema_version should be 1"; exit 1; }
+          echo "$OUTPUT" | jq -e '.overall_status == "ready"' > /dev/null || { echo "::error::overall_status should be 'ready'"; exit 1; }
+          echo "$OUTPUT" | jq -e '.from_stage' > /dev/null || { echo "::error::Missing from_stage field"; exit 1; }
+          echo "$OUTPUT" | jq -e '.to_stage' > /dev/null || { echo "::error::Missing to_stage field"; exit 1; }
+          echo "$OUTPUT" | jq -e '.stages | length > 0' > /dev/null || { echo "::error::stages array should not be empty"; exit 1; }
+          echo "$OUTPUT" | jq -e '.exit_code == 0' > /dev/null || { echo "::error::exit_code should be 0 for ready status"; exit 1; }
+
+          # Verify per-stage results are present
+          STAGE_COUNT=$(echo "$OUTPUT" | jq '.stages | length')
+          echo "  Validated $STAGE_COUNT stages in batch"
+
+          echo "✓ Run command: plan→audit batch validation passed"
+
+      - name: "[STATUS] Validate status command JSON structure"
+        working-directory: ${{ env.FIXTURE_ROOT }}
+        run: |
+          set -o pipefail
+          OUTPUT=$(${{ env.CLI }} speckit status \
+            --spec SPEC-CI-001-clean \
+            --json)
+
+          # Validate status command output structure
+          echo "$OUTPUT" | jq -e '.schema_version == 1' > /dev/null || { echo "::error::schema_version should be 1"; exit 1; }
+          echo "$OUTPUT" | jq -e '.spec_id' > /dev/null || { echo "::error::Missing spec_id field"; exit 1; }
+          echo "$OUTPUT" | jq -e '.generated_at' > /dev/null || { echo "::error::Missing generated_at field"; exit 1; }
+          echo "$OUTPUT" | jq -e '.stages' > /dev/null || { echo "::error::Missing stages field"; exit 1; }
+          echo "$OUTPUT" | jq -e '.evidence' > /dev/null || { echo "::error::Missing evidence field"; exit 1; }
+
+          echo "✓ Status command: JSON structure validated"
+
+      # =========================================================================
       # Failure Diagnostics
       # =========================================================================
 

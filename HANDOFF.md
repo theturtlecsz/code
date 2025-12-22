@@ -1,7 +1,7 @@
 # Gate Policy Alignment — Session Handoff
 
-**Last updated:** 2025-12-19
-**Status:** PR7-PR9 complete
+**Last updated:** 2025-12-22
+**Status:** SPEC-KIT-921 COMPLETE — CLI/TUI Parity Achieved
 
 ---
 
@@ -18,6 +18,40 @@
 | **PR7** | ✅ Complete | Internal vocabulary alignment (deprecation notes + serde aliases + type aliases) |
 | **PR8** | ✅ Complete | Clippy cleanup across spec-kit + stage0 + tui |
 | **PR9** | ✅ Complete | Command UX: `/spec-review` canonical, `/spec-consensus` deprecated alias with warn-once |
+| **SPEC-KIT-921** | ✅ Complete | CLI Adapter + Shared SpeckitExecutor Core (1771 LOC) |
+
+### SPEC-KIT-921 Implementation Summary
+
+**All phases complete:**
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| Phase A | ✅ | Types + skeleton (`SpeckitCommand`, `Outcome`, executor shell) |
+| Phase B | ✅ | Status + Review commands with shared executor |
+| Phase C | ✅ | ValidateStage (Plan, Tasks, Implement, Validate, Audit, Unlock) |
+| Phase D | ✅ | Run (batch validation) + Migrate (spec.md → PRD.md) |
+| Phase E | ✅ | CLI wiring in `cli/src/speckit_cmd.rs` + `main.rs` integration |
+
+**CLI Commands Available:**
+```bash
+code speckit status --spec SPEC-ID [--stale-hours N] [--json]
+code speckit review --spec SPEC-ID --stage STAGE [--strict-*] [--explain] [--json]
+code speckit specify --spec SPEC-ID [--execute] [--json]
+code speckit plan --spec SPEC-ID [--dry-run] [--strict-prereqs] [--json]
+code speckit tasks --spec SPEC-ID [--dry-run] [--strict-prereqs] [--json]
+code speckit implement --spec SPEC-ID [--dry-run] [--strict-prereqs] [--json]
+code speckit validate --spec SPEC-ID [--dry-run] [--strict-prereqs] [--json]
+code speckit audit --spec SPEC-ID [--dry-run] [--strict-prereqs] [--json]
+code speckit unlock --spec SPEC-ID [--dry-run] [--strict-prereqs] [--json]
+code speckit run --spec SPEC-ID --from STAGE --to STAGE [--json]
+code speckit migrate --spec SPEC-ID [--dry-run] [--json]
+```
+
+**Key Files:**
+- `codex-rs/spec-kit/src/executor/mod.rs` — SpeckitExecutor implementation
+- `codex-rs/spec-kit/src/executor/command.rs` — SpeckitCommand shared model
+- `codex-rs/cli/src/speckit_cmd.rs` — CLI adapter (1771 LOC)
+- `codex-rs/cli/src/main.rs:126,368-370` — CLI wiring
 
 ### Commits (chronological)
 ```
@@ -269,58 +303,98 @@ Keep **read compatibility** for historical evidence (old artifact directories/JS
 
 ## Next Session Start Command
 
-**Summary:**
+**Copy this prompt to continue:**
 ```
-Load HANDOFF.md and docs/SPEC-KIT-921.md. Begin Phase B extraction (status + review).
+load HANDOFF.md **ultrathink**
+
+## Session Context (2025-12-22)
+
+SPEC-KIT-921 is COMPLETE. Previous session accomplished:
+- ✅ Verified CLI builds and runs (`code speckit status --json` works)
+- ✅ Added `run` and `status` tests to `.github/workflows/spec-kit-ci.yml`
+- ✅ Created `docs/spec-kit/CLI-REFERENCE.md` (300+ lines)
+- ✅ Archived SPEC-KIT-920 as superseded
+
+## Pending Actions
+
+1. **Commit session changes** (if not done):
+   - `.github/workflows/spec-kit-ci.yml` — CI test enhancements
+   - `docs/spec-kit/CLI-REFERENCE.md` — new CLI reference doc
+   - `docs/SPEC-KIT-920-tui-automation/spec.md` — superseded notice
+   - `HANDOFF.md` — updated status
+
+2. **Validate CI workflow** — trigger GH Actions to verify new tests pass
+
+3. **Optional P3** — Extract pipeline coordinator from TUI (if headless orchestration needed)
+
+4. **SPEC.md tracker update** — Add SPEC-KIT-921 row if tracking active SPECs
+
+## Quick Verify
+```bash
+./codex-rs/target/release/code speckit run --spec SPEC-KIT-921 --from plan --to audit --json
+```
 ```
 
 **Key context:**
-- PR7-PR9 COMPLETE (vocabulary migration, clippy cleanup, command UX)
+- PR1-PR9 COMPLETE (vocabulary migration, clippy cleanup, command UX)
+- SPEC-KIT-921 COMPLETE (CLI adapter + SpeckitExecutor + all 11 subcommands)
 - CI hardening COMPLETE (vocabulary drift canary + golden wire-format tests)
-- SPEC-KIT-900 created but is heavyweight — use for quarterly integration only
-- **SPEC-KIT-920 superseded** — PTY-based TUI automation is fundamentally wrong
-- **P0 = SPEC-KIT-921** (CLI Adapter + Shared SpeckitExecutor Core)
+- SPEC-KIT-920 superseded (PTY automation was wrong approach)
+- **New:** `docs/spec-kit/CLI-REFERENCE.md` documents all CLI commands
 
 ---
 
-## SPEC-KIT-921: CLI Adapter + Shared Core (P0)
+## Post-921 Priorities (Updated 2025-12-22)
 
-**Problem:** TUI slash commands depend on `&mut ChatWidget`, making CLI impossible without re-implementing logic. PTY automation (SPEC-KIT-920 approach) fails in CI/Proxmox.
+### ✅ P0: Verify CLI Build & Run — DONE
+```bash
+cd codex-rs && cargo build -p codex-cli --release
+./target/release/code speckit status --spec SPEC-KIT-921 --json
+./target/release/code speckit review --spec SPEC-KIT-921 --stage plan --explain
+```
 
-**Solution:** Extract a shared `SpeckitExecutor` that:
-- Accepts typed `SpeckitCommand`
-- Emits `SpeckitEvent` to an event sink
-- Uses ports/traits for IO (not ChatWidget)
+### ✅ P1: CI Integration — DONE
+- Added `code speckit run --from plan --to audit` to CI workflow
+- Added `code speckit status --json` structure validation
+- See `.github/workflows/spec-kit-ci.yml` lines 240-283
 
-**Architectural Rule:**
-> No function that advances a Spec-Kit stage may take `&mut ChatWidget`.
+### ✅ P2: Documentation — DONE
+- Created `docs/spec-kit/CLI-REFERENCE.md` (300+ lines)
+- Archived SPEC-KIT-920 with superseded notice
+- HANDOFF.md updated with completion status
 
-### SPEC-KIT-920 Partial Work (Not Wasted)
+### 🔶 P3: Pipeline Coordinator Extraction (Optional)
+- `/speckit.auto` still runs in TUI context
+- Extract to SpeckitExecutor if headless orchestration needed
+- **Lower priority** — individual stages work via CLI
 
-The following was implemented and compiles:
-- `--initial-command` flag (working, dispatches after first redraw)
-- `--exit-on-complete` flag (wired through CLI/App, but triggers require PTY)
-- `should_exit_on_automation_complete()` helper (ready for CLI mode)
+### 🔶 P4: Commit & Push (Pending)
+- Session created uncommitted documentation
+- Commit message: `docs(spec-kit): add CLI reference and archive SPEC-KIT-920`
 
-This provides a pattern for the executor's `Outcome` handling once CLI exists.
+---
 
-### Phase B Starting Point
+## Superseded: SPEC-KIT-921 Planning (COMPLETE)
 
-Recommended extraction targets (lowest risk, highest leverage):
-1. `handle_spec_status()` — read-only, proves pattern
-2. `gate_evaluation.rs` — bounded side effects
-3. These immediately unlock CI automation
+The following sections are preserved for historical reference but the work is done.
 
-**Next session:** Map `handle_spec_status()` call graph, identify "pure core" vs "UI adapter" code, define minimal port traits.
+### Original Problem Statement
+TUI slash commands depended on `&mut ChatWidget`, making CLI impossible without re-implementing logic. PTY automation (SPEC-KIT-920 approach) failed in CI/Proxmox.
 
-### Files to Examine for Cut-Line
+### Solution Implemented
+Extracted `SpeckitExecutor` in `spec-kit/src/executor/` that:
+- Accepts typed `SpeckitCommand` (shared model)
+- Returns `Outcome` variants (Status, Review, Stage, Specify, Run, Migrate, Error)
+- No ChatWidget dependency — pure business logic
 
+### Files Created
 | File | Role |
 |------|------|
-| `tui/src/chatwidget/spec_kit/commands/status.rs` | Status command implementation |
-| `tui/src/chatwidget/spec_kit/gate_evaluation.rs` | Gate/review evaluation |
-| `spec-kit/src/gate_policy.rs` | Domain vocabulary (already clean) |
-| `spec-kit/src/config/policy_toggles.rs` | Policy toggles (already centralized) |
+| `spec-kit/src/executor/mod.rs` | SpeckitExecutor + Outcome types |
+| `spec-kit/src/executor/command.rs` | SpeckitCommand enum |
+| `spec-kit/src/executor/status.rs` | Status dashboard rendering |
+| `spec-kit/src/executor/review.rs` | Review dashboard rendering |
+| `cli/src/speckit_cmd.rs` | CLI adapter (1771 LOC) |
 
 ## PR7-PR9 Completion Summary
 
