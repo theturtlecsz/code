@@ -93,9 +93,25 @@ pub enum SpeckitCommand {
         dry_run: bool,
     },
 
+    /// Validate multiple stages in sequence (batch validation)
+    ///
+    /// CLI: `code speckit run --spec <SPEC-ID> --from <STAGE> --to <STAGE> [--json]`
+    ///
+    /// SPEC-KIT-921 P7-A: Run command validates stages from `--from` to `--to`.
+    /// This is validation-only (no agent spawning) - a readiness check for CI.
+    /// Each stage is validated in sequence, collecting outcomes.
+    Run {
+        /// The SPEC identifier
+        spec_id: String,
+
+        /// Starting stage (inclusive)
+        from_stage: Stage,
+
+        /// Ending stage (inclusive)
+        to_stage: Stage,
+    },
     // Future variants:
     // Doctor { format: OutputFormat },
-    // Run { spec_id: String, from_stage: Option<Stage>, to_stage: Option<Stage>, ... },
 }
 
 impl SpeckitCommand {

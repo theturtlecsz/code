@@ -89,7 +89,10 @@ impl std::fmt::Display for SpecIdError {
                 write!(f, "SPEC-ID contains invalid path characters (/, \\, or ..)")
             }
             SpecIdError::InvalidFormat(id) => {
-                write!(f, "SPEC-ID '{}' doesn't match expected format SPEC-XXX-nnn", id)
+                write!(
+                    f,
+                    "SPEC-ID '{id}' doesn't match expected format SPEC-XXX-nnn",
+                )
             }
         }
     }
@@ -176,7 +179,7 @@ pub fn resolve_spec_dir(repo_root: &Path, spec_id: &str) -> Option<ResolvedSpecD
         .collect();
 
     // Sort lexicographically for determinism
-    matches.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+    matches.sort_by_key(std::fs::DirEntry::file_name);
 
     matches.first().map(|entry| ResolvedSpecDir {
         path: entry.path(),
@@ -347,6 +350,11 @@ pub enum Outcome {
     /// SPEC-KIT-921 P6-A: Specify creates SPEC directory structure.
     Specify(SpecifyOutcome),
 
+    /// Run command outcome (batch stage validation)
+    ///
+    /// SPEC-KIT-921 P7-A: Aggregated validation results from multiple stages.
+    Run(RunOutcome),
+
     /// Command failed with error
     Error(String),
 }
@@ -366,6 +374,76 @@ pub struct SpecifyOutcome {
     pub already_existed: bool,
     /// Created files (if any)
     pub created_files: Vec<String>,
+}
+
+/// Outcome from a single stage in a batch run
+///
+/// SPEC-KIT-921 P7-A: Per-stage result in aggregated run output.
+#[derive(Debug, Clone)]
+pub struct RunStageOutcome {
+    /// Stage name
+    pub stage: crate::Stage,
+    /// Status: ready, blocked, or skipped
+    pub status: String,
+    /// Warning messages (advisory signals)
+    pub warnings: Vec<String>,
+    /// Error messages (blocking reasons)
+    pub errors: Vec<String>,
+}
+
+/// Overall status of a batch run
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunOverallStatus {
+    /// All stages ready
+    Ready,
+    /// One or more stages blocked
+    Blocked,
+    /// Some stages ready, some blocked
+    Partial,
+}
+
+impl RunOverallStatus {
+    /// Returns the status string for JSON output
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RunOverallStatus::Ready => "ready",
+            RunOverallStatus::Blocked => "blocked",
+            RunOverallStatus::Partial => "partial",
+        }
+    }
+}
+
+/// Outcome from the run command (batch stage validation)
+///
+/// SPEC-KIT-921 P7-A: Aggregated results from validating multiple stages.
+#[derive(Debug)]
+pub struct RunOutcome {
+    /// The validated SPEC identifier
+    pub spec_id: String,
+    /// Starting stage (inclusive)
+    pub from_stage: crate::Stage,
+    /// Ending stage (inclusive)
+    pub to_stage: crate::Stage,
+    /// Overall status: ready (all passed), blocked (any blocked), partial (mixed)
+    pub overall_status: RunOverallStatus,
+    /// Per-stage outcomes
+    pub stages: Vec<RunStageOutcome>,
+    /// Exit code: 0=all ready, 2=any blocked, 3=infrastructure error
+    pub exit_code: i32,
+    /// Whether spec.md legacy fallback was used
+    pub legacy_fallback: bool,
+    /// Legacy warning message if fallback was used
+    pub legacy_warning: Option<String>,
+}
+
+impl RunOutcome {
+    /// Calculate exit code based on overall status
+    pub fn calculate_exit_code(overall_status: RunOverallStatus) -> i32 {
+        match overall_status {
+            RunOverallStatus::Ready => 0,
+            RunOverallStatus::Blocked | RunOverallStatus::Partial => 2,
+        }
+    }
 }
 
 /// Execution context provided by the adapter
@@ -429,9 +507,12 @@ impl SpeckitExecutor {
                 dry_run,
                 strict_prereqs,
             } => self.execute_validate_stage(&spec_id, stage, dry_run, strict_prereqs),
-            SpeckitCommand::Specify { spec_id, dry_run } => {
-                self.execute_specify(&spec_id, dry_run)
-            }
+            SpeckitCommand::Specify { spec_id, dry_run } => self.execute_specify(&spec_id, dry_run),
+            SpeckitCommand::Run {
+                spec_id,
+                from_stage,
+                to_stage,
+            } => self.execute_run(&spec_id, from_stage, to_stage),
         }
     }
 
@@ -540,10 +621,7 @@ impl SpeckitExecutor {
             Some(r) => {
                 if !r.exact_match {
                     // Inform user that we matched a suffixed directory
-                    warnings.push(format!(
-                        "Resolved {} to directory: {}",
-                        spec_id, r.dir_name
-                    ));
+                    warnings.push(format!("Resolved {} to directory: {}", spec_id, r.dir_name));
                 }
                 r.path.clone()
             }
@@ -645,10 +723,8 @@ impl SpeckitExecutor {
         }
 
         // Create directory if it doesn't exist
-        if !already_existed {
-            if let Err(e) = std::fs::create_dir_all(&spec_dir) {
-                return Outcome::Error(format!("Failed to create SPEC directory: {e}"));
-            }
+        if !already_existed && let Err(e) = std::fs::create_dir_all(&spec_dir) {
+            return Outcome::Error(format!("Failed to create SPEC directory: {e}"));
         }
 
         // Create minimal PRD.md if it doesn't exist
@@ -676,6 +752,113 @@ impl SpeckitExecutor {
             spec_dir: spec_dir_relative,
             already_existed,
             created_files,
+        })
+    }
+
+    /// Execute run command (batch stage validation)
+    ///
+    /// SPEC-KIT-921 P7-A: Validate stages from `from_stage` to `to_stage`.
+    /// This is validation-only (no agent spawning) - a CI readiness check.
+    ///
+    /// Exit codes:
+    /// - 0: All stages ready
+    /// - 2: Any stage blocked
+    /// - 3: Infrastructure error (e.g., invalid stage range)
+    fn execute_run(
+        &self,
+        spec_id: &str,
+        from_stage: crate::Stage,
+        to_stage: crate::Stage,
+    ) -> Outcome {
+        // Validate spec ID first
+        if let Err(e) = validate_spec_id(spec_id) {
+            return Outcome::Error(e.to_string());
+        }
+
+        // Get the stage range
+        let stages = match crate::Stage::range(from_stage, to_stage) {
+            Some(s) => s,
+            None => {
+                return Outcome::Error(format!(
+                    "Invalid stage range: {} is after {}",
+                    from_stage.display_name(),
+                    to_stage.display_name()
+                ));
+            }
+        };
+
+        // Check for spec.md legacy fallback
+        let resolved = resolve_spec_dir(&self.context.repo_root, spec_id);
+        let spec_dir = match &resolved {
+            Some(r) => r.path.clone(),
+            None => default_spec_dir_for_creation(&self.context.repo_root, spec_id),
+        };
+
+        // Check for legacy spec.md (PRD.md is the canonical artifact)
+        let legacy_fallback =
+            spec_dir.join("spec.md").exists() && !spec_dir.join("PRD.md").exists();
+        let legacy_warning = if legacy_fallback {
+            Some(format!(
+                "DEPRECATED: Found spec.md but no PRD.md for {spec_id}. Please migrate to PRD.md.",
+            ))
+        } else {
+            None
+        };
+
+        // Validate each stage and collect outcomes
+        let mut stage_outcomes = Vec::new();
+        let mut any_blocked = false;
+        let mut any_ready = false;
+
+        for stage in &stages {
+            // Use the existing stage validation logic (dry_run=true, strict_prereqs=true)
+            let (required_missing, recommended_missing) =
+                check_stage_prereqs(&spec_dir, spec_id, *stage);
+
+            let status = if required_missing.is_empty() {
+                any_ready = true;
+                "ready"
+            } else {
+                any_blocked = true;
+                "blocked"
+            };
+
+            // Collect warnings (recommended + legacy)
+            let mut warnings = Vec::new();
+            for rec in &recommended_missing {
+                warnings.push(format!("[recommended] {rec}"));
+            }
+            if *stage == crate::Stage::Plan && legacy_fallback {
+                warnings.push("packet_source: spec_md_legacy".to_string());
+            }
+
+            stage_outcomes.push(RunStageOutcome {
+                stage: *stage,
+                status: status.to_string(),
+                warnings,
+                errors: required_missing,
+            });
+        }
+
+        // Determine overall status
+        let overall_status = match (any_ready, any_blocked) {
+            (true, false) => RunOverallStatus::Ready,
+            (false, true) => RunOverallStatus::Blocked,
+            (true, true) => RunOverallStatus::Partial,
+            (false, false) => RunOverallStatus::Ready, // Empty range is considered ready
+        };
+
+        let exit_code = RunOutcome::calculate_exit_code(overall_status);
+
+        Outcome::Run(RunOutcome {
+            spec_id: spec_id.to_string(),
+            from_stage,
+            to_stage,
+            overall_status,
+            stages: stage_outcomes,
+            exit_code,
+            legacy_fallback,
+            legacy_warning,
         })
     }
 }

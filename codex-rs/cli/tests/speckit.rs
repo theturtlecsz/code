@@ -1768,10 +1768,7 @@ fn tasks_strict_prereqs_json_shows_blocked() -> Result<()> {
     let repo_root = TempDir::new()?;
 
     // Create SPEC directory WITHOUT plan.md
-    let spec_dir = repo_root
-        .path()
-        .join("docs")
-        .join("SPEC-TEST-STRICT-JSON");
+    let spec_dir = repo_root.path().join("docs").join("SPEC-TEST-STRICT-JSON");
     fs::create_dir_all(&spec_dir)?;
 
     let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
@@ -1791,16 +1788,26 @@ fn tasks_strict_prereqs_json_shows_blocked() -> Result<()> {
 
     // Status should be blocked
     let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
-    assert_eq!(status, "blocked", "Expected blocked status with --strict-prereqs");
+    assert_eq!(
+        status, "blocked",
+        "Expected blocked status with --strict-prereqs"
+    );
 
     // Errors should contain the strict-prereqs prefix
     let errors = json.get("errors").and_then(|v| v.as_array());
     let has_strict_error = errors
-        .map(|e| e.iter().any(|err| {
-            err.as_str().map(|s| s.contains("[strict-prereqs]")).unwrap_or(false)
-        }))
+        .map(|e| {
+            e.iter().any(|err| {
+                err.as_str()
+                    .map(|s| s.contains("[strict-prereqs]"))
+                    .unwrap_or(false)
+            })
+        })
         .unwrap_or(false);
-    assert!(has_strict_error, "Expected [strict-prereqs] prefix in errors");
+    assert!(
+        has_strict_error,
+        "Expected [strict-prereqs] prefix in errors"
+    );
 
     Ok(())
 }
@@ -1849,10 +1856,7 @@ fn plan_strict_prereqs_succeeds_when_dir_exists() -> Result<()> {
     let repo_root = TempDir::new()?;
 
     // Create SPEC directory with PRD.md (canonical input artifact for Plan)
-    let spec_dir = repo_root
-        .path()
-        .join("docs")
-        .join("SPEC-TEST-PLAN-STRICT");
+    let spec_dir = repo_root.path().join("docs").join("SPEC-TEST-PLAN-STRICT");
     fs::create_dir_all(&spec_dir)?;
     fs::write(spec_dir.join("PRD.md"), "# Test PRD\n\n## Requirements\n")?;
 
@@ -1886,10 +1890,7 @@ fn tasks_without_strict_prereqs_warns_but_succeeds() -> Result<()> {
     let repo_root = TempDir::new()?;
 
     // Create SPEC directory WITHOUT plan.md
-    let spec_dir = repo_root
-        .path()
-        .join("docs")
-        .join("SPEC-TEST-NO-STRICT");
+    let spec_dir = repo_root.path().join("docs").join("SPEC-TEST-NO-STRICT");
     fs::create_dir_all(&spec_dir)?;
 
     let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
@@ -1914,7 +1915,10 @@ fn tasks_without_strict_prereqs_warns_but_succeeds() -> Result<()> {
 
     let json: JsonValue = serde_json::from_slice(&output.stdout)?;
     let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
-    assert_eq!(status, "ready", "Expected ready status without --strict-prereqs");
+    assert_eq!(
+        status, "ready",
+        "Expected ready status without --strict-prereqs"
+    );
 
     // Should have warnings
     let warnings = json.get("warnings").and_then(|v| v.as_array());
@@ -1933,10 +1937,7 @@ fn implement_strict_prereqs_blocks_when_plan_missing() -> Result<()> {
     let repo_root = TempDir::new()?;
 
     // Create SPEC directory WITHOUT plan.md
-    let spec_dir = repo_root
-        .path()
-        .join("docs")
-        .join("SPEC-TEST-IMPL-STRICT");
+    let spec_dir = repo_root.path().join("docs").join("SPEC-TEST-IMPL-STRICT");
     fs::create_dir_all(&spec_dir)?;
 
     let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
@@ -2480,6 +2481,474 @@ fn suffix_directory_deterministic_resolution() -> Result<()> {
         "Should resolve to alphabetically first directory: {}",
         warning_text
     );
+
+    Ok(())
+}
+
+// =============================================================================
+// P7-A: RUN BATCH COMMAND TESTS
+// =============================================================================
+
+#[test]
+fn run_single_stage_ready_exits_0() -> Result<()> {
+    // P7-A: Run with single stage (--from specify --to specify) should exit 0
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create minimal SPEC structure - specify stage has no prereqs
+    let spec_dir = repo_root.path().join("docs").join("SPEC-RUN-001");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("PRD.md"), "# PRD\nTest.")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            "SPEC-RUN-001",
+            "--from",
+            "specify",
+            "--to",
+            "specify",
+        ])
+        .output()?;
+
+    // Specify has no prereqs, should be ready
+    assert!(
+        output.status.success(),
+        "Expected exit 0 for single specify stage, got {:?}",
+        output.status.code()
+    );
+    Ok(())
+}
+
+#[test]
+fn run_blocked_stage_exits_2() -> Result<()> {
+    // P7-A: Run with blocked stage should exit 2
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory without plan.md (tasks stage blocked)
+    let spec_dir = repo_root.path().join("docs").join("SPEC-RUN-002");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("PRD.md"), "# PRD\nTest.")?;
+    // No plan.md - tasks stage should be blocked
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            "SPEC-RUN-002",
+            "--from",
+            "tasks",
+            "--to",
+            "tasks",
+        ])
+        .output()?;
+
+    // Tasks requires plan.md which doesn't exist
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "Expected exit 2 for blocked tasks stage, got {:?}",
+        output.status.code()
+    );
+    Ok(())
+}
+
+#[test]
+fn run_json_output_schema() -> Result<()> {
+    // P7-A: Run JSON output should match expected schema
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory with PRD.md
+    let spec_dir = repo_root.path().join("docs").join("SPEC-RUN-003");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("PRD.md"), "# PRD\nTest.")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            "SPEC-RUN-003",
+            "--from",
+            "specify",
+            "--to",
+            "plan",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Verify required fields
+    assert!(
+        json.get("schema_version").is_some(),
+        "Missing schema_version in run JSON"
+    );
+    assert!(
+        json.get("tool_version").is_some(),
+        "Missing tool_version in run JSON"
+    );
+    assert!(json.get("spec_id").is_some(), "Missing spec_id in run JSON");
+    assert!(
+        json.get("from_stage").is_some(),
+        "Missing from_stage in run JSON"
+    );
+    assert!(
+        json.get("to_stage").is_some(),
+        "Missing to_stage in run JSON"
+    );
+    assert!(
+        json.get("overall_status").is_some(),
+        "Missing overall_status in run JSON"
+    );
+    assert!(
+        json.get("stages").is_some(),
+        "Missing stages array in run JSON"
+    );
+    assert!(
+        json.get("exit_code").is_some(),
+        "Missing exit_code in run JSON"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn run_multiple_stages_partial_exits_2() -> Result<()> {
+    // P7-A: Run with some ready and some blocked stages should exit 2 (partial)
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC with PRD.md (specify ready, plan ready, tasks blocked)
+    let spec_dir = repo_root.path().join("docs").join("SPEC-RUN-004");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("PRD.md"), "# PRD\nTest.")?;
+    // No plan.md - tasks blocked
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            "SPEC-RUN-004",
+            "--from",
+            "specify",
+            "--to",
+            "tasks",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Should be partial (some ready, some blocked)
+    let overall_status = json
+        .get("overall_status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    assert_eq!(
+        overall_status, "partial",
+        "Expected partial status for mixed outcomes"
+    );
+
+    // Exit code should be 2 (blocked/partial)
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "Expected exit 2 for partial status"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn run_all_stages_ready_exits_0() -> Result<()> {
+    // P7-A: Run with all stages ready should exit 0
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC with all required artifacts
+    let spec_dir = repo_root.path().join("docs").join("SPEC-RUN-005");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("PRD.md"), "# PRD\nTest.")?;
+    fs::write(spec_dir.join("plan.md"), "# Plan\nTest.")?;
+    fs::write(spec_dir.join("tasks.md"), "# Tasks\nTest.")?;
+    fs::write(spec_dir.join("implement.md"), "# Implement\nTest.")?;
+    fs::write(spec_dir.join("validate.md"), "# Validate\nTest.")?;
+    fs::write(spec_dir.join("audit.md"), "# Audit\nTest.")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            "SPEC-RUN-005",
+            "--from",
+            "specify",
+            "--to",
+            "unlock",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Should be ready (all stages have prereqs)
+    let overall_status = json
+        .get("overall_status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    assert_eq!(
+        overall_status, "ready",
+        "Expected ready status when all artifacts present"
+    );
+
+    assert!(
+        output.status.success(),
+        "Expected exit 0 when all stages ready"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn run_invalid_stage_range_exits_error() -> Result<()> {
+    // P7-A: Run with invalid stage range (from > to) should report error
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory
+    let spec_dir = repo_root.path().join("docs").join("SPEC-RUN-006");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("PRD.md"), "# PRD\nTest.")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            "SPEC-RUN-006",
+            "--from",
+            "unlock",
+            "--to",
+            "specify",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Should have error about invalid range
+    assert!(
+        json.get("error").is_some(),
+        "Expected error in JSON for invalid stage range"
+    );
+
+    // Exit code should be 3 (infrastructure error)
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "Expected exit 3 for infrastructure error"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn run_legacy_spec_md_fallback() -> Result<()> {
+    // P7-A: Run with spec.md but no PRD.md should emit legacy warning
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC with spec.md (legacy) but no PRD.md
+    let spec_dir = repo_root.path().join("docs").join("SPEC-RUN-007");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("spec.md"), "# Legacy Spec\nOld format.")?;
+    // No PRD.md - should trigger legacy fallback
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            "SPEC-RUN-007",
+            "--from",
+            "plan",
+            "--to",
+            "plan",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Should have packet_source indicating legacy
+    let packet_source = json.get("packet_source").and_then(|v| v.as_str());
+    assert_eq!(
+        packet_source,
+        Some("spec_md_legacy"),
+        "Expected packet_source: spec_md_legacy for legacy spec.md"
+    );
+
+    // Should have legacy warning
+    assert!(
+        json.get("legacy_warning").is_some(),
+        "Expected legacy_warning in output"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn run_stages_array_contains_per_stage_outcomes() -> Result<()> {
+    // P7-A: Run JSON should contain per-stage outcomes in stages array
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC with PRD.md only
+    let spec_dir = repo_root.path().join("docs").join("SPEC-RUN-008");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("PRD.md"), "# PRD\nTest.")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            "SPEC-RUN-008",
+            "--from",
+            "specify",
+            "--to",
+            "plan",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    let stages = json.get("stages").and_then(|v| v.as_array()).unwrap();
+
+    // Should have 2 stages: specify and plan
+    assert_eq!(stages.len(), 2, "Expected 2 stages in output");
+
+    // Check first stage (specify)
+    let first_stage = &stages[0];
+    assert_eq!(
+        first_stage.get("stage").and_then(|v| v.as_str()),
+        Some("specify")
+    );
+    assert!(
+        first_stage.get("status").is_some(),
+        "Missing status in stage outcome"
+    );
+    assert!(
+        first_stage.get("warnings").is_some(),
+        "Missing warnings in stage outcome"
+    );
+    assert!(
+        first_stage.get("errors").is_some(),
+        "Missing errors in stage outcome"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn run_invalid_spec_id_format() -> Result<()> {
+    // P7-A: Run with invalid spec ID format should exit 3
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            "INVALID-ID", // Doesn't start with SPEC-
+            "--from",
+            "specify",
+            "--to",
+            "plan",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Should have error about invalid format
+    assert!(
+        json.get("error").is_some(),
+        "Expected error in JSON for invalid spec ID"
+    );
+
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "Expected exit 3 for invalid spec ID"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn run_full_pipeline_validation() -> Result<()> {
+    // P7-A: Full pipeline test from specify to unlock
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC with complete artifact chain
+    let spec_dir = repo_root.path().join("docs").join("SPEC-RUN-009");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("PRD.md"), "# PRD\nFull pipeline test.")?;
+    fs::write(spec_dir.join("plan.md"), "# Plan\nArchitecture.")?;
+    fs::write(spec_dir.join("tasks.md"), "# Tasks\nDecomposition.")?;
+    fs::write(spec_dir.join("implement.md"), "# Implement\nCode.")?;
+    fs::write(spec_dir.join("validate.md"), "# Validate\nTests.")?;
+    fs::write(spec_dir.join("audit.md"), "# Audit\nCompliance.")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            "SPEC-RUN-009",
+            "--from",
+            "specify",
+            "--to",
+            "unlock",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // All 7 stages should be in the output
+    let stages = json.get("stages").and_then(|v| v.as_array()).unwrap();
+    assert_eq!(stages.len(), 7, "Expected 7 stages for full pipeline");
+
+    // All should be ready
+    let overall = json
+        .get("overall_status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    assert_eq!(overall, "ready", "Expected all stages ready");
+
+    assert!(output.status.success(), "Expected exit 0 for full pipeline");
 
     Ok(())
 }

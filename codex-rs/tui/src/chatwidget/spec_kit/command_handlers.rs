@@ -76,7 +76,7 @@ pub fn handle_spec_status(widget: &mut ChatWidget, raw_args: String) {
             )));
             widget.request_redraw();
         }
-        // Status command never returns Review, Stage, or Specify variants
+        // Status command never returns Review, Stage, Specify, or Run variants
         Outcome::Review(_) | Outcome::ReviewSkipped { .. } => {
             unreachable!("Status command should never return Review outcome")
         }
@@ -85,6 +85,9 @@ pub fn handle_spec_status(widget: &mut ChatWidget, raw_args: String) {
         }
         Outcome::Specify(_) => {
             unreachable!("Status command should never return Specify outcome")
+        }
+        Outcome::Run(_) => {
+            unreachable!("Status command should never return Run outcome")
         }
     }
 }
@@ -186,7 +189,7 @@ pub fn handle_spec_review(widget: &mut ChatWidget, raw_args: String) {
             )));
             widget.request_redraw();
         }
-        // Review command never returns Status, Stage, or Specify variant
+        // Review command never returns Status, Stage, Specify, or Run variant
         Outcome::Status(_) => {
             unreachable!("Review command should never return Status outcome")
         }
@@ -195,6 +198,9 @@ pub fn handle_spec_review(widget: &mut ChatWidget, raw_args: String) {
         }
         Outcome::Specify(_) => {
             unreachable!("Review command should never return Specify outcome")
+        }
+        Outcome::Run(_) => {
+            unreachable!("Review command should never return Run outcome")
         }
     }
 }

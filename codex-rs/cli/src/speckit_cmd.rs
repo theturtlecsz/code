@@ -27,8 +27,8 @@ use clap::{Parser, Subcommand};
 use codex_spec_kit::Stage;
 use codex_spec_kit::config::policy_toggles::PolicyToggles;
 use codex_spec_kit::executor::{
-    ExecutionContext, Outcome, PolicySnapshot, ReviewOptions, ReviewSignal, SpeckitCommand,
-    SpeckitExecutor, StageResolution, TelemetryMode, render_review_dashboard,
+    ExecutionContext, Outcome, PolicySnapshot, ReviewOptions, ReviewSignal, RunOverallStatus,
+    SpeckitCommand, SpeckitExecutor, StageResolution, TelemetryMode, render_review_dashboard,
     render_status_dashboard, review_warning, status_degraded_warning,
 };
 use std::path::PathBuf;
@@ -123,6 +123,13 @@ pub enum SpeckitSubcommand {
     /// Validates SPEC exists, checks audit artifacts, runs guardrails.
     /// Use --no-dry-run to actually trigger agent execution (TUI only).
     Unlock(UnlockArgs),
+
+    /// Validate multiple stages in a batch (dry-run only)
+    ///
+    /// SPEC-KIT-921 P7-A: Run command validates stages from --from to --to.
+    /// This is validation-only (no agent spawning) - a readiness check for CI.
+    /// Reports aggregated outcome with per-stage results.
+    Run(RunArgs),
 }
 
 /// Arguments for `speckit status` command
@@ -341,6 +348,30 @@ pub struct UnlockArgs {
     pub json: bool,
 }
 
+/// Arguments for `speckit run` command
+///
+/// SPEC-KIT-921 P7-A: Batch stage validation for CI readiness checks.
+#[derive(Debug, Parser)]
+pub struct RunArgs {
+    /// SPEC identifier (e.g., SPEC-KIT-921)
+    #[arg(long = "spec", short = 's', value_name = "SPEC-ID")]
+    pub spec_id: String,
+
+    /// Starting stage (inclusive)
+    /// Valid stages: specify, plan, tasks, implement, validate, audit, unlock
+    #[arg(long = "from", value_name = "STAGE")]
+    pub from_stage: String,
+
+    /// Ending stage (inclusive)
+    /// Valid stages: specify, plan, tasks, implement, validate, audit, unlock
+    #[arg(long = "to", value_name = "STAGE")]
+    pub to_stage: String,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
 impl SpeckitCli {
     /// Run the speckit CLI command
     pub async fn run(self) -> anyhow::Result<()> {
@@ -371,6 +402,7 @@ impl SpeckitCli {
             SpeckitSubcommand::Validate(args) => run_validate(executor, args),
             SpeckitSubcommand::Audit(args) => run_audit(executor, args),
             SpeckitSubcommand::Unlock(args) => run_unlock(executor, args),
+            SpeckitSubcommand::Run(args) => run_run(executor, args),
         }
     }
 }
@@ -467,6 +499,9 @@ fn run_status(executor: SpeckitExecutor, args: StatusArgs) -> anyhow::Result<()>
         }
         Outcome::Specify(_) => {
             unreachable!("Status command should never return Specify outcome")
+        }
+        Outcome::Run(_) => {
+            unreachable!("Status command should never return Run outcome")
         }
     }
 }
@@ -675,6 +710,9 @@ fn run_review(executor: SpeckitExecutor, args: ReviewArgs) -> anyhow::Result<()>
         Outcome::Specify(_) => {
             unreachable!("Review command should never return Specify outcome")
         }
+        Outcome::Run(_) => {
+            unreachable!("Review command should never return Run outcome")
+        }
     }
 }
 
@@ -712,13 +750,13 @@ fn run_specify(executor: SpeckitExecutor, args: SpecifyArgs) -> anyhow::Result<(
                         outcome.spec_dir
                     );
                 } else {
-                    println!(
-                        "[dry-run] Would create SPEC directory {}",
-                        outcome.spec_dir
-                    );
+                    println!("[dry-run] Would create SPEC directory {}", outcome.spec_dir);
                 }
             } else if outcome.already_existed {
-                println!("SPEC {} already exists at {}", outcome.spec_id, outcome.spec_dir);
+                println!(
+                    "SPEC {} already exists at {}",
+                    outcome.spec_id, outcome.spec_dir
+                );
             } else {
                 println!("Created SPEC {} at {}", outcome.spec_id, outcome.spec_dir);
                 if !outcome.created_files.is_empty() {
@@ -835,6 +873,9 @@ fn run_plan(executor: SpeckitExecutor, args: PlanArgs) -> anyhow::Result<()> {
         Outcome::Specify(_) => {
             unreachable!("Plan command should never return Specify outcome")
         }
+        Outcome::Run(_) => {
+            unreachable!("Plan command should never return Run outcome")
+        }
     }
 }
 
@@ -936,6 +977,9 @@ fn run_tasks(executor: SpeckitExecutor, args: TasksArgs) -> anyhow::Result<()> {
         }
         Outcome::Specify(_) => {
             unreachable!("Tasks command should never return Specify outcome")
+        }
+        Outcome::Run(_) => {
+            unreachable!("Tasks command should never return Run outcome")
         }
     }
 }
@@ -1039,6 +1083,9 @@ fn run_implement(executor: SpeckitExecutor, args: ImplementArgs) -> anyhow::Resu
         Outcome::Specify(_) => {
             unreachable!("Implement command should never return Specify outcome")
         }
+        Outcome::Run(_) => {
+            unreachable!("Implement command should never return Run outcome")
+        }
     }
 }
 
@@ -1140,6 +1187,9 @@ fn run_validate(executor: SpeckitExecutor, args: ValidateStageArgs) -> anyhow::R
         }
         Outcome::Specify(_) => {
             unreachable!("Validate command should never return Specify outcome")
+        }
+        Outcome::Run(_) => {
+            unreachable!("Validate command should never return Run outcome")
         }
     }
 }
@@ -1243,6 +1293,9 @@ fn run_audit(executor: SpeckitExecutor, args: AuditArgs) -> anyhow::Result<()> {
         Outcome::Specify(_) => {
             unreachable!("Audit command should never return Specify outcome")
         }
+        Outcome::Run(_) => {
+            unreachable!("Audit command should never return Run outcome")
+        }
     }
 }
 
@@ -1344,6 +1397,9 @@ fn run_unlock(executor: SpeckitExecutor, args: UnlockArgs) -> anyhow::Result<()>
         }
         Outcome::Specify(_) => {
             unreachable!("Unlock command should never return Specify outcome")
+        }
+        Outcome::Run(_) => {
+            unreachable!("Unlock command should never return Run outcome")
         }
     }
 }
@@ -1450,5 +1506,141 @@ fn explain_review_exit_code(
             reasons: vec![],
             flags_active,
         },
+    }
+}
+
+/// Run the run command (batch stage validation)
+///
+/// SPEC-KIT-921 P7-A: Validate stages from --from to --to.
+/// Returns exit 0 if all stages ready, exit 2 if any blocked, exit 3 for infrastructure errors.
+fn run_run(executor: SpeckitExecutor, args: RunArgs) -> anyhow::Result<()> {
+    // Parse stage names
+    let from_stage = parse_stage(&args.from_stage)?;
+    let to_stage = parse_stage(&args.to_stage)?;
+
+    let command = SpeckitCommand::Run {
+        spec_id: args.spec_id.clone(),
+        from_stage,
+        to_stage,
+    };
+
+    match executor.execute(command) {
+        Outcome::Run(outcome) => {
+            if args.json {
+                // JSON output per HANDOFF.md schema
+                let stages: Vec<_> = outcome
+                    .stages
+                    .iter()
+                    .map(|s| {
+                        serde_json::json!({
+                            "stage": s.stage.as_str(),
+                            "status": s.status,
+                            "warnings": s.warnings,
+                            "errors": s.errors,
+                        })
+                    })
+                    .collect();
+
+                let mut json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "spec_id": outcome.spec_id,
+                    "from_stage": outcome.from_stage.as_str(),
+                    "to_stage": outcome.to_stage.as_str(),
+                    "overall_status": outcome.overall_status.as_str(),
+                    "stages": stages,
+                    "exit_code": outcome.exit_code,
+                });
+
+                // Add legacy warning if present
+                if outcome.legacy_fallback {
+                    if let Some(obj) = json.as_object_mut() {
+                        obj.insert(
+                            "packet_source".to_string(),
+                            serde_json::json!("spec_md_legacy"),
+                        );
+                        if let Some(ref warning) = outcome.legacy_warning {
+                            obj.insert("legacy_warning".to_string(), serde_json::json!(warning));
+                        }
+                    }
+                }
+
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                // Text output
+                match outcome.overall_status {
+                    RunOverallStatus::Ready => {
+                        println!(
+                            "✓ SPEC {} ready for stages {} to {}",
+                            outcome.spec_id,
+                            outcome.from_stage.display_name(),
+                            outcome.to_stage.display_name()
+                        );
+                    }
+                    RunOverallStatus::Blocked => {
+                        eprintln!(
+                            "✗ SPEC {} blocked for stages {} to {}",
+                            outcome.spec_id,
+                            outcome.from_stage.display_name(),
+                            outcome.to_stage.display_name()
+                        );
+                    }
+                    RunOverallStatus::Partial => {
+                        println!(
+                            "⚠ SPEC {} partially ready for stages {} to {}",
+                            outcome.spec_id,
+                            outcome.from_stage.display_name(),
+                            outcome.to_stage.display_name()
+                        );
+                    }
+                }
+
+                // Print per-stage details
+                for stage_outcome in &outcome.stages {
+                    let icon = if stage_outcome.status == "ready" {
+                        "✓"
+                    } else {
+                        "✗"
+                    };
+                    println!(
+                        "  {} {}: {}",
+                        icon,
+                        stage_outcome.stage.display_name(),
+                        stage_outcome.status
+                    );
+
+                    for warning in &stage_outcome.warnings {
+                        println!("    ⚠ {warning}");
+                    }
+                    for error in &stage_outcome.errors {
+                        println!("    ✗ {error}");
+                    }
+                }
+
+                // Print legacy warning
+                if let Some(ref warning) = outcome.legacy_warning {
+                    eprintln!("\n⚠ {warning}");
+                }
+            }
+
+            std::process::exit(outcome.exit_code);
+        }
+        Outcome::Error(err) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": err,
+                    "exit_code": 3,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: {err}");
+            }
+            std::process::exit(3);
+        }
+        _ => {
+            unreachable!("Run command should return Run or Error outcome")
+        }
     }
 }

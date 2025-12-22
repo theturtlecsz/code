@@ -77,6 +77,37 @@ impl Stage {
             Self::Unlock => "Unlock",
         }
     }
+
+    /// Get the 0-based index of this stage in the pipeline
+    ///
+    /// SPEC-KIT-921 P7-A: Used for stage range validation in run command.
+    pub fn index(&self) -> usize {
+        match self {
+            Self::Specify => 0,
+            Self::Plan => 1,
+            Self::Tasks => 2,
+            Self::Implement => 3,
+            Self::Validate => 4,
+            Self::Audit => 5,
+            Self::Unlock => 6,
+        }
+    }
+
+    /// Get stages in the range [from, to] inclusive
+    ///
+    /// SPEC-KIT-921 P7-A: Used for batch validation in run command.
+    /// Returns None if from > to (invalid range).
+    pub fn range(from: Stage, to: Stage) -> Option<Vec<Stage>> {
+        let from_idx = from.index();
+        let to_idx = to.index();
+
+        if from_idx > to_idx {
+            return None;
+        }
+
+        let all = Self::all();
+        Some(all[from_idx..=to_idx].to_vec())
+    }
 }
 
 impl From<crate::types::SpecStage> for Stage {

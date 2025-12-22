@@ -1,6 +1,6 @@
 # Spec-Kit Multi-Agent Framework - Task Tracker
 
-**Last Updated**: 2025-12-14
+**Last Updated**: 2025-12-22
 **Branch**: main
 **Status**: ✅ **PHASE 3 COMPLETE** - Production ready
 
@@ -231,6 +231,40 @@ All SPECKIT specs MUST include a `Model & Runtime (Spec Overrides)` section that
 | Order | Task ID | Title | Status | Owners | PRD | Branch | PR | Last Validation | Evidence | Notes |
 |-------|---------|-------|--------|--------|-----|--------|----|-----------------|----------|-------|
 | 1 | GR001-001 | Disable consensus.rs multi-agent patterns | **Done** | Code | docs/MODEL-POLICY.md (GR-001) | main | - | 2025-12-14 | P109 implementation | **IMPLEMENTED** (P109): (1) `SPEC_KIT_CONSENSUS=false` (default) - disables multi-agent consensus, (2) `SPEC_KIT_CRITIC=true` - optional non-blocking critic sidecar, (3) `expected_agents_for_stage()` returns single preferred agent by default, (4) `run_spec_consensus()` returns early with `consensus_ok=true` when disabled, (5) Legacy mode emits deprecation warning. Pipeline: Architect → Implementer → Judge (no voting). Quality enforced by compiler/tests + Judge audit. |
+
+### CLI/TUI Parity (SPEC-KIT-921)
+
+**Context**: CLI adapter implementation for spec-kit commands, ensuring parity between TUI and CLI surfaces. Shared executor pattern eliminates logic duplication.
+
+**STATUS**: P7-A Complete (speckit run batch command), P7-B pending
+
+| Order | Task ID | Title | Status | Owners | PRD | Branch | PR | Last Validation | Evidence | Notes |
+|-------|---------|-------|--------|--------|-----|--------|----|-----------------|----------|-------|
+| 1 | P0-P6 | CLI adapter foundation + shared executor | **Done** | Code | docs/spec-kit/HANDOFF.md | main | - | 2025-12-21 | 57 CLI tests | Canonical packet contract (PRD.md→plan.md→tasks.md→...), spec ID validation, directory resolution. |
+| 2 | P7-A | speckit run batch command | **Done** | Code | docs/spec-kit/HANDOFF.md | main | - | 2025-12-22 | 67 CLI tests | `code speckit run --spec <ID> --from <stage> --to <stage> [--json]`. Validation-only (no agent spawning). Exit codes: 0=ready, 2=blocked, 3=error. spec.md legacy fallback with deprecation warning. |
+| 3 | P7-B | spec.md→PRD.md migration tooling | **Pending** | Code | docs/spec-kit/HANDOFF.md | - | - | - | - | Migration command for legacy spec.md files. |
+
+### Architectural Audit Findings (2025-12-22)
+
+**Context**: Strategic Engineering Report identifying macro-level architectural issues. Prioritized by impact on production readiness.
+
+**STATUS**: 0/8 Started (Tracking for future work)
+
+| Order | Task ID | Title | Status | Priority | Evidence | Notes |
+|-------|---------|-------|--------|----------|----------|-------|
+| 1 | AD-001 | Unify async/blocking behavior | **Pending** | P0 | Strategic Engineering Report | tui/login enable reqwest `blocking` while running on Tokio. Risk of blocking async reactor. |
+| 2 | AD-002 | Unify logging frameworks | **Pending** | P1 | Strategic Engineering Report | Most use tracing, some use env_logger. Inconsistent filtering/formatting. |
+| 3 | AD-003 | Unify error handling | **Pending** | P1 | Strategic Engineering Report | codex-core uses custom errors, exec uses anyhow, tui uses color-eyre. Accidental drift. |
+| 4 | AD-004 | Unify config watchers | **Pending** | P1 | Strategic Engineering Report | Core uses `notify`, spec-kit uses `notify-debouncer-full`. Two competing abstractions. |
+| 5 | AD-005 | Resolve dependency version drift | **Pending** | P2 | Strategic Engineering Report | dirs 5 vs 6, toml 0.8 vs 0.9, thiserror 1 vs 2. Increases compile time and creates type mismatches. |
+| 6 | AD-006 | Add backpressure to unbounded channels | **Pending** | P0 | Strategic Engineering Report | TUI uses unbounded channels for event routing. Memory growth risk under streaming bursts. |
+| 7 | AD-007 | Feature-gate heavy adapters | **Pending** | P2 | Strategic Engineering Report | codex-core always pulls browser automation, tree-sitter. Should be `--features browser`. |
+| 8 | AD-008 | Modularize codex-core boundaries | **Pending** | P1 | Strategic Engineering Report | Split into core-domain, core-runtime, adapters-llm, adapters-tools, adapters-storage. |
+
+**Key Metrics from Audit**:
+- **Functional Completion**: ~70% (happy path strong, edge cases uneven)
+- **Breaking Point**: Unbounded channels → memory exhaustion under 100× load
+- **Missing for V1.0**: Observability (metrics), backpressure, clear subsystem boundaries, unified config
 
 ### Upstream Sync (2025-11-27 Analysis)
 
