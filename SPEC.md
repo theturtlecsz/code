@@ -273,7 +273,7 @@ All SPECKIT specs MUST include a `Model & Runtime (Spec Overrides)` section that
 
 **Context**: Comprehensive upstream analysis comparing fork (`~/code`) with upstream (`~/old/code`). Two reports generated: `docs/UPSTREAM-ANALYSIS-2025-11-27.md` (patch plan) and `docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md` (product gaps).
 
-**STATUS**: 9/18 Complete (Core SYNC items done, integration + feature gaps remain)
+**STATUS**: 9/18 Complete, 13 new items queued (SYNC-019 to SYNC-031)
 
 **Total Effort**: 70-121 hours (Security: DONE, Core: 10-22h, Features: 53-89h)
 
@@ -304,6 +304,37 @@ All SPECKIT specs MUST include a `Model & Runtime (Spec Overrides)` section that
 | 16 | SYNC-016 | Add device code auth fallback | **Done** | Code | docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md | main | | 2025-11-29 | | P6-SYNC Phase 7: Device code OAuth for all providers (OpenAI, Google, Anthropic). P53: keyring-store integration for secure token storage. |
 | 17 | SYNC-017 | Add /review and /merge workflows | **Done** | Code | docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md | main | | 2025-11-29 | | Already implemented: handle_review_command() (mod.rs:16252), handle_merge_command() (mod.rs:17382). |
 | 18 | SYNC-018 | Add branch-aware session resume | **Done** | Code | docs/UPSTREAM-FEATURE-GAP-ANALYSIS.md | main | | 2025-11-29 | | P6-SYNC Phase 4: PipelineBranch struct, branch_id column in SQLite, get_responses_for_branch() filtering. |
+
+#### Upstream Backport Program (2025-12-22 Analysis)
+
+**Context**: Comprehensive upgrade path covering Skills, code-bridge, TUI improvements, TUI v2, ModelsManager, exec hardening, retention/compaction, and centralized feature registry. Based on analysis of upstream zips: `codex-rs/tui2`, `core/src/skills/`, `core/src/models_manager/`, `core/src/features.rs`.
+
+**STATUS**: 0/13 Started (Roadmap defined, awaiting execution)
+
+**Execution Order** (min risk, max value early):
+1. SYNC-019 → 2. SYNC-023 → 3. SYNC-020 → 4. SYNC-025 → 5. SYNC-022 → 6. SYNC-026 → 7. SYNC-028 → 8. SYNC-029 → 9. SYNC-021 → 10. SYNC-027 → 11. SYNC-030/031
+
+| Order | Task ID | Title | Priority | Status | PRD | Feature Flag | Depends On | Notes |
+|-------|---------|-------|----------|--------|-----|--------------|------------|-------|
+| 1 | SYNC-019 | Central Feature Registry (Features enum + config mapping) | P0 | Pending | `docs/SYNC-019-features-registry/PRD.md` | n/a (enabler) | — | Feature gates at edges, config-driven enabling. |
+| 2 | SYNC-020 | Skills v1: Discover + inject + `/skills` browse/insert | P0 | Pending | `docs/SYNC-020-skills-v1/PRD.md` | `features.skills` | SYNC-019 | Metadata-only injection (name/description/path). |
+| 3 | SYNC-021 | Skills v2: SkillsManager + `skills/list` op + caching | P1 | Pending | `docs/SYNC-021-skills-v2/PRD.md` | `features.skills` | SYNC-020 | Queryable skills list, optional file-watch refresh. |
+| 4 | SYNC-022 | Code-Bridge v2 consumer: connect + subscribe + session surfacing | P1 | Pending | `docs/SYNC-022-code-bridge/PRD.md` | `features.bridge` | SYNC-019 | Events user-visible only (not injected to model by default). |
+| 5 | SYNC-023 | TUI (v1) UX/perf backports: redraw coalescing, spinners, bulk cmd responsiveness | P0 | Pending | `docs/SYNC-023-tui-perf/PRD.md` | n/a | — | Event loop + rendering policy, surgical patch. |
+| 6 | SYNC-024 | `/ps` + background terminal UI integration | P1 | Pending | `docs/SYNC-024-tui-ps/PRD.md` | n/a | SYNC-023 | Background exec/PTY session visibility. |
+| 7 | SYNC-025 | Exec hardening: spawn guards, output caps, wait interruption, time budgets | P0 | Pending | `docs/SYNC-025-exec-hardening/PRD.md` | `features.unified_exec` | — | Prevent hangs, runaway memory, zombie children. |
+| 8 | SYNC-026 | Retention/compaction hardening: prune orphan outputs, reduce cloning | P1 | Pending | `docs/SYNC-026-retention-compaction/PRD.md` | n/a | SYNC-025 | Long-session health, storage bounds. |
+| 9 | SYNC-027 | ModelsManager + Remote Models refresh/caching | P2 | Pending | `docs/SYNC-027-models-manager/PRD.md` | `features.remote_models` | SYNC-019 | Async refresh, offline cached list. |
+| 10 | SYNC-028 | TUI v2 scaffold: add `tui2` + required crates, CLI gating | P1 | Pending | `docs/SYNC-028-tui2-scaffold/PRD.md` | `features.tui2` | SYNC-019 | Dual frontends: TUI1 default, TUI2 behind flag. |
+| 11 | SYNC-029 | TUI v2 parity pass: key bindings, selection/copy, `/skills`, `/ps`, bridge surfacing | P2 | Pending | `docs/SYNC-029-tui2-parity/PRD.md` | `features.tui2` | SYNC-028, SYNC-020/024/022 | Spec-kit stays TUI1 only (Phase 1). |
+| 12 | SYNC-030 | Governance: requirements.toml + ExternalSandbox policy | P2 | Pending | `docs/SYNC-030-requirements-policy/PRD.md` | `features.exec_policy` | SYNC-019 | `/etc/codex/requirements.toml` enforcement. |
+| 13 | SYNC-031 | Observability (optional): minimal tracing/OTel shim | P3 | Pending | `docs/SYNC-031-otel-minimal/PRD.md` | `features.otel` | — | Zero functional dependency, optional exporter. |
+
+**Architectural Notes**:
+- **Patchable (good backports)**: Skills v1/v2, `/ps`, exec hardening, retention/compaction, feature registry
+- **Bigger lift**: TUI2 (new frontend architecture), code-bridge (privacy + rate limiting considerations)
+- **Feature checks at edges**: CLI/TUI/tool registry, not deep in domain logic
+- **Skills boundary**: Skill body stays on disk; injection is metadata-only
 
 **Rejected Items** (from analysis - incompatible with fork architecture):
 
