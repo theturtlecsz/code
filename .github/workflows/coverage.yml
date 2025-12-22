@@ -21,7 +21,7 @@ env:
 jobs:
   coverage:
     name: Generate Code Coverage
-    runs-on: turtle-runner
+    runs-on: [self-hosted, Linux]
 
     steps:
     - name: Checkout code
