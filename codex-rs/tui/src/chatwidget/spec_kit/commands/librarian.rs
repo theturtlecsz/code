@@ -147,13 +147,6 @@ fn execute_sweep(widget: &mut ChatWidget, args: &[&str]) {
             )
         });
 
-    // Try to get MCP manager for live data
-    let mcp_manager_guard = widget.mcp_manager.clone();
-    let mcp_opt =
-        crate::chatwidget::spec_kit::consensus_coordinator::block_on_sync(|| async move {
-            mcp_manager_guard.lock().await.clone()
-        });
-
     let mut result = SweepResult::new(&sweep_id, dry_run);
     result.config = Some(config.clone());
 
@@ -197,14 +190,10 @@ fn execute_sweep(widget: &mut ChatWidget, args: &[&str]) {
     });
 
     // Get memory client (live or fallback to sample data)
-    let memory_client = mcp_opt
-        .as_ref()
-        .and_then(|mcp| create_librarian_memory_client(mcp.clone()));
+    let memory_client = create_librarian_memory_client();
 
     // P99: Get relationships client for writing causal edges
-    let relationships_client = mcp_opt
-        .as_ref()
-        .and_then(|mcp| create_relationships_client(mcp.clone()));
+    let relationships_client = create_relationships_client();
 
     let memories = if let Some(ref client) = memory_client {
         let list_params = codex_stage0::librarian::ListParams {
@@ -233,7 +222,7 @@ fn execute_sweep(widget: &mut ChatWidget, args: &[&str]) {
             Err(e) => {
                 push_output(
                     widget,
-                    vec![format!("MCP error: {}. Using sample data.", e)],
+                    vec![format!("local-memory error: {}. Using sample data.", e)],
                     HistoryCellType::Error,
                 );
                 get_sample_memories()
@@ -246,7 +235,7 @@ fn execute_sweep(widget: &mut ChatWidget, args: &[&str]) {
         if flags.verbose {
             push_output(
                 widget,
-                vec!["No MCP connection, using sample data...".to_string()],
+                vec!["local-memory unavailable, using sample data...".to_string()],
                 HistoryCellType::Notice,
             );
         }

@@ -210,21 +210,18 @@ created_at          DATETIME           -- Creation time
 
 ---
 
-## 5. MCP Tools Reference
+## 5. CLI + REST Reference (No MCP)
 
-| Tool | Purpose | Key Parameters |
-|------|---------|----------------|
-| `mcp__local-memory__search` | Query memories | query, search_type, limit, domain, tags |
-| `mcp__local-memory__store_memory` | Store new memory | content, domain, tags, importance, source |
-| `mcp__local-memory__update_memory` | Update existing | id, content, importance, tags |
-| `mcp__local-memory__delete_memory` | Delete by ID | id |
-| `mcp__local-memory__get_memory_by_id` | Fetch specific | id |
-| `mcp__local-memory__analysis` | Q&A, summarize | analysis_type, question, timeframe, limit |
-| `mcp__local-memory__relationships` | Graph operations | relationship_type, memory_id, min_strength |
-| `mcp__local-memory__categories` | Category management | categories_type |
-| `mcp__local-memory__domains` | Domain management | domains_type |
-| `mcp__local-memory__sessions` | Session management | sessions_type |
-| `mcp__local-memory__stats` | System statistics | stats_type |
+Local Memory must be used via **CLI + REST only** (do not configure or call it via MCP).
+
+| Task | CLI (preferred) | REST (automation) |
+|------|------------------|-------------------|
+| Search | `lm search "query" --limit 10 --use_ai` | `GET /api/v1/memories/search?query=...&domain=...&limit=...` |
+| Store | `lm remember "WHAT: ...\nWHY: ...\nEVIDENCE: ...\nOUTCOME: ..." --type decision --importance 8` | `POST /api/v1/memories` |
+| Get by ID | — | `GET /api/v1/memories/{id}` |
+| Update | — | `PUT /api/v1/memories/{id}` |
+| Delete | `local-memory forget <id>` | `DELETE /api/v1/memories/{id}` |
+| Relationships | `~/.claude/hooks/lm-api.sh link <src> <tgt> causes 0.8 "context"` | `POST /api/v1/relationships` |
 
 ---
 
@@ -441,13 +438,16 @@ LM_API_BASE          # REST API base URL
 ~/.claude/hooks/lm-maintenance.sh --daily
 ~/.claude/hooks/lm-maintenance.sh --weekly
 
-# Store via MCP
-mcp__local-memory__store_memory(
-  content="[PATTERN]: Your insight",
-  importance=8,
-  domain="spec-kit",
-  tags=["type:pattern", "spec:SPEC-KIT-XXX"]
-)
+# Store (CLI)
+lm remember "[PATTERN]: Your insight\nEVIDENCE: ...\nOUTCOME: ..." \
+  --type pattern \
+  --importance 8 \
+  --tags "spec:SPEC-KIT-XXX"
+
+# Store (REST)
+curl -sS -X POST "http://localhost:3002/api/v1/memories" \
+  -H "Content-Type: application/json" \
+  -d '{"content":"[PATTERN]: Your insight","importance":8,"domain":"spec-kit","tags":["type:pattern","spec:SPEC-KIT-XXX"]}'
 ```
 
 ---

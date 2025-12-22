@@ -6,7 +6,7 @@ around your existing **local-memory** daemon.
 ## 0. Reality: local-memory is a closed daemon
 
 - The current `local-memory` daemon is **closed source**.
-- It exposes a **REST API** and **MCP tools** (e.g., search, store_memory, relationships, analysis).
+- It exposes a **REST API** and a **CLI** (e.g., `/api/v1/memories`, `/api/v1/relationships`; `local-memory search`, `local-memory remember`).
 - You **cannot**:
   - add new REST endpoints,
   - modify its SQLite schema,
@@ -15,7 +15,7 @@ around your existing **local-memory** daemon.
 Therefore, SPEC-KIT-102 V1 will be implemented as a **separate Rust layer** that:
 
 - Lives in your own repo (e.g., as a new crate/module alongside `codex-rs`).
-- Talks to local-memory via its existing REST/MCP APIs.
+- Talks to local-memory via its existing REST API and CLI (**no MCP**).
 - Maintains its own small overlay SQLite database.
 - Implements:
   - Ingestion guardians (for *your* memories).
@@ -36,7 +36,7 @@ as a powerful backend, without trying to replace or modify it.
 
 - **Local-Memory Daemon (Tier 0.9)** – black box
   - REST: `/memories`, `/search`, `/relationships`, etc.
-  - MCP: `mcp__local-memory__search`, `store_memory`, `update_memory`, `relationships`, `analysis`, ...
+  - CLI: `local-memory search`, `local-memory remember`, `local-memory relate`, `local-memory forget`, ...
   - Owns: raw memories, tags/domains, base relationships, its own analytics.
 
 - **Stage0 Overlay Engine (Tier 1)** – new Rust module/crate (you own)
@@ -70,7 +70,7 @@ as a powerful backend, without trying to replace or modify it.
      ▼
 [Stage0 Overlay Engine]
      │
-     ├──> Guardians on new memories → local-memory.store_memory (MCP/REST)
+     ├──> Guardians on new memories → store via CLI/REST (`local-memory remember` / `POST /api/v1/memories`)
      │
      ├──> DCC:
      │       - IQO via local LLM
@@ -223,7 +223,7 @@ And then in the `/speckit.auto` pipeline in codex-rs, you:
 
 When using this package in Claude Code:
 
-- Treat **local-memory** as a remote dependency accessed via MCP or REST client types.
+- Treat **local-memory** as a remote dependency accessed via REST client types (optionally CLI for debugging); do not depend on MCP.
 - Do **not** attempt to change local-memory’s schema or endpoints.
 - Focus on building the Stage0 overlay engine:
   - overlay DB schema,

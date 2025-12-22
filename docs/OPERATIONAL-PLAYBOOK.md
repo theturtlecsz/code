@@ -25,13 +25,13 @@ Stop and request clarification when:
 
 ## Memory Workflow
 
-Use **local-memory MCP exclusively** for high-value knowledge (importance ≥8).
+Use **local-memory via CLI + REST only** for high-value knowledge (importance ≥8). Do not configure or call `local-memory` via MCP.
 
 **Full protocol**: See `~/.local-memory/PROTOCOL.md` and `MEMORY-POLICY.md`.
 
 **Quick reference**:
-- Search: `local-memory search "query" --limit 5`
-- Store: `mcp__local-memory__store_memory(content, tags, importance>=8, domain)`
+- Search: `lm search "query" --limit 5`
+- Store: `lm remember "WHAT: ...\nWHY: ...\nEVIDENCE: ...\nOUTCOME: ..." --type decision --importance 8`
 - Health: `~/.claude/hooks/lm-dashboard.sh --compact`
 
 **Store**: Architecture decisions, reusable patterns, critical discoveries, milestones.
@@ -40,7 +40,7 @@ Use **local-memory MCP exclusively** for high-value knowledge (importance ≥8).
 **MANDATORY SESSION WORKFLOW**:
 1. **Session Start**: Query local-memory for project context, recent decisions, architecture state
 2. **Before Tasks**: Search local-memory for relevant prior work, patterns, solutions
-3. **During Work**: Store key decisions, architecture changes, bug discoveries (importance ≥7)
+3. **During Work**: Store key decisions, architecture changes, bug discoveries (importance ≥8)
 4. **After Milestones**: Store outcomes, file locations, validation results, lessons learned
 
 ## NotebookLM Integration (SPEC-KIT-102)
@@ -132,11 +132,11 @@ notebooklm health --deep   # Verify authentication
 
 ## Multi-Agent Expectations
 
-- **Consensus is fully automated** via native MCP integration (ARCH-002, 5.3x faster). All 13 `/speckit.*` commands operational
+- **Consensus is fully automated** via native integration (ARCH-002, 5.3x faster). All 13 `/speckit.*` commands operational
 - **Agent roster**: Tier 2 uses gemini/claude/code (or gpt_pro for dev stages), Tier 3 adds gpt_codex, Tier 4 dynamically selects 3-5 agents
 - **Degradation handling**: If agent fails, retry up to 3 times (AR-2). If still fails, continue with remaining agents (2/3 consensus still valid)
 - **Consensus metadata**: Automatically records `agent`, `version`, `content` in local-memory. Synthesis includes `consensus_ok`, `degraded`, `missing_agents`, `conflicts[]`
-- **Memory System**: Use local-memory MCP exclusively. Byterover deprecated 2025-10-18
+- **Memory System**: Use local-memory via **CLI + REST only** (no MCP). Byterover deprecated 2025-10-18
 - **Validation**: `/implement` runs `cargo fmt`, `cargo clippy`, build checks, tests before returning
 
 See `docs/spec-kit/MULTI-AGENT-ARCHITECTURE.md` for detailed system documentation.

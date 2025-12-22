@@ -1,11 +1,13 @@
 //! Stage0 adapter implementations for codex-rs
 //!
 //! This module provides concrete implementations of the Stage0 trait abstractions:
-//! - `LocalMemoryMcpAdapter`: Wraps MCP `local-memory` server
+//! - `LocalMemoryCliAdapter`: Wraps `local-memory` CLI search
+//! - `LibrarianMemoryRestAdapter`: Uses CLI + REST for Librarian sweep/edit
+//! - `RelationshipsRestAdapter`: Uses REST for relationships
 //! - `LlmStubAdapter`: Stub LLM client (uses heuristics, no actual LLM calls in V1)
 //! - `Tier2McpAdapter`: Wraps MCP `notebooklm` server
 //!
-//! These adapters bridge Stage0's trait-based design with codex-rs's MCP infrastructure.
+//! These adapters bridge Stage0's trait-based design with codex-rs integration points.
 
 use crate::local_memory_cli;
 use async_trait::async_trait;
@@ -16,23 +18,28 @@ use codex_stage0::dcc::{
 use codex_stage0::errors::{Result, Stage0Error};
 use codex_stage0::guardians::{LlmClient, MemoryKind};
 use codex_stage0::tier2::{CausalLinkSuggestion, Tier2Client, Tier2Response};
-use serde::Deserialize;
+use reqwest::blocking::Client as BlockingHttpClient;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MCP Server Names
+// Integration Defaults
 // ─────────────────────────────────────────────────────────────────────────────
-
-/// MCP server name for local-memory
-const LOCAL_MEMORY_SERVER: &str = "local-memory";
 
 /// MCP server name for NotebookLM
 const NOTEBOOKLM_SERVER: &str = "notebooklm";
 
-/// Default timeout for MCP tool calls
-const DEFAULT_MCP_TIMEOUT: Duration = Duration::from_secs(30);
+const LOCAL_MEMORY_API_BASE_DEFAULT: &str = "http://localhost:3002/api/v1";
+const LOCAL_MEMORY_HTTP_TIMEOUT: Duration = Duration::from_secs(30);
+
+fn local_memory_api_base() -> String {
+    std::env::var("LOCAL_MEMORY_API_BASE")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| LOCAL_MEMORY_API_BASE_DEFAULT.to_string())
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LocalMemoryCliAdapter
@@ -210,166 +217,6 @@ impl Tier2Client for Tier2HttpAdapter {
             .ok_or_else(|| Stage0Error::tier2("NotebookLM response missing data"))?;
         parse_tier2_answer_text(&data.answer, spec_id)
     }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// LocalMemoryMcpAdapter
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Adapter that implements `LocalMemoryClient` using MCP's local-memory server
-pub struct LocalMemoryMcpAdapter {
-    mcp_manager: Arc<McpConnectionManager>,
-}
-
-impl LocalMemoryMcpAdapter {
-    /// Create a new adapter wrapping the MCP connection manager
-    pub fn new(mcp_manager: Arc<McpConnectionManager>) -> Self {
-        Self { mcp_manager }
-    }
-}
-
-#[async_trait]
-impl LocalMemoryClient for LocalMemoryMcpAdapter {
-    async fn search_memories(
-        &self,
-        params: LocalMemorySearchParams,
-    ) -> Result<Vec<LocalMemorySummary>> {
-        // Build search arguments for mcp__local-memory__search
-        let mut query_parts: Vec<String> = Vec::new();
-
-        // Add keywords to query
-        if !params.iqo.keywords.is_empty() {
-            query_parts.push(params.iqo.keywords.join(" "));
-        }
-
-        // Add domains as part of query
-        if !params.iqo.domains.is_empty() {
-            query_parts.push(params.iqo.domains.join(" "));
-        }
-
-        let query = if query_parts.is_empty() {
-            "*".to_string() // Fallback to wildcard search
-        } else {
-            query_parts.join(" ")
-        };
-
-        // Build tags array for filtering
-        let mut tags: Vec<String> = params.iqo.required_tags.clone();
-        tags.extend(params.iqo.optional_tags.iter().cloned());
-
-        // Build search request
-        let search_args = json!({
-            "query": query,
-            "search_type": "hybrid",  // Use hybrid for best results
-            "use_ai": true,           // Enable semantic search
-            "limit": params.max_results.min(100),
-            "response_format": "detailed",
-            "tags": if tags.is_empty() { None } else { Some(tags) },
-            "domain": params.iqo.domains.first().cloned(),
-        });
-
-        // Call MCP tool
-        let result = self
-            .mcp_manager
-            .call_tool(
-                LOCAL_MEMORY_SERVER,
-                "search",
-                Some(search_args),
-                Some(DEFAULT_MCP_TIMEOUT),
-            )
-            .await
-            .map_err(|e| Stage0Error::local_memory(format!("MCP call failed: {e}")))?;
-
-        // Parse response
-        parse_local_memory_search_response(&result)
-    }
-}
-
-/// Parse MCP search response into LocalMemorySummary vec
-fn parse_local_memory_search_response(
-    result: &mcp_types::CallToolResult,
-) -> Result<Vec<LocalMemorySummary>> {
-    // Extract text content from MCP result
-    let text = result
-        .content
-        .iter()
-        .filter_map(|c| match c {
-            mcp_types::ContentBlock::TextContent(tc) => Some(tc.text.as_str()),
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .join("");
-
-    if text.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    // Parse JSON response
-    let json: serde_json::Value = serde_json::from_str(&text)
-        .map_err(|e| Stage0Error::local_memory(format!("Failed to parse response: {e}")))?;
-
-    // Extract memories array
-    let memories = json
-        .get("memories")
-        .or_else(|| json.get("results"))
-        .and_then(|v| v.as_array())
-        .unwrap_or(&Vec::new())
-        .clone();
-
-    let summaries: Vec<LocalMemorySummary> = memories
-        .iter()
-        .filter_map(|m| {
-            let id = m.get("id")?.as_str()?.to_string();
-            let content = m
-                .get("content")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-
-            // Truncate snippet to ~200 chars
-            let snippet = if content.len() > 200 {
-                format!("{}...", &content[..200])
-            } else {
-                content
-            };
-
-            let domain = m.get("domain").and_then(|v| v.as_str()).map(String::from);
-
-            let tags: Vec<String> = m
-                .get("tags")
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|t| t.as_str().map(String::from))
-                        .collect()
-                })
-                .unwrap_or_default();
-
-            let created_at = m
-                .get("created_at")
-                .and_then(|v| v.as_str())
-                .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-                .map(|dt| dt.with_timezone(&chrono::Utc));
-
-            // Extract similarity score if available
-            let similarity_score = m
-                .get("similarity")
-                .or_else(|| m.get("score"))
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.5); // Default to middle score
-
-            Some(LocalMemorySummary {
-                id,
-                domain,
-                tags,
-                created_at,
-                snippet,
-                similarity_score,
-            })
-        })
-        .collect();
-
-    Ok(summaries)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -641,7 +488,7 @@ impl Tier2Client for NoopTier2Client {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LibrarianMemoryMcpAdapter (for SPEC-KIT-103 Librarian)
+// LibrarianMemoryRestAdapter (for SPEC-KIT-103 Librarian)
 // ─────────────────────────────────────────────────────────────────────────────
 
 use codex_stage0::librarian::{
@@ -650,436 +497,291 @@ use codex_stage0::librarian::{
     MemoryMeta as LibrarianMemoryMeta,
 };
 
-/// Adapter that implements Librarian's `LocalMemoryClient` using MCP
-///
-/// SPEC-KIT-103 P98: This adapter bridges the Librarian's synchronous trait
-/// with the async MCP infrastructure using block_on_sync.
-///
-/// Operations:
-/// - `list_memories` → `mcp__local-memory__search`
-/// - `get_memory` → `mcp__local-memory__get_memory_by_id`
-/// - `update_memory` → `mcp__local-memory__update_memory`
-pub struct LibrarianMemoryMcpAdapter {
-    mcp_manager: Arc<McpConnectionManager>,
+#[derive(Debug, Deserialize)]
+struct LocalMemoryRestEnvelope<T> {
+    pub success: bool,
+    pub data: Option<T>,
+    pub error: Option<String>,
+    pub message: Option<String>,
 }
 
-impl LibrarianMemoryMcpAdapter {
-    /// Create a new adapter wrapping the MCP connection manager
-    pub fn new(mcp_manager: Arc<McpConnectionManager>) -> Self {
-        Self { mcp_manager }
+#[derive(Debug, Deserialize)]
+struct LocalMemoryRestMemory {
+    pub id: String,
+    pub content: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    pub importance: Option<i32>,
+    pub domain: Option<String>,
+    pub created_at: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalMemoryRestUpdateRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub importance: Option<i32>,
+}
+
+/// Adapter that implements Librarian's `LocalMemoryClient` using local-memory CLI + REST (no MCP).
+pub struct LibrarianMemoryRestAdapter {
+    client: BlockingHttpClient,
+    api_base: String,
+    max_content_length: usize,
+}
+
+impl LibrarianMemoryRestAdapter {
+    pub fn new(api_base: String) -> Self {
+        Self {
+            client: BlockingHttpClient::new(),
+            api_base,
+            max_content_length: 50_000,
+        }
     }
 
-    /// Async implementation of list_memories
-    async fn list_memories_async(
-        &self,
-        params: &LibrarianListParams,
-    ) -> Result<Vec<LibrarianMemoryMeta>> {
-        // Build search arguments for mcp__local-memory__search
-        let mut args = json!({
-            "search_type": "semantic",
-            "limit": params.limit.min(100),
-            "response_format": "detailed",
-        });
+    fn memory_url(&self, id: &str) -> String {
+        format!("{}/memories/{}", self.api_base.trim_end_matches('/'), id)
+    }
+}
 
-        // Add domain filter if specified
-        if let Some(domain) = params.domains.first() {
-            args["domain"] = json!(domain);
+impl LibrarianLocalMemoryClient for LibrarianMemoryRestAdapter {
+    fn list_memories(&self, params: &LibrarianListParams) -> Result<Vec<LibrarianMemoryMeta>> {
+        let limit = params.limit.clamp(1, 100);
+        let tags: Vec<String> = Vec::new();
+
+        let domains: Vec<Option<&str>> = if params.domains.is_empty() {
+            vec![None]
+        } else {
+            params.domains.iter().map(|d| Some(d.as_str())).collect()
+        };
+
+        let per_domain_limit = (limit + domains.len().saturating_sub(1)) / domains.len();
+
+        let mut metas: Vec<LibrarianMemoryMeta> = Vec::new();
+        for domain in domains {
+            let results = local_memory_cli::search_blocking(
+                "*",
+                per_domain_limit.min(100),
+                &tags,
+                domain,
+                self.max_content_length,
+            )
+            .map_err(|e| Stage0Error::local_memory(format!("local-memory search failed: {e}")))?;
+
+            for r in results {
+                let Some(id) = r.memory.id else {
+                    continue;
+                };
+
+                let importance = r.memory.importance.map(|i| i as i32);
+                if let Some(min) = params.min_importance {
+                    if importance.unwrap_or(0) < min {
+                        continue;
+                    }
+                }
+
+                metas.push(LibrarianMemoryMeta {
+                    id,
+                    content: r.memory.content,
+                    tags: r.memory.tags.unwrap_or_default(),
+                    importance,
+                    domain: r.memory.domain,
+                });
+
+                if metas.len() >= limit {
+                    break;
+                }
+            }
+
+            if metas.len() >= limit {
+                break;
+            }
         }
 
-        // Add minimum importance filter
-        // Note: local-memory search doesn't directly support min_importance,
-        // so we fetch more and filter client-side if needed
-
-        // Call MCP tool
-        let result = self
-            .mcp_manager
-            .call_tool(
-                LOCAL_MEMORY_SERVER,
-                "search",
-                Some(args),
-                Some(DEFAULT_MCP_TIMEOUT),
-            )
-            .await
-            .map_err(|e| Stage0Error::local_memory(format!("MCP list_memories failed: {e}")))?;
-
-        // Parse response
-        parse_librarian_list_response(&result, params.min_importance)
+        Ok(metas)
     }
 
-    /// Async implementation of get_memory
-    async fn get_memory_async(&self, id: &str) -> Result<LibrarianMemory> {
-        let args = json!({
-            "id": id,
-        });
+    fn get_memory(&self, id: &str) -> Result<LibrarianMemory> {
+        let url = self.memory_url(id);
+        let resp = self
+            .client
+            .get(&url)
+            .timeout(LOCAL_MEMORY_HTTP_TIMEOUT)
+            .send()
+            .map_err(|e| Stage0Error::local_memory(format!("GET {url} failed: {e}")))?;
 
-        let result = self
-            .mcp_manager
-            .call_tool(
-                LOCAL_MEMORY_SERVER,
-                "get_memory_by_id",
-                Some(args),
-                Some(DEFAULT_MCP_TIMEOUT),
-            )
-            .await
-            .map_err(|e| Stage0Error::local_memory(format!("MCP get_memory failed: {e}")))?;
+        if !resp.status().is_success() {
+            return Err(Stage0Error::local_memory(format!(
+                "GET {url} failed: {}",
+                resp.status()
+            )));
+        }
 
-        parse_librarian_get_response(&result, id)
+        let parsed: LocalMemoryRestEnvelope<LocalMemoryRestMemory> = resp
+            .json()
+            .map_err(|e| Stage0Error::local_memory(format!("Failed to parse GET response: {e}")))?;
+
+        if !parsed.success {
+            return Err(Stage0Error::local_memory(
+                parsed
+                    .error
+                    .or(parsed.message)
+                    .unwrap_or_else(|| "local-memory GET failed".to_string()),
+            ));
+        }
+
+        let mem = parsed
+            .data
+            .ok_or_else(|| Stage0Error::local_memory("local-memory GET missing data"))?;
+
+        Ok(LibrarianMemory {
+            id: mem.id,
+            content: mem.content,
+            tags: mem.tags,
+            importance: mem.importance,
+            domain: mem.domain,
+            created_at: mem.created_at,
+        })
     }
 
-    /// Async implementation of update_memory
-    async fn update_memory_async(&self, id: &str, change: &LibrarianMemoryChange) -> Result<()> {
-        let mut args = json!({
-            "id": id,
-        });
+    fn update_memory(&self, id: &str, change: &LibrarianMemoryChange) -> Result<()> {
+        let url = self.memory_url(id);
+        let body = LocalMemoryRestUpdateRequest {
+            content: change.content.clone(),
+            tags: change.tags.clone(),
+            importance: change.importance,
+        };
 
-        if let Some(ref content) = change.content {
-            args["content"] = json!(content);
-        }
-        if let Some(ref tags) = change.tags {
-            args["tags"] = json!(tags);
-        }
-        if let Some(importance) = change.importance {
-            args["importance"] = json!(importance);
+        let resp = self
+            .client
+            .put(&url)
+            .timeout(LOCAL_MEMORY_HTTP_TIMEOUT)
+            .json(&body)
+            .send()
+            .map_err(|e| Stage0Error::local_memory(format!("PUT {url} failed: {e}")))?;
+
+        if !resp.status().is_success() {
+            return Err(Stage0Error::local_memory(format!(
+                "PUT {url} failed: {}",
+                resp.status()
+            )));
         }
 
-        self.mcp_manager
-            .call_tool(
-                LOCAL_MEMORY_SERVER,
-                "update_memory",
-                Some(args),
-                Some(DEFAULT_MCP_TIMEOUT),
-            )
-            .await
-            .map_err(|e| Stage0Error::local_memory(format!("MCP update_memory failed: {e}")))?;
+        let parsed: LocalMemoryRestEnvelope<serde_json::Value> = resp
+            .json()
+            .map_err(|e| Stage0Error::local_memory(format!("Failed to parse PUT response: {e}")))?;
+
+        if !parsed.success {
+            return Err(Stage0Error::local_memory(
+                parsed
+                    .error
+                    .or(parsed.message)
+                    .unwrap_or_else(|| "local-memory update failed".to_string()),
+            ));
+        }
 
         Ok(())
     }
 }
 
-/// Block on async operation from sync context
-/// Uses the same pattern as stage0_integration.rs
-fn block_on_sync<F, T>(f: F) -> T
-where
-    F: std::future::Future<Output = T> + Send,
-    T: Send,
-{
-    // Try to use existing runtime, or create a new one
-    match tokio::runtime::Handle::try_current() {
-        Ok(handle) => {
-            // We're in an async context, use spawn_blocking to avoid blocking
-            std::thread::scope(|s| {
-                s.spawn(|| handle.block_on(f))
-                    .join()
-                    .expect("thread panicked")
-            })
-        }
-        Err(_) => {
-            // No runtime, create a new one
-            tokio::runtime::Runtime::new()
-                .expect("failed to create runtime")
-                .block_on(f)
-        }
-    }
-}
-
-impl LibrarianLocalMemoryClient for LibrarianMemoryMcpAdapter {
-    fn list_memories(&self, params: &LibrarianListParams) -> Result<Vec<LibrarianMemoryMeta>> {
-        block_on_sync(self.list_memories_async(params))
-    }
-
-    fn get_memory(&self, id: &str) -> Result<LibrarianMemory> {
-        block_on_sync(self.get_memory_async(id))
-    }
-
-    fn update_memory(&self, id: &str, change: &LibrarianMemoryChange) -> Result<()> {
-        block_on_sync(self.update_memory_async(id, change))
-    }
-}
-
-/// Parse MCP search response into LibrarianMemoryMeta vec
-fn parse_librarian_list_response(
-    result: &mcp_types::CallToolResult,
-    min_importance: Option<i32>,
-) -> Result<Vec<LibrarianMemoryMeta>> {
-    // Extract text content from MCP result
-    let text = result
-        .content
-        .iter()
-        .filter_map(|c| match c {
-            mcp_types::ContentBlock::TextContent(tc) => Some(tc.text.as_str()),
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .join("");
-
-    if text.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    // Parse JSON response
-    let json: serde_json::Value = serde_json::from_str(&text)
-        .map_err(|e| Stage0Error::local_memory(format!("Failed to parse list response: {e}")))?;
-
-    // Extract memories array
-    let memories = json
-        .get("memories")
-        .or_else(|| json.get("results"))
-        .and_then(|v| v.as_array())
-        .unwrap_or(&Vec::new())
-        .clone();
-
-    let metas: Vec<LibrarianMemoryMeta> = memories
-        .iter()
-        .filter_map(|m| {
-            let id = m.get("id")?.as_str()?.to_string();
-            let content = m
-                .get("content")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-
-            let importance = m
-                .get("importance")
-                .and_then(|v| v.as_i64())
-                .map(|i| i as i32);
-
-            // Apply min_importance filter
-            if let Some(min) = min_importance {
-                if importance.unwrap_or(0) < min {
-                    return None;
-                }
-            }
-
-            let domain = m.get("domain").and_then(|v| v.as_str()).map(String::from);
-
-            let tags: Vec<String> = m
-                .get("tags")
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|t| t.as_str().map(String::from))
-                        .collect()
-                })
-                .unwrap_or_default();
-
-            Some(LibrarianMemoryMeta {
-                id,
-                content,
-                tags,
-                importance,
-                domain,
-            })
-        })
-        .collect();
-
-    Ok(metas)
-}
-
-/// Parse MCP get_memory_by_id response into LibrarianMemory
-fn parse_librarian_get_response(
-    result: &mcp_types::CallToolResult,
-    id: &str,
-) -> Result<LibrarianMemory> {
-    // Extract text content from MCP result
-    let text = result
-        .content
-        .iter()
-        .filter_map(|c| match c {
-            mcp_types::ContentBlock::TextContent(tc) => Some(tc.text.as_str()),
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .join("");
-
-    if text.is_empty() {
-        return Err(Stage0Error::local_memory(format!(
-            "Empty response for memory: {}",
-            id
-        )));
-    }
-
-    // Parse JSON response
-    let json: serde_json::Value = serde_json::from_str(&text)
-        .map_err(|e| Stage0Error::local_memory(format!("Failed to parse get response: {e}")))?;
-
-    // Extract memory fields (might be wrapped in "memory" field or at root)
-    let mem = json.get("memory").unwrap_or(&json);
-
-    let memory_id = mem
-        .get("id")
-        .and_then(|v| v.as_str())
-        .unwrap_or(id)
-        .to_string();
-
-    let content = mem
-        .get("content")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-
-    let tags: Vec<String> = mem
-        .get("tags")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|t| t.as_str().map(String::from))
-                .collect()
-        })
-        .unwrap_or_default();
-
-    let importance = mem
-        .get("importance")
-        .and_then(|v| v.as_i64())
-        .map(|i| i as i32);
-
-    let domain = mem.get("domain").and_then(|v| v.as_str()).map(String::from);
-
-    let created_at = mem
-        .get("created_at")
-        .and_then(|v| v.as_str())
-        .map(String::from);
-
-    Ok(LibrarianMemory {
-        id: memory_id,
-        content,
-        tags,
-        importance,
-        domain,
-        created_at,
-    })
-}
-
-/// Create a Librarian memory client from an MCP connection manager
-///
-/// SPEC-KIT-103 P98: Factory function for creating the Librarian adapter.
-/// Returns None if the local-memory MCP server is unavailable.
-pub fn create_librarian_memory_client(
-    mcp_manager: Arc<McpConnectionManager>,
-) -> Option<LibrarianMemoryMcpAdapter> {
-    if has_local_memory_server(&mcp_manager) {
-        Some(LibrarianMemoryMcpAdapter::new(mcp_manager))
+/// Create a Librarian memory client using CLI + REST (no MCP).
+pub fn create_librarian_memory_client() -> Option<LibrarianMemoryRestAdapter> {
+    if local_memory_cli::local_memory_daemon_healthy_blocking(Duration::from_secs(2)) {
+        Some(LibrarianMemoryRestAdapter::new(local_memory_api_base()))
     } else {
-        tracing::warn!("local-memory MCP server not available for Librarian");
+        tracing::warn!("local-memory daemon not healthy for Librarian (using sample data)");
         None
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RelationshipsMcpAdapter (SPEC-KIT-103 P98 Task 6)
+// RelationshipsRestAdapter (SPEC-KIT-103 P98 Task 6)
 // ─────────────────────────────────────────────────────────────────────────────
 
 use codex_stage0::librarian::{RelationshipInput, RelationshipsClient};
 
-/// Adapter that implements RelationshipsClient using MCP
-///
-/// SPEC-KIT-103 P98 Task 6: Creates causal relationship edges in local-memory
-/// via the `mcp__local-memory__relationships` tool.
-pub struct RelationshipsMcpAdapter {
-    mcp_manager: Arc<McpConnectionManager>,
+#[derive(Debug, Serialize)]
+struct LocalMemoryRestRelationshipRequest<'a> {
+    pub source_memory_id: &'a str,
+    pub target_memory_id: &'a str,
+    pub relationship_type: &'a str,
+    pub strength: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context: Option<&'a str>,
 }
 
-impl RelationshipsMcpAdapter {
-    /// Create a new adapter wrapping the MCP connection manager
-    pub fn new(mcp_manager: Arc<McpConnectionManager>) -> Self {
-        Self { mcp_manager }
+pub struct RelationshipsRestAdapter {
+    client: BlockingHttpClient,
+    api_base: String,
+}
+
+impl RelationshipsRestAdapter {
+    pub fn new(api_base: String) -> Self {
+        Self {
+            client: BlockingHttpClient::new(),
+            api_base,
+        }
     }
 
-    /// Async implementation of create_relationship
-    async fn create_relationship_async(&self, input: &RelationshipInput) -> Result<()> {
-        let args = json!({
-            "relationship_type": "create",
-            "source_memory_id": input.source_id,
-            "target_memory_id": input.target_id,
-            "relationship_type_enum": input.relationship_type,
-            "strength": input.strength,
-            "context": input.context,
-        });
+    fn relationships_url(&self) -> String {
+        format!("{}/relationships", self.api_base.trim_end_matches('/'))
+    }
+}
 
-        self.mcp_manager
-            .call_tool(
-                LOCAL_MEMORY_SERVER,
-                "relationships",
-                Some(args),
-                Some(DEFAULT_MCP_TIMEOUT),
-            )
-            .await
-            .map_err(|e| {
-                Stage0Error::local_memory(format!("MCP create_relationship failed: {e}"))
-            })?;
+impl RelationshipsClient for RelationshipsRestAdapter {
+    fn create_relationship(&self, input: &RelationshipInput) -> Result<()> {
+        let url = self.relationships_url();
+        let body = LocalMemoryRestRelationshipRequest {
+            source_memory_id: &input.source_id,
+            target_memory_id: &input.target_id,
+            relationship_type: &input.relationship_type,
+            strength: input.strength,
+            context: input.context.as_deref(),
+        };
+
+        let resp = self
+            .client
+            .post(&url)
+            .timeout(LOCAL_MEMORY_HTTP_TIMEOUT)
+            .json(&body)
+            .send()
+            .map_err(|e| Stage0Error::local_memory(format!("POST {url} failed: {e}")))?;
+
+        if !resp.status().is_success() {
+            return Err(Stage0Error::local_memory(format!(
+                "POST {url} failed: {}",
+                resp.status()
+            )));
+        }
+
+        let parsed: LocalMemoryRestEnvelope<serde_json::Value> = resp.json().map_err(|e| {
+            Stage0Error::local_memory(format!("Failed to parse relationships response: {e}"))
+        })?;
+
+        if !parsed.success {
+            return Err(Stage0Error::local_memory(
+                parsed
+                    .error
+                    .or(parsed.message)
+                    .unwrap_or_else(|| "local-memory relationship creation failed".to_string()),
+            ));
+        }
 
         Ok(())
     }
 }
 
-impl RelationshipsClient for RelationshipsMcpAdapter {
-    fn create_relationship(&self, input: &RelationshipInput) -> Result<()> {
-        block_on_sync(self.create_relationship_async(input))
-    }
-}
-
-/// Create a Librarian relationships client from an MCP connection manager
-///
-/// SPEC-KIT-103 P98 Task 6: Factory function for creating the relationships adapter.
-/// Returns None if the local-memory MCP server is unavailable.
-pub fn create_relationships_client(
-    mcp_manager: Arc<McpConnectionManager>,
-) -> Option<RelationshipsMcpAdapter> {
-    if has_local_memory_server(&mcp_manager) {
-        Some(RelationshipsMcpAdapter::new(mcp_manager))
+/// Create a Librarian relationships client using REST (no MCP).
+pub fn create_relationships_client() -> Option<RelationshipsRestAdapter> {
+    if local_memory_cli::local_memory_daemon_healthy_blocking(Duration::from_secs(2)) {
+        Some(RelationshipsRestAdapter::new(local_memory_api_base()))
     } else {
-        tracing::warn!("local-memory MCP server not available for relationships");
+        tracing::warn!("local-memory daemon not healthy for relationships (skipping edges)");
         None
     }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Factory Functions
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Check if local-memory MCP server is available
-pub fn has_local_memory_server(mcp_manager: &McpConnectionManager) -> bool {
-    mcp_manager
-        .list_all_tools()
-        .keys()
-        .any(|k| k.starts_with(&format!("{LOCAL_MEMORY_SERVER}__")))
-}
-
-/// Check if NotebookLM MCP server is available
-pub fn has_notebooklm_server(mcp_manager: &McpConnectionManager) -> bool {
-    mcp_manager
-        .list_all_tools()
-        .keys()
-        .any(|k| k.starts_with(&format!("{NOTEBOOKLM_SERVER}__")))
-}
-
-/// Create all Stage0 adapters from an MCP connection manager
-///
-/// Returns `(local_memory, llm, tier2)` adapters.
-/// If a required MCP server is unavailable, returns None for that adapter.
-pub fn create_stage0_adapters(
-    mcp_manager: Arc<McpConnectionManager>,
-) -> (
-    Option<LocalMemoryMcpAdapter>,
-    LlmStubAdapter,
-    Option<Tier2McpAdapter>,
-) {
-    let local_memory = if has_local_memory_server(&mcp_manager) {
-        Some(LocalMemoryMcpAdapter::new(mcp_manager.clone()))
-    } else {
-        tracing::warn!("local-memory MCP server not available, Stage0 will use fallback");
-        None
-    };
-
-    let llm = LlmStubAdapter::new();
-
-    let tier2 = if has_notebooklm_server(&mcp_manager) {
-        Some(Tier2McpAdapter::new(mcp_manager))
-    } else {
-        tracing::info!("notebooklm MCP server not available, Tier2 synthesis disabled");
-        None
-    };
-
-    (local_memory, llm, tier2)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

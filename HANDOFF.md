@@ -309,30 +309,45 @@ load HANDOFF.md **ultrathink**
 
 ## Session Context (2025-12-22)
 
-SPEC-KIT-921 is COMPLETE. Previous session accomplished:
-- ✅ Verified CLI builds and runs (`code speckit status --json` works)
-- ✅ Added `run` and `status` tests to `.github/workflows/spec-kit-ci.yml`
-- ✅ Created `docs/spec-kit/CLI-REFERENCE.md` (300+ lines)
-- ✅ Archived SPEC-KIT-920 as superseded
+Previous session (P64) accomplished:
+- ✅ Fixed rustfmt CI failure (commit aa8b6439d)
+- ✅ Committed architectural changes (MCP→CLI/REST migration for local-memory)
+- ✅ Updated SPEC.md tracker with SPEC-KIT-921 completion
+- ✅ Updated HANDOFF.md with continuation prompt
 
-## Pending Actions
+## Primary Focus: CI Stabilization
 
-1. **Commit session changes** (if not done):
-   - `.github/workflows/spec-kit-ci.yml` — CI test enhancements
-   - `docs/spec-kit/CLI-REFERENCE.md` — new CLI reference doc
-   - `docs/SPEC-KIT-920-tui-automation/spec.md` — superseded notice
-   - `HANDOFF.md` — updated status
+1. **Verify CI workflows pass**:
+   - Check Quality Gates (rustfmt fix just pushed)
+   - Check Spec-Kit CI (was passing, verify still green)
+   - Monitor: `gh run list --limit 5`
 
-2. **Validate CI workflow** — trigger GH Actions to verify new tests pass
+2. **P3: Pipeline Coordinator Extraction** (include in scope):
+   - Goal: Extract `/speckit.auto` orchestration from TUI to SpeckitExecutor
+   - Enables: Headless full pipeline runs via CLI
+   - Files to modify: `spec-kit/src/executor/mod.rs`, `tui/src/chatwidget/spec_kit/pipeline_coordinator.rs`
+   - Approach: Move stage sequencing logic, keep TUI as thin adapter
 
-3. **Optional P3** — Extract pipeline coordinator from TUI (if headless orchestration needed)
-
-4. **SPEC.md tracker update** — Add SPEC-KIT-921 row if tracking active SPECs
+3. **MAINT-12 continuation** (if time permits):
+   - Stage0: NotebookLM HTTP-only + local-memory CLI/REST (no MCP)
+   - Goal: Stage0 must not require MCP at all
 
 ## Quick Verify
 ```bash
-./codex-rs/target/release/code speckit run --spec SPEC-KIT-921 --from plan --to audit --json
+gh run list --limit 5                              # Check CI status
+./codex-rs/target/release/code speckit status --spec SPEC-KIT-900 --json  # CLI works
+cargo test -p codex-cli -- speckit                # Run speckit tests
 ```
+
+## Tracking Summary
+
+| Item | Status | Next Action |
+|------|--------|-------------|
+| SPEC-KIT-921 | ✅ Complete | Done |
+| CI (Quality Gates) | ⏳ Pending | Verify rustfmt fix |
+| CI (Spec-Kit) | ✅ Passing | Monitor |
+| P3 Coordinator | 🔶 Scoped | Extract from TUI |
+| MAINT-12 Stage0 | 🔶 In Progress | Remove MCP deps |
 ```
 
 **Key context:**
