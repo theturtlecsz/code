@@ -23,7 +23,12 @@ Used by CLI integration tests and contract verification.
 ```
 SPEC-CI-001/
 ├── docs/
-│   ├── SPEC-CI-001-clean/plan.md
+│   ├── SPEC-CI-001-clean/
+│   │   ├── PRD.md
+│   │   ├── plan.md
+│   │   ├── tasks.md
+│   │   ├── implement.md
+│   │   └── validate.md
 │   ├── SPEC-CI-001-conflict/plan.md
 │   └── SPEC-CI-001-malformed/plan.md
 └── docs/SPEC-OPS-004-integrated-coder-hooks/evidence/consensus/
@@ -39,6 +44,7 @@ This fixture is a contract lock. Changes require:
 2. Update review.rs fixture tests
 3. Bump fixture version in this README
 
-**Fixture Version**: 1.0.0
+**Fixture Version**: 1.1.0
 **Created**: 2025-12-21
+**Updated**: 2025-12-22 (added stage prerequisite files for `run` command)
 **P1-B Reference**: SPEC-KIT-921
