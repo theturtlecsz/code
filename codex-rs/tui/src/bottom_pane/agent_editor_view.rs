@@ -651,13 +651,16 @@ mod tests {
         let (high_tx, _high_rx) = unbounded_channel();
         let (bulk_tx, _bulk_rx) = unbounded_channel();
         let sender = AppEventSender::new_dual(high_tx, bulk_tx);
+        // Use 'sh' as command since it's always available on Unix systems,
+        // ensuring the view renders params instead of "Not installed" message.
+        // The command existence check controls whether params are shown.
         let view = AgentEditorView::new(
-            "claude".into(),
+            "shell".into(),
             true,
             None,
             Some(vec!["--dangerously-skip-permissions".into()]),
             None,
-            "claude".into(),
+            "sh".into(), // Always exists, so installed=true and params render
             sender,
         );
 
