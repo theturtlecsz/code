@@ -355,6 +355,11 @@ pub enum Outcome {
     /// SPEC-KIT-921 P7-A: Aggregated validation results from multiple stages.
     Run(RunOutcome),
 
+    /// Migrate command outcome (spec.md → PRD.md)
+    ///
+    /// SPEC-KIT-921 P7-B: Migration result for legacy spec.md files.
+    Migrate(MigrateOutcome),
+
     /// Command failed with error
     Error(String),
 }
@@ -430,8 +435,9 @@ pub struct RunOutcome {
     pub stages: Vec<RunStageOutcome>,
     /// Exit code: 0=all ready, 2=any blocked, 3=infrastructure error
     pub exit_code: i32,
-    /// Whether spec.md legacy fallback was used
-    pub legacy_fallback: bool,
+    /// Whether legacy spec.md was detected (without PRD.md)
+    /// When true, Plan stage is blocked until PRD.md is created via migration
+    pub legacy_detected: bool,
     /// Legacy warning message if fallback was used
     pub legacy_warning: Option<String>,
 }
@@ -444,6 +450,56 @@ impl RunOutcome {
             RunOverallStatus::Blocked | RunOverallStatus::Partial => 2,
         }
     }
+}
+
+/// Status of a migration operation
+///
+/// SPEC-KIT-921 P7-B: Status codes for spec.md → PRD.md migration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MigrateStatus {
+    /// Migration completed successfully
+    Migrated,
+    /// No migration needed (PRD.md already exists)
+    AlreadyMigrated,
+    /// No source file to migrate (spec.md doesn't exist)
+    NoSourceFile,
+    /// Would migrate (dry-run mode)
+    WouldMigrate,
+}
+
+impl MigrateStatus {
+    /// Get the string representation for JSON output
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            MigrateStatus::Migrated => "migrated",
+            MigrateStatus::AlreadyMigrated => "already_migrated",
+            MigrateStatus::NoSourceFile => "no_source_file",
+            MigrateStatus::WouldMigrate => "would_migrate",
+        }
+    }
+}
+
+/// Outcome from the migrate command (spec.md → PRD.md)
+///
+/// SPEC-KIT-921 P7-B: Migration creates PRD.md from legacy spec.md.
+#[derive(Debug)]
+pub struct MigrateOutcome {
+    /// The SPEC identifier
+    pub spec_id: String,
+    /// Whether this was a dry-run (check only, no changes)
+    pub dry_run: bool,
+    /// Migration status
+    pub status: MigrateStatus,
+    /// Path to the SPEC directory (relative to repo root)
+    pub spec_dir: String,
+    /// Source file path (spec.md) if exists
+    pub source_file: Option<String>,
+    /// Destination file path (PRD.md) if created
+    pub dest_file: Option<String>,
+    /// Exit code: 0=success/no-op, 1=error
+    pub exit_code: i32,
+    /// Warnings (if any)
+    pub warnings: Vec<String>,
 }
 
 /// Execution context provided by the adapter
@@ -513,6 +569,7 @@ impl SpeckitExecutor {
                 from_stage,
                 to_stage,
             } => self.execute_run(&spec_id, from_stage, to_stage),
+            SpeckitCommand::Migrate { spec_id, dry_run } => self.execute_migrate(&spec_id, dry_run),
         }
     }
 
@@ -795,11 +852,12 @@ impl SpeckitExecutor {
         };
 
         // Check for legacy spec.md (PRD.md is the canonical artifact)
-        let legacy_fallback =
+        // Policy: legacy packets are BLOCKED until migrated (not a true fallback)
+        let legacy_detected =
             spec_dir.join("spec.md").exists() && !spec_dir.join("PRD.md").exists();
-        let legacy_warning = if legacy_fallback {
+        let legacy_warning = if legacy_detected {
             Some(format!(
-                "DEPRECATED: Found spec.md but no PRD.md for {spec_id}. Please migrate to PRD.md.",
+                "BLOCKED: Found spec.md but no PRD.md for {spec_id}. Run speckit migrate to create PRD.md.",
             ))
         } else {
             None
@@ -828,8 +886,8 @@ impl SpeckitExecutor {
             for rec in &recommended_missing {
                 warnings.push(format!("[recommended] {rec}"));
             }
-            if *stage == crate::Stage::Plan && legacy_fallback {
-                warnings.push("packet_source: spec_md_legacy".to_string());
+            if *stage == crate::Stage::Plan && legacy_detected {
+                warnings.push("packet_source: spec_md_legacy (blocked until migrated)".to_string());
             }
 
             stage_outcomes.push(RunStageOutcome {
@@ -857,8 +915,129 @@ impl SpeckitExecutor {
             overall_status,
             stages: stage_outcomes,
             exit_code,
-            legacy_fallback,
+            legacy_detected,
             legacy_warning,
+        })
+    }
+
+    /// Execute migrate command (SPEC-KIT-921 P7-B)
+    ///
+    /// Migrates legacy spec.md to PRD.md:
+    /// 1. Detect legacy: spec.md exists && PRD.md missing
+    /// 2. Create PRD.md with migration header
+    /// 3. Leave spec.md intact
+    fn execute_migrate(&self, spec_id: &str, dry_run: bool) -> Outcome {
+        // Validate spec ID
+        if let Err(e) = validate_spec_id(spec_id) {
+            return Outcome::Error(e.to_string());
+        }
+
+        // Resolve spec directory
+        let resolved = resolve_spec_dir(&self.context.repo_root, spec_id);
+        let spec_dir = match &resolved {
+            Some(r) => r.path.clone(),
+            None => {
+                // Directory doesn't exist - nothing to migrate
+                return Outcome::Migrate(MigrateOutcome {
+                    spec_id: spec_id.to_string(),
+                    dry_run,
+                    status: MigrateStatus::NoSourceFile,
+                    spec_dir: format!("docs/{spec_id}"),
+                    source_file: None,
+                    dest_file: None,
+                    exit_code: 0, // Not an error, just nothing to do
+                    warnings: vec![format!(
+                        "SPEC directory not found for {spec_id} - nothing to migrate"
+                    )],
+                });
+            }
+        };
+
+        let spec_dir_rel = spec_dir
+            .strip_prefix(&self.context.repo_root)
+            .unwrap_or(&spec_dir)
+            .to_string_lossy()
+            .to_string();
+
+        let spec_md_path = spec_dir.join("spec.md");
+        let prd_md_path = spec_dir.join("PRD.md");
+
+        // Check if PRD.md already exists
+        if prd_md_path.exists() {
+            return Outcome::Migrate(MigrateOutcome {
+                spec_id: spec_id.to_string(),
+                dry_run,
+                status: MigrateStatus::AlreadyMigrated,
+                spec_dir: spec_dir_rel,
+                source_file: if spec_md_path.exists() {
+                    Some("spec.md".to_string())
+                } else {
+                    None
+                },
+                dest_file: Some("PRD.md".to_string()),
+                exit_code: 0,
+                warnings: vec![],
+            });
+        }
+
+        // Check if spec.md exists
+        if !spec_md_path.exists() {
+            let warning = format!("No spec.md found in {spec_dir_rel} - nothing to migrate");
+            return Outcome::Migrate(MigrateOutcome {
+                spec_id: spec_id.to_string(),
+                dry_run,
+                status: MigrateStatus::NoSourceFile,
+                spec_dir: spec_dir_rel,
+                source_file: None,
+                dest_file: None,
+                exit_code: 0,
+                warnings: vec![warning],
+            });
+        }
+
+        // Dry-run mode: just report what would happen
+        if dry_run {
+            return Outcome::Migrate(MigrateOutcome {
+                spec_id: spec_id.to_string(),
+                dry_run: true,
+                status: MigrateStatus::WouldMigrate,
+                spec_dir: spec_dir_rel,
+                source_file: Some("spec.md".to_string()),
+                dest_file: Some("PRD.md".to_string()),
+                exit_code: 0,
+                warnings: vec![],
+            });
+        }
+
+        // Perform migration: read spec.md, create PRD.md with header
+        let spec_content = match std::fs::read_to_string(&spec_md_path) {
+            Ok(content) => content,
+            Err(e) => {
+                return Outcome::Error(format!("Failed to read spec.md: {e}"));
+            }
+        };
+
+        // Get current date for migration header
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+
+        // Create PRD.md with migration header
+        let prd_content = format!(
+            "<!-- Migrated from spec.md on {today} by speckit migrate -->\n\n{spec_content}"
+        );
+
+        if let Err(e) = std::fs::write(&prd_md_path, &prd_content) {
+            return Outcome::Error(format!("Failed to create PRD.md: {e}"));
+        }
+
+        Outcome::Migrate(MigrateOutcome {
+            spec_id: spec_id.to_string(),
+            dry_run: false,
+            status: MigrateStatus::Migrated,
+            spec_dir: spec_dir_rel,
+            source_file: Some("spec.md".to_string()),
+            dest_file: Some("PRD.md".to_string()),
+            exit_code: 0,
+            warnings: vec![],
         })
     }
 }
@@ -928,7 +1107,7 @@ fn check_stage_prereqs(
             // Required: PRD.md exists (output of Specify)
             if !spec_dir.join("PRD.md").exists() {
                 required_missing.push(format!(
-                    "PRD.md not found for {spec_id} - run speckit specify first"
+                    "PRD.md not found for {spec_id} - run the Specify stage first"
                 ));
             }
         }
@@ -936,7 +1115,7 @@ fn check_stage_prereqs(
             // Required: plan.md exists (output of Plan)
             if !spec_dir.join("plan.md").exists() {
                 required_missing.push(format!(
-                    "plan.md not found for {spec_id} - run /speckit.plan first"
+                    "plan.md not found for {spec_id} - run the Plan stage first"
                 ));
             }
         }
@@ -944,13 +1123,13 @@ fn check_stage_prereqs(
             // Required: tasks.md exists (output of Tasks)
             if !spec_dir.join("tasks.md").exists() {
                 required_missing.push(format!(
-                    "tasks.md not found for {spec_id} - run /speckit.tasks first"
+                    "tasks.md not found for {spec_id} - run the Tasks stage first"
                 ));
             }
             // Recommended: plan.md exists (for context)
             if spec_dir.exists() && !spec_dir.join("plan.md").exists() {
                 recommended_missing.push(format!(
-                    "plan.md not found for {spec_id} - consider running /speckit.plan first"
+                    "plan.md not found for {spec_id} - consider running the Plan stage first"
                 ));
             }
         }
@@ -958,13 +1137,13 @@ fn check_stage_prereqs(
             // Required: implement.md exists (output of Implement)
             if !spec_dir.join("implement.md").exists() {
                 required_missing.push(format!(
-                    "implement.md not found for {spec_id} - run /speckit.implement first"
+                    "implement.md not found for {spec_id} - run the Implement stage first"
                 ));
             }
             // Recommended: tasks.md exists (for test mapping)
             if spec_dir.exists() && !spec_dir.join("tasks.md").exists() {
                 recommended_missing.push(format!(
-                    "tasks.md not found for {spec_id} - consider running /speckit.tasks first"
+                    "tasks.md not found for {spec_id} - consider running the Tasks stage first"
                 ));
             }
         }
@@ -972,13 +1151,13 @@ fn check_stage_prereqs(
             // Required: validate.md exists (output of Validate)
             if !spec_dir.join("validate.md").exists() {
                 required_missing.push(format!(
-                    "validate.md not found for {spec_id} - run /speckit.validate first"
+                    "validate.md not found for {spec_id} - run the Validate stage first"
                 ));
             }
             // Recommended: implement.md exists (for audit context)
             if spec_dir.exists() && !spec_dir.join("implement.md").exists() {
                 recommended_missing.push(format!(
-                    "implement.md not found for {spec_id} - consider running /speckit.implement first"
+                    "implement.md not found for {spec_id} - consider running the Implement stage first"
                 ));
             }
         }
@@ -986,13 +1165,13 @@ fn check_stage_prereqs(
             // Required: audit.md exists (output of Audit)
             if !spec_dir.join("audit.md").exists() {
                 required_missing.push(format!(
-                    "audit.md not found for {spec_id} - run /speckit.audit first"
+                    "audit.md not found for {spec_id} - run the Audit stage first"
                 ));
             }
             // Recommended: validate.md exists (for final check)
             if spec_dir.exists() && !spec_dir.join("validate.md").exists() {
                 recommended_missing.push(format!(
-                    "validate.md not found for {spec_id} - consider running /speckit.validate first"
+                    "validate.md not found for {spec_id} - consider running the Validate stage first"
                 ));
             }
         }

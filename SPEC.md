@@ -236,13 +236,16 @@ All SPECKIT specs MUST include a `Model & Runtime (Spec Overrides)` section that
 
 **Context**: CLI adapter implementation for spec-kit commands, ensuring parity between TUI and CLI surfaces. Shared executor pattern eliminates logic duplication.
 
-**STATUS**: P7-A Complete (speckit run batch command), P7-B pending
+**STATUS**: P7-A/C Complete, P7-B pending
+
+**Policy Decision (2025-12-22)**: Legacy packets (spec.md without PRD.md) are **BLOCKED** until migrated. This is detection, not fallback. P7-B migration tooling provides the path forward.
 
 | Order | Task ID | Title | Status | Owners | PRD | Branch | PR | Last Validation | Evidence | Notes |
 |-------|---------|-------|--------|--------|-----|--------|----|-----------------|----------|-------|
 | 1 | P0-P6 | CLI adapter foundation + shared executor | **Done** | Code | docs/spec-kit/HANDOFF.md | main | - | 2025-12-21 | 57 CLI tests | Canonical packet contract (PRD.md→plan.md→tasks.md→...), spec ID validation, directory resolution. |
-| 2 | P7-A | speckit run batch command | **Done** | Code | docs/spec-kit/HANDOFF.md | main | - | 2025-12-22 | 67 CLI tests | `code speckit run --spec <ID> --from <stage> --to <stage> [--json]`. Validation-only (no agent spawning). Exit codes: 0=ready, 2=blocked, 3=error. spec.md legacy fallback with deprecation warning. |
-| 3 | P7-B | spec.md→PRD.md migration tooling | **Pending** | Code | docs/spec-kit/HANDOFF.md | - | - | - | - | Migration command for legacy spec.md files. |
+| 2 | P7-A | speckit run batch command | **Done** | Code | docs/spec-kit/HANDOFF.md | main | - | 2025-12-22 | 64 CLI tests | `code speckit run --spec <ID> --from <stage> --to <stage> [--json]`. Validation-only (no agent spawning). Exit codes: 0=ready, 2=blocked, 3=error. |
+| 3 | P7-B | spec.md→PRD.md migration tooling | **Done** | Code | docs/spec-kit/HANDOFF.md | main | - | 2025-12-22 | 70 CLI tests | `code speckit migrate --spec <ID> [--dry-run] [--json]`. Detect legacy, create PRD.md with migration header, leave spec.md intact. |
+| 4 | P7-C | Architectural watch-out fixes | **Done** | Code | docs/spec-kit/HANDOFF.md | main | - | 2025-12-22 | 64 CLI tests | Renamed legacy_fallback→legacy_detected (Watch-out A), surface-neutral core messages (Watch-out C), unified resolve_spec_dir() usage (Watch-out D). |
 
 ### Architectural Audit Findings (2025-12-22)
 

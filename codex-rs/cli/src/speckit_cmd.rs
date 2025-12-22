@@ -27,9 +27,9 @@ use clap::{Parser, Subcommand};
 use codex_spec_kit::Stage;
 use codex_spec_kit::config::policy_toggles::PolicyToggles;
 use codex_spec_kit::executor::{
-    ExecutionContext, Outcome, PolicySnapshot, ReviewOptions, ReviewSignal, RunOverallStatus,
-    SpeckitCommand, SpeckitExecutor, StageResolution, TelemetryMode, render_review_dashboard,
-    render_status_dashboard, review_warning, status_degraded_warning,
+    ExecutionContext, MigrateStatus, Outcome, PolicySnapshot, ReviewOptions, ReviewSignal,
+    RunOverallStatus, SpeckitCommand, SpeckitExecutor, StageResolution, TelemetryMode,
+    render_review_dashboard, render_status_dashboard, review_warning, status_degraded_warning,
 };
 use std::path::PathBuf;
 
@@ -130,6 +130,12 @@ pub enum SpeckitSubcommand {
     /// This is validation-only (no agent spawning) - a readiness check for CI.
     /// Reports aggregated outcome with per-stage results.
     Run(RunArgs),
+
+    /// Migrate legacy spec.md to PRD.md
+    ///
+    /// SPEC-KIT-921 P7-B: Migration command for legacy spec.md files.
+    /// Creates PRD.md with migration header, leaves spec.md intact.
+    Migrate(MigrateArgs),
 }
 
 /// Arguments for `speckit status` command
@@ -372,6 +378,24 @@ pub struct RunArgs {
     pub json: bool,
 }
 
+/// Arguments for `speckit migrate` command
+///
+/// SPEC-KIT-921 P7-B: Migrate legacy spec.md to PRD.md
+#[derive(Debug, Parser)]
+pub struct MigrateArgs {
+    /// SPEC identifier (e.g., SPEC-KIT-921)
+    #[arg(long = "spec", short = 's', value_name = "SPEC-ID")]
+    pub spec_id: String,
+
+    /// Check what would be migrated without making changes
+    #[arg(long = "dry-run")]
+    pub dry_run: bool,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
 impl SpeckitCli {
     /// Run the speckit CLI command
     pub async fn run(self) -> anyhow::Result<()> {
@@ -403,6 +427,7 @@ impl SpeckitCli {
             SpeckitSubcommand::Audit(args) => run_audit(executor, args),
             SpeckitSubcommand::Unlock(args) => run_unlock(executor, args),
             SpeckitSubcommand::Run(args) => run_run(executor, args),
+            SpeckitSubcommand::Migrate(args) => run_migrate(executor, args),
         }
     }
 }
@@ -502,6 +527,9 @@ fn run_status(executor: SpeckitExecutor, args: StatusArgs) -> anyhow::Result<()>
         }
         Outcome::Run(_) => {
             unreachable!("Status command should never return Run outcome")
+        }
+        Outcome::Migrate(_) => {
+            unreachable!("Status command should never return Migrate outcome")
         }
     }
 }
@@ -713,6 +741,9 @@ fn run_review(executor: SpeckitExecutor, args: ReviewArgs) -> anyhow::Result<()>
         Outcome::Run(_) => {
             unreachable!("Review command should never return Run outcome")
         }
+        Outcome::Migrate(_) => {
+            unreachable!("Review command should never return Migrate outcome")
+        }
     }
 }
 
@@ -876,6 +907,9 @@ fn run_plan(executor: SpeckitExecutor, args: PlanArgs) -> anyhow::Result<()> {
         Outcome::Run(_) => {
             unreachable!("Plan command should never return Run outcome")
         }
+        Outcome::Migrate(_) => {
+            unreachable!("Plan command should never return Migrate outcome")
+        }
     }
 }
 
@@ -980,6 +1014,9 @@ fn run_tasks(executor: SpeckitExecutor, args: TasksArgs) -> anyhow::Result<()> {
         }
         Outcome::Run(_) => {
             unreachable!("Tasks command should never return Run outcome")
+        }
+        Outcome::Migrate(_) => {
+            unreachable!("Tasks command should never return Migrate outcome")
         }
     }
 }
@@ -1086,6 +1123,9 @@ fn run_implement(executor: SpeckitExecutor, args: ImplementArgs) -> anyhow::Resu
         Outcome::Run(_) => {
             unreachable!("Implement command should never return Run outcome")
         }
+        Outcome::Migrate(_) => {
+            unreachable!("Implement command should never return Migrate outcome")
+        }
     }
 }
 
@@ -1190,6 +1230,9 @@ fn run_validate(executor: SpeckitExecutor, args: ValidateStageArgs) -> anyhow::R
         }
         Outcome::Run(_) => {
             unreachable!("Validate command should never return Run outcome")
+        }
+        Outcome::Migrate(_) => {
+            unreachable!("Validate command should never return Migrate outcome")
         }
     }
 }
@@ -1296,6 +1339,9 @@ fn run_audit(executor: SpeckitExecutor, args: AuditArgs) -> anyhow::Result<()> {
         Outcome::Run(_) => {
             unreachable!("Audit command should never return Run outcome")
         }
+        Outcome::Migrate(_) => {
+            unreachable!("Audit command should never return Migrate outcome")
+        }
     }
 }
 
@@ -1400,6 +1446,9 @@ fn run_unlock(executor: SpeckitExecutor, args: UnlockArgs) -> anyhow::Result<()>
         }
         Outcome::Run(_) => {
             unreachable!("Unlock command should never return Run outcome")
+        }
+        Outcome::Migrate(_) => {
+            unreachable!("Unlock command should never return Migrate outcome")
         }
     }
 }
@@ -1552,16 +1601,16 @@ fn run_run(executor: SpeckitExecutor, args: RunArgs) -> anyhow::Result<()> {
                     "exit_code": outcome.exit_code,
                 });
 
-                // Add legacy warning if present
-                if outcome.legacy_fallback {
-                    if let Some(obj) = json.as_object_mut() {
-                        obj.insert(
-                            "packet_source".to_string(),
-                            serde_json::json!("spec_md_legacy"),
-                        );
-                        if let Some(ref warning) = outcome.legacy_warning {
-                            obj.insert("legacy_warning".to_string(), serde_json::json!(warning));
-                        }
+                // Add legacy detection info if present (blocked until migrated)
+                if outcome.legacy_detected
+                    && let Some(obj) = json.as_object_mut()
+                {
+                    obj.insert(
+                        "packet_source".to_string(),
+                        serde_json::json!("spec_md_legacy"),
+                    );
+                    if let Some(ref warning) = outcome.legacy_warning {
+                        obj.insert("legacy_warning".to_string(), serde_json::json!(warning));
                     }
                 }
 
@@ -1641,6 +1690,81 @@ fn run_run(executor: SpeckitExecutor, args: RunArgs) -> anyhow::Result<()> {
         }
         _ => {
             unreachable!("Run command should return Run or Error outcome")
+        }
+    }
+}
+
+/// Run the migrate command
+///
+/// SPEC-KIT-921 P7-B: Migrate legacy spec.md to PRD.md
+fn run_migrate(executor: SpeckitExecutor, args: MigrateArgs) -> anyhow::Result<()> {
+    let command = SpeckitCommand::Migrate {
+        spec_id: args.spec_id.clone(),
+        dry_run: args.dry_run,
+    };
+
+    match executor.execute(command) {
+        Outcome::Migrate(outcome) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "spec_id": outcome.spec_id,
+                    "dry_run": outcome.dry_run,
+                    "status": outcome.status.as_str(),
+                    "spec_dir": outcome.spec_dir,
+                    "source_file": outcome.source_file,
+                    "dest_file": outcome.dest_file,
+                    "exit_code": outcome.exit_code,
+                    "warnings": outcome.warnings,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                // Text output
+                match outcome.status {
+                    MigrateStatus::Migrated => {
+                        println!("✓ Migrated spec.md → PRD.md for {}", outcome.spec_id);
+                        println!("  Source: {}/spec.md", outcome.spec_dir);
+                        println!("  Created: {}/PRD.md", outcome.spec_dir);
+                    }
+                    MigrateStatus::WouldMigrate => {
+                        println!("Would migrate spec.md → PRD.md for {}", outcome.spec_id);
+                        println!("  Source: {}/spec.md", outcome.spec_dir);
+                        println!("  Would create: {}/PRD.md", outcome.spec_dir);
+                    }
+                    MigrateStatus::AlreadyMigrated => {
+                        println!(
+                            "✓ {} already has PRD.md, no migration needed",
+                            outcome.spec_id
+                        );
+                    }
+                    MigrateStatus::NoSourceFile => {
+                        for warning in &outcome.warnings {
+                            println!("⚠ {warning}");
+                        }
+                    }
+                }
+            }
+
+            std::process::exit(outcome.exit_code);
+        }
+        Outcome::Error(err) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "spec_id": args.spec_id,
+                    "error": err,
+                    "exit_code": 1,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: {err}");
+            }
+            std::process::exit(1);
+        }
+        _ => {
+            unreachable!("Migrate command should return Migrate or Error outcome")
         }
     }
 }

@@ -20,7 +20,7 @@ use chrono::{DateTime, Duration, Local, Utc};
 use serde::Deserialize;
 use walkdir::WalkDir;
 
-const DOCS_ROOT: &str = "docs";
+// SPEC-KIT-921 P7: DOCS_ROOT removed - directory resolution now uses super::resolve_spec_dir()
 const COMMAND_EVIDENCE_ROOT: &str = "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands";
 const CONSENSUS_EVIDENCE_ROOT: &str = "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/consensus";
 const DEFAULT_STALE_HOURS: i64 = 24;
@@ -690,13 +690,14 @@ pub fn degraded_warning(report: &SpecStatusReport) -> Option<String> {
 }
 
 fn collect_packet_status(repo_root: &Path, spec_id: &str) -> Result<PacketStatus> {
-    let docs_root = repo_root.join(DOCS_ROOT);
     let mut entry = PacketStatus {
         directory: None,
         docs: HashMap::new(),
     };
 
-    let target_dir = find_spec_directory(&docs_root, spec_id);
+    // SPEC-KIT-921 P7: Use canonical resolver for deterministic directory matching
+    let resolved = super::resolve_spec_dir(repo_root, spec_id);
+    let target_dir = resolved.as_ref().map(|r| r.path.clone());
     entry.directory = target_dir
         .as_ref()
         .and_then(|dir| dir.strip_prefix(repo_root).ok())
@@ -720,23 +721,8 @@ fn collect_packet_status(repo_root: &Path, spec_id: &str) -> Result<PacketStatus
     Ok(entry)
 }
 
-fn find_spec_directory(root: &Path, spec_id: &str) -> Option<PathBuf> {
-    if !root.exists() {
-        return None;
-    }
-
-    let spec_prefix = spec_id.to_ascii_uppercase();
-    for entry in root.read_dir().ok()?.flatten() {
-        if entry.file_type().ok()?.is_dir() {
-            let name = entry.file_name();
-            let name = name.to_string_lossy();
-            if name.starts_with(&spec_prefix) {
-                return Some(entry.path());
-            }
-        }
-    }
-    None
-}
+// SPEC-KIT-921 P7: find_spec_directory removed - use super::resolve_spec_dir() instead
+// This ensures deterministic directory matching (sorted lexicographically)
 
 fn read_tracker_row(repo_root: &Path, spec_id: &str) -> Result<Option<TrackerRow>> {
     let tracker = repo_root.join("SPEC.md");

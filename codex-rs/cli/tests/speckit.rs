@@ -2952,3 +2952,252 @@ fn run_full_pipeline_validation() -> Result<()> {
 
     Ok(())
 }
+
+// =============================================================================
+// Migrate Command Tests (SPEC-KIT-921 P7-B)
+// =============================================================================
+
+#[test]
+fn migrate_spec_md_to_prd_md() -> Result<()> {
+    // P7-B: Migrate legacy spec.md to PRD.md
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create legacy SPEC with spec.md but no PRD.md
+    let spec_dir = repo_root.path().join("docs").join("SPEC-MIGRATE-001");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("spec.md"), "# Original Spec\n\nThis is a legacy spec.md file.")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args(["speckit", "migrate", "--spec", "SPEC-MIGRATE-001", "--json"])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Check status is "migrated"
+    let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
+    assert_eq!(status, "migrated", "Expected status 'migrated'");
+
+    // Check PRD.md was created
+    assert!(spec_dir.join("PRD.md").exists(), "PRD.md should be created");
+
+    // Check spec.md still exists (not deleted)
+    assert!(spec_dir.join("spec.md").exists(), "spec.md should still exist");
+
+    // Check PRD.md contains migration header
+    let prd_content = fs::read_to_string(spec_dir.join("PRD.md"))?;
+    assert!(
+        prd_content.contains("Migrated from spec.md"),
+        "PRD.md should contain migration header"
+    );
+    assert!(
+        prd_content.contains("This is a legacy spec.md file"),
+        "PRD.md should contain original content"
+    );
+
+    assert!(output.status.success(), "Expected exit 0");
+
+    Ok(())
+}
+
+#[test]
+fn migrate_dry_run_does_not_create_file() -> Result<()> {
+    // P7-B: Dry-run mode should not create files
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create legacy SPEC with spec.md but no PRD.md
+    let spec_dir = repo_root.path().join("docs").join("SPEC-MIGRATE-002");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("spec.md"), "# Legacy Spec\nDry run test.")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "migrate",
+            "--spec",
+            "SPEC-MIGRATE-002",
+            "--dry-run",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Check status is "would_migrate"
+    let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
+    assert_eq!(status, "would_migrate", "Expected status 'would_migrate'");
+
+    // Check PRD.md was NOT created
+    assert!(
+        !spec_dir.join("PRD.md").exists(),
+        "PRD.md should NOT be created in dry-run mode"
+    );
+
+    assert!(output.status.success(), "Expected exit 0");
+
+    Ok(())
+}
+
+#[test]
+fn migrate_already_migrated_returns_no_op() -> Result<()> {
+    // P7-B: If PRD.md already exists, report already_migrated
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC with both spec.md and PRD.md
+    let spec_dir = repo_root.path().join("docs").join("SPEC-MIGRATE-003");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("spec.md"), "# Legacy Spec")?;
+    fs::write(spec_dir.join("PRD.md"), "# Already Migrated")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args(["speckit", "migrate", "--spec", "SPEC-MIGRATE-003", "--json"])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Check status is "already_migrated"
+    let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
+    assert_eq!(status, "already_migrated", "Expected status 'already_migrated'");
+
+    assert!(output.status.success(), "Expected exit 0");
+
+    Ok(())
+}
+
+#[test]
+fn migrate_no_source_file_returns_no_op() -> Result<()> {
+    // P7-B: If spec.md doesn't exist, report no_source_file
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create SPEC directory with no spec.md
+    let spec_dir = repo_root.path().join("docs").join("SPEC-MIGRATE-004");
+    fs::create_dir_all(&spec_dir)?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args(["speckit", "migrate", "--spec", "SPEC-MIGRATE-004", "--json"])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Check status is "no_source_file"
+    let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
+    assert_eq!(status, "no_source_file", "Expected status 'no_source_file'");
+
+    // Check warnings array has the explanation
+    let warnings = json.get("warnings").and_then(|v| v.as_array());
+    assert!(
+        warnings.is_some() && !warnings.unwrap().is_empty(),
+        "Expected warnings with explanation"
+    );
+
+    assert!(output.status.success(), "Expected exit 0 (no-op, not an error)");
+
+    Ok(())
+}
+
+#[test]
+fn migrate_json_output_schema() -> Result<()> {
+    // P7-B: JSON output should include schema_version and all fields
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create legacy SPEC
+    let spec_dir = repo_root.path().join("docs").join("SPEC-MIGRATE-005");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("spec.md"), "# Schema Test")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args(["speckit", "migrate", "--spec", "SPEC-MIGRATE-005", "--json"])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Check required fields
+    assert!(json.get("schema_version").is_some(), "Missing schema_version");
+    assert!(json.get("tool_version").is_some(), "Missing tool_version");
+    assert!(json.get("spec_id").is_some(), "Missing spec_id");
+    assert!(json.get("status").is_some(), "Missing status");
+    assert!(json.get("spec_dir").is_some(), "Missing spec_dir");
+    assert!(json.get("exit_code").is_some(), "Missing exit_code");
+
+    Ok(())
+}
+
+#[test]
+fn migrate_then_run_succeeds() -> Result<()> {
+    // P7-B: After migration, run --from plan should succeed (Plan now has PRD.md prereq)
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create legacy SPEC with spec.md only
+    let spec_dir = repo_root.path().join("docs").join("SPEC-MIGRATE-006");
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(spec_dir.join("spec.md"), "# Legacy Spec\nFor migration test.")?;
+
+    // First: verify run fails before migration (Plan requires PRD.md)
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            "SPEC-MIGRATE-006",
+            "--from",
+            "plan",
+            "--to",
+            "plan",
+            "--json",
+        ])
+        .output()?;
+
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "Expected exit 2 (blocked) before migration"
+    );
+
+    // Second: migrate
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args(["speckit", "migrate", "--spec", "SPEC-MIGRATE-006"])
+        .output()?;
+
+    assert!(output.status.success(), "Migration should succeed");
+
+    // Third: verify run succeeds after migration
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            "SPEC-MIGRATE-006",
+            "--from",
+            "specify",
+            "--to",
+            "plan",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+    let overall = json
+        .get("overall_status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    assert_eq!(
+        overall, "ready",
+        "Expected 'ready' after migration"
+    );
+
+    Ok(())
+}

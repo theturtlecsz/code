@@ -89,6 +89,9 @@ pub fn handle_spec_status(widget: &mut ChatWidget, raw_args: String) {
         Outcome::Run(_) => {
             unreachable!("Status command should never return Run outcome")
         }
+        Outcome::Migrate(_) => {
+            unreachable!("Status command should never return Migrate outcome")
+        }
     }
 }
 
@@ -201,6 +204,9 @@ pub fn handle_spec_review(widget: &mut ChatWidget, raw_args: String) {
         }
         Outcome::Run(_) => {
             unreachable!("Review command should never return Run outcome")
+        }
+        Outcome::Migrate(_) => {
+            unreachable!("Review command should never return Migrate outcome")
         }
     }
 }

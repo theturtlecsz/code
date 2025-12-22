@@ -110,6 +110,20 @@ pub enum SpeckitCommand {
         /// Ending stage (inclusive)
         to_stage: Stage,
     },
+
+    /// Migrate legacy spec.md to PRD.md
+    ///
+    /// CLI: `code speckit migrate --spec <SPEC-ID> [--dry-run] [--json]`
+    ///
+    /// SPEC-KIT-921 P7-B: Migration command for legacy spec.md files.
+    /// Creates PRD.md with migration header, leaves spec.md intact.
+    Migrate {
+        /// The SPEC identifier
+        spec_id: String,
+
+        /// Dry-run mode: check what would be migrated without making changes
+        dry_run: bool,
+    },
     // Future variants:
     // Doctor { format: OutputFormat },
 }

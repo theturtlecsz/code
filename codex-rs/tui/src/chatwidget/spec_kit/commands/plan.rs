@@ -320,5 +320,8 @@ pub fn execute_stage_command(
         Outcome::Run(_) => {
             unreachable!("Stage command should never return Run outcome")
         }
+        Outcome::Migrate(_) => {
+            unreachable!("Stage command should never return Migrate outcome")
+        }
     }
 }
