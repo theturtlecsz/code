@@ -236,7 +236,7 @@ All SPECKIT specs MUST include a `Model & Runtime (Spec Overrides)` section that
 
 **Context**: CLI adapter implementation for spec-kit commands, ensuring parity between TUI and CLI surfaces. Shared executor pattern eliminates logic duplication.
 
-**STATUS**: P7-A/C Complete, P7-B pending
+**STATUS**: P7-A/B/C Complete
 
 **Policy Decision (2025-12-22)**: Legacy packets (spec.md without PRD.md) are **BLOCKED** until migrated. This is detection, not fallback. P7-B migration tooling provides the path forward.
 
