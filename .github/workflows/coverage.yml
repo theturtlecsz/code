@@ -58,9 +58,11 @@ jobs:
       working-directory: codex-rs
       run: |
         # Note: Not using --all-features to avoid compiling broken legacy_tests
+        # Exclude codex-process-hardening: its LD_* env var tests cause segfaults under tarpaulin
         cargo tarpaulin \
           --lib \
           --workspace \
+          --exclude codex-process-hardening \
           --out Html \
           --out Json \
           --output-dir ../coverage \
