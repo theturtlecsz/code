@@ -4,8 +4,6 @@ pub mod spec_kit;
 
 const SPEC_KIT_DEFAULT_BUDGET_USD: f64 = 2.0;
 
-#[cfg(test)]
-use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;

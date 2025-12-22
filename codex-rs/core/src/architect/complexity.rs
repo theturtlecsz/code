@@ -392,8 +392,6 @@ impl ComplexityReport {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_risk_levels() {
         // Test Rust thresholds
