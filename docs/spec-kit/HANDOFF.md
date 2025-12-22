@@ -1,287 +1,162 @@
-# HANDOFF: SPEC-KIT-921 P7 Continuation
+# HANDOFF: Upstream Backport Program
 
-**Generated**: 2025-12-21
-**Last Commit**: 0ddd9e61e (P7 foundational improvements)
+**Generated**: 2025-12-22
+**Last Commit**: 400e07916 (SYNC-019 to SYNC-031 roadmap)
 **Branch**: main
 
 ---
 
-## Continue P7 Implementation
+## Session Summary (2025-12-22)
+
+### Completed This Session
+
+| Task | Status | Evidence |
+|------|--------|----------|
+| P7-A: speckit run batch command | ✅ Done | 64 CLI tests |
+| P7-B: spec.md→PRD.md migration tooling | ✅ Done | 70 CLI tests |
+| P7-C: Architectural watch-out fixes | ✅ Done | Watch-outs A, C, D |
+| SYNC-019 to SYNC-031 roadmap | ✅ Added | SPEC.md updated |
+
+### Key Commits
+```
+400e07916 docs(spec): add SYNC-019 to SYNC-031 upstream backport roadmap
+ceb5b46ad docs: fix SPEC.md status line for P7-B completion
+e7ff5dc1a feat(spec-kit): P7-B migration tooling + P7-C architectural fixes
+d1836c6a8 feat(spec-kit): P7-A speckit run batch validation command
+```
+
+### Policy Decision (Documented)
+
+**Legacy packets are BLOCKED until migrated** (not warn-and-proceed).
+- `legacy_detected` field (renamed from `legacy_fallback`)
+- Migration path: `code speckit migrate --spec <ID>`
+- Creates PRD.md with migration header, leaves spec.md intact
+
+---
+
+## Continue: Upstream Backport Program
 
 Copy this prompt to start the next session:
 
 ```
-# Continue SPEC-KIT-921 P7-A Implementation
+# Continue Upstream Backport Program (SYNC-019+)
 
-Continue from docs/spec-kit/HANDOFF.md
+Read docs/spec-kit/HANDOFF.md and SPEC.md section "Upstream Backport Program (2025-12-22)"
 
 ## Context
-- P0-P6 + P7 foundations complete
-- 57 CLI tests passing (54 speckit + 3 helpers)
-- Canonical packet contract defined (PRD.md → plan.md → tasks.md → ...)
-- Spec ID validation with path traversal protection
-- Suffix directory resolution (SPEC-ID-suffix patterns)
-- Prereq matrix aligned with artifact dependency DAG
+- SPEC-KIT-921 P7 complete (70 CLI tests, speckit run + migrate commands)
+- SYNC-019 to SYNC-031 roadmap added to SPEC.md (13 items, 0/13 started)
+- Policy: Legacy packets blocked until migrated
 
-## P7-A Task: speckit run batch command
+## Execution Order (min risk, max value)
+1. SYNC-019: Central Feature Registry (P0, enabler for all others)
+2. SYNC-023: TUI v1 UX/perf backports (P0, immediate benefit)
+3. SYNC-020: Skills v1 (P0, depends on SYNC-019)
+4. SYNC-025: Exec hardening (P0, reliability)
 
-Implement `speckit run --spec <ID> --from <stage> --to <stage> [--json]`
+## First Task: SYNC-019 Feature Registry
 
-### Architect-Approved Design
-1. **Validation only** - no agent spawning (readiness check for CI)
-2. **Named stages only** - specify/plan/tasks/implement/validate/audit/unlock
-3. **Aggregated output** - single JSON with per-stage outcomes
-4. **Exit codes** - 0=all ready, 2=any blocked, 3=infrastructure error
+### Goal
+Introduce centralized `Features` enum + config mapping as enabler for all feature-gated work.
 
-### Implementation Steps
-1. Add `Run` subcommand to `cli/src/speckit_cmd.rs`
-2. Add `SpeckitCommand::Run { spec_id, from, to }` to executor
-3. Add `execute_run()` that iterates stages and collects outcomes
-4. Add `RunOutcome` with aggregated results
-5. Add spec.md fallback logic with deprecation warning
-6. Add 8+ tests for run command
+### Acceptance Criteria
+- [ ] Create `spec-kit/src/features.rs` with Features enum
+- [ ] Feature gates: skills, tui2, remote_models, bridge, unified_exec, exec_policy, otel
+- [ ] Config mapping from TOML/env to feature toggles
+- [ ] Feature checks at edges (CLI/TUI), not deep in domain logic
+- [ ] Unknown feature keys warn but don't crash
+- [ ] "Enabled features" visible in /debug or logs
+- [ ] Create docs/SYNC-019-features-registry/PRD.md
 
-### Also in P7
-- spec.md fallback with `packet_source: "spec_md_legacy"` warning
-- Full 7-stage validation pipeline test
+### Architectural Notes
+- Pattern: enum-based feature gates with "stage" metadata
+- Resolution: config file < env var (standard layering)
+- Boundary: features.rs owns enum + resolution, adapters query it
 
-## P7 Foundational Deliverables (Complete)
-
-| Task | Status | Tests |
-|------|--------|-------|
-| Spec ID validation | ✅ | 2 tests (path traversal, format) |
-| Directory resolution | ✅ | 2 tests (suffix, determinism) |
-| Prereq matrix alignment | ✅ | Updated all stages |
-| Packet contract docs | ✅ | In executor/mod.rs |
-
-## P7 Remaining Priority Order
-
-1. **P7-A: speckit run batch command** (validation only, --from/--to)
-2. **P7-B: spec.md fallback** (legacy compatibility with deprecation warning)
-3. **P7-C: Full pipeline test** (specify→unlock validation chain)
-
-**Deferred to P8**: Template library, full auto orchestration with agent spawning
-
-## P7-A Design Decisions (Architect-Approved)
-
-### Run Command Semantics
-- **Validation only** - no agent spawning (that's /speckit.auto territory)
-- Iterate stages from `--from` to `--to`
-- Run executor validation for each stage
-- Optionally run canonical reviews at boundaries (AfterPlan, AfterTasks, BeforeUnlock)
-- Emit single aggregated JSON summary + per-stage outcomes
-- Deterministic readiness report + exit code (CI-friendly)
-
-### Stage Granularity
-- **Named stages only**: `--from plan --to validate`
-- No numeric IDs (prevents vocabulary drift)
-- Valid names: specify, plan, tasks, implement, validate, audit, unlock
-
-### Legacy Compatibility
-- PRD.md is canonical input to Plan
-- If PRD.md missing but spec.md exists:
-  - Proceed with warning (non-strict mode)
-  - Emit `packet_source: "spec_md_legacy"` in output
-  - Mark as deprecated
-- Future: `--strict-packet` flag to block on missing PRD.md
-
-### Output Schema
-```json
-{
-  "schema_version": 1,
-  "spec_id": "SPEC-XXX",
-  "from_stage": "plan",
-  "to_stage": "validate",
-  "overall_status": "ready|blocked|partial",
-  "stages": [
-    { "stage": "plan", "status": "ready", "warnings": [], "errors": [] },
-    { "stage": "tasks", "status": "blocked", "warnings": [], "errors": ["..."] }
-  ],
-  "exit_code": 0|2|3
-}
-```
+## Optional Additions (ask user)
+- Create PRD skeletons for all 13 SYNC items?
+- Include AD-006 (event backpressure) alongside SYNC work?
+- Address product-requirements.md narrative mismatch?
 
 ## Start Commands
-
 ```bash
 git log --oneline -5
-cargo test -p codex-cli --test speckit
-cargo test -p codex-cli --test speckit_helpers
+cargo test -p codex-cli --test speckit -- --test-threads=1
+grep -r "SYNC-019" SPEC.md
 ```
 
-## Acceptance Criteria for P7
-
-- [ ] `speckit run --spec <ID> --from <stage> --to <stage> [--json]`
-- [ ] spec.md fallback with deprecation warning
-- [ ] Full 7-stage validation test (specify→unlock)
-- [ ] Aggregated JSON output with per-stage outcomes
-- [ ] 65+ CLI integration tests passing
+## Test Baseline
+- 70 CLI tests passing (speckit + helpers)
+- Clippy clean
 ```
 
 ---
 
-## Session Summary (P7 Foundations)
+## Upstream Backport Roadmap (Reference)
 
-### P7 Foundational Deliverables
+| Priority | Task ID | Title | Feature Flag | Depends On |
+|----------|---------|-------|--------------|------------|
+| P0 | SYNC-019 | Central Feature Registry | n/a (enabler) | — |
+| P0 | SYNC-020 | Skills v1 | `features.skills` | SYNC-019 |
+| P0 | SYNC-023 | TUI v1 UX/perf backports | n/a | — |
+| P0 | SYNC-025 | Exec hardening | `features.unified_exec` | — |
+| P1 | SYNC-021 | Skills v2 (SkillsManager) | `features.skills` | SYNC-020 |
+| P1 | SYNC-022 | Code-Bridge v2 consumer | `features.bridge` | SYNC-019 |
+| P1 | SYNC-024 | `/ps` + background terminal | n/a | SYNC-023 |
+| P1 | SYNC-026 | Retention/compaction hardening | n/a | SYNC-025 |
+| P1 | SYNC-028 | TUI v2 scaffold | `features.tui2` | SYNC-019 |
+| P2 | SYNC-027 | ModelsManager + remote models | `features.remote_models` | SYNC-019 |
+| P2 | SYNC-029 | TUI v2 parity pass | `features.tui2` | SYNC-028 |
+| P2 | SYNC-030 | Governance (requirements.toml) | `features.exec_policy` | SYNC-019 |
+| P3 | SYNC-031 | Minimal OTel (optional) | `features.otel` | — |
 
-| Task | Status | Deliverable |
-|------|--------|-------------|
-| Canonical packet contract | ✅ | Artifact DAG documented in executor/mod.rs |
-| Spec ID validation | ✅ | Path traversal + format validation, 2 tests |
-| Directory resolution | ✅ | resolve_spec_dir() with suffix support, 2 tests |
-| Prereq matrix alignment | ✅ | Matches artifact DAG |
-
-**Tests**: 57 CLI tests passing (54 speckit + 3 helpers)
-
-### Canonical Packet Contract
-
-```
-Stage     | Input Required       | Output Created
-----------|---------------------|------------------
-Specify   | (none)              | PRD.md
-Plan      | PRD.md              | plan.md
-Tasks     | plan.md             | tasks.md
-Implement | tasks.md            | implement.md
-Validate  | implement.md        | validate.md
-Audit     | validate.md         | audit.md
-Unlock    | audit.md            | (approval)
-```
-
-### Key Utilities Added
-
-```rust
-// Spec ID validation (security)
-pub fn validate_spec_id(spec_id: &str) -> Result<(), SpecIdError>
-
-// Canonical directory resolution (supports suffixes)
-pub fn resolve_spec_dir(repo_root: &Path, spec_id: &str) -> Option<ResolvedSpecDir>
-
-// Creation path (no suffix)
-pub fn default_spec_dir_for_creation(repo_root: &Path, spec_id: &str) -> PathBuf
-```
-
-### P6 Session Summary (Previous)
-
-| Task | Status | Tests |
-|------|--------|-------|
-| P6-C: --strict-prereqs | ✅ | 6 tests |
-| P6-D: Test helpers | ✅ | 3 tests |
-| P6-A: speckit specify | ✅ | 7 tests |
-| Architect gate tests | ✅ | 3 tests |
-
-### Key Additions
-
-#### --strict-prereqs (P6-C)
-
-Added to all stage validation commands:
-
-```bash
-speckit tasks --spec <ID> --strict-prereqs [--dry-run] [--json]
-```
-
-Behavior:
-- Default: warnings are advisory, command succeeds
-- With --strict-prereqs: missing prereqs → Blocked (exit 2)
-
-Prereq matrix:
-| Stage     | Required Prereqs                    |
-|-----------|-------------------------------------|
-| Specify   | (none - first stage)                |
-| Plan      | SPEC directory exists               |
-| Tasks     | plan.md exists                      |
-| Implement | plan.md exists                      |
-| Validate  | tasks.md OR implement.md exists     |
-| Audit     | tasks.md OR implement.md exists     |
-| Unlock    | tasks.md OR implement.md exists     |
-
-#### Test Helpers (P6-D)
-
-New `speckit_helpers.rs` module:
-
-```rust
-// Create test context with isolated dirs
-let ctx = TestContext::new()?;
-
-// Setup SPEC directory with files
-ctx.setup_spec_dir("SPEC-001", &[("plan.md", "# Plan")])?;
-
-// Run CLI and get result wrapper
-let result = ctx.run_cli(&["speckit", "tasks", "--spec", "SPEC-001", "--json"])?;
-
-// Assertion helpers
-result.assert_success();
-result.assert_schema_version(1);
-result.assert_stage("Tasks");
-result.assert_status("ready");
-```
-
-#### speckit specify (P6-A)
-
-```bash
-# Dry-run (default): report what would be created
-speckit specify --spec SPEC-TEST-001 [--json]
-
-# Execute: actually create directory and PRD.md
-speckit specify --spec SPEC-TEST-001 --execute [--json]
-```
-
-Creates:
-- `docs/<SPEC-ID>/` directory
-- `docs/<SPEC-ID>/PRD.md` with template content
+**Architectural Notes**:
+- Patchable: Skills, `/ps`, exec hardening, retention, feature registry
+- Bigger lift: TUI2 (new frontend), code-bridge (privacy considerations)
+- Feature checks at edges, not in domain logic
+- Skills boundary: metadata-only injection (body stays on disk)
 
 ---
 
-## Architecture After P6 (Current)
+## Architectural Debt Items (from SPEC.md)
 
-```
-CLI (speckit_cmd.rs)
-  ↓ SpeckitSubcommand::Status/Review/Specify/Plan/Tasks/Implement/Validate/Audit/Unlock
-  ↓
-SpeckitExecutor::execute()
-  ↓ SpeckitCommand::Specify { spec_id, dry_run }
-  ↓ SpeckitCommand::ValidateStage { spec_id, stage, dry_run, strict_prereqs }
-  ↓
-Outcome::Status/Review/ReviewSkipped/Stage(StageOutcome)/Specify(SpecifyOutcome)/Error
-  ↓
-render_*() → stdout (with schema_version)
-```
-
-Key types:
-
-```rust
-// spec-kit/src/executor/command.rs
-SpeckitCommand::Specify { spec_id, dry_run }
-SpeckitCommand::ValidateStage { spec_id, stage, dry_run, strict_prereqs }
-
-// spec-kit/src/executor/mod.rs
-SpecifyOutcome { spec_id, dry_run, spec_dir, already_existed, created_files }
-StageOutcome { spec_id, stage, resolution, blocking_reasons, advisory_signals, evidence_refs, dry_run }
-```
+| ID | Priority | Description | Pairs With |
+|----|----------|-------------|------------|
+| AD-001 | P0 | Async blocking in TUI event loop | SYNC-023 |
+| AD-006 | P0 | Event channel backpressure | SYNC-025/026 |
+| AD-002 | P1 | Inconsistent error handling | General cleanup |
+| AD-003 | P1 | Lack of structured logging | SYNC-031 |
 
 ---
 
 ## Files Reference
 
-### Modified in P6
-
+### Key Files for SYNC-019
 | File | Purpose |
 |------|---------|
-| `cli/src/speckit_cmd.rs` | Added Specify subcommand, --strict-prereqs to all stages |
-| `cli/tests/speckit.rs` | 50 tests (37 P5 + 6 strict-prereqs + 7 specify) |
-| `cli/tests/speckit_helpers.rs` | NEW: 3 test helper tests |
-| `spec-kit/src/executor/command.rs` | Added Specify command variant, strict_prereqs to ValidateStage |
-| `spec-kit/src/executor/mod.rs` | Added execute_specify(), SpecifyOutcome, strict_prereqs handling |
-| `tui/src/chatwidget/spec_kit/commands/plan.rs` | Added Outcome::Specify handling |
-| `tui/src/chatwidget/spec_kit/command_handlers.rs` | Added Outcome::Specify handling |
+| `spec-kit/src/features.rs` | NEW: Features enum + resolution |
+| `spec-kit/src/config/loader.rs` | Config loading (add features section) |
+| `cli/src/main.rs` | CLI entry (query features at startup) |
+| `tui/src/app.rs` | TUI entry (query features at startup) |
 
-### To Modify in P7
+### Completed P7 Files
+| File | Changes |
+|------|---------|
+| `spec-kit/src/executor/mod.rs` | execute_run(), execute_migrate(), legacy_detected |
+| `spec-kit/src/executor/command.rs` | Run, Migrate variants |
+| `spec-kit/src/executor/status.rs` | Unified resolve_spec_dir() usage |
+| `cli/src/speckit_cmd.rs` | run, migrate subcommands |
+| `cli/tests/speckit.rs` | 70 tests (64 + 6 migrate) |
 
-| File | Change |
-|------|--------|
-| `cli/src/speckit_cmd.rs` | Add Run subcommand with --from/--to |
-| `spec-kit/src/executor/mod.rs` | Add execute_run_batch() |
-| `cli/tests/speckit.rs` | Add run batch tests |
-| `templates/` | Add built-in SPEC templates |
+---
+
+## Exit Code Contract
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success / Ready |
+| 2 | Blocked / Escalation |
+| 3 | Infrastructure error |
 
 ---
 
@@ -289,47 +164,8 @@ StageOutcome { spec_id, stage, resolution, blocking_reasons, advisory_signals, e
 
 1. **No env/config reads in executor core** — resolve at adapter boundary
 2. **All paths repo-relative** in JSON output and evidence refs
-3. **Deterministic evidence selection** — tests cover ordering/timestamp logic
-4. **Strict modes behave predictably**: artifacts→2, schema→3, escalation→2, prereqs→2
-5. **TUI is an adapter** — slash commands call executor, not legacy implementations
-6. **Stage-specific commands** — each stage has its own CLI command (no generic `--stage` flag)
-7. **ValidateStage is stage-neutral** — single command variant handles all stage validation
-8. **Build-time determinism** — tool_version uses compile-time env vars only, no runtime git
-9. **Advisory by default** — missing prereqs warn but don't block (unless --strict-prereqs)
-10. **Specify is separate** — creation command, not validation (uses --execute, not --dry-run=false)
-11. **Centralized prereq matrix** — all prereq checks go through `check_stage_prereqs()`, not scattered logic
-12. **Idempotent scaffolding** — `speckit specify --execute` never overwrites existing PRD.md content
-
----
-
-## Exit Code Contract (Reference)
-
-| Code | Meaning              |
-|------|----------------------|
-| 0    | Success / Ready      |
-| 2    | Blocked / Escalation |
-| 3    | Infrastructure error |
-
----
-
-## Deferred to P7+
-
-- **speckit run batch command**: Stage range execution with --from/--to
-- **Template library**: Built-in SPEC templates for common patterns
-- **Full /speckit.auto orchestration**: After run batch command proven
-- **CLI config-file support** (`.speckit.toml`): After Phase C/D requirements clarify
-- **Checkpoint persistence**: After orchestration proven
-- **Custom template directory**: User-defined templates in .speckit/templates/
-
----
-
-## Progress Tracking
-
-| Phase | Status | Tests | Key Deliverable |
-|-------|--------|-------|-----------------|
-| P0-P3 | ✅ | 22 | Status, Review commands |
-| P4 | ✅ | 25 | Tasks command, StageOutcome envelope |
-| P5 | ✅ | 37 | Implement/Validate/Audit/Unlock commands |
-| P6 | ✅ | 53 | --strict-prereqs, specify, test helpers |
-| P7 (foundations) | ✅ | 57 | Packet contract, spec ID validation, directory resolution |
-| P7+ | ⏳ | - | Run batch, templates, auto orchestration |
+3. **Deterministic evidence selection** — tests cover ordering logic
+4. **Feature checks at edges** — CLI/TUI/tool registry, not domain logic
+5. **TUI is an adapter** — slash commands call executor
+6. **Advisory by default** — missing prereqs warn unless --strict-prereqs
+7. **Legacy packets blocked** — spec.md requires migration to PRD.md
