@@ -247,14 +247,15 @@ impl CliResult {
         let errors = json.get("errors").and_then(|v| v.as_array());
         let has_match = errors
             .map(|e| {
-                e.iter().any(|err| {
-                    err.as_str()
-                        .map(|s| s.contains(needle))
-                        .unwrap_or(false)
-                })
+                e.iter()
+                    .any(|err| err.as_str().map(|s| s.contains(needle)).unwrap_or(false))
             })
             .unwrap_or(false);
-        assert!(has_match, "Expected error containing '{}' in {:?}", needle, errors);
+        assert!(
+            has_match,
+            "Expected error containing '{}' in {:?}",
+            needle, errors
+        );
         self
     }
 }

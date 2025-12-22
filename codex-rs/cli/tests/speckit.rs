@@ -2966,7 +2966,10 @@ fn migrate_spec_md_to_prd_md() -> Result<()> {
     // Create legacy SPEC with spec.md but no PRD.md
     let spec_dir = repo_root.path().join("docs").join("SPEC-MIGRATE-001");
     fs::create_dir_all(&spec_dir)?;
-    fs::write(spec_dir.join("spec.md"), "# Original Spec\n\nThis is a legacy spec.md file.")?;
+    fs::write(
+        spec_dir.join("spec.md"),
+        "# Original Spec\n\nThis is a legacy spec.md file.",
+    )?;
 
     let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
     let output = cmd
@@ -2983,7 +2986,10 @@ fn migrate_spec_md_to_prd_md() -> Result<()> {
     assert!(spec_dir.join("PRD.md").exists(), "PRD.md should be created");
 
     // Check spec.md still exists (not deleted)
-    assert!(spec_dir.join("spec.md").exists(), "spec.md should still exist");
+    assert!(
+        spec_dir.join("spec.md").exists(),
+        "spec.md should still exist"
+    );
 
     // Check PRD.md contains migration header
     let prd_content = fs::read_to_string(spec_dir.join("PRD.md"))?;
@@ -3062,7 +3068,10 @@ fn migrate_already_migrated_returns_no_op() -> Result<()> {
 
     // Check status is "already_migrated"
     let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
-    assert_eq!(status, "already_migrated", "Expected status 'already_migrated'");
+    assert_eq!(
+        status, "already_migrated",
+        "Expected status 'already_migrated'"
+    );
 
     assert!(output.status.success(), "Expected exit 0");
 
@@ -3097,7 +3106,10 @@ fn migrate_no_source_file_returns_no_op() -> Result<()> {
         "Expected warnings with explanation"
     );
 
-    assert!(output.status.success(), "Expected exit 0 (no-op, not an error)");
+    assert!(
+        output.status.success(),
+        "Expected exit 0 (no-op, not an error)"
+    );
 
     Ok(())
 }
@@ -3121,7 +3133,10 @@ fn migrate_json_output_schema() -> Result<()> {
     let json: JsonValue = serde_json::from_slice(&output.stdout)?;
 
     // Check required fields
-    assert!(json.get("schema_version").is_some(), "Missing schema_version");
+    assert!(
+        json.get("schema_version").is_some(),
+        "Missing schema_version"
+    );
     assert!(json.get("tool_version").is_some(), "Missing tool_version");
     assert!(json.get("spec_id").is_some(), "Missing spec_id");
     assert!(json.get("status").is_some(), "Missing status");
@@ -3140,7 +3155,10 @@ fn migrate_then_run_succeeds() -> Result<()> {
     // Create legacy SPEC with spec.md only
     let spec_dir = repo_root.path().join("docs").join("SPEC-MIGRATE-006");
     fs::create_dir_all(&spec_dir)?;
-    fs::write(spec_dir.join("spec.md"), "# Legacy Spec\nFor migration test.")?;
+    fs::write(
+        spec_dir.join("spec.md"),
+        "# Legacy Spec\nFor migration test.",
+    )?;
 
     // First: verify run fails before migration (Plan requires PRD.md)
     let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
@@ -3194,10 +3212,7 @@ fn migrate_then_run_succeeds() -> Result<()> {
         .and_then(|v| v.as_str())
         .unwrap_or("");
 
-    assert_eq!(
-        overall, "ready",
-        "Expected 'ready' after migration"
-    );
+    assert_eq!(overall, "ready", "Expected 'ready' after migration");
 
     Ok(())
 }
