@@ -641,10 +641,13 @@ mod tests {
         cells.push(apply_begin_cell);
 
         let apply_end_cell: Arc<dyn HistoryCell> =
-            Arc::new(crate::history_cell::new_user_approval_decision(vec![
-                "✓ Patch applied".green().bold().into(),
-                "src/foo.txt".dim().into(),
-            ]));
+            Arc::new(crate::history_cell::PlainHistoryCell::new(
+                vec![
+                    "✓ Patch applied".green().bold().into(),
+                    "src/foo.txt".dim().into(),
+                ],
+                crate::history_cell::HistoryCellType::Notice,
+            ));
         cells.push(apply_end_cell);
 
         let mut exec_cell = crate::history_cell::new_active_exec_command(
