@@ -1,7 +1,7 @@
-# Session Handoff — MAINT-11 Phase 9 + Convergence
+# Session Handoff — MAINT-11 Phase 10
 
 **Last updated:** 2025-12-23
-**Status:** MAINT-12 Complete, MAINT-11 Phase 9 Ready
+**Status:** MAINT-11 Phase 9 Complete
 
 ---
 
@@ -11,64 +11,28 @@
 
 | Task | Status | Commit | Notes |
 |------|--------|--------|-------|
-| MAINT-12: Stage0 HTTP-only | ✅ | `db3985846` | Removed dead `Tier2McpAdapter` (~70 LOC) |
-| SPEC.md update | ✅ | `15ac70e5c` | Marked MAINT-12 complete |
-| Convergence docs | ✅ | `ada1eed7c` | Added MEMO/PROMPT pointer files |
-| MAINT-11 assessment | ✅ | — | mod.rs: 19,070 LOC (down 18.5%) |
-| Convergence verification | ✅ | — | All 6 criteria verified passing |
+| MAINT-11 Phase 9: Undo/Snapshots | ✅ | pending | Extracted undo_snapshots.rs (497 LOC) |
+| mod.rs reduction | ✅ | — | 19,070 → 18,613 LOC (-457 LOC, -2.4%) |
+| Tests verified | ✅ | — | All TUI tests passing |
+| SPEC.md updated | ✅ | — | Phase 9 documented |
 
-### Convergence Verification Results
+### Phase 9 Extraction Details
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| Pointer docs | ✅ | `codex-rs/docs/convergence/README.md`, `MEMO_codex-rs.md`, `PROMPT_codex-rs.md` |
-| Tier2 fail-closed | ✅ | `stage0_integration.rs:119-161` |
-| `code doctor` command | ✅ | `cli/src/main.rs:926-1191` |
-| System pointer memory | ✅ | `system_memory.rs` + `stage0_integration.rs:506-610` |
-| Tier1 excludes system:true | ✅ | `dcc.rs:414-418` |
-| Acceptance tests | ✅ | 6 tests in `convergence_acceptance.rs` |
+**Created:** `tui/src/chatwidget/undo_snapshots.rs` (497 LOC)
 
----
+**Functions Extracted:**
+- `capture_ghost_snapshot` - Create snapshot after commit
+- `current_conversation_snapshot` - Get current state
+- `conversation_delta_since` - Calculate changes
+- `snapshot_ghost_state` / `adopt_ghost_state` - Session transfer
+- `snapshot_preview` - UI preview generation
+- `handle_undo_command` - Main `/undo` handler
+- `show_undo_*` - UI display functions (5 functions)
+- `perform_undo_restore` - Execute restore
+- `reset_after_conversation_restore` - Post-restore cleanup
+- `undo_jump_back` / `has_pending_jump_back` - Quick undo
 
-## Next Session: MAINT-11 Phase 9
-
-### Primary Goal: Extract Undo/Snapshots Module
-
-**Target:** Extract ~460 LOC to `tui/src/chatwidget/undo_snapshots.rs`
-
-**Functions to Extract:**
-
-| Function | Line | Purpose |
-|----------|------|---------|
-| `GhostSnapshot` struct | 589 | Snapshot data structure |
-| `capture_ghost_snapshot` | 4666 | Create snapshot after commit |
-| `current_conversation_snapshot` | 4712 | Get current state |
-| `conversation_delta_since` | 4730 | Calculate changes |
-| `snapshot_preview` | 4756 | UI preview generation |
-| `handle_undo_command` | 4772 | Main `/undo` handler |
-| `show_undo_snapshots_disabled` | 4795 | Disabled state UI |
-| `show_undo_empty_state` | 4821 | Empty state UI |
-| `show_undo_status_popup` | 4836 | Status popup |
-| `show_undo_snapshot_picker` | 4891 | Picker UI |
-| `show_undo_restore_options` | 4956 | Restore options modal |
-| `perform_undo_restore` | 5013 | Execute restore |
-| `reset_after_conversation_restore` | 5124 | Post-restore cleanup |
-| `undo_jump_back` | 10882 | Quick undo |
-
-**Expected Result:** mod.rs < 18,600 LOC
-
-### Secondary Goals
-
-| Task | Priority | Notes |
-|------|----------|-------|
-| Run full test suite | P1 | Verify 604+ tests pass after extraction |
-| Document P3 recall command | P2 | `code stage0 recall SPEC-ID` as future work |
-
-### Deferred (Separate Session)
-
-- AD-001: Async/blocking unification
-- AD-006: Backpressure for unbounded channels
-- MAINT-13: Config inheritance
+**Pattern Used:** Same as session_handlers.rs - impl block on ChatWidget with super:: imports
 
 ---
 
@@ -84,47 +48,47 @@
 | 6 | Browser/chrome removal | -2,094 | ✅ |
 | 7 | `review_handlers.rs` | 462 | ✅ |
 | 8 | `session_handlers.rs` | 619 | ✅ |
-| **9** | **`undo_snapshots.rs`** | **~460** | **NEXT** |
-| 10 | `pro_overlay.rs` | ~200 | Planned |
+| 9 | `undo_snapshots.rs` | 497 | ✅ |
+| **10** | **`pro_overlay.rs`** | **~200** | **NEXT** |
 | 11 | `validation_config.rs` | ~200 | Planned |
 | 12 | `model_presets.rs` | ~120 | Planned |
 
-**mod.rs trajectory:** 23,413 → 20,758 → 19,070 → target 18,600
+**mod.rs trajectory:** 23,413 → 20,758 → 19,070 → 18,613 LOC (-20.5% total)
 
 ---
 
-## P3 Future Work: Pointer Recall Command
+## Next Session: MAINT-11 Phase 10
 
-**Goal:** Query stored Stage0 pointers for traceability
+### Primary Goal: Extract Pro Overlay Module
 
-```bash
-code stage0 recall SPEC-KIT-102
-# Shows: task brief hash, divine truth hash, paths, tier2 status, commit SHA
-```
+**Target:** Extract ~200 LOC to `tui/src/chatwidget/pro_overlay.rs`
 
-**Implementation Notes:**
-- Query local-memory REST API: `GET /api/v1/search?tags=spec:SPEC-ID,stage:0`
-- Include `system:true` explicitly (normally excluded)
-- Display in table format with timestamps
+**Candidates:**
+- Pro-related UI overlay handlers
+- Pro action/category/phase/stats handling
+- ProEvent processing
 
-**Status:** Documented for future implementation (not in next session scope)
+**To Find:** Search mod.rs for `Pro*` types and handlers
+
+### Deferred (Separate Session)
+
+- AD-001: Async/blocking unification
+- AD-006: Backpressure for unbounded channels
+- MAINT-13: Config inheritance
 
 ---
 
 ## Quick Verify Commands
 
 ```bash
-# Stage0 tests
-cargo test -p codex-stage0 -- convergence
-
 # Full TUI tests (verify extraction didn't break anything)
 cargo test -p codex-tui
 
-# Health check
-code doctor
-
 # Check mod.rs line count
 wc -l codex-rs/tui/src/chatwidget/mod.rs
+
+# Check new module size
+wc -l codex-rs/tui/src/chatwidget/undo_snapshots.rs
 ```
 
 ---
@@ -136,43 +100,26 @@ Copy this into a new session:
 ```
 load HANDOFF.md
 
-## Session Goal: MAINT-11 Phase 9 — Undo/Snapshots Extraction
+## Session Goal: MAINT-11 Phase 10 — Pro Overlay Extraction
 
 Previous session completed:
-- MAINT-12: Stage0 HTTP-only (removed dead Tier2McpAdapter)
-- Convergence verification: All 6 criteria passing
-- MAINT-11 assessment: mod.rs at 19,070 LOC
+- MAINT-11 Phase 9: Extracted undo_snapshots.rs (497 LOC)
+- mod.rs now at 18,613 LOC (-20.5% from original 23,413)
 
 ## Primary Task
 
-Extract Undo/Snapshots module (~460 LOC) from mod.rs:
-- Target file: `tui/src/chatwidget/undo_snapshots.rs`
-- Key functions: GhostSnapshot, capture_ghost_snapshot, handle_undo_command,
-  show_undo_*, perform_undo_restore, undo_jump_back
-- Goal: mod.rs < 18,600 LOC
+Extract Pro Overlay module (~200 LOC) from mod.rs:
+- Target file: `tui/src/chatwidget/pro_overlay.rs`
+- Key types: ProEvent, ProAction, ProCategory, ProPhase, ProStats handlers
+- Goal: mod.rs < 18,400 LOC
 
 ## Extraction Pattern (follow existing modules)
 
-1. Create new file with module doc and imports
-2. Move struct definitions first (GhostSnapshot, GhostSnapshotsDisabledReason)
-3. Move helper functions
-4. Move impl methods (may need trait or extension pattern)
-5. Add `pub(crate) mod undo_snapshots;` to mod.rs
-6. Re-export needed types
-7. Run tests: `cargo test -p codex-tui`
-
-## After Extraction
-
-1. Verify tests: `cargo test -p codex-tui` (expect 604+ passing)
-2. Check line count: `wc -l tui/src/chatwidget/mod.rs`
-3. Update SPEC.md with Phase 9 completion
-4. Commit with conventional format
-
-## Reference Files
-
-- Existing extraction: `tui/src/chatwidget/session_handlers.rs` (619 LOC, Phase 8)
-- Target functions: mod.rs lines 4666-5140, 10882
-- Struct definitions: mod.rs lines 309-340, 589-680
+1. Search for Pro* types and handlers in mod.rs
+2. Create new file with module doc and imports
+3. Move handlers to impl block on ChatWidget
+4. Add `mod pro_overlay;` to mod.rs
+5. Run tests: `cargo test -p codex-tui`
 ```
 
 ---
@@ -181,10 +128,9 @@ Extract Undo/Snapshots module (~460 LOC) from mod.rs:
 
 | File | Purpose |
 |------|---------|
-| `tui/src/chatwidget/mod.rs` | Main refactor target (19,070 LOC) |
-| `tui/src/chatwidget/session_handlers.rs` | Reference extraction (Phase 8) |
-| `stage0/tests/convergence_acceptance.rs` | Convergence test suite |
-| `cli/src/main.rs` | `code doctor` implementation |
+| `tui/src/chatwidget/mod.rs` | Main refactor target (18,613 LOC) |
+| `tui/src/chatwidget/undo_snapshots.rs` | Phase 9 extraction (497 LOC) |
+| `tui/src/chatwidget/session_handlers.rs` | Reference pattern (619 LOC) |
 | `SPEC.md` | Task tracking (MAINT-11 row) |
 
 ---
@@ -192,9 +138,7 @@ Extract Undo/Snapshots module (~460 LOC) from mod.rs:
 ## Commits This Session
 
 ```
-ada1eed7c docs(convergence): add codex-rs MEMO and PROMPT pointers
-15ac70e5c docs(spec): mark MAINT-12 complete
-db3985846 refactor(stage0): remove dead Tier2McpAdapter code (MAINT-12)
+[Pending] refactor(tui): extract undo_snapshots.rs from ChatWidget (MAINT-11 Phase 9)
 ```
 
 Push when ready: `git push`
