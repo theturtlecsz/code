@@ -1,38 +1,91 @@
-# Session Handoff — MAINT-11 Phase 10
+# Session Handoff — MAINT-11 Phase 10 + Convergence Testing
 
 **Last updated:** 2025-12-23
-**Status:** MAINT-11 Phase 9 Complete, Phase 10 Ready
+**Status:** Convergence Guardrails Complete, MAINT-11 Phase 10 In Progress
 
 ---
 
-## Session Summary (2025-12-23)
+## Session Summary (2025-12-23 - Session 2)
 
 ### Completed This Session
 
 | Task | Status | Commit | Notes |
 |------|--------|--------|-------|
-| MAINT-11 Phase 9: Undo/Snapshots | ✅ | `7ef1ddacc` | Extracted undo_snapshots.rs (497 LOC) |
-| mod.rs reduction | ✅ | — | 19,070 → 18,613 LOC (-457 LOC, -2.4%) |
-| Tests verified | ✅ | — | All TUI tests passing |
-| Documentation cleanup | ✅ | `1c73fddca` | Updated docs for CLI/REST local-memory architecture |
+| Convergence Guardrails | ✅ | `0af5b4a93` | Full implementation (791 LOC) |
+| docs/convergence/README.md | ✅ | — | Pointer to localmemory-policy canonical docs |
+| stage0_cmd.rs | ✅ | — | `code stage0 doctor` command (421 LOC) |
+| convergence_check.sh | ✅ | — | CI guardrails script (169 LOC) |
+| PR template | ✅ | — | Convergence checklist for PRs |
+| pro_overlay.rs | 🔄 | — | Created (570 LOC) but NOT wired yet |
 
-### Phase 9 Extraction Details
+### MAINT-11 Phase 10 Partial Work
 
-**Created:** `tui/src/chatwidget/undo_snapshots.rs` (497 LOC)
+**pro_overlay.rs** exists on disk (not committed) with:
+- ProState, ProStatusSnapshot, ProLogEntry, ProLogCategory, ProOverlay types
+- All Pro-related ChatWidget methods
 
-**Functions Extracted:**
-- `capture_ghost_snapshot` - Create snapshot after commit
-- `current_conversation_snapshot` - Get current state
-- `conversation_delta_since` - Calculate changes
-- `snapshot_ghost_state` / `adopt_ghost_state` - Session transfer
-- `snapshot_preview` - UI preview generation
-- `handle_undo_command` - Main `/undo` handler
-- `show_undo_*` - UI display functions (5 functions)
-- `perform_undo_restore` - Execute restore
-- `reset_after_conversation_restore` - Post-restore cleanup
-- `undo_jump_back` / `has_pending_jump_back` - Quick undo
+**mod.rs** was reverted to clean state (18,613 LOC) - ready for clean extraction next session.
 
-**Pattern Used:** impl block on ChatWidget with super:: imports
+---
+
+## Next Session: Complete Phase 10 + Test Convergence
+
+### Session Parameters
+- **Mode:** ultrathink (extended thinking for all tasks)
+- **Scope:** MAINT-11 Phase 10 completion + Convergence testing
+- **Order:** MAINT-11 first (code), then Convergence testing
+
+### Task 1: MAINT-11 Phase 10 Completion
+
+**Starting Point:** pro_overlay.rs exists with 570 LOC, mod.rs at 18,613 LOC
+
+**Steps:**
+1. Verify pro_overlay.rs exists: `ls -la codex-rs/tui/src/chatwidget/pro_overlay.rs`
+2. Add `mod pro_overlay;` to mod.rs (after `mod undo_snapshots;`)
+3. Remove Pro types from mod.rs lines 18252-18366:
+   - ProState, ProStatusSnapshot, ProLogEntry, ProLogCategory, ProOverlay
+   - Their impl blocks
+4. Remove Pro methods from ChatWidget impl:
+   - toggle_pro_overlay
+   - close_pro_overlay
+   - handle_pro_overlay_key
+   - handle_pro_event
+   - describe_pro_category
+   - describe_pro_phase
+   - render_pro_overlay
+   - pro_summary_line
+   - format_pro_log_entry
+   - pro_category_color
+   - parse_pro_action
+   - pro_surface_present
+   - format_recent_timestamp
+5. Clean up unused imports in mod.rs
+6. Run tests: `cargo test -p codex-tui`
+7. Verify: `wc -l codex-rs/tui/src/chatwidget/mod.rs` < 18,050
+
+**Success Criteria:**
+- mod.rs < 18,050 LOC (~560 LOC reduction)
+- All TUI tests passing
+- Clean compilation
+
+### Task 2: Convergence Testing
+
+**Steps:**
+1. Run `code stage0 doctor` and verify output
+2. Test with Tier2 disabled: `code stage0 doctor --tier1-only`
+3. Run `./scripts/convergence_check.sh` - should pass
+4. Review existing convergence tests: `cargo test -p codex-stage0 --test convergence_acceptance`
+5. Document any issues or needed fixes
+
+**Service URLs to verify:**
+- local-memory: `http://localhost:3002/api/v1`
+- NotebookLM: `http://127.0.0.1:3456`
+
+### Task 3: Commit and Push
+
+1. Stage Phase 10 files: pro_overlay.rs + mod.rs changes
+2. Commit: `refactor(tui): extract pro_overlay.rs from ChatWidget (MAINT-11 Phase 10)`
+3. Push to origin/main
 
 ---
 
@@ -49,61 +102,55 @@
 | 7 | `review_handlers.rs` | 462 | ✅ |
 | 8 | `session_handlers.rs` | 619 | ✅ |
 | 9 | `undo_snapshots.rs` | 497 | ✅ |
-| **10** | **`pro_overlay.rs`** | **~200** | **NEXT** |
+| **10** | **`pro_overlay.rs`** | **570** | **IN PROGRESS** |
 | 11 | `validation_config.rs` | ~200 | Planned |
 | 12 | `model_presets.rs` | ~120 | Planned |
 
-**mod.rs trajectory:** 23,413 → 18,613 LOC (-20.5% total)
+**mod.rs trajectory:** 23,413 → 18,613 LOC → ~18,050 LOC (target)
 
 ---
 
-## Next Session: MAINT-11 Phase 10
+## Convergence Guardrails Reference
 
-### Session Parameters
-- **Mode:** ultrathink (extended thinking for all tasks)
-- **Scope:** Phase 10 only (focused extraction)
-- **Tech Debt:** Deferred (no AD-001, AD-006)
+### Files Created This Session
 
-### Primary Goal: Extract Pro Overlay Module
+| File | Purpose |
+|------|---------|
+| `docs/convergence/README.md` | Pointer to canonical docs in localmemory-policy |
+| `codex-rs/cli/src/stage0_cmd.rs` | `code stage0 doctor` command |
+| `scripts/convergence_check.sh` | CI guardrails script |
+| `.github/pull_request_template.md` | PR checklist with convergence items |
 
-**Target:** `tui/src/chatwidget/pro_overlay.rs` (~200 LOC)
+### Key Semantics
 
-**Discovery Steps:**
-1. Search mod.rs for `Pro*` types and `handle_pro_event`
-2. Identify ProEvent, ProAction, ProCategory, ProPhase, ProStats handlers
-3. Map dependencies (imports, ChatWidget fields accessed)
+- **Tier2 Fail-Closed:** NotebookLM unavailable → skip (not error), continue Tier1
+- **System Pointers:** domain: `spec-tracker`, tag: `system:true`
+- **Best Effort:** Pointer write failures don't fail Stage0
+- **No Silent Fallback:** Never use "general" notebook without explicit config
 
-**Extraction Steps:**
-1. Create `pro_overlay.rs` with module doc
-2. Add required imports (follow undo_snapshots.rs pattern)
-3. Move Pro-related impl methods to new file
-4. Add `mod pro_overlay;` to mod.rs
-5. Clean up unused imports in mod.rs
-6. Run tests: `cargo test -p codex-tui`
-7. Verify line count: `wc -l codex-rs/tui/src/chatwidget/mod.rs`
+### Verification Commands
 
-**Success Criteria:**
-- mod.rs < 18,400 LOC
-- All TUI tests passing
-- Clean compilation (no warnings)
+```bash
+# Stage0 health check
+code stage0 doctor
 
-### Deferred (Future Sessions)
+# Tier1 only (skip NotebookLM checks)
+code stage0 doctor --tier1-only
 
-| Task | Priority | Notes |
-|------|----------|-------|
-| MAINT-11 Phase 11 | P1 | validation_config.rs (~200 LOC) |
-| MAINT-11 Phase 12 | P1 | model_presets.rs (~120 LOC) |
-| AD-001 | P2 | Async/blocking unification |
-| AD-006 | P2 | Channel backpressure |
-| MAINT-13 | P2 | Config inheritance for subdirectories |
+# CI convergence checks
+./scripts/convergence_check.sh
+
+# Convergence acceptance tests
+cargo test -p codex-stage0 --test convergence_acceptance
+```
 
 ---
 
 ## Quick Verify Commands
 
 ```bash
-# Search for Pro* handlers in mod.rs
-grep -n "Pro\|handle_pro" codex-rs/tui/src/chatwidget/mod.rs | head -30
+# Check if pro_overlay.rs exists
+ls -la codex-rs/tui/src/chatwidget/pro_overlay.rs
 
 # Full TUI tests
 cargo test -p codex-tui
@@ -111,7 +158,7 @@ cargo test -p codex-tui
 # Check mod.rs line count
 wc -l codex-rs/tui/src/chatwidget/mod.rs
 
-# Check new module size after creation
+# Check new module size
 wc -l codex-rs/tui/src/chatwidget/pro_overlay.rs
 ```
 
@@ -122,17 +169,45 @@ wc -l codex-rs/tui/src/chatwidget/pro_overlay.rs
 | File | Purpose |
 |------|---------|
 | `tui/src/chatwidget/mod.rs` | Main refactor target (18,613 LOC) |
+| `tui/src/chatwidget/pro_overlay.rs` | Phase 10 module (570 LOC, not wired) |
 | `tui/src/chatwidget/undo_snapshots.rs` | Phase 9 pattern reference (497 LOC) |
-| `tui/src/chatwidget/session_handlers.rs` | Alternative pattern reference (619 LOC) |
-| `SPEC.md` | Task tracking (MAINT-11 row) |
+| `codex-rs/cli/src/stage0_cmd.rs` | Stage0 doctor command |
+| `scripts/convergence_check.sh` | Convergence CI checks |
 
 ---
 
 ## Commits This Session
 
 ```
+0af5b4a93 feat(convergence): add Stage0 doctor and convergence guardrails
+d0513d0ac docs(handoff): prepare MAINT-11 Phase 10 session
 1c73fddca docs(convergence): update docs to reflect CLI/REST local-memory architecture
 7ef1ddacc refactor(tui): extract undo_snapshots.rs from ChatWidget (MAINT-11 Phase 9)
 ```
 
-✅ All pushed to origin/main
+---
+
+## Continuation Prompt
+
+```
+Continue MAINT-11 Phase 10 **ultrathink**
+
+### Context
+- pro_overlay.rs (570 LOC) exists but is NOT wired to mod.rs
+- mod.rs is at 18,613 LOC (reverted to clean state)
+- Convergence guardrails committed (0af5b4a93)
+
+### Priority Order
+1. Complete MAINT-11 Phase 10 (wire pro_overlay.rs, remove duplicates)
+2. Test convergence (`code stage0 doctor`)
+3. Commit Phase 10 changes
+
+### Key Files
+- codex-rs/tui/src/chatwidget/pro_overlay.rs (570 LOC, exists)
+- codex-rs/tui/src/chatwidget/mod.rs (18,613 LOC, needs cleanup)
+
+### Success Criteria
+- mod.rs < 18,050 LOC
+- All TUI tests passing
+- `code stage0 doctor` runs successfully
+```
