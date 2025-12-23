@@ -43,6 +43,10 @@ pub struct Iqo {
     /// Focus areas for Tier 2 routing (used in V1.5)
     #[serde(default)]
     pub notebook_focus: Vec<String>,
+    /// Tags to exclude from results (e.g., ["system:true"])
+    /// Memories with any of these tags are filtered out.
+    #[serde(default)]
+    pub exclude_tags: Vec<String>,
 }
 
 /// Environment context passed to IQO generation
@@ -273,6 +277,7 @@ fn heuristic_iqo(spec_content: &str, cfg: &Stage0Config) -> Iqo {
         keywords,
         max_candidates,
         notebook_focus: vec![],
+        exclude_tags: vec![], // Default exclusion applied in normalize_iqo
     }
 }
 
@@ -406,6 +411,12 @@ fn normalize_iqo(mut iqo: Iqo, cfg: &Stage0Config) -> Iqo {
     iqo.notebook_focus
         .retain(|f| matches!(f.as_str(), "architecture" | "bugs" | "diary"));
 
+    // CONVERGENCE: Exclude system pointer memories from Tier1 retrieval by default
+    // Per MEMO_codex-rs.md Section 4: "Tier1 memory retrieval must exclude system artifacts"
+    if !iqo.exclude_tags.iter().any(|t| t == "system:true") {
+        iqo.exclude_tags.push("system:true".to_string());
+    }
+
     iqo
 }
 
@@ -446,6 +457,7 @@ fn build_constitution_search_params(limit: usize) -> LocalMemorySearchParams {
             keywords: vec![], // No keyword filtering for constitution
             max_candidates: limit,
             notebook_focus: vec![],
+            exclude_tags: vec![], // Constitution memories are never system-tagged
         },
         max_results: limit,
     }
@@ -1487,6 +1499,41 @@ mod tests {
 
         iqo = normalize_iqo(iqo, &cfg);
         assert!(iqo.max_candidates <= 150);
+    }
+
+    /// CONVERGENCE: Verify normalize_iqo adds system:true exclusion by default
+    /// Per MEMO_codex-rs.md Section 4: "Tier1 memory retrieval must exclude system artifacts"
+    #[test]
+    fn test_normalize_iqo_adds_system_exclusion() {
+        let cfg = Stage0Config::default();
+        let iqo = Iqo {
+            exclude_tags: vec![], // Empty - no exclusions yet
+            ..Default::default()
+        };
+
+        let normalized = normalize_iqo(iqo, &cfg);
+        assert!(
+            normalized.exclude_tags.contains(&"system:true".to_string()),
+            "normalize_iqo should add system:true to exclude_tags"
+        );
+    }
+
+    /// CONVERGENCE: Verify normalize_iqo doesn't duplicate system:true if already present
+    #[test]
+    fn test_normalize_iqo_no_duplicate_exclusion() {
+        let cfg = Stage0Config::default();
+        let iqo = Iqo {
+            exclude_tags: vec!["system:true".to_string()], // Already present
+            ..Default::default()
+        };
+
+        let normalized = normalize_iqo(iqo, &cfg);
+        let system_count = normalized
+            .exclude_tags
+            .iter()
+            .filter(|t| *t == "system:true")
+            .count();
+        assert_eq!(system_count, 1, "system:true should not be duplicated");
     }
 
     #[test]

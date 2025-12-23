@@ -110,16 +110,35 @@ pub fn run_stage0_for_spec(
     // Create adapters (no MCP dependencies).
     let local_memory = LocalMemoryCliAdapter::new();
     let llm = LlmStubAdapter::new();
+
+    // CONVERGENCE: Tier2 fail-closed with explicit diagnostics
+    // Per MEMO_codex-rs.md Section 1: "emit diagnostics with actionable next steps"
     let tier2_opt = if stage0_cfg.tier2.enabled && !stage0_cfg.tier2.notebook.trim().is_empty() {
-        Some(Tier2HttpAdapter::new(
-            stage0_cfg
-                .tier2
-                .base_url
-                .clone()
-                .unwrap_or_else(|| "http://127.0.0.1:3456".to_string()),
-            stage0_cfg.tier2.notebook.clone(),
-        ))
+        // Check NotebookLM service health before creating adapter
+        let base_url = stage0_cfg
+            .tier2
+            .base_url
+            .clone()
+            .unwrap_or_else(|| "http://127.0.0.1:3456".to_string());
+
+        match check_tier2_service_health(&base_url) {
+            Ok(()) => Some(Tier2HttpAdapter::new(base_url, stage0_cfg.tier2.notebook.clone())),
+            Err(reason) => {
+                // Tier2 fail-closed: skip with diagnostic
+                tracing::warn!(
+                    "Stage0 Tier2 skipped: {}. Run 'code doctor' for details.",
+                    reason
+                );
+                None
+            }
+        }
     } else {
+        // No notebook configured - emit diagnostic
+        if stage0_cfg.tier2.enabled {
+            tracing::info!(
+                "Stage0 Tier2 skipped: No notebook configured. Add tier2.notebook to stage0.toml"
+            );
+        }
         None
     };
 
@@ -422,6 +441,28 @@ pub fn write_divine_truth_to_evidence(
 
     tracing::debug!("Wrote DIVINE_TRUTH.md to {}", path.display());
     Ok(path)
+}
+
+/// CONVERGENCE: Check NotebookLM service health before attempting Tier2
+///
+/// Returns Ok(()) if service is healthy, Err(reason) if not.
+/// Per MEMO_codex-rs.md: fail-closed means skip Tier2, not fail the pipeline.
+fn check_tier2_service_health(base_url: &str) -> Result<(), String> {
+    let health_url = format!("{}/health", base_url.trim_end_matches('/'));
+
+    // Use blocking client since we're in sync context
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(2))
+        .build()
+        .map_err(|e| format!("HTTP client error: {e}"))?;
+
+    match client.get(&health_url).send() {
+        Ok(resp) if resp.status().is_success() => Ok(()),
+        Ok(resp) => Err(format!("NotebookLM service unhealthy: {}", resp.status())),
+        Err(e) if e.is_timeout() => Err("NotebookLM service timeout".to_string()),
+        Err(e) if e.is_connect() => Err("NotebookLM service not running".to_string()),
+        Err(e) => Err(format!("NotebookLM service unreachable: {e}")),
+    }
 }
 
 #[cfg(test)]

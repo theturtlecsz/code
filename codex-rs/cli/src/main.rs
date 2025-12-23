@@ -1027,6 +1027,166 @@ async fn doctor_main() -> anyhow::Result<()> {
         "\nIf versions differ, remove older installs or reorder PATH so the intended binary comes first."
     );
 
+    // ─────────────────────────────────────────────────────────────────────────────
+    // CONVERGENCE: Stage0 Health Checks
+    // Per MEMO_codex-rs.md Section 2: Doctor helpers
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    println!("\n=== Stage0 Health Checks ===\n");
+
+    // Helper for health check result display
+    struct HealthCheck {
+        name: &'static str,
+        status: HealthStatus,
+        message: String,
+        fix_hint: Option<&'static str>,
+    }
+
+    #[derive(Clone, Copy)]
+    enum HealthStatus {
+        Ok,
+        Warn,
+        Fail,
+    }
+
+    let mut checks: Vec<HealthCheck> = Vec::new();
+
+    // 1. local-memory daemon health
+    let lm_check = {
+        let url = std::env::var("LOCAL_MEMORY_API_BASE")
+            .unwrap_or_else(|_| "http://localhost:3002/api/v1".to_string());
+        let health_url = format!("{}/health", url.trim_end_matches('/'));
+        match reqwest::Client::new()
+            .get(&health_url)
+            .timeout(std::time::Duration::from_secs(3))
+            .send()
+            .await
+        {
+            Ok(resp) if resp.status().is_success() => HealthCheck {
+                name: "local-memory",
+                status: HealthStatus::Ok,
+                message: "Daemon healthy".to_string(),
+                fix_hint: None,
+            },
+            Ok(resp) => HealthCheck {
+                name: "local-memory",
+                status: HealthStatus::Warn,
+                message: format!("Unexpected status: {}", resp.status()),
+                fix_hint: Some("Check local-memory logs"),
+            },
+            Err(e) => HealthCheck {
+                name: "local-memory",
+                status: HealthStatus::Fail,
+                message: format!("Not reachable: {}", e),
+                fix_hint: Some("Run: local-memory daemon start"),
+            },
+        }
+    };
+    checks.push(lm_check);
+
+    // 2. NotebookLM service health
+    let nlm_check = {
+        let base = std::env::var("NOTEBOOKLM_BASE_URL")
+            .unwrap_or_else(|_| "http://127.0.0.1:3456".to_string());
+        let health_url = format!("{}/health", base.trim_end_matches('/'));
+        match reqwest::Client::new()
+            .get(&health_url)
+            .timeout(std::time::Duration::from_secs(3))
+            .send()
+            .await
+        {
+            Ok(resp) if resp.status().is_success() => HealthCheck {
+                name: "notebooklm",
+                status: HealthStatus::Ok,
+                message: "Service healthy".to_string(),
+                fix_hint: None,
+            },
+            Ok(resp) => HealthCheck {
+                name: "notebooklm",
+                status: HealthStatus::Warn,
+                message: format!("Unexpected status: {}", resp.status()),
+                fix_hint: Some("Check notebooklm-mcp logs"),
+            },
+            Err(_) => HealthCheck {
+                name: "notebooklm",
+                status: HealthStatus::Warn,
+                message: "Service not running (Tier2 will be skipped)".to_string(),
+                fix_hint: Some("Run: node ~/notebooklm-mcp/dist/index.js"),
+            },
+        }
+    };
+    checks.push(nlm_check);
+
+    // 3. Notebook mapping (check stage0.toml)
+    let notebook_check = {
+        let config_path = dirs::config_dir()
+            .map(|d| d.join("codex").join("stage0.toml"))
+            .unwrap_or_default();
+        if config_path.exists() {
+            match std::fs::read_to_string(&config_path) {
+                Ok(content) => {
+                    // Simple check: look for notebook setting
+                    if content.contains("notebook") && !content.contains("notebook = \"\"") {
+                        HealthCheck {
+                            name: "notebook-mapping",
+                            status: HealthStatus::Ok,
+                            message: format!("Configured in {}", config_path.display()),
+                            fix_hint: None,
+                        }
+                    } else {
+                        HealthCheck {
+                            name: "notebook-mapping",
+                            status: HealthStatus::Warn,
+                            message: "No notebook configured (Tier2 will be skipped)".to_string(),
+                            fix_hint: Some("Add tier2.notebook to stage0.toml"),
+                        }
+                    }
+                }
+                Err(e) => HealthCheck {
+                    name: "notebook-mapping",
+                    status: HealthStatus::Fail,
+                    message: format!("Cannot read config: {}", e),
+                    fix_hint: Some("Check ~/.config/codex/stage0.toml"),
+                },
+            }
+        } else {
+            HealthCheck {
+                name: "notebook-mapping",
+                status: HealthStatus::Warn,
+                message: "No stage0.toml found (Tier2 will use defaults)".to_string(),
+                fix_hint: Some("Create ~/.config/codex/stage0.toml"),
+            }
+        }
+    };
+    checks.push(notebook_check);
+
+    // Print check results
+    for check in &checks {
+        let icon = match check.status {
+            HealthStatus::Ok => "[OK]  ",
+            HealthStatus::Warn => "[WARN]",
+            HealthStatus::Fail => "[FAIL]",
+        };
+        println!("{} {}: {}", icon, check.name, check.message);
+    }
+
+    // Print actionable next steps
+    let has_issues = checks
+        .iter()
+        .any(|c| matches!(c.status, HealthStatus::Warn | HealthStatus::Fail));
+    if has_issues {
+        println!("\n=== Next Steps ===\n");
+        for check in &checks {
+            if let (HealthStatus::Warn | HealthStatus::Fail, Some(hint)) =
+                (check.status, check.fix_hint)
+            {
+                println!("- {}: {}", check.name, hint);
+            }
+        }
+    } else {
+        println!("\nAll Stage0 checks passed. Ready for /speckit.auto.");
+    }
+
     Ok(())
 }
 #[cfg(test)]

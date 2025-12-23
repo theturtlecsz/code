@@ -22,6 +22,7 @@ pub mod librarian;
 pub mod overlay_db;
 pub mod project_intel;
 pub mod scoring;
+pub mod system_memory;
 pub mod tfidf;
 pub mod tier2;
 pub mod vector;
@@ -48,6 +49,9 @@ pub use overlay_db::{
 };
 pub use scoring::{ScoringComponents, ScoringInput, calculate_dynamic_score, calculate_score};
 pub use tfidf::{TfIdfBackend, TfIdfConfig};
+pub use system_memory::{
+    ArtifactType, compute_content_hash, extract_summary_bullets, store_system_pointer,
+};
 pub use tier2::{
     CausalLinkSuggestion, DivineTruth, Tier2Client, Tier2Response, build_fallback_divine_truth,
     build_tier2_prompt, parse_divine_truth, validate_causal_links,

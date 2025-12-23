@@ -101,10 +101,27 @@ impl LocalMemoryClient for LocalMemoryCliAdapter {
         .await
         .map_err(|e| Stage0Error::local_memory(format!("local-memory search failed: {e}")))?;
 
+        // Build exclusion set for client-side filtering
+        // CONVERGENCE: local-memory CLI doesn't support --exclude-tags, so filter here
+        let exclude_set: std::collections::HashSet<&str> = params
+            .iqo
+            .exclude_tags
+            .iter()
+            .map(|s| s.as_str())
+            .collect();
+
         Ok(results
             .into_iter()
             .filter_map(|r| {
                 let id = r.memory.id?;
+
+                // Client-side exclusion: skip memories with any excluded tag
+                if let Some(ref tags) = r.memory.tags {
+                    if tags.iter().any(|t| exclude_set.contains(t.as_str())) {
+                        return None;
+                    }
+                }
+
                 let snippet = if r.memory.content.len() > 200 {
                     format!("{}...", &r.memory.content[..200])
                 } else {

@@ -1576,6 +1576,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "dirs 6.0.0",
+ "reqwest 0.12.23",
  "rusqlite",
  "serde",
  "serde_json",

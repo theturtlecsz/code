@@ -196,6 +196,7 @@ async fn seed_architecture_bible(
         ],
         max_candidates: config.max_memories_per_artifact * 2,
         notebook_focus: vec![],
+        exclude_tags: vec![],
     };
 
     let params = LocalMemorySearchParams {
@@ -261,6 +262,7 @@ async fn seed_stack_justification(
         ],
         max_candidates: config.max_memories_per_artifact,
         notebook_focus: vec![],
+        exclude_tags: vec![],
     };
 
     let params = LocalMemorySearchParams {
@@ -318,6 +320,7 @@ async fn seed_bug_retros(
         ],
         max_candidates: config.max_memories_per_artifact * 2,
         notebook_focus: vec![],
+        exclude_tags: vec![],
     };
 
     let params = LocalMemorySearchParams {
@@ -407,6 +410,7 @@ async fn seed_project_diary(
         ],
         max_candidates: config.max_memories_per_artifact * 2,
         notebook_focus: vec![],
+        exclude_tags: vec![],
     };
 
     let params = LocalMemorySearchParams {

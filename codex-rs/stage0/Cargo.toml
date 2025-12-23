@@ -37,6 +37,9 @@ tokio = { workspace = true, features = ["rt-multi-thread", "sync"] }
 # Hashing for cache keys
 sha2 = { workspace = true }
 
+# HTTP client for system memory storage
+reqwest = { workspace = true, features = ["json"] }
+
 [dev-dependencies]
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
