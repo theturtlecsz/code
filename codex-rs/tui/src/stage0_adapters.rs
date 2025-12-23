@@ -1,17 +1,17 @@
 //! Stage0 adapter implementations for codex-rs
 //!
 //! This module provides concrete implementations of the Stage0 trait abstractions:
-//! - `LocalMemoryCliAdapter`: Wraps `local-memory` CLI search
+//! - `LocalMemoryCliAdapter`: Wraps `local-memory` CLI search (REST health + CLI commands)
+//! - `Tier2HttpAdapter`: Uses HTTP to call notebooklm-mcp service (no MCP dependency)
 //! - `LibrarianMemoryRestAdapter`: Uses CLI + REST for Librarian sweep/edit
 //! - `RelationshipsRestAdapter`: Uses REST for relationships
 //! - `LlmStubAdapter`: Stub LLM client (uses heuristics, no actual LLM calls in V1)
-//! - `Tier2McpAdapter`: Wraps MCP `notebooklm` server
 //!
-//! These adapters bridge Stage0's trait-based design with codex-rs integration points.
+//! **CONVERGENCE (MAINT-12)**: Stage0 uses HTTP-only for NotebookLM and CLI/REST for
+//! local-memory. No MCP dependency required.
 
 use crate::local_memory_cli;
 use async_trait::async_trait;
-use codex_core::mcp_connection_manager::McpConnectionManager;
 use codex_stage0::dcc::{
     EnvCtx, Iqo, LocalMemoryClient, LocalMemorySearchParams, LocalMemorySummary,
 };
@@ -21,15 +21,11 @@ use codex_stage0::tier2::{CausalLinkSuggestion, Tier2Client, Tier2Response};
 use reqwest::blocking::Client as BlockingHttpClient;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::sync::Arc;
 use std::time::Duration;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Integration Defaults
 // ─────────────────────────────────────────────────────────────────────────────
-
-/// MCP server name for NotebookLM
-const NOTEBOOKLM_SERVER: &str = "notebooklm";
 
 const LOCAL_MEMORY_API_BASE_DEFAULT: &str = "http://localhost:3002/api/v1";
 const LOCAL_MEMORY_HTTP_TIMEOUT: Duration = Duration::from_secs(30);
@@ -288,73 +284,6 @@ impl LlmClient for LlmStubAdapter {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tier2McpAdapter
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Adapter that implements `Tier2Client` using MCP's NotebookLM server
-pub struct Tier2McpAdapter {
-    mcp_manager: Arc<McpConnectionManager>,
-    /// Optional notebook ID to use (if None, uses active notebook)
-    notebook_id: Option<String>,
-}
-
-impl Tier2McpAdapter {
-    /// Create a new adapter wrapping the MCP connection manager
-    pub fn new(mcp_manager: Arc<McpConnectionManager>) -> Self {
-        Self {
-            mcp_manager,
-            notebook_id: None,
-        }
-    }
-
-    /// Create adapter with a specific notebook ID
-    pub fn with_notebook(mcp_manager: Arc<McpConnectionManager>, notebook_id: String) -> Self {
-        Self {
-            mcp_manager,
-            notebook_id: Some(notebook_id),
-        }
-    }
-}
-
-#[async_trait]
-impl Tier2Client for Tier2McpAdapter {
-    async fn generate_divine_truth(
-        &self,
-        spec_id: &str,
-        spec_content: &str,
-        task_brief_md: &str,
-    ) -> Result<Tier2Response> {
-        // Build the Tier2 prompt using Stage0's helper
-        let prompt = codex_stage0::build_tier2_prompt(spec_id, spec_content, task_brief_md);
-
-        // Build MCP tool arguments
-        let mut args = json!({
-            "question": prompt,
-        });
-
-        // Add notebook_id if specified
-        if let Some(ref nb_id) = self.notebook_id {
-            args["notebook_id"] = json!(nb_id);
-        }
-
-        // Call NotebookLM via MCP
-        let result = self
-            .mcp_manager
-            .call_tool(
-                NOTEBOOKLM_SERVER,
-                "ask_question",
-                Some(args),
-                Some(Duration::from_secs(120)), // Longer timeout for NotebookLM
-            )
-            .await
-            .map_err(|e| Stage0Error::tier2(format!("NotebookLM MCP call failed: {e}")))?;
-
-        // Parse response
-        parse_tier2_response(&result, spec_id)
-    }
-}
-
 fn parse_tier2_answer_text(text: &str, spec_id: &str) -> Result<Tier2Response> {
     let text = text.trim();
     if text.is_empty() {
@@ -399,23 +328,6 @@ fn parse_tier2_answer_text(text: &str, spec_id: &str) -> Result<Tier2Response> {
         divine_truth_md,
         suggested_links,
     })
-}
-
-/// Parse NotebookLM MCP response into Tier2Response
-fn parse_tier2_response(
-    result: &mcp_types::CallToolResult,
-    spec_id: &str,
-) -> Result<Tier2Response> {
-    let text = result
-        .content
-        .iter()
-        .filter_map(|c| match c {
-            mcp_types::ContentBlock::TextContent(tc) => Some(tc.text.as_str()),
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    parse_tier2_answer_text(&text, spec_id)
 }
 
 /// Parse causal link suggestions from Divine Truth markdown
