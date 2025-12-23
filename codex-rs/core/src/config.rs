@@ -2689,6 +2689,83 @@ trust_level = "untrusted"
     }
 
     #[test]
+    fn project_stage0_config_inherits_to_subdirectories() {
+        // MAINT-13: Verify Stage0 config inheritance works for subdirectories
+        let root = TempDir::new().unwrap();
+        let child = root.path().join("src");
+        let grandchild = child.join("lib");
+        std::fs::create_dir_all(&grandchild).unwrap();
+
+        let root_path = root.path().to_string_lossy();
+        let toml = format!(
+            r#"[projects."{root_path}"]
+trust_level = "trusted"
+
+[projects."{root_path}".stage0]
+notebook = "test-notebook"
+notebook_id = "nb-123"
+"#
+        );
+
+        let cfg: ConfigToml = toml::from_str(&toml).unwrap();
+
+        // Test that subdirectory resolves to parent's project config
+        let projects = cfg.projects.as_ref().unwrap();
+        let override_from_child = super::resolve_project_override(projects, &child);
+        let override_from_grandchild = super::resolve_project_override(projects, &grandchild);
+
+        // Both should resolve to the root project config
+        assert!(override_from_child.is_some(), "child should inherit parent config");
+        assert!(override_from_grandchild.is_some(), "grandchild should inherit parent config");
+
+        // Verify stage0 config is accessible
+        let child_stage0 = override_from_child.unwrap().stage0.as_ref();
+        assert!(child_stage0.is_some(), "stage0 config should be present");
+        assert_eq!(child_stage0.unwrap().notebook, Some("test-notebook".to_string()));
+        assert_eq!(child_stage0.unwrap().notebook_id, Some("nb-123".to_string()));
+
+        let grandchild_stage0 = override_from_grandchild.unwrap().stage0.as_ref();
+        assert!(grandchild_stage0.is_some(), "stage0 config should be present for grandchild");
+        assert_eq!(grandchild_stage0.unwrap().notebook, Some("test-notebook".to_string()));
+    }
+
+    #[test]
+    fn project_hooks_inherit_to_subdirectories() {
+        // MAINT-13: Verify hooks config inheritance works for subdirectories
+        let root = TempDir::new().unwrap();
+        let child = root.path().join("packages").join("core");
+        std::fs::create_dir_all(&child).unwrap();
+
+        let root_path = root.path().to_string_lossy();
+        let toml = format!(
+            r#"[projects."{root_path}"]
+trust_level = "trusted"
+
+[[projects."{root_path}".hooks]]
+event = "session.start"
+command = ["echo", "session-started"]
+
+[[projects."{root_path}".hooks]]
+event = "tool.before"
+command = ["echo", "before-tool"]
+"#
+        );
+
+        let cfg: ConfigToml = toml::from_str(&toml).unwrap();
+        let projects = cfg.projects.as_ref().unwrap();
+
+        // Subdirectory should resolve to parent's project config with hooks
+        let override_cfg = super::resolve_project_override(projects, &child);
+        assert!(override_cfg.is_some(), "subdirectory should inherit parent config");
+
+        let project_cfg = override_cfg.unwrap();
+        assert!(!project_cfg.hooks.is_empty(), "hooks config should be present");
+        assert_eq!(project_cfg.hooks.len(), 2, "should have 2 hooks configured");
+        assert_eq!(project_cfg.hooks[0].command, vec!["echo", "session-started"]);
+        assert_eq!(project_cfg.hooks[1].command, vec!["echo", "before-tool"]);
+    }
+
+    #[test]
     fn auto_upgrade_enabled_accepts_string_boolean() {
         let cfg_true = r#"auto_upgrade_enabled = "true""#;
         let parsed_true =
