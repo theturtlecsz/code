@@ -1,7 +1,7 @@
 # Session Handoff — MAINT-11 Phase 10
 
 **Last updated:** 2025-12-23
-**Status:** MAINT-11 Phase 9 Complete
+**Status:** MAINT-11 Phase 9 Complete, Phase 10 Ready
 
 ---
 
@@ -14,7 +14,7 @@
 | MAINT-11 Phase 9: Undo/Snapshots | ✅ | `7ef1ddacc` | Extracted undo_snapshots.rs (497 LOC) |
 | mod.rs reduction | ✅ | — | 19,070 → 18,613 LOC (-457 LOC, -2.4%) |
 | Tests verified | ✅ | — | All TUI tests passing |
-| SPEC.md updated | ✅ | — | Phase 9 documented |
+| Documentation cleanup | ✅ | `1c73fddca` | Updated docs for CLI/REST local-memory architecture |
 
 ### Phase 9 Extraction Details
 
@@ -32,7 +32,7 @@
 - `reset_after_conversation_restore` - Post-restore cleanup
 - `undo_jump_back` / `has_pending_jump_back` - Quick undo
 
-**Pattern Used:** Same as session_handlers.rs - impl block on ChatWidget with super:: imports
+**Pattern Used:** impl block on ChatWidget with super:: imports
 
 ---
 
@@ -53,73 +53,66 @@
 | 11 | `validation_config.rs` | ~200 | Planned |
 | 12 | `model_presets.rs` | ~120 | Planned |
 
-**mod.rs trajectory:** 23,413 → 20,758 → 19,070 → 18,613 LOC (-20.5% total)
+**mod.rs trajectory:** 23,413 → 18,613 LOC (-20.5% total)
 
 ---
 
 ## Next Session: MAINT-11 Phase 10
 
+### Session Parameters
+- **Mode:** ultrathink (extended thinking for all tasks)
+- **Scope:** Phase 10 only (focused extraction)
+- **Tech Debt:** Deferred (no AD-001, AD-006)
+
 ### Primary Goal: Extract Pro Overlay Module
 
-**Target:** Extract ~200 LOC to `tui/src/chatwidget/pro_overlay.rs`
+**Target:** `tui/src/chatwidget/pro_overlay.rs` (~200 LOC)
 
-**Candidates:**
-- Pro-related UI overlay handlers
-- Pro action/category/phase/stats handling
-- ProEvent processing
+**Discovery Steps:**
+1. Search mod.rs for `Pro*` types and `handle_pro_event`
+2. Identify ProEvent, ProAction, ProCategory, ProPhase, ProStats handlers
+3. Map dependencies (imports, ChatWidget fields accessed)
 
-**To Find:** Search mod.rs for `Pro*` types and handlers
+**Extraction Steps:**
+1. Create `pro_overlay.rs` with module doc
+2. Add required imports (follow undo_snapshots.rs pattern)
+3. Move Pro-related impl methods to new file
+4. Add `mod pro_overlay;` to mod.rs
+5. Clean up unused imports in mod.rs
+6. Run tests: `cargo test -p codex-tui`
+7. Verify line count: `wc -l codex-rs/tui/src/chatwidget/mod.rs`
 
-### Deferred (Separate Session)
+**Success Criteria:**
+- mod.rs < 18,400 LOC
+- All TUI tests passing
+- Clean compilation (no warnings)
 
-- AD-001: Async/blocking unification
-- AD-006: Backpressure for unbounded channels
-- MAINT-13: Config inheritance
+### Deferred (Future Sessions)
+
+| Task | Priority | Notes |
+|------|----------|-------|
+| MAINT-11 Phase 11 | P1 | validation_config.rs (~200 LOC) |
+| MAINT-11 Phase 12 | P1 | model_presets.rs (~120 LOC) |
+| AD-001 | P2 | Async/blocking unification |
+| AD-006 | P2 | Channel backpressure |
+| MAINT-13 | P2 | Config inheritance for subdirectories |
 
 ---
 
 ## Quick Verify Commands
 
 ```bash
-# Full TUI tests (verify extraction didn't break anything)
+# Search for Pro* handlers in mod.rs
+grep -n "Pro\|handle_pro" codex-rs/tui/src/chatwidget/mod.rs | head -30
+
+# Full TUI tests
 cargo test -p codex-tui
 
 # Check mod.rs line count
 wc -l codex-rs/tui/src/chatwidget/mod.rs
 
-# Check new module size
-wc -l codex-rs/tui/src/chatwidget/undo_snapshots.rs
-```
-
----
-
-## Next Session Start Prompt
-
-Copy this into a new session:
-
-```
-load HANDOFF.md
-
-## Session Goal: MAINT-11 Phase 10 — Pro Overlay Extraction
-
-Previous session completed:
-- MAINT-11 Phase 9: Extracted undo_snapshots.rs (497 LOC)
-- mod.rs now at 18,613 LOC (-20.5% from original 23,413)
-
-## Primary Task
-
-Extract Pro Overlay module (~200 LOC) from mod.rs:
-- Target file: `tui/src/chatwidget/pro_overlay.rs`
-- Key types: ProEvent, ProAction, ProCategory, ProPhase, ProStats handlers
-- Goal: mod.rs < 18,400 LOC
-
-## Extraction Pattern (follow existing modules)
-
-1. Search for Pro* types and handlers in mod.rs
-2. Create new file with module doc and imports
-3. Move handlers to impl block on ChatWidget
-4. Add `mod pro_overlay;` to mod.rs
-5. Run tests: `cargo test -p codex-tui`
+# Check new module size after creation
+wc -l codex-rs/tui/src/chatwidget/pro_overlay.rs
 ```
 
 ---
@@ -129,8 +122,8 @@ Extract Pro Overlay module (~200 LOC) from mod.rs:
 | File | Purpose |
 |------|---------|
 | `tui/src/chatwidget/mod.rs` | Main refactor target (18,613 LOC) |
-| `tui/src/chatwidget/undo_snapshots.rs` | Phase 9 extraction (497 LOC) |
-| `tui/src/chatwidget/session_handlers.rs` | Reference pattern (619 LOC) |
+| `tui/src/chatwidget/undo_snapshots.rs` | Phase 9 pattern reference (497 LOC) |
+| `tui/src/chatwidget/session_handlers.rs` | Alternative pattern reference (619 LOC) |
 | `SPEC.md` | Task tracking (MAINT-11 row) |
 
 ---
@@ -138,7 +131,8 @@ Extract Pro Overlay module (~200 LOC) from mod.rs:
 ## Commits This Session
 
 ```
+1c73fddca docs(convergence): update docs to reflect CLI/REST local-memory architecture
 7ef1ddacc refactor(tui): extract undo_snapshots.rs from ChatWidget (MAINT-11 Phase 9)
 ```
 
-✅ Pushed to origin/main
+✅ All pushed to origin/main
