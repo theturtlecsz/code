@@ -30,11 +30,13 @@ use tokio::runtime::{Builder as TokioRuntimeBuilder, Handle as TokioHandle};
 
 mod mcp_cmd;
 mod speckit_cmd;
+mod stage0_cmd;
 
 use crate::local_memory_cmd::LocalMemoryCli;
 use crate::mcp_cmd::McpCli;
 use crate::proto::ProtoCli;
 use crate::speckit_cmd::SpeckitCli;
+use crate::stage0_cmd::Stage0Cli;
 
 const CLI_COMMAND_NAME: &str = "code";
 
@@ -124,6 +126,9 @@ enum Subcommand {
     /// Spec-Kit CLI — headless commands for automation and CI.
     #[clap(visible_alias = "sk")]
     Speckit(SpeckitCli),
+
+    /// Stage0 CLI — convergence diagnostics and Stage0 utilities.
+    Stage0(Stage0Cli),
 }
 
 #[derive(Debug, Parser)]
@@ -367,6 +372,12 @@ async fn cli_main(codex_linux_sandbox_exe: Option<PathBuf>) -> anyhow::Result<()
         }
         Some(Subcommand::Speckit(speckit_cli)) => {
             speckit_cli.run().await?;
+        }
+        Some(Subcommand::Stage0(stage0_cli)) => {
+            let exit_code = stage0_cli.run().await;
+            if exit_code != 0 {
+                process::exit(exit_code);
+            }
         }
     }
 
