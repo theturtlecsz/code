@@ -1,95 +1,131 @@
-# Session Handoff — MAINT-11 Phase 10 + Convergence Testing
+# Session Handoff — SYNC-028 + SPEC-KIT-926
 
 **Last updated:** 2025-12-23
-**Status:** Convergence Guardrails Complete, MAINT-11 Phase 10 In Progress
+**Status:** MAINT-11/13 Complete, Pivoting to SYNC-028 (TUI v2)
+**Priority:** SYNC-028 → SPEC-KIT-926
 
 ---
 
-## Session Summary (2025-12-23 - Session 2)
+## Session Summary (2025-12-23 - Session 3)
 
 ### Completed This Session
 
 | Task | Status | Commit | Notes |
 |------|--------|--------|-------|
-| Convergence Guardrails | ✅ | `0af5b4a93` | Full implementation (791 LOC) |
-| docs/convergence/README.md | ✅ | — | Pointer to localmemory-policy canonical docs |
-| stage0_cmd.rs | ✅ | — | `code stage0 doctor` command (421 LOC) |
-| convergence_check.sh | ✅ | — | CI guardrails script (169 LOC) |
-| PR template | ✅ | — | Convergence checklist for PRs |
-| pro_overlay.rs | 🔄 | — | Created (570 LOC) but NOT wired yet |
+| MAINT-11 Phase 10 | ✅ | `407cda75d` | pro_overlay.rs wired, mod.rs 18,040 LOC |
+| MAINT-13 Closure | ✅ | `de76ac53f` | 2 inheritance tests added, marked done |
+| SPEC-926 Review | ✅ | — | Analyzed against DirectProcessExecutor |
+| User Decision | ✅ | — | Prioritize SYNC-028 before SPEC-926 |
 
-### MAINT-11 Phase 10 Partial Work
+### Key Decisions Made
 
-**pro_overlay.rs** exists on disk (not committed) with:
-- ProState, ProStatusSnapshot, ProLogEntry, ProLogCategory, ProOverlay types
-- All Pro-related ChatWidget methods
-
-**mod.rs** was reverted to clean state (18,613 LOC) - ready for clean extraction next session.
+| Question | Decision |
+|----------|----------|
+| UI approach for SPEC-926 | Prioritize TUI v2 (SYNC-028) first |
+| SPEC-926 Phase 5 (Consensus) | Remove from spec |
+| Include SPEC-920 in scope | No, focus on 926 after 028 |
 
 ---
 
-## Next Session: Complete Phase 10 + Test Convergence
+## Next Session: SYNC-028 (TUI v2 Scaffold)
 
-### Session Parameters
-- **Mode:** ultrathink (extended thinking for all tasks)
-- **Scope:** MAINT-11 Phase 10 completion + Convergence testing
-- **Order:** MAINT-11 first (code), then Convergence testing
+### Continuation Prompt
 
-### Task 1: MAINT-11 Phase 10 Completion
+```
+Continue SYNC-028 (TUI v2 scaffold) **ultrathink**
 
-**Starting Point:** pro_overlay.rs exists with 570 LOC, mod.rs at 18,613 LOC
+## Context
+- User prioritized TUI v2 scaffold before SPEC-926 progress visibility
+- TUI v2 will provide better primitives for status bar and progress display
+- SPEC-926 follows as Phase 2 (targeting TUI v2 architecture)
 
-**Steps:**
-1. Verify pro_overlay.rs exists: `ls -la codex-rs/tui/src/chatwidget/pro_overlay.rs`
-2. Add `mod pro_overlay;` to mod.rs (after `mod undo_snapshots;`)
-3. Remove Pro types from mod.rs lines 18252-18366:
-   - ProState, ProStatusSnapshot, ProLogEntry, ProLogCategory, ProOverlay
-   - Their impl blocks
-4. Remove Pro methods from ChatWidget impl:
-   - toggle_pro_overlay
-   - close_pro_overlay
-   - handle_pro_overlay_key
-   - handle_pro_event
-   - describe_pro_category
-   - describe_pro_phase
-   - render_pro_overlay
-   - pro_summary_line
-   - format_pro_log_entry
-   - pro_category_color
-   - parse_pro_action
-   - pro_surface_present
-   - format_recent_timestamp
-5. Clean up unused imports in mod.rs
-6. Run tests: `cargo test -p codex-tui`
-7. Verify: `wc -l codex-rs/tui/src/chatwidget/mod.rs` < 18,050
+## SYNC-028 Task
+PRD: docs/SYNC-028-tui2-scaffold/PRD.md
 
-**Success Criteria:**
-- mod.rs < 18,050 LOC (~560 LOC reduction)
-- All TUI tests passing
-- Clean compilation
+Goal: Bring in upstream tui2 (viewport-based TUI) as optional frontend behind features.tui2
 
-### Task 2: Convergence Testing
+Key deliverables:
+1. Add tui2 crate to workspace (from upstream source)
+2. Add features.tui2 feature flag to config_types.rs
+3. Add CLI flag --tui2 for opt-in
+4. Ensure builds cleanly without breaking TUI1
+5. Basic launch/exit test
 
-**Steps:**
-1. Run `code stage0 doctor` and verify output
-2. Test with Tier2 disabled: `code stage0 doctor --tier1-only`
-3. Run `./scripts/convergence_check.sh` - should pass
-4. Review existing convergence tests: `cargo test -p codex-stage0 --test convergence_acceptance`
-5. Document any issues or needed fixes
+## Blocking Question
+Upstream tui2 source not found in repo. Need to:
+1. Locate upstream zip/source for tui2
+2. Or scaffold minimal tui2 crate structure
 
-**Service URLs to verify:**
-- local-memory: `http://localhost:3002/api/v1`
-- NotebookLM: `http://127.0.0.1:3456`
+## Dependency Check
+SYNC-019 (Feature Registry) - may need to check if required first
 
-### Task 3: Commit and Push
-
-1. Stage Phase 10 files: pro_overlay.rs + mod.rs changes
-2. Commit: `refactor(tui): extract pro_overlay.rs from ChatWidget (MAINT-11 Phase 10)`
-3. Push to origin/main
+## Files to Read First
+1. docs/SYNC-028-tui2-scaffold/PRD.md
+2. docs/SYNC-019-features-registry/PRD.md
+3. codex-rs/core/src/config_types.rs
+4. codex-rs/tui/src/cli.rs
+```
 
 ---
 
-## MAINT-11 Progress Tracker
+## SPEC-KIT-926 Analysis (For After SYNC-028)
+
+### Tmux References to Remove
+
+The spec references obsolete tmux observability (replaced by DirectProcessExecutor in SPEC-936):
+
+| Line | Content | Action |
+|------|---------|--------|
+| 65 | `Observable: tmux attach -t agents-gemini` | Remove |
+| 167-168 | "Show observable tmux session" | Update to DirectProcessExecutor |
+| 272 | `tmux_session: Option<String>` | Remove field |
+| 793-794 | Example with tmux attach | Update example |
+
+### DirectProcessExecutor Capabilities
+
+From `codex-rs/core/src/async_agent_executor.rs` (SPEC-936):
+
+```rust
+pub struct AgentOutput {
+    pub stdout: String,      // Streaming capture
+    pub stderr: String,      // Error capture
+    pub exit_code: i32,      // Reliable completion
+    pub duration: Duration,  // Real-time tracking
+    pub timed_out: bool,     // Timeout detection
+}
+```
+
+**Benefits over tmux:**
+- <10ms spawn latency (vs 6500ms tmux)
+- Streaming stdout/stderr via tokio
+- No temp files (vs 4 files per agent)
+- Exit codes for completion (no polling)
+
+### Current TUI Message Pattern
+
+From `quality_gate_handler.rs`:
+```rust
+widget.history_push(crate::history_cell::PlainHistoryCell::new(
+    Role::System,
+    format!("message"),
+));
+```
+
+### Phase Updates for SPEC-926
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| Phase 1: Status Bar | Keep | Target TUI v2 primitives |
+| Phase 2: Agent Visibility | Keep | Use DirectProcessExecutor streaming |
+| Phase 3: Sequential Tracker | Keep | No changes |
+| Phase 4: Pipeline Preview | Keep | No changes |
+| Phase 5: Consensus Visibility | **REMOVE** | Per user decision |
+| Phase 6: Pipeline Progress | Keep | No changes |
+| Phase 7: Error Context | Keep | No changes |
+
+---
+
+## MAINT-11 Final Status
 
 | Phase | Module | LOC | Status |
 |-------|--------|-----|--------|
@@ -102,64 +138,27 @@
 | 7 | `review_handlers.rs` | 462 | ✅ |
 | 8 | `session_handlers.rs` | 619 | ✅ |
 | 9 | `undo_snapshots.rs` | 497 | ✅ |
-| **10** | **`pro_overlay.rs`** | **570** | **IN PROGRESS** |
-| 11 | `validation_config.rs` | ~200 | Planned |
-| 12 | `model_presets.rs` | ~120 | Planned |
+| 10 | `pro_overlay.rs` | 619 | ✅ |
+| 11 | `validation_config.rs` | ~200 | Future |
+| 12 | `model_presets.rs` | ~120 | Future |
 
-**mod.rs trajectory:** 23,413 → 18,613 LOC → ~18,050 LOC (target)
+**mod.rs trajectory:** 23,413 → 18,040 LOC (5,373 LOC reduced, 23% decrease)
 
 ---
 
-## Convergence Guardrails Reference
+## Open Questions for Next Session
 
-### Files Created This Session
+1. **Upstream tui2 source**: Where is the upstream tui2 code?
+2. **SYNC-019 dependency**: Is Feature Registry required before SYNC-028?
+3. **TUI1 fallback**: Should SPEC-926 have inline-only path while TUI v2 matures?
 
-| File | Purpose |
-|------|---------|
-| `docs/convergence/README.md` | Pointer to canonical docs in localmemory-policy |
-| `codex-rs/cli/src/stage0_cmd.rs` | `code stage0 doctor` command |
-| `scripts/convergence_check.sh` | CI guardrails script |
-| `.github/pull_request_template.md` | PR checklist with convergence items |
+---
 
-### Key Semantics
+## Commits This Session
 
-- **Tier2 Fail-Closed:** NotebookLM unavailable → skip (not error), continue Tier1
-- **System Pointers:** domain: `spec-tracker`, tag: `system:true`
-- **Best Effort:** Pointer write failures don't fail Stage0
-- **No Silent Fallback:** Never use "general" notebook without explicit config
-
-### Verification Commands
-
-```bash
-# Stage0 health check
-code stage0 doctor
-
-# Tier1 only (skip NotebookLM checks)
-code stage0 doctor --tier1-only
-
-# CI convergence checks
-./scripts/convergence_check.sh
-
-# Convergence acceptance tests
-cargo test -p codex-stage0 --test convergence_acceptance
 ```
-
----
-
-## Quick Verify Commands
-
-```bash
-# Check if pro_overlay.rs exists
-ls -la codex-rs/tui/src/chatwidget/pro_overlay.rs
-
-# Full TUI tests
-cargo test -p codex-tui
-
-# Check mod.rs line count
-wc -l codex-rs/tui/src/chatwidget/mod.rs
-
-# Check new module size
-wc -l codex-rs/tui/src/chatwidget/pro_overlay.rs
+de76ac53f fix(core): MAINT-13 add config inheritance tests and mark done
+407cda75d refactor(tui): extract pro_overlay.rs from ChatWidget (MAINT-11 Phase 10)
 ```
 
 ---
@@ -168,46 +167,8 @@ wc -l codex-rs/tui/src/chatwidget/pro_overlay.rs
 
 | File | Purpose |
 |------|---------|
-| `tui/src/chatwidget/mod.rs` | Main refactor target (18,613 LOC) |
-| `tui/src/chatwidget/pro_overlay.rs` | Phase 10 module (570 LOC, not wired) |
-| `tui/src/chatwidget/undo_snapshots.rs` | Phase 9 pattern reference (497 LOC) |
-| `codex-rs/cli/src/stage0_cmd.rs` | Stage0 doctor command |
-| `scripts/convergence_check.sh` | Convergence CI checks |
-
----
-
-## Commits This Session
-
-```
-0af5b4a93 feat(convergence): add Stage0 doctor and convergence guardrails
-d0513d0ac docs(handoff): prepare MAINT-11 Phase 10 session
-1c73fddca docs(convergence): update docs to reflect CLI/REST local-memory architecture
-7ef1ddacc refactor(tui): extract undo_snapshots.rs from ChatWidget (MAINT-11 Phase 9)
-```
-
----
-
-## Continuation Prompt
-
-```
-Continue MAINT-11 Phase 10 **ultrathink**
-
-### Context
-- pro_overlay.rs (570 LOC) exists but is NOT wired to mod.rs
-- mod.rs is at 18,613 LOC (reverted to clean state)
-- Convergence guardrails committed (0af5b4a93)
-
-### Priority Order
-1. Complete MAINT-11 Phase 10 (wire pro_overlay.rs, remove duplicates)
-2. Test convergence (`code stage0 doctor`)
-3. Commit Phase 10 changes
-
-### Key Files
-- codex-rs/tui/src/chatwidget/pro_overlay.rs (570 LOC, exists)
-- codex-rs/tui/src/chatwidget/mod.rs (18,613 LOC, needs cleanup)
-
-### Success Criteria
-- mod.rs < 18,050 LOC
-- All TUI tests passing
-- `code stage0 doctor` runs successfully
-```
+| `docs/SYNC-028-tui2-scaffold/PRD.md` | TUI v2 requirements |
+| `docs/SYNC-019-features-registry/PRD.md` | Feature registry (dependency) |
+| `docs/SPEC-KIT-926-tui-progress-visibility/spec.md` | Progress visibility spec |
+| `codex-rs/core/src/async_agent_executor.rs` | DirectProcessExecutor (replaces tmux) |
+| `codex-rs/tui/src/chatwidget/mod.rs` | Main TUI widget (18,040 LOC) |
