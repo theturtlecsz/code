@@ -73,9 +73,27 @@ pub struct Stage0Config {
     /// - `block`: Abort pipeline execution when constitution is incomplete (P92)
     #[serde(default)]
     pub phase1_gate_mode: GateMode,
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // CONVERGENCE: System pointer memory settings
+    // ─────────────────────────────────────────────────────────────────────────────
+    /// Store Stage0 outputs as pointer memories in local-memory
+    ///
+    /// When true (default), Stage0 stores metadata pointers after completing:
+    /// - domain: spec-tracker
+    /// - tags: system:true, spec:<id>, stage:0, artifact:<type>, tier2:<status>
+    /// - content: paths, hashes, summary (no raw Divine Truth)
+    ///
+    /// These enable traceability without polluting normal recall (excluded by system:true).
+    #[serde(default = "default_store_system_pointers")]
+    pub store_system_pointers: bool,
 }
 
 fn default_enabled() -> bool {
+    true
+}
+
+fn default_store_system_pointers() -> bool {
     true
 }
 
@@ -426,6 +444,7 @@ impl Default for Stage0Config {
             tier2: Tier2Config::default(),
             vector_index: VectorIndexConfig::default(),
             phase1_gate_mode: GateMode::default(),
+            store_system_pointers: default_store_system_pointers(),
         }
     }
 }

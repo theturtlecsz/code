@@ -50,7 +50,8 @@ pub use overlay_db::{
 pub use scoring::{ScoringComponents, ScoringInput, calculate_dynamic_score, calculate_score};
 pub use tfidf::{TfIdfBackend, TfIdfConfig};
 pub use system_memory::{
-    ArtifactType, compute_content_hash, extract_summary_bullets, store_system_pointer,
+    ArtifactType, Stage0PointerInfo, Tier2Status, compute_content_hash, extract_summary_bullets,
+    store_stage0_pointer, store_system_pointer,
 };
 pub use tier2::{
     CausalLinkSuggestion, DivineTruth, Tier2Client, Tier2Response, build_fallback_divine_truth,

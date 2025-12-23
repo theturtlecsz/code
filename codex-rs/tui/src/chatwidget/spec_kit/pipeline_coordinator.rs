@@ -188,27 +188,37 @@ pub fn handle_spec_auto(
 
             // Store result in state
             let task_brief_written;
-            if let Some(stage0_result) = result.result {
+            if let Some(ref stage0_result) = result.result {
                 // Write TASK_BRIEF.md to evidence directory
-                task_brief_written = super::stage0_integration::write_task_brief_to_evidence(
+                let task_brief_path = super::stage0_integration::write_task_brief_to_evidence(
                     &spec_id,
                     &widget.config.cwd,
                     &stage0_result.task_brief_md,
-                )
-                .is_ok();
+                );
+                task_brief_written = task_brief_path.is_ok();
 
                 if !task_brief_written {
                     tracing::warn!("Failed to write TASK_BRIEF.md");
                 }
 
                 // SPEC-KIT-102: Write DIVINE_TRUTH.md to evidence directory
-                if let Err(e) = super::stage0_integration::write_divine_truth_to_evidence(
+                let divine_truth_path = super::stage0_integration::write_divine_truth_to_evidence(
                     &spec_id,
                     &widget.config.cwd,
                     &stage0_result.divine_truth.raw_markdown,
-                ) {
+                );
+                if let Err(ref e) = divine_truth_path {
                     tracing::warn!("Failed to write DIVINE_TRUTH.md: {}", e);
                 }
+
+                // CONVERGENCE: Store system pointer memory (best-effort, non-blocking)
+                super::stage0_integration::store_stage0_system_pointer(
+                    &spec_id,
+                    &result,
+                    task_brief_path.as_ref().ok().map(|p| p.as_path()),
+                    divine_truth_path.as_ref().ok().map(|p| p.as_path()),
+                    None, // TODO: Pass notebook_id when available from config
+                );
 
                 // Log Stage0Complete event (success)
                 // P84: Added hybrid_used and structured tracing for Stage0 signaling
@@ -245,17 +255,25 @@ pub fn handle_spec_auto(
                 }
 
                 // Log Stage0 success to UI
+                // CONVERGENCE: Surface Tier2 diagnostics in output
+                let tier2_status = if stage0_result.tier2_used {
+                    "tier2=yes".to_string()
+                } else if let Some(ref reason) = result.tier2_skip_reason {
+                    format!("tier2=skipped ({})", reason)
+                } else {
+                    "tier2=no".to_string()
+                };
                 widget.history_push(crate::history_cell::PlainHistoryCell::new(
                     vec![ratatui::text::Line::from(format!(
-                        "Stage 0: Context compiled ({} memories, tier2={}, {}ms)",
+                        "Stage 0: Context compiled ({} memories, {}, {}ms)",
                         stage0_result.memories_used.len(),
-                        stage0_result.tier2_used,
+                        tier2_status,
                         stage0_result.latency_ms
                     ))],
                     crate::history_cell::HistoryCellType::Notice,
                 ));
 
-                state.stage0_result = Some(stage0_result);
+                state.stage0_result = Some(stage0_result.clone());
             } else if let Some(skip_reason) = result.skip_reason {
                 // Log Stage0Complete event (skipped)
                 if let Some(run_id) = &state.run_id {
@@ -452,22 +470,32 @@ pub fn handle_spec_plan(widget: &mut ChatWidget, spec_id: String) {
             &stage0_config,
         );
 
-        if let Some(stage0_result) = result.result {
+        if let Some(ref stage0_result) = result.result {
             // Write TASK_BRIEF.md to evidence directory
-            let _ = super::stage0_integration::write_task_brief_to_evidence(
+            let task_brief_path = super::stage0_integration::write_task_brief_to_evidence(
                 &spec_id,
                 &widget.config.cwd,
                 &stage0_result.task_brief_md,
             );
 
             // Write DIVINE_TRUTH.md to evidence directory
-            if let Err(e) = super::stage0_integration::write_divine_truth_to_evidence(
+            let divine_truth_path = super::stage0_integration::write_divine_truth_to_evidence(
                 &spec_id,
                 &widget.config.cwd,
                 &stage0_result.divine_truth.raw_markdown,
-            ) {
+            );
+            if let Err(ref e) = divine_truth_path {
                 tracing::warn!("Failed to write DIVINE_TRUTH.md: {}", e);
             }
+
+            // CONVERGENCE: Store system pointer memory (best-effort, non-blocking)
+            super::stage0_integration::store_stage0_system_pointer(
+                &spec_id,
+                &result,
+                task_brief_path.as_ref().ok().map(|p| p.as_path()),
+                divine_truth_path.as_ref().ok().map(|p| p.as_path()),
+                None, // TODO: Pass notebook_id when available from config
+            );
 
             // Log Stage0Complete event
             if let Some(run_id) = &state.run_id {
@@ -487,17 +515,25 @@ pub fn handle_spec_plan(widget: &mut ChatWidget, spec_id: String) {
                 );
             }
 
+            // CONVERGENCE: Surface Tier2 diagnostics in output
+            let tier2_status = if stage0_result.tier2_used {
+                "tier2=yes".to_string()
+            } else if let Some(ref reason) = result.tier2_skip_reason {
+                format!("tier2=skipped ({})", reason)
+            } else {
+                "tier2=no".to_string()
+            };
             widget.history_push(crate::history_cell::PlainHistoryCell::new(
                 vec![ratatui::text::Line::from(format!(
-                    "Stage 0: Context compiled ({} memories, tier2={}, {}ms)",
+                    "Stage 0: Context compiled ({} memories, {}, {}ms)",
                     stage0_result.memories_used.len(),
-                    stage0_result.tier2_used,
+                    tier2_status,
                     stage0_result.latency_ms
                 ))],
                 crate::history_cell::HistoryCellType::Notice,
             ));
 
-            state.stage0_result = Some(stage0_result);
+            state.stage0_result = Some(stage0_result.clone());
         } else if let Some(skip_reason) = result.skip_reason {
             state.stage0_skip_reason = Some(skip_reason);
         }

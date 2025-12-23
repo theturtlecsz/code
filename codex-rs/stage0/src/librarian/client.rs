@@ -282,10 +282,10 @@ pub mod mock {
                     }
 
                     // Importance filter
-                    if let Some(min_importance) = params.min_importance {
-                        if m.importance.unwrap_or(0) < min_importance {
-                            return false;
-                        }
+                    if let Some(min_importance) = params.min_importance
+                        && m.importance.unwrap_or(0) < min_importance
+                    {
+                        return false;
                     }
 
                     true

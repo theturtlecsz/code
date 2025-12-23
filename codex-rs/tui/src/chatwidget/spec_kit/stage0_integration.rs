@@ -32,6 +32,8 @@ pub struct Stage0ExecutionResult {
     pub cache_hit: bool,
     /// V2.5b: Whether hybrid retrieval was used (TfIdfBackend available)
     pub hybrid_retrieval_used: bool,
+    /// CONVERGENCE: Tier2 skip reason (for diagnostics and pointer memory)
+    pub tier2_skip_reason: Option<String>,
 }
 
 /// Configuration for Stage 0 execution
@@ -63,6 +65,7 @@ pub fn run_stage0_for_spec(
             tier2_used: false,
             cache_hit: false,
             hybrid_retrieval_used: false,
+            tier2_skip_reason: Some("Stage0 disabled".to_string()),
         };
     }
 
@@ -78,6 +81,7 @@ pub fn run_stage0_for_spec(
             tier2_used: false,
             cache_hit: false,
             hybrid_retrieval_used: false,
+            tier2_skip_reason: Some("local-memory unavailable".to_string()),
         };
     }
 
@@ -92,6 +96,7 @@ pub fn run_stage0_for_spec(
                 tier2_used: false,
                 cache_hit: false,
                 hybrid_retrieval_used: false,
+                tier2_skip_reason: Some("config load failed".to_string()),
             };
         }
     };
@@ -113,7 +118,9 @@ pub fn run_stage0_for_spec(
 
     // CONVERGENCE: Tier2 fail-closed with explicit diagnostics
     // Per MEMO_codex-rs.md Section 1: "emit diagnostics with actionable next steps"
-    let tier2_opt = if stage0_cfg.tier2.enabled && !stage0_cfg.tier2.notebook.trim().is_empty() {
+    let (tier2_opt, tier2_skip_reason) = if stage0_cfg.tier2.enabled
+        && !stage0_cfg.tier2.notebook.trim().is_empty()
+    {
         // Check NotebookLM service health before creating adapter
         let base_url = stage0_cfg
             .tier2
@@ -122,24 +129,35 @@ pub fn run_stage0_for_spec(
             .unwrap_or_else(|| "http://127.0.0.1:3456".to_string());
 
         match check_tier2_service_health(&base_url) {
-            Ok(()) => Some(Tier2HttpAdapter::new(base_url, stage0_cfg.tier2.notebook.clone())),
+            Ok(()) => (
+                Some(Tier2HttpAdapter::new(
+                    base_url,
+                    stage0_cfg.tier2.notebook.clone(),
+                )),
+                None,
+            ),
             Err(reason) => {
                 // Tier2 fail-closed: skip with diagnostic
                 tracing::warn!(
                     "Stage0 Tier2 skipped: {}. Run 'code doctor' for details.",
                     reason
                 );
-                None
+                (None, Some(reason))
             }
         }
     } else {
         // No notebook configured - emit diagnostic
-        if stage0_cfg.tier2.enabled {
+        let reason = if stage0_cfg.tier2.enabled {
+            let msg = "No notebook configured".to_string();
             tracing::info!(
-                "Stage0 Tier2 skipped: No notebook configured. Add tier2.notebook to stage0.toml"
+                "Stage0 Tier2 skipped: {}. Add tier2.notebook to stage0.toml",
+                msg
             );
-        }
-        None
+            Some(msg)
+        } else {
+            Some("Tier2 disabled".to_string())
+        };
+        (None, reason)
     };
 
     // Build environment context
@@ -179,6 +197,13 @@ pub fn run_stage0_for_spec(
                 duration_ms
             );
 
+            // If tier2 was used, clear the skip reason
+            let final_tier2_skip = if tier2_used {
+                None
+            } else {
+                tier2_skip_reason
+            };
+
             Stage0ExecutionResult {
                 result: Some(result),
                 skip_reason: None,
@@ -186,6 +211,7 @@ pub fn run_stage0_for_spec(
                 tier2_used,
                 cache_hit,
                 hybrid_retrieval_used: hybrid_used,
+                tier2_skip_reason: final_tier2_skip,
             }
         }
         Err(e) => {
@@ -197,6 +223,7 @@ pub fn run_stage0_for_spec(
                 tier2_used: false,
                 cache_hit: false,
                 hybrid_retrieval_used: false,
+                tier2_skip_reason: tier2_skip_reason.or(Some("Stage0 error".to_string())),
             }
         }
     }
@@ -463,6 +490,140 @@ fn check_tier2_service_health(base_url: &str) -> Result<(), String> {
         Err(e) if e.is_connect() => Err("NotebookLM service not running".to_string()),
         Err(e) => Err(format!("NotebookLM service unreachable: {e}")),
     }
+}
+
+/// CONVERGENCE: Store Stage0 system pointer memory after artifacts are written
+///
+/// This is a best-effort operation that logs errors but never fails.
+/// Call this after `write_task_brief_to_evidence` and `write_divine_truth_to_evidence`.
+///
+/// # Arguments
+/// * `spec_id` - SPEC identifier
+/// * `execution_result` - The Stage0ExecutionResult from run_stage0_for_spec
+/// * `task_brief_path` - Path where TASK_BRIEF.md was written
+/// * `divine_truth_path` - Path where DIVINE_TRUTH.md was written (if applicable)
+/// * `notebook_id` - Optional NotebookLM notebook ID used for Tier2
+pub fn store_stage0_system_pointer(
+    spec_id: &str,
+    execution_result: &Stage0ExecutionResult,
+    task_brief_path: Option<&std::path::Path>,
+    divine_truth_path: Option<&std::path::Path>,
+    notebook_id: Option<&str>,
+) {
+    // Check if we should store system pointers (from Stage0Config)
+    let store_enabled = match codex_stage0::Stage0Config::load() {
+        Ok(cfg) => cfg.store_system_pointers,
+        Err(_) => true, // Default to enabled if config fails
+    };
+
+    if !store_enabled {
+        tracing::debug!(
+            spec_id = spec_id,
+            "System pointer storage disabled in config"
+        );
+        return;
+    }
+
+    // Skip if no result (Stage0 didn't run)
+    let result = match &execution_result.result {
+        Some(r) => r,
+        None => {
+            tracing::debug!(
+                spec_id = spec_id,
+                "Skipping system pointer: no Stage0 result"
+            );
+            return;
+        }
+    };
+
+    // Build Tier2 status
+    let tier2_status = if execution_result.tier2_used {
+        codex_stage0::Tier2Status::Success
+    } else if let Some(ref reason) = execution_result.tier2_skip_reason {
+        codex_stage0::Tier2Status::Skipped(reason.clone())
+    } else {
+        codex_stage0::Tier2Status::Skipped("unknown".to_string())
+    };
+
+    // Compute hashes
+    let task_brief_hash = codex_stage0::compute_content_hash(&result.task_brief_md);
+    let divine_truth_hash = if execution_result.tier2_used {
+        Some(codex_stage0::compute_content_hash(
+            &result.divine_truth.raw_markdown,
+        ))
+    } else {
+        None
+    };
+
+    // Extract summary bullets from divine truth
+    let summary_bullets =
+        codex_stage0::extract_summary_bullets(&result.divine_truth.raw_markdown, 5);
+
+    // Get current git commit SHA
+    let commit_sha = get_git_commit_sha();
+
+    // Build pointer info
+    let info = codex_stage0::Stage0PointerInfo {
+        spec_id: spec_id.to_string(),
+        task_brief_path: task_brief_path.map(|p| p.to_string_lossy().to_string()),
+        divine_truth_path: divine_truth_path.map(|p| p.to_string_lossy().to_string()),
+        task_brief_hash,
+        divine_truth_hash,
+        summary_bullets,
+        tier2_status,
+        notebook_id: notebook_id.map(|s| s.to_string()),
+        commit_sha,
+    };
+
+    // Store pointer in background (non-blocking)
+    let api_base = "http://localhost:3002/api/v1".to_string();
+    std::thread::spawn(move || {
+        let rt = match tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        {
+            Ok(rt) => rt,
+            Err(e) => {
+                tracing::warn!(
+                    spec_id = %info.spec_id,
+                    error = %e,
+                    "Failed to create runtime for system pointer storage"
+                );
+                return;
+            }
+        };
+
+        rt.block_on(async {
+            match codex_stage0::store_stage0_pointer(&api_base, &info).await {
+                Some(id) => tracing::info!(
+                    spec_id = %info.spec_id,
+                    memory_id = %id,
+                    "System pointer memory stored"
+                ),
+                None => tracing::debug!(
+                    spec_id = %info.spec_id,
+                    "System pointer storage completed (best-effort)"
+                ),
+            }
+        });
+    });
+}
+
+/// Get current git commit SHA (short form)
+fn get_git_commit_sha() -> Option<String> {
+    std::process::Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                String::from_utf8(o.stdout)
+                    .ok()
+                    .map(|s| s.trim().to_string())
+            } else {
+                None
+            }
+        })
 }
 
 #[cfg(test)]
