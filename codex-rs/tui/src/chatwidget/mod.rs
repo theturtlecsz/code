@@ -87,6 +87,8 @@ mod review_handlers;
 mod session_handlers;
 mod submit_helpers;
 mod undo_snapshots;
+mod pro_overlay;
+use pro_overlay::ProState;
 
 #[cfg(test)]
 mod message_ordering_tests;
@@ -135,11 +137,7 @@ use codex_core::protocol::SessionConfiguredEvent;
 use codex_core::protocol::Op;
 use codex_core::protocol::PatchApplyBeginEvent;
 use codex_core::protocol::PatchApplyEndEvent;
-use codex_core::protocol::ProAction;
-use codex_core::protocol::ProCategory;
-use codex_core::protocol::ProEvent;
-use codex_core::protocol::ProPhase;
-use codex_core::protocol::ProStats;
+// MAINT-11: Pro* protocol types moved to pro_overlay.rs
 // ReviewOutputEvent moved to review_handlers.rs (MAINT-11 Phase 7)
 use codex_core::protocol::TaskCompleteEvent;
 use codex_core::protocol::TokenUsage;
@@ -156,7 +154,7 @@ use ratatui::layout::Rect;
 use ratatui::text::Line;
 use ratatui::widgets::Widget;
 use ratatui::widgets::WidgetRef;
-use std::cell::Cell;
+// MAINT-11: std::cell::Cell usage now fully-qualified
 use std::cell::RefCell;
 use std::process::Command;
 // SPEC-955: std::sync::mpsc only for TerminalRunController (separate system)
@@ -3430,15 +3428,7 @@ impl ChatWidget<'_> {
         layout_scroll::toggle_pro_hud(self);
     }
 
-    fn toggle_pro_overlay(&mut self) {
-        let new_state = !self.pro.overlay_visible;
-        self.pro.overlay_visible = new_state;
-        if new_state {
-            let overlay = self.pro.ensure_overlay();
-            overlay.set_scroll(0);
-        }
-        self.request_redraw();
-    }
+    // MAINT-11: toggle_pro_overlay moved to pro_overlay.rs
 
     fn set_limits_overlay_content(&mut self, content: LimitsOverlayContent) {
         if let Some(existing) = self.limits.overlay.as_mut() {
@@ -3725,81 +3715,7 @@ impl ChatWidget<'_> {
         )])
     }
 
-    fn close_pro_overlay(&mut self) {
-        if self.pro.overlay_visible {
-            self.pro.overlay_visible = false;
-            self.request_redraw();
-        }
-    }
-
-    fn handle_pro_overlay_key(&mut self, key_event: KeyEvent) -> bool {
-        if !self.pro.overlay_visible {
-            return false;
-        }
-        let Some(overlay) = self.pro.overlay.as_ref() else {
-            return false;
-        };
-        if !matches!(key_event.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
-            return true;
-        }
-        use crossterm::event::{KeyCode, KeyModifiers};
-        match key_event.code {
-            KeyCode::Esc => {
-                self.close_pro_overlay();
-                true
-            }
-            KeyCode::Char('p') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.toggle_pro_overlay();
-                true
-            }
-            KeyCode::Up => {
-                let current = overlay.scroll();
-                if current > 0 {
-                    overlay.set_scroll(current.saturating_sub(1));
-                    self.request_redraw();
-                }
-                true
-            }
-            KeyCode::Down => {
-                let current = overlay.scroll();
-                let max = overlay.max_scroll();
-                let next = current.saturating_add(1).min(max);
-                if next != current {
-                    overlay.set_scroll(next);
-                    self.request_redraw();
-                }
-                true
-            }
-            KeyCode::PageUp => {
-                let step = overlay.visible_rows().max(1);
-                let current = overlay.scroll();
-                let next = current.saturating_sub(step);
-                overlay.set_scroll(next);
-                self.request_redraw();
-                true
-            }
-            KeyCode::PageDown => {
-                let step = overlay.visible_rows().max(1);
-                let current = overlay.scroll();
-                let max = overlay.max_scroll();
-                let next = current.saturating_add(step).min(max);
-                overlay.set_scroll(next);
-                self.request_redraw();
-                true
-            }
-            KeyCode::Home => {
-                overlay.set_scroll(0);
-                self.request_redraw();
-                true
-            }
-            KeyCode::End => {
-                overlay.set_scroll(overlay.max_scroll());
-                self.request_redraw();
-                true
-            }
-            _ => false,
-        }
-    }
+    // MAINT-11: close_pro_overlay, handle_pro_overlay_key moved to pro_overlay.rs
 
     // dispatch_command() removed — command routing is handled at the App layer via AppEvent::DispatchCommand
 
@@ -4931,127 +4847,7 @@ impl ChatWidget<'_> {
         }
     }
 
-    fn handle_pro_event(&mut self, event: ProEvent) {
-        match event {
-            ProEvent::Toggled { enabled } => {
-                self.pro.set_enabled(enabled);
-                if !enabled {
-                    self.layout.pro_hud_expanded = false;
-                    if self.pro.overlay_visible {
-                        self.pro.overlay_visible = false;
-                    }
-                }
-                let title = if enabled {
-                    "Pro mode enabled"
-                } else {
-                    "Pro mode disabled"
-                };
-                self.pro
-                    .push_log(ProLogEntry::new(title, None, ProLogCategory::Status));
-            }
-            ProEvent::Status { phase, stats } => {
-                self.pro.update_status(phase.clone(), stats.clone());
-            }
-            ProEvent::DeveloperNote {
-                turn_id,
-                note,
-                artifacts,
-            } => {
-                let lower = note.to_ascii_lowercase();
-                if lower.contains("autonomous") && lower.contains("enabled") {
-                    self.pro.set_auto_enabled(true);
-                } else if lower.contains("autonomous") && lower.contains("disabled") {
-                    self.pro.set_auto_enabled(false);
-                }
-                let mut body_lines = vec![note.clone()];
-                for artifact in artifacts {
-                    if !artifact.summary.is_empty() {
-                        body_lines.push(format!("{}: {}", artifact.kind, artifact.summary));
-                    }
-                }
-                let body = if body_lines.is_empty() {
-                    None
-                } else {
-                    Some(body_lines.join("\n"))
-                };
-                let category = if turn_id.contains("observer") {
-                    ProLogCategory::Recommendation
-                } else {
-                    ProLogCategory::Note
-                };
-                self.pro
-                    .push_log(ProLogEntry::new("Developer note", body, category));
-            }
-            ProEvent::AgentSpawned {
-                category,
-                budget_ms,
-                ..
-            } => {
-                let title = format!("{} helper spawned", self.describe_pro_category(&category));
-                let body = if budget_ms > 0 {
-                    Some(format!("Budget: {} ms", budget_ms))
-                } else {
-                    None
-                };
-                self.pro
-                    .push_log(ProLogEntry::new(title, body, ProLogCategory::Agent));
-            }
-            ProEvent::AgentResult {
-                category,
-                ok,
-                note,
-                artifacts,
-                ..
-            } => {
-                let status = if ok { "completed" } else { "failed" };
-                let title = format!(
-                    "{} helper {}",
-                    self.describe_pro_category(&category),
-                    status
-                );
-                let mut body_lines = Vec::new();
-                if let Some(note) = note
-                    && !note.is_empty()
-                {
-                    body_lines.push(note);
-                }
-                for artifact in artifacts {
-                    if !artifact.summary.is_empty() {
-                        body_lines.push(format!("{}: {}", artifact.kind, artifact.summary));
-                    }
-                }
-                let body = if body_lines.is_empty() {
-                    None
-                } else {
-                    Some(body_lines.join("\n"))
-                };
-                self.pro
-                    .push_log(ProLogEntry::new(title, body, ProLogCategory::Agent));
-            }
-        }
-        self.request_redraw();
-    }
-
-    fn describe_pro_category(&self, category: &ProCategory) -> &'static str {
-        match category {
-            ProCategory::Planning => "Planning",
-            ProCategory::Research => "Research",
-            ProCategory::Debugging => "Debugging",
-            ProCategory::Review => "Review",
-            ProCategory::Background => "Background",
-        }
-    }
-
-    fn describe_pro_phase(&self, phase: &ProPhase) -> &'static str {
-        match phase {
-            ProPhase::Idle => "Idle",
-            ProPhase::Planning => "Planning",
-            ProPhase::Research => "Research",
-            ProPhase::Debug => "Debug",
-            ProPhase::Review => "Review",
-            ProPhase::Background => "Background",
-        }
-    }
+    // MAINT-11: handle_pro_event, describe_pro_category, describe_pro_phase moved to pro_overlay.rs
 
     pub(crate) fn handle_codex_event(&mut self, event: Event) {
         tracing::debug!(
@@ -15396,113 +15192,7 @@ impl ChatWidget<'_> {
             .render(content, buf);
     }
 
-    fn render_pro_overlay(&self, frame_area: Rect, history_area: Rect, buf: &mut Buffer) {
-        use ratatui::layout::Margin;
-        use ratatui::text::Line as RLine;
-        use ratatui::text::Span;
-        use ratatui::widgets::Block;
-        use ratatui::widgets::Borders;
-        use ratatui::widgets::Clear;
-        use ratatui::widgets::Paragraph;
-        use ratatui::widgets::Wrap;
-
-        let Some(overlay) = self.pro.overlay.as_ref() else {
-            return;
-        };
-
-        // Dim entire frame as scrim
-        let scrim_style = Style::default()
-            .bg(crate::colors::overlay_scrim())
-            .fg(crate::colors::text_dim());
-        fill_rect(buf, frame_area, None, scrim_style);
-
-        // Match horizontal padding used by history content
-        let padding = 1u16;
-        let overlay_area = Rect {
-            x: history_area.x + padding,
-            y: history_area.y,
-            width: history_area.width.saturating_sub(padding * 2),
-            height: history_area.height,
-        };
-
-        Clear.render(overlay_area, buf);
-
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .title(RLine::from(vec![
-                Span::styled(" Pro activity ", Style::default().fg(crate::colors::text())),
-                Span::styled(
-                    "— Esc close  ",
-                    Style::default().fg(crate::colors::text_dim()),
-                ),
-                Span::styled(
-                    "Ctrl+P overlay  ",
-                    Style::default().fg(crate::colors::text_dim()),
-                ),
-                Span::styled("↑↓ scroll", Style::default().fg(crate::colors::text_dim())),
-            ]))
-            .style(Style::default().bg(crate::colors::background()))
-            .border_style(
-                Style::default()
-                    .fg(crate::colors::border())
-                    .bg(crate::colors::background()),
-            );
-        let inner = block.inner(overlay_area);
-        block.render(overlay_area, buf);
-
-        let body = inner.inner(Margin::new(1, 1));
-        if body.height == 0 {
-            return;
-        }
-
-        let mut lines: Vec<RLine<'static>> = Vec::new();
-        let summary_style = Style::default()
-            .fg(crate::colors::text())
-            .add_modifier(Modifier::BOLD);
-        lines.push(RLine::from(vec![Span::styled(
-            self.pro_summary_line(),
-            summary_style,
-        )]));
-        lines.push(RLine::from(" "));
-
-        if self.pro.log.is_empty() {
-            lines.push(RLine::from(vec![Span::styled(
-                "No Pro activity captured yet",
-                Style::default().fg(crate::colors::text_dim()),
-            )]));
-        } else {
-            for entry in self.pro.log.iter().rev() {
-                for line in self.format_pro_log_entry(entry) {
-                    lines.push(line);
-                }
-                lines.push(RLine::from(" "));
-            }
-        }
-
-        while lines
-            .last()
-            .map(|line| line.spans.iter().all(|s| s.content.trim().is_empty()))
-            .unwrap_or(false)
-        {
-            lines.pop();
-        }
-
-        let total_lines = lines.len();
-        let visible_rows = body.height as usize;
-        overlay.set_visible_rows(body.height);
-        let max_scroll = total_lines.saturating_sub(visible_rows.max(1));
-        overlay.set_max_scroll(max_scroll.min(u16::MAX as usize) as u16);
-        let skip = overlay.scroll().min(overlay.max_scroll()) as usize;
-        let end = (skip + visible_rows).min(total_lines);
-        let slice = if skip < total_lines {
-            lines[skip..end].to_vec()
-        } else {
-            Vec::new()
-        };
-
-        let paragraph = Paragraph::new(slice).wrap(Wrap { trim: false });
-        paragraph.render(body, buf);
-    }
+    // MAINT-11: render_pro_overlay moved to pro_overlay.rs
 
     fn render_limits_overlay(&self, frame_area: Rect, history_area: Rect, buf: &mut Buffer) {
         use ratatui::layout::Margin;
@@ -15693,155 +15383,7 @@ impl ChatWidget<'_> {
             .render(text_area, buf);
     }
 
-    fn pro_summary_line(&self) -> String {
-        let mut parts: Vec<String> = Vec::new();
-        parts.push(if self.pro.enabled { "on" } else { "off" }.to_string());
-        parts.push(format!(
-            "auto {}",
-            if self.pro.auto_enabled { "on" } else { "off" }
-        ));
-        if let Some(status) = &self.pro.status {
-            parts.push(self.describe_pro_phase(&status.phase).to_string());
-            parts.push(format!(
-                "A{}/C{}/S{}",
-                status.stats.active, status.stats.completed, status.stats.spawned
-            ));
-        }
-        if let Some(ts) = self.pro.last_status_update {
-            parts.push(format!("updated {}", self.format_recent_timestamp(ts)));
-        }
-        parts.join(" · ")
-    }
-
-    fn format_pro_log_entry(&self, entry: &ProLogEntry) -> Vec<ratatui::text::Line<'static>> {
-        use ratatui::text::Span;
-
-        let mut lines: Vec<ratatui::text::Line<'static>> = Vec::new();
-        let timestamp = entry.timestamp.format("%H:%M:%S").to_string();
-        let mut header_spans: Vec<Span<'static>> = Vec::new();
-        header_spans.push(Span::styled(
-            timestamp,
-            Style::default().fg(crate::colors::text_dim()),
-        ));
-        header_spans.push(Span::raw("  "));
-        header_spans.push(Span::styled(
-            entry.title.clone(),
-            Style::default()
-                .fg(self.pro_category_color(entry.category))
-                .add_modifier(Modifier::BOLD),
-        ));
-        lines.push(ratatui::text::Line::from(header_spans));
-
-        if let Some(body) = &entry.body {
-            for body_line in body.lines() {
-                let trimmed = body_line.trim();
-                if trimmed.is_empty() {
-                    continue;
-                }
-                lines.push(ratatui::text::Line::from(Span::raw(format!(
-                    "  {}",
-                    trimmed
-                ))));
-            }
-        }
-
-        lines
-    }
-
-    fn pro_category_color(&self, category: ProLogCategory) -> ratatui::style::Color {
-        match category {
-            ProLogCategory::Status => crate::colors::text(),
-            ProLogCategory::Recommendation => crate::colors::primary(),
-            ProLogCategory::Agent => crate::colors::info(),
-            ProLogCategory::Note => crate::colors::text_mid(),
-        }
-    }
-
-    pub(crate) fn parse_pro_action(&self, args: &str) -> Result<ProAction, String> {
-        let trimmed = args.trim();
-        if trimmed.is_empty() {
-            return Ok(ProAction::Status);
-        }
-        let mut parts = trimmed.split_whitespace();
-        let first = parts.next().unwrap_or("").to_ascii_lowercase();
-        let ensure_no_extra = |iter: &mut dyn Iterator<Item = &str>| {
-            if iter.next().is_some() {
-                Err("Too many arguments for /pro [auto] command".to_string())
-            } else {
-                Ok(())
-            }
-        };
-        match first.as_str() {
-            "toggle" | "switch" => {
-                ensure_no_extra(&mut parts)?;
-                Ok(ProAction::Toggle)
-            }
-            "on" | "enable" | "start" => {
-                ensure_no_extra(&mut parts)?;
-                Ok(ProAction::On)
-            }
-            "off" | "disable" | "stop" => {
-                ensure_no_extra(&mut parts)?;
-                Ok(ProAction::Off)
-            }
-            "status" | "state" => {
-                ensure_no_extra(&mut parts)?;
-                Ok(ProAction::Status)
-            }
-            "auto" => {
-                let next = parts.next().map(|s| s.to_ascii_lowercase());
-                match next.as_deref() {
-                    None => Ok(ProAction::AutoToggle),
-                    Some("toggle" | "switch") => {
-                        ensure_no_extra(&mut parts)?;
-                        Ok(ProAction::AutoToggle)
-                    }
-                    Some("on" | "enable" | "start") => {
-                        ensure_no_extra(&mut parts)?;
-                        Ok(ProAction::AutoOn)
-                    }
-                    Some("off" | "disable" | "stop") => {
-                        ensure_no_extra(&mut parts)?;
-                        Ok(ProAction::AutoOff)
-                    }
-                    Some("status" | "state") => {
-                        ensure_no_extra(&mut parts)?;
-                        Ok(ProAction::AutoStatus)
-                    }
-                    Some(other) => Err(format!("Unknown /pro auto option: {}", other)),
-                }
-            }
-            other => Err(format!("Unknown /pro subcommand: {}", other)),
-        }
-    }
-
-    fn pro_surface_present(&self) -> bool {
-        if !(self.pro.enabled || self.pro.auto_enabled) {
-            return false;
-        }
-        self.pro.status.is_some() || !self.pro.log.is_empty() || self.pro.overlay_visible
-    }
-
-    fn format_recent_timestamp(&self, timestamp: DateTime<Local>) -> String {
-        let now = Local::now();
-        let delta = now.signed_duration_since(timestamp);
-        if delta.num_seconds() < 0 {
-            return "just now".to_string();
-        }
-        if delta.num_seconds() < 10 {
-            return "just now".to_string();
-        }
-        if delta.num_seconds() < 60 {
-            return format!("{}s ago", delta.num_seconds());
-        }
-        if delta.num_minutes() < 60 {
-            return format!("{}m ago", delta.num_minutes());
-        }
-        if delta.num_hours() < 24 {
-            return format!("{}h ago", delta.num_hours());
-        }
-        timestamp.format("%b %e %H:%M").to_string()
-    }
+    // MAINT-11: Pro helper functions (pro_summary_line, format_pro_log_entry, etc.) moved to pro_overlay.rs
 
     /// Render a collapsed header for the agents HUD with counts/list (1 line + border)
     fn render_agents_header(&self, area: Rect, buf: &mut Buffer) {
@@ -18248,122 +17790,7 @@ struct LayoutState {
     last_frame_width: std::cell::Cell<u16>,
 }
 
-#[derive(Default)]
-struct ProState {
-    enabled: bool,
-    auto_enabled: bool,
-    status: Option<ProStatusSnapshot>,
-    last_status_update: Option<DateTime<Local>>,
-    log: Vec<ProLogEntry>,
-    overlay: Option<ProOverlay>,
-    overlay_visible: bool,
-}
-
-#[derive(Clone)]
-struct ProStatusSnapshot {
-    phase: ProPhase,
-    stats: ProStats,
-}
-
-#[derive(Clone)]
-struct ProLogEntry {
-    timestamp: DateTime<Local>,
-    title: String,
-    body: Option<String>,
-    category: ProLogCategory,
-}
-
-#[derive(Clone, Copy)]
-enum ProLogCategory {
-    Status,
-    Recommendation,
-    Agent,
-    Note,
-}
-
-struct ProOverlay {
-    scroll: Cell<u16>,
-    max_scroll: Cell<u16>,
-    visible_rows: Cell<u16>,
-}
-
-impl ProOverlay {
-    fn new() -> Self {
-        Self {
-            scroll: Cell::new(0),
-            max_scroll: Cell::new(0),
-            visible_rows: Cell::new(0),
-        }
-    }
-
-    fn scroll(&self) -> u16 {
-        self.scroll.get()
-    }
-
-    fn set_scroll(&self, value: u16) {
-        let max = self.max_scroll.get();
-        self.scroll.set(value.min(max));
-    }
-
-    fn set_max_scroll(&self, max: u16) {
-        self.max_scroll.set(max);
-        self.set_scroll(self.scroll.get());
-    }
-
-    fn set_visible_rows(&self, rows: u16) {
-        self.visible_rows.set(rows);
-    }
-
-    fn visible_rows(&self) -> u16 {
-        self.visible_rows.get()
-    }
-
-    fn max_scroll(&self) -> u16 {
-        self.max_scroll.get()
-    }
-}
-
-impl ProLogEntry {
-    fn new(title: impl Into<String>, body: Option<String>, category: ProLogCategory) -> Self {
-        Self {
-            timestamp: Local::now(),
-            title: title.into(),
-            body,
-            category,
-        }
-    }
-}
-
-impl ProState {
-    fn set_enabled(&mut self, enabled: bool) {
-        self.enabled = enabled;
-    }
-
-    fn set_auto_enabled(&mut self, enabled: bool) {
-        self.auto_enabled = enabled;
-    }
-
-    fn update_status(&mut self, phase: ProPhase, stats: ProStats) {
-        self.status = Some(ProStatusSnapshot { phase, stats });
-        self.last_status_update = Some(Local::now());
-    }
-
-    fn push_log(&mut self, entry: ProLogEntry) {
-        const MAX_LOG_ENTRIES: usize = 200;
-        self.log.push(entry);
-        if self.log.len() > MAX_LOG_ENTRIES {
-            let excess = self.log.len() - MAX_LOG_ENTRIES;
-            self.log.drain(0..excess);
-        }
-    }
-
-    fn ensure_overlay(&mut self) -> &mut ProOverlay {
-        if self.overlay.is_none() {
-            self.overlay = Some(ProOverlay::new());
-        }
-        self.overlay.as_mut().unwrap()
-    }
-}
+// MAINT-11: Pro types (ProState, ProOverlay, etc.) moved to pro_overlay.rs
 
 #[derive(Default)]
 struct DiffsState {
