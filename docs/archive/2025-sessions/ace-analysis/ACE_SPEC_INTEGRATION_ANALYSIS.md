@@ -89,10 +89,10 @@ Based on SPEC.md:
 // After Curator creates valuable bullet:
 if curation.bullets_to_add.confidence >= 0.9 {
     // Also store in local-memory for detailed context
-    mcp__local-memory__store_memory(
+    local_memory_remember(
         content: format!("Pattern: {} - {}", bullet.text, bullet.rationale),
         domain: "ace-patterns",
-        tags: ["ace", "pattern", scope],
+        tags: ["component:ace", "type:pattern", scope],
         importance: 8
     );
 }

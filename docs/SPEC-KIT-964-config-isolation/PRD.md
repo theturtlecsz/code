@@ -33,7 +33,7 @@ Implement **hermetic agent isolation** - spawned agents receive ONLY:
 1. Project-local instruction files (`./CLAUDE.md`, `./AGENTS.md`, `./GEMINI.md`)
 2. Project-local templates (`./templates/`) OR embedded defaults
 3. Explicit prompts from `prompts.json`
-4. MCP queries scoped by project tags
+4. External tool calls scoped by project (for MCP tools, require project scoping; local-memory uses CLI/REST only)
 
 **Target Architecture**:
 ```
@@ -45,12 +45,14 @@ Implement **hermetic agent isolation** - spawned agents receive ONLY:
 │   ./templates/* (project-local)                             │
 │   [embedded templates] (binary)                             │
 │   prompts.json (project-relative refs only)                 │
-│   MCP queries with project:* scope                          │
+│   MCP tool calls with project:* scope (non-memory)          │
+│   local-memory via CLI/REST scoped by domain/tags           │
 ├─────────────────────────────────────────────────────────────┤
 │ BLOCKED:                                                    │
 │   ~/.claude/*, ~/.gemini/*, ~/.config/code/* (global)      │
 │   /home/*/* paths in prompts                                │
-│   Unscoped MCP queries                                      │
+│   Unscoped MCP tool calls                                   │
+│   local-memory over MCP                                     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -59,7 +61,7 @@ Implement **hermetic agent isolation** - spawned agents receive ONLY:
 - [ ] Template resolution: `./templates/ > embedded` (global path removed)
 - [ ] No user-specific paths in prompts.json
 - [ ] Project instruction files required: CLAUDE.md, AGENTS.md, GEMINI.md
-- [ ] MCP queries scoped by `project:*` tag
+- [ ] local-memory operations scoped by domain/tags (CLI/REST only; no MCP)
 - [ ] Pre-agent-spawn validation (runtime)
 - [ ] Pre-commit hook validation
 - [ ] CI workflow validation
@@ -114,26 +116,20 @@ Replace with:
 - `${TEMPLATE:name}` syntax (resolved at runtime)
 - Environment-agnostic references
 
-### FR-4: MCP Project Scoping
+### FR-4: Local-memory Project Scoping (No MCP)
 
 All local-memory operations should include project context:
 
 **Storage**:
-```rust
-mcp__local-memory__store_memory(
-    content: "...",
-    tags: ["project:theturtlecsz/code", "spec:SPEC-KIT-964", ...],
-    ...
-)
+```bash
+lm remember "..." \
+  --importance 8 \
+  --tags "project:theturtlecsz/code,spec:SPEC-KIT-964,type:decision"
 ```
 
 **Queries**:
-```rust
-mcp__local-memory__search(
-    query: "...",
-    tags: ["project:theturtlecsz/code"],
-    ...
-)
+```bash
+lm search "..." --tags "project:theturtlecsz/code" --limit 10
 ```
 
 This enables:
@@ -245,10 +241,10 @@ Isolation violations detected at:
 - Integrate into agent spawn flow
 - Add `--skip-isolation-check` escape hatch for debugging
 
-### Phase 5: MCP Project Scoping (30 min)
-- Update memory storage to include `project:*` tag
-- Update queries to filter by project
-- Document scoping pattern
+### Phase 5: Local-memory Project Scoping (30 min)
+- Ensure all memory stores include `project:*` tag (and `type:*`)
+- Ensure search defaults to current project scope unless explicitly widened
+- Document CLI/REST usage (no MCP) + scoping pattern
 
 ### Phase 6: Hook & CI Integration (15 min)
 - Add to pre-commit hook
@@ -260,7 +256,7 @@ Isolation violations detected at:
 ### Unit Tests
 - [ ] `test_template_resolution_skips_global()` - verify no UserConfig source
 - [ ] `test_isolation_validation_catches_user_paths()` - detect `/home/*/`
-- [ ] `test_mcp_queries_include_project_scope()` - verify tag present
+- [ ] `test_local_memory_calls_include_project_scope()` - verify tag present
 
 ### Integration Tests
 - [ ] Spawn agent with global config present - verify ignored
@@ -278,7 +274,7 @@ Isolation violations detected at:
 |------|--------|------------|
 | Breaking existing workflows | High | Warn before enforce, migration docs |
 | Performance overhead from validation | Low | Cache validation results |
-| MCP scoping breaks cross-project queries | Medium | Explicit `--all-projects` flag |
+| Scope enforcement breaks cross-project queries | Medium | Explicit `--all-projects` flag |
 | False positives in path detection | Medium | Allowlist for legitimate paths |
 
 ## 7. Future Considerations

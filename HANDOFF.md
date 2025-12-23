@@ -11,7 +11,7 @@
 
 | Task | Status | Commit | Notes |
 |------|--------|--------|-------|
-| MAINT-11 Phase 9: Undo/Snapshots | ✅ | pending | Extracted undo_snapshots.rs (497 LOC) |
+| MAINT-11 Phase 9: Undo/Snapshots | ✅ | `7ef1ddacc` | Extracted undo_snapshots.rs (497 LOC) |
 | mod.rs reduction | ✅ | — | 19,070 → 18,613 LOC (-457 LOC, -2.4%) |
 | Tests verified | ✅ | — | All TUI tests passing |
 | SPEC.md updated | ✅ | — | Phase 9 documented |
@@ -138,7 +138,7 @@ Extract Pro Overlay module (~200 LOC) from mod.rs:
 ## Commits This Session
 
 ```
-[Pending] refactor(tui): extract undo_snapshots.rs from ChatWidget (MAINT-11 Phase 9)
+7ef1ddacc refactor(tui): extract undo_snapshots.rs from ChatWidget (MAINT-11 Phase 9)
 ```
 
-Push when ready: `git push`
+✅ Pushed to origin/main

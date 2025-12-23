@@ -1422,10 +1422,10 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 cd ~/code
 
 # Query local-memory
-# Use: mcp__local-memory__search
-# - query: "SPEC-947 multi-provider validation"
-# - tags: ["spec:SPEC-KIT-947", "spec:SPEC-KIT-952"]
-# - limit: 10
+local-memory search "SPEC-947 multi-provider validation" \
+  --domain spec-kit \
+  --tags "spec:SPEC-KIT-947,spec:SPEC-KIT-952" \
+  --limit 10
 
 # Review this prompt
 cat docs/NEXT-SESSION-SPEC-947-VALIDATION.md

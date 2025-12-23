@@ -13,11 +13,9 @@
 **What it says**:
 ```markdown
 **5. Session End** (REQUIRED):
-Use mcp__local-memory__store_memory:
-- content: "Session 2025-10-20: Fixed routing bug..."
-- domain: "session-summary"
-- tags: ["2025-10-20", "routing-fix", "spec-066"]
-- importance: 9
+Do not auto-store session summaries in local-memory.
+Write a file summary to `~/.local-memory/session-summaries/<domain>/...` and promote manually if needed:
+- lm remember "WHAT: ...\nWHY: ...\nEVIDENCE: <file>\nOUTCOME: ..." --type milestone --importance 8 --tags "spec:SPEC-066"
 ```
 
 **What this creates**:
@@ -375,9 +373,9 @@ Example:
 ### Different Tools, Different Behaviors
 
 **Claude Code** (Anthropic):
-- Uses local-memory MCP
+- Uses local-memory CLI + REST (no MCP)
 - Follows CLAUDE.md workflow
-- Stores manually (we call mcp__local-memory__store)
+- Stores manually (we call `lm remember` / `POST /api/v1/memories`)
 
 **Gemini CLI** (Google):
 - Unknown if it uses local-memory
@@ -405,7 +403,7 @@ Example:
 
 ### Opportunity #1: Auto-Store from Spec-Kit Events
 
-**Currently Manual** (we call store_memory):
+**Currently Manual** (we call `lm remember` / `POST /api/v1/memories`):
 - Session summaries
 - Milestone completions
 - Bug discoveries
@@ -530,7 +528,7 @@ println!("Suggested tags: {:?}", suggested);
 
 ```rust
 pub fn generate_memory_health_report() -> MemoryHealthReport {
-    let stats = mcp_local_memory_stats();
+    let stats = local_memory_stats_rest();
 
     MemoryHealthReport {
         total_memories: stats.total,

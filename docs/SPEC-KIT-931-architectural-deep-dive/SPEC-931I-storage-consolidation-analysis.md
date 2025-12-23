@@ -384,7 +384,7 @@ widget.quality_gate_broker.fetch_agent_payloads_from_memory(...);
 - Effort: 0 hours
 
 **Option B**: Migrate historical data
-- Extract from MCP: `mcp__local-memory__search` with tags `quality-gate`
+- Extract from local-memory (CLI/REST): `local-memory search "*" --domain spec-kit --tags "quality-gate" --json`
 - Transform: Parse JSON, map to consensus_artifacts schema
 - Load: Bulk insert to SQLite
 - Effort: 1-2 hours (scripting + validation)

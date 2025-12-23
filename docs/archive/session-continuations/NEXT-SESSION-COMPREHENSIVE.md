@@ -534,9 +534,9 @@ insta::assert_snapshot!("name", snapshot);
 cd /home/thetu/code
 
 # Query local-memory for context
-# Use mcp__local-memory__search with:
-# - query: "SPEC-955 test deadlock Gemini CLI session management"
-# - limit: 10
+local-memory search "SPEC-955 test deadlock Gemini CLI session management" \
+  --domain spec-kit \
+  --limit 10
 
 # Review this prompt
 cat docs/NEXT-SESSION-COMPREHENSIVE.md

@@ -1873,13 +1873,11 @@ Dynamic Context Compilation which generates task-specific context on demand.
 > FIX APPLIED (quality_gate_handler.rs:709-740 + 37-130):
 > 1. Updated prompts to instruct local-memory storage:
 >    ```
->    CRITICAL: After generating JSON, store it in local-memory:
->    mcp__local-memory__store_memory(
->      content: <your JSON output>,
->      tags: ["quality-gate", "{spec_id}", "agent:{agent_name}"],
->      domain: "spec-kit",
->      importance: 8
->    )
+>    CRITICAL: After generating JSON, store it in local-memory (CLI + REST only):
+>    lm remember "<your JSON output>" \
+>      --domain spec-kit \
+>      --importance 8 \
+>      --tags "type:artifact,quality-gate,spec:{spec_id},agent:{agent_name}"
 >    ```
 
 > 2. Updated completion handler to retrieve from local-memory:
@@ -11703,7 +11701,7 @@ Dynamic Context Compilation which generates task-specific context on demand.
 >     {
 >       "id": "SPEC-KIT-900-LOCAL-MEMORY-ENTRIES",
 >       "question": "What are 'local-memory entries,' what is their expected format, and what is their specific purpose in the context of this smoke test?",
->       "answer": "Local-memory entries are curated knowledge snapshots stored via mcp__local-memory__store_memory after each stage completes. Format: JSON with fields {content, domain, tags, importance}. Purpose for SPEC-KIT-900: (1) Capture consensus quality insights (e.g., 'Gemini + Claude agree on X, but gpt5-medium flags Y'). (2) Record cost-per-stage observations for pattern analysis. (3) Document any prompt degradation or model-specific issues. Importance threshold: ≥8 (only significant findings). Domains: 'spec-kit' and 'infrastructure'. Expected ~3-5 entries per full run.",
+>       "answer": "Local-memory entries are curated knowledge snapshots stored via local-memory CLI/REST (lm remember or POST /api/v1/memories) after each stage completes. Format: JSON with fields {content, domain, tags, importance}. Purpose for SPEC-KIT-900: (1) Capture consensus quality insights (e.g., 'Gemini + Claude agree on X, but gpt5-medium flags Y'). (2) Record cost-per-stage observations for pattern analysis. (3) Document any prompt degradation or model-specific issues. Importance threshold: ≥8 (only significant findings). Domains: 'spec-kit' and 'infrastructure'. Expected ~3-5 entries per full run.",
 >       "confidence": "high",
 >       "magnitude": "important",
 >       "resolvability": "suggest-fix",
@@ -17408,7 +17406,7 @@ Dynamic Context Compilation which generates task-specific context on demand.
 >     {
 >       "id": "SPEC-KIT-900-LOCAL-MEMORY-ENTRIES",
 >       "question": "What are 'local-memory entries,' what is their expected format, and what is their specific purpose in the context of this smoke test?",
->       "answer": "Local-memory entries are curated knowledge snapshots stored via mcp__local-memory__store_memory after each stage completes. Format: JSON with fields {content, domain, tags, importance}. Purpose for SPEC-KIT-900: (1) Capture consensus quality insights (e.g., 'Gemini + Claude agree on X, but gpt5-medium flags Y'). (2) Record cost-per-stage observations for pattern analysis. (3) Document any prompt degradation or model-specific issues. Importance threshold: ≥8 (only significant findings). Domains: 'spec-kit' and 'infrastructure'. Expected ~3-5 entries per full run.",
+>       "answer": "Local-memory entries are curated knowledge snapshots stored via local-memory CLI/REST (lm remember or POST /api/v1/memories) after each stage completes. Format: JSON with fields {content, domain, tags, importance}. Purpose for SPEC-KIT-900: (1) Capture consensus quality insights (e.g., 'Gemini + Claude agree on X, but gpt5-medium flags Y'). (2) Record cost-per-stage observations for pattern analysis. (3) Document any prompt degradation or model-specific issues. Importance threshold: ≥8 (only significant findings). Domains: 'spec-kit' and 'infrastructure'. Expected ~3-5 entries per full run.",
 >       "confidence": "high",
 >       "magnitude": "important",
 >       "resolvability": "suggest-fix",
@@ -23189,7 +23187,7 @@ Dynamic Context Compilation which generates task-specific context on demand.
 >     {
 >       "id": "SPEC-KIT-900-LOCAL-MEMORY-ENTRIES",
 >       "question": "What are 'local-memory entries,' what is their expected format, and what is their specific purpose in the context of this smoke test?",
->       "answer": "Local-memory entries are curated knowledge snapshots stored via mcp__local-memory__store_memory after each stage completes. Format: JSON with fields {content, domain, tags, importance}. Purpose for SPEC-KIT-900: (1) Capture consensus quality insights (e.g., 'Gemini + Claude agree on X, but gpt5-medium flags Y'). (2) Record cost-per-stage observations for pattern analysis. (3) Document any prompt degradation or model-specific issues. Importance threshold: ≥8 (only significant findings). Domains: 'spec-kit' and 'infrastructure'. Expected ~3-5 entries per full run.",
+>       "answer": "Local-memory entries are curated knowledge snapshots stored via local-memory CLI/REST (lm remember or POST /api/v1/memories) after each stage completes. Format: JSON with fields {content, domain, tags, importance}. Purpose for SPEC-KIT-900: (1) Capture consensus quality insights (e.g., 'Gemini + Claude agree on X, but gpt5-medium flags Y'). (2) Record cost-per-stage observations for pattern analysis. (3) Document any prompt degradation or model-specific issues. Importance threshold: ≥8 (only significant findings). Domains: 'spec-kit' and 'infrastructure'. Expected ~3-5 entries per full run.",
 >       "confidence": "high",
 >       "magnitude": "important",
 >       "resolvability": "suggest-fix",
@@ -28928,7 +28926,7 @@ Dynamic Context Compilation which generates task-specific context on demand.
 >     {
 >       "id": "SPEC-KIT-900-LOCAL-MEMORY-ENTRIES",
 >       "question": "What are 'local-memory entries,' what is their expected format, and what is their specific purpose in the context of this smoke test?",
->       "answer": "Local-memory entries are curated knowledge snapshots stored via mcp__local-memory__store_memory after each stage completes. Format: JSON with fields {content, domain, tags, importance}. Purpose for SPEC-KIT-900: (1) Capture consensus quality insights (e.g., 'Gemini + Claude agree on X, but gpt5-medium flags Y'). (2) Record cost-per-stage observations for pattern analysis. (3) Document any prompt degradation or model-specific issues. Importance threshold: ≥8 (only significant findings). Domains: 'spec-kit' and 'infrastructure'. Expected ~3-5 entries per full run.",
+>       "answer": "Local-memory entries are curated knowledge snapshots stored via local-memory CLI/REST (lm remember or POST /api/v1/memories) after each stage completes. Format: JSON with fields {content, domain, tags, importance}. Purpose for SPEC-KIT-900: (1) Capture consensus quality insights (e.g., 'Gemini + Claude agree on X, but gpt5-medium flags Y'). (2) Record cost-per-stage observations for pattern analysis. (3) Document any prompt degradation or model-specific issues. Importance threshold: ≥8 (only significant findings). Domains: 'spec-kit' and 'infrastructure'. Expected ~3-5 entries per full run.",
 >       "confidence": "high",
 >       "magnitude": "important",
 >       "resolvability": "suggest-fix",
