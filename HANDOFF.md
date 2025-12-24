@@ -1,7 +1,11 @@
 # Session Handoff — SYNC-028 TUI v2 Port
 
 **Last updated:** 2025-12-24
-**Status:** SYNC-028 Complete - Ready for Interactive Testing
+**Status:** SYNC-028 Complete - ADR-002 Decision Made
+
+> **Architectural Decision**: tui2 is an upstream scaffold, NOT a replacement for tui.
+> spec-kit workflows remain in tui. See [ADR-002](docs/adr/ADR-002-tui2-purpose-and-future.md).
+
 **Commits:**
 - 22ca5087f fix(tui2): eliminate all 117 compiler warnings
 - f4d3acf10 fix(tui2): external crate warning cleanup (SYNC-028 S13)

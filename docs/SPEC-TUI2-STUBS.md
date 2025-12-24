@@ -1,5 +1,8 @@
 # SPEC-TUI2-STUBS: Stubbed Features in TUI v2 Port
 
+> **Architectural Decision**: tui2 is an upstream scaffold, NOT a replacement for tui.
+> spec-kit workflows remain in tui. See [ADR-002](adr/ADR-002-tui2-purpose-and-future.md).
+
 ## Overview
 
 This document tracks features that were stubbed out during the TUI v2 port (SYNC-028) due to API divergences between the upstream Codex codebase and the local fork.
