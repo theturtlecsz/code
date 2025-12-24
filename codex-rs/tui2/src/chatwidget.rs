@@ -404,7 +404,7 @@ impl ChatWidget {
         self.set_skills(None);
         self.conversation_id = Some(event.session_id.into());
         self.current_rollout_path = event.rollout_path.clone();
-        let initial_messages = event.initial_messages().clone();
+        // NOTE: Fork's SessionConfiguredEvent doesn't have initial_messages()
         let model_for_header = event.model.clone();
         self.session_header.set_model(&model_for_header);
         self.add_to_history(history_cell::new_session_info(
@@ -413,9 +413,6 @@ impl ChatWidget {
             event,
             self.show_welcome_banner,
         ));
-        if !initial_messages.is_empty() {
-            self.replay_initial_messages(initial_messages);
-        }
         // Ask codex-core to enumerate custom prompts for this session.
         // NOTE: ListCustomPrompts and ListSkills not available in local fork - stubbed out
         // self.submit_op(Op::ListCustomPrompts);
@@ -446,7 +443,9 @@ impl ChatWidget {
         include_logs: bool,
     ) {
         // Build a fresh snapshot at the time of opening the note overlay.
-        let snapshot = self.feedback.snapshot(self.conversation_id);
+        // NOTE: feedback.snapshot expects Option<&str>, convert ConversationId
+        let conversation_id_str = self.conversation_id.as_ref().map(|id| id.to_string());
+        let snapshot = self.feedback.snapshot(conversation_id_str.as_deref());
         let rollout = if include_logs {
             self.current_rollout_path.clone()
         } else {
@@ -577,11 +576,14 @@ impl ChatWidget {
     }
 
     fn context_remaining_percent(&self, info: &TokenUsageInfo) -> Option<i64> {
+        // NOTE: model_context_window is Option<u32>, context_window() returns Option<u64>
+        // percent_of_context_window_remaining returns u8, cast to i64
         info.model_context_window
+            .map(|w| w as u64)
             .or(self.model_family.context_window())
             .map(|window| {
                 info.last_token_usage
-                    .percent_of_context_window_remaining(window)
+                    .percent_of_context_window_remaining(window) as i64
             })
     }
 
@@ -590,7 +592,7 @@ impl ChatWidget {
             return None;
         }
 
-        Some(info.total_token_usage.tokens_in_context_window())
+        Some(info.total_token_usage.tokens_in_context_window() as i64)
     }
 
     fn restore_pre_review_token_info(&mut self) {
@@ -1105,11 +1107,13 @@ impl ChatWidget {
             .unwrap_or_else(|_| ev.command.join(" "));
         self.notify(Notification::ExecApprovalRequested { command });
 
+        // Call method before moving ev.reason to avoid borrow after move
+        let proposed_amendment = ev.proposed_execpolicy_amendment();
         let request = ApprovalRequest::Exec {
             id,
             command: ev.command,
             reason: ev.reason,
-            proposed_execpolicy_amendment: ev.proposed_execpolicy_amendment(),
+            proposed_execpolicy_amendment: proposed_amendment,
         };
         self.bottom_pane
             .push_approval_request(request, &self.config.features());
@@ -2123,7 +2127,8 @@ impl ChatWidget {
     }
 
     fn lower_cost_preset(&self) -> Option<ModelPreset> {
-        let models = self.models_manager.try_list_models(&self.config).ok()?;
+        // NOTE: Fork's try_list_models returns Option directly, not Result
+        let models = self.models_manager.try_list_models(&self.config)?;
         models
             .iter()
             .find(|preset| preset.model == NUDGE_MODEL_SLUG)
@@ -2988,14 +2993,15 @@ impl ChatWidget {
         let should_clear_downgrade = !matches!(&policy, SandboxPolicy::ReadOnly)
             || codex_core::get_platform_sandbox().is_some();
 
-        self.config.sandbox_policy.set(policy)?;
+        // NOTE: Fork's sandbox_policy.set() returns (), not Result
+        self.config.sandbox_policy.set(policy);
 
         #[cfg(target_os = "windows")]
         if should_clear_downgrade {
             self.config.forced_auto_mode_downgraded_on_windows = false;
         }
 
-        Ok(())
+        ConstraintResult::Ok(())
     }
 
     pub(crate) fn set_full_access_warning_acknowledged(&mut self, _acknowledged: bool) {

@@ -193,110 +193,14 @@ fn migration_prompt_hidden(config: &Config, migration_config_key: &str) -> bool 
 }
 
 async fn handle_model_migration_prompt_if_needed(
-    tui: &mut tui::Tui,
-    config: &mut Config,
-    model: &str,
-    app_event_tx: &AppEventSender,
-    models_manager: Arc<ModelsManager>,
+    _tui: &mut tui::Tui,
+    _config: &mut Config,
+    _model: &str,
+    _app_event_tx: &AppEventSender,
+    _models_manager: Arc<ModelsManager>,
 ) -> Option<AppExitInfo> {
-    let available_models = models_manager.list_models(config).await;
-    let upgrade = available_models
-        .iter()
-        .find(|preset| preset.model == model)
-        .and_then(|preset| preset.upgrade.as_ref());
-
-    if let Some(ModelUpgrade {
-        id: target_model,
-        reasoning_effort_mapping,
-        migration_config_key,
-        ..
-    }) = upgrade
-    {
-        if migration_prompt_hidden(config, migration_config_key.as_str()) {
-            return None;
-        }
-
-        let target_model = target_model.to_string();
-        if !should_show_model_migration_prompt(
-            model,
-            &target_model,
-            &config.notices().model_migrations,
-            &available_models,
-        ) {
-            return None;
-        }
-
-        let current_preset = available_models.iter().find(|preset| preset.model == model);
-        let target_preset = available_models
-            .iter()
-            .find(|preset| preset.model == target_model);
-        let target_display_name = target_preset
-            .map(|preset| preset.display_name.clone())
-            .unwrap_or_else(|| target_model.clone());
-        let heading_label = if target_display_name == model {
-            target_model.clone()
-        } else {
-            target_display_name.clone()
-        };
-        let target_description = target_preset.and_then(|preset| {
-            if preset.description.is_empty() {
-                None
-            } else {
-                Some(preset.description.clone())
-            }
-        });
-        let can_opt_out = current_preset.is_some();
-        let prompt_copy = migration_copy_for_models(
-            model,
-            &target_model,
-            heading_label,
-            target_description,
-            can_opt_out,
-        );
-        match run_model_migration_prompt(tui, prompt_copy).await {
-            ModelMigrationOutcome::Accepted => {
-                app_event_tx.send(AppEvent::PersistModelMigrationPromptAcknowledged {
-                    from_model: model.to_string(),
-                    to_model: target_model.clone(),
-                });
-                config.model = target_model.clone();
-
-                let mapped_effort = if let Some(reasoning_effort_mapping) = reasoning_effort_mapping {
-                    let current_effort = config.model_reasoning_effort;
-                    reasoning_effort_mapping
-                        .get(&current_effort)
-                        .cloned()
-                        .unwrap_or(current_effort)
-                } else {
-                    config.model_reasoning_effort
-                };
-
-                config.model_reasoning_effort = mapped_effort;
-
-                app_event_tx.send(AppEvent::UpdateModel(target_model.clone()));
-                app_event_tx.send(AppEvent::UpdateReasoningEffort(Some(mapped_effort)));
-                app_event_tx.send(AppEvent::PersistModelSelection {
-                    model: target_model.clone(),
-                    effort: mapped_effort,
-                });
-            }
-            ModelMigrationOutcome::Rejected => {
-                app_event_tx.send(AppEvent::PersistModelMigrationPromptAcknowledged {
-                    from_model: model.to_string(),
-                    to_model: target_model.clone(),
-                });
-            }
-            ModelMigrationOutcome::Exit => {
-                return Some(AppExitInfo {
-                    token_usage: TokenUsage::default(),
-                    conversation_id: None,
-                    update_action: None,
-                    session_lines: Vec::new(),
-                });
-            }
-        }
-    }
-
+    // NOTE: Model migration prompts not supported in fork due to ReasoningEffort type differences
+    // between codex_core::config_types and codex_protocol::openai_models
     None
 }
 

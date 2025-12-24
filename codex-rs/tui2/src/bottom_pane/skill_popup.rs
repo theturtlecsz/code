@@ -82,11 +82,13 @@ impl SkillPopup {
             .map(|(idx, indices, _score)| {
                 let skill = &self.skills[idx];
                 let name = truncate_text(&skill.name, 21);
+                // Both short_description and description are Option<String>
                 let description = skill
                     .short_description
                     .as_ref()
-                    .unwrap_or(&skill.description)
-                    .clone();
+                    .or(skill.description.as_ref())
+                    .cloned()
+                    .unwrap_or_default();
                 GenericDisplayRow {
                     name,
                     match_indices: indices,

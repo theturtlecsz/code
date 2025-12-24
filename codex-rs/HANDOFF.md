@@ -1,32 +1,49 @@
-# SYNC-028 Session 8 Handoff - Continue tui2 Error Fixes
+# SYNC-028 Session 9 Handoff - Continue tui2 Error Fixes
 
 **Date**: 2024-12-24
-**Session**: 8 of SYNC-028
-**Last Commit**: c830d0778 (migration docs + error reduction 262→173)
+**Session**: 9 of SYNC-028
+**Last Commit**: 7743298fc (reduce errors 173→149, fix API divergences)
 
 ---
 
-## Session 7 Summary (Completed)
+## Session 9 Summary (In Progress)
 
-### Committed Work (c830d0778)
+### Progress: 149 → 56 Errors (62.4% reduction)
 
-1. **Migration Documentation** (Phase 1 complete)
-   - `UPSTREAM_SYNC.md` - sync state tracking, commit conventions
-   - `docs/upstream/TYPE_MAPPING.md` - comprehensive type mapping matrix
-   - `docs/adr/ADR-001-tui2-local-api-adaptation.md` - Option B decision record
+#### Error Breakdown (56 remaining)
+```
+56 E0308 - mismatched types (ALL REMAINING)
+```
 
-2. **Compatibility Layer** (`tui2/src/compat.rs`)
-   - Stub modules: oss, terminal, features, auth, config, skills
-   - Protocol stubs: RateLimitSnapshot, ExecCommandSource, ElicitationAction
-   - Extension traits: ConfigExt, SandboxPolicyExt, protocol event extensions
-   - Constants: INTERACTIVE_SESSION_SOURCES, PROMPTS_CMD_PREFIX, etc.
+All remaining errors are type mismatches concentrated in `chatwidget.rs`.
 
-3. **Error Reduction**: 262 → 173 (34% reduction)
-   - E0432 (imports): 57 → 0 ✓
-   - E0609/E0599 (fields/methods): Major structural fixes
-   - E0308 (type mismatches): 85 remaining (main category)
+### Key Fixes Applied This Session
 
-### Build Status After Session 7
+1. **ScrollConfigOverrides Type Compatibility**
+   - Changed ConfigExt returns from `u32/f64` to `Option<u16/u64>`
+   - Required by upstream's generic scroll config system
+
+2. **ModelsManager Arc Wrapping**
+   - Return `Arc<ModelsManager>` instead of direct struct
+   - Required for upstream's shared state pattern
+
+3. **Model Migration Stubbed Out**
+   - Entirely disabled due to `ReasoningEffort` type conflicts
+   - Two incompatible enums: `codex_core::config_types` vs `codex_protocol::openai_models`
+
+4. **RateLimitSnapshot Type Switch**
+   - Changed from `codex_core::protocol` to `codex_protocol` version
+   - Credits display set to `None` (not available in fork)
+
+5. **Function Signature Reductions**
+   - `list_conversations`: 6 args → 3 args
+   - `ConversationManager::new`: 2 args → 1 arg
+
+6. **Enum Variant Fixes**
+   - `FileChange::Delete`: Changed from struct to unit variant
+   - `McpStartupStatus::Failed`: Changed from struct to tuple variant
+
+### Build Status After Session 9
 
 | Crate | Status |
 |-------|--------|
@@ -35,135 +52,134 @@
 | codex-tui (original) | BUILDS |
 | codex-app-server-protocol | BUILDS |
 | codex-backend-client | BUILDS |
-| codex-tui2 | **173 ERRORS** (down from 262) |
+| codex-tui2 | **56 ERRORS** (down from 149) |
 
 ---
 
-## Session 8 Tasks
+## Session 10 Tasks
 
-### Priority: Fix Remaining 173 Errors
+### Priority: Fix Remaining 56 E0308 Type Mismatches
 
-The remaining errors are categorized below. Focus on type mismatches first.
+All errors are in `chatwidget.rs`. Focus areas:
 
-#### Error Breakdown (173 total)
+1. **Option<T> vs T patterns** - Fork uses direct types, upstream uses Option wrappers
+2. **Integer type casts** - u8/u32/u64/i64 conversions
+3. **String/&str conversions** - Clone vs reference issues
 
+### Quick Diagnostic Commands
+
+```bash
+# Count errors
+cargo check -p codex-tui2 2>&1 | grep "^error\[E" | wc -l
+
+# See specific E0308 errors
+cargo check -p codex-tui2 2>&1 | grep -A3 "E0308"
+
+# Verify original tui still builds
+cargo check -p codex-tui
 ```
-85 E0308 - mismatched types (PRIORITY)
- 3 E0609 - no field (model, description on String types)
- 3 E0061 - wrong argument count
- 2 E0599 - missing methods (unwrap_or_else, etc.)
- 2 E0277 - trait bound not satisfied
- 2 E0026 - pattern field issues
- 1+ each - various other errors
-```
-
-#### Top Priority Fixes
-
-1. **E0308 Type Mismatches (85)**
-   - Most are from compat stub return types not matching expected types
-   - Analyze each location and fix return type or add conversion
-
-2. **Missing Fields on String Types (3)**
-   - `no field 'model' on type '&&String'`
-   - `no field 'description' on type '&String'`
-   - These suggest wrong type is being passed - trace back to source
-
-3. **Op/EventMsg Missing Variants**
-   - RunUserShellCommand, ResolveElicitation, ListMcpTools
-   - McpStartupUpdate, McpStartupComplete
-   - Either remove code using these or add proper stubs
-
-4. **SkillMetadata Fields**
-   - Missing: short_description, scope, path
-   - Add to compat::skills::SkillMetadata
-
-5. **ConfigEditsBuilder Methods**
-   - Missing: set_hide_world_writable_warning, set_hide_rate_limit_model_nudge, record_model_migration_seen
-   - Add to compat module
-
-6. **FileChange::Delete Pattern**
-   - Expects `content` field that doesn't exist
-   - Fix pattern to match actual struct
 
 ---
 
-## Continue Prompt for Session 8
+## Continue Prompt for Session 10
 
 ```
-Continue SYNC-028 (TUI v2 port) **ultrathink** - Fix remaining tui2 errors
+Continue SYNC-028 (TUI v2 port) Session 10 - FINAL PUSH **ultrathink**
 
 ## Context
-Session 7 committed (c830d0778). Migration docs complete. Error count: 173.
+Session 9 reduced errors 149→56 (62.4%). All 56 remaining are E0308 type mismatches.
 
 ## Current State
-- compat.rs has extension traits and stubs
-- Most import errors fixed
-- Remaining: 85 type mismatches + 88 other errors
+- All E0432 import errors: FIXED
+- All E0609 field access errors: FIXED
+- All E0599 method errors: FIXED
+- All E0061 argument count errors: FIXED
+- Remaining: 56 E0308 type mismatches in chatwidget.rs
 
-## Priority Tasks
+## Key Files
+- tui2/src/chatwidget.rs - Main chat widget (most errors)
+- tui2/src/compat.rs - Compatibility layer
 
-1. Fix E0308 type mismatches (85 errors)
-   - Run: `cargo check -p codex-tui2 2>&1 | grep "E0308" | head -20`
-   - Analyze each and fix return types or add conversions
-
-2. Fix missing struct fields
-   - SkillMetadata: add short_description, scope, path
-   - ConfigEditsBuilder: add missing methods
-
-3. Fix Op/EventMsg variant issues
-   - Remove or properly handle code using missing variants
-
-4. Verify original tui still builds
-   - Run: `cargo check -p codex-tui`
-
-## Build Commands
-```bash
-cargo check -p codex-tui2 2>&1 | grep "^error\[E" | wc -l  # Track progress
-cargo check -p codex-tui2 2>&1 | grep "E0308" | head -30   # Type mismatches
-cargo check -p codex-tui                                    # Verify original
-```
+## Patterns to Apply
+1. Option<T> wrapping: Add .map() or unwrap_or_default()
+2. Integer casts: as u16, as i64, etc.
+3. String conversions: .to_string(), .clone()
 
 ## Success Criteria
-- [ ] tui2 error count < 50
-- [ ] Original codex-tui still builds
-- [ ] Commit progress
+- [ ] cargo build -p codex-tui2 COMPILES
+- [ ] ./target/debug/codex-tui2 --help runs
+- [ ] cargo build -p codex-tui still works
+- [ ] Commit with `feat(tui2): complete port`
 ```
 
 ---
 
-## Files Modified This Session
+## Files Modified Session 9
 
 | File | Changes |
 |------|---------|
-| `UPSTREAM_SYNC.md` | NEW - sync state tracking |
-| `docs/upstream/TYPE_MAPPING.md` | NEW - type mapping matrix |
-| `docs/adr/ADR-001-tui2-local-api-adaptation.md` | NEW - decision record |
-| `tui2/src/compat.rs` | NEW - compatibility layer (600+ lines) |
-| `tui2/src/*.rs` | Modified imports, stubbed code |
-| `tui2/src/**/*.rs` | 30+ files with import fixes |
+| `tui2/src/compat.rs` | ConfigExt Option returns, Arc<ModelsManager>, format_env_display |
+| `tui2/src/app.rs` | Model migration stubbed, ConstraintResult handling |
+| `tui2/src/chatwidget.rs` | RateLimitSnapshot type, integer casts, pattern fixes |
+| `tui2/src/status/rate_limits.rs` | Credits set to None |
+| `tui2/src/bottom_pane/approval_overlay.rs` | Pattern matching fixes |
+| `tui2/src/bottom_pane/skill_popup.rs` | SkillMetadata field access |
 
 ---
 
-## Key Compat Module Contents
+## Key Patterns Documented
 
+### ReasoningEffort Type Conflict (BLOCKER)
 ```rust
-// Constants
-INTERACTIVE_SESSION_SOURCES, PROMPTS_CMD_PREFIX, DEFAULT_PROJECT_DOC_FILENAME
-OLLAMA_OSS_PROVIDER_ID, LMSTUDIO_OSS_PROVIDER_ID
+// Two incompatible types with same name:
+codex_core::config_types::ReasoningEffort      // Fork's version
+codex_protocol::openai_models::ReasoningEffort // Upstream's version
 
-// Stub Modules
-compat::oss, compat::terminal, compat::features, compat::auth
-compat::config, compat::skills, compat::protocol
+// Resolution: Stubbed out model migration entirely
+async fn handle_model_migration_prompt_if_needed(...) -> Option<AppExitInfo> {
+    None // Model migration not supported in fork
+}
+```
 
-// Extension Traits
-ConfigExt, SandboxPolicyExt, ExecCommandBeginEventExt, ExecCommandEndEventExt
-SessionConfiguredEventExt, ExecApprovalRequestEventExt
+### Option<T> Wrapping Pattern
+```rust
+// Fork returns direct value:
+fn scroll_config_vertical() -> u32
 
-// Protocol Types
-RateLimitSnapshot, ExecCommandSource, ElicitationAction, ExecPolicyAmendment
-TurnAbortReason, StreamErrorEvent, McpStartupStatus, etc.
+// Upstream expects Option:
+fn scroll_config_vertical() -> Option<u16>
+
+// Fix: Change return type and add conversion
+fn scroll_config_vertical(&self) -> Option<u16> {
+    Some(8) // Default value as Option
+}
+```
+
+### Arc Wrapping Pattern
+```rust
+// Fork returns struct directly:
+fn get_models_manager() -> ModelsManager
+
+// Upstream expects Arc:
+fn get_models_manager() -> Arc<ModelsManager>
+
+// Fix: Wrap in Arc
+pub fn get_models_manager(_config: &Config) -> Arc<ModelsManager> {
+    Arc::new(ModelsManager { ... })
+}
 ```
 
 ---
 
-_Last updated: 2024-12-24 (SYNC-028 Session 7 complete)_
+## Session History
+
+| Session | Errors | Reduction | Key Work |
+|---------|--------|-----------|----------|
+| 7 | 262→173 | 34% | Migration docs, compat.rs foundation |
+| 8 | 173→149 | 14% | API divergence fixes |
+| 9 | 149→56 | 62% | Type compatibility, model migration stub |
+| 10 | 56→0 | TBD | Final type mismatches |
+
+---
+
+_Last updated: 2024-12-24 (SYNC-028 Session 9 in progress)_

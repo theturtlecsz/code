@@ -180,7 +180,7 @@ impl ApprovalOverlay {
                     },
                     ApprovalDecision::McpElicitation(decision),
                 ) => {
-                    self.handle_elicitation_decision(server_name, request_id, *decision);
+                    self.handle_elicitation_decision(server_name, request_id, decision.clone());
                 }
                 _ => {}
             }

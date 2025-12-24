@@ -89,7 +89,9 @@ pub(crate) fn rate_limit_snapshot_display(
             .secondary
             .as_ref()
             .map(|window| RateLimitWindowDisplay::from_window(window, captured_at)),
-        credits: snapshot.credits.as_ref().map(CreditsSnapshotDisplay::from),
+        // NOTE: Fork's compat RateLimitSnapshot has credits as Option<u32>, not Option<CreditsSnapshot>
+        // Credits display not available in fork
+        credits: None,
     }
 }
 

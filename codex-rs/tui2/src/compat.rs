@@ -189,7 +189,7 @@ pub mod config {
     /// Stub - returns None since OSS provider resolution is not supported
     pub fn resolve_oss_provider(
         _provider: Option<&str>,
-        _config_toml: &TomlValue,
+        _config_toml: &codex_core::config::ConfigToml,
         _profile: Option<String>,
     ) -> Option<String> {
         None
@@ -484,7 +484,7 @@ impl SandboxPolicyExt for SandboxPolicy {
 /// Extension trait for ModelFamily to provide upstream-compatible methods
 pub trait ModelFamilyExt {
     fn get_model_slug(&self) -> &str;
-    fn context_window(&self) -> Option<u32>;
+    fn context_window(&self) -> Option<u64>;
 }
 
 impl ModelFamilyExt for codex_core::model_family::ModelFamily {
@@ -492,15 +492,19 @@ impl ModelFamilyExt for codex_core::model_family::ModelFamily {
         &self.slug
     }
 
-    fn context_window(&self) -> Option<u32> {
+    fn context_window(&self) -> Option<u64> {
         // Fork doesn't track context window size
         None
     }
 }
 
 /// Stub for format_env_display
-pub fn format_env_display(_key: &str, _value: &str) -> String {
-    String::new()
+/// Takes optional env map and optional env_vars, returns formatted string
+pub fn format_env_display(
+    _env: Option<&std::collections::HashMap<String, String>>,
+    _env_vars: &Option<std::collections::HashMap<String, String>>,
+) -> String {
+    String::from("-")
 }
 
 /// Stub for parse_turn_item - returns None since parsing not available locally
