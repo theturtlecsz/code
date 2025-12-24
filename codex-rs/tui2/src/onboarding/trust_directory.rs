@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use codex_core::config::set_project_trust_level;
+use crate::compat::config::set_project_trust_level;
 use codex_core::git_info::resolve_root_git_project_for_trust;
 use codex_protocol::config_types::TrustLevel;
 use crossterm::event::KeyCode;

@@ -1,3 +1,4 @@
+use crate::compat::ConfigExt;
 use codex_core::AuthManager;
 use codex_core::config::Config;
 use codex_core::git_info::get_git_repo_root;
@@ -80,15 +81,15 @@ impl OnboardingScreen {
             config,
         } = args;
         let cwd = config.cwd.clone();
-        let forced_chatgpt_workspace_id = config.forced_chatgpt_workspace_id.clone();
-        let forced_login_method = config.forced_login_method;
+        let forced_chatgpt_workspace_id = config.forced_chatgpt_workspace_id().clone();
+        let forced_login_method = config.forced_login_method();
         let codex_home = config.codex_home;
-        let cli_auth_credentials_store_mode = config.cli_auth_credentials_store_mode;
+        let cli_auth_credentials_store_mode = config.cli_auth_credentials_store_mode();
         let mut steps: Vec<Step> = Vec::new();
         steps.push(Step::Welcome(WelcomeWidget::new(
             !matches!(login_status, LoginStatus::NotAuthenticated),
             tui.frame_requester(),
-            config.animations,
+            config.animations(),
         )));
         if show_login_screen {
             let highlighted_mode = match forced_login_method {
@@ -106,7 +107,7 @@ impl OnboardingScreen {
                 auth_manager,
                 forced_chatgpt_workspace_id,
                 forced_login_method,
-                animations_enabled: config.animations,
+                animations_enabled: config.animations(),
             }))
         }
         let is_git_repo = get_git_repo_root(&cwd).is_some();

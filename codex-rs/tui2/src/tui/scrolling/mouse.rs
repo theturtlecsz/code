@@ -17,9 +17,8 @@
 //!
 //! See `codex-rs/tui2/docs/scroll_input_model.md` for the data-derived constants and analysis.
 
-use codex_core::config::types::ScrollInputMode;
-use codex_core::terminal::TerminalInfo;
-use codex_core::terminal::TerminalName;
+use crate::compat::config_types::ScrollInputMode;
+use crate::compat::terminal::{TerminalInfo, TerminalName};
 use std::time::Duration;
 use std::time::Instant;
 
@@ -685,6 +684,7 @@ impl ScrollStream {
         match self.config.mode {
             ScrollInputMode::Wheel => self.kind = ScrollStreamKind::Wheel,
             ScrollInputMode::Trackpad => self.kind = ScrollStreamKind::Trackpad,
+            ScrollInputMode::Line => self.kind = ScrollStreamKind::Wheel,
             ScrollInputMode::Auto => {
                 if self.kind != ScrollStreamKind::Unknown {
                     return;
@@ -715,6 +715,7 @@ impl ScrollStream {
         match self.config.mode {
             ScrollInputMode::Wheel => true,
             ScrollInputMode::Trackpad => false,
+            ScrollInputMode::Line => true,
             ScrollInputMode::Auto => matches!(self.kind, ScrollStreamKind::Wheel),
         }
     }
@@ -726,6 +727,7 @@ impl ScrollStream {
         match self.config.mode {
             ScrollInputMode::Wheel => self.config.wheel_lines_per_tick_f32(),
             ScrollInputMode::Trackpad => self.config.trackpad_lines_per_tick_f32(),
+            ScrollInputMode::Line => 1.0,
             ScrollInputMode::Auto => match self.kind {
                 ScrollStreamKind::Wheel => self.config.wheel_lines_per_tick_f32(),
                 ScrollStreamKind::Trackpad | ScrollStreamKind::Unknown => {

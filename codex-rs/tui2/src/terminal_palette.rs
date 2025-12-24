@@ -51,10 +51,17 @@ pub fn default_bg() -> Option<(u8, u8, u8)> {
 mod imp {
     use super::DefaultColors;
     use crossterm::style::Color as CrosstermColor;
-    use crossterm::style::query_background_color;
-    use crossterm::style::query_foreground_color;
     use std::sync::Mutex;
     use std::sync::OnceLock;
+
+    // Stub functions - query_foreground_color and query_background_color don't exist in our crossterm version
+    fn query_foreground_color() -> std::io::Result<Option<CrosstermColor>> {
+        Ok(None)
+    }
+
+    fn query_background_color() -> std::io::Result<Option<CrosstermColor>> {
+        Ok(None)
+    }
 
     struct Cache<T> {
         attempted: bool,

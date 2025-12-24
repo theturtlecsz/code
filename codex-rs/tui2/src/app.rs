@@ -34,12 +34,7 @@ use codex_ansi_escape::ansi_escape_line;
 use codex_core::AuthManager;
 use codex_core::ConversationManager;
 use codex_core::config::Config;
-use codex_core::config::edit::ConfigEditsBuilder;
-#[cfg(target_os = "windows")]
-use codex_core::features::Feature;
-use codex_core::models_manager::manager::ModelsManager;
-use codex_core::models_manager::model_presets::HIDE_GPT_5_1_CODEX_MAX_MIGRATION_PROMPT_CONFIG;
-use codex_core::models_manager::model_presets::HIDE_GPT5_1_MIGRATION_PROMPT_CONFIG;
+use crate::compat::models_manager::ModelsManager;
 use codex_core::protocol::EventMsg;
 use codex_core::protocol::FinalOutput;
 use codex_core::protocol::ListSkillsResponseEvent;
@@ -47,7 +42,11 @@ use codex_core::protocol::Op;
 use codex_core::protocol::SessionSource;
 use codex_core::protocol::SkillErrorInfo;
 use codex_core::protocol::TokenUsage;
-use codex_core::terminal::terminal_info;
+use crate::compat::terminal::terminal_info;
+use crate::compat::config::edit::ConfigEditsBuilder;
+use crate::compat::ConfigExt;
+use crate::compat::ConversationManagerExt;
+use crate::compat::ModelFamilyExt;
 use codex_protocol::ConversationId;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ModelUpgrade;
@@ -92,16 +91,6 @@ pub struct AppExitInfo {
     /// viewport and include styling (colors, bold, etc.) so that scrollback
     /// preserves the visual structure of the on-screen transcript.
     pub session_lines: Vec<String>,
-}
-
-impl From<AppExitInfo> for codex_tui::AppExitInfo {
-    fn from(info: AppExitInfo) -> Self {
-        codex_tui::AppExitInfo {
-            token_usage: info.token_usage,
-            conversation_id: info.conversation_id,
-            update_action: info.update_action.map(Into::into),
-        }
-    }
 }
 
 fn session_summary(
@@ -193,11 +182,11 @@ fn should_show_model_migration_prompt(
 fn migration_prompt_hidden(config: &Config, migration_config_key: &str) -> bool {
     match migration_config_key {
         HIDE_GPT_5_1_CODEX_MAX_MIGRATION_PROMPT_CONFIG => config
-            .notices
+            .notices()
             .hide_gpt_5_1_codex_max_migration_prompt
             .unwrap_or(false),
         HIDE_GPT5_1_MIGRATION_PROMPT_CONFIG => {
-            config.notices.hide_gpt5_1_migration_prompt.unwrap_or(false)
+            config.notices().hide_gpt5_1_migration_prompt.unwrap_or(false)
         }
         _ => false,
     }
@@ -231,7 +220,7 @@ async fn handle_model_migration_prompt_if_needed(
         if !should_show_model_migration_prompt(
             model,
             &target_model,
-            &config.notices.model_migrations,
+            &config.notices().model_migrations,
             &available_models,
         ) {
             return None;
@@ -491,15 +480,15 @@ impl App {
         let scroll_config = ScrollConfig::from_terminal(
             &terminal_info(),
             ScrollConfigOverrides {
-                events_per_tick: config.tui_scroll_events_per_tick,
-                wheel_lines_per_tick: config.tui_scroll_wheel_lines,
-                trackpad_lines_per_tick: config.tui_scroll_trackpad_lines,
-                trackpad_accel_events: config.tui_scroll_trackpad_accel_events,
-                trackpad_accel_max: config.tui_scroll_trackpad_accel_max,
-                mode: Some(config.tui_scroll_mode),
-                wheel_tick_detect_max_ms: config.tui_scroll_wheel_tick_detect_max_ms,
-                wheel_like_max_duration_ms: config.tui_scroll_wheel_like_max_duration_ms,
-                invert_direction: config.tui_scroll_invert,
+                events_per_tick: config.tui_scroll_events_per_tick(),
+                wheel_lines_per_tick: config.tui_scroll_wheel_lines(),
+                trackpad_lines_per_tick: config.tui_scroll_trackpad_lines(),
+                trackpad_accel_events: config.tui_scroll_trackpad_accel_events(),
+                trackpad_accel_max: config.tui_scroll_trackpad_accel_max(),
+                mode: Some(config.tui_scroll_mode()),
+                wheel_tick_detect_max_ms: config.tui_scroll_wheel_tick_detect_max_ms(),
+                wheel_like_max_duration_ms: config.tui_scroll_wheel_like_max_duration_ms(),
+                invert_direction: config.tui_scroll_invert(),
             },
         );
 

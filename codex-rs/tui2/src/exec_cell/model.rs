@@ -1,7 +1,7 @@
 use std::time::Duration;
 use std::time::Instant;
 
-use codex_core::protocol::ExecCommandSource;
+use crate::compat::protocol::ExecCommandSource;
 use codex_protocol::parse_command::ParsedCommand;
 
 #[derive(Clone, Debug, Default)]

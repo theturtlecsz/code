@@ -1,0 +1,802 @@
+//! Compatibility stubs for upstream-only features.
+//!
+//! This module provides stub implementations for features that exist in upstream
+//! but are not available in the local fork. See docs/adr/ADR-001-tui2-local-api-adaptation.md
+//! for the architectural decision behind this approach.
+//!
+//! # Upstream Features Stubbed
+//!
+//! - OSS provider management (`codex_common::oss`)
+//! - Feature flags (`codex_core::features`)
+//! - Terminal info detection (`codex_core::terminal`)
+//! - Various protocol events and types
+
+use codex_core::config::Config;
+use codex_core::protocol::SandboxPolicy;
+
+/// Stub for `codex_core::INTERACTIVE_SESSION_SOURCES`
+pub const INTERACTIVE_SESSION_SOURCES: &[&str] = &["codex_cli", "codex_tui"];
+
+/// Stub for `codex_protocol::custom_prompts::PROMPTS_CMD_PREFIX`
+pub const PROMPTS_CMD_PREFIX: &str = "/";
+
+/// Stub for `codex_core::project_doc::DEFAULT_PROJECT_DOC_FILENAME`
+pub const DEFAULT_PROJECT_DOC_FILENAME: &str = "AGENTS.md";
+
+/// Stub OSS provider IDs
+pub const OLLAMA_OSS_PROVIDER_ID: &str = "ollama";
+pub const LMSTUDIO_OSS_PROVIDER_ID: &str = "lmstudio";
+
+/// Stub default ports
+pub const DEFAULT_OLLAMA_PORT: u16 = 11434;
+pub const DEFAULT_LMSTUDIO_PORT: u16 = 1234;
+
+/// Stub OSS module
+pub mod oss {
+    use codex_core::config::Config;
+
+    /// Stub - always returns Ok since OSS is not supported locally
+    pub async fn ensure_oss_provider_ready(
+        _provider_id: &str,
+        _config: &Config,
+    ) -> std::io::Result<()> {
+        Ok(())
+    }
+
+    /// Stub - returns None since OSS is not supported locally
+    pub fn get_default_model_for_oss_provider(_provider_id: &str) -> Option<&'static str> {
+        None
+    }
+}
+
+/// Stub terminal module
+pub mod terminal {
+    /// Minimal terminal info struct
+    #[derive(Debug, Clone, Default)]
+    pub struct TerminalInfo {
+        pub name: Option<TerminalName>,
+    }
+
+    #[derive(Debug, Clone)]
+    pub enum TerminalName {
+        Unknown,
+        Alacritty,
+        AppleTerminal,
+        Ghostty,
+        Iterm2,
+        Kitty,
+        VsCode,
+        WarpTerminal,
+        WezTerm,
+    }
+
+    /// Stub - returns default terminal info
+    pub fn terminal_info() -> TerminalInfo {
+        TerminalInfo::default()
+    }
+}
+
+/// Stub features module
+pub mod features {
+    use std::collections::HashSet;
+
+    /// Feature enumeration
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum Feature {
+        ApplyPatchAmendment,
+        Elicitation,
+        ExecPolicy,
+        WindowsSandbox,
+    }
+
+    impl Feature {
+        pub fn key(&self) -> &'static str {
+            match self {
+                Feature::ApplyPatchAmendment => "apply_patch_amendment",
+                Feature::Elicitation => "elicitation",
+                Feature::ExecPolicy => "exec_policy",
+                Feature::WindowsSandbox => "windows_sandbox",
+            }
+        }
+    }
+
+    /// Feature flags container
+    #[derive(Debug, Clone)]
+    pub struct Features {
+        enabled: HashSet<Feature>,
+    }
+
+    impl Features {
+        /// Create with default features (all disabled)
+        pub fn with_defaults() -> Self {
+            Self {
+                enabled: HashSet::new(),
+            }
+        }
+
+        /// Check if a feature is enabled
+        pub fn enabled(&self, feature: Feature) -> bool {
+            self.enabled.contains(&feature)
+        }
+
+        /// Enable a feature
+        pub fn enable(&mut self, feature: Feature) {
+            self.enabled.insert(feature);
+        }
+
+        /// Disable a feature
+        pub fn disable(&mut self, feature: Feature) {
+            self.enabled.remove(&feature);
+        }
+    }
+
+    /// Feature flag for apply patch amendments
+    pub fn apply_patch_amendment_enabled() -> bool {
+        false
+    }
+
+    /// Feature flag for elicitation
+    pub fn elicitation_enabled() -> bool {
+        false
+    }
+}
+
+/// Stub auth functions
+pub mod auth {
+    use codex_core::config::Config;
+
+    /// Stub - no login restrictions enforced locally
+    pub async fn enforce_login_restrictions(_config: &Config) -> Result<(), String> {
+        Ok(())
+    }
+
+    /// Stub - reads OpenAI API key from environment
+    pub fn read_openai_api_key_from_env() -> Option<String> {
+        std::env::var("OPENAI_API_KEY").ok()
+    }
+
+    /// Stub auth credentials store mode
+    #[derive(Debug, Clone, Copy, Default)]
+    pub enum AuthCredentialsStoreMode {
+        #[default]
+        Keychain,
+    }
+
+    /// Stub auth mode
+    #[derive(Debug, Clone, Copy, Default)]
+    pub enum AuthMode {
+        #[default]
+        ApiKey,
+        OAuth,
+        Session,
+    }
+}
+
+/// Stub config functions
+pub mod config {
+    use codex_core::config::Config;
+    use toml::Value as TomlValue;
+    use std::path::Path;
+
+    /// Stub - returns None since OSS provider resolution is not supported
+    pub fn resolve_oss_provider(
+        _provider: Option<&str>,
+        _config_toml: &TomlValue,
+        _profile: Option<String>,
+    ) -> Option<String> {
+        None
+    }
+
+    /// Stub - OSS provider setting not supported locally
+    pub fn set_default_oss_provider(_codex_home: &Path, _provider: &str) -> std::io::Result<()> {
+        Ok(())
+    }
+
+    /// Stub - project trust level setting not supported locally
+    pub fn set_project_trust_level(_codex_home: &Path, _path: &Path, _level: &str) -> std::io::Result<()> {
+        Ok(())
+    }
+
+    /// Stub constraint result
+    #[derive(Debug, Clone)]
+    pub enum ConstraintResult {
+        Ok,
+        Warning(String),
+        Error(String),
+    }
+
+    /// Stub config edit module
+    pub mod edit {
+        use std::path::{Path, PathBuf};
+
+        /// Stub ConfigEditsBuilder - operations are no-ops
+        #[derive(Debug, Clone, Default)]
+        pub struct ConfigEditsBuilder {
+            changes: Vec<String>,
+        }
+
+        impl ConfigEditsBuilder {
+            pub fn new(_codex_home: &Path) -> Self {
+                Self::default()
+            }
+
+            /// Constructor from codex_home path (stub, ignores path)
+            pub fn from_codex_home(_codex_home: &Path) -> std::io::Result<Self> {
+                Ok(Self::default())
+            }
+
+            pub fn with_profile(&mut self, _profile: Option<&str>) -> &mut Self {
+                self
+            }
+
+            pub fn set_feature_enabled(&mut self, _feature: &str, _enabled: bool) -> &mut Self {
+                self
+            }
+
+            pub fn set_model(&mut self, _model: Option<&str>, _effort: Option<&str>) -> &mut Self {
+                self
+            }
+
+            pub fn set_hide_full_access_warning(&mut self, _hide: bool) -> &mut Self {
+                self
+            }
+
+            pub fn set_project_config_value(&mut self, _key: &str, _value: &str) -> &mut Self {
+                self
+            }
+
+            pub fn set_model_migrations(&mut self, _migrations: &[String]) -> &mut Self {
+                self
+            }
+
+            pub async fn apply(&self) -> std::io::Result<()> {
+                Ok(())
+            }
+
+            pub fn write(&self, _path: &PathBuf) -> std::io::Result<()> {
+                Ok(())
+            }
+
+            pub fn save(&self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+    }
+
+    /// Stub types module
+    pub mod types {
+        // Empty - types are accessed directly from codex_core::config_types
+    }
+}
+
+/// Stub protocol types that don't exist locally
+pub mod protocol {
+    use serde::{Deserialize, Serialize};
+
+    /// Stub rate limit snapshot
+    #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+    pub struct RateLimitSnapshot {
+        pub requests_remaining: Option<u32>,
+        pub tokens_remaining: Option<u32>,
+        pub reset_at: Option<String>,
+        pub window: Option<RateLimitWindow>,
+        pub primary: Option<RateLimitWindow>,
+        pub secondary: Option<RateLimitWindow>,
+        pub credits: Option<u32>,
+    }
+
+    /// Stub rate limit window
+    #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+    pub struct RateLimitWindow {
+        pub period: String,
+        pub requests: u32,
+        pub tokens: u32,
+        pub requests_remaining: Option<u32>,
+        pub tokens_remaining: Option<u32>,
+        pub resets_at: Option<String>,
+        pub used_percent: Option<f64>,
+        pub window_minutes: Option<u32>,
+    }
+
+    /// Stub exec command source
+    #[derive(Debug, Clone, Default)]
+    pub enum ExecCommandSource {
+        #[default]
+        Model,
+        User,
+        UnifiedExecInteraction,
+        UserShell,
+    }
+
+    /// Stub elicitation action
+    #[derive(Debug, Clone)]
+    pub enum ElicitationAction {
+        Confirm,
+        Cancel,
+        Input(String),
+        Accept,
+        Decline,
+    }
+
+    /// Stub exec policy amendment
+    #[derive(Debug, Clone)]
+    pub struct ExecPolicyAmendment {
+        pub command_pattern: String,
+    }
+
+    impl ExecPolicyAmendment {
+        pub fn command(&self) -> &str {
+            &self.command_pattern
+        }
+    }
+
+    /// Stub approved exec policy amendment
+    #[derive(Debug, Clone)]
+    pub struct ApprovedExecpolicyAmendment {
+        pub command_pattern: String,
+    }
+
+    impl ApprovedExecpolicyAmendment {
+        pub fn new(command_pattern: String) -> Self {
+            Self { command_pattern }
+        }
+
+        pub fn command(&self) -> &str {
+            &self.command_pattern
+        }
+    }
+
+    /// Stub turn abort reason
+    #[derive(Debug, Clone, PartialEq)]
+    pub enum TurnAbortReason {
+        UserInterrupt,
+        Error(String),
+        ReviewEnded,
+        Interrupted,
+        Replaced,
+    }
+
+    // Stub event types that don't exist locally
+    #[derive(Debug, Clone)]
+    pub struct DeprecationNoticeEvent {
+        pub message: String,
+        pub summary: String,
+        pub details: String,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct StreamErrorEvent {
+        pub error: String,
+        pub message: String,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct TerminalInteractionEvent {
+        pub content: String,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct McpStartupUpdateEvent {
+        pub server_name: String,
+        pub status: McpStartupStatus,
+        pub server: String,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct McpStartupCompleteEvent {
+        pub servers_ready: usize,
+        pub failed: Vec<String>,
+        pub cancelled: bool,
+    }
+
+    #[derive(Debug, Clone)]
+    pub enum McpStartupStatus {
+        Starting,
+        Ready,
+        Failed(String),
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct McpListToolsResponseEvent {
+        pub tools: Vec<String>,
+        pub server_name: Option<String>,
+        pub resources: Vec<String>,
+        pub resource_templates: Vec<String>,
+        pub auth_statuses: std::collections::HashMap<String, String>,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ListCustomPromptsResponseEvent {
+        pub prompts: Vec<String>,
+        pub custom_prompts: Vec<String>,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ViewImageToolCallEvent {
+        pub path: String,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct WebSearchEndEvent {
+        pub query: String,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct WarningEvent {
+        pub message: String,
+    }
+}
+
+/// Extension trait for SandboxPolicy to provide upstream-compatible methods
+pub trait SandboxPolicyExt {
+    fn get(&self) -> &SandboxPolicy;
+    fn set(&mut self, policy: SandboxPolicy);
+}
+
+impl SandboxPolicyExt for SandboxPolicy {
+    fn get(&self) -> &SandboxPolicy {
+        self
+    }
+
+    fn set(&mut self, policy: SandboxPolicy) {
+        *self = policy;
+    }
+}
+
+/// Extension trait for ModelFamily to provide upstream-compatible methods
+pub trait ModelFamilyExt {
+    fn get_model_slug(&self) -> &str;
+}
+
+impl ModelFamilyExt for codex_core::model_family::ModelFamily {
+    fn get_model_slug(&self) -> &str {
+        &self.slug
+    }
+}
+
+/// Stub for format_env_display
+pub fn format_env_display(_key: &str, _value: &str) -> String {
+    String::new()
+}
+
+/// Stub for parse_turn_item - returns None since parsing not available locally
+pub fn parse_turn_item<T>(_item: &T) -> Option<ParsedTurnItem> {
+    None
+}
+
+/// Stub parsed turn item type
+#[derive(Debug, Clone)]
+pub struct ParsedTurnItem {
+    pub kind: String,
+    pub content: String,
+}
+
+/// Stub path_utils module
+pub mod path_utils {
+    use std::path::Path;
+
+    /// Stub - just returns the path as-is
+    pub fn normalize_for_path_comparison(path: &Path) -> std::path::PathBuf {
+        path.to_path_buf()
+    }
+}
+
+/// Stub bash module
+pub mod bash {
+    /// Stub - returns None since bash command extraction not available locally
+    pub fn extract_bash_command(_text: &str) -> Option<String> {
+        None
+    }
+}
+
+/// Stub parse_command module
+pub mod parse_command {
+    /// Stub - returns None since shell command extraction not available locally
+    pub fn extract_shell_command(_text: &str) -> Option<String> {
+        None
+    }
+}
+
+/// Stub env module
+pub mod env {
+    /// Stub - returns false since WSL detection not available locally
+    pub fn is_wsl() -> bool {
+        false
+    }
+}
+
+/// Stub config_types that don't exist locally
+pub mod config_types {
+    use serde::{Deserialize, Serialize};
+
+    /// Stub scroll input mode
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+    pub enum ScrollInputMode {
+        Auto,
+        Wheel,
+        Line,
+        Trackpad,
+    }
+
+    impl Default for ScrollInputMode {
+        fn default() -> Self {
+            Self::Auto
+        }
+    }
+
+    /// Stub MCP server transport config
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub enum McpServerTransportConfig {
+        Stdio {
+            command: String,
+            args: Vec<String>,
+            env: Option<std::collections::HashMap<String, String>>,
+            env_vars: Option<std::collections::HashMap<String, String>>,
+            cwd: Option<String>,
+        },
+        StreamableHttp {
+            url: String,
+            headers: Option<std::collections::HashMap<String, String>>,
+            http_headers: Option<std::collections::HashMap<String, String>>,
+            env_http_headers: Option<std::collections::HashMap<String, String>>,
+        },
+    }
+}
+
+/// Stub skills module
+pub mod skills {
+    /// Stub skill info
+    #[derive(Debug, Clone)]
+    pub struct SkillInfo {
+        pub name: String,
+        pub description: String,
+    }
+
+    /// Stub skill metadata
+    #[derive(Debug, Clone)]
+    pub struct SkillMetadata {
+        pub name: String,
+        pub description: Option<String>,
+    }
+
+    /// Stub list_skills function
+    pub fn list_skills() -> Vec<SkillMetadata> {
+        Vec::new()
+    }
+}
+
+/// Stub models_manager module
+pub mod models_manager {
+    use codex_core::config::Config;
+    use codex_core::model_family::ModelFamily;
+
+    /// Stub models manager
+    #[derive(Debug, Clone, Copy)]
+    pub struct ModelsManager;
+
+    impl ModelsManager {
+        /// Stub - returns the model name as-is
+        pub async fn get_model(&self, model: &str, _config: &Config) -> String {
+            model.to_string()
+        }
+
+        /// Stub - constructs a basic model family
+        pub async fn construct_model_family(&self, _model: &str, _config: &Config) -> ModelFamily {
+            ModelFamily::default()
+        }
+
+        /// Stub - returns empty list of models
+        pub async fn list_models(&self) -> Vec<String> {
+            Vec::new()
+        }
+
+        /// Stub - returns None for list of models
+        pub async fn try_list_models(&self) -> Option<Vec<String>> {
+            None
+        }
+    }
+}
+
+/// Stub review_prompts module
+pub mod review_prompts {
+    /// Stub review prompt
+    pub fn get_review_prompt(_name: &str) -> Option<&'static str> {
+        None
+    }
+
+    /// Stub user-facing hint for review targets
+    pub fn user_facing_hint(_target: &str) -> String {
+        String::from("Review")
+    }
+}
+
+/// Stub notices config
+#[derive(Debug, Clone, Default)]
+pub struct NoticesConfig {
+    pub hide_rate_limit_model_nudge: Option<bool>,
+    pub hide_full_access_warning: Option<bool>,
+    pub hide_world_writable_warning: Option<bool>,
+    pub hide_gpt5_1_migration_prompt: Option<bool>,
+    pub hide_gpt_5_1_codex_max_migration_prompt: Option<bool>,
+    pub model_migrations: Vec<String>,
+}
+
+/// Extension trait for Config to provide upstream-compatible methods
+pub trait ConfigExt {
+    fn notices(&self) -> &NoticesConfig;
+    fn animations(&self) -> bool;
+    fn features(&self) -> crate::compat::features::Features;
+    fn disable_paste_burst(&self) -> bool;
+    fn tui_scroll_events_per_tick(&self) -> u32;
+    fn tui_scroll_wheel_lines(&self) -> u32;
+    fn tui_scroll_trackpad_lines(&self) -> u32;
+    fn tui_scroll_trackpad_accel_events(&self) -> u32;
+    fn tui_scroll_trackpad_accel_max(&self) -> f64;
+    fn tui_scroll_mode(&self) -> crate::compat::config_types::ScrollInputMode;
+    fn tui_scroll_wheel_tick_detect_max_ms(&self) -> u64;
+    fn tui_scroll_wheel_like_max_duration_ms(&self) -> u64;
+    fn tui_scroll_invert(&self) -> bool;
+    fn cli_auth_credentials_store_mode(&self) -> crate::compat::auth::AuthCredentialsStoreMode;
+    fn show_tooltips(&self) -> bool;
+    fn forced_chatgpt_workspace_id(&self) -> Option<String>;
+    fn forced_login_method(&self) -> Option<codex_protocol::config_types::ForcedLoginMethod>;
+}
+
+impl ConfigExt for Config {
+    fn notices(&self) -> &NoticesConfig {
+        // Return a reference to a leaked static instance
+        // This is a workaround for the lifetime issue with extension traits
+        use std::sync::OnceLock;
+        static NOTICES: OnceLock<NoticesConfig> = OnceLock::new();
+        NOTICES.get_or_init(|| NoticesConfig::default())
+    }
+
+    fn animations(&self) -> bool {
+        true
+    }
+
+    fn features(&self) -> crate::compat::features::Features {
+        crate::compat::features::Features::with_defaults()
+    }
+
+    fn disable_paste_burst(&self) -> bool {
+        false
+    }
+
+    fn tui_scroll_events_per_tick(&self) -> u32 {
+        3
+    }
+
+    fn tui_scroll_wheel_lines(&self) -> u32 {
+        3
+    }
+
+    fn tui_scroll_trackpad_lines(&self) -> u32 {
+        1
+    }
+
+    fn tui_scroll_trackpad_accel_events(&self) -> u32 {
+        5
+    }
+
+    fn tui_scroll_trackpad_accel_max(&self) -> f64 {
+        3.0
+    }
+
+    fn tui_scroll_mode(&self) -> crate::compat::config_types::ScrollInputMode {
+        crate::compat::config_types::ScrollInputMode::Auto
+    }
+
+    fn tui_scroll_wheel_tick_detect_max_ms(&self) -> u64 {
+        50
+    }
+
+    fn tui_scroll_wheel_like_max_duration_ms(&self) -> u64 {
+        200
+    }
+
+    fn tui_scroll_invert(&self) -> bool {
+        false
+    }
+
+    fn cli_auth_credentials_store_mode(&self) -> crate::compat::auth::AuthCredentialsStoreMode {
+        crate::compat::auth::AuthCredentialsStoreMode::Keychain
+    }
+
+    fn show_tooltips(&self) -> bool {
+        true
+    }
+
+    fn forced_chatgpt_workspace_id(&self) -> Option<String> {
+        None
+    }
+
+    fn forced_login_method(&self) -> Option<codex_protocol::config_types::ForcedLoginMethod> {
+        None
+    }
+}
+
+/// Extension trait for ConversationManager to provide upstream-compatible methods
+pub trait ConversationManagerExt {
+    fn get_models_manager(&self) -> models_manager::ModelsManager;
+}
+
+impl ConversationManagerExt for codex_core::ConversationManager {
+    fn get_models_manager(&self) -> models_manager::ModelsManager {
+        models_manager::ModelsManager
+    }
+}
+
+/// Extension trait for ExecCommandBeginEvent to provide upstream-compatible fields
+pub trait ExecCommandBeginEventExt {
+    fn source(&self) -> protocol::ExecCommandSource;
+    fn interaction_input(&self) -> Option<String>;
+}
+
+impl ExecCommandBeginEventExt for codex_core::protocol::ExecCommandBeginEvent {
+    fn source(&self) -> protocol::ExecCommandSource {
+        protocol::ExecCommandSource::Model
+    }
+
+    fn interaction_input(&self) -> Option<String> {
+        None
+    }
+}
+
+/// Extension trait for ExecCommandEndEvent to provide upstream-compatible fields
+pub trait ExecCommandEndEventExt {
+    fn source(&self) -> protocol::ExecCommandSource;
+    fn interaction_input(&self) -> Option<String>;
+    fn command(&self) -> Vec<String>;
+    fn parsed_cmd(&self) -> Option<String>;
+    fn formatted_output(&self) -> Option<String>;
+    fn aggregated_output(&self) -> Option<String>;
+}
+
+impl ExecCommandEndEventExt for codex_core::protocol::ExecCommandEndEvent {
+    fn source(&self) -> protocol::ExecCommandSource {
+        protocol::ExecCommandSource::Model
+    }
+
+    fn interaction_input(&self) -> Option<String> {
+        None
+    }
+
+    fn command(&self) -> Vec<String> {
+        Vec::new()
+    }
+
+    fn parsed_cmd(&self) -> Option<String> {
+        None
+    }
+
+    fn formatted_output(&self) -> Option<String> {
+        Some(format!("{}\n{}", self.stdout, self.stderr))
+    }
+
+    fn aggregated_output(&self) -> Option<String> {
+        Some(format!("{}\n{}", self.stdout, self.stderr))
+    }
+}
+
+/// Extension trait for SessionConfiguredEvent to provide upstream-compatible fields
+pub trait SessionConfiguredEventExt {
+    fn initial_messages(&self) -> Vec<String>;
+}
+
+impl SessionConfiguredEventExt for codex_core::protocol::SessionConfiguredEvent {
+    fn initial_messages(&self) -> Vec<String> {
+        Vec::new()
+    }
+}
+
+/// Extension trait for ExecApprovalRequestEvent to provide upstream-compatible fields
+pub trait ExecApprovalRequestEventExt {
+    fn proposed_execpolicy_amendment(&self) -> Option<protocol::ExecPolicyAmendment>;
+}
+
+impl ExecApprovalRequestEventExt for codex_core::protocol::ExecApprovalRequestEvent {
+    fn proposed_execpolicy_amendment(&self) -> Option<protocol::ExecPolicyAmendment> {
+        None
+    }
+}

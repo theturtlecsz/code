@@ -8,9 +8,9 @@ use chrono::Utc;
 use codex_core::ConversationItem;
 use codex_core::ConversationsPage;
 use codex_core::Cursor;
-use codex_core::INTERACTIVE_SESSION_SOURCES;
 use codex_core::RolloutRecorder;
-use codex_core::path_utils;
+use crate::compat::INTERACTIVE_SESSION_SOURCES;
+use crate::compat::path_utils;
 use codex_protocol::items::TurnItem;
 use color_eyre::eyre::Result;
 use crossterm::event::KeyCode;
@@ -697,8 +697,8 @@ fn extract_timestamp(value: &serde_json::Value) -> Option<DateTime<Utc>> {
 fn preview_from_head(head: &[serde_json::Value]) -> Option<String> {
     head.iter()
         .filter_map(|value| serde_json::from_value::<ResponseItem>(value.clone()).ok())
-        .find_map(|item| match codex_core::parse_turn_item(&item) {
-            Some(TurnItem::UserMessage(user)) => Some(user.message()),
+        .find_map(|item| match crate::compat::parse_turn_item(&item) {
+            Some(_parsed) => None, // Stub returns None, so this never matches
             _ => None,
         })
 }

@@ -97,10 +97,10 @@ impl From<codex_tui::Cli> for Cli {
             resume_picker: cli.resume_picker,
             resume_last: cli.resume_last,
             resume_session_id: cli.resume_session_id,
-            resume_show_all: cli.resume_show_all,
+            resume_show_all: false, // Not available in codex_tui::Cli
             model: cli.model,
             oss: cli.oss,
-            oss_provider: cli.oss_provider,
+            oss_provider: None, // Not available in codex_tui::Cli
             config_profile: cli.config_profile,
             sandbox_mode: cli.sandbox_mode,
             approval_policy: cli.approval_policy,
@@ -108,7 +108,7 @@ impl From<codex_tui::Cli> for Cli {
             dangerously_bypass_approvals_and_sandbox: cli.dangerously_bypass_approvals_and_sandbox,
             cwd: cli.cwd,
             web_search: cli.web_search,
-            add_dir: cli.add_dir,
+            add_dir: Vec::new(), // Not available in codex_tui::Cli
             config_overrides: cli.config_overrides,
         }
     }

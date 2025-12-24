@@ -9,7 +9,7 @@ use super::selection_popup_common::render_rows_single_line;
 use crate::render::Insets;
 use crate::render::RectExt;
 use codex_common::fuzzy_match::fuzzy_match;
-use codex_core::skills::model::SkillMetadata;
+use crate::compat::skills::SkillMetadata;
 
 use crate::text_formatting::truncate_text;
 

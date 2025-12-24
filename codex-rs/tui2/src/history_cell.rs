@@ -1,3 +1,4 @@
+use crate::compat::ConfigExt;
 use crate::diff_render::create_diff_summary;
 use crate::diff_render::display_path_for;
 use crate::exec_cell::CommandOutput;
@@ -23,9 +24,9 @@ use crate::wrapping::RtOptions;
 use crate::wrapping::word_wrap_line;
 use crate::wrapping::word_wrap_lines;
 use base64::Engine;
-use codex_common::format_env_display::format_env_display;
+use crate::compat::format_env_display;
 use codex_core::config::Config;
-use codex_core::config::types::McpServerTransportConfig;
+use crate::compat::config_types::McpServerTransportConfig;
 use codex_core::protocol::FileChange;
 use codex_core::protocol::McpAuthStatus;
 use codex_core::protocol::McpInvocation;
@@ -675,7 +676,7 @@ pub(crate) fn new_session_info(
 
         parts.push(Box::new(PlainHistoryCell { lines: help_lines }));
     } else {
-        if config.show_tooltips
+        if config.show_tooltips()
             && let Some(tooltips) = tooltips::random_tooltip().map(TooltipHistoryCell::new)
         {
             parts.push(Box::new(tooltips));
@@ -1515,8 +1516,8 @@ mod tests {
     use crate::exec_cell::ExecCell;
     use codex_core::config::Config;
     use codex_core::config::ConfigBuilder;
-    use codex_core::config::types::McpServerConfig;
-    use codex_core::config::types::McpServerTransportConfig;
+    use codex_core::config_types::McpServerConfig;
+    use crate::compat::config_types::McpServerTransportConfig;
     use codex_core::models_manager::manager::ModelsManager;
     use codex_core::protocol::McpAuthStatus;
     use codex_protocol::parse_command::ParsedCommand;
@@ -1525,7 +1526,7 @@ mod tests {
     use serde_json::json;
     use std::collections::HashMap;
 
-    use codex_core::protocol::ExecCommandSource;
+    use crate::compat::protocol::ExecCommandSource;
     use mcp_types::CallToolResult;
     use mcp_types::ContentBlock;
     use mcp_types::TextContent;

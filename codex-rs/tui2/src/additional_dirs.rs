@@ -13,9 +13,7 @@ pub fn add_dir_warning_message(
     }
 
     match sandbox_policy {
-        SandboxPolicy::WorkspaceWrite { .. }
-        | SandboxPolicy::DangerFullAccess
-        | SandboxPolicy::ExternalSandbox { .. } => None,
+        SandboxPolicy::WorkspaceWrite { .. } | SandboxPolicy::DangerFullAccess => None,
         SandboxPolicy::ReadOnly => Some(format_warning(additional_dirs)),
     }
 }
@@ -34,7 +32,6 @@ fn format_warning(additional_dirs: &[PathBuf]) -> String {
 #[cfg(test)]
 mod tests {
     use super::add_dir_warning_message;
-    use codex_core::protocol::NetworkAccess;
     use codex_core::protocol::SandboxPolicy;
     use pretty_assertions::assert_eq;
     use std::path::PathBuf;
@@ -53,14 +50,7 @@ mod tests {
         assert_eq!(add_dir_warning_message(&dirs, &sandbox), None);
     }
 
-    #[test]
-    fn returns_none_for_external_sandbox() {
-        let sandbox = SandboxPolicy::ExternalSandbox {
-            network_access: NetworkAccess::Enabled,
-        };
-        let dirs = vec![PathBuf::from("/tmp/example")];
-        assert_eq!(add_dir_warning_message(&dirs, &sandbox), None);
-    }
+    // Note: ExternalSandbox test removed - variant not available locally
 
     #[test]
     fn warns_for_read_only() {

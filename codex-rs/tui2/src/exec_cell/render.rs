@@ -14,8 +14,10 @@ use crate::wrapping::word_wrap_line;
 use crate::wrapping::word_wrap_lines;
 use codex_ansi_escape::ansi_escape_line;
 use codex_common::elapsed::format_duration;
-use codex_core::bash::extract_bash_command;
-use codex_core::protocol::ExecCommandSource;
+use crate::compat::bash::extract_bash_command;
+use crate::compat::protocol::ExecCommandSource;
+use crate::compat::ExecCommandBeginEventExt;
+use crate::compat::ExecCommandEndEventExt;
 use codex_protocol::parse_command::ParsedCommand;
 use itertools::Itertools;
 use ratatui::prelude::*;
@@ -611,7 +613,7 @@ const EXEC_DISPLAY_LAYOUT: ExecDisplayLayout = ExecDisplayLayout::new(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_core::protocol::ExecCommandSource;
+    use crate::compat::protocol::ExecCommandSource;
 
     #[test]
     fn user_shell_output_is_limited_by_screen_lines() {

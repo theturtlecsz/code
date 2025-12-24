@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
 use codex_core::AuthManager;
-use codex_core::auth::AuthCredentialsStoreMode;
+use crate::compat::auth::AuthCredentialsStoreMode;
 use codex_core::auth::CLIENT_ID;
 use codex_core::auth::login_with_api_key;
 use codex_core::auth::read_openai_api_key_from_env;
@@ -655,7 +655,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use tempfile::TempDir;
 
-    use codex_core::auth::AuthCredentialsStoreMode;
+    use crate::compat::auth::AuthCredentialsStoreMode;
 
     fn widget_forced_chatgpt() -> (AuthModeWidget, TempDir) {
         let codex_home = TempDir::new().unwrap();

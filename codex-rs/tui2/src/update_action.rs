@@ -9,20 +9,6 @@ pub enum UpdateAction {
     BrewUpgrade,
 }
 
-impl From<UpdateAction> for codex_tui::update_action::UpdateAction {
-    fn from(action: UpdateAction) -> Self {
-        match action {
-            UpdateAction::NpmGlobalLatest => {
-                codex_tui::update_action::UpdateAction::NpmGlobalLatest
-            }
-            UpdateAction::BunGlobalLatest => {
-                codex_tui::update_action::UpdateAction::BunGlobalLatest
-            }
-            UpdateAction::BrewUpgrade => codex_tui::update_action::UpdateAction::BrewUpgrade,
-        }
-    }
-}
-
 impl UpdateAction {
     /// Returns the list of command-line arguments for invoking the update.
     pub fn command_args(self) -> (&'static str, &'static [&'static str]) {
