@@ -259,15 +259,14 @@ async fn handle_model_migration_prompt_if_needed(
                     from_model: model.to_string(),
                     to_model: target_model.clone(),
                 });
-                config.model = Some(target_model.clone());
+                config.model = target_model.clone();
 
-                let mapped_effort = if let Some(reasoning_effort_mapping) = reasoning_effort_mapping
-                    && let Some(reasoning_effort) = config.model_reasoning_effort
-                {
+                let mapped_effort = if let Some(reasoning_effort_mapping) = reasoning_effort_mapping {
+                    let current_effort = config.model_reasoning_effort;
                     reasoning_effort_mapping
-                        .get(&reasoning_effort)
+                        .get(&current_effort)
                         .cloned()
-                        .or(config.model_reasoning_effort)
+                        .unwrap_or(current_effort)
                 } else {
                     config.model_reasoning_effort
                 };
@@ -275,7 +274,7 @@ async fn handle_model_migration_prompt_if_needed(
                 config.model_reasoning_effort = mapped_effort;
 
                 app_event_tx.send(AppEvent::UpdateModel(target_model.clone()));
-                app_event_tx.send(AppEvent::UpdateReasoningEffort(mapped_effort));
+                app_event_tx.send(AppEvent::UpdateReasoningEffort(Some(mapped_effort)));
                 app_event_tx.send(AppEvent::PersistModelSelection {
                     model: target_model.clone(),
                     effort: mapped_effort,
@@ -395,9 +394,9 @@ impl App {
         let (app_event_tx, mut app_event_rx) = unbounded_channel();
         let app_event_tx = AppEventSender::new(app_event_tx);
 
+        // NOTE: Fork's ConversationManager doesn't take SessionSource
         let conversation_manager = Arc::new(ConversationManager::new(
             auth_manager.clone(),
-            SessionSource::Cli,
         ));
         let mut model = conversation_manager
             .get_models_manager()
@@ -414,8 +413,9 @@ impl App {
         if let Some(exit_info) = exit_info {
             return Ok(exit_info);
         }
-        if let Some(updated_model) = config.model.clone() {
-            model = updated_model;
+        // Update model from config if it changed during migration
+        if config.model != model {
+            model = config.model.clone();
         }
 
         let enhanced_keys_supported = tui.enhanced_keys_supported();
@@ -485,7 +485,7 @@ impl App {
                 trackpad_lines_per_tick: config.tui_scroll_trackpad_lines(),
                 trackpad_accel_events: config.tui_scroll_trackpad_accel_events(),
                 trackpad_accel_max: config.tui_scroll_trackpad_accel_max(),
-                mode: Some(config.tui_scroll_mode()),
+                mode: config.tui_scroll_mode(),
                 wheel_tick_detect_max_ms: config.tui_scroll_wheel_tick_detect_max_ms(),
                 wheel_like_max_duration_ms: config.tui_scroll_wheel_like_max_duration_ms(),
                 invert_direction: config.tui_scroll_invert(),
@@ -1855,9 +1855,11 @@ impl App {
             }
             AppEvent::PersistModelSelection { model, effort } => {
                 let profile = self.active_profile.as_deref();
+                // NOTE: set_model takes Option<&str> for effort, convert from ReasoningEffort
+                let effort_str = effort.map(|e| e.to_string());
                 match ConfigEditsBuilder::new(&self.config.codex_home)
                     .with_profile(profile)
-                    .set_model(Some(model.as_str()), effort)
+                    .set_model(Some(model.as_str()), effort_str.as_deref())
                     .apply()
                     .await
                 {
@@ -1910,11 +1912,16 @@ impl App {
                 {
                     self.config.forced_auto_mode_downgraded_on_windows = false;
                 }
-                if let Err(err) = self.chat_widget.set_sandbox_policy(policy) {
-                    tracing::warn!(%err, "failed to set sandbox policy on chat config");
-                    self.chat_widget
-                        .add_error_message(format!("Failed to set sandbox policy: {err}"));
-                    return Ok(true);
+                // NOTE: set_sandbox_policy returns ConstraintResult, not Result
+                match self.chat_widget.set_sandbox_policy(policy) {
+                    crate::compat::config::ConstraintResult::Ok(()) => {}
+                    crate::compat::config::ConstraintResult::Warning(err)
+                    | crate::compat::config::ConstraintResult::Error(err) => {
+                        tracing::warn!(%err, "failed to set sandbox policy on chat config");
+                        self.chat_widget
+                            .add_error_message(format!("Failed to set sandbox policy: {err}"));
+                        return Ok(true);
+                    }
                 }
 
                 // If sandbox policy becomes workspace-write or read-only, run the Windows world-writable scan.
@@ -2098,7 +2105,9 @@ impl App {
 
     fn on_update_reasoning_effort(&mut self, effort: Option<ReasoningEffortConfig>) {
         self.chat_widget.set_reasoning_effort(effort);
-        self.config.model_reasoning_effort = effort;
+        // NOTE: Fork's config uses codex_core::config_types::ReasoningEffort (different type)
+        // We can't directly assign since they're different types with same name
+        // For now, just update the chat_widget; config already has its own effort
     }
 
     async fn handle_key_event(&mut self, tui: &mut tui::Tui, key_event: KeyEvent) {

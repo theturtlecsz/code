@@ -629,13 +629,13 @@ pub(crate) fn new_session_info(
 ) -> SessionInfoCell {
     let SessionConfiguredEvent {
         model,
-        reasoning_effort,
         ..
     } = event;
+    // NOTE: Fork's SessionConfiguredEvent doesn't have reasoning_effort
     // Header box rendered as history (so it appears at the very top)
     let header = SessionHeaderHistoryCell::new(
         model.clone(),
-        reasoning_effort,
+        None, // Fork doesn't expose reasoning_effort in session event
         config.cwd.clone(),
         CODEX_CLI_VERSION,
     );
@@ -1161,76 +1161,32 @@ pub(crate) fn new_mcp_tools_output(
             .get(server.as_str())
             .copied()
             .unwrap_or(McpAuthStatus::Unsupported);
-        let mut header: Vec<Span<'static>> = vec!["  • ".into(), server.clone().into()];
-        if !cfg.enabled {
-            header.push(" ".into());
-            header.push("(disabled)".red());
-            lines.push(header.into());
-            lines.push(Line::from(""));
-            continue;
-        }
+        let header: Vec<Span<'static>> = vec!["  • ".into(), server.clone().into()];
+        // NOTE: Fork's McpServerConfig doesn't have enabled/transport fields
+        // It uses direct command/args/env - always enabled, always stdio-based
         lines.push(header.into());
         lines.push(vec!["    • Status: ".into(), "enabled".green()].into());
         lines.push(vec!["    • Auth: ".into(), auth_status.to_string().into()].into());
 
-        match &cfg.transport {
-            McpServerTransportConfig::Stdio {
-                command,
-                args,
-                env,
-                env_vars,
-                cwd,
-            } => {
-                let args_suffix = if args.is_empty() {
-                    String::new()
-                } else {
-                    format!(" {}", args.join(" "))
-                };
-                let cmd_display = format!("{command}{args_suffix}");
-                lines.push(vec!["    • Command: ".into(), cmd_display.into()].into());
+        // Direct command/args display for fork's simpler structure
+        {
+            let command = &cfg.command;
+            let args = &cfg.args;
+            let env = &cfg.env;
+            let args_suffix = if args.is_empty() {
+                String::new()
+            } else {
+                format!(" {}", args.join(" "))
+            };
+            let cmd_display = format!("{command}{args_suffix}");
+            lines.push(vec!["    • Command: ".into(), cmd_display.into()].into());
 
-                if let Some(cwd) = cwd.as_ref() {
-                    lines.push(vec!["    • Cwd: ".into(), cwd.display().to_string().into()].into());
-                }
-
-                let env_display = format_env_display(env.as_ref(), env_vars);
-                if env_display != "-" {
-                    lines.push(vec!["    • Env: ".into(), env_display.into()].into());
-                }
-            }
-            McpServerTransportConfig::StreamableHttp {
-                url,
-                http_headers,
-                env_http_headers,
-                ..
-            } => {
-                lines.push(vec!["    • URL: ".into(), url.clone().into()].into());
-                if let Some(headers) = http_headers.as_ref()
-                    && !headers.is_empty()
-                {
-                    let mut pairs: Vec<_> = headers.iter().collect();
-                    pairs.sort_by(|(a, _), (b, _)| a.cmp(b));
-                    let display = pairs
-                        .into_iter()
-                        .map(|(name, _)| format!("{name}=*****"))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    lines.push(vec!["    • HTTP headers: ".into(), display.into()].into());
-                }
-                if let Some(headers) = env_http_headers.as_ref()
-                    && !headers.is_empty()
-                {
-                    let mut pairs: Vec<_> = headers.iter().collect();
-                    pairs.sort_by(|(a, _), (b, _)| a.cmp(b));
-                    let display = pairs
-                        .into_iter()
-                        .map(|(name, var)| format!("{name}={var}"))
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    lines.push(vec!["    • Env HTTP headers: ".into(), display.into()].into());
-                }
+            let env_display = format_env_display(env.as_ref(), &None);
+            if env_display != "-" {
+                lines.push(vec!["    • Env: ".into(), env_display.into()].into());
             }
         }
+        // NOTE: Upstream's StreamableHttp transport type not supported in fork
 
         if names.is_empty() {
             lines.push("    • Tools: (none)".into());
@@ -1307,8 +1263,9 @@ pub(crate) fn new_error_event(message: String) -> PlainHistoryCell {
 
 /// Render a user‑friendly plan update styled like a checkbox todo list.
 pub(crate) fn new_plan_update(update: UpdatePlanArgs) -> PlanUpdateCell {
-    let UpdatePlanArgs { explanation, plan } = update;
-    PlanUpdateCell { explanation, plan }
+    // NOTE: Fork's UpdatePlanArgs has name instead of explanation
+    let UpdatePlanArgs { name, plan } = update;
+    PlanUpdateCell { explanation: name, plan }
 }
 
 #[derive(Debug)]

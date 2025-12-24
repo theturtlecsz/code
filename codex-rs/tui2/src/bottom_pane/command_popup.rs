@@ -169,10 +169,8 @@ impl CommandPopup {
                     }
                     CommandItem::UserPrompt(i) => {
                         let prompt = &self.prompts[i];
-                        let description = prompt
-                            .description
-                            .clone()
-                            .unwrap_or_else(|| "send saved prompt".to_string());
+                        // NOTE: Fork's CustomPrompt doesn't have description field
+                        let description = "send saved prompt".to_string();
                         (
                             format!("/{PROMPTS_CMD_PREFIX}:{}", prompt.name),
                             description,

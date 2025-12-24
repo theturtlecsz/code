@@ -88,14 +88,11 @@ pub async fn run_resume_picker(
     let page_loader: PageLoader = Arc::new(move |request: PageLoadRequest| {
         let tx = loader_tx.clone();
         tokio::spawn(async move {
-            let provider_filter = vec![request.default_provider.clone()];
+            // NOTE: Fork's list_conversations only takes 3 args (no session_sources, provider_filter)
             let page = RolloutRecorder::list_conversations(
                 &request.codex_home,
                 PAGE_SIZE,
                 request.cursor.as_ref(),
-                INTERACTIVE_SESSION_SOURCES,
-                Some(provider_filter.as_slice()),
-                request.default_provider.as_str(),
             )
             .await;
             let _ = tx.send(BackgroundEvent::PageLoaded {
@@ -632,16 +629,10 @@ fn rows_from_items(items: Vec<ConversationItem>) -> Vec<Row> {
 }
 
 fn head_to_row(item: &ConversationItem) -> Row {
-    let created_at = item
-        .created_at
-        .as_deref()
-        .and_then(parse_timestamp_str)
-        .or_else(|| item.head.first().and_then(extract_timestamp));
-    let updated_at = item
-        .updated_at
-        .as_deref()
-        .and_then(parse_timestamp_str)
-        .or(created_at);
+    // NOTE: Fork's ConversationItem doesn't have created_at/updated_at fields
+    // Extract from head data instead
+    let created_at = item.head.first().and_then(extract_timestamp);
+    let updated_at = created_at;
 
     let (cwd, git_branch) = extract_session_meta_from_head(&item.head);
     let preview = preview_from_head(&item.head)

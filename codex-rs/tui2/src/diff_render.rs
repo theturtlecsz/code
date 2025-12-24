@@ -101,7 +101,8 @@ fn collect_rows(changes: &HashMap<PathBuf, FileChange>) -> Vec<Row> {
     for (path, change) in changes.iter() {
         let (added, removed) = match change {
             FileChange::Add { content } => (content.lines().count(), 0),
-            FileChange::Delete { content } => (0, content.lines().count()),
+            // NOTE: Fork's Delete variant has no content field
+            FileChange::Delete => (0, 0),
             FileChange::Update { unified_diff, .. } => calculate_add_remove_from_diff(unified_diff),
         };
         let move_path = match change {
@@ -207,17 +208,9 @@ fn render_change(change: &FileChange, out: &mut Vec<RtLine<'static>>, width: usi
                 ));
             }
         }
-        FileChange::Delete { content } => {
-            let line_number_width = line_number_width(content.lines().count());
-            for (i, raw) in content.lines().enumerate() {
-                out.extend(push_wrapped_diff_line(
-                    i + 1,
-                    DiffLineType::Delete,
-                    raw,
-                    width,
-                    line_number_width,
-                ));
-            }
+        // NOTE: Fork's Delete variant has no content field
+        FileChange::Delete => {
+            out.push(RtLine::from("(file deleted)".red()));
         }
         FileChange::Update { unified_diff, .. } => {
             if let Ok(patch) = diffy::Patch::from_str(unified_diff) {

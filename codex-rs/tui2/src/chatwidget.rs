@@ -62,7 +62,7 @@ use crate::compat::protocol::McpListToolsResponseEvent;
 use crate::compat::protocol::McpStartupCompleteEvent;
 use crate::compat::protocol::McpStartupStatus;
 use crate::compat::protocol::McpStartupUpdateEvent;
-use crate::compat::protocol::RateLimitSnapshot;
+use codex_protocol::protocol::RateLimitSnapshot;
 use crate::compat::protocol::StreamErrorEvent;
 use crate::compat::protocol::TerminalInteractionEvent;
 use crate::compat::protocol::TurnAbortReason;
@@ -402,8 +402,8 @@ impl ChatWidget {
         self.bottom_pane
             .set_history_metadata(event.history_log_id, event.history_entry_count);
         self.set_skills(None);
-        self.conversation_id = Some(event.session_id);
-        self.current_rollout_path = Some(event.rollout_path.clone());
+        self.conversation_id = Some(event.session_id.into());
+        self.current_rollout_path = event.rollout_path.clone();
         let initial_messages = event.initial_messages().clone();
         let model_for_header = event.model.clone();
         self.session_header.set_model(&model_for_header);
@@ -413,8 +413,8 @@ impl ChatWidget {
             event,
             self.show_welcome_banner,
         ));
-        if let Some(messages) = initial_messages {
-            self.replay_initial_messages(messages);
+        if !initial_messages.is_empty() {
+            self.replay_initial_messages(initial_messages);
         }
         // Ask codex-core to enumerate custom prompts for this session.
         // NOTE: ListCustomPrompts and ListSkills not available in local fork - stubbed out
@@ -578,7 +578,7 @@ impl ChatWidget {
 
     fn context_remaining_percent(&self, info: &TokenUsageInfo) -> Option<i64> {
         info.model_context_window
-            .or(self.model_family.context_window)
+            .or(self.model_family.context_window())
             .map(|window| {
                 info.last_token_usage
                     .percent_of_context_window_remaining(window)
@@ -606,20 +606,8 @@ impl ChatWidget {
     }
 
     pub(crate) fn on_rate_limit_snapshot(&mut self, snapshot: Option<RateLimitSnapshot>) {
-        if let Some(mut snapshot) = snapshot {
-            if snapshot.credits.is_none() {
-                snapshot.credits = self
-                    .rate_limit_snapshot
-                    .as_ref()
-                    .and_then(|display| display.credits.as_ref())
-                    .map(|credits| CreditsSnapshot {
-                        has_credits: credits.has_credits,
-                        unlimited: credits.unlimited,
-                        balance: credits.balance.clone(),
-                    });
-            }
-
-            self.plan_type = snapshot.plan_type.or(self.plan_type);
+        if let Some(snapshot) = snapshot {
+            // NOTE: credits and plan_type not available in fork's RateLimitSnapshot
 
             let warnings = self.rate_limit_warnings.take_warnings(
                 snapshot
@@ -704,7 +692,7 @@ impl ChatWidget {
 
     fn on_mcp_startup_update(&mut self, ev: McpStartupUpdateEvent) {
         let mut status = self.mcp_startup_status.take().unwrap_or_default();
-        if let McpStartupStatus::Failed { error } = &ev.status {
+        if let McpStartupStatus::Failed(error) = &ev.status {
             self.on_warning(error);
         }
         status.insert(ev.server, ev.status);
@@ -925,7 +913,7 @@ impl ChatWidget {
     }
 
     fn on_deprecation_notice(&mut self, event: DeprecationNoticeEvent) {
-        let DeprecationNoticeEvent { summary, details } = event;
+        let DeprecationNoticeEvent { summary, details, .. } = event;
         self.add_to_history(history_cell::new_deprecation_notice(summary, details));
         self.request_redraw();
     }
@@ -1293,7 +1281,7 @@ impl ChatWidget {
         } = common;
         let model_slug = model_family.get_model_slug().to_string();
         let mut config = config;
-        config.model = Some(model_slug.clone());
+        config.model = model_slug.clone();
         let mut rng = rand::rng();
         let placeholder = EXAMPLE_PROMPTS[rng.random_range(0..EXAMPLE_PROMPTS.len())].to_string();
         let codex_op_tx = spawn_agent(config.clone(), app_event_tx.clone(), conversation_manager);
@@ -1586,10 +1574,8 @@ impl ChatWidget {
                 self.request_exit();
             }
             SlashCommand::Logout => {
-                if let Err(e) = codex_core::auth::logout(
-                    &self.config.codex_home,
-                    self.config.cli_auth_credentials_store_mode(),
-                ) {
+                // NOTE: Fork's logout only takes codex_home
+                if let Err(e) = codex_core::auth::logout(&self.config.codex_home) {
                     tracing::error!("failed to logout: {e}");
                 }
                 self.request_exit();
@@ -1652,9 +1638,9 @@ impl ChatWidget {
                     //     cwd: self.config.cwd.clone(),
                     //     reason: Some("test".to_string()),
                     // }),
+                    // NOTE: Fork's struct doesn't have turn_id; Update requires original/new_content
                     msg: EventMsg::ApplyPatchApprovalRequest(ApplyPatchApprovalRequestEvent {
                         call_id: "1".to_string(),
-                        turn_id: "turn-1".to_string(),
                         changes: HashMap::from([
                             (
                                 PathBuf::from("/tmp/test.txt"),
@@ -1667,6 +1653,8 @@ impl ChatWidget {
                                 FileChange::Update {
                                     unified_diff: "+test\n-test2".to_string(),
                                     move_path: None,
+                                    original_content: "test2".to_string(),
+                                    new_content: "test".to_string(),
                                 },
                             ),
                         ]),
@@ -1812,7 +1800,7 @@ impl ChatWidget {
     }
 
     pub(crate) fn handle_codex_event(&mut self, event: Event) {
-        let Event { id, msg } = event;
+        let Event { id, msg, .. } = event;
         self.dispatch_event_msg(Some(id), msg, false);
     }
 

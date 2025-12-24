@@ -164,6 +164,7 @@ impl FileSearchManager {
     ) {
         let compute_indices = true;
         std::thread::spawn(move || {
+            // NOTE: Fork's file_search::run takes 7 args (no prefer_cwd flag)
             let matches = file_search::run(
                 &query,
                 MAX_FILE_SEARCH_RESULTS,
@@ -172,7 +173,6 @@ impl FileSearchManager {
                 NUM_FILE_SEARCH_THREADS,
                 cancellation_token.clone(),
                 compute_indices,
-                true,
             )
             .map(|res| res.matches)
             .unwrap_or_default();

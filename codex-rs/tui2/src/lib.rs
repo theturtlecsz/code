@@ -163,13 +163,11 @@ pub async fn run_main(
     };
 
     #[allow(clippy::print_stderr)]
+    // NOTE: Fork's load_config_as_toml_with_cli_overrides takes 2 args (no cwd) and is sync
     let config_toml = match load_config_as_toml_with_cli_overrides(
         &codex_home,
-        &config_cwd,
         cli_kv_overrides.clone(),
-    )
-    .await
-    {
+    ) {
         Ok(config_toml) => config_toml,
         Err(err) => {
             eprintln!("Error loading config.toml: {err}");
@@ -447,14 +445,11 @@ async fn run_ratatui_app(
             }
         }
     } else if cli.resume_last {
-        let provider_filter = vec![config.model_provider_id.clone()];
+        // NOTE: Fork's list_conversations only takes 3 args
         match RolloutRecorder::list_conversations(
             &config.codex_home,
             1,
             None,
-            INTERACTIVE_SESSION_SOURCES,
-            Some(provider_filter.as_slice()),
-            &config.model_provider_id,
         )
         .await
         {

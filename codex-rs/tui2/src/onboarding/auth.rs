@@ -29,7 +29,7 @@ use ratatui::widgets::Paragraph;
 use ratatui::widgets::WidgetRef;
 use ratatui::widgets::Wrap;
 
-use codex_app_server_protocol::AuthMode;
+use codex_protocol::mcp_protocol::AuthMode;
 use codex_protocol::config_types::ForcedLoginMethod;
 use std::sync::RwLock;
 
@@ -522,10 +522,10 @@ impl AuthModeWidget {
             self.disallow_api_login();
             return;
         }
+        // NOTE: Fork's login_with_api_key takes 2 args (no credentials store mode)
         match login_with_api_key(
             &self.codex_home,
             &api_key,
-            self.cli_auth_credentials_store_mode,
         ) {
             Ok(()) => {
                 self.error = None;
@@ -563,11 +563,11 @@ impl AuthModeWidget {
         }
 
         self.error = None;
+        // NOTE: Fork's ServerOptions::new takes 3 args (no workspace_id, no credentials_store_mode)
         let opts = ServerOptions::new(
             self.codex_home.clone(),
             CLIENT_ID.to_string(),
-            self.forced_chatgpt_workspace_id.clone(),
-            self.cli_auth_credentials_store_mode,
+            "cli".to_string(), // originator
         );
         match run_login_server(opts) {
             Ok(child) => {

@@ -334,6 +334,9 @@ impl ExecCell {
                         ParsedCommand::Unknown { cmd } => {
                             lines.push(("Run", vec![cmd.clone().into()]));
                         }
+                        ParsedCommand::ReadCommand { cmd } => {
+                            lines.push(("Read Command", vec![cmd.clone().into()]));
+                        }
                     }
                 }
                 lines

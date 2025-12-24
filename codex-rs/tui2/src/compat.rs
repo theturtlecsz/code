@@ -52,12 +52,20 @@ pub mod oss {
 /// Stub terminal module
 pub mod terminal {
     /// Minimal terminal info struct
-    #[derive(Debug, Clone, Default)]
+    #[derive(Debug, Clone)]
     pub struct TerminalInfo {
-        pub name: Option<TerminalName>,
+        pub name: TerminalName,
     }
 
-    #[derive(Debug, Clone)]
+    impl Default for TerminalInfo {
+        fn default() -> Self {
+            Self {
+                name: TerminalName::Unknown,
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, Copy)]
     pub enum TerminalName {
         Unknown,
         Alacritty,
@@ -199,10 +207,20 @@ pub mod config {
 
     /// Stub constraint result
     #[derive(Debug, Clone)]
-    pub enum ConstraintResult {
-        Ok,
+    pub enum ConstraintResult<T = ()> {
+        Ok(T),
         Warning(String),
         Error(String),
+    }
+
+    impl<T> ConstraintResult<T> {
+        pub fn ok(value: T) -> Self {
+            Self::Ok(value)
+        }
+
+        pub fn is_ok(&self) -> bool {
+            matches!(self, Self::Ok(_))
+        }
     }
 
     /// Stub config edit module
@@ -295,6 +313,7 @@ pub mod protocol {
         pub primary: Option<RateLimitWindow>,
         pub secondary: Option<RateLimitWindow>,
         pub credits: Option<u32>,
+        pub plan_type: Option<String>,
     }
 
     /// Stub rate limit window
@@ -465,11 +484,17 @@ impl SandboxPolicyExt for SandboxPolicy {
 /// Extension trait for ModelFamily to provide upstream-compatible methods
 pub trait ModelFamilyExt {
     fn get_model_slug(&self) -> &str;
+    fn context_window(&self) -> Option<u32>;
 }
 
 impl ModelFamilyExt for codex_core::model_family::ModelFamily {
     fn get_model_slug(&self) -> &str {
         &self.slug
+    }
+
+    fn context_window(&self) -> Option<u32> {
+        // Fork doesn't track context window size
+        None
     }
 }
 
@@ -564,6 +589,8 @@ pub mod config_types {
 
 /// Stub skills module
 pub mod skills {
+    use std::path::PathBuf;
+
     /// Stub skill info
     #[derive(Debug, Clone)]
     pub struct SkillInfo {
@@ -576,6 +603,21 @@ pub mod skills {
     pub struct SkillMetadata {
         pub name: String,
         pub description: Option<String>,
+        pub short_description: Option<String>,
+        pub path: Option<PathBuf>,
+        pub scope: Option<String>,
+    }
+
+    impl SkillMetadata {
+        pub fn new(name: String) -> Self {
+            Self {
+                name,
+                description: None,
+                short_description: None,
+                path: None,
+                scope: None,
+            }
+        }
     }
 
     /// Stub list_skills function
@@ -588,6 +630,7 @@ pub mod skills {
 pub mod models_manager {
     use codex_core::config::Config;
     use codex_core::model_family::ModelFamily;
+    use codex_protocol::openai_models::ModelPreset;
 
     /// Stub models manager
     #[derive(Debug, Clone, Copy)]
@@ -614,13 +657,13 @@ pub mod models_manager {
             }
         }
 
-        /// Stub - returns empty list of models
-        pub async fn list_models(&self) -> Vec<String> {
+        /// Stub - returns empty list of model presets (no model migration support)
+        pub async fn list_models(&self, _config: &Config) -> Vec<ModelPreset> {
             Vec::new()
         }
 
-        /// Stub - returns None for list of models
-        pub async fn try_list_models(&self) -> Option<Vec<String>> {
+        /// Stub - returns None for list of models (sync version)
+        pub fn try_list_models(&self, _config: &Config) -> Option<Vec<ModelPreset>> {
             None
         }
     }
@@ -656,14 +699,14 @@ pub trait ConfigExt {
     fn animations(&self) -> bool;
     fn features(&self) -> crate::compat::features::Features;
     fn disable_paste_burst(&self) -> bool;
-    fn tui_scroll_events_per_tick(&self) -> u32;
-    fn tui_scroll_wheel_lines(&self) -> u32;
-    fn tui_scroll_trackpad_lines(&self) -> u32;
-    fn tui_scroll_trackpad_accel_events(&self) -> u32;
-    fn tui_scroll_trackpad_accel_max(&self) -> f64;
-    fn tui_scroll_mode(&self) -> crate::compat::config_types::ScrollInputMode;
-    fn tui_scroll_wheel_tick_detect_max_ms(&self) -> u64;
-    fn tui_scroll_wheel_like_max_duration_ms(&self) -> u64;
+    fn tui_scroll_events_per_tick(&self) -> Option<u16>;
+    fn tui_scroll_wheel_lines(&self) -> Option<u16>;
+    fn tui_scroll_trackpad_lines(&self) -> Option<u16>;
+    fn tui_scroll_trackpad_accel_events(&self) -> Option<u16>;
+    fn tui_scroll_trackpad_accel_max(&self) -> Option<u16>;
+    fn tui_scroll_mode(&self) -> Option<crate::compat::config_types::ScrollInputMode>;
+    fn tui_scroll_wheel_tick_detect_max_ms(&self) -> Option<u64>;
+    fn tui_scroll_wheel_like_max_duration_ms(&self) -> Option<u64>;
     fn tui_scroll_invert(&self) -> bool;
     fn cli_auth_credentials_store_mode(&self) -> crate::compat::auth::AuthCredentialsStoreMode;
     fn show_tooltips(&self) -> bool;
@@ -692,36 +735,36 @@ impl ConfigExt for Config {
         false
     }
 
-    fn tui_scroll_events_per_tick(&self) -> u32 {
-        3
+    fn tui_scroll_events_per_tick(&self) -> Option<u16> {
+        None // Use terminal-detected default
     }
 
-    fn tui_scroll_wheel_lines(&self) -> u32 {
-        3
+    fn tui_scroll_wheel_lines(&self) -> Option<u16> {
+        None // Use terminal-detected default
     }
 
-    fn tui_scroll_trackpad_lines(&self) -> u32 {
-        1
+    fn tui_scroll_trackpad_lines(&self) -> Option<u16> {
+        None // Use terminal-detected default
     }
 
-    fn tui_scroll_trackpad_accel_events(&self) -> u32 {
-        5
+    fn tui_scroll_trackpad_accel_events(&self) -> Option<u16> {
+        None // Use terminal-detected default
     }
 
-    fn tui_scroll_trackpad_accel_max(&self) -> f64 {
-        3.0
+    fn tui_scroll_trackpad_accel_max(&self) -> Option<u16> {
+        None // Use terminal-detected default
     }
 
-    fn tui_scroll_mode(&self) -> crate::compat::config_types::ScrollInputMode {
-        crate::compat::config_types::ScrollInputMode::Auto
+    fn tui_scroll_mode(&self) -> Option<crate::compat::config_types::ScrollInputMode> {
+        None // Use terminal-detected default
     }
 
-    fn tui_scroll_wheel_tick_detect_max_ms(&self) -> u64 {
-        50
+    fn tui_scroll_wheel_tick_detect_max_ms(&self) -> Option<u64> {
+        None // Use terminal-detected default
     }
 
-    fn tui_scroll_wheel_like_max_duration_ms(&self) -> u64 {
-        200
+    fn tui_scroll_wheel_like_max_duration_ms(&self) -> Option<u64> {
+        None // Use terminal-detected default
     }
 
     fn tui_scroll_invert(&self) -> bool {
@@ -747,12 +790,12 @@ impl ConfigExt for Config {
 
 /// Extension trait for ConversationManager to provide upstream-compatible methods
 pub trait ConversationManagerExt {
-    fn get_models_manager(&self) -> models_manager::ModelsManager;
+    fn get_models_manager(&self) -> std::sync::Arc<models_manager::ModelsManager>;
 }
 
 impl ConversationManagerExt for codex_core::ConversationManager {
-    fn get_models_manager(&self) -> models_manager::ModelsManager {
-        models_manager::ModelsManager
+    fn get_models_manager(&self) -> std::sync::Arc<models_manager::ModelsManager> {
+        std::sync::Arc::new(models_manager::ModelsManager)
     }
 }
 

@@ -1,3 +1,4 @@
+use crate::compat::ModelFamilyExt;
 use crate::compat::SandboxPolicyExt;
 use crate::history_cell::CompositeHistoryCell;
 use crate::history_cell::HistoryCell;
@@ -113,7 +114,8 @@ impl StatusHistoryCell {
         now: DateTime<Local>,
         model_name: &str,
     ) -> Self {
-        let config_entries = create_config_summary_entries(config, model_name);
+        // NOTE: Fork's create_config_summary_entries takes only config (no model_name)
+        let config_entries = create_config_summary_entries(config);
         let (model_name, model_details) = compose_model_display(model_name, &config_entries);
         let approval = config_entries
             .iter()
@@ -131,7 +133,7 @@ impl StatusHistoryCell {
         let agents_summary = compose_agents_summary(config);
         let account = compose_account_display(auth_manager, plan_type);
         let session_id = session_id.as_ref().map(std::string::ToString::to_string);
-        let context_window = model_family.context_window.and_then(|window| {
+        let context_window = model_family.context_window().and_then(|window| {
             context_usage.map(|usage| StatusContextWindowData {
                 percent_remaining: usage.percent_of_context_window_remaining(window),
                 tokens_in_context: usage.tokens_in_context_window(),
