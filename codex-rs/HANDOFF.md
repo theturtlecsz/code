@@ -1,181 +1,208 @@
-# SYNC-028 Session 6 Handoff - TUI v2 Port (API Reconciliation Phase)
+# SYNC-028 Session 7 Handoff - Migration Documentation & tui2 Reconciliation
 
 **Date**: 2024-12-24
-**Session**: 6 of SYNC-028
-**Commit Before**: 65ae1d449 (tui2 + dependencies ported)
+**Session**: 7 of SYNC-028
+**Last Commit**: a2637d802 (JsonSchema derives for app-server-protocol compat)
 
-## Session 6 Summary
+---
 
-This session completed the JsonSchema phase and discovered significant API mismatches between tui2 (ported from upstream) and the local protocol/core crates.
+## Session 6 Summary (Completed)
 
-### Completed Work
+### Committed Work (a2637d802)
 
-1. **JsonSchema derives added to all remaining types**:
-   - `ApprovedCommandMatchKind`, `SandboxPolicy`, `CodexErrorInfo`, `ReviewContextMetadata`, `ReviewDecision` (protocol.rs)
-   - `CustomPrompt` (custom_prompts.rs)
-   - `HistoryEntry` (message_history.rs)
-   - `ResponseItem` and related types (models.rs)
-   - `FunctionCallOutputPayload` (models.rs)
-   - `#[schemars(with = "String")]` for serde_with Base64 field
+1. **JsonSchema derives** added to 60+ protocol types
+2. **mcp-types JsonSchema** - all 100+ types now have JsonSchema derive
+3. **app-server-protocol conversions** - fixed From impls, type mappings
+4. **backend-client fixes** - rate limit mappings, type conversions
+5. **codex-tui EventMsg** - added new variant handlers
 
-2. **Added JsonSchema to mcp-types crate** (per user preference):
-   - Added schemars dependency to mcp-types/Cargo.toml
-   - All 100+ types now have JsonSchema derive
-
-3. **Fixed app-server-protocol conversions**:
-   - ParsedCommand::Read now has `path: Option<String>`
-   - RateLimitSnapshot/RateLimitWindow conversions fixed
-   - TokenUsage i64/u64 conversions added
-   - SandboxPolicy::ExternalSandbox mapped to WorkspaceWrite
-   - AbsolutePathBuf/PathBuf conversions added
-   - EventMsg match exhaustiveness fixed
-
-4. **Fixed backend-client**:
-   - `get_codex_user_agent(None)` argument fix
-   - RateLimitSnapshot field removals (credits, plan_type)
-   - RateLimitWindow field rename (resets_at -> resets_in_seconds)
-   - Type conversions (i32 -> u64)
-
-5. **Fixed codex-tui (original)**:
-   - Added EventMsg handlers for UndoStarted, UndoCompleted, ListSkillsResponse
-
-### Build Status
+### Build Status After Session 6
 
 | Crate | Status |
 |-------|--------|
 | codex-protocol | BUILDS |
 | codex-core | BUILDS |
 | codex-tui (original) | BUILDS |
-| codex-app-server-protocol | BUILDS (1 warning) |
+| codex-app-server-protocol | BUILDS |
 | codex-backend-client | BUILDS |
-| codex-tui2 | **262 ERRORS** |
+| codex-tui2 | **262 ERRORS** (API mismatch) |
 
-### tui2 Error Analysis
+### User Decisions (Session 6)
 
-The tui2 crate has 262 compile errors due to API mismatches with local crates. Key issues:
-
-```
-E0026: Struct fields exist in upstream but not locally:
-  - SessionConfiguredEvent.reasoning_effort
-  - UpdatePlanArgs.explanation
-  - FileChange::Delete.content
-
-E0027: Pattern missing fields:
-  - Event.event_seq, Event.order
-
-E0412/E0422: Missing types:
-  - AppExitInfo
-  - ApprovedExecpolicyAmendment
-
-E0425: Missing functions:
-  - parse_turn_item
-
-E0308: Type mismatches (user_facing_hint: String vs Option)
-```
-
-### Root Cause
-
-The tui2 crate was ported from a different upstream version that has evolved independently from our local protocol/core crates. The upstream has additional fields, types, and different APIs.
-
-### Options for Next Session
-
-**Option A: Update local crates to match upstream (RECOMMENDED)**
-- Add missing fields to SessionConfiguredEvent, Event, FileChange, etc.
-- Add missing types (AppExitInfo, ApprovedExecpolicyAmendment)
-- Add missing functions (parse_turn_item)
-- Pros: Closer alignment with upstream, easier future syncs
-- Cons: More invasive changes to working code
-
-**Option B: Modify tui2 to use local APIs**
-- Adjust tui2 code to work with existing local types
-- May require removing features that depend on missing APIs
-- Pros: Less risk to working code
-- Cons: Diverges from upstream, harder future syncs
-
-**Option C: Defer tui2 integration**
-- Keep tui2 as reference but don't build it yet
-- Focus on stabilizing current TUI
-- Pros: Lowest risk
-- Cons: Delays new TUI features
+1. **tui2 integration**: **Option B** - Modify tui2 to use local APIs
+2. **Migration docs**: Create documentation before continuing tui2 work
 
 ---
 
-## Files Modified (uncommitted, this session)
+## Session 7 Tasks
 
-### Protocol/Core changes:
-- `codex-rs/mcp-types/Cargo.toml` - added schemars
-- `codex-rs/mcp-types/src/lib.rs` - added JsonSchema to all types
-- `codex-rs/protocol/src/protocol.rs` - added JsonSchema to 5 types
-- `codex-rs/protocol/src/custom_prompts.rs` - added JsonSchema
-- `codex-rs/protocol/src/message_history.rs` - added JsonSchema
-- `codex-rs/protocol/src/models.rs` - added JsonSchema to 10+ types
-- `codex-rs/protocol/src/parse_command.rs` - added path field to Read
+### Phase 1: Create Migration Documentation (FIRST)
 
-### Conversion fixes:
-- `codex-rs/app-server-protocol/src/protocol/v2.rs` - fixed From impls
-- `codex-rs/app-server-protocol/src/protocol/thread_history.rs` - removed UndoCompleted
-- `codex-rs/backend-client/src/client.rs` - fixed rate limit mappings
-- `codex-rs/core/src/parse_command.rs` - added path: None to Read
-- `codex-rs/tui/src/chatwidget/mod.rs` - added new EventMsg variants
+Before fixing tui2, create documentation infrastructure for tracking upstream divergences.
+
+#### 1.1 Create `UPSTREAM_SYNC.md`
+Living document tracking sync state:
+```markdown
+- Current upstream sync point (commit hash, date)
+- Divergence inventory (categorized)
+- Sync checklist for future updates
+- Commit tagging convention (#upstream-fix, #local-only)
+```
+
+#### 1.2 Create `docs/upstream/TYPE_MAPPING.md`
+API divergence matrix:
+```markdown
+| Local Type | Upstream Type | Divergence | Strategy |
+|------------|---------------|------------|----------|
+| SandboxPolicy | SandboxPolicy | Missing ExternalSandbox | Map to WorkspaceWrite |
+| RateLimitSnapshot | RateLimitSnapshot | Missing credits, plan_type | Skip fields |
+| ... | ... | ... | ... |
+```
+
+#### 1.3 Create `docs/adr/ADR-001-tui2-local-api-adaptation.md`
+Architecture Decision Record for Option B:
+```markdown
+# ADR-001: Adapt tui2 to Local APIs
+
+## Status: Accepted
+## Context: tui2 ported from upstream expects APIs not in local crates
+## Decision: Modify tui2 to use local APIs (Option B)
+## Consequences: Diverges from upstream, but preserves local stability
+```
+
+### Phase 2: Fix tui2 Errors (Option B)
+
+After documentation is in place, systematically fix tui2:
+
+#### Error Categories (262 total)
+```
+E0609 (63): No field on type - stub or remove field access
+E0432 (57): Unresolved import - remove or stub imports
+E0599 (54): No method on type - implement locally or remove
+E0308 (35): Type mismatches - adjust types
+E0433 (16): Failed to resolve - fix module paths
+E0061 (9):  Wrong argument count - adjust calls
+E0560 (8):  Struct has no field - remove field
+E0063 (5):  Missing fields - add defaults
+```
+
+#### Key Missing Imports to Stub/Remove
+```rust
+codex_common::oss                              // OSS-specific features
+codex_core::INTERACTIVE_SESSION_SOURCES        // Constant
+codex_core::auth::enforce_login_restrictions   // Auth function
+codex_core::config::resolve_oss_provider       // Config function
+codex_core::config::edit                       // Config module
+codex_core::terminal::terminal_info            // Terminal utils
+codex_core::features                           // Feature flags
+codex_protocol::custom_prompts::PROMPTS_CMD_PREFIX
+```
 
 ---
 
-## Continue Prompt for Next Session
+## Continue Prompt for Session 7
 
 ```
-Continue SYNC-028 (TUI v2 port) **ultrathink** - API Reconciliation
+Continue SYNC-028 (TUI v2 port) **ultrathink** - Migration Docs & tui2 Fix
 
 ## Context
-Session 6 completed JsonSchema phase. codex-protocol, codex-core, and codex-tui
-all build. codex-tui2 has 262 errors due to API mismatches with local crates.
+Session 6 completed and committed (a2637d802). User chose:
+- Option B: Modify tui2 to use local APIs
+- Create migration documentation FIRST before fixing tui2
 
-## Decision Required
-Choose approach for tui2 integration:
-A) Update local crates to match upstream (recommended)
-B) Modify tui2 to use local APIs
-C) Defer tui2 integration
+## Phase 1: Migration Documentation (DO FIRST)
 
-## If Option A:
-1. Add missing fields to protocol types:
-   - SessionConfiguredEvent.reasoning_effort
-   - Event.event_seq, Event.order
-   - FileChange::Delete.content
-   - UpdatePlanArgs.explanation
+Create three documents to track upstream divergences:
 
-2. Add missing types:
-   - AppExitInfo
-   - ApprovedExecpolicyAmendment
-   - parse_turn_item function
+1. UPSTREAM_SYNC.md (root level)
+   - Current sync point
+   - Divergence inventory
+   - Sync checklist
+   - Commit conventions
 
-3. Fix type mismatches (user_facing_hint: String vs Option)
+2. docs/upstream/TYPE_MAPPING.md
+   - Local ↔ Upstream type mapping
+   - Field differences
+   - Compatibility strategies
 
-4. Build and test tui2
+3. docs/adr/ADR-001-tui2-local-api-adaptation.md
+   - Document Option B decision
+   - Context, consequences, alternatives considered
+
+## Phase 2: Fix tui2 (262 errors)
+
+After docs are created, fix tui2 systematically:
+1. Fix E0432 import errors (57) - remove/stub missing imports
+2. Fix E0609 field access errors (63) - stub or remove
+3. Fix E0599 method errors (54) - implement or remove
+4. Fix remaining errors
 
 ## Build Commands
 ```bash
-# Verify existing builds still work
-cargo check -p codex-protocol
-cargo check -p codex-tui
-
-# Check tui2 error count
-cargo check -p codex-tui2 2>&1 | grep "^error\[E" | wc -l
-
-# Full workspace build
-cargo build --workspace
+cargo check -p codex-tui      # Verify original still works
+cargo check -p codex-tui2 2>&1 | grep "^error\[E" | wc -l  # Track progress
 ```
 
 ## Success Criteria
-- [ ] codex-tui (original) still builds
-- [ ] codex-tui2 builds (or decision made to defer)
-- [ ] Tests pass
-- [ ] Changes committed
+- [ ] UPSTREAM_SYNC.md created
+- [ ] TYPE_MAPPING.md created
+- [ ] ADR-001 created
+- [ ] tui2 error count reduced (target: <50)
+- [ ] Commit documentation + tui2 fixes
 ```
 
 ---
 
-## User Decisions (Session 5-6)
+## Research References (Session 6)
 
-1. **External types approach**: Add JsonSchema to mcp-types crate (complete schema) - DONE
-2. **Feature flag**: CLI flag only (`--tui2`) - simple, matches upstream - PENDING
-3. **Test scope**: tui2 tests only - focused verification - PENDING
-4. **tui2 integration**: Decision needed (A/B/C above)
+Migration documentation approach based on:
+- [Fork maintenance best practices](https://gruchalski.com/posts/2024-03-03-maintaining-a-fork-of-a-repository/)
+- [ADR tools](https://github.com/npryce/adr-tools) for decision records
+- [Schema evolution patterns](https://martinfowler.com/articles/evodb.html)
+- [Upstream sync conventions](https://joaquimrocha.com/2024/09/22/how-to-fork/)
+
+Key patterns to implement:
+- Commit prefixes: `#upstream-fix`, `#local-only`
+- Version tags: `v1.2.3-local.1` for local patches
+- Compatibility modes: BACKWARD, FORWARD, FULL
+
+---
+
+## tui2 Error Details
+
+### Missing Modules (E0432)
+```
+codex_common::oss
+codex_core::INTERACTIVE_SESSION_SOURCES
+codex_core::auth::enforce_login_restrictions
+codex_core::config::resolve_oss_provider
+codex_core::config::edit
+codex_core::terminal::terminal_info
+codex_core::features (3 occurrences)
+codex_core::protocol::ElicitationAction
+codex_core::protocol::ExecPolicyAmendment
+codex_protocol::custom_prompts::PROMPTS_CMD_PREFIX (3 occurrences)
+codex_core::config::ConstraintResult
+codex_core::config::types
+codex_core::project_doc::DEFAULT_PROJECT_DOC_FILENAME
+codex_core::protocol::DeprecationNoticeEvent
+```
+
+### Missing Types (E0412/E0422)
+```
+AppExitInfo
+ApprovedExecpolicyAmendment
+```
+
+### Missing Functions (E0425)
+```
+parse_turn_item (codex_core)
+```
+
+### Struct Field Mismatches (E0026/E0027)
+```
+SessionConfiguredEvent.reasoning_effort
+UpdatePlanArgs.explanation
+FileChange::Delete.content
+Event.event_seq, Event.order
+```
