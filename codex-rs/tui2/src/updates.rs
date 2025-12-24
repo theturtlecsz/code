@@ -14,8 +14,12 @@ use std::path::PathBuf;
 
 use crate::version::CODEX_CLI_VERSION;
 
+/// Update checking is disabled in the fork - upstream checks openai/codex releases.
+/// To re-enable, add `check_for_update_on_startup` field to Config.
+const CHECK_FOR_UPDATE_ON_STARTUP: bool = false;
+
 pub fn get_upgrade_version(config: &Config) -> Option<String> {
-    if !config.check_for_update_on_startup {
+    if !CHECK_FOR_UPDATE_ON_STARTUP {
         return None;
     }
 
@@ -77,7 +81,7 @@ fn read_version_info(version_file: &Path) -> anyhow::Result<VersionInfo> {
 async fn check_for_update(version_file: &Path) -> anyhow::Result<()> {
     let latest_version = match update_action::get_update_action() {
         Some(UpdateAction::BrewUpgrade) => {
-            let cask_contents = create_client()
+            let cask_contents = create_client("tui2-update-check")
                 .get(HOMEBREW_CASK_URL)
                 .send()
                 .await?
@@ -89,7 +93,7 @@ async fn check_for_update(version_file: &Path) -> anyhow::Result<()> {
         _ => {
             let ReleaseInfo {
                 tag_name: latest_tag_name,
-            } = create_client()
+            } = create_client("tui2-update-check")
                 .get(LATEST_RELEASE_URL)
                 .send()
                 .await?
@@ -145,7 +149,7 @@ fn extract_version_from_latest_tag(latest_tag_name: &str) -> anyhow::Result<Stri
 /// Returns the latest version to show in a popup, if it should be shown.
 /// This respects the user's dismissal choice for the current latest version.
 pub fn get_upgrade_version_for_popup(config: &Config) -> Option<String> {
-    if !config.check_for_update_on_startup {
+    if !CHECK_FOR_UPDATE_ON_STARTUP {
         return None;
     }
 
