@@ -14,7 +14,8 @@ use codex_core::protocol::AskForApproval;
 use codex_core::protocol::SandboxPolicy;
 use codex_protocol::openai_models::ReasoningEffort;
 
-#[allow(clippy::large_enum_variant)]
+// Some variants are stubbed for fork compatibility
+#[allow(clippy::large_enum_variant, dead_code)]
 #[derive(Debug)]
 pub(crate) enum AppEvent {
     CodexEvent(Event),

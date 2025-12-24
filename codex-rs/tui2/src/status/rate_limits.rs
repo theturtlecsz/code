@@ -4,7 +4,6 @@ use super::helpers::format_reset_timestamp;
 use chrono::DateTime;
 use chrono::Duration as ChronoDuration;
 use chrono::Local;
-use chrono::Utc;
 use codex_core::protocol::CreditsSnapshot as CoreCreditsSnapshot;
 use crate::compat::protocol::RateLimitSnapshot;
 use crate::compat::protocol::RateLimitWindow;

@@ -21,7 +21,7 @@ use codex_core::protocol::Op;
 use codex_core::protocol::ReviewDecision;
 use crate::compat::protocol::ElicitationAction;
 use crate::compat::protocol::ExecPolicyAmendment;
-use crate::compat::features::{Feature, Features};
+use crate::compat::features::Features;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyEventKind;
@@ -443,8 +443,8 @@ impl ApprovalOption {
 }
 
 fn exec_options(
-    proposed_execpolicy_amendment: Option<ExecPolicyAmendment>,
-    features: &Features,
+    _proposed_execpolicy_amendment: Option<ExecPolicyAmendment>,
+    _features: &Features,
 ) -> Vec<ApprovalOption> {
     vec![ApprovalOption {
         label: "Yes, proceed".to_string(),

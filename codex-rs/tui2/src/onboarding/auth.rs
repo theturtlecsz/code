@@ -143,7 +143,9 @@ impl KeyboardHandler for AuthModeWidget {
     }
 }
 
+// Auth mode fields for upstream compatibility - some fields not used in fork
 #[derive(Clone)]
+#[allow(dead_code)]
 pub(crate) struct AuthModeWidget {
     pub request_frame: FrameRequester,
     pub highlighted_mode: AuthMode,

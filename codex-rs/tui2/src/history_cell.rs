@@ -1,5 +1,4 @@
 use crate::compat::ConfigExt;
-use crate::compat::protocol::ApprovedExecpolicyAmendment;
 use crate::diff_render::create_diff_summary;
 use crate::diff_render::display_path_for;
 use crate::exec_cell::CommandOutput;
@@ -27,7 +26,6 @@ use crate::wrapping::word_wrap_lines;
 use base64::Engine;
 use crate::compat::format_env_display;
 use codex_core::config::Config;
-use crate::compat::config_types::McpServerTransportConfig;
 use codex_core::protocol::FileChange;
 use codex_core::protocol::McpAuthStatus;
 use codex_core::protocol::McpInvocation;
@@ -1062,11 +1060,14 @@ pub(crate) fn new_warning_event(message: String) -> PrefixedWrappedHistoryCell {
 }
 
 #[derive(Debug)]
+// Deprecation notices - stubbed for fork
+#[allow(dead_code)]
 pub(crate) struct DeprecationNoticeCell {
     summary: String,
     details: Option<String>,
 }
 
+#[allow(dead_code)]
 pub(crate) fn new_deprecation_notice(
     summary: String,
     details: Option<String>,
@@ -1113,6 +1114,7 @@ pub(crate) fn empty_mcp_output() -> PlainHistoryCell {
 }
 
 /// Render MCP tools grouped by connection using the fully-qualified tool names.
+#[allow(dead_code)]
 pub(crate) fn new_mcp_tools_output(
     config: &Config,
     tools: HashMap<String, mcp_types::Tool>,
@@ -1355,6 +1357,7 @@ pub(crate) fn new_patch_apply_failure(stderr: String) -> PlainHistoryCell {
     PlainHistoryCell { lines }
 }
 
+#[allow(dead_code)]
 pub(crate) fn new_view_image_tool_call(path: PathBuf, cwd: &Path) -> PlainHistoryCell {
     let display_path = display_path_for(&path, cwd);
 

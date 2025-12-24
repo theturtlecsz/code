@@ -16,8 +16,6 @@ use codex_ansi_escape::ansi_escape_line;
 use codex_common::elapsed::format_duration;
 use crate::compat::bash::extract_bash_command;
 use crate::compat::protocol::ExecCommandSource;
-use crate::compat::ExecCommandBeginEventExt;
-use crate::compat::ExecCommandEndEventExt;
 use codex_core::parse_command::ParsedCommand;
 use itertools::Itertools;
 use ratatui::prelude::*;

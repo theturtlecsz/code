@@ -10,9 +10,6 @@ use crate::exec_command::strip_bash_lc_and_escape;
 use crate::file_search::FileSearchManager;
 use crate::history_cell::HistoryCell;
 use crate::history_cell::UserHistoryCell;
-use crate::model_migration::ModelMigrationOutcome;
-use crate::model_migration::migration_copy_for_models;
-use crate::model_migration::run_model_migration_prompt;
 use crate::pager_overlay::Overlay;
 use crate::render::highlight::highlight_bash_to_lines;
 use crate::render::renderable::Renderable;
@@ -39,7 +36,6 @@ use codex_core::protocol::EventMsg;
 use codex_core::protocol::FinalOutput;
 use codex_core::protocol::ListSkillsResponseEvent;
 use codex_core::protocol::Op;
-use codex_core::protocol::SessionSource;
 use codex_core::protocol::SkillErrorInfo;
 use codex_core::protocol::TokenUsage;
 use crate::compat::terminal::terminal_info;
@@ -49,7 +45,6 @@ use crate::compat::ConversationManagerExt;
 use crate::compat::ModelFamilyExt;
 use codex_protocol::ConversationId;
 use codex_protocol::openai_models::ModelPreset;
-use codex_protocol::openai_models::ModelUpgrade;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use color_eyre::eyre::Result;
 use color_eyre::eyre::WrapErr;
@@ -146,6 +141,8 @@ struct SessionSummary {
     resume_command: Option<String>,
 }
 
+// Model migration - stubbed for fork (upstream models not available)
+#[allow(dead_code)]
 fn should_show_model_migration_prompt(
     current_model: &str,
     target_model: &str,
@@ -179,6 +176,7 @@ fn should_show_model_migration_prompt(
     false
 }
 
+#[allow(dead_code, non_snake_case, unused_variables, unreachable_patterns)]
 fn migration_prompt_hidden(config: &Config, migration_config_key: &str) -> bool {
     match migration_config_key {
         HIDE_GPT_5_1_CODEX_MAX_MIGRATION_PROMPT_CONFIG => config

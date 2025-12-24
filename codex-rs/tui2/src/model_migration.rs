@@ -1,3 +1,6 @@
+// Model migration prompts - stubbed for fork (original models not available)
+#![allow(dead_code)]
+
 use crate::key_hint;
 use crate::render::Insets;
 use crate::render::renderable::ColumnRenderable;

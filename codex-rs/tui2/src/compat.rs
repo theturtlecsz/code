@@ -11,6 +11,9 @@
 //! - Terminal info detection (`codex_core::terminal`)
 //! - Various protocol events and types
 
+// Allow dead code - this module contains stubs for future implementation
+#![allow(dead_code)]
+
 use codex_core::config::Config;
 use codex_core::protocol::SandboxPolicy;
 
@@ -210,8 +213,8 @@ pub mod auth {
 
 /// Stub config functions
 pub mod config {
-    use codex_core::config::Config;
-    use toml::Value as TomlValue;
+    
+    
     use std::path::Path;
 
     /// Stub - returns None since OSS provider resolution is not supported
@@ -333,7 +336,7 @@ pub mod config {
 
 /// Stub protocol types that don't exist locally
 pub mod protocol {
-    use serde::{Deserialize, Serialize};
+    
 
     // Re-export from codex_protocol for consistency
     pub use codex_protocol::protocol::RateLimitSnapshot;

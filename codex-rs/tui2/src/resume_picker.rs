@@ -9,9 +9,7 @@ use codex_core::ConversationItem;
 use codex_core::ConversationsPage;
 use codex_core::Cursor;
 use codex_core::RolloutRecorder;
-use crate::compat::INTERACTIVE_SESSION_SOURCES;
 use crate::compat::path_utils;
-use codex_protocol::items::TurnItem;
 use color_eyre::eyre::Result;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
@@ -47,6 +45,7 @@ pub enum ResumeSelection {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 struct PageLoadRequest {
     codex_home: PathBuf,
     cursor: Option<Cursor>,
@@ -671,6 +670,7 @@ fn paths_match(a: &Path, b: &Path) -> bool {
     a == b
 }
 
+#[allow(dead_code)]
 fn parse_timestamp_str(ts: &str) -> Option<DateTime<Utc>> {
     chrono::DateTime::parse_from_rfc3339(ts)
         .map(|dt| dt.with_timezone(&Utc))

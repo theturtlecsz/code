@@ -1,3 +1,6 @@
+// Custom prompts - stubbed for fork (type mismatch with upstream)
+#![allow(dead_code)]
+
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyModifiers;

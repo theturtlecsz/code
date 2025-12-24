@@ -53,6 +53,8 @@ impl InterruptManager {
             .push_back(QueuedInterrupt::ApplyPatchApproval(id, ev));
     }
 
+    // Elicitation - stubbed for fork
+    #[allow(dead_code)]
     pub(crate) fn push_elicitation(&mut self, ev: ElicitationRequestEvent) {
         self.queue.push_back(QueuedInterrupt::Elicitation(ev));
     }

@@ -31,7 +31,6 @@ use crate::compat::auth::enforce_login_restrictions;
 use codex_protocol::mcp_protocol::AuthMode;
 use crate::compat::oss::{ensure_oss_provider_ready, get_default_model_for_oss_provider};
 use crate::compat::config::resolve_oss_provider;
-use crate::compat::INTERACTIVE_SESSION_SOURCES;
 
 mod additional_dirs;
 mod app;
@@ -157,7 +156,7 @@ pub async fn run_main(
     };
 
     let cwd = cli.cwd.clone();
-    let config_cwd = match cwd.as_deref() {
+    let _config_cwd = match cwd.as_deref() {
         Some(path) => AbsolutePathBuf::from_absolute_path(path.canonicalize()?)?,
         None => AbsolutePathBuf::current_dir()?,
     };

@@ -7,18 +7,13 @@ use std::time::Duration;
 
 use crate::compat::ConfigExt;
 use crate::compat::ExecApprovalRequestEventExt;
-use crate::compat::ExecCommandBeginEventExt;
-use crate::compat::ExecCommandEndEventExt;
 use crate::compat::ModelFamilyExt;
 use crate::compat::SandboxPolicyExt;
-use crate::compat::SessionConfiguredEventExt;
 use crate::compat::models_manager::ModelsManager;
 use codex_protocol::mcp_protocol::AuthMode;
 use codex_backend_client::Client as BackendClient;
 use codex_core::config::Config;
 use codex_core::config_types::Notifications;
-use codex_core::git_info::current_branch_name;
-use codex_core::git_info::local_git_branches;
 use codex_core::model_family::ModelFamily;
 use codex_core::protocol::AgentMessageDeltaEvent;
 use codex_core::protocol::AgentMessageEvent;
@@ -28,7 +23,6 @@ use codex_core::protocol::AgentReasoningRawContentDeltaEvent;
 use codex_core::protocol::AgentReasoningRawContentEvent;
 use codex_core::protocol::ApplyPatchApprovalRequestEvent;
 use codex_core::protocol::BackgroundEventEvent;
-use codex_core::protocol::CreditsSnapshot;
 use codex_core::protocol::ErrorEvent;
 use codex_core::protocol::Event;
 use codex_core::protocol::EventMsg;
@@ -42,7 +36,6 @@ use codex_core::protocol::McpToolCallEndEvent;
 use codex_core::protocol::Op;
 use codex_core::protocol::PatchApplyBeginEvent;
 use codex_core::protocol::ReviewRequest;
-use codex_core::protocol::ReviewTarget;
 use codex_core::protocol::SkillsListEntry;
 use codex_core::protocol::TaskCompleteEvent;
 use codex_core::protocol::TokenUsage;
@@ -63,12 +56,9 @@ use crate::compat::protocol::McpStartupCompleteEvent;
 use crate::compat::protocol::McpStartupStatus;
 use crate::compat::protocol::McpStartupUpdateEvent;
 use codex_protocol::protocol::RateLimitSnapshot;
-use crate::compat::protocol::StreamErrorEvent;
 use crate::compat::protocol::TerminalInteractionEvent;
 use crate::compat::protocol::TurnAbortReason;
 use crate::compat::protocol::ViewImageToolCallEvent;
-use crate::compat::protocol::WarningEvent;
-use crate::compat::protocol::WebSearchEndEvent;
 use codex_protocol::ConversationId;
 use codex_protocol::account::PlanType;
 use codex_protocol::approvals::ElicitationRequestEvent;
@@ -100,7 +90,6 @@ use crate::bottom_pane::InputResult;
 use crate::bottom_pane::SelectionAction;
 use crate::bottom_pane::SelectionItem;
 use crate::bottom_pane::SelectionViewParams;
-use crate::bottom_pane::custom_prompt_view::CustomPromptView;
 use crate::bottom_pane::popup_consts::standard_popup_hint_line;
 use crate::clipboard_paste::paste_image_to_temp_png;
 use crate::diff_render::display_path_for;
@@ -285,6 +274,8 @@ enum RateLimitSwitchPromptState {
     Shown,
 }
 
+// MCP startup status field is used internally but flagged as never-read due to take() pattern
+#[allow(dead_code)]
 pub(crate) struct ChatWidget {
     app_event_tx: AppEventSender,
     codex_op_tx: UnboundedSender<Op>,
@@ -375,6 +366,8 @@ fn create_initial_user_message(text: String, image_paths: Vec<PathBuf>) -> Optio
     }
 }
 
+// Many event handlers are stubbed - events not generated in fork
+#[allow(dead_code)]
 impl ChatWidget {
     fn flush_answer_stream_with_separator(&mut self) {
         if let Some(mut controller) = self.stream_controller.take()
@@ -428,10 +421,13 @@ impl ChatWidget {
         }
     }
 
+    // Skills - stubbed for fork
+    #[allow(dead_code)]
     fn set_skills(&mut self, skills: Option<Vec<SkillMetadata>>) {
         self.bottom_pane.set_skills(skills);
     }
 
+    #[allow(dead_code)]
     fn set_skills_from_response(&mut self, response: &ListSkillsResponseEvent) {
         let skills = skills_for_cwd(&self.config.cwd, &response.skills);
         self.set_skills(Some(skills));
@@ -1966,6 +1962,8 @@ impl ChatWidget {
         self.request_redraw();
     }
 
+    // Review mode - stubbed for fork
+    #[allow(dead_code)]
     fn on_exited_review_mode(&mut self, review: ExitedReviewModeEvent) {
         // Leave review mode; if output is present, flush pending stream + show results.
         if let Some(output) = review.review_output {
@@ -3164,6 +3162,7 @@ impl ChatWidget {
         debug!("on_list_custom_prompts called but display not ported");
     }
 
+    #[allow(dead_code)]
     fn on_list_skills(&mut self, ev: ListSkillsResponseEvent) {
         self.set_skills_from_response(&ev);
     }
@@ -3503,6 +3502,8 @@ pub(crate) fn show_review_commit_picker_with_entries(
     });
 }
 
+// Skill mentions - stubbed for fork (not in local InputItem)
+#[allow(dead_code)]
 fn find_skill_mentions(text: &str, skills: &[SkillMetadata]) -> Vec<SkillMetadata> {
     let mut seen: HashSet<String> = HashSet::new();
     let mut matches: Vec<SkillMetadata> = Vec::new();
@@ -3519,6 +3520,7 @@ fn find_skill_mentions(text: &str, skills: &[SkillMetadata]) -> Vec<SkillMetadat
     matches
 }
 
+#[allow(dead_code)]
 fn skills_for_cwd(cwd: &Path, skills_entries: &[SkillsListEntry]) -> Vec<SkillMetadata> {
     skills_entries
         .iter()
