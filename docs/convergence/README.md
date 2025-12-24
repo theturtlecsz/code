@@ -9,8 +9,9 @@
 |----------|----------|---------|
 | CONVERGENCE_OVERVIEW.md | `localmemory-policy/docs/convergence/` | System-wide convergence architecture |
 | CONVERGENCE_MATRIX.yaml | `localmemory-policy/docs/convergence/` | Service interface compatibility matrix |
-| INTERFACES.md | `localmemory-policy/` | Canonical interface specifications |
-| COMPATIBILITY.yaml | `localmemory-policy/` | Version compatibility requirements |
+| INTERFACES.md | `localmemory-policy/docs/convergence/` | Canonical interface specifications |
+| COMPATIBILITY.yaml | `localmemory-policy/docs/convergence/` | Version compatibility requirements |
+| LOGGING_CONTRACT.md | `localmemory-policy/docs/convergence/` | Cross-layer logging specification |
 
 ## codex-rs Convergence Role
 
