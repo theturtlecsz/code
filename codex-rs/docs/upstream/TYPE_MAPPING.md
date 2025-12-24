@@ -249,6 +249,50 @@ The following `EventMsg` variants exist upstream but not locally:
 | `crossterm` | `query_foreground_color` | Remove (not in crossterm 0.27) |
 | `crossterm` | `query_background_color` | Remove (not in crossterm 0.27) |
 
+## Session 9-11 Discoveries (SYNC-028)
+
+### Type Location Divergences
+
+These types exist in different modules between upstream and fork:
+
+| Type | Upstream Location | Fork Location | Strategy |
+|------|-------------------|---------------|----------|
+| `ReasoningEffort` | `codex_protocol` | `codex_core::config` | Bidirectional conversions in `compat.rs` |
+| `RateLimitSnapshot` | `EventMsg::RateLimitEvent` | `codex_protocol::protocol` | Re-export + conversion |
+| `ParsedCommand` | `codex_protocol::parsed_command` | `codex_core::parse_command` | Use fork location |
+| `TurnAbortReason` | `codex_protocol` | `codex_protocol` | Re-export in compat.rs |
+
+### Missing Enum Variants
+
+| Type | Missing Variant | Strategy |
+|------|-----------------|----------|
+| `InputItem` | `Skill { ... }` | Remove skill mentions from chat handling |
+
+### Missing Config Fields
+
+| Field | Expected Type | Strategy |
+|-------|---------------|----------|
+| `check_for_update_on_startup` | `bool` | Disabled via const (upstream checks openai/codex) |
+
+### Function Signature Divergences
+
+| Function | Upstream Signature | Fork Signature | Strategy |
+|----------|-------------------|----------------|----------|
+| `create_client()` | `fn create_client() -> Client` | `fn create_client(originator: &str) -> Client` | Pass originator string |
+
+### Conversion Helpers (tui2/src/compat.rs)
+
+Created bidirectional conversion functions:
+
+```rust
+// ReasoningEffort conversions
+fn protocol_to_core_reasoning(re: ProtocolReasoningEffort) -> CoreReasoningEffort
+fn core_to_protocol_reasoning(re: CoreReasoningEffort) -> ProtocolReasoningEffort
+
+// RateLimitSnapshot wrapper
+pub use codex_protocol::protocol::RateLimitSnapshot;
+```
+
 ---
 
-_Last updated: 2024-12-24 (SYNC-028 Session 7)_
+_Last updated: 2024-12-24 (SYNC-028 Session 11)_

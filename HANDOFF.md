@@ -1,8 +1,41 @@
 # Session Handoff — SYNC-028 TUI v2 Port
 
 **Last updated:** 2025-12-24
-**Status:** SYNC-028 Complete - Ready for Runtime Testing
-**Commit:** `f172d340e` feat(tui2): complete port - 0 errors (SYNC-028 S10)
+**Status:** SYNC-028 Runtime Testing Complete (Headless)
+**Commits:**
+- `a36dd8c2e` docs(tui2): add S11 runtime testing results and test plan
+- `14c940c99` fix(tui2): resolve API divergences in updates.rs
+
+---
+
+## Session 11 Summary (2025-12-24) - RUNTIME TESTING
+
+### Runtime Test Results
+
+| Test | Result | Notes |
+|------|--------|-------|
+| `--help` | PASS | Full usage displayed |
+| `--version` | PASS | "codex-tui2 0.0.0" |
+| Non-tty detection | PASS | Graceful error, no panic |
+| Interactive launch | BLOCKED | Headless environment - needs real terminal |
+
+### Fixes Applied
+
+| Issue | Fix | Location |
+|-------|-----|----------|
+| `create_client()` arity | Added `originator` parameter | tui2/src/updates.rs |
+| `check_for_update_on_startup` | Disabled via const (irrelevant for fork) | tui2/src/updates.rs |
+
+### Documentation Created
+
+- `docs/SPEC-TUI2-TEST-PLAN.md` - Comprehensive test plan for all stubbed features
+- `docs/upstream/TYPE_MAPPING.md` - Updated with Session 9-11 discoveries
+
+### Session 11 Outcome
+
+**Primary Goal**: Partially achieved - binary runs without panic, but interactive testing blocked by headless environment.
+
+**Secondary Goals**: Fully achieved - TYPE_MAPPING.md updated, test plan created.
 
 ---
 
@@ -132,42 +165,37 @@ RUST_BACKTRACE=1 ./target/debug/codex-tui2
 ## Continuation Prompt
 
 ```
-Continue SYNC-028 Session 11 - RUNTIME TESTING
+Continue SYNC-028 Session 12 - INTERACTIVE TESTING + WARNING CLEANUP
 
 Load HANDOFF.md for full context.
 
 ## Context
-Session 10 achieved 0 compilation errors (commit f172d340e).
-Build succeeds: cargo build -p codex-tui2
+Session 11 completed headless runtime testing.
+- Commits: a36dd8c2e (docs), 14c940c99 (fix)
+- Build succeeds: cargo build -p codex-tui2 --release (117 warnings)
+- --help and --version work
+- Fixed 2 API divergences (create_client, check_for_update_on_startup)
 
-## Session 11 Goals
+## Session 12 Goals
 
-### Primary: Runtime Testing
-1. Build release binary
-2. Run --help, verify it works
-3. Launch interactive TUI
-4. Test basic prompt submission
-5. Document any panics/errors
+### Phase 1: Interactive Testing (Requires Real Terminal)
+1. Launch TUI: RUST_BACKTRACE=1 ./target/release/codex-tui2
+2. Submit a prompt and verify response
+3. Test Ctrl+C exit
+4. Verify status bar displays model
+5. Run 10-turn session without panic
 
-### Secondary: Documentation
-1. Update docs/upstream/TYPE_MAPPING.md with new divergences:
-   - ReasoningEffort (protocol vs core)
-   - RateLimitSnapshot (event vs snapshot)
-   - ParsedCommand (protocol vs core)
-   - InputItem (no Skill variant in fork)
+### Phase 2: Warning Cleanup (After Interactive Tests Pass)
+1. Fix 117 compiler warnings
+2. Focus on: unused imports, dead code, unreachable patterns
+3. Target: 0 warnings on cargo build -p codex-tui2
 
-2. Create test plan for stubbed features:
-   - docs/SPEC-TUI2-TEST-PLAN.md
+### Test Plan Reference
+See docs/SPEC-TUI2-TEST-PLAN.md for stubbed feature tests.
 
 ### Success Criteria
-- tui2 binary runs without panic
-- Can submit at least one prompt
-- TYPE_MAPPING.md updated
-- Test plan created
-
-### If Runtime Fails
-1. Capture full backtrace: RUST_BACKTRACE=full
-2. Identify panic location
-3. Add defensive handling or stub
-4. Re-test
+- [ ] Interactive TUI runs without panic
+- [ ] Can submit at least one prompt
+- [ ] Ctrl+C exits cleanly
+- [ ] Warnings reduced to 0 (or documented exceptions)
 ```
