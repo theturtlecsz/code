@@ -1,22 +1,32 @@
-# SYNC-028 Session 7 Handoff - Migration Documentation & tui2 Reconciliation
+# SYNC-028 Session 8 Handoff - Continue tui2 Error Fixes
 
 **Date**: 2024-12-24
-**Session**: 7 of SYNC-028
-**Last Commit**: a2637d802 (JsonSchema derives for app-server-protocol compat)
+**Session**: 8 of SYNC-028
+**Last Commit**: c830d0778 (migration docs + error reduction 262→173)
 
 ---
 
-## Session 6 Summary (Completed)
+## Session 7 Summary (Completed)
 
-### Committed Work (a2637d802)
+### Committed Work (c830d0778)
 
-1. **JsonSchema derives** added to 60+ protocol types
-2. **mcp-types JsonSchema** - all 100+ types now have JsonSchema derive
-3. **app-server-protocol conversions** - fixed From impls, type mappings
-4. **backend-client fixes** - rate limit mappings, type conversions
-5. **codex-tui EventMsg** - added new variant handlers
+1. **Migration Documentation** (Phase 1 complete)
+   - `UPSTREAM_SYNC.md` - sync state tracking, commit conventions
+   - `docs/upstream/TYPE_MAPPING.md` - comprehensive type mapping matrix
+   - `docs/adr/ADR-001-tui2-local-api-adaptation.md` - Option B decision record
 
-### Build Status After Session 6
+2. **Compatibility Layer** (`tui2/src/compat.rs`)
+   - Stub modules: oss, terminal, features, auth, config, skills
+   - Protocol stubs: RateLimitSnapshot, ExecCommandSource, ElicitationAction
+   - Extension traits: ConfigExt, SandboxPolicyExt, protocol event extensions
+   - Constants: INTERACTIVE_SESSION_SOURCES, PROMPTS_CMD_PREFIX, etc.
+
+3. **Error Reduction**: 262 → 173 (34% reduction)
+   - E0432 (imports): 57 → 0 ✓
+   - E0609/E0599 (fields/methods): Major structural fixes
+   - E0308 (type mismatches): 85 remaining (main category)
+
+### Build Status After Session 7
 
 | Crate | Status |
 |-------|--------|
@@ -25,184 +35,135 @@
 | codex-tui (original) | BUILDS |
 | codex-app-server-protocol | BUILDS |
 | codex-backend-client | BUILDS |
-| codex-tui2 | **262 ERRORS** (API mismatch) |
-
-### User Decisions (Session 6)
-
-1. **tui2 integration**: **Option B** - Modify tui2 to use local APIs
-2. **Migration docs**: Create documentation before continuing tui2 work
+| codex-tui2 | **173 ERRORS** (down from 262) |
 
 ---
 
-## Session 7 Tasks
+## Session 8 Tasks
 
-### Phase 1: Create Migration Documentation (FIRST)
+### Priority: Fix Remaining 173 Errors
 
-Before fixing tui2, create documentation infrastructure for tracking upstream divergences.
+The remaining errors are categorized below. Focus on type mismatches first.
 
-#### 1.1 Create `UPSTREAM_SYNC.md`
-Living document tracking sync state:
-```markdown
-- Current upstream sync point (commit hash, date)
-- Divergence inventory (categorized)
-- Sync checklist for future updates
-- Commit tagging convention (#upstream-fix, #local-only)
+#### Error Breakdown (173 total)
+
+```
+85 E0308 - mismatched types (PRIORITY)
+ 3 E0609 - no field (model, description on String types)
+ 3 E0061 - wrong argument count
+ 2 E0599 - missing methods (unwrap_or_else, etc.)
+ 2 E0277 - trait bound not satisfied
+ 2 E0026 - pattern field issues
+ 1+ each - various other errors
 ```
 
-#### 1.2 Create `docs/upstream/TYPE_MAPPING.md`
-API divergence matrix:
-```markdown
-| Local Type | Upstream Type | Divergence | Strategy |
-|------------|---------------|------------|----------|
-| SandboxPolicy | SandboxPolicy | Missing ExternalSandbox | Map to WorkspaceWrite |
-| RateLimitSnapshot | RateLimitSnapshot | Missing credits, plan_type | Skip fields |
-| ... | ... | ... | ... |
-```
+#### Top Priority Fixes
 
-#### 1.3 Create `docs/adr/ADR-001-tui2-local-api-adaptation.md`
-Architecture Decision Record for Option B:
-```markdown
-# ADR-001: Adapt tui2 to Local APIs
+1. **E0308 Type Mismatches (85)**
+   - Most are from compat stub return types not matching expected types
+   - Analyze each location and fix return type or add conversion
 
-## Status: Accepted
-## Context: tui2 ported from upstream expects APIs not in local crates
-## Decision: Modify tui2 to use local APIs (Option B)
-## Consequences: Diverges from upstream, but preserves local stability
-```
+2. **Missing Fields on String Types (3)**
+   - `no field 'model' on type '&&String'`
+   - `no field 'description' on type '&String'`
+   - These suggest wrong type is being passed - trace back to source
 
-### Phase 2: Fix tui2 Errors (Option B)
+3. **Op/EventMsg Missing Variants**
+   - RunUserShellCommand, ResolveElicitation, ListMcpTools
+   - McpStartupUpdate, McpStartupComplete
+   - Either remove code using these or add proper stubs
 
-After documentation is in place, systematically fix tui2:
+4. **SkillMetadata Fields**
+   - Missing: short_description, scope, path
+   - Add to compat::skills::SkillMetadata
 
-#### Error Categories (262 total)
-```
-E0609 (63): No field on type - stub or remove field access
-E0432 (57): Unresolved import - remove or stub imports
-E0599 (54): No method on type - implement locally or remove
-E0308 (35): Type mismatches - adjust types
-E0433 (16): Failed to resolve - fix module paths
-E0061 (9):  Wrong argument count - adjust calls
-E0560 (8):  Struct has no field - remove field
-E0063 (5):  Missing fields - add defaults
-```
+5. **ConfigEditsBuilder Methods**
+   - Missing: set_hide_world_writable_warning, set_hide_rate_limit_model_nudge, record_model_migration_seen
+   - Add to compat module
 
-#### Key Missing Imports to Stub/Remove
-```rust
-codex_common::oss                              // OSS-specific features
-codex_core::INTERACTIVE_SESSION_SOURCES        // Constant
-codex_core::auth::enforce_login_restrictions   // Auth function
-codex_core::config::resolve_oss_provider       // Config function
-codex_core::config::edit                       // Config module
-codex_core::terminal::terminal_info            // Terminal utils
-codex_core::features                           // Feature flags
-codex_protocol::custom_prompts::PROMPTS_CMD_PREFIX
-```
+6. **FileChange::Delete Pattern**
+   - Expects `content` field that doesn't exist
+   - Fix pattern to match actual struct
 
 ---
 
-## Continue Prompt for Session 7
+## Continue Prompt for Session 8
 
 ```
-Continue SYNC-028 (TUI v2 port) **ultrathink** - Migration Docs & tui2 Fix
+Continue SYNC-028 (TUI v2 port) **ultrathink** - Fix remaining tui2 errors
 
 ## Context
-Session 6 completed and committed (a2637d802). User chose:
-- Option B: Modify tui2 to use local APIs
-- Create migration documentation FIRST before fixing tui2
+Session 7 committed (c830d0778). Migration docs complete. Error count: 173.
 
-## Phase 1: Migration Documentation (DO FIRST)
+## Current State
+- compat.rs has extension traits and stubs
+- Most import errors fixed
+- Remaining: 85 type mismatches + 88 other errors
 
-Create three documents to track upstream divergences:
+## Priority Tasks
 
-1. UPSTREAM_SYNC.md (root level)
-   - Current sync point
-   - Divergence inventory
-   - Sync checklist
-   - Commit conventions
+1. Fix E0308 type mismatches (85 errors)
+   - Run: `cargo check -p codex-tui2 2>&1 | grep "E0308" | head -20`
+   - Analyze each and fix return types or add conversions
 
-2. docs/upstream/TYPE_MAPPING.md
-   - Local ↔ Upstream type mapping
-   - Field differences
-   - Compatibility strategies
+2. Fix missing struct fields
+   - SkillMetadata: add short_description, scope, path
+   - ConfigEditsBuilder: add missing methods
 
-3. docs/adr/ADR-001-tui2-local-api-adaptation.md
-   - Document Option B decision
-   - Context, consequences, alternatives considered
+3. Fix Op/EventMsg variant issues
+   - Remove or properly handle code using missing variants
 
-## Phase 2: Fix tui2 (262 errors)
-
-After docs are created, fix tui2 systematically:
-1. Fix E0432 import errors (57) - remove/stub missing imports
-2. Fix E0609 field access errors (63) - stub or remove
-3. Fix E0599 method errors (54) - implement or remove
-4. Fix remaining errors
+4. Verify original tui still builds
+   - Run: `cargo check -p codex-tui`
 
 ## Build Commands
 ```bash
-cargo check -p codex-tui      # Verify original still works
 cargo check -p codex-tui2 2>&1 | grep "^error\[E" | wc -l  # Track progress
+cargo check -p codex-tui2 2>&1 | grep "E0308" | head -30   # Type mismatches
+cargo check -p codex-tui                                    # Verify original
 ```
 
 ## Success Criteria
-- [ ] UPSTREAM_SYNC.md created
-- [ ] TYPE_MAPPING.md created
-- [ ] ADR-001 created
-- [ ] tui2 error count reduced (target: <50)
-- [ ] Commit documentation + tui2 fixes
+- [ ] tui2 error count < 50
+- [ ] Original codex-tui still builds
+- [ ] Commit progress
 ```
 
 ---
 
-## Research References (Session 6)
+## Files Modified This Session
 
-Migration documentation approach based on:
-- [Fork maintenance best practices](https://gruchalski.com/posts/2024-03-03-maintaining-a-fork-of-a-repository/)
-- [ADR tools](https://github.com/npryce/adr-tools) for decision records
-- [Schema evolution patterns](https://martinfowler.com/articles/evodb.html)
-- [Upstream sync conventions](https://joaquimrocha.com/2024/09/22/how-to-fork/)
-
-Key patterns to implement:
-- Commit prefixes: `#upstream-fix`, `#local-only`
-- Version tags: `v1.2.3-local.1` for local patches
-- Compatibility modes: BACKWARD, FORWARD, FULL
+| File | Changes |
+|------|---------|
+| `UPSTREAM_SYNC.md` | NEW - sync state tracking |
+| `docs/upstream/TYPE_MAPPING.md` | NEW - type mapping matrix |
+| `docs/adr/ADR-001-tui2-local-api-adaptation.md` | NEW - decision record |
+| `tui2/src/compat.rs` | NEW - compatibility layer (600+ lines) |
+| `tui2/src/*.rs` | Modified imports, stubbed code |
+| `tui2/src/**/*.rs` | 30+ files with import fixes |
 
 ---
 
-## tui2 Error Details
+## Key Compat Module Contents
 
-### Missing Modules (E0432)
-```
-codex_common::oss
-codex_core::INTERACTIVE_SESSION_SOURCES
-codex_core::auth::enforce_login_restrictions
-codex_core::config::resolve_oss_provider
-codex_core::config::edit
-codex_core::terminal::terminal_info
-codex_core::features (3 occurrences)
-codex_core::protocol::ElicitationAction
-codex_core::protocol::ExecPolicyAmendment
-codex_protocol::custom_prompts::PROMPTS_CMD_PREFIX (3 occurrences)
-codex_core::config::ConstraintResult
-codex_core::config::types
-codex_core::project_doc::DEFAULT_PROJECT_DOC_FILENAME
-codex_core::protocol::DeprecationNoticeEvent
-```
+```rust
+// Constants
+INTERACTIVE_SESSION_SOURCES, PROMPTS_CMD_PREFIX, DEFAULT_PROJECT_DOC_FILENAME
+OLLAMA_OSS_PROVIDER_ID, LMSTUDIO_OSS_PROVIDER_ID
 
-### Missing Types (E0412/E0422)
-```
-AppExitInfo
-ApprovedExecpolicyAmendment
+// Stub Modules
+compat::oss, compat::terminal, compat::features, compat::auth
+compat::config, compat::skills, compat::protocol
+
+// Extension Traits
+ConfigExt, SandboxPolicyExt, ExecCommandBeginEventExt, ExecCommandEndEventExt
+SessionConfiguredEventExt, ExecApprovalRequestEventExt
+
+// Protocol Types
+RateLimitSnapshot, ExecCommandSource, ElicitationAction, ExecPolicyAmendment
+TurnAbortReason, StreamErrorEvent, McpStartupStatus, etc.
 ```
 
-### Missing Functions (E0425)
-```
-parse_turn_item (codex_core)
-```
+---
 
-### Struct Field Mismatches (E0026/E0027)
-```
-SessionConfiguredEvent.reasoning_effort
-UpdatePlanArgs.explanation
-FileChange::Delete.content
-Event.event_seq, Event.order
-```
+_Last updated: 2024-12-24 (SYNC-028 Session 7 complete)_
