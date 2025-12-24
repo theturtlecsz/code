@@ -623,6 +623,9 @@ impl EventProcessor for EventProcessorWithHumanOutput {
             EventMsg::EnteredReviewMode(_) => {}
             EventMsg::ExitedReviewMode(_) => {}
             EventMsg::Pro(_) => {}
+            EventMsg::UndoStarted(_) => {}
+            EventMsg::UndoCompleted(_) => {}
+            EventMsg::ListSkillsResponse(_) => {}
         }
         CodexStatus::Running
     }

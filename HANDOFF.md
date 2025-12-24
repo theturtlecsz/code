@@ -4,7 +4,8 @@
 **Status:** SYNC-028 Complete - Ready for Interactive Testing
 **Commits:**
 - 22ca5087f fix(tui2): eliminate all 117 compiler warnings
-- Pending: fix(tui2): external crate warning cleanup
+- f4d3acf10 fix(tui2): external crate warning cleanup (SYNC-028 S13)
+- 1bdba5d78 fix(core): handle new EventMsg variants in exec and mcp-server
 
 ---
 
@@ -34,6 +35,15 @@ cargo build -p codex-tui2 --release
 # Finished `release` profile [optimized] target(s) in 6m 34s
 # 0 warnings
 ```
+
+### Main Binary Build Fix
+
+New `EventMsg` variants added to `codex_core::protocol` required handling:
+
+| Crate | File | Added Arms |
+|-------|------|------------|
+| codex-exec | event_processor_with_human_output.rs | `UndoStarted`, `UndoCompleted`, `ListSkillsResponse` |
+| codex-mcp-server | codex_tool_runner.rs | `UndoStarted`, `UndoCompleted`, `ListSkillsResponse` |
 
 ### Documentation Updated
 
@@ -216,6 +226,7 @@ Session 13 Summary
 | Metric              | Result                 |
 |---------------------|------------------------|
 | External Warnings   | 2 → 0                  |
+| Main Binary Build   | FIXED (EventMsg arms)  |
 | Stubs Documented    | 19 (8+6+5)             |
-| Interactive Testing | BLOCKED (headless)     |
-| Next Session        | Requires real terminal |
+| Interactive Testing | PASS (user-verified)   |
+| tui2 Status         | Functional (some features missing) |

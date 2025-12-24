@@ -295,7 +295,10 @@ async fn run_codex_tool_session_inner(
                     | EventMsg::ExitedReviewMode(_)
                     | EventMsg::Pro(_)
                     | EventMsg::CustomToolCallBegin(_)
-                    | EventMsg::CustomToolCallEnd(_) => {
+                    | EventMsg::CustomToolCallEnd(_)
+                    | EventMsg::UndoStarted(_)
+                    | EventMsg::UndoCompleted(_)
+                    | EventMsg::ListSkillsResponse(_) => {
                         // For now, we do not do anything extra for these
                         // events. Note that
                         // send(codex_event_to_notification(&event)) above has
