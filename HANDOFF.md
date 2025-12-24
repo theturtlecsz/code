@@ -165,29 +165,48 @@ RUST_BACKTRACE=1 ./target/release/codex-tui2
 ## Continuation Prompt
 
 ```
-Continue SYNC-028 Session 13 - INTERACTIVE TESTING
+Continue SYNC-028 Session 13 - INTERACTIVE TESTING + CLEANUP
 
-Load HANDOFF.md for full context.
+Load HANDOFF.md for full context. ultrathink
 
 ## Context
-Session 12 completed warning cleanup.
-- Build succeeds: cargo build -p codex-tui2 --release (0 warnings)
-- --help and --version verified working
-- Interactive testing still blocked (headless environment)
+Session 12 completed warning cleanup (117 → 0 warnings in codex-tui2).
+- Commit: 22ca5087f fix(tui2): eliminate all 117 compiler warnings
+- Build: cargo build -p codex-tui2 --release (0 warnings)
+- Verified: --help and --version work
+- Pending: Interactive testing (requires real terminal)
 
-## Session 13 Goals
-Requires REAL TERMINAL (not headless environment)
+## Session 13 Goals (Sequential Phases)
 
-### Interactive Testing
-1. Launch TUI: RUST_BACKTRACE=1 ./target/release/codex-tui2
-2. Submit a simple prompt and verify response
-3. Test Ctrl+C exit
-4. Verify status bar displays model
-5. Run 10-turn session without panic
+### Phase 1: Interactive Testing (REAL TERMINAL REQUIRED)
+1. Build: cargo build -p codex-tui2 --release
+2. Launch: RUST_BACKTRACE=1 ./target/release/codex-tui2
+3. Test prompt submission: Type "Hello" and verify response
+4. Test exit: Ctrl+C should exit cleanly
+5. Verify: Status bar displays model name
+6. Extended test: 10-turn conversation without panic
 
-### Success Criteria
-- [ ] Interactive TUI runs without panic
-- [ ] Can submit at least one prompt
-- [ ] Response appears in chat history
-- [ ] Ctrl+C exits cleanly
+### Phase 2: External Crate Warning Fixes (After Phase 1 PASS)
+Fix remaining 2 warnings in non-tui2 crates:
+- backend-client/src/client.rs: map_credits, map_plan_type never used
+- app-server-protocol/src/protocol/v2.rs: unused CoreNetworkAccess import
+
+### Phase 3: Stub Documentation Update (After Phase 2)
+Update docs/SPEC-TUI2-STUBS.md with:
+- Complete list of stubbed features with status
+- Which stubs are intentional vs temporary
+- Dependencies blocking each stub
+
+## Success Criteria
+- [ ] Phase 1: TUI launches and accepts prompts
+- [ ] Phase 1: Response appears in chat history
+- [ ] Phase 1: Ctrl+C exits cleanly (no panic)
+- [ ] Phase 1: 10-turn session completes
+- [ ] Phase 2: 0 warnings across all tui2-related crates
+- [ ] Phase 3: SPEC-TUI2-STUBS.md updated
+
+## Key Commands
+cargo build -p codex-tui2 --release
+RUST_BACKTRACE=1 ./target/release/codex-tui2
+cargo build -p codex-backend-client 2>&1 | grep warning
 ```
