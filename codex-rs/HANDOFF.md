@@ -1,154 +1,181 @@
-# SYNC-028 Session 5 Handoff - TUI v2 Port (JsonSchema Phase)
+# SYNC-028 Session 6 Handoff - TUI v2 Port (API Reconciliation Phase)
 
 **Date**: 2024-12-24
-**Session**: 5 of SYNC-028
+**Session**: 6 of SYNC-028
 **Commit Before**: 65ae1d449 (tui2 + dependencies ported)
 
-## Session Summary
+## Session 6 Summary
 
-This session focused on porting missing protocol files and adding JsonSchema derives to enable `app-server-protocol` schema generation compatibility.
+This session completed the JsonSchema phase and discovered significant API mismatches between tui2 (ported from upstream) and the local protocol/core crates.
 
 ### Completed Work
 
-1. **Ported 6 protocol files** from upstream:
-   - `account.rs` (PlanType enum)
-   - `approvals.rs` (ExecApprovalRequestEvent, ElicitationRequestEvent, etc.)
-   - `user_input.rs` (UserInput enum)
-   - `items.rs` (TurnItem, UserMessageItem, AgentMessageItem, etc.)
-   - `openai_models.rs` (ReasoningEffort, ModelPreset, ModelInfo, etc.)
-   - Updated `lib.rs` to export new modules and re-export ConversationId
+1. **JsonSchema derives added to all remaining types**:
+   - `ApprovedCommandMatchKind`, `SandboxPolicy`, `CodexErrorInfo`, `ReviewContextMetadata`, `ReviewDecision` (protocol.rs)
+   - `CustomPrompt` (custom_prompts.rs)
+   - `HistoryEntry` (message_history.rs)
+   - `ResponseItem` and related types (models.rs)
+   - `FunctionCallOutputPayload` (models.rs)
+   - `#[schemars(with = "String")]` for serde_with Base64 field
 
-2. **Added missing types to codex_protocol/src/protocol.rs**:
-   - NetworkAccess, CreditsSnapshot, SessionSource, SubAgentSource
-   - ReviewDelivery, McpAuthStatus, SkillScope
-   - SkillMetadata, SkillErrorInfo, CodexErrorInfo
+2. **Added JsonSchema to mcp-types crate** (per user preference):
+   - Added schemars dependency to mcp-types/Cargo.toml
+   - All 100+ types now have JsonSchema derive
 
-3. **Added missing types to codex_core/src/protocol.rs**:
-   - Same types as above plus UndoCompletedEvent, UndoStartedEvent
-   - ListSkillsResponseEvent, SkillsListEntry
-   - Added UndoCompleted, UndoStarted, ListSkillsResponse to EventMsg enum
+3. **Fixed app-server-protocol conversions**:
+   - ParsedCommand::Read now has `path: Option<String>`
+   - RateLimitSnapshot/RateLimitWindow conversions fixed
+   - TokenUsage i64/u64 conversions added
+   - SandboxPolicy::ExternalSandbox mapped to WorkspaceWrite
+   - AbsolutePathBuf/PathBuf conversions added
+   - EventMsg match exhaustiveness fixed
 
-4. **Added JsonSchema derives** to many types:
-   - config_types.rs: ReasoningEffort, ReasoningSummary, Verbosity, SandboxMode
-   - mcp_protocol.rs: ConversationId
-   - parse_command.rs: ParsedCommand
-   - plan_tool.rs: StepStatus, PlanItemArg, UpdatePlanArgs
-   - items.rs: TurnItem and inner types
-   - protocol.rs: Bulk update of ~50+ types
+4. **Fixed backend-client**:
+   - `get_codex_user_agent(None)` argument fix
+   - RateLimitSnapshot field removals (credits, plan_type)
+   - RateLimitWindow field rename (resets_at -> resets_in_seconds)
+   - Type conversions (i32 -> u64)
 
-5. **Updated workspace Cargo.toml**:
-   - Added `uuid1` feature to schemars for Uuid JsonSchema support
+5. **Fixed codex-tui (original)**:
+   - Added EventMsg handlers for UndoStarted, UndoCompleted, ListSkillsResponse
 
-### Remaining Errors (15 types missing JsonSchema)
+### Build Status
+
+| Crate | Status |
+|-------|--------|
+| codex-protocol | BUILDS |
+| codex-core | BUILDS |
+| codex-tui (original) | BUILDS |
+| codex-app-server-protocol | BUILDS (1 warning) |
+| codex-backend-client | BUILDS |
+| codex-tui2 | **262 ERRORS** |
+
+### tui2 Error Analysis
+
+The tui2 crate has 262 compile errors due to API mismatches with local crates. Key issues:
 
 ```
-ApprovedCommandMatchKind       - needs JsonSchema
-As<Base64>                     - serde_with type, needs special handling
-CodexErrorInfo                 - already added, may need re-check
-CustomPrompt                   - in custom_prompts.rs
-HistoryEntry                   - in message_history.rs
-mcp_types::CallToolResult      - external crate, use #[schemars(skip)]
-ResponseItem                   - in models.rs (2 occurrences)
-ReviewContextMetadata          - in protocol.rs
-ReviewDecision                 - in protocol.rs (2 occurrences)
-SandboxPolicy                  - in protocol.rs (3 occurrences)
-Tool (mcp_types)               - external crate, use #[schemars(skip)]
+E0026: Struct fields exist in upstream but not locally:
+  - SessionConfiguredEvent.reasoning_effort
+  - UpdatePlanArgs.explanation
+  - FileChange::Delete.content
+
+E0027: Pattern missing fields:
+  - Event.event_seq, Event.order
+
+E0412/E0422: Missing types:
+  - AppExitInfo
+  - ApprovedExecpolicyAmendment
+
+E0425: Missing functions:
+  - parse_turn_item
+
+E0308: Type mismatches (user_facing_hint: String vs Option)
 ```
 
-### Files Modified (uncommitted)
+### Root Cause
 
-- `codex-rs/Cargo.toml` - workspace schemars uuid1 feature
-- `codex-rs/protocol/Cargo.toml` - added schemars dependency
-- `codex-rs/protocol/src/lib.rs` - new module exports
-- `codex-rs/protocol/src/account.rs` - NEW
-- `codex-rs/protocol/src/approvals.rs` - NEW
-- `codex-rs/protocol/src/user_input.rs` - NEW
-- `codex-rs/protocol/src/items.rs` - NEW
-- `codex-rs/protocol/src/openai_models.rs` - NEW
-- `codex-rs/protocol/src/config_types.rs` - added JsonSchema
-- `codex-rs/protocol/src/mcp_protocol.rs` - added JsonSchema to ConversationId
-- `codex-rs/protocol/src/parse_command.rs` - added JsonSchema
-- `codex-rs/protocol/src/plan_tool.rs` - added JsonSchema
-- `codex-rs/protocol/src/protocol.rs` - added types + JsonSchema
-- `codex-rs/core/src/protocol.rs` - added types + EventMsg variants
+The tui2 crate was ported from a different upstream version that has evolved independently from our local protocol/core crates. The upstream has additional fields, types, and different APIs.
+
+### Options for Next Session
+
+**Option A: Update local crates to match upstream (RECOMMENDED)**
+- Add missing fields to SessionConfiguredEvent, Event, FileChange, etc.
+- Add missing types (AppExitInfo, ApprovedExecpolicyAmendment)
+- Add missing functions (parse_turn_item)
+- Pros: Closer alignment with upstream, easier future syncs
+- Cons: More invasive changes to working code
+
+**Option B: Modify tui2 to use local APIs**
+- Adjust tui2 code to work with existing local types
+- May require removing features that depend on missing APIs
+- Pros: Less risk to working code
+- Cons: Diverges from upstream, harder future syncs
+
+**Option C: Defer tui2 integration**
+- Keep tui2 as reference but don't build it yet
+- Focus on stabilizing current TUI
+- Pros: Lowest risk
+- Cons: Delays new TUI features
+
+---
+
+## Files Modified (uncommitted, this session)
+
+### Protocol/Core changes:
+- `codex-rs/mcp-types/Cargo.toml` - added schemars
+- `codex-rs/mcp-types/src/lib.rs` - added JsonSchema to all types
+- `codex-rs/protocol/src/protocol.rs` - added JsonSchema to 5 types
+- `codex-rs/protocol/src/custom_prompts.rs` - added JsonSchema
+- `codex-rs/protocol/src/message_history.rs` - added JsonSchema
+- `codex-rs/protocol/src/models.rs` - added JsonSchema to 10+ types
+- `codex-rs/protocol/src/parse_command.rs` - added path field to Read
+
+### Conversion fixes:
+- `codex-rs/app-server-protocol/src/protocol/v2.rs` - fixed From impls
+- `codex-rs/app-server-protocol/src/protocol/thread_history.rs` - removed UndoCompleted
+- `codex-rs/backend-client/src/client.rs` - fixed rate limit mappings
+- `codex-rs/core/src/parse_command.rs` - added path: None to Read
+- `codex-rs/tui/src/chatwidget/mod.rs` - added new EventMsg variants
 
 ---
 
 ## Continue Prompt for Next Session
 
 ```
-Continue SYNC-028 (TUI v2 port) **ultrathink** - JsonSchema Completion
+Continue SYNC-028 (TUI v2 port) **ultrathink** - API Reconciliation
 
 ## Context
-Session 5 ported protocol files and added JsonSchema to ~50+ types.
-15 types still need JsonSchema or #[schemars(skip)] annotations.
+Session 6 completed JsonSchema phase. codex-protocol, codex-core, and codex-tui
+all build. codex-tui2 has 262 errors due to API mismatches with local crates.
 
-## Remaining Tasks (in order)
+## Decision Required
+Choose approach for tui2 integration:
+A) Update local crates to match upstream (recommended)
+B) Modify tui2 to use local APIs
+C) Defer tui2 integration
 
-1. Fix remaining JsonSchema errors (15 types):
-   a. Add JsonSchema to:
-      - ApprovedCommandMatchKind (protocol.rs)
-      - ReviewContextMetadata (protocol.rs)
-      - ReviewDecision (protocol.rs)
-      - SandboxPolicy (protocol.rs)
-      - CustomPrompt (custom_prompts.rs)
-      - HistoryEntry (message_history.rs)
-      - ResponseItem (models.rs)
+## If Option A:
+1. Add missing fields to protocol types:
+   - SessionConfiguredEvent.reasoning_effort
+   - Event.event_seq, Event.order
+   - FileChange::Delete.content
+   - UpdatePlanArgs.explanation
 
-   b. Add #[schemars(skip)] for external types:
-      - mcp_types::CallToolResult
-      - mcp_types::Tool
-      - serde_with::As<Base64>
+2. Add missing types:
+   - AppExitInfo
+   - ApprovedExecpolicyAmendment
+   - parse_turn_item function
 
-2. Verify codex-protocol builds: cargo check -p codex-protocol
+3. Fix type mismatches (user_facing_hint: String vs Option)
 
-3. Build codex-tui2: cargo check -p codex-tui2
-
-4. Fix any remaining compile errors in tui2 or app-server-protocol
-
-5. Run tui2 tests: cargo test -p codex-tui2
-
-6. Add CLI --tui2 flag for opt-in launch
-
-7. Add features.tui2 config option
-
-8. Create UPSTREAM_SYNC.md tracking document
-
-9. Commit all changes with message:
-   "feat(protocol): add JsonSchema derives for tui2 compat (SYNC-028)"
-
-## Key Files to Focus On
-- protocol/src/protocol.rs (lines 243-294 for SandboxPolicy, ReviewDecision)
-- protocol/src/custom_prompts.rs
-- protocol/src/message_history.rs
-- protocol/src/models.rs
-
-## For schemars(skip) Pattern
-```rust
-#[serde(skip_serializing_if = "Option::is_none")]
-#[schemars(skip)]
-pub external_field: Option<ExternalType>,
-```
+4. Build and test tui2
 
 ## Build Commands
 ```bash
+# Verify existing builds still work
 cargo check -p codex-protocol
-cargo check -p codex-tui2
-cargo test -p codex-tui2
+cargo check -p codex-tui
+
+# Check tui2 error count
+cargo check -p codex-tui2 2>&1 | grep "^error\[E" | wc -l
+
+# Full workspace build
+cargo build --workspace
 ```
 
 ## Success Criteria
-- [ ] cargo build -p codex-protocol succeeds
-- [ ] cargo build -p codex-tui2 succeeds
-- [ ] cargo test -p codex-tui2 passes (some failures OK)
-- [ ] codex-tui2 binary runs
-- [ ] Existing codex-tui still works
+- [ ] codex-tui (original) still builds
+- [ ] codex-tui2 builds (or decision made to defer)
+- [ ] Tests pass
+- [ ] Changes committed
 ```
 
 ---
 
-## User Decisions (Session 5)
+## User Decisions (Session 5-6)
 
-1. **External types approach**: Add JsonSchema to mcp-types crate (complete schema)
-2. **Feature flag**: CLI flag only (`--tui2`) - simple, matches upstream
-3. **Test scope**: tui2 tests only - focused verification
+1. **External types approach**: Add JsonSchema to mcp-types crate (complete schema) - DONE
+2. **Feature flag**: CLI flag only (`--tui2`) - simple, matches upstream - PENDING
+3. **Test scope**: tui2 tests only - focused verification - PENDING
+4. **tui2 integration**: Decision needed (A/B/C above)

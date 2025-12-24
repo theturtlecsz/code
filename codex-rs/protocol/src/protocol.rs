@@ -38,7 +38,7 @@ pub const ENVIRONMENT_CONTEXT_CLOSE_TAG: &str = "</environment_context>";
 pub const USER_MESSAGE_BEGIN: &str = "## My request for Codex:";
 
 /// Submission Queue Entry - requests from user
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
 pub struct Submission {
     /// Unique id for this Submission to correlate with Events
     pub id: String,
@@ -65,7 +65,7 @@ pub struct Submission {
 /// these protocols by converting `SendUserTurnParams` to internal operations.
 ///
 /// For structured JSON output in `codex_core`, use `ConfigureSession.output_schema`.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, schemars::JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[allow(clippy::large_enum_variant)]
 #[non_exhaustive]
@@ -214,7 +214,7 @@ pub enum Op {
 
 /// Determines the conditions under which the user is consulted to approve
 /// running the command proposed by Codex.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Display, TS)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Display, TS, schemars::JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum AskForApproval {
@@ -240,7 +240,7 @@ pub enum AskForApproval {
     Never,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash, TS)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash, TS, schemars::JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum ApprovedCommandMatchKind {
     Exact,
@@ -248,7 +248,7 @@ pub enum ApprovedCommandMatchKind {
 }
 
 /// Determines execution restrictions for model shell commands.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Display, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Display, TS, schemars::JsonSchema)]
 #[strum(serialize_all = "kebab-case")]
 #[serde(tag = "mode", rename_all = "kebab-case")]
 pub enum SandboxPolicy {
@@ -430,7 +430,7 @@ impl SandboxPolicy {
 
 /// User input
 #[non_exhaustive]
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, schemars::JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InputItem {
     Text {
@@ -449,7 +449,7 @@ pub enum InputItem {
 }
 
 /// Event Queue Entry - events from agent
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct Event {
     /// Submission `id` that this event is correlated with.
     pub id: String,
@@ -464,7 +464,7 @@ pub struct Event {
 }
 
 /// Lightweight representation of an event suitable for persistence and replay.
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct RecordedEvent {
     pub id: String,
     pub event_seq: u64,
@@ -473,7 +473,7 @@ pub struct RecordedEvent {
     pub msg: EventMsg,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct OrderMeta {
     /// 1-based ordinal of this request/turn in the session
     pub request_ordinal: u64,
@@ -487,7 +487,7 @@ pub struct OrderMeta {
 
 /// Response event from the agent
 /// NOTE: Make sure none of these values have optional types, as it will mess up the extension code-gen.
-#[derive(Debug, Clone, Deserialize, Serialize, Display, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, Display, TS, schemars::JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
 pub enum EventMsg {
@@ -590,29 +590,60 @@ pub enum EventMsg {
     ExitedReviewMode(ExitedReviewModeEvent),
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct ExitedReviewModeEvent {
     pub review_output: Option<ReviewOutputEvent>,
 }
 
 // Individual event payload types matching each `EventMsg` variant.
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
-pub struct ErrorEvent {
-    pub message: String,
+/// Codex errors that we expose to clients.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, TS, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(rename_all = "snake_case")]
+pub enum CodexErrorInfo {
+    ContextWindowExceeded,
+    UsageLimitExceeded,
+    HttpConnectionFailed {
+        http_status_code: Option<u16>,
+    },
+    /// Failed to connect to the response SSE stream.
+    ResponseStreamConnectionFailed {
+        http_status_code: Option<u16>,
+    },
+    InternalServerError,
+    Unauthorized,
+    BadRequest,
+    SandboxError,
+    /// The response SSE stream disconnected in the middle of a turn before completion.
+    ResponseStreamDisconnected {
+        http_status_code: Option<u16>,
+    },
+    /// Reached the retry limit for responses.
+    ResponseTooManyFailedAttempts {
+        http_status_code: Option<u16>,
+    },
+    Other,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
+pub struct ErrorEvent {
+    pub message: String,
+    #[serde(default)]
+    pub codex_error_info: Option<CodexErrorInfo>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct TaskCompleteEvent {
     pub last_agent_message: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct TaskStartedEvent {
     pub model_context_window: Option<u64>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct TokenUsage {
     pub input_tokens: u64,
     pub cached_input_tokens: u64,
@@ -621,7 +652,7 @@ pub struct TokenUsage {
     pub total_tokens: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct TokenUsageInfo {
     pub total_token_usage: TokenUsage,
     pub last_token_usage: TokenUsage,
@@ -658,19 +689,19 @@ impl TokenUsageInfo {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct TokenCountEvent {
     pub info: Option<TokenUsageInfo>,
     pub rate_limits: Option<RateLimitSnapshot>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct RateLimitSnapshot {
     pub primary: Option<RateLimitWindow>,
     pub secondary: Option<RateLimitWindow>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct RateLimitWindow {
     /// Percentage (0-100) of the window that has been consumed.
     pub used_percent: f64,
@@ -681,7 +712,7 @@ pub struct RateLimitWindow {
 }
 
 /// Payload for `ReplayHistory` containing prior `ResponseItem`s and optional events.
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct ReplayHistoryEvent {
     pub items: Vec<crate::models::ResponseItem>,
     #[serde(default)]
@@ -751,7 +782,7 @@ impl TokenUsage {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
 pub struct FinalOutput {
     pub token_usage: TokenUsage,
 }
@@ -792,12 +823,12 @@ impl fmt::Display for FinalOutput {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct AgentMessageEvent {
     pub message: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum InputMessageKind {
     /// Plain user text (default)
@@ -808,7 +839,7 @@ pub enum InputMessageKind {
     EnvironmentContext,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct UserMessageEvent {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -860,35 +891,35 @@ fn ends_with_ignore_ascii_case(text: &str, suffix: &str) -> bool {
             .all(|(a, b)| a.eq_ignore_ascii_case(b))
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct AgentMessageDeltaEvent {
     pub delta: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct AgentReasoningEvent {
     pub text: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct AgentReasoningRawContentEvent {
     pub text: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct AgentReasoningRawContentDeltaEvent {
     pub delta: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct AgentReasoningSectionBreakEvent {}
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct AgentReasoningDeltaEvent {
     pub delta: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct McpInvocation {
     /// Name of the MCP server as defined in the config.
     pub server: String,
@@ -898,14 +929,14 @@ pub struct McpInvocation {
     pub arguments: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct McpToolCallBeginEvent {
     /// Identifier so this can be paired with the McpToolCallEnd event.
     pub call_id: String,
     pub invocation: McpInvocation,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct McpToolCallEndEvent {
     /// Identifier for the corresponding McpToolCallBegin that finished.
     pub call_id: String,
@@ -925,12 +956,12 @@ impl McpToolCallEndEvent {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct WebSearchBeginEvent {
     pub call_id: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct WebSearchEndEvent {
     pub call_id: String,
     pub query: String,
@@ -938,20 +969,20 @@ pub struct WebSearchEndEvent {
 
 /// Response payload for `Op::GetHistory` containing the current session's
 /// in-memory transcript.
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct ConversationPathResponseEvent {
     pub conversation_id: ConversationId,
     pub path: PathBuf,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct ResumedHistory {
     pub conversation_id: ConversationId,
     pub history: Vec<RolloutItem>,
     pub rollout_path: PathBuf,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub enum InitialHistory {
     New,
     Resumed(ResumedHistory),
@@ -993,7 +1024,7 @@ impl InitialHistory {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Default, Debug, TS)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug, TS, schemars::JsonSchema)]
 pub struct SessionMeta {
     pub id: ConversationId,
     pub timestamp: String,
@@ -1003,7 +1034,7 @@ pub struct SessionMeta {
     pub instructions: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, TS, schemars::JsonSchema)]
 pub struct SessionMetaLine {
     #[serde(flatten)]
     pub meta: SessionMeta,
@@ -1011,7 +1042,7 @@ pub struct SessionMetaLine {
     pub git: Option<GitInfo>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, TS)]
+#[derive(Serialize, Deserialize, Debug, Clone, TS, schemars::JsonSchema)]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum RolloutItem {
     SessionMeta(SessionMetaLine),
@@ -1021,7 +1052,7 @@ pub enum RolloutItem {
     Event(RecordedEvent),
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[derive(Serialize, Deserialize, Clone, Debug, TS, schemars::JsonSchema)]
 pub struct CompactedItem {
     pub message: String,
 }
@@ -1038,7 +1069,7 @@ impl From<CompactedItem> for ResponseItem {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[derive(Serialize, Deserialize, Clone, Debug, TS, schemars::JsonSchema)]
 pub struct TurnContextItem {
     pub cwd: PathBuf,
     pub approval_policy: AskForApproval,
@@ -1049,14 +1080,14 @@ pub struct TurnContextItem {
     pub summary: ReasoningSummaryConfig,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, schemars::JsonSchema)]
 pub struct RolloutLine {
     pub timestamp: String,
     #[serde(flatten)]
     pub item: RolloutItem,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[derive(Serialize, Deserialize, Clone, Debug, TS, schemars::JsonSchema)]
 pub struct GitInfo {
     /// Current commit hash (SHA)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1070,7 +1101,7 @@ pub struct GitInfo {
 }
 
 /// Review request sent to the review session.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, TS, schemars::JsonSchema)]
 pub struct ReviewRequest {
     pub prompt: String,
     pub user_facing_hint: String,
@@ -1079,7 +1110,7 @@ pub struct ReviewRequest {
     pub metadata: Option<ReviewContextMetadata>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, TS, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, TS, Default, schemars::JsonSchema)]
 pub struct ReviewContextMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -1096,7 +1127,7 @@ pub struct ReviewContextMetadata {
 }
 
 /// Structured review result produced by a child review session.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, TS, schemars::JsonSchema)]
 pub struct ReviewOutputEvent {
     pub findings: Vec<ReviewFinding>,
     pub overall_correctness: String,
@@ -1116,7 +1147,7 @@ impl Default for ReviewOutputEvent {
 }
 
 /// A single review finding describing an observed issue or recommendation.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, TS, schemars::JsonSchema)]
 pub struct ReviewFinding {
     pub title: String,
     pub body: String,
@@ -1126,20 +1157,20 @@ pub struct ReviewFinding {
 }
 
 /// Location of the code related to a review finding.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, TS, schemars::JsonSchema)]
 pub struct ReviewCodeLocation {
     pub absolute_file_path: PathBuf,
     pub line_range: ReviewLineRange,
 }
 
 /// Inclusive line range in a file associated with the finding.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, TS, schemars::JsonSchema)]
 pub struct ReviewLineRange {
     pub start: u32,
     pub end: u32,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct ExecCommandBeginEvent {
     /// Identifier so this can be paired with the ExecCommandEnd event.
     pub call_id: String,
@@ -1150,7 +1181,7 @@ pub struct ExecCommandBeginEvent {
     pub parsed_cmd: Vec<ParsedCommand>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct ExecCommandEndEvent {
     /// Identifier for the ExecCommandBegin that finished.
     pub call_id: String,
@@ -1170,7 +1201,7 @@ pub struct ExecCommandEndEvent {
     pub formatted_output: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, TS, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecOutputStream {
     Stdout,
@@ -1178,7 +1209,7 @@ pub enum ExecOutputStream {
 }
 
 #[serde_as]
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, TS, schemars::JsonSchema)]
 pub struct ExecCommandOutputDeltaEvent {
     /// Identifier for the ExecCommandBegin that produced this chunk.
     pub call_id: String,
@@ -1187,10 +1218,11 @@ pub struct ExecCommandOutputDeltaEvent {
     /// Raw bytes from the stream (may not be valid UTF-8).
     #[serde_as(as = "serde_with::base64::Base64")]
     #[ts(type = "string")]
+    #[schemars(with = "String")]
     pub chunk: Vec<u8>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct ExecApprovalRequestEvent {
     /// Identifier for the associated exec call, if available.
     pub call_id: String,
@@ -1203,7 +1235,7 @@ pub struct ExecApprovalRequestEvent {
     pub reason: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct ApplyPatchApprovalRequestEvent {
     /// Responses API call id for the associated patch apply call, if available.
     pub call_id: String,
@@ -1216,17 +1248,17 @@ pub struct ApplyPatchApprovalRequestEvent {
     pub grant_root: Option<PathBuf>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct BackgroundEventEvent {
     pub message: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct StreamErrorEvent {
     pub message: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct PatchApplyBeginEvent {
     /// Identifier so this can be paired with the PatchApplyEnd event.
     pub call_id: String,
@@ -1236,7 +1268,7 @@ pub struct PatchApplyBeginEvent {
     pub changes: HashMap<PathBuf, FileChange>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct PatchApplyEndEvent {
     /// Identifier for the PatchApplyBegin that finished.
     pub call_id: String,
@@ -1248,12 +1280,12 @@ pub struct PatchApplyEndEvent {
     pub success: bool,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct TurnDiffEvent {
     pub unified_diff: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct GetHistoryEntryResponseEvent {
     pub offset: usize,
     pub log_id: u64,
@@ -1263,19 +1295,19 @@ pub struct GetHistoryEntryResponseEvent {
 }
 
 /// Response payload for `Op::ListMcpTools`.
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct McpListToolsResponseEvent {
     /// Fully qualified tool name -> tool definition.
     pub tools: std::collections::HashMap<String, McpTool>,
 }
 
 /// Response payload for `Op::ListCustomPrompts`.
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct ListCustomPromptsResponseEvent {
     pub custom_prompts: Vec<CustomPrompt>,
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct SessionConfiguredEvent {
     /// Name left as session_id instead of conversation_id for backwards compatibility.
     pub session_id: ConversationId,
@@ -1302,7 +1334,7 @@ pub struct SessionConfiguredEvent {
 }
 
 /// User's decision in response to an ExecApprovalRequest.
-#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, TS)]
+#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, TS, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ReviewDecision {
     /// User has approved this command and the agent should execute it.
@@ -1323,7 +1355,7 @@ pub enum ReviewDecision {
     Abort,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, TS, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum FileChange {
     Add {
@@ -1340,7 +1372,7 @@ pub enum FileChange {
     },
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct Chunk {
     /// 1-based line index of the first line in the original file
     pub orig_index: u32,
@@ -1348,17 +1380,147 @@ pub struct Chunk {
     pub inserted_lines: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
 pub struct TurnAbortedEvent {
     pub reason: TurnAbortReason,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, TS, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum TurnAbortReason {
     Interrupted,
     Replaced,
     ReviewEnded,
+}
+
+// --- Types ported from upstream for tui2 compatibility ---
+
+/// Whether network access is enabled in the sandbox.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum NetworkAccess {
+    #[default]
+    Restricted,
+    Enabled,
+}
+
+impl NetworkAccess {
+    pub fn is_enabled(self) -> bool {
+        matches!(self, NetworkAccess::Enabled)
+    }
+}
+
+/// Snapshot of user's credit status.
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
+pub struct CreditsSnapshot {
+    pub has_credits: bool,
+    pub unlimited: bool,
+    pub balance: Option<String>,
+}
+
+/// The source of this Codex session.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq, TS, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionSource {
+    Cli,
+    #[default]
+    VSCode,
+    Exec,
+    Mcp,
+    SubAgent(SubAgentSource),
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, TS, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SubAgentSource {
+    Review,
+    Compact,
+    Other(String),
+}
+
+impl fmt::Display for SessionSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SessionSource::Cli => f.write_str("cli"),
+            SessionSource::VSCode => f.write_str("vscode"),
+            SessionSource::Exec => f.write_str("exec"),
+            SessionSource::Mcp => f.write_str("mcp"),
+            SessionSource::SubAgent(sub_source) => write!(f, "subagent_{sub_source}"),
+            SessionSource::Unknown => f.write_str("unknown"),
+        }
+    }
+}
+
+impl fmt::Display for SubAgentSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SubAgentSource::Review => f.write_str("review"),
+            SubAgentSource::Compact => f.write_str("compact"),
+            SubAgentSource::Other(s) => write!(f, "{s}"),
+        }
+    }
+}
+
+/// Review delivery mode.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, TS, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewDelivery {
+    Inline,
+    Detached,
+}
+
+/// Authentication status of an MCP server.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, TS, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum McpAuthStatus {
+    #[default]
+    Unsupported,
+    NotLoggedIn,
+    BearerToken,
+    OAuth,
+}
+
+impl fmt::Display for McpAuthStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let text = match self {
+            McpAuthStatus::Unsupported => "Unsupported",
+            McpAuthStatus::NotLoggedIn => "Not logged in",
+            McpAuthStatus::BearerToken => "Bearer token",
+            McpAuthStatus::OAuth => "OAuth",
+        };
+        f.write_str(text)
+    }
+}
+
+/// Scope of a skill (where it was loaded from).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillScope {
+    User,
+    Repo,
+    System,
+    Admin,
+}
+
+/// Metadata for a skill.
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
+pub struct SkillMetadata {
+    pub name: String,
+    pub description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub short_description: Option<String>,
+    pub path: PathBuf,
+    pub scope: SkillScope,
+}
+
+/// Error information for a skill that failed to load.
+#[derive(Debug, Clone, Deserialize, Serialize, TS, schemars::JsonSchema)]
+pub struct SkillErrorInfo {
+    pub path: PathBuf,
+    pub message: String,
 }
 
 #[cfg(test)]

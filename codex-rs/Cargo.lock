@@ -1561,6 +1561,7 @@ dependencies = [
  "mcp-types",
  "mime_guess",
  "pretty_assertions",
+ "schemars 0.8.22",
  "serde",
  "serde_json",
  "serde_with",
@@ -4547,6 +4548,7 @@ dependencies = [
 name = "mcp-types"
 version = "0.0.0"
 dependencies = [
+ "schemars 0.8.22",
  "serde",
  "serde_json",
  "ts-rs",
@@ -6517,6 +6519,7 @@ dependencies = [
  "schemars_derive 0.8.22",
  "serde",
  "serde_json",
+ "uuid",
 ]
 
 [[package]]

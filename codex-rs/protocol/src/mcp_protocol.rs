@@ -19,8 +19,9 @@ use strum_macros::Display;
 use ts_rs::TS;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, TS, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, TS, Hash, schemars::JsonSchema)]
 #[ts(type = "string")]
+#[schemars(transparent)]
 pub struct ConversationId {
     uuid: Uuid,
 }

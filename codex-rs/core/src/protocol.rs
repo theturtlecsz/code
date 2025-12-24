@@ -835,6 +835,15 @@ pub enum EventMsg {
     /// Exited review mode with an optional final result to apply.
     ExitedReviewMode(Option<codex_protocol::protocol::ReviewOutputEvent>),
 
+    /// Undo operation started.
+    UndoStarted(UndoStartedEvent),
+
+    /// Undo operation completed.
+    UndoCompleted(UndoCompletedEvent),
+
+    /// Response to listing skills.
+    ListSkillsResponse(ListSkillsResponseEvent),
+
     /// Replay a previously recorded transcript into the UI.
     /// Used after resuming from a rollout file so the user sees the full
     /// history for that session without re-executing any actions.
@@ -1429,6 +1438,190 @@ pub struct Chunk {
     pub deleted_lines: Vec<String>,
     pub inserted_lines: Vec<String>,
 }
+
+// --- Types ported from upstream for tui2 compatibility ---
+
+/// Whether network access is enabled in the sandbox.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NetworkAccess {
+    #[default]
+    Restricted,
+    Enabled,
+}
+
+impl NetworkAccess {
+    pub fn is_enabled(self) -> bool {
+        matches!(self, NetworkAccess::Enabled)
+    }
+}
+
+/// Snapshot of user's credit status.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CreditsSnapshot {
+    pub has_credits: bool,
+    pub unlimited: bool,
+    pub balance: Option<String>,
+}
+
+/// The source of this Codex session.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionSource {
+    Cli,
+    #[default]
+    VSCode,
+    Exec,
+    Mcp,
+    SubAgent(SubAgentSource),
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SubAgentSource {
+    Review,
+    Compact,
+    Other(String),
+}
+
+impl fmt::Display for SessionSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SessionSource::Cli => f.write_str("cli"),
+            SessionSource::VSCode => f.write_str("vscode"),
+            SessionSource::Exec => f.write_str("exec"),
+            SessionSource::Mcp => f.write_str("mcp"),
+            SessionSource::SubAgent(sub_source) => write!(f, "subagent_{sub_source}"),
+            SessionSource::Unknown => f.write_str("unknown"),
+        }
+    }
+}
+
+impl fmt::Display for SubAgentSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SubAgentSource::Review => f.write_str("review"),
+            SubAgentSource::Compact => f.write_str("compact"),
+            SubAgentSource::Other(s) => write!(f, "{s}"),
+        }
+    }
+}
+
+/// Event indicating an undo operation completed.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct UndoCompletedEvent {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+/// Event indicating an undo operation started.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct UndoStartedEvent {
+    pub message: String,
+}
+
+/// Review delivery mode.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewDelivery {
+    Inline,
+    Detached,
+}
+
+/// What to review.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum ReviewTarget {
+    /// Review the working tree: staged, unstaged, and untracked files.
+    UncommittedChanges,
+
+    /// Review changes between the current branch and the given base branch.
+    #[serde(rename_all = "camelCase")]
+    BaseBranch { branch: String },
+
+    /// Review the changes introduced by a specific commit.
+    #[serde(rename_all = "camelCase")]
+    Commit {
+        sha: String,
+        /// Optional human-readable label (e.g., commit subject) for UIs.
+        title: Option<String>,
+    },
+
+    /// Arbitrary instructions provided by the user.
+    #[serde(rename_all = "camelCase")]
+    Custom { instructions: String },
+}
+
+/// Authentication status of an MCP server.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum McpAuthStatus {
+    #[default]
+    Unsupported,
+    NotLoggedIn,
+    BearerToken,
+    OAuth,
+}
+
+impl fmt::Display for McpAuthStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let text = match self {
+            McpAuthStatus::Unsupported => "Unsupported",
+            McpAuthStatus::NotLoggedIn => "Not logged in",
+            McpAuthStatus::BearerToken => "Bearer token",
+            McpAuthStatus::OAuth => "OAuth",
+        };
+        f.write_str(text)
+    }
+}
+
+/// Scope of a skill (where it was loaded from).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillScope {
+    User,
+    Repo,
+    System,
+    Admin,
+}
+
+/// Metadata for a skill.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SkillMetadata {
+    pub name: String,
+    pub description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub short_description: Option<String>,
+    pub path: PathBuf,
+    pub scope: SkillScope,
+}
+
+/// Error information for a skill that failed to load.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SkillErrorInfo {
+    pub path: PathBuf,
+    pub message: String,
+}
+
+/// Entry in the skills list for a working directory.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SkillsListEntry {
+    pub cwd: PathBuf,
+    pub skills: Vec<SkillMetadata>,
+    pub errors: Vec<SkillErrorInfo>,
+}
+
+/// Response payload for `Op::ListSkills`.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ListSkillsResponseEvent {
+    pub skills: Vec<SkillsListEntry>,
+}
+
+// Re-export CodexErrorInfo from codex_protocol
+pub use codex_protocol::protocol::CodexErrorInfo;
 
 #[cfg(test)]
 mod tests {

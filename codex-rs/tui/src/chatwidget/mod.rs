@@ -6422,6 +6422,8 @@ impl ChatWidget<'_> {
                 }
                 self.request_redraw();
             }
+            // New event variants - no-op in TUI for now
+            EventMsg::UndoStarted(_) | EventMsg::UndoCompleted(_) | EventMsg::ListSkillsResponse(_) => {}
         }
     }
 

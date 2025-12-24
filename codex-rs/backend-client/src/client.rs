@@ -76,7 +76,7 @@ impl Client {
     pub async fn from_auth(base_url: impl Into<String>, auth: &CodexAuth) -> Result<Self> {
         let token = auth.get_token().await.map_err(anyhow::Error::from)?;
         let mut client = Self::new(base_url)?
-            .with_user_agent(get_codex_user_agent())
+            .with_user_agent(get_codex_user_agent(None))
             .with_bearer_token(token);
         if let Some(account_id) = auth.get_account_id() {
             client = client.with_chatgpt_account_id(account_id);
@@ -288,12 +288,9 @@ impl Client {
             (None, None)
         };
 
-        RateLimitSnapshot {
-            primary,
-            secondary,
-            credits: Self::map_credits(payload.credits),
-            plan_type: Some(Self::map_plan_type(payload.plan_type)),
-        }
+        // Note: credits and plan_type are not included in the protocol's RateLimitSnapshot
+        // They are available via separate APIs if needed
+        RateLimitSnapshot { primary, secondary }
     }
 
     fn map_rate_limit_window(
@@ -306,11 +303,11 @@ impl Client {
 
         let used_percent = f64::from(snapshot.used_percent);
         let window_minutes = Self::window_minutes_from_seconds(snapshot.limit_window_seconds);
-        let resets_at = Some(i64::from(snapshot.reset_at));
+        let resets_in_seconds = Some(snapshot.reset_at.max(0) as u64);
         Some(RateLimitWindow {
             used_percent,
             window_minutes,
-            resets_at,
+            resets_in_seconds,
         })
     }
 
@@ -344,12 +341,12 @@ impl Client {
         }
     }
 
-    fn window_minutes_from_seconds(seconds: i32) -> Option<i64> {
+    fn window_minutes_from_seconds(seconds: i32) -> Option<u64> {
         if seconds <= 0 {
             return None;
         }
 
-        let seconds_i64 = i64::from(seconds);
-        Some((seconds_i64 + 59) / 60)
+        let seconds_u64 = seconds as u64;
+        Some((seconds_u64 + 59) / 60)
     }
 }

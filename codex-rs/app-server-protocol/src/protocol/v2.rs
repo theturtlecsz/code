@@ -514,12 +514,13 @@ impl SandboxPolicy {
                 codex_protocol::protocol::SandboxPolicy::DangerFullAccess
             }
             SandboxPolicy::ReadOnly => codex_protocol::protocol::SandboxPolicy::ReadOnly,
+            // ExternalSandbox maps to WorkspaceWrite with empty roots and network access based on the enum
             SandboxPolicy::ExternalSandbox { network_access } => {
-                codex_protocol::protocol::SandboxPolicy::ExternalSandbox {
-                    network_access: match network_access {
-                        NetworkAccess::Restricted => CoreNetworkAccess::Restricted,
-                        NetworkAccess::Enabled => CoreNetworkAccess::Enabled,
-                    },
+                codex_protocol::protocol::SandboxPolicy::WorkspaceWrite {
+                    writable_roots: Vec::new(),
+                    network_access: matches!(network_access, NetworkAccess::Enabled),
+                    exclude_tmpdir_env_var: false,
+                    exclude_slash_tmp: false,
                 }
             }
             SandboxPolicy::WorkspaceWrite {
@@ -528,7 +529,7 @@ impl SandboxPolicy {
                 exclude_tmpdir_env_var,
                 exclude_slash_tmp,
             } => codex_protocol::protocol::SandboxPolicy::WorkspaceWrite {
-                writable_roots: writable_roots.clone(),
+                writable_roots: writable_roots.iter().map(|p| p.as_path().to_path_buf()).collect(),
                 network_access: *network_access,
                 exclude_tmpdir_env_var: *exclude_tmpdir_env_var,
                 exclude_slash_tmp: *exclude_slash_tmp,
@@ -544,21 +545,16 @@ impl From<codex_protocol::protocol::SandboxPolicy> for SandboxPolicy {
                 SandboxPolicy::DangerFullAccess
             }
             codex_protocol::protocol::SandboxPolicy::ReadOnly => SandboxPolicy::ReadOnly,
-            codex_protocol::protocol::SandboxPolicy::ExternalSandbox { network_access } => {
-                SandboxPolicy::ExternalSandbox {
-                    network_access: match network_access {
-                        CoreNetworkAccess::Restricted => NetworkAccess::Restricted,
-                        CoreNetworkAccess::Enabled => NetworkAccess::Enabled,
-                    },
-                }
-            }
             codex_protocol::protocol::SandboxPolicy::WorkspaceWrite {
                 writable_roots,
                 network_access,
                 exclude_tmpdir_env_var,
                 exclude_slash_tmp,
             } => SandboxPolicy::WorkspaceWrite {
-                writable_roots,
+                writable_roots: writable_roots
+                    .into_iter()
+                    .filter_map(|p| AbsolutePathBuf::try_from(p).ok())
+                    .collect(),
                 network_access,
                 exclude_tmpdir_env_var,
                 exclude_slash_tmp,
@@ -596,7 +592,7 @@ pub enum CommandAction {
     Read {
         command: String,
         name: String,
-        path: PathBuf,
+        path: Option<String>,
     },
     ListFiles {
         command: String,
@@ -700,6 +696,7 @@ impl From<CoreParsedCommand> for CommandAction {
                 path,
             },
             CoreParsedCommand::Unknown { cmd } => CommandAction::Unknown { command: cmd },
+            CoreParsedCommand::ReadCommand { cmd } => CommandAction::Unknown { command: cmd },
         }
     }
 }
@@ -1205,7 +1202,7 @@ impl From<CoreTokenUsageInfo> for ThreadTokenUsage {
         Self {
             total: value.total_token_usage.into(),
             last: value.last_token_usage.into(),
-            model_context_window: value.model_context_window,
+            model_context_window: value.model_context_window.map(|v| v as i64),
         }
     }
 }
@@ -1229,11 +1226,11 @@ pub struct TokenUsageBreakdown {
 impl From<CoreTokenUsage> for TokenUsageBreakdown {
     fn from(value: CoreTokenUsage) -> Self {
         Self {
-            total_tokens: value.total_tokens,
-            input_tokens: value.input_tokens,
-            cached_input_tokens: value.cached_input_tokens,
-            output_tokens: value.output_tokens,
-            reasoning_output_tokens: value.reasoning_output_tokens,
+            total_tokens: value.total_tokens as i64,
+            input_tokens: value.input_tokens as i64,
+            cached_input_tokens: value.cached_input_tokens as i64,
+            output_tokens: value.output_tokens as i64,
+            reasoning_output_tokens: value.reasoning_output_tokens as i64,
         }
     }
 }
@@ -1874,8 +1871,8 @@ impl From<CoreRateLimitSnapshot> for RateLimitSnapshot {
         Self {
             primary: value.primary.map(RateLimitWindow::from),
             secondary: value.secondary.map(RateLimitWindow::from),
-            credits: value.credits.map(CreditsSnapshot::from),
-            plan_type: value.plan_type,
+            credits: None, // TODO: Add to CoreRateLimitSnapshot when upstream provides it
+            plan_type: None, // TODO: Add to CoreRateLimitSnapshot when upstream provides it
         }
     }
 }
@@ -1895,8 +1892,8 @@ impl From<CoreRateLimitWindow> for RateLimitWindow {
     fn from(value: CoreRateLimitWindow) -> Self {
         Self {
             used_percent: value.used_percent.round() as i32,
-            window_duration_mins: value.window_minutes,
-            resets_at: value.resets_at,
+            window_duration_mins: value.window_minutes.map(|v| v as i64),
+            resets_at: value.resets_in_seconds.map(|v| v as i64),
         }
     }
 }

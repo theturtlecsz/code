@@ -35,7 +35,7 @@ impl From<ParsedCommand> for codex_protocol::parse_command::ParsedCommand {
     fn from(v: ParsedCommand) -> Self {
         use codex_protocol::parse_command::ParsedCommand as P;
         match v {
-            ParsedCommand::Read { cmd, name } => P::Read { cmd, name },
+            ParsedCommand::Read { cmd, name } => P::Read { cmd, name, path: None },
             ParsedCommand::ListFiles { cmd, path } => P::ListFiles { cmd, path },
             ParsedCommand::Search { cmd, query, path } => P::Search { cmd, query, path },
             ParsedCommand::ReadCommand { cmd } => P::ReadCommand { cmd },
