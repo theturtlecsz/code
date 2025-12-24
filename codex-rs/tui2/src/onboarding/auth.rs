@@ -4,7 +4,7 @@ use codex_core::AuthManager;
 use crate::compat::auth::AuthCredentialsStoreMode;
 use codex_core::auth::CLIENT_ID;
 use codex_core::auth::login_with_api_key;
-use codex_core::auth::read_openai_api_key_from_env;
+use crate::compat::auth::read_openai_api_key_from_env;
 use codex_login::ServerOptions;
 use codex_login::ShutdownHandle;
 use codex_login::run_login_server;

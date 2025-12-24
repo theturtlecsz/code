@@ -28,6 +28,7 @@ use tracing_subscriber::prelude::*;
 
 // Local compatibility stubs for upstream-only features
 use crate::compat::auth::enforce_login_restrictions;
+use codex_protocol::mcp_protocol::AuthMode;
 use crate::compat::oss::{ensure_oss_provider_ready, get_default_model_for_oss_provider};
 use crate::compat::config::resolve_oss_provider;
 use crate::compat::INTERACTIVE_SESSION_SOURCES;

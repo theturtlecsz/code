@@ -940,9 +940,12 @@ impl ChatWidget {
     fn on_undo_started(&mut self, event: UndoStartedEvent) {
         self.bottom_pane.ensure_status_indicator();
         self.bottom_pane.set_interrupt_hint_visible(false);
-        let message = event
-            .message
-            .unwrap_or_else(|| "Undo in progress...".to_string());
+        // Local fork: message is String, not Option<String>
+        let message = if event.message.is_empty() {
+            "Undo in progress...".to_string()
+        } else {
+            event.message
+        };
         self.set_status_header(message);
     }
 
@@ -1747,9 +1750,9 @@ impl ChatWidget {
                 )));
                 return;
             }
-            self.submit_op(Op::RunUserShellCommand {
-                command: cmd.to_string(),
-            });
+            // NOTE: RunUserShellCommand doesn't exist in local fork's Op enum
+            // self.submit_op(Op::RunUserShellCommand { command: cmd.to_string() });
+            self.add_error_message("User shell commands are not supported in this fork".to_string());
             return;
         }
 
@@ -1864,8 +1867,9 @@ impl ChatWidget {
             // NOTE: Warning doesn't exist in local fork - using Error instead
             // EventMsg::Warning(WarningEvent { message }) => self.on_warning(message),
             EventMsg::Error(ErrorEvent { message, .. }) => self.on_error(message),
-            EventMsg::McpStartupUpdate(ev) => self.on_mcp_startup_update(ev),
-            EventMsg::McpStartupComplete(ev) => self.on_mcp_startup_complete(ev),
+            // NOTE: MCP startup events don't exist in local fork's EventMsg
+            // EventMsg::McpStartupUpdate(ev) => self.on_mcp_startup_update(ev),
+            // EventMsg::McpStartupComplete(ev) => self.on_mcp_startup_complete(ev),
             EventMsg::TurnAborted(ev) => match ev.reason {
                 TurnAbortReason::Interrupted => {
                     self.on_interrupted_turn(ev.reason);
@@ -1958,9 +1962,13 @@ impl ChatWidget {
             self.pre_review_token_info = Some(self.token_info.clone());
         }
         self.is_review_mode = true;
-        let hint = review
-            .user_facing_hint
-            .unwrap_or_else(|| codex_core::review_prompts::user_facing_hint(&review.target));
+        // NOTE: In local fork, user_facing_hint is String, not Option<String>
+        let hint = if review.user_facing_hint.is_empty() {
+            // review.target doesn't exist in local fork, use a default
+            "Review".to_string()
+        } else {
+            review.user_facing_hint.clone()
+        };
         let banner = format!(">> Code review started: {hint} <<");
         self.add_to_history(history_cell::new_review_status_line(banner));
         self.request_redraw();
@@ -2583,8 +2591,9 @@ impl ChatWidget {
 
     /// Open a popup to choose the approvals mode (ask for approval policy + sandbox policy).
     pub(crate) fn open_approvals_popup(&mut self) {
-        let current_approval = self.config.approval_policy.value();
-        let current_sandbox = self.config.sandbox_policy.get();
+        // NOTE: In local fork, these are direct enum values, not wrappers
+        let current_approval = &self.config.approval_policy;
+        let current_sandbox = &self.config.sandbox_policy;
         let mut items: Vec<SelectionItem> = Vec::new();
         let presets: Vec<ApprovalPreset> = builtin_approval_presets();
         for preset in presets.into_iter() {
@@ -2981,9 +2990,8 @@ impl ChatWidget {
 
     /// Set the approval policy in the widget's config copy.
     pub(crate) fn set_approval_policy(&mut self, policy: AskForApproval) {
-        if let Err(err) = self.config.approval_policy.set(policy) {
-            tracing::warn!(%err, "failed to set approval_policy on chat config");
-        }
+        // NOTE: In local fork, approval_policy is a direct enum, not a wrapper
+        self.config.approval_policy = policy;
     }
 
     /// Set the sandbox policy in the widget's config copy.
@@ -3058,7 +3066,9 @@ impl ChatWidget {
         if self.config.mcp_servers.is_empty() {
             self.add_to_history(history_cell::empty_mcp_output());
         } else {
-            self.submit_op(Op::ListMcpTools);
+            // NOTE: ListMcpTools doesn't exist in local fork's Op enum
+            // self.submit_op(Op::ListMcpTools);
+            self.add_to_history(history_cell::empty_mcp_output());
         }
     }
 

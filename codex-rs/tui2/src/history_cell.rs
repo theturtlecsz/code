@@ -1,4 +1,5 @@
 use crate::compat::ConfigExt;
+use crate::compat::protocol::ApprovedExecpolicyAmendment;
 use crate::diff_render::create_diff_summary;
 use crate::diff_render::display_path_for;
 use crate::exec_cell::CommandOutput;

@@ -1901,12 +1901,9 @@ impl App {
                         | codex_core::protocol::SandboxPolicy::ReadOnly
                 );
 
-                if let Err(err) = self.config.sandbox_policy.set(policy.clone()) {
-                    tracing::warn!(%err, "failed to set sandbox policy on app config");
-                    self.chat_widget
-                        .add_error_message(format!("Failed to set sandbox policy: {err}"));
-                    return Ok(true);
-                }
+                // NOTE: In local fork, sandbox_policy is a direct enum, not a wrapper
+                // Direct assignment always succeeds
+                self.config.sandbox_policy = policy.clone();
                 #[cfg(target_os = "windows")]
                 if !matches!(&policy, codex_core::protocol::SandboxPolicy::ReadOnly)
                     || codex_core::get_platform_sandbox().is_some()

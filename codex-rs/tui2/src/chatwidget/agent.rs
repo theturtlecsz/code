@@ -34,10 +34,13 @@ pub(crate) fn spawn_agent(
             Err(err) => {
                 let message = err.to_string();
                 eprintln!("{message}");
+                // NOTE: to_error_event doesn't exist in local fork's CodexErr
+                // Construct ErrorEvent directly from the error message
+                use codex_core::protocol::ErrorEvent;
                 app_event_tx_clone.send(AppEvent::CodexEvent(Event {
                     id: "".to_string(),
                     event_seq: 0,
-                    msg: EventMsg::Error(err.to_error_event(None)),
+                    msg: EventMsg::Error(ErrorEvent { message: message.clone() }),
                     order: None,
                 }));
                 app_event_tx_clone.send(AppEvent::ExitRequest);

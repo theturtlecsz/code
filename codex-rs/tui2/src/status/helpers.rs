@@ -92,7 +92,9 @@ pub(crate) fn compose_account_display(
 
     match auth.mode {
         AuthMode::ChatGPT => {
-            let email = auth.get_account_email();
+            // NOTE: get_account_email doesn't exist in local fork
+            // Use get_account_id as a fallback identifier
+            let email = auth.get_account_id();
             let plan = plan
                 .map(|plan_type| title_case(format!("{plan_type:?}").as_str()))
                 .or_else(|| Some("Unknown".to_string()));

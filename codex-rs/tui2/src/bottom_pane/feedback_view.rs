@@ -77,17 +77,10 @@ impl FeedbackNoteView {
 
         let mut thread_id = self.snapshot.thread_id.clone();
 
-        let result = self.snapshot.upload_feedback(
-            classification,
-            reason_opt,
-            self.include_logs,
-            if self.include_logs {
-                rollout_path_ref
-            } else {
-                None
-            },
-            Some(SessionSource::Cli),
-        );
+        // NOTE: upload_feedback doesn't exist in local fork's CodexLogSnapshot
+        // Feedback upload is not supported in this fork
+        let _ = (classification, reason_opt, rollout_path_ref);
+        let result: Result<(), String> = Err("Feedback upload not supported in this fork".to_string());
 
         match result {
             Ok(()) => {

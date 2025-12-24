@@ -120,17 +120,13 @@ impl StatusHistoryCell {
             .find(|(k, _)| *k == "approval")
             .map(|(_, v)| v.clone())
             .unwrap_or_else(|| "<unknown>".to_string());
-        let sandbox = match config.sandbox_policy.get() {
+        // NOTE: In local fork, sandbox_policy is a direct enum (no .get() wrapper)
+        // and ExternalSandbox variant doesn't exist
+        let sandbox = match &config.sandbox_policy {
             SandboxPolicy::DangerFullAccess => "danger-full-access".to_string(),
             SandboxPolicy::ReadOnly => "read-only".to_string(),
             SandboxPolicy::WorkspaceWrite { .. } => "workspace-write".to_string(),
-            SandboxPolicy::ExternalSandbox { network_access } => {
-                if matches!(network_access, NetworkAccess::Enabled) {
-                    "external-sandbox (network access enabled)".to_string()
-                } else {
-                    "external-sandbox".to_string()
-                }
-            }
+            // ExternalSandbox doesn't exist in local fork
         };
         let agents_summary = compose_agents_summary(config);
         let account = compose_account_display(auth_manager, plan_type);

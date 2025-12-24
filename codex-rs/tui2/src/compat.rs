@@ -249,6 +249,18 @@ pub mod config {
                 self
             }
 
+            pub fn set_hide_world_writable_warning(&mut self, _hide: bool) -> &mut Self {
+                self
+            }
+
+            pub fn set_hide_rate_limit_model_nudge(&mut self, _hide: bool) -> &mut Self {
+                self
+            }
+
+            pub fn record_model_migration_seen(&mut self, _from_model: &str, _to_model: &str) -> &mut Self {
+                self
+            }
+
             pub async fn apply(&self) -> std::io::Result<()> {
                 Ok(())
             }
@@ -382,11 +394,18 @@ pub mod protocol {
         pub server: String,
     }
 
+    /// Represents a failed MCP server during startup
+    #[derive(Debug, Clone)]
+    pub struct FailedMcpServer {
+        pub server: String,
+        pub error: Option<String>,
+    }
+
     #[derive(Debug, Clone)]
     pub struct McpStartupCompleteEvent {
         pub servers_ready: usize,
-        pub failed: Vec<String>,
-        pub cancelled: bool,
+        pub failed: Vec<FailedMcpServer>,
+        pub cancelled: Vec<String>,
     }
 
     #[derive(Debug, Clone)]
@@ -581,8 +600,18 @@ pub mod models_manager {
         }
 
         /// Stub - constructs a basic model family
-        pub async fn construct_model_family(&self, _model: &str, _config: &Config) -> ModelFamily {
-            ModelFamily::default()
+        pub async fn construct_model_family(&self, model: &str, _config: &Config) -> ModelFamily {
+            use codex_core::config_types::ReasoningSummaryFormat;
+            ModelFamily {
+                slug: model.to_string(),
+                family: model.to_string(),
+                needs_special_apply_patch_instructions: false,
+                supports_reasoning_summaries: false,
+                reasoning_summary_format: ReasoningSummaryFormat::None,
+                uses_local_shell_tool: false,
+                apply_patch_tool_type: None,
+                base_instructions: String::new(),
+            }
         }
 
         /// Stub - returns empty list of models

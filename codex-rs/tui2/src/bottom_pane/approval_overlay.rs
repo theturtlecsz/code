@@ -208,16 +208,12 @@ impl ApprovalOverlay {
 
     fn handle_elicitation_decision(
         &self,
-        server_name: &str,
-        request_id: &RequestId,
-        decision: ElicitationAction,
+        _server_name: &str,
+        _request_id: &RequestId,
+        _decision: ElicitationAction,
     ) {
-        self.app_event_tx
-            .send(AppEvent::CodexOp(Op::ResolveElicitation {
-                server_name: server_name.to_string(),
-                request_id: request_id.clone(),
-                decision,
-            }));
+        // NOTE: Op::ResolveElicitation doesn't exist in local fork
+        // Elicitation is not supported in this fork
     }
 
     fn advance_queue(&mut self) {
@@ -457,25 +453,27 @@ fn exec_options(
         additional_shortcuts: vec![key_hint::plain(KeyCode::Char('y'))],
     }]
     .into_iter()
-    .chain(
-        proposed_execpolicy_amendment
-            .filter(|_| features.enabled(Feature::ExecPolicy))
-            .map(|prefix| {
-                let rendered_prefix = strip_bash_lc_and_escape(prefix.command());
-                ApprovalOption {
-                    label: format!(
-                        "Yes, and don't ask again for commands that start with `{rendered_prefix}`"
-                    ),
-                    decision: ApprovalDecision::Review(
-                        ReviewDecision::ApprovedExecpolicyAmendment {
-                            proposed_execpolicy_amendment: prefix,
-                        },
-                    ),
-                    display_shortcut: None,
-                    additional_shortcuts: vec![key_hint::plain(KeyCode::Char('p'))],
-                }
-            }),
-    )
+    // NOTE: ApprovedExecpolicyAmendment doesn't exist in local fork's ReviewDecision
+    // Execpolicy amendments are not supported in this fork
+    // .chain(
+    //     proposed_execpolicy_amendment
+    //         .filter(|_| features.enabled(Feature::ExecPolicy))
+    //         .map(|prefix| {
+    //             let rendered_prefix = strip_bash_lc_and_escape(prefix.command());
+    //             ApprovalOption {
+    //                 label: format!(
+    //                     "Yes, and don't ask again for commands that start with `{rendered_prefix}`"
+    //                 ),
+    //                 decision: ApprovalDecision::Review(
+    //                     ReviewDecision::ApprovedExecpolicyAmendment {
+    //                         proposed_execpolicy_amendment: prefix,
+    //                     },
+    //                 ),
+    //                 display_shortcut: None,
+    //                 additional_shortcuts: vec![key_hint::plain(KeyCode::Char('p'))],
+    //             }
+    //         }),
+    // )
     .chain([ApprovalOption {
         label: "No, and tell Codex what to do differently".to_string(),
         decision: ApprovalDecision::Review(ReviewDecision::Abort),
