@@ -96,6 +96,10 @@ rusqlite = { workspace = true }
 r2d2 = "0.8"
 r2d2_sqlite = "0.31"
 
+[features]
+deterministic_process_ids = []
+test-support = []  # SYNC-028: Required by tui2 tests
+
 [target.'cfg(target_os = "linux")'.dependencies]
 landlock = "0.4.1"
 seccompiler = "0.5.0"
