@@ -73,6 +73,34 @@ SPEC.md                      # Task tracking (single source of truth)
 - Dirty tree: Guardrails require clean tree unless `SPEC_OPS_ALLOW_DIRTY=1`
 - Config isolation: Templates resolve `./templates/` → embedded only (no global)
 
+## Local Memory Integration
+
+**Policy**: CLI + REST only. No MCP.
+
+### Golden Path vs Manual
+
+| Mode | When | Memory Handling |
+|------|------|-----------------|
+| **`/speckit.auto`** | Primary workflow | Stage0 orchestrates memory recall + Tier2 (NotebookLM) |
+| **Ad-hoc work** | Debugging, exploration | Use `lm` commands manually (below) |
+
+### Manual Commands (Non-Golden-Path Only)
+
+**Before proposing changes** (if NOT using `/speckit.auto`):
+```bash
+lm recall "<task keywords>" --limit 5
+lm domain  # Verify domain resolution
+```
+
+**After significant work** (importance >= 8 only):
+```bash
+lm remember "<insight>" --type <TYPE> --importance 8 --tags "component:..."
+```
+
+**Canonical types**: `decision`, `pattern`, `bug-fix`, `milestone`, `discovery`, `limitation`, `architecture`
+
+**Policy reference**: `~/.claude/skills/local-memory/SKILL.md`
+
 ## Git
 
 - Default branch: **main**

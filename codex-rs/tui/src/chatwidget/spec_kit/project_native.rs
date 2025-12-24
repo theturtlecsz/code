@@ -198,12 +198,41 @@ fn create_instruction_files(
     };
 
     // Common content for all instruction files (everything after line 1)
+    // P73/P74: Added Local Memory Integration section for cross-agent consistency
     let common_content = format!(
         r#"
 ## Repository Context
 **Project**: {name}
 **Created**: {date}
 **Type**: {type_name}
+
+## Local Memory Integration
+
+**Policy**: CLI + REST only. No MCP.
+
+### Golden Path vs Manual
+
+| Mode | When | Memory Handling |
+|------|------|-----------------|
+| **`/speckit.auto`** | Primary workflow | Stage0 orchestrates memory recall + Tier2 (NotebookLM) |
+| **Ad-hoc work** | Debugging, exploration | Use `lm` commands manually (below) |
+
+### Manual Commands (Non-Golden-Path Only)
+
+**Before proposing changes** (if NOT using `/speckit.auto`):
+```bash
+lm recall "<task keywords>" --limit 5
+lm domain  # Verify domain resolution
+```
+
+**After significant work** (importance >= 8 only):
+```bash
+lm remember "<insight>" --type <TYPE> --importance 8 --tags "component:..."
+```
+
+**Canonical types**: `decision`, `pattern`, `bug-fix`, `milestone`, `discovery`, `limitation`, `architecture`
+
+**Policy reference**: `~/.claude/skills/local-memory/SKILL.md`
 
 ## Spec-Kit Workflow
 This project uses spec-kit for structured development:
