@@ -311,6 +311,7 @@ impl Client {
         })
     }
 
+    #[allow(dead_code)]
     fn map_credits(credits: Option<Option<Box<CreditStatusDetails>>>) -> Option<CreditsSnapshot> {
         let details = match credits {
             Some(Some(details)) => *details,
@@ -324,6 +325,7 @@ impl Client {
         })
     }
 
+    #[allow(dead_code)]
     fn map_plan_type(plan_type: crate::types::PlanType) -> AccountPlanType {
         match plan_type {
             crate::types::PlanType::Free => AccountPlanType::Free,
