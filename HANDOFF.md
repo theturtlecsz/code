@@ -1,104 +1,173 @@
 # Session Handoff — SYNC-028 TUI v2 Port
 
 **Last updated:** 2025-12-24
-**Status:** SYNC-028 In Progress - Session 9 Progress
-**Priority:** SYNC-028 (TUI v2) → SPEC-KIT-926 (Progress Visibility)
+**Status:** SYNC-028 Complete - Ready for Runtime Testing
+**Commit:** `f172d340e` feat(tui2): complete port - 0 errors (SYNC-028 S10)
 
 ---
 
-## Session Summary (2025-12-24 - Session 9)
+## Session 10 Summary (2025-12-24) - COMPILATION COMPLETE
 
-### Error Reduction Progress
+### Final Error Reduction
 
-| Metric | Session Start | Session End | Change |
-|--------|---------------|-------------|--------|
-| Total errors | 149 | 77 | -72 (-48%) |
-| E0308 (types) | 88 | 64 | -24 |
-| E0609 (fields) | 16 | ~5 | -11 |
-| E0061 (args) | 12 | 2 | -10 |
+| Metric | Session Start | Session End | Total Journey |
+|--------|---------------|-------------|---------------|
+| Errors | 56 | **0** | 262 → 0 |
+| Build Status | Failed | **Success** | - |
+| Warnings | - | 117 | Mostly unused imports |
 
-### Fixes Applied This Session
+### Key Fixes Applied
 
 | Category | Fix | Files |
 |----------|-----|-------|
-| ScrollConfigOverrides | Changed ConfigExt trait to return Option<u16/u64> types | compat.rs |
-| TerminalInfo | Changed name from Option<TerminalName> to direct TerminalName | compat.rs |
-| ModelsManager | Return Arc<ModelsManager> instead of direct struct | compat.rs |
-| ConversationId | Use .into() for Uuid→ConversationId conversion | chatwidget.rs |
-| RateLimitSnapshot | Switch to codex_protocol version, stub credits/plan_type | chatwidget.rs |
-| ModelFamily.context_window | Add extension method, use () syntax | compat.rs, chatwidget.rs, card.rs |
-| SkillMetadata | Add short_description, path, scope fields | compat.rs |
-| RolloutRecorder::list_conversations | Reduce from 6 to 3 args | resume_picker.rs, lib.rs |
-| load_config_as_toml_with_cli_overrides | Remove async, reduce args | lib.rs |
-| logout | Reduce from 2 to 1 arg | chatwidget.rs |
-| file_search::run | Reduce from 8 to 7 args | file_search.rs |
-| login_with_api_key | Reduce from 3 to 2 args | onboarding/auth.rs |
-| AuthMode | Import from codex_protocol::mcp_protocol instead | onboarding/auth.rs |
-| FileChange::Delete | Handle as unit variant (no content field) | diff_render.rs |
-| ApplyPatchApprovalRequestEvent | Remove turn_id, add original/new_content | chatwidget.rs |
-| ConversationManager::new | Reduce from 2 to 1 arg | app.rs |
-| ParsedCommand::ReadCommand | Add missing match arm | exec_cell/render.rs |
-| McpServerConfig | Remove enabled/transport field access | history_cell.rs |
-| ConversationItem | Use head data for timestamps | resume_picker.rs |
-| ConstraintResult | Add generic parameter, handle variants | compat.rs, app.rs |
-| Pattern matching | Add .. to handle extra fields | chatwidget.rs, history_cell.rs |
-| ServerOptions::new | Reduce from 4 to 3 args | onboarding/auth.rs |
-| create_config_summary_entries | Reduce from 2 to 1 arg | status/card.rs |
-| Various ReasoningEffort mismatches | Type conversions and stubs | app.rs |
+| ReasoningEffort | Bidirectional conversion functions | compat.rs |
+| RateLimitSnapshot | Re-export from protocol + conversion | compat.rs |
+| AuthMode | Aligned to codex_protocol::mcp_protocol | chatwidget.rs, helpers.rs, onboarding_screen.rs |
+| ParsedCommand | Aligned to codex_core::parse_command | chatwidget.rs, exec_cell/*.rs |
+| InputItem | Removed skill mentions (not in fork) | chatwidget.rs |
+| TurnAbortReason | Re-export from protocol | compat.rs |
+| Integer casts | u8/u64 → i64 for status display | status/card.rs |
+| Path normalization | Return Result for caller pattern | compat.rs |
 
-### Remaining Work (77 errors)
+### Stubbed Features
 
-**Major Categories:**
+Documented in `docs/SPEC-TUI2-STUBS.md`:
 
-| Error Type | Count | Description |
-|------------|-------|-------------|
-| E0308 | 64 | Type mismatches - still the bulk |
-| E0277 | 4 | Trait bounds (CreditsSnapshot, Try) |
-| E0061 | 2 | Function arg counts |
-| E0308 special | 4 | if/else, match arms compatibility |
-| Other | 3 | Move, borrow, method issues |
+| Feature | Impact | Status |
+|---------|--------|--------|
+| Model migration prompts | UI | Partially working |
+| Credits display | UI | No data source |
+| OSS provider integration | Feature | Stubbed |
+| Skill mentions (@skill) | Feature | Stubbed |
+| MCP tools display | UI | Type mismatch |
+| Custom prompts | UI | Type mismatch |
+| User shell commands (!cmd) | Feature | Error shown |
+| Review mode exit | Partial | Minimal handler |
+| Execpolicy amendment | UI | Removed |
 
-### Key Patterns Identified
+### Memory Stored
 
-1. **ReasoningEffort type conflicts** - Multiple crates define same-named types:
-   - `codex_core::config_types::ReasoningEffort`
-   - `codex_protocol::openai_models::ReasoningEffort`
-   Need careful conversion between them.
-
-2. **Option<T> vs T** - Fork uses direct types where upstream uses Option wrappers.
-
-3. **Struct field differences** - Fork's structs often have fewer fields.
-
-4. **Function signature differences** - Fork's functions often take fewer args.
+- **Milestone**: TUI v2 port completion (importance 9)
+- **Pattern**: Type conversion approach in compat.rs (importance 8)
 
 ---
 
-## Next Session Actions
+## Next Session: Runtime Testing (Session 11)
 
-1. Continue fixing E0308 type mismatches (64 remaining)
-2. Fix remaining E0277 trait bounds (4)
-3. Target: Get to 0 errors this session or next
-4. After 0 errors: Build binary and test
+### Primary Goal
 
-## Success Criteria
+Run tui2 binary and verify it doesn't panic during basic operations.
 
-- [x] cargo check -p codex-tui2 errors under 100 ✓ (77)
-- [ ] cargo check -p codex-tui2 (0 errors)
-- [ ] cargo build -p codex-tui2 (binary compiles)
-- [ ] ./target/debug/codex-tui2 --help (runs)
-- [ ] cargo build -p codex-tui (existing TUI still works)
+### Test Plan
 
-## Key Files Modified
+```bash
+# 1. Build release binary
+cargo build -p codex-tui2 --release
 
-- tui2/src/compat.rs - Stub layer for upstream compatibility
-- tui2/src/chatwidget.rs - Main chat widget
-- tui2/src/app.rs - App state and event handling
-- tui2/src/lib.rs - Entry point
-- Various status/, onboarding/, bottom_pane/ files
+# 2. Basic startup test
+./target/release/codex-tui2 --help
+
+# 3. Interactive test (if --help works)
+./target/release/codex-tui2
+
+# 4. Test with specific config
+./target/release/codex-tui2 -c /path/to/config.toml
+```
+
+### Test Scenarios to Verify
+
+1. **Startup**: Does it launch without panic?
+2. **Model display**: Does status bar show current model?
+3. **Input**: Can we type and submit prompts?
+4. **History**: Do messages appear in the chat?
+5. **Exit**: Does Ctrl+C exit cleanly?
+
+### Secondary Goals
+
+1. **Update TYPE_MAPPING.md**: Document new divergences discovered:
+   - ReasoningEffort (protocol vs core)
+   - RateLimitSnapshot (event vs snapshot)
+   - ParsedCommand (protocol vs core)
+   - InputItem (no Skill variant)
+
+2. **Create test plan**: Document test cases for each stubbed feature
+
+### Success Criteria
+
+- [ ] `./target/release/codex-tui2 --help` runs
+- [ ] `./target/release/codex-tui2` launches TUI
+- [ ] Can submit at least one prompt without panic
+- [ ] TYPE_MAPPING.md updated with new divergences
+- [ ] Test plan created for stubbed features
 
 ---
 
-**Committed:** `7743298fc` - Session 8 progress (149 errors)
-**Session 9 progress:** 149 → 77 errors (-72, -48%)
+## Diagnostic Commands
 
-**Next session will continue until 0 errors** with same approach.
+```bash
+# Check build
+cargo build -p codex-tui2 2>&1 | tail -5
+
+# Check original still works
+cargo build -p codex-tui 2>&1 | tail -5
+
+# Run with debug logging
+RUST_LOG=debug ./target/debug/codex-tui2
+
+# Check for panics in specific module
+RUST_BACKTRACE=1 ./target/debug/codex-tui2
+```
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| tui2/src/compat.rs | All compatibility stubs and conversions |
+| tui2/src/chatwidget.rs | Main chat widget (most changes) |
+| docs/SPEC-TUI2-STUBS.md | Stubbed features documentation |
+| codex-rs/UPSTREAM_SYNC.md | Port status in upstream tracking |
+
+---
+
+## Continuation Prompt
+
+```
+Continue SYNC-028 Session 11 - RUNTIME TESTING
+
+Load HANDOFF.md for full context.
+
+## Context
+Session 10 achieved 0 compilation errors (commit f172d340e).
+Build succeeds: cargo build -p codex-tui2
+
+## Session 11 Goals
+
+### Primary: Runtime Testing
+1. Build release binary
+2. Run --help, verify it works
+3. Launch interactive TUI
+4. Test basic prompt submission
+5. Document any panics/errors
+
+### Secondary: Documentation
+1. Update docs/upstream/TYPE_MAPPING.md with new divergences:
+   - ReasoningEffort (protocol vs core)
+   - RateLimitSnapshot (event vs snapshot)
+   - ParsedCommand (protocol vs core)
+   - InputItem (no Skill variant in fork)
+
+2. Create test plan for stubbed features:
+   - docs/SPEC-TUI2-TEST-PLAN.md
+
+### Success Criteria
+- tui2 binary runs without panic
+- Can submit at least one prompt
+- TYPE_MAPPING.md updated
+- Test plan created
+
+### If Runtime Fails
+1. Capture full backtrace: RUST_BACKTRACE=full
+2. Identify panic location
+3. Add defensive handling or stub
+4. Re-test
+```
