@@ -33,7 +33,7 @@ use codex_core::protocol::McpAuthStatus;
 use codex_core::protocol::McpInvocation;
 use codex_core::protocol::SessionConfiguredEvent;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
-use codex_protocol::openai_models::ReasoningSummaryFormat;
+use codex_core::config_types::ReasoningSummaryFormat;
 use codex_protocol::plan_tool::PlanItemArg;
 use codex_protocol::plan_tool::StepStatus;
 use codex_protocol::plan_tool::UpdatePlanArgs;
@@ -411,19 +411,7 @@ pub fn new_approval_decision_cell(
                 ],
             )
         }
-        ApprovedExecpolicyAmendment { .. } => {
-            let snippet = Span::from(exec_snippet(&command)).dim();
-            (
-                "✔ ".green(),
-                vec![
-                    "You ".into(),
-                    "approved".bold(),
-                    " codex to run ".into(),
-                    snippet,
-                    " and applied the execpolicy amendment".bold(),
-                ],
-            )
-        }
+        // NOTE: ApprovedExecpolicyAmendment removed - doesn't exist in local fork
         ApprovedForSession => {
             let snippet = Span::from(exec_snippet(&command)).dim();
             (

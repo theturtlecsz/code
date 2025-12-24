@@ -18,7 +18,7 @@ use crate::compat::bash::extract_bash_command;
 use crate::compat::protocol::ExecCommandSource;
 use crate::compat::ExecCommandBeginEventExt;
 use crate::compat::ExecCommandEndEventExt;
-use codex_protocol::parse_command::ParsedCommand;
+use codex_core::parse_command::ParsedCommand;
 use itertools::Itertools;
 use ratatui::prelude::*;
 use ratatui::style::Modifier;

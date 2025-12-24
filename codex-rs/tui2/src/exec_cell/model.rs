@@ -2,7 +2,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 use crate::compat::protocol::ExecCommandSource;
-use codex_protocol::parse_command::ParsedCommand;
+use codex_core::parse_command::ParsedCommand;
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct CommandOutput {

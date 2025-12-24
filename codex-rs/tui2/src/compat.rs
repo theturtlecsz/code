@@ -14,6 +14,34 @@
 use codex_core::config::Config;
 use codex_core::protocol::SandboxPolicy;
 
+/// Convert protocol ReasoningEffort to core ReasoningEffort
+pub fn convert_reasoning_effort(
+    effort: codex_protocol::openai_models::ReasoningEffort,
+) -> codex_core::config_types::ReasoningEffort {
+    use codex_protocol::openai_models::ReasoningEffort as ProtocolEffort;
+    use codex_core::config_types::ReasoningEffort as CoreEffort;
+    match effort {
+        ProtocolEffort::High | ProtocolEffort::XHigh => CoreEffort::High,
+        ProtocolEffort::Medium => CoreEffort::Medium,
+        ProtocolEffort::Low => CoreEffort::Low,
+        ProtocolEffort::Minimal | ProtocolEffort::None => CoreEffort::Minimal,
+    }
+}
+
+/// Convert core ReasoningEffort to protocol ReasoningEffort
+pub fn convert_reasoning_effort_to_protocol(
+    effort: codex_core::config_types::ReasoningEffort,
+) -> codex_protocol::openai_models::ReasoningEffort {
+    use codex_protocol::openai_models::ReasoningEffort as ProtocolEffort;
+    use codex_core::config_types::ReasoningEffort as CoreEffort;
+    match effort {
+        CoreEffort::High => ProtocolEffort::High,
+        CoreEffort::Medium => ProtocolEffort::Medium,
+        CoreEffort::Low => ProtocolEffort::Low,
+        CoreEffort::Minimal | CoreEffort::None => ProtocolEffort::Minimal,
+    }
+}
+
 /// Stub for `codex_core::INTERACTIVE_SESSION_SOURCES`
 pub const INTERACTIVE_SESSION_SOURCES: &[&str] = &["codex_cli", "codex_tui"];
 
@@ -201,7 +229,11 @@ pub mod config {
     }
 
     /// Stub - project trust level setting not supported locally
-    pub fn set_project_trust_level(_codex_home: &Path, _path: &Path, _level: &str) -> std::io::Result<()> {
+    pub fn set_project_trust_level(
+        _codex_home: &Path,
+        _path: &Path,
+        _level: codex_protocol::config_types::TrustLevel,
+    ) -> std::io::Result<()> {
         Ok(())
     }
 
@@ -303,30 +335,28 @@ pub mod config {
 pub mod protocol {
     use serde::{Deserialize, Serialize};
 
-    /// Stub rate limit snapshot
-    #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-    pub struct RateLimitSnapshot {
-        pub requests_remaining: Option<u32>,
-        pub tokens_remaining: Option<u32>,
-        pub reset_at: Option<String>,
-        pub window: Option<RateLimitWindow>,
-        pub primary: Option<RateLimitWindow>,
-        pub secondary: Option<RateLimitWindow>,
-        pub credits: Option<u32>,
-        pub plan_type: Option<String>,
-    }
+    // Re-export from codex_protocol for consistency
+    pub use codex_protocol::protocol::RateLimitSnapshot;
+    pub use codex_protocol::protocol::RateLimitWindow;
 
-    /// Stub rate limit window
-    #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-    pub struct RateLimitWindow {
-        pub period: String,
-        pub requests: u32,
-        pub tokens: u32,
-        pub requests_remaining: Option<u32>,
-        pub tokens_remaining: Option<u32>,
-        pub resets_at: Option<String>,
-        pub used_percent: Option<f64>,
-        pub window_minutes: Option<u32>,
+    /// Convert RateLimitSnapshotEvent from codex_core to RateLimitSnapshot from codex_protocol
+    pub fn convert_rate_limit_snapshot(
+        snapshot: &codex_core::protocol::RateLimitSnapshotEvent,
+    ) -> RateLimitSnapshot {
+        let primary = RateLimitWindow {
+            used_percent: snapshot.primary_used_percent,
+            window_minutes: Some(snapshot.primary_window_minutes),
+            resets_in_seconds: snapshot.primary_reset_after_seconds,
+        };
+        let secondary = RateLimitWindow {
+            used_percent: snapshot.secondary_used_percent,
+            window_minutes: Some(snapshot.secondary_window_minutes),
+            resets_in_seconds: snapshot.secondary_reset_after_seconds,
+        };
+        RateLimitSnapshot {
+            primary: Some(primary),
+            secondary: Some(secondary),
+        }
     }
 
     /// Stub exec command source
@@ -377,15 +407,8 @@ pub mod protocol {
         }
     }
 
-    /// Stub turn abort reason
-    #[derive(Debug, Clone, PartialEq)]
-    pub enum TurnAbortReason {
-        UserInterrupt,
-        Error(String),
-        ReviewEnded,
-        Interrupted,
-        Replaced,
-    }
+    // Re-export from codex_protocol for consistency
+    pub use codex_protocol::protocol::TurnAbortReason;
 
     // Stub event types that don't exist locally
     #[derive(Debug, Clone)]
@@ -524,15 +547,17 @@ pub mod path_utils {
     use std::path::Path;
 
     /// Stub - just returns the path as-is
-    pub fn normalize_for_path_comparison(path: &Path) -> std::path::PathBuf {
-        path.to_path_buf()
+    /// Returns Result to match expected signature from caller
+    pub fn normalize_for_path_comparison(path: &Path) -> Result<std::path::PathBuf, std::io::Error> {
+        Ok(path.to_path_buf())
     }
 }
 
 /// Stub bash module
 pub mod bash {
     /// Stub - returns None since bash command extraction not available locally
-    pub fn extract_bash_command(_text: &str) -> Option<String> {
+    /// Signature matches upstream which takes &[String] and returns Option<(usize, &str)>
+    pub fn extract_bash_command<'a>(_command: &'a [String]) -> Option<(usize, &'a str)> {
         None
     }
 }
@@ -540,7 +565,8 @@ pub mod bash {
 /// Stub parse_command module
 pub mod parse_command {
     /// Stub - returns None since shell command extraction not available locally
-    pub fn extract_shell_command(_text: &str) -> Option<String> {
+    /// Signature matches upstream which takes &[String] and returns Option<(usize, &str)>
+    pub fn extract_shell_command<'a>(_command: &'a [String]) -> Option<(usize, &'a str)> {
         None
     }
 }
@@ -824,7 +850,7 @@ pub trait ExecCommandEndEventExt {
     fn source(&self) -> protocol::ExecCommandSource;
     fn interaction_input(&self) -> Option<String>;
     fn command(&self) -> Vec<String>;
-    fn parsed_cmd(&self) -> Option<String>;
+    fn parsed_cmd(&self) -> Vec<codex_core::parse_command::ParsedCommand>;
     fn formatted_output(&self) -> Option<String>;
     fn aggregated_output(&self) -> Option<String>;
 }
@@ -842,8 +868,8 @@ impl ExecCommandEndEventExt for codex_core::protocol::ExecCommandEndEvent {
         Vec::new()
     }
 
-    fn parsed_cmd(&self) -> Option<String> {
-        None
+    fn parsed_cmd(&self) -> Vec<codex_core::parse_command::ParsedCommand> {
+        Vec::new()
     }
 
     fn formatted_output(&self) -> Option<String> {

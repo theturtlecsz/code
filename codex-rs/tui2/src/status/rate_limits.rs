@@ -46,16 +46,18 @@ pub(crate) struct RateLimitWindowDisplay {
 
 impl RateLimitWindowDisplay {
     fn from_window(window: &RateLimitWindow, captured_at: DateTime<Local>) -> Self {
+        // Convert resets_in_seconds to a formatted timestamp
         let resets_at = window
-            .resets_at
-            .and_then(|seconds| DateTime::<Utc>::from_timestamp(seconds, 0))
-            .map(|dt| dt.with_timezone(&Local))
-            .map(|dt| format_reset_timestamp(dt, captured_at));
+            .resets_in_seconds
+            .and_then(|secs| {
+                let reset_time = captured_at + ChronoDuration::seconds(secs as i64);
+                Some(format_reset_timestamp(reset_time, captured_at))
+            });
 
         Self {
             used_percent: window.used_percent,
             resets_at,
-            window_minutes: window.window_minutes,
+            window_minutes: window.window_minutes.map(|m| m as i64),
         }
     }
 }

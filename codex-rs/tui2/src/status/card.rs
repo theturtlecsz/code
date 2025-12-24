@@ -135,16 +135,16 @@ impl StatusHistoryCell {
         let session_id = session_id.as_ref().map(std::string::ToString::to_string);
         let context_window = model_family.context_window().and_then(|window| {
             context_usage.map(|usage| StatusContextWindowData {
-                percent_remaining: usage.percent_of_context_window_remaining(window),
-                tokens_in_context: usage.tokens_in_context_window(),
-                window,
+                percent_remaining: usage.percent_of_context_window_remaining(window) as i64,
+                tokens_in_context: usage.tokens_in_context_window() as i64,
+                window: window as i64,
             })
         });
 
         let token_usage = StatusTokenUsageData {
-            total: total_usage.blended_total(),
-            input: total_usage.non_cached_input(),
-            output: total_usage.output_tokens,
+            total: total_usage.blended_total() as i64,
+            input: total_usage.non_cached_input() as i64,
+            output: total_usage.output_tokens as i64,
             context_window,
         };
         let rate_limits = compose_rate_limit_data(rate_limits, now);

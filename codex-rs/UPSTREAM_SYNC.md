@@ -35,6 +35,26 @@ These upstream features are intentionally not included:
 | `models_manager` | Dynamic model management | Use static config |
 | Terminal interaction events | Complex terminal handling | Simplified implementation |
 
+### TUI v2 Port Status (SYNC-028)
+
+**Status**: Ported with limitations
+**Completed**: Session 10 (2024-12-24)
+**Build Status**: `cargo build -p codex-tui2` succeeds
+
+Stubbed features (see `docs/SPEC-TUI2-STUBS.md` for details):
+
+| Feature | Impact | Status |
+|---------|--------|--------|
+| Model migration prompts | UI only | Partially working |
+| Credits display | UI only | Stubbed (no data source) |
+| OSS provider integration | Feature unavailable | Stubbed |
+| Skill mentions (`@skill`) | Feature unavailable | Stubbed |
+| MCP tools display | UI only | Stubbed (type mismatch) |
+| Custom prompts | UI only | Stubbed (type mismatch) |
+| User shell commands (`!cmd`) | Feature unavailable | Error message shown |
+| Review mode exit | Partial | Minimal handler |
+| Execpolicy amendment approval | UI only | Removed |
+
 ### API Divergences
 
 See [`docs/upstream/TYPE_MAPPING.md`](docs/upstream/TYPE_MAPPING.md) for detailed type mapping.

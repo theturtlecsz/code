@@ -13,7 +13,7 @@ use crate::compat::ModelFamilyExt;
 use crate::compat::SandboxPolicyExt;
 use crate::compat::SessionConfiguredEventExt;
 use crate::compat::models_manager::ModelsManager;
-use codex_app_server_protocol::AuthMode;
+use codex_protocol::mcp_protocol::AuthMode;
 use codex_backend_client::Client as BackendClient;
 use codex_core::config::Config;
 use codex_core::config_types::Notifications;
@@ -72,8 +72,8 @@ use crate::compat::protocol::WebSearchEndEvent;
 use codex_protocol::ConversationId;
 use codex_protocol::account::PlanType;
 use codex_protocol::approvals::ElicitationRequestEvent;
-use codex_protocol::parse_command::ParsedCommand;
-use codex_protocol::user_input::UserInput;
+use codex_core::parse_command::ParsedCommand;
+use codex_core::protocol::InputItem;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyEventKind;
@@ -619,12 +619,12 @@ impl ChatWidget {
                 snapshot
                     .secondary
                     .as_ref()
-                    .and_then(|window| window.window_minutes),
+                    .and_then(|window| window.window_minutes.map(|m| m as i64)),
                 snapshot.primary.as_ref().map(|window| window.used_percent),
                 snapshot
                     .primary
                     .as_ref()
-                    .and_then(|window| window.window_minutes),
+                    .and_then(|window| window.window_minutes.map(|m| m as i64)),
             );
 
             let high_usage = snapshot
@@ -855,7 +855,7 @@ impl ChatWidget {
     fn on_view_image_tool_call(&mut self, event: ViewImageToolCallEvent) {
         self.flush_answer_stream_with_separator();
         self.add_to_history(history_cell::new_view_image_tool_call(
-            event.path,
+            PathBuf::from(event.path),
             &self.config.cwd,
         ));
         self.request_redraw();
@@ -888,9 +888,9 @@ impl ChatWidget {
         self.flush_answer_stream_with_separator();
     }
 
-    fn on_web_search_end(&mut self, ev: WebSearchEndEvent) {
+    fn on_web_search_end(&mut self, ev: codex_core::protocol::WebSearchCompleteEvent) {
         self.flush_answer_stream_with_separator();
-        self.add_to_history(history_cell::new_web_search_call(ev.query));
+        self.add_to_history(history_cell::new_web_search_call(ev.query.unwrap_or_default()));
     }
 
     fn on_get_history_entry_response(
@@ -916,7 +916,7 @@ impl ChatWidget {
 
     fn on_deprecation_notice(&mut self, event: DeprecationNoticeEvent) {
         let DeprecationNoticeEvent { summary, details, .. } = event;
-        self.add_to_history(history_cell::new_deprecation_notice(summary, details));
+        self.add_to_history(history_cell::new_deprecation_notice(summary, Some(details)));
         self.request_redraw();
     }
 
@@ -1207,12 +1207,13 @@ impl ChatWidget {
             *cell = new_exec;
         } else {
             self.flush_active_cell();
+            let source = ev.source();
 
             self.active_cell = Some(Box::new(new_active_exec_command(
                 ev.call_id.clone(),
                 ev.command.clone(),
                 ev.parsed_cmd,
-                ev.source(),
+                source,
                 interaction_input,
                 self.config.animations(),
             )));
@@ -1728,7 +1729,7 @@ impl ChatWidget {
             return;
         }
 
-        let mut items: Vec<UserInput> = Vec::new();
+        let mut items: Vec<InputItem> = Vec::new();
 
         // Special-case: "!cmd" executes a local shell command instead of sending to the model.
         if let Some(stripped) = text.strip_prefix('!') {
@@ -1749,22 +1750,15 @@ impl ChatWidget {
         }
 
         if !text.is_empty() {
-            items.push(UserInput::Text { text: text.clone() });
+            items.push(InputItem::Text { text: text.clone() });
         }
 
         for path in image_paths {
-            items.push(UserInput::LocalImage { path });
+            items.push(InputItem::LocalImage { path });
         }
 
-        if let Some(skills) = self.bottom_pane.skills() {
-            let skill_mentions = find_skill_mentions(&text, skills);
-            for skill in skill_mentions {
-                items.push(UserInput::Skill {
-                    name: skill.name.clone(),
-                    path: skill.path.clone(),
-                });
-            }
-        }
+        // NOTE: Skill mentions are not supported in the fork's InputItem type
+        // The skill feature would need to be added to codex_core::protocol::InputItem
 
         self.codex_op_tx
             .send(Op::UserInput { items })
@@ -1854,7 +1848,9 @@ impl ChatWidget {
             }
             EventMsg::TokenCount(ev) => {
                 self.set_token_info(ev.info);
-                self.on_rate_limit_snapshot(ev.rate_limits);
+                self.on_rate_limit_snapshot(
+                    ev.rate_limits.as_ref().map(crate::compat::protocol::convert_rate_limit_snapshot)
+                );
             }
             // NOTE: Warning doesn't exist in local fork - using Error instead
             // EventMsg::Warning(WarningEvent { message }) => self.on_warning(message),
@@ -1899,7 +1895,7 @@ impl ChatWidget {
             EventMsg::WebSearchBegin(ev) => self.on_web_search_begin(ev),
             // NOTE: WebSearchEnd doesn't exist in local fork (using WebSearchComplete instead)
             // EventMsg::WebSearchEnd(ev) => self.on_web_search_end(ev),
-            EventMsg::WebSearchComplete(ev) => self.on_web_search_end(&ev),
+            EventMsg::WebSearchComplete(ev) => self.on_web_search_end(ev),
             EventMsg::GetHistoryEntryResponse(ev) => self.on_get_history_entry_response(ev),
             // NOTE: McpListToolsResponse, ListCustomPromptsResponse, ListSkillsResponse, SkillsUpdateAvailable don't exist in local fork
             // EventMsg::McpListToolsResponse(ev) => self.on_list_mcp_tools(ev),
@@ -1932,7 +1928,11 @@ impl ChatWidget {
             EventMsg::EnteredReviewMode(review_request) => {
                 self.on_entered_review_mode(review_request)
             }
-            EventMsg::ExitedReviewMode(review) => self.on_exited_review_mode(review),
+            EventMsg::ExitedReviewMode(_review) => {
+                // NOTE: ExitedReviewMode handler stubbed - review output handling not fully ported
+                self.restore_pre_review_token_info();
+                self.request_redraw();
+            }
             // NOTE: ContextCompacted, RawResponseItem, ItemStarted, ItemCompleted, AgentMessageContentDelta, ReasoningContentDelta, ReasoningRawContentDelta don't exist in local fork
             // EventMsg::ContextCompacted(_) => self.on_agent_message("Context compacted".to_owned()),
             // EventMsg::RawResponseItem(_)
@@ -2172,7 +2172,7 @@ impl ChatWidget {
                 approval_policy: None,
                 sandbox_policy: None,
                 model: Some(switch_model.clone()),
-                effort: Some(Some(default_effort)),
+                effort: Some(Some(crate::compat::convert_reasoning_effort(default_effort))),
                 summary: None,
             }));
             tx.send(AppEvent::UpdateModel(switch_model.clone()));
@@ -2236,10 +2236,10 @@ impl ChatWidget {
     pub(crate) fn open_model_popup(&mut self) {
         let current_model = self.model_family.get_model_slug().to_string();
         let presets: Vec<ModelPreset> =
-            // todo(aibrahim): make this async function
+            // NOTE: try_list_models returns Option in fork, not Result
             match self.models_manager.try_list_models(&self.config) {
-                Ok(models) => models,
-                Err(_) => {
+                Some(models) => models,
+                None => {
                     self.add_info_message(
                         "Models are being updated; please try /model again in a moment."
                             .to_string(),
@@ -2387,12 +2387,13 @@ impl ChatWidget {
             let effort_label = effort_for_action
                 .map(|effort| effort.to_string())
                 .unwrap_or_else(|| "default".to_string());
+            let core_effort = effort_for_action.map(crate::compat::convert_reasoning_effort);
             tx.send(AppEvent::CodexOp(Op::OverrideTurnContext {
                 cwd: None,
                 approval_policy: None,
                 sandbox_policy: None,
                 model: Some(model_for_action.clone()),
-                effort: Some(effort_for_action),
+                effort: Some(core_effort),
                 summary: None,
             }));
             tx.send(AppEvent::UpdateModel(model_for_action.clone()));
@@ -2475,7 +2476,7 @@ impl ChatWidget {
         let model_slug = preset.model.to_string();
         let is_current_model = self.model_family.get_model_slug() == preset.model;
         let highlight_choice = if is_current_model {
-            self.config.model_reasoning_effort
+            Some(crate::compat::convert_reasoning_effort_to_protocol(self.config.model_reasoning_effort))
         } else {
             default_choice
         };
@@ -2557,13 +2558,14 @@ impl ChatWidget {
     }
 
     fn apply_model_and_effort(&self, model: String, effort: Option<ReasoningEffortConfig>) {
+        let core_effort = effort.map(crate::compat::convert_reasoning_effort);
         self.app_event_tx
             .send(AppEvent::CodexOp(Op::OverrideTurnContext {
                 cwd: None,
                 approval_policy: None,
                 sandbox_policy: None,
                 model: Some(model.clone()),
-                effort: Some(effort),
+                effort: Some(core_effort),
                 summary: None,
             }));
         self.app_event_tx.send(AppEvent::UpdateModel(model.clone()));
@@ -2591,7 +2593,7 @@ impl ChatWidget {
         let presets: Vec<ApprovalPreset> = builtin_approval_presets();
         for preset in presets.into_iter() {
             let is_current =
-                Self::preset_matches_current(current_approval, current_sandbox, &preset);
+                Self::preset_matches_current(current_approval.clone(), current_sandbox, &preset);
             let name = preset.label.to_string();
             let description_text = preset.description;
             let description = Some(description_text.to_string());
@@ -3032,7 +3034,9 @@ impl ChatWidget {
 
     /// Set the reasoning effort in the widget's config copy.
     pub(crate) fn set_reasoning_effort(&mut self, effort: Option<ReasoningEffortConfig>) {
-        self.config.model_reasoning_effort = effort;
+        self.config.model_reasoning_effort = effort
+            .map(crate::compat::convert_reasoning_effort)
+            .unwrap_or_default();
     }
 
     /// Set the model in the widget's config copy.
@@ -3146,21 +3150,18 @@ impl ChatWidget {
         }
     }
 
-    fn on_list_mcp_tools(&mut self, ev: McpListToolsResponseEvent) {
-        self.add_to_history(history_cell::new_mcp_tools_output(
-            &self.config,
-            ev.tools,
-            ev.resources,
-            ev.resource_templates,
-            &ev.auth_statuses,
-        ));
+    // NOTE: MCP tools display not fully ported - type mismatch with HashMap vs Vec
+    #[allow(dead_code)]
+    fn on_list_mcp_tools(&mut self, _ev: McpListToolsResponseEvent) {
+        // Stubbed - ev.tools has different type than history_cell expects
+        debug!("on_list_mcp_tools called but display not ported");
     }
 
-    fn on_list_custom_prompts(&mut self, ev: ListCustomPromptsResponseEvent) {
-        let len = ev.custom_prompts.len();
-        debug!("received {len} custom prompts");
-        // Forward to bottom pane so the slash popup can show them now.
-        self.bottom_pane.set_custom_prompts(ev.custom_prompts);
+    // NOTE: Custom prompts not fully ported - type mismatch
+    #[allow(dead_code)]
+    fn on_list_custom_prompts(&mut self, _ev: ListCustomPromptsResponseEvent) {
+        // Stubbed - ev.custom_prompts has different type than bottom_pane expects
+        debug!("on_list_custom_prompts called but display not ported");
     }
 
     fn on_list_skills(&mut self, ev: ListSkillsResponseEvent) {
@@ -3528,10 +3529,10 @@ fn skills_for_cwd(cwd: &Path, skills_entries: &[SkillsListEntry]) -> Vec<SkillMe
                 .iter()
                 .map(|skill| SkillMetadata {
                     name: skill.name.clone(),
-                    description: skill.description.clone(),
+                    description: Some(skill.description.clone()),
                     short_description: skill.short_description.clone(),
-                    path: skill.path.clone(),
-                    scope: skill.scope,
+                    path: Some(skill.path.clone()),
+                    scope: Some(format!("{:?}", skill.scope)),
                 })
                 .collect()
         })

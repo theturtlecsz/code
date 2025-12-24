@@ -12,7 +12,7 @@ use ratatui::style::Color;
 use ratatui::widgets::Clear;
 use ratatui::widgets::WidgetRef;
 
-use codex_app_server_protocol::AuthMode;
+use codex_protocol::mcp_protocol::AuthMode;
 use codex_protocol::config_types::ForcedLoginMethod;
 
 use crate::LoginStatus;
@@ -83,7 +83,7 @@ impl OnboardingScreen {
         let cwd = config.cwd.clone();
         let forced_chatgpt_workspace_id = config.forced_chatgpt_workspace_id().clone();
         let forced_login_method = config.forced_login_method();
-        let codex_home = config.codex_home;
+        let codex_home = config.codex_home.clone();
         let cli_auth_credentials_store_mode = config.cli_auth_credentials_store_mode();
         let mut steps: Vec<Step> = Vec::new();
         steps.push(Step::Welcome(WelcomeWidget::new(
