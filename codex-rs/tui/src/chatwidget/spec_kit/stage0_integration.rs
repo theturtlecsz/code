@@ -477,19 +477,22 @@ pub fn write_divine_truth_to_evidence(
 fn check_tier2_service_health(base_url: &str) -> Result<(), String> {
     let health_url = format!("{}/health", base_url.trim_end_matches('/'));
 
-    // Use blocking client since we're in sync context
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(2))
-        .build()
-        .map_err(|e| format!("HTTP client error: {e}"))?;
+    // SPEC-KIT-900 FIX: Use block_in_place to allow blocking reqwest calls
+    // within an async tokio context.
+    tokio::task::block_in_place(|| {
+        let client = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(2))
+            .build()
+            .map_err(|e| format!("HTTP client error: {e}"))?;
 
-    match client.get(&health_url).send() {
-        Ok(resp) if resp.status().is_success() => Ok(()),
-        Ok(resp) => Err(format!("NotebookLM service unhealthy: {}", resp.status())),
-        Err(e) if e.is_timeout() => Err("NotebookLM service timeout".to_string()),
-        Err(e) if e.is_connect() => Err("NotebookLM service not running".to_string()),
-        Err(e) => Err(format!("NotebookLM service unreachable: {e}")),
-    }
+        match client.get(&health_url).send() {
+            Ok(resp) if resp.status().is_success() => Ok(()),
+            Ok(resp) => Err(format!("NotebookLM service unhealthy: {}", resp.status())),
+            Err(e) if e.is_timeout() => Err("NotebookLM service timeout".to_string()),
+            Err(e) if e.is_connect() => Err("NotebookLM service not running".to_string()),
+            Err(e) => Err(format!("NotebookLM service unreachable: {e}")),
+        }
+    })
 }
 
 /// CONVERGENCE: Store Stage0 system pointer memory after artifacts are written

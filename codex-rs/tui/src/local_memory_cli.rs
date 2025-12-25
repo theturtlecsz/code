@@ -16,12 +16,18 @@ pub(crate) fn local_memory_daemon_healthy_blocking(timeout: Duration) -> bool {
         return true;
     }
 
-    reqwest::blocking::Client::new()
-        .get(LOCAL_MEMORY_REST_HEALTH_URL)
-        .timeout(timeout)
-        .send()
-        .map(|resp| resp.status().is_success())
-        .unwrap_or(false)
+    // SPEC-KIT-900 FIX: Use block_in_place to allow blocking reqwest calls
+    // within an async tokio context. Without this, reqwest::blocking::Client::new()
+    // tries to create its own runtime and panics with "Cannot drop a runtime
+    // in a context where blocking is not allowed".
+    tokio::task::block_in_place(|| {
+        reqwest::blocking::Client::new()
+            .get(LOCAL_MEMORY_REST_HEALTH_URL)
+            .timeout(timeout)
+            .send()
+            .map(|resp| resp.status().is_success())
+            .unwrap_or(false)
+    })
 }
 
 pub(crate) async fn local_memory_daemon_healthy(timeout: Duration) -> bool {

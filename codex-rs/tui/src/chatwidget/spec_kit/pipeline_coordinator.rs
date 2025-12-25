@@ -178,13 +178,17 @@ pub fn handle_spec_auto(
             }
 
             // Run Stage0 with the passed config
-            let result = super::stage0_integration::run_stage0_for_spec(
-                &widget.config,
-                &spec_id,
-                &spec_content,
-                &widget.config.cwd,
-                &stage0_config,
-            );
+            // SPEC-KIT-900 FIX: Wrap with block_in_place to allow blocking HTTP calls
+            // (reqwest::blocking) within the async tokio context.
+            let result = tokio::task::block_in_place(|| {
+                super::stage0_integration::run_stage0_for_spec(
+                    &widget.config,
+                    &spec_id,
+                    &spec_content,
+                    &widget.config.cwd,
+                    &stage0_config,
+                )
+            });
 
             // Store result in state
             let task_brief_written;

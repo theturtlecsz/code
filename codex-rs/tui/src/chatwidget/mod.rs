@@ -4475,22 +4475,12 @@ impl ChatWidget<'_> {
                 return;
             }
             crate::slash_command::ProcessedCommand::SpecAuto(invocation) => {
-                // Delegate to spec-auto orchestrator (runs in visible conversation)
-                let prompt = invocation.spec_id.to_string();
-                let expanded = codex_core::slash_commands::format_subagent_command(
-                    "spec-auto",
-                    &prompt,
-                    Some(&self.config.agents),
-                    Some(&self.config.subagent_commands),
-                );
-
-                // Submit as expanded prompt - orchestrator executes visibly
-                self.submit_user_message(UserMessage {
-                    display_text: format!("/speckit.auto {}", invocation.spec_id),
-                    ordered_items: vec![InputItem::Text {
-                        text: expanded.prompt,
-                    }],
-                });
+                // SPEC-KIT-900 FIX: Route to native pipeline coordinator
+                // Previously used format_subagent_command() which fell back to ALL agents
+                // when no [[subagents.commands]] config existed for "spec-auto".
+                // Now routes directly to handle_spec_auto_command() which uses
+                // MODEL-POLICY.md single-agent-per-stage (GR-001).
+                self.handle_spec_auto_command(invocation);
                 return;
             }
             crate::slash_command::ProcessedCommand::Error(error_msg) => {
