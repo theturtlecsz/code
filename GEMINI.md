@@ -1,6 +1,9 @@
 # GEMINI.md
 
-Not related to Anthropic's Claude Code.
+Project instructions for AI agents (Claude Code, code TUI, Gemini, etc.)
+
+> **tui vs tui2**: tui is the primary UI with spec-kit support. tui2 is an upstream scaffold only.
+> See [ADR-002](docs/adr/ADR-002-tui2-purpose-and-future.md).
 
 ## Commands
 
