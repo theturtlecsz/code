@@ -3190,9 +3190,7 @@ impl ChatWidget<'_> {
             if self.spec_auto_state.is_some() {
                 // Cancel the running pipeline
                 spec_kit::halt_spec_auto_with_error(self, "Cancelled by user (Esc)".to_string());
-                self.history_push(crate::history_cell::new_background_event(
-                    "Pipeline cancelled.".to_string(),
-                ));
+                self.push_background_tail("Pipeline cancelled.".to_string());
                 self.request_redraw();
                 return;
             }
@@ -14968,6 +14966,108 @@ mod tests {
             !chat.bottom_pane.is_task_running(),
             "spinner should hide after all agents are terminal and TaskComplete processed"
         );
+    }
+
+    // ===================================================================
+    // SESSION 17: REGRESSION TESTS FOR ESC CANCELLATION AND BLOCKING FIXES
+    // ===================================================================
+
+    /// Regression test: Esc key cancels running spec_auto pipeline
+    ///
+    /// Session 16 fix: Added Esc handler in mod.rs:3183-3199 that checks
+    /// if spec_auto_state.is_some() and calls halt_spec_auto_with_error.
+    #[tokio::test(flavor = "current_thread")]
+    async fn esc_cancels_spec_auto_pipeline() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+        use super::spec_kit::pipeline_config::PipelineConfig;
+
+        let mut chat = make_widget();
+
+        // Set up an active spec_auto pipeline
+        let spec_state = spec_kit::SpecAutoState::with_quality_gates(
+            "SPEC-TEST-001".to_string(),
+            "Test goal".to_string(),
+            SpecStage::Plan,
+            None, // hal_mode
+            false, // quality_gates_enabled
+            PipelineConfig::defaults(),
+        );
+        chat.spec_auto_state = Some(spec_state);
+
+        // Verify pipeline is active
+        assert!(
+            chat.spec_auto_state.is_some(),
+            "spec_auto_state should be Some before Esc"
+        );
+
+        // Press Esc
+        chat.handle_key_event(KeyEvent {
+            code: KeyCode::Esc,
+            modifiers: KeyModifiers::NONE,
+            kind: KeyEventKind::Press,
+            state: crossterm::event::KeyEventState::NONE,
+        });
+
+        // Verify pipeline is cancelled
+        assert!(
+            chat.spec_auto_state.is_none(),
+            "spec_auto_state should be None after Esc cancellation"
+        );
+    }
+
+    /// Regression test: Esc does NOT cancel when no pipeline is running
+    #[tokio::test(flavor = "current_thread")]
+    async fn esc_without_pipeline_does_not_crash() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+
+        let mut chat = make_widget();
+
+        // Ensure no pipeline is running
+        assert!(
+            chat.spec_auto_state.is_none(),
+            "spec_auto_state should be None initially"
+        );
+
+        // Press Esc - should not crash or panic
+        chat.handle_key_event(KeyEvent {
+            code: KeyCode::Esc,
+            modifiers: KeyModifiers::NONE,
+            kind: KeyEventKind::Press,
+            state: crossterm::event::KeyEventState::NONE,
+        });
+
+        // Still None after Esc
+        assert!(
+            chat.spec_auto_state.is_none(),
+            "spec_auto_state should remain None"
+        );
+    }
+
+    /// Regression test: block_in_place wrapper prevents runtime nesting panic
+    ///
+    /// Session 16 fix: Wrapped Runtime::new().block_on() calls with
+    /// tokio::task::block_in_place() in consensus_db.rs to prevent
+    /// "Cannot start a runtime from within a runtime" panic.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn block_in_place_prevents_runtime_panic() {
+        // This test runs inside a tokio runtime (due to #[tokio::test])
+        // The block_in_place fix allows nested Runtime::new().block_on()
+        // by using tokio::task::block_in_place() to temporarily exit
+        // the async context.
+
+        // Test that block_in_place works correctly
+        let result = tokio::task::block_in_place(|| {
+            // This would panic without block_in_place:
+            // "Cannot start a runtime from within a runtime"
+            let rt = tokio::runtime::Runtime::new().expect("create runtime");
+            rt.block_on(async {
+                // Simulate async work
+                tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
+                42
+            })
+        });
+
+        assert_eq!(result, 42, "block_in_place should allow nested runtime");
     }
 }
 

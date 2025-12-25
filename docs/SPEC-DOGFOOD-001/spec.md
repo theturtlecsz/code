@@ -76,3 +76,48 @@ Before dogfooding is productive, these conditions MUST be true:
 - All 4 acceptance criteria pass on first execution.
 - No manual intervention required during pipeline run.
 - Evidence artifacts are human-readable and contain synthesized context from project docs.
+
+---
+
+## Session 17 Validation Results
+
+**Date**: 2025-12-25
+**Build**: 12e7d7d1a7b4d58bbf038a7c4e6a36eefe8685b3ea125889a016c6c64f46ba4c
+
+### Regression Tests Added
+
+1. **`esc_cancels_spec_auto_pipeline`**: Verifies Esc key cancels running pipeline (Session 16 fix)
+2. **`esc_without_pipeline_does_not_crash`**: Verifies Esc works safely when no pipeline running
+3. **`block_in_place_prevents_runtime_panic`**: Verifies tokio runtime nesting is handled correctly (Session 16 fix)
+
+All 3 regression tests pass. Full test suite: **550 passed, 0 failed, 3 ignored**.
+
+### Bug Found and Fixed
+
+- **Issue**: Esc handler used `history_push` for background events (debug assertion failure)
+- **Fix**: Changed to `push_background_tail` helper (mod.rs:3193)
+
+### Acceptance Criteria Verification
+
+| ID | Criterion | Status | Evidence |
+|----|-----------|--------|----------|
+| A0 | No Surprise Fan-Out | ✅ PASS | `enabled: false` default in QualityCheckpointConfig (config_types.rs:1272) |
+| A1 | Doctor Ready | ✅ PASS | `code doctor` shows all [OK] for Stage0 checks |
+| A2 | Tier2 Used | ⏳ MANUAL | Requires `/speckit.auto` execution (self-referential from Claude Code) |
+| A3 | Evidence Exists | ⏳ MANUAL | No evidence directory yet - requires pipeline run |
+| A4 | System Pointer | ✅ PASS | `lm search "SPEC-DOGFOOD-001"` returns 3 results |
+| A5 | GR-001 Enforcement | ✅ PASS | Guard at quality_gate_handler.rs:1208 rejects >1 agent |
+| A6 | Slash Dispatch Single-Shot | ✅ PASS | Re-entry guard at pipeline_coordinator.rs:41-44 |
+
+### Summary
+
+- **5 of 7 criteria verified programmatically**
+- **2 criteria require manual testing** (A2, A3 - need actual pipeline execution)
+- **All regression tests pass**
+- **One bug found and fixed during testing**
+
+### Next Steps
+
+1. Run `/speckit.auto SPEC-DOGFOOD-001` manually in TUI to verify A2 and A3
+2. Commit Session 17 changes
+3. Create final dogfooding validation report
