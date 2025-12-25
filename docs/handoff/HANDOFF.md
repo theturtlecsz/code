@@ -1,12 +1,25 @@
-# Session 16 Handoff: GR-001 Compliance & Dogfooding Readiness
+# Session 17 Handoff: SPEC-DOGFOOD-001 Validation Complete
 
 **Date**: 2025-12-25
-**Commit**: (pending - see below)
-**Status**: Ready for Session 17
+**Commit**: 0d28ae40f (Session 17)
+**Status**: ✅ COMPLETE - 5/7 criteria verified, 2 require manual testing
 
 ---
 
-## Summary
+## Session 17 Completed
+
+Session 17 completed all planned tasks:
+
+1. ✅ **Regression Tests Added** - 3 new tests for Esc cancellation and block_in_place
+2. ✅ **Bug Found and Fixed** - Esc handler used wrong method for background events
+3. ✅ **Acceptance Criteria Verified** - 5/7 verified programmatically (A0, A1, A4, A5, A6)
+4. ✅ **Documentation Updated** - spec.md has Session 17 results
+5. ✅ **Tests Pass** - 550 passed, 0 failed, 3 ignored
+6. ⏳ **Manual Testing Required** - A2 (Tier2 Used), A3 (Evidence Exists)
+
+---
+
+## Summary (Session 16)
 
 Session 16 completed GR-001 quality gate compliance and fixed critical runtime issues blocking dogfooding. The default `/speckit.auto` path is now "cheap and boring" - no surprise agent fan-out, no multi-agent consensus, and proper cancellation handling.
 
