@@ -3969,22 +3969,17 @@ impl ChatWidget<'_> {
         );
         let _ = self.history_insert_with_key_global_tagged(Box::new(cell), key, "epilogue");
 
-        // SPEC-KIT QUALITY GATE: Trigger handler if in QualityGateExecuting AND not already processing
-        if let Some(state) = &self.spec_auto_state
-            && let spec_kit::state::SpecAutoPhase::QualityGateExecuting { checkpoint, .. } =
-                state.phase
-        {
-            // Only trigger if:
-            // 1. Checkpoint not completed
-            // 2. Not currently processing (prevents recursion)
-            if !state.completed_checkpoints.contains(&checkpoint)
-                && state.quality_gate_processing.is_none()
-            {
-                spec_kit::handler::on_quality_gate_agents_complete(self);
-                // SPEC-939: Check for pending config reload after quality gate completes
-                self.check_pending_config_reload();
-            }
-        }
+        // SPEC-KIT-900 FIX: Removed premature quality gate triggering.
+        // The handler should only be called when QualityGateNativeAgentsComplete event
+        // is received (after agents actually complete), not on every history_push.
+        // This was causing "0 of 3 expected agents" because the broker ran before
+        // agents were spawned.
+        //
+        // The proper flow is:
+        // 1. execute_quality_checkpoint() spawns agents in background
+        // 2. wait_for_quality_gate_agents() polls until complete
+        // 3. QualityGateNativeAgentsComplete event is sent
+        // 4. app.rs handler calls set_native_agent_ids + on_quality_gate_agents_complete
     }
     /// Insert a background event near the top of the current request so it appears
     /// before imminent provider output (e.g. Exec begin).

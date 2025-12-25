@@ -464,7 +464,7 @@ impl SpecKitCommand for SpecKitConstitutionCommand {
     }
 
     fn description(&self) -> &'static str {
-        "manage constitution (view/add/sync/add-exception)"
+        "manage constitution (view/add/import/sync/add-exception)"
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
@@ -478,12 +478,13 @@ impl SpecKitCommand for SpecKitConstitutionCommand {
         match subcommand.to_lowercase().as_str() {
             "view" | "" => execute_constitution_view(widget),
             "add" => execute_constitution_add(widget, rest.trim()),
+            "import" => execute_constitution_import(widget),
             "sync" => execute_constitution_sync(widget),
             "ace" => execute_constitution_ace(widget),
             "add-exception" => execute_constitution_add_exception(widget, rest.trim()),
             _ => {
                 widget.history_push(crate::history_cell::new_error_event(format!(
-                    "Unknown subcommand '{}'. Use: view, add, sync, ace, or add-exception",
+                    "Unknown subcommand '{}'. Use: view, add, import, sync, ace, or add-exception",
                     subcommand
                 )));
                 widget.request_redraw();
@@ -537,14 +538,29 @@ fn execute_constitution_view(widget: &mut ChatWidget) {
     };
 
     if version == 0 {
+        // Check if memory/constitution.md exists for import suggestion
+        let constitution_file = widget.config.cwd.join("memory").join("constitution.md");
+        let has_file = constitution_file.exists();
+
+        let mut lines = vec![
+            ratatui::text::Line::from("📋 Constitution Status"),
+            ratatui::text::Line::from(""),
+            ratatui::text::Line::from("No constitution defined in overlay DB."),
+            ratatui::text::Line::from(""),
+        ];
+
+        if has_file {
+            lines.push(ratatui::text::Line::from(
+                "✓ Found memory/constitution.md - run /speckit.constitution import to bootstrap.",
+            ));
+        } else {
+            lines.push(ratatui::text::Line::from(
+                "Use /speckit.constitution add to create one.",
+            ));
+        }
+
         widget.history_push(crate::history_cell::PlainHistoryCell::new(
-            vec![
-                ratatui::text::Line::from("📋 Constitution Status"),
-                ratatui::text::Line::from(""),
-                ratatui::text::Line::from("No constitution defined."),
-                ratatui::text::Line::from(""),
-                ratatui::text::Line::from("Use /speckit.constitution add to create one."),
-            ],
+            lines,
             crate::history_cell::HistoryCellType::Notice,
         ));
         widget.request_redraw();
@@ -846,6 +862,217 @@ fn execute_constitution_add(widget: &mut ChatWidget, args: &str) {
         crate::history_cell::HistoryCellType::Notice,
     ));
     widget.request_redraw();
+}
+
+/// Import constitution from memory/constitution.md
+///
+/// Parses the markdown file and populates the overlay DB with guardrails, principles,
+/// goals, and non-goals. Does NOT overwrite the source file.
+fn execute_constitution_import(widget: &mut ChatWidget) {
+    use ratatui::text::Line;
+
+    // Check if memory/constitution.md exists
+    let constitution_file = widget.config.cwd.join("memory").join("constitution.md");
+    if !constitution_file.exists() {
+        widget.history_push(crate::history_cell::new_error_event(
+            "memory/constitution.md not found. Create it first or use /speckit.constitution add."
+                .to_string(),
+        ));
+        widget.request_redraw();
+        return;
+    }
+
+    // Read the file
+    let content = match std::fs::read_to_string(&constitution_file) {
+        Ok(c) => c,
+        Err(e) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Failed to read memory/constitution.md: {}",
+                e
+            )));
+            widget.request_redraw();
+            return;
+        }
+    };
+
+    // Load config and connect to DB
+    let config = match codex_stage0::Stage0Config::load() {
+        Ok(c) => c,
+        Err(e) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Failed to load Stage0 config: {}",
+                e
+            )));
+            widget.request_redraw();
+            return;
+        }
+    };
+
+    let db = match codex_stage0::OverlayDb::connect_and_init(&config) {
+        Ok(d) => d,
+        Err(e) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Failed to connect to overlay DB: {}",
+                e
+            )));
+            widget.request_redraw();
+            return;
+        }
+    };
+
+    // Parse the markdown and extract constitution entries
+    let entries = parse_constitution_markdown(&content);
+
+    if entries.is_empty() {
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![
+                Line::from("⚠️ No constitution entries found in memory/constitution.md"),
+                Line::from(""),
+                Line::from("Expected format with sections like:"),
+                Line::from("  ## Guardrails, ## Principles, ## Goals, ## Non-Goals"),
+                Line::from("  followed by bullet points (- or *)"),
+            ],
+            crate::history_cell::HistoryCellType::Notice,
+        ));
+        widget.request_redraw();
+        return;
+    }
+
+    // Import entries to DB
+    let mut imported = 0;
+    let mut errors = 0;
+
+    for (entry_type, content) in &entries {
+        let type_str = match entry_type {
+            codex_stage0::ConstitutionType::Guardrail => "guardrail",
+            codex_stage0::ConstitutionType::Principle => "principle",
+            codex_stage0::ConstitutionType::Goal => "goal",
+            codex_stage0::ConstitutionType::NonGoal => "nongoal",
+            codex_stage0::ConstitutionType::Exception => "exception",
+        };
+        let memory_id = format!(
+            "import-{}-{}",
+            type_str,
+            uuid::Uuid::new_v4()
+        );
+
+        if let Err(e) = db.upsert_constitution_memory(&memory_id, *entry_type, content) {
+            tracing::warn!("Failed to import constitution entry: {}", e);
+            errors += 1;
+        } else {
+            imported += 1;
+        }
+    }
+
+    // Increment version
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    content.hash(&mut hasher);
+    let hash = format!("{:016x}", hasher.finish());
+    if let Err(e) = db.increment_constitution_version(Some(&hash)) {
+        tracing::warn!("Failed to increment constitution version: {}", e);
+    }
+
+    // Invalidate Tier 2 cache
+    let cache_invalidated = db.invalidate_tier2_by_constitution().unwrap_or(0);
+
+    let mut lines = vec![
+        Line::from(format!(
+            "✅ Imported {} entries from memory/constitution.md",
+            imported
+        )),
+    ];
+
+    if errors > 0 {
+        lines.push(Line::from(format!("   ({} errors)", errors)));
+    }
+
+    // Summary by type
+    let guardrails = entries
+        .iter()
+        .filter(|(t, _)| *t == codex_stage0::ConstitutionType::Guardrail)
+        .count();
+    let principles = entries
+        .iter()
+        .filter(|(t, _)| *t == codex_stage0::ConstitutionType::Principle)
+        .count();
+    let goals = entries
+        .iter()
+        .filter(|(t, _)| *t == codex_stage0::ConstitutionType::Goal)
+        .count();
+    let nongoals = entries
+        .iter()
+        .filter(|(t, _)| *t == codex_stage0::ConstitutionType::NonGoal)
+        .count();
+
+    lines.push(Line::from(format!(
+        "   Guardrails: {}, Principles: {}, Goals: {}, Non-Goals: {}",
+        guardrails, principles, goals, nongoals
+    )));
+
+    if cache_invalidated > 0 {
+        lines.push(Line::from(format!(
+            "   Cache: {} Tier 2 entries invalidated",
+            cache_invalidated
+        )));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(
+        "   Run /speckit.constitution view to verify.",
+    ));
+
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+        lines,
+        crate::history_cell::HistoryCellType::Notice,
+    ));
+    widget.request_redraw();
+}
+
+/// Parse constitution markdown file into typed entries
+///
+/// Looks for sections: ## Guardrails, ## Principles, ## Goals, ## Non-Goals
+/// And extracts bullet points (- or *) under each section.
+fn parse_constitution_markdown(content: &str) -> Vec<(codex_stage0::ConstitutionType, String)> {
+    let mut entries = Vec::new();
+    let mut current_type: Option<codex_stage0::ConstitutionType> = None;
+
+    for line in content.lines() {
+        let line = line.trim();
+
+        // Detect section headers
+        if line.starts_with("##") {
+            let header = line.trim_start_matches('#').trim().to_lowercase();
+            current_type = if header.contains("guardrail") {
+                Some(codex_stage0::ConstitutionType::Guardrail)
+            } else if header.contains("principle") {
+                Some(codex_stage0::ConstitutionType::Principle)
+            } else if header.contains("non-goal") || header.contains("nongoal") {
+                Some(codex_stage0::ConstitutionType::NonGoal)
+            } else if header.contains("goal") {
+                Some(codex_stage0::ConstitutionType::Goal)
+            } else {
+                None
+            };
+            continue;
+        }
+
+        // Extract bullet points
+        if let Some(entry_type) = current_type {
+            if line.starts_with('-') || line.starts_with('*') {
+                let content = line
+                    .trim_start_matches('-')
+                    .trim_start_matches('*')
+                    .trim();
+                if !content.is_empty() && content.len() > 5 {
+                    // Ignore very short entries
+                    entries.push((entry_type, content.to_string()));
+                }
+            }
+        }
+    }
+
+    entries
 }
 
 /// P91: Sync constitution to markdown files

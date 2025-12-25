@@ -1,6 +1,12 @@
 //! Stage0 configuration loading
 //!
-//! Loads configuration from `~/.config/codex/stage0.toml` (or `CODEX_STAGE0_CONFIG` env).
+//! Loads configuration from `~/.config/code/stage0.toml` with fallback to
+//! `~/.config/codex/stage0.toml` for backward compatibility.
+//!
+//! Environment variable overrides (checked in order):
+//! 1. `CODE_STAGE0_CONFIG` (preferred)
+//! 2. `CODEX_STAGE0_CONFIG` (legacy)
+//!
 //! See docs/stage0/STAGE0_CONFIG_AND_PROMPTS.md for the full schema.
 
 use crate::errors::{Result, Stage0Error};
@@ -100,11 +106,24 @@ fn default_store_system_pointers() -> bool {
 fn default_db_path() -> String {
     dirs::home_dir()
         .map(|h| {
-            h.join(".config")
+            // Prefer ~/.config/code/ path (canonical)
+            let code_path = h
+                .join(".config")
+                .join("code")
+                .join("local-memory-overlay.db");
+
+            // Check if new path exists or old path doesn't exist (use new)
+            let codex_path = h
+                .join(".config")
                 .join("codex")
-                .join("local-memory-overlay.db")
-                .to_string_lossy()
-                .into_owned()
+                .join("local-memory-overlay.db");
+
+            if code_path.exists() || !codex_path.exists() {
+                code_path.to_string_lossy().into_owned()
+            } else {
+                // Fall back to legacy path if it exists and new doesn't
+                codex_path.to_string_lossy().into_owned()
+            }
         })
         .unwrap_or_else(|| "local-memory-overlay.db".to_string())
 }
@@ -450,8 +469,11 @@ impl Default for Stage0Config {
 }
 
 impl Stage0Config {
-    /// Environment variable for config path override
-    pub const ENV_CONFIG_PATH: &'static str = "CODEX_STAGE0_CONFIG";
+    /// Environment variable for config path override (preferred)
+    pub const ENV_CONFIG_PATH: &'static str = "CODE_STAGE0_CONFIG";
+
+    /// Legacy environment variable for config path override
+    pub const ENV_CONFIG_PATH_LEGACY: &'static str = "CODEX_STAGE0_CONFIG";
 
     /// Default config filename
     pub const DEFAULT_CONFIG_FILENAME: &'static str = "stage0.toml";
@@ -459,8 +481,10 @@ impl Stage0Config {
     /// Load configuration from file
     ///
     /// Resolution order:
-    /// 1. `CODEX_STAGE0_CONFIG` environment variable
-    /// 2. `~/.config/codex/stage0.toml`
+    /// 1. `CODE_STAGE0_CONFIG` environment variable (preferred)
+    /// 2. `CODEX_STAGE0_CONFIG` environment variable (legacy)
+    /// 3. `~/.config/code/stage0.toml` (preferred)
+    /// 4. `~/.config/codex/stage0.toml` (legacy fallback)
     ///
     /// If the config file doesn't exist, returns default configuration.
     pub fn load() -> Result<Self> {
@@ -499,15 +523,58 @@ impl Stage0Config {
     }
 
     /// Resolve the configuration file path
+    ///
+    /// Priority:
+    /// 1. CODE_STAGE0_CONFIG env var (preferred)
+    /// 2. CODEX_STAGE0_CONFIG env var (legacy)
+    /// 3. ~/.config/code/stage0.toml (preferred path)
+    /// 4. ~/.config/codex/stage0.toml (legacy fallback)
     fn resolve_config_path() -> PathBuf {
+        // Check preferred env var first
         if let Ok(path) = std::env::var(Self::ENV_CONFIG_PATH) {
             return PathBuf::from(path);
         }
 
+        // Check legacy env var
+        if let Ok(path) = std::env::var(Self::ENV_CONFIG_PATH_LEGACY) {
+            return PathBuf::from(path);
+        }
+
+        // Check file paths
+        if let Some(home) = dirs::home_dir() {
+            // Preferred path: ~/.config/code/stage0.toml
+            let code_path = home
+                .join(".config")
+                .join("code")
+                .join(Self::DEFAULT_CONFIG_FILENAME);
+
+            if code_path.exists() {
+                return code_path;
+            }
+
+            // Legacy fallback: ~/.config/codex/stage0.toml
+            let codex_path = home
+                .join(".config")
+                .join("codex")
+                .join(Self::DEFAULT_CONFIG_FILENAME);
+
+            if codex_path.exists() {
+                return codex_path;
+            }
+
+            // Neither exists - return preferred path (for "not found" message)
+            return code_path;
+        }
+
+        PathBuf::from(Self::DEFAULT_CONFIG_FILENAME)
+    }
+
+    /// Get the canonical config path (for user-facing messages)
+    pub fn canonical_config_path() -> PathBuf {
         dirs::home_dir()
             .map(|h| {
                 h.join(".config")
-                    .join("codex")
+                    .join("code")
                     .join(Self::DEFAULT_CONFIG_FILENAME)
             })
             .unwrap_or_else(|| PathBuf::from(Self::DEFAULT_CONFIG_FILENAME))

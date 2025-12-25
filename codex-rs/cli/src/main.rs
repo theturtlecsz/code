@@ -1129,11 +1129,22 @@ async fn doctor_main() -> anyhow::Result<()> {
     checks.push(nlm_check);
 
     // 3. Notebook mapping (check stage0.toml)
+    // Resolution order: ~/.config/code/stage0.toml (preferred), ~/.config/codex/stage0.toml (legacy)
     let notebook_check = {
-        let config_path = dirs::config_dir()
-            .map(|d| d.join("codex").join("stage0.toml"))
-            .unwrap_or_default();
-        if config_path.exists() {
+        let home = dirs::home_dir();
+        let code_path = home
+            .as_ref()
+            .map(|h| h.join(".config").join("code").join("stage0.toml"));
+        let codex_path = home
+            .as_ref()
+            .map(|h| h.join(".config").join("codex").join("stage0.toml"));
+
+        // Find the actual config path (prefer code over codex)
+        let config_path = code_path
+            .filter(|p| p.exists())
+            .or_else(|| codex_path.filter(|p| p.exists()));
+
+        if let Some(config_path) = config_path {
             match std::fs::read_to_string(&config_path) {
                 Ok(content) => {
                     // Simple check: look for notebook setting
@@ -1157,7 +1168,7 @@ async fn doctor_main() -> anyhow::Result<()> {
                     name: "notebook-mapping",
                     status: HealthStatus::Fail,
                     message: format!("Cannot read config: {}", e),
-                    fix_hint: Some("Check ~/.config/codex/stage0.toml"),
+                    fix_hint: Some("Check ~/.config/code/stage0.toml"),
                 },
             }
         } else {
@@ -1165,7 +1176,7 @@ async fn doctor_main() -> anyhow::Result<()> {
                 name: "notebook-mapping",
                 status: HealthStatus::Warn,
                 message: "No stage0.toml found (Tier2 will use defaults)".to_string(),
-                fix_hint: Some("Create ~/.config/codex/stage0.toml"),
+                fix_hint: Some("Create ~/.config/code/stage0.toml"),
             }
         }
     };
