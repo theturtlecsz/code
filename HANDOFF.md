@@ -1,7 +1,7 @@
 # Session Handoff — Dogfooding: "tui writes tui"
 
 **Last updated:** 2025-12-25
-**Status:** P0 Blockers Resolved - Ready for Dogfooding
+**Status:** P0 Blockers Resolved - Ready for SPEC-DOGFOOD-001
 
 > **Goal**: Use `code` TUI to develop `~/code` as the default workflow.
 
@@ -30,99 +30,115 @@
 
 ---
 
-## Session 14 Summary (2025-12-25) - DOGFOODING READINESS
+## Session 15 Plan (Architect-Approved)
 
-### Completed
+### Decisions Made
 
-1. **Dogfooding Analysis**
-   - Identified P0/P1 blockers
-   - Created `docs/DOGFOODING-CHECKLIST.md`
-   - Created `docs/DOGFOODING-BACKLOG.md`
+| Question | Answer | Rationale |
+|----------|--------|-----------|
+| stage0.toml | **Yes, create it** | Removes WARN, enables Tier2 for dogfooding |
+| NotebookLM sources | **Core docs only** | Tight, high-leverage set; not comprehensive |
+| Formal SPEC | **Yes, create SPEC-DOGFOOD-001** | Makes dogfooding measurable via golden path |
 
-2. **Instruction File Fixes**
-   - Fixed CLAUDE.md, AGENTS.md, GEMINI.md headers
-   - Added tui/tui2 callout with ADR-002 link
+### Critical Correction: stage0.toml Schema
 
-3. **SessionEnd Hook Fix** (in localmemory-policy)
-   - Was gated on `CLAUDE_TOOL_COUNT` env var (never set by Claude Code)
-   - Now parses stdin JSON for `transcript_path`
-   - Analyzes transcript for decision patterns (ADR-*, SYNC-*)
-   - Auto-promotes decisions (importance 9) and milestones (importance 8)
+**Current docs are outdated.** The actual `Stage0Config` expects:
 
-4. **NotebookLM Setup**
-   - Authentication configured
-   - Created `code-project-docs` notebook
-   - Added 3 sources (ADR-002, Dogfooding Checklist, Golden Path)
-   - Verified HTTP API works (`/api/ask` returns accurate answers)
+```toml
+# ~/.config/code/stage0.toml (CORRECT)
+enabled = true
+store_system_pointers = true
+db_path = "~/.config/code/local-memory-overlay.db"
 
-### Key Decisions Made
+[tier2]
+enabled = true
+notebook = "4e80974f-789d-43bd-abe9-7b1e76839506"  # NOT "default_notebook"
+base_url = "http://127.0.0.1:3456"
+cache_ttl_hours = 24
+call_timeout = "30s"
+```
 
-| Decision | ADR | Summary |
-|----------|-----|---------|
-| tui2 purpose | ADR-002 | Upstream scaffold only, NOT replacement |
-| Golden path | - | `/speckit.auto` + Stage0 + local-memory + NotebookLM |
-| Memory access | - | CLI + REST only, no MCP |
-| NotebookLM access | - | HTTP API at 127.0.0.1:3456, no MCP |
+**NOT** the old format:
+```toml
+# WRONG - docs/examples use this but Stage0 ignores it
+[tier2]
+default_notebook = "code-docs"  # Stage0 looks for "notebook" not this
+```
 
----
+### Path Canonicalization
 
-## Remaining Work
-
-### P1: Should Fix Soon
-
-| Item | Owner | Status |
-|------|-------|--------|
-| Create stage0.toml | `~/code` or user config | Pending |
-| Consolidate config files | User config | Pending |
-| Add more NotebookLM sources | `~/code` | Optional |
-
-### P2: Nice to Have
-
-| Item | Owner |
-|------|-------|
-| `/doctor` TUI command | `~/code` |
-| Session hooks for `code` binary | `localmemory-policy` |
+| Type | Canonical | Fallback (backward compat) |
+|------|-----------|---------------------------|
+| Config dir | `~/.config/code/` | `~/.config/codex/` |
+| stage0.toml | `~/.config/code/stage0.toml` | `~/.config/codex/stage0.toml` |
 
 ---
 
-## Quick Commands
+## Session 15 Goals
+
+### 1. Create stage0.toml (Correct Schema)
 
 ```bash
-# Daily health check
-./build-fast.sh && \
-./codex-rs/target/dev-fast/code doctor && \
-lm health && \
-curl -s http://127.0.0.1:3456/health/ready | jq -r '.ready'
+mkdir -p ~/.config/code
+cat > ~/.config/code/stage0.toml << 'EOF'
+enabled = true
+store_system_pointers = true
+db_path = "~/.config/code/local-memory-overlay.db"
 
-# Start dogfooding
-./build-fast.sh run
-
-# Query NotebookLM
-curl -s http://127.0.0.1:3456/api/ask -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"notebook": "code-project-docs", "question": "What is the golden path?"}' | jq '.data.answer'
+[tier2]
+enabled = true
+notebook = "4e80974f-789d-43bd-abe9-7b1e76839506"
+base_url = "http://127.0.0.1:3456"
+cache_ttl_hours = 24
+call_timeout = "30s"
+EOF
 ```
+
+### 2. Seed NotebookLM with Core Docs Only
+
+Add these sources via HTTP API:
+- `docs/DOGFOODING-CHECKLIST.md`
+- `docs/SPEC-TUI2-STUBS.md`
+- `docs/convergence/CONVERGENCE_OVERVIEW.md`
+- `docs/stage0/STAGE0_IMPLEMENTATION_GUIDE.md` (if exists)
+- NL_* files (via `/stage0.project-intel` commands if available)
+
+### 3. Create SPEC-DOGFOOD-001
+
+Create `docs/SPEC-DOGFOOD-001/spec.md` with:
+- G1: Tier2 enabled by default
+- G2: Config/docs reference `code` not `codex`
+- G3: NotebookLM seeded with core docs
+- G4: Stage0 writes system pointer to local-memory
+- G5: Evidence artifacts produced
+
+### 4. Run via Golden Path
+
+```bash
+./build-fast.sh run
+# In TUI: /speckit.auto SPEC-DOGFOOD-001
+```
+
+---
+
+## Acceptance Tests (From SPEC)
+
+| Test | Command | Pass Criteria |
+|------|---------|---------------|
+| A1: Doctor ready | `code doctor` | No stage0.toml warning |
+| A2: Tier2 used | `/speckit.auto SPEC-DOGFOOD-001` | tier2_used=true in logs |
+| A3: Evidence exists | `ls docs/SPEC-DOGFOOD-001/evidence/` | TASK_BRIEF.md + DIVINE_TRUTH.md |
+| A4: System pointer | `lm search "SPEC-DOGFOOD-001"` | system:true artifact exists |
 
 ---
 
 ## Cross-Repo Coordination
 
-| Repo | Owns | Recent Changes |
-|------|------|----------------|
-| `~/code` | Stage0, spec-kit, TUI, doctor | ADR-002, dogfooding docs, instruction files |
-| `~/notebooklm-client` | Auth, library, HTTP service | Fixed patchright-core issue |
-| `~/infra/localmemory-policy` | Memory policy, hooks, `lm` CLI | SessionEnd hook fix |
-
----
-
-## Key Files
-
-| File | Purpose |
-|------|---------|
-| `docs/DOGFOODING-CHECKLIST.md` | Daily health checks |
-| `docs/DOGFOODING-BACKLOG.md` | Prioritized blockers |
-| `docs/adr/ADR-002-tui2-purpose-and-future.md` | tui/tui2 decision |
-| `CLAUDE.md`, `AGENTS.md`, `GEMINI.md` | Agent instructions |
+| Repo | Owns | Session 15 Changes |
+|------|------|-------------------|
+| `~/code` | Stage0, spec-kit, TUI, doctor | SPEC-DOGFOOD-001, stage0.toml template |
+| `~/notebooklm-client` | Auth, library, HTTP service | Add core doc sources |
+| `~/infra/localmemory-policy` | Memory policy, hooks, `lm` CLI | (no changes expected) |
 
 ---
 
@@ -132,59 +148,80 @@ curl -s http://127.0.0.1:3456/api/ask -X POST \
 Load HANDOFF.md for full context. ultrathink
 
 ## Context
-Session 14 completed dogfooding readiness analysis.
-- All P0 blockers resolved
-- NotebookLM notebook created with project docs
-- Instruction files fixed
-- SessionEnd hook fixed (in localmemory-policy)
+Session 14 completed dogfooding readiness. Architect approved:
+- Create stage0.toml (with CORRECT schema - see HANDOFF.md)
+- Add core docs only to NotebookLM
+- Create formal SPEC-DOGFOOD-001
+
+CRITICAL: Current stage0.toml docs are WRONG. Stage0Config expects:
+- `tier2.notebook` (not `default_notebook`)
+- `tier2.base_url` (not nested domain_mapping)
 
 ## Session 15 Goals
 
-### Primary: Start Dogfooding
-1. Run `./build-fast.sh run` in real terminal
-2. Use `code` TUI to make a small change to `~/code`
-3. Run tests via TUI
-4. Commit via TUI
+### 1. Create stage0.toml
+Path: ~/.config/code/stage0.toml
+Use notebook ID: 4e80974f-789d-43bd-abe9-7b1e76839506
+Verify: `code doctor` shows no stage0.toml warning
 
-### Secondary: P1 Items
-1. Create `~/.config/codex/stage0.toml` for Tier2 domain mapping
-2. Add more sources to NotebookLM notebook (optional)
+### 2. Seed NotebookLM with Core Docs
+Add via HTTP API (POST /api/sources):
+- docs/DOGFOODING-CHECKLIST.md
+- docs/SPEC-TUI2-STUBS.md
+- docs/convergence/CONVERGENCE_OVERVIEW.md
+- docs/stage0/STAGE0_IMPLEMENTATION_GUIDE.md (if exists)
 
-## Questions for Architect
-1. Should we create stage0.toml now or defer?
-2. How much NotebookLM source content? (minimal/core docs/comprehensive)
-3. Should we create a formal SPEC for dogfooding work?
+### 3. Create SPEC-DOGFOOD-001
+Create docs/SPEC-DOGFOOD-001/spec.md with acceptance tests:
+- A1: Doctor ready
+- A2: Tier2 used
+- A3: Evidence exists
+- A4: System pointer stored
+
+### 4. Run SPEC via Golden Path
+./build-fast.sh run
+In TUI: /speckit.auto SPEC-DOGFOOD-001
 
 ## Success Criteria
-- [ ] Complete one full development cycle using `code` TUI
-- [ ] Make a change, test, commit - without using Claude Code
-- [ ] Stage0.toml created (if approved)
+- [ ] code doctor passes with no warnings
+- [ ] Tier2 query works (tier2_used=true)
+- [ ] SPEC-DOGFOOD-001 evidence artifacts exist
+- [ ] System pointer in local-memory
 
 ## Key Commands
 ./build-fast.sh run
 ./codex-rs/target/dev-fast/code doctor
-curl -s http://127.0.0.1:3456/api/ask -X POST -H "Content-Type: application/json" \
-  -d '{"notebook": "code-project-docs", "question": "..."}'
+curl -s http://127.0.0.1:3456/api/sources -X POST -H "Content-Type: application/json" -d '{...}'
 ```
 
 ---
 
-## Session 14 Commits
+## Session 14 Summary
 
-| Hash | Message |
-|------|---------|
-| 8790efdf9 | docs(adr): ADR-002 tui2 is upstream scaffold |
-| 57538569a | docs: add dogfooding checklist and fix instruction file headers |
-| cc9b897 | fix(hooks): SessionEnd now uses transcript analysis (localmemory-policy) |
+### Completed
+
+1. **Dogfooding Analysis** - Created DOGFOODING-CHECKLIST.md, DOGFOODING-BACKLOG.md
+2. **Instruction File Fixes** - Fixed CLAUDE.md, AGENTS.md, GEMINI.md headers
+3. **SessionEnd Hook Fix** - Now parses transcript, auto-promotes decisions/milestones
+4. **NotebookLM Setup** - Auth configured, notebook created, 3 sources added
+5. **Architect Review** - Approved stage0.toml, core docs, formal SPEC
+
+### Key Decisions
+
+| Decision | ADR/Source |
+|----------|------------|
+| tui2 is scaffold only | ADR-002 |
+| Golden path: /speckit.auto + Stage0 + Tier2 | Architect |
+| Memory: CLI + REST only | Policy |
+| NotebookLM: HTTP API at 127.0.0.1:3456 | Policy |
+| Config path: ~/.config/code/ canonical | Architect |
 
 ---
 
-## Previous Sessions (SYNC-028)
+## Previous Sessions
 
 | Session | Focus | Outcome |
 |---------|-------|---------|
-| S10 | Compilation | 262 → 0 errors |
-| S11 | Runtime testing | --help/--version work |
-| S12 | Warning cleanup | 117 → 0 warnings |
-| S13 | External crates | 0 warnings all crates |
-| S14 | Dogfooding readiness | All P0 blockers resolved |
+| S10-S13 | SYNC-028 tui2 port | Compiles, 0 warnings |
+| S14 | Dogfooding readiness | All P0 resolved, architect review |
+| S15 | SPEC-DOGFOOD-001 | (next) |
