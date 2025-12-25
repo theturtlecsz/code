@@ -16,15 +16,42 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 // MAINT-7: Centralized evidence path constants
-/// Default evidence base directory
+// NOTE: Legacy constant kept for backwards compatibility with tests
+// Use evidence_base_for_spec() for production code
 pub const DEFAULT_EVIDENCE_BASE: &str = "docs/SPEC-OPS-004-integrated-coder-hooks/evidence";
 
-/// Helper: Build consensus directory path
+/// Build evidence base directory for a specific SPEC
+///
+/// Returns `docs/{spec_directory}/evidence/` where spec_directory is resolved
+/// via find_spec_directory (e.g., SPEC-DOGFOOD-001 → docs/SPEC-DOGFOOD-001/evidence)
+pub fn evidence_base_for_spec(cwd: &Path, spec_id: &str) -> PathBuf {
+    // Try to find the actual SPEC directory
+    if let Ok(spec_dir) = super::spec_directory::find_spec_directory(cwd, spec_id) {
+        spec_dir.join("evidence")
+    } else {
+        // Fallback: construct path directly (SPEC directory may not exist yet)
+        cwd.join("docs").join(spec_id).join("evidence")
+    }
+}
+
+/// Helper: Build consensus directory path for a SPEC
+pub fn consensus_dir_for_spec(cwd: &Path, spec_id: &str) -> PathBuf {
+    evidence_base_for_spec(cwd, spec_id).join("consensus")
+}
+
+/// Helper: Build commands directory path for a SPEC
+pub fn commands_dir_for_spec(cwd: &Path, spec_id: &str) -> PathBuf {
+    evidence_base_for_spec(cwd, spec_id).join("commands")
+}
+
+/// Legacy helper: Build consensus directory path (uses hardcoded default)
+#[deprecated(note = "Use consensus_dir_for_spec with explicit spec_id")]
 pub fn consensus_dir(cwd: &Path) -> PathBuf {
     cwd.join(DEFAULT_EVIDENCE_BASE).join("consensus")
 }
 
-/// Helper: Build commands directory path
+/// Legacy helper: Build commands directory path (uses hardcoded default)
+#[deprecated(note = "Use commands_dir_for_spec with explicit spec_id")]
 pub fn commands_dir(cwd: &Path) -> PathBuf {
     cwd.join(DEFAULT_EVIDENCE_BASE).join("commands")
 }

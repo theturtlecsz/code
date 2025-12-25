@@ -2008,27 +2008,26 @@ fn record_stage_skip(spec_id: &str, stage: SpecStage, reason: &str) -> Result<()
         "schemaVersion": "1.0"
     });
 
-    // Evidence directory path matches existing telemetry structure
-    let evidence_dir = format!(
-        "docs/SPEC-OPS-004-integrated-coder-hooks/evidence/commands/{}",
-        spec_id
+    // Evidence directory path (dynamic based on spec_id)
+    let evidence_dir = super::evidence::evidence_base_for_spec(
+        std::path::Path::new("."),
+        spec_id,
     );
     fs::create_dir_all(&evidence_dir)
         .map_err(|e| format!("Failed to create evidence directory: {}", e))?;
 
-    let skip_file = format!(
-        "{}/speckit-{}_SKIPPED.json",
-        evidence_dir,
+    let skip_file = evidence_dir.join(format!(
+        "speckit-{}_SKIPPED.json",
         stage.display_name().to_lowercase()
-    );
+    ));
 
     let json_str = serde_json::to_string_pretty(&skip_metadata)
         .map_err(|e| format!("Failed to serialize skip metadata: {}", e))?;
 
     fs::write(&skip_file, json_str)
-        .map_err(|e| format!("Failed to write skip telemetry to {}: {}", skip_file, e))?;
+        .map_err(|e| format!("Failed to write skip telemetry to {:?}: {}", skip_file, e))?;
 
-    tracing::debug!("📝 Skip telemetry recorded: {}", skip_file);
+    tracing::debug!("📝 Skip telemetry recorded: {:?}", skip_file);
     Ok(())
 }
 

@@ -101,10 +101,8 @@ fn collect_stage_artifact_paths(
         paths.push(stage_file);
     }
 
-    // 2. Consensus artifacts directory
-    let consensus_dir = cwd
-        .join("docs/SPEC-OPS-004-integrated-coder-hooks/evidence/consensus")
-        .join(spec_id);
+    // 2. Consensus artifacts directory (in spec's evidence dir)
+    let consensus_dir = super::evidence::consensus_dir_for_spec(cwd, spec_id);
 
     if consensus_dir.exists() {
         // Add synthesis and verdict files for this stage
@@ -121,9 +119,9 @@ fn collect_stage_artifact_paths(
         }
     }
 
-    // 3. Cost summary (updated after each stage)
-    let cost_file = cwd
-        .join("docs/SPEC-OPS-004-integrated-coder-hooks/evidence/costs")
+    // 3. Cost summary (in spec's evidence dir)
+    let cost_file = super::evidence::evidence_base_for_spec(cwd, spec_id)
+        .join("costs")
         .join(format!("{}_cost_summary.json", spec_id));
 
     if cost_file.exists() {

@@ -352,12 +352,8 @@ fn is_allow_dirty_env() -> bool {
 fn emit_telemetry(cwd: &Path, result: &GuardrailResult) -> Result<PathBuf, std::io::Error> {
     use std::io::Write;
 
-    let evidence_dir = cwd
-        .join("docs")
-        .join("SPEC-OPS-004-integrated-coder-hooks")
-        .join("evidence")
-        .join("commands")
-        .join(&result.spec_id);
+    // Use dynamic evidence path based on spec_id (writes to docs/{spec_id}/evidence/)
+    let evidence_dir = super::evidence::evidence_base_for_spec(cwd, &result.spec_id);
 
     std::fs::create_dir_all(&evidence_dir)?;
 

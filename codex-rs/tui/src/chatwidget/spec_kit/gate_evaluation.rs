@@ -702,8 +702,8 @@ pub(crate) fn load_latest_consensus_synthesis(
     spec_id: &str,
     stage: SpecStage,
 ) -> Result<Option<ConsensusSynthesisSummary>> {
-    // MAINT-7: Use centralized path helper
-    let base = super::evidence::consensus_dir(cwd).join(spec_id);
+    // MAINT-7: Use centralized path helper (dynamic per spec_id)
+    let base = super::evidence::consensus_dir_for_spec(cwd, spec_id);
     if !base.exists() {
         return Ok(None);
     }
@@ -1138,8 +1138,8 @@ pub(crate) fn persist_consensus_telemetry_bundle(
     slug: &str,
     consensus_status: &str,
 ) -> Result<ConsensusTelemetryPaths> {
-    // MAINT-7: Use centralized path helper
-    let base = super::evidence::consensus_dir(cwd).join(spec_id);
+    // MAINT-7: Use centralized path helper (dynamic per spec_id)
+    let base = super::evidence::consensus_dir_for_spec(cwd, spec_id);
     fs::create_dir_all(&base).map_err(|e| {
         format!(
             "failed to create consensus evidence directory {}: {}",
