@@ -205,10 +205,10 @@ impl ConsensusDb {
         };
 
         // Write to NEW schema using async wrapper with retry
-        // Use Runtime::new() to avoid nested runtime issues
-        let runtime = tokio::runtime::Runtime::new().map_err(|_| rusqlite::Error::InvalidQuery)?;
-
-        runtime.block_on(async {
+        // Use block_in_place to allow blocking in async context, then new runtime for the actual async work
+        tokio::task::block_in_place(|| {
+            let runtime = tokio::runtime::Runtime::new().map_err(|_| rusqlite::Error::InvalidQuery)?;
+            runtime.block_on(async {
             // Wrap async operations with retry logic
             execute_with_backoff(
                 || async {
@@ -240,6 +240,7 @@ impl ConsensusDb {
             )
             .await
             .map_err(|_| rusqlite::Error::InvalidQuery)
+            })
         })
     }
 
@@ -481,10 +482,10 @@ impl ConsensusDb {
         };
 
         // Write to NEW schema using async wrapper with retry
-        // Use Runtime::new() to avoid nested runtime issues
-        let runtime = tokio::runtime::Runtime::new().map_err(|_| rusqlite::Error::InvalidQuery)?;
-
-        runtime.block_on(async {
+        // Use block_in_place to allow blocking in async context, then new runtime for the actual async work
+        tokio::task::block_in_place(|| {
+            let runtime = tokio::runtime::Runtime::new().map_err(|_| rusqlite::Error::InvalidQuery)?;
+            runtime.block_on(async {
             // Wrap async operations with retry logic
             execute_with_backoff(
                 || async {
@@ -508,6 +509,7 @@ impl ConsensusDb {
             )
             .await
             .map_err(|_| rusqlite::Error::InvalidQuery)
+            })
         })
     }
 
@@ -878,10 +880,10 @@ impl ConsensusDb {
         };
 
         // Write to NEW schema using async wrapper with retry
-        // Use Runtime::new() to avoid nested runtime issues
-        let runtime = tokio::runtime::Runtime::new().map_err(|_| rusqlite::Error::InvalidQuery)?;
-
-        runtime.block_on(async {
+        // Use block_in_place to allow blocking in async context, then new runtime for the actual async work
+        tokio::task::block_in_place(|| {
+            let runtime = tokio::runtime::Runtime::new().map_err(|_| rusqlite::Error::InvalidQuery)?;
+            runtime.block_on(async {
             // Wrap async operations with retry logic
             execute_with_backoff(
                 || async {
@@ -916,6 +918,7 @@ impl ConsensusDb {
             )
             .await
             .map_err(|_| rusqlite::Error::InvalidQuery)
+            })
         })
     }
 

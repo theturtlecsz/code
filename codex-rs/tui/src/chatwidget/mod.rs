@@ -3180,6 +3180,24 @@ impl ChatWidget<'_> {
             self.bottom_pane.clear_ctrl_c_quit_hint();
         }
 
+        // Esc cancels running spec_auto pipeline
+        if let crossterm::event::KeyEvent {
+            code: crossterm::event::KeyCode::Esc,
+            kind: KeyEventKind::Press,
+            ..
+        } = key_event
+        {
+            if self.spec_auto_state.is_some() {
+                // Cancel the running pipeline
+                spec_kit::halt_spec_auto_with_error(self, "Cancelled by user (Esc)".to_string());
+                self.history_push(crate::history_cell::new_background_event(
+                    "Pipeline cancelled.".to_string(),
+                ));
+                self.request_redraw();
+                return;
+            }
+        }
+
         // Global HUD toggles (avoid conflicting with common editor keys):
         // - Ctrl+A: toggle Agents terminal mode
         if let KeyEvent {
