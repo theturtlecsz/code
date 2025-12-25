@@ -1049,12 +1049,9 @@ fn get_quality_gate_agents(
             return checkpoint_config.agents.clone();
         }
     }
-    // Fallback to default agents
-    vec![
-        "gemini".to_string(),
-        "claude".to_string(),
-        "code".to_string(),
-    ]
+    // GR-001: No multi-agent fallback. Quality gates are opt-in only.
+    // Return empty vec - caller will skip checkpoint if no agents configured.
+    vec![]
 }
 
 /// Get quality gate consensus threshold from config, falling back to default (SPEC-939 Component 2a)
@@ -1077,6 +1074,7 @@ fn get_quality_gate_threshold(
 }
 
 /// Check if a quality gate checkpoint is enabled (SPEC-939 Component 2a)
+/// GR-001: Quality gates are disabled by default (opt-in only, no multi-agent consensus)
 fn is_checkpoint_enabled(widget: &ChatWidget, checkpoint: super::state::QualityCheckpoint) -> bool {
     if let Some(quality_gates) = &widget.config.quality_gates {
         let checkpoint_config = match checkpoint {
@@ -1086,8 +1084,8 @@ fn is_checkpoint_enabled(widget: &ChatWidget, checkpoint: super::state::QualityC
         };
         return checkpoint_config.enabled;
     }
-    // Default to enabled
-    true
+    // GR-001: Quality gates disabled by default (no multi-agent consensus in default path)
+    false
 }
 
 /// Calculate active quality gate checkpoints based on pipeline configuration (SPEC-948 Task 2.4)
@@ -1179,6 +1177,65 @@ pub(super) fn execute_quality_checkpoint(
     // Get quality gate agents from config (SPEC-939: configurable quality gates)
     let quality_gate_agents = get_quality_gate_agents(widget, checkpoint);
     let quality_gate_threshold = get_quality_gate_threshold(widget, checkpoint);
+
+    // GR-001: Skip checkpoint if no agents configured (quality gates are opt-in)
+    if quality_gate_agents.is_empty() {
+        tracing::info!(
+            "Quality checkpoint {:?}: No agents configured, skipping (GR-001 opt-in)",
+            checkpoint
+        );
+
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![ratatui::text::Line::from(format!(
+                "Quality Checkpoint: {} - SKIPPED (no agents configured)",
+                checkpoint.name()
+            ))],
+            crate::history_cell::HistoryCellType::Notice,
+        ));
+
+        // Mark checkpoint as completed (skipped)
+        if let Some(state) = widget.spec_auto_state.as_mut() {
+            state.completed_checkpoints.insert(checkpoint);
+        }
+
+        // Advance to next stage
+        super::handler::advance_spec_auto(widget);
+        return;
+    }
+
+    // GR-001: REJECT multi-agent quality gates (no voting/consensus allowed)
+    // Only single-agent "critic sidecar" mode is policy-compliant
+    if quality_gate_agents.len() > 1 {
+        tracing::error!(
+            "🚨 GR-001 VIOLATION: Quality checkpoint {:?} configured with {} agents. \
+             Multi-agent consensus is forbidden. Use single agent only.",
+            checkpoint,
+            quality_gate_agents.len()
+        );
+
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![
+                ratatui::text::Line::from(format!(
+                    "❌ GR-001 Violation: {} agents configured for {}",
+                    quality_gate_agents.len(),
+                    checkpoint.name()
+                )),
+                ratatui::text::Line::from(
+                    "Multi-agent consensus is forbidden. Use single agent (critic sidecar) only."
+                ),
+            ],
+            crate::history_cell::HistoryCellType::Error,
+        ));
+
+        // Mark checkpoint as completed (skipped due to policy violation)
+        if let Some(state) = widget.spec_auto_state.as_mut() {
+            state.completed_checkpoints.insert(checkpoint);
+        }
+
+        // Advance to next stage
+        super::handler::advance_spec_auto(widget);
+        return;
+    }
 
     // SPEC-939: Log configuration being used
     tracing::info!(
@@ -1289,6 +1346,9 @@ pub(super) fn execute_quality_checkpoint(
         return;
     }
 
+    // GR-001: Extract the single quality gate agent (enforced by guard above)
+    let quality_gate_agent = quality_gate_agents[0].clone();
+
     // Spawn agents in background task
     let spawn_handle = tokio::spawn(async move {
         match super::native_quality_gate_orchestrator::spawn_quality_gate_agents_native(
@@ -1296,6 +1356,7 @@ pub(super) fn execute_quality_checkpoint(
             &spec_id_clone,
             checkpoint_clone,
             &agent_configs,
+            &quality_gate_agent, // GR-001: Single agent only
             run_id.clone(),
             branch_id, // P6-SYNC Phase 4
         )
@@ -1356,6 +1417,7 @@ pub(super) fn execute_quality_checkpoint(
     drop(spawn_handle);
 
     // Transition to quality gate executing phase
+    // SPEC-DOGFOOD-001: Use configured agents instead of hardcoded list
     if let Some(state) = widget.spec_auto_state.as_mut() {
         tracing::warn!(
             "DEBUG: Setting phase to QualityGateExecuting for checkpoint={:?}",
@@ -1366,11 +1428,8 @@ pub(super) fn execute_quality_checkpoint(
             checkpoint,
             gates: gates.to_vec(),
             active_gates: gates.iter().copied().collect(),
-            expected_agents: vec![
-                "gemini".to_string(),
-                "claude".to_string(),
-                "code".to_string(),
-            ],
+            // SPEC-DOGFOOD-001: Use configured quality gate agents (was hardcoded to 3)
+            expected_agents: expected_agents.clone(),
             completed_agents: std::collections::HashSet::new(),
             results: std::collections::HashMap::new(),
             native_agent_ids: None, // Will be set by completion event

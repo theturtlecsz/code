@@ -1264,14 +1264,12 @@ pub struct QualityCheckpointConfig {
 
 impl Default for QualityCheckpointConfig {
     fn default() -> Self {
+        // GR-001: Quality gates are OFF by default (no multi-agent consensus)
+        // If enabled, only single-agent "critic sidecar" mode is compliant
         Self {
-            agents: vec![
-                "gemini".to_string(),
-                "claude".to_string(),
-                "code".to_string(),
-            ],
-            threshold: default_quality_threshold(),
-            enabled: true,
+            agents: vec![],      // Empty = disabled, no fan-out
+            threshold: 1.0,      // Single agent = unanimous (irrelevant when empty)
+            enabled: false,      // OFF by default (opt-in only)
         }
     }
 }
@@ -1302,30 +1300,14 @@ pub struct QualityGateConfig {
 
 impl Default for QualityGateConfig {
     fn default() -> Self {
+        // GR-001: ALL checkpoints are OFF by default
+        // No multi-agent consensus in the default path
         Self {
             plan: QualityCheckpointConfig::default(),
             tasks: QualityCheckpointConfig::default(),
             validate: QualityCheckpointConfig::default(),
-            audit: QualityCheckpointConfig {
-                // Audit uses premium agents by default
-                agents: vec![
-                    "gemini-pro".to_string(),
-                    "claude-sonnet".to_string(),
-                    "gpt5-high".to_string(),
-                ],
-                threshold: 0.67,
-                enabled: true,
-            },
-            unlock: QualityCheckpointConfig {
-                // Unlock uses premium agents by default
-                agents: vec![
-                    "gemini-pro".to_string(),
-                    "claude-sonnet".to_string(),
-                    "gpt5-high".to_string(),
-                ],
-                threshold: 0.67,
-                enabled: true,
-            },
+            audit: QualityCheckpointConfig::default(),   // GR-001: No premium agent fan-out
+            unlock: QualityCheckpointConfig::default(),  // GR-001: No premium agent fan-out
         }
     }
 }
@@ -1486,12 +1468,13 @@ mod tests {
 
     #[test]
     fn test_quality_checkpoint_config_defaults() {
-        // Test that checkpoint defaults are applied correctly
+        // GR-001: Quality gates are OFF by default (no multi-agent consensus)
         let config = QualityCheckpointConfig::default();
 
-        assert_eq!(config.agents, vec!["gemini", "claude", "code"]);
-        assert_eq!(config.threshold, 0.67);
-        assert!(config.enabled);
+        // GR-001: Empty agents = disabled, single-agent only when explicitly enabled
+        assert!(config.agents.is_empty());
+        assert_eq!(config.threshold, 1.0);  // Single agent = unanimous
+        assert!(!config.enabled);           // OFF by default
     }
 
     #[test]
@@ -1511,25 +1494,25 @@ mod tests {
 
     #[test]
     fn test_quality_gate_config_defaults() {
-        // Test that QualityGateConfig defaults work
+        // GR-001: ALL quality gates are OFF by default
         let config = QualityGateConfig::default();
 
-        // Plan uses default agents
-        assert_eq!(config.plan.agents, vec!["gemini", "claude", "code"]);
-        assert_eq!(config.plan.threshold, 0.67);
+        // All checkpoints disabled by default (GR-001)
+        assert!(config.plan.agents.is_empty());
+        assert!(!config.plan.enabled);
 
-        // Audit uses premium agents
-        assert_eq!(
-            config.audit.agents,
-            vec!["gemini-pro", "claude-sonnet", "gpt5-high"]
-        );
-        assert_eq!(config.audit.threshold, 0.67);
+        assert!(config.tasks.agents.is_empty());
+        assert!(!config.tasks.enabled);
 
-        // Unlock uses premium agents
-        assert_eq!(
-            config.unlock.agents,
-            vec!["gemini-pro", "claude-sonnet", "gpt5-high"]
-        );
+        assert!(config.validate.agents.is_empty());
+        assert!(!config.validate.enabled);
+
+        // Audit and unlock also disabled (no premium agent fan-out)
+        assert!(config.audit.agents.is_empty());
+        assert!(!config.audit.enabled);
+
+        assert!(config.unlock.agents.is_empty());
+        assert!(!config.unlock.enabled);
     }
 
     #[test]
@@ -1543,7 +1526,8 @@ mod tests {
         let config: QualityGateConfig = toml::from_str(toml).unwrap();
 
         assert!(!config.plan.enabled);
-        assert!(config.tasks.enabled); // Other checkpoints use defaults
+        // GR-001: Other checkpoints also disabled by default
+        assert!(!config.tasks.enabled);
     }
 
     #[test]
@@ -1596,17 +1580,18 @@ mod tests {
 
         let config: QualityGateConfig = toml::from_str(toml).unwrap();
 
-        // Plan uses cheaper agents with lower threshold
+        // Plan uses cheaper agents with lower threshold (enabled by serde default)
         assert_eq!(config.plan.agents.len(), 2);
         assert_eq!(config.plan.agents, vec!["gemini-flash", "claude-haiku"]);
         assert_eq!(config.plan.threshold, 0.5);
+        assert!(config.plan.enabled); // serde default_true when field missing
 
-        // Audit is disabled to save cost (agents value doesn't matter when disabled)
+        // Audit is explicitly disabled
         assert!(!config.audit.enabled);
 
-        // Other checkpoints use defaults
-        assert!(config.tasks.enabled);
-        assert!(config.validate.enabled);
+        // GR-001: Unconfigured checkpoints are disabled by default
+        assert!(!config.tasks.enabled);
+        assert!(!config.validate.enabled);
     }
 
     #[test]

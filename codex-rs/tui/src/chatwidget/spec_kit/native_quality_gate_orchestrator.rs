@@ -3,8 +3,9 @@
 //! Eliminates LLM orchestrator for quality gate plumbing.
 //! LLMs do quality analysis ONLY. Native code handles spawning, waiting, collection.
 //!
-//! Architecture:
-//! - Native spawns 3 agents (gemini, claude, code) with gate-specific prompts
+//! Architecture (GR-001 compliant):
+//! - Single-agent "critic sidecar" mode only (no multi-agent consensus)
+//! - Native spawns exactly 1 agent with gate-specific prompt
 //! - Native polls for completion
 //! - Native broker collects results from filesystem
 //! - No Python scripts, no orchestrator LLM
@@ -25,12 +26,16 @@ pub struct AgentSpawnInfo {
     pub prompt_preview: String,
 }
 
-/// Spawn quality gate agents natively (no LLM orchestrator)
+/// Spawn quality gate agent natively (GR-001 compliant: single agent only)
+///
+/// # Arguments
+/// * `quality_gate_agent` - The single configured quality gate agent name
 pub async fn spawn_quality_gate_agents_native(
     cwd: &Path,
     spec_id: &str,
     checkpoint: QualityCheckpoint,
     agent_configs: &[AgentConfig],
+    quality_gate_agent: &str, // GR-001: Single agent only
     run_id: Option<String>,
     branch_id: Option<String>, // P6-SYNC Phase 4: Branch tracking for resume filtering
 ) -> Result<Vec<AgentSpawnInfo>, String> {
@@ -72,12 +77,15 @@ pub async fn spawn_quality_gate_agents_native(
         .get(gate_key)
         .ok_or_else(|| format!("No prompts found for {}", gate_key))?;
 
-    // Define the 3 agents to spawn (SPEC-KIT-070 Tier 2: cheapest models for quality gates)
-    let agent_spawn_configs = vec![
-        ("gemini", "gemini_flash"), // gemini-2.5-flash (cheapest)
-        ("claude", "claude_haiku"), // claude-haiku (cheapest)
-        ("code", "gpt_low"),        // gpt-5 low reasoning (cheapest, matches flash/haiku tier)
-    ];
+    // GR-001: Use the single configured agent (no hardcoded multi-agent list)
+    // Map common agent names to config names
+    let agent_lower = quality_gate_agent.to_lowercase();
+    let config_name: &str = match agent_lower.as_str() {
+        "gemini" | "gemini-flash" => "gemini_flash",
+        "claude" | "claude-haiku" => "claude_haiku",
+        "code" | "gpt" | "gpt-low" => "gpt_low",
+        _ => quality_gate_agent, // Use as-is if not a known alias
+    };
 
     let mut spawn_infos = Vec::new();
     let batch_id = uuid::Uuid::new_v4().to_string();
@@ -108,13 +116,22 @@ pub async fn spawn_quality_gate_agents_native(
         }
     }
 
-    // Spawn each agent
-    for (agent_name, config_name) in agent_spawn_configs {
+    // GR-001: Spawn the single configured agent
+    let agent_name = quality_gate_agent;
+    {
+        // Try to find agent-specific prompt, fall back to generic "critic" prompt
         let prompt_template = gate_prompts
             .get(agent_name)
             .and_then(|v| v.get("prompt"))
             .and_then(|v| v.as_str())
-            .ok_or_else(|| format!("No prompt found for {} in {}", agent_name, gate_key))?;
+            .or_else(|| {
+                // Fallback: try "critic" or first available prompt
+                gate_prompts
+                    .get("critic")
+                    .and_then(|v| v.get("prompt"))
+                    .and_then(|v| v.as_str())
+            })
+            .ok_or_else(|| format!("No prompt found for {} or 'critic' in {}", agent_name, gate_key))?;
 
         // Build prompt with SPEC context
         let prompt = build_quality_gate_prompt(spec_id, gate, prompt_template, cwd).await?;

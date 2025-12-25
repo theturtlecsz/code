@@ -127,17 +127,27 @@ impl CommandPopup {
     /// Compute fuzzy-filtered matches over built-in commands and user prompts,
     /// paired with optional highlight indices and score. Sorted by ascending
     /// score, then by name for stability.
+    ///
+    /// **Note**: Subagents that conflict with builtin command names are filtered out
+    /// to prevent duplicate execution (Builtins win).
     fn filtered(&self) -> Vec<(CommandItem, Option<Vec<usize>>, i32)> {
         let filter = self.command_filter.trim();
         let mut out: Vec<(CommandItem, Option<Vec<usize>>, i32)> = Vec::new();
+
+        // Collect builtin command names for conflict detection (Builtins win)
+        let builtin_names: std::collections::HashSet<&str> =
+            self.builtins.iter().map(|(_, cmd)| cmd.command()).collect();
+
         if filter.is_empty() {
             // Built-ins first, in presentation order.
             for (_, cmd) in self.builtins.iter() {
                 out.push((CommandItem::Builtin(*cmd), None, 0));
             }
-            // Then subagent commands
-            for (idx, _) in self.subagents.iter().enumerate() {
-                out.push((CommandItem::Subagent(idx), None, 0));
+            // Then subagent commands (skip conflicts with builtins)
+            for (idx, name) in self.subagents.iter().enumerate() {
+                if !builtin_names.contains(name.as_str()) {
+                    out.push((CommandItem::Subagent(idx), None, 0));
+                }
             }
             // Then prompts, already sorted by name.
             for idx in 0..self.prompts.len() {
@@ -151,7 +161,11 @@ impl CommandPopup {
                 out.push((CommandItem::Builtin(*cmd), Some(indices), score));
             }
         }
+        // Skip subagents that conflict with builtins (Builtins win)
         for (idx, name) in self.subagents.iter().enumerate() {
+            if builtin_names.contains(name.as_str()) {
+                continue; // Skip - builtin takes precedence
+            }
             if let Some((indices, score)) = fuzzy_match(name, filter) {
                 out.push((CommandItem::Subagent(idx), Some(indices), score));
             }

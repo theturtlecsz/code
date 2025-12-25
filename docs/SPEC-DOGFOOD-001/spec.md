@@ -29,14 +29,30 @@
 - Comprehensive NotebookLM source seeding beyond core docs already added.
 - Code changes to Stage0 engine; this is a validation spec, not implementation.
 
+## Dogfooding Bootstrap Prerequisites (P0)
+
+Before dogfooding is productive, these conditions MUST be true:
+
+| ID | Prerequisite | Status |
+|----|-------------|--------|
+| P0.1 | No surprise fan-out: Default `/speckit.auto` spawns only canonical pipeline agents | ✅ Quality gates OFF by default |
+| P0.2 | GR-001 compliance: No multi-agent debate/vote/consensus in default path | ✅ Quality gates disabled; >1 agent rejected |
+| P0.3 | Single-shot dispatch: Slash command execution does not trigger duplicates | ✅ Builtin commands win over conflicting subagents |
+| P0.4 | Constitution gate satisfied: DB bootstrap complete | ⏳ Verify with `code doctor` |
+
+**Rationale**: Dogfooding becomes "fighting the tool" if the default path is expensive, policy-violating, or triggers confusing errors. These prerequisites ensure predictable, cheap, boring defaults.
+
 ## Acceptance Criteria
 
 | ID | Criterion | Verification Command |
 |----|-----------|---------------------|
+| A0 | No Surprise Fan-Out | `/speckit.auto` spawns only canonical pipeline agents (no quality gate agents unless explicitly enabled) |
 | A1 | Doctor Ready | `code doctor` shows all [OK], no stage0.toml warning |
 | A2 | Tier2 Used | `/speckit.auto SPEC-DOGFOOD-001` logs show `tier2_used=true` or similar indicator |
 | A3 | Evidence Exists | `ls docs/SPEC-DOGFOOD-001/evidence/` contains `TASK_BRIEF.md` and/or `DIVINE_TRUTH.md` |
 | A4 | System Pointer | `lm search "SPEC-DOGFOOD-001"` returns memory with `system:true` tag |
+| A5 | GR-001 Enforcement | Quality gates with >1 agent are rejected with explicit GR-001 error message |
+| A6 | Slash Dispatch Single-Shot | Selecting `/speckit.auto` from popup triggers exactly one pipeline execution (re-entry guard not hit in normal usage) |
 
 ## Dependencies
 

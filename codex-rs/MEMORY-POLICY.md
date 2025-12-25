@@ -50,7 +50,7 @@ local-memory search "consensus" --tags spec:SPEC-123
 
 ### Query Best Practices
 1. **Before** any task: Query local-memory for relevant context
-2. **During** work: Store decisions with importance ≥7
+2. **During** work: Store decisions with importance ≥8
 3. **After** completion: Store outcomes, evidence paths, validation results
 4. **Tag Structure**: Use `spec:SPEC-ID`, `stage:STAGE`, `consensus-verdict` for spec-kit artifacts
 
@@ -360,7 +360,7 @@ Stale (90+ days):
 ## Questions?
 
 If uncertain about memory system usage:
-1. Default to local-memory MCP
+1. Default to local-memory CLI + REST (NOT MCP)
 2. Check this policy document
 3. Review CLAUDE.md Section 9 for workflow
 4. Ask maintainer if edge case arises

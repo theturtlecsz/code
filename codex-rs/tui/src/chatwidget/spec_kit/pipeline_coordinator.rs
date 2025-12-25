@@ -38,6 +38,21 @@ pub fn handle_spec_auto(
     cli_overrides: Option<PipelineOverrides>, // SPEC-948: CLI flags for stage filtering
     stage0_config: super::stage0_integration::Stage0ExecutionConfig, // SPEC-KIT-102: Stage 0 config
 ) {
+    // SPEC-DOGFOOD-001: Re-entry guard - prevent duplicate pipeline execution
+    if let Some(existing_state) = widget.spec_auto_state.as_ref() {
+        tracing::warn!(
+            "🚨 DUPLICATE PIPELINE: Pipeline already running for {} (phase: {:?}). Ignoring duplicate /speckit.auto {}",
+            existing_state.spec_id,
+            existing_state.phase,
+            spec_id
+        );
+        widget.history_push(crate::history_cell::new_error_event(format!(
+            "Pipeline already running for {}. Wait for completion or cancel with Esc.",
+            existing_state.spec_id
+        )));
+        return;
+    }
+
     let mut header: Vec<ratatui::text::Line<'static>> = Vec::new();
     header.push(ratatui::text::Line::from(format!(
         "/speckit.auto {}",

@@ -155,7 +155,8 @@ impl StageType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QualityGateConfig {
     /// Whether quality gates are enabled
-    #[serde(default = "default_true")]
+    /// GR-001: OFF by default (no multi-agent consensus in default path)
+    #[serde(default = "default_false")]
     pub enabled: bool,
 
     /// Auto-resolve low-severity issues
@@ -167,10 +168,15 @@ fn default_true() -> bool {
     true
 }
 
+fn default_false() -> bool {
+    false
+}
+
 impl Default for QualityGateConfig {
     fn default() -> Self {
+        // GR-001: Quality gates OFF by default
         Self {
-            enabled: true,
+            enabled: false,
             auto_resolve: true,
         }
     }
@@ -521,7 +527,8 @@ mod tests {
     fn test_defaults() {
         let config = PipelineConfig::defaults();
         assert_eq!(config.enabled_stages.len(), 8);
-        assert!(config.quality_gates.enabled);
+        // GR-001: Quality gates are OFF by default
+        assert!(!config.quality_gates.enabled);
         assert!(config.quality_gates.auto_resolve);
     }
 
