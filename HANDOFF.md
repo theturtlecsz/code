@@ -1,236 +1,190 @@
-# Session Handoff — SYNC-028 TUI v2 Port
+# Session Handoff — Dogfooding: "tui writes tui"
 
-**Last updated:** 2025-12-24
-**Status:** SYNC-028 Complete - ADR-002 Decision Made
+**Last updated:** 2025-12-25
+**Status:** P0 Blockers Resolved - Ready for Dogfooding
 
-> **Architectural Decision**: tui2 is an upstream scaffold, NOT a replacement for tui.
-> spec-kit workflows remain in tui. See [ADR-002](docs/adr/ADR-002-tui2-purpose-and-future.md).
-
-**Commits:**
-- 22ca5087f fix(tui2): eliminate all 117 compiler warnings
-- f4d3acf10 fix(tui2): external crate warning cleanup (SYNC-028 S13)
-- 1bdba5d78 fix(core): handle new EventMsg variants in exec and mcp-server
+> **Goal**: Use `code` TUI to develop `~/code` as the default workflow.
 
 ---
 
-## Session 13 Summary (2025-12-24) - EXTERNAL CRATE CLEANUP
+## Current State
 
-### Environment Check
+### Health Check Status (All PASS)
 
-| Check | Result |
-|-------|--------|
-| TTY Available | No (headless) |
-| Phase 1 (Interactive) | BLOCKED |
-| Phase 2 (External Crates) | COMPLETED |
-| Phase 3 (Documentation) | COMPLETED |
+| Service | Status | Verification |
+|---------|--------|--------------|
+| Build | PASS | `./build-fast.sh` succeeds |
+| Local-memory | PASS | `lm health` returns "ok" |
+| NotebookLM Auth | PASS | `authenticated: true` |
+| NotebookLM Ready | PASS | `ready: true` |
+| NotebookLM Library | PASS | 1 notebook, 3 sources |
+| Code Doctor | PASS | All [OK], 1 WARN (stage0.toml) |
 
-### Warning Fixes Applied
+### Notebook Created
 
-| Crate | File | Issue | Fix |
-|-------|------|-------|-----|
-| codex-backend-client | client.rs:314 | `map_credits` unused | Added `#[allow(dead_code)]` |
-| codex-backend-client | client.rs:327 | `map_plan_type` unused | Added `#[allow(dead_code)]` |
-| codex-app-server-protocol | v2.rs:21 | Unused `CoreNetworkAccess` import | Moved to test module |
-
-### Build Status
-
-```
-cargo build -p codex-tui2 --release
-# Finished `release` profile [optimized] target(s) in 6m 34s
-# 0 warnings
-```
-
-### Main Binary Build Fix
-
-New `EventMsg` variants added to `codex_core::protocol` required handling:
-
-| Crate | File | Added Arms |
-|-------|------|------------|
-| codex-exec | event_processor_with_human_output.rs | `UndoStarted`, `UndoCompleted`, `ListSkillsResponse` |
-| codex-mcp-server | codex_tool_runner.rs | `UndoStarted`, `UndoCompleted`, `ListSkillsResponse` |
-
-### Documentation Updated
-
-- `docs/SPEC-TUI2-STUBS.md` - Comprehensive stub documentation:
-  - 8 intentional stubs (not planned)
-  - 6 temporary stubs (future candidates)
-  - 5 type adaptation stubs
-  - Extension traits inventory
-  - Dead code annotation inventory
+| Property | Value |
+|----------|-------|
+| Name | `code-project-docs` |
+| ID | `4e80974f-789d-43bd-abe9-7b1e76839506` |
+| Sources | ADR-002, Dogfooding Checklist, Golden Path Architecture |
 
 ---
 
-## Session 12 Summary (2025-12-24) - WARNING CLEANUP
+## Session 14 Summary (2025-12-25) - DOGFOODING READINESS
 
-### Warning Reduction
+### Completed
 
-| Metric | Session Start | Session End | Reduction |
-|--------|---------------|-------------|-----------|
-| Warnings | 117 | **0** | 100% |
-| Build Status | Success | Success | - |
-| Interactive Testing | BLOCKED | BLOCKED | Headless environment |
+1. **Dogfooding Analysis**
+   - Identified P0/P1 blockers
+   - Created `docs/DOGFOODING-CHECKLIST.md`
+   - Created `docs/DOGFOODING-BACKLOG.md`
 
-### Approach Used
+2. **Instruction File Fixes**
+   - Fixed CLAUDE.md, AGENTS.md, GEMINI.md headers
+   - Added tui/tui2 callout with ADR-002 link
 
-1. **cargo fix** - Auto-fixed 27 unused imports
-2. **Module-level `#[allow(dead_code)]`** - For stub modules:
-   - `compat.rs` - All compatibility stubs
-   - `model_migration.rs` - Upstream model migration prompts
-   - `custom_prompt_view.rs` - Custom prompts (type mismatch)
-3. **Function-level `#[allow(dead_code)]`** - For individual stubbed functions
-4. **Impl-level `#[allow(dead_code)]`** - For ChatWidget event handlers
+3. **SessionEnd Hook Fix** (in localmemory-policy)
+   - Was gated on `CLAUDE_TOOL_COUNT` env var (never set by Claude Code)
+   - Now parses stdin JSON for `transcript_path`
+   - Analyzes transcript for decision patterns (ADR-*, SYNC-*)
+   - Auto-promotes decisions (importance 9) and milestones (importance 8)
 
----
+4. **NotebookLM Setup**
+   - Authentication configured
+   - Created `code-project-docs` notebook
+   - Added 3 sources (ADR-002, Dogfooding Checklist, Golden Path)
+   - Verified HTTP API works (`/api/ask` returns accurate answers)
 
-## Session 11 Summary (2025-12-24) - RUNTIME TESTING
+### Key Decisions Made
 
-### Runtime Test Results
-
-| Test | Result | Notes |
-|------|--------|-------|
-| `--help` | PASS | Full usage displayed |
-| `--version` | PASS | "codex-tui2 0.0.0" |
-| Non-tty detection | PASS | Graceful error, no panic |
-| Interactive launch | BLOCKED | Headless environment - needs real terminal |
-
-### Fixes Applied
-
-| Issue | Fix | Location |
-|-------|-----|----------|
-| `create_client()` arity | Added `originator` parameter | tui2/src/updates.rs |
-| `check_for_update_on_startup` | Disabled via const (irrelevant for fork) | tui2/src/updates.rs |
+| Decision | ADR | Summary |
+|----------|-----|---------|
+| tui2 purpose | ADR-002 | Upstream scaffold only, NOT replacement |
+| Golden path | - | `/speckit.auto` + Stage0 + local-memory + NotebookLM |
+| Memory access | - | CLI + REST only, no MCP |
+| NotebookLM access | - | HTTP API at 127.0.0.1:3456, no MCP |
 
 ---
 
-## Session 10 Summary (2025-12-24) - COMPILATION COMPLETE
+## Remaining Work
 
-### Final Error Reduction
+### P1: Should Fix Soon
 
-| Metric | Session Start | Session End | Total Journey |
-|--------|---------------|-------------|---------------|
-| Errors | 56 | **0** | 262 → 0 |
-| Build Status | Failed | **Success** | - |
-| Warnings | - | 117 | Now fixed |
+| Item | Owner | Status |
+|------|-------|--------|
+| Create stage0.toml | `~/code` or user config | Pending |
+| Consolidate config files | User config | Pending |
+| Add more NotebookLM sources | `~/code` | Optional |
+
+### P2: Nice to Have
+
+| Item | Owner |
+|------|-------|
+| `/doctor` TUI command | `~/code` |
+| Session hooks for `code` binary | `localmemory-policy` |
 
 ---
 
-## Next Session: Interactive Testing (Session 14)
-
-### Primary Goal
-
-Run tui2 binary interactively in a real terminal and verify core functionality.
-
-### Prerequisites
-
-- Real terminal (not headless)
-- API key configured
-
-### Test Plan
+## Quick Commands
 
 ```bash
-# 1. Build release binary
-cargo build -p codex-tui2 --release
+# Daily health check
+./build-fast.sh && \
+./codex-rs/target/dev-fast/code doctor && \
+lm health && \
+curl -s http://127.0.0.1:3456/health/ready | jq -r '.ready'
 
-# 2. Verify no panic on launch
-RUST_BACKTRACE=1 ./target/release/codex-tui2
+# Start dogfooding
+./build-fast.sh run
 
-# 3. Test basic interaction
-# - Submit a simple prompt ("Hello")
-# - Verify response appears
-# - Test Ctrl+C exit
+# Query NotebookLM
+curl -s http://127.0.0.1:3456/api/ask -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"notebook": "code-project-docs", "question": "What is the golden path?"}' | jq '.data.answer'
 ```
-
-### Test Scenarios to Verify
-
-1. **Startup**: Does it launch without panic?
-2. **Model display**: Does status bar show current model?
-3. **Input**: Can we type and submit prompts?
-4. **History**: Do messages appear in the chat?
-5. **Exit**: Does Ctrl+C exit cleanly?
-6. **10-turn session**: Can we have a multi-turn conversation?
-
-### Success Criteria
-
-- [ ] Interactive TUI runs without panic
-- [ ] Can submit at least one prompt
-- [ ] Response appears in chat history
-- [ ] Ctrl+C exits cleanly
-- [ ] Status bar displays model name
 
 ---
 
-## Diagnostic Commands
+## Cross-Repo Coordination
 
-```bash
-# Check build (should show 0 warnings for tui2)
-cargo build -p codex-tui2 2>&1 | tail -5
+| Repo | Owns | Recent Changes |
+|------|------|----------------|
+| `~/code` | Stage0, spec-kit, TUI, doctor | ADR-002, dogfooding docs, instruction files |
+| `~/notebooklm-client` | Auth, library, HTTP service | Fixed patchright-core issue |
+| `~/infra/localmemory-policy` | Memory policy, hooks, `lm` CLI | SessionEnd hook fix |
 
-# Release build
-cargo build -p codex-tui2 --release
-
-# Run with debug logging
-RUST_LOG=debug ./target/debug/codex-tui2
-
-# Check for panics
-RUST_BACKTRACE=1 ./target/release/codex-tui2
-
-# Verify all warnings eliminated
-cargo build -p codex-tui2 -p codex-backend-client -p codex-app-server-protocol 2>&1 | grep warning
-# Expected: no output
-```
+---
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| tui2/src/compat.rs | All compatibility stubs and conversions |
-| tui2/src/chatwidget.rs | Main chat widget (most changes) |
-| docs/SPEC-TUI2-STUBS.md | Comprehensive stubbed features documentation |
-| docs/SPEC-TUI2-TEST-PLAN.md | Test plan for stubbed features |
+| `docs/DOGFOODING-CHECKLIST.md` | Daily health checks |
+| `docs/DOGFOODING-BACKLOG.md` | Prioritized blockers |
+| `docs/adr/ADR-002-tui2-purpose-and-future.md` | tui/tui2 decision |
+| `CLAUDE.md`, `AGENTS.md`, `GEMINI.md` | Agent instructions |
 
 ---
 
 ## Continuation Prompt
 
 ```
-Continue SYNC-028 Session 14 - INTERACTIVE TESTING
-
 Load HANDOFF.md for full context. ultrathink
 
 ## Context
-Session 13 completed external crate warning cleanup.
-- All warnings eliminated across tui2-related crates
-- SPEC-TUI2-STUBS.md updated with comprehensive stub inventory
-- Phase 1 (interactive testing) still blocked on headless environment
+Session 14 completed dogfooding readiness analysis.
+- All P0 blockers resolved
+- NotebookLM notebook created with project docs
+- Instruction files fixed
+- SessionEnd hook fixed (in localmemory-policy)
 
-## Session 14 Goals
+## Session 15 Goals
 
-### Interactive Testing (REAL TERMINAL REQUIRED)
-1. Build: cargo build -p codex-tui2 --release
-2. Launch: RUST_BACKTRACE=1 ./target/release/codex-tui2
-3. Test prompt submission: Type "Hello" and verify response
-4. Test exit: Ctrl+C should exit cleanly
-5. Verify: Status bar displays model name
-6. Extended test: 10-turn conversation without panic
+### Primary: Start Dogfooding
+1. Run `./build-fast.sh run` in real terminal
+2. Use `code` TUI to make a small change to `~/code`
+3. Run tests via TUI
+4. Commit via TUI
+
+### Secondary: P1 Items
+1. Create `~/.config/codex/stage0.toml` for Tier2 domain mapping
+2. Add more sources to NotebookLM notebook (optional)
+
+## Questions for Architect
+1. Should we create stage0.toml now or defer?
+2. How much NotebookLM source content? (minimal/core docs/comprehensive)
+3. Should we create a formal SPEC for dogfooding work?
 
 ## Success Criteria
-- [ ] TUI launches and accepts prompts
-- [ ] Response appears in chat history
-- [ ] Ctrl+C exits cleanly (no panic)
-- [ ] 10-turn session completes
+- [ ] Complete one full development cycle using `code` TUI
+- [ ] Make a change, test, commit - without using Claude Code
+- [ ] Stage0.toml created (if approved)
 
 ## Key Commands
-cargo build -p codex-tui2 --release
-RUST_BACKTRACE=1 ./target/release/codex-tui2
+./build-fast.sh run
+./codex-rs/target/dev-fast/code doctor
+curl -s http://127.0.0.1:3456/api/ask -X POST -H "Content-Type: application/json" \
+  -d '{"notebook": "code-project-docs", "question": "..."}'
 ```
 
 ---
-Session 13 Summary
 
-| Metric              | Result                 |
-|---------------------|------------------------|
-| External Warnings   | 2 → 0                  |
-| Main Binary Build   | FIXED (EventMsg arms)  |
-| Stubs Documented    | 19 (8+6+5)             |
-| Interactive Testing | PASS (user-verified)   |
-| tui2 Status         | Functional (some features missing) |
+## Session 14 Commits
+
+| Hash | Message |
+|------|---------|
+| 8790efdf9 | docs(adr): ADR-002 tui2 is upstream scaffold |
+| 57538569a | docs: add dogfooding checklist and fix instruction file headers |
+| cc9b897 | fix(hooks): SessionEnd now uses transcript analysis (localmemory-policy) |
+
+---
+
+## Previous Sessions (SYNC-028)
+
+| Session | Focus | Outcome |
+|---------|-------|---------|
+| S10 | Compilation | 262 → 0 errors |
+| S11 | Runtime testing | --help/--version work |
+| S12 | Warning cleanup | 117 → 0 warnings |
+| S13 | External crates | 0 warnings all crates |
+| S14 | Dogfooding readiness | All P0 blockers resolved |
