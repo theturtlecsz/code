@@ -1108,8 +1108,8 @@ pub(crate) fn persist_consensus_verdict(
     stage: SpecStage,
     verdict: &ConsensusVerdict,
 ) -> Result<PathBuf> {
-    // MAINT-7: Use centralized path helper
-    let consensus_dir = super::evidence::consensus_dir(cwd).join(spec_id);
+    // MAINT-7: Use centralized path helper (dynamic per spec_id)
+    let consensus_dir = super::evidence::consensus_dir_for_spec(cwd, spec_id);
     fs::create_dir_all(&consensus_dir)
         .map_err(|e| format!("Failed to create consensus directory: {e}"))?;
 

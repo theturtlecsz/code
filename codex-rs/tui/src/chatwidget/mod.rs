@@ -2983,9 +2983,18 @@ impl ChatWidget<'_> {
     }
 
     /// Poll config watcher for file changes (SPEC-939 Component 1a).
-    /// Defers reload if quality gate is active.
+    /// Defers reload if quality gate is active, processes pending reloads when not.
     pub(crate) fn poll_config_watcher(&mut self) {
-        // SPEC-939: Poll config watcher for file changes
+        // SPEC-939: First check for pending reload from when quality gate was active
+        if !self.is_quality_gate_active() {
+            if let Some(paths) = self.pending_config_reload.take() {
+                tracing::debug!("Processing deferred config reload (quality gate finished)");
+                self.show_reload_prompt(paths);
+                return;
+            }
+        }
+
+        // SPEC-939: Then poll for new config file changes
         if let Some(ref mut watcher) = self.config_watcher
             && let Some(changed_paths) = watcher.check_for_changes()
         {
@@ -2996,14 +3005,6 @@ impl ChatWidget<'_> {
             } else {
                 self.show_reload_prompt(changed_paths);
             }
-        }
-    }
-
-    /// Check for pending config reload after quality gate completes (SPEC-939 Component 1a).
-    pub(crate) fn check_pending_config_reload(&mut self) {
-        // After quality gate completes, check for pending reload
-        if let Some(paths) = self.pending_config_reload.take() {
-            self.show_reload_prompt(paths);
         }
     }
 
