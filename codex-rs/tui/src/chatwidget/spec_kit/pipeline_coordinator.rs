@@ -262,22 +262,27 @@ pub fn handle_spec_auto(
                 }
             }
 
-            // SPEC-DOGFOOD-001 S30: Run Stage0 synchronously
+            // SPEC-DOGFOOD-001 S30: Run Stage0 in separate thread to avoid runtime conflicts
             // NOTE: This blocks the TUI during execution. UX improvement tracked for follow-up.
-            // The Tier2 HTTP call happens in a separate thread to avoid runtime conflicts,
-            // but the overall Stage0 execution is synchronous from the TUI's perspective.
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            // Must spawn in std::thread because we're inside the TUI's tokio runtime.
+            let config_clone = widget.config.clone();
+            let spec_id_clone = spec_id.clone();
+            let spec_content_clone = spec_content.clone();
+            let cwd_clone = widget.config.cwd.clone();
+            let stage0_config_clone = stage0_config.clone();
+
+            let handle = std::thread::spawn(move || {
                 super::stage0_integration::run_stage0_for_spec(
-                    &widget.config,
-                    &spec_id,
-                    &spec_content,
-                    &widget.config.cwd,
-                    &stage0_config,
+                    &config_clone,
+                    &spec_id_clone,
+                    &spec_content_clone,
+                    &cwd_clone,
+                    &stage0_config_clone,
                     None, // No progress channel for sync execution
                 )
-            }));
+            });
 
-            let result = match result {
+            let result = match handle.join() {
                 Ok(r) => r,
                 Err(e) => {
                     let panic_msg = if let Some(s) = e.downcast_ref::<&str>() {
@@ -288,17 +293,17 @@ pub fn handle_spec_auto(
                         "Unknown panic".to_string()
                     };
                     widget.history_push(crate::history_cell::new_error_event(format!(
-                        "Stage 0: PANIC - {}",
+                        "Stage 0: Thread panic - {}",
                         panic_msg
                     )));
                     super::stage0_integration::Stage0ExecutionResult {
                         result: None,
-                        skip_reason: Some(format!("Panic: {}", panic_msg)),
+                        skip_reason: Some(format!("Thread panic: {}", panic_msg)),
                         duration_ms: 0,
                         tier2_used: false,
                         cache_hit: false,
                         hybrid_retrieval_used: false,
-                        tier2_skip_reason: Some("Panic".to_string()),
+                        tier2_skip_reason: Some("Thread panic".to_string()),
                     }
                 }
             };
