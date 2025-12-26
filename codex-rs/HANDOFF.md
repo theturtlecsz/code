@@ -1,185 +1,143 @@
-# SYNC-028 Session 9 Handoff - Continue tui2 Error Fixes
+# Dead Code Cleanup - Session 17 Handoff
 
-**Date**: 2024-12-24
-**Session**: 9 of SYNC-028
-**Last Commit**: 7743298fc (reduce errors 173→149, fix API divergences)
-
----
-
-## Session 9 Summary (In Progress)
-
-### Progress: 149 → 56 Errors (62.4% reduction)
-
-#### Error Breakdown (56 remaining)
-```
-56 E0308 - mismatched types (ALL REMAINING)
-```
-
-All remaining errors are type mismatches concentrated in `chatwidget.rs`.
-
-### Key Fixes Applied This Session
-
-1. **ScrollConfigOverrides Type Compatibility**
-   - Changed ConfigExt returns from `u32/f64` to `Option<u16/u64>`
-   - Required by upstream's generic scroll config system
-
-2. **ModelsManager Arc Wrapping**
-   - Return `Arc<ModelsManager>` instead of direct struct
-   - Required for upstream's shared state pattern
-
-3. **Model Migration Stubbed Out**
-   - Entirely disabled due to `ReasoningEffort` type conflicts
-   - Two incompatible enums: `codex_core::config_types` vs `codex_protocol::openai_models`
-
-4. **RateLimitSnapshot Type Switch**
-   - Changed from `codex_core::protocol` to `codex_protocol` version
-   - Credits display set to `None` (not available in fork)
-
-5. **Function Signature Reductions**
-   - `list_conversations`: 6 args → 3 args
-   - `ConversationManager::new`: 2 args → 1 arg
-
-6. **Enum Variant Fixes**
-   - `FileChange::Delete`: Changed from struct to unit variant
-   - `McpStartupStatus::Failed`: Changed from struct to tuple variant
-
-### Build Status After Session 9
-
-| Crate | Status |
-|-------|--------|
-| codex-protocol | BUILDS |
-| codex-core | BUILDS |
-| codex-tui (original) | BUILDS |
-| codex-app-server-protocol | BUILDS |
-| codex-backend-client | BUILDS |
-| codex-tui2 | **56 ERRORS** (down from 149) |
+**Date**: 2025-12-26
+**Task**: SPEC-DOGFOOD-001 Dead Code Audit & Cleanup
+**Session**: 17 (partial work, build broken)
+**Plan File**: `~/.claude/plans/stateful-floating-anchor.md`
 
 ---
 
-## Session 10 Tasks
+## Session 17 Summary
 
-### Priority: Fix Remaining 56 E0308 Type Mismatches
+### Work Completed (Build Currently Broken)
 
-All errors are in `chatwidget.rs`. Focus areas:
+#### Dead Code Deleted (~1,000 LOC)
+1. **chatwidget/mod.rs**:
+   - `set_mouse_status_message()` - never called
+   - `notify_login_claude_failed()`, `notify_login_gemini_failed()` - never called
+   - `coalesce_read_ranges_in_lines()` - 80 LOC, never called
+   - Consensus infrastructure methods with hardcoded paths (~700 LOC)
+   - Thin wrapper methods that just delegated to spec_kit
 
-1. **Option<T> vs T patterns** - Fork uses direct types, upstream uses Option wrappers
-2. **Integer type casts** - u8/u32/u64/i64 conversions
-3. **String/&str conversions** - Clone vs reference issues
+2. **spec_kit modules**:
+   - Deleted `evidence_cleanup.rs` module (~180 LOC) - 0 usages
+   - Removed `handle_spec_consensus_impl` from consensus_coordinator.rs
+   - Removed unused re-export from handler.rs
 
-### Quick Diagnostic Commands
+3. **login_accounts_view.rs**:
+   - Deleted redundant `on_claude_failed()`, `on_gemini_failed()` methods
 
-```bash
-# Count errors
-cargo check -p codex-tui2 2>&1 | grep "^error\[E" | wc -l
+#### Trait Changes
+- Removed `run_spec_consensus()` from `SpecKitContext` trait (context.rs)
+- Removed implementation from ChatWidget
 
-# See specific E0308 errors
-cargo check -p codex-tui2 2>&1 | grep -A3 "E0308"
+### Build Status: BROKEN
 
-# Verify original tui still builds
-cargo check -p codex-tui
-```
+**Remaining Issues**:
+1. 3 deprecated tests still call `.run_spec_consensus()` - need deletion
+2. Unused imports in `consensus_coordinator.rs`: `parse_consensus_stage`, `HistoryCellType`
+3. Unused import in `chatwidget/mod.rs`: `sha2::{Digest, Sha256}`
+4. Unused import in `spec_kit/mod.rs`: `advance_spec_auto`
 
 ---
 
-## Continue Prompt for Session 10
+## Session 18 Tasks (Next Session)
+
+### Priority 1: Fix Build Errors
+
+1. **Delete deprecated tests** (chatwidget/mod.rs, ~200 LOC):
+   - `run_spec_consensus_writes_verdict_and_local_memory()`
+   - `run_spec_consensus_reports_missing_agents()`
+   - `run_spec_consensus_persists_telemetry_bundle_when_enabled()`
+
+2. **Clean unused imports**:
+   - `consensus_coordinator.rs`: Remove `parse_consensus_stage`, `HistoryCellType`
+   - `chatwidget/mod.rs`: Remove `sha2::{Digest, Sha256}`
+   - `spec_kit/mod.rs`: Remove unused `advance_spec_auto`
+
+3. **Build and verify**:
+   ```bash
+   cargo build --workspace
+   cargo test -p codex-tui
+   ```
+
+4. **Commit with message**:
+   ```
+   fix(tui): dead code cleanup - Session 17+18
+
+   - Delete ~1,200 LOC of dead consensus infrastructure
+   - Remove deprecated tests using old LocalMemoryMock
+   - Clean unused imports
+   - Remove run_spec_consensus from SpecKitContext trait
+   ```
+
+---
+
+## Multi-Session Plan Overview
+
+| Session | Goal | Est. LOC |
+|---------|------|----------|
+| 18 | Fix build, commit current work | -200 |
+| 19 | Delete native_consensus_executor.rs | -407 |
+| 20 | Type alias migration (Consensus* → Gate*) | -50 |
+| 21-23 | Analyze undocumented annotations | -300 |
+| 24 | Final audit and documentation | 0 |
+
+**Total estimated deletion**: ~957 LOC
+
+---
+
+## Critical Files
+
+| File | Purpose |
+|------|---------|
+| `tui/src/chatwidget/mod.rs` | Main ChatWidget, has deprecated tests |
+| `tui/src/chatwidget/spec_kit/context.rs` | SpecKitContext trait (modified) |
+| `tui/src/chatwidget/spec_kit/consensus_coordinator.rs` | Has unused imports |
+| `tui/src/chatwidget/spec_kit/gate_evaluation.rs` | Active consensus implementation |
+| `~/.claude/plans/stateful-floating-anchor.md` | Full multi-session plan |
+
+---
+
+## User Decisions (From Session 17)
+
+- **Scope**: tui crate only (not tui2, per ADR-002)
+- **Undocumented annotations**: Analyze, delete truly dead, tag infrastructure
+- **Type aliases**: Include Consensus* → Gate* migration in cleanup
+- **Old tests**: Delete deprecated tests using LocalMemoryMock
+
+---
+
+## Continuation Prompt for Session 18
 
 ```
-Continue SYNC-028 (TUI v2 port) Session 10 - FINAL PUSH **ultrathink**
+Continue SPEC-DOGFOOD-001 Dead Code Cleanup - Session 18 **ultrathink**
 
 ## Context
-Session 9 reduced errors 149→56 (62.4%). All 56 remaining are E0308 type mismatches.
+Session 17 deleted ~1,000 LOC of dead code but left the build broken.
+See HANDOFF.md and ~/.claude/plans/stateful-floating-anchor.md for full plan.
 
-## Current State
-- All E0432 import errors: FIXED
-- All E0609 field access errors: FIXED
-- All E0599 method errors: FIXED
-- All E0061 argument count errors: FIXED
-- Remaining: 56 E0308 type mismatches in chatwidget.rs
+## Immediate Tasks
+1. Delete 3 deprecated tests calling run_spec_consensus (~200 LOC)
+2. Clean unused imports (consensus_coordinator.rs, chatwidget/mod.rs, spec_kit/mod.rs)
+3. Build and verify: cargo build --workspace
+4. Run tests: cargo test -p codex-tui
+5. Commit the complete Session 17+18 dead code cleanup
 
-## Key Files
-- tui2/src/chatwidget.rs - Main chat widget (most errors)
-- tui2/src/compat.rs - Compatibility layer
-
-## Patterns to Apply
-1. Option<T> wrapping: Add .map() or unwrap_or_default()
-2. Integer casts: as u16, as i64, etc.
-3. String conversions: .to_string(), .clone()
+## Files to Modify
+- tui/src/chatwidget/mod.rs - Delete tests, clean imports
+- tui/src/chatwidget/spec_kit/consensus_coordinator.rs - Clean imports
+- tui/src/chatwidget/spec_kit/mod.rs - Clean imports
 
 ## Success Criteria
-- [ ] cargo build -p codex-tui2 COMPILES
-- [ ] ./target/debug/codex-tui2 --help runs
-- [ ] cargo build -p codex-tui still works
-- [ ] Commit with `feat(tui2): complete port`
+- [ ] cargo build --workspace - 0 errors, minimal warnings
+- [ ] cargo test -p codex-tui - passes
+- [ ] Commit pushed
+
+## After Session 18
+Continue with Session 19: Delete native_consensus_executor.rs (407 LOC)
 ```
 
 ---
 
-## Files Modified Session 9
-
-| File | Changes |
-|------|---------|
-| `tui2/src/compat.rs` | ConfigExt Option returns, Arc<ModelsManager>, format_env_display |
-| `tui2/src/app.rs` | Model migration stubbed, ConstraintResult handling |
-| `tui2/src/chatwidget.rs` | RateLimitSnapshot type, integer casts, pattern fixes |
-| `tui2/src/status/rate_limits.rs` | Credits set to None |
-| `tui2/src/bottom_pane/approval_overlay.rs` | Pattern matching fixes |
-| `tui2/src/bottom_pane/skill_popup.rs` | SkillMetadata field access |
-
----
-
-## Key Patterns Documented
-
-### ReasoningEffort Type Conflict (BLOCKER)
-```rust
-// Two incompatible types with same name:
-codex_core::config_types::ReasoningEffort      // Fork's version
-codex_protocol::openai_models::ReasoningEffort // Upstream's version
-
-// Resolution: Stubbed out model migration entirely
-async fn handle_model_migration_prompt_if_needed(...) -> Option<AppExitInfo> {
-    None // Model migration not supported in fork
-}
-```
-
-### Option<T> Wrapping Pattern
-```rust
-// Fork returns direct value:
-fn scroll_config_vertical() -> u32
-
-// Upstream expects Option:
-fn scroll_config_vertical() -> Option<u16>
-
-// Fix: Change return type and add conversion
-fn scroll_config_vertical(&self) -> Option<u16> {
-    Some(8) // Default value as Option
-}
-```
-
-### Arc Wrapping Pattern
-```rust
-// Fork returns struct directly:
-fn get_models_manager() -> ModelsManager
-
-// Upstream expects Arc:
-fn get_models_manager() -> Arc<ModelsManager>
-
-// Fix: Wrap in Arc
-pub fn get_models_manager(_config: &Config) -> Arc<ModelsManager> {
-    Arc::new(ModelsManager { ... })
-}
-```
-
----
-
-## Session History
-
-| Session | Errors | Reduction | Key Work |
-|---------|--------|-----------|----------|
-| 7 | 262→173 | 34% | Migration docs, compat.rs foundation |
-| 8 | 173→149 | 14% | API divergence fixes |
-| 9 | 149→56 | 62% | Type compatibility, model migration stub |
-| 10 | 56→0 | TBD | Final type mismatches |
-
----
-
-_Last updated: 2024-12-24 (SYNC-028 Session 9 in progress)_
+_Last updated: 2025-12-26 (Session 17 handoff)_
