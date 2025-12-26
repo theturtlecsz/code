@@ -38,7 +38,24 @@ pub fn handle_spec_auto(
     cli_overrides: Option<PipelineOverrides>, // SPEC-948: CLI flags for stage filtering
     stage0_config: super::stage0_integration::Stage0ExecutionConfig, // SPEC-KIT-102: Stage 0 config
 ) {
-    // DEBUG: Confirm function entry (TUI-visible)
+    // DEBUG: Confirm function entry - FILE-BASED TRACE (SPEC-DOGFOOD-001 S29)
+    {
+        use std::io::Write;
+        let trace_msg = format!(
+            "[{}] handle_spec_auto ENTRY: spec_id={}, stage0_disabled={}\n",
+            chrono::Utc::now().format("%H:%M:%S%.3f"),
+            spec_id,
+            stage0_config.disabled
+        );
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("/tmp/speckit-trace.log")
+        {
+            let _ = f.write_all(trace_msg.as_bytes());
+        }
+    }
+    // Also try TUI push
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
         vec![ratatui::text::Line::from(format!(
             "🔍 DEBUG: handle_spec_auto(spec_id={}, stage0_disabled={})",
@@ -169,28 +186,46 @@ pub fn handle_spec_auto(
     }
 
     // SPEC-KIT-102: Run Stage 0 context injection before pipeline starts
-    // DEBUG: Stage0 decision point (SPEC-DOGFOOD-001 Session 29)
-    widget.history_push(crate::history_cell::PlainHistoryCell::new(
-        vec![ratatui::text::Line::from(format!(
-            "📍 DEBUG: Stage0 check → disabled={}, entering Stage0 block={}",
-            stage0_config.disabled, !stage0_config.disabled
-        ))],
-        crate::history_cell::HistoryCellType::Notice,
-    ));
+    // FILE-BASED TRACE: Stage0 decision (SPEC-DOGFOOD-001 S29)
+    {
+        use std::io::Write;
+        let trace_msg = format!(
+            "[{}] Stage0 CHECK: disabled={}, will_execute={}\n",
+            chrono::Utc::now().format("%H:%M:%S%.3f"),
+            stage0_config.disabled,
+            !stage0_config.disabled
+        );
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("/tmp/speckit-trace.log")
+        {
+            let _ = f.write_all(trace_msg.as_bytes());
+        }
+    }
 
     if !stage0_config.disabled {
         // Load spec content
         let spec_path = widget.config.cwd.join(format!("docs/{}/spec.md", spec_id));
         let spec_content = std::fs::read_to_string(&spec_path).unwrap_or_default();
 
-        // DEBUG: Spec content loaded (SPEC-DOGFOOD-001 Session 29)
-        widget.history_push(crate::history_cell::PlainHistoryCell::new(
-            vec![ratatui::text::Line::from(format!(
-                "📍 DEBUG: spec.md loaded from {:?} ({} chars)",
-                spec_path, spec_content.len()
-            ))],
-            crate::history_cell::HistoryCellType::Notice,
-        ));
+        // FILE-BASED TRACE: Spec loaded (SPEC-DOGFOOD-001 S29)
+        {
+            use std::io::Write;
+            let trace_msg = format!(
+                "[{}] Stage0 SPEC LOADED: path={:?}, len={}\n",
+                chrono::Utc::now().format("%H:%M:%S%.3f"),
+                spec_path,
+                spec_content.len()
+            );
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/speckit-trace.log")
+            {
+                let _ = f.write_all(trace_msg.as_bytes());
+            }
+        }
 
         if !spec_content.is_empty() {
             // Log Stage0Start event
@@ -219,6 +254,22 @@ pub fn handle_spec_auto(
                 );
             }
 
+            // FILE-BASED TRACE: Before Stage0 execution (SPEC-DOGFOOD-001 S29)
+            {
+                use std::io::Write;
+                let trace_msg = format!(
+                    "[{}] Stage0 EXECUTING: calling run_stage0_for_spec...\n",
+                    chrono::Utc::now().format("%H:%M:%S%.3f")
+                );
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/speckit-trace.log")
+                {
+                    let _ = f.write_all(trace_msg.as_bytes());
+                }
+            }
+
             // Run Stage0 with the passed config
             // SPEC-KIT-900 FIX: Wrap with block_in_place to allow blocking HTTP calls
             // (reqwest::blocking) within the async tokio context.
@@ -234,6 +285,23 @@ pub fn handle_spec_auto(
                     )
                 })
             }));
+
+            // FILE-BASED TRACE: After Stage0 execution (SPEC-DOGFOOD-001 S29)
+            {
+                use std::io::Write;
+                let trace_msg = format!(
+                    "[{}] Stage0 RETURNED: result.is_ok={}\n",
+                    chrono::Utc::now().format("%H:%M:%S%.3f"),
+                    result.is_ok()
+                );
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/speckit-trace.log")
+                {
+                    let _ = f.write_all(trace_msg.as_bytes());
+                }
+            }
 
             let result = match result {
                 Ok(r) => r,

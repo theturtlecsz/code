@@ -1,5 +1,5 @@
 {
-  "output_markdown": "# Plan: SPEC-DOGFOOD-001\n\n**Stage**: Tasks\n**Agents**: 1\n**Generated**: 2025-12-26 16:32 UTC\n\n## Tasks (from claude)\n\n\n## Consensus Summary\n\n- Synthesized from 1 agent responses\n- All agents completed successfully\n",
+  "output_markdown": "# Plan: SPEC-DOGFOOD-001\n\n**Stage**: Tasks\n**Agents**: 1\n**Generated**: 2025-12-26 17:22 UTC\n\n## Tasks (from claude)\n\n\n## Consensus Summary\n\n- Synthesized from 1 agent responses\n- All agents completed successfully\n",
   "output_path": "/home/thetu/code/docs/SPEC-DOGFOOD-001/tasks.md",
   "status": "ok",
   "artifacts_count": 1,
