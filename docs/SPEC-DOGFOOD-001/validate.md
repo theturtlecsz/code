@@ -2,7 +2,7 @@
 
 **Stage**: Validate
 **Agents**: 1
-**Generated**: 2025-12-26 17:38 UTC
+**Generated**: 2025-12-26 17:45 UTC
 
 ## Agent Responses (Raw)
 
@@ -31,7 +31,7 @@ balanced
   "test_scenarios": [
     "Execute /speckit.auto SPEC-DOGFOOD-001 from TUI and capture agent spawn log to stderr/stdout",
     "Parse execution logs and count distinct agents spawned; verify count ≤ 3 (Architect, Implementer, Judge)",
-    "Verify agent names match canonical set: no Quality Gate agents (Consensus, Auditor, Judge-Consensus) present in spawn list",
+    "Verify agent names match canonical set: no Quality Gate agents (Consensus, Auditor, Judge-Consensus) present",
     "Confirm quality_gates_enabled flag defaults to false in stage0.toml and no gate agents appear",
     "Verify no agent is spawned twice (re-entry guard active for default path)",
     "Validate that spawned agents follow canonical order: Architect → Implementer → Judge (no parallel consensus voting)"
@@ -64,7 +64,7 @@ balanced
   "coverage": "Complete - validates Tier2 (NotebookLM) integration is functional and actually invoked"
 }
 - {
-  "requirement": "A3: Evidence Exists - ls docs/SPEC-DOGFOOD-001/evidence/ contains TASK_BRIEF.md and/or DIVINE_TRUTH.md",
+  "requirement": "A3: Evidence Exists - docs/SPEC-DOGFOOD-001/evidence/ contains TASK_BRIEF.md and DIVINE_TRUTH.md",
   "test_scenarios": [
     "After /speckit.auto SPEC-DOGFOOD-001 completes, list directory: ls -lah docs/SPEC-DOGFOOD-001/evidence/",
     "Verify both TASK_BRIEF.md and DIVINE_TRUTH.md files exist (not just one)",
