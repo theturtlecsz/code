@@ -234,10 +234,10 @@ cargo test -p codex-cli --lib
 ## Continuation Prompt
 
 ```
-Evaluate SPEC-DOGFOOD-001 completion - Session 23 **ultrathink**
+Continue SPEC-DOGFOOD-001 - Session 23 **ultrathink**
 
 ## Context
-Session 22 completed:
+Session 22 completed (commits a83aeb2e3, 47b9eb7f3):
 - Fixed 17 clippy warnings in codex-cli tests
 - Documented 13 blanket dead_code allows with purpose comments
 - Full workspace clippy passes (excluding tui2)
@@ -245,30 +245,62 @@ Session 22 completed:
 
 Total progress S17-S22: ~3,220 LOC deleted
 
-## SPEC Completion Evaluation
+## Session 23 Tasks (Prioritized)
 
-### Completed Work
-- [x] ~3,200+ LOC deleted (exceeds goal)
-- [x] Full workspace clippy clean (excluding tui2 per ADR-002)
-- [x] Test isolation fixed (#[serial])
-- [x] Type modernization (Consensus* → Gate*/StageReview*)
-- [x] Dead code audit complete with documentation
+### 1. Investigate Config Test Failure Root Cause
+**Target:** `config::tests::persist_model_selection_updates_profile`
+**Symptom:** Test fails with `xhigh` variant not found
 
-### Remaining Items
-1. Pre-existing test failure: `config::tests::persist_model_selection_updates_profile`
-   - Investigate `xhigh` variant source (likely stale config.toml)
-   - Fix or document as known issue
+Investigation steps:
+a. Read the test code in `codex-rs/core/src/config.rs` (~line 2966)
+b. Check if test creates its own temp dir or reads from user config
+c. Search codebase for `xhigh` to find origin
+d. Check `~/.codex/config.toml` for stale data
+e. Determine if test isolation issue or actual code bug
+f. Fix the root cause (not just symptoms)
 
-### Session 23 Tasks
-1. Investigate and fix the pre-existing config test failure
-2. Write SPEC-DOGFOOD-001 completion summary
-3. Update HANDOFF.md with final status
-4. Consider closing SPEC if all criteria met
+### 2. Aggressive Dead Code Cleanup
+Beyond documentation - actually DELETE unused code:
 
-### Success Criteria
-- [ ] Pre-existing test failure resolved or documented
-- [ ] SPEC-DOGFOOD-001 marked complete
-- [ ] Final commit pushed
+a. Run: `grep -r "#!\[allow(dead_code)\]" codex-rs/ | grep -v tui2 | grep -v target`
+b. For each blanket allow without "pending" comment:
+   - Check if module exports are used anywhere
+   - If truly unused: DELETE the module
+   - If partially used: remove allow, add targeted allows
+c. Priority targets:
+   - `core/src/acp.rs` - Is AcpFileSystem used?
+   - `core/src/rollout/list.rs` - Is ConversationsPage used?
+   - `core/src/unified_exec/` - Is UnifiedExecSessionManager used?
+   - `tui/src/transcript_app.rs` - Is this wired up anywhere?
+
+### 3. Manual Workflow Testing
+SPEC-DOGFOOD-001 is about dogfooding spec-kit. Test the actual workflow:
+
+a. Create a test spec: `/speckit.new test-workflow-validation`
+b. Run through stages: specify → plan → tasks → verify
+c. Document any issues encountered
+d. Fix blocking issues, log non-blocking for future
+
+### 4. Verification & Commit
+```bash
+cargo clippy --workspace --all-targets --exclude codex-tui2 -- -D warnings
+cargo test -p codex-core
+cargo test -p codex-tui --lib
+cargo test -p codex-stage0
+~/code/build-fast.sh
+```
+
+## Success Criteria
+- [ ] Config test failure root cause identified and fixed
+- [ ] At least 2 truly dead modules deleted (not just documented)
+- [ ] Spec-kit workflow manually tested end-to-end
+- [ ] All tests pass
+- [ ] Commits pushed
+
+## Decision Points
+- If workflow testing reveals blocking issues → prioritize fixes
+- If dead code deletion breaks things → revert and document why kept
+- If config test is environmental → make test self-contained
 ```
 
 ---
