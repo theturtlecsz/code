@@ -155,8 +155,8 @@ struct NotebooklmAskData {
 
 /// Adapter that implements `Tier2Client` using notebooklm-mcp HTTP service.
 ///
-/// Uses blocking HTTP client with `block_in_place` to avoid async runtime issues
-/// when called from nested `block_on` contexts (SPEC-DOGFOOD-001 S30 fix).
+/// Uses blocking HTTP client directly since Stage0 runs in a dedicated std::thread
+/// (SPEC-DOGFOOD-001 S30 fix). No async runtime involvement needed.
 pub struct Tier2HttpAdapter {
     base_url: String,
     notebook: String,
@@ -167,18 +167,16 @@ impl Tier2HttpAdapter {
         Self { base_url, notebook }
     }
 
-    pub async fn is_healthy(&self, timeout: Duration) -> bool {
+    /// Check health - uses blocking HTTP since we're in a dedicated thread
+    pub fn is_healthy_blocking(&self, timeout: Duration) -> bool {
         let url = format!("{}/health", self.base_url);
-        let url_clone = url.clone();
-        tokio::task::block_in_place(move || {
-            reqwest::blocking::Client::builder()
-                .timeout(timeout)
-                .build()
-                .ok()
-                .and_then(|c| c.get(&url_clone).send().ok())
-                .map(|r| r.status().is_success())
-                .unwrap_or(false)
-        })
+        reqwest::blocking::Client::builder()
+            .timeout(timeout)
+            .build()
+            .ok()
+            .and_then(|c| c.get(&url).send().ok())
+            .map(|r| r.status().is_success())
+            .unwrap_or(false)
     }
 }
 
@@ -212,88 +210,81 @@ impl Tier2Client for Tier2HttpAdapter {
         let prompt = codex_stage0::build_tier2_prompt(spec_id, spec_content, task_brief_md);
 
         let url = format!("{}/api/ask", self.base_url);
-        let notebook = self.notebook.clone();
 
-        // Use block_in_place with blocking client to avoid async runtime issues
-        // in nested block_on contexts (SPEC-DOGFOOD-001 S30 fix)
-        let result: std::result::Result<NotebooklmAskResponse, String> =
-            tokio::task::block_in_place(move || {
-                let client = reqwest::blocking::Client::builder()
-                    .timeout(Duration::from_secs(120))
-                    .build()
-                    .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+        // Use blocking HTTP directly since Stage0 runs in a dedicated std::thread
+        // (SPEC-DOGFOOD-001 S30 fix). No block_in_place needed.
+        let client = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(120))
+            .build()
+            .map_err(|e| Stage0Error::tier2(format!("Failed to create HTTP client: {e}")))?;
 
-                let body = json!({
-                    "question": prompt,
-                    "notebook": notebook,
-                });
+        let body = json!({
+            "question": prompt,
+            "notebook": &self.notebook,
+        });
 
-                let resp = client
-                    .post(&url)
-                    .json(&body)
-                    .send()
-                    .map_err(|e| {
-                        // FILE-BASED TRACE: HTTP error
-                        {
-                            use std::io::Write;
-                            let trace_msg = format!(
-                                "[{}] Tier2 HTTP ERROR: {}\n",
-                                chrono::Utc::now().format("%H:%M:%S%.3f"),
-                                e
-                            );
-                            if let Ok(mut f) = std::fs::OpenOptions::new()
-                                .create(true)
-                                .append(true)
-                                .open("/tmp/speckit-trace.log")
-                            {
-                                let _ = f.write_all(trace_msg.as_bytes());
-                            }
-                        }
-                        format!("NotebookLM HTTP request failed: {e}")
-                    })?;
-
-                if !resp.status().is_success() {
-                    // FILE-BASED TRACE
-                    {
-                        use std::io::Write;
-                        let trace_msg = format!(
-                            "[{}] Tier2 HTTP STATUS ERROR: {}\n",
-                            chrono::Utc::now().format("%H:%M:%S%.3f"),
-                            resp.status()
-                        );
-                        if let Ok(mut f) = std::fs::OpenOptions::new()
-                            .create(true)
-                            .append(true)
-                            .open("/tmp/speckit-trace.log")
-                        {
-                            let _ = f.write_all(trace_msg.as_bytes());
-                        }
-                    }
-                    return Err(format!("NotebookLM HTTP error: {}", resp.status()));
+        let resp = client.post(&url).json(&body).send().map_err(|e| {
+            // FILE-BASED TRACE: HTTP error
+            {
+                use std::io::Write;
+                let trace_msg = format!(
+                    "[{}] Tier2 HTTP ERROR: {}\n",
+                    chrono::Utc::now().format("%H:%M:%S%.3f"),
+                    e
+                );
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/speckit-trace.log")
+                {
+                    let _ = f.write_all(trace_msg.as_bytes());
                 }
+            }
+            Stage0Error::tier2(format!("NotebookLM HTTP request failed: {e}"))
+        })?;
 
-                resp.json::<NotebooklmAskResponse>().map_err(|e| {
-                    // FILE-BASED TRACE
-                    {
-                        use std::io::Write;
-                        let trace_msg = format!(
-                            "[{}] Tier2 JSON PARSE ERROR: {}\n",
-                            chrono::Utc::now().format("%H:%M:%S%.3f"),
-                            e
-                        );
-                        if let Ok(mut f) = std::fs::OpenOptions::new()
-                            .create(true)
-                            .append(true)
-                            .open("/tmp/speckit-trace.log")
-                        {
-                            let _ = f.write_all(trace_msg.as_bytes());
-                        }
-                    }
-                    format!("Failed to parse NotebookLM response: {e}")
-                })
-            });
+        if !resp.status().is_success() {
+            // FILE-BASED TRACE
+            {
+                use std::io::Write;
+                let trace_msg = format!(
+                    "[{}] Tier2 HTTP STATUS ERROR: {}\n",
+                    chrono::Utc::now().format("%H:%M:%S%.3f"),
+                    resp.status()
+                );
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/speckit-trace.log")
+                {
+                    let _ = f.write_all(trace_msg.as_bytes());
+                }
+            }
+            return Err(Stage0Error::tier2(format!(
+                "NotebookLM HTTP error: {}",
+                resp.status()
+            )));
+        }
 
-        let parsed = result.map_err(Stage0Error::tier2)?;
+        let parsed: NotebooklmAskResponse = resp.json().map_err(|e| {
+            // FILE-BASED TRACE
+            {
+                use std::io::Write;
+                let trace_msg = format!(
+                    "[{}] Tier2 JSON PARSE ERROR: {}\n",
+                    chrono::Utc::now().format("%H:%M:%S%.3f"),
+                    e
+                );
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/speckit-trace.log")
+                {
+                    let _ = f.write_all(trace_msg.as_bytes());
+                }
+            }
+            Stage0Error::tier2(format!("Failed to parse NotebookLM response: {e}"))
+        })?;
 
         if !parsed.success {
             // FILE-BASED TRACE
