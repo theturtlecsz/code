@@ -251,13 +251,21 @@ Total progress S17-S22: ~3,220 LOC deleted
 **Target:** `config::tests::persist_model_selection_updates_profile`
 **Symptom:** Test fails with `xhigh` variant not found
 
+**Key insight from S22:** User's `~/.code/config.toml` has valid `model_reasoning_effort = "medium"`,
+NOT `xhigh`. The `xhigh` value must come from:
+- A test fixture or mock data
+- Legacy `~/.codex/` fallback (OnceLock race condition?)
+- Another test's side effect
+
 Investigation steps:
-a. Read the test code in `codex-rs/core/src/config.rs` (~line 2966)
-b. Check if test creates its own temp dir or reads from user config
-c. Search codebase for `xhigh` to find origin
-d. Check `~/.codex/config.toml` for stale data
-e. Determine if test isolation issue or actual code bug
+a. Read test code in `codex-rs/core/src/config.rs` (~line 2966)
+b. Search entire codebase for `xhigh` literal string
+c. Check `legacy_codex_home_dir()` OnceLock behavior (line 2488)
+d. Verify test sets `CODEX_HOME` env var to prevent legacy fallback
+e. Check for test isolation issues with `#[serial]` requirement
 f. Fix the root cause (not just symptoms)
+
+**Note:** This project uses `~/.code/`, not `~/.codex/`. Legacy fallback exists for migration.
 
 ### 2. Aggressive Dead Code Cleanup
 Beyond documentation - actually DELETE unused code:
