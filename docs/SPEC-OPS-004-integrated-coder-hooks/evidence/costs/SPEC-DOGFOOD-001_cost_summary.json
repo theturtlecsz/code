@@ -3,26 +3,22 @@
   "total_spent": 0.0,
   "budget": 2.0,
   "utilization": 0.0,
-  "call_count": 6,
+  "call_count": 3,
   "per_stage": {
-    "spec-implement": 0.0,
     "spec-plan": 0.0,
     "spec-tasks": 0.0
   },
   "per_model": {
-    "gemini": 0.0,
-    "claude": 0.0
+    "claude": 0.0,
+    "gemini": 0.0
   },
-  "duration": 154,
+  "duration": 98,
   "stage_notes": [
     {
       "stage": "spec-tasks"
     },
     {
       "stage": "spec-implement"
-    },
-    {
-      "stage": "spec-validate"
     }
   ]
 }

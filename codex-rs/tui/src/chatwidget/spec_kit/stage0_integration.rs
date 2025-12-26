@@ -477,9 +477,26 @@ pub fn write_divine_truth_to_evidence(
 fn check_tier2_service_health(base_url: &str) -> Result<(), String> {
     let health_url = format!("{}/health", base_url.trim_end_matches('/'));
 
+    // FILE-BASED TRACE: Tier2 health check (SPEC-DOGFOOD-001 S29)
+    {
+        use std::io::Write;
+        let trace_msg = format!(
+            "[{}] Tier2 HEALTH CHECK: url={}\n",
+            chrono::Utc::now().format("%H:%M:%S%.3f"),
+            health_url
+        );
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("/tmp/speckit-trace.log")
+        {
+            let _ = f.write_all(trace_msg.as_bytes());
+        }
+    }
+
     // SPEC-KIT-900 FIX: Use block_in_place to allow blocking reqwest calls
     // within an async tokio context.
-    tokio::task::block_in_place(|| {
+    let result = tokio::task::block_in_place(|| {
         let client = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(2))
             .build()
@@ -492,7 +509,26 @@ fn check_tier2_service_health(base_url: &str) -> Result<(), String> {
             Err(e) if e.is_connect() => Err("NotebookLM service not running".to_string()),
             Err(e) => Err(format!("NotebookLM service unreachable: {e}")),
         }
-    })
+    });
+
+    // FILE-BASED TRACE: Health check result
+    {
+        use std::io::Write;
+        let trace_msg = format!(
+            "[{}] Tier2 HEALTH RESULT: {:?}\n",
+            chrono::Utc::now().format("%H:%M:%S%.3f"),
+            result
+        );
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("/tmp/speckit-trace.log")
+        {
+            let _ = f.write_all(trace_msg.as_bytes());
+        }
+    }
+
+    result
 }
 
 /// CONVERGENCE: Store Stage0 system pointer memory after artifacts are written
@@ -513,6 +549,24 @@ pub fn store_stage0_system_pointer(
     divine_truth_path: Option<&std::path::Path>,
     notebook_id: Option<&str>,
 ) {
+    // FILE-BASED TRACE: System pointer storage entry (SPEC-DOGFOOD-001 S29)
+    {
+        use std::io::Write;
+        let trace_msg = format!(
+            "[{}] SYSTEM POINTER: entry for spec_id={}, has_result={}\n",
+            chrono::Utc::now().format("%H:%M:%S%.3f"),
+            spec_id,
+            execution_result.result.is_some()
+        );
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("/tmp/speckit-trace.log")
+        {
+            let _ = f.write_all(trace_msg.as_bytes());
+        }
+    }
+
     // Check if we should store system pointers (from Stage0Config)
     let store_enabled = match codex_stage0::Stage0Config::load() {
         Ok(cfg) => cfg.store_system_pointers,
@@ -520,6 +574,21 @@ pub fn store_stage0_system_pointer(
     };
 
     if !store_enabled {
+        // FILE-BASED TRACE
+        {
+            use std::io::Write;
+            let trace_msg = format!(
+                "[{}] SYSTEM POINTER: disabled in config\n",
+                chrono::Utc::now().format("%H:%M:%S%.3f")
+            );
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/speckit-trace.log")
+            {
+                let _ = f.write_all(trace_msg.as_bytes());
+            }
+        }
         tracing::debug!(
             spec_id = spec_id,
             "System pointer storage disabled in config"
@@ -531,6 +600,21 @@ pub fn store_stage0_system_pointer(
     let result = match &execution_result.result {
         Some(r) => r,
         None => {
+            // FILE-BASED TRACE
+            {
+                use std::io::Write;
+                let trace_msg = format!(
+                    "[{}] SYSTEM POINTER: no Stage0 result, skipping\n",
+                    chrono::Utc::now().format("%H:%M:%S%.3f")
+                );
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/speckit-trace.log")
+                {
+                    let _ = f.write_all(trace_msg.as_bytes());
+                }
+            }
             tracing::debug!(
                 spec_id = spec_id,
                 "Skipping system pointer: no Stage0 result"
