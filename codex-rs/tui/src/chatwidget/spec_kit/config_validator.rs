@@ -9,7 +9,6 @@
 //!
 //! REBASE-SAFE: New file, 100% isolation, no upstream changes
 
-#![allow(dead_code)] // Validation helpers pending integration
 
 use super::error::{Result, SpecKitError};
 use codex_core::config::Config;
@@ -21,6 +20,7 @@ use std::collections::HashSet;
 pub struct ValidationError {
     pub field: String,
     pub issue: String,
+    #[allow(dead_code)] // Used for error classification, read by callers
     pub severity: ValidationSeverity,
 }
 
@@ -202,11 +202,13 @@ impl SpecKitConfigValidator {
     }
 
     /// Quick validation - returns true if config is usable
+    #[allow(dead_code)] // Pending: quick validation checks
     pub fn is_valid(config: &Config) -> bool {
         Self::validate(config).is_ok()
     }
 
     /// Get all validation issues (errors + warnings) for reporting
+    #[allow(dead_code)] // Pending: detailed validation reporting
     pub fn validate_all(config: &Config) -> (Vec<ValidationError>, Vec<ValidationError>) {
         let mut errors = Vec::new();
         let mut warnings = Vec::new();

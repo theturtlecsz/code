@@ -1406,13 +1406,13 @@ mod tests {
                     println!("Stream complete");
                 }
                 StreamEvent::Error(e) => {
-                    panic!("Unexpected error: {:?}", e);
+                    panic!("Unexpected error: {e:?}");
                 }
             }
         }
 
-        println!("Response: {}", response);
-        println!("Metadata received: {}", metadata_received);
+        println!("Response: {response}");
+        println!("Metadata received: {metadata_received}");
 
         // Verify we got a response
         assert!(!response.is_empty(), "Should have received response text");
@@ -1426,7 +1426,7 @@ mod tests {
                     input < 100,
                     "Input tokens should be reasonable (<100 for this prompt)"
                 );
-                println!("✅ Input tokens validated: {}", input);
+                println!("✅ Input tokens validated: {input}");
             }
             if let Some(output) = output_tokens {
                 assert!(output > 0, "Output tokens should be positive");
@@ -1434,7 +1434,7 @@ mod tests {
                     output < 200,
                     "Output tokens should be reasonable (<200 for a haiku)"
                 );
-                println!("✅ Output tokens validated: {}", output);
+                println!("✅ Output tokens validated: {output}");
             }
         } else {
             println!("⚠️  No metadata event received - token counts not available from CLI");
@@ -1458,7 +1458,7 @@ mod tests {
         let mut failed = 0;
 
         for (model_id, display_name) in models {
-            println!("\n=== Testing {} ({}) ===", display_name, model_id);
+            println!("\n=== Testing {display_name} ({model_id}) ===");
 
             // Note: Claude CLI uses CLI default model, we pass empty string
             // The model_id here is for documentation/logging purposes
@@ -1477,7 +1477,7 @@ mod tests {
                     let stream_result = session.stream_turn(prompt, tx, cancel).await;
 
                     if let Err(e) = &stream_result {
-                        println!("  ❌ {} failed to stream: {:?}", display_name, e);
+                        println!("  ❌ {display_name} failed to stream: {e:?}");
                         failed += 1;
                         continue;
                     }
@@ -1498,7 +1498,7 @@ mod tests {
                         );
                         passed += 1;
                     } else {
-                        println!("  ⚠️  {} response unexpected: {}", display_name, response);
+                        println!("  ⚠️  {display_name} response unexpected: {response}");
                         // Still count as passed if we got a response
                         passed += 1;
                     }
@@ -1506,14 +1506,14 @@ mod tests {
                     session.shutdown().await.ok();
                 }
                 Err(e) => {
-                    println!("  ❌ {} failed to spawn: {:?}", display_name, e);
+                    println!("  ❌ {display_name} failed to spawn: {e:?}");
                     failed += 1;
                 }
             }
         }
 
         println!("\n=== Claude Smoke Test Summary ===");
-        println!("Passed: {}/3, Failed: {}/3", passed, failed);
+        println!("Passed: {passed}/3, Failed: {failed}/3");
 
         // Note: We only test one model due to the CLI executor/provider singleton limitation.
         // All 3 models use the same CLI default, so we verify the CLI works, not model switching

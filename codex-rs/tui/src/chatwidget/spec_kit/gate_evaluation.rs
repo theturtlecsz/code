@@ -29,63 +29,47 @@ use std::path::PathBuf;
 // ============================================================================
 // TYPES (moved from chatwidget/mod.rs)
 //
-// PR7 Note: These are "wire types" for JSON serialization backward compatibility.
+// These are "wire types" for JSON serialization backward compatibility.
 // Domain code should use types from `codex_spec_kit::gate_policy` where possible.
-// The "Consensus" prefix is legacy naming; prefer "Gate" or "StageReview" in new code.
 // ============================================================================
 
-/// Wire type for artifact data from consensus collection.
+/// Wire type for artifact data from gate evaluation.
 ///
-/// **Deprecation Note (PR7)**: This is a wire type for JSON serialization.
+/// Used for collecting agent outputs during consensus/gate evaluation.
 /// For domain logic, prefer `codex_spec_kit::gate_policy` types.
-/// The "Consensus" naming is legacy; new code should use "Gate" or "Artifact".
 #[derive(Debug, Clone)]
-pub(crate) struct ConsensusArtifactData {
+pub(crate) struct GateArtifactData {
     pub memory_id: Option<String>,
     pub agent: String,
     pub version: Option<String>,
     pub content: Value,
 }
 
-/// Type alias for gradual migration to gate vocabulary.
-/// TODO(PR10+): Migrate callsites to use this alias, then convert to newtype.
-#[allow(dead_code)]
-pub(crate) type GateArtifactData = ConsensusArtifactData;
-
 /// Wire type for evidence file handles.
 ///
-/// **Deprecation Note (PR7)**: Legacy naming. New code should use "GateEvidenceHandle".
+/// Tracks evidence artifacts with path and checksum.
 #[derive(Clone)]
 #[allow(dead_code)] // Used for evidence tracking, fields may be used in future
-pub(crate) struct ConsensusEvidenceHandle {
+pub(crate) struct GateEvidenceHandle {
     pub path: PathBuf,
     pub sha256: String,
 }
 
-/// Type alias for gradual migration to gate vocabulary.
-#[allow(dead_code)]
-pub(crate) type GateEvidenceHandle = ConsensusEvidenceHandle;
-
 /// Wire type for telemetry path tracking.
 ///
-/// **Deprecation Note (PR7)**: Legacy naming. New code should use "GateTelemetryPaths".
+/// Collects paths to agent artifacts, telemetry bundle, and synthesis output.
 #[allow(dead_code)] // Used for telemetry path tracking, fields consumed externally
-pub(crate) struct ConsensusTelemetryPaths {
+pub(crate) struct GateTelemetryPaths {
     pub agent_paths: Vec<PathBuf>,
     pub telemetry_path: PathBuf,
     pub synthesis_path: PathBuf,
 }
 
-/// Type alias for gradual migration to gate vocabulary.
-#[allow(dead_code)]
-pub(crate) type GateTelemetryPaths = ConsensusTelemetryPaths;
-
 /// Wire type for artifact verdict in JSON persistence.
 ///
-/// **Deprecation Note (PR7)**: This is a wire type for JSON serialization.
-/// The "Consensus" naming is legacy; new code should use "GateArtifactVerdict".
+/// Serialized as part of StageReviewVerdict for evidence persistence.
 #[derive(Clone, Serialize, Deserialize)]
-pub(crate) struct ConsensusArtifactVerdict {
+pub(crate) struct GateArtifactVerdict {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memory_id: Option<String>,
     pub agent: String,
@@ -94,19 +78,16 @@ pub(crate) struct ConsensusArtifactVerdict {
     pub content: Value,
 }
 
-/// Type alias for gradual migration to gate vocabulary.
-#[allow(dead_code)]
-pub(crate) type GateArtifactVerdict = ConsensusArtifactVerdict;
-
 /// Wire type for stage review verdict in JSON persistence.
 ///
-/// **Deprecation Note (PR7)**: This is a wire type for JSON serialization.
-/// The "Consensus" naming is legacy; prefer "StageReviewVerdict" in new code.
+/// Contains the full verdict from a stage gate evaluation, including
+/// agreements, conflicts, and all agent artifacts.
 ///
-/// **Serde Compatibility (PR7)**: Fields use serde aliases to support both
+/// **Serde Compatibility**: The `consensus_ok` field uses serde aliases to support both
 /// legacy ("consensus_ok") and new ("gate_ok", "review_ok") field names when reading.
+/// The legacy name is preserved for wire format stability with existing evidence files.
 #[derive(Clone, Serialize, Deserialize)]
-pub(crate) struct ConsensusVerdict {
+pub(crate) struct StageReviewVerdict {
     pub spec_id: String,
     pub stage: String,
     pub recorded_at: String,
@@ -129,18 +110,14 @@ pub(crate) struct ConsensusVerdict {
     pub aggregator: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub synthesis_path: Option<String>,
-    pub artifacts: Vec<ConsensusArtifactVerdict>,
+    pub artifacts: Vec<GateArtifactVerdict>,
 }
-
-/// Type alias for gradual migration to gate vocabulary.
-#[allow(dead_code)]
-pub(crate) type StageReviewVerdict = ConsensusVerdict;
 
 /// Wire type for synthesis summary (internal use).
 ///
-/// **Deprecation Note (PR7)**: Legacy naming. Consider "StageReviewSummary" for new code.
+/// Parsed from synthesis JSON files for display and validation.
 #[derive(Debug)]
-pub(crate) struct ConsensusSynthesisSummary {
+pub(crate) struct StageReviewSummary {
     pub status: String,
     pub missing_agents: Vec<String>,
     pub agreements: Vec<String>,
@@ -149,15 +126,11 @@ pub(crate) struct ConsensusSynthesisSummary {
     pub path: PathBuf,
 }
 
-/// Type alias for gradual migration.
-#[allow(dead_code)]
-pub(crate) type StageReviewSummary = ConsensusSynthesisSummary;
-
 /// Wire type for reading raw synthesis JSON from disk.
 ///
-/// **Deprecation Note (PR7)**: Legacy naming. Consider "StageReviewRaw" for new code.
+/// Intermediate type for deserializing synthesis files before conversion.
 #[derive(Debug, Deserialize)]
-pub(crate) struct ConsensusSynthesisRaw {
+pub(crate) struct StageReviewRaw {
     pub stage: Option<String>,
     #[serde(rename = "specId")]
     pub spec_id: Option<String>,
@@ -165,12 +138,12 @@ pub(crate) struct ConsensusSynthesisRaw {
     #[serde(default)]
     pub missing_agents: Vec<String>,
     #[serde(default)]
-    pub consensus: ConsensusSynthesisConsensusRaw,
+    pub consensus: StageReviewConsensusRaw,
     pub prompt_version: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
-pub(crate) struct ConsensusSynthesisConsensusRaw {
+pub(crate) struct StageReviewConsensusRaw {
     #[serde(default)]
     pub agreements: Vec<String>,
     #[serde(default)]
@@ -362,7 +335,7 @@ use std::path::Path;
 pub(crate) fn artifacts_from_cached_responses(
     cached_responses: &[(String, String)],
     stage: SpecStage,
-) -> Result<Vec<ConsensusArtifactData>> {
+) -> Result<Vec<GateArtifactData>> {
     let mut artifacts = Vec::new();
 
     for (agent_name, response_text) in cached_responses {
@@ -379,7 +352,7 @@ pub(crate) fn artifacts_from_cached_responses(
             }
         };
 
-        artifacts.push(ConsensusArtifactData {
+        artifacts.push(GateArtifactData {
             memory_id: Some(format!("cached_{}", agent_name)),
             agent: agent_name.clone(),
             version: None,
@@ -397,7 +370,7 @@ pub(crate) async fn collect_consensus_artifacts(
     spec_id: &str,
     stage: SpecStage,
     mcp_manager: &codex_core::mcp_connection_manager::McpConnectionManager,
-) -> Result<(Vec<ConsensusArtifactData>, Vec<String>)> {
+) -> Result<(Vec<GateArtifactData>, Vec<String>)> {
     let mut warnings: Vec<String> = Vec::new();
 
     // SPEC-KIT-072 Phase 3: SQLite is PRIMARY source (local-memory deprecated for artifacts)
@@ -412,7 +385,7 @@ pub(crate) async fn collect_consensus_artifacts(
                 let mut artifacts = Vec::new();
                 for artifact in sqlite_artifacts {
                     if let Ok(content) = serde_json::from_str::<Value>(&artifact.content_json) {
-                        artifacts.push(ConsensusArtifactData {
+                        artifacts.push(GateArtifactData {
                             memory_id: Some(format!("sqlite_{}", artifact.id)),
                             agent: artifact.agent_name,
                             version: None,
@@ -457,7 +430,7 @@ pub(crate) async fn collect_consensus_artifacts(
             warnings.append(&mut memory_warnings);
 
             // Parse local-memory results into artifacts
-            let mut artifacts: Vec<ConsensusArtifactData> = Vec::new();
+            let mut artifacts: Vec<GateArtifactData> = Vec::new();
 
             for result in entries {
                 let memory_id = result.memory.id.clone();
@@ -525,7 +498,7 @@ pub(crate) async fn collect_consensus_artifacts(
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
 
-                artifacts.push(ConsensusArtifactData {
+                artifacts.push(GateArtifactData {
                     memory_id,
                     agent,
                     version,
@@ -572,7 +545,7 @@ fn load_artifacts_from_evidence(
     evidence_root: &Path,
     spec_id: &str,
     stage: SpecStage,
-) -> Result<Option<(Vec<ConsensusArtifactData>, Vec<String>)>> {
+) -> Result<Option<(Vec<GateArtifactData>, Vec<String>)>> {
     let consensus_dir = evidence_root.join(spec_id);
     if !consensus_dir.exists() {
         return Ok(None);
@@ -589,7 +562,7 @@ fn load_artifacts_from_evidence(
         )
     })?;
 
-    let mut artifacts: Vec<ConsensusArtifactData> = Vec::new();
+    let mut artifacts: Vec<GateArtifactData> = Vec::new();
     let warnings: Vec<String> = Vec::new();
 
     for entry_res in entries {
@@ -633,7 +606,7 @@ fn load_artifacts_from_evidence(
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        artifacts.push(ConsensusArtifactData {
+        artifacts.push(GateArtifactData {
             memory_id: None,
             agent,
             version,
@@ -701,7 +674,7 @@ pub(crate) fn load_latest_consensus_synthesis(
     cwd: &Path,
     spec_id: &str,
     stage: SpecStage,
-) -> Result<Option<ConsensusSynthesisSummary>> {
+) -> Result<Option<StageReviewSummary>> {
     // MAINT-7: Use centralized path helper (dynamic per spec_id)
     let base = super::evidence::consensus_dir_for_spec(cwd, spec_id);
     if !base.exists() {
@@ -749,7 +722,7 @@ pub(crate) fn load_latest_consensus_synthesis(
         )
     })?;
 
-    let raw: ConsensusSynthesisRaw = serde_json::from_str(&contents).map_err(|e| {
+    let raw: StageReviewRaw = serde_json::from_str(&contents).map_err(|e| {
         format!(
             "Failed to parse consensus synthesis {}: {}",
             latest_path.display(),
@@ -778,7 +751,7 @@ pub(crate) fn load_latest_consensus_synthesis(
         .into());
     }
 
-    Ok(Some(ConsensusSynthesisSummary {
+    Ok(Some(StageReviewSummary {
         status: raw.status,
         missing_agents: raw.missing_agents,
         agreements: raw.consensus.agreements,
@@ -1016,7 +989,7 @@ pub async fn run_spec_consensus(
     // Persistence: Write verdict, telemetry, and remember in local-memory
     if telemetry_enabled {
         let evidence_slug = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
-        let verdict_obj = ConsensusVerdict {
+        let verdict_obj = StageReviewVerdict {
             spec_id: spec_id.to_string(),
             stage: stage.command_name().to_string(),
             recorded_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
@@ -1035,7 +1008,7 @@ pub async fn run_spec_consensus(
                 .map(|p| p.to_string_lossy().into_owned()),
             artifacts: artifacts
                 .iter()
-                .map(|artifact| ConsensusArtifactVerdict {
+                .map(|artifact| GateArtifactVerdict {
                     memory_id: artifact.memory_id.clone(),
                     agent: artifact.agent.clone(),
                     version: artifact.version.clone(),
@@ -1051,7 +1024,7 @@ pub async fn run_spec_consensus(
                     verdict_path.display()
                 )));
 
-                let verdict_handle = ConsensusEvidenceHandle {
+                let verdict_handle = GateEvidenceHandle {
                     path: verdict_path.clone(),
                     sha256: String::new(), // Not computing hash for now
                 };
@@ -1106,7 +1079,7 @@ pub(crate) fn persist_consensus_verdict(
     cwd: &Path,
     spec_id: &str,
     stage: SpecStage,
-    verdict: &ConsensusVerdict,
+    verdict: &StageReviewVerdict,
 ) -> Result<PathBuf> {
     // MAINT-7: Use centralized path helper (dynamic per spec_id)
     let consensus_dir = super::evidence::consensus_dir_for_spec(cwd, spec_id);
@@ -1133,11 +1106,11 @@ pub(crate) fn persist_consensus_telemetry_bundle(
     cwd: &Path,
     spec_id: &str,
     stage: SpecStage,
-    verdict: &ConsensusVerdict,
-    verdict_handle: &ConsensusEvidenceHandle,
+    verdict: &StageReviewVerdict,
+    verdict_handle: &GateEvidenceHandle,
     slug: &str,
     consensus_status: &str,
-) -> Result<ConsensusTelemetryPaths> {
+) -> Result<GateTelemetryPaths> {
     // MAINT-7: Use centralized path helper (dynamic per spec_id)
     let base = super::evidence::consensus_dir_for_spec(cwd, spec_id);
     fs::create_dir_all(&base).map_err(|e| {
@@ -1221,7 +1194,7 @@ pub(crate) fn persist_consensus_telemetry_bundle(
     file.write_all(json.as_bytes())
         .map_err(|e| format!("Failed to write synthesis: {e}"))?;
 
-    Ok(ConsensusTelemetryPaths {
+    Ok(GateTelemetryPaths {
         agent_paths,
         telemetry_path,
         synthesis_path,
@@ -1235,7 +1208,7 @@ pub(crate) fn persist_consensus_telemetry_bundle(
 pub(crate) async fn remember_consensus_verdict(
     spec_id: &str,
     stage: SpecStage,
-    verdict: &ConsensusVerdict,
+    verdict: &StageReviewVerdict,
     _mcp_manager: &codex_core::mcp_connection_manager::McpConnectionManager,
 ) -> Result<()> {
     let mut summary_value = serde_json::json!({
@@ -1474,11 +1447,11 @@ mod gr001_tests {
     // PR7: Golden Evidence Tests - Wire Format Stability
     // =========================================================================
 
-    /// Golden test: Ensure ConsensusVerdict serializes with LEGACY key names.
+    /// Golden test: Ensure StageReviewVerdict serializes with LEGACY key names.
     /// This prevents accidental wire format changes that would break evidence files.
     #[test]
     fn test_consensus_verdict_serializes_legacy_keys() {
-        let verdict = ConsensusVerdict {
+        let verdict = StageReviewVerdict {
             spec_id: "SPEC-GOLDEN-001".to_string(),
             stage: "plan".to_string(),
             recorded_at: "2025-01-01T00:00:00Z".to_string(),
@@ -1517,7 +1490,7 @@ mod gr001_tests {
         );
     }
 
-    /// Golden test: Ensure ConsensusVerdict deserializes NEW key names via aliases.
+    /// Golden test: Ensure StageReviewVerdict deserializes NEW key names via aliases.
     /// This enables forward compatibility - new evidence writers can use new names.
     #[test]
     fn test_consensus_verdict_deserializes_new_keys() {
@@ -1535,7 +1508,7 @@ mod gr001_tests {
             "artifacts": []
         }"#;
 
-        let verdict: ConsensusVerdict =
+        let verdict: StageReviewVerdict =
             serde_json::from_str(json_gate_ok).expect("deserialize with gate_ok alias");
         assert!(
             verdict.consensus_ok,
@@ -1556,7 +1529,7 @@ mod gr001_tests {
             "artifacts": []
         }"#;
 
-        let verdict: ConsensusVerdict =
+        let verdict: StageReviewVerdict =
             serde_json::from_str(json_review_ok).expect("deserialize with review_ok alias");
         assert!(
             !verdict.consensus_ok,
@@ -1581,7 +1554,7 @@ mod gr001_tests {
             "artifacts": []
         }"#;
 
-        let verdict: ConsensusVerdict =
+        let verdict: StageReviewVerdict =
             serde_json::from_str(json_legacy).expect("deserialize legacy format");
         assert!(verdict.consensus_ok);
         assert_eq!(verdict.spec_id, "SPEC-GOLDEN-004");

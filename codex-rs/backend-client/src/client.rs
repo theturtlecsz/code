@@ -349,6 +349,6 @@ impl Client {
         }
 
         let seconds_u64 = seconds as u64;
-        Some((seconds_u64 + 59) / 60)
+        Some(seconds_u64.div_ceil(60))
     }
 }

@@ -222,6 +222,7 @@ mod tests {
         let events = vec![
             EventMsg::UserMessage(UserMessageEvent {
                 message: "First turn".into(),
+                kind: None,
                 images: Some(vec!["https://example.com/one.png".into()]),
             }),
             EventMsg::AgentMessage(AgentMessageEvent {
@@ -235,6 +236,7 @@ mod tests {
             }),
             EventMsg::UserMessage(UserMessageEvent {
                 message: "Second turn".into(),
+                kind: None,
                 images: None,
             }),
             EventMsg::AgentMessage(AgentMessageEvent {
@@ -305,6 +307,7 @@ mod tests {
         let events = vec![
             EventMsg::UserMessage(UserMessageEvent {
                 message: "Turn start".into(),
+                kind: None,
                 images: None,
             }),
             EventMsg::AgentReasoning(AgentReasoningEvent {
@@ -349,6 +352,7 @@ mod tests {
         let events = vec![
             EventMsg::UserMessage(UserMessageEvent {
                 message: "Please do the thing".into(),
+                kind: None,
                 images: None,
             }),
             EventMsg::AgentMessage(AgentMessageEvent {
@@ -359,6 +363,7 @@ mod tests {
             }),
             EventMsg::UserMessage(UserMessageEvent {
                 message: "Let's try again".into(),
+                kind: None,
                 images: None,
             }),
             EventMsg::AgentMessage(AgentMessageEvent {

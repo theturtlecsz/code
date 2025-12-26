@@ -397,7 +397,7 @@ mod tests {
         // Test Rust thresholds
         assert_eq!(if 250.0 >= 200.0 { "critical" } else { "low" }, "critical");
         assert_eq!(
-            if 150.0 >= 100.0 && 150.0 < 200.0 {
+            if (100.0..200.0).contains(&150.0) {
                 "high"
             } else {
                 "low"

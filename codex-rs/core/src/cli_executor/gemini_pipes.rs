@@ -840,8 +840,7 @@ fn is_perfect_square(n: u64) -> bool {
 "#;
 
         let prompt = format!(
-            "Analyze this Rust code and list ONLY the function names (one per line, no explanation):\n{}",
-            long_code
+            "Analyze this Rust code and list ONLY the function names (one per line, no explanation):\n{long_code}"
         );
 
         assert!(
@@ -903,7 +902,7 @@ fn is_perfect_square(n: u64) -> bool {
         ];
 
         for (model_id, display_name) in models {
-            println!("\n=== Testing {} ({}) ===", display_name, model_id);
+            println!("\n=== Testing {display_name} ({model_id}) ===");
 
             let session_result = GeminiPipesSession::spawn(model_id, None).await;
 
@@ -920,7 +919,7 @@ fn is_perfect_square(n: u64) -> bool {
                     let stream_result = session.stream_turn(prompt, tx, cancel).await;
 
                     if let Err(e) = &stream_result {
-                        println!("  ❌ {} failed to stream: {:?}", display_name, e);
+                        println!("  ❌ {display_name} failed to stream: {e:?}");
                         continue;
                     }
 
@@ -939,13 +938,13 @@ fn is_perfect_square(n: u64) -> bool {
                             &response[..response.len().min(50)]
                         );
                     } else {
-                        println!("  ⚠️  {} response unexpected: {}", display_name, response);
+                        println!("  ⚠️  {display_name} response unexpected: {response}");
                     }
 
                     session.shutdown().await.ok();
                 }
                 Err(e) => {
-                    println!("  ❌ {} failed to spawn: {:?}", display_name, e);
+                    println!("  ❌ {display_name} failed to spawn: {e:?}");
                 }
             }
         }

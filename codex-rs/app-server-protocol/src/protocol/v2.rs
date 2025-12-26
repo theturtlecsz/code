@@ -1946,28 +1946,41 @@ mod tests {
     use codex_protocol::items::TurnItem;
     use codex_protocol::items::UserMessageItem;
     use codex_protocol::items::WebSearchItem;
-    use codex_protocol::protocol::NetworkAccess as CoreNetworkAccess;
     use codex_protocol::user_input::UserInput as CoreUserInput;
     use pretty_assertions::assert_eq;
     use serde_json::json;
     use std::path::PathBuf;
 
     #[test]
-    fn sandbox_policy_round_trips_external_sandbox_network_access() {
+    fn sandbox_policy_converts_external_sandbox_to_workspace_write() {
+        // ExternalSandbox maps to WorkspaceWrite in core protocol (which doesn't have ExternalSandbox)
         let v2_policy = SandboxPolicy::ExternalSandbox {
             network_access: NetworkAccess::Enabled,
         };
 
         let core_policy = v2_policy.to_core();
+        // ExternalSandbox becomes WorkspaceWrite with empty roots
         assert_eq!(
             core_policy,
-            codex_protocol::protocol::SandboxPolicy::ExternalSandbox {
-                network_access: CoreNetworkAccess::Enabled,
+            codex_protocol::protocol::SandboxPolicy::WorkspaceWrite {
+                writable_roots: vec![],
+                network_access: true,
+                exclude_tmpdir_env_var: false,
+                exclude_slash_tmp: false,
             }
         );
 
+        // Round-trip goes through WorkspaceWrite, not back to ExternalSandbox
         let back_to_v2 = SandboxPolicy::from(core_policy);
-        assert_eq!(back_to_v2, v2_policy);
+        assert_eq!(
+            back_to_v2,
+            SandboxPolicy::WorkspaceWrite {
+                writable_roots: vec![],
+                network_access: true,
+                exclude_tmpdir_env_var: false,
+                exclude_slash_tmp: false,
+            }
+        );
     }
 
     #[test]

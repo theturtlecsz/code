@@ -5,7 +5,6 @@
 //!
 //! MAINT-2: Extracted from handler.rs (925 LOC) for maintainability
 
-#![allow(dead_code, unused_variables)] // Extended QA features pending
 
 use super::super::ChatWidget;
 use super::ace_learning::{ExecutionFeedback, send_learning_feedback_sync};
@@ -935,8 +934,8 @@ fn submit_gpt5_validations(
     // SPEC-KIT-927: Spawn gpt_pro agent DIRECTLY instead of submitting to main LLM
     // This prevents the main LLM from calling run_agent tool with 18 models
     let agent_configs = widget.config.agents.clone();
-    let spec_id_clone = spec_id.to_string();
-    let checkpoint_clone = checkpoint;
+    let _spec_id_clone = spec_id.to_string();
+    let _checkpoint_clone = checkpoint;
 
     tokio::spawn(async move {
         use codex_core::agent_tool::AGENT_MANAGER;
@@ -1098,6 +1097,7 @@ fn is_checkpoint_enabled(widget: &ChatWidget, checkpoint: super::state::QualityC
 ///
 /// This enables quality gate bypass awareness - if stages are skipped in config, corresponding
 /// checkpoints are automatically disabled.
+#[allow(dead_code)] // Pending: dynamic checkpoint calculation (SPEC-948)
 pub(super) fn active_quality_gates(
     config: &super::pipeline_config::PipelineConfig,
 ) -> Vec<super::state::QualityCheckpoint> {
@@ -1453,6 +1453,7 @@ pub fn set_native_agent_ids(widget: &mut ChatWidget, agent_ids: Vec<String>) {
 }
 
 /// Build quality gate prompt for a specific gate
+#[allow(dead_code)] // Pending: direct quality gate prompts (SPEC-948)
 fn build_quality_gate_prompt(
     spec_id: &str,
     gate: super::state::QualityGateType,
@@ -1663,7 +1664,7 @@ pub(super) fn finalize_quality_gates(widget: &mut ChatWidget) {
 /// Uses full Reflector/Curator cycle if enabled, otherwise simple scoring
 fn send_ace_learning_on_checkpoint_pass(
     widget: &ChatWidget,
-    checkpoint: super::state::QualityCheckpoint,
+    _checkpoint: super::state::QualityCheckpoint,
 ) {
     let Some(state) = widget.spec_auto_state.as_ref() else {
         return;
