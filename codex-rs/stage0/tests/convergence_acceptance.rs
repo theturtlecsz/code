@@ -84,7 +84,7 @@ impl LocalMemoryClient for MockLocalMemoryClient {
             .iqo
             .exclude_tags
             .iter()
-            .map(|s| s.as_str())
+            .map(String::as_str)
             .collect();
 
         let filtered: Vec<LocalMemorySummary> = self
@@ -218,14 +218,17 @@ impl Tier2Client for MockTier2Client {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Helper to create a test engine with temp database
+#[allow(clippy::expect_used)]
 fn create_test_engine() -> (Stage0Engine, tempfile::TempDir) {
     let temp = tempfile::tempdir().expect("tempdir");
-    let mut cfg = Stage0Config::default();
-    cfg.db_path = temp
-        .path()
-        .join("stage0-overlay.db")
-        .to_string_lossy()
-        .into_owned();
+    let cfg = Stage0Config {
+        db_path: temp
+            .path()
+            .join("stage0-overlay.db")
+            .to_string_lossy()
+            .into_owned(),
+        ..Default::default()
+    };
     let engine = Stage0Engine::with_config(cfg).expect("create engine");
     (engine, temp)
 }

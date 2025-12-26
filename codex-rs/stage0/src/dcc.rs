@@ -2158,8 +2158,7 @@ mod tests {
 
             assert!(
                 is_constitution_candidate(&candidate),
-                "Should detect constitution by tag: {}",
-                tag
+                "Should detect constitution by tag: {tag}"
             );
         }
     }

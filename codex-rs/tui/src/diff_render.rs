@@ -43,17 +43,7 @@ enum DiffLineType {
     Context,
 }
 
-/// Convenience wrapper for create_diff_summary_with_width (used by tests)
-#[cfg(test)]
-pub(super) fn create_diff_summary(
-    title: &str,
-    changes: &HashMap<PathBuf, FileChange>,
-    event_type: PatchEventType,
-) -> Vec<RtLine<'static>> {
-    create_diff_summary_with_width(title, changes, event_type, None)
-}
-
-/// Same as `create_diff_summary` but allows specifying a target content width in columns.
+/// Create a summary of file changes for display in the chat widget.
 /// When `width_cols` is provided, wrapping for detailed diff lines uses that width to
 /// ensure hanging indents align within the caller’s render area.
 pub(super) fn create_diff_summary_with_width(
@@ -552,6 +542,15 @@ mod tests {
     use ratatui::widgets::Paragraph;
     use ratatui::widgets::WidgetRef;
     use ratatui::widgets::Wrap;
+
+    /// Local test helper wrapping create_diff_summary_with_width
+    fn create_diff_summary(
+        title: &str,
+        changes: &HashMap<PathBuf, FileChange>,
+        event_type: PatchEventType,
+    ) -> Vec<RtLine<'static>> {
+        create_diff_summary_with_width(title, changes, event_type, None)
+    }
 
     fn snapshot_lines(name: &str, lines: Vec<RtLine<'static>>, width: u16, height: u16) {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("terminal");

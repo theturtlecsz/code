@@ -1339,15 +1339,18 @@ mod tests {
     fn test_builtin_cases_include_code_lane() {
         let cases = built_in_eval_cases();
 
-        let memory_cases: Vec<_> = cases
-            .iter()
-            .filter(|c| c.lane == EvalLane::Memory)
-            .collect();
-        let code_cases: Vec<_> = cases.iter().filter(|c| c.lane == EvalLane::Code).collect();
-
         // Should have both memory and code cases
-        assert!(!memory_cases.is_empty(), "Should have memory lane cases");
-        assert!(!code_cases.is_empty(), "Should have code lane cases");
+        assert!(
+            cases.iter().any(|c| c.lane == EvalLane::Memory),
+            "Should have memory lane cases"
+        );
+        assert!(
+            cases.iter().any(|c| c.lane == EvalLane::Code),
+            "Should have code lane cases"
+        );
+
+        // Collect for further iteration
+        let code_cases: Vec<_> = cases.iter().filter(|c| c.lane == EvalLane::Code).collect();
 
         // Verify code cases have expected ID format
         for case in &code_cases {

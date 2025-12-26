@@ -723,9 +723,8 @@ mod tests {
 
     #[test]
     fn test_llm_stub_default() {
-        let stub = LlmStubAdapter;
         // Just verify it creates without panic
-        drop(stub);
+        let _ = LlmStubAdapter;
     }
 
     #[test]

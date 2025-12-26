@@ -1310,12 +1310,12 @@ pub(crate) async fn remember_consensus_verdict(
 #[cfg(test)]
 mod gr001_tests {
     use super::*;
+    use serial_test::serial;
 
     // Note: Rust 2024 edition requires unsafe for env::set_var/remove_var
     // SAFETY: These tests run sequentially and only modify test-specific env vars
     //
-    // IMPORTANT: Run with `cargo test gr001 -- --test-threads=1` to avoid race conditions
-    // Env var tests MUST run serially since they modify shared process state.
+    // Tests that modify env vars are marked with #[serial] to prevent race conditions.
 
     #[test]
     #[allow(deprecated)]
@@ -1353,6 +1353,7 @@ mod gr001_tests {
     }
 
     #[test]
+    #[serial]
     fn test_critic_disabled_by_default() {
         // SAFETY: Test isolation - clear both env vars
         unsafe {
@@ -1363,6 +1364,7 @@ mod gr001_tests {
     }
 
     #[test]
+    #[serial]
     fn test_critic_enabled_canonical_var() {
         // SAFETY: Test isolation
         unsafe {
@@ -1376,6 +1378,7 @@ mod gr001_tests {
     }
 
     #[test]
+    #[serial]
     fn test_critic_enabled_deprecated_var() {
         // SAFETY: Test isolation
         unsafe {
@@ -1390,6 +1393,7 @@ mod gr001_tests {
     }
 
     #[test]
+    #[serial]
     fn test_critic_canonical_wins_over_deprecated() {
         // SAFETY: Test isolation
         unsafe {
