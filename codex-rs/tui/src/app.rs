@@ -2026,6 +2026,7 @@ impl App<'_> {
                         | SlashCommand::SpecKitChecklist
                         | SlashCommand::SpecKitAuto
                         | SlashCommand::SpecKitStatus
+                        | SlashCommand::SpecKitCancel
                         | SlashCommand::SpecKitConfigure
                         | SlashCommand::SpecKitConstitution
                         | SlashCommand::SpecKitAceStatus

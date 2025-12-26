@@ -146,6 +146,9 @@ pub enum SlashCommand {
     SpecKitAuto,
     #[strum(serialize = "speckit.status")]
     SpecKitStatus,
+    // SPEC-DOGFOOD-001: Cancel stale pipeline state
+    #[strum(serialize = "speckit.cancel")]
+    SpecKitCancel,
     #[strum(serialize = "speckit.configure")]
     SpecKitConfigure,
     #[strum(serialize = "speckit.constitution")]
@@ -236,6 +239,7 @@ impl SlashCommand {
             SlashCommand::SpecKitUnlock => "final approval for merge",
             SlashCommand::SpecKitAuto => "full pipeline (native coordinator)",
             SlashCommand::SpecKitStatus => "show progress dashboard (native)",
+            SlashCommand::SpecKitCancel => "clear stale pipeline state (native)",
             SlashCommand::SpecKitConfigure => "configure pipeline stages (interactive modal)",
             SlashCommand::SpecKitConstitution => "extract ACE bullets (native)",
             SlashCommand::SpecKitAceStatus => "show ACE stats (native)",
@@ -310,6 +314,7 @@ impl SlashCommand {
                 | SlashCommand::SpecKitUnlock
                 | SlashCommand::SpecKitAuto
                 | SlashCommand::SpecKitStatus
+                | SlashCommand::SpecKitCancel
                 | SlashCommand::SpecKitConfigure
         )
     }
