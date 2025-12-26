@@ -274,6 +274,8 @@ impl PipelineBranch {
 /// Phase tracking for /speckit.auto pipeline
 #[derive(Debug, Clone)]
 pub enum SpecAutoPhase {
+    // NOTE: Stage0 runs synchronously before the state machine starts.
+    // UX improvement for async Stage0 with progress feedback tracked for follow-up.
     Guardrail,
     ExecutingAgents {
         // Track which agents we're waiting for completion

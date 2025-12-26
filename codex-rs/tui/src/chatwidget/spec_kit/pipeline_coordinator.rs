@@ -262,90 +262,24 @@ pub fn handle_spec_auto(
                 }
             }
 
-            // SPEC-DOGFOOD-001 S30: Show initial Stage0 status
-            widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                vec![ratatui::text::Line::from("⟳ Stage0: Starting context compilation...")],
-                crate::history_cell::HistoryCellType::Notice,
-            ));
+            // SPEC-DOGFOOD-001 S30: Run Stage0 synchronously
+            // NOTE: This blocks the TUI during execution. UX improvement tracked for follow-up.
+            // The Tier2 HTTP call happens in a separate thread to avoid runtime conflicts,
+            // but the overall Stage0 execution is synchronous from the TUI's perspective.
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                super::stage0_integration::run_stage0_for_spec(
+                    &widget.config,
+                    &spec_id,
+                    &spec_content,
+                    &widget.config.cwd,
+                    &stage0_config,
+                    None, // No progress channel for sync execution
+                )
+            }));
 
-            // SPEC-DOGFOOD-001 S30: Run Stage0 with progress reporting
-            // Use std::thread to avoid blocking the event loop, with channel for progress
-            let (progress_tx, progress_rx) = std::sync::mpsc::channel();
-            let config_clone = widget.config.clone();
-            let spec_id_clone = spec_id.clone();
-            let spec_content_clone = spec_content.clone();
-            let cwd_clone = widget.config.cwd.clone();
-            let stage0_config_clone = stage0_config.clone();
-
-            let handle = std::thread::spawn(move || {
-                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    super::stage0_integration::run_stage0_for_spec(
-                        &config_clone,
-                        &spec_id_clone,
-                        &spec_content_clone,
-                        &cwd_clone,
-                        &stage0_config_clone,
-                        Some(progress_tx),
-                    )
-                }))
-            });
-
-            // Poll progress while waiting for Stage0 to complete
-            let mut last_status = String::new();
-            loop {
-                // Check for progress updates (non-blocking with short timeout)
-                match progress_rx.recv_timeout(std::time::Duration::from_millis(100)) {
-                    Ok(progress) => {
-                        let status = match &progress {
-                            super::stage0_integration::Stage0Progress::Starting => {
-                                "Stage0: Starting...".to_string()
-                            }
-                            super::stage0_integration::Stage0Progress::CheckingLocalMemory => {
-                                "Stage0: Checking local-memory...".to_string()
-                            }
-                            super::stage0_integration::Stage0Progress::LoadingConfig => {
-                                "Stage0: Loading configuration...".to_string()
-                            }
-                            super::stage0_integration::Stage0Progress::CheckingTier2Health => {
-                                "Stage0: Checking NotebookLM health...".to_string()
-                            }
-                            super::stage0_integration::Stage0Progress::CompilingContext => {
-                                "Stage0: Compiling context...".to_string()
-                            }
-                            super::stage0_integration::Stage0Progress::QueryingTier2 => {
-                                "Stage0: Querying NotebookLM (Tier2)...".to_string()
-                            }
-                            super::stage0_integration::Stage0Progress::Tier2Complete(ms) => {
-                                format!("Stage0: Tier2 complete ({}ms)", ms)
-                            }
-                            super::stage0_integration::Stage0Progress::Finished { .. } => {
-                                break; // Exit loop, will get result from thread
-                            }
-                        };
-                        if status != last_status {
-                            last_status = status.clone();
-                            widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                                vec![ratatui::text::Line::from(format!("⟳ {}", status))],
-                                crate::history_cell::HistoryCellType::Notice,
-                            ));
-                        }
-                    }
-                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                        // Check if thread is done
-                        if handle.is_finished() {
-                            break;
-                        }
-                    }
-                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                        break; // Channel closed, thread done
-                    }
-                }
-            }
-
-            // Get the result from the thread
-            let result = match handle.join() {
-                Ok(Ok(r)) => r,
-                Ok(Err(e)) => {
+            let result = match result {
+                Ok(r) => r,
+                Err(e) => {
                     let panic_msg = if let Some(s) = e.downcast_ref::<&str>() {
                         s.to_string()
                     } else if let Some(s) = e.downcast_ref::<String>() {
@@ -365,20 +299,6 @@ pub fn handle_spec_auto(
                         cache_hit: false,
                         hybrid_retrieval_used: false,
                         tier2_skip_reason: Some("Panic".to_string()),
-                    }
-                }
-                Err(_) => {
-                    widget.history_push(crate::history_cell::new_error_event(
-                        "Stage 0: Thread join failed".to_string(),
-                    ));
-                    super::stage0_integration::Stage0ExecutionResult {
-                        result: None,
-                        skip_reason: Some("Thread join failed".to_string()),
-                        duration_ms: 0,
-                        tier2_used: false,
-                        cache_hit: false,
-                        hybrid_retrieval_used: false,
-                        tier2_skip_reason: Some("Thread error".to_string()),
                     }
                 }
             };

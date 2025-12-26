@@ -47,6 +47,61 @@ pub enum Stage0Progress {
 /// Channel sender for Stage0 progress updates
 pub type Stage0ProgressSender = mpsc::Sender<Stage0Progress>;
 
+/// Pending Stage0 operation for async execution (SPEC-DOGFOOD-001 S30)
+///
+/// This allows Stage0 to run in the background while the TUI remains responsive.
+pub struct Stage0PendingOperation {
+    /// Receiver for progress updates
+    pub progress_rx: mpsc::Receiver<Stage0Progress>,
+    /// Receiver for final result
+    pub result_rx: mpsc::Receiver<Stage0ExecutionResult>,
+    /// Spec ID being processed
+    pub spec_id: String,
+    /// Spec content
+    pub spec_content: String,
+    /// Stage0 execution config
+    pub config: Stage0ExecutionConfig,
+}
+
+/// Spawn Stage0 in a background thread and return channels for polling.
+///
+/// SPEC-DOGFOOD-001 S30: This allows the TUI to remain responsive while Stage0 runs.
+/// Call `poll_stage0_progress` periodically to check for updates.
+pub fn spawn_stage0_async(
+    planner_config: codex_core::config::Config,
+    spec_id: String,
+    spec_content: String,
+    cwd: std::path::PathBuf,
+    config: Stage0ExecutionConfig,
+) -> Stage0PendingOperation {
+    let (progress_tx, progress_rx) = mpsc::channel();
+    let (result_tx, result_rx) = mpsc::channel();
+
+    let spec_id_clone = spec_id.clone();
+    let spec_content_clone = spec_content.clone();
+    let config_clone = config.clone();
+
+    std::thread::spawn(move || {
+        let result = run_stage0_for_spec(
+            &planner_config,
+            &spec_id_clone,
+            &spec_content_clone,
+            &cwd,
+            &config_clone,
+            Some(progress_tx),
+        );
+        let _ = result_tx.send(result);
+    });
+
+    Stage0PendingOperation {
+        progress_rx,
+        result_rx,
+        spec_id,
+        spec_content,
+        config,
+    }
+}
+
 /// Result of Stage 0 execution for pipeline consumption
 #[derive(Debug, Clone)]
 pub struct Stage0ExecutionResult {
