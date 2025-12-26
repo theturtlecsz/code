@@ -1,10 +1,10 @@
 # Session Handoff — SPEC-DOGFOOD-001 Dead Code Cleanup
 
 **Last updated:** 2025-12-26
-**Status:** Session 23 Complete, SPEC-DOGFOOD-001 Near Completion
+**Status:** Session 24 Complete, Acceptance Criteria Validation Pending
 **Current SPEC:** SPEC-DOGFOOD-001
 
-> **Goal**: Clean up dead code, fix test isolation, and modernize type naming.
+> **Goal**: Clean up dead code, fix test isolation, and validate golden path dogfooding.
 
 ---
 
@@ -19,8 +19,72 @@
 | S21 | Type migration + audit | ~50 | Renamed 8 types, fixed 6 clippy, audited dead_code |
 | S22 | Clippy + dead_code docs | ~20 | Fixed 17 clippy warnings, documented 13 blanket allows |
 | S23 | Config fix + module deletion | ~664 | Fixed xhigh parse error, deleted unified_exec |
+| S24 | Orphaned module cleanup | ~1,538 | Deleted 4 orphaned TUI modules, verified A1 |
 
-**Total deleted (S17-S23):** ~3,884 LOC
+**Total deleted (S17-S24):** ~5,422 LOC
+
+---
+
+## Session 24 Summary (Complete)
+
+### Commits
+- (Pending) - refactor(tui): Delete orphaned backtrack/pager/transcript modules (~1,538 LOC)
+
+### Diagnostic Results (Acceptance Criteria)
+
+| ID | Criterion | Status | Evidence |
+|----|-----------|--------|----------|
+| A0 | No Surprise Fan-Out | ⏳ | Needs interactive test |
+| A1 | Doctor Ready | ✅ | `code doctor` all [OK] |
+| A2 | Tier2 Used | ⚠️ | NotebookLM auth expired (25.1h > 24h max) |
+| A3 | Evidence Exists | ⏳ | Needs interactive test |
+| A4 | System Pointer | ⏳ | Needs interactive test |
+| A5 | GR-001 Enforcement | ⏳ | Needs interactive test |
+| A6 | Slash Dispatch Single-Shot | ⏳ | Needs interactive test |
+
+### Dead Code Deleted (~1,538 lines)
+
+**Discovery:** Found 4 orphaned/unused TUI modules:
+1. `app_backtrack.rs` (360 lines) - Orphaned file, never compiled (no `mod app_backtrack`)
+2. `backtrack_helpers.rs` (155 lines) - Only used by orphaned app_backtrack
+3. `transcript_app.rs` (280 lines) - Only used for dead field `_transcript_overlay`
+4. `pager_overlay.rs` (743 lines) - Only used by orphaned app_backtrack
+
+**Dead fields removed from App struct:**
+- `_transcript_overlay: Option<TranscriptApp>`
+- `_deferred_history_lines: Vec<Line<'static>>`
+- `_transcript_saved_viewport: Option<Rect>`
+- `_debug: bool` (parameter kept with `_` prefix for API stability)
+
+**Cleanup applied:**
+- Deleted 4 source files
+- Deleted 3 snapshot files
+- Removed 3 mod declarations from lib.rs
+- Removed 2 unused imports from app.rs
+
+### Verification
+- `cargo clippy -p codex-tui --all-targets -- -D warnings` ✅
+- `cargo test -p codex-tui --lib` ✅ (533 tests)
+- `cargo test -p codex-core` ✅ (all pass)
+- `cargo clippy --workspace --all-targets --exclude codex-tui2 -- -D warnings` ✅
+- `~/code/build-fast.sh` ✅
+
+### Blocking Issue for Tier2 Validation
+NotebookLM authentication expired (25.1h old, max 24h). Need to re-authenticate:
+```bash
+notebooklm setup-auth
+```
+This blocks A2 (Tier2 Used) acceptance criterion verification.
+
+### Next Session Tasks
+1. Re-authenticate NotebookLM
+2. Run interactive dogfooding test:
+   - Build TUI: `~/code/build-fast.sh run`
+   - Create test spec: `/speckit.new test-session-24-validation`
+   - Run pipeline: `/speckit.auto SPEC-TEST-###`
+   - Verify A0, A2, A3, A4, A5, A6
+3. Update SPEC-DOGFOOD-001 acceptance criteria with results
+4. Consider SPEC completion if all criteria pass
 
 ---
 

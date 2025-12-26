@@ -11,7 +11,6 @@ use crate::onboarding::onboarding_screen::KeyboardHandler;
 use crate::onboarding::onboarding_screen::OnboardingScreen;
 use crate::onboarding::onboarding_screen::OnboardingScreenArgs;
 use crate::slash_command::SlashCommand;
-use crate::transcript_app::TranscriptApp;
 use crate::tui;
 use crate::tui::TerminalInfo;
 use codex_core::ConversationManager;
@@ -32,8 +31,6 @@ use futures::FutureExt;
 use portable_pty::{CommandBuilder, MasterPty, PtyPair, PtySize, native_pty_system};
 use ratatui::CompletedFrame;
 use ratatui::buffer::Buffer;
-use ratatui::prelude::Rect;
-use ratatui::text::Line;
 use shlex::try_join;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::{Read, Write};
@@ -124,19 +121,12 @@ pub(crate) struct App<'a> {
     /// Controls the input reader thread spawned at startup.
     input_running: Arc<AtomicBool>,
 
-    // Transcript overlay state
-    _transcript_overlay: Option<TranscriptApp>,
-    _deferred_history_lines: Vec<Line<'static>>,
-    _transcript_saved_viewport: Option<Rect>,
-
     enhanced_keys_supported: bool,
     /// Tracks keys seen as pressed when keyboard enhancements are unavailable
     /// so duplicate release events can be filtered and release-only terminals
     /// still synthesize a press.
     non_enhanced_pressed_keys: HashSet<KeyCode>,
 
-    /// Debug flag for logging LLM requests/responses
-    _debug: bool,
     /// Show per-cell ordering overlay when true
     show_order_overlay: bool,
 
@@ -242,7 +232,7 @@ impl App<'_> {
         initial_prompt: Option<String>,
         initial_images: Vec<std::path::PathBuf>,
         show_trust_screen: bool,
-        debug: bool,
+        _debug: bool,
         show_order_overlay: bool,
         terminal_info: TerminalInfo,
         enable_perf: bool,
@@ -463,12 +453,8 @@ impl App<'_> {
             post_frame_redraw,
             scheduled_frame_armed,
             input_running,
-            _transcript_overlay: None,
-            _deferred_history_lines: Vec::new(),
-            _transcript_saved_viewport: None,
             enhanced_keys_supported,
             non_enhanced_pressed_keys: HashSet::new(),
-            _debug: debug,
             show_order_overlay,
             commit_anim_running: Arc::new(AtomicBool::new(false)),
             terminal_info,
