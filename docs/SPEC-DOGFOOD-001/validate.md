@@ -2,7 +2,7 @@
 
 **Stage**: Validate
 **Agents**: 1
-**Generated**: 2025-12-26 15:34 UTC
+**Generated**: 2025-12-26 16:35 UTC
 
 ## Agent Responses (Raw)
 
@@ -30,7 +30,7 @@ balanced
   "requirement": "A0: No Surprise Fan-Out - /speckit.auto spawns only canonical pipeline agents (no quality gate agents unless explicitly enabled)",
   "test_scenarios": [
     "Execute /speckit.auto SPEC-DOGFOOD-001 from TUI and capture agent spawn log to stderr/stdout",
-    "Parse execution logs and count distinct agents spawned; verify count <= 3 (Architect, Implementer, Judge)",
+    "Parse execution logs and count distinct agents spawned; verify count ≤ 3 (Architect, Implementer, Judge)",
     "Verify agent names match canonical set: no Quality Gate agents (Consensus, Auditor, Judge-Consensus) present in spawn list",
     "Confirm quality_gates_enabled flag defaults to false in stage0.toml and no gate agents appear",
     "Verify no agent is spawned twice (re-entry guard active for default path)",
@@ -114,6 +114,50 @@ balanced
     "Confirm dispatch guard remains active throughout TUI session (not one-shot only)"
   ],
   "coverage": "Complete - validates single-shot dispatch behavior and re-entry guard function"
+}
+- {
+  "requirement": "P0.1: No Surprise Fan-Out prerequisite - Default /speckit.auto spawns only canonical pipeline agents",
+  "test_scenarios": [
+    "Count total agent spawn events during default /speckit.auto SPEC-DOGFOOD-001 execution",
+    "Verify agent spawn count = 3 (exactly Architect, Implementer, Judge in order)",
+    "Confirm no auxiliary agents are spawned for housekeeping, quality gates, or consensus",
+    "Validate pipeline configuration has quality_gates_enabled=false by default",
+    "Verify logs show no agent spawn retries or fallback agent spawning"
+  ],
+  "coverage": "Full - directly validates P0.1 dogfooding prerequisite"
+}
+- {
+  "requirement": "P0.2: GR-001 Compliance - No multi-agent debate/vote/consensus in default path",
+  "test_scenarios": [
+    "Execute /speckit.auto SPEC-DOGFOOD-001 with GR-001 validation enabled",
+    "Verify no voting, consensus, or debate logic is triggered during pipeline execution",
+    "Confirm logs show GR-001 guard passed during pre-flight checks",
+    "Validate that Architect/Implementer/Judge execute sequentially without cross-agent communication",
+    "Verify no consensus memory artifacts (system pointers tagged with 'vote:*') are generated"
+  ],
+  "coverage": "Full - directly validates P0.2 GR-001 compliance"
+}
+- {
+  "requirement": "P0.3: Single-Shot Dispatch - Slash command execution does not trigger duplicates",
+  "test_scenarios": [
+    "From TUI, type / and select /speckit.auto SPEC-DOGFOOD-001 once",
+    "Monitor execution logs for duplicate command dispatches or re-entry attempts",
+    "Verify exactly one pipeline instance is created (process ID count = 1)",
+    "Confirm re-entry guard log shows '0 re-entries blocked'",
+    "Type /speckit.auto again while first execution is still running; verify no parallel execution spawned"
+  ],
+  "coverage": "Full - directly validates P0.3 single-shot dispatch prerequisite"
+}
+- {
+  "requirement": "P0.4: Constitution Gate - DB bootstrap complete and accessible",
+  "test_scenarios": [
+    "Run 'code doctor' and verify output shows 'Constitution DB [OK]' or similar",
+    "Confirm stage0.toml file loads without TOML syntax errors",
+    "Verify all config sections are parseable (stage0, tier1, tier2, domain_mappings)",
+    "Test that local-memory CLI can connect to daemon (lm health returns 'ready')",
+    "Validate NotebookLM HTTP endpoint is reachable (curl -s http://127.0.0.1:3456/health/ready | jq succeeds)"
+  ],
+  "coverage": "Full - directly validates P0.4 constitution gate completion"
 }
 
 **gaps**:

@@ -5,18 +5,18 @@
   "utilization": 0.0,
   "call_count": 21,
   "per_stage": {
-    "spec-plan": 0.0,
     "spec-validate": 0.0,
-    "spec-unlock": 0.0,
+    "spec-tasks": 0.0,
     "spec-implement": 0.0,
-    "spec-audit": 0.0,
-    "spec-tasks": 0.0
+    "spec-unlock": 0.0,
+    "spec-plan": 0.0,
+    "spec-audit": 0.0
   },
   "per_model": {
-    "gemini": 0.0,
-    "claude": 0.0
+    "claude": 0.0,
+    "gemini": 0.0
   },
-  "duration": 606,
+  "duration": 556,
   "stage_notes": [
     {
       "stage": "spec-tasks"

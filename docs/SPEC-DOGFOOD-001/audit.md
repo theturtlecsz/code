@@ -2,20 +2,22 @@
 
 **Stage**: Audit
 **Agents**: 1
-**Generated**: 2025-12-26 15:36 UTC
+**Generated**: 2025-12-26 16:36 UTC
 
 ## Risks (from claude)
 
-- **Risk**: Stage0 silent skip bug - /speckit.auto produces no output despite proper infrastructure setup
-  - Mitigation: Sessions 25-26 added file-based trace logging and panic detection in pipeline_coordinator.rs and stage0_integration.rs. Continue investigation focusing on ChatWidget::handle_message, AppEvent enum dispatch, and config-driven command overrides. Add regression test case for /speckit.auto routing to prevent future silent skip bugs.
-- **Risk**: NotebookLM session expiration during production use would prevent Tier2 queries
-  - Mitigation: Code implements graceful fallback to Tier1 (local-memory). Authentication handled via Chrome profile per CLAUDE.md MCP guidance. Recommend: validate session freshness before marking Tier2 complete (re-auth if cookie >24h old) before merge.
-- **Risk**: Evidence artifact generation (A3/A4 acceptance criteria) requires Stage0 to execute correctly
-  - Mitigation: Evidence directory structure prepared; artifacts will populate during actual /speckit.auto invocation once routing bug is fixed. After fix, run full interactive test to verify artifact generation and system pointer storage in local-memory.
-- **Risk**: GR-001 quality gate compliance depends on user configuration not exceeding 1-agent limit
-  - Mitigation: Code enforces this constraint programmatically in spec_kit modules. Acceptance criterion A5 validates via configuration; edge case only affects non-compliant user setup, not core pipeline. No action required.
-- **Risk**: Cost tracking shows $0 spent with $2 budget - evidence collection may be incomplete
-  - Mitigation: Cost tracking is functional (call_count=21, duration=514s); $0 cost suggests testing-only invocations or cached responses. Production deployment will track actual API calls. Budget is conservative for full pipeline execution. No action required.
+- **Risk**: Stage0 silent skip bug - /speckit.auto produces no output despite infrastructure health checks passing (local-memory healthy, NotebookLM authenticated, stage0.toml configured)
+  - Mitigation: Root cause diagnostic: review ChatWidget::handle_message command routing (lines 220-450 in pipeline_coordinator.rs), verify AppEvent::SlashCommand dispatch logic, check for config-driven command overrides that may short-circuit Stage0 execution. Add regression test case to spec_kit test suite to prevent future silent skip bugs. Sessions 25-26 evidence shows file-based trace logging and panic detection are in place; apply trace logs to isolate entry point where Stage0 is not being called.
+- **Risk**: Evidence artifact generation (acceptance criteria A3/A4) requires Stage0 execution - artifacts cannot be validated until routing bug is fixed
+  - Mitigation: Block fix before production merge: implement Stage0 routing fix, execute /speckit.auto SPEC-DOGFOOD-001 in interactive TUI session, verify TASK_BRIEF.md and DIVINE_TRUTH.md are created in docs/SPEC-DOGFOOD-001/evidence/, confirm both files contain >500 bytes of synthesized markdown (not empty templates), validate via lm search that system pointer memory is stored with system:true tag and importance>=8.
+- **Risk**: NotebookLM session expiration during production dogfooding would prevent Tier2 queries, though graceful fallback to Tier1 (local-memory) is implemented
+  - Mitigation: Pre-production validation: before marking Tier2 complete, add NotebookLM session freshness check to confirm authentication cookie is <24 hours old. Recommend re-auth flow if cookie staleness detected. Add e2e test for Tier2 unavailability scenario to verify graceful Tier1 fallback produces expected TASK_BRIEF.md even without NotebookLM.
+- **Risk**: Cost tracking shows $0 spent despite 21 API calls and 606s duration - suggests testing-only invocations or response caching may mask actual production costs
+  - Mitigation: Non-blocking: cost tracking is functional and $2 budget is conservative for full production pipeline. Monitor actual API call costs post-launch. $0 cost likely reflects NotebookLM cached responses and local-memory CLI invocations (no API charges). No action required for launch; establish cost monitoring baseline in first week of dogfooding.
+- **Risk**: GR-001 quality gate enforcement is programmatically correct but depends on user configuration not exceeding 1-agent limit - edge case only affects non-compliant user setup
+  - Mitigation: Acceptance criterion A5 validates programmatic enforcement works correctly. No action required; edge case does not affect core pipeline with default configuration.
+- **Risk**: Acceptance criteria testing gaps identified in validate.md - no fallback behavior test, no concurrent execution stress test, no NotebookLM failure recovery test
+  - Mitigation: Implement critical gap tests before marking ready for dogfooding: (1) disable NotebookLM service and verify /speckit.auto produces Tier1-only evidence, (2) invoke /speckit.auto twice in rapid succession and verify re-entry guard prevents parallel execution, (3) simulate NotebookLM timeout (10s+) and verify graceful timeout handling (documentation required). These tests increase confidence in production robustness.
 
 ## Consensus Summary
 
