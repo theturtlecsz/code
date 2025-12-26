@@ -1,175 +1,134 @@
 # Session Handoff — SPEC-DOGFOOD-001 Stage0 Fix
 
 **Last updated:** 2025-12-26
-**Status:** Session 26 Complete, Stage0 Trace Analysis Pending
+**Status:** Session 27 Complete, Stage0 Fixed, Pipeline State Cleanup Pending
 **Current SPEC:** SPEC-DOGFOOD-001
 
-> **Goal**: Fix Stage0 so it executes and produces artifacts before pipeline enters PLAN/TASKS/IMPLEMENT.
+> **Goal**: Complete SPEC-DOGFOOD-001 dogfooding validation with working Stage0.
 
 ---
 
 ## Session Log
 
-| Session | Focus | LOC Deleted | Outcome |
+| Session | Focus | LOC Changed | Outcome |
 |---------|-------|-------------|---------|
-| S17 | Dead code audit | ~1,500 | Identified unused modules |
-| S18 | Native consensus cleanup | ~800 | Deleted native_consensus_executor.rs |
-| S19 | Config reload removal | ~840 | Deleted config_reload.rs, clippy fixes |
-| S20 | Test isolation + clippy | ~10 | Added #[serial], fixed 5 clippy warnings |
-| S21 | Type migration + audit | ~50 | Renamed 8 types, fixed 6 clippy, audited dead_code |
-| S22 | Clippy + dead_code docs | ~20 | Fixed 17 clippy warnings, documented 13 blanket allows |
-| S23 | Config fix + module deletion | ~664 | Fixed xhigh parse error, deleted unified_exec |
-| S24 | Orphaned module cleanup | ~1,538 | Deleted 4 orphaned TUI modules, verified A1 |
+| S17 | Dead code audit | -1,500 | Identified unused modules |
+| S18 | Native consensus cleanup | -800 | Deleted native_consensus_executor.rs |
+| S19 | Config reload removal | -840 | Deleted config_reload.rs, clippy fixes |
+| S20 | Test isolation + clippy | -10 | Added #[serial], fixed 5 clippy warnings |
+| S21 | Type migration + audit | -50 | Renamed 8 types, fixed 6 clippy, audited dead_code |
+| S22 | Clippy + dead_code docs | -20 | Fixed 17 clippy warnings, documented 13 blanket allows |
+| S23 | Config fix + module deletion | -664 | Fixed xhigh parse error, deleted unified_exec |
+| S24 | Orphaned module cleanup | -1,538 | Deleted 4 orphaned TUI modules, verified A1 |
 | S25 | Acceptance validation | 0 | 4/6 criteria validated, Stage0 routing bug found |
 | S26 | Stage0 routing debug | +92 | Confirmed routing works, added comprehensive trace |
+| S27 | **Stage0 JSON fix** | -73 | **Fixed null results bug, Stage0 now works** |
 
 **Total deleted (S17-S24):** ~5,422 LOC
+**Net change (S27):** -73 LOC (removed debug trace, added fix + tests)
 
 ---
 
-## Session 26 Summary (Complete)
+## Session 27 Summary (Complete)
+
+### Root Cause Found & Fixed
+
+**Bug:** `lm search` CLI returns `"results": null` when no matches found (e.g., `constitution` domain with no entries). The Rust `LocalMemorySearchData` struct expected `Vec<LocalMemorySearchResult>` but serde couldn't deserialize `null` into `Vec`.
+
+**Fix:** Added custom deserializer `deserialize_null_as_empty_vec` in `local_memory_util.rs` that handles both `null` and missing arrays as empty `Vec`.
 
 ### Commits
-- `ed56cd960` - fix(stage0): Add panic detection and fallback output (SPEC-DOGFOOD-001)
-- `eb9f507b1` - debug(stage0): Add file-based trace to diagnose routing (SPEC-DOGFOOD-001)
-- `00b0228d7` - chore: Commit SPEC-DOGFOOD-001 pipeline artifacts
-- `3e35fed3c` - debug(stage0): Add comprehensive trace throughout Stage0 execution path
 
-### Critical Finding: Routing Works, Stage0 Block Entered
+| Hash | Description |
+|------|-------------|
+| `3b1d70aac` | fix(stage0): Handle null results array from local-memory CLI (SPEC-DOGFOOD-001) |
+| `420c6da19` | chore: Commit SPEC-DOGFOOD-001 pipeline artifacts with Stage0 output |
 
-**Trace log evidence (`/tmp/stage0-trace.log`):**
-```
-[14:53:47] BEFORE Stage0 check: disabled=false
-[14:53:47] INSIDE Stage0 block (not disabled)
-[14:53:47] spec_path="/home/thetu/code/docs/SPEC-DOGFOOD-001/spec.md", content_len=4496
-```
+### Artifacts Generated
 
-**What this proves:**
-1. Command routing: `ProcessedCommand::SpecAuto` → `handle_spec_auto_command()` → `handle_spec_auto()` ✅
-2. Stage0 not disabled: `stage0_config.disabled=false` ✅
-3. Spec file found: `content_len=4496` (not empty) ✅
-4. CWD correct: `/home/thetu/code` ✅
+Stage0 now produces artifacts:
+- `docs/SPEC-DOGFOOD-001/evidence/TASK_BRIEF.md` (Tier1 output)
+- `docs/SPEC-DOGFOOD-001/evidence/DIVINE_TRUTH.md` (Tier2 placeholder)
 
-**What's missing:** The trace stops after loading spec content. We don't yet have trace showing:
-- `ENTERING Stage0 execution (content not empty)`
-- `BEFORE run_stage0_for_spec() call`
-- `run_stage0_for_spec() ENTRY`
-- `local-memory health check`
-- `AFTER run_stage0_for_spec()`
-- `Stage0 result: has_result=..., skip_reason=...`
+### Tests Added
 
-### Trace Points Added (Comprehensive)
-
-**pipeline_coordinator.rs:**
-- Line 211-220: `ENTERING Stage0 execution (content not empty)`
-- Line 253-262: `BEFORE run_stage0_for_spec() call`
-- Line 276-286: `AFTER run_stage0_for_spec(): is_ok=...`
-- Line 314-326: `Stage0 result: has_result=..., skip_reason=..., tier2_used=...`
-
-**stage0_integration.rs:**
-- Line 59-68: `run_stage0_for_spec() ENTRY: spec_id=..., cwd=..., disabled=...`
-- Line 85-94: `Checking local-memory health...`
-- Line 97-106: `local-memory UNHEALTHY - returning skip`
-- Line 120-129: `local-memory HEALTHY`
-
-### Services Verified Healthy
-```bash
-# local-memory daemon
-curl -s http://localhost:3002/api/v1/health
-# {"success":true,"message":"Server is healthy",...}
-
-# NotebookLM service
-curl -s http://127.0.0.1:3456/health/ready
-# {"status":"ready","ready":true,...}
+```rust
+// local_memory_util.rs - 3 new tests
+test_null_results_array_handled  // The critical fix
+test_empty_results_array
+test_populated_results_array
 ```
 
-### Acceptance Criteria Status
+**Test count:** 536 passing (was 533)
+
+### Known Issue: Stale Pipeline State
+
+**Problem:** After Stage0 failure, `widget.spec_auto_state` wasn't cleared. Esc key doesn't work because overlays may intercept it first.
+
+**Workaround:** Restart TUI (`Ctrl+C` then `~/code/build-fast.sh run`)
+
+**Permanent fix needed:** Add `/speckit.cancel` command (Session 28 task)
+
+### Acceptance Criteria Status (Updated)
 
 | ID | Criterion | Status | Evidence |
 |----|-----------|--------|----------|
-| A0 | No Surprise Fan-Out | ✅ | `quality_gate_handler.rs:1075-1088` - default `false` when config absent |
-| A1 | Doctor Ready | ✅ | `code doctor` shows all [OK] |
-| A2 | Tier2 Used | ⚠️ BLOCKED | Stage0 not producing output |
-| A3 | Evidence Exists | ⚠️ BLOCKED | TASK_BRIEF.md, DIVINE_TRUTH.md not generated |
-| A4 | System Pointer | ⚠️ BLOCKED | Stage0 not storing system pointer |
-| A5 | GR-001 Enforcement | ✅ | `quality_gate_handler.rs:1206-1238` |
-| A6 | Slash Dispatch Single-Shot | ✅ | `quality_gate_handler.rs:28-71` |
+| A0 | No Surprise Fan-Out | PASS | `quality_gate_handler.rs:1075-1088` |
+| A1 | Doctor Ready | PASS | `code doctor` shows all [OK] |
+| A2 | Tier2 Used | NEEDS VERIFY | Stage0 works, need clean run |
+| A3 | Evidence Exists | PASS | `TASK_BRIEF.md` generated |
+| A4 | System Pointer | NEEDS VERIFY | Run pipeline to validate |
+| A5 | GR-001 Enforcement | PASS | `quality_gate_handler.rs:1206-1238` |
+| A6 | Slash Dispatch Single-Shot | PASS | `quality_gate_handler.rs:28-71` |
 
-**Score: 4/6 validated, 2/6 blocked by Stage0 execution issue**
+**Score: 5/6 validated, 1/6 needs verification**
 
 ---
 
-## Session 27 Plan: Analyze Trace & Fix Stage0
+## Session 28 Plan
 
-### Priority: Stage0 fix ONLY (per user preference)
+### Priority Order
 
-### Immediate Action: Run Pipeline & Capture Full Trace
+1. **Add `/speckit.cancel` command** (user-approved)
+   - Force-clear `spec_auto_state`
+   - No TUI restart required
 
-```bash
-# 1. Clear old trace
-rm -f /tmp/stage0-trace.log
+2. **Restart TUI and run full pipeline**
+   - Clean state after restart
+   - `/speckit.auto SPEC-DOGFOOD-001`
+   - Validate all 6 stages complete
 
-# 2. Build and run TUI
-~/code/build-fast.sh run
+3. **Verify acceptance criteria**
+   - A2: Check Tier2 usage in Stage0 output
+   - A4: Run `lm search "SPEC-DOGFOOD-001"` for system pointer
 
-# 3. Execute command
-/speckit.auto SPEC-DOGFOOD-001
+4. **Update SPEC status** (if all criteria pass)
 
-# 4. After first guardrail, exit TUI and check trace
-cat /tmp/stage0-trace.log
+### Implementation: /speckit.cancel Command
+
+**Location:** `tui/src/chatwidget/spec_kit/command_handlers.rs`
+
+```rust
+/// Handle /speckit.cancel command - force clear pipeline state
+pub fn handle_speckit_cancel(widget: &mut ChatWidget) {
+    if widget.spec_auto_state.is_some() {
+        let spec_id = widget.spec_auto_state.as_ref()
+            .map(|s| s.spec_id.clone())
+            .unwrap_or_default();
+        widget.spec_auto_state = None;
+        widget.set_spec_auto_metrics(None);
+        widget.history_push(new_notice_event(format!(
+            "Pipeline state cleared for {}", spec_id
+        )));
+    } else {
+        widget.history_push(new_notice_event(
+            "No pipeline running".to_string()
+        ));
+    }
+}
 ```
 
-### Expected Trace Output (Full Path)
-
-If Stage0 executes correctly:
-```
-[HH:MM:SS] BEFORE Stage0 check: disabled=false
-[HH:MM:SS] INSIDE Stage0 block (not disabled)
-[HH:MM:SS] spec_path="...", content_len=4496
-[HH:MM:SS] ENTERING Stage0 execution (content not empty)
-[HH:MM:SS] BEFORE run_stage0_for_spec() call
-[HH:MM:SS] run_stage0_for_spec() ENTRY: spec_id=SPEC-DOGFOOD-001, cwd=..., disabled=false
-[HH:MM:SS] Checking local-memory health...
-[HH:MM:SS] local-memory HEALTHY
-[HH:MM:SS] AFTER run_stage0_for_spec(): is_ok=true
-[HH:MM:SS] Stage0 result: has_result=true, skip_reason=None, tier2_used=true
-```
-
-### Failure Scenarios & Fixes
-
-| Last Trace Line | Diagnosis | Fix |
-|-----------------|-----------|-----|
-| `spec_path=..., content_len=4496` | `if !spec_content.is_empty()` not entered | Check condition logic |
-| `ENTERING Stage0 execution` | Stage0Start event logging issue | Check `state.run_id` |
-| `BEFORE run_stage0_for_spec()` | Call hangs or panics | Check tokio/blocking interaction |
-| `run_stage0_for_spec() ENTRY` | Entry but no health check | Check disabled flag inside function |
-| `Checking local-memory health...` | Health check hangs | Check timeout, daemon |
-| `local-memory UNHEALTHY` | Daemon not responding | Start daemon, check port |
-| `local-memory HEALTHY` | Config load fails | Check Stage0Config::load() path |
-| `AFTER run_stage0_for_spec(): is_ok=false` | Panic caught | Check panic message in result |
-| `Stage0 result: has_result=false` | Skip occurred | Check `skip_reason` for cause |
-
-### After Fix: Squash Debug Commits
-
-Once Stage0 works, squash commits:
-```bash
-git rebase -i HEAD~4  # Squash: ed56cd960, eb9f507b1, 00b0228d7, 3e35fed3c
-# New message: "fix(stage0): Ensure Stage0 executes before pipeline (SPEC-DOGFOOD-001)"
-```
-
-### Validation Commands
-
-```bash
-# Check artifacts exist
-ls docs/SPEC-DOGFOOD-001/evidence/TASK_BRIEF.md
-ls docs/SPEC-DOGFOOD-001/evidence/DIVINE_TRUTH.md
-
-# Check system pointer
-lm search "SPEC-DOGFOOD-001" --limit 5
-
-# Verify TUI shows Stage0 output
-# Look for: "Stage 0: Context compiled (X memories, tier2=yes/no, Xms)"
-```
+**Also update:** Command dispatcher to route `/speckit.cancel`
 
 ---
 
@@ -177,75 +136,69 @@ lm search "SPEC-DOGFOOD-001" --limit 5
 
 | File | Purpose |
 |------|---------|
-| `tui/src/chatwidget/mod.rs:4464-4484` | ProcessedCommand::SpecAuto handler |
-| `tui/src/chatwidget/mod.rs:12852-12910` | handle_spec_auto_command() |
-| `tui/src/chatwidget/spec_kit/pipeline_coordinator.rs:32-450` | handle_spec_auto() with Stage0 |
-| `tui/src/chatwidget/spec_kit/stage0_integration.rs:52-230` | run_stage0_for_spec() |
-| `/tmp/stage0-trace.log` | Runtime trace output |
+| `tui/src/local_memory_util.rs:24-40` | Null results fix + deserializer |
+| `tui/src/local_memory_util.rs:68-106` | Unit tests for null handling |
+| `tui/src/chatwidget/spec_kit/command_handlers.rs` | Add /speckit.cancel here |
+| `tui/src/chatwidget/mod.rs:3159-3173` | Esc handler (reference) |
+| `docs/SPEC-DOGFOOD-001/evidence/` | Stage0 artifacts location |
 
 ---
 
 ## Continuation Prompt
 
 ```
-Continue SPEC-DOGFOOD-001 - Session 27 **ultrathink**
+Continue SPEC-DOGFOOD-001 - Session 28 **ultrathink**
 
 ## Context
-Session 26 completed (commits ed56cd960..3e35fed3c):
-- Confirmed routing works: ProcessedCommand::SpecAuto → handle_spec_auto() ✅
-- Confirmed Stage0 block entered: disabled=false, content_len=4496 ✅
-- Added comprehensive trace to /tmp/stage0-trace.log
-- Trace stops after loading spec content - need to identify failure point
+Session 27 completed (commits 3b1d70aac, 420c6da19):
+- FIXED: Stage0 null JSON results bug (local_memory_util.rs)
+- Stage0 now generates TASK_BRIEF.md successfully
+- Debug trace code removed, 3 unit tests added
+- 536 tests passing
 
-## Immediate Action Required
-1. Run TUI: `~/code/build-fast.sh run`
-2. Execute: `/speckit.auto SPEC-DOGFOOD-001`
-3. Exit after first guardrail appears
-4. Run: `cat /tmp/stage0-trace.log`
-5. Share FULL trace output
+## Known Issue
+- Stale pipeline state prevents re-running /speckit.auto
+- Esc doesn't clear state (overlays intercept)
+- Workaround: Restart TUI
 
-## Expected Trace Lines (in order)
-- BEFORE Stage0 check: disabled=false
-- INSIDE Stage0 block (not disabled)
-- spec_path=..., content_len=4496
-- ENTERING Stage0 execution (content not empty)
-- BEFORE run_stage0_for_spec() call
-- run_stage0_for_spec() ENTRY: spec_id=..., cwd=..., disabled=...
-- Checking local-memory health...
-- local-memory HEALTHY (or UNHEALTHY)
-- AFTER run_stage0_for_spec(): is_ok=...
-- Stage0 result: has_result=..., skip_reason=..., tier2_used=...
+## Session 28 Tasks (Priority Order)
 
-## Diagnosis Guide
-- If trace stops at "spec_path=..." → the if block isn't entered
-- If trace stops at "BEFORE run_stage0_for_spec()" → function call hangs
-- If trace shows "local-memory UNHEALTHY" → daemon issue
-- If "has_result=false" → check skip_reason for cause
+### 1. Add /speckit.cancel Command
+Location: tui/src/chatwidget/spec_kit/command_handlers.rs
 
-## Acceptance Criteria (Blocked)
-| ID | Criterion | Status |
-|----|-----------|--------|
-| A2 | Tier2 Used | ⚠️ Needs Stage0 |
-| A3 | Evidence Exists | ⚠️ Needs Stage0 |
-| A4 | System Pointer | ⚠️ Needs Stage0 |
+Add function:
+- `handle_speckit_cancel(widget: &mut ChatWidget)`
+- Clear `spec_auto_state` and `spec_auto_metrics`
+- Push notice to history
 
-## After Fix
-1. Squash debug commits (4 commits → 1)
-2. Remove trace code OR leave for future debugging
-3. Validate artifacts: TASK_BRIEF.md, DIVINE_TRUTH.md
-4. Validate system pointer: `lm search "SPEC-DOGFOOD-001"`
-5. Update SPEC status
+Update command routing in mod.rs to dispatch /speckit.cancel
+
+### 2. Verify Full Pipeline
+After adding cancel command:
+```bash
+~/code/build-fast.sh run
+# In TUI:
+/speckit.cancel  # Clear any stale state
+/speckit.auto SPEC-DOGFOOD-001
+```
+
+### 3. Validate Acceptance Criteria
+- A2: Check Stage0 output shows tier2 usage
+- A4: `lm search "SPEC-DOGFOOD-001"` returns system pointer
+
+### 4. Update SPEC Status
+If all criteria pass, mark SPEC-DOGFOOD-001 complete
 
 ## Key Files
-- pipeline_coordinator.rs:210-326 - Stage0 execution with trace
-- stage0_integration.rs:52-130 - run_stage0_for_spec with trace
-- /tmp/stage0-trace.log - Runtime trace output
+- command_handlers.rs - Add /speckit.cancel
+- mod.rs:4400-4500 - Command routing
+- local_memory_util.rs - Fixed module (reference only)
 - HANDOFF.md - This file
 
 ## Non-Negotiable Constraints
 - Fix must be inside codex-rs only
 - Do NOT modify localmemory-policy or notebooklm-mcp
-- Keep fix minimal and targeted
+- Keep changes minimal and targeted
 ```
 
 ---
@@ -253,7 +206,7 @@ Session 26 completed (commits ed56cd960..3e35fed3c):
 ## Previous Sessions (Archived)
 
 <details>
-<summary>Sessions 17-25 Summary</summary>
+<summary>Sessions 17-26 Summary</summary>
 
 | Session | Focus | Outcome |
 |---------|-------|---------|
@@ -262,5 +215,6 @@ Session 26 completed (commits ed56cd960..3e35fed3c):
 | S23 | Config fix | XHigh variant, unified_exec deleted |
 | S24 | Orphaned modules | 4 modules deleted (~1,538 LOC) |
 | S25 | Acceptance validation | 4/6 criteria passed, Stage0 bug found |
+| S26 | Stage0 routing debug | Confirmed routing works, trace added |
 
 </details>
