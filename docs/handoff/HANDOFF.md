@@ -1,188 +1,143 @@
-# Session 17 Handoff: SPEC-DOGFOOD-001 Validation Complete
+# Session 18 Handoff: Dead Code Cleanup Complete
 
-**Date**: 2025-12-25
-**Commit**: 0d28ae40f (Session 17)
-**Status**: ✅ COMPLETE - 5/7 criteria verified, 2 require manual testing
-
----
-
-## Session 17 Completed
-
-Session 17 completed all planned tasks:
-
-1. ✅ **Regression Tests Added** - 3 new tests for Esc cancellation and block_in_place
-2. ✅ **Bug Found and Fixed** - Esc handler used wrong method for background events
-3. ✅ **Acceptance Criteria Verified** - 5/7 verified programmatically (A0, A1, A4, A5, A6)
-4. ✅ **Documentation Updated** - spec.md has Session 17 results
-5. ✅ **Tests Pass** - 550 passed, 0 failed, 3 ignored
-6. ⏳ **Manual Testing Required** - A2 (Tier2 Used), A3 (Evidence Exists)
+**Date**: 2025-12-26
+**Commit**: `2989b2011` - `refactor(tui): Complete SPEC-DOGFOOD-001 dead code cleanup`
+**Status**: Session 18 COMPLETE - 2,343 LOC deleted, 0 warnings, all tests pass
 
 ---
 
-## Summary (Session 16)
+## Session 18 Completed
 
-Session 16 completed GR-001 quality gate compliance and fixed critical runtime issues blocking dogfooding. The default `/speckit.auto` path is now "cheap and boring" - no surprise agent fan-out, no multi-agent consensus, and proper cancellation handling.
+Session 18 completed the dead code cleanup that Session 17 started but left broken:
 
----
-
-## Completed Work
-
-### 1. GR-001 Quality Gate Compliance
-- **Quality gates OFF by default** - No surprise fan-out
-- **Single-agent enforcement** - >1 agent triggers explicit GR-001 error
-- **Empty agents → skip gracefully** - Diagnostic message shown
-- **Native orchestrator fixed** - Uses configured agent, not hardcoded 3
-
-**Files Changed**:
-- `core/src/config_types.rs` - Default to `enabled: false`, `agents: []`
-- `tui/src/chatwidget/spec_kit/quality_gate_handler.rs` - GR-001 guard
-- `tui/src/chatwidget/spec_kit/native_quality_gate_orchestrator.rs` - Single agent
-- `tui/src/chatwidget/spec_kit/pipeline_config.rs` - Default to `enabled: false`
-
-### 2. Duplicate Command Execution Fix
-- **Builtins win** - Subagents conflicting with builtin names are filtered from popup
-- **Re-entry guard preserved** - Defense-in-depth remains
-
-**Files Changed**:
-- `tui/src/bottom_pane/command_popup.rs` - Filter conflicting subagents
-
-### 3. Esc Cancellation Handler (NEW)
-- **Pipeline cancellation works** - Pressing Esc when `spec_auto_state` is active cancels cleanly
-- Shows "Pipeline cancelled." message
-
-**Files Changed**:
-- `tui/src/chatwidget/mod.rs:3183-3199` - Esc handler added
-
-### 4. Blocking Panic Fix (NEW)
-- **Runtime nesting fixed** - Wrapped 3 occurrences of `Runtime::new().block_on()` with `tokio::task::block_in_place()`
-- Prevents "Cannot start a runtime from within a runtime" panic
-
-**Files Changed**:
-- `tui/src/chatwidget/spec_kit/consensus_db.rs` - 3 fixes at lines 209, 486, 884
-
-### 5. Documentation Updates
-- `docs/SPEC-DOGFOOD-001/spec.md` - Added P0 prerequisites and A0/A5/A6 criteria
-- `MEMORY-POLICY.md` - Fixed MCP→CLI+REST contradiction, importance ≥7→≥8
+1. **Deleted Files**: `evidence_cleanup.rs` (630 LOC)
+2. **Deleted Tests**: 4 deprecated tests (LocalMemoryMock-based + context mock)
+3. **Deleted Helpers**: `LocalMemoryMock`, `consensus_fixture`, `flatten_lines`, `LM_MOCK_LOCK`
+4. **Deleted Functions**: `on_claude_failed`, `on_gemini_failed` (OAuth handlers)
+5. **Cleaned Imports**: 6 unused imports across 4 files
+6. **Build Status**: 0 errors, 0 warnings
+7. **Tests**: 543 lib + 34 integration tests pass
 
 ---
 
-## Session 17 Tasks
+## Session 19 Plan: Comprehensive Dead Code Audit
 
-### Task 1: Commit Session 16 Fixes
+### Phase 1: Audit (Before Deleting)
+
+Run comprehensive dead code analysis to identify all candidates:
+
 ```bash
-git add -A && git commit -m "fix(spec-kit): Esc cancellation and blocking panic fixes
+# 1. Clippy dead code analysis
+cargo clippy --workspace --all-targets -- -W dead_code 2>&1 | tee dead_code_audit.txt
 
-Session 16 Part 2: Runtime fixes for dogfooding readiness.
+# 2. Check for unused modules
+for f in codex-rs/tui/src/chatwidget/spec_kit/*.rs; do
+  name=$(basename "$f" .rs)
+  if [ "$name" != "mod" ]; then
+    count=$(grep -r "${name}::" codex-rs/tui/src --include="*.rs" | grep -v "^${f}:" | wc -l)
+    echo "$name: $count usages"
+  fi
+done
 
-**Esc Cancellation**:
-- Added Esc key handler in mod.rs to cancel running spec_auto pipeline
-- Calls halt_spec_auto_with_error with 'Cancelled by user (Esc)'
-
-**Blocking Panic Fix**:
-- Wrapped 3 Runtime::new().block_on() calls with tokio::task::block_in_place()
-- Prevents 'Cannot start a runtime from within a runtime' panic
-- Affected: store_artifact, store_synthesis, store_quality_gate_artifact
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
-"
+# 3. Check for unused public functions
+cargo build --workspace 2>&1 | grep -i "unused\|never used"
 ```
 
-### Task 2: Add Regression Tests
-Add tests for:
-1. **Esc cancellation** - Verify `spec_auto_state` is cleared when Esc pressed during pipeline
-2. **block_in_place wrapper** - Verify consensus_db operations don't panic from async context
+### Phase 2: Identified Candidates
 
-**Test Locations**:
-- `tui/src/chatwidget/tests.rs` - Esc cancellation
-- `tui/src/chatwidget/spec_kit/consensus_db.rs` - Blocking tests (may need `#[tokio::test]`)
+| File | LOC | Status | Notes |
+|------|-----|--------|-------|
+| `native_consensus_executor.rs` | 406 | VERIFIED UNUSED | Module declared but never imported |
+| `config_reload.rs` | 391 | NEEDS VERIFICATION | Functions only in docstrings |
 
-### Task 3: Full Dogfooding Validation
-Run `/speckit.auto SPEC-DOGFOOD-001` and verify all acceptance criteria:
+### Phase 3: Safe Deletion
 
-| ID | Criterion | Expected Result |
-|----|-----------|-----------------|
-| A0 | No Surprise Fan-Out | Only canonical pipeline agents spawn |
-| A1 | Doctor Ready | `code doctor` shows all [OK] |
-| A2 | Tier2 Used | Logs show `tier2_used=true` |
-| A3 | Evidence Exists | `TASK_BRIEF.md` and/or `DIVINE_TRUTH.md` in evidence dir |
-| A4 | System Pointer | `lm search "SPEC-DOGFOOD-001"` returns memory |
-| A5 | GR-001 Enforcement | >1 agent config would be rejected |
-| A6 | Slash Dispatch Single-Shot | No duplicate "Resume from" messages |
+For each verified-unused file:
+1. Remove module declaration from `mod.rs`
+2. Delete the file
+3. Build and test
+4. Commit incrementally
 
-### Task 4: Document Results
-- Update `docs/SPEC-DOGFOOD-001/spec.md` with validation results
-- If all pass, mark P0.1-P0.4 as ✅
+### Phase 4: Push to Origin
+
+After all deletions verified:
+```bash
+git push origin main
+```
+
+Currently 9 commits ahead of origin.
 
 ---
 
 ## Verification Commands
 
 ```bash
-# Build
-~/code/build-fast.sh
+# Build (must be 0 warnings)
+cargo build --workspace
 
-# Run TUI
-~/code/build-fast.sh run
-
-# Run tests
+# Tests (must all pass)
 cargo test -p codex-tui --lib
+cargo test -p codex-tui
 
-# Doctor check
-./codex-rs/target/dev-fast/code doctor
+# Final push
+git push origin main
 ```
-
----
-
-## Known State
-
-- **Working tree**: 2 uncommitted files (mod.rs, consensus_db.rs)
-- **Tests**: 547 TUI tests pass, 16 quality gate tests pass
-- **Build**: Successful with dev-fast profile
 
 ---
 
 ## Key Files Reference
 
-| File | Purpose |
-|------|---------|
-| `quality_gate_handler.rs:1206-1238` | GR-001 >1 agent guard |
-| `quality_gate_handler.rs:1181-1204` | Empty agents skip guard |
-| `native_quality_gate_orchestrator.rs:38` | Single agent parameter |
-| `command_popup.rs:137-139` | Builtin name conflict detection |
-| `mod.rs:3183-3199` | Esc cancellation handler |
-| `consensus_db.rs:209,486,884` | block_in_place wrappers |
+| File | Status |
+|------|--------|
+| `native_consensus_executor.rs` | To be deleted (verified unused) |
+| `config_reload.rs` | Audit needed |
+| `mod.rs:43` | Module declaration to remove |
+| `mod.rs:27` | Module declaration to remove |
 
 ---
 
-## Resume Prompt for Session 17
+## Resume Prompt for Session 19
 
 ```
-Continue SPEC-DOGFOOD-001 Session 17.
+Continue SPEC-DOGFOOD-001 Session 19 - Dead Code Audit and Cleanup
 
 ## Context
-Session 16 completed GR-001 quality gate compliance and fixed:
-- Esc cancellation (now works to cancel running pipeline)
-- Blocking panic in consensus_db (Runtime nesting fixed)
+Session 18 completed:
+- Deleted 2,343 LOC of dead code
+- Build: 0 errors, 0 warnings
+- Tests: 543 lib + 34 integration pass
+- Commit: 2989b2011
 
-## Uncommitted Changes
-2 files need to be committed:
-- tui/src/chatwidget/mod.rs (Esc handler)
-- tui/src/chatwidget/spec_kit/consensus_db.rs (block_in_place fixes)
+## Session 19 Tasks (in order)
+1. Run comprehensive dead code audit:
+   - cargo clippy --workspace -- -W dead_code
+   - Check for unused module imports
+   - Verify native_consensus_executor.rs is truly unused
+   - Verify config_reload.rs is truly unused
 
-## Session 17 Tasks
-1. Commit the uncommitted fixes (commit message in HANDOFF.md)
-2. Add regression tests for Esc cancellation and blocking fixes
-3. Run full dogfooding validation: /speckit.auto SPEC-DOGFOOD-001
-4. Verify all acceptance criteria A0-A6
-5. Document results in SPEC-DOGFOOD-001/spec.md
+2. For each verified-unused file:
+   - Remove from mod.rs
+   - Delete file
+   - Build and verify
+   - Commit incrementally
 
-## Key Commands
-- Build: ~/code/build-fast.sh
-- Run: ~/code/build-fast.sh run
-- Tests: cargo test -p codex-tui --lib
+3. Push all commits to origin:
+   - Currently 9 commits ahead
+   - git push origin main
 
-## Reference
-See docs/handoff/HANDOFF.md for full details.
+## Known Candidates
+- native_consensus_executor.rs (406 LOC) - module declared but never imported
+- config_reload.rs (391 LOC) - needs verification
+
+## Success Criteria
+- [ ] Dead code audit complete with documented findings
+- [ ] All verified-unused files deleted
+- [ ] Build: 0 errors, 0 warnings
+- [ ] Tests: all pass
+- [ ] Commits pushed to origin
+
+## Commands
+- Build: cargo build --workspace
+- Test: cargo test -p codex-tui --lib
+- Push: git push origin main
 ```
