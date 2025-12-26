@@ -76,15 +76,59 @@ notebooklm setup-auth
 ```
 This blocks A2 (Tier2 Used) acceptance criterion verification.
 
-### Next Session Tasks
-1. Re-authenticate NotebookLM
-2. Run interactive dogfooding test:
-   - Build TUI: `~/code/build-fast.sh run`
-   - Create test spec: `/speckit.new test-session-24-validation`
-   - Run pipeline: `/speckit.auto SPEC-TEST-###`
-   - Verify A0, A2, A3, A4, A5, A6
-3. Update SPEC-DOGFOOD-001 acceptance criteria with results
-4. Consider SPEC completion if all criteria pass
+### Session 25 Plan (Acceptance Criteria Validation)
+
+**Scope:** Focus exclusively on validating SPEC-DOGFOOD-001 acceptance criteria.
+**Fallback Policy:** Block until NotebookLM re-auth succeeds (no skip).
+**Test Target:** Use SPEC-DOGFOOD-001 itself (not ephemeral test spec).
+
+#### Phase 1: NotebookLM Re-Authentication (BLOCKING)
+```bash
+# Step 1: Attempt re-auth
+notebooklm setup-auth
+
+# Step 2: Verify health
+notebooklm health
+# Expected: "Authenticated: Yes"
+
+# Step 3: If headless, use X11 forwarding
+ssh -X host
+chromium --user-data-dir=~/.local/share/notebooklm-mcp/chrome_profile \
+         --password-store=basic --no-first-run https://notebooklm.google.com
+```
+
+#### Phase 2: Interactive Pipeline Test (Requires TUI)
+```bash
+# Step 1: Build and run TUI
+~/code/build-fast.sh run
+
+# Step 2: Run pipeline on SPEC-DOGFOOD-001
+/speckit.auto SPEC-DOGFOOD-001
+
+# Step 3: Monitor for acceptance criteria evidence
+# A0: Verify only canonical agents spawn (no quality gate agents)
+# A2: Check logs for tier2_used=true indicator
+# A6: Confirm no re-entry guard hit
+```
+
+#### Phase 3: Evidence Collection
+```bash
+# A3: Evidence files
+ls docs/SPEC-DOGFOOD-001/evidence/
+# Expected: TASK_BRIEF.md, DIVINE_TRUTH.md
+
+# A4: System pointer
+lm search "SPEC-DOGFOOD-001"
+# Expected: Memory with system:true tag
+
+# A5: GR-001 enforcement (may need separate test)
+# Trigger multi-agent quality gate, verify rejection
+```
+
+#### Phase 4: Documentation Update
+1. Update `docs/SPEC-DOGFOOD-001/spec.md` acceptance criteria table
+2. Mark SPEC as complete if all pass
+3. Commit with evidence
 
 ---
 
