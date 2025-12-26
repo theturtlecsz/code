@@ -155,8 +155,9 @@ struct NotebooklmAskData {
 
 /// Adapter that implements `Tier2Client` using notebooklm-mcp HTTP service.
 ///
-/// Uses blocking HTTP client directly since Stage0 runs in a dedicated std::thread
-/// (SPEC-DOGFOOD-001 S30 fix). No async runtime involvement needed.
+/// IMPORTANT: Due to tokio runtime conflicts, HTTP calls must be made OUTSIDE
+/// the tokio runtime. Use `fetch_tier2_response_blocking()` before entering
+/// Stage0, then pass a `PrecomputedTier2Client` with the result.
 pub struct Tier2HttpAdapter {
     base_url: String,
     notebook: String,
@@ -167,32 +168,21 @@ impl Tier2HttpAdapter {
         Self { base_url, notebook }
     }
 
-    /// Check health - uses blocking HTTP since we're in a dedicated thread
-    pub fn is_healthy_blocking(&self, timeout: Duration) -> bool {
-        let url = format!("{}/health", self.base_url);
-        reqwest::blocking::Client::builder()
-            .timeout(timeout)
-            .build()
-            .ok()
-            .and_then(|c| c.get(&url).send().ok())
-            .map(|r| r.status().is_success())
-            .unwrap_or(false)
-    }
-}
-
-#[async_trait]
-impl Tier2Client for Tier2HttpAdapter {
-    async fn generate_divine_truth(
+    /// Fetch Tier2 response using blocking HTTP - call OUTSIDE tokio runtime!
+    ///
+    /// SPEC-DOGFOOD-001 S30: reqwest::blocking creates its own tokio runtime,
+    /// so this must be called before entering any tokio block_on context.
+    pub fn fetch_tier2_response_blocking(
         &self,
         spec_id: &str,
         spec_content: &str,
         task_brief_md: &str,
     ) -> Result<Tier2Response> {
-        // FILE-BASED TRACE: Tier2 generate_divine_truth (SPEC-DOGFOOD-001 S29)
+        // FILE-BASED TRACE
         {
             use std::io::Write;
             let trace_msg = format!(
-                "[{}] Tier2 GENERATE: spec_id={}, url={}/api/ask, notebook={}\n",
+                "[{}] Tier2 FETCH BLOCKING: spec_id={}, url={}/api/ask, notebook={}\n",
                 chrono::Utc::now().format("%H:%M:%S%.3f"),
                 spec_id,
                 self.base_url,
@@ -208,11 +198,8 @@ impl Tier2Client for Tier2HttpAdapter {
         }
 
         let prompt = codex_stage0::build_tier2_prompt(spec_id, spec_content, task_brief_md);
-
         let url = format!("{}/api/ask", self.base_url);
 
-        // Use blocking HTTP directly since Stage0 runs in a dedicated std::thread
-        // (SPEC-DOGFOOD-001 S30 fix). No block_in_place needed.
         let client = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(120))
             .build()
@@ -224,7 +211,7 @@ impl Tier2Client for Tier2HttpAdapter {
         });
 
         let resp = client.post(&url).json(&body).send().map_err(|e| {
-            // FILE-BASED TRACE: HTTP error
+            // FILE-BASED TRACE
             {
                 use std::io::Write;
                 let trace_msg = format!(
@@ -287,36 +274,24 @@ impl Tier2Client for Tier2HttpAdapter {
         })?;
 
         if !parsed.success {
-            // FILE-BASED TRACE
-            {
-                use std::io::Write;
-                let trace_msg = format!(
-                    "[{}] Tier2 API ERROR: {:?}\n",
-                    chrono::Utc::now().format("%H:%M:%S%.3f"),
-                    parsed.error
-                );
-                if let Ok(mut f) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open("/tmp/speckit-trace.log")
-                {
-                    let _ = f.write_all(trace_msg.as_bytes());
-                }
-            }
-            return Err(Stage0Error::tier2(format!(
-                "NotebookLM error: {}",
-                parsed.error.unwrap_or_else(|| "Unknown error".to_string())
-            )));
+            let error_msg = parsed
+                .error
+                .unwrap_or_else(|| "Unknown NotebookLM error".to_string());
+            return Err(Stage0Error::tier2(format!("NotebookLM error: {}", error_msg)));
         }
+
+        let answer = parsed
+            .data
+            .map(|d| d.answer)
+            .unwrap_or_else(|| "No answer received".to_string());
 
         // FILE-BASED TRACE: Success
         {
             use std::io::Write;
-            let answer_len = parsed.data.as_ref().map(|d| d.answer.len()).unwrap_or(0);
             let trace_msg = format!(
-                "[{}] Tier2 SUCCESS: answer_len={}\n",
+                "[{}] Tier2 FETCH SUCCESS: answer_len={}\n",
                 chrono::Utc::now().format("%H:%M:%S%.3f"),
-                answer_len
+                answer.len()
             );
             if let Ok(mut f) = std::fs::OpenOptions::new()
                 .create(true)
@@ -327,10 +302,220 @@ impl Tier2Client for Tier2HttpAdapter {
             }
         }
 
-        let data = parsed
-            .data
-            .ok_or_else(|| Stage0Error::tier2("NotebookLM response missing data"))?;
-        parse_tier2_answer_text(&data.answer, spec_id)
+        Ok(Tier2Response {
+            divine_truth_md: answer,
+            suggested_links: vec![],
+        })
+    }
+}
+
+/// Pre-computed Tier2 client that holds an already-fetched response.
+///
+/// SPEC-DOGFOOD-001 S30: Use this to avoid tokio runtime conflicts.
+/// Fetch the response using `Tier2HttpAdapter::fetch_tier2_response_blocking()`
+/// BEFORE entering the tokio runtime, then pass this client to Stage0Engine.
+pub struct PrecomputedTier2Client {
+    response: Option<Tier2Response>,
+    error: Option<String>,
+}
+
+impl PrecomputedTier2Client {
+    /// Create with a successful response
+    pub fn with_response(response: Tier2Response) -> Self {
+        Self {
+            response: Some(response),
+            error: None,
+        }
+    }
+
+    /// Create with an error
+    pub fn with_error(error: String) -> Self {
+        Self {
+            response: None,
+            error: Some(error),
+        }
+    }
+}
+
+#[async_trait]
+impl Tier2Client for Tier2HttpAdapter {
+    async fn generate_divine_truth(
+        &self,
+        spec_id: &str,
+        spec_content: &str,
+        task_brief_md: &str,
+    ) -> Result<Tier2Response> {
+        // SPEC-DOGFOOD-001 S30: Spawn a completely separate thread for the HTTP call.
+        // reqwest::blocking creates its own tokio runtime, which conflicts with our
+        // existing runtime. By spawning a new std::thread, we isolate the runtimes.
+        let base_url = self.base_url.clone();
+        let notebook = self.notebook.clone();
+        let spec_id = spec_id.to_string();
+        let spec_content = spec_content.to_string();
+        let task_brief_md = task_brief_md.to_string();
+
+        let handle = std::thread::spawn(move || {
+            // FILE-BASED TRACE
+            {
+                use std::io::Write;
+                let trace_msg = format!(
+                    "[{}] Tier2 THREAD START: spec_id={}, url={}/api/ask, notebook={}\n",
+                    chrono::Utc::now().format("%H:%M:%S%.3f"),
+                    spec_id,
+                    base_url,
+                    notebook
+                );
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/speckit-trace.log")
+                {
+                    let _ = f.write_all(trace_msg.as_bytes());
+                }
+            }
+
+            let prompt = codex_stage0::build_tier2_prompt(&spec_id, &spec_content, &task_brief_md);
+            let url = format!("{}/api/ask", base_url);
+
+            let client = match reqwest::blocking::Client::builder()
+                .timeout(Duration::from_secs(120))
+                .build()
+            {
+                Ok(c) => c,
+                Err(e) => return Err(format!("Failed to create HTTP client: {e}")),
+            };
+
+            let body = serde_json::json!({
+                "question": prompt,
+                "notebook": notebook,
+            });
+
+            let resp = match client.post(&url).json(&body).send() {
+                Ok(r) => r,
+                Err(e) => {
+                    // FILE-BASED TRACE
+                    {
+                        use std::io::Write;
+                        let trace_msg = format!(
+                            "[{}] Tier2 HTTP ERROR: {}\n",
+                            chrono::Utc::now().format("%H:%M:%S%.3f"),
+                            e
+                        );
+                        if let Ok(mut f) = std::fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open("/tmp/speckit-trace.log")
+                        {
+                            let _ = f.write_all(trace_msg.as_bytes());
+                        }
+                    }
+                    return Err(format!("NotebookLM HTTP request failed: {e}"));
+                }
+            };
+
+            if !resp.status().is_success() {
+                // FILE-BASED TRACE
+                {
+                    use std::io::Write;
+                    let trace_msg = format!(
+                        "[{}] Tier2 HTTP STATUS ERROR: {}\n",
+                        chrono::Utc::now().format("%H:%M:%S%.3f"),
+                        resp.status()
+                    );
+                    if let Ok(mut f) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open("/tmp/speckit-trace.log")
+                    {
+                        let _ = f.write_all(trace_msg.as_bytes());
+                    }
+                }
+                return Err(format!("NotebookLM HTTP error: {}", resp.status()));
+            }
+
+            let parsed: NotebooklmAskResponse = match resp.json() {
+                Ok(p) => p,
+                Err(e) => {
+                    // FILE-BASED TRACE
+                    {
+                        use std::io::Write;
+                        let trace_msg = format!(
+                            "[{}] Tier2 JSON PARSE ERROR: {}\n",
+                            chrono::Utc::now().format("%H:%M:%S%.3f"),
+                            e
+                        );
+                        if let Ok(mut f) = std::fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open("/tmp/speckit-trace.log")
+                        {
+                            let _ = f.write_all(trace_msg.as_bytes());
+                        }
+                    }
+                    return Err(format!("Failed to parse NotebookLM response: {e}"));
+                }
+            };
+
+            if !parsed.success {
+                let error_msg = parsed
+                    .error
+                    .unwrap_or_else(|| "Unknown NotebookLM error".to_string());
+                return Err(format!("NotebookLM error: {}", error_msg));
+            }
+
+            let answer = parsed
+                .data
+                .map(|d| d.answer)
+                .unwrap_or_else(|| "No answer received".to_string());
+
+            // FILE-BASED TRACE: Success
+            {
+                use std::io::Write;
+                let trace_msg = format!(
+                    "[{}] Tier2 THREAD SUCCESS: answer_len={}\n",
+                    chrono::Utc::now().format("%H:%M:%S%.3f"),
+                    answer.len()
+                );
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/speckit-trace.log")
+                {
+                    let _ = f.write_all(trace_msg.as_bytes());
+                }
+            }
+
+            Ok(Tier2Response {
+                divine_truth_md: answer,
+                suggested_links: vec![],
+            })
+        });
+
+        // Wait for the thread to complete
+        match handle.join() {
+            Ok(Ok(response)) => Ok(response),
+            Ok(Err(e)) => Err(Stage0Error::tier2(e)),
+            Err(_) => Err(Stage0Error::tier2("Tier2 thread panicked")),
+        }
+    }
+}
+
+#[async_trait]
+impl Tier2Client for PrecomputedTier2Client {
+    async fn generate_divine_truth(
+        &self,
+        _spec_id: &str,
+        _spec_content: &str,
+        _task_brief_md: &str,
+    ) -> Result<Tier2Response> {
+        // Simply return the pre-computed response
+        if let Some(ref response) = self.response {
+            Ok(response.clone())
+        } else if let Some(ref error) = self.error {
+            Err(Stage0Error::tier2(error.clone()))
+        } else {
+            Err(Stage0Error::tier2("No pre-computed Tier2 response available"))
+        }
     }
 }
 
