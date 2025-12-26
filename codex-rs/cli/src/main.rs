@@ -1088,7 +1088,7 @@ async fn doctor_main() -> anyhow::Result<()> {
             Err(e) => HealthCheck {
                 name: "local-memory",
                 status: HealthStatus::Fail,
-                message: format!("Not reachable: {}", e),
+                message: format!("Not reachable: {e}"),
                 fix_hint: Some("Run: local-memory daemon start"),
             },
         }
@@ -1167,7 +1167,7 @@ async fn doctor_main() -> anyhow::Result<()> {
                 Err(e) => HealthCheck {
                     name: "notebook-mapping",
                     status: HealthStatus::Fail,
-                    message: format!("Cannot read config: {}", e),
+                    message: format!("Cannot read config: {e}"),
                     fix_hint: Some("Check ~/.config/code/stage0.toml"),
                 },
             }

@@ -1279,7 +1279,7 @@ fn default_quality_threshold() -> f64 {
 }
 
 /// Quality gate configuration per checkpoint (SPEC-939 Component 2a)
-#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct QualityGateConfig {
     /// Configuration for plan checkpoint (clarify before planning)
     #[serde(default)]
@@ -1298,19 +1298,7 @@ pub struct QualityGateConfig {
     pub unlock: QualityCheckpointConfig,
 }
 
-impl Default for QualityGateConfig {
-    fn default() -> Self {
-        // GR-001: ALL checkpoints are OFF by default
-        // No multi-agent consensus in the default path
-        Self {
-            plan: QualityCheckpointConfig::default(),
-            tasks: QualityCheckpointConfig::default(),
-            validate: QualityCheckpointConfig::default(),
-            audit: QualityCheckpointConfig::default(),   // GR-001: No premium agent fan-out
-            unlock: QualityCheckpointConfig::default(),  // GR-001: No premium agent fan-out
-        }
-    }
-}
+// Note: Default derives to all-off checkpoints per GR-001 (no multi-agent consensus in default path)
 
 /// Hot-reload configuration
 #[derive(Deserialize, Debug, Clone, PartialEq)]
