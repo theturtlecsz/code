@@ -2,7 +2,7 @@
 
 **Stage**: Validate
 **Agents**: 1
-**Generated**: 2025-12-26 14:57 UTC
+**Generated**: 2025-12-26 15:34 UTC
 
 ## Agent Responses (Raw)
 
@@ -29,92 +29,116 @@ balanced
 - {
   "requirement": "A0: No Surprise Fan-Out - /speckit.auto spawns only canonical pipeline agents (no quality gate agents unless explicitly enabled)",
   "test_scenarios": [
-    "Invoke /speckit.auto SPEC-DOGFOOD-001 from TUI and capture agent spawn log",
-    "Parse output for agent count and verify only canonical agents appear (Architect, Implementer, Judge) in default path",
-    "Verify no quality gate agents spawned unless quality_gates_enabled = true in config",
-    "Confirm agent spawning does not trigger re-entry guard (single-shot dispatch)"
+    "Execute /speckit.auto SPEC-DOGFOOD-001 from TUI and capture agent spawn log to stderr/stdout",
+    "Parse execution logs and count distinct agents spawned; verify count <= 3 (Architect, Implementer, Judge)",
+    "Verify agent names match canonical set: no Quality Gate agents (Consensus, Auditor, Judge-Consensus) present in spawn list",
+    "Confirm quality_gates_enabled flag defaults to false in stage0.toml and no gate agents appear",
+    "Verify no agent is spawned twice (re-entry guard active for default path)",
+    "Validate that spawned agents follow canonical order: Architect → Implementer → Judge (no parallel consensus voting)"
   ],
-  "coverage": "Full coverage of P0.1 prerequisite; validates GR-001 compliance"
+  "coverage": "Full - covers P0.1 prerequisite, GR-001 compliance, and default path simplicity guarantee"
 }
 - {
   "requirement": "A1: Doctor Ready - code doctor shows all [OK], no stage0.toml warning",
   "test_scenarios": [
-    "Run 'code doctor' from command line and capture output",
-    "Verify all checks pass with [OK] status (local-memory, NotebookLM, configuration)",
-    "Verify no [WARN] or [ERROR] status reported for stage0.toml or missing config",
-    "Verify doctor output includes health checks for: local-memory daemon, NotebookLM auth, notebook mapping"
+    "Run 'code doctor' from command line and capture full output",
+    "Verify all status lines contain [OK] marker; no [WARN], [ERROR], or [SKIP] present",
+    "Specifically check for: local-memory daemon health [OK], NotebookLM auth [OK], stage0.toml exists [OK], notebook mapping [OK]",
+    "Verify doctor output includes validation of config file syntax (TOML parsing successful)",
+    "Confirm doctor output does NOT warn about missing or misconfigured stage0.toml",
+    "Validate that all prerequisites listed in spec dependencies section show green status"
   ],
-  "coverage": "Full coverage of P0.4 prerequisite; validates system readiness before pipeline execution"
+  "coverage": "Full - covers P0.4 prerequisite and validates pre-pipeline system readiness"
 }
 - {
   "requirement": "A2: Tier2 Used - /speckit.auto SPEC-DOGFOOD-001 logs show tier2_used=true or similar indicator",
   "test_scenarios": [
-    "Run /speckit.auto SPEC-DOGFOOD-001 and capture Stage0 execution logs",
-    "Search logs for 'tier2_used=true' or 'tier2_queried=true' or similar indicator",
-    "Verify NotebookLM request appears in logs with notebook ID (code-project-docs: 4e80974f-789d-43bd-abe9-7b1e76839506)",
-    "Confirm Stage0 did not fail closed to Tier1 only (tier2 actually executed)"
+    "Execute /speckit.auto SPEC-DOGFOOD-001 with verbose logging enabled",
+    "Capture Stage0 execution logs from Stage0 coordinator output",
+    "Search logs for tier2_used=true, tier2_queried=true, or NotebookLM request indicators",
+    "Verify notebook ID '4e80974f-789d-43bd-abe9-7b1e76839506' (code-project-docs) appears in logs",
+    "Confirm Stage0 did not gracefully degrade to Tier1-only (Tier2 actually executed, not skipped)",
+    "Validate that logs show Tier2 response was integrated into Divine Truth synthesis (not null/empty)",
+    "Check that execution time includes Tier2 latency (>500ms overhead from NotebookLM round-trip)"
   ],
-  "coverage": "Complete coverage of Objective #1; validates Tier2 (NotebookLM) integration is functional"
+  "coverage": "Complete - validates Tier2 (NotebookLM) integration is functional and actually invoked"
 }
 - {
   "requirement": "A3: Evidence Exists - ls docs/SPEC-DOGFOOD-001/evidence/ contains TASK_BRIEF.md and/or DIVINE_TRUTH.md",
   "test_scenarios": [
-    "After /speckit.auto completes, list files in docs/SPEC-DOGFOOD-001/evidence/",
-    "Verify TASK_BRIEF.md exists and is non-empty (> 100 bytes)",
-    "Verify DIVINE_TRUTH.md exists and is non-empty (> 100 bytes)",
-    "Parse both files and verify they contain synthesized project context (human-readable, not raw JSON)"
+    "After /speckit.auto SPEC-DOGFOOD-001 completes, list directory: ls -lah docs/SPEC-DOGFOOD-001/evidence/",
+    "Verify both TASK_BRIEF.md and DIVINE_TRUTH.md files exist (not just one)",
+    "Validate file sizes: TASK_BRIEF.md > 500 bytes, DIVINE_TRUTH.md > 500 bytes (exclude empty templates)",
+    "Parse TASK_BRIEF.md and verify it contains synthesized project context (human-readable markdown, not JSON dump)",
+    "Parse DIVINE_TRUTH.md and verify it contains system-wide synthesis with citations from NotebookLM sources",
+    "Verify both files are committed to git (not temporary/ephemeral artifacts)",
+    "Confirm evidence artifacts are in SPEC-DOGFOOD-001 directory, not in parent or sibling SPEC directories"
   ],
-  "coverage": "Complete coverage of Objective #2; validates evidence artifact generation from Stage0 execution"
+  "coverage": "Complete - validates evidence artifact generation pipeline produces required outputs"
 }
 - {
   "requirement": "A4: System Pointer - lm search 'SPEC-DOGFOOD-001' returns memory with system:true tag",
   "test_scenarios": [
-    "Run 'lm search \"SPEC-DOGFOOD-001\"' after /speckit.auto completes",
-    "Verify at least one result is returned",
-    "Parse result and verify it contains 'system:true' tag in metadata",
-    "Confirm memory entry references Stage0 execution and has canonical type (e.g., 'milestone')"
+    "After /speckit.auto completes, execute 'lm search \"SPEC-DOGFOOD-001\"' from CLI",
+    "Verify at least one memory entry is returned (not empty result set)",
+    "Parse returned memory entry JSON and verify 'system:true' tag is present in metadata",
+    "Confirm memory entry 'type' field contains canonical type: 'milestone', 'decision', or 'pattern' (not untyped)",
+    "Validate memory entry 'importance' field is >= 8 (system pointers must meet durability threshold)",
+    "Verify memory entry references Stage0 execution context and SPEC-DOGFOOD-001 spec ID",
+    "Confirm memory entry is retrievable via 'lm zoom <id>' command with full context expansion"
   ],
-  "coverage": "Complete coverage of Objective #3; validates system pointer memory storage in local-memory daemon"
+  "coverage": "Complete - validates system pointer memory storage in local-memory daemon"
 }
 - {
   "requirement": "A5: GR-001 Enforcement - Quality gates with >1 agent are rejected with explicit GR-001 error message",
   "test_scenarios": [
-    "Attempt to configure and invoke /speckit.auto with quality_gates enabled and consensus voting enabled",
-    "Verify pipeline rejects with explicit error message containing 'GR-001'",
-    "Confirm error message explains constraint: 'consensus/debate policies prohibited in default path'",
-    "Verify error is raised before any agent is spawned (fail-fast behavior)"
+    "Modify stage0.toml to set quality_gates_enabled=true and consensus_voting=true",
+    "Attempt to invoke /speckit.auto SPEC-DOGFOOD-001 with modified config",
+    "Verify pipeline execution fails immediately with error message containing 'GR-001'",
+    "Confirm error message text includes constraint: 'consensus/debate policies prohibited in default path'",
+    "Validate error is raised during pre-flight checks (before Architect agent spawned)",
+    "Verify error prevents any pipeline stage from executing (fail-fast behavior)",
+    "Confirm GR-001 enforcement works even if quality_gates_enabled is true (guardrail cannot be disabled)"
   ],
-  "coverage": "Complete coverage of P0.2 prerequisite; validates guardrail GR-001 enforcement in default path"
+  "coverage": "Complete - validates GR-001 guardrail enforcement prevents default path policy violations"
 }
 - {
   "requirement": "A6: Slash Dispatch Single-Shot - Selecting /speckit.auto from popup triggers exactly one pipeline execution",
   "test_scenarios": [
-    "Launch TUI and open slash command completion popup",
-    "Select /speckit.auto SPEC-DOGFOOD-001 from dropdown",
-    "Monitor pipeline execution and count how many times /speckit.auto invokes Stage0",
-    "Verify re-entry guard prevents duplicate pipeline spawning (expect exactly 1 execution)",
-    "Check logs for re-entry guard hits (should be 0)"
+    "Launch TUI and open slash command completion popup by typing '/'",
+    "Select '/speckit.auto SPEC-DOGFOOD-001' from dropdown menu",
+    "Monitor pipeline execution and count Stage0 invocations (log all entry points)",
+    "Verify exactly 1 Stage0 execution occurs (no duplicate spawns from re-entry guard)",
+    "Check Stage0 logs for re-entry guard status (should log '0 re-entries detected')",
+    "Verify that rapidly selecting /speckit.auto multiple times does not spawn parallel executions",
+    "Confirm dispatch guard remains active throughout TUI session (not one-shot only)"
   ],
-  "coverage": "Complete coverage of P0.3 prerequisite; validates single-shot slash command dispatch behavior"
+  "coverage": "Complete - validates single-shot dispatch behavior and re-entry guard function"
 }
 
 **gaps**:
-- "No explicit test scenario for Tier1 (local-memory) fallback behavior when Tier2 (NotebookLM) is unavailable; assumes Tier2 success path only"
-- "Missing test for edge case: notebook mapping resolution when domain is not explicitly configured in stage0.toml"
-- "No performance baseline specified; 'synthesized context' verification is qualitative; consider adding: TASK_BRIEF.md must contain ≥3 citation refs and ≥500 tokens"
-- "No test for concurrent /speckit.auto invocations (stress test for re-entry guard)"
-- "Missing test for recovery path: what happens if NotebookLM becomes unavailable mid-pipeline (timeout, graceful degradation)"
-- "Evidence artifacts location hardcoded to docs/SPEC-DOGFOOD-001/evidence/; no test for custom evidence directory configuration"
-- "No validation of synthesized evidence quality (e.g., citation accuracy, factual correctness of synthesized context)"
+- "No explicit test scenario for Tier1 (local-memory) fallback behavior when Tier2 (NotebookLM) is unavailable; current tests assume Tier2 success path only"
+- "Missing test for edge case: notebook domain mapping resolution when 'code' domain is not explicitly configured in stage0.toml (uses default fallback)"
+- "No performance baseline specified; synthesized context verification is qualitative; recommend quantitative criterion: TASK_BRIEF.md must contain ≥500 tokens and ≥3 citation references"
+- "No stress test for concurrent /speckit.auto invocations (multi-user dogfooding scenario with re-entry guard collision detection)"
+- "Missing test for recovery path: what happens if NotebookLM becomes unavailable mid-pipeline (timeout behavior, graceful degradation, fallback to Tier1)"
+- "Evidence artifact location is hardcoded to docs/SPEC-DOGFOOD-001/evidence/; no test for custom evidence directory configuration or path overrides"
+- "No validation of synthesized evidence quality (citation accuracy, factual correctness of synthesized context, absence of hallucinations)"
+- "Missing test for stage0.toml configuration sensitivity: verify domain mappings work correctly for 'spec-kit' and 'code' domains specifically"
+- "No test coverage for NotebookLM authentication refresh; assumes credentials remain valid throughout pipeline execution"
+- "Missing test for memory service persistence: verify system pointer is still retrievable after service restart"
 
 **recommendations**:
-- "Add quantitative acceptance criterion: TASK_BRIEF.md must contain ≥500 tokens and ≥3 citations from NotebookLM sources"
-- "Add Tier1 fallback test: disable NotebookLM and verify /speckit.auto completes with Tier1-only evidence (local-memory)"
-- "Add concurrent execution test: invoke /speckit.auto twice in rapid succession and verify re-entry guard prevents race condition"
-- "Add timeout resilience test: simulate NotebookLM latency (10s+) and verify Stage0 handles gracefully (timeout vs. wait)"
-- "Consider adding automated evidence quality check: parse DIVINE_TRUTH.md and verify it references specific code lines or architectural decisions from project"
-- "Add configuration sensitivity test: verify stage0.toml domain mapping works for 'spec-kit' and 'code' domains specifically"
-- "Consider adding: Test with NotebookLM service stopped to validate Tier1 fallback path and error messaging"
+- "Add quantitative acceptance criterion for A3: TASK_BRIEF.md must contain ≥500 tokens and ≥3 distinct citations from NotebookLM sources (measurable quality gate)"
+- "Add Tier1 fallback test: disable NotebookLM service and verify /speckit.auto SPEC-DOGFOOD-001 completes with Tier1-only evidence; verify logs show graceful degradation message"
+- "Add concurrent execution test: invoke /speckit.auto twice in rapid succession (within 1 second) and verify re-entry guard prevents race condition and resource contention"
+- "Add timeout resilience test: simulate NotebookLM latency with iptables delay rule (10s+) and verify Stage0 handles with timeout vs. wait behavior correctly documented"
+- "Add automated evidence quality check: parse DIVINE_TRUTH.md and verify it references specific code lines, architectural decisions, or configuration keys from project (not generic filler text)"
+- "Add configuration sensitivity test matrix: verify stage0.toml domain mappings work for domains: 'spec-kit', 'code', 'core', 'tui' (if applicable)"
+- "Add NotebookLM service failure test: stop NotebookLM service and verify /speckit.auto produces error message with recovery instructions (does not hang or produce corrupted artifacts)"
+- "Add memory durability test: verify system pointer survives local-memory daemon restart (persistence to disk, reload on service recovery)"
+- "Add evidence artifact integrity test: verify TASK_BRIEF.md and DIVINE_TRUTH.md are valid Markdown (no syntax errors) and contain no JSON/binary corruption"
+- "Add slash command popup test: verify /speckit.auto appears in completion dropdown after typing '/' and tab-completion works correctly (UX verification)"
 
 
 ## Consensus Summary
