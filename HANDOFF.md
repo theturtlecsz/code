@@ -1,10 +1,10 @@
-# Session Handoff — SPEC-DOGFOOD-001 Dead Code Cleanup
+# Session Handoff — SPEC-DOGFOOD-001 Stage0 Fix
 
 **Last updated:** 2025-12-26
-**Status:** Session 25 Complete, Stage0 Routing Debug Pending
+**Status:** Session 26 Complete, Stage0 Trace Analysis Pending
 **Current SPEC:** SPEC-DOGFOOD-001
 
-> **Goal**: Clean up dead code, fix test isolation, and validate golden path dogfooding.
+> **Goal**: Fix Stage0 so it executes and produces artifacts before pipeline enters PLAN/TASKS/IMPLEMENT.
 
 ---
 
@@ -21,15 +21,67 @@
 | S23 | Config fix + module deletion | ~664 | Fixed xhigh parse error, deleted unified_exec |
 | S24 | Orphaned module cleanup | ~1,538 | Deleted 4 orphaned TUI modules, verified A1 |
 | S25 | Acceptance validation | 0 | 4/6 criteria validated, Stage0 routing bug found |
+| S26 | Stage0 routing debug | +92 | Confirmed routing works, added comprehensive trace |
 
 **Total deleted (S17-S24):** ~5,422 LOC
 
 ---
 
-## Session 25 Summary (Complete)
+## Session 26 Summary (Complete)
 
 ### Commits
-- `342244b06` - fix(tui): Display Stage0 skip reason in TUI (SPEC-DOGFOOD-001)
+- `ed56cd960` - fix(stage0): Add panic detection and fallback output (SPEC-DOGFOOD-001)
+- `eb9f507b1` - debug(stage0): Add file-based trace to diagnose routing (SPEC-DOGFOOD-001)
+- `00b0228d7` - chore: Commit SPEC-DOGFOOD-001 pipeline artifacts
+- `3e35fed3c` - debug(stage0): Add comprehensive trace throughout Stage0 execution path
+
+### Critical Finding: Routing Works, Stage0 Block Entered
+
+**Trace log evidence (`/tmp/stage0-trace.log`):**
+```
+[14:53:47] BEFORE Stage0 check: disabled=false
+[14:53:47] INSIDE Stage0 block (not disabled)
+[14:53:47] spec_path="/home/thetu/code/docs/SPEC-DOGFOOD-001/spec.md", content_len=4496
+```
+
+**What this proves:**
+1. Command routing: `ProcessedCommand::SpecAuto` → `handle_spec_auto_command()` → `handle_spec_auto()` ✅
+2. Stage0 not disabled: `stage0_config.disabled=false` ✅
+3. Spec file found: `content_len=4496` (not empty) ✅
+4. CWD correct: `/home/thetu/code` ✅
+
+**What's missing:** The trace stops after loading spec content. We don't yet have trace showing:
+- `ENTERING Stage0 execution (content not empty)`
+- `BEFORE run_stage0_for_spec() call`
+- `run_stage0_for_spec() ENTRY`
+- `local-memory health check`
+- `AFTER run_stage0_for_spec()`
+- `Stage0 result: has_result=..., skip_reason=...`
+
+### Trace Points Added (Comprehensive)
+
+**pipeline_coordinator.rs:**
+- Line 211-220: `ENTERING Stage0 execution (content not empty)`
+- Line 253-262: `BEFORE run_stage0_for_spec() call`
+- Line 276-286: `AFTER run_stage0_for_spec(): is_ok=...`
+- Line 314-326: `Stage0 result: has_result=..., skip_reason=..., tier2_used=...`
+
+**stage0_integration.rs:**
+- Line 59-68: `run_stage0_for_spec() ENTRY: spec_id=..., cwd=..., disabled=...`
+- Line 85-94: `Checking local-memory health...`
+- Line 97-106: `local-memory UNHEALTHY - returning skip`
+- Line 120-129: `local-memory HEALTHY`
+
+### Services Verified Healthy
+```bash
+# local-memory daemon
+curl -s http://localhost:3002/api/v1/health
+# {"success":true,"message":"Server is healthy",...}
+
+# NotebookLM service
+curl -s http://127.0.0.1:3456/health/ready
+# {"status":"ready","ready":true,...}
+```
 
 ### Acceptance Criteria Status
 
@@ -37,581 +89,178 @@
 |----|-----------|--------|----------|
 | A0 | No Surprise Fan-Out | ✅ | `quality_gate_handler.rs:1075-1088` - default `false` when config absent |
 | A1 | Doctor Ready | ✅ | `code doctor` shows all [OK] |
-| A2 | Tier2 Used | ⚠️ BLOCKED | Stage0 not producing TUI output despite code in binary |
+| A2 | Tier2 Used | ⚠️ BLOCKED | Stage0 not producing output |
 | A3 | Evidence Exists | ⚠️ BLOCKED | TASK_BRIEF.md, DIVINE_TRUTH.md not generated |
 | A4 | System Pointer | ⚠️ BLOCKED | Stage0 not storing system pointer |
-| A5 | GR-001 Enforcement | ✅ | `quality_gate_handler.rs:1206-1238` - rejects multi-agent with explicit error |
-| A6 | Slash Dispatch Single-Shot | ✅ | `quality_gate_handler.rs:28-71` - three-layer re-entry guard |
+| A5 | GR-001 Enforcement | ✅ | `quality_gate_handler.rs:1206-1238` |
+| A6 | Slash Dispatch Single-Shot | ✅ | `quality_gate_handler.rs:28-71` |
 
-**Score: 4/6 validated, 2/6 blocked by Stage0 routing issue**
-
-### Findings
-
-**NotebookLM Auth:** Working (34.5h old cookie still valid despite health check warning)
-
-**Pipeline Test Results:**
-- Pipeline completed all 6 stages (PLAN → TASKS → IMPLEMENT → VALIDATE → AUDIT → UNLOCK)
-- All guardrail checks passed
-- No Stage0 output visible in TUI
-- No Stage0 artifacts generated (TASK_BRIEF.md, DIVINE_TRUTH.md)
-
-**Bug Identified: Stage0 Silent Skip**
-
-Despite:
-1. Code being in binary (`strings` shows debug message)
-2. stage0.toml correctly configured (`enabled = true`, Tier2 enabled)
-3. NotebookLM working (CLI query succeeded)
-4. local-memory daemon healthy
-
-...no Stage0 output appears. Debug code added at two points:
-- `pipeline_coordinator.rs:41-48` - Entry point to `handle_spec_auto()`
-- `commands/special.rs:30-37` - Entry point to `SpecKitAutoCommand.execute()`
-
-Neither debug message appeared in TUI output, suggesting `/speckit.auto` is bypassing both code paths.
-
-**Code Analysis:**
-- `/speckit.auto` should route through `ProcessedCommand::SpecAuto` → `handle_spec_auto_command()` → `spec_kit::handle_spec_auto()`
-- OR through `SPEC_KIT_REGISTRY` → `SpecKitAutoCommand.execute()` → `handle_spec_auto_command()`
-- Both paths have debug code, neither shows output
-- Possible third routing path exists
-
-### Files Changed
-- `pipeline_coordinator.rs` - Added Stage0 skip TUI output + debug
-- `commands/special.rs` - Added debug at registry execute entry
+**Score: 4/6 validated, 2/6 blocked by Stage0 execution issue**
 
 ---
 
-## Session 26 Plan: Debug Stage0 Routing
+## Session 27 Plan: Analyze Trace & Fix Stage0
 
-### Priority: Find why Stage0 output doesn't appear
+### Priority: Stage0 fix ONLY (per user preference)
 
-**Hypothesis:** `/speckit.auto` is being routed through a third code path that bypasses both:
-1. `ProcessedCommand::SpecAuto` handling in `mod.rs:4464-4471`
-2. `SPEC_KIT_REGISTRY` dispatch in `routing.rs:151`
+### Immediate Action: Run Pipeline & Capture Full Trace
 
-**Investigation Steps:**
-
-1. **Trace command dispatch**
-   - Add debug at `process_slash_command_message()` return
-   - Add debug at `try_dispatch_spec_kit_command()` entry
-   - Add debug at `AppEvent::DispatchCommand` handling
-
-2. **Check for alternative routing**
-   - Search for other places that intercept "speckit.auto"
-   - Check if there's a config-driven command override
-   - Verify `SlashCommand::SpecKitAuto` enum is being matched
-
-3. **Verify binary has code**
-   ```bash
-   strings /home/thetu/code/codex-rs/target/dev-fast/code | grep "handle_spec_auto"
-   ```
-
-4. **Run with trace logging**
-   ```bash
-   RUST_LOG=codex_tui::chatwidget=debug ~/code/build-fast.sh run
-   ```
-
-### Once Stage0 works:
-- A2: Verify `tier2_used=true` in Stage0 output
-- A3: Confirm TASK_BRIEF.md and DIVINE_TRUTH.md generated
-- A4: Verify system pointer stored with `lm search "SPEC-DOGFOOD-001"`
-
----
-
-## Session 24 Summary (Complete)
-
-### Commits
-- (Pending) - refactor(tui): Delete orphaned backtrack/pager/transcript modules (~1,538 LOC)
-
-### Diagnostic Results (Acceptance Criteria)
-
-| ID | Criterion | Status | Evidence |
-|----|-----------|--------|----------|
-| A0 | No Surprise Fan-Out | ⏳ | Needs interactive test |
-| A1 | Doctor Ready | ✅ | `code doctor` all [OK] |
-| A2 | Tier2 Used | ⚠️ | NotebookLM auth expired (25.1h > 24h max) |
-| A3 | Evidence Exists | ⏳ | Needs interactive test |
-| A4 | System Pointer | ⏳ | Needs interactive test |
-| A5 | GR-001 Enforcement | ⏳ | Needs interactive test |
-| A6 | Slash Dispatch Single-Shot | ⏳ | Needs interactive test |
-
-### Dead Code Deleted (~1,538 lines)
-
-**Discovery:** Found 4 orphaned/unused TUI modules:
-1. `app_backtrack.rs` (360 lines) - Orphaned file, never compiled (no `mod app_backtrack`)
-2. `backtrack_helpers.rs` (155 lines) - Only used by orphaned app_backtrack
-3. `transcript_app.rs` (280 lines) - Only used for dead field `_transcript_overlay`
-4. `pager_overlay.rs` (743 lines) - Only used by orphaned app_backtrack
-
-**Dead fields removed from App struct:**
-- `_transcript_overlay: Option<TranscriptApp>`
-- `_deferred_history_lines: Vec<Line<'static>>`
-- `_transcript_saved_viewport: Option<Rect>`
-- `_debug: bool` (parameter kept with `_` prefix for API stability)
-
-**Cleanup applied:**
-- Deleted 4 source files
-- Deleted 3 snapshot files
-- Removed 3 mod declarations from lib.rs
-- Removed 2 unused imports from app.rs
-
-### Verification
-- `cargo clippy -p codex-tui --all-targets -- -D warnings` ✅
-- `cargo test -p codex-tui --lib` ✅ (533 tests)
-- `cargo test -p codex-core` ✅ (all pass)
-- `cargo clippy --workspace --all-targets --exclude codex-tui2 -- -D warnings` ✅
-- `~/code/build-fast.sh` ✅
-
-### Blocking Issue for Tier2 Validation
-NotebookLM authentication expired (25.1h old, max 24h). Need to re-authenticate:
 ```bash
-notebooklm setup-auth
-```
-This blocks A2 (Tier2 Used) acceptance criterion verification.
+# 1. Clear old trace
+rm -f /tmp/stage0-trace.log
 
-### Session 25 Plan (Acceptance Criteria Validation)
-
-**Scope:** Focus exclusively on validating SPEC-DOGFOOD-001 acceptance criteria.
-**Fallback Policy:** Block until NotebookLM re-auth succeeds (no skip).
-**Test Target:** Use SPEC-DOGFOOD-001 itself (not ephemeral test spec).
-
-#### Phase 1: NotebookLM Re-Authentication (BLOCKING)
-```bash
-# Step 1: Attempt re-auth
-notebooklm setup-auth
-
-# Step 2: Verify health
-notebooklm health
-# Expected: "Authenticated: Yes"
-
-# Step 3: If headless, use X11 forwarding
-ssh -X host
-chromium --user-data-dir=~/.local/share/notebooklm-mcp/chrome_profile \
-         --password-store=basic --no-first-run https://notebooklm.google.com
-```
-
-#### Phase 2: Interactive Pipeline Test (Requires TUI)
-```bash
-# Step 1: Build and run TUI
+# 2. Build and run TUI
 ~/code/build-fast.sh run
 
-# Step 2: Run pipeline on SPEC-DOGFOOD-001
+# 3. Execute command
 /speckit.auto SPEC-DOGFOOD-001
 
-# Step 3: Monitor for acceptance criteria evidence
-# A0: Verify only canonical agents spawn (no quality gate agents)
-# A2: Check logs for tier2_used=true indicator
-# A6: Confirm no re-entry guard hit
+# 4. After first guardrail, exit TUI and check trace
+cat /tmp/stage0-trace.log
 ```
 
-#### Phase 3: Evidence Collection
+### Expected Trace Output (Full Path)
+
+If Stage0 executes correctly:
+```
+[HH:MM:SS] BEFORE Stage0 check: disabled=false
+[HH:MM:SS] INSIDE Stage0 block (not disabled)
+[HH:MM:SS] spec_path="...", content_len=4496
+[HH:MM:SS] ENTERING Stage0 execution (content not empty)
+[HH:MM:SS] BEFORE run_stage0_for_spec() call
+[HH:MM:SS] run_stage0_for_spec() ENTRY: spec_id=SPEC-DOGFOOD-001, cwd=..., disabled=false
+[HH:MM:SS] Checking local-memory health...
+[HH:MM:SS] local-memory HEALTHY
+[HH:MM:SS] AFTER run_stage0_for_spec(): is_ok=true
+[HH:MM:SS] Stage0 result: has_result=true, skip_reason=None, tier2_used=true
+```
+
+### Failure Scenarios & Fixes
+
+| Last Trace Line | Diagnosis | Fix |
+|-----------------|-----------|-----|
+| `spec_path=..., content_len=4496` | `if !spec_content.is_empty()` not entered | Check condition logic |
+| `ENTERING Stage0 execution` | Stage0Start event logging issue | Check `state.run_id` |
+| `BEFORE run_stage0_for_spec()` | Call hangs or panics | Check tokio/blocking interaction |
+| `run_stage0_for_spec() ENTRY` | Entry but no health check | Check disabled flag inside function |
+| `Checking local-memory health...` | Health check hangs | Check timeout, daemon |
+| `local-memory UNHEALTHY` | Daemon not responding | Start daemon, check port |
+| `local-memory HEALTHY` | Config load fails | Check Stage0Config::load() path |
+| `AFTER run_stage0_for_spec(): is_ok=false` | Panic caught | Check panic message in result |
+| `Stage0 result: has_result=false` | Skip occurred | Check `skip_reason` for cause |
+
+### After Fix: Squash Debug Commits
+
+Once Stage0 works, squash commits:
 ```bash
-# A3: Evidence files
-ls docs/SPEC-DOGFOOD-001/evidence/
-# Expected: TASK_BRIEF.md, DIVINE_TRUTH.md
-
-# A4: System pointer
-lm search "SPEC-DOGFOOD-001"
-# Expected: Memory with system:true tag
-
-# A5: GR-001 enforcement (may need separate test)
-# Trigger multi-agent quality gate, verify rejection
+git rebase -i HEAD~4  # Squash: ed56cd960, eb9f507b1, 00b0228d7, 3e35fed3c
+# New message: "fix(stage0): Ensure Stage0 executes before pipeline (SPEC-DOGFOOD-001)"
 ```
 
-#### Phase 4: Documentation Update
-1. Update `docs/SPEC-DOGFOOD-001/spec.md` acceptance criteria table
-2. Mark SPEC as complete if all pass
-3. Commit with evidence
-
----
-
-## Session 23 Summary (Complete)
-
-### Commits
-- `a3ecf8278` - fix(config): Add XHigh reasoning effort variant and fix test isolation
-
-### Changes Made
-
-#### 1. Config Test Fix - Root Cause Analysis
-**Problem:** `persist_model_selection_updates_profile` test failed with `xhigh` variant parse error.
-
-**Root Cause Identified:**
-- User's `~/.codex/config.toml` (legacy directory) contained `model_reasoning_effort = "xhigh"`
-- The `ReasoningEffort` enum in `core/src/config_types.rs` only had: Minimal, Low, Medium, High, None
-- `XHigh` existed in `protocol/src/openai_models.rs` but not in config types
-- The `legacy_codex_home_dir()` function uses a static `OnceLock` that caches forever
-- Test didn't set `CODEX_HOME` env var, allowing fallback to cached legacy path
-- `resolve_codex_path_for_read()` then read legacy config containing invalid "xhigh"
-
-**Fix Applied:**
-- Added `XHigh` variant to `core/src/config_types.rs::ReasoningEffort` enum
-- Added `set_codex_home_env(codex_home.path())` call to test for proper isolation
-- Updated TUI `model_selection_view.rs` with XHigh effort rank/label/description
-
-#### 2. Dead Code Deletion (~664 lines)
-**unified_exec module deleted:**
-- `core/src/unified_exec/mod.rs` (646 lines)
-- `core/src/unified_exec/errors.rs` (23 lines)
-- Removed module declaration from `core/src/lib.rs`
-
-**Rationale:** Module was declared but never used externally:
-- `UnifiedExecSessionManager` only referenced in internal tests
-- `UnifiedExecError` only used within the module itself
-- No external imports of `unified_exec::`
-
-**Also cleaned:**
-- Removed unused `ExecCommandSession` re-export from `exec_command/mod.rs`
-
-#### 3. Verification
-- 290 spec-kit tests pass (workflow validation)
-- 533 TUI lib tests pass
-- Full clippy passes (0 warnings)
-- Build successful
-
-### Investigation Insights
-**OnceLock race condition pattern:**
-```rust
-fn legacy_codex_home_dir() -> Option<PathBuf> {
-    static LEGACY: OnceLock<Option<PathBuf>> = OnceLock::new();
-    LEGACY.get_or_init(|| {
-        if env_overrides_present() { return None; }  // Only checked at init!
-        // ...
-    }).clone()
-}
-```
-If first test doesn't set `CODEX_HOME`/`CODE_HOME`, the OnceLock caches the legacy path.
-Later tests that DO set env vars still see the cached value.
-**Solution:** Always set `CODEX_HOME` before any config operations in tests.
-
----
-
-## Session 22 Summary (Complete)
-
-### Commits
-- `a83aeb2e3` - fix(clippy): Fix codex-cli test warnings and document dead_code allows
-
-### Changes Made
-
-#### 1. codex-cli Test Clippy Fixes (17 warnings)
-**speckit_helpers.rs:**
-- Added `#[allow(clippy::expect_used)]` on CliResult impl (test assertions should panic)
-- Fixed redundant closure: `|v| v.as_u64()` → `serde_json::Value::as_u64`
-- Inlined 4 format args
-
-**speckit.rs:**
-- Fixed 4 redundant closures for `as_u64()`, `as_bool()`
-- Fixed 2 redundant closures for `Vec::is_empty`
-- Inlined 4 format args
-
-**stage0_cmd.rs:**
-- Fixed 4 useless_format warnings (changed to `.to_string()`)
-
-#### 2. Dead Code Documentation (13 blanket allows)
-Added documentation comments to undocumented blanket allows:
-
-**core package:**
-- `acp.rs` - ACP filesystem abstraction for MCP tool execution
-- `rollout/list.rs` - Conversation listing utilities for rollout sessions
-- `unified_exec/mod.rs` - Unified PTY execution manager for shell sessions
-- `unified_exec/errors.rs` - Error types for unified PTY execution
-- `exec_command/session_manager.rs` - Session manager for exec command execution
-
-**tui package:**
-- `spec_prompts.rs` - Spec-kit prompt templates and generation
-- `markdown.rs` - Markdown parsing utilities
-- `markdown_stream.rs` - Streaming markdown renderer
-- `backtrack_helpers.rs` - Conversation backtracking utilities
-- `streaming/mod.rs` - Streaming response infrastructure
-- `streaming/controller.rs` - Streaming response controller
-- `transcript_app.rs` - Transcript viewer application
-- `bottom_pane/list_selection_view.rs` - List selection widget for bottom pane
-
-#### 3. Audit Findings
-- 51 blanket module-level `#![allow(dead_code)]` (excluding tui2/target)
-- Most spec_kit modules already have documented "pending integration" comments
-- Core modules now documented with purpose comments
-
-### Verification
-- `cargo clippy --workspace --all-targets --exclude codex-tui2 -- -D warnings` ✅
-- `cargo test -p codex-tui --lib` ✅ (533 tests)
-- `cargo test -p codex-stage0` ✅ (257 tests)
-- `cargo test -p codex-cli --lib` ✅ (3 tests)
-- `~/code/build-fast.sh` ✅
-
-### Known Pre-existing Issue
-- `config::tests::persist_model_selection_updates_profile` - Fails due to `xhigh` variant in existing config file (not related to this session's changes)
-
----
-
-## Session 21 Summary (Complete)
-
-### Commits
-- `1d4ef03e2` - refactor(tui): Rename Consensus* types to Gate*/StageReview* and fix clippy
-
-### Changes Made
-
-#### 1. Type Migration (gate_evaluation.rs)
-8 types renamed to better naming:
-- `ConsensusArtifactData` → `GateArtifactData`
-- `ConsensusEvidenceHandle` → `GateEvidenceHandle`
-- `ConsensusTelemetryPaths` → `GateTelemetryPaths`
-- `ConsensusArtifactVerdict` → `GateArtifactVerdict`
-- `ConsensusVerdict` → `StageReviewVerdict`
-- `ConsensusSynthesisSummary` → `StageReviewSummary`
-- `ConsensusSynthesisRaw` → `StageReviewRaw`
-- `ConsensusSynthesisConsensusRaw` → `StageReviewConsensusRaw`
-
-Removed 6 type aliases (now direct types). Updated doc comments to reflect new naming.
-
-#### 2. app-server-protocol Fixes
-- Added `kind: None` to 5 `UserMessageEvent` constructors in thread_history.rs
-- Fixed `SandboxPolicy::ExternalSandbox` test - changed to verify actual conversion behavior (ExternalSandbox → WorkspaceWrite)
-- Removed unused `CoreNetworkAccess` import
-
-#### 3. Clippy Fixes
-- `backend-client/client.rs`: Use `div_ceil()` instead of manual ceiling division
-- `core/cli_executor/claude_pipes.rs`: Inline format args (6 locations)
-- `core/cli_executor/gemini_pipes.rs`: Inline format args (5 locations)
-- `core/architect/complexity.rs`: Use `range.contains()` for bounds check
-
-#### 4. Dead Code Audit
-Removed blanket `#![allow(dead_code)]` from 3 modules:
-- `config_validator.rs` - Code IS used; added targeted allows for 3 pending items
-- `quality_gate_handler.rs` - Code IS used; added targeted allows for 2 pending items
-- `ace_reflector.rs` - Code IS used; added targeted allow for 1 pending item
-
-### Verification
-- `cargo clippy --workspace --exclude codex-tui2 --exclude codex-cli -- -D warnings` ✅
-- `cargo test -p codex-tui --lib` ✅ (533 tests)
-- `cargo test -p codex-stage0` ✅ (257 tests)
-- `~/code/build-fast.sh` ✅
-
----
-
-## Session 22 Plan (Expanded)
-
-### 1. Fix codex-cli Test Clippy Warnings
-
-**Target:** `codex-rs/cli/tests/speckit_helpers.rs`
-
-Known warnings:
-- `expect_used` - Replace `.expect()` with proper error handling or `?`
-- `redundant_closure` - Simplify closures like `|v| v.as_u64()` to method refs
-- `uninlined_format_args` - Use inline format args
-
-**Steps:**
-a. Read the test file to understand context
-b. Fix expect_used warnings (use `?` or `.ok()` as appropriate)
-c. Fix redundant_closure warnings (use method references)
-d. Fix format args (inline variables)
-e. Verify: `cargo clippy -p codex-cli --all-targets -- -D warnings`
-
-### 2. Comprehensive Dead Code Audit
-
-**Scope:** Full workspace grep for `#[allow(dead_code)]`
-
-**Audit targets:**
-a. All spec_kit modules (not just the 3 already audited)
-b. quality.rs, routing.rs helper functions
-c. Test utilities across packages
-d. Any remaining blanket module-level allows
-
-**For each allow found:**
-- Grep for actual usage
-- If used: remove allow (or add targeted allow with comment)
-- If unused: consider deletion or document why pending
-
-**Steps:**
-a. `grep -r "allow(dead_code)" codex-rs/` to find all locations
-b. Categorize: blanket module vs targeted item
-c. Audit each for actual usage
-d. Apply fixes or document pending
-
-### 3. Verification (Full Workspace)
+### Validation Commands
 
 ```bash
-# Full workspace clippy (excluding only tui2 per ADR-002)
-cargo clippy --workspace --all-targets --exclude codex-tui2 -- -D warnings
+# Check artifacts exist
+ls docs/SPEC-DOGFOOD-001/evidence/TASK_BRIEF.md
+ls docs/SPEC-DOGFOOD-001/evidence/DIVINE_TRUTH.md
 
-# Tests
-cargo test -p codex-tui --lib
-cargo test -p codex-stage0
-cargo test -p codex-core
-cargo test -p codex-cli --lib
+# Check system pointer
+lm search "SPEC-DOGFOOD-001" --limit 5
 
-# Build
-~/code/build-fast.sh
+# Verify TUI shows Stage0 output
+# Look for: "Stage 0: Context compiled (X memories, tier2=yes/no, Xms)"
 ```
 
 ---
 
-## Success Criteria (S21 - Achieved)
+## Key Files
 
-- [x] All Consensus* types renamed to Gate*/StageReview*
-- [x] No type aliases remain (direct types only)
-- [x] app-server-protocol compiles
-- [x] Full workspace clippy passes (excluding tui2/cli pre-existing)
-- [x] All tests pass
-- [x] Commit pushed
-
-## Success Criteria (S23 - Achieved)
-
-- [x] Config test failure root cause identified and fixed
-- [x] At least 2 truly dead modules deleted (unified_exec = 669 lines)
-- [x] Spec-kit workflow tested via unit tests (290 tests pass)
-- [x] All tests pass
-- [x] Commits pushed
-
----
-
-## Known Issues
-
-### Pre-existing (not blocking)
-- `codex-tui2` compilation errors (upstream scaffold per ADR-002)
-
-### Resolved (S23)
-- ~~`config::tests::persist_model_selection_updates_profile`~~ - Fixed by adding XHigh variant and test isolation
-
-### Out of Scope
-- ACE integration modules (pending feature work, properly annotated)
-- tui2 (upstream scaffold only, per ADR-002)
-
----
-
-## Key Files Modified (S21)
-
-| File | Changes |
+| File | Purpose |
 |------|---------|
-| `gate_evaluation.rs` | 8 type renames, 6 alias removals, doc updates |
-| `thread_history.rs` | 5 `kind: None` additions |
-| `v2.rs` | SandboxPolicy test fix |
-| `client.rs` | div_ceil fix |
-| `claude_pipes.rs` | 6 inline format args |
-| `gemini_pipes.rs` | 5 inline format args |
-| `complexity.rs` | range.contains() fix |
-| `config_validator.rs` | Targeted dead_code allows |
-| `quality_gate_handler.rs` | Targeted dead_code allows |
-| `ace_reflector.rs` | Targeted dead_code allow |
+| `tui/src/chatwidget/mod.rs:4464-4484` | ProcessedCommand::SpecAuto handler |
+| `tui/src/chatwidget/mod.rs:12852-12910` | handle_spec_auto_command() |
+| `tui/src/chatwidget/spec_kit/pipeline_coordinator.rs:32-450` | handle_spec_auto() with Stage0 |
+| `tui/src/chatwidget/spec_kit/stage0_integration.rs:52-230` | run_stage0_for_spec() |
+| `/tmp/stage0-trace.log` | Runtime trace output |
 
 ---
 
 ## Continuation Prompt
 
 ```
-Continue SPEC-DOGFOOD-001 - Session 24 **ultrathink**
+Continue SPEC-DOGFOOD-001 - Session 27 **ultrathink**
 
 ## Context
-Session 23 completed (commits a3ecf8278, 69594bc3b):
-- Fixed config test by adding XHigh variant and test isolation
-- Deleted unified_exec module (~664 lines)
-- Full workspace clippy passes, all tests pass
+Session 26 completed (commits ed56cd960..3e35fed3c):
+- Confirmed routing works: ProcessedCommand::SpecAuto → handle_spec_auto() ✅
+- Confirmed Stage0 block entered: disabled=false, content_len=4496 ✅
+- Added comprehensive trace to /tmp/stage0-trace.log
+- Trace stops after loading spec content - need to identify failure point
 
-**IMPORTANT**: SPEC-DOGFOOD-001 is NOT just dead code cleanup. The core objective
-is validating the golden path for dogfooding spec-kit. See `docs/SPEC-DOGFOOD-001/spec.md`.
+## Immediate Action Required
+1. Run TUI: `~/code/build-fast.sh run`
+2. Execute: `/speckit.auto SPEC-DOGFOOD-001`
+3. Exit after first guardrail appears
+4. Run: `cat /tmp/stage0-trace.log`
+5. Share FULL trace output
 
-Sessions S17-S23 focused on code cleanup (~3,884 LOC). Session 24 refocuses on
-the original acceptance criteria while completing cleanup.
+## Expected Trace Lines (in order)
+- BEFORE Stage0 check: disabled=false
+- INSIDE Stage0 block (not disabled)
+- spec_path=..., content_len=4496
+- ENTERING Stage0 execution (content not empty)
+- BEFORE run_stage0_for_spec() call
+- run_stage0_for_spec() ENTRY: spec_id=..., cwd=..., disabled=...
+- Checking local-memory health...
+- local-memory HEALTHY (or UNHEALTHY)
+- AFTER run_stage0_for_spec(): is_ok=...
+- Stage0 result: has_result=..., skip_reason=..., tier2_used=...
 
-## SPEC-DOGFOOD-001 Acceptance Criteria Status
+## Diagnosis Guide
+- If trace stops at "spec_path=..." → the if block isn't entered
+- If trace stops at "BEFORE run_stage0_for_spec()" → function call hangs
+- If trace shows "local-memory UNHEALTHY" → daemon issue
+- If "has_result=false" → check skip_reason for cause
 
-| ID | Criterion | Status | Notes |
-|----|-----------|--------|-------|
-| A0 | No Surprise Fan-Out | ⏳ | Verify quality gates OFF by default |
-| A1 | Doctor Ready | ⏳ | Run `code doctor`, check all [OK] |
-| A2 | Tier2 Used | ⏳ | Check `/speckit.auto` logs for tier2_used |
-| A3 | Evidence Exists | ⏳ | Check docs/SPEC-DOGFOOD-001/evidence/ |
-| A4 | System Pointer | ⏳ | `lm search "SPEC-DOGFOOD-001"` for system:true |
-| A5 | GR-001 Enforcement | ⏳ | >1 agent quality gates rejected |
-| A6 | Slash Dispatch Single-Shot | ⏳ | No re-entry guard hit on normal usage |
+## Acceptance Criteria (Blocked)
+| ID | Criterion | Status |
+|----|-----------|--------|
+| A2 | Tier2 Used | ⚠️ Needs Stage0 |
+| A3 | Evidence Exists | ⚠️ Needs Stage0 |
+| A4 | System Pointer | ⚠️ Needs Stage0 |
 
-## Session 24 Tasks (Prioritized)
-
-### 1. Validate Golden Path Prerequisites
-Run diagnostics to verify dogfooding readiness:
-
-```bash
-code doctor                              # Check all systems OK
-lm health                                # Verify local-memory daemon
-notebooklm health                        # Verify NotebookLM service
-cat ~/.config/codex/stage0.toml          # Verify Tier2 config
-```
-
-### 2. Interactive Spec-Kit Test (Required)
-Execute the actual dogfooding workflow:
-
-a. Build and run TUI: `~/code/build-fast.sh run`
-b. Create test spec: `/speckit.new test-session-24-validation`
-c. Run pipeline: `/speckit.auto SPEC-TEST-###`
-d. Monitor for:
-   - No surprise fan-out (only canonical agents)
-   - Tier2 invocation (NotebookLM queries)
-   - Evidence generation
-e. Document any blocking issues
-
-### 3. Dead Code Cleanup (Moderate)
-Clean up underscore-prefixed dead fields in `tui/src/app.rs`:
-- `_transcript_overlay: Option<TranscriptApp>` - appears unused
-- `_deferred_history_lines: Vec<Line<'static>>` - appears unused
-- `_transcript_saved_viewport: Option<Rect>` - appears unused
-- `_debug: bool` - appears unused
-
-Delete modules pending >6 months with no roadmap item.
-
-### 4. Evidence Collection
-After running `/speckit.auto SPEC-DOGFOOD-001`:
-
-```bash
-ls docs/SPEC-DOGFOOD-001/evidence/       # Check TASK_BRIEF.md, DIVINE_TRUTH.md
-lm search "SPEC-DOGFOOD-001"             # Check for system pointer
-```
-
-### 5. Update Acceptance Criteria
-After validation, update docs/SPEC-DOGFOOD-001/spec.md with:
-- ✅/❌ status for each acceptance criterion
-- Evidence of completion (screenshots, log excerpts)
-- Any gaps or issues discovered
-
-### 6. Verification & Commit
-```bash
-cargo clippy --workspace --all-targets --exclude codex-tui2 -- -D warnings
-cargo test -p codex-core
-cargo test -p codex-tui --lib
-~/code/build-fast.sh
-```
-
-## Success Criteria
-- [ ] `code doctor` shows all [OK]
-- [ ] Interactive `/speckit.auto` test completed
-- [ ] At least 3 acceptance criteria verified (A0, A1, A5 or A6)
-- [ ] Dead fields cleaned from app.rs
-- [ ] All tests pass
-- [ ] SPEC acceptance status updated
-- [ ] Commits pushed
-
-## Decision Points
-- If `code doctor` fails → fix infrastructure before proceeding
-- If `/speckit.auto` errors → document blocking issue, fix or defer
-- If Tier2 not invoked → check stage0.toml config, escalate if needed
-- If evidence not generated → investigate Stage0 engine wiring
+## After Fix
+1. Squash debug commits (4 commits → 1)
+2. Remove trace code OR leave for future debugging
+3. Validate artifacts: TASK_BRIEF.md, DIVINE_TRUTH.md
+4. Validate system pointer: `lm search "SPEC-DOGFOOD-001"`
+5. Update SPEC status
 
 ## Key Files
-- `docs/SPEC-DOGFOOD-001/spec.md` - Acceptance criteria
-- `~/.config/codex/stage0.toml` - Stage0 Tier2 config
-- `tui/src/app.rs` - Dead field cleanup target
-- `HANDOFF.md` - Session tracking
+- pipeline_coordinator.rs:210-326 - Stage0 execution with trace
+- stage0_integration.rs:52-130 - run_stage0_for_spec with trace
+- /tmp/stage0-trace.log - Runtime trace output
+- HANDOFF.md - This file
+
+## Non-Negotiable Constraints
+- Fix must be inside codex-rs only
+- Do NOT modify localmemory-policy or notebooklm-mcp
+- Keep fix minimal and targeted
 ```
 
 ---
 
-## Previous Context (Archived)
+## Previous Sessions (Archived)
 
 <details>
-<summary>Session 15 Plan (Historical)</summary>
+<summary>Sessions 17-25 Summary</summary>
 
-Session 15 was focused on SPEC-DOGFOOD-001 initial setup:
-- Create stage0.toml
-- Seed NotebookLM with core docs
-- Create formal SPEC-DOGFOOD-001
+| Session | Focus | Outcome |
+|---------|-------|---------|
+| S17-S19 | Dead code cleanup | ~3,140 LOC deleted |
+| S20-S22 | Test isolation, clippy | All tests passing |
+| S23 | Config fix | XHigh variant, unified_exec deleted |
+| S24 | Orphaned modules | 4 modules deleted (~1,538 LOC) |
+| S25 | Acceptance validation | 4/6 criteria passed, Stage0 bug found |
 
-This context has been superseded by the dead code cleanup focus (S17+).
 </details>
