@@ -297,43 +297,80 @@ cargo test -p codex-cli --lib
 ## Continuation Prompt
 
 ```
-Continue SPEC-DOGFOOD-001 - Session 24
+Continue SPEC-DOGFOOD-001 - Session 24 **ultrathink**
 
 ## Context
-Session 23 completed (commit a3ecf8278):
+Session 23 completed (commits a3ecf8278, 69594bc3b):
 - Fixed config test by adding XHigh variant and test isolation
 - Deleted unified_exec module (~664 lines)
 - Full workspace clippy passes, all tests pass
-- Build successful
 
-Total progress S17-S23: ~3,884 LOC deleted
+**IMPORTANT**: SPEC-DOGFOOD-001 is NOT just dead code cleanup. The core objective
+is validating the golden path for dogfooding spec-kit. See `docs/SPEC-DOGFOOD-001/spec.md`.
+
+Sessions S17-S23 focused on code cleanup (~3,884 LOC). Session 24 refocuses on
+the original acceptance criteria while completing cleanup.
+
+## SPEC-DOGFOOD-001 Acceptance Criteria Status
+
+| ID | Criterion | Status | Notes |
+|----|-----------|--------|-------|
+| A0 | No Surprise Fan-Out | ⏳ | Verify quality gates OFF by default |
+| A1 | Doctor Ready | ⏳ | Run `code doctor`, check all [OK] |
+| A2 | Tier2 Used | ⏳ | Check `/speckit.auto` logs for tier2_used |
+| A3 | Evidence Exists | ⏳ | Check docs/SPEC-DOGFOOD-001/evidence/ |
+| A4 | System Pointer | ⏳ | `lm search "SPEC-DOGFOOD-001"` for system:true |
+| A5 | GR-001 Enforcement | ⏳ | >1 agent quality gates rejected |
+| A6 | Slash Dispatch Single-Shot | ⏳ | No re-entry guard hit on normal usage |
 
 ## Session 24 Tasks (Prioritized)
 
-### 1. Additional Dead Code Cleanup
-More modules with blanket dead_code allows to investigate:
+### 1. Validate Golden Path Prerequisites
+Run diagnostics to verify dogfooding readiness:
 
-a. `tui/src/transcript_app.rs` - TranscriptApp field is underscore-prefixed, likely dead
-b. `tui/src/streaming/` - Check if streaming infrastructure is fully integrated
-c. `tui/src/providers/claude.rs`, `gemini.rs` - CLI provider helpers status
-d. `core/src/rollout/list.rs` - Used by tui2 only, check if needed
+```bash
+code doctor                              # Check all systems OK
+lm health                                # Verify local-memory daemon
+notebooklm health                        # Verify NotebookLM service
+cat ~/.config/codex/stage0.toml          # Verify Tier2 config
+```
 
-### 2. Clean Up Underscore-Prefixed Dead Fields
-In `tui/src/app.rs`:
+### 2. Interactive Spec-Kit Test (Required)
+Execute the actual dogfooding workflow:
+
+a. Build and run TUI: `~/code/build-fast.sh run`
+b. Create test spec: `/speckit.new test-session-24-validation`
+c. Run pipeline: `/speckit.auto SPEC-TEST-###`
+d. Monitor for:
+   - No surprise fan-out (only canonical agents)
+   - Tier2 invocation (NotebookLM queries)
+   - Evidence generation
+e. Document any blocking issues
+
+### 3. Dead Code Cleanup (Moderate)
+Clean up underscore-prefixed dead fields in `tui/src/app.rs`:
 - `_transcript_overlay: Option<TranscriptApp>` - appears unused
 - `_deferred_history_lines: Vec<Line<'static>>` - appears unused
 - `_transcript_saved_viewport: Option<Rect>` - appears unused
 - `_debug: bool` - appears unused
 
-Either use these fields or delete them.
+Delete modules pending >6 months with no roadmap item.
 
-### 3. Spec-Kit Interactive Testing (Optional)
-If time permits, manually test spec-kit workflow:
-- `/speckit.new test-feature`
-- `/speckit.auto SPEC-ID`
-- Document any issues
+### 4. Evidence Collection
+After running `/speckit.auto SPEC-DOGFOOD-001`:
 
-### 4. Verification & Commit
+```bash
+ls docs/SPEC-DOGFOOD-001/evidence/       # Check TASK_BRIEF.md, DIVINE_TRUTH.md
+lm search "SPEC-DOGFOOD-001"             # Check for system pointer
+```
+
+### 5. Update Acceptance Criteria
+After validation, update docs/SPEC-DOGFOOD-001/spec.md with:
+- ✅/❌ status for each acceptance criterion
+- Evidence of completion (screenshots, log excerpts)
+- Any gaps or issues discovered
+
+### 6. Verification & Commit
 ```bash
 cargo clippy --workspace --all-targets --exclude codex-tui2 -- -D warnings
 cargo test -p codex-core
@@ -342,15 +379,25 @@ cargo test -p codex-tui --lib
 ```
 
 ## Success Criteria
-- [ ] At least 1 more dead module or significant dead code removed
-- [ ] Underscore-prefixed fields cleaned up or documented
+- [ ] `code doctor` shows all [OK]
+- [ ] Interactive `/speckit.auto` test completed
+- [ ] At least 3 acceptance criteria verified (A0, A1, A5 or A6)
+- [ ] Dead fields cleaned from app.rs
 - [ ] All tests pass
+- [ ] SPEC acceptance status updated
 - [ ] Commits pushed
 
-## Notes
-- SPEC-DOGFOOD-001 is near completion (3,884 LOC deleted)
-- Focus on finishing cleanup, not adding new features
-- If dead code removal breaks anything, revert and document
+## Decision Points
+- If `code doctor` fails → fix infrastructure before proceeding
+- If `/speckit.auto` errors → document blocking issue, fix or defer
+- If Tier2 not invoked → check stage0.toml config, escalate if needed
+- If evidence not generated → investigate Stage0 engine wiring
+
+## Key Files
+- `docs/SPEC-DOGFOOD-001/spec.md` - Acceptance criteria
+- `~/.config/codex/stage0.toml` - Stage0 Tier2 config
+- `tui/src/app.rs` - Dead field cleanup target
+- `HANDOFF.md` - Session tracking
 ```
 
 ---
