@@ -154,6 +154,7 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
     registry.register(Box::new(SpecKitNewCommand));
     registry.register(Box::new(SpecKitSpecifyCommand));
     registry.register(Box::new(SpecKitAutoCommand));
+    registry.register(Box::new(SpecKitCancelCommand)); // SPEC-DOGFOOD-001
     registry.register(Box::new(SpecKitStatusCommand));
     registry.register(Box::new(SpecKitConfigureCommand)); // SPEC-947 Phase 4
     registry.register(Box::new(SpecKitProjectCommand)); // SPEC-KIT-960
@@ -322,7 +323,8 @@ mod tests {
         // P97/SPEC-KIT-103: Added stage0.librarian (1 new)
         // SPEC-KIT-2XX: Added stage0.project-intel (1 new)
         // PR9: Added spec-review (1 new) - spec-consensus is deprecated alias
-        assert_eq!(registry.len(), 40, "Registry should have 40 commands");
+        // SPEC-DOGFOOD-001: Added speckit.cancel (1 new)
+        assert_eq!(registry.len(), 41, "Registry should have 41 commands");
 
         // Verify key commands are registered
         assert!(registry.find("speckit.status").is_some());

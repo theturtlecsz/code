@@ -5,6 +5,7 @@
 //! Each command implements the SpecKitCommand trait and delegates to
 //! existing handlers in ../handler.rs
 
+mod cancel; // SPEC-DOGFOOD-001: Cancel stale pipeline state
 mod configure; // SPEC-947 Phase 4: Pipeline configurator command
 mod guardrail;
 mod intel; // SPEC-KIT-2XX: Project Intel for NotebookLM
@@ -19,6 +20,7 @@ mod templates; // SPEC-KIT-962: Template management commands
 pub mod verify;
 
 // Re-export all commands
+pub use cancel::*;
 pub use configure::*;
 pub use guardrail::*;
 pub use intel::*;

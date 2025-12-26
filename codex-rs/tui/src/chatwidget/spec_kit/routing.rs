@@ -109,11 +109,13 @@ pub fn try_dispatch_spec_kit_command(
         | "speckit.new"
         // Native control commands (direct execution through registry)
         | "speckit.auto"           // Pipeline coordinator
+        | "speckit.cancel"         // SPEC-DOGFOOD-001: Cancel stale state
         | "speckit.status"         // Status dashboard
         | "speckit.constitution"   // ACE constitution extraction
         | "speckit.ace-status"     // ACE playbook status
         // Legacy aliases
         | "spec-auto"
+        | "spec-cancel"            // SPEC-DOGFOOD-001
         | "spec-status"
         | "new-spec"
     );
