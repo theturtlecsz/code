@@ -204,15 +204,44 @@ pub fn handle_spec_auto(
             // Run Stage0 with the passed config
             // SPEC-KIT-900 FIX: Wrap with block_in_place to allow blocking HTTP calls
             // (reqwest::blocking) within the async tokio context.
-            let result = tokio::task::block_in_place(|| {
-                super::stage0_integration::run_stage0_for_spec(
-                    &widget.config,
-                    &spec_id,
-                    &spec_content,
-                    &widget.config.cwd,
-                    &stage0_config,
-                )
-            });
+            // SPEC-DOGFOOD-001: Wrap in catch_unwind to detect silent panics
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                tokio::task::block_in_place(|| {
+                    super::stage0_integration::run_stage0_for_spec(
+                        &widget.config,
+                        &spec_id,
+                        &spec_content,
+                        &widget.config.cwd,
+                        &stage0_config,
+                    )
+                })
+            }));
+
+            let result = match result {
+                Ok(r) => r,
+                Err(e) => {
+                    let panic_msg = if let Some(s) = e.downcast_ref::<&str>() {
+                        s.to_string()
+                    } else if let Some(s) = e.downcast_ref::<String>() {
+                        s.clone()
+                    } else {
+                        "Unknown panic".to_string()
+                    };
+                    widget.history_push(crate::history_cell::new_error_event(format!(
+                        "Stage 0: PANIC - {}",
+                        panic_msg
+                    )));
+                    super::stage0_integration::Stage0ExecutionResult {
+                        result: None,
+                        skip_reason: Some(format!("Panic: {}", panic_msg)),
+                        duration_ms: 0,
+                        tier2_used: false,
+                        cache_hit: false,
+                        hybrid_retrieval_used: false,
+                        tier2_skip_reason: Some("Panic".to_string()),
+                    }
+                }
+            };
 
             // Store result in state
             let task_brief_written;
@@ -339,6 +368,14 @@ pub fn handle_spec_auto(
                         "Stage 0: Skipped ({})",
                         skip_reason
                     ))],
+                    crate::history_cell::HistoryCellType::Notice,
+                ));
+            } else {
+                // SPEC-DOGFOOD-001 FIX: Catch edge case where both result and skip_reason are None
+                widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                    vec![ratatui::text::Line::from(
+                        "Stage 0: Completed (no result or skip_reason returned - possible bug)"
+                    )],
                     crate::history_cell::HistoryCellType::Notice,
                 ));
             }
