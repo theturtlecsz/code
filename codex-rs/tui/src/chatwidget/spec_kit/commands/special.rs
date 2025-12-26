@@ -27,6 +27,15 @@ impl SpecKitCommand for SpecKitAutoCommand {
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
+        // DEBUG: Registry path - this shows if command goes through SPEC_KIT_REGISTRY
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![ratatui::text::Line::from(format!(
+                "🔧 DEBUG: SpecKitAutoCommand.execute(args={})",
+                args
+            ))],
+            crate::history_cell::HistoryCellType::Notice,
+        ));
+
         // Parse spec-auto args and delegate to handler
         match crate::slash_command::parse_spec_auto_args(&args) {
             Ok(invocation) => {

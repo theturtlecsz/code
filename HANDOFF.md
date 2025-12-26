@@ -1,7 +1,7 @@
 # Session Handoff — SPEC-DOGFOOD-001 Dead Code Cleanup
 
 **Last updated:** 2025-12-26
-**Status:** Session 24 Complete, Acceptance Criteria Validation Pending
+**Status:** Session 25 Complete, Stage0 Routing Debug Pending
 **Current SPEC:** SPEC-DOGFOOD-001
 
 > **Goal**: Clean up dead code, fix test isolation, and validate golden path dogfooding.
@@ -20,8 +20,101 @@
 | S22 | Clippy + dead_code docs | ~20 | Fixed 17 clippy warnings, documented 13 blanket allows |
 | S23 | Config fix + module deletion | ~664 | Fixed xhigh parse error, deleted unified_exec |
 | S24 | Orphaned module cleanup | ~1,538 | Deleted 4 orphaned TUI modules, verified A1 |
+| S25 | Acceptance validation | 0 | 4/6 criteria validated, Stage0 routing bug found |
 
 **Total deleted (S17-S24):** ~5,422 LOC
+
+---
+
+## Session 25 Summary (Complete)
+
+### Commits
+- `342244b06` - fix(tui): Display Stage0 skip reason in TUI (SPEC-DOGFOOD-001)
+
+### Acceptance Criteria Status
+
+| ID | Criterion | Status | Evidence |
+|----|-----------|--------|----------|
+| A0 | No Surprise Fan-Out | ✅ | `quality_gate_handler.rs:1075-1088` - default `false` when config absent |
+| A1 | Doctor Ready | ✅ | `code doctor` shows all [OK] |
+| A2 | Tier2 Used | ⚠️ BLOCKED | Stage0 not producing TUI output despite code in binary |
+| A3 | Evidence Exists | ⚠️ BLOCKED | TASK_BRIEF.md, DIVINE_TRUTH.md not generated |
+| A4 | System Pointer | ⚠️ BLOCKED | Stage0 not storing system pointer |
+| A5 | GR-001 Enforcement | ✅ | `quality_gate_handler.rs:1206-1238` - rejects multi-agent with explicit error |
+| A6 | Slash Dispatch Single-Shot | ✅ | `quality_gate_handler.rs:28-71` - three-layer re-entry guard |
+
+**Score: 4/6 validated, 2/6 blocked by Stage0 routing issue**
+
+### Findings
+
+**NotebookLM Auth:** Working (34.5h old cookie still valid despite health check warning)
+
+**Pipeline Test Results:**
+- Pipeline completed all 6 stages (PLAN → TASKS → IMPLEMENT → VALIDATE → AUDIT → UNLOCK)
+- All guardrail checks passed
+- No Stage0 output visible in TUI
+- No Stage0 artifacts generated (TASK_BRIEF.md, DIVINE_TRUTH.md)
+
+**Bug Identified: Stage0 Silent Skip**
+
+Despite:
+1. Code being in binary (`strings` shows debug message)
+2. stage0.toml correctly configured (`enabled = true`, Tier2 enabled)
+3. NotebookLM working (CLI query succeeded)
+4. local-memory daemon healthy
+
+...no Stage0 output appears. Debug code added at two points:
+- `pipeline_coordinator.rs:41-48` - Entry point to `handle_spec_auto()`
+- `commands/special.rs:30-37` - Entry point to `SpecKitAutoCommand.execute()`
+
+Neither debug message appeared in TUI output, suggesting `/speckit.auto` is bypassing both code paths.
+
+**Code Analysis:**
+- `/speckit.auto` should route through `ProcessedCommand::SpecAuto` → `handle_spec_auto_command()` → `spec_kit::handle_spec_auto()`
+- OR through `SPEC_KIT_REGISTRY` → `SpecKitAutoCommand.execute()` → `handle_spec_auto_command()`
+- Both paths have debug code, neither shows output
+- Possible third routing path exists
+
+### Files Changed
+- `pipeline_coordinator.rs` - Added Stage0 skip TUI output + debug
+- `commands/special.rs` - Added debug at registry execute entry
+
+---
+
+## Session 26 Plan: Debug Stage0 Routing
+
+### Priority: Find why Stage0 output doesn't appear
+
+**Hypothesis:** `/speckit.auto` is being routed through a third code path that bypasses both:
+1. `ProcessedCommand::SpecAuto` handling in `mod.rs:4464-4471`
+2. `SPEC_KIT_REGISTRY` dispatch in `routing.rs:151`
+
+**Investigation Steps:**
+
+1. **Trace command dispatch**
+   - Add debug at `process_slash_command_message()` return
+   - Add debug at `try_dispatch_spec_kit_command()` entry
+   - Add debug at `AppEvent::DispatchCommand` handling
+
+2. **Check for alternative routing**
+   - Search for other places that intercept "speckit.auto"
+   - Check if there's a config-driven command override
+   - Verify `SlashCommand::SpecKitAuto` enum is being matched
+
+3. **Verify binary has code**
+   ```bash
+   strings /home/thetu/code/codex-rs/target/dev-fast/code | grep "handle_spec_auto"
+   ```
+
+4. **Run with trace logging**
+   ```bash
+   RUST_LOG=codex_tui::chatwidget=debug ~/code/build-fast.sh run
+   ```
+
+### Once Stage0 works:
+- A2: Verify `tier2_used=true` in Stage0 output
+- A3: Confirm TASK_BRIEF.md and DIVINE_TRUTH.md generated
+- A4: Verify system pointer stored with `lm search "SPEC-DOGFOOD-001"`
 
 ---
 
