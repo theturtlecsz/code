@@ -38,6 +38,15 @@ pub fn handle_spec_auto(
     cli_overrides: Option<PipelineOverrides>, // SPEC-948: CLI flags for stage filtering
     stage0_config: super::stage0_integration::Stage0ExecutionConfig, // SPEC-KIT-102: Stage 0 config
 ) {
+    // DEBUG: Confirm function entry (TUI-visible)
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+        vec![ratatui::text::Line::from(format!(
+            "🔍 DEBUG: handle_spec_auto(spec_id={}, stage0_disabled={})",
+            spec_id, stage0_config.disabled
+        ))],
+        crate::history_cell::HistoryCellType::Notice,
+    ));
+
     // SPEC-DOGFOOD-001: Re-entry guard - prevent duplicate pipeline execution
     if let Some(existing_state) = widget.spec_auto_state.as_ref() {
         tracing::warn!(
@@ -323,6 +332,15 @@ pub fn handle_spec_auto(
                     state.execution_logger.log_event(event);
                 }
                 state.stage0_skip_reason = Some(skip_reason.clone());
+
+                // SPEC-DOGFOOD-001 FIX: Show skip reason in TUI (was silently logged only)
+                widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                    vec![ratatui::text::Line::from(format!(
+                        "Stage 0: Skipped ({})",
+                        skip_reason
+                    ))],
+                    crate::history_cell::HistoryCellType::Notice,
+                ));
             }
         } else {
             // Log Stage0Complete event (skipped - no spec content)
@@ -353,6 +371,15 @@ pub fn handle_spec_auto(
                 state.execution_logger.log_event(event);
             }
             state.stage0_skip_reason = Some(skip_reason.to_string());
+
+            // SPEC-DOGFOOD-001 FIX: Show skip reason in TUI
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![ratatui::text::Line::from(format!(
+                    "Stage 0: Skipped ({})",
+                    skip_reason
+                ))],
+                crate::history_cell::HistoryCellType::Notice,
+            ));
         }
     } else {
         // Log Stage0Complete event (disabled by flag)
@@ -383,6 +410,15 @@ pub fn handle_spec_auto(
             state.execution_logger.log_event(event);
         }
         state.stage0_skip_reason = Some(skip_reason.to_string());
+
+        // SPEC-DOGFOOD-001 FIX: Show skip reason in TUI
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![ratatui::text::Line::from(format!(
+                "Stage 0: Skipped ({})",
+                skip_reason
+            ))],
+            crate::history_cell::HistoryCellType::Notice,
+        ));
     }
 
     widget.spec_auto_state = Some(state);
