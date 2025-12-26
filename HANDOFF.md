@@ -1,227 +1,209 @@
-# Session Handoff — Dogfooding: "tui writes tui"
+# Session Handoff — SPEC-DOGFOOD-001 Dead Code Cleanup
 
-**Last updated:** 2025-12-25
-**Status:** P0 Blockers Resolved - Ready for SPEC-DOGFOOD-001
+**Last updated:** 2025-12-26
+**Status:** Session 20 Complete, Session 21 Ready
+**Current SPEC:** SPEC-DOGFOOD-001
 
-> **Goal**: Use `code` TUI to develop `~/code` as the default workflow.
-
----
-
-## Current State
-
-### Health Check Status (All PASS)
-
-| Service | Status | Verification |
-|---------|--------|--------------|
-| Build | PASS | `./build-fast.sh` succeeds |
-| Local-memory | PASS | `lm health` returns "ok" |
-| NotebookLM Auth | PASS | `authenticated: true` |
-| NotebookLM Ready | PASS | `ready: true` |
-| NotebookLM Library | PASS | 1 notebook, 3 sources |
-| Code Doctor | PASS | All [OK], 1 WARN (stage0.toml) |
-
-### Notebook Created
-
-| Property | Value |
-|----------|-------|
-| Name | `code-project-docs` |
-| ID | `4e80974f-789d-43bd-abe9-7b1e76839506` |
-| Sources | ADR-002, Dogfooding Checklist, Golden Path Architecture |
+> **Goal**: Clean up dead code, fix test isolation, and modernize type naming.
 
 ---
 
-## Session 15 Plan (Architect-Approved)
+## Session Log
 
-### Decisions Made
+| Session | Focus | LOC Deleted | Outcome |
+|---------|-------|-------------|---------|
+| S17 | Dead code audit | ~1,500 | Identified unused modules |
+| S18 | Native consensus cleanup | ~800 | Deleted native_consensus_executor.rs |
+| S19 | Config reload removal | ~840 | Deleted config_reload.rs, clippy fixes |
+| S20 | Test isolation + clippy | ~10 | Added #[serial], fixed 5 clippy warnings |
+| S21 | Type migration | TBD | (next) |
 
-| Question | Answer | Rationale |
-|----------|--------|-----------|
-| stage0.toml | **Yes, create it** | Removes WARN, enables Tier2 for dogfooding |
-| NotebookLM sources | **Core docs only** | Tight, high-leverage set; not comprehensive |
-| Formal SPEC | **Yes, create SPEC-DOGFOOD-001** | Makes dogfooding measurable via golden path |
-
-### Critical Correction: stage0.toml Schema
-
-**Current docs are outdated.** The actual `Stage0Config` expects:
-
-```toml
-# ~/.config/code/stage0.toml (CORRECT)
-enabled = true
-store_system_pointers = true
-db_path = "~/.config/code/local-memory-overlay.db"
-
-[tier2]
-enabled = true
-notebook = "4e80974f-789d-43bd-abe9-7b1e76839506"  # NOT "default_notebook"
-base_url = "http://127.0.0.1:3456"
-cache_ttl_hours = 24
-call_timeout = "30s"
-```
-
-**NOT** the old format:
-```toml
-# WRONG - docs/examples use this but Stage0 ignores it
-[tier2]
-default_notebook = "code-docs"  # Stage0 looks for "notebook" not this
-```
-
-### Path Canonicalization
-
-| Type | Canonical | Fallback (backward compat) |
-|------|-----------|---------------------------|
-| Config dir | `~/.config/code/` | `~/.config/codex/` |
-| stage0.toml | `~/.config/code/stage0.toml` | `~/.config/codex/stage0.toml` |
+**Total deleted (S17-S20):** ~3,150 LOC
 
 ---
 
-## Session 15 Goals
+## Session 20 Summary (Complete)
 
-### 1. Create stage0.toml (Correct Schema)
+### Commits
+- `8808ebd7b` - fix(tui): Fix test isolation with #[serial] and resolve clippy warnings
+
+### Changes Made
+1. **Test isolation** - Added `#[serial]` to 4 env-var-mutating critic tests
+2. **Dead code** - Deleted `create_diff_summary` wrapper (~10 LOC)
+3. **Clippy fixes** - Resolved 5 warnings across stage0 and tui
+
+### Verification
+- `cargo clippy -p codex-tui -p codex-stage0 --all-targets -- -D warnings` ✅
+- `cargo test -p codex-tui --lib` ✅ (533 tests passing in parallel)
+
+---
+
+## Session 21 Plan
+
+### 1. Type Alias Migration (Consensus* → Gate*)
+
+**Files:** `codex-rs/tui/src/chatwidget/spec_kit/gate_evaluation.rs`
+
+Rename these types and update all callsites:
+
+| Old Name | New Name |
+|----------|----------|
+| `ConsensusArtifactData` | `GateArtifactData` |
+| `ConsensusEvidenceHandle` | `GateEvidenceHandle` |
+| `ConsensusTelemetryPaths` | `GateTelemetryPaths` |
+| `ConsensusArtifactVerdict` | `GateArtifactVerdict` |
+| `ConsensusVerdict` | `StageReviewVerdict` |
+| `ConsensusSynthesisSummary` | `StageReviewSummary` |
+| `ConsensusSynthesisRaw` | `StageReviewRaw` |
+| `ConsensusSynthesisConsensusRaw` | `StageReviewConsensusRaw` |
+
+**Steps:**
+a. Rename struct definitions (remove `Consensus` prefix)
+b. Update all callsites in gate_evaluation.rs
+c. Update callsites in other files (grep for usage)
+d. Remove type aliases (now direct types)
+e. Verify: `cargo build -p codex-tui`
+
+### 2. Fix app-server-protocol Compilation Errors
+
+**Files:** `codex-rs/app-server-protocol/src/protocol/`
+
+| Error | File | Fix |
+|-------|------|-----|
+| Missing `kind` field | thread_history.rs:223,236,306,350,360 | Add `kind: UserMessageKind::default()` |
+| Missing `ExternalSandbox` variant | v2.rs:1964 | Add variant or update match |
+
+**Steps:**
+a. Read `UserMessageEvent` struct to understand `kind` field
+b. Read `SandboxPolicy` enum to understand variants
+c. Add missing fields/variants
+d. Verify: `cargo clippy --workspace -- -D warnings`
+
+### 3. Audit Module-Level #[allow(dead_code)]
+
+**Target modules** (check if code is actually used):
+- `config_validator.rs` - "Validation helpers pending integration"
+- `quality_gate_handler.rs` - "Extended QA features pending"
+- `ace_reflector.rs` - "ACE reflection pending full integration"
+
+**Steps:**
+a. For each module, grep for usage of exported items
+b. If items are used, remove the module-level allow
+c. If items are truly unused, consider deletion or keep allow with updated comment
+d. Document findings
+
+### 4. Verification
 
 ```bash
-mkdir -p ~/.config/code
-cat > ~/.config/code/stage0.toml << 'EOF'
-enabled = true
-store_system_pointers = true
-db_path = "~/.config/code/local-memory-overlay.db"
-
-[tier2]
-enabled = true
-notebook = "4e80974f-789d-43bd-abe9-7b1e76839506"
-base_url = "http://127.0.0.1:3456"
-cache_ttl_hours = 24
-call_timeout = "30s"
-EOF
-```
-
-### 2. Seed NotebookLM with Core Docs Only
-
-Add these sources via HTTP API:
-- `docs/DOGFOODING-CHECKLIST.md`
-- `docs/SPEC-TUI2-STUBS.md`
-- `docs/convergence/CONVERGENCE_OVERVIEW.md`
-- `docs/stage0/STAGE0_IMPLEMENTATION_GUIDE.md` (if exists)
-- NL_* files (via `/stage0.project-intel` commands if available)
-
-### 3. Create SPEC-DOGFOOD-001
-
-Create `docs/SPEC-DOGFOOD-001/spec.md` with:
-- G1: Tier2 enabled by default
-- G2: Config/docs reference `code` not `codex`
-- G3: NotebookLM seeded with core docs
-- G4: Stage0 writes system pointer to local-memory
-- G5: Evidence artifacts produced
-
-### 4. Run via Golden Path
-
-```bash
-./build-fast.sh run
-# In TUI: /speckit.auto SPEC-DOGFOOD-001
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test -p codex-tui --lib
+cargo test -p codex-stage0
 ```
 
 ---
 
-## Acceptance Tests (From SPEC)
+## Success Criteria
 
-| Test | Command | Pass Criteria |
-|------|---------|---------------|
-| A1: Doctor ready | `code doctor` | No stage0.toml warning |
-| A2: Tier2 used | `/speckit.auto SPEC-DOGFOOD-001` | tier2_used=true in logs |
-| A3: Evidence exists | `ls docs/SPEC-DOGFOOD-001/evidence/` | TASK_BRIEF.md + DIVINE_TRUTH.md |
-| A4: System pointer | `lm search "SPEC-DOGFOOD-001"` | system:true artifact exists |
+- [ ] All Consensus* types renamed to Gate*/StageReview*
+- [ ] No type aliases remain (direct types only)
+- [ ] app-server-protocol compiles
+- [ ] Full workspace clippy passes (0 warnings)
+- [ ] All tests pass
+- [ ] Commit pushed
 
 ---
 
-## Cross-Repo Coordination
+## Known Issues
 
-| Repo | Owns | Session 15 Changes |
-|------|------|-------------------|
-| `~/code` | Stage0, spec-kit, TUI, doctor | SPEC-DOGFOOD-001, stage0.toml template |
-| `~/notebooklm-client` | Auth, library, HTTP service | Add core doc sources |
-| `~/infra/localmemory-policy` | Memory policy, hooks, `lm` CLI | (no changes expected) |
+### Pre-existing (not blocking)
+- `app-server-protocol` compilation errors (will fix in S21)
+- Many modules have `#[allow(dead_code)]` for pending features
+
+### Out of Scope
+- ACE integration modules (intentionally dead, pending feature work)
+- tui2 (upstream scaffold only, per ADR-002)
+
+---
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `gate_evaluation.rs` | Type definitions, consensus logic |
+| `thread_history.rs` | UserMessageEvent construction |
+| `v2.rs` | SandboxPolicy handling |
+| `config_validator.rs` | Validation helpers (check dead_code) |
 
 ---
 
 ## Continuation Prompt
 
 ```
-Load HANDOFF.md for full context. ultrathink
+Continue SPEC-DOGFOOD-001 Dead Code Cleanup - Session 21 **ultrathink**
 
 ## Context
-Session 14 completed dogfooding readiness. Architect approved:
-- Create stage0.toml (with CORRECT schema - see HANDOFF.md)
-- Add core docs only to NotebookLM
-- Create formal SPEC-DOGFOOD-001
+Session 20 completed:
+- Fixed test isolation with #[serial] for 4 critic tests
+- Deleted create_diff_summary dead code (~10 LOC)
+- Fixed 5 clippy warnings
+- Commit: 8808ebd7b
 
-CRITICAL: Current stage0.toml docs are WRONG. Stage0Config expects:
-- `tier2.notebook` (not `default_notebook`)
-- `tier2.base_url` (not nested domain_mapping)
+See HANDOFF.md for full details.
 
-## Session 15 Goals
+## Session 21 Tasks (in order)
 
-### 1. Create stage0.toml
-Path: ~/.config/code/stage0.toml
-Use notebook ID: 4e80974f-789d-43bd-abe9-7b1e76839506
-Verify: `code doctor` shows no stage0.toml warning
+### 1. Type Alias Migration (Consensus* → Gate*)
+In gate_evaluation.rs:
+a. Rename ConsensusArtifactData → GateArtifactData
+b. Rename ConsensusEvidenceHandle → GateEvidenceHandle
+c. Rename ConsensusTelemetryPaths → GateTelemetryPaths
+d. Rename ConsensusArtifactVerdict → GateArtifactVerdict
+e. Rename ConsensusVerdict → StageReviewVerdict
+f. Rename ConsensusSynthesisSummary → StageReviewSummary
+g. Rename ConsensusSynthesisRaw → StageReviewRaw
+h. Rename ConsensusSynthesisConsensusRaw → StageReviewConsensusRaw
+i. Update all callsites (grep for old names)
+j. Remove now-unused type aliases
 
-### 2. Seed NotebookLM with Core Docs
-Add via HTTP API (POST /api/sources):
-- docs/DOGFOODING-CHECKLIST.md
-- docs/SPEC-TUI2-STUBS.md
-- docs/convergence/CONVERGENCE_OVERVIEW.md
-- docs/stage0/STAGE0_IMPLEMENTATION_GUIDE.md (if exists)
+### 2. Fix app-server-protocol Errors
+a. Add missing `kind` field to UserMessageEvent constructors (5 locations)
+b. Fix missing ExternalSandbox variant in SandboxPolicy match
 
-### 3. Create SPEC-DOGFOOD-001
-Create docs/SPEC-DOGFOOD-001/spec.md with acceptance tests:
-- A1: Doctor ready
-- A2: Tier2 used
-- A3: Evidence exists
-- A4: System pointer stored
+### 3. Audit #[allow(dead_code)]
+Check these modules for unused code:
+- config_validator.rs
+- quality_gate_handler.rs
+- ace_reflector.rs
+Remove allows if code is used, or document why it's pending.
 
-### 4. Run SPEC via Golden Path
-./build-fast.sh run
-In TUI: /speckit.auto SPEC-DOGFOOD-001
+### 4. Final Verification
+- cargo clippy --workspace --all-targets -- -D warnings
+- cargo test -p codex-tui --lib
+- cargo test -p codex-stage0
+- Commit and push
 
 ## Success Criteria
-- [ ] code doctor passes with no warnings
-- [ ] Tier2 query works (tier2_used=true)
-- [ ] SPEC-DOGFOOD-001 evidence artifacts exist
-- [ ] System pointer in local-memory
+- All Consensus* types renamed to Gate*/StageReview*
+- No type aliases remain
+- Full workspace clippy passes (0 warnings)
+- All tests pass
+- Commit pushed
 
-## Key Commands
-./build-fast.sh run
-./codex-rs/target/dev-fast/code doctor
-curl -s http://127.0.0.1:3456/api/sources -X POST -H "Content-Type: application/json" -d '{...}'
+## After Session 21
+Continue with Session 22: Review remaining dead code opportunities
 ```
 
 ---
 
-## Session 14 Summary
+## Previous Context (Archived)
 
-### Completed
+<details>
+<summary>Session 15 Plan (Historical)</summary>
 
-1. **Dogfooding Analysis** - Created DOGFOODING-CHECKLIST.md, DOGFOODING-BACKLOG.md
-2. **Instruction File Fixes** - Fixed CLAUDE.md, AGENTS.md, GEMINI.md headers
-3. **SessionEnd Hook Fix** - Now parses transcript, auto-promotes decisions/milestones
-4. **NotebookLM Setup** - Auth configured, notebook created, 3 sources added
-5. **Architect Review** - Approved stage0.toml, core docs, formal SPEC
+Session 15 was focused on SPEC-DOGFOOD-001 initial setup:
+- Create stage0.toml
+- Seed NotebookLM with core docs
+- Create formal SPEC-DOGFOOD-001
 
-### Key Decisions
-
-| Decision | ADR/Source |
-|----------|------------|
-| tui2 is scaffold only | ADR-002 |
-| Golden path: /speckit.auto + Stage0 + Tier2 | Architect |
-| Memory: CLI + REST only | Policy |
-| NotebookLM: HTTP API at 127.0.0.1:3456 | Policy |
-| Config path: ~/.config/code/ canonical | Architect |
-
----
-
-## Previous Sessions
-
-| Session | Focus | Outcome |
-|---------|-------|---------|
-| S10-S13 | SYNC-028 tui2 port | Compiles, 0 warnings |
-| S14 | Dogfooding readiness | All P0 resolved, architect review |
-| S15 | SPEC-DOGFOOD-001 | (next) |
+This context has been superseded by the dead code cleanup focus (S17+).
+</details>
