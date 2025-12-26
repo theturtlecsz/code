@@ -124,12 +124,11 @@ impl ConfirmGuardPatternRuntime {
     }
 }
 
-#[allow(dead_code)]
+// Extension trait for unwrapping Mutex locks (panics on poison)
 trait MutexExt<T> {
     fn lock_unchecked(&self) -> std::sync::MutexGuard<'_, T>;
 }
 
-#[allow(dead_code)]
 impl<T> MutexExt<T> for Mutex<T> {
     fn lock_unchecked(&self) -> std::sync::MutexGuard<'_, T> {
         #[expect(clippy::expect_used)]

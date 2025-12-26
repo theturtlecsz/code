@@ -1006,14 +1006,6 @@ impl LoginAddAccountState {
     }
 
     // Claude OAuth handlers (SPEC-KIT-954)
-    pub fn on_claude_failed(&mut self, error: String) {
-        self.step = AddStep::Choose { selected: 1 }; // Return to Claude option
-        self.feedback = Some(Feedback {
-            message: error,
-            is_error: true,
-        });
-    }
-
     pub fn on_claude_complete(&mut self, result: Result<(), String>) {
         match result {
             Ok(()) => {
@@ -1045,14 +1037,6 @@ impl LoginAddAccountState {
     }
 
     // Gemini OAuth handlers (SPEC-KIT-954)
-    pub fn on_gemini_failed(&mut self, error: String) {
-        self.step = AddStep::Choose { selected: 2 }; // Return to Gemini option
-        self.feedback = Some(Feedback {
-            message: error,
-            is_error: true,
-        });
-    }
-
     pub fn on_gemini_complete(&mut self, result: Result<(), String>) {
         match result {
             Ok(()) => {

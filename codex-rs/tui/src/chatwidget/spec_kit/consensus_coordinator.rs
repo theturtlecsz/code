@@ -10,8 +10,7 @@
 //! handling MCP connection timing and transient failures.
 
 use super::super::ChatWidget;
-use super::gate_evaluation::{parse_consensus_stage, run_spec_consensus};
-use crate::history_cell::HistoryCellType;
+use super::gate_evaluation::run_spec_consensus;
 use crate::spec_prompts::SpecStage;
 use std::sync::Arc;
 
@@ -123,71 +122,5 @@ pub(crate) fn persist_cost_summary(widget: &mut ChatWidget, spec_id: &str) {
             "Failed to write cost summary for {}: {}",
             spec_id, err
         )));
-    }
-}
-
-/// Handle /spec-consensus command implementation
-///
-/// Inspects consensus artifacts for a specific SPEC-ID and stage.
-/// Parses arguments, validates stage name, and runs consensus check
-/// with MCP retry logic.
-///
-/// Usage: /spec-consensus <SPEC-ID> <stage>
-/// Stages: plan, tasks, implement, validate, audit, unlock
-pub(crate) fn handle_spec_consensus_impl(widget: &mut ChatWidget, raw_args: String) {
-    let trimmed = raw_args.trim();
-    if trimmed.is_empty() {
-        widget.history_push(crate::history_cell::new_error_event(
-            "Usage: /spec-consensus <SPEC-ID> <stage>".to_string(),
-        ));
-        return;
-    }
-
-    let mut parts = trimmed.split_whitespace();
-    let Some(spec_id) = parts.next() else {
-        widget.history_push(crate::history_cell::new_error_event(
-            "Usage: /spec-consensus <SPEC-ID> <stage>".to_string(),
-        ));
-        return;
-    };
-
-    let Some(stage_str) = parts.next() else {
-        widget.history_push(crate::history_cell::new_error_event(
-            "Usage: /spec-consensus <SPEC-ID> <stage>".to_string(),
-        ));
-        return;
-    };
-
-    let Some(stage) = parse_consensus_stage(stage_str) else {
-        widget.history_push(crate::history_cell::new_error_event(format!(
-            "Unknown stage '{stage_str}'. Expected plan, tasks, implement, validate, audit, or unlock.",
-        )));
-        return;
-    };
-
-    // FORK-SPECIFIC (just-every/code): Use async MCP consensus with retry
-    let consensus_result = block_on_sync(|| {
-        let mcp = widget.mcp_manager.clone();
-        let cwd = widget.config.cwd.clone();
-        let spec = spec_id.to_string();
-        let telemetry_enabled = widget.spec_kit_telemetry_enabled();
-        async move { run_consensus_with_retry(mcp, cwd, spec, stage, telemetry_enabled).await }
-    });
-
-    match consensus_result {
-        Ok((lines, ok)) => {
-            let cell = crate::history_cell::PlainHistoryCell::new(
-                lines,
-                if ok {
-                    HistoryCellType::Notice
-                } else {
-                    HistoryCellType::Error
-                },
-            );
-            widget.history_push(cell);
-        }
-        Err(err) => {
-            widget.history_push(crate::history_cell::new_error_event(err.to_string()));
-        }
     }
 }

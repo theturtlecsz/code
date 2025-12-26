@@ -32,7 +32,6 @@ pub mod context;
 pub mod cost_tracker; // SPEC-KIT-070: Cost tracking and budget management
 pub mod error;
 pub mod evidence;
-pub mod evidence_cleanup; // SPEC-933 Component 4: Automated evidence cleanup (archive/purge)
 pub mod execution_logger; // SPEC-KIT-070: End-to-end execution visibility
 pub mod file_modifier;
 pub mod gate_evaluation; // Gate evaluation (renamed from consensus - PR4)
@@ -110,7 +109,7 @@ pub use state::{
 
 // Re-export handler functions
 pub(crate) use handler::{
-    advance_spec_auto, auto_submit_spec_stage_prompt, halt_spec_auto_with_error, handle_guardrail,
+    auto_submit_spec_stage_prompt, halt_spec_auto_with_error, handle_guardrail,
     handle_spec_auto, handle_spec_consensus, handle_spec_status, on_quality_gate_agents_complete,
     on_quality_gate_answers, on_quality_gate_cancelled, on_spec_auto_agents_complete,
     on_spec_auto_task_complete, on_spec_auto_task_started,

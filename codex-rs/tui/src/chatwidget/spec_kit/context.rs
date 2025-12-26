@@ -92,14 +92,6 @@ pub(crate) trait SpecKitContext {
         stage: SpecStage,
     ) -> Result<GuardrailOutcome>;
 
-    /// Run consensus checking for a spec/stage
-    /// Returns (output_lines, consensus_ok)
-    fn run_spec_consensus(
-        &mut self,
-        spec_id: &str,
-        stage: SpecStage,
-    ) -> Result<(Vec<ratatui::text::Line<'static>>, bool)>;
-
     // === Extended Operations (T82) ===
 
     /// Submit user message with ordered items
@@ -247,16 +239,6 @@ pub mod test_mock {
             })
         }
 
-        fn run_spec_consensus(
-            &mut self,
-            _spec_id: &str,
-            _stage: SpecStage,
-        ) -> Result<(Vec<ratatui::text::Line<'static>>, bool)> {
-            // Mock: Return review OK
-            use ratatui::text::Line;
-            Ok((vec![Line::from("Mock stage review OK")], true))
-        }
-
         // === T82: Extended Operations ===
 
         fn submit_user_message(&mut self, display: String, items: Vec<InputItem>) {
@@ -360,17 +342,5 @@ pub mod test_mock {
         let outcome = result.unwrap();
         assert!(outcome.success);
         assert!(outcome.summary.contains("Mock"));
-    }
-
-    #[test]
-    fn test_mock_context_run_consensus() {
-        let mut ctx = MockSpecKitContext::new();
-
-        let result = ctx.run_spec_consensus("SPEC-TEST", SpecStage::Plan);
-        assert!(result.is_ok());
-
-        let (lines, ok) = result.unwrap();
-        assert!(ok);
-        assert_eq!(lines.len(), 1);
     }
 }

@@ -9,9 +9,6 @@ pub use super::command_handlers::{
     handle_spec_status,
 };
 
-// Re-export consensus coordination for use by command_handlers
-pub(crate) use super::consensus_coordinator::handle_spec_consensus_impl;
-
 // Re-export agent orchestration functions
 pub(crate) use super::agent_orchestrator::schedule_degraded_follow_up;
 pub use super::agent_orchestrator::{
