@@ -208,6 +208,17 @@ pub fn handle_spec_auto(
         }
 
         if !spec_content.is_empty() {
+            // TRACE: Entering Stage0 execution block
+            {
+                use std::io::Write;
+                let _ = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/stage0-trace.log")
+                    .and_then(|mut f| writeln!(f, "[{}] ENTERING Stage0 execution (content not empty)",
+                        chrono::Local::now().format("%H:%M:%S")));
+            }
+
             // Log Stage0Start event
             if let Some(run_id) = &state.run_id {
                 state.execution_logger.log_event(
@@ -238,6 +249,18 @@ pub fn handle_spec_auto(
             // SPEC-KIT-900 FIX: Wrap with block_in_place to allow blocking HTTP calls
             // (reqwest::blocking) within the async tokio context.
             // SPEC-DOGFOOD-001: Wrap in catch_unwind to detect silent panics
+
+            // TRACE: Before run_stage0_for_spec call
+            {
+                use std::io::Write;
+                let _ = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/stage0-trace.log")
+                    .and_then(|mut f| writeln!(f, "[{}] BEFORE run_stage0_for_spec() call",
+                        chrono::Local::now().format("%H:%M:%S")));
+            }
+
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 tokio::task::block_in_place(|| {
                     super::stage0_integration::run_stage0_for_spec(
@@ -249,6 +272,18 @@ pub fn handle_spec_auto(
                     )
                 })
             }));
+
+            // TRACE: After run_stage0_for_spec call
+            {
+                use std::io::Write;
+                let is_ok = result.is_ok();
+                let _ = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/stage0-trace.log")
+                    .and_then(|mut f| writeln!(f, "[{}] AFTER run_stage0_for_spec(): is_ok={}",
+                        chrono::Local::now().format("%H:%M:%S"), is_ok));
+            }
 
             let result = match result {
                 Ok(r) => r,
@@ -275,6 +310,20 @@ pub fn handle_spec_auto(
                     }
                 }
             };
+
+            // TRACE: After result match - log what we got
+            {
+                use std::io::Write;
+                let _ = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/stage0-trace.log")
+                    .and_then(|mut f| writeln!(f, "[{}] Stage0 result: has_result={}, skip_reason={:?}, tier2_used={}",
+                        chrono::Local::now().format("%H:%M:%S"),
+                        result.result.is_some(),
+                        result.skip_reason,
+                        result.tier2_used));
+            }
 
             // Store result in state
             let task_brief_written;
