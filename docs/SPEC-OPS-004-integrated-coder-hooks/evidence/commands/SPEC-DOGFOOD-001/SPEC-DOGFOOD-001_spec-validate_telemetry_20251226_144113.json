@@ -1,0 +1,11 @@
+{
+  "spec_id": "SPEC-DOGFOOD-001",
+  "stage": "validate",
+  "event": "dispatched",
+  "mode": "auto",
+  "stage_run_id": "validate-SPEC-DOGFOOD-001-auto-attempt-1-d854b26679f74cb88bc4f1575b08a68a",
+  "attempt": 1,
+  "dedupe_count": 0,
+  "payload_hash": "4cdf89a186b93214027352435d69886a06054c1dc34e171e8c14f5a5704f9b51",
+  "timestamp": "2025-12-26T14:41:13.909754107+00:00"
+}

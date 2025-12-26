@@ -1,0 +1,24 @@
+{
+  "spec_id": "SPEC-DOGFOOD-001",
+  "total_spent": 0.0,
+  "budget": 2.0,
+  "utilization": 0.0,
+  "call_count": 3,
+  "per_stage": {
+    "spec-tasks": 0.0,
+    "spec-plan": 0.0
+  },
+  "per_model": {
+    "claude": 0.0,
+    "gemini": 0.0
+  },
+  "duration": 87,
+  "stage_notes": [
+    {
+      "stage": "spec-tasks"
+    },
+    {
+      "stage": "spec-implement"
+    }
+  ]
+}

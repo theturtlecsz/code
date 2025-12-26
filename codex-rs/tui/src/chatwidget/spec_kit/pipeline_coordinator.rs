@@ -169,10 +169,43 @@ pub fn handle_spec_auto(
     }
 
     // SPEC-KIT-102: Run Stage 0 context injection before pipeline starts
+    // TRACE: Log entry to Stage0 block
+    {
+        use std::io::Write;
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("/tmp/stage0-trace.log")
+            .and_then(|mut f| writeln!(f, "[{}] BEFORE Stage0 check: disabled={}",
+                chrono::Local::now().format("%H:%M:%S"), stage0_config.disabled));
+    }
+
     if !stage0_config.disabled {
+        // TRACE: Inside Stage0 block
+        {
+            use std::io::Write;
+            let _ = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/stage0-trace.log")
+                .and_then(|mut f| writeln!(f, "[{}] INSIDE Stage0 block (not disabled)",
+                    chrono::Local::now().format("%H:%M:%S")));
+        }
+
         // Load spec content
         let spec_path = widget.config.cwd.join(format!("docs/{}/spec.md", spec_id));
         let spec_content = std::fs::read_to_string(&spec_path).unwrap_or_default();
+
+        // TRACE: Log spec content check
+        {
+            use std::io::Write;
+            let _ = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/stage0-trace.log")
+                .and_then(|mut f| writeln!(f, "[{}] spec_path={:?}, content_len={}",
+                    chrono::Local::now().format("%H:%M:%S"), spec_path, spec_content.len()));
+        }
 
         if !spec_content.is_empty() {
             // Log Stage0Start event
