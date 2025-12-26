@@ -7,6 +7,7 @@
 //! - Creating adapters from local services (CLI/REST + HTTP)
 //! - Injecting Divine Truth + TASK_BRIEF into agent prompts
 //! - V2.5b: Hybrid retrieval using shared TfIdfBackend
+//! - SPEC-DOGFOOD-001 S30: Progress callbacks for UX feedback
 
 use crate::stage0_adapters::{
     LlmStubAdapter, LocalMemoryCliAdapter, NoopTier2Client, Tier2HttpAdapter,
@@ -15,7 +16,36 @@ use crate::vector_state::VECTOR_STATE;
 use codex_stage0::Stage0Engine;
 use codex_stage0::dcc::EnvCtx;
 use std::path::Path;
+use std::sync::mpsc;
 use std::time::Duration;
+
+/// Stage0 progress updates for UX feedback (SPEC-DOGFOOD-001 S30)
+#[derive(Debug, Clone)]
+pub enum Stage0Progress {
+    /// Starting Stage0 execution
+    Starting,
+    /// Checking local-memory daemon health
+    CheckingLocalMemory,
+    /// Loading Stage0 configuration
+    LoadingConfig,
+    /// Checking Tier2 (NotebookLM) health
+    CheckingTier2Health,
+    /// Compiling DCC context
+    CompilingContext,
+    /// Querying Tier2 (NotebookLM)
+    QueryingTier2,
+    /// Tier2 query completed (with duration in ms)
+    Tier2Complete(u64),
+    /// Finished with result summary
+    Finished {
+        success: bool,
+        tier2_used: bool,
+        duration_ms: u64,
+    },
+}
+
+/// Channel sender for Stage0 progress updates
+pub type Stage0ProgressSender = mpsc::Sender<Stage0Progress>;
 
 /// Result of Stage 0 execution for pipeline consumption
 #[derive(Debug, Clone)]
@@ -45,19 +75,39 @@ pub struct Stage0ExecutionConfig {
     pub explain: bool,
 }
 
+/// Helper to send progress update (ignores send failures)
+fn send_progress(tx: &Option<Stage0ProgressSender>, progress: Stage0Progress) {
+    if let Some(sender) = tx {
+        let _ = sender.send(progress);
+    }
+}
+
 /// Run Stage 0 context injection for a spec
 ///
 /// This is called synchronously from handle_spec_auto before the pipeline starts.
 /// Uses block_on_sync internally to run async Stage0 code.
+///
+/// SPEC-DOGFOOD-001 S30: Added optional progress_tx for UX feedback during execution.
 pub fn run_stage0_for_spec(
     planner_config: &codex_core::config::Config,
     spec_id: &str,
     spec_content: &str,
     cwd: &Path,
     config: &Stage0ExecutionConfig,
+    progress_tx: Option<Stage0ProgressSender>,
 ) -> Stage0ExecutionResult {
+    send_progress(&progress_tx, Stage0Progress::Starting);
+
     // Check if disabled
     if config.disabled {
+        send_progress(
+            &progress_tx,
+            Stage0Progress::Finished {
+                success: false,
+                tier2_used: false,
+                duration_ms: 0,
+            },
+        );
         return Stage0ExecutionResult {
             result: None,
             skip_reason: Some("Stage 0 disabled by configuration".to_string()),
@@ -71,13 +121,23 @@ pub fn run_stage0_for_spec(
 
     let start = std::time::Instant::now();
 
+    send_progress(&progress_tx, Stage0Progress::CheckingLocalMemory);
     if !crate::local_memory_cli::local_memory_daemon_healthy_blocking(Duration::from_millis(750)) {
+        let duration_ms = start.elapsed().as_millis() as u64;
+        send_progress(
+            &progress_tx,
+            Stage0Progress::Finished {
+                success: false,
+                tier2_used: false,
+                duration_ms,
+            },
+        );
         return Stage0ExecutionResult {
             result: None,
             skip_reason: Some(
                 "local-memory daemon not available at http://localhost:3002".to_string(),
             ),
-            duration_ms: start.elapsed().as_millis() as u64,
+            duration_ms,
             tier2_used: false,
             cache_hit: false,
             hybrid_retrieval_used: false,
@@ -85,6 +145,7 @@ pub fn run_stage0_for_spec(
         };
     }
 
+    send_progress(&progress_tx, Stage0Progress::LoadingConfig);
     // Load Stage0Config and apply per-project Tier2 overrides from Planner config.
     let mut stage0_cfg = match codex_stage0::Stage0Config::load() {
         Ok(cfg) => cfg,
@@ -122,6 +183,7 @@ pub fn run_stage0_for_spec(
         && !stage0_cfg.tier2.notebook.trim().is_empty()
     {
         // Check NotebookLM service health before creating adapter
+        send_progress(&progress_tx, Stage0Progress::CheckingTier2Health);
         let base_url = stage0_cfg
             .tier2
             .base_url
@@ -167,6 +229,13 @@ pub fn run_stage0_for_spec(
         recent_files: get_recent_files(cwd),
     };
 
+    // Send progress: Querying Tier2 if enabled, otherwise just compiling context
+    if tier2_opt.is_some() {
+        send_progress(&progress_tx, Stage0Progress::QueryingTier2);
+    } else {
+        send_progress(&progress_tx, Stage0Progress::CompilingContext);
+    }
+
     // Run Stage 0 engine
     // Note: Stage0Engine contains rusqlite::Connection which is not Send,
     // so we need to run everything in a dedicated single-threaded runtime
@@ -197,6 +266,16 @@ pub fn run_stage0_for_spec(
                 duration_ms
             );
 
+            // Send final progress
+            send_progress(
+                &progress_tx,
+                Stage0Progress::Finished {
+                    success: true,
+                    tier2_used,
+                    duration_ms,
+                },
+            );
+
             // If tier2 was used, clear the skip reason
             let final_tier2_skip = if tier2_used {
                 None
@@ -216,6 +295,17 @@ pub fn run_stage0_for_spec(
         }
         Err(e) => {
             tracing::warn!("Stage 0 failed for {}: {}", spec_id, e);
+
+            // Send final progress
+            send_progress(
+                &progress_tx,
+                Stage0Progress::Finished {
+                    success: false,
+                    tier2_used: false,
+                    duration_ms,
+                },
+            );
+
             Stage0ExecutionResult {
                 result: None,
                 skip_reason: Some(format!("Stage 0 error: {e}")),

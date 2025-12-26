@@ -38,7 +38,7 @@ pub fn handle_spec_auto(
     cli_overrides: Option<PipelineOverrides>, // SPEC-948: CLI flags for stage filtering
     stage0_config: super::stage0_integration::Stage0ExecutionConfig, // SPEC-KIT-102: Stage 0 config
 ) {
-    // DEBUG: Confirm function entry - FILE-BASED TRACE (SPEC-DOGFOOD-001 S29)
+    // FILE-BASED TRACE: handle_spec_auto entry (SPEC-DOGFOOD-001 S29)
     {
         use std::io::Write;
         let trace_msg = format!(
@@ -55,14 +55,6 @@ pub fn handle_spec_auto(
             let _ = f.write_all(trace_msg.as_bytes());
         }
     }
-    // Also try TUI push
-    widget.history_push(crate::history_cell::PlainHistoryCell::new(
-        vec![ratatui::text::Line::from(format!(
-            "🔍 DEBUG: handle_spec_auto(spec_id={}, stage0_disabled={})",
-            spec_id, stage0_config.disabled
-        ))],
-        crate::history_cell::HistoryCellType::Notice,
-    ));
 
     // SPEC-DOGFOOD-001: Re-entry guard - prevent duplicate pipeline execution
     if let Some(existing_state) = widget.spec_auto_state.as_ref() {
@@ -270,42 +262,90 @@ pub fn handle_spec_auto(
                 }
             }
 
-            // Run Stage0 with the passed config
-            // SPEC-KIT-900 FIX: Wrap with block_in_place to allow blocking HTTP calls
-            // (reqwest::blocking) within the async tokio context.
-            // SPEC-DOGFOOD-001: Wrap in catch_unwind to detect silent panics
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                tokio::task::block_in_place(|| {
-                    super::stage0_integration::run_stage0_for_spec(
-                        &widget.config,
-                        &spec_id,
-                        &spec_content,
-                        &widget.config.cwd,
-                        &stage0_config,
-                    )
-                })
-            }));
+            // SPEC-DOGFOOD-001 S30: Show initial Stage0 status
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![ratatui::text::Line::from("⟳ Stage0: Starting context compilation...")],
+                crate::history_cell::HistoryCellType::Notice,
+            ));
 
-            // FILE-BASED TRACE: After Stage0 execution (SPEC-DOGFOOD-001 S29)
-            {
-                use std::io::Write;
-                let trace_msg = format!(
-                    "[{}] Stage0 RETURNED: result.is_ok={}\n",
-                    chrono::Utc::now().format("%H:%M:%S%.3f"),
-                    result.is_ok()
-                );
-                if let Ok(mut f) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open("/tmp/speckit-trace.log")
-                {
-                    let _ = f.write_all(trace_msg.as_bytes());
+            // SPEC-DOGFOOD-001 S30: Run Stage0 with progress reporting
+            // Use std::thread to avoid blocking the event loop, with channel for progress
+            let (progress_tx, progress_rx) = std::sync::mpsc::channel();
+            let config_clone = widget.config.clone();
+            let spec_id_clone = spec_id.clone();
+            let spec_content_clone = spec_content.clone();
+            let cwd_clone = widget.config.cwd.clone();
+            let stage0_config_clone = stage0_config.clone();
+
+            let handle = std::thread::spawn(move || {
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    super::stage0_integration::run_stage0_for_spec(
+                        &config_clone,
+                        &spec_id_clone,
+                        &spec_content_clone,
+                        &cwd_clone,
+                        &stage0_config_clone,
+                        Some(progress_tx),
+                    )
+                }))
+            });
+
+            // Poll progress while waiting for Stage0 to complete
+            let mut last_status = String::new();
+            loop {
+                // Check for progress updates (non-blocking with short timeout)
+                match progress_rx.recv_timeout(std::time::Duration::from_millis(100)) {
+                    Ok(progress) => {
+                        let status = match &progress {
+                            super::stage0_integration::Stage0Progress::Starting => {
+                                "Stage0: Starting...".to_string()
+                            }
+                            super::stage0_integration::Stage0Progress::CheckingLocalMemory => {
+                                "Stage0: Checking local-memory...".to_string()
+                            }
+                            super::stage0_integration::Stage0Progress::LoadingConfig => {
+                                "Stage0: Loading configuration...".to_string()
+                            }
+                            super::stage0_integration::Stage0Progress::CheckingTier2Health => {
+                                "Stage0: Checking NotebookLM health...".to_string()
+                            }
+                            super::stage0_integration::Stage0Progress::CompilingContext => {
+                                "Stage0: Compiling context...".to_string()
+                            }
+                            super::stage0_integration::Stage0Progress::QueryingTier2 => {
+                                "Stage0: Querying NotebookLM (Tier2)...".to_string()
+                            }
+                            super::stage0_integration::Stage0Progress::Tier2Complete(ms) => {
+                                format!("Stage0: Tier2 complete ({}ms)", ms)
+                            }
+                            super::stage0_integration::Stage0Progress::Finished { .. } => {
+                                break; // Exit loop, will get result from thread
+                            }
+                        };
+                        if status != last_status {
+                            last_status = status.clone();
+                            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                                vec![ratatui::text::Line::from(format!("⟳ {}", status))],
+                                crate::history_cell::HistoryCellType::Notice,
+                            ));
+                        }
+                    }
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                        // Check if thread is done
+                        if handle.is_finished() {
+                            break;
+                        }
+                    }
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                        break; // Channel closed, thread done
+                    }
                 }
             }
 
-            let result = match result {
-                Ok(r) => r,
-                Err(e) => {
+            // Get the result from the thread
+            let result = match handle.join() {
+                Ok(Ok(r)) => r,
+                Ok(Err(e)) => {
                     let panic_msg = if let Some(s) = e.downcast_ref::<&str>() {
                         s.to_string()
                     } else if let Some(s) = e.downcast_ref::<String>() {
@@ -327,7 +367,65 @@ pub fn handle_spec_auto(
                         tier2_skip_reason: Some("Panic".to_string()),
                     }
                 }
+                Err(_) => {
+                    widget.history_push(crate::history_cell::new_error_event(
+                        "Stage 0: Thread join failed".to_string(),
+                    ));
+                    super::stage0_integration::Stage0ExecutionResult {
+                        result: None,
+                        skip_reason: Some("Thread join failed".to_string()),
+                        duration_ms: 0,
+                        tier2_used: false,
+                        cache_hit: false,
+                        hybrid_retrieval_used: false,
+                        tier2_skip_reason: Some("Thread error".to_string()),
+                    }
+                }
             };
+
+            // FILE-BASED TRACE: After Stage0 execution (SPEC-DOGFOOD-001 S29)
+            {
+                use std::io::Write;
+                let trace_msg = format!(
+                    "[{}] Stage0 RETURNED: result.is_ok={}\n",
+                    chrono::Utc::now().format("%H:%M:%S%.3f"),
+                    result.result.is_some()
+                );
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/speckit-trace.log")
+                {
+                    let _ = f.write_all(trace_msg.as_bytes());
+                }
+            }
+
+            // SPEC-DOGFOOD-001 S30: Show Stage0 completion status to user
+            {
+                let status_msg = if result.result.is_some() {
+                    let tier2_info = if result.tier2_used {
+                        "Tier2 ✓".to_string()
+                    } else if result.cache_hit {
+                        "Tier2 (cached)".to_string()
+                    } else if let Some(ref reason) = result.tier2_skip_reason {
+                        format!("Tier2 skipped: {}", reason)
+                    } else {
+                        "Tier2 ✗".to_string()
+                    };
+                    format!(
+                        "Stage0 complete: {}ms | {}",
+                        result.duration_ms, tier2_info
+                    )
+                } else if let Some(ref reason) = result.skip_reason {
+                    format!("Stage0 skipped: {}", reason)
+                } else {
+                    "Stage0 complete".to_string()
+                };
+                widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                    vec![ratatui::text::Line::from(format!("⚙️  {}", status_msg))],
+                    crate::history_cell::HistoryCellType::Notice,
+                ));
+            }
 
             // Store result in state
             let task_brief_written;
@@ -638,7 +736,7 @@ pub fn handle_spec_plan(widget: &mut ChatWidget, spec_id: String) {
             );
         }
 
-        // Run Stage0 with default config
+        // Run Stage0 with default config (no progress reporting for resume path)
         let stage0_config = super::stage0_integration::Stage0ExecutionConfig::default();
         let result = super::stage0_integration::run_stage0_for_spec(
             &widget.config,
@@ -646,6 +744,7 @@ pub fn handle_spec_plan(widget: &mut ChatWidget, spec_id: String) {
             &spec_content,
             &widget.config.cwd,
             &stage0_config,
+            None, // No progress for resume
         );
 
         if let Some(ref stage0_result) = result.result {

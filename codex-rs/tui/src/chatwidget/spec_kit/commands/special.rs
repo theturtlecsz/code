@@ -378,6 +378,7 @@ fn run_stage0_for_constitution_check(widget: &ChatWidget, spec_id: &str) -> Opti
         &spec_content,
         &widget.config.cwd,
         &config,
+        None, // No progress for conflict check
     );
 
     // Extract constitution_conflicts from Stage0Result
