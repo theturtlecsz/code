@@ -67,36 +67,59 @@ Removed blanket `#![allow(dead_code)]` from 3 modules:
 
 ---
 
-## Session 22 Plan
+## Session 22 Plan (Expanded)
 
-### 1. Review Pre-existing Issues
+### 1. Fix codex-cli Test Clippy Warnings
 
-**tui2 Package (out of scope per ADR-002)**
-Contains compilation errors from upstream scaffold divergence. Not blocking.
+**Target:** `codex-rs/cli/tests/speckit_helpers.rs`
 
-**codex-cli Tests**
-Contains clippy warnings (expect_used, redundant_closure). Low priority.
+Known warnings:
+- `expect_used` - Replace `.expect()` with proper error handling or `?`
+- `redundant_closure` - Simplify closures like `|v| v.as_u64()` to method refs
+- `uninlined_format_args` - Use inline format args
 
-### 2. Remaining Dead Code Opportunities
+**Steps:**
+a. Read the test file to understand context
+b. Fix expect_used warnings (use `?` or `.ok()` as appropriate)
+c. Fix redundant_closure warnings (use method references)
+d. Fix format args (inline variables)
+e. Verify: `cargo clippy -p codex-cli --all-targets -- -D warnings`
 
-Check for additional cleanup opportunities:
-- Review other `#[allow(dead_code)]` in spec_kit modules
-- Check for unused helper functions in quality.rs, routing.rs
-- Review test utilities that may be dead
+### 2. Comprehensive Dead Code Audit
 
-### 3. Documentation Update
+**Scope:** Full workspace grep for `#[allow(dead_code)]`
 
-- Update CLAUDE.md if needed
-- Archive completed SPEC sections
-- Update key docs index
+**Audit targets:**
+a. All spec_kit modules (not just the 3 already audited)
+b. quality.rs, routing.rs helper functions
+c. Test utilities across packages
+d. Any remaining blanket module-level allows
 
-### 4. Verification
+**For each allow found:**
+- Grep for actual usage
+- If used: remove allow (or add targeted allow with comment)
+- If unused: consider deletion or document why pending
+
+**Steps:**
+a. `grep -r "allow(dead_code)" codex-rs/` to find all locations
+b. Categorize: blanket module vs targeted item
+c. Audit each for actual usage
+d. Apply fixes or document pending
+
+### 3. Verification (Full Workspace)
 
 ```bash
-cargo clippy --workspace --all-targets --exclude codex-tui2 --exclude codex-cli -- -D warnings
+# Full workspace clippy (excluding only tui2 per ADR-002)
+cargo clippy --workspace --all-targets --exclude codex-tui2 -- -D warnings
+
+# Tests
 cargo test -p codex-tui --lib
 cargo test -p codex-stage0
 cargo test -p codex-core
+cargo test -p codex-cli --lib
+
+# Build
+~/code/build-fast.sh
 ```
 
 ---
@@ -110,13 +133,20 @@ cargo test -p codex-core
 - [x] All tests pass
 - [x] Commit pushed
 
+## Success Criteria (S22)
+
+- [ ] codex-cli test clippy warnings fixed (0 warnings)
+- [ ] Comprehensive dead_code audit complete
+- [ ] Full workspace clippy passes (excluding only tui2)
+- [ ] All tests pass
+- [ ] Commit pushed
+
 ---
 
 ## Known Issues
 
 ### Pre-existing (not blocking)
 - `codex-tui2` compilation errors (upstream scaffold per ADR-002)
-- `codex-cli` clippy warnings in tests (expect_used, redundant_closure)
 
 ### Out of Scope
 - ACE integration modules (pending feature work, properly annotated)
@@ -147,45 +177,66 @@ cargo test -p codex-core
 Continue SPEC-DOGFOOD-001 Dead Code Cleanup - Session 22 **ultrathink**
 
 ## Context
-Session 21 completed:
+Session 21 completed (commit 1d4ef03e2):
 - Renamed 8 Consensus* types to Gate*/StageReview*
 - Removed 6 type aliases (now direct types)
 - Fixed app-server-protocol (5 UserMessageEvent, SandboxPolicy test)
 - Fixed 12 clippy warnings across 6 files
 - Audited 3 modules for dead_code, added targeted allows
-- Commit: 1d4ef03e2
+
+Total progress S17-S21: ~3,200 LOC deleted
 
 See HANDOFF.md for full details.
 
-## Session 22 Tasks
+## Session 22 Tasks (in order)
 
-### 1. Review Remaining Dead Code
-a. Check spec_kit modules for unused code opportunities
-b. Review quality.rs, routing.rs for dead helpers
-c. Check test utilities for dead code
+### 1. Fix codex-cli Test Clippy Warnings
+Target: `codex-rs/cli/tests/speckit_helpers.rs`
+a. Read the test file to understand context
+b. Fix expect_used warnings (use `?` or `.ok()`)
+c. Fix redundant_closure warnings (use method references)
+d. Fix uninlined_format_args (inline variables)
+e. Verify: `cargo clippy -p codex-cli --all-targets -- -D warnings`
 
-### 2. Pre-existing Issues (Optional)
-a. codex-cli test clippy warnings (low priority)
-b. tui2 compilation (per ADR-002, leave as-is)
+### 2. Comprehensive Dead Code Audit
+a. Run: `grep -r "allow(dead_code)" codex-rs/` to find all locations
+b. Categorize: blanket module-level vs targeted item allows
+c. For each blanket allow:
+   - Grep for actual usage of module exports
+   - If used: remove blanket, add targeted allows with comments
+   - If unused: consider deletion or document why pending
+d. Focus areas:
+   - All spec_kit modules (expand beyond 3 already audited)
+   - quality.rs, routing.rs helper functions
+   - Test utilities across packages
 
-### 3. Documentation
-a. Update docs/SPEC-DOGFOOD-001/ with progress
-b. Consider archiving completed sections
+### 3. Final Verification
+```bash
+# Full workspace clippy (excluding only tui2 per ADR-002)
+cargo clippy --workspace --all-targets --exclude codex-tui2 -- -D warnings
 
-### 4. Final Verification
-- cargo clippy --workspace --exclude codex-tui2 --exclude codex-cli -- -D warnings
-- cargo test -p codex-tui --lib
-- cargo test -p codex-stage0
-- cargo test -p codex-core
+# Tests
+cargo test -p codex-tui --lib
+cargo test -p codex-stage0
+cargo test -p codex-core
+cargo test -p codex-cli --lib
+
+# Build
+~/code/build-fast.sh
+```
+
+### 4. Commit and Update HANDOFF.md
 
 ## Success Criteria
-- Review completed for additional dead code
-- Documentation updated
-- All tests pass
-- Commit pushed
+- [ ] codex-cli test clippy warnings fixed (0 warnings)
+- [ ] Comprehensive dead_code audit complete
+- [ ] Full workspace clippy passes (excluding only tui2)
+- [ ] All tests pass
+- [ ] Commit pushed
 
 ## After Session 22
-Evaluate SPEC-DOGFOOD-001 completion or continue with additional cleanup
+Evaluate SPEC-DOGFOOD-001 completion status. If ~3,500+ LOC deleted and
+workspace clean, consider closing SPEC with summary in HANDOFF.md.
 ```
 
 ---
