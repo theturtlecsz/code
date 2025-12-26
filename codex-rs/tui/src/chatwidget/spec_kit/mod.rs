@@ -24,7 +24,6 @@ pub mod code_index; // P85: Code unit extraction for Shadow Code Brain
 pub mod command_handlers; // Command entry points (status, consensus, guardrail)
 pub mod command_registry;
 pub mod commands;
-pub mod config_reload; // SPEC-945D Phase 2.2: Config hot-reload handler
 pub mod config_validator;
 pub mod consensus_coordinator; // Consensus checking with MCP retry logic
 pub mod consensus_db; // SPEC-KIT-072: SQLite storage for consensus artifacts (replaces local-memory)
@@ -40,7 +39,6 @@ pub mod guardrail;
 pub mod handler;
 pub mod isolation_validator; // SPEC-KIT-964 Phase 6: Hermetic isolation validation for multi-agent spawning
 pub mod json_extractor; // SPEC-KIT-927: Industrial-strength JSON extraction from LLM outputs
-pub mod native_consensus_executor; // Native consensus orchestration (eliminates orchestrator agent)
 pub mod native_guardrail; // SPEC-KIT-066, SPEC-KIT-902: Native guardrail validation (replaces bash scripts)
 pub mod native_quality_gate_orchestrator; // SPEC-KIT-900, I-003: Native quality gate orchestration (eliminates LLM plumbing)
 pub mod new_native; // SPEC-KIT-072: Native SPEC creation (eliminates 2 agents, $0.15 → $0)
