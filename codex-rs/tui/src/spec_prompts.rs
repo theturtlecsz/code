@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code)] // Spec-kit prompt templates and generation
 
 use std::collections::HashMap;
 use std::sync::Arc;

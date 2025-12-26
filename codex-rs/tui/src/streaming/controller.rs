@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code)] // Streaming response controller
 
 use std::collections::HashMap;
 

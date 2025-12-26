@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code)] // Session manager for exec command execution
 use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::io::Read;

@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code)] // Error types for unified PTY execution
 use thiserror::Error;
 
 #[derive(Debug, Error)]

@@ -343,7 +343,7 @@ fn review_json_includes_schema_version() -> Result<()> {
         "Missing schema_version in review JSON"
     );
     assert_eq!(
-        schema_version.and_then(|v| v.as_u64()),
+        schema_version.and_then(serde_json::Value::as_u64),
         Some(1),
         "schema_version should be 1"
     );
@@ -396,7 +396,7 @@ fn status_json_includes_schema_version() -> Result<()> {
         "Missing schema_version in status JSON"
     );
     assert_eq!(
-        schema_version.and_then(|v| v.as_u64()),
+        schema_version.and_then(serde_json::Value::as_u64),
         Some(1),
         "schema_version should be 1"
     );
@@ -1997,8 +1997,7 @@ fn specify_dry_run_reports_would_create() -> Result<()> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
         stdout.contains("dry-run") && stdout.contains("Would create"),
-        "Expected dry-run message about would create, got: {}",
-        stdout
+        "Expected dry-run message about would create, got: {stdout}"
     );
 
     // Verify directory was NOT created
@@ -2086,7 +2085,7 @@ fn specify_json_output_structure() -> Result<()> {
     let json: JsonValue = serde_json::from_slice(&output.stdout)?;
 
     // Verify schema version
-    let schema_version = json.get("schema_version").and_then(|v| v.as_u64());
+    let schema_version = json.get("schema_version").and_then(serde_json::Value::as_u64);
     assert_eq!(schema_version, Some(1), "Expected schema_version 1");
 
     // Verify required fields
@@ -2130,7 +2129,7 @@ fn specify_existing_dir_reports_already_existed() -> Result<()> {
     let json: JsonValue = serde_json::from_slice(&output.stdout)?;
 
     // Should report already_existed
-    let already_existed = json.get("already_existed").and_then(|v| v.as_bool());
+    let already_existed = json.get("already_existed").and_then(serde_json::Value::as_bool);
     assert_eq!(
         already_existed,
         Some(true),
@@ -2140,7 +2139,7 @@ fn specify_existing_dir_reports_already_existed() -> Result<()> {
     // Should not have created any files
     let created_files = json.get("created_files").and_then(|v| v.as_array());
     assert!(
-        created_files.map(|f| f.is_empty()).unwrap_or(true),
+        created_files.map(Vec::is_empty).unwrap_or(true),
         "Expected no created_files when PRD already exists"
     );
 
@@ -2208,12 +2207,12 @@ fn specify_idempotent_never_overwrites() -> Result<()> {
 
     // Verify JSON reports already_existed and no files created
     let json: JsonValue = serde_json::from_slice(&output2.stdout)?;
-    let already_existed = json.get("already_existed").and_then(|v| v.as_bool());
+    let already_existed = json.get("already_existed").and_then(serde_json::Value::as_bool);
     assert_eq!(already_existed, Some(true), "Should report already_existed");
 
     let created_files = json.get("created_files").and_then(|v| v.as_array());
     assert!(
-        created_files.map(|f| f.is_empty()).unwrap_or(true),
+        created_files.map(Vec::is_empty).unwrap_or(true),
         "Should not have created any files on second run"
     );
 
@@ -2343,8 +2342,7 @@ fn spec_id_path_traversal_rejected() -> Result<()> {
 
     assert!(
         error_text.contains("invalid path characters"),
-        "Error should mention path characters: {}",
-        error_text
+        "Error should mention path characters: {error_text}"
     );
 
     Ok(())
@@ -2383,8 +2381,7 @@ fn spec_id_format_validation() -> Result<()> {
 
     assert!(
         error_text.contains("doesn't match expected format"),
-        "Error should mention format: {}",
-        error_text
+        "Error should mention format: {error_text}"
     );
 
     Ok(())
@@ -2478,8 +2475,7 @@ fn suffix_directory_deterministic_resolution() -> Result<()> {
 
     assert!(
         warning_text.contains("SPEC-TEST-MULTI-alpha"),
-        "Should resolve to alphabetically first directory: {}",
-        warning_text
+        "Should resolve to alphabetically first directory: {warning_text}"
     );
 
     Ok(())

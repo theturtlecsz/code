@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code)] // ACP filesystem abstraction for MCP tool execution
 
 use agent_client_protocol as acp;
 use anyhow::Context as _;

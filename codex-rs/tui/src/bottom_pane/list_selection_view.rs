@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code)] // List selection widget for bottom pane
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyModifiers;

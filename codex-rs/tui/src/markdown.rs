@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code)] // Markdown parsing utilities
 
 use crate::citation_regex::CITATION_REGEX;
 use crate::markdown_renderer::MarkdownRenderer;

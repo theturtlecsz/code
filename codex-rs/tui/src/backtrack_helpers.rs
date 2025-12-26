@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code)] // Conversation backtracking utilities
 use ratatui::text::Line;
 
 /// Convenience: compute the highlight range for the Nth last user message.

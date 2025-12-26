@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code)] // Transcript viewer application
 use std::io::Result;
 
 use crate::insert_history;

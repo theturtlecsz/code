@@ -165,12 +165,12 @@ async fn check_local_memory(api_base: &str) -> CheckResult {
         Ok(resp) => CheckResult::fail(
             "local-memory",
             format!("Health check returned {}", resp.status()),
-            format!("Ensure local-memory is running: lm health"),
+            "Ensure local-memory is running: lm health".to_string(),
         ),
         Err(e) => CheckResult::fail(
             "local-memory",
             format!("Connection failed: {e}"),
-            format!("Start local-memory: cd ~/localmemory-policy && ./local_memory.py serve"),
+            "Start local-memory: cd ~/localmemory-policy && ./local_memory.py serve".to_string(),
         ),
     }
 }
@@ -266,16 +266,12 @@ async fn check_notebooklm(service_url: &str) -> CheckResult {
         Ok(resp) => CheckResult::fail(
             "notebooklm",
             format!("Health check returned {}", resp.status()),
-            format!(
-                "Ensure notebooklm-mcp is running: cd ~/notebooklm-mcp && npm start"
-            ),
+            "Ensure notebooklm-mcp is running: cd ~/notebooklm-mcp && npm start".to_string(),
         ),
         Err(e) => CheckResult::warn(
             "notebooklm",
             format!("Connection failed: {e}"),
-            format!(
-                "NotebookLM service not running. Tier2 will be skipped. Start with: cd ~/notebooklm-mcp && npm start"
-            ),
+            "NotebookLM service not running. Tier2 will be skipped. Start with: cd ~/notebooklm-mcp && npm start".to_string(),
         ),
     }
 }

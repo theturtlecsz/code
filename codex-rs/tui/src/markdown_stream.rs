@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code)] // Streaming markdown renderer
 
 use std::collections::VecDeque;
 

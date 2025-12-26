@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code)] // Conversation listing utilities for rollout sessions
 use std::cmp::Reverse;
 use std::io::{self};
 use std::path::Path;

@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code)] // Unified PTY execution manager for shell sessions
 use portable_pty::CommandBuilder;
 use portable_pty::PtySize;
 use portable_pty::native_pty_system;

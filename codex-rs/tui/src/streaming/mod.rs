@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code)] // Streaming response infrastructure
 
 use crate::markdown_stream::AnimatedLineStreamer;
 use crate::markdown_stream::MarkdownStreamCollector;

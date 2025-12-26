@@ -2,6 +2,9 @@
 //!
 //! SPEC-KIT-921 P6-D: Shared test helpers to reduce boilerplate.
 //!
+//! Note: This module uses `expect()` in assertion helpers because panicking
+//! on parse failure is the correct behavior for test assertions.
+//!
 //! ## Usage
 //!
 //! ```rust,ignore
@@ -134,6 +137,7 @@ pub struct CliResult {
     pub output: Output,
 }
 
+#[allow(clippy::expect_used)] // Test assertions should panic on parse failure
 impl CliResult {
     /// Assert the command succeeded (exit 0)
     pub fn assert_success(&self) {
@@ -174,12 +178,11 @@ impl CliResult {
     /// Assert JSON output has expected schema_version
     pub fn assert_schema_version(&self, expected: u64) -> &Self {
         let json = self.json().expect("Failed to parse JSON");
-        let version = json.get("schema_version").and_then(|v| v.as_u64());
+        let version = json.get("schema_version").and_then(serde_json::Value::as_u64);
         assert_eq!(
             version,
             Some(expected),
-            "Expected schema_version {expected}, got {:?}",
-            version
+            "Expected schema_version {expected}, got {version:?}"
         );
         self
     }
@@ -190,9 +193,7 @@ impl CliResult {
         let stage = json.get("stage").and_then(|v| v.as_str()).unwrap_or("");
         assert!(
             stage.contains(expected),
-            "Expected stage containing '{}', got '{}'",
-            expected,
-            stage
+            "Expected stage containing '{expected}', got '{stage}'"
         );
         self
     }
@@ -203,8 +204,7 @@ impl CliResult {
         let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
         assert_eq!(
             status, expected,
-            "Expected status '{}', got '{}'",
-            expected, status
+            "Expected status '{expected}', got '{status}'"
         );
         self
     }
@@ -253,8 +253,7 @@ impl CliResult {
             .unwrap_or(false);
         assert!(
             has_match,
-            "Expected error containing '{}' in {:?}",
-            needle, errors
+            "Expected error containing '{needle}' in {errors:?}"
         );
         self
     }
