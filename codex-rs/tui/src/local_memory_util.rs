@@ -23,8 +23,20 @@ pub struct LocalMemorySearchResponse {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct LocalMemorySearchData {
-    #[serde(default)]
+    /// Results array. Uses custom deserializer to handle `null` as empty vec.
+    /// The local-memory CLI returns `"results": null` when no matches found.
+    #[serde(default, deserialize_with = "deserialize_null_as_empty_vec")]
     pub results: Vec<LocalMemorySearchResult>,
+}
+
+/// Deserialize null or missing array as empty vec
+fn deserialize_null_as_empty_vec<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    let opt: Option<Vec<T>> = Option::deserialize(deserializer)?;
+    Ok(opt.unwrap_or_default())
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -51,4 +63,44 @@ pub struct LocalMemoryRecord {
     pub created_at: Option<DateTime<Utc>>,
     #[serde(default)]
     pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// SPEC-DOGFOOD-001: Verify null results array is handled correctly
+    /// The local-memory CLI returns `"results": null` when no matches found
+    #[test]
+    fn test_null_results_array_handled() {
+        let json = r#"{"success":true,"data":{"query":"*","result_count":0,"results":null}}"#;
+        let parsed: LocalMemorySearchResponse = serde_json::from_str(json)
+            .expect("should parse JSON with null results");
+
+        assert!(parsed.success);
+        assert!(parsed.data.is_some());
+        assert!(parsed.data.unwrap().results.is_empty());
+    }
+
+    /// Verify empty array still works
+    #[test]
+    fn test_empty_results_array() {
+        let json = r#"{"success":true,"data":{"results":[]}}"#;
+        let parsed: LocalMemorySearchResponse = serde_json::from_str(json)
+            .expect("should parse JSON with empty results");
+
+        assert!(parsed.data.unwrap().results.is_empty());
+    }
+
+    /// Verify actual results still work
+    #[test]
+    fn test_populated_results_array() {
+        let json = r#"{"success":true,"data":{"results":[{"memory":{"content":"test"},"relevance_score":0.95}]}}"#;
+        let parsed: LocalMemorySearchResponse = serde_json::from_str(json)
+            .expect("should parse JSON with results");
+
+        let results = parsed.data.unwrap().results;
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].memory.content, "test");
+    }
 }

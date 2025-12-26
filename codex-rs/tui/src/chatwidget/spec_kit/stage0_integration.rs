@@ -56,17 +56,6 @@ pub fn run_stage0_for_spec(
     cwd: &Path,
     config: &Stage0ExecutionConfig,
 ) -> Stage0ExecutionResult {
-    // TRACE: Entry to run_stage0_for_spec
-    {
-        use std::io::Write;
-        let _ = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("/tmp/stage0-trace.log")
-            .and_then(|mut f| writeln!(f, "[{}] run_stage0_for_spec() ENTRY: spec_id={}, cwd={:?}, disabled={}",
-                chrono::Local::now().format("%H:%M:%S"), spec_id, cwd, config.disabled));
-    }
-
     // Check if disabled
     if config.disabled {
         return Stage0ExecutionResult {
@@ -82,28 +71,7 @@ pub fn run_stage0_for_spec(
 
     let start = std::time::Instant::now();
 
-    // TRACE: Before local-memory health check
-    {
-        use std::io::Write;
-        let _ = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("/tmp/stage0-trace.log")
-            .and_then(|mut f| writeln!(f, "[{}] Checking local-memory health...",
-                chrono::Local::now().format("%H:%M:%S")));
-    }
-
     if !crate::local_memory_cli::local_memory_daemon_healthy_blocking(Duration::from_millis(750)) {
-        // TRACE: local-memory unhealthy
-        {
-            use std::io::Write;
-            let _ = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open("/tmp/stage0-trace.log")
-                .and_then(|mut f| writeln!(f, "[{}] local-memory UNHEALTHY - returning skip",
-                    chrono::Local::now().format("%H:%M:%S")));
-        }
         return Stage0ExecutionResult {
             result: None,
             skip_reason: Some(
@@ -115,17 +83,6 @@ pub fn run_stage0_for_spec(
             hybrid_retrieval_used: false,
             tier2_skip_reason: Some("local-memory unavailable".to_string()),
         };
-    }
-
-    // TRACE: local-memory healthy
-    {
-        use std::io::Write;
-        let _ = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("/tmp/stage0-trace.log")
-            .and_then(|mut f| writeln!(f, "[{}] local-memory HEALTHY",
-                chrono::Local::now().format("%H:%M:%S")));
     }
 
     // Load Stage0Config and apply per-project Tier2 overrides from Planner config.
