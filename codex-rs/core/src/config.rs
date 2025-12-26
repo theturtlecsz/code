@@ -2965,6 +2965,8 @@ model = "gpt-4.1"
     #[tokio::test]
     async fn persist_model_selection_updates_profile() -> anyhow::Result<()> {
         let codex_home = TempDir::new()?;
+        // Prevent legacy fallback to ~/.codex which may contain incompatible config
+        set_codex_home_env(codex_home.path());
 
         persist_model_selection(
             codex_home.path(),

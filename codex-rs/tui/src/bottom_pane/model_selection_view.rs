@@ -229,16 +229,18 @@ impl ModelSelectionView {
 
     fn effort_rank(effort: ReasoningEffort) -> u8 {
         match effort {
-            ReasoningEffort::High => 0,
-            ReasoningEffort::Medium => 1,
-            ReasoningEffort::Low => 2,
-            ReasoningEffort::Minimal => 3,
-            ReasoningEffort::None => 4,
+            ReasoningEffort::XHigh => 0,
+            ReasoningEffort::High => 1,
+            ReasoningEffort::Medium => 2,
+            ReasoningEffort::Low => 3,
+            ReasoningEffort::Minimal => 4,
+            ReasoningEffort::None => 5,
         }
     }
 
     fn effort_label(effort: ReasoningEffort) -> &'static str {
         match effort {
+            ReasoningEffort::XHigh => "Extra High",
             ReasoningEffort::High => "High",
             ReasoningEffort::Medium => "Medium",
             ReasoningEffort::Low => "Low",
@@ -256,6 +258,9 @@ impl ModelSelectionView {
             ReasoningEffort::Medium => "Balanced reasoning. Ideal for most tasks. (default)",
             ReasoningEffort::High => {
                 "Deep reasoning. Useful when solving difficult problems. (slower)"
+            }
+            ReasoningEffort::XHigh => {
+                "Extra-high reasoning. Maximum depth for complex tasks. (slowest)"
             }
             ReasoningEffort::None => "Reasoning disabled",
         }

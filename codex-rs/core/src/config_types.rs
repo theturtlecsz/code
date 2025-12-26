@@ -959,6 +959,8 @@ pub enum ReasoningEffort {
     #[default]
     Medium,
     High,
+    /// Extra-high reasoning effort for complex tasks.
+    XHigh,
     /// Deprecated: previously disabled reasoning. Kept for internal use only.
     #[serde(skip)]
     None,
