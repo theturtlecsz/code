@@ -26,7 +26,7 @@
 ## Session 22 Summary (Complete)
 
 ### Commits
-- `TBD` - fix(clippy): Fix codex-cli test warnings and document dead_code allows
+- `a83aeb2e3` - fix(clippy): Fix codex-cli test warnings and document dead_code allows
 
 ### Changes Made
 
