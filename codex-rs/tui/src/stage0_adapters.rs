@@ -189,6 +189,25 @@ impl Tier2Client for Tier2HttpAdapter {
         spec_content: &str,
         task_brief_md: &str,
     ) -> Result<Tier2Response> {
+        // FILE-BASED TRACE: Tier2 generate_divine_truth (SPEC-DOGFOOD-001 S29)
+        {
+            use std::io::Write;
+            let trace_msg = format!(
+                "[{}] Tier2 GENERATE: spec_id={}, url={}/api/ask, notebook={}\n",
+                chrono::Utc::now().format("%H:%M:%S%.3f"),
+                spec_id,
+                self.base_url,
+                self.notebook
+            );
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/speckit-trace.log")
+            {
+                let _ = f.write_all(trace_msg.as_bytes());
+            }
+        }
+
         let prompt = codex_stage0::build_tier2_prompt(spec_id, spec_content, task_brief_md);
 
         let url = format!("{}/api/ask", self.base_url);
@@ -197,16 +216,53 @@ impl Tier2Client for Tier2HttpAdapter {
             "notebook": self.notebook,
         });
 
-        let resp = self
+        let resp = match self
             .client
             .post(&url)
             .json(&body)
             .timeout(Duration::from_secs(120))
             .send()
             .await
-            .map_err(|e| Stage0Error::tier2(format!("NotebookLM HTTP request failed: {e}")))?;
+        {
+            Ok(r) => r,
+            Err(e) => {
+                // FILE-BASED TRACE: HTTP error
+                {
+                    use std::io::Write;
+                    let trace_msg = format!(
+                        "[{}] Tier2 HTTP ERROR: {}\n",
+                        chrono::Utc::now().format("%H:%M:%S%.3f"),
+                        e
+                    );
+                    if let Ok(mut f) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open("/tmp/speckit-trace.log")
+                    {
+                        let _ = f.write_all(trace_msg.as_bytes());
+                    }
+                }
+                return Err(Stage0Error::tier2(format!("NotebookLM HTTP request failed: {e}")));
+            }
+        };
 
         if !resp.status().is_success() {
+            // FILE-BASED TRACE
+            {
+                use std::io::Write;
+                let trace_msg = format!(
+                    "[{}] Tier2 HTTP STATUS ERROR: {}\n",
+                    chrono::Utc::now().format("%H:%M:%S%.3f"),
+                    resp.status()
+                );
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/speckit-trace.log")
+                {
+                    let _ = f.write_all(trace_msg.as_bytes());
+                }
+            }
             return Err(Stage0Error::tier2(format!(
                 "NotebookLM HTTP error: {}",
                 resp.status()
@@ -216,13 +272,65 @@ impl Tier2Client for Tier2HttpAdapter {
         let parsed: NotebooklmAskResponse = resp
             .json()
             .await
-            .map_err(|e| Stage0Error::tier2(format!("Failed to parse NotebookLM response: {e}")))?;
+            .map_err(|e| {
+                // FILE-BASED TRACE
+                {
+                    use std::io::Write;
+                    let trace_msg = format!(
+                        "[{}] Tier2 JSON PARSE ERROR: {}\n",
+                        chrono::Utc::now().format("%H:%M:%S%.3f"),
+                        e
+                    );
+                    if let Ok(mut f) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open("/tmp/speckit-trace.log")
+                    {
+                        let _ = f.write_all(trace_msg.as_bytes());
+                    }
+                }
+                Stage0Error::tier2(format!("Failed to parse NotebookLM response: {e}"))
+            })?;
 
         if !parsed.success {
+            // FILE-BASED TRACE
+            {
+                use std::io::Write;
+                let trace_msg = format!(
+                    "[{}] Tier2 API ERROR: {:?}\n",
+                    chrono::Utc::now().format("%H:%M:%S%.3f"),
+                    parsed.error
+                );
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/speckit-trace.log")
+                {
+                    let _ = f.write_all(trace_msg.as_bytes());
+                }
+            }
             return Err(Stage0Error::tier2(format!(
                 "NotebookLM error: {}",
                 parsed.error.unwrap_or_else(|| "Unknown error".to_string())
             )));
+        }
+
+        // FILE-BASED TRACE: Success
+        {
+            use std::io::Write;
+            let answer_len = parsed.data.as_ref().map(|d| d.answer.len()).unwrap_or(0);
+            let trace_msg = format!(
+                "[{}] Tier2 SUCCESS: answer_len={}\n",
+                chrono::Utc::now().format("%H:%M:%S%.3f"),
+                answer_len
+            );
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/speckit-trace.log")
+            {
+                let _ = f.write_all(trace_msg.as_bytes());
+            }
         }
 
         let data = parsed
