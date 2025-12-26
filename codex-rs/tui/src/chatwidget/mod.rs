@@ -4462,6 +4462,14 @@ impl ChatWidget<'_> {
                 return;
             }
             crate::slash_command::ProcessedCommand::SpecAuto(invocation) => {
+                // DEBUG: Trace SpecAuto routing (SPEC-DOGFOOD-001 Session 29)
+                self.history_push(crate::history_cell::PlainHistoryCell::new(
+                    vec![ratatui::text::Line::from(format!(
+                        "📍 DEBUG: submit_user_message → SpecAuto(spec_id={})",
+                        invocation.spec_id
+                    ))],
+                    crate::history_cell::HistoryCellType::Notice,
+                ));
                 // SPEC-KIT-900 FIX: Route to native pipeline coordinator
                 // Previously used format_subagent_command() which fell back to ALL agents
                 // when no [[subagents.commands]] config existed for "spec-auto".
@@ -12850,6 +12858,15 @@ impl ChatWidget<'_> {
     // Upstream: Does not have these methods
     // Preserve: handle_spec_auto_command, advance_spec_auto, and related during rebases
     fn handle_spec_auto_command(&mut self, invocation: SpecAutoInvocation) {
+        // DEBUG: Entry point trace (SPEC-DOGFOOD-001 Session 29)
+        self.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![ratatui::text::Line::from(format!(
+                "📍 DEBUG: handle_spec_auto_command(spec_id={}, no_stage0={})",
+                invocation.spec_id, invocation.no_stage0
+            ))],
+            crate::history_cell::HistoryCellType::Notice,
+        ));
+
         let SpecAutoInvocation {
             spec_id,
             goal,

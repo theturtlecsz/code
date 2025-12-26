@@ -169,10 +169,28 @@ pub fn handle_spec_auto(
     }
 
     // SPEC-KIT-102: Run Stage 0 context injection before pipeline starts
+    // DEBUG: Stage0 decision point (SPEC-DOGFOOD-001 Session 29)
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+        vec![ratatui::text::Line::from(format!(
+            "📍 DEBUG: Stage0 check → disabled={}, entering Stage0 block={}",
+            stage0_config.disabled, !stage0_config.disabled
+        ))],
+        crate::history_cell::HistoryCellType::Notice,
+    ));
+
     if !stage0_config.disabled {
         // Load spec content
         let spec_path = widget.config.cwd.join(format!("docs/{}/spec.md", spec_id));
         let spec_content = std::fs::read_to_string(&spec_path).unwrap_or_default();
+
+        // DEBUG: Spec content loaded (SPEC-DOGFOOD-001 Session 29)
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![ratatui::text::Line::from(format!(
+                "📍 DEBUG: spec.md loaded from {:?} ({} chars)",
+                spec_path, spec_content.len()
+            ))],
+            crate::history_cell::HistoryCellType::Notice,
+        ));
 
         if !spec_content.is_empty() {
             // Log Stage0Start event

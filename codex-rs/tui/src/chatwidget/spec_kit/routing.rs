@@ -72,6 +72,15 @@ pub fn try_dispatch_spec_kit_command(
     command_text: &str,
     app_event_tx: &AppEventSender,
 ) -> bool {
+    // DEBUG: Trace registry dispatch (SPEC-DOGFOOD-001 Session 29)
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+        vec![ratatui::text::Line::from(format!(
+            "📍 DEBUG: try_dispatch_spec_kit_command({})",
+            command_text
+        ))],
+        crate::history_cell::HistoryCellType::Notice,
+    ));
+
     // Extract command name (first token after /)
     let command_name = command_text
         .trim_start_matches('/')
