@@ -90,7 +90,55 @@ pub fn spawn_stage0_async(
             &config_clone,
             Some(progress_tx),
         );
-        let _ = result_tx.send(result);
+
+        // S33: Trace before sending result over channel
+        {
+            use std::io::Write;
+            let trace_msg = format!(
+                "[{}] Stage0 ASYNC RESULT: tier2={}, has_result={}, sending to channel...\n",
+                chrono::Utc::now().format("%H:%M:%S%.3f"),
+                result.tier2_used,
+                result.result.is_some(),
+            );
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/speckit-trace.log")
+            {
+                let _ = f.write_all(trace_msg.as_bytes());
+            }
+        }
+
+        match result_tx.send(result) {
+            Ok(_) => {
+                use std::io::Write;
+                let trace_msg = format!(
+                    "[{}] Stage0 CHANNEL SEND: success\n",
+                    chrono::Utc::now().format("%H:%M:%S%.3f"),
+                );
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/speckit-trace.log")
+                {
+                    let _ = f.write_all(trace_msg.as_bytes());
+                }
+            }
+            Err(_) => {
+                use std::io::Write;
+                let trace_msg = format!(
+                    "[{}] Stage0 CHANNEL SEND: FAILED (receiver dropped)\n",
+                    chrono::Utc::now().format("%H:%M:%S%.3f"),
+                );
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/speckit-trace.log")
+                {
+                    let _ = f.write_all(trace_msg.as_bytes());
+                }
+            }
+        }
     });
 
     Stage0PendingOperation {

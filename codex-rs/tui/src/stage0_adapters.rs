@@ -541,6 +541,27 @@ impl Tier2Client for Tier2HttpAdapter {
                 // Continue anyway - we'll try with the query
             }
 
+            // SPEC-TIER2-SOURCES S33: Close session after source operations
+            // The upsert operations leave the browser on the Sources tab.
+            // Close all sessions so the ask gets a fresh browser in chat view.
+            {
+                let sessions_url = format!("{}/api/sessions", base_url);
+                if let Ok(sessions_resp) = client.get(&sessions_url).send() {
+                    if let Ok(sessions_json) = sessions_resp.json::<serde_json::Value>() {
+                        if let Some(sessions) = sessions_json["data"]["sessions"].as_array() {
+                            for session in sessions {
+                                if let Some(id) = session["id"].as_str() {
+                                    let close_url = format!("{}/api/sessions/{}", base_url, id);
+                                    let _ = client.delete(&close_url).send();
+                                }
+                            }
+                        }
+                    }
+                }
+                // Brief delay for session cleanup
+                std::thread::sleep(Duration::from_millis(500));
+            }
+
             // SPEC-TIER2-SOURCES: Step 3 - Send minimal query
             // Now that sources are uploaded, we send a short query
             let prompt = codex_stage0::build_tier2_prompt(&spec_id, &spec_content, &task_brief_md);

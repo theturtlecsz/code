@@ -275,6 +275,11 @@ pub fn handle_spec_auto(
             // Store pending operation for polling
             widget.stage0_pending = Some(pending);
 
+            // S33 FIX: Start commit animation so on_commit_tick polls for Stage0 result
+            // Without this, poll_stage0_pending is never called because CommitTick
+            // events are only generated during streaming responses.
+            widget.app_event_tx.send(crate::app_event::AppEvent::StartCommitAnimation);
+
             // Set phase to Stage0Pending and store state
             state.phase = super::state::SpecAutoPhase::Stage0Pending {
                 status: "Starting Stage0...".to_string(),
@@ -387,6 +392,9 @@ pub fn process_stage0_result(
     result: super::stage0_integration::Stage0ExecutionResult,
     spec_id: String,
 ) {
+    // S33 FIX: Stop the commit animation that was started for Stage0 polling
+    widget.app_event_tx.send(crate::app_event::AppEvent::StopCommitAnimation);
+
     // FILE-BASED TRACE: After Stage0 execution
     {
         use std::io::Write;
@@ -444,6 +452,24 @@ pub fn process_stage0_result(
 
     // Process result and update state
     if let Some(ref stage0_result) = result.result {
+        // S33: Trace evidence writing
+        {
+            use std::io::Write;
+            let trace_msg = format!(
+                "[{}] Stage0 WRITING EVIDENCE: divine_truth_len={}, task_brief_len={}\n",
+                chrono::Utc::now().format("%H:%M:%S%.3f"),
+                stage0_result.divine_truth.raw_markdown.len(),
+                stage0_result.task_brief_md.len(),
+            );
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/speckit-trace.log")
+            {
+                let _ = f.write_all(trace_msg.as_bytes());
+            }
+        }
+
         // Write TASK_BRIEF.md to evidence directory
         let task_brief_path = super::stage0_integration::write_task_brief_to_evidence(
             &spec_id,
@@ -464,6 +490,24 @@ pub fn process_stage0_result(
         );
         if let Err(ref e) = divine_truth_path {
             tracing::warn!("Failed to write DIVINE_TRUTH.md: {}", e);
+        }
+
+        // S33: Trace after evidence write
+        {
+            use std::io::Write;
+            let trace_msg = format!(
+                "[{}] Stage0 EVIDENCE WRITTEN: task_brief={}, divine_truth={}\n",
+                chrono::Utc::now().format("%H:%M:%S%.3f"),
+                task_brief_written,
+                divine_truth_path.is_ok(),
+            );
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/speckit-trace.log")
+            {
+                let _ = f.write_all(trace_msg.as_bytes());
+            }
         }
 
         // Store system pointer memory (best-effort, non-blocking)
