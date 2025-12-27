@@ -137,121 +137,37 @@ pub trait Tier2Client: Send + Sync {
 /// NotebookLM retrieval (seeded artifacts use these exact filenames).
 ///
 /// P90/SPEC-KIT-105: Added constitution awareness clause and Section 2.
-pub fn build_tier2_prompt(spec_id: &str, spec_content: &str, task_brief_md: &str) -> String {
+/// S31: Chat query limit is ~2,000 chars. Using minimal prompt - full instructions
+/// should be in NotebookLM's "Custom Instructions" (10k limit).
+pub fn build_tier2_prompt(spec_id: &str, spec_content: &str, _task_brief_md: &str) -> String {
+    const MAX_QUERY_CHARS: usize = 1800;
+    const TEMPLATE_OVERHEAD: usize = 400; // Approx chars for template text
+    let max_spec_chars = MAX_QUERY_CHARS.saturating_sub(TEMPLATE_OVERHEAD);
+
+    // Truncate spec content to fit
+    let spec_truncated: String = if spec_content.len() > max_spec_chars {
+        let truncated: String = spec_content.chars().take(max_spec_chars - 50).collect();
+        format!("{}...[truncated]", truncated)
+    } else {
+        spec_content.to_string()
+    };
+
+    // Minimal prompt - relies on NotebookLM's seeded sources for context
     format!(
-        r#"You are the "Shadow Staff Engineer" for the codex-rs project.
+        r#"Analyze {spec_id} for the codex-rs project.
 
-You have access to these seeded knowledge files (use these exact names in your search):
-- **NL_ARCHITECTURE_BIBLE.md** - System design, module boundaries, design decisions
-- **NL_STACK_JUSTIFICATION.md** - Tech choices, dependency rationale
-- **NL_BUG_RETROS_01.md** - Failure patterns, anti-patterns, post-mortems
-- **NL_DEBT_LANDSCAPE.md** - TODO/FIXME/HACK clusters, known issues by module
-- **NL_PROJECT_DIARY_01.md** - Session history, progress patterns, milestones
+SPEC:
+{spec_truncated}
 
-=== CONSTITUTION AWARENESS (P90/SPEC-KIT-105) ===
+Using your sources (Architecture Bible, Bug Retros, Project Diary), provide:
+1. **Summary**: What this spec does (3-5 bullets)
+2. **Risks**: Key risks and mitigations
+3. **Architecture**: Relevant patterns/constraints from sources
+4. **History**: Related past issues or decisions
 
-The TASK_BRIEF contains a "Project Constitution" section (Section 0) with:
-- **Principles**: Core values guiding implementation choices
-- **Guardrails**: Hard constraints that MUST NOT be violated
-- **Goals**: Project objectives to align with
-
-When making recommendations, you MUST:
-1. Respect all guardrails as hard constraints (no exceptions)
-2. Align suggestions with stated principles
-3. Call out any spec details that conflict with the constitution
-
-Your job is to synthesize a "Divine Truth" brief for the /speckit.auto pipeline.
-This brief guides multiple agents to plan, implement, and validate the spec.
-
-=== OUTPUT FORMAT ===
-
-Follow this structure EXACTLY. Do not add extra sections.
-
-# Divine Truth Brief: {spec_id}
-
-## 1. Executive Summary
-- Summarize the spec intent in 3-7 bullet points.
-- Focus on WHAT is changing and WHY it matters.
-- Assume the reader knows codex-rs generally but not this spec.
-- Keep to ~200 words.
-
-## 2. Constitution Alignment
-Analyze how this spec aligns with the project constitution from Section 0.
-
-**Aligned with:** List principle/guardrail IDs that this spec supports (e.g., P1, G2).
-
-**Potential conflicts:**
-- If any spec requirements could violate guardrails, list them here.
-- For each conflict, suggest a mitigation or ask a clarifying question.
-- If no conflicts, write "None identified."
-
-Keep to ~150 words.
-
-## 3. Architectural Guardrails
-- List architectural constraints or patterns that MUST be respected.
-- Reference relevant historical decisions from Architecture Bible.
-- Call out potential conflicts with prior decisions.
-- Keep to ~300 words.
-
-## 4. Historical Context & Lessons
-- Summarize relevant lessons from:
-  - Bug Retrospectives / Anti-Patterns
-  - Project Diary entries
-  - Technical Debt Landscape
-- Highlight past failures that intersect with this spec's scope.
-- Explain what to do differently this time.
-- Keep to ~300 words.
-
-## 5. Risks & Open Questions
-- List concrete risks to: correctness, performance, maintainability, DX.
-- For each risk, suggest: mitigations, validation strategies, or questions.
-- If there are major unknowns, call them out explicitly.
-- Keep to ~300 words.
-
-## 6. Suggested Causal Links
-Provide a JSON array of suggested relationships between memories.
-
-```json
-[
-  {{{{
-    "from_id": "mem-xxx",
-    "to_id": "mem-yyy",
-    "type": "causes|solves|contradicts|expands|supersedes",
-    "confidence": 0.85,
-    "reasoning": "short explanation"
-  }}}}
-]
-```
-
-Rules for JSON:
-- ONLY use memory IDs that appear in TASK_BRIEF.md below.
-- If no IDs are available, output empty array: []
-- Ensure JSON is valid and parseable.
-- Include 0-5 relationships (quality over quantity).
-
-=== INPUT DATA ===
-
-SPEC ID: {spec_id}
-
-SPEC CONTENT (spec.md):
----
-{spec_content}
----
-
-TASK BRIEF (TASK_BRIEF.md):
----
-{task_brief_md}
----
-
-=== INSTRUCTIONS ===
-
-1. Read the spec and task brief carefully.
-2. Pay special attention to Section 0 (Project Constitution) in the task brief.
-3. Cross-reference with your seeded knowledge.
-4. Synthesize into the 6-section format above.
-5. Prefer to mark uncertainties as "Open Questions" rather than hallucinate.
-6. Keep total output under 2000 words.
-7. Output ONLY the Divine Truth brief. No preamble, no closing remarks."#
+Keep response under 1000 words. Reference specific source documents."#,
+        spec_id = spec_id,
+        spec_truncated = spec_truncated
     )
 }
 

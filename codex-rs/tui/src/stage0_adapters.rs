@@ -201,7 +201,7 @@ impl Tier2HttpAdapter {
         let url = format!("{}/api/ask", self.base_url);
 
         let client = reqwest::blocking::Client::builder()
-            .timeout(Duration::from_secs(120))
+            .timeout(Duration::from_secs(300)) // 5 min to match NotebookLM service timeout
             .build()
             .map_err(|e| Stage0Error::tier2(format!("Failed to create HTTP client: {e}")))?;
 
@@ -377,8 +377,29 @@ impl Tier2Client for Tier2HttpAdapter {
             let prompt = codex_stage0::build_tier2_prompt(&spec_id, &spec_content, &task_brief_md);
             let url = format!("{}/api/ask", base_url);
 
+            // FILE-BASED TRACE: Log prompt size for debugging (SPEC-DOGFOOD-001 S31)
+            {
+                use std::io::Write;
+                let preview: String = prompt.chars().take(500).collect();
+                let trace_msg = format!(
+                    "[{}] Tier2 PROMPT: len={} chars, preview=\"{}...\"\n",
+                    chrono::Utc::now().format("%H:%M:%S%.3f"),
+                    prompt.len(),
+                    preview.replace('\n', "\\n")
+                );
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/speckit-trace.log")
+                {
+                    let _ = f.write_all(trace_msg.as_bytes());
+                }
+                // Also write full prompt to separate file for inspection
+                let _ = std::fs::write("/tmp/tier2-prompt.txt", &prompt);
+            }
+
             let client = match reqwest::blocking::Client::builder()
-                .timeout(Duration::from_secs(120))
+                .timeout(Duration::from_secs(300)) // 5 min to match NotebookLM service timeout
                 .build()
             {
                 Ok(c) => c,
