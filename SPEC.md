@@ -491,6 +491,21 @@ The Shadow Stage 0 overlay provides deep context and code awareness for `/specki
 | **SPEC-KIT-104** | Roadmap | Metrics & Learning (Phase 4) | - |
 | **SPEC-KIT-900** | In-Progress | E2E Integration Test Harness (ferris-test benchmark) | P87 |
 | **SPEC-KIT-105** | Research | Constitution & Vision Workflow Enhancement | P87 |
+| **SPEC-TIER2-SOURCES** | **Done** | Source-based Tier2 architecture (fixes 2k query limit) | S31-S32 |
+| **SPEC-DOGFOOD-001** | **E2E Pending** | TUI dogfooding validation | S28-S33 |
+
+### S32 Milestone (2025-12-27)
+
+**SPEC-TIER2-SOURCES Complete**: Implemented source-based Tier2 architecture to bypass NotebookLM's 2k char chat limit.
+
+| Component | Change | Commit |
+|-----------|--------|--------|
+| notebooklm-client | `POST /api/sources/upsert` with fuzzy title matching | `3f4464b` |
+| codex-rs | Tier2HttpAdapter upserts CURRENT_SPEC + CURRENT_TASK_BRIEF | `04d042a47` |
+| codex-rs | `build_tier2_prompt()` returns ~350 char query | `04d042a47` |
+| NotebookLM | NL_TIER2_TEMPLATE source added | Manual |
+
+**S33 Scope**: Run `/speckit.auto SPEC-DOGFOOD-001` for E2E validation (A2/A3/A4/A5 criteria).
 
 ### Phase Completion
 
