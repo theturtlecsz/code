@@ -526,6 +526,9 @@ pub(crate) struct ChatWidget<'a> {
     // Handler methods extracted to spec_kit module (free functions)
     spec_auto_state: Option<SpecAutoState>,
     validate_lifecycles: HashMap<String, spec_kit::state::ValidateLifecycle>,
+    /// Pending Stage0 operation for async execution (SPEC-DOGFOOD-001 S31)
+    /// When Some, poll in on_commit_tick for progress/completion
+    stage0_pending: Option<spec_kit::stage0_integration::Stage0PendingOperation>,
     // === END FORK-SPECIFIC ===
 
     // === FORK-SPECIFIC (just-every/code): Native MCP for local-memory ===
@@ -1988,7 +1991,98 @@ impl ChatWidget<'_> {
     /// Periodic tick to commit at most one queued line to history,
     /// animating the output.
     pub(crate) fn on_commit_tick(&mut self) {
+        // SPEC-DOGFOOD-001 S31: Poll Stage0 pending operation for async progress
+        self.poll_stage0_pending();
+
         streaming::on_commit_tick(self);
+    }
+
+    /// Poll Stage0 pending operation for progress and completion
+    /// Called from on_commit_tick to keep TUI responsive during Stage0 execution
+    fn poll_stage0_pending(&mut self) {
+        use spec_kit::stage0_integration::Stage0Progress;
+        use std::sync::mpsc::TryRecvError;
+
+        let Some(ref pending) = self.stage0_pending else {
+            return;
+        };
+
+        // Poll for progress updates (non-blocking)
+        loop {
+            match pending.progress_rx.try_recv() {
+                Ok(progress) => {
+                    let status = match progress {
+                        Stage0Progress::Starting => "Starting...".to_string(),
+                        Stage0Progress::CheckingLocalMemory => "Checking local-memory...".to_string(),
+                        Stage0Progress::LoadingConfig => "Loading config...".to_string(),
+                        Stage0Progress::CheckingTier2Health => "Checking Tier2 health...".to_string(),
+                        Stage0Progress::CompilingContext => "Compiling context...".to_string(),
+                        Stage0Progress::QueryingTier2 => "Querying NotebookLM...".to_string(),
+                        Stage0Progress::Tier2Complete(ms) => format!("Tier2 complete ({}ms)", ms),
+                        Stage0Progress::Finished { success, tier2_used, duration_ms } => {
+                            format!("Finished: success={}, tier2={}, {}ms", success, tier2_used, duration_ms)
+                        }
+                    };
+
+                    // Update status in state
+                    if let Some(ref mut state) = self.spec_auto_state {
+                        if let spec_kit::state::SpecAutoPhase::Stage0Pending { status: ref mut s, .. } = state.phase {
+                            *s = status;
+                        }
+                    }
+                }
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => break,
+            }
+        }
+
+        // Poll for final result (non-blocking)
+        match pending.result_rx.try_recv() {
+            Ok(result) => {
+                // Take ownership and clear pending
+                let pending = self.stage0_pending.take().unwrap();
+                let spec_id = pending.spec_id.clone();
+
+                // Process result and continue pipeline
+                spec_kit::pipeline_coordinator::process_stage0_result(self, result, spec_id);
+            }
+            Err(TryRecvError::Empty) => {
+                // Still pending - check for timeout
+                if let Some(ref state) = self.spec_auto_state {
+                    if let spec_kit::state::SpecAutoPhase::Stage0Pending { started_at, .. } = state.phase {
+                        let elapsed = started_at.elapsed();
+                        if elapsed > std::time::Duration::from_secs(300) {
+                            // 5 minute timeout
+                            self.stage0_pending = None;
+                            self.history_push(history_cell::new_warning_event(
+                                "Stage0 timeout (5 min) - continuing with fallback".to_string(),
+                            ));
+
+                            // Transition to Guardrail and continue
+                            if let Some(ref mut state) = self.spec_auto_state {
+                                state.stage0_skip_reason = Some("Timeout".to_string());
+                                state.phase = spec_kit::state::SpecAutoPhase::Guardrail;
+                            }
+                            spec_kit::pipeline_coordinator::advance_spec_auto(self);
+                        }
+                    }
+                }
+            }
+            Err(TryRecvError::Disconnected) => {
+                // Thread died unexpectedly
+                self.stage0_pending = None;
+                self.history_push(history_cell::new_error_event(
+                    "Stage0 thread disconnected unexpectedly".to_string(),
+                ));
+
+                // Transition to Guardrail and continue
+                if let Some(ref mut state) = self.spec_auto_state {
+                    state.stage0_skip_reason = Some("Thread disconnected".to_string());
+                    state.phase = spec_kit::state::SpecAutoPhase::Guardrail;
+                }
+                spec_kit::pipeline_coordinator::advance_spec_auto(self);
+            }
+        }
     }
     fn is_write_cycle_active(&self) -> bool {
         streaming::is_write_cycle_active(self)
@@ -2392,6 +2486,7 @@ impl ChatWidget<'_> {
             standard_terminal_mode: !config.tui.alternate_screen,
             spec_auto_state: None,
             validate_lifecycles: HashMap::new(),
+            stage0_pending: None,
             // FORK-SPECIFIC (just-every/code): Use shared MCP manager from App
             mcp_manager,
             quality_gate_broker,
@@ -2626,6 +2721,7 @@ impl ChatWidget<'_> {
             standard_terminal_mode: !config.tui.alternate_screen,
             spec_auto_state: None,
             validate_lifecycles: HashMap::new(),
+            stage0_pending: None,
             mcp_manager,
             quality_gate_broker,
             initial_command: None,
@@ -2837,6 +2933,7 @@ impl ChatWidget<'_> {
             system_cell_by_id: HashMap::new(),
             spec_auto_state: None,
             validate_lifecycles: HashMap::new(),
+            stage0_pending: None,
             // FORK-SPECIFIC (just-every/code): Use shared MCP manager from App
             mcp_manager,
             quality_gate_broker,

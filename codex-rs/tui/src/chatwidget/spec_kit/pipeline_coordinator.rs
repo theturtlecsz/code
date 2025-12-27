@@ -262,232 +262,34 @@ pub fn handle_spec_auto(
                 }
             }
 
-            // SPEC-DOGFOOD-001 S30: Run Stage0 in separate thread to avoid runtime conflicts
-            // NOTE: This blocks the TUI during execution. UX improvement tracked for follow-up.
-            // Must spawn in std::thread because we're inside the TUI's tokio runtime.
-            let config_clone = widget.config.clone();
-            let spec_id_clone = spec_id.clone();
-            let spec_content_clone = spec_content.clone();
-            let cwd_clone = widget.config.cwd.clone();
-            let stage0_config_clone = stage0_config.clone();
+            // SPEC-DOGFOOD-001 S31: Spawn Stage0 async - TUI remains responsive
+            // Uses spawn_stage0_async to run in background, poll in on_commit_tick
+            let pending = super::stage0_integration::spawn_stage0_async(
+                widget.config.clone(),
+                spec_id.clone(),
+                spec_content.clone(),
+                widget.config.cwd.clone(),
+                stage0_config.clone(),
+            );
 
-            let handle = std::thread::spawn(move || {
-                super::stage0_integration::run_stage0_for_spec(
-                    &config_clone,
-                    &spec_id_clone,
-                    &spec_content_clone,
-                    &cwd_clone,
-                    &stage0_config_clone,
-                    None, // No progress channel for sync execution
-                )
-            });
+            // Store pending operation for polling
+            widget.stage0_pending = Some(pending);
 
-            let result = match handle.join() {
-                Ok(r) => r,
-                Err(e) => {
-                    let panic_msg = if let Some(s) = e.downcast_ref::<&str>() {
-                        s.to_string()
-                    } else if let Some(s) = e.downcast_ref::<String>() {
-                        s.clone()
-                    } else {
-                        "Unknown panic".to_string()
-                    };
-                    widget.history_push(crate::history_cell::new_error_event(format!(
-                        "Stage 0: Thread panic - {}",
-                        panic_msg
-                    )));
-                    super::stage0_integration::Stage0ExecutionResult {
-                        result: None,
-                        skip_reason: Some(format!("Thread panic: {}", panic_msg)),
-                        duration_ms: 0,
-                        tier2_used: false,
-                        cache_hit: false,
-                        hybrid_retrieval_used: false,
-                        tier2_skip_reason: Some("Thread panic".to_string()),
-                    }
-                }
+            // Set phase to Stage0Pending and store state
+            state.phase = super::state::SpecAutoPhase::Stage0Pending {
+                status: "Starting Stage0...".to_string(),
+                started_at: std::time::Instant::now(),
             };
+            widget.spec_auto_state = Some(state);
 
-            // FILE-BASED TRACE: After Stage0 execution (SPEC-DOGFOOD-001 S29)
-            {
-                use std::io::Write;
-                let trace_msg = format!(
-                    "[{}] Stage0 RETURNED: result.is_ok={}\n",
-                    chrono::Utc::now().format("%H:%M:%S%.3f"),
-                    result.result.is_some()
-                );
-                if let Ok(mut f) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open("/tmp/speckit-trace.log")
-                {
-                    let _ = f.write_all(trace_msg.as_bytes());
-                }
-            }
+            // Show status message
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![ratatui::text::Line::from("⚙️  Stage 0: Starting (background)...")],
+                crate::history_cell::HistoryCellType::Notice,
+            ));
 
-            // SPEC-DOGFOOD-001 S30: Show Stage0 completion status to user
-            {
-                let status_msg = if result.result.is_some() {
-                    let tier2_info = if result.tier2_used {
-                        "Tier2 ✓".to_string()
-                    } else if result.cache_hit {
-                        "Tier2 (cached)".to_string()
-                    } else if let Some(ref reason) = result.tier2_skip_reason {
-                        format!("Tier2 skipped: {}", reason)
-                    } else {
-                        "Tier2 ✗".to_string()
-                    };
-                    format!(
-                        "Stage0 complete: {}ms | {}",
-                        result.duration_ms, tier2_info
-                    )
-                } else if let Some(ref reason) = result.skip_reason {
-                    format!("Stage0 skipped: {}", reason)
-                } else {
-                    "Stage0 complete".to_string()
-                };
-                widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                    vec![ratatui::text::Line::from(format!("⚙️  {}", status_msg))],
-                    crate::history_cell::HistoryCellType::Notice,
-                ));
-            }
-
-            // Store result in state
-            let task_brief_written;
-            if let Some(ref stage0_result) = result.result {
-                // Write TASK_BRIEF.md to evidence directory
-                let task_brief_path = super::stage0_integration::write_task_brief_to_evidence(
-                    &spec_id,
-                    &widget.config.cwd,
-                    &stage0_result.task_brief_md,
-                );
-                task_brief_written = task_brief_path.is_ok();
-
-                if !task_brief_written {
-                    tracing::warn!("Failed to write TASK_BRIEF.md");
-                }
-
-                // SPEC-KIT-102: Write DIVINE_TRUTH.md to evidence directory
-                let divine_truth_path = super::stage0_integration::write_divine_truth_to_evidence(
-                    &spec_id,
-                    &widget.config.cwd,
-                    &stage0_result.divine_truth.raw_markdown,
-                );
-                if let Err(ref e) = divine_truth_path {
-                    tracing::warn!("Failed to write DIVINE_TRUTH.md: {}", e);
-                }
-
-                // CONVERGENCE: Store system pointer memory (best-effort, non-blocking)
-                super::stage0_integration::store_stage0_system_pointer(
-                    &spec_id,
-                    &result,
-                    task_brief_path.as_ref().ok().map(|p| p.as_path()),
-                    divine_truth_path.as_ref().ok().map(|p| p.as_path()),
-                    None, // TODO: Pass notebook_id when available from config
-                );
-
-                // Log Stage0Complete event (success)
-                // P84: Added hybrid_used and structured tracing for Stage0 signaling
-                if let Some(run_id) = &state.run_id {
-                    let event = super::execution_logger::ExecutionEvent::Stage0Complete {
-                        run_id: run_id.clone(),
-                        spec_id: spec_id.clone(),
-                        duration_ms: result.duration_ms,
-                        tier2_used: result.tier2_used,
-                        cache_hit: result.cache_hit,
-                        hybrid_used: result.hybrid_retrieval_used,
-                        memories_used: stage0_result.memories_used.len(),
-                        task_brief_written,
-                        skip_reason: None,
-                        timestamp: super::execution_logger::ExecutionEvent::now(),
-                    };
-
-                    // P84: Structured tracing for future metrics integration
-                    tracing::info!(
-                        target: "stage0",
-                        event_type = "Stage0Complete",
-                        spec_id = %spec_id,
-                        result = "success",
-                        duration_ms = result.duration_ms,
-                        tier2_used = result.tier2_used,
-                        cache_hit = result.cache_hit,
-                        hybrid_used = result.hybrid_retrieval_used,
-                        memories_used = stage0_result.memories_used.len(),
-                        task_brief_written = task_brief_written,
-                        "Stage 0 completed successfully"
-                    );
-
-                    state.execution_logger.log_event(event);
-                }
-
-                // Log Stage0 success to UI
-                // CONVERGENCE: Surface Tier2 diagnostics in output
-                let tier2_status = if stage0_result.tier2_used {
-                    "tier2=yes".to_string()
-                } else if let Some(ref reason) = result.tier2_skip_reason {
-                    format!("tier2=skipped ({})", reason)
-                } else {
-                    "tier2=no".to_string()
-                };
-                widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                    vec![ratatui::text::Line::from(format!(
-                        "Stage 0: Context compiled ({} memories, {}, {}ms)",
-                        stage0_result.memories_used.len(),
-                        tier2_status,
-                        stage0_result.latency_ms
-                    ))],
-                    crate::history_cell::HistoryCellType::Notice,
-                ));
-
-                state.stage0_result = Some(stage0_result.clone());
-            } else if let Some(skip_reason) = result.skip_reason {
-                // Log Stage0Complete event (skipped)
-                if let Some(run_id) = &state.run_id {
-                    let event = super::execution_logger::ExecutionEvent::Stage0Complete {
-                        run_id: run_id.clone(),
-                        spec_id: spec_id.clone(),
-                        duration_ms: result.duration_ms,
-                        tier2_used: false,
-                        cache_hit: false,
-                        hybrid_used: false,
-                        memories_used: 0,
-                        task_brief_written: false,
-                        skip_reason: Some(skip_reason.clone()),
-                        timestamp: super::execution_logger::ExecutionEvent::now(),
-                    };
-
-                    // P84: Structured tracing for skip case
-                    tracing::info!(
-                        target: "stage0",
-                        event_type = "Stage0Complete",
-                        spec_id = %spec_id,
-                        result = "skipped",
-                        duration_ms = result.duration_ms,
-                        skip_reason = %skip_reason,
-                        "Stage 0 skipped"
-                    );
-
-                    state.execution_logger.log_event(event);
-                }
-                state.stage0_skip_reason = Some(skip_reason.clone());
-
-                // SPEC-DOGFOOD-001 FIX: Show skip reason in TUI (was silently logged only)
-                widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                    vec![ratatui::text::Line::from(format!(
-                        "Stage 0: Skipped ({})",
-                        skip_reason
-                    ))],
-                    crate::history_cell::HistoryCellType::Notice,
-                ));
-            } else {
-                // SPEC-DOGFOOD-001 FIX: Catch edge case where both result and skip_reason are None
-                widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                    vec![ratatui::text::Line::from(
-                        "Stage 0: Completed (no result or skip_reason returned - possible bug)"
-                    )],
-                    crate::history_cell::HistoryCellType::Notice,
-                ));
-            }
+            // Return early - on_commit_tick will poll for completion and call process_stage0_result
+            return;
         } else {
             // Log Stage0Complete event (skipped - no spec content)
             let skip_reason = "spec.md is empty or not found";
@@ -568,6 +370,220 @@ pub fn handle_spec_auto(
     }
 
     widget.spec_auto_state = Some(state);
+    advance_spec_auto(widget);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SPEC-DOGFOOD-001 S31: Async Stage0 Result Processing
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Process Stage0 result after async completion
+///
+/// Called from on_commit_tick when Stage0PendingOperation.result_rx receives a result.
+/// Handles the same logic as the original blocking code: writing TASK_BRIEF.md,
+/// DIVINE_TRUTH.md, logging, and transitioning to Guardrail phase.
+pub fn process_stage0_result(
+    widget: &mut ChatWidget,
+    result: super::stage0_integration::Stage0ExecutionResult,
+    spec_id: String,
+) {
+    // FILE-BASED TRACE: After Stage0 execution
+    {
+        use std::io::Write;
+        let trace_msg = format!(
+            "[{}] Stage0 RETURNED: result.is_ok={}\n",
+            chrono::Utc::now().format("%H:%M:%S%.3f"),
+            result.result.is_some()
+        );
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("/tmp/speckit-trace.log")
+        {
+            let _ = f.write_all(trace_msg.as_bytes());
+        }
+    }
+
+    // Check state exists
+    if widget.spec_auto_state.is_none() {
+        widget.history_push(crate::history_cell::new_error_event(
+            "Stage0 result received but no spec_auto_state - internal error".to_string(),
+        ));
+        return;
+    }
+
+    // Show Stage0 completion status to user (before state borrow)
+    {
+        let status_msg = if result.result.is_some() {
+            let tier2_info = if result.tier2_used {
+                "Tier2 ✓".to_string()
+            } else if result.cache_hit {
+                "Tier2 (cached)".to_string()
+            } else if let Some(ref reason) = result.tier2_skip_reason {
+                format!("Tier2 skipped: {}", reason)
+            } else {
+                "Tier2 ✗".to_string()
+            };
+            format!(
+                "Stage0 complete: {}ms | {}",
+                result.duration_ms, tier2_info
+            )
+        } else if let Some(ref reason) = result.skip_reason {
+            format!("Stage0 skipped: {}", reason)
+        } else {
+            "Stage0 complete".to_string()
+        };
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![ratatui::text::Line::from(format!("⚙️  {}", status_msg))],
+            crate::history_cell::HistoryCellType::Notice,
+        ));
+    }
+
+    // Process result - collect UI messages to push after state updates
+    let mut ui_messages: Vec<Box<dyn crate::history_cell::HistoryCell>> = Vec::new();
+
+    // Process result and update state
+    if let Some(ref stage0_result) = result.result {
+        // Write TASK_BRIEF.md to evidence directory
+        let task_brief_path = super::stage0_integration::write_task_brief_to_evidence(
+            &spec_id,
+            &widget.config.cwd,
+            &stage0_result.task_brief_md,
+        );
+        let task_brief_written = task_brief_path.is_ok();
+
+        if !task_brief_written {
+            tracing::warn!("Failed to write TASK_BRIEF.md");
+        }
+
+        // Write DIVINE_TRUTH.md to evidence directory
+        let divine_truth_path = super::stage0_integration::write_divine_truth_to_evidence(
+            &spec_id,
+            &widget.config.cwd,
+            &stage0_result.divine_truth.raw_markdown,
+        );
+        if let Err(ref e) = divine_truth_path {
+            tracing::warn!("Failed to write DIVINE_TRUTH.md: {}", e);
+        }
+
+        // Store system pointer memory (best-effort, non-blocking)
+        super::stage0_integration::store_stage0_system_pointer(
+            &spec_id,
+            &result,
+            task_brief_path.as_ref().ok().map(|p| p.as_path()),
+            divine_truth_path.as_ref().ok().map(|p| p.as_path()),
+            None,
+        );
+
+        // Log Stage0Complete event (success) - access state briefly
+        if let Some(ref mut state) = widget.spec_auto_state {
+            if let Some(run_id) = &state.run_id {
+                let event = super::execution_logger::ExecutionEvent::Stage0Complete {
+                    run_id: run_id.clone(),
+                    spec_id: spec_id.clone(),
+                    duration_ms: result.duration_ms,
+                    tier2_used: result.tier2_used,
+                    cache_hit: result.cache_hit,
+                    hybrid_used: result.hybrid_retrieval_used,
+                    memories_used: stage0_result.memories_used.len(),
+                    task_brief_written,
+                    skip_reason: None,
+                    timestamp: super::execution_logger::ExecutionEvent::now(),
+                };
+
+                tracing::info!(
+                    target: "stage0",
+                    event_type = "Stage0Complete",
+                    spec_id = %spec_id,
+                    result = "success",
+                    duration_ms = result.duration_ms,
+                    tier2_used = result.tier2_used,
+                    cache_hit = result.cache_hit,
+                    hybrid_used = result.hybrid_retrieval_used,
+                    memories_used = stage0_result.memories_used.len(),
+                    task_brief_written = task_brief_written,
+                    "Stage 0 completed successfully"
+                );
+
+                state.execution_logger.log_event(event);
+            }
+            state.stage0_result = Some(stage0_result.clone());
+        }
+
+        // Prepare UI message
+        let tier2_status = if stage0_result.tier2_used {
+            "tier2=yes".to_string()
+        } else if let Some(ref reason) = result.tier2_skip_reason {
+            format!("tier2=skipped ({})", reason)
+        } else {
+            "tier2=no".to_string()
+        };
+        ui_messages.push(Box::new(crate::history_cell::PlainHistoryCell::new(
+            vec![ratatui::text::Line::from(format!(
+                "Stage 0: Context compiled ({} memories, {}, {}ms)",
+                stage0_result.memories_used.len(),
+                tier2_status,
+                stage0_result.latency_ms
+            ))],
+            crate::history_cell::HistoryCellType::Notice,
+        )));
+    } else if let Some(ref skip_reason) = result.skip_reason {
+        // Log Stage0Complete event (skipped)
+        if let Some(ref mut state) = widget.spec_auto_state {
+            if let Some(run_id) = &state.run_id {
+                let event = super::execution_logger::ExecutionEvent::Stage0Complete {
+                    run_id: run_id.clone(),
+                    spec_id: spec_id.clone(),
+                    duration_ms: result.duration_ms,
+                    tier2_used: false,
+                    cache_hit: false,
+                    hybrid_used: false,
+                    memories_used: 0,
+                    task_brief_written: false,
+                    skip_reason: Some(skip_reason.clone()),
+                    timestamp: super::execution_logger::ExecutionEvent::now(),
+                };
+
+                tracing::info!(
+                    target: "stage0",
+                    event_type = "Stage0Complete",
+                    spec_id = %spec_id,
+                    result = "skipped",
+                    duration_ms = result.duration_ms,
+                    skip_reason = %skip_reason,
+                    "Stage 0 skipped"
+                );
+
+                state.execution_logger.log_event(event);
+            }
+            state.stage0_skip_reason = Some(skip_reason.clone());
+        }
+
+        ui_messages.push(Box::new(crate::history_cell::PlainHistoryCell::new(
+            vec![ratatui::text::Line::from(format!(
+                "Stage 0: Skipped ({})",
+                skip_reason
+            ))],
+            crate::history_cell::HistoryCellType::Notice,
+        )));
+    } else {
+        ui_messages.push(Box::new(crate::history_cell::PlainHistoryCell::new(
+            vec![ratatui::text::Line::from(
+                "Stage 0: Completed (no result or skip_reason returned - possible bug)",
+            )],
+            crate::history_cell::HistoryCellType::Notice,
+        )));
+    }
+
+    // Push UI messages (state borrow is released)
+    for msg in ui_messages {
+        widget.history_push(msg);
+    }
+
+    // Transition to Guardrail phase and continue pipeline
+    if let Some(ref mut state) = widget.spec_auto_state {
+        state.phase = super::state::SpecAutoPhase::Guardrail;
+    }
     advance_spec_auto(widget);
 }
 
@@ -806,17 +822,18 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
                     continue;
                 }
 
-                // SPEC-KIT-928: Check if quality gates are still running (single-flight guard)
-                // Prevent stage advancement while quality gates are executing
+                // SPEC-KIT-928: Check if quality gates or Stage0 are still running (single-flight guard)
+                // Prevent stage advancement while blocking operations are in progress
                 if matches!(
                     state.phase,
-                    SpecAutoPhase::QualityGateExecuting { .. }
+                    SpecAutoPhase::Stage0Pending { .. }
+                        | SpecAutoPhase::QualityGateExecuting { .. }
                         | SpecAutoPhase::QualityGateProcessing { .. }
                         | SpecAutoPhase::QualityGateValidating { .. }
                         | SpecAutoPhase::QualityGateAwaitingHuman { .. }
                 ) {
                     tracing::warn!(
-                        "⚠️ Stage advancement blocked: Quality gates still in progress (phase: {:?})",
+                        "⚠️ Stage advancement blocked: Async operation in progress (phase: {:?})",
                         state.phase
                     );
                     return;
@@ -914,6 +931,9 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
                     }
                     SpecAutoPhase::QualityGateAwaitingHuman { .. } => {
                         return; // Waiting for human input
+                    }
+                    SpecAutoPhase::Stage0Pending { .. } => {
+                        return; // Stage0 running in background - poll in on_commit_tick
                     }
                 }
             }
