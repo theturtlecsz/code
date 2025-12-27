@@ -1,160 +1,207 @@
-# Session 32 Prompt - Tier2 Source Architecture + Dogfood Completion
+# Session 32 Prompt - Source-Based Tier2 Architecture
 
 **Last updated:** 2025-12-27
-**Status:** Session 31 Complete - Async Stage0 working, Tier2 needs source-based architecture
-**Current SPECs:** SPEC-DOGFOOD-001 (validation), SPEC-TIER2-SOURCES (new)
+**Status:** S31 Complete - Async Stage0 implemented, Tier2 needs source-based architecture
+**Primary SPEC:** SPEC-TIER2-SOURCES (implements fix for SPEC-DOGFOOD-001 A2/A3)
 
 ---
 
-## Session 31 Summary
+## Session 31 Accomplishments
 
-### Completed
-1. **Async Stage0** - TUI remains responsive during Stage0 execution
-   - Commit `220832042` - Full implementation
-   - Tested and confirmed working
+| Item | Status | Commit |
+|------|--------|--------|
+| Async Stage0 (TUI responsive) | ✅ IMPLEMENTED | `220832042` |
+| Tier2 prompt reduction (~1.8k chars) | ✅ IMPLEMENTED | `08d892178` |
+| TUI Blocking Audit | ✅ COMPLETE | `docs/SPEC-DOGFOOD-001/evidence/TUI_BLOCKING_AUDIT.md` |
+| Async Stage0 Design Doc | ✅ UPDATED | `docs/SPEC-DOGFOOD-001/evidence/ASYNC_STAGE0_DESIGN.md` |
+| SPEC-TIER2-SOURCES created | ✅ COMPLETE | `docs/SPEC-TIER2-SOURCES/spec.md` |
+| S31 milestone in local-memory | ✅ STORED | importance=8, type=discovery |
 
-2. **Tier2 Prompt Fix** - Reduced prompt to fit ~2k chat limit
-   - Commit `08d892178` - Minimal prompt format
-   - Root cause identified: NotebookLM chat query limit is ~2k chars
-
-3. **Root Cause Analysis** - NotebookLM architecture mismatch
-   - Query limit: ~2,000 chars (hard limit)
-   - Custom instructions: 10,000 chars (for static instructions only)
-   - Correct pattern: Put dynamic content as **sources**, not in query
-
-4. **New SPEC Created** - `SPEC-TIER2-SOURCES`
-   - Source-based Tier2 architecture design
-   - Requires `notebooklm-mcp` changes first
-
-### Pending
-- **SPEC-DOGFOOD-001 A2/A3** - Tier2 validation (blocked on source architecture)
-- **SPEC-TIER2-SOURCES** - Implementation
+### Key Discovery (S31)
+**NotebookLM chat query limit is ~2,000 chars** (not 10k - that's Custom Instructions).
+The correct pattern is **source-based**: upsert SPEC + TASK_BRIEF as sources, send minimal query.
 
 ---
 
-## Session 32 Priority Options
+## Session 32 Scope: SPEC-TIER2-SOURCES Implementation
 
-### Option A: Complete Dogfood with Minimal Tier2 (Quick)
-1. Test current minimal prompt (~1.8k chars)
-2. Verify Tier2 works end-to-end
-3. Mark SPEC-DOGFOOD-001 complete
-4. Defer SPEC-TIER2-SOURCES to later session
+### Decision Record
+- **Tier2 Path:** Option B - Source architecture (orchestrated by codex-rs, notebooklm-mcp as primitives)
+- **NL Config:** No UI Custom Instructions dependency - template as versioned source document
+- **Boundary:** `notebooklm-mcp` gets primitive enhancements only; Stage0 orchestrates
 
-### Option B: Implement Source Architecture First (Thorough)
-1. Add `upsertSource` API to `notebooklm-mcp`
-2. Update Stage0 to use source-based queries
-3. Full Tier2 validation
-4. Mark both SPECs complete
+### Architecture
 
----
+```
+BEFORE (broken - 10k+ chars):
+  Query = instructions + SPEC + TASK_BRIEF → ❌ Submit disabled
 
-## Quick Start (Option A)
-
-```bash
-# Test minimal Tier2 prompt
-rm -f /tmp/speckit-trace.log /tmp/tier2-prompt.txt
-~/code/build-fast.sh run
-# In TUI: /speckit.auto SPEC-DOGFOOD-001
-
-# Verify
-wc -c /tmp/tier2-prompt.txt  # Should be < 2000
-cat /tmp/speckit-trace.log   # Should show Tier2 SUCCESS
-head -50 docs/SPEC-DOGFOOD-001/evidence/DIVINE_TRUTH.md
+AFTER (source-based - ~100 chars):
+  Sources = [NL_TIER2_TEMPLATE.md, CURRENT_SPEC.md, CURRENT_TASK_BRIEF.md]
+  Query = "Generate Divine Truth for SPEC-X using sources" → ✅ Works
 ```
 
 ---
 
-## SPEC-TIER2-SOURCES Implementation (Option B)
+## Implementation Phases
 
-### Phase 1: NotebookLM Service (`notebooklm-mcp`)
+### Phase 1: NotebookLM Service Enhancement (`notebooklm-mcp`)
 
-Add source upsert API:
+Add source upsert primitive:
+
 ```typescript
 // POST /api/sources/upsert
 {
   "notebook": "code-project-docs",
-  "name": "CURRENT_SPEC.md",
-  "content": "<content>"
+  "name": "CURRENT_SPEC.md",      // Fixed name for upsert
+  "content": "<spec content>"
+}
+
+// Response
+{
+  "success": true,
+  "sourceId": "...",
+  "action": "created" | "updated"
 }
 ```
 
-### Phase 2: Stage0 Tier2 (`codex-rs`)
+Implementation notes:
+- Find source by name in notebook
+- If exists: update content
+- If not: create new source
+- Use fixed names to stay within 50-source limit
 
-Update `stage0_adapters.rs`:
-1. Call `POST /api/sources/upsert` with CURRENT_SPEC.md
-2. Call `POST /api/sources/upsert` with CURRENT_TASK_BRIEF.md
-3. Send minimal query (~100 chars)
+### Phase 2: Stage0 Tier2 Orchestration (`codex-rs`)
 
-New query format:
-```
-Generate Divine Truth Brief for {spec_id}.
-Use sources CURRENT_SPEC.md and CURRENT_TASK_BRIEF.md.
-Follow NL_TIER2_TEMPLATE.md format.
-```
+Update `stage0_adapters.rs` to:
 
-### Phase 3: Notebook Setup
+1. **Upsert sources before query:**
+   ```rust
+   // POST /api/sources/upsert with CURRENT_SPEC.md
+   // POST /api/sources/upsert with CURRENT_TASK_BRIEF.md
+   ```
 
-Add one-time source: `NL_TIER2_TEMPLATE.md` with output format.
+2. **Send minimal query:**
+   ```
+   Generate Divine Truth Brief for {spec_id}.
+   Use sources CURRENT_SPEC.md and CURRENT_TASK_BRIEF.md.
+   Follow NL_TIER2_TEMPLATE.md format exactly.
+   Output only the 6-section brief.
+   ```
+
+3. **Cache by content hash:**
+   ```rust
+   cache_key = hash(spec_content + task_brief + notebook_id)
+   ```
+
+### Phase 3: One-Time Notebook Setup
+
+Add static source to `code-project-docs` notebook:
+- `NL_TIER2_TEMPLATE.md` - Contains 6-section output format (from current `tier2.rs` template)
+
+This is a one-time manual step or can be automated via `/api/sources/upsert`.
 
 ---
 
-## Key Files
+## Files to Modify
 
-| File | Purpose |
+| File | Changes |
 |------|---------|
-| `docs/SPEC-TIER2-SOURCES/spec.md` | Source architecture spec |
-| `codex-rs/stage0/src/tier2.rs` | Prompt building |
-| `codex-rs/tui/src/stage0_adapters.rs` | Tier2 HTTP calls |
-| `~/notebooklm-client/` | NotebookLM service |
+| `~/notebooklm-client/src/routes/sources.ts` | Add `/api/sources/upsert` endpoint |
+| `codex-rs/tui/src/stage0_adapters.rs` | Call upsert before query, minimal query format |
+| `codex-rs/stage0/src/tier2.rs` | Simplify `build_tier2_prompt()` to ~100 chars |
 
 ---
 
-## Acceptance Criteria Status
+## Acceptance Criteria
 
-### SPEC-DOGFOOD-001
+### SPEC-TIER2-SOURCES
+| ID | Criterion | Validation |
+|----|-----------|------------|
+| A1 | Source upsert API exists | `POST /api/sources/upsert` returns 200 |
+| A2 | CURRENT_SPEC.md upserted | Trace log shows upsert call |
+| A3 | CURRENT_TASK_BRIEF.md upserted | Trace log shows upsert call |
+| A4 | Query < 500 chars | `wc -c /tmp/tier2-prompt.txt` < 500 |
+| A5 | Valid Divine Truth returned | `DIVINE_TRUTH.md` has real content |
+| A6 | Source count bounded | Notebook has ≤10 dynamic sources |
+
+### SPEC-DOGFOOD-001 (Unblocked by above)
 | ID | Criterion | Status |
 |----|-----------|--------|
 | A0 | No Surprise Fan-Out | ✅ PASS |
 | A1 | Doctor Ready | ✅ PASS |
-| A2 | Tier2 Used | ⏳ TEST with minimal prompt |
-| A3 | Evidence Exists | ⏳ TEST |
-| A4 | System Pointer | ⏳ TEST |
+| A2 | Tier2 Used | ⏳ Blocked on SPEC-TIER2-SOURCES |
+| A3 | Evidence Exists | ⏳ Blocked on SPEC-TIER2-SOURCES |
+| A4 | System Pointer | ⏳ Needs validation |
 | A5 | GR-001 Enforcement | ✅ PASS |
 | A6 | Slash Dispatch Single-Shot | ✅ PASS |
-| UX1 | Blocking audit | ✅ PASS |
-| UX2 | Design doc | ✅ PASS |
-| UX3 | Async Stage0 | ✅ PASS |
-
-### SPEC-TIER2-SOURCES (New)
-| ID | Criterion | Status |
-|----|-----------|--------|
-| A1 | Source upsert API | ❌ PENDING |
-| A2 | CURRENT_SPEC.md upserted | ❌ PENDING |
-| A3 | CURRENT_TASK_BRIEF.md upserted | ❌ PENDING |
-| A4 | Query < 500 chars | ❌ PENDING |
-| A5 | Valid Divine Truth | ❌ PENDING |
-| A6 | Source count bounded | ❌ PENDING |
+| UX1-3 | Async Stage0 | ✅ PASS |
 
 ---
 
 ## Session 32 Checklist
 
 ```
-[ ] 1. Decide: Option A (quick) or Option B (thorough)
-[ ] 2. If Option A: Test minimal Tier2, verify DIVINE_TRUTH.md
-[ ] 3. If Option B: Implement source upsert in notebooklm-mcp
-[ ] 4. Validate SPEC-DOGFOOD-001 A2/A3/A4
-[ ] 5. Commit and update HANDOFF.md
+Phase 1: notebooklm-mcp
+[ ] 1. Add POST /api/sources/upsert endpoint
+[ ] 2. Implement find-by-name + create/update logic
+[ ] 3. Test manually: curl -X POST .../api/sources/upsert
+[ ] 4. Restart service (systemctl --user restart notebooklm)
+
+Phase 2: codex-rs Stage0
+[ ] 5. Update stage0_adapters.rs to call upsert before query
+[ ] 6. Simplify build_tier2_prompt() to minimal format
+[ ] 7. Add content-hash caching
+[ ] 8. Build: ~/code/build-fast.sh
+
+Phase 3: Validation
+[ ] 9. Add NL_TIER2_TEMPLATE.md to notebook (one-time)
+[ ] 10. Run: /speckit.auto SPEC-DOGFOOD-001
+[ ] 11. Verify: wc -c /tmp/tier2-prompt.txt < 500
+[ ] 12. Verify: cat /tmp/speckit-trace.log shows SUCCESS
+[ ] 13. Verify: DIVINE_TRUTH.md has real content
+[ ] 14. Validate A4: lm search "SPEC-DOGFOOD-001"
+
+Phase 4: Completion
+[ ] 15. Mark SPEC-TIER2-SOURCES acceptance criteria
+[ ] 16. Mark SPEC-DOGFOOD-001 A2/A3/A4
+[ ] 17. Commit all changes
+[ ] 18. Update HANDOFF.md for S33
 ```
 
 ---
 
-## NotebookLM Limits Reference
+## Quick Start
+
+```bash
+# Read the SPEC first
+cat docs/SPEC-TIER2-SOURCES/spec.md
+
+# Check NotebookLM service
+curl -s http://127.0.0.1:3456/health/ready | jq
+
+# Start with notebooklm-mcp changes
+cd ~/notebooklm-client
+# Implement /api/sources/upsert
+```
+
+---
+
+## Reference: NotebookLM Limits
 
 | Input Type | Limit | Use For |
 |------------|-------|---------|
 | Chat query | ~2,000 chars | Minimal query only |
-| Custom instructions | 10,000 chars | Static persona/format |
+| Custom instructions | 10,000 chars | Human convenience (not pipeline) |
 | Source document | 500k words / 200MB | SPEC, TASK_BRIEF, templates |
 | Sources per notebook | 50 (free) / 300 (premium) | Use upsert to stay bounded |
 | Daily queries | 50 (free) / 500 (premium) | Cache by content hash |
+
+---
+
+## Constraints
+
+- `notebooklm-mcp`: Primitive enhancements only (upsert API), no orchestration logic
+- `codex-rs`: Orchestrates source upsert + query flow
+- Template stored as **source document**, not UI Custom Instructions
+- Cache Tier2 responses to respect daily quota

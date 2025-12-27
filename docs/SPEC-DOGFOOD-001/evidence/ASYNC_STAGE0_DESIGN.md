@@ -2,8 +2,22 @@
 
 **Session:** S31
 **Date:** 2025-12-26
-**Status:** Design Complete, Implementation Deferred to S32
+**Status:** ✅ IMPLEMENTED (S31)
 **SPEC:** SPEC-DOGFOOD-001 UX Improvement
+
+### Implementation Commits
+- `220832042` - feat(stage0): Implement async Stage0 with non-blocking TUI
+- `08d892178` - fix(tier2): Reduce prompt to fit NotebookLM 2k char query limit
+
+### Verified Behavior
+- TUI remains responsive during Stage0 execution
+- Progress polling via `on_commit_tick()`
+- 5-minute timeout with graceful fallback
+- Thread disconnection handling
+
+### Remaining Gaps (Tracked in SPEC-TIER2-SOURCES)
+- Tier2 source-based architecture (query limit workaround)
+- System pointer storage validation
 
 ---
 
