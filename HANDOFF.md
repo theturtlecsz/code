@@ -1,8 +1,8 @@
-# Session 34 Prompt - Post-Validation
+# Session 34 Prompt - Source Management
 
 **Last updated:** 2025-12-27
 **Status:** S33 Complete - Source-based Tier2 E2E validated
-**Primary SPEC:** SPEC-DOGFOOD-001 (Complete)
+**Primary SPEC:** SPEC-SOURCE-MGMT (New)
 
 ---
 
@@ -16,89 +16,125 @@
 | DIVINE_TRUTH.md with citations | ✅ CONFIRMED | Evidence updated |
 | SPEC-DOGFOOD-001 A2/A3/A4/A5 | ✅ ALL PASS | See SPEC.md |
 
-### Key Fixes (S33)
+---
 
-**Issue 1: Browser stuck on Sources tab**
-- After upserts, browser stayed on Sources tab
-- Ask API couldn't find chat input
-- Fix: Close all sessions before ask so fresh session opens in chat view
+## Problem: Source Proliferation
 
-**Issue 2: Stage0 result never polled**
-- `spawn_stage0_async` sent result over channel
-- `poll_stage0_pending` never called because `CommitTick` only runs during streaming
-- Fix: Start `CommitAnimation` when Stage0 spawns, stop when result received
+After multiple `/speckit.auto` runs, the NotebookLM notebook has accumulated redundant sources:
 
-### E2E Trace (Successful Run)
-
+**Current state (13 sources, 6 redundant):**
 ```
-[21:39:55] handle_spec_auto ENTRY: spec_id=SPEC-DOGFOOD-001
-[21:40:10] Tier2 UPSERT SUCCESS: name=CURRENT_SPEC, action=created
-[21:40:24] Tier2 UPSERT SUCCESS: name=CURRENT_TASK_BRIEF, action=created
-[21:40:25] Tier2 PROMPT: len=401 chars
-[21:40:59] Tier2 THREAD SUCCESS: answer_len=4133
-[21:40:59] Stage0 ASYNC RESULT: tier2=true, has_result=true
-[21:40:59] Stage0 CHANNEL SEND: success
-[21:40:59] Stage0 POLL RECEIVED: calling process_stage0_result
-[21:40:59] Stage0 EVIDENCE WRITTEN: task_brief=true, divine_truth=true
+1. Divine Truth Tier 2 SPEC Analysis Framework [KEEP - template]
+2. Golden Path Dogfooding Validation: Stage0 System Integration [REDUNDANT]
+3. Golden Path Dogfooding Validation: Stage0 Verification Spec [REDUNDANT]
+4. NotebookLM Tier2 Architectural Decisions and Milestone Log [KEEP - static]
+5. Protocol for Active Testing Specifications [KEEP - static]
+6. Golden Path Dogfooding Validation: SPEC-DOGFOOD-001 [REDUNDANT]
+7. S33 Smoke Test Protocols [DELETE - test artifact]
+8. SPEC-DOGFOOD-001: Golden Path Dogfooding Validation Brief [KEEP - CURRENT_TASK_BRIEF]
+9. TUI v2 Port Stub and Compatibility Tracking Document [KEEP - static]
+10. The Codex TUI Dogfooding Protocol [KEEP - static]
+11. The Essence of New Source Testing [KEEP - static]
+12. The Golden Path Dogfooding Validation Specification [REDUNDANT]
+13. Golden Path Dogfooding Validation: SPEC-DOGFOOD-001 Project Brief [REDUNDANT]
 ```
+
+**Root cause:** The upsert uses fuzzy title matching, but NotebookLM renames sources based on content. Each run with slightly different content creates a new source.
 
 ---
 
-## Session 34 Scope
+## SPEC-SOURCE-MGMT: NotebookLM Source Lifecycle Management
 
-### Option A: Clean Up Diagnostic Tracing (Recommended)
+### Problem Statement
 
-The S33 commit includes diagnostic tracing that could be removed for cleaner code:
+The current source-based Tier2 architecture creates orphan sources over time because:
+1. NotebookLM generates semantic titles from content (unpredictable)
+2. Fuzzy matching often fails to find the "same" source
+3. No tracking of which sources belong to which spec
+4. No cleanup of stale sources
+5. NotebookLM has a 50-source limit per notebook
 
-| File | Tracing Added |
-|------|---------------|
-| `stage0_integration.rs` | ASYNC RESULT, CHANNEL SEND |
-| `mod.rs` | POLL RECEIVED |
-| `pipeline_coordinator.rs` | WRITING EVIDENCE, EVIDENCE WRITTEN |
+### Proposed Architecture
 
-Decision: Keep for debugging or remove for cleaner code?
+**Option A: Local Source Registry (Recommended)**
 
-### Option B: Continue with Next SPEC
-
-With SPEC-DOGFOOD-001 complete, potential next SPECs:
-- **SPEC-KIT-900**: E2E Integration Test Harness (in progress)
-- **SPEC-KIT-103**: Librarian & Repair Jobs (Phase 3)
-- **SPEC-KIT-105**: Constitution & Vision Enhancement
-
-### Option C: Store S33 Milestone in Local Memory
-
-```bash
-lm remember "S33: Source-based Tier2 E2E validated. Fixed browser session issue (close sessions after upserts) and polling issue (CommitAnimation for Stage0). DIVINE_TRUTH.md now receives real NotebookLM citations." --type milestone --importance 9 --tags "component:tier2,service:notebooklm"
 ```
+~/.config/code/source-registry.db  (SQLite)
+
+Tables:
+- sources (id, spec_id, source_type, notebooklm_title, created_at, last_used)
+- notebooks (id, notebook_id, name, source_count)
+
+Flow:
+1. Before upsert: lookup spec_id in registry
+2. If found: delete existing source by stored title
+3. Upsert new source
+4. After upsert: update registry with new title
+5. Periodic cleanup: delete sources not used in N days
+```
+
+**Option B: Naming Convention**
+
+Use deterministic prefixes that survive NotebookLM renaming:
+```
+CURRENT_SPEC_{SPEC_ID}_{HASH_8}
+CURRENT_BRIEF_{SPEC_ID}_{HASH_8}
+```
+
+**Option C: Source Pinning**
+
+Keep only 2 dynamic sources (CURRENT_SPEC, CURRENT_BRIEF) and always overwrite them regardless of title changes.
+
+### Acceptance Criteria
+
+| ID | Criterion | Verification |
+|----|-----------|--------------|
+| A1 | No orphan sources after 10 runs | `list-sources` shows constant count |
+| A2 | Cleanup command exists | `/stage0.cleanup-sources` or similar |
+| A3 | Source count tracked | Registry shows per-spec history |
+| A4 | Manual cleanup works | Can delete by spec_id |
+
+### Implementation Tasks
+
+1. **Phase 1: Registry Design**
+   - Create SQLite schema for source tracking
+   - Add registry lookup to Tier2HttpAdapter
+   - Store NotebookLM-generated title after upsert
+
+2. **Phase 2: Upsert Enhancement**
+   - Delete old source before upserting new
+   - Handle title mismatch gracefully
+   - Update registry with new title
+
+3. **Phase 3: Cleanup Command**
+   - Add `/stage0.cleanup-sources` command
+   - Delete sources older than N days
+   - Report cleanup stats
 
 ---
 
-## Current State
+## Session 34 Tasks
 
-### NotebookLM Sources (code-project-docs)
+### Phase 1: Manual Cleanup (Immediate)
 
-```
-Static:
-1. Divine Truth Tier 2 SPEC Analysis Framework (NL_TIER2_TEMPLATE)
-2. The Essence of New Source Testing
-3. NotebookLM Tier2 Architectural Decisions and Milestone Log
-4. Protocol for Active Testing Specifications
-5. TUI v2 Port Stub and Compatibility Tracking Document
-6. The Codex TUI Dogfooding Protocol
+The delete-source CLI isn't working properly. Manual cleanup via NotebookLM UI:
 
-Dynamic (upserted per query):
-7. CURRENT_SPEC
-8. CURRENT_TASK_BRIEF
-```
+1. Open https://notebooklm.google.com
+2. Select `code-project-docs` notebook
+3. Delete sources 2, 3, 6, 7, 12, 13 (the redundant ones)
+4. Verify 7 sources remain
 
-### Commits (S32-S33)
+### Phase 2: Design Source Registry
 
-| Session | Commit | Description |
-|---------|--------|-------------|
-| S32 | `3f4464b` | notebooklm-client: POST /api/sources/upsert |
-| S32 | `04d042a47` | codex-rs: Tier2HttpAdapter upsert flow |
-| S32 | `82b52ce20` | docs: S32 evidence and SPEC.md |
-| S33 | `fbd254241` | fix: Session close + polling fixes |
+Create `docs/SPEC-SOURCE-MGMT/spec.md` with:
+- Problem statement
+- Architecture options (A/B/C above)
+- Chosen approach with rationale
+- Implementation plan
+
+### Phase 3: Implement Registry
+
+If time permits, implement Option A (Local Source Registry).
 
 ---
 
@@ -106,17 +142,18 @@ Dynamic (upserted per query):
 
 | Location | Purpose |
 |----------|---------|
-| `~/code/codex-rs/tui/src/stage0_adapters.rs` | Session close fix + Tier2 upsert flow |
-| `~/code/codex-rs/tui/src/chatwidget/spec_kit/pipeline_coordinator.rs` | Polling fix (StartCommitAnimation) |
-| `~/code/codex-rs/tui/src/chatwidget/mod.rs` | poll_stage0_pending |
-| `/tmp/speckit-trace.log` | Runtime trace log |
-| `docs/SPEC-DOGFOOD-001/evidence/DIVINE_TRUTH.md` | Real NotebookLM output |
+| `~/code/codex-rs/tui/src/stage0_adapters.rs` | Tier2HttpAdapter - where to add registry |
+| `~/.config/code/source-registry.db` | Proposed registry location |
+| `~/notebooklm-client/src/service/handlers/sources.ts` | Upsert API |
 
 ---
 
-## Constraints
+## Commits (S32-S33)
 
-- **notebooklm-client = primitives only**: Upsert API, session management
-- **codex-rs = orchestration**: Source lifecycle, polling, file writes
-- **Query limit**: ~2,000 chars (current prompt: ~401 chars)
-- **Source limit**: 50 sources per notebook (upsert keeps bounded)
+| Session | Commit | Description |
+|---------|--------|-------------|
+| S32 | `3f4464b` | notebooklm-client: POST /api/sources/upsert |
+| S32 | `04d042a47` | codex-rs: Tier2HttpAdapter upsert flow |
+| S32 | `82b52ce20` | docs: S32 evidence and SPEC.md |
+| S33 | `fbd254241` | fix: Session close + polling fixes |
+| S33 | `a68a6b8cc` | docs: S33 milestone |
