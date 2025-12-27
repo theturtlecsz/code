@@ -1,104 +1,104 @@
-# Session 33 Prompt - E2E Validation
+# Session 34 Prompt - Post-Validation
 
 **Last updated:** 2025-12-27
-**Status:** S32 Complete - Source-based Tier2 implemented, E2E validation pending
-**Primary SPEC:** SPEC-DOGFOOD-001 (A2/A3/A4 validation)
+**Status:** S33 Complete - Source-based Tier2 E2E validated
+**Primary SPEC:** SPEC-DOGFOOD-001 (Complete)
 
 ---
 
-## Session 32 Accomplishments
+## Session 33 Accomplishments
 
 | Item | Status | Commit |
 |------|--------|--------|
-| `POST /api/sources/upsert` API | ✅ IMPLEMENTED | notebooklm-client `3f4464b` |
-| Tier2HttpAdapter upsert flow | ✅ IMPLEMENTED | codex-rs `04d042a47` |
-| Minimal prompt (~350 chars) | ✅ IMPLEMENTED | codex-rs `04d042a47` |
-| NL_TIER2_TEMPLATE source | ✅ ADDED | "Divine Truth Tier 2 SPEC Analysis Framework" |
-| SPEC-TIER2-SOURCES A1-A4,A6 | ✅ COMPLETE | Only A5 (E2E) pending |
+| Source-based Tier2 E2E | ✅ VALIDATED | `fbd254241` |
+| Session close fix | ✅ FIXED | `fbd254241` |
+| Polling fix (CommitAnimation) | ✅ FIXED | `fbd254241` |
+| DIVINE_TRUTH.md with citations | ✅ CONFIRMED | Evidence updated |
+| SPEC-DOGFOOD-001 A2/A3/A4/A5 | ✅ ALL PASS | See SPEC.md |
 
-### Key Implementation Details (S32)
+### Key Fixes (S33)
 
-**Upsert API** (`notebooklm-client`):
-- Fuzzy title matching: NotebookLM generates semantic titles from content
-- Algorithm: list sources → find by key words → delete if exists → add new
-- Returns `action: "created" | "updated"`
+**Issue 1: Browser stuck on Sources tab**
+- After upserts, browser stayed on Sources tab
+- Ask API couldn't find chat input
+- Fix: Close all sessions before ask so fresh session opens in chat view
 
-**Tier2 Flow** (`codex-rs`):
-1. Upsert CURRENT_SPEC source (prepends spec_id as heading)
-2. Upsert CURRENT_TASK_BRIEF source (prepends spec_id as heading)
-3. Send minimal query: "Analyze SPEC-X using the CURRENT_SPEC and CURRENT_TASK_BRIEF sources"
+**Issue 2: Stage0 result never polled**
+- `spawn_stage0_async` sent result over channel
+- `poll_stage0_pending` never called because `CommitTick` only runs during streaming
+- Fix: Start `CommitAnimation` when Stage0 spawns, stop when result received
+
+### E2E Trace (Successful Run)
+
+```
+[21:39:55] handle_spec_auto ENTRY: spec_id=SPEC-DOGFOOD-001
+[21:40:10] Tier2 UPSERT SUCCESS: name=CURRENT_SPEC, action=created
+[21:40:24] Tier2 UPSERT SUCCESS: name=CURRENT_TASK_BRIEF, action=created
+[21:40:25] Tier2 PROMPT: len=401 chars
+[21:40:59] Tier2 THREAD SUCCESS: answer_len=4133
+[21:40:59] Stage0 ASYNC RESULT: tier2=true, has_result=true
+[21:40:59] Stage0 CHANNEL SEND: success
+[21:40:59] Stage0 POLL RECEIVED: calling process_stage0_result
+[21:40:59] Stage0 EVIDENCE WRITTEN: task_brief=true, divine_truth=true
+```
 
 ---
 
-## Session 33 Scope: E2E Validation
+## Session 34 Scope
 
-### Option A: Full Validation (Recommended)
+### Option A: Clean Up Diagnostic Tracing (Recommended)
 
-Run `/speckit.auto SPEC-DOGFOOD-001` and validate:
+The S33 commit includes diagnostic tracing that could be removed for cleaner code:
 
-| Criterion | Validation Command | Expected |
-|-----------|-------------------|----------|
-| A2: Tier2 Used | `grep tier2 /tmp/speckit-trace.log` | Shows upsert + query calls |
-| A3: Evidence | `ls -la docs/SPEC-DOGFOOD-001/evidence/` | TASK_BRIEF.md, DIVINE_TRUTH.md exist |
-| A4: System Pointer | `lm search "SPEC-DOGFOOD-001"` | Returns memory with system:true |
+| File | Tracing Added |
+|------|---------------|
+| `stage0_integration.rs` | ASYNC RESULT, CHANNEL SEND |
+| `mod.rs` | POLL RECEIVED |
+| `pipeline_coordinator.rs` | WRITING EVIDENCE, EVIDENCE WRITTEN |
 
-### Option B: Quick Smoke Test
+Decision: Keep for debugging or remove for cleaner code?
+
+### Option B: Continue with Next SPEC
+
+With SPEC-DOGFOOD-001 complete, potential next SPECs:
+- **SPEC-KIT-900**: E2E Integration Test Harness (in progress)
+- **SPEC-KIT-103**: Librarian & Repair Jobs (Phase 3)
+- **SPEC-KIT-105**: Constitution & Vision Enhancement
+
+### Option C: Store S33 Milestone in Local Memory
 
 ```bash
-# 1. Check trace log during Tier2
-tail -f /tmp/speckit-trace.log
-
-# 2. Verify prompt size
-cat /tmp/tier2-prompt.txt | wc -c  # Should be < 500
-
-# 3. Test upsert API directly
-curl -s -X POST "http://127.0.0.1:3456/api/sources/upsert" \
-  -H "Content-Type: application/json" \
-  -d '{"notebook":"code-project-docs","name":"TEST_SMOKE","content":"test"}' | jq
-
-# 4. Verify sources
-curl -s "http://127.0.0.1:3456/api/sources?notebook=code-project-docs" | jq '.data.sources | map(.title)'
+lm remember "S33: Source-based Tier2 E2E validated. Fixed browser session issue (close sessions after upserts) and polling issue (CommitAnimation for Stage0). DIVINE_TRUTH.md now receives real NotebookLM citations." --type milestone --importance 9 --tags "component:tier2,service:notebooklm"
 ```
 
 ---
 
-## Session 33 Checklist
+## Current State
+
+### NotebookLM Sources (code-project-docs)
 
 ```
-Validation
-[ ] 1. Run /speckit.auto SPEC-DOGFOOD-001
-[ ] 2. Verify A2: Tier2 logs show upsert calls
-[ ] 3. Verify A3: Evidence files exist
-[ ] 4. Verify A4: lm search returns system pointer
-[ ] 5. Verify A5: DIVINE_TRUTH.md has real content
-
-Cleanup
-[ ] 6. Mark SPEC-TIER2-SOURCES A5 as complete
-[ ] 7. Mark SPEC-DOGFOOD-001 A2/A3/A4 as complete
-[ ] 8. Update SPEC.md status
-
-Documentation
-[ ] 9. Store S32 milestone in local-memory
-[ ] 10. Update HANDOFF.md for S34
-```
-
----
-
-## Current NotebookLM Sources
-
-```
-code-project-docs (6 sources):
-1. Divine Truth Tier 2 SPEC Analysis Framework  ← NL_TIER2_TEMPLATE
+Static:
+1. Divine Truth Tier 2 SPEC Analysis Framework (NL_TIER2_TEMPLATE)
 2. The Essence of New Source Testing
 3. NotebookLM Tier2 Architectural Decisions and Milestone Log
 4. Protocol for Active Testing Specifications
 5. TUI v2 Port Stub and Compatibility Tracking Document
 6. The Codex TUI Dogfooding Protocol
 
-Dynamic sources (created at runtime):
-- CURRENT_SPEC (upserted before each query)
-- CURRENT_TASK_BRIEF (upserted before each query)
+Dynamic (upserted per query):
+7. CURRENT_SPEC
+8. CURRENT_TASK_BRIEF
 ```
+
+### Commits (S32-S33)
+
+| Session | Commit | Description |
+|---------|--------|-------------|
+| S32 | `3f4464b` | notebooklm-client: POST /api/sources/upsert |
+| S32 | `04d042a47` | codex-rs: Tier2HttpAdapter upsert flow |
+| S32 | `82b52ce20` | docs: S32 evidence and SPEC.md |
+| S33 | `fbd254241` | fix: Session close + polling fixes |
 
 ---
 
@@ -106,17 +106,17 @@ Dynamic sources (created at runtime):
 
 | Location | Purpose |
 |----------|---------|
-| `~/notebooklm-client/src/service/handlers/sources.ts` | `handleUpsertSource` - fuzzy matching upsert |
-| `~/code/codex-rs/tui/src/stage0_adapters.rs` | `Tier2HttpAdapter` - upsert + query flow |
-| `~/code/codex-rs/stage0/src/tier2.rs` | `build_tier2_prompt()` - minimal prompt |
+| `~/code/codex-rs/tui/src/stage0_adapters.rs` | Session close fix + Tier2 upsert flow |
+| `~/code/codex-rs/tui/src/chatwidget/spec_kit/pipeline_coordinator.rs` | Polling fix (StartCommitAnimation) |
+| `~/code/codex-rs/tui/src/chatwidget/mod.rs` | poll_stage0_pending |
 | `/tmp/speckit-trace.log` | Runtime trace log |
-| `/tmp/tier2-prompt.txt` | Last prompt sent |
+| `docs/SPEC-DOGFOOD-001/evidence/DIVINE_TRUTH.md` | Real NotebookLM output |
 
 ---
 
 ## Constraints
 
-- **notebooklm-mcp = primitives only**: Upsert API, no orchestration logic
-- **codex-rs = orchestration**: Manages source lifecycle, caching
-- **Query limit**: ~2,000 chars (current prompt: ~350 chars)
-- **Source limit**: 50 sources per notebook (using upsert to stay bounded)
+- **notebooklm-client = primitives only**: Upsert API, session management
+- **codex-rs = orchestration**: Source lifecycle, polling, file writes
+- **Query limit**: ~2,000 chars (current prompt: ~401 chars)
+- **Source limit**: 50 sources per notebook (upsert keeps bounded)

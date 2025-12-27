@@ -492,7 +492,7 @@ The Shadow Stage 0 overlay provides deep context and code awareness for `/specki
 | **SPEC-KIT-900** | In-Progress | E2E Integration Test Harness (ferris-test benchmark) | P87 |
 | **SPEC-KIT-105** | Research | Constitution & Vision Workflow Enhancement | P87 |
 | **SPEC-TIER2-SOURCES** | **Done** | Source-based Tier2 architecture (fixes 2k query limit) | S31-S32 |
-| **SPEC-DOGFOOD-001** | **E2E Pending** | TUI dogfooding validation | S28-S33 |
+| **SPEC-DOGFOOD-001** | **Done** | TUI dogfooding validation - E2E complete | S28-S33 |
 
 ### S32 Milestone (2025-12-27)
 
@@ -505,7 +505,28 @@ The Shadow Stage 0 overlay provides deep context and code awareness for `/specki
 | codex-rs | `build_tier2_prompt()` returns ~350 char query | `04d042a47` |
 | NotebookLM | NL_TIER2_TEMPLATE source added | Manual |
 
-**S33 Scope**: Run `/speckit.auto SPEC-DOGFOOD-001` for E2E validation (A2/A3/A4/A5 criteria).
+### S33 Milestone (2025-12-27)
+
+**SPEC-DOGFOOD-001 E2E Complete**: Full source-based Tier2 pipeline validated end-to-end.
+
+| Issue | Fix | Commit |
+|-------|-----|--------|
+| Browser stuck on Sources tab after upserts | Close sessions before ask | `fbd254241` |
+| Stage0 result never polled | Start CommitAnimation for polling | `fbd254241` |
+
+**Validation Results**:
+- ✅ Source upserts work (CURRENT_SPEC, CURRENT_TASK_BRIEF)
+- ✅ Minimal 401-char prompt (down from 1773)
+- ✅ DIVINE_TRUTH.md updated with real NotebookLM citations
+- ✅ Full pipeline: upsert → ask → poll → write evidence → system pointer
+
+**Acceptance Criteria**:
+| ID | Criterion | Status |
+|----|-----------|--------|
+| A2 | Tier2 Used | ✅ tier2_used=true in trace |
+| A3 | Evidence Exists | ✅ DIVINE_TRUTH.md + TASK_BRIEF.md updated |
+| A4 | System Pointer | ✅ lm search returns memory |
+| A5 | Valid Divine Truth | ✅ Real NotebookLM output with citations |
 
 ### Phase Completion
 
