@@ -131,43 +131,30 @@ pub trait Tier2Client: Send + Sync {
 
 /// Build the Tier2 prompt for NotebookLM
 ///
-/// Implements the "Shadow Staff Engineer" prompt from docs/stage0/STAGE0_TIER2_PROMPT.md
+/// SPEC-TIER2-SOURCES (S32): Source-based architecture.
+/// The SPEC and TASK_BRIEF are uploaded as sources (CURRENT_SPEC, CURRENT_TASK_BRIEF)
+/// by the Tier2HttpAdapter before this query is sent. This query just references
+/// those sources, staying well under the ~2,000 char chat limit.
 ///
 /// P84: Updated to explicitly reference NL_* artifact names for better
 /// NotebookLM retrieval (seeded artifacts use these exact filenames).
 ///
-/// P90/SPEC-KIT-105: Added constitution awareness clause and Section 2.
-/// S31: Chat query limit is ~2,000 chars. Using minimal prompt - full instructions
-/// should be in NotebookLM's "Custom Instructions" (10k limit).
-pub fn build_tier2_prompt(spec_id: &str, spec_content: &str, _task_brief_md: &str) -> String {
-    const MAX_QUERY_CHARS: usize = 1800;
-    const TEMPLATE_OVERHEAD: usize = 400; // Approx chars for template text
-    let max_spec_chars = MAX_QUERY_CHARS.saturating_sub(TEMPLATE_OVERHEAD);
-
-    // Truncate spec content to fit
-    let spec_truncated: String = if spec_content.len() > max_spec_chars {
-        let truncated: String = spec_content.chars().take(max_spec_chars - 50).collect();
-        format!("{}...[truncated]", truncated)
-    } else {
-        spec_content.to_string()
-    };
-
-    // Minimal prompt - relies on NotebookLM's seeded sources for context
+/// P90/SPEC-KIT-105: Constitution alignment awareness.
+pub fn build_tier2_prompt(spec_id: &str, _spec_content: &str, _task_brief_md: &str) -> String {
+    // SPEC-TIER2-SOURCES: Minimal query referencing uploaded sources
+    // Sources available: CURRENT_SPEC, CURRENT_TASK_BRIEF, plus seeded docs
+    // Target: < 500 chars (well under 2k limit)
     format!(
-        r#"Analyze {spec_id} for the codex-rs project.
+        r#"Analyze {} using the CURRENT_SPEC and CURRENT_TASK_BRIEF sources.
 
-SPEC:
-{spec_truncated}
+Using all sources (Architecture Bible, Bug Retros, Project Diary), provide:
+1. **Summary**: 3-5 bullets on what this implements
+2. **Risks**: Key risks with mitigations
+3. **Architecture**: Relevant patterns from your sources
+4. **History**: Related decisions or past issues
 
-Using your sources (Architecture Bible, Bug Retros, Project Diary), provide:
-1. **Summary**: What this spec does (3-5 bullets)
-2. **Risks**: Key risks and mitigations
-3. **Architecture**: Relevant patterns/constraints from sources
-4. **History**: Related past issues or decisions
-
-Keep response under 1000 words. Reference specific source documents."#,
-        spec_id = spec_id,
-        spec_truncated = spec_truncated
+Be specific. Cite sources. Under 1000 words."#,
+        spec_id
     )
 }
 
@@ -640,34 +627,35 @@ None identified.
     }
 
     #[test]
-    fn test_build_tier2_prompt_contains_required_sections() {
+    fn test_build_tier2_prompt_source_based() {
+        // SPEC-TIER2-SOURCES (S32): Prompt now references uploaded sources
+        // instead of embedding full content
         let prompt = build_tier2_prompt("SPEC-TEST", "Test spec content", "Test brief");
 
-        assert!(prompt.contains("Shadow Staff Engineer"));
-        assert!(prompt.contains("Divine Truth"));
-        assert!(prompt.contains("SPEC ID: SPEC-TEST"));
-        assert!(prompt.contains("Test spec content"));
-        assert!(prompt.contains("Test brief"));
-        assert!(prompt.contains("Executive Summary"));
-        assert!(prompt.contains("Constitution Alignment")); // P90: New section
-        assert!(prompt.contains("Architectural Guardrails"));
-        assert!(prompt.contains("Historical Context"));
-        assert!(prompt.contains("Risks & Open Questions"));
-        assert!(prompt.contains("Suggested Causal Links"));
+        // Should contain spec_id
+        assert!(prompt.contains("SPEC-TEST"));
 
-        // P84: Verify NL_* artifact names are explicitly referenced
-        assert!(prompt.contains("NL_ARCHITECTURE_BIBLE.md"));
-        assert!(prompt.contains("NL_STACK_JUSTIFICATION.md"));
-        assert!(prompt.contains("NL_BUG_RETROS_01.md"));
-        assert!(prompt.contains("NL_DEBT_LANDSCAPE.md"));
-        assert!(prompt.contains("NL_PROJECT_DIARY_01.md"));
+        // Should reference uploaded sources
+        assert!(prompt.contains("CURRENT_SPEC"));
+        assert!(prompt.contains("CURRENT_TASK_BRIEF"));
 
-        // P90: Verify constitution awareness clause
-        assert!(prompt.contains("CONSTITUTION AWARENESS"));
-        assert!(prompt.contains("Principles"));
-        assert!(prompt.contains("Guardrails"));
-        assert!(prompt.contains("hard constraints"));
-        assert!(prompt.contains("Section 0"));
+        // Should reference seeded knowledge sources
+        assert!(prompt.contains("Architecture Bible"));
+        assert!(prompt.contains("Bug Retros"));
+        assert!(prompt.contains("Project Diary"));
+
+        // Should request key sections
+        assert!(prompt.contains("Summary"));
+        assert!(prompt.contains("Risks"));
+        assert!(prompt.contains("Architecture"));
+        assert!(prompt.contains("History"));
+
+        // Should be under 500 chars (well under 2k limit)
+        assert!(
+            prompt.len() < 500,
+            "Prompt should be < 500 chars, got {}",
+            prompt.len()
+        );
     }
 
     #[test]

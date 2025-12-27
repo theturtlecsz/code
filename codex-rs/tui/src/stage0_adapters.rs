@@ -140,6 +140,10 @@ impl LocalMemoryClient for LocalMemoryCliAdapter {
 // Tier2HttpAdapter
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// NotebookLM API Response Types
+// ─────────────────────────────────────────────────────────────────────────────
+
 #[derive(Debug, Deserialize)]
 struct NotebooklmAskResponse {
     pub success: bool,
@@ -151,6 +155,98 @@ struct NotebooklmAskResponse {
 #[serde(rename_all = "camelCase")]
 struct NotebooklmAskData {
     pub answer: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct NotebooklmUpsertResponse {
+    pub success: bool,
+    pub data: Option<NotebooklmUpsertData>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct NotebooklmUpsertData {
+    pub name: String,
+    pub action: String, // "created" | "updated"
+}
+
+/// Upsert a source document to NotebookLM
+///
+/// SPEC-TIER2-SOURCES: Source-based architecture. Upload SPEC and TASK_BRIEF as sources
+/// before sending a minimal query, avoiding the 2k chat query limit.
+fn upsert_source_blocking(
+    client: &BlockingHttpClient,
+    base_url: &str,
+    notebook: &str,
+    name: &str,
+    content: &str,
+) -> std::result::Result<String, String> {
+    use std::io::Write;
+
+    let url = format!("{}/api/sources/upsert", base_url);
+
+    let trace_msg = format!(
+        "[{}] Tier2 UPSERT: name={}, notebook={}, content_len={}\n",
+        chrono::Utc::now().format("%H:%M:%S%.3f"),
+        name,
+        notebook,
+        content.len()
+    );
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("/tmp/speckit-trace.log")
+    {
+        let _ = f.write_all(trace_msg.as_bytes());
+    }
+
+    let body = json!({
+        "notebook": notebook,
+        "name": name,
+        "content": content,
+    });
+
+    let resp = client
+        .post(&url)
+        .timeout(Duration::from_secs(120))
+        .json(&body)
+        .send()
+        .map_err(|e| format!("Upsert HTTP request failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        return Err(format!("Upsert HTTP error: {}", resp.status()));
+    }
+
+    let parsed: NotebooklmUpsertResponse = resp
+        .json()
+        .map_err(|e| format!("Failed to parse upsert response: {e}"))?;
+
+    if !parsed.success {
+        return Err(parsed
+            .error
+            .unwrap_or_else(|| "Unknown upsert error".to_string()));
+    }
+
+    let action = parsed
+        .data
+        .map(|d| d.action)
+        .unwrap_or_else(|| "unknown".to_string());
+
+    let trace_msg = format!(
+        "[{}] Tier2 UPSERT SUCCESS: name={}, action={}\n",
+        chrono::Utc::now().format("%H:%M:%S%.3f"),
+        name,
+        action
+    );
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("/tmp/speckit-trace.log")
+    {
+        let _ = f.write_all(trace_msg.as_bytes());
+    }
+
+    Ok(action)
 }
 
 /// Adapter that implements `Tier2Client` using notebooklm-mcp HTTP service.
@@ -345,6 +441,11 @@ impl Tier2Client for Tier2HttpAdapter {
         spec_content: &str,
         task_brief_md: &str,
     ) -> Result<Tier2Response> {
+        // SPEC-TIER2-SOURCES (S32): Source-based architecture.
+        // 1. Upsert CURRENT_SPEC.md source
+        // 2. Upsert CURRENT_TASK_BRIEF.md source
+        // 3. Send minimal query (~100 chars) referencing sources
+        //
         // SPEC-DOGFOOD-001 S30: Spawn a completely separate thread for the HTTP call.
         // reqwest::blocking creates its own tokio runtime, which conflicts with our
         // existing runtime. By spawning a new std::thread, we isolate the runtimes.
@@ -355,14 +456,14 @@ impl Tier2Client for Tier2HttpAdapter {
         let task_brief_md = task_brief_md.to_string();
 
         let handle = std::thread::spawn(move || {
+            use std::io::Write;
+
             // FILE-BASED TRACE
             {
-                use std::io::Write;
                 let trace_msg = format!(
-                    "[{}] Tier2 THREAD START: spec_id={}, url={}/api/ask, notebook={}\n",
+                    "[{}] Tier2 THREAD START (source-based): spec_id={}, notebook={}\n",
                     chrono::Utc::now().format("%H:%M:%S%.3f"),
                     spec_id,
-                    base_url,
                     notebook
                 );
                 if let Ok(mut f) = std::fs::OpenOptions::new()
@@ -374,12 +475,79 @@ impl Tier2Client for Tier2HttpAdapter {
                 }
             }
 
+            // Create HTTP client with longer timeout for source operations
+            let client = match reqwest::blocking::Client::builder()
+                .timeout(Duration::from_secs(300))
+                .build()
+            {
+                Ok(c) => c,
+                Err(e) => return Err(format!("Failed to create HTTP client: {e}")),
+            };
+
+            // SPEC-TIER2-SOURCES: Step 1 - Upsert CURRENT_SPEC.md source
+            // Prepend spec_id as heading for context
+            let spec_source_content = format!(
+                "# SPEC: {}\n\n{}",
+                spec_id,
+                spec_content
+            );
+            if let Err(e) = upsert_source_blocking(
+                &client,
+                &base_url,
+                &notebook,
+                "CURRENT_SPEC",
+                &spec_source_content,
+            ) {
+                let trace_msg = format!(
+                    "[{}] Tier2 UPSERT SPEC FAILED: {}\n",
+                    chrono::Utc::now().format("%H:%M:%S%.3f"),
+                    e
+                );
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/speckit-trace.log")
+                {
+                    let _ = f.write_all(trace_msg.as_bytes());
+                }
+                // Continue anyway - we'll try with the query
+            }
+
+            // SPEC-TIER2-SOURCES: Step 2 - Upsert CURRENT_TASK_BRIEF.md source
+            let brief_source_content = format!(
+                "# Task Brief: {}\n\n{}",
+                spec_id,
+                task_brief_md
+            );
+            if let Err(e) = upsert_source_blocking(
+                &client,
+                &base_url,
+                &notebook,
+                "CURRENT_TASK_BRIEF",
+                &brief_source_content,
+            ) {
+                let trace_msg = format!(
+                    "[{}] Tier2 UPSERT BRIEF FAILED: {}\n",
+                    chrono::Utc::now().format("%H:%M:%S%.3f"),
+                    e
+                );
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/speckit-trace.log")
+                {
+                    let _ = f.write_all(trace_msg.as_bytes());
+                }
+                // Continue anyway - we'll try with the query
+            }
+
+            // SPEC-TIER2-SOURCES: Step 3 - Send minimal query
+            // Now that sources are uploaded, we send a short query
             let prompt = codex_stage0::build_tier2_prompt(&spec_id, &spec_content, &task_brief_md);
             let url = format!("{}/api/ask", base_url);
 
-            // FILE-BASED TRACE: Log prompt size for debugging (SPEC-DOGFOOD-001 S31)
+            // FILE-BASED TRACE: Log prompt size for debugging
             {
-                use std::io::Write;
                 let preview: String = prompt.chars().take(500).collect();
                 let trace_msg = format!(
                     "[{}] Tier2 PROMPT: len={} chars, preview=\"{}...\"\n",
@@ -398,14 +566,6 @@ impl Tier2Client for Tier2HttpAdapter {
                 let _ = std::fs::write("/tmp/tier2-prompt.txt", &prompt);
             }
 
-            let client = match reqwest::blocking::Client::builder()
-                .timeout(Duration::from_secs(300)) // 5 min to match NotebookLM service timeout
-                .build()
-            {
-                Ok(c) => c,
-                Err(e) => return Err(format!("Failed to create HTTP client: {e}")),
-            };
-
             let body = serde_json::json!({
                 "question": prompt,
                 "notebook": notebook,
@@ -414,34 +574,10 @@ impl Tier2Client for Tier2HttpAdapter {
             let resp = match client.post(&url).json(&body).send() {
                 Ok(r) => r,
                 Err(e) => {
-                    // FILE-BASED TRACE
-                    {
-                        use std::io::Write;
-                        let trace_msg = format!(
-                            "[{}] Tier2 HTTP ERROR: {}\n",
-                            chrono::Utc::now().format("%H:%M:%S%.3f"),
-                            e
-                        );
-                        if let Ok(mut f) = std::fs::OpenOptions::new()
-                            .create(true)
-                            .append(true)
-                            .open("/tmp/speckit-trace.log")
-                        {
-                            let _ = f.write_all(trace_msg.as_bytes());
-                        }
-                    }
-                    return Err(format!("NotebookLM HTTP request failed: {e}"));
-                }
-            };
-
-            if !resp.status().is_success() {
-                // FILE-BASED TRACE
-                {
-                    use std::io::Write;
                     let trace_msg = format!(
-                        "[{}] Tier2 HTTP STATUS ERROR: {}\n",
+                        "[{}] Tier2 HTTP ERROR: {}\n",
                         chrono::Utc::now().format("%H:%M:%S%.3f"),
-                        resp.status()
+                        e
                     );
                     if let Ok(mut f) = std::fs::OpenOptions::new()
                         .create(true)
@@ -450,6 +586,22 @@ impl Tier2Client for Tier2HttpAdapter {
                     {
                         let _ = f.write_all(trace_msg.as_bytes());
                     }
+                    return Err(format!("NotebookLM HTTP request failed: {e}"));
+                }
+            };
+
+            if !resp.status().is_success() {
+                let trace_msg = format!(
+                    "[{}] Tier2 HTTP STATUS ERROR: {}\n",
+                    chrono::Utc::now().format("%H:%M:%S%.3f"),
+                    resp.status()
+                );
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/speckit-trace.log")
+                {
+                    let _ = f.write_all(trace_msg.as_bytes());
                 }
                 return Err(format!("NotebookLM HTTP error: {}", resp.status()));
             }
@@ -457,21 +609,17 @@ impl Tier2Client for Tier2HttpAdapter {
             let parsed: NotebooklmAskResponse = match resp.json() {
                 Ok(p) => p,
                 Err(e) => {
-                    // FILE-BASED TRACE
+                    let trace_msg = format!(
+                        "[{}] Tier2 JSON PARSE ERROR: {}\n",
+                        chrono::Utc::now().format("%H:%M:%S%.3f"),
+                        e
+                    );
+                    if let Ok(mut f) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open("/tmp/speckit-trace.log")
                     {
-                        use std::io::Write;
-                        let trace_msg = format!(
-                            "[{}] Tier2 JSON PARSE ERROR: {}\n",
-                            chrono::Utc::now().format("%H:%M:%S%.3f"),
-                            e
-                        );
-                        if let Ok(mut f) = std::fs::OpenOptions::new()
-                            .create(true)
-                            .append(true)
-                            .open("/tmp/speckit-trace.log")
-                        {
-                            let _ = f.write_all(trace_msg.as_bytes());
-                        }
+                        let _ = f.write_all(trace_msg.as_bytes());
                     }
                     return Err(format!("Failed to parse NotebookLM response: {e}"));
                 }
@@ -491,7 +639,6 @@ impl Tier2Client for Tier2HttpAdapter {
 
             // FILE-BASED TRACE: Success
             {
-                use std::io::Write;
                 let trace_msg = format!(
                     "[{}] Tier2 THREAD SUCCESS: answer_len={}\n",
                     chrono::Utc::now().format("%H:%M:%S%.3f"),

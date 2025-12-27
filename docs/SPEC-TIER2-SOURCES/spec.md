@@ -88,14 +88,27 @@ Avoid re-querying during debugging iterations.
 
 ## Acceptance Criteria
 
-| ID | Criterion | Validation |
-|----|-----------|------------|
-| A1 | Source upsert API exists | `POST /api/sources/upsert` returns 200 |
-| A2 | CURRENT_SPEC.md upserted before query | Trace log shows upsert call |
-| A3 | CURRENT_TASK_BRIEF.md upserted before query | Trace log shows upsert call |
-| A4 | Query is < 500 chars | `wc -c /tmp/tier2-prompt.txt` < 500 |
-| A5 | Tier2 returns valid Divine Truth | DIVINE_TRUTH.md has real content |
-| A6 | Source count stays bounded | Notebook has <= 10 dynamic sources |
+| ID | Criterion | Validation | Status |
+|----|-----------|------------|--------|
+| A1 | Source upsert API exists | `POST /api/sources/upsert` returns 200 | ✅ S32 |
+| A2 | CURRENT_SPEC.md upserted before query | Trace log shows upsert call | ✅ S32 |
+| A3 | CURRENT_TASK_BRIEF.md upserted before query | Trace log shows upsert call | ✅ S32 |
+| A4 | Query is < 500 chars | `wc -c /tmp/tier2-prompt.txt` < 500 | ✅ S32 |
+| A5 | Tier2 returns valid Divine Truth | DIVINE_TRUTH.md has real content | 🔄 E2E pending |
+| A6 | Source count stays bounded | Notebook has <= 10 dynamic sources | ✅ S32 |
+
+## Implementation Status (S32)
+
+**Completed:**
+1. `POST /api/sources/upsert` endpoint in notebooklm-client (fuzzy title matching)
+2. `Tier2HttpAdapter` upserts CURRENT_SPEC + CURRENT_TASK_BRIEF before query
+3. `build_tier2_prompt()` now returns ~350 char query (well under 2k limit)
+4. NL_TIER2_TEMPLATE source added to notebook (one-time setup)
+
+**Key files:**
+- `~/notebooklm-client/src/service/handlers/sources.ts` - `handleUpsertSource`
+- `codex-rs/tui/src/stage0_adapters.rs` - Source upsert + Tier2 flow
+- `codex-rs/stage0/src/tier2.rs` - Minimal prompt builder
 
 ## Out of Scope
 
