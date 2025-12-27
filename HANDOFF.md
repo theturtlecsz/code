@@ -1,87 +1,100 @@
-# Session 32 Prompt - Async Stage0 Implementation
+# Session 32 Prompt - Tier2 Source Architecture + Dogfood Completion
 
-**Last updated:** 2025-12-26
-**Status:** Session 31 Complete - Blocking Audit Done, Design Ready
-**Current SPEC:** SPEC-DOGFOOD-001
+**Last updated:** 2025-12-27
+**Status:** Session 31 Complete - Async Stage0 working, Tier2 needs source-based architecture
+**Current SPECs:** SPEC-DOGFOOD-001 (validation), SPEC-TIER2-SOURCES (new)
 
 ---
 
 ## Session 31 Summary
 
 ### Completed
-1. **TUI Blocking Audit** - Full audit of all blocking patterns in `tui/src/`
-   - Created `docs/SPEC-DOGFOOD-001/evidence/TUI_BLOCKING_AUDIT.md`
-   - Identified 3 critical `.join()` calls, 30+ `block_on` patterns
-   - Root cause: `pipeline_coordinator.rs:285` blocks TUI during Stage0
+1. **Async Stage0** - TUI remains responsive during Stage0 execution
+   - Commit `220832042` - Full implementation
+   - Tested and confirmed working
 
-2. **Async Stage0 Design** - Architecture document for S32 implementation
-   - Created `docs/SPEC-DOGFOOD-001/evidence/ASYNC_STAGE0_DESIGN.md`
-   - 6-phase implementation plan
-   - Reuses existing `Stage0PendingOperation` infrastructure
+2. **Tier2 Prompt Fix** - Reduced prompt to fit ~2k chat limit
+   - Commit `08d892178` - Minimal prompt format
+   - Root cause identified: NotebookLM chat query limit is ~2k chars
 
-3. **Build Preparation** - TUI built and ready for Tier2 validation
+3. **Root Cause Analysis** - NotebookLM architecture mismatch
+   - Query limit: ~2,000 chars (hard limit)
+   - Custom instructions: 10,000 chars (for static instructions only)
+   - Correct pattern: Put dynamic content as **sources**, not in query
 
-### Pending (Requires Manual Testing)
-- **Tier2 Validation (A2, A3)** - User needs to run `/speckit.auto SPEC-DOGFOOD-001` in TUI
-- **System Pointer (A4)** - Validate with `lm search "SPEC-DOGFOOD-001"`
+4. **New SPEC Created** - `SPEC-TIER2-SOURCES`
+   - Source-based Tier2 architecture design
+   - Requires `notebooklm-mcp` changes first
 
----
-
-## Session 32 Scope
-
-| Task | Priority | Effort |
-|------|----------|--------|
-| Implement async Stage0 (6 phases) | HIGH | 2.5 hours |
-| Manual testing of async behavior | HIGH | 30 min |
-| Verify Tier2 still works after refactor | MEDIUM | 15 min |
+### Pending
+- **SPEC-DOGFOOD-001 A2/A3** - Tier2 validation (blocked on source architecture)
+- **SPEC-TIER2-SOURCES** - Implementation
 
 ---
 
-## Session 32 Tasks
+## Session 32 Priority Options
 
-### 1. Validate Tier2 (If Not Done in S31)
+### Option A: Complete Dogfood with Minimal Tier2 (Quick)
+1. Test current minimal prompt (~1.8k chars)
+2. Verify Tier2 works end-to-end
+3. Mark SPEC-DOGFOOD-001 complete
+4. Defer SPEC-TIER2-SOURCES to later session
+
+### Option B: Implement Source Architecture First (Thorough)
+1. Add `upsertSource` API to `notebooklm-mcp`
+2. Update Stage0 to use source-based queries
+3. Full Tier2 validation
+4. Mark both SPECs complete
+
+---
+
+## Quick Start (Option A)
 
 ```bash
-rm -f /tmp/speckit-trace.log
+# Test minimal Tier2 prompt
+rm -f /tmp/speckit-trace.log /tmp/tier2-prompt.txt
 ~/code/build-fast.sh run
 # In TUI: /speckit.auto SPEC-DOGFOOD-001
-# After:
-cat /tmp/speckit-trace.log
-cat docs/SPEC-DOGFOOD-001/evidence/DIVINE_TRUTH.md | head -50
-lm search "SPEC-DOGFOOD-001" --limit 5
+
+# Verify
+wc -c /tmp/tier2-prompt.txt  # Should be < 2000
+cat /tmp/speckit-trace.log   # Should show Tier2 SUCCESS
+head -50 docs/SPEC-DOGFOOD-001/evidence/DIVINE_TRUTH.md
 ```
 
-### 2. Implement Async Stage0
+---
 
-Follow `docs/SPEC-DOGFOOD-001/evidence/ASYNC_STAGE0_DESIGN.md`:
+## SPEC-TIER2-SOURCES Implementation (Option B)
 
-**Phase 1:** Add `Stage0Pending` to `SpecAutoPhase` enum
-- File: `tui/src/chatwidget/spec_kit/state.rs:276`
+### Phase 1: NotebookLM Service (`notebooklm-mcp`)
 
-**Phase 2:** Add `stage0_pending` field to `ChatWidget`
-- File: `tui/src/chatwidget/mod.rs`
+Add source upsert API:
+```typescript
+// POST /api/sources/upsert
+{
+  "notebook": "code-project-docs",
+  "name": "CURRENT_SPEC.md",
+  "content": "<content>"
+}
+```
 
-**Phase 3:** Modify `handle_spec_auto` to use `spawn_stage0_async`
-- File: `tui/src/chatwidget/spec_kit/pipeline_coordinator.rs:274`
+### Phase 2: Stage0 Tier2 (`codex-rs`)
 
-**Phase 4:** Add polling in `on_commit_tick`
-- File: `tui/src/chatwidget/mod.rs`
+Update `stage0_adapters.rs`:
+1. Call `POST /api/sources/upsert` with CURRENT_SPEC.md
+2. Call `POST /api/sources/upsert` with CURRENT_TASK_BRIEF.md
+3. Send minimal query (~100 chars)
 
-**Phase 5:** Add helper methods (`update_stage0_status`, `continue_pipeline_after_stage0`)
-- File: `tui/src/chatwidget/mod.rs`
+New query format:
+```
+Generate Divine Truth Brief for {spec_id}.
+Use sources CURRENT_SPEC.md and CURRENT_TASK_BRIEF.md.
+Follow NL_TIER2_TEMPLATE.md format.
+```
 
-**Phase 6:** Update status bar to show Stage0 progress
-- File: Status bar rendering code
+### Phase 3: Notebook Setup
 
-### 3. Testing
-
-| Test | Expected Result |
-|------|-----------------|
-| Start `/speckit.auto` | TUI remains responsive |
-| During Stage0 | Status bar shows progress |
-| Scroll history | Immediate response |
-| Wait for completion | Pipeline continues |
-| Ctrl+C during Stage0 | Graceful cancellation |
+Add one-time source: `NL_TIER2_TEMPLATE.md` with output format.
 
 ---
 
@@ -89,96 +102,59 @@ Follow `docs/SPEC-DOGFOOD-001/evidence/ASYNC_STAGE0_DESIGN.md`:
 
 | File | Purpose |
 |------|---------|
-| `tui/src/chatwidget/spec_kit/state.rs` | SpecAutoPhase enum |
-| `tui/src/chatwidget/spec_kit/stage0_integration.rs` | Existing async infrastructure |
-| `tui/src/chatwidget/spec_kit/pipeline_coordinator.rs` | Pipeline entry point |
-| `tui/src/chatwidget/mod.rs` | ChatWidget, on_commit_tick |
-
----
-
-## Existing Async Infrastructure (Ready to Use)
-
-```rust
-// stage0_integration.rs:50-64
-pub struct Stage0PendingOperation {
-    pub progress_rx: mpsc::Receiver<Stage0Progress>,
-    pub result_rx: mpsc::Receiver<Stage0ExecutionResult>,
-    pub spec_id: String,
-    pub spec_content: String,
-    pub config: Stage0ExecutionConfig,
-}
-
-// stage0_integration.rs:66-101
-pub fn spawn_stage0_async(...) -> Stage0PendingOperation
-```
+| `docs/SPEC-TIER2-SOURCES/spec.md` | Source architecture spec |
+| `codex-rs/stage0/src/tier2.rs` | Prompt building |
+| `codex-rs/tui/src/stage0_adapters.rs` | Tier2 HTTP calls |
+| `~/notebooklm-client/` | NotebookLM service |
 
 ---
 
 ## Acceptance Criteria Status
 
 ### SPEC-DOGFOOD-001
-| ID | Criterion | Status | Notes |
-|----|-----------|--------|-------|
-| A0 | No Surprise Fan-Out | ✅ PASS | Verified S25 |
-| A1 | Doctor Ready | ✅ PASS | Verified S25 |
-| A2 | Tier2 Used | ❓ TEST | Needs manual validation |
-| A3 | Evidence Exists | ⚠️ PARTIAL | Needs real content verification |
-| A4 | System Pointer | ❓ TEST | Needs manual validation |
-| A5 | GR-001 Enforcement | ✅ PASS | Verified S25 |
-| A6 | Slash Dispatch Single-Shot | ✅ PASS | Verified S25 |
+| ID | Criterion | Status |
+|----|-----------|--------|
+| A0 | No Surprise Fan-Out | ✅ PASS |
+| A1 | Doctor Ready | ✅ PASS |
+| A2 | Tier2 Used | ⏳ TEST with minimal prompt |
+| A3 | Evidence Exists | ⏳ TEST |
+| A4 | System Pointer | ⏳ TEST |
+| A5 | GR-001 Enforcement | ✅ PASS |
+| A6 | Slash Dispatch Single-Shot | ✅ PASS |
+| UX1 | Blocking audit | ✅ PASS |
+| UX2 | Design doc | ✅ PASS |
+| UX3 | Async Stage0 | ✅ PASS |
 
-### UX Improvements
-| ID | Criterion | Status | Session |
-|----|-----------|--------|---------|
-| UX1 | Blocking audit complete | ✅ PASS | S31 |
-| UX2 | Design doc for async Stage0 | ✅ PASS | S31 |
-| UX3 | Stage0Pending phase implemented | ❌ PENDING | S32 |
-
----
-
-## Configuration Reference
-
-**Stage0 config:** `~/.config/code/stage0.toml`
-```toml
-[tier2]
-enabled = true
-notebook = "code-project-docs"
-base_url = "http://127.0.0.1:3456"
-cache_ttl_hours = 24
-```
-
----
-
-## Constraints
-- Fix inside `codex-rs/` only
-- Do NOT modify `localmemory-policy` or `notebooklm-mcp`
-- Keep file-based tracing until Tier2 validated
+### SPEC-TIER2-SOURCES (New)
+| ID | Criterion | Status |
+|----|-----------|--------|
+| A1 | Source upsert API | ❌ PENDING |
+| A2 | CURRENT_SPEC.md upserted | ❌ PENDING |
+| A3 | CURRENT_TASK_BRIEF.md upserted | ❌ PENDING |
+| A4 | Query < 500 chars | ❌ PENDING |
+| A5 | Valid Divine Truth | ❌ PENDING |
+| A6 | Source count bounded | ❌ PENDING |
 
 ---
 
 ## Session 32 Checklist
 
 ```
-[ ] 1. Validate Tier2 if not done in S31
-[ ] 2. Implement Phase 1: Add Stage0Pending to enum
-[ ] 3. Implement Phase 2: Add stage0_pending field
-[ ] 4. Implement Phase 3: Modify handle_spec_auto
-[ ] 5. Implement Phase 4: Add polling in on_commit_tick
-[ ] 6. Implement Phase 5: Add helper methods
-[ ] 7. Implement Phase 6: Update status bar
-[ ] 8. Build and test async behavior
-[ ] 9. Verify Tier2 still works
-[ ] 10. Update HANDOFF.md for S33
+[ ] 1. Decide: Option A (quick) or Option B (thorough)
+[ ] 2. If Option A: Test minimal Tier2, verify DIVINE_TRUTH.md
+[ ] 3. If Option B: Implement source upsert in notebooklm-mcp
+[ ] 4. Validate SPEC-DOGFOOD-001 A2/A3/A4
+[ ] 5. Commit and update HANDOFF.md
 ```
 
 ---
 
-## Quick Start for Session 32
+## NotebookLM Limits Reference
 
-```bash
-# Read the design doc first
-cat docs/SPEC-DOGFOOD-001/evidence/ASYNC_STAGE0_DESIGN.md
-
-# Start implementation
-code codex-rs/tui/src/chatwidget/spec_kit/state.rs  # Phase 1
-```
+| Input Type | Limit | Use For |
+|------------|-------|---------|
+| Chat query | ~2,000 chars | Minimal query only |
+| Custom instructions | 10,000 chars | Static persona/format |
+| Source document | 500k words / 200MB | SPEC, TASK_BRIEF, templates |
+| Sources per notebook | 50 (free) / 300 (premium) | Use upsert to stay bounded |
+| Daily queries | 50 (free) / 500 (premium) | Cache by content hash |
