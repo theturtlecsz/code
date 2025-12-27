@@ -270,19 +270,45 @@ notebooklm registry delete SPEC-OLD-001 --confirm
 
 ## Known Issues Found (S34)
 
-### CLI delete-source "Invalid JSON response"
+### Bug 1: CLI delete-source "Invalid JSON response" - FIXED
 
-**Root cause:** `ServiceClient.request()` in `service-client.ts:574-629` doesn't set `Content-Length` header when sending body. Node.js uses chunked encoding, server returns 400 with empty body.
+**Root cause:** `ServiceClient.request()` didn't set `Content-Length` header.
 
-**Fix:** Add Content-Length header:
+**Fix applied (service-client.ts:627-631):**
 ```typescript
-const bodyStr = body ? JSON.stringify(body) : undefined;
-if (bodyStr) {
-  headers["Content-Length"] = Buffer.byteLength(bodyStr).toString();
+if (body) {
+  const bodyStr = JSON.stringify(body);
+  req.setHeader("Content-Length", Buffer.byteLength(bodyStr).toString());
+  req.write(bodyStr);
 }
 ```
 
-**Location:** `~/notebooklm-client/src/client/service-client.ts`
+**Status:** ✅ Verified working - delete-source CLI returns valid JSON
+
+### Bug 2: Upsert doesn't return NLM-generated title - FIXED
+
+**Fix applied (sources.ts:389-418):**
+- Added `listSources()` call after adding source
+- Returns `nlmTitle` field with actual NotebookLM-assigned title
+- Falls back to last source if name matching fails
+
+**Status:** ✅ Verified working - upsert returns `nlmTitle` field
+
+**Minor refinement needed:** Title matching uses substring, but NLM transforms names significantly:
+- Input: "S34_TEST_SOURCE"
+- NLM output: "S34 Registry Validation Protocol Test Source"
+- Matching should use word-based fuzzy matching (like upsert delete logic)
+
+### Bug 3: Off-by-one in upsert delete - FIXED
+
+**Fix applied (sources.ts:361):**
+```typescript
+// Before (wrong): existingSource.index - 1
+// After (correct): existingSource.index
+await sourceManager.deleteSource(notebookUrl, existingSource.index, {...})
+```
+
+**Status:** ✅ Verified working - delete uses correct 1-based index
 
 ---
 

@@ -502,15 +502,12 @@ The Shadow Stage 0 overlay provides deep context and code awareness for `/specki
 | Deliverable | Status | Location |
 |-------------|--------|----------|
 | Source registry schema (SQLite) | Designed | `docs/SPEC-SOURCE-MGMT/spec.md` |
-| CLI delete-source bug identified | Fixed (needs deploy) | Missing Content-Length header |
-| Manual source cleanup | Done | 13 → 5 sources via curl |
+| CLI delete-source bug | ✅ FIXED | service-client.ts:627-631 |
+| Upsert title return | ✅ FIXED | sources.ts:389-418 |
+| Off-by-one delete | ✅ FIXED | sources.ts:361 |
+| Manual source cleanup | Done | 13 → 5 sources |
 
-**Known Issues Documented**:
-- `ServiceClient.request()` missing Content-Length header causes "Invalid JSON response" on DELETE
-- `handleUpsertSource` doesn't return NLM-generated title (blocks registry integration)
-- Potential off-by-one in upsert delete (`existingSource.index - 1`)
-
-**Implementation Deferred**: Registry requires notebooklm-client changes (add better-sqlite3, title discovery).
+**All Prerequisites Complete**: Registry implementation ready for S35.
 
 ### S32 Milestone (2025-12-27)
 

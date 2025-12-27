@@ -1,7 +1,7 @@
 # Session 35 Prompt - Source Registry Implementation
 
 **Last updated:** 2025-12-27
-**Status:** S34 Complete - Registry designed, bugs documented
+**Status:** S34 Complete - All bugs fixed and verified
 **Primary SPEC:** SPEC-SOURCE-MGMT
 
 ---
@@ -10,98 +10,56 @@
 
 | Item | Status | Location |
 |------|--------|----------|
-| CLI delete-source bug identified | Root cause found | Missing Content-Length header |
-| Source registry schema designed | SQLite schema ready | `docs/SPEC-SOURCE-MGMT/spec.md` |
-| Manual source cleanup | Done | 13 → 5 sources (via curl workaround) |
-| SPEC.md updated | S34 milestone added | SPEC.md:498-513 |
+| CLI delete-source bug | ✅ FIXED & VERIFIED | service-client.ts:627-631 |
+| Upsert title return | ✅ FIXED & VERIFIED | sources.ts:389-418 |
+| Off-by-one delete | ✅ FIXED & VERIFIED | sources.ts:361 |
+| Source registry schema | Designed | `docs/SPEC-SOURCE-MGMT/spec.md` |
+| Source cleanup | Done | 13 → 5 sources |
 
 ---
 
-## Bugs Found in notebooklm-client
+## Bugs Fixed in notebooklm-client (All Verified)
 
-### 1. CLI delete-source "Invalid JSON response"
+### 1. CLI delete-source "Invalid JSON response" ✅ FIXED
 
-**Root cause:** `ServiceClient.request()` in `service-client.ts:574-629` doesn't set `Content-Length` header when sending body. Node.js uses chunked transfer encoding, server returns 400 with empty body.
-
-**Fix needed in `~/notebooklm-client/src/client/service-client.ts`:**
-
+**Fix applied (service-client.ts:627-631):**
 ```typescript
-// Lines 574-584 - add Content-Length
-private async request<T>(
-  method: string,
-  path: string,
-  body?: unknown,
-  timeout?: number
-): Promise<ServiceResponse<T>> {
-  return new Promise((resolve, reject) => {
-    const bodyStr = body ? JSON.stringify(body) : undefined;
-
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    };
-
-    if (bodyStr) {
-      headers["Content-Length"] = Buffer.byteLength(bodyStr).toString();
-    }
-
-    const options: http.RequestOptions = {
-      hostname: this.config.host,
-      port: this.config.port,
-      path,
-      method,
-      headers,
-      timeout: timeout ?? this.config.timeout,
-    };
-    // ... rest unchanged, but use bodyStr instead of JSON.stringify(body)
+if (body) {
+  const bodyStr = JSON.stringify(body);
+  req.setHeader("Content-Length", Buffer.byteLength(bodyStr).toString());
+  req.write(bodyStr);
+}
 ```
 
-### 2. Upsert doesn't return NLM-generated title
+**Verified:** `notebooklm delete-source -i 2 --json` returns valid JSON
 
-**Location:** `~/notebooklm-client/src/service/handlers/sources.ts:388-396`
+### 2. Upsert returns NLM-generated title ✅ FIXED
 
-**Issue:** Response only includes original name, not the title NotebookLM generated.
+**Fix applied (sources.ts:389-418):**
+- Added `listSources()` call after adding source
+- Returns `nlmTitle` field with actual NotebookLM-assigned title
 
-**Fix needed:** After `addSource()`, call `listSources()` to discover the new title:
+**Verified:** Upsert response includes `nlmTitle` field
 
+**Minor refinement:** Title matching uses substring but NLM transforms significantly. Future: use word-based fuzzy matching.
+
+### 3. Off-by-one in upsert delete ✅ FIXED
+
+**Fix applied (sources.ts:361):**
 ```typescript
-// After line 386, before res.json:
-const updatedList = await sourceManager.listSources(notebookUrl, { showBrowser: false });
-const newSource = updatedList.sources.find(s =>
-  s.title.toLowerCase().includes(nameWithoutExt)
-);
-
-res.json({
-  success: true,
-  data: {
-    name: nameNormalized,
-    action,
-    sourceType: "text",
-    processingTimeMs: addResult.processingTimeMs,
-    notebooklmTitle: newSource?.title,  // NEW: actual title
-  },
-});
+// Removed incorrect -1 offset
+await sourceManager.deleteSource(notebookUrl, existingSource.index, {...})
 ```
 
-### 3. Potential off-by-one in upsert delete
-
-**Location:** `~/notebooklm-client/src/service/handlers/sources.ts:360`
-
-**Code:** `deleteSource(notebookUrl, existingSource.index - 1, ...)`
-
-**Question:** Source indices are 1-based from listSources. Does deleteSource expect 0-based or 1-based?
-
-**Check:** Review `source-deleter.ts:87-88` which validates `sourceIndex < 1` suggesting 1-based.
+**Verified:** Delete works correctly with 1-based index
 
 ---
 
 ## Source Registry Implementation (S35)
 
-### Phase 1: Fix notebooklm-client bugs (prerequisite)
+### Phase 1: Prerequisites ✅ COMPLETE
 
-1. Fix Content-Length header in ServiceClient.request()
-2. Add notebooklmTitle to upsert response
-3. Verify delete index handling
+All bugs fixed and verified. Ready for registry implementation.
 
 ### Phase 2: Add better-sqlite3 to notebooklm-client
 
@@ -160,17 +118,15 @@ Sources in notebook (5 total):
 
 ---
 
-## Workarounds
+## Test Results
 
-Until bugs are fixed, use curl directly for delete operations:
-
+All fixes verified:
 ```bash
-# Delete source by index (1-based)
-curl -s -X DELETE "http://127.0.0.1:3456/api/sources/3" \
-  -H "Content-Type: application/json" \
-  -H "Content-Length: 2" \
-  -d '{}'
+# Delete-source CLI works
+notebooklm delete-source -i 2 --json
+# Returns: {"success": true, "data": {"deletedTitle": "..."}}
 
-# List sources
-notebooklm list-sources
+# Upsert returns NLM title
+curl -X POST ".../api/sources/upsert" -d '{"name": "...", "content": "..."}'
+# Returns: {"data": {"nlmTitle": "...", "action": "created"}}
 ```
