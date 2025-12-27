@@ -493,6 +493,24 @@ The Shadow Stage 0 overlay provides deep context and code awareness for `/specki
 | **SPEC-KIT-105** | Research | Constitution & Vision Workflow Enhancement | P87 |
 | **SPEC-TIER2-SOURCES** | **Done** | Source-based Tier2 architecture (fixes 2k query limit) | S31-S32 |
 | **SPEC-DOGFOOD-001** | **Done** | TUI dogfooding validation - E2E complete | S28-S33 |
+| **SPEC-SOURCE-MGMT** | **Draft** | NotebookLM source lifecycle management | S34 |
+
+### S34 Milestone (2025-12-27)
+
+**SPEC-SOURCE-MGMT Drafted**: Designed source registry architecture to prevent orphan source proliferation.
+
+| Deliverable | Status | Location |
+|-------------|--------|----------|
+| Source registry schema (SQLite) | Designed | `docs/SPEC-SOURCE-MGMT/spec.md` |
+| CLI delete-source bug identified | Fixed (needs deploy) | Missing Content-Length header |
+| Manual source cleanup | Done | 13 → 5 sources via curl |
+
+**Known Issues Documented**:
+- `ServiceClient.request()` missing Content-Length header causes "Invalid JSON response" on DELETE
+- `handleUpsertSource` doesn't return NLM-generated title (blocks registry integration)
+- Potential off-by-one in upsert delete (`existingSource.index - 1`)
+
+**Implementation Deferred**: Registry requires notebooklm-client changes (add better-sqlite3, title discovery).
 
 ### S32 Milestone (2025-12-27)
 

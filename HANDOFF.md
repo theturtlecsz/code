@@ -1,140 +1,143 @@
-# Session 34 Prompt - Source Management
+# Session 35 Prompt - Source Registry Implementation
 
 **Last updated:** 2025-12-27
-**Status:** S33 Complete - Source-based Tier2 E2E validated
-**Primary SPEC:** SPEC-SOURCE-MGMT (New)
+**Status:** S34 Complete - Registry designed, bugs documented
+**Primary SPEC:** SPEC-SOURCE-MGMT
 
 ---
 
-## Session 33 Accomplishments
+## Session 34 Accomplishments
 
-| Item | Status | Commit |
-|------|--------|--------|
-| Source-based Tier2 E2E | ✅ VALIDATED | `fbd254241` |
-| Session close fix | ✅ FIXED | `fbd254241` |
-| Polling fix (CommitAnimation) | ✅ FIXED | `fbd254241` |
-| DIVINE_TRUTH.md with citations | ✅ CONFIRMED | Evidence updated |
-| SPEC-DOGFOOD-001 A2/A3/A4/A5 | ✅ ALL PASS | See SPEC.md |
-
----
-
-## Problem: Source Proliferation
-
-After multiple `/speckit.auto` runs, the NotebookLM notebook has accumulated redundant sources:
-
-**Current state (13 sources, 6 redundant):**
-```
-1. Divine Truth Tier 2 SPEC Analysis Framework [KEEP - template]
-2. Golden Path Dogfooding Validation: Stage0 System Integration [REDUNDANT]
-3. Golden Path Dogfooding Validation: Stage0 Verification Spec [REDUNDANT]
-4. NotebookLM Tier2 Architectural Decisions and Milestone Log [KEEP - static]
-5. Protocol for Active Testing Specifications [KEEP - static]
-6. Golden Path Dogfooding Validation: SPEC-DOGFOOD-001 [REDUNDANT]
-7. S33 Smoke Test Protocols [DELETE - test artifact]
-8. SPEC-DOGFOOD-001: Golden Path Dogfooding Validation Brief [KEEP - CURRENT_TASK_BRIEF]
-9. TUI v2 Port Stub and Compatibility Tracking Document [KEEP - static]
-10. The Codex TUI Dogfooding Protocol [KEEP - static]
-11. The Essence of New Source Testing [KEEP - static]
-12. The Golden Path Dogfooding Validation Specification [REDUNDANT]
-13. Golden Path Dogfooding Validation: SPEC-DOGFOOD-001 Project Brief [REDUNDANT]
-```
-
-**Root cause:** The upsert uses fuzzy title matching, but NotebookLM renames sources based on content. Each run with slightly different content creates a new source.
+| Item | Status | Location |
+|------|--------|----------|
+| CLI delete-source bug identified | Root cause found | Missing Content-Length header |
+| Source registry schema designed | SQLite schema ready | `docs/SPEC-SOURCE-MGMT/spec.md` |
+| Manual source cleanup | Done | 13 → 5 sources (via curl workaround) |
+| SPEC.md updated | S34 milestone added | SPEC.md:498-513 |
 
 ---
 
-## SPEC-SOURCE-MGMT: NotebookLM Source Lifecycle Management
+## Bugs Found in notebooklm-client
 
-### Problem Statement
+### 1. CLI delete-source "Invalid JSON response"
 
-The current source-based Tier2 architecture creates orphan sources over time because:
-1. NotebookLM generates semantic titles from content (unpredictable)
-2. Fuzzy matching often fails to find the "same" source
-3. No tracking of which sources belong to which spec
-4. No cleanup of stale sources
-5. NotebookLM has a 50-source limit per notebook
+**Root cause:** `ServiceClient.request()` in `service-client.ts:574-629` doesn't set `Content-Length` header when sending body. Node.js uses chunked transfer encoding, server returns 400 with empty body.
 
-### Proposed Architecture
+**Fix needed in `~/notebooklm-client/src/client/service-client.ts`:**
 
-**Option A: Local Source Registry (Recommended)**
+```typescript
+// Lines 574-584 - add Content-Length
+private async request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  timeout?: number
+): Promise<ServiceResponse<T>> {
+  return new Promise((resolve, reject) => {
+    const bodyStr = body ? JSON.stringify(body) : undefined;
 
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    };
+
+    if (bodyStr) {
+      headers["Content-Length"] = Buffer.byteLength(bodyStr).toString();
+    }
+
+    const options: http.RequestOptions = {
+      hostname: this.config.host,
+      port: this.config.port,
+      path,
+      method,
+      headers,
+      timeout: timeout ?? this.config.timeout,
+    };
+    // ... rest unchanged, but use bodyStr instead of JSON.stringify(body)
 ```
-~/.config/code/source-registry.db  (SQLite)
 
-Tables:
-- sources (id, spec_id, source_type, notebooklm_title, created_at, last_used)
-- notebooks (id, notebook_id, name, source_count)
+### 2. Upsert doesn't return NLM-generated title
 
-Flow:
-1. Before upsert: lookup spec_id in registry
-2. If found: delete existing source by stored title
-3. Upsert new source
-4. After upsert: update registry with new title
-5. Periodic cleanup: delete sources not used in N days
+**Location:** `~/notebooklm-client/src/service/handlers/sources.ts:388-396`
+
+**Issue:** Response only includes original name, not the title NotebookLM generated.
+
+**Fix needed:** After `addSource()`, call `listSources()` to discover the new title:
+
+```typescript
+// After line 386, before res.json:
+const updatedList = await sourceManager.listSources(notebookUrl, { showBrowser: false });
+const newSource = updatedList.sources.find(s =>
+  s.title.toLowerCase().includes(nameWithoutExt)
+);
+
+res.json({
+  success: true,
+  data: {
+    name: nameNormalized,
+    action,
+    sourceType: "text",
+    processingTimeMs: addResult.processingTimeMs,
+    notebooklmTitle: newSource?.title,  // NEW: actual title
+  },
+});
 ```
 
-**Option B: Naming Convention**
+### 3. Potential off-by-one in upsert delete
 
-Use deterministic prefixes that survive NotebookLM renaming:
-```
-CURRENT_SPEC_{SPEC_ID}_{HASH_8}
-CURRENT_BRIEF_{SPEC_ID}_{HASH_8}
-```
+**Location:** `~/notebooklm-client/src/service/handlers/sources.ts:360`
 
-**Option C: Source Pinning**
+**Code:** `deleteSource(notebookUrl, existingSource.index - 1, ...)`
 
-Keep only 2 dynamic sources (CURRENT_SPEC, CURRENT_BRIEF) and always overwrite them regardless of title changes.
+**Question:** Source indices are 1-based from listSources. Does deleteSource expect 0-based or 1-based?
 
-### Acceptance Criteria
-
-| ID | Criterion | Verification |
-|----|-----------|--------------|
-| A1 | No orphan sources after 10 runs | `list-sources` shows constant count |
-| A2 | Cleanup command exists | `/stage0.cleanup-sources` or similar |
-| A3 | Source count tracked | Registry shows per-spec history |
-| A4 | Manual cleanup works | Can delete by spec_id |
-
-### Implementation Tasks
-
-1. **Phase 1: Registry Design**
-   - Create SQLite schema for source tracking
-   - Add registry lookup to Tier2HttpAdapter
-   - Store NotebookLM-generated title after upsert
-
-2. **Phase 2: Upsert Enhancement**
-   - Delete old source before upserting new
-   - Handle title mismatch gracefully
-   - Update registry with new title
-
-3. **Phase 3: Cleanup Command**
-   - Add `/stage0.cleanup-sources` command
-   - Delete sources older than N days
-   - Report cleanup stats
+**Check:** Review `source-deleter.ts:87-88` which validates `sourceIndex < 1` suggesting 1-based.
 
 ---
 
-## Session 34 Tasks
+## Source Registry Implementation (S35)
 
-### Phase 1: Manual Cleanup (Immediate)
+### Phase 1: Fix notebooklm-client bugs (prerequisite)
 
-The delete-source CLI isn't working properly. Manual cleanup via NotebookLM UI:
+1. Fix Content-Length header in ServiceClient.request()
+2. Add notebooklmTitle to upsert response
+3. Verify delete index handling
 
-1. Open https://notebooklm.google.com
-2. Select `code-project-docs` notebook
-3. Delete sources 2, 3, 6, 7, 12, 13 (the redundant ones)
-4. Verify 7 sources remain
+### Phase 2: Add better-sqlite3 to notebooklm-client
 
-### Phase 2: Design Source Registry
+```bash
+cd ~/notebooklm-client
+npm install better-sqlite3
+npm install -D @types/better-sqlite3
+```
 
-Create `docs/SPEC-SOURCE-MGMT/spec.md` with:
-- Problem statement
-- Architecture options (A/B/C above)
-- Chosen approach with rationale
-- Implementation plan
+### Phase 3: Implement SourceRegistry class
 
-### Phase 3: Implement Registry
+**Location:** `~/notebooklm-client/src/sources/source-registry.ts`
 
-If time permits, implement Option A (Local Source Registry).
+**Schema:** See `~/code/docs/SPEC-SOURCE-MGMT/spec.md`
+
+### Phase 4: Integrate with handleUpsertSource
+
+1. Lookup existing source by (notebook_id, spec_id, source_type)
+2. If found, delete by stored notebooklm_title
+3. After add, update registry with new title
+
+---
+
+## Current Source State
+
+```
+Sources in notebook (5 total):
+  1. Divine Truth Tier 2 SPEC Analysis Framework [ready]
+  2. Golden Path Dogfooding Validation: Stage0 Verification Spec [ready]
+  3. Protocol for Active Testing Specifications [ready]
+  4. The Codex TUI Dogfooding Protocol [ready]
+  5. Golden Path Dogfooding Validation: SPEC-DOGFOOD-001 [ready]
+```
+
+**Static sources (don't delete):** 1, 3, 4
+**Dynamic sources (managed by registry):** 2, 5
 
 ---
 
@@ -142,18 +145,32 @@ If time permits, implement Option A (Local Source Registry).
 
 | Location | Purpose |
 |----------|---------|
-| `~/code/codex-rs/tui/src/stage0_adapters.rs` | Tier2HttpAdapter - where to add registry |
-| `~/.config/code/source-registry.db` | Proposed registry location |
-| `~/notebooklm-client/src/service/handlers/sources.ts` | Upsert API |
+| `~/code/docs/SPEC-SOURCE-MGMT/spec.md` | Registry architecture spec |
+| `~/notebooklm-client/src/client/service-client.ts` | HTTP client (Content-Length fix) |
+| `~/notebooklm-client/src/service/handlers/sources.ts` | Upsert handler (title return) |
+| `~/notebooklm-client/src/sources/source-deleter.ts` | Delete implementation |
 
 ---
 
-## Commits (S32-S33)
+## Commits (S34)
 
-| Session | Commit | Description |
-|---------|--------|-------------|
-| S32 | `3f4464b` | notebooklm-client: POST /api/sources/upsert |
-| S32 | `04d042a47` | codex-rs: Tier2HttpAdapter upsert flow |
-| S32 | `82b52ce20` | docs: S32 evidence and SPEC.md |
-| S33 | `fbd254241` | fix: Session close + polling fixes |
-| S33 | `a68a6b8cc` | docs: S33 milestone |
+| Commit | Description |
+|--------|-------------|
+| (pending) | docs: SPEC-SOURCE-MGMT and S34 milestone |
+
+---
+
+## Workarounds
+
+Until bugs are fixed, use curl directly for delete operations:
+
+```bash
+# Delete source by index (1-based)
+curl -s -X DELETE "http://127.0.0.1:3456/api/sources/3" \
+  -H "Content-Type: application/json" \
+  -H "Content-Length: 2" \
+  -d '{}'
+
+# List sources
+notebooklm list-sources
+```
