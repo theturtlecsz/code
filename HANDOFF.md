@@ -33,15 +33,21 @@ if (body) {
 
 **Verified:** `notebooklm delete-source -i 2 --json` returns valid JSON
 
-### 2. Upsert returns NLM-generated title ✅ FIXED
+### 2. Upsert returns NLM-generated title ✅ FIXED + REFINED
 
-**Fix applied (sources.ts:389-418):**
+**Initial fix (sources.ts:389-418):**
 - Added `listSources()` call after adding source
-- Returns `nlmTitle` field with actual NotebookLM-assigned title
+- Returns `nlmTitle` field
 
-**Verified:** Upsert response includes `nlmTitle` field
+**Refinement applied (sources.ts:389-435):**
+- Before/after source comparison for reliable title discovery
+- Compares source list before vs after add
+- Finds new sources by title difference
+- Correctly returns NLM-generated title even when unpredictable
 
-**Minor refinement:** Title matching uses substring but NLM transforms significantly. Future: use word-based fuzzy matching.
+**Verified:** Input "S34_FINAL_TEST" → returns "The Final Synthesis of Source Comparison"
+
+**Remaining limitation:** Upsert delete fuzzy matching still fails when NLM titles lack matching words. Registry needed for reliable updates.
 
 ### 3. Off-by-one in upsert delete ✅ FIXED
 

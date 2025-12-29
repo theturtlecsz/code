@@ -285,19 +285,34 @@ if (body) {
 
 **Status:** ✅ Verified working - delete-source CLI returns valid JSON
 
-### Bug 2: Upsert doesn't return NLM-generated title - FIXED
+### Bug 2: Upsert doesn't return NLM-generated title - FIXED + REFINED
 
-**Fix applied (sources.ts:389-418):**
+**Initial fix (sources.ts:389-418):**
 - Added `listSources()` call after adding source
 - Returns `nlmTitle` field with actual NotebookLM-assigned title
-- Falls back to last source if name matching fails
 
-**Status:** ✅ Verified working - upsert returns `nlmTitle` field
+**Refinement (S34):**
+- Implemented before/after source comparison for reliable title discovery
+- Compares source list before add vs after add
+- Identifies new sources by title difference
+- Falls back to word-based scoring if comparison fails
 
-**Minor refinement needed:** Title matching uses substring, but NLM transforms names significantly:
-- Input: "S34_TEST_SOURCE"
-- NLM output: "S34 Registry Validation Protocol Test Source"
-- Matching should use word-based fuzzy matching (like upsert delete logic)
+**Algorithm:**
+```
+1. Store existing titles before add: Set<title>
+2. After add, list sources again
+3. Find sources not in original set (new sources)
+4. If exactly 1 new source → return its title
+5. If multiple → score by word match, take best
+6. If none → fall back to word-based scoring
+```
+
+**Status:** ✅ Verified working - correctly returns NLM-generated title
+
+**Example:**
+- Input name: "S34_FINAL_TEST"
+- NLM-generated title: "The Final Synthesis of Source Comparison"
+- Returned `nlmTitle`: ✅ "The Final Synthesis of Source Comparison"
 
 ### Bug 3: Off-by-one in upsert delete - FIXED
 
@@ -309,6 +324,23 @@ await sourceManager.deleteSource(notebookUrl, existingSource.index, {...})
 ```
 
 **Status:** ✅ Verified working - delete uses correct 1-based index
+
+---
+
+## Remaining Limitation: Upsert Delete Fuzzy Matching
+
+The upsert "update" flow (delete old → add new) still relies on fuzzy matching to find existing sources. When NLM generates titles that don't contain enough matching words, the old source isn't deleted:
+
+**Example:**
+- Input name: "S34_FINAL_TEST"
+- Old NLM title: "The Final Synthesis of Source Comparison"
+- nameWords: ["s34", "final", "test"]
+- Title contains: "final" only (1/3 = 33% < 66% threshold)
+- Result: Old source NOT deleted, action="created" instead of "updated"
+
+**Impact:** Source proliferation continues until registry is implemented.
+
+**Solution:** SPEC-SOURCE-MGMT registry stores `name → nlmTitle` mapping, enabling reliable delete by stored title.
 
 ---
 
