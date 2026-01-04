@@ -28,27 +28,46 @@ NVIDIA GeForce RTX 5090
 | **Embeddings (bge-m3)** | CPU-only | GPU acceleration |
 | **Template Guardian** | CPU batch processing | Real-time GPU inference |
 
-### Priority: vLLM Setup Tasks
+### Revised Routing Philosophy (MODEL-POLICY.md v2.0.0)
+
+**Core Principle**: "Cloud where quality wins, Local where speed wins"
+
+| Lane | Default | Why |
+|------|---------|-----|
+| **Architect/Planner** | Cloud (Sonnet/GPT) | Quality wins for deep reasoning |
+| **Serious Implementer** | Cloud (DeepSeek/Sonnet) | Quality wins for multi-file refactors |
+| **Judge/Auditor** | Cloud (GPT-5.1 High) | Always cloud for governance |
+| **Tutor** | Local (MoE) | Speed wins for interactive coaching |
+| **Reflex Implementer** | Local (MoE) | Speed wins for small patches, tool loops |
+| **Librarian** | Local + Kimi escalation | Speed wins routine, cloud for hard sweeps |
+| **Embeddings** | Local | Always local (infrastructure) |
+
+### Priority: vLLM Setup Tasks (Simplified)
 
 | Order | Task | Status | Notes |
 |-------|------|--------|-------|
 | 1 | Install vLLM + CUDA dependencies | Pending | `pip install vllm` (Python 3.10+) |
-| 2 | Download 14B planner model | Pending | Qwen2.5-14B-Instruct or similar |
-| 3 | Download 32B coder model | Pending | DeepSeek-Coder-33B-Instruct or CodeLlama-34B |
-| 4 | Configure vLLM server | Pending | OpenAI-compatible API on localhost:8000 |
-| 5 | Wire TUI to vLLM endpoint | Pending | Update model router for fast_local tier |
-| 6 | Update local-llm-requirements.md | Pending | Document new hardware profile |
-| 7 | Benchmark fast_local latency | Pending | Target: <500ms for 14B, <1s for 32B |
+| 2 | Download Qwen3-Coder-30B-A3B-Instruct (AWQ 4-bit) | Pending | Single model for all local lanes |
+| 3 | Configure vLLM server | Pending | OpenAI-compatible API on localhost:8000 |
+| 4 | Wire TUI to vLLM endpoint | Pending | Update model router for local_reflex tier |
+| 5 | Benchmark local_reflex latency | Pending | Target: <200ms (MoE efficiency) |
 
-### Model Selection (MODEL-POLICY.md §8)
+### Model Selection (MODEL-POLICY.md §6 - Single Model Strategy)
 
 ```
-fast_local tier:
-├── Planner (14B): Qwen2.5-14B-Instruct @ FP16 (~28GB VRAM)
-│   └── Alternative: Mistral-7B-Instruct (~14GB) for faster inference
-├── Coder (32B): DeepSeek-Coder-33B-Instruct @ INT8 (~17GB VRAM)
-│   └── Alternative: CodeLlama-34B-Instruct (~17GB)
-└── Total: Fits in 32GB with model swapping
+local_reflex tier (ONE model serves all local lanes):
+├── Qwen3-Coder-30B-A3B-Instruct (MoE)
+│   ├── Total params: 30.5B
+│   ├── Activated params: 3.3B (fast inference)
+│   ├── Context: 262,144 tokens
+│   ├── VRAM: ~12-16GB with AWQ 4-bit
+│   └── Use: Tutor, Reflex Implementer, Librarian
+│
+└── Why single model?
+    ├── No swapping overhead
+    ├── One vLLM server, always warm
+    ├── MoE = high capability, low latency
+    └── Cloud handles quality-sensitive work
 ```
 
 ---

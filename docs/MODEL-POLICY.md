@@ -1,27 +1,101 @@
 # Model Routing Policy
 
-**Version**: 1.0.0
+**Version**: 2.0.0
 **Created**: 2025-12-14
+**Updated**: 2026-01-04 (S35 - Single-GPU optimization)
 **Status**: Active
 
 This document is the **single source of truth** for model routing in codex-rs. All specs MUST reference this document and comply with its constraints.
 
 ---
 
+## 0. Routing Philosophy (v2.0)
+
+### Core Principle: "Cloud where quality wins, Local where speed wins"
+
+**NOT** "local-first with cloud escalation" — that philosophy assumed privacy constraints that don't apply.
+
+Since **privacy is not a constraint**, the routing decision should be based purely on:
+1. **Quality-per-minute** — cloud models generally win for deep reasoning
+2. **Quality-per-dollar** — DeepSeek/Sonnet are cheap enough for most work
+3. **Latency sensitivity** — local wins for tight loops (compile/test/fix cycles)
+4. **Volume economics** — local wins for high-volume automation (capex paid)
+
+### Single-GPU Constraint (RTX 5090 32GB)
+
+With one 5090, assume:
+- **One vLLM model loaded at a time** (practically)
+- **Model swapping** for different roles, not concurrent loading
+- Local is the **fast reflex lane**, not the default brain
+
+### What Local Wins At
+
+| Advantage | Why It Matters |
+|-----------|----------------|
+| **Always-on reflex** | No quotas, no network, no latency spikes |
+| **High-volume economics** | Capex paid, marginal cost is electricity |
+| **Deterministic pinned behavior** | Stable snapshots for CI/eval harnesses |
+| **Tight tool loops** | Latency dominates compile/test/fix cycles |
+
+### What Local Cannot Beat
+
+| Limitation | Implication |
+|------------|-------------|
+| **Frontier reasoning quality** | Cloud wins for deep planning, multi-file refactors |
+| **Concurrent model loading** | Can't run 14B + 32B simultaneously on 32GB |
+
+---
+
 ## 1. Model Routing Table
 
-| Role | Default Model | Provider | Local/Cloud | Runtime | Fallback | Constraints |
-|------|---------------|----------|-------------|---------|----------|-------------|
-| **Architect / Planner** | Local 14B reasoning (Ministral 3 14B / Qwen 14B thinking) | Local | Local | vLLM | GPT-5.1 High → DeepSeek R2 | Must emit `plan.json` + confidence. Escalate if `confidence < 0.75`. |
-| **Implementer / Rust Ace** | Local 32B coder (Qwen2.5/3 Coder 32B) | Local | Local | vLLM | DeepSeek coder/R2 → Sonnet/GPT-5.1 High | Follow plan strictly. Escalate after 2 failed compile/test loops. |
-| **Librarian (long-context)** | Local 8–14B synth (Llama 3.1 8B / Qwen 14B) | Local | Local | vLLM | Kimi K2 (escalation-only) → Sonnet | Kimi only for hard sweeps (>100k context, contradictions, tool-heavy). |
-| **Tutor (maieutic coach)** | Local 7B instruct (Qwen2.5-Coder-7B) | Local | Local | vLLM/llama.cpp | Haiku → GPT-5.1 low | Ask questions first. Keep sessions short. |
-| **Auditor / Final Judge** | GPT-5.1 High (or Claude Opus) | OpenAI/Anthropic | Cloud | — | Sonnet / DeepSeek R2 | Rare + budget-gated. Must cite evidence. Run after diff + tests. |
-| **Stage0 Tier2 Synth** | NotebookLM (citation-grounded) | Google | Cloud | — | Local 8–14B summarizer | Must be citation-grounded. Use session IDs. |
-| **Stage0 Retrieval** | Deterministic | — | Local | TF-IDF + MMR | — | No LLM except optional "explain scoring" lane. |
-| **ACE Reflector / Curator** | Local 8B instruct (Llama 3.1 8B / Qwen 14B) | Local | Local | vLLM/llama.cpp | Kimi (escalation-only) | Escalate only for "interesting failures". |
-| **Embeddings** | bge-m3 | Local | Local | sentence-transformers | OpenAI embeddings | Must be stable & reproducible. |
-| **CV / Camera** | YOLO/TensorRT | Local | Local | TensorRT/PyTorch | — | Separate from LLM scheduling. |
+| Role | Default | Provider | Local/Cloud | When to Use Local | Fallback | Constraints |
+|------|---------|----------|-------------|-------------------|----------|-------------|
+| **Architect / Planner** | Sonnet / GPT-5.1 | Anthropic/OpenAI | **Cloud** | Fast draft only, offline mode | DeepSeek R2 | Must emit `plan.json` + confidence. Cloud-first for quality. |
+| **Implementer / Rust Ace** | Local MoE coder | Local | **Local (attempt 1)** | Small-to-medium diffs, reflex patches | DeepSeek → Sonnet/GPT-5.1 | Cloud-first for: cross-crate, unsafe, public API. Escalate after 2 fails. |
+| **Librarian (long-context)** | Local 8–14B synth | Local | **Local** | Routine cleanup, structure | Kimi K2 (escalation-only) | Kimi only for hard sweeps (>100k, contradictions, tool-heavy). |
+| **Tutor (maieutic coach)** | Local MoE coder | Local | **Local** | Always — perfect fit | Haiku | Fast, interactive, cheap. Keep sessions short. |
+| **Auditor / Final Judge** | GPT-5.1 High / Claude Opus | OpenAI/Anthropic | **Cloud-only** | Never local | Sonnet / DeepSeek R2 | Always cloud. Rare + budget-gated. Must cite evidence. |
+| **Stage0 Tier2 Synth** | NotebookLM | Google | **Cloud** | — | Local summarizer | Citation-grounded. Use session IDs. |
+| **Stage0 Retrieval** | Deterministic | — | **Local** | Always | — | No LLM except optional "explain scoring" lane. |
+| **ACE Reflector / Curator** | Local 8B instruct | Local | **Local** | Routine curation | Kimi (escalation-only) | Escalate only for "interesting failures". |
+| **Embeddings** | bge-m3 | Local | **Local** | Always | OpenAI embeddings | Must be stable & reproducible. GPU-accelerated. |
+| **CV / Camera** | YOLO/TensorRT | Local | **Local** | Always | — | Separate from LLM scheduling. |
+
+### Cloud-First Lanes (Quality Wins)
+
+```
+Architect/Planner ──────► Sonnet / GPT-5.1 (default)
+                              │
+                              ▼ (fallback)
+                         DeepSeek R2
+
+Auditor/Judge ──────────► GPT-5.1 High / Opus (always cloud)
+
+Serious Implementer ────► Cloud for:
+                          • Cross-crate refactors
+                          • async/concurrency/lifetimes
+                          • unsafe, FFI, sandbox changes
+                          • Public API changes
+```
+
+### Local-First Lanes (Speed/Volume Wins)
+
+```
+Tutor ──────────────────► Local MoE (always)
+
+Reflex Implementer ─────► Local MoE for:
+                          • Small patches (<100 lines)
+                          • Formatting/boilerplate
+                          • First-pass attempts
+                          • Tool-loop retries
+
+Librarian ──────────────► Local 8–14B (routine)
+                              │
+                              ▼ (escalation)
+                         Kimi K2 (hard sweeps only)
+
+Embeddings + Retrieval ─► Local (always)
+```
 
 ---
 
@@ -75,16 +149,31 @@ Quality enforced by: compiler/tests, constitution gates, Judge audit — **not b
 
 ## 3. Escalation Triggers
 
-### Architect Escalation
-- `confidence < 0.75`
-- Scope is large or requirements ambiguous
-- User explicitly requests escalation
+### Architect: N/A (Cloud-First)
 
-### Implementer Escalation (to DeepSeek)
+Architect/Planner is **cloud-first by default**. No escalation needed — start with Sonnet/GPT.
+
+Local planner only used for:
+- Fast draft plans (then cloud reviews)
+- Offline mode
+- High-volume batch planning where latency matters more than quality
+
+### Implementer Escalation (Local → Cloud)
+
+**Start local** for small-to-medium diffs, **escalate to cloud** when:
 - 2 failed compile/test loops
 - Low-confidence self-check
-- Complex multi-crate refactor / high coupling surface
-- Tool-heavy refactor beyond local model stability
+- Change is High-Risk (see §7):
+  - Cross-crate refactor / async / concurrency / lifetimes
+  - `unsafe`, FFI, sandbox changes
+  - Auth/security/crypto
+  - Public API changes
+- User explicitly requests cloud
+
+**Direct to cloud** (skip local) when:
+- Multi-file architectural refactor
+- Scope estimate > 500 lines
+- Requirements are ambiguous
 
 ### Librarian Escalation (to Kimi)
 - `context_estimate > 100k`
@@ -142,10 +231,51 @@ Quality enforced by: compiler/tests, constitution gates, Judge audit — **not b
 - Embeddings pipeline (bge-m3)
 - Git harvester
 
-### Hardware Assumptions
-- GPU: RTX 5090 32GB VRAM
-- Runtime: vLLM (default), llama.cpp (fallback)
-- Ollama: Dev bring-up only (not production default)
+### Hardware Configuration (Single RTX 5090)
+
+```
+GPU: NVIDIA GeForce RTX 5090 (32GB VRAM)
+├── Driver: 580.105.08
+├── CUDA: 13.0
+└── Constraint: ONE model loaded at a time
+
+Runtime: vLLM (primary), llama.cpp (fallback)
+Ollama: Dev bring-up only (not production)
+```
+
+### Recommended Local Model (Single-GPU Optimized)
+
+**Primary**: Qwen3-Coder-30B-A3B-Instruct (MoE)
+- Total params: 30.5B
+- Activated params: 3.3B (efficient inference)
+- Context: 262,144 tokens
+- VRAM: ~12-16GB with AWQ 4-bit quantization
+- Use case: Tutor, Reflex Implementer, Librarian
+
+**Why MoE?** High capability with low activated params = fast inference + headroom for KV cache.
+
+**Alternative** (if MoE unavailable): Ministral 3 14B
+- Optimized for local deployment
+- 256k context
+- ~28GB VRAM at FP16
+
+### Model Swapping Strategy
+
+Since only one model fits at production quality:
+
+```
+Workflow          │ Model Loaded
+──────────────────┼─────────────────────────────
+Tutor session     │ Qwen3-Coder-30B-A3B
+Reflex implement  │ Qwen3-Coder-30B-A3B (same)
+Librarian sweep   │ Qwen3-Coder-30B-A3B (same)
+──────────────────┼─────────────────────────────
+Architect/Plan    │ Cloud (Sonnet/GPT) — no swap
+Serious implement │ Cloud (DeepSeek/Sonnet) — no swap
+Judge/Audit       │ Cloud (GPT-5.1 High) — no swap
+```
+
+**Result**: One local model serves all local lanes. No swapping overhead in practice.
 
 ---
 
@@ -190,7 +320,7 @@ Every spec MUST include:
 ```md
 ## Model & Runtime (Spec Overrides)
 
-Policy: docs/MODEL-POLICY.md (version: 1.0.0)
+Policy: docs/MODEL-POLICY.md (version: 2.0.0)
 
 Roles exercised by this spec:
 - Stage0 Tier2 (NotebookLM): YES/NO
@@ -200,22 +330,23 @@ Roles exercised by this spec:
 - Tutor: YES/NO
 - Auditor/Judge: YES/NO
 
-Routing mode: local-first with escalation
-Architect escalation: confidence < 0.75
-Implementer escalation: 2 failed compile/test loops
-Kimi: escalation-only (Librarian hard sweeps)
-DeepSeek: escalation-only (Implementer stuck)
+Routing mode: cloud-where-quality-wins, local-where-speed-wins
+Architect: Cloud-first (Sonnet/GPT)
+Implementer: Local for small diffs, cloud for serious/HR work
+Librarian: Local + Kimi escalation (hard sweeps)
+Judge: Cloud-only (always)
 
 Primary tiers:
-- fast_local: <local 14B planner> + <local 32B coder> (vLLM on RTX 5090)
-- slow_cloud_escalation: DeepSeek (reasoner/chat) [escalation-only]
+- cloud_quality: Sonnet / GPT-5.1 (Architect, Serious Implementer)
+- local_reflex: Qwen3-Coder-30B-A3B MoE (Tutor, Reflex Implementer, Librarian)
+- cloud_escalation: DeepSeek R2 / Kimi K2 (when local fails)
 - premium_judge: GPT-5.1 High / Claude Opus (HR required)
 
 Privacy:
 - local_only = false  # if true → forbids all cloud calls
 
 High-risk:
-- HR = YES/NO (if YES → cloud Judge required)
+- HR = YES/NO (if YES → cloud Architect + cloud Judge required)
 
 Overrides (must be rare):
 - <none | list>
@@ -226,7 +357,7 @@ Infrastructure-only specs may use:
 ```md
 ## Model & Runtime (Spec Overrides)
 
-Policy: docs/MODEL-POLICY.md (version: 1.0.0)
+Policy: docs/MODEL-POLICY.md (version: 2.0.0)
 
 This spec is **infrastructure-only** and does not invoke model routing directly.
 Roles exercised: none (no Architect/Implementer/Librarian/Tutor/Judge).
@@ -240,6 +371,7 @@ Guardrails still apply: sandboxing, evidence/logging, no hallucinated citations.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.0.0 | 2026-01-04 | **Philosophy shift**: "cloud-where-quality-wins, local-where-speed-wins". Single-GPU optimization (RTX 5090). Architect/Planner now cloud-first. Simplified to single local MoE model (Qwen3-Coder-30B-A3B). Added §0 Routing Philosophy. |
 | 1.0.0 | 2025-12-14 | Initial policy from Q0.1–Q0.9 audit |
 
 ---

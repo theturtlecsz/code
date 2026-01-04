@@ -34,35 +34,61 @@ Disk:   SSD (fast model loading)
 
 ---
 
-## GPU-Accelerated Model Strategy
+## GPU-Accelerated Model Strategy (v2.0 - Single Model)
 
-### Primary Models (vLLM)
+### Routing Philosophy Update (MODEL-POLICY.md v2.0.0)
 
-| Role | Model | VRAM | Notes |
-|------|-------|------|-------|
-| Planner (14B) | Qwen2.5-14B-Instruct | ~28GB FP16 | Default for Stage 0 IQO |
-| Coder (32B) | DeepSeek-Coder-33B-Instruct | ~17GB INT8 | Quantized to fit |
-| Fallback (7B) | Mistral-7B-Instruct | ~14GB | Faster, fits alongside 14B |
+**Core Principle**: "Cloud where quality wins, Local where speed wins"
+
+- **Architect/Planner**: Cloud-first (Sonnet/GPT) — quality wins
+- **Serious Implementer**: Cloud (DeepSeek/Sonnet) — quality wins
+- **Judge/Auditor**: Always cloud (GPT-5.1 High)
+- **Tutor/Reflex Implementer/Librarian**: Local MoE — speed wins
+
+### Recommended Local Model (Single-GPU Optimized)
+
+| Model | Qwen3-Coder-30B-A3B-Instruct (MoE) |
+|-------|-------------------------------------|
+| Total params | 30.5B |
+| Activated params | 3.3B (efficient!) |
+| Context | 262,144 tokens |
+| VRAM | ~12-16GB with AWQ 4-bit |
+| Use cases | Tutor, Reflex Implementer, Librarian |
+
+**Why MoE?** High capability with low activated params = fast inference + KV cache headroom.
+
+**Why single model?**
+- No swapping overhead
+- One vLLM server, always warm
+- Cloud handles quality-sensitive Architect/Judge work
 
 ### vLLM Server Configuration
 
 ```bash
-# Start vLLM with OpenAI-compatible API
+# Start vLLM with OpenAI-compatible API (single MoE model)
 python -m vllm.entrypoints.openai.api_server \
-    --model Qwen/Qwen2.5-14B-Instruct \
+    --model cpatonn/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit \
     --port 8000 \
-    --max-model-len 8192 \
-    --gpu-memory-utilization 0.9
+    --max-model-len 32768 \
+    --gpu-memory-utilization 0.85
 ```
 
-### Expected Performance
+### Expected Performance (MoE)
 
-| Model | CPU (Ollama) | GPU (vLLM) | Improvement |
-|-------|--------------|------------|-------------|
-| 3B | 4.67s | ~50ms | 93x |
-| 7B | ~12s | ~100ms | 120x |
-| 14B | ~30s | ~200ms | 150x |
-| 32B | N/A (OOM) | ~500ms | Now possible |
+| Scenario | Latency (est.) | Notes |
+|----------|----------------|-------|
+| Short prompt (<1k tokens) | ~50-100ms | MoE activated params are small |
+| Medium prompt (1-8k tokens) | ~100-200ms | Good for tool loops |
+| Long context (8-32k tokens) | ~300-500ms | Still fast for Librarian |
+
+### Comparison: Old Multi-Model vs New Single-Model
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| **Old: 14B planner + 32B coder** | Role-specific optimization | Swapping overhead, complexity |
+| **New: Single MoE** | Always warm, simpler, cloud for quality | Less role specialization |
+
+**Decision**: Single MoE + cloud for quality is the right tradeoff for one 5090.
 
 ---
 
