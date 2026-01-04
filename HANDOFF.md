@@ -1,8 +1,55 @@
-# Session 35 Prompt - Source Registry Implementation
+# Session 35 Prompt - GPU Activation & Source Registry
 
-**Last updated:** 2025-12-27
-**Status:** S34 Complete - All bugs fixed and verified
-**Primary SPEC:** SPEC-SOURCE-MGMT
+**Last updated:** 2026-01-04
+**Status:** S35 Active - RTX 5090 INSTALLED ✅
+**Primary SPEC:** SPEC-SOURCE-MGMT + GPU Activation
+
+---
+
+## 🎉 MILESTONE: RTX 5090 32GB Installed
+
+**Verified:** 2026-01-04
+
+```
+NVIDIA GeForce RTX 5090
+├── VRAM: 32607 MiB (32GB)
+├── Driver: 580.105.08
+├── CUDA: 13.0
+└── Status: Idle, ready for workloads
+```
+
+### What This Unlocks
+
+| Blocked Task | Previous State | Now Possible |
+|--------------|---------------|--------------|
+| **vLLM runtime** | Not possible (no GPU) | Default runtime per MODEL-POLICY.md |
+| **fast_local tier** | Ollama CPU (4.67s latency) | 14B planner + 32B coder on GPU |
+| **Stage 0 IQO** | qwen2.5:3b CPU (4.67s) | GPU-accelerated inference (<100ms) |
+| **Embeddings (bge-m3)** | CPU-only | GPU acceleration |
+| **Template Guardian** | CPU batch processing | Real-time GPU inference |
+
+### Priority: vLLM Setup Tasks
+
+| Order | Task | Status | Notes |
+|-------|------|--------|-------|
+| 1 | Install vLLM + CUDA dependencies | Pending | `pip install vllm` (Python 3.10+) |
+| 2 | Download 14B planner model | Pending | Qwen2.5-14B-Instruct or similar |
+| 3 | Download 32B coder model | Pending | DeepSeek-Coder-33B-Instruct or CodeLlama-34B |
+| 4 | Configure vLLM server | Pending | OpenAI-compatible API on localhost:8000 |
+| 5 | Wire TUI to vLLM endpoint | Pending | Update model router for fast_local tier |
+| 6 | Update local-llm-requirements.md | Pending | Document new hardware profile |
+| 7 | Benchmark fast_local latency | Pending | Target: <500ms for 14B, <1s for 32B |
+
+### Model Selection (MODEL-POLICY.md §8)
+
+```
+fast_local tier:
+├── Planner (14B): Qwen2.5-14B-Instruct @ FP16 (~28GB VRAM)
+│   └── Alternative: Mistral-7B-Instruct (~14GB) for faster inference
+├── Coder (32B): DeepSeek-Coder-33B-Instruct @ INT8 (~17GB VRAM)
+│   └── Alternative: CodeLlama-34B-Instruct (~17GB)
+└── Total: Fits in 32GB with model swapping
+```
 
 ---
 

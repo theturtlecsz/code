@@ -1,7 +1,8 @@
 # Local LLM Requirements Analysis
 
-**Date**: 2025-11-30 (P72)
-**Use Case**: Template Guardian for memory restructuring
+**Date**: 2026-01-04 (S35) - **UPDATED with RTX 5090**
+**Previous**: 2025-11-30 (P72) - CPU-only analysis
+**Use Case**: fast_local tier for Stage 0 IQO, Template Guardian, Planner, Coder
 
 ---
 
@@ -9,14 +10,13 @@
 
 | Metric | Value | Assessment |
 |--------|-------|------------|
-| Available GPU | None | CPU-only inference required |
+| Available GPU | **RTX 5090 32GB** | ✓ Full GPU inference |
 | System RAM | 64GB (58GB free) | Exceeds requirements |
-| CPU | Intel Xeon Gold 6132 @ 2.60GHz | Server-grade, good for inference |
-| Model tested | qwen2.5:3b (1.9GB) | ✓ Suitable |
-| Warm latency | **4.67 seconds** | Acceptable |
-| Output quality | Good (with proper prompting) | ✓ Production-ready |
+| CPU | Intel Xeon Gold 6132 @ 2.60GHz | Server-grade, good for fallback |
+| Runtime | **vLLM** (primary), llama.cpp (fallback) | Per MODEL-POLICY.md |
+| Target latency | **<500ms (14B), <1s (32B)** | GPU-accelerated |
 
-**Recommendation**: Use qwen2.5:3b for Template Guardian. CPU inference is acceptable for batch processing.
+**Recommendation**: Deploy vLLM with Qwen2.5-14B-Instruct (planner) + DeepSeek-Coder-33B (coder). GPU enables fast_local tier as designed in MODEL-POLICY.md.
 
 ---
 
@@ -26,13 +26,51 @@
 CPU:    Intel(R) Xeon(R) Gold 6132 CPU @ 2.60GHz
         14 cores, server-grade, AVX-512 support
 RAM:    64GB total, ~58GB available
-GPU:    None (CPU-only inference)
+GPU:    NVIDIA GeForce RTX 5090 32GB ← NEW (2026-01-04)
+        Driver: 580.105.08
+        CUDA: 13.0
 Disk:   SSD (fast model loading)
 ```
 
 ---
 
-## Model Benchmarks
+## GPU-Accelerated Model Strategy
+
+### Primary Models (vLLM)
+
+| Role | Model | VRAM | Notes |
+|------|-------|------|-------|
+| Planner (14B) | Qwen2.5-14B-Instruct | ~28GB FP16 | Default for Stage 0 IQO |
+| Coder (32B) | DeepSeek-Coder-33B-Instruct | ~17GB INT8 | Quantized to fit |
+| Fallback (7B) | Mistral-7B-Instruct | ~14GB | Faster, fits alongside 14B |
+
+### vLLM Server Configuration
+
+```bash
+# Start vLLM with OpenAI-compatible API
+python -m vllm.entrypoints.openai.api_server \
+    --model Qwen/Qwen2.5-14B-Instruct \
+    --port 8000 \
+    --max-model-len 8192 \
+    --gpu-memory-utilization 0.9
+```
+
+### Expected Performance
+
+| Model | CPU (Ollama) | GPU (vLLM) | Improvement |
+|-------|--------------|------------|-------------|
+| 3B | 4.67s | ~50ms | 93x |
+| 7B | ~12s | ~100ms | 120x |
+| 14B | ~30s | ~200ms | 150x |
+| 32B | N/A (OOM) | ~500ms | Now possible |
+
+---
+
+## Legacy: CPU-Only Analysis (P72)
+
+The following benchmarks were performed when the system had no GPU (CPU-only inference).
+
+## Model Benchmarks (CPU-Only, Historical)
 
 ### qwen2.5:3b (1.9GB)
 
