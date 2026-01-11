@@ -140,6 +140,9 @@ pub mod live_wrap;
 mod local_memory_cli;
 mod local_memory_util;
 mod markdown;
+/// SPEC-KIT-971: Memvid adapter for Stage0 memory traits.
+/// All Memvid concepts are isolated here; Stage0 core has no Memvid dependency.
+pub mod memvid_adapter;
 mod markdown_renderer;
 mod markdown_stream;
 mod model_router;
