@@ -1,10 +1,11 @@
 # Documentation Index
-## 2026 Memvid-first Program (new)
-- `DECISION_REGISTER.md` — locked decisions D1–D112 (source-of-truth for product locks)
-- `MEMVID_FIRST_WORKBENCH.md` — architecture + roadmap for Memvid-first workbench
-- `MEMVID-ENVIRONMENT.md` — ops/runbook for capsules
-- `MODEL-POLICY.md` — Model Policy v2 track (authoring + enforcement)
-- Specs: `SPEC-KIT-971-*` through `SPEC-KIT-980-*`
+## 2026-Q1 Active Program (authoritative)
+
+- `PROGRAM_2026Q1_ACTIVE.md` — **pinned active specs + dependency DAG + sequencing gates**
+- `DECISION_REGISTER.md` — locked decisions (D1–D112)
+- `MODEL-POLICY.md` — model policy (roles, routing rules, enforcement)
+- `MEMVID_FIRST_WORKBENCH.md` — architecture + ADRs for the Memvid-first workbench
+- `GOLDEN_PATH.md` — end-to-end walkthrough (what “good” looks like)
 
 **Last Updated**: 2026-01-10
 **Total Active Docs**: ~45 essential documents

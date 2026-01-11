@@ -11,6 +11,16 @@ with optional power features for images/audio behind compile-time gates.
 
 This turns “memory” into a real workbench substrate (not just code/text logs).
 
+## Decision IDs implemented
+
+**Implemented by this spec:** D11, D37
+
+**Referenced (must remain consistent):** D5, D6
+
+**Explicitly out of scope:** D32
+
+---
+
 ## Goals
 - Ingest PDFs and DOCX files as first-class artifacts with provenance metadata.
 - Make extracted text searchable via Memvid hybrid retrieval.

@@ -6,6 +6,16 @@
 ## Summary
 Make retrieval robust and debuggable: lex+vec fusion, filters, recency bias, and an eval harness that gates regressions and drives tuning.
 
+## Decision IDs implemented
+
+**Implemented by this spec:** D5, D21, D24, D35, D89, D90
+
+**Referenced (must remain consistent):** D66, D80
+
+**Explicitly out of scope:** D31
+
+---
+
 ## Goals
 - Deliver the listed deliverables with tests and safe rollout.
 - Keep Stage0 core abstracted (Memvid is an adapter).

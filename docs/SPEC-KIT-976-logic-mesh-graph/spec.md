@@ -12,6 +12,16 @@ This is the foundation for:
 - relationship-aware retrieval (graph‑expanded recall)
 - replayable audits that can explain *why* a decision was made
 
+## Decision IDs implemented
+
+**Implemented by this spec:** D31, D10, D62, D63, D64, D75, D97
+
+**Referenced (must remain consistent):** D58, D77
+
+**Explicitly out of scope:** D60
+
+---
+
 ## Goals
 - A **v1 schema** for Cards + Edges that is stable, versioned, and time‑travelable.
 - A minimal extraction/enrichment pipeline that produces useful Cards/Edges for the 2026-Q1 specs (971–980).

@@ -6,6 +6,16 @@
 ## Summary
 Migrate fully off the local-memory daemon after parity gates: import corpus, dual-run A/B, then deprecate and remove local-memory dependencies.
 
+## Decision IDs implemented
+
+**Implemented by this spec:** D14, D39, D40, D52, D94
+
+**Referenced (must remain consistent):** D53, D35
+
+**Explicitly out of scope:** D60
+
+---
+
 ## Goals
 - Deliver the listed deliverables with tests and safe rollout.
 - Keep Stage0 core abstracted (Memvid is an adapter).

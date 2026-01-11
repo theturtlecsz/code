@@ -8,6 +8,41 @@
 
 ---
 
+## Docs Contract (Non-Negotiable)
+
+This section exists because we’ve had multiple iterations of “misread intent” during handoff.  
+The goal is to make direction **unmissable** and enforceable in code review + CI.
+
+### Doc precedence order
+
+If two docs disagree, **higher precedence wins**:
+
+1. **`SPEC.md`** — active program + open tasks (this file is the execution source-of-truth)
+2. **`docs/PROGRAM_2026Q1_ACTIVE.md`** — active program DAG + sequencing + “don’t start until” gates
+3. **`docs/DECISION_REGISTER.md`** — locked decisions (D1–D112)
+4. **`docs/SPEC-KIT-971..980/**`** — implementation specs for the 2026-Q1 program
+5. **Everything else in `docs/`** — reference/historical unless explicitly labeled **ACTIVE**
+
+### Invariants (do not violate)
+
+- **Reflex is a routing mode**, not a Stage0 role: `Implementer(mode=reflex)`
+- **Single-writer capsule model**: global lock + writer queue (no multi-writer direct writes)
+- **Memvid capsule is system-of-record**; legacy `local-memory` is fallback until parity gates pass (SPEC-KIT-979)
+- **Stage boundary commits create checkpoints**; manual commits also create checkpoints
+- **Run isolation via branches**: every run starts in `run/<RUN_ID>`; merges to `main` only on Unlock PASS
+- **Replay is offline-first**: exact for retrieval + events; LLM I/O replay depends on capture mode
+- **URI stability**: logical `mv2://…` URIs are immutable; physical frames may change; resolution uses URI indexing/aliasing (SPEC-KIT-971)
+
+### Golden path + enforcement
+
+- **Golden Path walkthrough:** `docs/GOLDEN_PATH.md`
+- **Every PR must link:**
+  - the SPEC-KIT-* deliverable(s) it satisfies, and
+  - the Decision IDs it implements.
+- **Doc-lint gate:** `scripts/doc_lint.py` (must pass in CI before merge)
+
+---
+
 ## Model & Runtime Policy
 
 **Authoritative Documents (v2 track)**:

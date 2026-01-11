@@ -8,6 +8,16 @@
 **Important:** "Reflex" is **not** a new Stage0 role. Treat it as `role=Implementer` + `mode=reflex` (for telemetry + routing), used only inside the Implement stage.
 Wire a local OpenAI-compatible inference server for sub-second compiler loops using SGLang with RadixAttention and JSON schema enforcement. Establish bakeoff gates for reflex promotion.
 
+## Decision IDs implemented
+
+**Implemented by this spec:** D13, D25, D43, D55, D78, D93, D110, D112
+
+**Referenced (must remain consistent):** D49, D50
+
+**Explicitly out of scope:** D27
+
+---
+
 ## Goals
 - Deliver the listed deliverables with tests and safe rollout.
 - Keep Stage0 core abstracted (local inference is an adapter behind an OpenAI-compatible client).

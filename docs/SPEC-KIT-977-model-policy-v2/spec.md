@@ -6,6 +6,16 @@
 ## Summary
 Turn model policy into an executable system: authored in repo, validated in CI, snapshotted into capsules, enforced at routing and gates, monitored and auditable.
 
+## Decision IDs implemented
+
+**Implemented by this spec:** D12, D17, D36, D56, D57, D44
+
+**Referenced (must remain consistent):** D30, D59
+
+**Explicitly out of scope:** D60
+
+---
+
 ## Goals
 - Deliver the listed deliverables with tests and safe rollout.
 - Keep Stage0 core abstracted (Memvid is an adapter).

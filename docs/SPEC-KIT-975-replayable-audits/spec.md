@@ -6,6 +6,16 @@
 ## Summary
 Record the agent’s operations (retrieval, tool calls, decisions) so we can replay a run against the same capsule checkpoint and produce deterministic audit reports. Optional A/B model replay comes later.
 
+## Decision IDs implemented
+
+**Implemented by this spec:** D33, D65, D66, D72, D76, D95
+
+**Referenced (must remain consistent):** D51, D59
+
+**Explicitly out of scope:** D60
+
+---
+
 ## Goals
 - Deliver the listed deliverables with tests and safe rollout.
 - Keep Stage0 core abstracted (Memvid is an adapter).
@@ -16,7 +26,7 @@ Record the agent’s operations (retrieval, tool calls, decisions) so we can rep
 
 ## Deliverables
 - **Run Event Schema v1** (versioned JSON):
-  - `StageTransition`, `PolicySnapshotRef`, `RetrievalRequest`, `RetrievalResponse`, `ToolCall`, `ToolResult`, `PatchApply`, `GateDecision`, `ErrorEvent`.
+  - `StageTransition`, `PolicySnapshotRef`, `RetrievalRequest`, `RetrievalResponse`, `ToolCall`, `ToolResult`, `PatchApply`, `GateDecision`, `ErrorEvent`, `BranchMerged`, `CapsuleExported`, `CapsuleImported`.
   - Optional: `ModelCallEnvelope` with capture modes (see below).
 - **Capture pipeline**:
   - Instrument Spec‑Kit + Stage0 adapters to append `RunEvent`s into the workspace capsule (`track=events`) with canonical `mv2://.../event/<RUN_ID>/<SEQ>` URIs.
@@ -38,6 +48,24 @@ Record the agent’s operations (retrieval, tool calls, decisions) so we can rep
   - Emit `replay_report.md` + `replay_report.json` (single artifact) with links to capsule URIs.
   - Store the report back into the capsule under `mv2://.../artifact/...`.
 - **Stretch (explicitly optional)**: A/B replay that re-runs selected model calls with a different model and produces diffs (gated; may require network).
+
+## Replay Truth Table (read this before implementing)
+
+We use the term **“exact replay”** in a precise way:
+
+> **Exact = retrieval + events.**  
+> **Model I/O depends on capture mode.**  
+> Offline replay **never** reissues remote model calls.
+
+| Step type | Offline “exact”? | Condition |
+|----------:|:------------------|:----------|
+| Retrieval requests/responses | ✅ Yes | Same capsule checkpoint + same retrieval config → same hit set (within epsilon) |
+| Event timeline | ✅ Yes | Events are captured at commit time and replayed verbatim |
+| Tool outputs | ✅ Yes | Only if the tool output was captured (ToolResult events) |
+| Model prompts/responses | ⚠️ Depends | Only reconstructable if `audit.capture_llm_io = "full"` |
+| Remote model calls | ❌ Never | Offline mode never reissues network calls |
+
+---
 
 ## Acceptance Criteria (testable)
 - Given a completed run with `audit.capture_llm_io=summary`, the capsule contains:

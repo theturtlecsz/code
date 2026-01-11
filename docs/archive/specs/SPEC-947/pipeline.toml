@@ -1,0 +1,22 @@
+spec_id = "SPEC-947"
+enabled_stages = [
+    "new",
+    "specify",
+    "plan",
+    "tasks",
+    "implement",
+    "validate",
+    "audit",
+    "unlock",
+]
+
+[quality_gates]
+enabled = true
+auto_resolve = true
+
+[stage_models]
+specify = ["code"]
+
+[skip_conditions]
+
+[skip_reasons]
