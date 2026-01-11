@@ -1,3 +1,5 @@
+> **REFRACTOR NOTE (2026-01-10)**: Librarian is being rebased onto **Memvid capsules + Logic Mesh**. This doc is partially outdated (local-memory assumptions). See **SPEC-KIT-976** (logic mesh) and **SPEC-KIT-971** (capsule foundation).
+
 # SPEC-KIT-103: Librarian & Repair Jobs
 
 **Status**: ROADMAP / PLANNING (requires refinement before implementation)

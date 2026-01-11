@@ -1,29 +1,80 @@
 # Spec-Kit Multi-Agent Framework - Task Tracker
 
-**Last Updated**: 2025-12-22
+**Last Updated**: 2026-01-11
 **Branch**: main
-**Status**: ✅ **PHASE 3 COMPLETE** - Production ready
+**Status**: 🚧 **PHASE 4 IN PROGRESS** — Memvid-first workbench + Model Policy v2 (see 2026-Q1 Program)
+**Target Release**: `0.5.x` (Memvid-first + Policy v2), baseline `0.4.x` remains production-ready
+**Decision Register**: `docs/DECISION_REGISTER.md` (D1–D112 locked)
 
 ---
 
 ## Model & Runtime Policy
 
-**Authoritative Documents**:
-- **Model Routing Policy**: `docs/MODEL-POLICY.md` (version: 1.0.0)
-- **Guardrails**: `docs/MODEL-POLICY.md` Section 7 (GR-001 through GR-013)
+**Authoritative Documents (v2 track)**:
+- **Model routing & enforcement**: `docs/MODEL-POLICY.md` (target: v2.x; update in progress)
+- **Decision register**: `docs/DECISION_REGISTER.md` (D1–D112 locked; do not violate without an ADR + review)
+- **Memvid-first architecture**: `docs/MEMVID_FIRST_WORKBENCH.md` (new; generated 2026-01)
 
-**Spec Compliance Requirement**:
-All SPECKIT specs MUST include a `Model & Runtime (Spec Overrides)` section that references MODEL-POLICY.md version. Infrastructure-only specs may use the minimal template.
+**Defaults (all configurable via TUI / config)**
 
-**Key Policy Points**:
-- **No consensus**: Single-owner pipeline (Architect → Implementer → Judge); no voting/swarm
-- **Local-first**: Default to local models; cloud escalation-only (Kimi for Librarian, DeepSeek for Implementer)
-- **HR requires cloud Judge**: High-risk changes require GPT-5.1 High / Claude Opus approval
-- **NotebookLM must be citation-grounded**: No hallucinated citations (GR-008)
+| Routing Target | Default | Notes |
+| --- | --- | --- |
+| Architect (cloud) | `gpt-5.2-xhigh` | Best reasoning/design; can be downgraded to `gpt-5.2-high` for budget. |
+| Judge (cloud) | `gpt-5.2-xhigh` | Always used for unlock gates; should remain frontier. |
+| Implementer (cloud) | `gpt-5.2-xhigh` (or `gpt-5.2-high`) | Larger patches; escalated from `Implementer(mode=reflex)` after N failures. |
+| Implementer (mode=reflex; local) | `gpt-oss-20b` (MXFP4) via SGLang | **Not a new Stage0 role**. Used inside the Implement stage for sub-second compiler loops + schema-constrained JSON patches. |
+| SidecarCritic (cheap, always-on) | `gpt-5.2-mini` (default) | Critique/formatting/lint-ish; keep inexpensive. |
+| NotebookLM Tier2 (cloud, always-on) | NLM service | Long-context synthesis; **non-blocking** with timeouts + fallbacks. |
+
+**Routing (high level)**:
+- Cloud-first for planning/reasoning.
+- Local-only where it is strictly better: reflex compiler loops, offline mode, sensitive-data mode.
+- Escalate after `reflex_max_attempts` (default: 2) from `Implementer(mode=reflex)` to cloud Implementer/Architect.
+- Judge always cloud for unlocks.
 
 ---
 
-## Current State (2025-10-15)
+## 2026-Q1 Program: Memvid-first Auditable Agent Workbench + Model Policy v2
+
+This program upgrades the **memory + evidence substrate** to Memvid capsules and makes **time‑travel + branching + replayable audits** first‑class product capabilities.
+
+**Non‑negotiables** (locked via decisions D1–D112):
+- Workspace capsule default; per‑run encrypted exports.
+- Stage boundary checkpoints are the canonical time‑travel anchors (timestamps remain for convenience).
+- Hybrid retrieval (BM25 + vector) with explainability (lex score, vec score, recency bias, tags).
+- Full graph / logic mesh, branching, replayable audits (explicit requirement).
+- Dual‑backend rollout (Memvid + local‑memory fallback) → sunset local‑memory after parity gates.
+
+### P0/P1 Work Items (90‑day plan)
+
+| Order | Task ID | Title | Status | Owner (role) | Notes / Acceptance Criteria |
+| --- | --- | --- | --- | --- | --- |
+| 1 | SPEC-KIT-971 | Memvid Capsule Foundation + Single‑Writer Adapter | TODO | Platform Eng | Create/open capsule; `put/get/search`; **stable `mv2://` URIs**; stage checkpoint commits; minimal **event track plumbing**; crash recovery tests; config switch + local‑memory fallback. |
+| 2 | SPEC-KIT-972 | Hybrid Retrieval + Explainable Scoring + Eval Harness | TODO | Search/Eval Eng | Lex+vec fusion; recency bias + filters; `/speckit.search --explain`; golden queries + A/B harness vs local‑memory; regression gates in CI. |
+| 3 | SPEC-KIT-973 | Time‑Travel UX (timeline/as‑of/diff/branch) | TODO | TUI Eng | `/speckit.timeline`, `/speckit.asof`, `/speckit.diff`; stage checkpoint schema; deterministic “what did it know at stage X” retrieval. |
+| 4 | SPEC-KIT-974 | Run Capsule Export/Import + Encryption + Safe Export | TODO | Platform+Security Eng | Export `.mv2e`; import & reproduce retrieval context offline; safe‑export redaction pipeline + audit log of exports. |
+| 5 | SPEC-KIT-975 | Replayable Audits v1 (deterministic) | TODO | Platform+Eval Eng | Expand event schema + capture (beyond stage events); deterministic offline replay against same checkpoint; generate `replay_report.md` + `replay_report.json`; optional model A/B (explicit). |
+| 6 | SPEC-KIT-976 | Graph / Logic Mesh v1 (project state) | TODO | Platform+Search Eng | Memory Cards extraction + entity timelines; relationships/graph queries; `/speckit.state` and `/speckit.facts` commands. |
+| 7 | SPEC-KIT-977 | Model Policy v2 (author → snapshot → enforce → audit) | TODO | Platform+Security Eng | Policy authoring in repo; `PolicySnapshot` stored in capsule per run; router enforcement; policy tests + change log; approvals warn-only initially. |
+| 8 | SPEC-KIT-978 | Implementer.Reflex Mode (RTX 5090) via SGLang + Bakeoff | TODO | Infra/LLM Eng | SGLang server; `gpt-oss-20b` MXFP4; JSON constrained decoding; bakeoff harness (TTFT/TPS/pass@1); vLLM fallback path. (**Reflex is a routing mode, not a new Stage0 role.**) |
+| 9 | SPEC-KIT-979 | Local‑Memory Migration + Sunset Plan | TODO | Platform Eng | Import existing corpus; dual‑backend parity; deprecate local‑memory env docs; remove daemon dependency once parity gates pass. |
+| 10 | SPEC-KIT-980 | Multi‑Modal Ingestion (PDF/DOCX; images/audio gated) | TODO | Ingestion Eng | `speckit ingest <path>`; PDF/DOCX extraction behind feature flags; searchable + time‑travelable; add fixtures + golden queries. |
+
+### Triage: Existing open backlog items impacted by this program
+
+| Existing Item | Current | Action | Notes |
+| --- | --- | --- | --- |
+| SPEC-KIT-010 (local-memory migration) | Historical | **Superseded** | Replace with SPEC-KIT-979 (Memvid migration + sunset). Keep docs as legacy reference only. |
+| SPEC-KIT-103 (Librarian roadmap) | Needs update | **Refactor** | Rebase Librarian onto Memvid (cards + logic mesh + time travel). See SPEC-KIT-976. |
+| SYNC-024 (TUI `/speckit.ps` process/status view) | Backlog | **Keep (not superseded)** | Useful to surface Memvid writer/indexer + local SGLang server status. Can be accelerated but is not folded into Memvid specs. |
+| SYNC-025 (exec hardening) | Backlog | **Keep (align with Q1)** | Improves reliability for local reflex + ingest (timeouts, cancellation, resource limits). Treat as enabling work; not superseded. |
+| SYNC-026 (retention/compaction hardening) | Backlog | **Align** | Re-scope to include Memvid capsule growth: stats, retention policy, compaction/rotation hooks. Coordinate with SPEC-KIT-971 + SPEC-KIT-979. |
+| LOCAL-MEMORY-ENVIRONMENT.md | Current ops doc | **Keep, mark legacy** | Add `MEMVID-ENVIRONMENT.md`; keep local‑memory doc as fallback until SPEC-KIT-979 is done. |
+**Note:** `D43` is the canonical decision for the reflex default (GPT‑OSS‑20B). `D110` is reserved for the standardized **backup** reflex model (Qwen3‑A3B) to avoid configuration conflicts.
+
+
+## 2025 Baseline (Archived)
+> Archived baseline. Current work is tracked in **2026-Q1 Program** above.
 
 **Vision**: Vague idea → automated multi-agent development → validated implementation
 **Status**: ✅ **PHASE 3 STANDARDIZATION COMPLETE**
@@ -476,6 +527,7 @@ docs/SPEC-OPS-004-integrated-coder-hooks/evidence/
 ---
 
 ## Stage 0 / NotebookLM Integration (SPEC-KIT-102)
+> NOTE (2026-01): The Librarian/NotebookLM work is being refactored onto **Memvid capsules** with **time-travel + replay** and local reflex via **SGLang (gpt-oss-20b)**. Treat the roadmap below as historical; execution is tracked in **SPEC-KIT-971..979** above.
 
 **STATUS**: V1/V2 Complete, V3/V4 Roadmap
 
@@ -549,7 +601,7 @@ The Shadow Stage 0 overlay provides deep context and code awareness for `/specki
 |-------|--------|------------------|
 | V1: Foundation | **DONE** | Stage0Engine, overlay DB, DCC, Tier2 cache, /speckit.auto integration |
 | V2: Hybrid | **DONE** | TF-IDF backend, memory+code lanes, NotebookLM seeding, eval harness |
-| V3: Librarian | Roadmap | Local LLM (qwen2.5:3b), auto-restructure, meta-memories, causal inference |
+| V3: Librarian | Roadmap | Local LLM (gpt-oss-20b (MXFP4) [reflex]; optional small model for extraction), auto-restructure, meta-memories, causal inference |
 | V4: Learning | Roadmap | Parameter tuning, weight optimization, config versioning |
 
 ### Test Coverage
@@ -578,46 +630,18 @@ The Shadow Stage 0 overlay provides deep context and code awareness for `/specki
 
 ## Next Steps
 
-**All Test Coverage Work COMPLETE** ✅ (as of 2025-10-19)
-- Phase 3: Production ready (13 /speckit.* commands operational)
-- Documentation: Current (v1.3, all policies documented)
-- Maintenance: All priority tasks complete (MAINT-1 through MAINT-9)
-- Testing: **Phase 1+2+3+4 COMPLETE** (604 tests, 100% pass rate, **42-48% estimated coverage**)
-
-**Test Coverage Achievement** (4 months ahead of schedule):
-- **604 tests** (178 → 604, +426 tests, +239% increase)
-- **100% pass rate** maintained throughout all phases
-- **40% coverage target EXCEEDED** (estimated 42-48%, Q1 2026 goal achieved Oct 2025)
-- **All 4 test phases complete**: Infrastructure, Module testing, Integration, Edge cases + property-based
-
-**Upcoming Work** (Q1-Q2 2026):
-- **Optional refinement**: Performance benchmarks, additional property-based tests
-- **Stretch goals**: 50% coverage, stress testing, fuzz testing
-- **MAINT-10**: Extract spec-kit to separate crate (Phase 1 foundation complete)
-- **Upstream sync**: Quarterly sync 2026-01-15
-
-**Completed Tasks** (2025-10-18/19, 2-day epic sprint):
-- ✅ MAINT-1 through MAINT-9 (all P0/P1/P2 maintenance)
-- ✅ MAINT-3: Test coverage Phases 1-4 (604 tests, 42-48% coverage)
-- ✅ spec_status fix (100% pass rate)
-- ✅ Phase 3 integration tests (3 months ahead of Jan 2026 schedule)
-- ✅ Phase 4 edge cases + proptest (4 months ahead of Feb 2026 schedule)
-
-**Deferred Tasks**:
-- ⏸️ **MAINT-10**: Extract spec-kit to separate crate (deferred indefinitely per 2025-10-19 ultra-analysis)
-  - **Rationale**: YAGNI principle - no CLI/API/library consumers exist or planned
-  - **Risk**: 20-30 hour effort, HIGH risk to 604-test suite, adds upstream merge complexity
-  - **Resume criteria**: CLI tool, API server, or library consumer requirement emerges
-  - **Current state**: Acceptable (spec-kit works perfectly in TUI, Phase 1 foundation exists for future)
-
-**Upstream Sync**:
-- Next quarterly sync: 2026-01-15 (per UPSTREAM-SYNC.md)
-- Ready: 80 FORK-SPECIFIC markers, 98.8% isolation, conflict resolution strategy documented
-
----
+1. Treat the **2026-Q1 Program** section as the current source-of-truth for execution sequencing.
+2. Create the new SPEC-KIT-971..979 spec directories (or link them to the generated architecture docs) and wire them into the repo docs index.
+3. Start with **SPEC-KIT-971 + SPEC-KIT-978** in parallel: Memvid foundation + local reflex wiring are the critical risk burn-down items.
+4. Gate the local-memory sunset (SPEC-KIT-979) behind parity tests from SPEC-KIT-972.
 
 ## Documentation Index
 
+- **Decision Register (locked)**: docs/DECISION_REGISTER.md
+- **Memvid-first Workbench**: docs/MEMVID_FIRST_WORKBENCH.md
+- **Model Policy v2**: docs/MODEL-POLICY.md
+- **Memvid Environment (local-first ops)**: docs/MEMVID-ENVIRONMENT.md
+- **2026-Q1 Specs**: docs/SPEC-KIT-971-* through docs/SPEC-KIT-979-*
 - **Architecture**: IMPLEMENTATION_CONSENSUS.md
 - **GitHub Comparison**: SPEC_KIT_ALIGNMENT_ANALYSIS.md
 - **Command Strategy**: COMMAND_NAMING_AND_MODEL_STRATEGY.md

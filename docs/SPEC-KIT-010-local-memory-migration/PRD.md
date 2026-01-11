@@ -1,3 +1,5 @@
+> **LEGACY NOTE (2026-01-10)**: This spec migrated from Byterover to the `local-memory` daemon. The new program is **Memvid-first**. Treat this as historical; see **SPEC-KIT-979** for migration/sunset.
+
 # PRD: Local-memory Migration (T10)
 
 ## Overview

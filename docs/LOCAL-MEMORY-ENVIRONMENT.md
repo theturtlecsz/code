@@ -1,3 +1,5 @@
+> **LEGACY NOTE (2026-01-10)**: This document describes the `local-memory` daemon backend. The system is moving to **Memvid-first capsules**. Keep this as a fallback reference until SPEC-KIT-979 is complete.
+
 # Local-Memory Environment Capture
 
 > **Generated**: 2025-11-30

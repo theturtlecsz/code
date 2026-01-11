@@ -1,6 +1,12 @@
 # Documentation Index
+## 2026 Memvid-first Program (new)
+- `DECISION_REGISTER.md` — locked decisions D1–D112 (source-of-truth for product locks)
+- `MEMVID_FIRST_WORKBENCH.md` — architecture + roadmap for Memvid-first workbench
+- `MEMVID-ENVIRONMENT.md` — ops/runbook for capsules
+- `MODEL-POLICY.md` — Model Policy v2 track (authoring + enforcement)
+- Specs: `SPEC-KIT-971-*` through `SPEC-KIT-980-*`
 
-**Last Updated**: 2025-10-19
+**Last Updated**: 2026-01-10
 **Total Active Docs**: ~45 essential documents
 **Archive**: docs/archive/ (session notes, completed designs)
 
@@ -12,7 +18,7 @@
 
 | Document | Purpose | Status |
 |----------|---------|--------|
-| **SPEC.md** | Task tracker, single source of truth | ✅ Current (2025-10-19) |
+| **SPEC.md** | Task tracker, single source of truth | ✅ Current (2026-01-10) |
 | **CLAUDE.md** | Operating guide for Claude Code | ✅ Current (2025-10-19) |
 | **product-requirements.md** | Product scope and vision | ✅ Current |
 | **PLANNING.md** | High-level architecture, goals, constraints | ✅ Current |
@@ -29,7 +35,6 @@
 | **testing-policy.md** | Test coverage strategy (604 tests, 42-48% coverage) | ✅ Current (2025-10-19) |
 | **evidence-policy.md** | Evidence retention, archival automation | ✅ Current |
 | **UPSTREAM-SYNC.md** | Quarterly sync process, conflict resolution | ✅ Current |
-| **MEMORY-POLICY.md** | Memory system policy (local-memory only) | ✅ Current |
 | **memory/constitution.md** | Project charter and guardrails | ✅ Current |
 
 **Location**: `/docs/` and `/docs/spec-kit/`
