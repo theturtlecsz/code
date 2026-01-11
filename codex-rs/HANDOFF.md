@@ -1,12 +1,12 @@
 # HANDOFF.md — Session Continuation
 
 **Created:** 2026-01-11
-**Last Session:** SPEC-KIT-971 Memvid Capsule Foundation (Phase 1 + 2 complete)
-**Next Session:** SPEC-KIT-972 Hybrid Retrieval + Evaluation Harness
+**Last Session:** SPEC-KIT-972 Steps 1-3 Complete (commit 01a263d4a)
+**Next Session:** SPEC-KIT-972 Completion + 971 Config Switch
 
 ---
 
-## Continuation Prompt
+## Continuation Prompt (Next Session)
 
 ```markdown
 ROLE
@@ -21,93 +21,82 @@ NON-NEGOTIABLES (read first)
    - Logical mv2:// URIs are immutable; physical IDs are never treated as stable keys
    - LocalMemoryClient trait is the interface; MemvidMemoryAdapter is the implementation
    - Single-writer capsule model: global lock + writer queue
-   - Replay is offline-first: exact for retrieval + events; model I/O depends on capture mode
+   - Hybrid = lex + vec (NOT optional - required for 972 acceptance)
 
-CONTEXT FROM PREVIOUS SESSION
-- SPEC-KIT-971 is COMPLETE (commits 41c640977, a92f1d5bf)
-- Phase 2 gate passed: URI contract + checkpoint listing tests passing
-- MemvidMemoryAdapter implements LocalMemoryClient with search_memories() stub
-- CapsuleHandle has put(), commit_stage(), resolve_uri() implemented
-- CLI commands working: /speckit.capsule doctor|stats|checkpoints|commit
-- 35 tests passing (17 memvid + 16 registry + 2 capsule)
+CONTEXT FROM PREVIOUS SESSION (commit 01a263d4a)
+- SPEC-KIT-972 Steps 1-3 COMPLETE:
+  - Step 1: search_memories() with TF-IDF lexical search + IQO filtering
+  - Step 2: A/B evaluation harness + 15 golden queries + report generator
+  - Step 3: /speckit.search --explain CLI command
+- 38 tests passing (31 memvid + 7 msearch CLI)
+- Lexical search working; vector search NOT yet implemented
 
-PRIMARY TASK: SPEC-KIT-972 Hybrid Retrieval + Evaluation Harness
+EXECUTION ORDER (Parallel Phase First)
+Run these in parallel to establish baselines before vector search:
 
-Step 0 — Read these docs (in order)
-- docs/SPEC-KIT-972-hybrid-retrieval-eval/spec.md (deliverables + acceptance criteria)
-- tui/src/memvid_adapter/adapter.rs (search_memories stub at line 182-221)
-- codex-stage0/src/dcc.rs (LocalMemorySearchParams, IQO struct)
+PARALLEL TASK 1: Config Switch (SPEC-KIT-971 backlog)
+- Add memory_backend = memvid | local-memory config
+- Wire into Stage0 initialization
+- Test dual-backend fallback
+- File: tui/src/memvid_adapter/adapter.rs (create_memvid_adapter)
+- Decision IDs: D7 (foundation plumbing)
 
-Step 1 — First PR Target
-Implement hybrid search in MemvidMemoryAdapter::search_memories():
-1. Parse IQO parameters (domains, keywords, tags, importance threshold)
-2. Implement lexical search (BM25 or simple TF-IDF baseline)
-3. Implement vector search stub (placeholder for BGE-M3 integration)
-4. Fuse results with weighted scoring
-5. Return as LocalMemorySummary with explain fields
+PARALLEL TASK 2: A/B Harness on Real Corpus
+- Run ABHarness against actual local-memory data
+- Produce JSON + Markdown report artifact
+- Save to: .speckit/eval/ab-report-{timestamp}.{json,md}
+- File: tui/src/memvid_adapter/eval.rs (ABHarness::run)
+- Decision IDs: D89
 
-Step 2 — Second PR Target
-Add evaluation harness:
-1. Create golden query suite (10-20 representative queries)
-2. Build A/B harness comparing local-memory vs memvid
-3. Output report artifact (JSON + markdown summary)
+PARALLEL TASK 3: Performance Benchmarking
+- Measure P95 latency on warm cache
+- Verify < 250ms acceptance criteria
+- Add benchmark harness or use eval.rs timing
+- Decision IDs: D90
 
-Acceptance Criteria for 972:
-- [ ] /speckit.search --explain renders signal breakdown per result
-- [ ] Golden queries meet or exceed baseline top-k hit rate
-- [ ] A/B harness runs and produces report artifact
-- [ ] Retrieval P95 < 250ms on warm cache
+SEQUENTIAL TASK (After Parallel Phase)
 
-SECONDARY TASKS (971 backlog - lower priority)
-
-1. Dedup tracks (BLAKE3 + SimHash)
-   - Enable when memvid crate is integrated
-   - Add contract tests for exact + near-dup detection
-   - File: tui/src/memvid_adapter/capsule.rs (config.enable_dedup)
-
-2. Config switch (memory_backend)
-   - Add memory_backend = memvid | local-memory config
-   - Wire into Stage0 initialization
-   - Test dual-backend fallback
-
-FILES TO REFERENCE
-
-Key implementation files:
-- tui/src/memvid_adapter/adapter.rs:182 — search_memories() stub (TODO marker)
-- tui/src/memvid_adapter/types.rs — LogicalUri, UriIndex
-- tui/src/memvid_adapter/capsule.rs — CapsuleHandle lifecycle
-
-Stage0 interface files:
-- codex-stage0/src/dcc.rs — LocalMemoryClient trait, LocalMemorySearchParams
-- codex-stage0/src/dcc.rs — IQO struct (domains, keywords, tags, importance)
-
-Test files:
-- tui/src/memvid_adapter/tests.rs — 17 lifecycle tests
-- tui/src/memvid_adapter/adapter.rs:258 — adapter_tests module
-
-DECISION IDS FOR 972
-
-Implemented by 972: D5, D21, D24, D35, D89, D90
-Referenced: D66, D80
-Out of scope: D31
+TASK 4: Vector Search (BGE-M3) — REQUIRED for 972 completion
+- Add semantic vector search to hybrid scoring
+- Hybrid = lex + vec (this completes the "hybrid" deliverable)
+- Update fusion: final_score = α*lex + β*vec + γ*recency
+- Decision IDs: D5, D21
 
 ACCEPTANCE CRITERIA CHECKLIST
 
-For each PR:
-- [ ] PR references SPEC-ID and exact deliverable(s)
-- [ ] PR lists Decision IDs implemented/referenced/out-of-scope
-- [ ] Tests added/updated and pass locally
-- [ ] doc_lint passes (or evidence provided)
-- [ ] Fallback to local-memory preserved until SPEC-979 gates pass
+972 Completion:
+- [x] /speckit.search --explain renders signal breakdown per result
+- [ ] A/B harness runs on real corpus and produces report artifact
+- [ ] Retrieval P95 < 250ms on warm cache
+- [ ] Vector search (BGE-M3) integrated into hybrid scoring
+- [ ] Golden queries meet or exceed baseline top-k hit rate
+
+971 Backlog:
+- [ ] memory_backend config switch working
+- [ ] Dual-backend fallback tested
+
+FILES TO REFERENCE
+
+Implementation:
+- tui/src/memvid_adapter/adapter.rs — search_memories() (line ~356)
+- tui/src/memvid_adapter/eval.rs — ABHarness, golden queries
+- tui/src/chatwidget/spec_kit/commands/msearch.rs — CLI command
+
+Stage0 interface:
+- stage0/src/dcc.rs — LocalMemoryClient trait, IQO struct
+- stage0/src/vector.rs — VectorBackend trait
+- stage0/src/tfidf.rs — TfIdfBackend (current lexical backend)
 
 OUTPUT EXPECTATION
-For each PR:
-- Code changes
-- Tests
-- Any necessary doc updates (only in active program docs/specs)
-- Short PR summary explaining how the change satisfies SPEC acceptance criteria
+For each task:
+- Code changes with tests
+- Update HANDOFF.md progress tracker
+- Commit with SPEC-ID and Decision IDs
 
-When finished with 972 baseline, update this HANDOFF.md for the next session.
+Quick Start:
+cd ~/code/codex-rs
+cat HANDOFF.md  # This file
+cargo test -p codex-tui --lib -- memvid  # 38 tests should pass
 ```
 
 ---
