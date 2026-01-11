@@ -593,16 +593,28 @@ impl CapsuleHandle {
     }
 
     /// Get capsule statistics.
+    ///
+    /// ## SPEC-KIT-971 Deliverable
+    /// `speckit capsule stats` command: size, frame counts, index status, and dedup ratio.
     pub fn stats(&self) -> CapsuleStats {
+        let size_bytes = std::fs::metadata(&self.config.capsule_path)
+            .map(|m| m.len())
+            .unwrap_or(0);
+
+        // Calculate dedup ratio (stub - actual calculation when memvid integrated)
+        // For now, return 1.0 (no dedup) since we're not actually deduplicating
+        let dedup_ratio = 1.0;
+
         CapsuleStats {
             path: self.config.capsule_path.clone(),
-            size_bytes: std::fs::metadata(&self.config.capsule_path)
-                .map(|m| m.len())
-                .unwrap_or(0),
+            size_bytes,
             checkpoint_count: self.checkpoints.read().unwrap().len(),
             event_count: self.events.read().unwrap().len(),
             uri_count: self.uri_index.read().unwrap().len(),
             current_branch: self.current_branch(),
+            frame_count: 0, // Stub - actual frame count when memvid integrated
+            index_status: IndexStatus::Healthy, // Stub - actual status check
+            dedup_ratio,
         }
     }
 }
@@ -637,4 +649,18 @@ pub struct CapsuleStats {
     pub event_count: usize,
     pub uri_count: usize,
     pub current_branch: BranchId,
+    /// Frame count (stub - actual count when memvid crate integrated)
+    pub frame_count: usize,
+    /// Index status (healthy/rebuilding/missing)
+    pub index_status: IndexStatus,
+    /// Dedup ratio (1.0 = no dedup, >1.0 = dedup active)
+    /// Calculated as (logical_size / physical_size)
+    pub dedup_ratio: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum IndexStatus {
+    Healthy,
+    Rebuilding,
+    Missing,
 }

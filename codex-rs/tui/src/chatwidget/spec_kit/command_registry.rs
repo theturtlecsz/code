@@ -198,6 +198,9 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
     // Evidence/stats command
     registry.register(Box::new(SpecEvidenceStatsCommand));
 
+    // Capsule commands (SPEC-KIT-971)
+    registry.register(Box::new(CapsuleDoctorCommand));
+
     // Search commands
     registry.register(Box::new(SearchCommand));
 
@@ -324,7 +327,8 @@ mod tests {
         // SPEC-KIT-2XX: Added stage0.project-intel (1 new)
         // PR9: Added spec-review (1 new) - spec-consensus is deprecated alias
         // SPEC-DOGFOOD-001: Added speckit.cancel (1 new)
-        assert_eq!(registry.len(), 41, "Registry should have 41 commands");
+        // SPEC-KIT-971: Added speckit.capsule (1 new)
+        assert_eq!(registry.len(), 42, "Registry should have 42 commands");
 
         // Verify key commands are registered
         assert!(registry.find("speckit.status").is_some());
@@ -334,6 +338,7 @@ mod tests {
         assert!(registry.find("speckit.constitution").is_some());
         assert!(registry.find("speckit.vision").is_some()); // P93
         assert!(registry.find("spec-review").is_some()); // PR9
+        assert!(registry.find("speckit.capsule").is_some()); // SPEC-KIT-971
         assert!(registry.find("guardrail.plan").is_some());
     }
 

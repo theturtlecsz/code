@@ -6,6 +6,7 @@
 //! existing handlers in ../handler.rs
 
 mod cancel; // SPEC-DOGFOOD-001: Cancel stale pipeline state
+mod capsule; // SPEC-KIT-971: Memvid capsule commands
 mod configure; // SPEC-947 Phase 4: Pipeline configurator command
 mod guardrail;
 mod intel; // SPEC-KIT-2XX: Project Intel for NotebookLM
@@ -21,6 +22,7 @@ pub mod verify;
 
 // Re-export all commands
 pub use cancel::*;
+pub use capsule::*;
 pub use configure::*;
 pub use guardrail::*;
 pub use intel::*;

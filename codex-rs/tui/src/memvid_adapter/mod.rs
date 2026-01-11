@@ -21,7 +21,10 @@ mod capsule;
 mod types;
 
 pub use adapter::MemvidMemoryAdapter;
-pub use capsule::{CapsuleHandle, CapsuleConfig, CapsuleError};
+pub use capsule::{
+    CapsuleHandle, CapsuleConfig, CapsuleError,
+    CapsuleStats, DiagnosticResult, IndexStatus,
+};
 pub use types::{
     LogicalUri, CheckpointId, CheckpointMetadata, BranchId,
     RunEventEnvelope, EventType, UriIndex,
