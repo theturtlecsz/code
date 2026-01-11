@@ -11,6 +11,7 @@ mod configure; // SPEC-947 Phase 4: Pipeline configurator command
 mod guardrail;
 mod intel; // SPEC-KIT-2XX: Project Intel for NotebookLM
 mod librarian; // SPEC-KIT-103: Librarian memory quality engine
+mod msearch; // SPEC-KIT-972: Memory search with --explain
 mod plan;
 mod project; // SPEC-KIT-960: Project scaffolding command
 mod quality;
@@ -27,6 +28,7 @@ pub use configure::*;
 pub use guardrail::*;
 pub use intel::*;
 pub use librarian::*;
+pub use msearch::*;
 pub use plan::*;
 pub use project::*;
 pub use quality::*;

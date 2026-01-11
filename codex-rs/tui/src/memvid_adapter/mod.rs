@@ -18,9 +18,11 @@
 
 mod adapter;
 mod capsule;
+pub mod eval;
 mod types;
 
-pub use adapter::MemvidMemoryAdapter;
+pub use adapter::{MemvidMemoryAdapter, MemoryMeta};
+pub use eval::{ABHarness, ABReport, GoldenQuery, golden_query_suite, golden_test_memories};
 pub use capsule::{
     CapsuleHandle, CapsuleConfig, CapsuleError,
     CapsuleStats, DiagnosticResult, IndexStatus,
