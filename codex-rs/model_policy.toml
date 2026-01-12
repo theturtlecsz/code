@@ -1,0 +1,144 @@
+# model_policy.toml - Machine-Authoritative Model Policy Configuration
+#
+# This file is the source of truth for model governance configuration.
+# Human-readable rationale lives in docs/MODEL-POLICY.md.
+# At runtime, this is compiled into PolicySnapshot.json.
+#
+# Schema version: 1.0
+
+[meta]
+schema_version = "1.0"
+effective_date = "2026-01-12"
+
+# =============================================================================
+# System of Record
+# =============================================================================
+
+[system_of_record]
+# Memvid capsule is primary, local-memory is fallback only
+primary = "memvid"
+fallback = "local-memory"
+fallback_enabled = true
+
+# Fallback activation conditions (ALL must be true)
+# - memvid_open_failed: Capsule failed to open
+# - fallback_enabled: This flag is true
+# - local_memory_healthy: local-memory daemon responds to health check
+
+# =============================================================================
+# Model Routing
+# =============================================================================
+
+[routing.cloud]
+# Default cloud models by role
+architect = ["claude-sonnet-4-20250514", "gpt-4o", "gemini-2.0-flash"]
+implementer = ["claude-sonnet-4-20250514", "gpt-4o"]
+judge = ["claude-sonnet-4-20250514"]
+
+# Default selections
+default_architect = "claude-sonnet-4-20250514"
+default_implementer = "claude-sonnet-4-20250514"
+default_judge = "claude-sonnet-4-20250514"
+
+[routing.reflex]
+# Reflex is a routing mode for Implementer only
+enabled = false
+endpoint = "http://127.0.0.1:3009/v1"
+model = "qwen2.5-coder-7b-instruct"
+timeout_ms = 1500
+json_schema_required = true
+
+# Fallback order when reflex is enabled
+# 1. Try reflex if healthy + thresholds met
+# 2. Fall back to cloud implementer
+fallback_to_cloud = true
+
+[routing.reflex.thresholds]
+# Bakeoff thresholds for reflex promotion
+p95_latency_ms = 2000
+success_parity_percent = 85
+json_schema_compliance_percent = 100
+
+# =============================================================================
+# Capture and Replay
+# =============================================================================
+
+[capture]
+# Capture mode: none | prompts_only | full_io
+mode = "prompts_only"
+
+# What to capture in each mode:
+# - none: Events only, no LLM I/O
+# - prompts_only: Prompts + metadata, no responses
+# - full_io: Full request/response pairs
+
+# Store embeddings for offline replay
+store_embeddings = true
+
+# =============================================================================
+# Token Budgets
+# =============================================================================
+
+[budgets.tokens]
+# Max tokens for TASK_BRIEF by stage
+plan = 8000
+tasks = 4000
+implement = 6000
+validate = 4000
+audit = 4000
+unlock = 2000
+
+[budgets.cost]
+# Cost thresholds (USD)
+warn_threshold = 5.0
+confirm_threshold = 10.0
+hard_limit = 25.0
+hard_limit_enabled = false
+
+# =============================================================================
+# Scoring Weights (Stage0 retrieval)
+# =============================================================================
+
+[scoring]
+# Memory ranking weights (must sum to 1.0)
+usage = 0.30
+recency = 0.30
+priority = 0.25
+decay = 0.15
+
+# Hybrid retrieval weights
+vector_weight = 0.6
+lexical_weight = 0.4
+
+# =============================================================================
+# Gate Criteria
+# =============================================================================
+
+[gates.reflex_promotion]
+# Criteria for promoting a model to reflex-eligible
+p95_latency_ms = 2000
+success_parity_percent = 85
+json_schema_compliance_percent = 100
+golden_query_regression_allowed = false
+
+[gates.local_memory_sunset]
+# Criteria for SPEC-KIT-979 parity gate
+retrieval_p95_parity = true
+search_quality_parity = true
+stability_days = 30
+zero_fallback_activations = true
+
+# =============================================================================
+# Security
+# =============================================================================
+
+[security.redaction]
+# Patterns to redact from captures
+env_var_patterns = ["*_KEY", "*_SECRET", "*_TOKEN", "*_PASSWORD"]
+file_patterns = [".env", "credentials", "secrets"]
+
+[security.export]
+# Export controls
+require_explicit_action = true
+allow_no_export_marking = true
+encrypt_at_rest = false

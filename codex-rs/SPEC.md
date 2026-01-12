@@ -24,12 +24,24 @@ These invariants MUST NOT be violated:
 ### Architecture Boundary
 - **Stage0 core has no Memvid dependency** - All Memvid concepts isolated in adapter
 - **LocalMemoryClient trait is the interface** - MemvidMemoryAdapter is the implementation
-- **Adapter boundary enforced** - Stage0 → LocalMemoryClient → MemvidMemoryAdapter → CapsuleHandle
+- **Adapter boundary enforced** - Stage0 -> LocalMemoryClient -> MemvidMemoryAdapter -> CapsuleHandle
+
+### System of Record
+- **Memvid capsule is the system-of-record** - local-memory is fallback only (until SPEC-KIT-979 parity gates pass)
+- **Stage0 pipeline honors `memory_backend`** - Do not hard-require local-memory when memvid selected
+- **Fallback is conditional** - Only activate if enabled AND memvid fails AND local-memory healthy
 
 ### URI and Storage
 - **Logical mv2:// URIs are immutable** - Once returned, never change
 - **Physical IDs are never treated as stable keys** - Only logical URIs are stable
-- **Single-writer capsule model** - Global lock + writer queue enforced
+- **URI stability** - Graph/event references use logical URIs only (never raw frame IDs)
+- **Single-writer capsule model** - Cross-process lock + writer queue enforced
+
+### Checkpoints and Branches
+- **Stage boundary commits create checkpoints** - Automatic on stage transitions
+- **Manual commits also create checkpoints** - User-triggered via CLI/TUI
+- **Run isolation via branches** - Every run writes to `run/<RUN_ID>` branch
+- **Merge at Unlock** - Merges run branch into main using defined merge semantics
 
 ### Merge Policy
 - **Merge modes are `curated` or `full` only** - Never squash, ff, or rebase
@@ -40,6 +52,16 @@ These invariants MUST NOT be violated:
 - **Hybrid = lex + vec** - Required for retrieval (not optional)
 - **Score fusion via RRF or linear combination**
 
+### Reflex Mode
+- **Reflex is a routing mode** - `Implementer(mode=reflex)` not a new Stage0 role
+- **No new role name** - Routing chooses backend based on policy + health + bakeoff thresholds
+- **Stage context** - Reflex only applies to Implement stage
+
+### Replay Determinism
+- **Offline replay is exact for retrieval + events** - Timeline deterministic
+- **LLM I/O depends on capture mode** - Controlled by PolicySnapshot settings
+- **Capture modes** - `none | prompts_only | full_io`
+
 ---
 
 ## Active Tasks
@@ -48,9 +70,9 @@ These invariants MUST NOT be violated:
 
 | Spec | Status | Owner | Next Action |
 |------|--------|-------|-------------|
-| SPEC-KIT-971 | 95% | - | resolve_uri API + checkpoint listing |
-| SPEC-KIT-977 | 0% | - | PolicySnapshot capture |
-| SPEC-KIT-978 | 0% | - | Reflex stack integration |
+| SPEC-KIT-971 | 80% | - | Cross-process lock + wire memory_backend into pipeline + resolve_uri CLI |
+| SPEC-KIT-977 | 30% | - | Wire capture at run start + capsule storage + event binding |
+| SPEC-KIT-978 | 0% | - | Routing mode plumbing + reflex config + bakeoff harness |
 
 ### Completed (Recent)
 
@@ -58,13 +80,33 @@ These invariants MUST NOT be violated:
 |------|-----------------|------------------|
 | SPEC-KIT-972 | 2026-01-12 | Hybrid retrieval, A/B harness, HybridBackend |
 | SPEC-KIT-971 (core) | 2026-01-11 | Capsule foundation, crash recovery, config switch |
+| SPEC-KIT-977 (partial) | 2026-01-12 | PolicySnapshot struct, filesystem store, capture integration |
 
 ### Blocked
 
 | Spec | Blocker | Unblocks |
 |------|---------|----------|
-| SPEC-KIT-975 (full) | Needs 972 eval harness | 976 Logic Mesh |
-| SPEC-KIT-973 | Needs 977 PolicySnapshot | Time-Travel UI |
+| SPEC-KIT-975 | Needs 977 PolicySnapshot + events query API | 973 Time-Travel, 976 Logic Mesh |
+| SPEC-KIT-973 | Needs 975 event schema | Time-Travel UI |
+| SPEC-KIT-976 | Needs 975 event schema | Logic Mesh graph |
+
+---
+
+## Gating Chain
+
+```
+971 (Capsule) + 977 (PolicySnapshot) + 978 (Reflex)
+                    |
+                    v
+              975 (Event Schema)
+                    |
+        +-----------+-----------+
+        v                       v
+  973 (Time-Travel)      976 (Logic Mesh)
+                    |
+                    v
+              979 (local-memory sunset)
+```
 
 ---
 
@@ -75,7 +117,7 @@ These invariants MUST NOT be violated:
 | Same capsule, same query, same branch | Identical results | Deterministic |
 | Same capsule, same query, different branch | Branch-specific results | Deterministic within branch |
 | Exported capsule, imported elsewhere | Identical to source | Deterministic |
-| Offline replay (no network) | Uses cached embeddings | Deterministic if cached |
+| Offline replay (no network) | Uses cached embeddings | Deterministic if captured |
 | Cross-version replay | Warn if version mismatch | Best-effort |
 
 ---
@@ -84,10 +126,23 @@ These invariants MUST NOT be violated:
 
 | Phase | Gate Criteria | Status |
 |-------|---------------|--------|
-| 1→2 | 971 URI contract + checkpoint tests | PASSED |
-| 2→3 | 972 eval harness + 975 event schema v1 | PASSED |
-| 3→4 | 972 parity gates + export verification | PASSED |
-| 4→5 | 977 PolicySnapshot + 978 reflex stack | PENDING |
+| 1->2 | 971 URI contract + checkpoint tests | PASSED |
+| 2->3 | 972 eval harness operational | PASSED |
+| 3->4 | 977 PolicySnapshot stored in capsule | PENDING |
+| 4->5 | 978 Reflex bakeoff complete + 975 event baseline | PENDING |
+| 5->6 | 973/976 advanced features | PENDING |
+
+---
+
+## Policy Source Files
+
+These files are REQUIRED and enforced by doc_lint:
+
+| File | Purpose | Status |
+|------|---------|--------|
+| `docs/MODEL-POLICY.md` | Human-readable policy rationale ("why") | Required |
+| `model_policy.toml` | Machine-authoritative policy config ("what") | Required |
+| `PolicySnapshot.json` | Compiled artifact stored in capsule | Generated |
 
 ---
 
@@ -96,15 +151,17 @@ These invariants MUST NOT be violated:
 ### Build & Test
 ```bash
 ~/code/build-fast.sh              # Fast build
-cargo test -p codex-tui --lib memvid  # Memvid tests (37 passing)
-cargo test -p codex-stage0 --lib      # Stage0 tests (260 passing)
+cargo test -p codex-tui --lib memvid  # Memvid tests (47 passing)
+cargo test -p codex-stage0 --lib      # Stage0 tests (269 passing)
 python3 scripts/doc_lint.py           # Doc contract lint
+python3 scripts/golden_path_test.py   # E2E validation (10/10)
 ```
 
 ### Key Paths
 ```
 codex-rs/tui/src/memvid_adapter/  # Memvid implementation
 codex-rs/stage0/src/              # Stage0 core (no Memvid dep)
+codex-rs/stage0/src/policy.rs     # PolicySnapshot
 codex-rs/stage0/src/hybrid.rs     # HybridBackend
 docs/SPEC-KIT-*/                  # Feature specifications
 ```

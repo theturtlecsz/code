@@ -1,7 +1,26 @@
 # Memory System Policy
 
 **Effective Date**: 2025-10-18
-**Status**: MANDATORY
+**Status**: DEPRECATED (Phase 0 Historical)
+**Superseded By**: `docs/MODEL-POLICY.md` + `model_policy.toml`
+
+---
+
+> **DEPRECATION NOTICE (2026-01-12)**
+>
+> This document reflects Phase 0 policy when local-memory was the only memory system.
+> As of Q1 2026, **Memvid capsule is the system-of-record** and local-memory is fallback only.
+>
+> For current policy, see:
+> - `docs/MODEL-POLICY.md` - Human-readable rationale
+> - `model_policy.toml` - Machine-authoritative configuration
+> - `SPEC.md` - Invariants (System of Record section)
+>
+> This file is retained for historical reference only. Do not use for new development.
+
+---
+
+## [HISTORICAL] Phase 0 Policy
 
 ---
 

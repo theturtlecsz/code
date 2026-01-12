@@ -39,6 +39,8 @@ REQUIRED_FILES = {
     "SPEC.md": "Root task tracking and docs contract",
     "docs/PROGRAM_2026Q1_ACTIVE.md": "Active program DAG and phase gates",
     "docs/DECISION_REGISTER.md": "Locked decisions D1-D112+",
+    "docs/MODEL-POLICY.md": "Human-readable model policy rationale",
+    "model_policy.toml": "Machine-authoritative model policy config",
 }
 
 # Patterns that indicate wrong merge terminology
@@ -285,6 +287,10 @@ def check_invariants_documented(result: LintResult, verbose: bool = False):
         r"logical.*uri.*immutable",
         r"single[- ]writer",
         r"mv2://",
+        r"memvid.*system[- ]of[- ]record",
+        r"reflex.*routing\s+mode",
+        r"run.*branch",
+        r"replay.*determinism|offline.*replay",
     ]
 
     # Search in SPEC.md, HANDOFF.md, and docs/
@@ -320,12 +326,46 @@ def check_invariants_documented(result: LintResult, verbose: bool = False):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def check_policy_toml_schema(result: LintResult, verbose: bool = False):
+    """Check that model_policy.toml has required sections."""
+    if verbose:
+        print("Checking model_policy.toml schema...")
+
+    policy_path = REPO_ROOT / "model_policy.toml"
+    if not policy_path.exists():
+        return  # Already reported in check_required_files
+
+    content = policy_path.read_text()
+
+    required_sections = [
+        r"\[meta\]",
+        r"\[system_of_record\]",
+        r"\[routing",
+        r"\[capture\]",
+        r"\[budgets",
+        r"\[scoring\]",
+    ]
+
+    for section in required_sections:
+        if not re.search(section, content):
+            section_name = section.replace("\\[", "[").replace("\\]", "]")
+            result.add_error(
+                "model_policy.toml",
+                None,
+                f"Missing required section: '{section_name}'"
+            )
+        elif verbose:
+            section_name = section.replace("\\[", "[").replace("\\]", "]")
+            print(f"  ✓ Section '{section_name}' found")
+
+
 def run_all_checks(verbose: bool = False) -> LintResult:
     """Run all documentation checks."""
     result = LintResult()
 
     check_required_files(result, verbose)
     check_spec_md_structure(result, verbose)
+    check_policy_toml_schema(result, verbose)
     check_merge_terminology(result, verbose)
     check_decision_ids_in_specs(result, verbose)
     check_replay_truth_table(result, verbose)
