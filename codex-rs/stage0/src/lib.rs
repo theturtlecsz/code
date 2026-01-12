@@ -21,6 +21,7 @@ pub mod guardians;
 pub mod hybrid;
 pub mod librarian;
 pub mod overlay_db;
+pub mod policy;
 pub mod project_intel;
 pub mod scoring;
 pub mod system_memory;
@@ -62,6 +63,10 @@ pub use tier2::{
 pub use vector::{
     DocumentKind, DocumentMetadata, IndexStats, ScoredVector, VectorBackend, VectorDocument,
     VectorFilters,
+};
+pub use policy::{
+    ModelConfig, PolicySnapshot, PolicySnapshotInfo, PolicyStore, capture_policy_snapshot,
+    get_policy_for_run,
 };
 
 use sha2::{Digest, Sha256};

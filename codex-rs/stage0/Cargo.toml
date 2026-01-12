@@ -37,6 +37,9 @@ tokio = { workspace = true, features = ["rt-multi-thread", "sync"] }
 # Hashing for cache keys
 sha2 = { workspace = true }
 
+# UUID generation for policy IDs
+uuid = { workspace = true, features = ["v4"] }
+
 # HTTP client for system memory storage
 reqwest = { workspace = true, features = ["json"] }
 

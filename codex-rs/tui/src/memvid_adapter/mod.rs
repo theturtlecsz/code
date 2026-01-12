@@ -1,4 +1,5 @@
 //! SPEC-KIT-971: Memvid Capsule Foundation
+//! SPEC-KIT-977: PolicySnapshot Integration
 //!
 //! This module implements the Memvid adapter for Stage0 memory traits.
 //! All Memvid concepts are isolated here; Stage0 core has no Memvid dependency.
@@ -9,6 +10,7 @@
 //! - D7: Single-writer capsule model
 //! - D18: Stage boundary checkpoints
 //! - D70: Stable mv2:// URI scheme
+//! - D100-D102: PolicySnapshot capture and storage
 //!
 //! ## Key Invariants (from SPEC.md Docs Contract)
 //! - Logical URIs are immutable once returned
@@ -19,6 +21,7 @@
 mod adapter;
 mod capsule;
 pub mod eval;
+pub mod policy_capture;
 mod types;
 
 pub use adapter::{MemvidMemoryAdapter, MemoryMeta, create_memory_client};
@@ -34,6 +37,9 @@ pub use capsule::{
 pub use types::{
     LogicalUri, CheckpointId, CheckpointMetadata, BranchId,
     RunEventEnvelope, EventType, UriIndex,
+};
+pub use policy_capture::{
+    capture_and_store_policy, load_policy, list_policies, latest_policy,
 };
 
 #[cfg(test)]

@@ -10,7 +10,7 @@
 //! See docs/stage0/STAGE0_CONFIG_AND_PROMPTS.md for the full schema.
 
 use crate::errors::{Result, Stage0Error};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -223,7 +223,7 @@ impl Default for ScoringConfig {
 }
 
 /// Scoring weight distribution
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ScoringWeights {
     /// Weight for usage count
     #[serde(default = "default_usage_weight")]
