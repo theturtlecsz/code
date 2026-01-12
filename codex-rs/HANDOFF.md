@@ -1,8 +1,8 @@
 # HANDOFF.md — Session Continuation
 
 **Created:** 2026-01-11
-**Last Session:** SPEC-KIT-972 Steps 1-3 Complete (commit 01a263d4a)
-**Next Session:** SPEC-KIT-972 Completion + 971 Config Switch
+**Last Session:** 2026-01-12 (SPEC-KIT-972 Complete + V6 Doc Contract)
+**Next Session:** SPEC-KIT-971/977/978 Parallel Implementation
 
 ---
 
@@ -15,88 +15,199 @@ You are an implementor working in the Codex-RS / Spec-Kit repo.
 NON-NEGOTIABLES (read first)
 1) SPEC.md is the primary source of truth.
 2) Doc precedence order is mandatory:
-   SPEC.md → docs/PROGRAM_2026Q1_ACTIVE.md → docs/DECISION_REGISTER.md → docs/SPEC-KIT-972-hybrid-retrieval-eval/
+   SPEC.md → docs/PROGRAM_2026Q1_ACTIVE.md → docs/DECISION_REGISTER.md
 3) Invariants you MUST NOT violate:
    - Stage0 core has no Memvid dependency (adapter boundary enforced)
    - Logical mv2:// URIs are immutable; physical IDs are never treated as stable keys
    - LocalMemoryClient trait is the interface; MemvidMemoryAdapter is the implementation
    - Single-writer capsule model: global lock + writer queue
-   - Hybrid = lex + vec (NOT optional - required for 972 acceptance)
+   - Hybrid = lex + vec (required, not optional)
+   - Merge modes are `curated` or `full` only (never squash/ff/rebase)
 
-CONTEXT FROM PREVIOUS SESSION (commit 01a263d4a)
-- SPEC-KIT-972 Steps 1-3 COMPLETE:
-  - Step 1: search_memories() with TF-IDF lexical search + IQO filtering
-  - Step 2: A/B evaluation harness + 15 golden queries + report generator
-  - Step 3: /speckit.search --explain CLI command
-- 38 tests passing (31 memvid + 7 msearch CLI)
-- Lexical search working; vector search NOT yet implemented
+COMPLETED IN PREVIOUS SESSION (2026-01-12)
+- SPEC-KIT-972: COMPLETE
+  - HybridBackend with RRF/linear fusion (stage0/src/hybrid.rs)
+  - A/B evaluation harness with run_ab_harness_and_save()
+  - P95 < 250ms verification via ABReport.b_latency_acceptable()
+  - 37 memvid tests + 260 stage0 tests passing
+- SPEC-KIT-971 Config Switch: COMPLETE
+  - MemoryBackend enum (memvid | local-memory)
+  - create_memory_client() factory function
+  - 4 config switch tests
+- V6 Doc Contract: COMPLETE
+  - SPEC.md with invariants and replay truth table
+  - docs/PROGRAM_2026Q1_ACTIVE.md with DAG
+  - docs/DECISION_REGISTER.md with D1-D112
+  - doc_lint.py integrated into pre-commit
+- Golden Path Validation: 10/10 PASSED
+  - scripts/golden_path_test.py validates full workflow
+  - Reports in .speckit/eval/golden-path-*.{json,md}
 
-EXECUTION ORDER (Parallel Phase First)
-Run these in parallel to establish baselines before vector search:
+COMMITS FROM LAST SESSION
+- abb5358fa: feat(memvid): SPEC-KIT-972 completion + 971 config switch
+- 593a9f000: docs: V6 doc contract + doc_lint.py enforcement
+- 18b0326bd: test: golden-path E2E validation (10/10 passed)
 
-PARALLEL TASK 1: Config Switch (SPEC-KIT-971 backlog)
-- Add memory_backend = memvid | local-memory config
-- Wire into Stage0 initialization
-- Test dual-backend fallback
-- File: tui/src/memvid_adapter/adapter.rs (create_memvid_adapter)
-- Decision IDs: D7 (foundation plumbing)
+===================================================================
+NEXT SESSION TASKS (Execute in Parallel)
+===================================================================
 
-PARALLEL TASK 2: A/B Harness on Real Corpus
-- Run ABHarness against actual local-memory data
-- Produce JSON + Markdown report artifact
-- Save to: .speckit/eval/ab-report-{timestamp}.{json,md}
-- File: tui/src/memvid_adapter/eval.rs (ABHarness::run)
-- Decision IDs: D89
+TASK 1: SPEC-971 Completion — CLI + resolve_uri API
+Priority: HIGH
+Decision: Full CLI implementation (user confirmed)
 
-PARALLEL TASK 3: Performance Benchmarking
-- Measure P95 latency on warm cache
-- Verify < 250ms acceptance criteria
-- Add benchmark harness or use eval.rs timing
-- Decision IDs: D90
+Deliverables:
+1. CLI Commands:
+   - `speckit capsule checkpoints` — List all checkpoints with IDs and labels
+   - `speckit capsule commit --label <LABEL>` — Create manual checkpoint
+   - TUI aliases: `/speckit.checkpoints`, `/speckit.commit <LABEL>`
 
-SEQUENTIAL TASK (After Parallel Phase)
+2. API Implementation:
+   - resolve_uri(uri: &str, branch: Option<&str>, as_of: Option<DateTime>) -> Result<ResolvedUri>
+   - list_checkpoints(branch: Option<&str>) -> Result<Vec<CheckpointInfo>>
+   - create_checkpoint(label: &str) -> Result<CheckpointId>
 
-TASK 4: Vector Search (BGE-M3) — REQUIRED for 972 completion
-- Add semantic vector search to hybrid scoring
-- Hybrid = lex + vec (this completes the "hybrid" deliverable)
-- Update fusion: final_score = α*lex + β*vec + γ*recency
-- Decision IDs: D5, D21
+3. Requirements:
+   - Checkpoints queryable by ID AND by label (non-negotiable)
+   - Labels must be unique within a branch
+   - as_of parameter enables point-in-time resolution
 
-ACCEPTANCE CRITERIA CHECKLIST
+Files to modify:
+- tui/src/memvid_adapter/capsule.rs — Add checkpoint listing and resolve_uri
+- tui/src/chatwidget/spec_kit/commands/capsule.rs — Add CLI commands
+- stage0/src/dcc.rs — Add resolve_uri to LocalMemoryClient trait
 
-972 Completion:
-- [x] /speckit.search --explain renders signal breakdown per result
-- [x] A/B harness runs on real corpus and produces report artifact (run_ab_harness_and_save)
-- [x] Retrieval P95 < 250ms on warm cache (ABReport.b_latency_acceptable(250))
-- [x] Vector search integrated into hybrid scoring (HybridBackend with RRF/linear fusion)
-- [x] Golden queries meet or exceed baseline top-k hit rate
+Decision IDs: D6, D11, D14, D18
 
-971 Backlog:
-- [x] memory_backend config switch working (MemoryBackend enum + create_memory_client)
-- [x] Dual-backend fallback tested (4 config switch tests)
+---
 
-FILES TO REFERENCE
+TASK 2: SPEC-977 PolicySnapshot — Capture at Boundaries
+Priority: HIGH
+Decision: JSON format compiled from human-readable source
 
-Implementation:
-- tui/src/memvid_adapter/adapter.rs — search_memories() (line ~356)
-- tui/src/memvid_adapter/eval.rs — ABHarness, golden queries
-- tui/src/chatwidget/spec_kit/commands/msearch.rs — CLI command
+Deliverables:
+1. PolicySnapshot struct:
+   ```rust
+   pub struct PolicySnapshot {
+       pub schema_version: String,  // "1.0"
+       pub policy_id: String,       // UUID
+       pub hash: String,            // SHA256 of canonical JSON
+       pub created_at: DateTime<Utc>,
+       pub model_config: ModelConfig,
+       pub weights: ScoringWeights,
+       pub prompts: HashMap<String, String>,
+       pub source_files: Vec<String>,  // model_policy.toml, MODEL-POLICY.md
+   }
+   ```
 
-Stage0 interface:
-- stage0/src/dcc.rs — LocalMemoryClient trait, IQO struct
-- stage0/src/vector.rs — VectorBackend trait
-- stage0/src/tfidf.rs — TfIdfBackend (current lexical backend)
+2. Storage locations:
+   - Filesystem cache: `.speckit/policies/snapshot-<POLICY_ID>.json`
+   - Capsule storage: `mv2://.../policy/<POLICY_ID>`
+
+3. Capture points:
+   - Run start (capture active policy)
+   - Stage boundary (if policy changed)
+   - Events tagged with policy_id for traceability
+
+4. API:
+   - capture_policy_snapshot() -> Result<PolicySnapshot>
+   - get_policy_for_run(run_id: &str) -> Result<PolicySnapshot>
+   - list_policy_snapshots() -> Result<Vec<PolicySnapshotInfo>>
+
+Files to create:
+- stage0/src/policy.rs — PolicySnapshot struct and capture logic
+- tui/src/memvid_adapter/policy_capture.rs — Integration with capsule
+
+Decision IDs: D100, D101, D102
+
+---
+
+TASK 3: SPEC-978 Reflex Stack — SGLang Primary
+Priority: MEDIUM
+Decision: SGLang primary, vLLM fallback (OpenAI-compatible)
+
+Deliverables:
+1. ReflexBackend trait:
+   ```rust
+   #[async_trait]
+   pub trait ReflexBackend: Send + Sync {
+       async fn generate(&self, prompt: &str, schema: Option<&JsonSchema>) -> Result<String>;
+       async fn generate_structured<T: DeserializeOwned>(&self, prompt: &str) -> Result<T>;
+       fn name(&self) -> &str;
+   }
+   ```
+
+2. Implementations:
+   - SGLangBackend — Primary (constrained decoding, prefix caching)
+   - VLLMBackend — Fallback (OpenAI-compatible endpoint)
+
+3. Configuration:
+   ```toml
+   [reflex]
+   primary = "sglang"
+   fallback = "vllm"
+   sglang_endpoint = "http://localhost:30000"
+   vllm_endpoint = "http://localhost:8000"
+   timeout_ms = 30000
+   ```
+
+4. Integration:
+   - Wire into A/B harness for bakeoff testing
+   - Capture reflex calls in capsule for replay
+
+Files to create:
+- stage0/src/reflex.rs — ReflexBackend trait + implementations
+- stage0/src/config.rs — Add [reflex] section
+
+Decision IDs: D110, D111, D112
+
+---
+
+TASK 4: Progress UI Enhancement
+Priority: LOW
+Decision: Add progress bars and streaming output
+
+Deliverables:
+- Add indicatif or similar for progress bars in golden_path_test.py
+- Stream test output as it runs rather than batch at end
+- Show elapsed time per step during execution
+
+Files to modify:
+- scripts/golden_path_test.py — Add progress reporting
+
+===================================================================
+EXECUTION ORDER
+===================================================================
+
+1. Start TASK 1 and TASK 2 in parallel (both HIGH priority)
+2. Begin TASK 3 after initial progress on 1 and 2
+3. TASK 4 is optional polish, do last if time permits
+
+VERIFICATION COMMANDS
+After completing each task, run:
+```bash
+cargo test -p codex-tui --lib -- memvid
+cargo test -p codex-stage0 --lib
+python3 scripts/doc_lint.py
+python3 scripts/golden_path_test.py
+```
+
+ACCEPTANCE CRITERIA
+- [ ] `speckit capsule checkpoints` lists checkpoints with ID and label
+- [ ] `speckit capsule commit --label X` creates checkpoint
+- [ ] resolve_uri works with branch and as_of parameters
+- [ ] PolicySnapshot captured at run start
+- [ ] PolicySnapshot stored in capsule and filesystem
+- [ ] SGLang backend connects and generates
+- [ ] vLLM fallback activates when SGLang unavailable
+- [ ] All existing tests still pass (37 memvid + 260 stage0)
+- [ ] Golden path validation still 10/10
 
 OUTPUT EXPECTATION
-For each task:
-- Code changes with tests
-- Update HANDOFF.md progress tracker
+- Code changes with tests for each task
+- Update HANDOFF.md progress tracker after each commit
 - Commit with SPEC-ID and Decision IDs
-
-Quick Start:
-cd ~/code/codex-rs
-cat HANDOFF.md  # This file
-cargo test -p codex-tui --lib -- memvid  # 38 tests should pass
+- Push after each logical unit of work
 ```
 
 ---
@@ -107,21 +218,23 @@ cargo test -p codex-tui --lib -- memvid  # 38 tests should pass
 
 | Spec | Status | Commits | Key Deliverables |
 |------|--------|---------|------------------|
-| SPEC-KIT-971 | ✅ Complete | 41c640977, a92f1d5bf | Capsule foundation, CLI commands, crash recovery, config switch |
-| SPEC-KIT-972 | ✅ Complete | 01a263d4a, (pending) | Hybrid retrieval, eval harness, HybridBackend |
+| SPEC-KIT-971 (core) | ✅ Complete | 41c640977, a92f1d5bf, abb5358fa | Capsule foundation, crash recovery, config switch |
+| SPEC-KIT-972 | ✅ Complete | 01a263d4a, abb5358fa | Hybrid retrieval, eval harness, HybridBackend |
 
 ### In Progress
 
 | Spec | Status | Next Step |
 |------|--------|-----------|
-| (none) | - | - |
+| SPEC-KIT-971 (CLI) | 🔄 5% | Implement checkpoint listing CLI |
+| SPEC-KIT-977 | 🔄 0% | Create PolicySnapshot struct |
+| SPEC-KIT-978 | 🔄 0% | Create ReflexBackend trait |
 
 ### Blocked / Waiting
 
 | Spec | Blocker | Unblocks |
 |------|---------|----------|
-| SPEC-KIT-975 (full) | Needs 972 eval harness | 976 Logic Mesh |
-| SPEC-KIT-973 | Needs 977 PolicySnapshot | Time-Travel UI |
+| SPEC-KIT-975 (full) | Needs 977 PolicySnapshot | 976 Logic Mesh |
+| SPEC-KIT-973 | Needs 971 checkpoint CLI | Time-Travel UI |
 
 ### Phase Gates
 
@@ -130,6 +243,7 @@ cargo test -p codex-tui --lib -- memvid  # 38 tests should pass
 | 1→2 | 971 URI contract + checkpoint tests | ✅ Passed |
 | 2→3 | 972 eval harness + 975 event schema v1 | ✅ Passed |
 | 3→4 | 972 parity gates + export verification | ✅ Passed |
+| 4→5 | 977 PolicySnapshot + 978 reflex stack | ⏳ Pending |
 
 ---
 
@@ -150,202 +264,92 @@ Stage0 Core (no Memvid dependency)
                     └── [future] memvid crate
 ```
 
-### Search Flow (IMPLEMENTED in 972)
+### Search Flow (IMPLEMENTED)
 
 ```
 search_memories(params: LocalMemorySearchParams)
     │
     ├── Parse IQO: domains, keywords, required_tags, optional_tags, exclude_tags
     │
-    ├── Lexical Search (TF-IDF via codex_stage0::TfIdfBackend)
-    │   └── lex_score from BM25-style TF-IDF
+    ├── Lexical Search (TF-IDF via TfIdfBackend)
+    │   └── lex_score from BM25-style scoring
+    │
+    ├── [IMPLEMENTED] HybridBackend (stage0/src/hybrid.rs)
+    │   ├── RRF fusion: 1/(k + rank_lex) + 1/(k + rank_vec)
+    │   └── Linear fusion: lex_weight * lex + vec_weight * vec
     │
     ├── IQO Filtering
     │   ├── Domain filter (matches or spec:* prefix)
     │   ├── Required tags (ALL must match)
-    │   ├── Exclude tags (ANY excludes)
-    │   └── Optional tags (boost scoring)
-    │
-    ├── Fuse Results
-    │   └── final_score = 0.6*lex_score + 0.2*recency_score + 0.2*tag_boost
-    │
-    ├── [NOT YET] Vector Search (BGE-M3 placeholder)
+    │   └── Exclude tags (ANY excludes)
     │
     └── Return Vec<LocalMemorySummary>
-            └── similarity_score = hybrid fusion score
 ```
 
-**Next: Evaluation harness (Step 2) for A/B comparison**
+### PolicySnapshot Flow (TO IMPLEMENT)
 
-### Key Types
+```
+Run Start
+    │
+    ├── capture_policy_snapshot()
+    │   ├── Read model_policy.toml + MODEL-POLICY.md
+    │   ├── Compile to canonical JSON
+    │   ├── Compute SHA256 hash
+    │   └── Generate policy_id
+    │
+    ├── Store to filesystem: .speckit/policies/snapshot-{id}.json
+    │
+    ├── Store to capsule: mv2://.../policy/{id}
+    │
+    └── Tag all events with policy_id
+```
 
-```rust
-// Stage0 interface (don't modify)
-pub struct LocalMemorySearchParams {
-    pub iqo: IQO,
-    pub max_results: usize,
-}
+### Reflex Stack Flow (TO IMPLEMENT)
 
-pub struct IQO {
-    pub domains: Vec<String>,
-    pub keywords: Vec<String>,
-    pub tags: Vec<String>,
-    pub importance_threshold: Option<f32>,
-}
-
-// Return type
-pub struct LocalMemorySummary {
-    pub id: String,
-    pub domain: Option<String>,
-    pub tags: Vec<String>,
-    pub created_at: Option<DateTime<Utc>>,
-    pub snippet: String,
-    pub similarity_score: f64,
-    // TODO: Add explain fields in 972
-}
+```
+Reflex Call
+    │
+    ├── Try SGLang (primary)
+    │   ├── Constrained decoding if schema provided
+    │   └── Prefix caching for repeated prompts
+    │
+    ├── If SGLang fails → Try vLLM (fallback)
+    │   └── OpenAI-compatible endpoint
+    │
+    ├── Capture call in capsule for replay
+    │
+    └── Return structured output
 ```
 
 ---
 
-## Files Changed This Session (972 Completion + 971 Config Switch)
+## Files Changed This Session (2026-01-12)
 
 | File | Change |
 |------|--------|
-| stage0/src/config.rs | **NEW** - MemoryBackend enum (memvid/local-memory) + config field |
+| stage0/src/config.rs | MemoryBackend enum + memory_backend config field |
 | stage0/src/lib.rs | Export MemoryBackend, HybridBackend, HybridConfig |
-| stage0/src/hybrid.rs | **NEW** - HybridBackend with RRF/linear fusion for hybrid retrieval |
-| tui/src/memvid_adapter/adapter.rs | **NEW** - create_memory_client() with backend switch + 4 tests |
-| tui/src/memvid_adapter/eval.rs | **NEW** - run_ab_harness_and_save(), run_ab_harness_synthetic() + 2 tests |
-| tui/src/memvid_adapter/mod.rs | Export create_memory_client, EvalRunResult, run_ab_harness_and_save |
-
-### Session Summary (2026-01-12)
-
-**Parallel Phase Complete:**
-1. ✅ Config Switch (SPEC-KIT-971) - `MemoryBackend` enum with `create_memory_client()`
-2. ✅ A/B Harness Runner - `run_ab_harness_and_save()` produces JSON+MD reports
-3. ✅ P95 Benchmarking - `ABReport.b_latency_acceptable(250)` verification
-
-**Sequential Phase Complete:**
-4. ✅ Hybrid Retrieval - `HybridBackend` with RRF and linear fusion
-
-**Test Count:** 37 memvid tests passing (31 original + 4 config switch + 2 eval runner)
+| stage0/src/hybrid.rs | **NEW** - HybridBackend with RRF/linear fusion |
+| tui/src/memvid_adapter/adapter.rs | create_memory_client() factory |
+| tui/src/memvid_adapter/eval.rs | run_ab_harness_and_save(), run_ab_harness_synthetic() |
+| tui/src/memvid_adapter/mod.rs | Export create_memory_client, EvalRunResult |
+| SPEC.md | **NEW** - Root docs contract with invariants |
+| docs/PROGRAM_2026Q1_ACTIVE.md | **NEW** - Active program DAG |
+| docs/DECISION_REGISTER.md | **NEW** - Locked decisions D1-D112 |
+| scripts/doc_lint.py | **NEW** - Doc contract validator |
+| scripts/golden_path_test.py | **NEW** - E2E validation (10/10 passed) |
+| .githooks/pre-commit | Added doc lint integration |
 
 ---
 
-## Files Changed Previous Session (972 Steps 1-3)
+## Test Summary
 
-| File | Change |
-|------|--------|
-| tui/src/memvid_adapter/adapter.rs | **MAJOR** - Full search_memories() implementation with TF-IDF |
-| tui/src/memvid_adapter/eval.rs | **NEW** - A/B evaluation harness, golden queries, report generator |
-| tui/src/memvid_adapter/mod.rs | Added MemoryMeta, ABHarness, GoldenQuery exports |
-| tui/src/chatwidget/spec_kit/commands/msearch.rs | **NEW** - /speckit.search --explain command |
-| tui/src/chatwidget/spec_kit/commands/mod.rs | Added msearch module |
-| tui/src/chatwidget/spec_kit/command_registry.rs | Registered MemorySearchCommand |
-
-### SPEC-KIT-972 Step 1 Implementation Details
-
-**search_memories() now implements:**
-1. TF-IDF/BM25 lexical search using codex_stage0::TfIdfBackend
-2. IQO parameter parsing: domains, keywords, required_tags, optional_tags, exclude_tags
-3. Hybrid scoring: 0.6*lex_score + 0.2*recency_score + 0.2*tag_boost
-4. Auto-indexing of ingested artifacts
-5. Fallback to local-memory if no results
-
-**New types (Step 1):**
-- `MemoryMeta` - Stores domain, tags, importance, timestamps for filtering
-
-### SPEC-KIT-972 Step 2 Implementation Details
-
-**Evaluation harness (eval.rs):**
-1. `ABHarness` - Runs same queries against two backends, computes comparison
-2. `ABReport` - Comparative report with per-query and aggregate metrics
-3. `GoldenQuery` - Query definition with IQO params and expected IDs
-4. 15 golden queries exercising keyword, domain, tag, and edge cases
-5. `golden_test_memories()` - Synthetic test corpus matching golden queries
-
-**Report generation:**
-- JSON export via `save_json()`
-- Markdown export via `to_markdown()` with summary tables and verdict
-
-**Metrics tracked:**
-- Mean P@k, R@k, MRR per backend
-- P95 latency per backend
-- Pass rate (cases meeting threshold)
-- Parity verdict (B meets A baseline)
-
-**New tests (7 eval + 7 search = 14 added, all passing):**
-- test_golden_query_suite_structure
-- test_golden_query_to_search_params
-- test_golden_query_to_eval_case
-- test_golden_test_memories_coverage
-- test_percentile_duration
-- test_ab_report_to_markdown
-- test_ab_harness_with_memvid_adapter
-
-**Total memvid adapter tests: 31 passing**
-
-### SPEC-KIT-972 CLI Implementation Details (msearch.rs)
-
-**Command: `/speckit.search [options] <keywords...>`**
-
-Options:
-- `--explain, -e` - Show signal breakdown per result
-- `--domain, -d <D>` - Filter by domain
-- `--tag, -t <T>` - Require tag (can be repeated)
-- `--max, -n <N>` - Max results (default: 10)
-
-Examples:
-```bash
-/speckit.search error handling
-/speckit.search --explain tfidf bm25
-/speckit.search --domain spec-kit --tag type:decision architecture
-```
-
-**Signal breakdown (--explain mode):**
-```
-1. mem-rust-errors-001 (score: 0.742)
-   Domain: rust
-   ├─ lex_score:     0.95 × 0.6 = 0.570
-   ├─ recency_score: 0.50 × 0.2 = 0.100
-   ├─ tag_boost:     0.36 × 0.2 = 0.072
-   └─ final_score:   0.742
-```
-
-**New tests (7 added, all passing):**
-- test_parse_search_args_simple
-- test_parse_search_args_with_explain
-- test_parse_search_args_with_domain
-- test_parse_search_args_with_tag
-- test_parse_search_args_combined
-- test_parse_search_args_help
-- test_command_metadata
-
-**Total tests: 38 passing (31 memvid + 7 msearch)**
-
-### SPEC-KIT-972 Remaining Work
-
-**For full acceptance:**
-- [x] `/speckit.search --explain` CLI command (renders signal breakdown)
-- [ ] Run A/B harness on real corpus and produce report artifact
-- [ ] Verify P95 latency < 250ms on warm cache
-
-**Stretch goals:**
-- [ ] Vector search (BGE-M3 placeholder currently)
-- [ ] Config switch (memory_backend = memvid | local-memory)
-
----
-
-## Files Changed Previous Session (971)
-
-| File | Change |
-|------|--------|
-| tui/src/memvid_adapter/mod.rs | Added CapsuleStats, DiagnosticResult, IndexStatus exports |
-| tui/src/memvid_adapter/capsule.rs | Enhanced stats(), added IndexStatus enum |
-| tui/src/memvid_adapter/tests.rs | Added crash recovery tests |
-| tui/src/chatwidget/spec_kit/commands/capsule.rs | **NEW** - CLI commands |
-| tui/src/chatwidget/spec_kit/commands/mod.rs | Added capsule module |
-| tui/src/chatwidget/spec_kit/command_registry.rs | Registered CapsuleDoctorCommand |
+| Package | Tests | Status |
+|---------|-------|--------|
+| codex-tui (memvid) | 37 | ✅ All passing |
+| codex-stage0 | 260 | ✅ All passing |
+| Golden Path | 10/10 | ✅ All passing |
+| Doc Lint | 0 errors | ✅ Passing |
 
 ---
 
@@ -355,17 +359,23 @@ Examples:
 ```bash
 ~/code/build-fast.sh              # Fast build
 cargo test -p codex-tui --lib memvid  # Memvid tests
-cargo test -p codex-tui --lib command_registry  # Registry tests
+cargo test -p codex-stage0 --lib      # Stage0 tests
+python3 scripts/doc_lint.py           # Doc contract lint
+python3 scripts/golden_path_test.py   # Golden path E2E
 ```
 
 ### Key Paths
 ```
 codex-rs/tui/src/memvid_adapter/  # Memvid implementation
-codex-rs/stage0/src/dcc.rs        # LocalMemoryClient trait
-docs/SPEC-KIT-972-*/spec.md       # Next spec
+codex-rs/stage0/src/              # Stage0 core (no Memvid dep)
+codex-rs/stage0/src/hybrid.rs     # HybridBackend
+codex-rs/SPEC.md                  # Root docs contract
 docs/PROGRAM_2026Q1_ACTIVE.md     # Program DAG + gates
+docs/DECISION_REGISTER.md         # Locked decisions
+scripts/doc_lint.py               # Doc contract validator
+scripts/golden_path_test.py       # E2E validation
 ```
 
 ---
 
-*Generated by Claude Code session 2026-01-11*
+*Generated by Claude Code session 2026-01-12*
