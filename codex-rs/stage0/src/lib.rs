@@ -18,6 +18,7 @@ pub mod dcc;
 pub mod errors;
 pub mod eval;
 pub mod guardians;
+pub mod hybrid;
 pub mod librarian;
 pub mod overlay_db;
 pub mod project_intel;
@@ -27,7 +28,7 @@ pub mod tfidf;
 pub mod tier2;
 pub mod vector;
 
-pub use config::{GateMode, Stage0Config, VectorIndexConfig};
+pub use config::{GateMode, MemoryBackend, Stage0Config, VectorIndexConfig};
 pub use dcc::{
     CompileContextResult, DccContext, EnvCtx, ExplainScore, ExplainScores, Iqo, LocalMemoryClient,
     LocalMemorySearchParams, LocalMemorySummary, MemoryCandidate, NoopVectorBackend,
@@ -48,6 +49,7 @@ pub use overlay_db::{
     ConstitutionType, OverlayDb, OverlayMemory, StructureStatus, Tier2CacheEntry,
 };
 pub use scoring::{ScoringComponents, ScoringInput, calculate_dynamic_score, calculate_score};
+pub use hybrid::{HybridBackend, HybridConfig};
 pub use tfidf::{TfIdfBackend, TfIdfConfig};
 pub use system_memory::{
     ArtifactType, Stage0PointerInfo, Tier2Status, compute_content_hash, extract_summary_bullets,

@@ -21,8 +21,12 @@ mod capsule;
 pub mod eval;
 mod types;
 
-pub use adapter::{MemvidMemoryAdapter, MemoryMeta};
-pub use eval::{ABHarness, ABReport, GoldenQuery, golden_query_suite, golden_test_memories};
+pub use adapter::{MemvidMemoryAdapter, MemoryMeta, create_memory_client};
+pub use eval::{
+    ABHarness, ABReport, EvalRunResult, GoldenQuery,
+    golden_query_suite, golden_test_memories,
+    run_ab_harness_and_save, run_ab_harness_synthetic,
+};
 pub use capsule::{
     CapsuleHandle, CapsuleConfig, CapsuleError,
     CapsuleStats, DiagnosticResult, IndexStatus,

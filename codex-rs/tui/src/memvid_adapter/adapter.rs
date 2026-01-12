@@ -600,6 +600,96 @@ pub fn create_memvid_adapter(
     }
 }
 
+/// Create a LocalMemoryClient based on the configured backend.
+///
+/// ## SPEC-KIT-971: Config Switch
+/// Routes to the appropriate backend based on `memory_backend` config:
+/// - `Memvid`: Creates a MemvidMemoryAdapter with capsule storage
+/// - `LocalMemory`: Uses the provided fallback client directly
+///
+/// ## Fallback Behavior
+/// If `backend` is `Memvid` but capsule fails to open, the fallback client
+/// is used (if provided). This enables graceful degradation.
+///
+/// ## Returns
+/// - `Ok(Arc<dyn LocalMemoryClient>)`: The configured memory client
+/// - `Err`: If neither memvid nor fallback can be initialized
+pub async fn create_memory_client(
+    backend: codex_stage0::MemoryBackend,
+    capsule_path: Option<std::path::PathBuf>,
+    workspace_id: Option<String>,
+    fallback: Option<Arc<dyn LocalMemoryClient>>,
+) -> Result<Arc<dyn LocalMemoryClient>, CapsuleError> {
+    use codex_stage0::MemoryBackend;
+
+    match backend {
+        MemoryBackend::LocalMemory => {
+            // Use fallback client directly
+            match fallback {
+                Some(client) => {
+                    tracing::info!(
+                        target: "memvid",
+                        "Using local-memory backend (via config)"
+                    );
+                    Ok(client)
+                }
+                None => {
+                    tracing::warn!(
+                        target: "memvid",
+                        "local-memory backend selected but no fallback client provided"
+                    );
+                    Err(CapsuleError::Corrupted {
+                        reason: "local-memory backend selected but no client available".to_string(),
+                    })
+                }
+            }
+        }
+        MemoryBackend::Memvid => {
+            // Create and open memvid adapter
+            let adapter = create_memvid_adapter(capsule_path, workspace_id, fallback.clone());
+
+            match adapter.open().await {
+                Ok(true) => {
+                    tracing::info!(
+                        target: "memvid",
+                        "Using memvid backend (capsule opened)"
+                    );
+                    Ok(Arc::new(adapter))
+                }
+                Ok(false) => {
+                    // Capsule failed but fallback activated
+                    tracing::warn!(
+                        target: "memvid",
+                        "Memvid capsule failed, using fallback"
+                    );
+                    match fallback {
+                        Some(client) => Ok(client),
+                        None => Err(CapsuleError::NotOpen),
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(
+                        target: "memvid",
+                        error = %e,
+                        "Failed to open memvid capsule"
+                    );
+                    // Try fallback
+                    match fallback {
+                        Some(client) => {
+                            tracing::info!(
+                                target: "memvid",
+                                "Using fallback after memvid error"
+                            );
+                            Ok(client)
+                        }
+                        None => Err(e),
+                    }
+                }
+            }
+        }
+    }
+}
+
 // =============================================================================
 // Tests
 // =============================================================================
@@ -1088,5 +1178,143 @@ mod adapter_tests {
         // The one with more "Rust" mentions should score higher
         assert_eq!(results[0].id, "mem-high");
         assert!(results[0].similarity_score > 0.0);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // SPEC-KIT-971: Config Switch Tests
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_create_memory_client_memvid_backend() {
+        use codex_stage0::MemoryBackend;
+
+        let temp_dir = TempDir::new().unwrap();
+        let capsule_path = temp_dir.path().join("test.mv2");
+
+        let client = create_memory_client(
+            MemoryBackend::Memvid,
+            Some(capsule_path.clone()),
+            Some("test".to_string()),
+            None,
+        )
+        .await
+        .unwrap();
+
+        // Should have created the capsule file
+        assert!(capsule_path.exists());
+
+        // Verify client is functional
+        let params = LocalMemorySearchParams {
+            iqo: Iqo {
+                keywords: vec!["test".to_string()],
+                ..Default::default()
+            },
+            max_results: 10,
+        };
+        let results = client.search_memories(params).await.unwrap();
+        assert!(results.is_empty()); // No data yet
+    }
+
+    #[tokio::test]
+    async fn test_create_memory_client_local_memory_backend() {
+        use codex_stage0::MemoryBackend;
+
+        // Create a mock fallback client (using an adapter with an in-memory capsule)
+        let temp_dir = TempDir::new().unwrap();
+        let fallback_path = temp_dir.path().join("fallback.mv2");
+        let fallback_config = CapsuleConfig {
+            capsule_path: fallback_path,
+            workspace_id: "fallback".to_string(),
+            ..Default::default()
+        };
+        let fallback = MemvidMemoryAdapter::new(fallback_config);
+        fallback.open().await.unwrap();
+        let fallback_arc: Arc<dyn LocalMemoryClient> = Arc::new(fallback);
+
+        // Request local-memory backend
+        let client = create_memory_client(
+            MemoryBackend::LocalMemory,
+            None,
+            None,
+            Some(fallback_arc.clone()),
+        )
+        .await
+        .unwrap();
+
+        // The client should be the fallback
+        // Verify by checking it returns empty results (no data)
+        let params = LocalMemorySearchParams {
+            iqo: Iqo {
+                keywords: vec!["test".to_string()],
+                ..Default::default()
+            },
+            max_results: 10,
+        };
+        let results = client.search_memories(params).await.unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_create_memory_client_local_memory_no_fallback_fails() {
+        use codex_stage0::MemoryBackend;
+
+        // Request local-memory backend without fallback
+        let result = create_memory_client(
+            MemoryBackend::LocalMemory,
+            None,
+            None,
+            None, // No fallback
+        )
+        .await;
+
+        assert!(result.is_err());
+        match result {
+            Err(CapsuleError::Corrupted { reason }) => {
+                assert!(reason.contains("no client available"));
+            }
+            _ => panic!("Expected Corrupted error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_memory_client_memvid_with_fallback() {
+        use codex_stage0::MemoryBackend;
+
+        // Create a fallback that we can verify
+        let temp_dir = TempDir::new().unwrap();
+        let fallback_path = temp_dir.path().join("fallback.mv2");
+        let fallback_config = CapsuleConfig {
+            capsule_path: fallback_path,
+            workspace_id: "fallback".to_string(),
+            ..Default::default()
+        };
+        let fallback = MemvidMemoryAdapter::new(fallback_config);
+        fallback.open().await.unwrap();
+        let fallback_arc: Arc<dyn LocalMemoryClient> = Arc::new(fallback);
+
+        // Create memvid with valid path - should use memvid, not fallback
+        let capsule_path = temp_dir.path().join("memvid.mv2");
+        let client = create_memory_client(
+            MemoryBackend::Memvid,
+            Some(capsule_path.clone()),
+            Some("primary".to_string()),
+            Some(fallback_arc),
+        )
+        .await
+        .unwrap();
+
+        // Capsule file should be created
+        assert!(capsule_path.exists());
+
+        // Client should work
+        let params = LocalMemorySearchParams {
+            iqo: Iqo {
+                keywords: vec!["test".to_string()],
+                ..Default::default()
+            },
+            max_results: 10,
+        };
+        let results = client.search_memories(params).await.unwrap();
+        assert!(results.is_empty());
     }
 }

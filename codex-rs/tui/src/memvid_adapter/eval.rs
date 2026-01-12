@@ -812,6 +812,165 @@ pub fn save_golden_queries(queries: &[GoldenQuery], path: &Path) -> std::io::Res
 }
 
 // =============================================================================
+// SPEC-KIT-972: Report Runner
+// =============================================================================
+
+/// Result from running the A/B evaluation harness.
+#[derive(Debug)]
+pub struct EvalRunResult {
+    /// The generated report
+    pub report: ABReport,
+    /// Path to JSON report file
+    pub json_path: std::path::PathBuf,
+    /// Path to Markdown report file
+    pub md_path: std::path::PathBuf,
+    /// Whether backend B meets baseline (A)
+    pub meets_baseline: bool,
+    /// Whether P95 latency is under 250ms threshold
+    pub latency_acceptable: bool,
+}
+
+/// Run the A/B harness and save reports to the eval directory.
+///
+/// ## SPEC-KIT-972: A/B Harness on Real Corpus
+/// This function:
+/// 1. Runs the ABHarness against both backends
+/// 2. Generates JSON and Markdown reports
+/// 3. Saves to `.speckit/eval/ab-report-{timestamp}.{json,md}`
+/// 4. Returns the result with acceptance criteria checks
+///
+/// ## Arguments
+/// * `backend_a` - Baseline backend (typically local-memory)
+/// * `backend_b` - Experiment backend (typically memvid)
+/// * `name_a` - Display name for backend A
+/// * `name_b` - Display name for backend B
+/// * `eval_dir` - Directory to save reports (e.g., ".speckit/eval")
+/// * `top_k` - Number of results to retrieve per query
+///
+/// ## Returns
+/// * `Ok(EvalRunResult)` - The evaluation result with saved report paths
+/// * `Err` - If the evaluation or file save fails
+pub async fn run_ab_harness_and_save(
+    backend_a: Arc<dyn LocalMemoryClient>,
+    backend_b: Arc<dyn LocalMemoryClient>,
+    name_a: &str,
+    name_b: &str,
+    eval_dir: &Path,
+    top_k: usize,
+) -> Stage0Result<EvalRunResult> {
+    // Create eval directory if it doesn't exist
+    std::fs::create_dir_all(eval_dir)
+        .map_err(|e| codex_stage0::errors::Stage0Error::dcc_with_source("create eval dir", e))?;
+
+    // Run the harness
+    let harness = ABHarness::new(backend_a, backend_b)
+        .with_names(name_a, name_b)
+        .with_top_k(top_k);
+
+    let report = harness.run().await?;
+
+    // Generate timestamp for filenames
+    let timestamp = report.generated_at.format("%Y%m%d_%H%M%S");
+    let base_name = format!("ab-report-{}", timestamp);
+
+    let json_path = eval_dir.join(format!("{}.json", base_name));
+    let md_path = eval_dir.join(format!("{}.md", base_name));
+
+    // Save reports
+    report
+        .save_json(&json_path)
+        .map_err(|e| codex_stage0::errors::Stage0Error::dcc_with_source("save JSON report", e))?;
+
+    report
+        .save_markdown(&md_path)
+        .map_err(|e| codex_stage0::errors::Stage0Error::dcc_with_source("save MD report", e))?;
+
+    // Check acceptance criteria
+    let meets_baseline = report.b_meets_baseline();
+    let latency_acceptable = report.b_latency_acceptable(250);
+
+    tracing::info!(
+        target: "eval",
+        json_path = %json_path.display(),
+        md_path = %md_path.display(),
+        meets_baseline = meets_baseline,
+        latency_acceptable = latency_acceptable,
+        p95_latency_ms = %report.p95_latency_b().as_millis(),
+        "A/B evaluation complete"
+    );
+
+    Ok(EvalRunResult {
+        report,
+        json_path,
+        md_path,
+        meets_baseline,
+        latency_acceptable,
+    })
+}
+
+/// Run A/B harness using synthetic test data (for testing).
+///
+/// This seeds both backends with the golden test memories and runs
+/// the evaluation. Useful for validating the harness works correctly.
+pub async fn run_ab_harness_synthetic(
+    eval_dir: &Path,
+    top_k: usize,
+) -> Stage0Result<EvalRunResult> {
+    use crate::memvid_adapter::adapter::MemvidMemoryAdapter;
+    use crate::memvid_adapter::capsule::CapsuleConfig;
+    use tempfile::TempDir;
+
+    // Create temp directories for both backends
+    let temp_dir = TempDir::new()
+        .map_err(|e| codex_stage0::errors::Stage0Error::dcc_with_source("create temp dir", e))?;
+
+    let capsule_a = temp_dir.path().join("backend_a.mv2");
+    let capsule_b = temp_dir.path().join("backend_b.mv2");
+
+    // Create and populate backend A
+    let config_a = CapsuleConfig {
+        capsule_path: capsule_a,
+        workspace_id: "baseline".to_string(),
+        ..Default::default()
+    };
+    let adapter_a = MemvidMemoryAdapter::new(config_a);
+    adapter_a.open().await.map_err(|e| {
+        codex_stage0::errors::Stage0Error::dcc_with_source("open backend A", std::io::Error::other(e))
+    })?;
+
+    // Create and populate backend B
+    let config_b = CapsuleConfig {
+        capsule_path: capsule_b,
+        workspace_id: "experiment".to_string(),
+        ..Default::default()
+    };
+    let adapter_b = MemvidMemoryAdapter::new(config_b);
+    adapter_b.open().await.map_err(|e| {
+        codex_stage0::errors::Stage0Error::dcc_with_source("open backend B", std::io::Error::other(e))
+    })?;
+
+    // Add golden test memories to both backends
+    for (meta, content) in golden_test_memories() {
+        adapter_a.add_memory_to_index(meta.clone(), &content).await;
+        adapter_b.add_memory_to_index(meta, &content).await;
+    }
+
+    // Run the harness
+    let backend_a: Arc<dyn LocalMemoryClient> = Arc::new(adapter_a);
+    let backend_b: Arc<dyn LocalMemoryClient> = Arc::new(adapter_b);
+
+    run_ab_harness_and_save(
+        backend_a,
+        backend_b,
+        "local-memory (synthetic)",
+        "memvid (synthetic)",
+        eval_dir,
+        top_k,
+    )
+    .await
+}
+
+// =============================================================================
 // Serde helpers for Duration
 // =============================================================================
 
@@ -1044,5 +1203,86 @@ mod tests {
 
         // Should pass baseline check (comparing to self)
         assert!(report.b_meets_baseline());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // SPEC-KIT-972: Report Runner Tests
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_run_ab_harness_synthetic_produces_reports() {
+        let temp_dir = TempDir::new().unwrap();
+        let eval_dir = temp_dir.path().join("eval");
+
+        let result = run_ab_harness_synthetic(&eval_dir, 5).await.unwrap();
+
+        // Check that reports were created
+        assert!(result.json_path.exists(), "JSON report should exist");
+        assert!(result.md_path.exists(), "Markdown report should exist");
+
+        // Verify JSON is valid
+        let json_content = std::fs::read_to_string(&result.json_path).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json_content).unwrap();
+        assert!(parsed.get("backend_a_name").is_some());
+        assert!(parsed.get("backend_b_name").is_some());
+
+        // Verify Markdown has expected sections
+        let md_content = std::fs::read_to_string(&result.md_path).unwrap();
+        assert!(md_content.contains("# A/B Retrieval Evaluation Report"));
+        assert!(md_content.contains("## Summary"));
+        assert!(md_content.contains("## Verdict"));
+
+        // Self-comparison should meet baseline
+        assert!(result.meets_baseline);
+
+        // Synthetic test should be fast (well under 250ms)
+        assert!(result.latency_acceptable);
+    }
+
+    #[tokio::test]
+    async fn test_run_ab_harness_and_save_creates_timestamped_files() {
+        let temp_dir = TempDir::new().unwrap();
+        let eval_dir = temp_dir.path().join("eval");
+        let capsule_path = temp_dir.path().join("test.mv2");
+
+        let config = CapsuleConfig {
+            capsule_path,
+            workspace_id: "test".to_string(),
+            ..Default::default()
+        };
+
+        let adapter = MemvidMemoryAdapter::new(config);
+        adapter.open().await.unwrap();
+
+        // Add some test data
+        for (meta, content) in golden_test_memories().into_iter().take(3) {
+            adapter.add_memory_to_index(meta, &content).await;
+        }
+
+        let adapter_arc: Arc<dyn LocalMemoryClient> = Arc::new(adapter);
+
+        let result = run_ab_harness_and_save(
+            adapter_arc.clone(),
+            adapter_arc,
+            "baseline",
+            "experiment",
+            &eval_dir,
+            5,
+        )
+        .await
+        .unwrap();
+
+        // Verify filenames have timestamp pattern
+        let json_name = result.json_path.file_name().unwrap().to_str().unwrap();
+        assert!(json_name.starts_with("ab-report-"));
+        assert!(json_name.ends_with(".json"));
+
+        let md_name = result.md_path.file_name().unwrap().to_str().unwrap();
+        assert!(md_name.starts_with("ab-report-"));
+        assert!(md_name.ends_with(".md"));
+
+        // Check that directory was created
+        assert!(eval_dir.exists());
+        assert!(eval_dir.is_dir());
     }
 }

@@ -17,6 +17,24 @@ use std::path::PathBuf;
 // P91/SPEC-KIT-105: Constitution Gate Mode
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SPEC-KIT-971: Memory Backend Selection
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Memory backend for Stage0 retrieval
+///
+/// Controls which backend is used for local memory operations.
+/// Per SPEC-KIT-971: "memory_backend = memvid | local-memory config"
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum MemoryBackend {
+    /// Use Memvid capsule for memory storage (default)
+    #[default]
+    Memvid,
+    /// Use local-memory REST/CLI backend
+    LocalMemory,
+}
+
 /// Mode for Phase -1 constitution readiness gate
 ///
 /// Controls how /speckit.auto, /speckit.plan, and /speckit.new behave when
@@ -93,6 +111,19 @@ pub struct Stage0Config {
     /// These enable traceability without polluting normal recall (excluded by system:true).
     #[serde(default = "default_store_system_pointers")]
     pub store_system_pointers: bool,
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // SPEC-KIT-971: Memory Backend Selection
+    // ─────────────────────────────────────────────────────────────────────────────
+    /// Memory backend to use for Tier1 retrieval
+    ///
+    /// Controls which backend is used for local memory operations:
+    /// - `memvid`: Use Memvid capsule for memory storage (default)
+    /// - `local-memory`: Use local-memory REST/CLI backend
+    ///
+    /// Per SPEC-KIT-971: "memory_backend = memvid | local-memory config"
+    #[serde(default)]
+    pub memory_backend: MemoryBackend,
 }
 
 fn default_enabled() -> bool {
@@ -464,6 +495,7 @@ impl Default for Stage0Config {
             vector_index: VectorIndexConfig::default(),
             phase1_gate_mode: GateMode::default(),
             store_system_pointers: default_store_system_pointers(),
+            memory_backend: MemoryBackend::default(),
         }
     }
 }
@@ -639,6 +671,8 @@ mod tests {
         assert!(cfg.tier2.enabled);
         // P91: Gate mode defaults to Warn
         assert_eq!(cfg.phase1_gate_mode, GateMode::Warn);
+        // SPEC-KIT-971: Memory backend defaults to Memvid
+        assert_eq!(cfg.memory_backend, MemoryBackend::Memvid);
     }
 
     // P91/SPEC-KIT-105: GateMode tests
@@ -677,6 +711,43 @@ mod tests {
         "#;
         let cfg = Stage0Config::parse(toml).expect("should parse");
         assert_eq!(cfg.phase1_gate_mode, GateMode::Block);
+    }
+
+    // SPEC-KIT-971: MemoryBackend tests
+    #[test]
+    fn test_memory_backend_default() {
+        let backend = MemoryBackend::default();
+        assert_eq!(backend, MemoryBackend::Memvid);
+    }
+
+    #[test]
+    fn test_memory_backend_parse_memvid() {
+        let toml = r#"
+            enabled = true
+            memory_backend = "memvid"
+        "#;
+        let cfg = Stage0Config::parse(toml).expect("should parse");
+        assert_eq!(cfg.memory_backend, MemoryBackend::Memvid);
+    }
+
+    #[test]
+    fn test_memory_backend_parse_local_memory() {
+        let toml = r#"
+            enabled = true
+            memory_backend = "local-memory"
+        "#;
+        let cfg = Stage0Config::parse(toml).expect("should parse");
+        assert_eq!(cfg.memory_backend, MemoryBackend::LocalMemory);
+    }
+
+    #[test]
+    fn test_memory_backend_default_in_config() {
+        let toml = r#"
+            enabled = true
+        "#;
+        let cfg = Stage0Config::parse(toml).expect("should parse");
+        // Default should be Memvid
+        assert_eq!(cfg.memory_backend, MemoryBackend::Memvid);
     }
 
     #[test]
