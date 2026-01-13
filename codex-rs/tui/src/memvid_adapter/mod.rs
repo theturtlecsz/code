@@ -24,7 +24,10 @@ pub mod eval;
 pub mod policy_capture;
 mod types;
 
-pub use adapter::{MemvidMemoryAdapter, MemoryMeta, create_memory_client};
+pub use adapter::{
+    MemvidMemoryAdapter, MemoryMeta, UnifiedMemoryClient,
+    create_memory_client, create_unified_memory_client,
+};
 pub use eval::{
     ABHarness, ABReport, EvalRunResult, GoldenQuery,
     golden_query_suite, golden_test_memories,

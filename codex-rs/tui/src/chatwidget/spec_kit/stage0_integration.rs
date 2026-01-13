@@ -1,6 +1,7 @@
 //! Stage 0 integration for spec-kit pipeline
 //!
 //! SPEC-KIT-102: Stage 0 context injection for /speckit.auto
+//! SPEC-KIT-971: Pipeline integration honors Stage0Config.memory_backend
 //!
 //! This module handles:
 //! - Running Stage0Engine before the main pipeline
@@ -8,13 +9,13 @@
 //! - Injecting Divine Truth + TASK_BRIEF into agent prompts
 //! - V2.5b: Hybrid retrieval using shared TfIdfBackend
 //! - SPEC-DOGFOOD-001 S30: Progress callbacks for UX feedback
+//! - SPEC-KIT-971: Backend routing via memory_backend config
 
-use crate::stage0_adapters::{
-    LlmStubAdapter, LocalMemoryCliAdapter, NoopTier2Client, Tier2HttpAdapter,
-};
+use crate::memvid_adapter::{create_unified_memory_client, UnifiedMemoryClient};
+use crate::stage0_adapters::{LlmStubAdapter, NoopTier2Client, Tier2HttpAdapter};
 use crate::vector_state::VECTOR_STATE;
-use codex_stage0::Stage0Engine;
 use codex_stage0::dcc::EnvCtx;
+use codex_stage0::{MemoryBackend, Stage0Engine};
 use std::path::Path;
 use std::sync::mpsc;
 use std::time::Duration;
@@ -24,10 +25,12 @@ use std::time::Duration;
 pub enum Stage0Progress {
     /// Starting Stage0 execution
     Starting,
-    /// Checking local-memory daemon health
+    /// Checking local-memory daemon health (only for local-memory backend)
     CheckingLocalMemory,
     /// Loading Stage0 configuration
     LoadingConfig,
+    /// SPEC-KIT-971: Creating memory client (memvid or local-memory)
+    CreatingMemoryClient { backend: String },
     /// Checking Tier2 (NotebookLM) health
     CheckingTier2Health,
     /// Compiling DCC context
@@ -224,32 +227,8 @@ pub fn run_stage0_for_spec(
 
     let start = std::time::Instant::now();
 
-    send_progress(&progress_tx, Stage0Progress::CheckingLocalMemory);
-    if !crate::local_memory_cli::local_memory_daemon_healthy_blocking(Duration::from_millis(750)) {
-        let duration_ms = start.elapsed().as_millis() as u64;
-        send_progress(
-            &progress_tx,
-            Stage0Progress::Finished {
-                success: false,
-                tier2_used: false,
-                duration_ms,
-            },
-        );
-        return Stage0ExecutionResult {
-            result: None,
-            skip_reason: Some(
-                "local-memory daemon not available at http://localhost:3002".to_string(),
-            ),
-            duration_ms,
-            tier2_used: false,
-            cache_hit: false,
-            hybrid_retrieval_used: false,
-            tier2_skip_reason: Some("local-memory unavailable".to_string()),
-        };
-    }
-
+    // SPEC-KIT-971: Load Stage0Config FIRST to determine memory_backend
     send_progress(&progress_tx, Stage0Progress::LoadingConfig);
-    // Load Stage0Config and apply per-project Tier2 overrides from Planner config.
     let mut stage0_cfg = match codex_stage0::Stage0Config::load() {
         Ok(cfg) => cfg,
         Err(e) => {
@@ -265,6 +244,125 @@ pub fn run_stage0_for_spec(
         }
     };
 
+    // SPEC-KIT-971: Create memory client based on configured backend
+    // This replaces the unconditional local-memory daemon check
+    let memory_backend = stage0_cfg.memory_backend;
+    let backend_name = match memory_backend {
+        MemoryBackend::Memvid => "memvid",
+        MemoryBackend::LocalMemory => "local-memory",
+    };
+    send_progress(
+        &progress_tx,
+        Stage0Progress::CreatingMemoryClient {
+            backend: backend_name.to_string(),
+        },
+    );
+
+    // For LocalMemory backend, check daemon health first (traditional behavior)
+    if memory_backend == MemoryBackend::LocalMemory {
+        send_progress(&progress_tx, Stage0Progress::CheckingLocalMemory);
+        if !crate::local_memory_cli::local_memory_daemon_healthy_blocking(
+            Duration::from_millis(750),
+        ) {
+            let duration_ms = start.elapsed().as_millis() as u64;
+            send_progress(
+                &progress_tx,
+                Stage0Progress::Finished {
+                    success: false,
+                    tier2_used: false,
+                    duration_ms,
+                },
+            );
+            return Stage0ExecutionResult {
+                result: None,
+                skip_reason: Some(
+                    "local-memory daemon not available at http://localhost:3002".to_string(),
+                ),
+                duration_ms,
+                tier2_used: false,
+                cache_hit: false,
+                hybrid_retrieval_used: false,
+                tier2_skip_reason: Some("local-memory unavailable".to_string()),
+            };
+        }
+    }
+
+    // SPEC-KIT-971: Create unified memory client
+    // For memvid backend: does NOT require local-memory daemon upfront
+    // Fallback to local-memory only checked if memvid fails
+    let capsule_path = cwd.join(".speckit/memvid/workspace.mv2");
+
+    // Use tokio runtime to call async create_unified_memory_client
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(e) => {
+            let duration_ms = start.elapsed().as_millis() as u64;
+            send_progress(
+                &progress_tx,
+                Stage0Progress::Finished {
+                    success: false,
+                    tier2_used: false,
+                    duration_ms,
+                },
+            );
+            return Stage0ExecutionResult {
+                result: None,
+                skip_reason: Some(format!("Failed to create runtime: {e}")),
+                duration_ms,
+                tier2_used: false,
+                cache_hit: false,
+                hybrid_retrieval_used: false,
+                tier2_skip_reason: Some("runtime creation failed".to_string()),
+            };
+        }
+    };
+
+    let memory_client: UnifiedMemoryClient = match rt.block_on(create_unified_memory_client(
+        memory_backend,
+        capsule_path,
+        "default".to_string(),
+        || {
+            crate::local_memory_cli::local_memory_daemon_healthy_blocking(
+                Duration::from_millis(500),
+            )
+        },
+    )) {
+        Ok(client) => {
+            tracing::info!(
+                target: "stage0",
+                backend = backend_name,
+                "Memory client created successfully"
+            );
+            client
+        }
+        Err(e) => {
+            let duration_ms = start.elapsed().as_millis() as u64;
+            send_progress(
+                &progress_tx,
+                Stage0Progress::Finished {
+                    success: false,
+                    tier2_used: false,
+                    duration_ms,
+                },
+            );
+            return Stage0ExecutionResult {
+                result: None,
+                skip_reason: Some(format!(
+                    "Failed to create memory client ({}): {}",
+                    backend_name, e
+                )),
+                duration_ms,
+                tier2_used: false,
+                cache_hit: false,
+                hybrid_retrieval_used: false,
+                tier2_skip_reason: Some("memory client creation failed".to_string()),
+            };
+        }
+    };
+
     let (tier2_notebook, tier2_base_url) = resolve_tier2_overrides(planner_config);
     if let Some(notebook) = tier2_notebook.clone() {
         stage0_cfg.tier2.enabled = true;
@@ -276,8 +374,7 @@ pub fn run_stage0_for_spec(
         stage0_cfg.tier2.base_url = Some(base_url);
     }
 
-    // Create adapters (no MCP dependencies).
-    let local_memory = LocalMemoryCliAdapter::new();
+    // Create LLM adapter (no MCP dependencies).
     let llm = LlmStubAdapter::new();
 
     // CONVERGENCE: Tier2 fail-closed with explicit diagnostics
@@ -342,11 +439,12 @@ pub fn run_stage0_for_spec(
     // Run Stage 0 engine
     // Note: Stage0Engine contains rusqlite::Connection which is not Send,
     // so we need to run everything in a dedicated single-threaded runtime
+    // SPEC-KIT-971: Uses memory_client from backend routing above
     let (stage0_result, hybrid_used) = run_stage0_blocking(
         spec_id.to_string(),
         spec_content.to_string(),
         env,
-        local_memory,
+        memory_client,
         llm,
         stage0_cfg,
         tier2_opt,
@@ -429,11 +527,14 @@ pub fn run_stage0_for_spec(
 ///
 /// V2.5b: Returns (result, hybrid_used) tuple. Uses shared VECTOR_STATE
 /// if available for hybrid retrieval.
+///
+/// SPEC-KIT-971: Accepts UnifiedMemoryClient enum to support both
+/// memvid and local-memory backends via unified interface.
 fn run_stage0_blocking(
     spec_id: String,
     spec_content: String,
     env: EnvCtx,
-    local_memory: LocalMemoryCliAdapter,
+    memory_client: UnifiedMemoryClient,
     llm: LlmStubAdapter,
     stage0_cfg: codex_stage0::Stage0Config,
     tier2: Option<Tier2HttpAdapter>,
@@ -473,7 +574,7 @@ fn run_stage0_blocking(
                 let result = if let Some(tier2_client) = tier2 {
                     engine
                         .run_stage0(
-                            &local_memory,
+                            &memory_client,
                             &llm,
                             Some(backend),
                             &tier2_client,
@@ -488,7 +589,7 @@ fn run_stage0_blocking(
                     let noop_tier2 = NoopTier2Client::new();
                     engine
                         .run_stage0(
-                            &local_memory,
+                            &memory_client,
                             &llm,
                             Some(backend),
                             &noop_tier2,
@@ -505,7 +606,7 @@ fn run_stage0_blocking(
                 // Backend disappeared, fall back to noop
                 run_without_vector(
                     &engine,
-                    &local_memory,
+                    &memory_client,
                     &llm,
                     tier2,
                     &spec_id,
@@ -521,7 +622,7 @@ fn run_stage0_blocking(
             tracing::debug!("No TfIdfBackend available, running without hybrid retrieval");
             run_without_vector(
                 &engine,
-                &local_memory,
+                &memory_client,
                 &llm,
                 tier2,
                 &spec_id,
@@ -535,9 +636,11 @@ fn run_stage0_blocking(
 }
 
 /// Helper to run Stage0 without vector backend
+///
+/// SPEC-KIT-971: Accepts &UnifiedMemoryClient to support unified interface.
 async fn run_without_vector(
     engine: &Stage0Engine,
-    local_memory: &LocalMemoryCliAdapter,
+    memory_client: &UnifiedMemoryClient,
     llm: &LlmStubAdapter,
     tier2: Option<Tier2HttpAdapter>,
     spec_id: &str,
@@ -550,7 +653,7 @@ async fn run_without_vector(
     let result = if let Some(tier2_client) = tier2 {
         engine
             .run_stage0(
-                local_memory,
+                memory_client,
                 llm,
                 noop_vector,
                 &tier2_client,
@@ -565,7 +668,7 @@ async fn run_without_vector(
         let noop_tier2 = NoopTier2Client::new();
         engine
             .run_stage0(
-                local_memory,
+                memory_client,
                 llm,
                 noop_vector,
                 &noop_tier2,
@@ -922,5 +1025,152 @@ mod tests {
         // Test with non-existent path
         let branch = get_git_branch(std::path::Path::new("/nonexistent"));
         assert_eq!(branch, "main");
+    }
+
+    // =========================================================================
+    // SPEC-KIT-971-A5: Pipeline Backend Test
+    // =========================================================================
+
+    /// SPEC-KIT-971-A5: Stage0 runs with memvid backend when local-memory is absent.
+    ///
+    /// This test verifies that:
+    /// 1. When memory_backend = memvid, the pipeline does NOT require local-memory daemon
+    /// 2. Stage0 succeeds when capsule path exists (creates capsule if needed)
+    /// 3. Returns a Stage0ExecutionResult even with 0 memories
+    #[test]
+    fn test_971_a5_memvid_backend_without_local_memory() {
+        use crate::memvid_adapter::{create_unified_memory_client, UnifiedMemoryClient};
+        use codex_stage0::MemoryBackend;
+        use tempfile::TempDir;
+
+        // Create a temporary directory for the capsule
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let capsule_path = temp_dir.path().join("test.mv2");
+
+        // Create tokio runtime for async test
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("create runtime");
+
+        rt.block_on(async {
+            // Create unified memory client with memvid backend
+            // The health check closure always returns false (simulating absent local-memory)
+            let result = create_unified_memory_client(
+                MemoryBackend::Memvid,
+                capsule_path.clone(),
+                "test".to_string(),
+                || false, // Local-memory is not healthy
+            )
+            .await;
+
+            // Should succeed because capsule opens
+            assert!(result.is_ok(), "Memvid client should open without local-memory");
+
+            let client = result.unwrap();
+
+            // Verify it's a Memvid client, not LocalMemory
+            match &client {
+                UnifiedMemoryClient::Memvid(_) => {
+                    // Expected: memvid adapter created
+                }
+                UnifiedMemoryClient::LocalMemory(_) => {
+                    panic!("Expected Memvid client, got LocalMemory");
+                }
+            }
+
+            // Verify the capsule file was created
+            assert!(capsule_path.exists(), "Capsule file should be created");
+
+            // Verify the client is functional (search returns empty since no data)
+            use codex_stage0::dcc::{Iqo, LocalMemoryClient, LocalMemorySearchParams};
+            let params = LocalMemorySearchParams {
+                iqo: Iqo {
+                    keywords: vec!["test".to_string()],
+                    ..Default::default()
+                },
+                max_results: 10,
+            };
+            let results = client.search_memories(params).await;
+            assert!(results.is_ok(), "Search should succeed");
+            assert!(results.unwrap().is_empty(), "No data, empty results expected");
+        });
+    }
+
+    /// SPEC-KIT-971-A5: Memvid fallback to local-memory when capsule fails.
+    ///
+    /// This test verifies that when memvid capsule fails AND local-memory is healthy,
+    /// the system falls back to local-memory.
+    #[test]
+    fn test_971_a5_memvid_fallback_to_local_memory() {
+        use crate::memvid_adapter::{create_unified_memory_client, UnifiedMemoryClient};
+        use codex_stage0::MemoryBackend;
+        use std::path::PathBuf;
+
+        // Use an invalid path that will cause capsule open to fail
+        let invalid_path = PathBuf::from("/nonexistent/deeply/nested/path/that/cannot/exist.mv2");
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("create runtime");
+
+        rt.block_on(async {
+            // Create unified memory client with memvid backend
+            // The health check returns true (local-memory is healthy)
+            let result = create_unified_memory_client(
+                MemoryBackend::Memvid,
+                invalid_path,
+                "test".to_string(),
+                || true, // Local-memory is healthy
+            )
+            .await;
+
+            // Should succeed with fallback to local-memory
+            assert!(result.is_ok(), "Should fall back to local-memory");
+
+            let client = result.unwrap();
+
+            // Verify it's a LocalMemory client (fallback)
+            match &client {
+                UnifiedMemoryClient::LocalMemory(_) => {
+                    // Expected: fell back to local-memory
+                }
+                UnifiedMemoryClient::Memvid(_) => {
+                    panic!("Expected LocalMemory fallback, got Memvid");
+                }
+            }
+        });
+    }
+
+    /// SPEC-KIT-971-A5: Memvid fails when capsule fails and local-memory unhealthy.
+    #[test]
+    fn test_971_a5_memvid_no_fallback_fails() {
+        use crate::memvid_adapter::create_unified_memory_client;
+        use codex_stage0::MemoryBackend;
+        use std::path::PathBuf;
+
+        // Use an invalid path that will cause capsule open to fail
+        let invalid_path = PathBuf::from("/nonexistent/deeply/nested/path/that/cannot/exist.mv2");
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("create runtime");
+
+        rt.block_on(async {
+            // Create unified memory client with memvid backend
+            // The health check returns false (local-memory is not healthy)
+            let result = create_unified_memory_client(
+                MemoryBackend::Memvid,
+                invalid_path,
+                "test".to_string(),
+                || false, // Local-memory is not healthy
+            )
+            .await;
+
+            // Should fail because no fallback available
+            assert!(result.is_err(), "Should fail when no fallback available");
+        });
     }
 }

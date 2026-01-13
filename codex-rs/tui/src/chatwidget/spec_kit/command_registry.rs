@@ -328,8 +328,9 @@ mod tests {
         // SPEC-KIT-2XX: Added stage0.project-intel (1 new)
         // PR9: Added spec-review (1 new) - spec-consensus is deprecated alias
         // SPEC-DOGFOOD-001: Added speckit.cancel (1 new)
-        // SPEC-KIT-971: Added speckit.capsule (1 new)
-        assert_eq!(registry.len(), 42, "Registry should have 42 commands");
+        // SPEC-KIT-971: Added capsule.doctor (1 new)
+        // SPEC-KIT-972: Added memory.search (1 new)
+        assert_eq!(registry.len(), 43, "Registry should have 43 commands");
 
         // Verify key commands are registered
         assert!(registry.find("speckit.status").is_some());

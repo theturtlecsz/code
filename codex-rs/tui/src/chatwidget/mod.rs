@@ -2015,6 +2015,9 @@ impl ChatWidget<'_> {
                         Stage0Progress::Starting => "Starting...".to_string(),
                         Stage0Progress::CheckingLocalMemory => "Checking local-memory...".to_string(),
                         Stage0Progress::LoadingConfig => "Loading config...".to_string(),
+                        Stage0Progress::CreatingMemoryClient { backend } => {
+                            format!("Creating {} memory client...", backend)
+                        }
                         Stage0Progress::CheckingTier2Health => "Checking Tier2 health...".to_string(),
                         Stage0Progress::CompilingContext => "Compiling context...".to_string(),
                         Stage0Progress::QueryingTier2 => "Querying NotebookLM...".to_string(),

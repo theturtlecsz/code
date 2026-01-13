@@ -145,7 +145,7 @@ pub fn build_tier2_prompt(spec_id: &str, _spec_content: &str, _task_brief_md: &s
     // Sources available: CURRENT_SPEC, CURRENT_TASK_BRIEF, plus seeded docs
     // Target: < 500 chars (well under 2k limit)
     format!(
-        r#"Analyze {} using the CURRENT_SPEC and CURRENT_TASK_BRIEF sources.
+        r#"Analyze {spec_id} using the CURRENT_SPEC and CURRENT_TASK_BRIEF sources.
 
 Using all sources (Architecture Bible, Bug Retros, Project Diary), provide:
 1. **Summary**: 3-5 bullets on what this implements
@@ -153,8 +153,7 @@ Using all sources (Architecture Bible, Bug Retros, Project Diary), provide:
 3. **Architecture**: Relevant patterns from your sources
 4. **History**: Related decisions or past issues
 
-Be specific. Cite sources. Under 1000 words."#,
-        spec_id
+Be specific. Cite sources. Under 1000 words."#
     )
 }
 

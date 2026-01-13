@@ -229,7 +229,7 @@ impl PolicyStore {
 
     /// Get the path for a policy snapshot.
     fn snapshot_path(&self, policy_id: &str) -> PathBuf {
-        self.base_path.join(format!("snapshot-{}.json", policy_id))
+        self.base_path.join(format!("snapshot-{policy_id}.json"))
     }
 
     /// Store a policy snapshot to disk.

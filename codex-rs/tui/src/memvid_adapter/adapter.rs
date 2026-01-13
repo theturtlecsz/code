@@ -571,6 +571,34 @@ impl MemvidMemoryAdapter {
 }
 
 // =============================================================================
+// SPEC-KIT-971: UnifiedMemoryClient enum for backend routing
+// =============================================================================
+
+/// Unified memory client that supports both memvid and local-memory backends.
+///
+/// SPEC-KIT-971: This enum allows Stage0 to work with either backend while
+/// maintaining type safety (avoiding `dyn` issues with Stage0's generic constraints).
+pub enum UnifiedMemoryClient {
+    /// Memvid capsule backend
+    Memvid(MemvidMemoryAdapter),
+    /// Local-memory CLI backend
+    LocalMemory(crate::stage0_adapters::LocalMemoryCliAdapter),
+}
+
+#[async_trait]
+impl LocalMemoryClient for UnifiedMemoryClient {
+    async fn search_memories(
+        &self,
+        params: LocalMemorySearchParams,
+    ) -> Stage0Result<Vec<LocalMemorySummary>> {
+        match self {
+            UnifiedMemoryClient::Memvid(adapter) => adapter.search_memories(params).await,
+            UnifiedMemoryClient::LocalMemory(adapter) => adapter.search_memories(params).await,
+        }
+    }
+}
+
+// =============================================================================
 // Factory function for creating adapter
 // =============================================================================
 
@@ -683,6 +711,80 @@ pub async fn create_memory_client(
                             Ok(client)
                         }
                         None => Err(e),
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Create a UnifiedMemoryClient based on the configured backend.
+///
+/// ## SPEC-KIT-971: Pipeline Integration
+/// This is the primary factory for Stage0 integration. Returns a `UnifiedMemoryClient`
+/// enum that implements `LocalMemoryClient` and works with Stage0's generic constraints.
+///
+/// ## Backend Routing
+/// - `Memvid`: Creates MemvidMemoryAdapter, opens capsule
+/// - `LocalMemory`: Uses LocalMemoryCliAdapter directly
+///
+/// ## Fallback Behavior
+/// If `backend` is `Memvid` but capsule fails to open:
+/// - Check if local-memory daemon is healthy
+/// - If healthy: use local-memory as fallback
+/// - If not: return error
+pub async fn create_unified_memory_client(
+    backend: codex_stage0::MemoryBackend,
+    capsule_path: std::path::PathBuf,
+    workspace_id: String,
+    check_local_memory_health: impl Fn() -> bool,
+) -> Result<UnifiedMemoryClient, CapsuleError> {
+    use codex_stage0::MemoryBackend;
+
+    match backend {
+        MemoryBackend::LocalMemory => {
+            tracing::info!(
+                target: "stage0",
+                "Using local-memory backend (via config)"
+            );
+            Ok(UnifiedMemoryClient::LocalMemory(
+                crate::stage0_adapters::LocalMemoryCliAdapter::new(),
+            ))
+        }
+        MemoryBackend::Memvid => {
+            // Create memvid adapter without fallback (we handle fallback ourselves)
+            let config = CapsuleConfig {
+                capsule_path: capsule_path.clone(),
+                workspace_id: workspace_id.clone(),
+                ..Default::default()
+            };
+            let adapter = MemvidMemoryAdapter::new(config);
+
+            match adapter.open().await {
+                Ok(true) => {
+                    tracing::info!(
+                        target: "stage0",
+                        "Using memvid backend (capsule opened)"
+                    );
+                    Ok(UnifiedMemoryClient::Memvid(adapter))
+                }
+                Ok(false) | Err(_) => {
+                    // Capsule failed - check if local-memory is available as fallback
+                    tracing::warn!(
+                        target: "stage0",
+                        "Memvid capsule failed, checking local-memory fallback"
+                    );
+
+                    if check_local_memory_health() {
+                        tracing::info!(
+                            target: "stage0",
+                            "Using local-memory fallback after memvid failure"
+                        );
+                        Ok(UnifiedMemoryClient::LocalMemory(
+                            crate::stage0_adapters::LocalMemoryCliAdapter::new(),
+                        ))
+                    } else {
+                        Err(CapsuleError::NotOpen)
                     }
                 }
             }

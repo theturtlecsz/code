@@ -1,0 +1,77 @@
+{
+  "timestamp": "2026-01-12T17:48:12.707382",
+  "passed": true,
+  "total_duration_ms": 6486.886978149414,
+  "steps": [
+    {
+      "name": "Capsule Init",
+      "passed": true,
+      "duration_ms": 4390.253305435181,
+      "message": "CapsuleHandle.open() creates .mv2 file",
+      "error": null
+    },
+    {
+      "name": "Artifact Ingest",
+      "passed": true,
+      "duration_ms": 246.40607833862305,
+      "message": "ingest() returns stable mv2:// URI",
+      "error": null
+    },
+    {
+      "name": "Checkpoint Create",
+      "passed": true,
+      "duration_ms": 243.2234287261963,
+      "message": "checkpoint() creates stage boundary event",
+      "error": null
+    },
+    {
+      "name": "Retrieval Query",
+      "passed": true,
+      "duration_ms": 244.7819709777832,
+      "message": "search_memories() returns ranked results",
+      "error": null
+    },
+    {
+      "name": "Branch Isolation",
+      "passed": true,
+      "duration_ms": 245.6040382385254,
+      "message": "Branches isolate run data correctly",
+      "error": null
+    },
+    {
+      "name": "URI Stability",
+      "passed": true,
+      "duration_ms": 240.29827117919922,
+      "message": "URIs remain stable across capsule reopen",
+      "error": null
+    },
+    {
+      "name": "Crash Recovery",
+      "passed": true,
+      "duration_ms": 247.91455268859863,
+      "message": "Capsule recovers from mid-write crash",
+      "error": null
+    },
+    {
+      "name": "A/B Harness",
+      "passed": true,
+      "duration_ms": 243.83068084716797,
+      "message": "ABHarness produces comparative metrics",
+      "error": null
+    },
+    {
+      "name": "Hybrid Backend",
+      "passed": true,
+      "duration_ms": 142.20070838928223,
+      "message": "HybridBackend merges lex+vec results",
+      "error": null
+    },
+    {
+      "name": "Config Switch",
+      "passed": true,
+      "duration_ms": 242.37394332885742,
+      "message": "create_memory_client routes by config",
+      "error": null
+    }
+  ]
+}
