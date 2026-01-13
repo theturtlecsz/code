@@ -1,6 +1,7 @@
 //! Git integration for automated stage artifact commits
 //!
 //! SPEC-KIT-922: Auto-commit stage artifacts to maintain clean tree throughout pipeline.
+//! SPEC-KIT-971: Capsule checkpoint integration after git commits.
 //!
 //! Problem: /speckit.auto generates stage artifacts (plan.md, tasks.md, etc.) that dirty
 //! the git tree, causing guardrail failures at subsequent stages.
@@ -13,6 +14,15 @@ use crate::spec_prompts::SpecStage;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// Result of a successful stage commit.
+#[derive(Debug, Clone)]
+pub struct StageCommitResult {
+    /// Short commit hash (7-8 chars)
+    pub commit_hash: String,
+    /// Stage that was committed
+    pub stage: SpecStage,
+}
+
 /// Auto-commit stage artifacts to maintain clean tree during /speckit.auto pipeline
 ///
 /// Called after each stage's consensus succeeds, before advancing to next stage.
@@ -22,19 +32,26 @@ use std::process::Command;
 /// - Consensus artifacts (synthesis + verdict JSON)
 /// - Cost summary updates
 ///
-/// Returns Ok(()) even if commit fails (non-fatal - pipeline continues).
+/// ## Returns
+/// - `Ok(Some(StageCommitResult))` if commit succeeded with commit hash
+/// - `Ok(None)` if no commit was made (no changes, already committed, or disabled)
+/// - `Err` on git command failure
+///
+/// ## SPEC-KIT-971: Capsule Integration
+/// The returned commit_hash can be used to create a capsule checkpoint
+/// via `CapsuleHandle::commit_stage(spec_id, run_id, stage, Some(commit_hash))`.
 pub fn auto_commit_stage_artifacts(
     spec_id: &str,
     stage: SpecStage,
     cwd: &Path,
     auto_commit_enabled: bool,
-) -> Result<()> {
+) -> Result<Option<StageCommitResult>> {
     if !auto_commit_enabled {
         tracing::debug!(
             "Auto-commit disabled, skipping for {} stage",
             stage.display_name()
         );
-        return Ok(());
+        return Ok(None);
     }
 
     tracing::info!(
@@ -51,7 +68,7 @@ pub fn auto_commit_stage_artifacts(
             "No stage artifacts found to commit for {} stage",
             stage.display_name()
         );
-        return Ok(());
+        return Ok(None);
     }
 
     tracing::debug!("Found {} artifact paths to commit", paths_to_commit.len());
@@ -68,19 +85,27 @@ pub fn auto_commit_stage_artifacts(
             "No changes staged for {} stage (files may already be committed)",
             stage.display_name()
         );
-        return Ok(());
+        return Ok(None);
     }
 
     // 4. Commit with descriptive message
     let commit_msg = format_stage_commit_message(spec_id, stage);
     commit_staged_files(&commit_msg, cwd)?;
 
+    // 5. Get the commit hash (SPEC-KIT-971: for capsule checkpoint)
+    let commit_hash = get_head_commit_hash(cwd)?;
+
     tracing::info!(
-        "✅ Auto-committed {} stage artifacts for {}",
+        "✅ Auto-committed {} stage artifacts for {} ({})",
         stage.display_name(),
-        spec_id
+        spec_id,
+        commit_hash
     );
-    Ok(())
+
+    Ok(Some(StageCommitResult {
+        commit_hash,
+        stage,
+    }))
 }
 
 /// Collect all artifact paths for a given stage
@@ -190,6 +215,89 @@ fn commit_staged_files(message: &str, cwd: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Get the short hash of the HEAD commit.
+///
+/// Returns the 7-8 character short hash used for capsule checkpoint tracking.
+pub fn get_head_commit_hash(cwd: &Path) -> Result<String> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .current_dir(cwd)
+        .output()
+        .map_err(|e| SpecKitError::from_string(format!("Git rev-parse failed: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(SpecKitError::from_string(format!(
+            "Git rev-parse failed: {}",
+            stderr
+        )));
+    }
+
+    let hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok(hash)
+}
+
+// =============================================================================
+// SPEC-KIT-971: Capsule Checkpoint Integration
+// =============================================================================
+
+use crate::memvid_adapter::{CapsuleConfig, CapsuleHandle, CheckpointId};
+
+/// Create a capsule checkpoint after stage completion.
+///
+/// This should be called after `auto_commit_stage_artifacts` succeeds.
+/// It records a checkpoint in the capsule with the stage metadata and
+/// emits a StageTransition event.
+///
+/// ## Parameters
+/// - `spec_id`: The SPEC identifier (e.g., "SPEC-KIT-971")
+/// - `run_id`: The pipeline run identifier
+/// - `stage`: The completed stage
+/// - `commit_hash`: Git commit hash from the stage commit (optional)
+/// - `cwd`: Working directory (for capsule path resolution)
+///
+/// ## Returns
+/// - `Ok(CheckpointId)` if checkpoint created successfully
+/// - `Err` on capsule errors (logged but typically non-fatal)
+pub fn create_capsule_checkpoint(
+    spec_id: &str,
+    run_id: &str,
+    stage: SpecStage,
+    commit_hash: Option<&str>,
+    cwd: &Path,
+) -> Result<CheckpointId> {
+    let capsule_path = cwd.join(".speckit").join("memvid").join("workspace.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path,
+        workspace_id: "workspace".to_string(),
+        ..Default::default()
+    };
+
+    // Open capsule with write lock for checkpoint creation
+    let handle = CapsuleHandle::open(config).map_err(|e| {
+        SpecKitError::from_string(format!("Failed to open capsule: {}", e))
+    })?;
+
+    // Create checkpoint at stage boundary
+    let checkpoint_id = handle
+        .commit_stage(spec_id, run_id, stage.display_name(), commit_hash)
+        .map_err(|e| {
+            SpecKitError::from_string(format!("Failed to create capsule checkpoint: {}", e))
+        })?;
+
+    tracing::info!(
+        spec_id = %spec_id,
+        run_id = %run_id,
+        stage = %stage.display_name(),
+        checkpoint_id = %checkpoint_id,
+        commit_hash = ?commit_hash,
+        "Created capsule checkpoint for stage"
+    );
+
+    Ok(checkpoint_id)
+}
+
 /// Format commit message for stage artifact commit
 fn format_stage_commit_message(spec_id: &str, stage: SpecStage) -> String {
     format!(
@@ -238,5 +346,165 @@ mod tests {
             assert!(msg.contains("SPEC-TEST"));
             assert!(msg.contains(stage.display_name()));
         }
+    }
+
+    /// SPEC-KIT-971: Test that create_capsule_checkpoint creates a checkpoint.
+    ///
+    /// This test simulates calling the stage completion hook and verifies
+    /// that list_checkpoints() becomes non-empty after the call.
+    #[test]
+    fn test_create_capsule_checkpoint_creates_checkpoint() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("tempdir");
+        let cwd = temp_dir.path();
+
+        // Create .speckit/memvid directory for capsule
+        let capsule_dir = cwd.join(".speckit").join("memvid");
+        std::fs::create_dir_all(&capsule_dir).expect("create capsule dir");
+
+        // Create capsule checkpoint
+        let result = create_capsule_checkpoint(
+            "SPEC-TEST-971",
+            "run-checkpoint-test",
+            SpecStage::Plan,
+            Some("abc1234"),
+            cwd,
+        );
+
+        assert!(result.is_ok(), "create_capsule_checkpoint should succeed");
+
+        let checkpoint_id = result.unwrap();
+        assert!(
+            checkpoint_id.as_str().contains("SPEC-TEST-971"),
+            "Checkpoint ID should contain spec_id"
+        );
+        assert!(
+            checkpoint_id.as_str().contains("Plan"),
+            "Checkpoint ID should contain stage name"
+        );
+
+        // Verify checkpoint exists in capsule by reopening and listing
+        let capsule_path = capsule_dir.join("workspace.mv2");
+        let config = CapsuleConfig {
+            capsule_path,
+            workspace_id: "workspace".to_string(),
+            ..Default::default()
+        };
+
+        // Open read-only to verify checkpoint persisted
+        let handle = CapsuleHandle::open_read_only(config).expect("open capsule");
+        let checkpoints = handle.list_checkpoints();
+
+        assert!(
+            !checkpoints.is_empty(),
+            "list_checkpoints() should be non-empty after checkpoint creation"
+        );
+        assert_eq!(
+            checkpoints.len(),
+            1,
+            "Should have exactly one checkpoint"
+        );
+
+        let cp = &checkpoints[0];
+        assert_eq!(cp.spec_id, Some("SPEC-TEST-971".to_string()));
+        assert_eq!(cp.stage, Some("Plan".to_string()));
+        assert_eq!(cp.commit_hash, Some("abc1234".to_string()));
+    }
+
+    /// SPEC-KIT-971: Test checkpoint creation without commit hash.
+    #[test]
+    fn test_create_capsule_checkpoint_without_commit_hash() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("tempdir");
+        let cwd = temp_dir.path();
+
+        // Create .speckit/memvid directory for capsule
+        let capsule_dir = cwd.join(".speckit").join("memvid");
+        std::fs::create_dir_all(&capsule_dir).expect("create capsule dir");
+
+        // Create capsule checkpoint without commit hash
+        let result = create_capsule_checkpoint(
+            "SPEC-TEST-971",
+            "run-no-hash",
+            SpecStage::Tasks,
+            None, // No commit hash
+            cwd,
+        );
+
+        assert!(result.is_ok(), "create_capsule_checkpoint should succeed without hash");
+
+        // Verify checkpoint has no commit_hash
+        let capsule_path = capsule_dir.join("workspace.mv2");
+        let config = CapsuleConfig {
+            capsule_path,
+            workspace_id: "workspace".to_string(),
+            ..Default::default()
+        };
+
+        let handle = CapsuleHandle::open_read_only(config).expect("open capsule");
+        let checkpoints = handle.list_checkpoints();
+
+        assert_eq!(checkpoints.len(), 1);
+        assert_eq!(checkpoints[0].commit_hash, None);
+        assert_eq!(checkpoints[0].stage, Some("Tasks".to_string()));
+    }
+
+    /// SPEC-KIT-971: Test that StageTransition event is emitted on checkpoint.
+    #[test]
+    fn test_create_capsule_checkpoint_emits_stage_transition_event() {
+        use crate::memvid_adapter::EventType;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("tempdir");
+        let cwd = temp_dir.path();
+
+        // Create .speckit/memvid directory
+        let capsule_dir = cwd.join(".speckit").join("memvid");
+        std::fs::create_dir_all(&capsule_dir).expect("create capsule dir");
+
+        // Create checkpoint
+        let _ = create_capsule_checkpoint(
+            "SPEC-EVENT-TEST",
+            "run-event",
+            SpecStage::Implement,
+            Some("def5678"),
+            cwd,
+        )
+        .expect("create checkpoint");
+
+        // Open and check events
+        let capsule_path = capsule_dir.join("workspace.mv2");
+        let config = CapsuleConfig {
+            capsule_path,
+            workspace_id: "workspace".to_string(),
+            ..Default::default()
+        };
+
+        let handle = CapsuleHandle::open_read_only(config).expect("open capsule");
+        let events = handle.list_events();
+
+        // Should have a StageTransition event
+        let stage_events: Vec<_> = events
+            .iter()
+            .filter(|e| matches!(e.event_type, EventType::StageTransition))
+            .collect();
+
+        assert_eq!(
+            stage_events.len(),
+            1,
+            "Should have exactly one StageTransition event"
+        );
+
+        let event = stage_events[0];
+        assert_eq!(event.spec_id, "SPEC-EVENT-TEST");
+        assert_eq!(event.run_id, "run-event");
+        assert_eq!(event.stage, Some("Implement".to_string()));
+
+        // Event payload should contain checkpoint info
+        let payload = &event.payload;
+        assert!(payload.get("stage").is_some());
+        assert!(payload.get("checkpoint_id").is_some());
     }
 }

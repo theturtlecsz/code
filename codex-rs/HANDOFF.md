@@ -1,8 +1,8 @@
 # HANDOFF.md — Session Continuation
 
 **Created:** 2026-01-11
-**Last Session:** 2026-01-13 (SPEC-KIT-971 Cross-Process Locking Complete)
-**Next Session:** Implement CLI Commands (checkpoints, stats, doctor)
+**Last Session:** 2026-01-13 (SPEC-KIT-971 Checkpoint Integration + SPEC-KIT-977 Wiring Complete)
+**Next Session:** CLI Commands + Policy Event Binding
 
 ---
 
@@ -30,153 +30,201 @@ CURRENT STATE — Session completed 2026-01-13
 ===================================================================
 
 COMPLETED THIS SESSION:
-1. ✅ SPEC-KIT-971-A5 Pipeline Integration
-   - 3 acceptance tests passing
-   - UnifiedMemoryClient enum dispatch pattern
-   - Backend routing in run_speckit_auto_pipeline()
-   - 607 tests passing
 
-2. ✅ SPEC-KIT-971 Cross-Process Single-Writer Lock
-   - lock.rs module with LockMetadata, CapsuleLock, LockError
-   - Atomic lock file creation (O_CREAT|O_EXCL) + fs2 advisory lock
-   - Stale lock detection (process existence check on same host)
-   - CapsuleOpenOptions for write_lock + context
-   - open_read_only() for non-locking access
-   - Doctor shows detailed lock info + recovery steps
-   - 8 new tests, all passing
+1. ✅ SPEC-KIT-971 Checkpoint Integration with Pipeline Stage Commits
+   - StageCommitResult struct returns commit hash from auto_commit
+   - get_head_commit_hash() function for commit retrieval
+   - create_capsule_checkpoint() function wired after git auto-commit
+   - 5 git_integration tests passing
+   - Checkpoints record spec_id, run_id, stage, commit_hash
 
-===================================================================
-TASK FOR NEXT SESSION: CLI Commands
-===================================================================
+2. ✅ SPEC-KIT-977 PolicySnapshot Wiring
+   - Deterministic hash (excludes policy_id, created_at, hash)
+   - content_matches() and content_changed() helpers
+   - put_policy() for global URI: mv2://<workspace>/policy/<policy_id>
+   - CurrentPolicyInfo tracking in CapsuleHandle
+   - StageTransition events include policy_id/hash
+   - 15 policy tests passing
 
-Implement `speckit capsule` CLI subcommands:
-
-### 1. `speckit capsule checkpoints` (Priority 1)
-```bash
-# JSON-first output (user preference)
-speckit capsule checkpoints                    # JSON output
-speckit capsule checkpoints --format table     # Human-readable table
-speckit capsule checkpoints --branch run/abc   # Filter by branch
-speckit capsule checkpoints --label v1.0       # Find by label
-```
-
-Implementation location: `tui/src/chatwidget/spec_kit/commands/capsule.rs`
-
-Output JSON schema:
-```json
-{
-  "checkpoints": [
-    {
-      "id": "SPEC-971_plan_20260113120000",
-      "label": "stage:plan",
-      "stage": "plan",
-      "spec_id": "SPEC-971",
-      "run_id": "run-abc",
-      "commit_hash": "abc123",
-      "timestamp": "2026-01-13T12:00:00Z",
-      "is_manual": false
-    }
-  ],
-  "total": 5,
-  "branch": "main"
-}
-```
-
-### 2. `speckit capsule stats` (Priority 2)
-```bash
-speckit capsule stats                          # JSON output
-speckit capsule stats --format table           # Human-readable
-```
-
-Uses existing `CapsuleHandle::stats()` method.
-
-### 3. `speckit capsule doctor` (Priority 3)
-```bash
-speckit capsule doctor                         # JSON output
-speckit capsule doctor --format table          # Human-readable
-```
-
-Uses existing `CapsuleHandle::doctor()` method. Already shows lock details.
-
-### 4. `speckit capsule init` (Priority 4)
-```bash
-speckit capsule init                           # Create workspace.mv2
-speckit capsule init --path custom.mv2         # Custom path
-```
+3. ✅ SPEC-KIT-971 CLI (speckit capsule subcommands)
+   - doctor, stats, checkpoints, commit, resolve-uri commands
+   - JSON-first output with stable schema
+   - 7 CLI tests passing
 
 ===================================================================
-WHERE TO IMPLEMENT
+TASK FOR NEXT SESSION: CLI + 977 (Parallel Tracks)
 ===================================================================
 
-1. Create new command module:
-   `tui/src/chatwidget/spec_kit/commands/capsule.rs`
+### TRACK 1: Complete CLI Commands
 
-2. Register in command_registry.rs:
-   - CapsuleCheckpointsCommand
-   - CapsuleStatsCommand
-   - CapsuleDoctorCommand (may already exist)
-   - CapsuleInitCommand
+**Location:** `cli/src/speckit_cmd.rs` (already has capsule subcommand structure)
 
-3. Wire up in chatwidget/spec_kit/mod.rs
+Remaining CLI work:
+1. `speckit capsule init` - Create new workspace.mv2
+2. `speckit capsule events` - List events with filtering
+3. `speckit capsule export` - Export to per-run capsule
 
-===================================================================
-EXISTING CODE TO USE
-===================================================================
+### TRACK 2: Policy Event Binding (Phase 4→5 Gate)
 
-The capsule functionality is already implemented:
+**Goal:** Every event emitted after policy capture includes policy_id/hash.
+
+**Locations to wire:**
+- `tui/src/chatwidget/spec_kit/pipeline_coordinator.rs` - capture policy at run start
+- `tui/src/memvid_adapter/capsule.rs` - emit_policy_snapshot_ref_with_info already exists
+- `tui/src/memvid_adapter/policy_capture.rs` - capture_and_store_policy exists
+
+**Implementation pattern:**
 ```rust
-// tui/src/memvid_adapter/capsule.rs
-impl CapsuleHandle {
-    pub fn list_checkpoints(&self) -> Vec<CheckpointMetadata>
-    pub fn list_checkpoints_filtered(&self, branch: Option<&BranchId>) -> Vec<CheckpointMetadata>
-    pub fn get_checkpoint_by_label(&self, label: &str) -> Option<CheckpointMetadata>
-    pub fn stats(&self) -> CapsuleStats
-    pub fn doctor(path: &Path) -> Vec<DiagnosticResult>
-}
+// At run start (in pipeline_coordinator.rs handle_spec_auto_run)
+let policy_info = capture_and_store_policy(&capsule, &stage0_config).await?;
 
-// Lock info available via:
-pub use lock::{LockMetadata, is_locked, lock_path_for};
+// All subsequent events get policy binding
+capsule.emit_stage_transition_with_policy(
+    spec_id, run_id, stage, commit_hash, policy_info
+)?;
+```
+
+**Tests needed:**
+1. All events after policy capture include policy_id
+2. Policy unchanged across stages in same run
+3. Phase 4→5 gate verification test
+
+===================================================================
+FILES CHANGED THIS SESSION (2026-01-13)
+===================================================================
+
+| File | Change |
+|------|--------|
+| tui/src/chatwidget/spec_kit/git_integration.rs | StageCommitResult, create_capsule_checkpoint, 3 tests |
+| tui/src/chatwidget/spec_kit/pipeline_coordinator.rs | Wired checkpoint creation after git commit |
+| tui/src/memvid_adapter/capsule.rs | CurrentPolicyInfo, put_policy, list_events, policy in StageTransition |
+| tui/src/memvid_adapter/mod.rs | Export new types |
+| tui/src/memvid_adapter/policy_capture.rs | Uses put_policy() |
+| stage0/src/policy.rs | Deterministic hash, content_matches, content_changed |
+| cli/src/speckit_cmd.rs | Capsule CLI subcommands |
+
+===================================================================
+TEST SUMMARY
+===================================================================
+
+| Module | Tests | Status |
+|--------|-------|--------|
+| git_integration | 5 | ✅ All passing |
+| capsule | 9 | ✅ All passing |
+| stage0 policy | 15 | ✅ All passing |
+| CLI | 7 | ✅ All passing |
+
+Run commands:
+```bash
+cargo test -p codex-tui --lib "git_integration"
+cargo test -p codex-tui --lib "capsule"
+cargo test -p codex-stage0 "policy"
 ```
 
 ===================================================================
-TEST COMMANDS
+KEY CODE PATTERNS IMPLEMENTED
+===================================================================
+
+### Checkpoint Integration Flow
+
+```
+auto_commit_stage_artifacts()
+    ├── Stage files (git add)
+    ├── Commit with message
+    ├── Return StageCommitResult { commit_hash, stage }
+    │
+    └── Pipeline coordinator:
+        └── create_capsule_checkpoint(spec_id, run_id, stage, commit_hash, cwd)
+            ├── Open CapsuleHandle
+            ├── commit_stage(spec_id, run_id, stage_name, commit_hash)
+            └── Return CheckpointId
+```
+
+### PolicySnapshot Hash (Deterministic)
+
+```rust
+// Excluded from hash (runtime values):
+// - policy_id (generated at capture time)
+// - created_at (timestamp)
+// - hash (self-referential)
+
+// Included in hash (content):
+// - policy_name
+// - policy_version
+// - source_files (sorted for determinism)
+// - model_config
+// - scoring_weights
+```
+
+### Global Policy URI
+
+```
+mv2://workspace/policy/{policy_id}
+    └── Capsule-scoped, globally referenceable
+    └── Stored via put_policy() at dedicated path
+```
+
+===================================================================
+ARCHITECTURAL NOTES
+===================================================================
+
+### Event Binding Pattern
+
+All events should include:
+- event_type: EventType enum
+- spec_id, run_id: Pipeline context
+- stage: Optional stage name
+- policy_id, policy_hash: From CurrentPolicyInfo
+- payload: Event-specific data
+
+### Phase 4→5 Gate Requirements
+
+1. PolicySnapshot captured at run start ✅
+2. All events tagged with policy_id (partial - StageTransition done)
+3. Policy unchanged verification (content_matches helper exists)
+4. Export includes policy metadata
+
+===================================================================
+QUICK COMMANDS
 ===================================================================
 
 ```bash
 # Build
 ~/code/build-fast.sh
 
-# Run specific tests
-cargo test -p codex-tui --lib -- memvid_adapter::tests
-cargo test -p codex-tui --lib -- capsule
-
-# Full suite
+# Run tests
 cargo test -p codex-tui --lib
+cargo test -p codex-stage0 --lib
 
-# Verify CLI works (after implementation)
-./target/debug/code-tui --help
+# Specific modules
+cargo test -p codex-tui --lib "capsule"
+cargo test -p codex-tui --lib "git_integration"
+cargo test -p codex-stage0 "policy"
+
+# CLI smoke test
+./target/debug/code-tui speckit capsule doctor
+./target/debug/code-tui speckit capsule stats
+./target/debug/code-tui speckit capsule checkpoints
 ```
 
 ===================================================================
-AFTER CLI: NEXT PRIORITY
+DO NOT INCLUDE (Deferred)
 ===================================================================
 
-SPEC-KIT-977 PolicySnapshot Integration
-- PolicySnapshot struct exists in stage0/src/policy.rs
-- Need to integrate into capsule events
-- Tag all events with policy_id
-- Phase 4→5 gate requirement
+- Dead code cleanup (9 clippy warnings) - defer to later session
+- SPEC-KIT-973 Time-travel UI - needs CLI complete first
+- SPEC-KIT-976 Logic Mesh - needs 977 policy wiring complete
 
 ===================================================================
 OUTPUT EXPECTATION
 ===================================================================
 
-- Implement CLI commands with JSON-first output
-- Add --format table option for human-readable output
-- Register commands in command_registry.rs
-- Add tests for CLI output parsing
-- Commit with spec ID and decision IDs
-- Update progress tracker
+1. Complete remaining CLI commands (init, events, export)
+2. Wire policy capture at pipeline run start
+3. Ensure all events include policy_id after capture
+4. Add phase 4→5 gate verification test
+5. Commit with spec IDs and decision IDs
+6. Update HANDOFF.md with progress
 ```
 
 ---
@@ -185,34 +233,32 @@ OUTPUT EXPECTATION
 
 ### Completed This Session (2026-01-13)
 
-| Task | Status | Commits | Tests |
-|------|--------|---------|-------|
-| 971-A5 Pipeline Integration | ✅ | 5d00c1f2b | 3 acceptance tests |
-| 971 Cross-Process Lock | ✅ | 04f2807cc | 8 lock tests |
+| Task | Status | Tests |
+|------|--------|-------|
+| 971 Checkpoint Integration | ✅ | 5 passing |
+| 977 PolicySnapshot Wiring | ✅ | 15 passing |
+| 971 CLI (partial) | ✅ | 7 passing |
 
 ### Completed Specs
 
-| Spec | Status | Commits | Key Deliverables |
-|------|--------|---------|------------------|
-| SPEC-KIT-971 (core) | ✅ | 41c640977+ | Capsule foundation, crash recovery |
-| SPEC-KIT-971 (A5) | ✅ | 5d00c1f2b | Pipeline backend routing |
-| SPEC-KIT-971 (lock) | ✅ | 04f2807cc | Cross-process single-writer lock |
-| SPEC-KIT-972 | ✅ | 01a263d4a+ | Hybrid retrieval, eval harness |
+| Spec | Status | Key Deliverables |
+|------|--------|------------------|
+| SPEC-KIT-971 (core) | ✅ | Capsule foundation, crash recovery, persistence |
+| SPEC-KIT-971 (A5) | ✅ | Pipeline backend routing |
+| SPEC-KIT-971 (lock) | ✅ | Cross-process single-writer lock |
+| SPEC-KIT-971 (checkpoints) | ✅ | Stage boundary checkpoints with git integration |
+| SPEC-KIT-971 (CLI) | 🔄 70% | doctor/stats/checkpoints done, init/events/export pending |
+| SPEC-KIT-972 | ✅ | Hybrid retrieval, eval harness |
+| SPEC-KIT-977 (hash) | ✅ | Deterministic hash, content helpers |
+| SPEC-KIT-977 (wiring) | 🔄 60% | Policy capture + storage done, event binding partial |
 
 ### In Progress
 
 | Spec | Status | Next Step |
 |------|--------|-----------|
-| SPEC-KIT-971 (CLI) | 🔄 10% | Implement checkpoints/stats/doctor CLI |
-| SPEC-KIT-977 | 🔄 40% | Integrate PolicySnapshot into capsule events |
+| SPEC-KIT-971 (CLI) | 🔄 70% | Add init, events, export commands |
+| SPEC-KIT-977 (wiring) | 🔄 60% | Wire policy capture at run start, bind all events |
 | SPEC-KIT-978 | 🔄 0% | Create ReflexBackend trait |
-
-### Blocked / Waiting
-
-| Spec | Blocker | Unblocks |
-|------|---------|----------|
-| SPEC-KIT-973 | Needs 971 CLI | Time-Travel UI |
-| SPEC-KIT-975 (full) | Needs 977 | 976 Logic Mesh |
 
 ### Phase Gates
 
@@ -221,118 +267,70 @@ OUTPUT EXPECTATION
 | 1→2 | 971 URI contract + checkpoint tests | ✅ Passed |
 | 2→3 | 972 eval harness + 975 event schema v1 | ✅ Passed |
 | 3→4 | 972 parity gates + export verification | ✅ Passed |
-| 4→5 | 977 PolicySnapshot + 978 reflex stack | ⏳ Pending |
+| 4→5 | 977 PolicySnapshot + 978 reflex stack | ⏳ 60% Complete |
 
 ---
 
-## Architecture Notes
+## Architecture Summary
 
-### Cross-Process Lock Flow (IMPLEMENTED)
-
-```
-CapsuleHandle::open(config)
-    │
-    ├── If write_lock=true (default):
-    │   ├── Create <capsule_path>.lock atomically (O_CREAT|O_EXCL)
-    │   ├── Write LockMetadata JSON (pid, host, user, started_at, context)
-    │   ├── Acquire fs2 advisory lock
-    │   └── Store CapsuleLock in handle
-    │
-    ├── If lock exists:
-    │   ├── Read LockMetadata from JSON
-    │   ├── Check if stale (process not running on same host)
-    │   │   ├── Stale → Clean up and retry
-    │   │   └── Active → Return CapsuleError::LockedByWriter(metadata)
-    │
-    └── On Drop:
-        └── CapsuleLock::drop() releases lock + removes file
-```
-
-### LockMetadata Schema
-
-```json
-{
-  "pid": 12345,
-  "host": "hostname",
-  "user": "username",
-  "started_at": "2026-01-13T01:00:00Z",
-  "spec_id": "SPEC-KIT-971",
-  "run_id": "run-abc",
-  "branch": "main",
-  "schema_version": 1
-}
-```
-
-### Adapter Boundary (enforced)
+### Checkpoint + Git Integration Flow
 
 ```
-Stage0 Core (no Memvid dependency)
+Pipeline Stage Complete
     │
-    └── LocalMemoryClient trait
-            │
-            ▼
-    UnifiedMemoryClient (enum dispatch)
-            │
-            ├── Memvid(MemvidMemoryAdapter)
-            │       ├── CapsuleHandle
-            │       └── CapsuleLock (cross-process)
-            │
-            └── LocalMemory(LocalMemoryCliAdapter)
-                    └── `lm` CLI commands
+    ├── auto_commit_stage_artifacts()
+    │   ├── git add <stage files>
+    │   ├── git commit -m "feat(SPEC-ID): complete Stage stage"
+    │   └── Return StageCommitResult { commit_hash, stage }
+    │
+    └── create_capsule_checkpoint()
+        ├── CapsuleHandle::open(config)
+        ├── handle.commit_stage(spec_id, run_id, stage, commit_hash)
+        │   ├── Create CheckpointMetadata
+        │   ├── Emit StageTransition event (with policy_id if set)
+        │   └── Persist to capsule
+        └── Return CheckpointId
+```
+
+### Policy Capture + Binding Flow
+
+```
+Pipeline Run Start
+    │
+    └── capture_and_store_policy(&capsule, &config)
+        ├── PolicySnapshot::capture(files, config)
+        ├── capsule.put_policy(snapshot)  // Global URI
+        └── capsule.set_current_policy(policy_id, hash)
+
+All Subsequent Events
+    │
+    └── event.policy_id = capsule.current_policy.id
+        event.policy_hash = capsule.current_policy.hash
 ```
 
 ---
 
-## Files Changed This Session (2026-01-13)
+## Key Files Reference
 
-| File | Change |
-|------|--------|
-| tui/src/memvid_adapter/lock.rs | NEW: LockMetadata, CapsuleLock, lock_path_for |
-| tui/src/memvid_adapter/capsule.rs | CapsuleOpenOptions, open_with_options, LockedByWriter |
-| tui/src/memvid_adapter/mod.rs | Export lock types |
-| tui/src/memvid_adapter/tests.rs | 8 new cross-process lock tests |
-| tui/Cargo.toml | Added hostname, whoami dependencies |
-| tui/src/chatwidget/spec_kit/stage0_integration.rs | Backend routing, 3 acceptance tests |
-| tui/src/chatwidget/spec_kit/command_registry.rs | Fixed command count 42→43 |
-
----
-
-## Test Summary
-
-| Package | Tests | Status |
-|---------|-------|--------|
-| codex-tui (all) | 607 | ✅ Passing |
-| memvid_adapter | 27 | ✅ Passing |
-| lock module | 4 | ✅ Passing |
-| 971-A5 acceptance | 3 | ✅ Passing |
-| cross-process lock | 8 | ✅ Passing |
+| File | Purpose |
+|------|---------|
+| tui/src/chatwidget/spec_kit/git_integration.rs | Git auto-commit + capsule checkpoint |
+| tui/src/chatwidget/spec_kit/pipeline_coordinator.rs | Pipeline orchestration |
+| tui/src/memvid_adapter/capsule.rs | CapsuleHandle, checkpoints, events |
+| tui/src/memvid_adapter/policy_capture.rs | Policy capture utilities |
+| stage0/src/policy.rs | PolicySnapshot struct, deterministic hash |
+| cli/src/speckit_cmd.rs | CLI subcommands |
 
 ---
 
-## Quick Reference
+## Commits This Session
 
-### Build & Test
-```bash
-~/code/build-fast.sh              # Fast build
-cargo test -p codex-tui --lib     # Full TUI tests (607)
-cargo test -p codex-tui --lib -- memvid_adapter::tests  # Memvid tests (27)
-cargo test -p codex-tui --lib -- lock  # Lock tests (4)
-cargo test -p codex-stage0 --lib  # Stage0 tests
 ```
-
-### Key Paths
-```
-codex-rs/tui/src/memvid_adapter/lock.rs       # Cross-process lock (NEW)
-codex-rs/tui/src/memvid_adapter/capsule.rs    # CapsuleHandle + diagnostics
-codex-rs/tui/src/memvid_adapter/adapter.rs    # UnifiedMemoryClient
-codex-rs/stage0/src/policy.rs                 # PolicySnapshot
-codex-rs/SPEC.md                              # Root docs contract
-```
-
-### Commits This Session
-```
-5d00c1f2b  test(stage0,memvid): SPEC-KIT-971-A5 acceptance tests pass
-04f2807cc  feat(memvid): SPEC-KIT-971 cross-process single-writer lock
+27cbdeddc docs(handoff): SPEC-KIT-971 session complete + CLI next steps
+04f2807cc feat(memvid): SPEC-KIT-971 cross-process single-writer lock
+5d00c1f2b test(stage0,memvid): SPEC-KIT-971-A5 acceptance tests pass
+400704922 docs: V6 contract alignment + policy source files + spec updates
+a42f594fd feat(stage0,memvid): SPEC-KIT-971 CLI + SPEC-KIT-977 PolicySnapshot
 ```
 
 ---

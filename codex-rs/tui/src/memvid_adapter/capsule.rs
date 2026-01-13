@@ -4,13 +4,32 @@
 //! - D7: Single-writer capsule model (global lock + writer queue)
 //! - D18: Stage boundary checkpoints
 //! - D2: Canonical capsule path: `./.speckit/memvid/workspace.mv2`
+//!
+//! ## On-Disk Format (Minimal Persistence)
+//! ```text
+//! [Header: "MV2\x00\x01" (5 bytes)]
+//! [Record 0]
+//! [Record 1]
+//! ...
+//!
+//! Record format:
+//! [u32 record_len][u8 record_kind][u32 meta_len][meta_json bytes][payload bytes]
+//!
+//! record_kind:
+//!   0 = Artifact
+//!   1 = Checkpoint
+//!   2 = Event
+//! ```
 
 use crate::memvid_adapter::lock::{CapsuleLock, LockError, LockMetadata, is_locked, lock_path_for};
 use crate::memvid_adapter::types::{
     BranchId, CheckpointId, CheckpointMetadata, EventType, LogicalUri, ObjectType,
     PhysicalPointer, RunEventEnvelope, UriIndex,
 };
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use thiserror::Error;
@@ -91,6 +110,63 @@ impl Default for CapsuleConfig {
 }
 
 // =============================================================================
+// On-Disk Record Format (SPEC-KIT-971 Minimal Persistence)
+// =============================================================================
+
+/// Magic header for MV2 capsule files.
+const MV2_HEADER: &[u8] = b"MV2\x00\x01";
+/// Header length in bytes.
+const MV2_HEADER_LEN: usize = 5;
+
+/// Record kind identifiers.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecordKind {
+    Artifact = 0,
+    Checkpoint = 1,
+    Event = 2,
+}
+
+impl TryFrom<u8> for RecordKind {
+    type Error = ();
+
+    fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {
+        match value {
+            0 => Ok(RecordKind::Artifact),
+            1 => Ok(RecordKind::Checkpoint),
+            2 => Ok(RecordKind::Event),
+            _ => Err(()),
+        }
+    }
+}
+
+/// Metadata stored with artifact records (JSON-serializable).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArtifactRecordMeta {
+    /// Logical URI for this artifact
+    pub uri: String,
+    /// Object type
+    pub object_type: String,
+    /// User-provided metadata
+    pub metadata: serde_json::Value,
+}
+
+/// A stored record read from disk during scan.
+#[derive(Debug, Clone)]
+pub struct StoredRecord {
+    /// Record kind
+    pub kind: RecordKind,
+    /// Record sequence number (0-based)
+    pub seq: u64,
+    /// File offset where payload starts
+    pub payload_offset: u64,
+    /// Payload length in bytes
+    pub payload_len: u64,
+    /// Parsed metadata (JSON)
+    pub meta: serde_json::Value,
+}
+
+// =============================================================================
 // CapsuleHandle - Lifecycle management (D7)
 // =============================================================================
 
@@ -137,8 +213,37 @@ pub struct CapsuleHandle {
     /// Is the capsule open?
     is_open: Arc<RwLock<bool>>,
 
-    // TODO: When memvid crate is added as dependency:
-    // inner: memvid::Capsule,
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Persistence state (SPEC-KIT-971 minimal persistence)
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// File handle for append-only writes (only present when write_lock is true)
+    file_handle: Arc<Mutex<Option<File>>>,
+
+    /// Record sequence counter (for frame_id)
+    record_seq: Arc<Mutex<u64>>,
+
+    /// Stored records for reading payload bytes back
+    stored_records: Arc<RwLock<Vec<StoredRecord>>>,
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Policy tracking (SPEC-KIT-977)
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// Current policy snapshot info (policy_id, hash, uri)
+    /// Set when policy is captured at run start
+    current_policy: Arc<RwLock<Option<CurrentPolicyInfo>>>,
+}
+
+/// Current policy info tracked in the capsule handle (SPEC-KIT-977).
+#[derive(Debug, Clone)]
+pub struct CurrentPolicyInfo {
+    /// Policy ID (UUID)
+    pub policy_id: String,
+    /// Content hash (SHA256)
+    pub hash: String,
+    /// Capsule URI (mv2://<workspace>/policy/<policy_id>)
+    pub uri: LogicalUri,
 }
 
 /// Write lock state.
@@ -223,6 +328,12 @@ impl CapsuleHandle {
     /// - Writes LockMetadata JSON to the lock file
     /// - Holds advisory OS lock (fs2) for extra safety
     /// - If another process holds the lock, returns `CapsuleError::LockedByWriter`
+    ///
+    /// ## Persistence
+    /// On open, scans existing file and rebuilds:
+    /// - URI index
+    /// - Checkpoints
+    /// - Events
     pub fn open_with_options(config: CapsuleConfig, options: CapsuleOpenOptions) -> Result<Self> {
         // Ensure parent directory exists
         if let Some(parent) = config.capsule_path.parent() {
@@ -258,15 +369,9 @@ impl CapsuleHandle {
             None
         };
 
-        // TODO: When memvid crate is added:
-        // let inner = if exists {
-        //     memvid::Capsule::open(&config.capsule_path)?
-        // } else {
-        //     memvid::Capsule::create(&config.capsule_path)?
-        // };
-
-        let handle = Self {
-            config,
+        // Initialize handle with default/empty state
+        let mut handle = Self {
+            config: config.clone(),
             cross_process_lock,
             write_lock: Arc::new(Mutex::new(WriteLock {
                 holder: None,
@@ -279,11 +384,26 @@ impl CapsuleHandle {
             events: Arc::new(RwLock::new(Vec::new())),
             event_seq: Arc::new(Mutex::new(0)),
             is_open: Arc::new(RwLock::new(true)),
+            file_handle: Arc::new(Mutex::new(None)),
+            record_seq: Arc::new(Mutex::new(0)),
+            stored_records: Arc::new(RwLock::new(Vec::new())),
+            current_policy: Arc::new(RwLock::new(None)),
         };
 
         // If this is a new capsule, create it
         if !exists {
             handle.create_capsule_file()?;
+        } else {
+            // Scan existing file and rebuild indexes
+            handle.scan_and_rebuild()?;
+        }
+
+        // Open file handle for append if write access requested
+        if options.write_lock {
+            let file = OpenOptions::new()
+                .append(true)
+                .open(&config.capsule_path)?;
+            *handle.file_handle.lock().unwrap() = Some(file);
         }
 
         Ok(handle)
@@ -343,10 +463,214 @@ impl CapsuleHandle {
 
     /// Create a new capsule file.
     fn create_capsule_file(&self) -> Result<()> {
-        // Create a minimal capsule file
-        // TODO: When memvid crate is added, use proper initialization
-        std::fs::write(&self.config.capsule_path, b"MV2\x00\x01")?;
+        // Create capsule file with MV2 header
+        std::fs::write(&self.config.capsule_path, MV2_HEADER)?;
         Ok(())
+    }
+
+    /// Scan existing capsule file and rebuild indexes.
+    ///
+    /// Reads all records from disk and populates:
+    /// - `uri_index`: URI → PhysicalPointer mapping
+    /// - `checkpoints`: List of checkpoint metadata
+    /// - `events`: List of event envelopes
+    /// - `stored_records`: All records for payload retrieval
+    fn scan_and_rebuild(&mut self) -> Result<()> {
+        let mut file = File::open(&self.config.capsule_path)?;
+
+        // Skip header
+        file.seek(SeekFrom::Start(MV2_HEADER_LEN as u64))?;
+
+        let file_len = file.metadata()?.len();
+        let mut pos = MV2_HEADER_LEN as u64;
+        let mut seq = 0u64;
+
+        let mut uri_index = UriIndex::new();
+        let mut checkpoints = Vec::new();
+        let mut events = Vec::new();
+        let mut stored_records = Vec::new();
+        let mut max_event_seq = 0u64;
+
+        while pos < file_len {
+            // Try to read a record
+            match Self::read_record(&mut file, pos, seq) {
+                Ok((record, next_pos)) => {
+                    // Process record based on kind
+                    match record.kind {
+                        RecordKind::Artifact => {
+                            // Parse artifact metadata
+                            if let Ok(art_meta) = serde_json::from_value::<ArtifactRecordMeta>(record.meta.clone()) {
+                                if let Ok(uri) = art_meta.uri.parse::<LogicalUri>() {
+                                    let pointer = PhysicalPointer {
+                                        frame_id: record.seq,
+                                        offset: record.payload_offset,
+                                        length: record.payload_len,
+                                    };
+                                    uri_index.insert(uri, pointer);
+                                }
+                            }
+                        }
+                        RecordKind::Checkpoint => {
+                            // Parse checkpoint metadata
+                            if let Ok(cp_meta) = serde_json::from_value::<CheckpointMetadata>(record.meta.clone()) {
+                                checkpoints.push(cp_meta);
+                            }
+                        }
+                        RecordKind::Event => {
+                            // Parse event envelope
+                            if let Ok(event) = serde_json::from_value::<RunEventEnvelope>(record.meta.clone()) {
+                                // Track max event seq for future event numbering
+                                if let Some(seq_num) = event.uri.as_str().split('/').last().and_then(|s| s.parse::<u64>().ok()) {
+                                    max_event_seq = max_event_seq.max(seq_num);
+                                }
+                                events.push(event);
+                            }
+                        }
+                    }
+
+                    stored_records.push(record);
+                    pos = next_pos;
+                    seq += 1;
+                }
+                Err(e) => {
+                    // If we can't read more records, stop scanning
+                    // This could be end of file or corruption
+                    tracing::debug!("Stopped scanning at pos {}: {}", pos, e);
+                    break;
+                }
+            }
+        }
+
+        // Update handle state
+        *self.uri_index.write().unwrap() = uri_index;
+        *self.checkpoints.write().unwrap() = checkpoints;
+        *self.events.write().unwrap() = events;
+        *self.stored_records.write().unwrap() = stored_records;
+        *self.record_seq.lock().unwrap() = seq;
+        *self.event_seq.lock().unwrap() = max_event_seq;
+
+        Ok(())
+    }
+
+    /// Read a single record from the file at the given position.
+    ///
+    /// Returns (StoredRecord, next_position)
+    fn read_record(file: &mut File, pos: u64, seq: u64) -> Result<(StoredRecord, u64)> {
+        file.seek(SeekFrom::Start(pos))?;
+
+        // Read record length (u32)
+        let mut len_buf = [0u8; 4];
+        file.read_exact(&mut len_buf)?;
+        let record_len = u32::from_le_bytes(len_buf) as u64;
+
+        if record_len < 6 {
+            return Err(CapsuleError::Corrupted {
+                reason: format!("Record too small at pos {}", pos),
+            });
+        }
+
+        // Read record kind (u8)
+        let mut kind_buf = [0u8; 1];
+        file.read_exact(&mut kind_buf)?;
+        let kind = RecordKind::try_from(kind_buf[0]).map_err(|_| CapsuleError::Corrupted {
+            reason: format!("Invalid record kind {} at pos {}", kind_buf[0], pos),
+        })?;
+
+        // Read metadata length (u32)
+        let mut meta_len_buf = [0u8; 4];
+        file.read_exact(&mut meta_len_buf)?;
+        let meta_len = u32::from_le_bytes(meta_len_buf) as u64;
+
+        // Read metadata JSON
+        let mut meta_buf = vec![0u8; meta_len as usize];
+        file.read_exact(&mut meta_buf)?;
+        let meta: serde_json::Value = serde_json::from_slice(&meta_buf).map_err(|e| {
+            CapsuleError::Corrupted {
+                reason: format!("Invalid JSON metadata at pos {}: {}", pos, e),
+            }
+        })?;
+
+        // Calculate payload offset and length
+        // Record format: [4 bytes len][1 byte kind][4 bytes meta_len][meta_len bytes meta][payload]
+        let header_size = 4 + 1 + 4 + meta_len;
+        let payload_offset = pos + header_size;
+        let payload_len = record_len - 1 - 4 - meta_len; // record_len doesn't include the len field itself
+
+        let record = StoredRecord {
+            kind,
+            seq,
+            payload_offset,
+            payload_len,
+            meta,
+        };
+
+        // Calculate next record position
+        let next_pos = pos + 4 + record_len;
+
+        Ok((record, next_pos))
+    }
+
+    /// Write a record to the capsule file.
+    ///
+    /// Returns the PhysicalPointer for the written payload.
+    fn write_record(
+        &self,
+        kind: RecordKind,
+        meta: &serde_json::Value,
+        payload: &[u8],
+    ) -> Result<PhysicalPointer> {
+        let mut file_handle = self.file_handle.lock().unwrap();
+        let file = file_handle.as_mut().ok_or(CapsuleError::InvalidOperation {
+            reason: "No file handle for write (opened read-only?)".to_string(),
+        })?;
+
+        // Get current file position for offset calculation
+        let file_pos = file.seek(SeekFrom::End(0))?;
+
+        // Serialize metadata
+        let meta_bytes = serde_json::to_vec(meta).map_err(|e| {
+            CapsuleError::InvalidOperation {
+                reason: format!("Failed to serialize metadata: {}", e),
+            }
+        })?;
+
+        // Calculate record length (kind + meta_len + meta + payload)
+        let record_len = 1 + 4 + meta_bytes.len() + payload.len();
+
+        // Write record
+        file.write_all(&(record_len as u32).to_le_bytes())?; // record_len
+        file.write_all(&[kind as u8])?;                       // kind
+        file.write_all(&(meta_bytes.len() as u32).to_le_bytes())?; // meta_len
+        file.write_all(&meta_bytes)?;                         // meta
+        file.write_all(payload)?;                              // payload
+        file.flush()?;
+
+        // Calculate payload offset
+        let payload_offset = file_pos + 4 + 1 + 4 + meta_bytes.len() as u64;
+
+        // Get and increment sequence
+        let seq = {
+            let mut seq = self.record_seq.lock().unwrap();
+            let current = *seq;
+            *seq += 1;
+            current
+        };
+
+        // Store the record in memory for later reads
+        let record = StoredRecord {
+            kind,
+            seq,
+            payload_offset,
+            payload_len: payload.len() as u64,
+            meta: meta.clone(),
+        };
+        self.stored_records.write().unwrap().push(record);
+
+        Ok(PhysicalPointer {
+            frame_id: seq,
+            offset: payload_offset,
+            length: payload.len() as u64,
+        })
     }
 
     /// Check if capsule is open.
@@ -420,23 +744,108 @@ impl CapsuleHandle {
         Ok(uri)
     }
 
+    // =========================================================================
+    // Policy storage (SPEC-KIT-977)
+    // =========================================================================
+
+    /// Store a policy snapshot in the capsule.
+    ///
+    /// ## SPEC-KIT-977: Global Policy URI
+    ///
+    /// Unlike regular artifacts that use `mv2://<workspace>/<spec>/<run>/<type>/<path>`,
+    /// policy snapshots use a **global** URI: `mv2://<workspace>/policy/<policy_id>`.
+    /// This allows policy to be shared across runs.
+    ///
+    /// ## Returns
+    /// The policy URI (mv2://<workspace>/policy/<policy_id>)
+    pub fn put_policy(
+        &self,
+        policy_id: &str,
+        policy_hash: &str,
+        data: Vec<u8>,
+        metadata: serde_json::Value,
+    ) -> Result<LogicalUri> {
+        if !self.is_open() {
+            return Err(CapsuleError::NotOpen);
+        }
+
+        // Generate global policy URI (not spec/run scoped)
+        let uri = LogicalUri::for_policy(&self.config.workspace_id, policy_id);
+
+        // Create artifact record metadata
+        let art_meta = ArtifactRecordMeta {
+            uri: uri.as_str().to_string(),
+            object_type: "policy".to_string(),
+            metadata,
+        };
+        let meta_value = serde_json::to_value(&art_meta).map_err(|e| {
+            CapsuleError::InvalidOperation {
+                reason: format!("Failed to serialize policy metadata: {}", e),
+            }
+        })?;
+
+        // Write record to disk directly (bypass queue for immediate persistence)
+        let pointer = self.write_record(RecordKind::Artifact, &meta_value, &data)?;
+
+        // Update URI index
+        self.uri_index.write().unwrap().insert(uri.clone(), pointer);
+
+        // Track as current policy
+        self.set_current_policy(policy_id, policy_hash, &uri);
+
+        tracing::debug!(
+            policy_id = %policy_id,
+            hash = %policy_hash,
+            uri = %uri,
+            "Stored policy snapshot in capsule"
+        );
+
+        Ok(uri)
+    }
+
+    /// Set the current policy for this capsule session.
+    ///
+    /// Called after `put_policy()` to track the active policy.
+    /// StageTransition events will include this policy info.
+    pub fn set_current_policy(&self, policy_id: &str, hash: &str, uri: &LogicalUri) {
+        *self.current_policy.write().unwrap() = Some(CurrentPolicyInfo {
+            policy_id: policy_id.to_string(),
+            hash: hash.to_string(),
+            uri: uri.clone(),
+        });
+    }
+
+    /// Get the current policy info (if set).
+    pub fn current_policy(&self) -> Option<CurrentPolicyInfo> {
+        self.current_policy.read().unwrap().clone()
+    }
+
     /// Flush pending writes to disk.
+    ///
+    /// Writes all queued artifacts to the capsule file and updates the URI index.
     fn flush_writes(&self) -> Result<()> {
         let mut queue = self.write_queue.lock().unwrap();
         let writes: Vec<_> = queue.drain(..).collect();
         drop(queue);
 
-        let mut uri_index = self.uri_index.write().unwrap();
-
-        for (i, write) in writes.into_iter().enumerate() {
-            // TODO: When memvid crate is added, write to actual capsule
-            // For now, just update the URI index with a placeholder
-            let pointer = PhysicalPointer {
-                frame_id: i as u64,
-                offset: 0,
-                length: write.data.len() as u64,
+        for write in writes {
+            // Create artifact record metadata
+            let art_meta = ArtifactRecordMeta {
+                uri: write.uri.as_str().to_string(),
+                object_type: "artifact".to_string(), // Could extract from URI
+                metadata: write.metadata,
             };
-            uri_index.insert(write.uri, pointer);
+            let meta_value = serde_json::to_value(&art_meta).map_err(|e| {
+                CapsuleError::InvalidOperation {
+                    reason: format!("Failed to serialize artifact metadata: {}", e),
+                }
+            })?;
+
+            // Write record to disk
+            let pointer = self.write_record(RecordKind::Artifact, &meta_value, &write.data)?;
+
+            // Update URI index
+            self.uri_index.write().unwrap().insert(write.uri, pointer);
         }
 
         Ok(())
@@ -485,14 +894,37 @@ impl CapsuleHandle {
             is_manual: false,
         };
 
-        // Store checkpoint
+        // Persist checkpoint to disk (if we have write access)
+        if self.file_handle.lock().unwrap().is_some() {
+            let meta_value = serde_json::to_value(&metadata).map_err(|e| {
+                CapsuleError::InvalidOperation {
+                    reason: format!("Failed to serialize checkpoint: {}", e),
+                }
+            })?;
+            self.write_record(RecordKind::Checkpoint, &meta_value, &[])?;
+        }
+
+        // Store checkpoint in memory
         self.checkpoints.write().unwrap().push(metadata);
 
-        // Emit StageTransition event
-        self.emit_event(spec_id, run_id, Some(stage), EventType::StageTransition, serde_json::json!({
-            "stage": stage,
-            "checkpoint_id": checkpoint_id.as_str(),
-        }))?;
+        // Emit StageTransition event with policy info (SPEC-KIT-977)
+        let policy_info = self.current_policy();
+        let event_payload = if let Some(ref policy) = policy_info {
+            serde_json::json!({
+                "stage": stage,
+                "checkpoint_id": checkpoint_id.as_str(),
+                "policy_id": policy.policy_id,
+                "policy_hash": policy.hash,
+                "policy_uri": policy.uri.as_str(),
+            })
+        } else {
+            serde_json::json!({
+                "stage": stage,
+                "checkpoint_id": checkpoint_id.as_str(),
+            })
+        };
+
+        self.emit_event(spec_id, run_id, Some(stage), EventType::StageTransition, event_payload)?;
 
         Ok(checkpoint_id)
     }
@@ -526,7 +958,17 @@ impl CapsuleHandle {
             is_manual: true,
         };
 
-        // Store checkpoint
+        // Persist checkpoint to disk (if we have write access)
+        if self.file_handle.lock().unwrap().is_some() {
+            let meta_value = serde_json::to_value(&metadata).map_err(|e| {
+                CapsuleError::InvalidOperation {
+                    reason: format!("Failed to serialize checkpoint: {}", e),
+                }
+            })?;
+            self.write_record(RecordKind::Checkpoint, &meta_value, &[])?;
+        }
+
+        // Store checkpoint in memory
         self.checkpoints.write().unwrap().push(metadata);
 
         Ok(checkpoint_id)
@@ -535,6 +977,11 @@ impl CapsuleHandle {
     /// List all checkpoints.
     pub fn list_checkpoints(&self) -> Vec<CheckpointMetadata> {
         self.checkpoints.read().unwrap().clone()
+    }
+
+    /// List all events.
+    pub fn list_events(&self) -> Vec<RunEventEnvelope> {
+        self.events.read().unwrap().clone()
     }
 
     /// List checkpoints with optional branch filter.
@@ -642,6 +1089,17 @@ impl CapsuleHandle {
             payload,
         };
 
+        // Persist event to disk (if we have write access)
+        if self.file_handle.lock().unwrap().is_some() {
+            let meta_value = serde_json::to_value(&event).map_err(|e| {
+                CapsuleError::InvalidOperation {
+                    reason: format!("Failed to serialize event: {}", e),
+                }
+            })?;
+            self.write_record(RecordKind::Event, &meta_value, &[])?;
+        }
+
+        // Store event in memory
         self.events.write().unwrap().push(event);
 
         Ok(uri)
@@ -662,6 +1120,32 @@ impl CapsuleHandle {
             EventType::PolicySnapshotRef,
             serde_json::json!({
                 "policy_uri": policy_uri.as_str(),
+            }),
+        )
+    }
+
+    /// Emit a PolicySnapshotRef event with full policy info (SPEC-KIT-977).
+    ///
+    /// This version includes policy_id and policy_hash in the event payload
+    /// for better traceability without needing to dereference the URI.
+    pub fn emit_policy_snapshot_ref_with_info(
+        &self,
+        spec_id: &str,
+        run_id: &str,
+        stage: Option<&str>,
+        policy_uri: &LogicalUri,
+        policy_id: &str,
+        policy_hash: &str,
+    ) -> Result<LogicalUri> {
+        self.emit_event(
+            spec_id,
+            run_id,
+            stage,
+            EventType::PolicySnapshotRef,
+            serde_json::json!({
+                "policy_uri": policy_uri.as_str(),
+                "policy_id": policy_id,
+                "policy_hash": policy_hash,
             }),
         )
     }
@@ -764,6 +1248,87 @@ impl CapsuleHandle {
                 reason: format!("Checkpoint with label '{}' not found", label),
             }),
         }
+    }
+
+    // =========================================================================
+    // Payload retrieval (SPEC-KIT-971 persistence)
+    // =========================================================================
+
+    /// Read payload bytes for a URI.
+    ///
+    /// ## Parameters
+    /// - `uri`: The logical URI to read
+    /// - `branch`: Branch context (defaults to current branch)
+    /// - `as_of`: Checkpoint for time-travel (None = latest)
+    ///
+    /// ## Returns
+    /// The raw payload bytes stored for this URI.
+    ///
+    /// ## SPEC-KIT-971 Persistence Requirement
+    /// After put + commit + reopen, `get_bytes(uri)` must return identical bytes.
+    pub fn get_bytes(
+        &self,
+        uri: &LogicalUri,
+        branch: Option<&BranchId>,
+        as_of: Option<&CheckpointId>,
+    ) -> Result<Vec<u8>> {
+        // First resolve the URI to get the physical pointer
+        let pointer = self.resolve_uri(uri, branch, as_of)?;
+
+        // Read the payload from disk
+        self.read_payload(&pointer)
+    }
+
+    /// Read payload bytes by URI string.
+    pub fn get_bytes_str(
+        &self,
+        uri_str: &str,
+        branch: Option<&BranchId>,
+        as_of: Option<&CheckpointId>,
+    ) -> Result<Vec<u8>> {
+        let uri: LogicalUri = uri_str.parse().map_err(|_| CapsuleError::InvalidOperation {
+            reason: format!("Invalid URI: {}", uri_str),
+        })?;
+        self.get_bytes(&uri, branch, as_of)
+    }
+
+    /// Read payload from disk using a physical pointer.
+    fn read_payload(&self, pointer: &PhysicalPointer) -> Result<Vec<u8>> {
+        let mut file = File::open(&self.config.capsule_path)?;
+        file.seek(SeekFrom::Start(pointer.offset))?;
+
+        let mut buf = vec![0u8; pointer.length as usize];
+        file.read_exact(&mut buf)?;
+
+        Ok(buf)
+    }
+
+    /// Get stored records (for adapter search index rebuilding).
+    ///
+    /// Returns an iterator over stored artifact records with their metadata
+    /// for rebuilding the TF-IDF search index on reopen.
+    pub fn iter_stored_artifacts(&self) -> impl Iterator<Item = (LogicalUri, Vec<u8>, serde_json::Value)> + '_ {
+        let records = self.stored_records.read().unwrap();
+        let path = self.config.capsule_path.clone();
+
+        records
+            .iter()
+            .filter(|r| r.kind == RecordKind::Artifact)
+            .filter_map(move |r| {
+                // Parse artifact metadata
+                let art_meta: ArtifactRecordMeta = serde_json::from_value(r.meta.clone()).ok()?;
+                let uri: LogicalUri = art_meta.uri.parse().ok()?;
+
+                // Read payload
+                let mut file = File::open(&path).ok()?;
+                file.seek(SeekFrom::Start(r.payload_offset)).ok()?;
+                let mut buf = vec![0u8; r.payload_len as usize];
+                file.read_exact(&mut buf).ok()?;
+
+                Some((uri, buf, art_meta.metadata))
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
     }
 
     // =========================================================================

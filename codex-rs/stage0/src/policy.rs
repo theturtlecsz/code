@@ -8,6 +8,18 @@
 //! - D101: Dual storage (filesystem + capsule)
 //! - D102: Events tagged with policy_id for traceability
 //!
+//! ## Hash Determinism (SPEC-KIT-977-A1)
+//!
+//! The `hash` field is a **content-hash** computed only from policy content:
+//! - `schema_version`, `model_config`, `weights`, `prompts`, `source_files`
+//!
+//! Excluded from hash (runtime values):
+//! - `policy_id` (UUID generated at capture time)
+//! - `created_at` (timestamp at capture time)
+//! - `hash` (obviously circular)
+//!
+//! This ensures: **capturing twice with identical inputs produces identical hash**.
+//!
 //! ## Storage Locations
 //! - Filesystem: `.speckit/policies/snapshot-<POLICY_ID>.json`
 //! - Capsule: `mv2://.../policy/<POLICY_ID>`
@@ -146,12 +158,20 @@ impl PolicySnapshot {
     }
 
     /// Compute SHA256 hash of the canonical JSON representation.
+    ///
+    /// ## SPEC-KIT-977-A1: Deterministic Hash
+    ///
+    /// The hash is computed ONLY from content fields, excluding:
+    /// - `policy_id` (runtime UUID)
+    /// - `created_at` (runtime timestamp)
+    /// - `hash` (obviously circular)
+    ///
+    /// This ensures identical inputs produce identical hashes.
     fn compute_hash(&self) -> String {
-        // Create a copy without the hash field for hashing
+        // Hash only content fields (not runtime identifiers)
+        // This ensures deterministic hashing per SPEC-KIT-977-A1
         let hashable = serde_json::json!({
             "schema_version": self.schema_version,
-            "policy_id": self.policy_id,
-            "created_at": self.created_at.to_rfc3339(),
             "model_config": self.model_config,
             "weights": self.weights,
             "prompts": self.prompts,
@@ -166,9 +186,37 @@ impl PolicySnapshot {
     }
 
     /// Verify the hash matches the snapshot content.
+    ///
+    /// Returns true if recomputing the hash produces the same value.
+    /// Useful for detecting tampering or corruption.
     pub fn verify_hash(&self) -> bool {
         let computed = self.compute_hash();
         computed == self.hash
+    }
+
+    /// Check if this policy has the same content as another.
+    ///
+    /// ## SPEC-KIT-977-A1: Policy Changed Detection
+    ///
+    /// Uses content-hash comparison to determine if policy content changed.
+    /// Two policies with different `policy_id` or `created_at` but identical
+    /// content will return `true` (same content).
+    ///
+    /// ## Usage
+    /// ```ignore
+    /// if !new_policy.content_matches(&old_policy) {
+    ///     // Policy changed, need to re-capture
+    /// }
+    /// ```
+    pub fn content_matches(&self, other: &PolicySnapshot) -> bool {
+        self.hash == other.hash
+    }
+
+    /// Check if policy content has changed compared to another snapshot.
+    ///
+    /// Convenience inverse of `content_matches()`.
+    pub fn content_changed(&self, other: &PolicySnapshot) -> bool {
+        !self.content_matches(other)
     }
 
     /// Get summary info for listing.
@@ -528,5 +576,157 @@ mod tests {
         assert!(!snapshot.policy_id.is_empty());
         assert_eq!(snapshot.schema_version, "1.0");
         // source_files depends on actual filesystem state
+    }
+
+    // =========================================================================
+    // SPEC-KIT-977-A1: Deterministic Hash Tests
+    // =========================================================================
+
+    /// SPEC-KIT-977-A1: Identical inputs produce identical hashes.
+    ///
+    /// Capturing twice with the same config and source_files should produce
+    /// the same hash, even though policy_id and created_at differ.
+    #[test]
+    fn test_deterministic_hash_same_inputs_same_hash() {
+        let config = Stage0Config::default();
+        let source_files = vec!["stage0.toml".to_string(), "model_policy.toml".to_string()];
+
+        // Capture twice with identical inputs
+        let snapshot1 = PolicySnapshot::capture(&config, source_files.clone());
+        let snapshot2 = PolicySnapshot::capture(&config, source_files);
+
+        // Different policy_id (UUID is random)
+        assert_ne!(snapshot1.policy_id, snapshot2.policy_id);
+
+        // Different created_at (captured at different moments)
+        // (In practice they might be the same if fast enough, but we don't rely on that)
+
+        // CRITICAL: Hash must be identical for same content
+        assert_eq!(
+            snapshot1.hash, snapshot2.hash,
+            "SPEC-KIT-977-A1 violated: identical inputs should produce identical hash"
+        );
+
+        // content_matches should return true
+        assert!(
+            snapshot1.content_matches(&snapshot2),
+            "content_matches should return true for identical content"
+        );
+
+        // content_changed should return false
+        assert!(
+            !snapshot1.content_changed(&snapshot2),
+            "content_changed should return false for identical content"
+        );
+    }
+
+    /// SPEC-KIT-977-A1: Changing a field produces different hash.
+    #[test]
+    fn test_deterministic_hash_different_source_files_different_hash() {
+        let config = Stage0Config::default();
+
+        let snapshot1 = PolicySnapshot::capture(&config, vec!["file1.toml".to_string()]);
+        let snapshot2 = PolicySnapshot::capture(&config, vec!["file2.toml".to_string()]);
+
+        // Different source_files should produce different hash
+        assert_ne!(
+            snapshot1.hash, snapshot2.hash,
+            "Different source_files should produce different hash"
+        );
+
+        // content_matches should return false
+        assert!(
+            !snapshot1.content_matches(&snapshot2),
+            "content_matches should return false for different content"
+        );
+
+        // content_changed should return true
+        assert!(
+            snapshot1.content_changed(&snapshot2),
+            "content_changed should return true for different content"
+        );
+    }
+
+    /// SPEC-KIT-977-A1: Changing model_config produces different hash.
+    #[test]
+    fn test_deterministic_hash_different_config_different_hash() {
+        let config1 = Stage0Config::default();
+        let mut config2 = Stage0Config::default();
+
+        // Modify a config field
+        config2.context_compiler.top_k = 999;
+
+        let source_files = vec!["test.toml".to_string()];
+        let snapshot1 = PolicySnapshot::capture(&config1, source_files.clone());
+        let snapshot2 = PolicySnapshot::capture(&config2, source_files);
+
+        // Different model_config should produce different hash
+        assert_ne!(
+            snapshot1.hash, snapshot2.hash,
+            "Different model_config should produce different hash"
+        );
+
+        assert!(snapshot1.content_changed(&snapshot2));
+    }
+
+    /// SPEC-KIT-977-A1: Hash verification after JSON roundtrip.
+    #[test]
+    fn test_deterministic_hash_survives_json_roundtrip() {
+        let config = Stage0Config::default();
+        let original = PolicySnapshot::capture(&config, vec!["test.toml".to_string()]);
+
+        // Serialize and deserialize
+        let json = original.to_json().expect("serialize");
+        let restored = PolicySnapshot::from_json(&json).expect("deserialize");
+
+        // Hash should be preserved
+        assert_eq!(original.hash, restored.hash);
+
+        // verify_hash should pass
+        assert!(restored.verify_hash(), "verify_hash should pass after JSON roundtrip");
+
+        // content_matches should work across roundtrip
+        assert!(original.content_matches(&restored));
+    }
+
+    /// SPEC-KIT-977-A1: Empty source_files is a valid input.
+    #[test]
+    fn test_deterministic_hash_empty_source_files() {
+        let config = Stage0Config::default();
+
+        let snapshot1 = PolicySnapshot::capture(&config, vec![]);
+        let snapshot2 = PolicySnapshot::capture(&config, vec![]);
+
+        // Same empty input should produce same hash
+        assert_eq!(
+            snapshot1.hash, snapshot2.hash,
+            "Empty source_files should produce deterministic hash"
+        );
+    }
+
+    /// SPEC-KIT-977-A1: Source file order affects hash (intentional).
+    ///
+    /// Different ordering of source_files produces different hash because
+    /// the canonical JSON serialization preserves array order.
+    /// This is intentional - if order matters for policy resolution,
+    /// the hash should reflect that.
+    #[test]
+    fn test_deterministic_hash_source_file_order_matters() {
+        let config = Stage0Config::default();
+
+        let snapshot1 = PolicySnapshot::capture(
+            &config,
+            vec!["a.toml".to_string(), "b.toml".to_string()],
+        );
+        let snapshot2 = PolicySnapshot::capture(
+            &config,
+            vec!["b.toml".to_string(), "a.toml".to_string()],
+        );
+
+        // Different order = different hash
+        assert_ne!(
+            snapshot1.hash, snapshot2.hash,
+            "Source file order should affect hash"
+        );
     }
 }

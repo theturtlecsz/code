@@ -31,6 +31,10 @@ use codex_spec_kit::executor::{
     RunOverallStatus, SpeckitCommand, SpeckitExecutor, StageResolution, TelemetryMode,
     render_review_dashboard, render_status_dashboard, review_warning, status_degraded_warning,
 };
+use codex_tui::memvid_adapter::{
+    CapsuleConfig, CapsuleHandle, CheckpointId, DiagnosticResult,
+};
+use std::io::Write;
 use std::path::PathBuf;
 
 /// Schema version for JSON outputs.
@@ -136,6 +140,12 @@ pub enum SpeckitSubcommand {
     /// SPEC-KIT-921 P7-B: Migration command for legacy spec.md files.
     /// Creates PRD.md with migration header, leaves spec.md intact.
     Migrate(MigrateArgs),
+
+    /// Capsule operations (MV2 persistent storage)
+    ///
+    /// SPEC-KIT-971: Headless CLI for capsule management.
+    /// Provides doctor, stats, checkpoints, commit, and resolve-uri commands.
+    Capsule(CapsuleArgs),
 }
 
 /// Arguments for `speckit status` command
@@ -396,12 +406,119 @@ pub struct MigrateArgs {
     pub json: bool,
 }
 
+// =============================================================================
+// Capsule CLI Commands (SPEC-KIT-971)
+// =============================================================================
+
+/// Arguments for `speckit capsule` command
+///
+/// SPEC-KIT-971: Capsule management commands for MV2 persistent storage.
+#[derive(Debug, Parser)]
+pub struct CapsuleArgs {
+    /// Path to capsule file (default: .speckit/memvid/workspace.mv2)
+    #[arg(long = "capsule", value_name = "PATH")]
+    pub capsule_path: Option<PathBuf>,
+
+    #[command(subcommand)]
+    pub command: CapsuleSubcommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum CapsuleSubcommand {
+    /// Run capsule diagnostics
+    ///
+    /// Checks capsule existence, lock status, header validity, and version.
+    /// Returns actionable recovery steps for any issues found.
+    Doctor(CapsuleDoctorArgs),
+
+    /// Show capsule statistics
+    ///
+    /// Displays size, frame counts, index status, and dedup ratio.
+    Stats(CapsuleStatsArgs),
+
+    /// List checkpoints
+    ///
+    /// Shows all checkpoints with timestamps, labels, and stages.
+    Checkpoints(CapsuleCheckpointsArgs),
+
+    /// Create a manual checkpoint
+    ///
+    /// Creates a labeled checkpoint at the current state.
+    Commit(CapsuleCommitArgs),
+
+    /// Resolve a logical URI to its payload
+    ///
+    /// Looks up a mv2:// URI and optionally writes payload to a file.
+    ResolveUri(CapsuleResolveUriArgs),
+}
+
+/// Arguments for `capsule doctor`
+#[derive(Debug, Parser)]
+pub struct CapsuleDoctorArgs {
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
+/// Arguments for `capsule stats`
+#[derive(Debug, Parser)]
+pub struct CapsuleStatsArgs {
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
+/// Arguments for `capsule checkpoints`
+#[derive(Debug, Parser)]
+pub struct CapsuleCheckpointsArgs {
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
+/// Arguments for `capsule commit`
+#[derive(Debug, Parser)]
+pub struct CapsuleCommitArgs {
+    /// Label for the checkpoint (required)
+    #[arg(long = "label", short = 'l', value_name = "LABEL")]
+    pub label: String,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
+/// Arguments for `capsule resolve-uri`
+#[derive(Debug, Parser)]
+pub struct CapsuleResolveUriArgs {
+    /// The logical URI to resolve (mv2://...)
+    #[arg(value_name = "URI")]
+    pub uri: String,
+
+    /// Resolve as of a specific checkpoint
+    #[arg(long = "as-of", value_name = "CHECKPOINT")]
+    pub as_of: Option<String>,
+
+    /// Write payload to file instead of stdout
+    #[arg(long = "out", short = 'o', value_name = "PATH")]
+    pub out: Option<PathBuf>,
+
+    /// Output as JSON instead of payload bytes
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
 impl SpeckitCli {
     /// Run the speckit CLI command
     pub async fn run(self) -> anyhow::Result<()> {
         let cwd = self
             .cwd
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+
+        // Handle capsule commands separately (don't need executor)
+        if let SpeckitSubcommand::Capsule(args) = self.command {
+            return run_capsule(cwd, args);
+        }
 
         // Resolve policy from env/config at adapter boundary (not in executor)
         let toggles = PolicyToggles::from_env_and_config();
@@ -428,6 +545,7 @@ impl SpeckitCli {
             SpeckitSubcommand::Unlock(args) => run_unlock(executor, args),
             SpeckitSubcommand::Run(args) => run_run(executor, args),
             SpeckitSubcommand::Migrate(args) => run_migrate(executor, args),
+            SpeckitSubcommand::Capsule(_) => unreachable!("Capsule handled above"),
         }
     }
 }
@@ -1767,4 +1885,417 @@ fn run_migrate(executor: SpeckitExecutor, args: MigrateArgs) -> anyhow::Result<(
             unreachable!("Migrate command should return Migrate or Error outcome")
         }
     }
+}
+
+// =============================================================================
+// Capsule CLI Handlers (SPEC-KIT-971)
+// =============================================================================
+
+/// Default capsule path relative to repo root
+const DEFAULT_CAPSULE_PATH: &str = ".speckit/memvid/workspace.mv2";
+
+/// Exit codes for capsule commands (per SPEC-KIT-971)
+mod capsule_exit {
+    pub const SUCCESS: i32 = 0;
+    pub const USER_ERROR: i32 = 1;   // Bad args, invalid URI
+    pub const SYSTEM_ERROR: i32 = 2; // Corrupt capsule, locked, IO error
+}
+
+/// Run the capsule command
+fn run_capsule(cwd: PathBuf, args: CapsuleArgs) -> anyhow::Result<()> {
+    let capsule_path = args
+        .capsule_path
+        .unwrap_or_else(|| cwd.join(DEFAULT_CAPSULE_PATH));
+
+    match args.command {
+        CapsuleSubcommand::Doctor(cmd_args) => run_capsule_doctor(&capsule_path, cmd_args),
+        CapsuleSubcommand::Stats(cmd_args) => run_capsule_stats(&capsule_path, cmd_args),
+        CapsuleSubcommand::Checkpoints(cmd_args) => run_capsule_checkpoints(&capsule_path, cmd_args),
+        CapsuleSubcommand::Commit(cmd_args) => run_capsule_commit(&capsule_path, cmd_args),
+        CapsuleSubcommand::ResolveUri(cmd_args) => run_capsule_resolve_uri(&capsule_path, cmd_args),
+    }
+}
+
+/// Run `capsule doctor` command
+fn run_capsule_doctor(capsule_path: &PathBuf, args: CapsuleDoctorArgs) -> anyhow::Result<()> {
+    let diagnostics = CapsuleHandle::doctor(capsule_path);
+
+    // Determine overall status
+    let has_errors = diagnostics.iter().any(|d| matches!(d, DiagnosticResult::Error(_, _)));
+    let has_warnings = diagnostics.iter().any(|d| matches!(d, DiagnosticResult::Warning(_, _)));
+    let status = if has_errors {
+        "error"
+    } else if has_warnings {
+        "warning"
+    } else {
+        "ok"
+    };
+
+    if args.json {
+        let diag_json: Vec<_> = diagnostics
+            .iter()
+            .map(|d| match d {
+                DiagnosticResult::Ok(msg) => serde_json::json!({
+                    "level": "ok",
+                    "message": msg,
+                }),
+                DiagnosticResult::Warning(msg, hint) => serde_json::json!({
+                    "level": "warning",
+                    "message": msg,
+                    "hint": hint,
+                }),
+                DiagnosticResult::Error(msg, hint) => serde_json::json!({
+                    "level": "error",
+                    "message": msg,
+                    "hint": hint,
+                }),
+            })
+            .collect();
+
+        let json = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "tool_version": tool_version(),
+            "status": status,
+            "capsule_path": capsule_path.display().to_string(),
+            "diagnostics": diag_json,
+        });
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        println!("Capsule Doctor: {}", capsule_path.display());
+        println!("Status: {}", status.to_uppercase());
+        println!();
+        for diag in &diagnostics {
+            match diag {
+                DiagnosticResult::Ok(msg) => println!("  ✓ {msg}"),
+                DiagnosticResult::Warning(msg, hint) => {
+                    println!("  ⚠ {msg}");
+                    println!("    → {hint}");
+                }
+                DiagnosticResult::Error(msg, hint) => {
+                    println!("  ✗ {msg}");
+                    println!("    → {hint}");
+                }
+            }
+        }
+    }
+
+    if has_errors {
+        std::process::exit(capsule_exit::SYSTEM_ERROR);
+    }
+    Ok(())
+}
+
+/// Run `capsule stats` command
+fn run_capsule_stats(capsule_path: &PathBuf, args: CapsuleStatsArgs) -> anyhow::Result<()> {
+    // Try to open capsule read-only for stats
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "cli".to_string(),
+        ..Default::default()
+    };
+
+    let handle = match CapsuleHandle::open_read_only(config) {
+        Ok(h) => h,
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("{e}"),
+                    "capsule_path": capsule_path.display().to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Failed to open capsule: {e}");
+            }
+            std::process::exit(capsule_exit::SYSTEM_ERROR);
+        }
+    };
+
+    let stats = handle.stats();
+
+    let index_status_str = format!("{:?}", stats.index_status);
+
+    if args.json {
+        let json = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "tool_version": tool_version(),
+            "capsule_path": capsule_path.display().to_string(),
+            "size_bytes": stats.size_bytes,
+            "frame_count": stats.frame_count,
+            "uri_count": stats.uri_count,
+            "checkpoint_count": stats.checkpoint_count,
+            "event_count": stats.event_count,
+            "dedup_ratio": stats.dedup_ratio,
+            "index_status": index_status_str,
+        });
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        println!("Capsule Stats: {}", capsule_path.display());
+        println!();
+        println!("  Size:        {} bytes", stats.size_bytes);
+        println!("  Frames:      {}", stats.frame_count);
+        println!("  URIs:        {}", stats.uri_count);
+        println!("  Checkpoints: {}", stats.checkpoint_count);
+        println!("  Events:      {}", stats.event_count);
+        println!("  Dedup ratio: {:.2}", stats.dedup_ratio);
+        println!("  Index:       {}", index_status_str);
+    }
+
+    Ok(())
+}
+
+/// Run `capsule checkpoints` command
+fn run_capsule_checkpoints(capsule_path: &PathBuf, args: CapsuleCheckpointsArgs) -> anyhow::Result<()> {
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "cli".to_string(),
+        ..Default::default()
+    };
+
+    let handle = match CapsuleHandle::open_read_only(config) {
+        Ok(h) => h,
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("{e}"),
+                    "capsule_path": capsule_path.display().to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Failed to open capsule: {e}");
+            }
+            std::process::exit(capsule_exit::SYSTEM_ERROR);
+        }
+    };
+
+    let checkpoints = handle.list_checkpoints();
+
+    if args.json {
+        let cp_json: Vec<_> = checkpoints
+            .iter()
+            .map(|cp| {
+                serde_json::json!({
+                    "checkpoint_id": cp.checkpoint_id.as_str(),
+                    "label": cp.label,
+                    "stage": cp.stage,
+                    "spec_id": cp.spec_id,
+                    "run_id": cp.run_id,
+                    "commit_hash": cp.commit_hash,
+                    "timestamp": cp.timestamp.to_rfc3339(),
+                    "is_manual": cp.is_manual,
+                })
+            })
+            .collect();
+
+        let json = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "tool_version": tool_version(),
+            "capsule_path": capsule_path.display().to_string(),
+            "checkpoints": cp_json,
+            "count": checkpoints.len(),
+        });
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        println!("Capsule Checkpoints: {}", capsule_path.display());
+        println!();
+        if checkpoints.is_empty() {
+            println!("  (no checkpoints)");
+        } else {
+            for cp in &checkpoints {
+                let label = cp.label.as_deref().unwrap_or("-");
+                let stage = cp.stage.as_deref().unwrap_or("-");
+                println!(
+                    "  {} | {} | {} | {}",
+                    cp.checkpoint_id.as_str(),
+                    label,
+                    stage,
+                    cp.timestamp.format("%Y-%m-%d %H:%M:%S")
+                );
+            }
+        }
+        println!();
+        println!("Total: {} checkpoint(s)", checkpoints.len());
+    }
+
+    Ok(())
+}
+
+/// Run `capsule commit` command
+fn run_capsule_commit(capsule_path: &PathBuf, args: CapsuleCommitArgs) -> anyhow::Result<()> {
+    // Validate label
+    if args.label.is_empty() {
+        if args.json {
+            let json = serde_json::json!({
+                "schema_version": SCHEMA_VERSION,
+                "tool_version": tool_version(),
+                "error": "Label cannot be empty",
+                "capsule_path": capsule_path.display().to_string(),
+            });
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        } else {
+            eprintln!("Error: Label cannot be empty");
+        }
+        std::process::exit(capsule_exit::USER_ERROR);
+    }
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "cli".to_string(),
+        ..Default::default()
+    };
+
+    // Open with write lock for commit
+    let handle = match CapsuleHandle::open(config) {
+        Ok(h) => h,
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("{e}"),
+                    "capsule_path": capsule_path.display().to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Failed to open capsule: {e}");
+            }
+            std::process::exit(capsule_exit::SYSTEM_ERROR);
+        }
+    };
+
+    let checkpoint_id = match handle.commit_manual(&args.label) {
+        Ok(id) => id,
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("{e}"),
+                    "capsule_path": capsule_path.display().to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Failed to create checkpoint: {e}");
+            }
+            std::process::exit(capsule_exit::SYSTEM_ERROR);
+        }
+    };
+
+    if args.json {
+        let json = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "tool_version": tool_version(),
+            "capsule_path": capsule_path.display().to_string(),
+            "checkpoint_id": checkpoint_id.as_str(),
+            "label": args.label,
+            "created": true,
+        });
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        println!("Created checkpoint: {}", checkpoint_id.as_str());
+        println!("Label: {}", args.label);
+    }
+
+    Ok(())
+}
+
+/// Run `capsule resolve-uri` command
+fn run_capsule_resolve_uri(capsule_path: &PathBuf, args: CapsuleResolveUriArgs) -> anyhow::Result<()> {
+    // Validate URI format
+    if !args.uri.starts_with("mv2://") {
+        if args.json {
+            let json = serde_json::json!({
+                "schema_version": SCHEMA_VERSION,
+                "tool_version": tool_version(),
+                "error": "URI must start with mv2://",
+                "uri": args.uri,
+                "capsule_path": capsule_path.display().to_string(),
+            });
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        } else {
+            eprintln!("Error: URI must start with mv2://");
+        }
+        std::process::exit(capsule_exit::USER_ERROR);
+    }
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "cli".to_string(),
+        ..Default::default()
+    };
+
+    let handle = match CapsuleHandle::open_read_only(config) {
+        Ok(h) => h,
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("{e}"),
+                    "uri": args.uri,
+                    "capsule_path": capsule_path.display().to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Failed to open capsule: {e}");
+            }
+            std::process::exit(capsule_exit::SYSTEM_ERROR);
+        }
+    };
+
+    // Resolve as_of checkpoint if provided
+    let as_of = args.as_of.as_ref().map(|s| CheckpointId::new(s.clone()));
+
+    // Get the bytes
+    let bytes = match handle.get_bytes_str(&args.uri, None, as_of.as_ref()) {
+        Ok(b) => b,
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("{e}"),
+                    "uri": args.uri,
+                    "as_of": args.as_of,
+                    "capsule_path": capsule_path.display().to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Failed to resolve URI: {e}");
+            }
+            std::process::exit(capsule_exit::USER_ERROR);
+        }
+    };
+
+    if args.json {
+        // In JSON mode, return metadata about the resolution
+        let json = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "tool_version": tool_version(),
+            "capsule_path": capsule_path.display().to_string(),
+            "uri": args.uri,
+            "as_of": args.as_of,
+            "size_bytes": bytes.len(),
+            "content_preview": String::from_utf8_lossy(&bytes[..bytes.len().min(200)]),
+            "out_path": args.out.as_ref().map(|p| p.display().to_string()),
+        });
+        println!("{}", serde_json::to_string_pretty(&json)?);
+
+        // Still write to file if --out was specified
+        if let Some(out_path) = &args.out {
+            std::fs::write(out_path, &bytes)?;
+        }
+    } else if let Some(out_path) = &args.out {
+        // Write to file
+        std::fs::write(out_path, &bytes)?;
+        println!("Wrote {} bytes to {}", bytes.len(), out_path.display());
+    } else {
+        // Write to stdout (binary)
+        std::io::stdout().write_all(&bytes)?;
+    }
+
+    Ok(())
 }

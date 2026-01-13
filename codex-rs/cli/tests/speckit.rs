@@ -3212,3 +3212,294 @@ fn migrate_then_run_succeeds() -> Result<()> {
 
     Ok(())
 }
+
+// =============================================================================
+// CAPSULE CLI TESTS (SPEC-KIT-971)
+// =============================================================================
+
+/// Create a capsule for testing
+fn create_test_capsule(cwd: &Path) -> std::io::Result<std::path::PathBuf> {
+    let capsule_dir = cwd.join(".speckit").join("memvid");
+    fs::create_dir_all(&capsule_dir)?;
+    let capsule_path = capsule_dir.join("workspace.mv2");
+    // Create minimal MV2 capsule file
+    fs::write(&capsule_path, b"MV2\x00\x01")?;
+    Ok(capsule_path)
+}
+
+#[test]
+fn capsule_doctor_json_returns_valid_schema() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create a valid capsule
+    create_test_capsule(repo_root.path())?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args(["speckit", "capsule", "doctor", "--json"])
+        .output()?;
+
+    // Should exit 0 for valid capsule
+    assert!(
+        output.status.success(),
+        "Expected exit 0 for valid capsule, got {:?}. stderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Parse JSON output
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Verify schema
+    assert!(json.get("schema_version").is_some(), "Missing schema_version");
+    assert!(json.get("tool_version").is_some(), "Missing tool_version");
+    assert!(json.get("status").is_some(), "Missing status");
+    assert!(json.get("diagnostics").is_some(), "Missing diagnostics");
+    assert!(json.get("capsule_path").is_some(), "Missing capsule_path");
+
+    // Status should be "ok" for valid capsule
+    let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
+    assert_eq!(status, "ok", "Expected status 'ok' for valid capsule");
+
+    // Diagnostics should be an array
+    let diagnostics = json.get("diagnostics").and_then(|v| v.as_array());
+    assert!(diagnostics.is_some(), "diagnostics should be an array");
+
+    Ok(())
+}
+
+#[test]
+fn capsule_doctor_exits_2_for_missing_capsule() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Don't create capsule - it should be missing
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args(["speckit", "capsule", "doctor", "--json"])
+        .output()?;
+
+    // Should exit 2 (system error) for missing capsule
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "Expected exit 2 for missing capsule, got {:?}",
+        output.status.code()
+    );
+
+    // Parse JSON output
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Status should be "error"
+    let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
+    assert_eq!(status, "error", "Expected status 'error' for missing capsule");
+
+    Ok(())
+}
+
+#[test]
+fn capsule_stats_json_returns_valid_schema() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create a valid capsule
+    create_test_capsule(repo_root.path())?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args(["speckit", "capsule", "stats", "--json"])
+        .output()?;
+
+    // Should exit 0
+    assert!(
+        output.status.success(),
+        "Expected exit 0 for stats, got {:?}. stderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Parse JSON output
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Verify schema
+    assert!(json.get("schema_version").is_some(), "Missing schema_version");
+    assert!(json.get("tool_version").is_some(), "Missing tool_version");
+    assert!(json.get("size_bytes").is_some(), "Missing size_bytes");
+    assert!(json.get("uri_count").is_some(), "Missing uri_count");
+    assert!(json.get("checkpoint_count").is_some(), "Missing checkpoint_count");
+
+    Ok(())
+}
+
+#[test]
+fn capsule_checkpoints_json_returns_valid_schema() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create a valid capsule
+    create_test_capsule(repo_root.path())?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args(["speckit", "capsule", "checkpoints", "--json"])
+        .output()?;
+
+    // Should exit 0
+    assert!(
+        output.status.success(),
+        "Expected exit 0 for checkpoints, got {:?}. stderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Parse JSON output
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Verify schema
+    assert!(json.get("schema_version").is_some(), "Missing schema_version");
+    assert!(json.get("checkpoints").is_some(), "Missing checkpoints");
+    assert!(json.get("count").is_some(), "Missing count");
+
+    // Checkpoints should be an array
+    let checkpoints = json.get("checkpoints").and_then(|v| v.as_array());
+    assert!(checkpoints.is_some(), "checkpoints should be an array");
+
+    // Fresh capsule should have 0 checkpoints
+    let count = json.get("count").and_then(|v| v.as_u64()).unwrap_or(999);
+    assert_eq!(count, 0, "Fresh capsule should have 0 checkpoints");
+
+    Ok(())
+}
+
+#[test]
+fn capsule_commit_creates_checkpoint() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create a valid capsule
+    create_test_capsule(repo_root.path())?;
+
+    // Create a checkpoint
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "capsule",
+            "commit",
+            "--label",
+            "test-label",
+            "--json",
+        ])
+        .output()?;
+
+    // Should exit 0
+    assert!(
+        output.status.success(),
+        "Expected exit 0 for commit, got {:?}. stderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Parse JSON output
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Verify checkpoint was created
+    assert!(json.get("checkpoint_id").is_some(), "Missing checkpoint_id");
+    assert!(json.get("created").is_some(), "Missing created flag");
+
+    let created = json.get("created").and_then(|v| v.as_bool()).unwrap_or(false);
+    assert!(created, "Checkpoint should be created");
+
+    let label = json.get("label").and_then(|v| v.as_str()).unwrap_or("");
+    assert_eq!(label, "test-label", "Label should match");
+
+    // Now verify checkpoint appears in list
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args(["speckit", "capsule", "checkpoints", "--json"])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+    let count = json.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
+    assert_eq!(count, 1, "Should have 1 checkpoint after commit");
+
+    Ok(())
+}
+
+#[test]
+fn capsule_resolve_uri_exits_1_for_invalid_uri() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create a valid capsule
+    create_test_capsule(repo_root.path())?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "capsule",
+            "resolve-uri",
+            "invalid://uri",
+            "--json",
+        ])
+        .output()?;
+
+    // Should exit 1 (user error) for invalid URI
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "Expected exit 1 for invalid URI, got {:?}",
+        output.status.code()
+    );
+
+    // Parse JSON output
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Should have error message
+    assert!(json.get("error").is_some(), "Missing error field");
+
+    Ok(())
+}
+
+#[test]
+fn capsule_custom_path_works() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create capsule at custom path
+    let custom_path = repo_root.path().join("custom").join("test.mv2");
+    fs::create_dir_all(custom_path.parent().unwrap())?;
+    fs::write(&custom_path, b"MV2\x00\x01")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "capsule",
+            "--capsule",
+            custom_path.to_str().unwrap(),
+            "doctor",
+            "--json",
+        ])
+        .output()?;
+
+    // Should exit 0
+    assert!(
+        output.status.success(),
+        "Expected exit 0 for custom path, got {:?}. stderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Parse JSON output
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Verify custom path is used
+    let path = json.get("capsule_path").and_then(|v| v.as_str()).unwrap_or("");
+    assert!(path.contains("custom"), "Should use custom path");
+
+    Ok(())
+}

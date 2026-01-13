@@ -36,7 +36,7 @@ pub use eval::{
 };
 pub use capsule::{
     CapsuleHandle, CapsuleConfig, CapsuleError, CapsuleOpenOptions,
-    CapsuleStats, DiagnosticResult, IndexStatus,
+    CapsuleStats, DiagnosticResult, IndexStatus, CurrentPolicyInfo,
 };
 pub use lock::{LockMetadata, is_locked, lock_path_for};
 pub use types::{

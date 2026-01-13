@@ -116,9 +116,15 @@ impl MemvidMemoryAdapter {
     /// Returns Ok(true) if capsule opened successfully.
     /// Returns Ok(false) if fallback mode activated.
     /// Returns Err if both capsule and fallback fail.
+    ///
+    /// ## SPEC-KIT-971 Persistence
+    /// On reopen, rebuilds the TF-IDF search index from stored artifacts.
     pub async fn open(&self) -> Result<bool, CapsuleError> {
         match CapsuleHandle::open(self.config.clone()) {
             Ok(handle) => {
+                // Rebuild search index from stored artifacts (SPEC-KIT-971 persistence)
+                self.rebuild_search_index_from_handle(&handle).await;
+
                 *self.capsule.write().await = Some(handle);
                 *self.use_fallback.write().await = false;
                 Ok(true)
@@ -132,6 +138,27 @@ impl MemvidMemoryAdapter {
                     Err(e)
                 }
             }
+        }
+    }
+
+    /// Rebuild the search index from stored artifacts in a capsule.
+    ///
+    /// Called during open() to restore search capability after reopen.
+    async fn rebuild_search_index_from_handle(&self, handle: &CapsuleHandle) {
+        let mut count = 0;
+        for (uri, data, metadata) in handle.iter_stored_artifacts() {
+            // Extract spec_id from URI if possible (mv2://workspace/spec/run/type/path)
+            let spec_id = uri.as_str()
+                .strip_prefix("mv2://")
+                .and_then(|s| s.split('/').nth(1))
+                .unwrap_or("unknown");
+
+            self.index_memory(&uri, &data, &metadata, spec_id).await;
+            count += 1;
+        }
+
+        if count > 0 {
+            tracing::info!("Rebuilt search index with {} artifacts from capsule", count);
         }
     }
 

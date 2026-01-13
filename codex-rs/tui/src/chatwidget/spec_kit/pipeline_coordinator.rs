@@ -1659,18 +1659,28 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                 persist_cost_summary(widget, &spec_id);
 
                 // SPEC-KIT-922: Auto-commit stage artifacts after consensus succeeds
-                if widget.spec_kit_auto_commit_enabled() {
+                // SPEC-KIT-971: Create capsule checkpoint after git commit
+                let commit_result = if widget.spec_kit_auto_commit_enabled() {
                     match super::git_integration::auto_commit_stage_artifacts(
                         &spec_id,
                         current_stage,
                         &widget.config.cwd,
                         true, // Already checked via spec_kit_auto_commit_enabled()
                     ) {
-                        Ok(()) => {
+                        Ok(Some(result)) => {
                             tracing::info!(
-                                "Auto-commit successful for {} stage",
+                                "Auto-commit successful for {} stage ({})",
+                                current_stage.display_name(),
+                                result.commit_hash
+                            );
+                            Some(result)
+                        }
+                        Ok(None) => {
+                            tracing::debug!(
+                                "No changes to commit for {} stage",
                                 current_stage.display_name()
                             );
+                            None
                         }
                         Err(err) => {
                             tracing::warn!("Auto-commit failed (non-fatal): {}", err);
@@ -1681,6 +1691,34 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                                 ))],
                                 HistoryCellType::Notice,
                             ));
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+
+                // SPEC-KIT-971: Create capsule checkpoint for stage boundary
+                if let Some(state) = widget.spec_auto_state.as_ref()
+                    && let Some(run_id) = &state.run_id
+                {
+                    let commit_hash = commit_result.as_ref().map(|r| r.commit_hash.as_str());
+                    match super::git_integration::create_capsule_checkpoint(
+                        &spec_id,
+                        run_id,
+                        current_stage,
+                        commit_hash,
+                        &widget.config.cwd,
+                    ) {
+                        Ok(checkpoint_id) => {
+                            tracing::info!(
+                                "Created capsule checkpoint {} for {} stage",
+                                checkpoint_id,
+                                current_stage.display_name()
+                            );
+                        }
+                        Err(err) => {
+                            tracing::warn!("Capsule checkpoint failed (non-fatal): {}", err);
                         }
                     }
                 }

@@ -8,7 +8,7 @@
 //! - D102: Events tagged with policy_id for traceability
 
 use super::capsule::{CapsuleHandle, Result as CapsuleResult};
-use super::types::{LogicalUri, ObjectType};
+use super::types::LogicalUri;
 use codex_stage0::{PolicySnapshot, PolicyStore, Stage0Config, capture_policy_snapshot};
 
 /// Capture and store a policy snapshot for a run.
@@ -16,8 +16,13 @@ use codex_stage0::{PolicySnapshot, PolicyStore, Stage0Config, capture_policy_sna
 /// This is the main entry point called at run start. It:
 /// 1. Captures the active policy configuration
 /// 2. Stores to filesystem (.speckit/policies/)
-/// 3. Stores to capsule (mv2://.../policy/<ID>)
+/// 3. Stores to capsule (mv2://<workspace>/policy/<ID>) - global URI
 /// 4. Emits PolicySnapshotRef event
+///
+/// ## SPEC-KIT-977: Dual Storage + Event Binding
+/// - Filesystem: `.speckit/policies/snapshot-<POLICY_ID>.json`
+/// - Capsule: `mv2://<workspace>/policy/<POLICY_ID>` (global, not spec/run scoped)
+/// - Event: `PolicySnapshotRef` with policy_uri, policy_id, policy_hash
 ///
 /// Returns the captured PolicySnapshot for event tagging.
 pub fn capture_and_store_policy(
@@ -29,7 +34,7 @@ pub fn capture_and_store_policy(
     // 1. Capture the policy snapshot
     let snapshot = capture_policy_snapshot(config);
 
-    // 2. Store to filesystem
+    // 2. Store to filesystem (D101: dual storage)
     let store = PolicyStore::new();
     if let Err(e) = store.store(&snapshot) {
         tracing::warn!(
@@ -40,13 +45,12 @@ pub fn capture_and_store_policy(
         // Continue - capsule storage is the primary
     }
 
-    // 3. Store to capsule
+    // 3. Store to capsule using global policy URI (SPEC-KIT-977)
+    // URI: mv2://<workspace>/policy/<policy_id> (not spec/run scoped)
     let policy_json = snapshot.to_json().unwrap_or_default();
-    let policy_uri = handle.put(
-        spec_id,
-        run_id,
-        ObjectType::Policy,
+    let policy_uri = handle.put_policy(
         &snapshot.policy_id,
+        &snapshot.hash,
         policy_json.into_bytes(),
         serde_json::json!({
             "schema_version": snapshot.schema_version,
@@ -55,8 +59,15 @@ pub fn capture_and_store_policy(
         }),
     )?;
 
-    // 4. Emit PolicySnapshotRef event
-    handle.emit_policy_snapshot_ref(spec_id, run_id, None, &policy_uri)?;
+    // 4. Emit PolicySnapshotRef event with full policy info (D102: events tagged)
+    handle.emit_policy_snapshot_ref_with_info(
+        spec_id,
+        run_id,
+        None,
+        &policy_uri,
+        &snapshot.policy_id,
+        &snapshot.hash,
+    )?;
 
     tracing::info!(
         policy_id = %snapshot.policy_id,

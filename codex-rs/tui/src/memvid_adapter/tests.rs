@@ -983,3 +983,637 @@ fn test_cross_process_lock_actual_subprocess() {
     // Clean up
     std::fs::remove_file(&lock_path).ok();
 }
+
+/// Test cross-process locking with an actual subprocess holding the lock.
+///
+/// This test spawns a real child process that:
+/// 1. Creates the lock file atomically
+/// 2. Writes valid LockMetadata JSON
+/// 3. Holds an advisory flock on the file
+/// 4. Sleeps while parent attempts to acquire
+///
+/// The parent process then verifies:
+/// - CapsuleHandle::open fails with LockedByWriter
+/// - The error contains the child's PID
+#[cfg(unix)]
+#[test]
+fn test_cross_process_lock_with_real_subprocess() {
+    use crate::memvid_adapter::capsule::CapsuleError;
+    use crate::memvid_adapter::lock::lock_path_for;
+    use std::process::{Command, Stdio};
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("real_subprocess.mv2");
+    let lock_path = lock_path_for(&capsule_path);
+
+    // First, create the capsule (unlocked)
+    {
+        let config = CapsuleConfig {
+            capsule_path: capsule_path.clone(),
+            workspace_id: "real_subprocess_test".to_string(),
+            ..Default::default()
+        };
+        let _handle = CapsuleHandle::open(config).expect("should create capsule");
+    }
+
+    // Spawn a subprocess that will hold the lock
+    // The subprocess:
+    // 1. Opens the lock file exclusively
+    // 2. Writes LockMetadata JSON with its own PID
+    // 3. Uses flock() to hold advisory lock
+    // 4. Sleeps for 5 seconds
+    //
+    // We use a shell script because it's the simplest way to test actual
+    // cross-process isolation.
+    let lock_path_str = lock_path.to_string_lossy();
+
+    // Note: Use unquoted heredoc delimiter to allow variable expansion
+    let script = format!(
+        r#"
+exec 200>"{lock_path}"
+flock -n 200 || exit 1
+cat > "{lock_path}" << LOCKJSON
+{{
+  "pid": $$,
+  "host": "$(hostname)",
+  "user": "$(whoami)",
+  "started_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "spec_id": "SUBPROCESS-SPEC",
+  "run_id": "subprocess-run",
+  "schema_version": 1
+}}
+LOCKJSON
+sleep 5
+"#,
+        lock_path = lock_path_str
+    );
+
+    let mut child = Command::new("sh")
+        .args(["-c", &script])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("Failed to spawn lock-holding subprocess");
+
+    // Give the subprocess time to acquire the lock
+    std::thread::sleep(std::time::Duration::from_millis(200));
+
+    // Now try to open the capsule for writing from the parent
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "real_subprocess_test".to_string(),
+        ..Default::default()
+    };
+
+    let result = CapsuleHandle::open(config);
+
+    // Should fail because subprocess holds the lock
+    assert!(result.is_err(), "Should fail when subprocess holds lock");
+
+    match result {
+        Err(CapsuleError::LockedByWriter(meta)) => {
+            // Verify metadata was parsed correctly
+            assert_eq!(meta.spec_id, Some("SUBPROCESS-SPEC".to_string()));
+            assert_eq!(meta.run_id, Some("subprocess-run".to_string()));
+            // PID should be the child's PID (not 0 or our PID)
+            assert!(meta.pid > 0, "Lock should have valid PID");
+            assert_ne!(meta.pid, std::process::id(), "Lock should have child's PID, not ours");
+        }
+        Err(other) => panic!("Expected LockedByWriter error, got: {:?}", other),
+        Ok(_) => panic!("Expected error but open succeeded"),
+    }
+
+    // Clean up: kill the subprocess
+    let _ = child.kill();
+    let _ = child.wait();
+
+    // Lock file should still exist (subprocess was killed, not graceful exit)
+    // This also tests that we handle orphaned locks correctly on next open
+    // (stale lock detection should clean it up)
+
+    // Now we can open successfully after child is gone (stale lock cleanup)
+    let config2 = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "real_subprocess_test".to_string(),
+        ..Default::default()
+    };
+
+    // Wait a moment for the OS to release the flock
+    std::thread::sleep(std::time::Duration::from_millis(100));
+
+    let result2 = CapsuleHandle::open(config2);
+    assert!(result2.is_ok(), "Should succeed after subprocess dies (stale lock recovery)");
+}
+
+// =============================================================================
+// SPEC-KIT-971 Persistence Acceptance Tests
+// =============================================================================
+
+/// Test that put bytes survive reopen.
+///
+/// SPEC-KIT-971 Acceptance Criteria:
+/// - After put + commit + reopen, resolve_uri succeeds
+/// - get_bytes returns identical bytes
+#[test]
+fn test_persistence_put_bytes_survive_reopen() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("persistence_test.mv2");
+
+    let test_data = b"Hello, this is test data for persistence!".to_vec();
+    let test_metadata = serde_json::json!({"type": "test", "importance": 8});
+    let mut stored_uri: Option<LogicalUri> = None;
+
+    // Phase 1: Open, put, commit, close
+    {
+        let config = CapsuleConfig {
+            capsule_path: capsule_path.clone(),
+            workspace_id: "persistence_test".to_string(),
+            ..Default::default()
+        };
+
+        let handle = CapsuleHandle::open(config).expect("should create capsule");
+
+        // Put some data
+        let uri = handle
+            .put(
+                "SPEC-TEST",
+                "run-1",
+                ObjectType::Artifact,
+                "test-file.txt",
+                test_data.clone(),
+                test_metadata.clone(),
+            )
+            .expect("put should succeed");
+
+        stored_uri = Some(uri);
+
+        // Commit to flush writes to disk
+        handle
+            .commit_stage("SPEC-TEST", "run-1", "test-stage", None)
+            .expect("commit should succeed");
+
+        // Handle is dropped here, releasing the lock
+    }
+
+    // Phase 2: Reopen and verify data persisted
+    {
+        let config = CapsuleConfig {
+            capsule_path: capsule_path.clone(),
+            workspace_id: "persistence_test".to_string(),
+            ..Default::default()
+        };
+
+        let handle = CapsuleHandle::open(config).expect("should reopen capsule");
+
+        let uri = stored_uri.as_ref().expect("should have stored URI");
+
+        // Resolve should succeed
+        let pointer = handle
+            .resolve_uri(uri, None, None)
+            .expect("resolve_uri should succeed after reopen");
+        assert!(pointer.length > 0, "Pointer should have non-zero length");
+
+        // Get bytes should return identical data
+        let retrieved_data = handle
+            .get_bytes(uri, None, None)
+            .expect("get_bytes should succeed");
+        assert_eq!(
+            retrieved_data, test_data,
+            "Retrieved data should match original"
+        );
+    }
+}
+
+/// Test that checkpoints survive reopen.
+#[test]
+fn test_persistence_checkpoints_survive_reopen() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("checkpoint_persist.mv2");
+
+    // Phase 1: Create checkpoint
+    {
+        let config = CapsuleConfig {
+            capsule_path: capsule_path.clone(),
+            workspace_id: "checkpoint_test".to_string(),
+            ..Default::default()
+        };
+
+        let handle = CapsuleHandle::open(config).expect("should create capsule");
+
+        handle
+            .commit_stage("SPEC-CP", "run-cp", "stage1", Some("abc123"))
+            .expect("commit should succeed");
+
+        let checkpoints = handle.list_checkpoints();
+        assert_eq!(checkpoints.len(), 1, "Should have 1 checkpoint");
+    }
+
+    // Phase 2: Reopen and verify checkpoints persisted
+    {
+        let config = CapsuleConfig {
+            capsule_path: capsule_path.clone(),
+            workspace_id: "checkpoint_test".to_string(),
+            ..Default::default()
+        };
+
+        let handle = CapsuleHandle::open(config).expect("should reopen capsule");
+
+        let checkpoints = handle.list_checkpoints();
+        assert_eq!(
+            checkpoints.len(),
+            1,
+            "Should have 1 checkpoint after reopen"
+        );
+
+        let cp = &checkpoints[0];
+        assert_eq!(cp.stage, Some("stage1".to_string()));
+        assert_eq!(cp.spec_id, Some("SPEC-CP".to_string()));
+        assert_eq!(cp.commit_hash, Some("abc123".to_string()));
+    }
+}
+
+/// Test that doctor passes and stats reflect non-zero uri_count after persistence.
+#[test]
+fn test_persistence_doctor_passes_and_stats_correct() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("doctor_persist.mv2");
+
+    // Phase 1: Create capsule with data
+    {
+        let config = CapsuleConfig {
+            capsule_path: capsule_path.clone(),
+            workspace_id: "doctor_test".to_string(),
+            ..Default::default()
+        };
+
+        let handle = CapsuleHandle::open(config).expect("should create capsule");
+
+        // Add multiple artifacts
+        for i in 0..3 {
+            handle
+                .put(
+                    "SPEC-DOC",
+                    "run-doc",
+                    ObjectType::Artifact,
+                    &format!("file{}.txt", i),
+                    format!("Content for file {}", i).into_bytes(),
+                    serde_json::json!({"index": i}),
+                )
+                .expect("put should succeed");
+        }
+
+        handle
+            .commit_stage("SPEC-DOC", "run-doc", "populate", None)
+            .expect("commit should succeed");
+    }
+
+    // Phase 2: Reopen and verify doctor + stats
+    {
+        let config = CapsuleConfig {
+            capsule_path: capsule_path.clone(),
+            workspace_id: "doctor_test".to_string(),
+            ..Default::default()
+        };
+
+        // Doctor should pass
+        let diagnostics = CapsuleHandle::doctor(&capsule_path);
+        let has_errors = diagnostics
+            .iter()
+            .any(|d| matches!(d, crate::memvid_adapter::capsule::DiagnosticResult::Error(_, _)));
+        assert!(!has_errors, "Doctor should pass: {:?}", diagnostics);
+
+        // Stats should reflect data
+        let handle = CapsuleHandle::open(config).expect("should reopen capsule");
+        let stats = handle.stats();
+
+        assert!(stats.size_bytes > 5, "Capsule should have data");
+        assert_eq!(stats.uri_count, 3, "Should have 3 URIs");
+        assert_eq!(stats.checkpoint_count, 1, "Should have 1 checkpoint");
+        assert!(stats.event_count >= 1, "Should have at least 1 event");
+    }
+}
+
+/// Test that multiple put/reopen cycles maintain data integrity.
+#[test]
+fn test_persistence_multiple_cycles() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("multi_cycle.mv2");
+
+    let mut all_uris = Vec::new();
+
+    // Cycle 1: Create initial data
+    {
+        let config = CapsuleConfig {
+            capsule_path: capsule_path.clone(),
+            workspace_id: "multi_cycle".to_string(),
+            ..Default::default()
+        };
+
+        let handle = CapsuleHandle::open(config).expect("should create capsule");
+
+        let uri = handle
+            .put(
+                "SPEC-MC",
+                "run-mc",
+                ObjectType::Artifact,
+                "cycle1.txt",
+                b"Cycle 1 data".to_vec(),
+                serde_json::json!({"cycle": 1}),
+            )
+            .expect("put should succeed");
+        all_uris.push(uri);
+
+        handle
+            .commit_stage("SPEC-MC", "run-mc", "cycle1", None)
+            .expect("commit should succeed");
+    }
+
+    // Cycle 2: Add more data
+    {
+        let config = CapsuleConfig {
+            capsule_path: capsule_path.clone(),
+            workspace_id: "multi_cycle".to_string(),
+            ..Default::default()
+        };
+
+        let handle = CapsuleHandle::open(config).expect("should reopen capsule");
+
+        // Verify cycle 1 data still there
+        let data1 = handle
+            .get_bytes(&all_uris[0], None, None)
+            .expect("should get cycle 1 data");
+        assert_eq!(data1, b"Cycle 1 data");
+
+        // Add cycle 2 data
+        let uri = handle
+            .put(
+                "SPEC-MC",
+                "run-mc",
+                ObjectType::Artifact,
+                "cycle2.txt",
+                b"Cycle 2 data".to_vec(),
+                serde_json::json!({"cycle": 2}),
+            )
+            .expect("put should succeed");
+        all_uris.push(uri);
+
+        handle
+            .commit_stage("SPEC-MC", "run-mc", "cycle2", None)
+            .expect("commit should succeed");
+    }
+
+    // Cycle 3: Verify all data
+    {
+        let config = CapsuleConfig {
+            capsule_path: capsule_path.clone(),
+            workspace_id: "multi_cycle".to_string(),
+            ..Default::default()
+        };
+
+        let handle = CapsuleHandle::open(config).expect("should reopen capsule");
+
+        // Both URIs should work
+        let data1 = handle
+            .get_bytes(&all_uris[0], None, None)
+            .expect("should get cycle 1 data");
+        let data2 = handle
+            .get_bytes(&all_uris[1], None, None)
+            .expect("should get cycle 2 data");
+
+        assert_eq!(data1, b"Cycle 1 data");
+        assert_eq!(data2, b"Cycle 2 data");
+
+        // Stats should reflect accumulated data
+        let stats = handle.stats();
+        assert_eq!(stats.uri_count, 2, "Should have 2 URIs");
+        assert_eq!(stats.checkpoint_count, 2, "Should have 2 checkpoints");
+    }
+}
+
+// =============================================================================
+// SPEC-KIT-977 Policy Wiring Acceptance Tests
+// =============================================================================
+
+/// SPEC-KIT-977: After run start, capsule events include a PolicySnapshotRef event.
+#[test]
+fn test_policy_capture_emits_policy_snapshot_ref_event() {
+    use crate::memvid_adapter::policy_capture::capture_and_store_policy;
+    use codex_stage0::Stage0Config;
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("policy_event.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "policy_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("should create capsule");
+    let stage0_config = Stage0Config::default();
+
+    // Capture and store policy (simulates run start)
+    let result = capture_and_store_policy(&handle, &stage0_config, "SPEC-977", "run-001");
+    assert!(result.is_ok(), "capture_and_store_policy should succeed");
+
+    let snapshot = result.unwrap();
+    assert!(!snapshot.policy_id.is_empty());
+    assert!(!snapshot.hash.is_empty());
+
+    // Check that PolicySnapshotRef event was emitted
+    let events = handle.list_events();
+    let policy_events: Vec<_> = events
+        .iter()
+        .filter(|e| matches!(e.event_type, crate::memvid_adapter::EventType::PolicySnapshotRef))
+        .collect();
+
+    assert_eq!(
+        policy_events.len(),
+        1,
+        "Should have exactly one PolicySnapshotRef event"
+    );
+
+    // Verify event payload contains policy info
+    let policy_event = policy_events[0];
+    let payload = &policy_event.payload;
+    assert!(
+        payload.get("policy_uri").is_some(),
+        "PolicySnapshotRef should have policy_uri"
+    );
+    assert!(
+        payload.get("policy_id").is_some(),
+        "PolicySnapshotRef should have policy_id"
+    );
+    assert!(
+        payload.get("policy_hash").is_some(),
+        "PolicySnapshotRef should have policy_hash"
+    );
+
+    // Verify policy_id and hash match
+    assert_eq!(
+        payload.get("policy_id").unwrap().as_str().unwrap(),
+        snapshot.policy_id,
+        "Event policy_id should match snapshot"
+    );
+    assert_eq!(
+        payload.get("policy_hash").unwrap().as_str().unwrap(),
+        snapshot.hash,
+        "Event policy_hash should match snapshot"
+    );
+}
+
+/// SPEC-KIT-977: After commit_stage, StageTransition payload includes policy_id/hash.
+#[test]
+fn test_stage_transition_includes_policy_info() {
+    use crate::memvid_adapter::policy_capture::capture_and_store_policy;
+    use codex_stage0::Stage0Config;
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("stage_policy.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "stage_policy_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("should create capsule");
+    let stage0_config = Stage0Config::default();
+
+    // First capture policy (simulates run start)
+    let snapshot = capture_and_store_policy(&handle, &stage0_config, "SPEC-977", "run-002")
+        .expect("should capture policy");
+
+    // Now commit a stage
+    handle
+        .commit_stage("SPEC-977", "run-002", "plan", Some("abc123"))
+        .expect("should commit stage");
+
+    // Find the StageTransition event
+    let events = handle.list_events();
+    let stage_events: Vec<_> = events
+        .iter()
+        .filter(|e| matches!(e.event_type, crate::memvid_adapter::EventType::StageTransition))
+        .collect();
+
+    assert_eq!(
+        stage_events.len(),
+        1,
+        "Should have exactly one StageTransition event"
+    );
+
+    // Verify StageTransition includes policy info
+    let stage_event = stage_events[0];
+    let payload = &stage_event.payload;
+
+    assert!(
+        payload.get("policy_id").is_some(),
+        "StageTransition should have policy_id"
+    );
+    assert!(
+        payload.get("policy_hash").is_some(),
+        "StageTransition should have policy_hash"
+    );
+    assert!(
+        payload.get("policy_uri").is_some(),
+        "StageTransition should have policy_uri"
+    );
+
+    // Verify values match the captured policy
+    assert_eq!(
+        payload.get("policy_id").unwrap().as_str().unwrap(),
+        snapshot.policy_id,
+        "StageTransition policy_id should match"
+    );
+    assert_eq!(
+        payload.get("policy_hash").unwrap().as_str().unwrap(),
+        snapshot.hash,
+        "StageTransition policy_hash should match"
+    );
+}
+
+/// SPEC-KIT-977: Policy URI is global (mv2://<workspace>/policy/<id>).
+#[test]
+fn test_policy_uri_is_global_not_spec_scoped() {
+    use crate::memvid_adapter::policy_capture::capture_and_store_policy;
+    use codex_stage0::Stage0Config;
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("global_uri.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "global_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("should create capsule");
+    let stage0_config = Stage0Config::default();
+
+    // Capture policy
+    let snapshot = capture_and_store_policy(&handle, &stage0_config, "SPEC-977", "run-003")
+        .expect("should capture policy");
+
+    // Get current policy info
+    let policy_info = handle.current_policy().expect("should have current policy");
+
+    // Verify URI format is global: mv2://<workspace>/policy/<id>
+    let uri_str = policy_info.uri.as_str();
+    assert!(
+        uri_str.starts_with("mv2://global_test/policy/"),
+        "Policy URI should be global: mv2://<workspace>/policy/<id>, got: {}",
+        uri_str
+    );
+    assert!(
+        uri_str.contains(&snapshot.policy_id),
+        "Policy URI should contain policy_id"
+    );
+
+    // Verify it does NOT contain spec_id or run_id
+    assert!(
+        !uri_str.contains("SPEC-977"),
+        "Policy URI should NOT contain spec_id"
+    );
+    assert!(
+        !uri_str.contains("run-003"),
+        "Policy URI should NOT contain run_id"
+    );
+}
+
+/// SPEC-KIT-977: Current policy is tracked and accessible.
+#[test]
+fn test_current_policy_tracking() {
+    use crate::memvid_adapter::policy_capture::capture_and_store_policy;
+    use codex_stage0::Stage0Config;
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("tracking.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "tracking_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("should create capsule");
+
+    // Initially no policy
+    assert!(
+        handle.current_policy().is_none(),
+        "Should have no policy before capture"
+    );
+
+    // Capture policy
+    let stage0_config = Stage0Config::default();
+    let snapshot = capture_and_store_policy(&handle, &stage0_config, "SPEC-977", "run-004")
+        .expect("should capture policy");
+
+    // Now should have current policy
+    let policy_info = handle.current_policy();
+    assert!(policy_info.is_some(), "Should have current policy after capture");
+
+    let policy = policy_info.unwrap();
+    assert_eq!(policy.policy_id, snapshot.policy_id);
+    assert_eq!(policy.hash, snapshot.hash);
+}
