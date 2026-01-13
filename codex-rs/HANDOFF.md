@@ -1,8 +1,8 @@
 # HANDOFF.md — Session Continuation
 
 **Created:** 2026-01-11
-**Last Session:** 2026-01-13 (SPEC-KIT-971 Pipeline Integration In Progress)
-**Next Session:** Complete 971-A5 Acceptance Tests + Run Verification
+**Last Session:** 2026-01-13 (SPEC-KIT-971 Cross-Process Locking Complete)
+**Next Session:** Implement CLI Commands (checkpoints, stats, doctor)
 
 ---
 
@@ -20,184 +20,199 @@ NON-NEGOTIABLES (read first)
    - Stage0 core has no Memvid dependency (adapter boundary enforced)
    - Logical mv2:// URIs are immutable; physical IDs are never treated as stable keys
    - LocalMemoryClient trait is the interface; MemvidMemoryAdapter is the implementation
-   - Single-writer capsule model: global lock + writer queue
+   - Single-writer capsule model: cross-process lock + in-process writer queue
    - Hybrid = lex + vec (required, not optional)
    - Merge modes are `curated` or `full` only (never squash/ff/rebase)
+   - Lock file path: <capsule_path>.lock (e.g., workspace.mv2.lock)
 
 ===================================================================
-CURRENT STATE — Session interrupted 2026-01-13
+CURRENT STATE — Session completed 2026-01-13
 ===================================================================
 
-TASK IN PROGRESS: SPEC-KIT-971 Pipeline Integration (971-A5)
-Goal: `/speckit.auto` MUST NOT hard-require local-memory when `Stage0Config.memory_backend=memvid`
+COMPLETED THIS SESSION:
+1. ✅ SPEC-KIT-971-A5 Pipeline Integration
+   - 3 acceptance tests passing
+   - UnifiedMemoryClient enum dispatch pattern
+   - Backend routing in run_speckit_auto_pipeline()
+   - 607 tests passing
 
-IMPLEMENTATION COMPLETED (not yet tested):
-1. UnifiedMemoryClient enum — Type-safe backend abstraction (adapter.rs)
-2. create_unified_memory_client() — Factory with fallback logic (adapter.rs)
-3. Backend routing — stage0_integration.rs uses config-based routing
-4. Stage0Progress::CreatingMemoryClient variant — Progress reporting (mod.rs)
-5. 3 acceptance tests added — test_971_a5_* in stage0_integration.rs
+2. ✅ SPEC-KIT-971 Cross-Process Single-Writer Lock
+   - lock.rs module with LockMetadata, CapsuleLock, LockError
+   - Atomic lock file creation (O_CREAT|O_EXCL) + fs2 advisory lock
+   - Stale lock detection (process existence check on same host)
+   - CapsuleOpenOptions for write_lock + context
+   - open_read_only() for non-locking access
+   - Doctor shows detailed lock info + recovery steps
+   - 8 new tests, all passing
 
-KEY IMPLEMENTATION PATTERN:
-```rust
-pub enum UnifiedMemoryClient {
-    Memvid(MemvidMemoryAdapter),
-    LocalMemory(crate::stage0_adapters::LocalMemoryCliAdapter),
-}
+===================================================================
+TASK FOR NEXT SESSION: CLI Commands
+===================================================================
 
-#[async_trait]
-impl LocalMemoryClient for UnifiedMemoryClient {
-    async fn search_memories(&self, params: LocalMemorySearchParams) -> Stage0Result<Vec<LocalMemorySummary>> {
-        match self {
-            UnifiedMemoryClient::Memvid(adapter) => adapter.search_memories(params).await,
-            UnifiedMemoryClient::LocalMemory(adapter) => adapter.search_memories(params).await,
-        }
+Implement `speckit capsule` CLI subcommands:
+
+### 1. `speckit capsule checkpoints` (Priority 1)
+```bash
+# JSON-first output (user preference)
+speckit capsule checkpoints                    # JSON output
+speckit capsule checkpoints --format table     # Human-readable table
+speckit capsule checkpoints --branch run/abc   # Filter by branch
+speckit capsule checkpoints --label v1.0       # Find by label
+```
+
+Implementation location: `tui/src/chatwidget/spec_kit/commands/capsule.rs`
+
+Output JSON schema:
+```json
+{
+  "checkpoints": [
+    {
+      "id": "SPEC-971_plan_20260113120000",
+      "label": "stage:plan",
+      "stage": "plan",
+      "spec_id": "SPEC-971",
+      "run_id": "run-abc",
+      "commit_hash": "abc123",
+      "timestamp": "2026-01-13T12:00:00Z",
+      "is_manual": false
     }
+  ],
+  "total": 5,
+  "branch": "main"
 }
 ```
 
-PROBLEM SOLVED:
-- `dyn LocalMemoryClient` doesn't implement `Sized` (required by Stage0Engine::run_stage0)
-- Solution: Enum dispatch pattern provides type safety + Sized guarantee
+### 2. `speckit capsule stats` (Priority 2)
+```bash
+speckit capsule stats                          # JSON output
+speckit capsule stats --format table           # Human-readable
+```
+
+Uses existing `CapsuleHandle::stats()` method.
+
+### 3. `speckit capsule doctor` (Priority 3)
+```bash
+speckit capsule doctor                         # JSON output
+speckit capsule doctor --format table          # Human-readable
+```
+
+Uses existing `CapsuleHandle::doctor()` method. Already shows lock details.
+
+### 4. `speckit capsule init` (Priority 4)
+```bash
+speckit capsule init                           # Create workspace.mv2
+speckit capsule init --path custom.mv2         # Custom path
+```
 
 ===================================================================
-NEXT STEPS (In Order)
+WHERE TO IMPLEMENT
 ===================================================================
 
-1. READ THESE FILES FIRST:
-   - tui/src/memvid_adapter/adapter.rs (lines 1-100 for UnifiedMemoryClient)
-   - tui/src/chatwidget/spec_kit/stage0_integration.rs (lines 300-400 for backend routing)
-   - tui/src/chatwidget/spec_kit/stage0_integration.rs (tests at bottom)
+1. Create new command module:
+   `tui/src/chatwidget/spec_kit/commands/capsule.rs`
 
-2. RUN TESTS:
-   ```bash
-   cargo test -p codex-tui --lib -- stage0_integration::tests::test_971
-   ```
+2. Register in command_registry.rs:
+   - CapsuleCheckpointsCommand
+   - CapsuleStatsCommand
+   - CapsuleDoctorCommand (may already exist)
+   - CapsuleInitCommand
 
-   Expected: 3 tests pass:
-   - test_971_a5_memvid_backend_without_local_memory
-   - test_971_a5_memvid_fallback_to_local_memory
-   - test_971_a5_memvid_no_fallback_fails
-
-3. IF TESTS FAIL:
-   - Check that UnifiedMemoryClient implements all LocalMemoryClient methods
-   - Verify create_unified_memory_client handles all 4 scenarios:
-     a) memvid OK → use memvid
-     b) memvid fails, local-memory healthy → fallback to local-memory
-     c) memvid fails, local-memory unhealthy → error
-     d) config says local-memory → use local-memory directly
-
-4. RUN FULL TEST SUITE:
-   ```bash
-   cargo test -p codex-tui --lib -- memvid
-   cargo test -p codex-stage0 --lib
-   python3 scripts/doc_lint.py
-   python3 scripts/golden_path_test.py
-   ```
-
-5. COMMIT AND PUSH:
-   ```bash
-   git add -A && git commit -m "feat(stage0): 971-A5 pipeline honors memory_backend config
-
-   - UnifiedMemoryClient enum for type-safe backend dispatch
-   - create_unified_memory_client() factory with fallback logic
-   - Backend routing in run_speckit_auto_pipeline()
-   - 3 acceptance tests for 971-A5 scenarios
-
-   Decision IDs: D1, D7
-   Closes: 971-A5
-
-   🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-   Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
-   git push
-   ```
-
-6. THEN PROCEED TO:
-   - TASK 2: SPEC-977 PolicySnapshot (if not started)
-   - TASK 3: SPEC-978 Reflex Stack
+3. Wire up in chatwidget/spec_kit/mod.rs
 
 ===================================================================
-ACCEPTANCE TESTS FOR 971-A5 (Reference)
+EXISTING CODE TO USE
 ===================================================================
 
-The tests verify:
+The capsule functionality is already implemented:
+```rust
+// tui/src/memvid_adapter/capsule.rs
+impl CapsuleHandle {
+    pub fn list_checkpoints(&self) -> Vec<CheckpointMetadata>
+    pub fn list_checkpoints_filtered(&self, branch: Option<&BranchId>) -> Vec<CheckpointMetadata>
+    pub fn get_checkpoint_by_label(&self, label: &str) -> Option<CheckpointMetadata>
+    pub fn stats(&self) -> CapsuleStats
+    pub fn doctor(path: &Path) -> Vec<DiagnosticResult>
+}
 
-1. test_971_a5_memvid_backend_without_local_memory
-   - Config: memory_backend = Memvid
-   - Mock: local-memory daemon NOT running
-   - Mock: capsule path exists
-   - Expected: Pipeline proceeds using memvid (no local-memory check failure)
-
-2. test_971_a5_memvid_fallback_to_local_memory
-   - Config: memory_backend = Memvid
-   - Mock: capsule creation fails
-   - Mock: local-memory daemon IS running
-   - Expected: Fallback to local-memory, pipeline continues
-
-3. test_971_a5_memvid_no_fallback_fails
-   - Config: memory_backend = Memvid
-   - Mock: capsule creation fails
-   - Mock: local-memory daemon NOT running
-   - Expected: Pipeline fails with clear error
+// Lock info available via:
+pub use lock::{LockMetadata, is_locked, lock_path_for};
+```
 
 ===================================================================
-WARNINGS TO ADDRESS (if any remain after testing)
+TEST COMMANDS
 ===================================================================
 
-Compiler warnings noted in previous session:
-- Unused imports (clean up after testing)
-- Dead code warnings (may be fixed once tests exercise the code)
+```bash
+# Build
+~/code/build-fast.sh
 
-Run `cargo clippy -p codex-tui` after tests pass to clean up.
+# Run specific tests
+cargo test -p codex-tui --lib -- memvid_adapter::tests
+cargo test -p codex-tui --lib -- capsule
+
+# Full suite
+cargo test -p codex-tui --lib
+
+# Verify CLI works (after implementation)
+./target/debug/code-tui --help
+```
 
 ===================================================================
-FILES MODIFIED THIS SESSION (2026-01-13)
+AFTER CLI: NEXT PRIORITY
 ===================================================================
 
-| File | Change |
-|------|--------|
-| tui/src/memvid_adapter/adapter.rs | Added UnifiedMemoryClient enum + create_unified_memory_client() |
-| tui/src/memvid_adapter/mod.rs | Export UnifiedMemoryClient, create_unified_memory_client |
-| tui/src/chatwidget/spec_kit/stage0_integration.rs | Backend routing + Stage0Progress::CreatingMemoryClient + 3 tests |
-| tui/src/chatwidget/mod.rs | Match arm for CreatingMemoryClient progress variant |
+SPEC-KIT-977 PolicySnapshot Integration
+- PolicySnapshot struct exists in stage0/src/policy.rs
+- Need to integrate into capsule events
+- Tag all events with policy_id
+- Phase 4→5 gate requirement
 
 ===================================================================
 OUTPUT EXPECTATION
 ===================================================================
 
-- Run tests first, fix any failures
-- Commit with SPEC-ID and Decision IDs
-- Push after verification passes
-- Update progress tracker below
+- Implement CLI commands with JSON-first output
+- Add --format table option for human-readable output
+- Register commands in command_registry.rs
+- Add tests for CLI output parsing
+- Commit with spec ID and decision IDs
+- Update progress tracker
 ```
 
 ---
 
 ## Progress Tracker
 
+### Completed This Session (2026-01-13)
+
+| Task | Status | Commits | Tests |
+|------|--------|---------|-------|
+| 971-A5 Pipeline Integration | ✅ | 5d00c1f2b | 3 acceptance tests |
+| 971 Cross-Process Lock | ✅ | 04f2807cc | 8 lock tests |
+
 ### Completed Specs
 
 | Spec | Status | Commits | Key Deliverables |
 |------|--------|---------|------------------|
-| SPEC-KIT-971 (core) | ✅ Complete | 41c640977, a92f1d5bf, abb5358fa | Capsule foundation, crash recovery, config switch |
-| SPEC-KIT-972 | ✅ Complete | 01a263d4a, abb5358fa | Hybrid retrieval, eval harness, HybridBackend |
+| SPEC-KIT-971 (core) | ✅ | 41c640977+ | Capsule foundation, crash recovery |
+| SPEC-KIT-971 (A5) | ✅ | 5d00c1f2b | Pipeline backend routing |
+| SPEC-KIT-971 (lock) | ✅ | 04f2807cc | Cross-process single-writer lock |
+| SPEC-KIT-972 | ✅ | 01a263d4a+ | Hybrid retrieval, eval harness |
 
 ### In Progress
 
 | Spec | Status | Next Step |
 |------|--------|-----------|
-| SPEC-KIT-971 (A5) | 🔄 90% | Run 971-A5 acceptance tests, commit |
-| SPEC-KIT-971 (CLI) | 🔄 5% | Implement checkpoint listing CLI (after A5) |
-| SPEC-KIT-977 | 🔄 40% | PolicySnapshot struct created in stage0/src/policy.rs, needs integration |
+| SPEC-KIT-971 (CLI) | 🔄 10% | Implement checkpoints/stats/doctor CLI |
+| SPEC-KIT-977 | 🔄 40% | Integrate PolicySnapshot into capsule events |
 | SPEC-KIT-978 | 🔄 0% | Create ReflexBackend trait |
 
 ### Blocked / Waiting
 
 | Spec | Blocker | Unblocks |
 |------|---------|----------|
-| SPEC-KIT-975 (full) | Needs 977 PolicySnapshot | 976 Logic Mesh |
-| SPEC-KIT-973 | Needs 971 checkpoint CLI | Time-Travel UI |
+| SPEC-KIT-973 | Needs 971 CLI | Time-Travel UI |
+| SPEC-KIT-975 (full) | Needs 977 | 976 Logic Mesh |
 
 ### Phase Gates
 
@@ -212,6 +227,42 @@ OUTPUT EXPECTATION
 
 ## Architecture Notes
 
+### Cross-Process Lock Flow (IMPLEMENTED)
+
+```
+CapsuleHandle::open(config)
+    │
+    ├── If write_lock=true (default):
+    │   ├── Create <capsule_path>.lock atomically (O_CREAT|O_EXCL)
+    │   ├── Write LockMetadata JSON (pid, host, user, started_at, context)
+    │   ├── Acquire fs2 advisory lock
+    │   └── Store CapsuleLock in handle
+    │
+    ├── If lock exists:
+    │   ├── Read LockMetadata from JSON
+    │   ├── Check if stale (process not running on same host)
+    │   │   ├── Stale → Clean up and retry
+    │   │   └── Active → Return CapsuleError::LockedByWriter(metadata)
+    │
+    └── On Drop:
+        └── CapsuleLock::drop() releases lock + removes file
+```
+
+### LockMetadata Schema
+
+```json
+{
+  "pid": 12345,
+  "host": "hostname",
+  "user": "username",
+  "started_at": "2026-01-13T01:00:00Z",
+  "spec_id": "SPEC-KIT-971",
+  "run_id": "run-abc",
+  "branch": "main",
+  "schema_version": 1
+}
+```
+
 ### Adapter Boundary (enforced)
 
 ```
@@ -223,88 +274,11 @@ Stage0 Core (no Memvid dependency)
     UnifiedMemoryClient (enum dispatch)
             │
             ├── Memvid(MemvidMemoryAdapter)
-            │       └── CapsuleHandle
+            │       ├── CapsuleHandle
+            │       └── CapsuleLock (cross-process)
             │
             └── LocalMemory(LocalMemoryCliAdapter)
                     └── `lm` CLI commands
-```
-
-### Backend Routing Flow (IMPLEMENTED 2026-01-13)
-
-```
-run_speckit_auto_pipeline()
-    │
-    ├── Read Stage0Config.memory_backend
-    │
-    ├── If Memvid:
-    │   ├── Try create capsule
-    │   │   ├── Success → UnifiedMemoryClient::Memvid
-    │   │   └── Failure:
-    │   │       ├── Check local-memory health
-    │   │       │   ├── Healthy → UnifiedMemoryClient::LocalMemory (fallback)
-    │   │       │   └── Unhealthy → Error (no backend available)
-    │   │
-    │   └── Continue pipeline with memory client
-    │
-    └── If LocalMemory:
-        └── UnifiedMemoryClient::LocalMemory (direct)
-```
-
-### Search Flow (IMPLEMENTED)
-
-```
-search_memories(params: LocalMemorySearchParams)
-    │
-    ├── Parse IQO: domains, keywords, required_tags, optional_tags, exclude_tags
-    │
-    ├── Lexical Search (TF-IDF via TfIdfBackend)
-    │   └── lex_score from BM25-style scoring
-    │
-    ├── [IMPLEMENTED] HybridBackend (stage0/src/hybrid.rs)
-    │   ├── RRF fusion: 1/(k + rank_lex) + 1/(k + rank_vec)
-    │   └── Linear fusion: lex_weight * lex + vec_weight * vec
-    │
-    ├── IQO Filtering
-    │   ├── Domain filter (matches or spec:* prefix)
-    │   ├── Required tags (ALL must match)
-    │   └── Exclude tags (ANY excludes)
-    │
-    └── Return Vec<LocalMemorySummary>
-```
-
-### PolicySnapshot Flow (PARTIALLY IMPLEMENTED)
-
-```
-Run Start
-    │
-    ├── capture_policy_snapshot() [IMPLEMENTED in stage0/src/policy.rs]
-    │   ├── Read model_policy.toml + MODEL-POLICY.md
-    │   ├── Compile to canonical JSON
-    │   ├── Compute SHA256 hash
-    │   └── Generate policy_id
-    │
-    ├── Store to filesystem: .speckit/policies/snapshot-{id}.json [IMPLEMENTED]
-    │
-    ├── Store to capsule: mv2://.../policy/{id} [TODO: integration]
-    │
-    └── Tag all events with policy_id [TODO]
-```
-
-### Reflex Stack Flow (TO IMPLEMENT)
-
-```
-Reflex Call
-    │
-    ├── Try SGLang (primary)
-    │   ├── Constrained decoding if schema provided
-    │   └── Prefix caching for repeated prompts
-    │
-    ├── If SGLang fails → Try vLLM (fallback)
-    │   └── OpenAI-compatible endpoint
-    │
-    ├── Capture call in capsule for replay
-    │
-    └── Return structured output
 ```
 
 ---
@@ -313,10 +287,13 @@ Reflex Call
 
 | File | Change |
 |------|--------|
-| tui/src/memvid_adapter/adapter.rs | UnifiedMemoryClient enum + create_unified_memory_client() factory |
-| tui/src/memvid_adapter/mod.rs | Export new types |
-| tui/src/chatwidget/spec_kit/stage0_integration.rs | Backend routing + CreatingMemoryClient progress + 3 tests |
-| tui/src/chatwidget/mod.rs | Match arm for new progress variant |
+| tui/src/memvid_adapter/lock.rs | NEW: LockMetadata, CapsuleLock, lock_path_for |
+| tui/src/memvid_adapter/capsule.rs | CapsuleOpenOptions, open_with_options, LockedByWriter |
+| tui/src/memvid_adapter/mod.rs | Export lock types |
+| tui/src/memvid_adapter/tests.rs | 8 new cross-process lock tests |
+| tui/Cargo.toml | Added hostname, whoami dependencies |
+| tui/src/chatwidget/spec_kit/stage0_integration.rs | Backend routing, 3 acceptance tests |
+| tui/src/chatwidget/spec_kit/command_registry.rs | Fixed command count 42→43 |
 
 ---
 
@@ -324,11 +301,11 @@ Reflex Call
 
 | Package | Tests | Status |
 |---------|-------|--------|
-| codex-tui (memvid) | 37+ | ⏳ Need to run |
-| codex-stage0 | 260+ | ⏳ Need to run |
-| Golden Path | 10/10 | ⏳ Need to run |
-| Doc Lint | 0 errors | ⏳ Need to run |
-| 971-A5 Acceptance | 3 | ⏳ Need to run |
+| codex-tui (all) | 607 | ✅ Passing |
+| memvid_adapter | 27 | ✅ Passing |
+| lock module | 4 | ✅ Passing |
+| 971-A5 acceptance | 3 | ✅ Passing |
+| cross-process lock | 8 | ✅ Passing |
 
 ---
 
@@ -337,25 +314,25 @@ Reflex Call
 ### Build & Test
 ```bash
 ~/code/build-fast.sh              # Fast build
-cargo test -p codex-tui --lib -- stage0_integration::tests::test_971  # 971-A5 tests
-cargo test -p codex-tui --lib memvid  # Memvid tests
-cargo test -p codex-stage0 --lib      # Stage0 tests
-python3 scripts/doc_lint.py           # Doc contract lint
-python3 scripts/golden_path_test.py   # Golden path E2E
+cargo test -p codex-tui --lib     # Full TUI tests (607)
+cargo test -p codex-tui --lib -- memvid_adapter::tests  # Memvid tests (27)
+cargo test -p codex-tui --lib -- lock  # Lock tests (4)
+cargo test -p codex-stage0 --lib  # Stage0 tests
 ```
 
 ### Key Paths
 ```
-codex-rs/tui/src/memvid_adapter/  # Memvid implementation
-codex-rs/tui/src/memvid_adapter/adapter.rs  # UnifiedMemoryClient (NEW)
-codex-rs/stage0/src/              # Stage0 core (no Memvid dep)
-codex-rs/stage0/src/hybrid.rs     # HybridBackend
-codex-rs/stage0/src/policy.rs     # PolicySnapshot
-codex-rs/SPEC.md                  # Root docs contract
-docs/PROGRAM_2026Q1_ACTIVE.md     # Program DAG + gates
-docs/DECISION_REGISTER.md         # Locked decisions
-scripts/doc_lint.py               # Doc contract validator
-scripts/golden_path_test.py       # E2E validation
+codex-rs/tui/src/memvid_adapter/lock.rs       # Cross-process lock (NEW)
+codex-rs/tui/src/memvid_adapter/capsule.rs    # CapsuleHandle + diagnostics
+codex-rs/tui/src/memvid_adapter/adapter.rs    # UnifiedMemoryClient
+codex-rs/stage0/src/policy.rs                 # PolicySnapshot
+codex-rs/SPEC.md                              # Root docs contract
+```
+
+### Commits This Session
+```
+5d00c1f2b  test(stage0,memvid): SPEC-KIT-971-A5 acceptance tests pass
+04f2807cc  feat(memvid): SPEC-KIT-971 cross-process single-writer lock
 ```
 
 ---
