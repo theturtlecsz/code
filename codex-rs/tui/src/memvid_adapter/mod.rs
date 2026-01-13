@@ -21,6 +21,7 @@
 mod adapter;
 mod capsule;
 pub mod eval;
+pub mod lock;
 pub mod policy_capture;
 mod types;
 
@@ -34,9 +35,10 @@ pub use eval::{
     run_ab_harness_and_save, run_ab_harness_synthetic,
 };
 pub use capsule::{
-    CapsuleHandle, CapsuleConfig, CapsuleError,
+    CapsuleHandle, CapsuleConfig, CapsuleError, CapsuleOpenOptions,
     CapsuleStats, DiagnosticResult, IndexStatus,
 };
+pub use lock::{LockMetadata, is_locked, lock_path_for};
 pub use types::{
     LogicalUri, CheckpointId, CheckpointMetadata, BranchId,
     RunEventEnvelope, EventType, UriIndex,

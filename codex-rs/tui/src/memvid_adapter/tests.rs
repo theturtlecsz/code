@@ -328,9 +328,11 @@ fn test_crash_recovery_mid_write() {
 /// Test that a stale lock file is detected by doctor
 #[test]
 fn test_crash_leaves_stale_lock() {
+    use crate::memvid_adapter::lock::lock_path_for;
+
     let temp_dir = TempDir::new().unwrap();
     let capsule_path = temp_dir.path().join("stale_lock.mv2");
-    let lock_path = capsule_path.with_extension("mv2.lock");
+    let lock_path = lock_path_for(&capsule_path);
 
     // Create capsule first
     let config = CapsuleConfig {
@@ -341,15 +343,25 @@ fn test_crash_leaves_stale_lock() {
     let handle = CapsuleHandle::open(config.clone()).expect("should create");
     drop(handle);
 
-    // Simulate crash by creating stale lock file
-    std::fs::write(&lock_path, b"stale_lock_holder").expect("should create lock");
-
-    // Doctor should detect stale lock
-    let results = CapsuleHandle::doctor(&capsule_path);
-    let has_lock_error = results.iter().any(|r| {
-        matches!(r, DiagnosticResult::Error(msg, _) if msg.contains("locked"))
+    // Simulate crash by creating stale lock file with valid JSON metadata
+    // Use a non-existent PID so it will be detected as stale
+    let stale_lock = serde_json::json!({
+        "pid": 999999999,
+        "host": "crashed_host",
+        "user": "crashed_user",
+        "started_at": chrono::Utc::now().to_rfc3339(),
+        "schema_version": 1
     });
-    assert!(has_lock_error, "doctor should detect stale lock");
+    std::fs::write(&lock_path, serde_json::to_string_pretty(&stale_lock).unwrap())
+        .expect("should create lock");
+
+    // Doctor should detect stale lock (as a warning since it's stale)
+    let results = CapsuleHandle::doctor(&capsule_path);
+    let has_lock_warning_or_error = results.iter().any(|r| {
+        matches!(r, DiagnosticResult::Error(msg, _) | DiagnosticResult::Warning(msg, _)
+            if msg.to_lowercase().contains("lock"))
+    });
+    assert!(has_lock_warning_or_error, "doctor should detect stale lock");
 
     // Clean up lock for next test
     std::fs::remove_file(&lock_path).unwrap();
@@ -689,4 +701,285 @@ fn test_resolve_uri_str() {
     // Invalid URI string
     let result = handle.resolve_uri_str("not-a-valid-uri", None, None);
     assert!(result.is_err());
+}
+
+// =============================================================================
+// SPEC-KIT-971: Cross-process single-writer lock tests
+// =============================================================================
+
+#[test]
+fn test_cross_process_lock_acquired_on_open() {
+    use crate::memvid_adapter::lock::lock_path_for;
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("lock_test.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "lock_test".to_string(),
+        ..Default::default()
+    };
+
+    // Open capsule - should acquire lock
+    let handle = CapsuleHandle::open(config.clone()).expect("should open");
+
+    // Lock file should exist
+    let lock_path = lock_path_for(&capsule_path);
+    assert!(lock_path.exists(), "Lock file should exist while handle is open");
+
+    // Drop handle - lock should be released
+    drop(handle);
+
+    // Lock file should be removed
+    assert!(!lock_path.exists(), "Lock file should be removed after handle drop");
+}
+
+#[test]
+fn test_cross_process_lock_blocks_second_writer() {
+    use crate::memvid_adapter::capsule::CapsuleError;
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("lock_conflict.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "lock_conflict".to_string(),
+        ..Default::default()
+    };
+
+    // First open - acquires lock
+    let _handle1 = CapsuleHandle::open(config.clone()).expect("first open should succeed");
+
+    // Second open - should fail with LockedByWriter
+    let result = CapsuleHandle::open(config);
+    assert!(result.is_err(), "Second open should fail");
+
+    match result {
+        Err(CapsuleError::LockedByWriter(metadata)) => {
+            // Verify metadata contains current process PID
+            assert_eq!(metadata.pid, std::process::id(), "Lock metadata should contain our PID");
+            assert!(!metadata.host.is_empty(), "Lock metadata should contain host");
+            assert!(!metadata.user.is_empty(), "Lock metadata should contain user");
+        }
+        Err(other) => panic!("Expected LockedByWriter error, got: {:?}", other),
+        Ok(_) => panic!("Expected error but got Ok"),
+    }
+}
+
+#[test]
+fn test_cross_process_lock_with_context() {
+    use crate::memvid_adapter::capsule::CapsuleOpenOptions;
+    use crate::memvid_adapter::lock::is_locked;
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("lock_context.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "context_test".to_string(),
+        ..Default::default()
+    };
+
+    // Open with context
+    let options = CapsuleOpenOptions::write().with_context(
+        Some("SPEC-KIT-971".to_string()),
+        Some("run-abc123".to_string()),
+        Some("main".to_string()),
+    );
+
+    let _handle = CapsuleHandle::open_with_options(config.clone(), options)
+        .expect("should open with context");
+
+    // Verify lock metadata contains context
+    let lock_meta = is_locked(&capsule_path).expect("should have lock");
+    assert_eq!(lock_meta.spec_id, Some("SPEC-KIT-971".to_string()));
+    assert_eq!(lock_meta.run_id, Some("run-abc123".to_string()));
+    assert_eq!(lock_meta.branch, Some("main".to_string()));
+}
+
+#[test]
+fn test_read_only_does_not_acquire_lock() {
+    use crate::memvid_adapter::lock::lock_path_for;
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("read_only.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "read_only_test".to_string(),
+        ..Default::default()
+    };
+
+    // First, create the capsule with a write lock
+    {
+        let _handle = CapsuleHandle::open(config.clone()).expect("should create");
+    }
+
+    // Now open read-only - should not create lock
+    let handle = CapsuleHandle::open_read_only(config.clone()).expect("should open read-only");
+
+    // Lock file should NOT exist for read-only access
+    let lock_path = lock_path_for(&capsule_path);
+    assert!(!lock_path.exists(), "Read-only open should not create lock file");
+
+    drop(handle);
+}
+
+#[test]
+fn test_read_only_succeeds_when_write_locked() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("read_while_locked.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "read_locked_test".to_string(),
+        ..Default::default()
+    };
+
+    // Open with write lock
+    let _writer = CapsuleHandle::open(config.clone()).expect("should open for write");
+
+    // Read-only open should succeed even with write lock held
+    let reader = CapsuleHandle::open_read_only(config);
+    assert!(reader.is_ok(), "Read-only should succeed when write lock is held");
+}
+
+#[test]
+fn test_doctor_detects_active_lock_with_metadata() {
+    use crate::memvid_adapter::capsule::CapsuleOpenOptions;
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("doctor_lock.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "doctor_lock_test".to_string(),
+        ..Default::default()
+    };
+
+    // Open with context
+    let options = CapsuleOpenOptions::write().with_context(
+        Some("SPEC-999".to_string()),
+        Some("run-xyz".to_string()),
+        None,
+    );
+    let _handle = CapsuleHandle::open_with_options(config, options).expect("should open");
+
+    // Run doctor - should detect lock with metadata
+    let results = CapsuleHandle::doctor(&capsule_path);
+
+    // Find the lock-related result
+    let lock_result = results.iter().find(|r| {
+        match r {
+            DiagnosticResult::Error(msg, _) => msg.contains("locked"),
+            DiagnosticResult::Warning(msg, _) => msg.contains("lock"),
+            _ => false,
+        }
+    });
+
+    assert!(lock_result.is_some(), "Doctor should detect the lock");
+
+    // The error should contain our context
+    if let Some(DiagnosticResult::Error(msg, recovery)) = lock_result {
+        assert!(msg.contains("SPEC-999"), "Lock message should contain spec_id");
+        assert!(recovery.contains("ps -p"), "Recovery should include process check");
+    }
+}
+
+#[test]
+fn test_stale_lock_recovery() {
+    use crate::memvid_adapter::lock::{LockMetadata, lock_path_for};
+    use chrono::Utc;
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("stale_recovery.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "stale_recovery_test".to_string(),
+        ..Default::default()
+    };
+
+    // First, create the capsule
+    {
+        let _handle = CapsuleHandle::open(config.clone()).expect("should create");
+    }
+
+    // Create a fake stale lock with a non-existent PID
+    let lock_path = lock_path_for(&capsule_path);
+    let stale_metadata = LockMetadata {
+        pid: 999999999, // Unlikely to be a real PID
+        host: hostname::get().map(|h| h.to_string_lossy().to_string()).unwrap_or_default(),
+        user: "old_user".to_string(),
+        started_at: Utc::now() - chrono::Duration::hours(2),
+        spec_id: Some("OLD-SPEC".to_string()),
+        run_id: None,
+        branch: None,
+        schema_version: 1,
+    };
+    let json = serde_json::to_string_pretty(&stale_metadata).unwrap();
+    std::fs::write(&lock_path, json).expect("should write stale lock");
+
+    // Open should succeed because the stale lock is cleaned up
+    let handle = CapsuleHandle::open(config);
+    assert!(handle.is_ok(), "Should recover from stale lock");
+
+    drop(handle);
+}
+
+/// Test that cross-process locking works across actual processes.
+///
+/// This test simulates another process holding a lock by writing a lock file
+/// directly, then verifies the parent can't acquire the same lock.
+#[test]
+fn test_cross_process_lock_actual_subprocess() {
+    use crate::memvid_adapter::lock::lock_path_for;
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("subprocess_lock.mv2");
+    let lock_path = lock_path_for(&capsule_path);
+
+    // Create capsule first
+    {
+        let config = CapsuleConfig {
+            capsule_path: capsule_path.clone(),
+            workspace_id: "subprocess_test".to_string(),
+            ..Default::default()
+        };
+        let _handle = CapsuleHandle::open(config).expect("should create");
+    }
+
+    // Simulate another process on a remote host holding the lock
+    // Remote host locks won't be checked for staleness (can't verify process exists)
+    let lock_json = serde_json::json!({
+        "pid": 12345,
+        "host": "remote-host-that-does-not-exist.local",
+        "user": "remote_user",
+        "started_at": chrono::Utc::now().to_rfc3339(),
+        "spec_id": "REMOTE-SPEC",
+        "schema_version": 1
+    });
+    std::fs::write(&lock_path, serde_json::to_string_pretty(&lock_json).unwrap())
+        .expect("should create remote lock");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "subprocess_test".to_string(),
+        ..Default::default()
+    };
+
+    let result = CapsuleHandle::open(config);
+    assert!(result.is_err(), "Should fail when lock is held by remote process");
+
+    match result {
+        Err(CapsuleError::LockedByWriter(meta)) => {
+            assert_eq!(meta.spec_id, Some("REMOTE-SPEC".to_string()));
+            assert_eq!(meta.host, "remote-host-that-does-not-exist.local");
+        }
+        Err(other) => panic!("Expected LockedByWriter, got {:?}", other),
+        Ok(_) => panic!("Expected error but got Ok"),
+    }
+
+    // Clean up
+    std::fs::remove_file(&lock_path).ok();
 }

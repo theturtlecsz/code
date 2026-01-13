@@ -5,6 +5,7 @@
 //! - D18: Stage boundary checkpoints
 //! - D2: Canonical capsule path: `./.speckit/memvid/workspace.mv2`
 
+use crate::memvid_adapter::lock::{CapsuleLock, LockError, LockMetadata, is_locked, lock_path_for};
 use crate::memvid_adapter::types::{
     BranchId, CheckpointId, CheckpointMetadata, EventType, LogicalUri, ObjectType,
     PhysicalPointer, RunEventEnvelope, UriIndex,
@@ -25,6 +26,9 @@ pub enum CapsuleError {
 
     #[error("Capsule is locked by another process")]
     Locked,
+
+    #[error("Capsule is locked by another writer: {0}")]
+    LockedByWriter(LockMetadata),
 
     #[error("Capsule is corrupted: {reason}")]
     Corrupted { reason: String },
@@ -105,7 +109,11 @@ impl Default for CapsuleConfig {
 pub struct CapsuleHandle {
     config: CapsuleConfig,
 
-    /// Write lock - single writer at a time
+    /// Cross-process exclusive lock (SPEC-KIT-971)
+    /// Holds the lock file handle; released on drop
+    cross_process_lock: Option<CapsuleLock>,
+
+    /// In-process write lock - single writer at a time
     write_lock: Arc<Mutex<WriteLock>>,
 
     /// URI index for resolution
@@ -147,18 +155,75 @@ struct PendingWrite {
     metadata: serde_json::Value,
 }
 
+/// Options for opening a capsule.
+#[derive(Debug, Clone, Default)]
+pub struct CapsuleOpenOptions {
+    /// Acquire exclusive write lock (default: true)
+    pub write_lock: bool,
+
+    /// Context for lock metadata
+    pub spec_id: Option<String>,
+    pub run_id: Option<String>,
+    pub branch: Option<String>,
+}
+
+impl CapsuleOpenOptions {
+    /// Create options for write access (default).
+    pub fn write() -> Self {
+        Self {
+            write_lock: true,
+            ..Default::default()
+        }
+    }
+
+    /// Create options for read-only access.
+    pub fn read_only() -> Self {
+        Self {
+            write_lock: false,
+            ..Default::default()
+        }
+    }
+
+    /// Set context for the lock metadata.
+    pub fn with_context(mut self, spec_id: Option<String>, run_id: Option<String>, branch: Option<String>) -> Self {
+        self.spec_id = spec_id;
+        self.run_id = run_id;
+        self.branch = branch;
+        self
+    }
+}
+
 impl CapsuleHandle {
-    /// Open or create a capsule.
+    /// Open or create a capsule with write lock (default behavior).
     ///
     /// ## Behavior
     /// - If capsule exists: open and verify integrity
     /// - If capsule doesn't exist: create new
     /// - If capsule is corrupted: return error (caller decides fallback)
+    /// - Acquires exclusive cross-process lock
     ///
     /// ## Acceptance Criteria (SPEC-KIT-971)
     /// - End-to-end: create → put → commit → reopen → search returns artifact
     /// - Crash recovery: capsule reopens; last committed checkpoint readable
+    /// - Cross-process lock prevents concurrent writes
     pub fn open(config: CapsuleConfig) -> Result<Self> {
+        Self::open_with_options(config, CapsuleOpenOptions::write())
+    }
+
+    /// Open a capsule for read-only access (no lock acquired).
+    pub fn open_read_only(config: CapsuleConfig) -> Result<Self> {
+        Self::open_with_options(config, CapsuleOpenOptions::read_only())
+    }
+
+    /// Open a capsule with custom options.
+    ///
+    /// ## SPEC-KIT-971: Cross-process locking
+    /// When `options.write_lock` is true:
+    /// - Creates `<capsule_path>.lock` atomically
+    /// - Writes LockMetadata JSON to the lock file
+    /// - Holds advisory OS lock (fs2) for extra safety
+    /// - If another process holds the lock, returns `CapsuleError::LockedByWriter`
+    pub fn open_with_options(config: CapsuleConfig, options: CapsuleOpenOptions) -> Result<Self> {
         // Ensure parent directory exists
         if let Some(parent) = config.capsule_path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -168,9 +233,30 @@ impl CapsuleHandle {
         let exists = config.capsule_path.exists();
 
         if exists {
-            // Verify capsule integrity
-            Self::verify_capsule(&config.capsule_path)?;
+            // Verify capsule integrity (for read access, we don't fail on lock)
+            Self::verify_capsule(&config.capsule_path, !options.write_lock)?;
         }
+
+        // Acquire cross-process lock if write access requested
+        let cross_process_lock = if options.write_lock {
+            let lock_metadata = LockMetadata::with_context(
+                options.spec_id.clone(),
+                options.run_id.clone(),
+                options.branch.clone(),
+            );
+
+            match CapsuleLock::acquire(&config.capsule_path, lock_metadata) {
+                Ok(lock) => Some(lock),
+                Err(LockError::AlreadyLocked(existing)) => {
+                    return Err(CapsuleError::LockedByWriter(existing));
+                }
+                Err(LockError::Io(e)) => {
+                    return Err(CapsuleError::Io(e));
+                }
+            }
+        } else {
+            None
+        };
 
         // TODO: When memvid crate is added:
         // let inner = if exists {
@@ -181,6 +267,7 @@ impl CapsuleHandle {
 
         let handle = Self {
             config,
+            cross_process_lock,
             write_lock: Arc::new(Mutex::new(WriteLock {
                 holder: None,
                 acquired_at: None,
@@ -204,12 +291,16 @@ impl CapsuleHandle {
 
     /// Verify capsule integrity.
     ///
-    /// Checks:
+    /// ## Parameters
+    /// - `path`: Path to the capsule file
+    /// - `skip_lock_check`: If true, don't fail on existing lock (for read-only access)
+    ///
+    /// ## Checks
     /// - File exists and is readable
     /// - Footer is valid
     /// - Version is compatible
-    /// - No lock file stale
-    fn verify_capsule(path: &Path) -> Result<()> {
+    /// - Lock file status (unless `skip_lock_check` is true)
+    fn verify_capsule(path: &Path, skip_lock_check: bool) -> Result<()> {
         // Check file exists
         if !path.exists() {
             return Err(CapsuleError::NotFound {
@@ -217,12 +308,21 @@ impl CapsuleHandle {
             });
         }
 
-        // Check lock file
-        let lock_path = path.with_extension("mv2.lock");
-        if lock_path.exists() {
-            // TODO: Check if lock is stale (process no longer running)
-            // For now, fail if lock exists
-            return Err(CapsuleError::Locked);
+        // Check lock file (SPEC-KIT-971: use <path>.lock convention)
+        if !skip_lock_check {
+            if let Some(lock_metadata) = is_locked(path) {
+                // Check if lock is stale
+                if lock_metadata.is_stale() {
+                    tracing::warn!(
+                        pid = lock_metadata.pid,
+                        host = %lock_metadata.host,
+                        "Found stale lock from terminated process, will be cleaned on acquire"
+                    );
+                    // Don't fail here - lock acquisition will clean it up
+                } else {
+                    return Err(CapsuleError::LockedByWriter(lock_metadata));
+                }
+            }
         }
 
         // Check header magic bytes
@@ -678,9 +778,10 @@ impl CapsuleHandle {
     /// - Footer is valid
     /// - Version is compatible
     ///
-    /// ## Acceptance Criteria
+    /// ## Acceptance Criteria (SPEC-KIT-971)
     /// `speckit capsule doctor` detects: missing capsule, locked capsule,
     /// corrupted footer, and version mismatch; returns non-zero exit on failure.
+    /// Shows actionable recovery steps for each issue.
     pub fn doctor(path: &Path) -> Vec<DiagnosticResult> {
         let mut results = Vec::new();
 
@@ -688,22 +789,57 @@ impl CapsuleHandle {
         if !path.exists() {
             results.push(DiagnosticResult::Error(
                 "Capsule not found".to_string(),
-                format!("Create with: speckit capsule init"),
+                "Create with: speckit capsule init".to_string(),
             ));
             return results;
         }
         results.push(DiagnosticResult::Ok("Capsule exists".to_string()));
 
-        // Check lock
-        let lock_path = path.with_extension("mv2.lock");
-        if lock_path.exists() {
-            results.push(DiagnosticResult::Error(
-                "Capsule is locked".to_string(),
-                "Another process may be using the capsule. If stale, remove the .lock file."
-                    .to_string(),
-            ));
+        // Check lock (SPEC-KIT-971: use <path>.lock convention with metadata)
+        let lock_path = lock_path_for(path);
+        if let Some(lock_metadata) = is_locked(path) {
+            let is_stale = lock_metadata.is_stale();
+            let lock_info = format!(
+                "PID: {}, User: {}@{}, Started: {}",
+                lock_metadata.pid,
+                lock_metadata.user,
+                lock_metadata.host,
+                lock_metadata.started_at.format("%Y-%m-%d %H:%M:%S UTC")
+            );
+
+            if is_stale {
+                results.push(DiagnosticResult::Warning(
+                    format!("Stale lock detected ({})", lock_info),
+                    format!(
+                        "Process {} is no longer running. Remove with:\n  rm {}",
+                        lock_metadata.pid,
+                        lock_path.display()
+                    ),
+                ));
+            } else {
+                let context = match (&lock_metadata.spec_id, &lock_metadata.run_id) {
+                    (Some(spec), Some(run)) => format!(" [spec: {}, run: {}]", spec, run),
+                    (Some(spec), None) => format!(" [spec: {}]", spec),
+                    _ => String::new(),
+                };
+
+                results.push(DiagnosticResult::Error(
+                    format!("Capsule is locked{} ({})", context, lock_info),
+                    format!(
+                        "Wait for process {} to complete, or if stuck:\n  \
+                        1. Check process: ps -p {}\n  \
+                        2. If not running: rm {}\n  \
+                        3. If stuck: kill {} && rm {}",
+                        lock_metadata.pid,
+                        lock_metadata.pid,
+                        lock_path.display(),
+                        lock_metadata.pid,
+                        lock_path.display()
+                    ),
+                ));
+            }
         } else {
-            results.push(DiagnosticResult::Ok("No stale lock".to_string()));
+            results.push(DiagnosticResult::Ok("No lock held".to_string()));
         }
 
         // Check readability
@@ -712,12 +848,13 @@ impl CapsuleHandle {
                 if data.len() < 5 {
                     results.push(DiagnosticResult::Error(
                         "Capsule file too small".to_string(),
-                        "File may be corrupted. Restore from backup.".to_string(),
+                        "File may be corrupted. Restore from backup or recreate:\n  \
+                        rm -f {} && speckit capsule init".to_string(),
                     ));
                 } else if &data[0..3] != b"MV2" {
                     results.push(DiagnosticResult::Error(
                         "Invalid capsule header".to_string(),
-                        "File is not a valid MV2 capsule.".to_string(),
+                        "File is not a valid MV2 capsule. Restore from backup.".to_string(),
                     ));
                 } else {
                     results.push(DiagnosticResult::Ok("Capsule header valid".to_string()));
@@ -726,7 +863,7 @@ impl CapsuleHandle {
             Err(e) => {
                 results.push(DiagnosticResult::Error(
                     "Cannot read capsule".to_string(),
-                    format!("IO error: {}", e),
+                    format!("IO error: {}. Check file permissions.", e),
                 ));
             }
         }
@@ -763,12 +900,12 @@ impl CapsuleHandle {
 
 impl Drop for CapsuleHandle {
     fn drop(&mut self) {
-        // Release write lock and mark as closed
+        // Mark as closed
         *self.is_open.write().unwrap() = false;
 
-        // Remove lock file if we created one
-        let lock_path = self.config.capsule_path.with_extension("mv2.lock");
-        let _ = std::fs::remove_file(lock_path);
+        // SPEC-KIT-971: Cross-process lock is automatically released when
+        // self.cross_process_lock (Option<CapsuleLock>) is dropped.
+        // CapsuleLock::drop() handles unlocking and removing the lock file.
     }
 }
 
