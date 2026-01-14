@@ -425,6 +425,12 @@ pub struct CapsuleArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum CapsuleSubcommand {
+    /// Initialize a new capsule (workspace.mv2)
+    ///
+    /// SPEC-KIT-971: Creates a new MV2 capsule at the default path.
+    /// Safe to run multiple times - will not overwrite existing capsule.
+    Init(CapsuleInitArgs),
+
     /// Run capsule diagnostics
     ///
     /// Checks capsule existence, lock status, header validity, and version.
@@ -441,6 +447,11 @@ pub enum CapsuleSubcommand {
     /// Shows all checkpoints with timestamps, labels, and stages.
     Checkpoints(CapsuleCheckpointsArgs),
 
+    /// List events with optional filtering
+    ///
+    /// SPEC-KIT-971: Shows events from the capsule with stage/type filters.
+    Events(CapsuleEventsArgs),
+
     /// Create a manual checkpoint
     ///
     /// Creates a labeled checkpoint at the current state.
@@ -450,6 +461,23 @@ pub enum CapsuleSubcommand {
     ///
     /// Looks up a mv2:// URI and optionally writes payload to a file.
     ResolveUri(CapsuleResolveUriArgs),
+
+    /// Export capsule to per-run archive
+    ///
+    /// SPEC-KIT-971: Exports events and artifacts for a specific run.
+    Export(CapsuleExportArgs),
+}
+
+/// Arguments for `capsule init`
+#[derive(Debug, Parser)]
+pub struct CapsuleInitArgs {
+    /// Force creation even if capsule exists (will backup existing)
+    #[arg(long = "force")]
+    pub force: bool,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
 }
 
 /// Arguments for `capsule doctor`
@@ -504,6 +532,58 @@ pub struct CapsuleResolveUriArgs {
     pub out: Option<PathBuf>,
 
     /// Output as JSON instead of payload bytes
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
+/// Arguments for `capsule events`
+///
+/// SPEC-KIT-971: List events with optional filtering.
+#[derive(Debug, Parser)]
+pub struct CapsuleEventsArgs {
+    /// Filter by stage (e.g., "plan", "implement")
+    #[arg(long = "stage", short = 's', value_name = "STAGE")]
+    pub stage: Option<String>,
+
+    /// Filter by event type (e.g., "StageTransition", "PolicySnapshotRef")
+    #[arg(long = "type", short = 't', value_name = "TYPE")]
+    pub event_type: Option<String>,
+
+    /// Filter by spec ID
+    #[arg(long = "spec", value_name = "SPEC-ID")]
+    pub spec_id: Option<String>,
+
+    /// Filter by run ID
+    #[arg(long = "run", value_name = "RUN-ID")]
+    pub run_id: Option<String>,
+
+    /// Limit number of results
+    #[arg(long = "limit", short = 'n', value_name = "N")]
+    pub limit: Option<usize>,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
+/// Arguments for `capsule export`
+///
+/// SPEC-KIT-971: Export capsule to per-run archive.
+#[derive(Debug, Parser)]
+pub struct CapsuleExportArgs {
+    /// Spec ID to export
+    #[arg(long = "spec", short = 's', value_name = "SPEC-ID")]
+    pub spec_id: String,
+
+    /// Run ID to export
+    #[arg(long = "run", short = 'r', value_name = "RUN-ID")]
+    pub run_id: String,
+
+    /// Output directory for the export (default: .speckit/exports/)
+    #[arg(long = "out", short = 'o', value_name = "PATH")]
+    pub out: Option<PathBuf>,
+
+    /// Output as JSON instead of text
     #[arg(long = "json", short = 'j')]
     pub json: bool,
 }
@@ -1908,11 +1988,14 @@ fn run_capsule(cwd: PathBuf, args: CapsuleArgs) -> anyhow::Result<()> {
         .unwrap_or_else(|| cwd.join(DEFAULT_CAPSULE_PATH));
 
     match args.command {
+        CapsuleSubcommand::Init(cmd_args) => run_capsule_init(&capsule_path, cmd_args),
         CapsuleSubcommand::Doctor(cmd_args) => run_capsule_doctor(&capsule_path, cmd_args),
         CapsuleSubcommand::Stats(cmd_args) => run_capsule_stats(&capsule_path, cmd_args),
         CapsuleSubcommand::Checkpoints(cmd_args) => run_capsule_checkpoints(&capsule_path, cmd_args),
+        CapsuleSubcommand::Events(cmd_args) => run_capsule_events(&capsule_path, cmd_args),
         CapsuleSubcommand::Commit(cmd_args) => run_capsule_commit(&capsule_path, cmd_args),
         CapsuleSubcommand::ResolveUri(cmd_args) => run_capsule_resolve_uri(&capsule_path, cmd_args),
+        CapsuleSubcommand::Export(cmd_args) => run_capsule_export(&capsule_path, cmd_args),
     }
 }
 
@@ -2295,6 +2378,341 @@ fn run_capsule_resolve_uri(capsule_path: &PathBuf, args: CapsuleResolveUriArgs) 
     } else {
         // Write to stdout (binary)
         std::io::stdout().write_all(&bytes)?;
+    }
+
+    Ok(())
+}
+
+/// Run `capsule init` command
+///
+/// SPEC-KIT-971: Initialize a new workspace capsule.
+fn run_capsule_init(capsule_path: &PathBuf, args: CapsuleInitArgs) -> anyhow::Result<()> {
+    // Check if capsule already exists
+    if capsule_path.exists() {
+        if args.force {
+            // Backup existing capsule
+            let backup_path = capsule_path.with_extension("mv2.bak");
+            if let Err(e) = std::fs::rename(capsule_path, &backup_path) {
+                if args.json {
+                    let json = serde_json::json!({
+                        "schema_version": SCHEMA_VERSION,
+                        "tool_version": tool_version(),
+                        "error": format!("Failed to backup existing capsule: {e}"),
+                        "capsule_path": capsule_path.display().to_string(),
+                    });
+                    println!("{}", serde_json::to_string_pretty(&json)?);
+                } else {
+                    eprintln!("Error: Failed to backup existing capsule: {e}");
+                }
+                std::process::exit(capsule_exit::SYSTEM_ERROR);
+            }
+
+            if !args.json {
+                println!("Backed up existing capsule to {}", backup_path.display());
+            }
+        } else {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exists": true,
+                    "created": false,
+                    "capsule_path": capsule_path.display().to_string(),
+                    "message": "Capsule already exists. Use --force to replace.",
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                println!("Capsule already exists at {}", capsule_path.display());
+                println!("Use --force to backup and replace.");
+            }
+            return Ok(());
+        }
+    }
+
+    // Create the capsule
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "default".to_string(),
+        ..Default::default()
+    };
+
+    match CapsuleHandle::open(config) {
+        Ok(handle) => {
+            // Immediately drop to release lock
+            drop(handle);
+
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "created": true,
+                    "capsule_path": capsule_path.display().to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                println!("Created capsule at {}", capsule_path.display());
+            }
+            Ok(())
+        }
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("{e}"),
+                    "capsule_path": capsule_path.display().to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Failed to create capsule: {e}");
+            }
+            std::process::exit(capsule_exit::SYSTEM_ERROR);
+        }
+    }
+}
+
+/// Run `capsule events` command
+///
+/// SPEC-KIT-971: List events with optional filtering.
+fn run_capsule_events(capsule_path: &PathBuf, args: CapsuleEventsArgs) -> anyhow::Result<()> {
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "cli".to_string(),
+        ..Default::default()
+    };
+
+    let handle = match CapsuleHandle::open_read_only(config) {
+        Ok(h) => h,
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("{e}"),
+                    "capsule_path": capsule_path.display().to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Failed to open capsule: {e}");
+            }
+            std::process::exit(capsule_exit::SYSTEM_ERROR);
+        }
+    };
+
+    let mut events = handle.list_events();
+
+    // Apply filters
+    if let Some(ref stage) = args.stage {
+        events.retain(|e| e.stage.as_deref() == Some(stage.as_str()));
+    }
+    if let Some(ref event_type) = args.event_type {
+        events.retain(|e| format!("{:?}", e.event_type).to_lowercase() == event_type.to_lowercase());
+    }
+    if let Some(ref spec_id) = args.spec_id {
+        events.retain(|e| &e.spec_id == spec_id);
+    }
+    if let Some(ref run_id) = args.run_id {
+        events.retain(|e| &e.run_id == run_id);
+    }
+
+    // Apply limit
+    if let Some(limit) = args.limit {
+        events.truncate(limit);
+    }
+
+    if args.json {
+        let events_json: Vec<_> = events
+            .iter()
+            .map(|e| {
+                serde_json::json!({
+                    "uri": e.uri.as_str(),
+                    "event_type": format!("{:?}", e.event_type),
+                    "timestamp": e.timestamp.to_rfc3339(),
+                    "spec_id": e.spec_id,
+                    "run_id": e.run_id,
+                    "stage": e.stage,
+                    "payload": e.payload,
+                })
+            })
+            .collect();
+
+        let json = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "tool_version": tool_version(),
+            "capsule_path": capsule_path.display().to_string(),
+            "events": events_json,
+            "count": events.len(),
+            "filters": {
+                "stage": args.stage,
+                "event_type": args.event_type,
+                "spec_id": args.spec_id,
+                "run_id": args.run_id,
+                "limit": args.limit,
+            },
+        });
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        println!("Capsule Events: {}", capsule_path.display());
+        println!();
+        if events.is_empty() {
+            println!("  (no events matching filters)");
+        } else {
+            for event in &events {
+                let stage_str = event.stage.as_deref().unwrap_or("-");
+                println!(
+                    "  {} | {:?} | {} | {}",
+                    event.timestamp.format("%Y-%m-%d %H:%M:%S"),
+                    event.event_type,
+                    stage_str,
+                    event.spec_id,
+                );
+            }
+        }
+        println!();
+        println!("Total: {} event(s)", events.len());
+    }
+
+    Ok(())
+}
+
+/// Run `capsule export` command
+///
+/// SPEC-KIT-971: Export capsule to per-run archive.
+fn run_capsule_export(capsule_path: &PathBuf, args: CapsuleExportArgs) -> anyhow::Result<()> {
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "cli".to_string(),
+        ..Default::default()
+    };
+
+    let handle = match CapsuleHandle::open_read_only(config) {
+        Ok(h) => h,
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("{e}"),
+                    "capsule_path": capsule_path.display().to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Failed to open capsule: {e}");
+            }
+            std::process::exit(capsule_exit::SYSTEM_ERROR);
+        }
+    };
+
+    // Get events for this spec/run
+    let events = handle.list_events();
+    let run_events: Vec<_> = events
+        .iter()
+        .filter(|e| e.spec_id == args.spec_id && e.run_id == args.run_id)
+        .collect();
+
+    // Get checkpoints for this spec/run
+    let checkpoints = handle.list_checkpoints();
+    let run_checkpoints: Vec<_> = checkpoints
+        .iter()
+        .filter(|c| {
+            c.spec_id.as_deref() == Some(args.spec_id.as_str())
+                && c.run_id.as_deref() == Some(args.run_id.as_str())
+        })
+        .collect();
+
+    // Determine output path
+    let out_dir = args.out.unwrap_or_else(|| {
+        capsule_path
+            .parent()
+            .unwrap_or(std::path::Path::new("."))
+            .join("exports")
+    });
+
+    // Create export directory
+    let export_name = format!("{}_{}", args.spec_id, args.run_id);
+    let export_path = out_dir.join(&export_name);
+    if let Err(e) = std::fs::create_dir_all(&export_path) {
+        if args.json {
+            let json = serde_json::json!({
+                "schema_version": SCHEMA_VERSION,
+                "tool_version": tool_version(),
+                "error": format!("Failed to create export directory: {e}"),
+            });
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        } else {
+            eprintln!("Error: Failed to create export directory: {e}");
+        }
+        std::process::exit(capsule_exit::SYSTEM_ERROR);
+    }
+
+    // Write events.json
+    let events_json: Vec<_> = run_events
+        .iter()
+        .map(|e| {
+            serde_json::json!({
+                "uri": e.uri.as_str(),
+                "event_type": format!("{:?}", e.event_type),
+                "timestamp": e.timestamp.to_rfc3339(),
+                "stage": e.stage,
+                "payload": e.payload,
+            })
+        })
+        .collect();
+    let events_file = export_path.join("events.json");
+    std::fs::write(&events_file, serde_json::to_string_pretty(&events_json)?)?;
+
+    // Write checkpoints.json
+    let cp_json: Vec<_> = run_checkpoints
+        .iter()
+        .map(|c| {
+            serde_json::json!({
+                "checkpoint_id": c.checkpoint_id.as_str(),
+                "label": c.label,
+                "stage": c.stage,
+                "commit_hash": c.commit_hash,
+                "timestamp": c.timestamp.to_rfc3339(),
+            })
+        })
+        .collect();
+    let checkpoints_file = export_path.join("checkpoints.json");
+    std::fs::write(&checkpoints_file, serde_json::to_string_pretty(&cp_json)?)?;
+
+    // Write manifest.json
+    let manifest = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "tool_version": tool_version(),
+        "spec_id": args.spec_id,
+        "run_id": args.run_id,
+        "exported_at": chrono::Utc::now().to_rfc3339(),
+        "source_capsule": capsule_path.display().to_string(),
+        "event_count": run_events.len(),
+        "checkpoint_count": run_checkpoints.len(),
+    });
+    let manifest_file = export_path.join("manifest.json");
+    std::fs::write(&manifest_file, serde_json::to_string_pretty(&manifest)?)?;
+
+    if args.json {
+        let json = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "tool_version": tool_version(),
+            "exported": true,
+            "export_path": export_path.display().to_string(),
+            "spec_id": args.spec_id,
+            "run_id": args.run_id,
+            "event_count": run_events.len(),
+            "checkpoint_count": run_checkpoints.len(),
+            "files": [
+                events_file.display().to_string(),
+                checkpoints_file.display().to_string(),
+                manifest_file.display().to_string(),
+            ],
+        });
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        println!("Exported run {} / {} to {}", args.spec_id, args.run_id, export_path.display());
+        println!("  Events: {} → {}", run_events.len(), events_file.display());
+        println!("  Checkpoints: {} → {}", run_checkpoints.len(), checkpoints_file.display());
+        println!("  Manifest: {}", manifest_file.display());
     }
 
     Ok(())

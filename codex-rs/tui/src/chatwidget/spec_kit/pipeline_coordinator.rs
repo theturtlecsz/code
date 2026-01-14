@@ -6,6 +6,7 @@
 //! - Task lifecycle tracking (on_spec_auto_task_*)
 //! - Consensus checking and stage progression
 //! - Quality gate checkpoint integration
+//! - SPEC-KIT-977: Policy capture at run start
 
 #![allow(dead_code, unused_variables)] // Pipeline helpers pending integration
 
@@ -23,6 +24,7 @@ use super::validation_lifecycle::{
     record_validate_lifecycle_event,
 };
 use crate::history_cell::HistoryCellType;
+use crate::memvid_adapter::{CapsuleConfig, CapsuleHandle, policy_capture};
 use crate::slash_command::{HalMode, SlashCommand};
 use crate::spec_prompts::SpecStage;
 use std::fs;
@@ -175,6 +177,50 @@ pub fn handle_spec_auto(
                     .map(|m| format!("{:?}", m))
                     .unwrap_or_else(|| "mock".to_string()),
             });
+    }
+
+    // SPEC-KIT-977: Capture policy snapshot at run start for phase 4→5 gate
+    if let Some(run_id) = &state.run_id {
+        let capsule_path = widget.config.cwd.join(".speckit/workspace.mv2");
+        let capsule_config = CapsuleConfig {
+            capsule_path: capsule_path.clone(),
+            workspace_id: spec_id.clone(),
+            ..Default::default()
+        };
+
+        // Open capsule and capture policy (non-blocking - continue on failure)
+        match CapsuleHandle::open(capsule_config) {
+            Ok(handle) => {
+                let stage0_cfg = codex_stage0::Stage0Config::load().unwrap_or_default();
+                match policy_capture::capture_and_store_policy(
+                    &handle,
+                    &stage0_cfg,
+                    &spec_id,
+                    run_id,
+                ) {
+                    Ok(snapshot) => {
+                        // Store policy info in state for phase 4→5 verification
+                        state.policy_id = Some(snapshot.policy_id.clone());
+                        state.policy_hash = Some(snapshot.hash.clone());
+                        if let Some(info) = handle.current_policy() {
+                            state.policy_uri = Some(info.uri.as_str().to_string());
+                        }
+                        tracing::info!(
+                            policy_id = %snapshot.policy_id,
+                            hash = %snapshot.hash,
+                            "Policy snapshot captured at run start"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Failed to capture policy snapshot - continuing without policy binding");
+                    }
+                }
+                // Handle dropped here - lock released
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to open capsule for policy capture - continuing without policy binding");
+            }
+        }
     }
 
     // SPEC-KIT-102: Run Stage 0 context injection before pipeline starts

@@ -1,8 +1,8 @@
 # HANDOFF.md — Session Continuation
 
 **Created:** 2026-01-11
-**Last Session:** 2026-01-13 (SPEC-KIT-971 Checkpoint Integration + SPEC-KIT-977 Wiring Complete)
-**Next Session:** CLI Commands + Policy Event Binding
+**Last Session:** 2026-01-14 (SPEC-KIT-971 CLI + SPEC-KIT-977 Policy Event Binding Complete)
+**Next Session:** SPEC-KIT-978 ReflexBackend trait
 
 ---
 
@@ -26,10 +26,24 @@ NON-NEGOTIABLES (read first)
    - Lock file path: <capsule_path>.lock (e.g., workspace.mv2.lock)
 
 ===================================================================
-CURRENT STATE — Session completed 2026-01-13
+CURRENT STATE — Session completed 2026-01-14
 ===================================================================
 
 COMPLETED THIS SESSION:
+
+1. ✅ SPEC-KIT-971 CLI Commands Complete
+   - `speckit capsule init` - Create new workspace.mv2
+   - `speckit capsule events` - List events with stage/type/spec/run filtering
+   - `speckit capsule export` - Export per-run archive (events.json, checkpoints.json, manifest.json)
+   - All CLI commands support --json output
+
+2. ✅ SPEC-KIT-977 Policy Event Binding (Phase 4→5 Gate)
+   - Policy capture wired at run start in pipeline_coordinator.rs
+   - policy_id, policy_hash, policy_uri fields added to SpecAutoState
+   - All StageTransition events include policy binding after capture
+   - 2 phase 4→5 gate verification tests added
+
+PRIOR SESSION (2026-01-13):
 
 1. ✅ SPEC-KIT-971 Checkpoint Integration with Pipeline Stage Commits
    - StageCommitResult struct returns commit hash from auto_commit
@@ -46,52 +60,43 @@ COMPLETED THIS SESSION:
    - StageTransition events include policy_id/hash
    - 15 policy tests passing
 
-3. ✅ SPEC-KIT-971 CLI (speckit capsule subcommands)
+3. ✅ SPEC-KIT-971 CLI (initial)
    - doctor, stats, checkpoints, commit, resolve-uri commands
    - JSON-first output with stable schema
    - 7 CLI tests passing
 
 ===================================================================
-TASK FOR NEXT SESSION: CLI + 977 (Parallel Tracks)
+TASK FOR NEXT SESSION: SPEC-KIT-978 ReflexBackend trait
 ===================================================================
 
-### TRACK 1: Complete CLI Commands
+### SPEC-KIT-978: ReflexBackend Trait
 
-**Location:** `cli/src/speckit_cmd.rs` (already has capsule subcommand structure)
+**Goal:** Create ReflexBackend trait for fast-path model inference.
 
-Remaining CLI work:
-1. `speckit capsule init` - Create new workspace.mv2
-2. `speckit capsule events` - List events with filtering
-3. `speckit capsule export` - Export to per-run capsule
+**Key deliverables:**
+1. ReflexBackend trait definition
+2. Local inference implementation (vLLM/Ollama)
+3. Cloud fallback implementation
+4. Latency-based routing
 
-### TRACK 2: Policy Event Binding (Phase 4→5 Gate)
+### Deferred Tasks (Do Not Implement)
 
-**Goal:** Every event emitted after policy capture includes policy_id/hash.
-
-**Locations to wire:**
-- `tui/src/chatwidget/spec_kit/pipeline_coordinator.rs` - capture policy at run start
-- `tui/src/memvid_adapter/capsule.rs` - emit_policy_snapshot_ref_with_info already exists
-- `tui/src/memvid_adapter/policy_capture.rs` - capture_and_store_policy exists
-
-**Implementation pattern:**
-```rust
-// At run start (in pipeline_coordinator.rs handle_spec_auto_run)
-let policy_info = capture_and_store_policy(&capsule, &stage0_config).await?;
-
-// All subsequent events get policy binding
-capsule.emit_stage_transition_with_policy(
-    spec_id, run_id, stage, commit_hash, policy_info
-)?;
-```
-
-**Tests needed:**
-1. All events after policy capture include policy_id
-2. Policy unchanged across stages in same run
-3. Phase 4→5 gate verification test
+- Dead code cleanup (9 clippy warnings)
+- SPEC-KIT-973 Time-travel UI
+- SPEC-KIT-976 Logic Mesh
 
 ===================================================================
-FILES CHANGED THIS SESSION (2026-01-13)
+FILES CHANGED THIS SESSION (2026-01-14)
 ===================================================================
+
+| File | Change |
+|------|--------|
+| cli/src/speckit_cmd.rs | Added init, events, export commands |
+| tui/src/chatwidget/spec_kit/pipeline_coordinator.rs | Policy capture at run start |
+| tui/src/chatwidget/spec_kit/state.rs | policy_id, policy_hash, policy_uri fields |
+| tui/src/memvid_adapter/tests.rs | Phase 4→5 gate verification tests |
+
+PRIOR SESSION (2026-01-13):
 
 | File | Change |
 |------|--------|
@@ -110,7 +115,7 @@ TEST SUMMARY
 | Module | Tests | Status |
 |--------|-------|--------|
 | git_integration | 5 | ✅ All passing |
-| capsule | 9 | ✅ All passing |
+| capsule | 11 | ✅ All passing (incl. phase 4→5 gate) |
 | stage0 policy | 15 | ✅ All passing |
 | CLI | 7 | ✅ All passing |
 
@@ -118,6 +123,7 @@ Run commands:
 ```bash
 cargo test -p codex-tui --lib "git_integration"
 cargo test -p codex-tui --lib "capsule"
+cargo test -p codex-tui --lib "phase_4_5"
 cargo test -p codex-stage0 "policy"
 ```
 
@@ -231,13 +237,12 @@ OUTPUT EXPECTATION
 
 ## Progress Tracker
 
-### Completed This Session (2026-01-13)
+### Completed This Session (2026-01-14)
 
 | Task | Status | Tests |
 |------|--------|-------|
-| 971 Checkpoint Integration | ✅ | 5 passing |
-| 977 PolicySnapshot Wiring | ✅ | 15 passing |
-| 971 CLI (partial) | ✅ | 7 passing |
+| 971 CLI Commands (init, events, export) | ✅ | CLI tests passing |
+| 977 Policy Event Binding | ✅ | 2 phase 4→5 gate tests |
 
 ### Completed Specs
 
@@ -247,17 +252,15 @@ OUTPUT EXPECTATION
 | SPEC-KIT-971 (A5) | ✅ | Pipeline backend routing |
 | SPEC-KIT-971 (lock) | ✅ | Cross-process single-writer lock |
 | SPEC-KIT-971 (checkpoints) | ✅ | Stage boundary checkpoints with git integration |
-| SPEC-KIT-971 (CLI) | 🔄 70% | doctor/stats/checkpoints done, init/events/export pending |
+| SPEC-KIT-971 (CLI) | ✅ | doctor/stats/checkpoints/commit/resolve-uri/init/events/export |
 | SPEC-KIT-972 | ✅ | Hybrid retrieval, eval harness |
 | SPEC-KIT-977 (hash) | ✅ | Deterministic hash, content helpers |
-| SPEC-KIT-977 (wiring) | 🔄 60% | Policy capture + storage done, event binding partial |
+| SPEC-KIT-977 (wiring) | ✅ | Policy capture at run start, all events bound |
 
 ### In Progress
 
 | Spec | Status | Next Step |
 |------|--------|-----------|
-| SPEC-KIT-971 (CLI) | 🔄 70% | Add init, events, export commands |
-| SPEC-KIT-977 (wiring) | 🔄 60% | Wire policy capture at run start, bind all events |
 | SPEC-KIT-978 | 🔄 0% | Create ReflexBackend trait |
 
 ### Phase Gates
@@ -267,7 +270,8 @@ OUTPUT EXPECTATION
 | 1→2 | 971 URI contract + checkpoint tests | ✅ Passed |
 | 2→3 | 972 eval harness + 975 event schema v1 | ✅ Passed |
 | 3→4 | 972 parity gates + export verification | ✅ Passed |
-| 4→5 | 977 PolicySnapshot + 978 reflex stack | ⏳ 60% Complete |
+| 4→5 | 977 PolicySnapshot + event binding | ✅ Passed (2026-01-14) |
+| 5→6 | 978 ReflexBackend + latency routing | ⏳ Pending |
 
 ---
 
@@ -323,9 +327,16 @@ All Subsequent Events
 
 ---
 
-## Commits This Session
+## Commits This Session (2026-01-14)
 
 ```
+29d2d26e2 feat(cli,memvid): SPEC-KIT-971 CLI complete + SPEC-KIT-977 policy binding
+```
+
+### Prior Session (2026-01-13)
+
+```
+8b9893ec8 feat(memvid): SPEC-KIT-971 checkpoint integration + SPEC-KIT-977 policy wiring
 27cbdeddc docs(handoff): SPEC-KIT-971 session complete + CLI next steps
 04f2807cc feat(memvid): SPEC-KIT-971 cross-process single-writer lock
 5d00c1f2b test(stage0,memvid): SPEC-KIT-971-A5 acceptance tests pass
@@ -335,4 +346,4 @@ a42f594fd feat(stage0,memvid): SPEC-KIT-971 CLI + SPEC-KIT-977 PolicySnapshot
 
 ---
 
-*Generated by Claude Code session 2026-01-13*
+*Generated by Claude Code session 2026-01-14*

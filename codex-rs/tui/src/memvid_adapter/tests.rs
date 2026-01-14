@@ -1617,3 +1617,165 @@ fn test_current_policy_tracking() {
     assert_eq!(policy.policy_id, snapshot.policy_id);
     assert_eq!(policy.hash, snapshot.hash);
 }
+
+// =============================================================================
+// SPEC-KIT-977: Phase 4→5 Gate Verification Tests
+// =============================================================================
+
+/// Phase 4→5 gate: Verify all events after policy capture include policy binding.
+///
+/// SPEC-KIT-977 Acceptance Criteria:
+/// - Every event emitted after run start includes policy_id and policy_hash
+/// - StageTransition events (phase boundaries) include policy info
+/// - Missing policy binding at phase 4→5 boundary is a gate failure
+#[test]
+fn test_phase_4_5_gate_events_include_policy() {
+    use crate::memvid_adapter::policy_capture::capture_and_store_policy;
+    use codex_stage0::Stage0Config;
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("phase_gate.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "phase_gate_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("should create capsule");
+    let stage0_config = Stage0Config::default();
+
+    // Phase 1-3: Setup (no policy yet)
+    // Phase 4: Policy capture (simulates run start)
+    let snapshot = capture_and_store_policy(&handle, &stage0_config, "SPEC-GATE", "run-phase45")
+        .expect("should capture policy");
+
+    // Phase 5: Implementation starts - all events should have policy binding
+    // Put some artifacts (simulates implementation work)
+    handle
+        .put(
+            "SPEC-GATE",
+            "run-phase45",
+            ObjectType::Artifact,
+            "impl.rs",
+            b"// Implementation code".to_vec(),
+            serde_json::json!({"phase": "implement"}),
+        )
+        .expect("should put artifact");
+
+    // Commit stage transition (phase 4→5 boundary)
+    handle
+        .commit_stage("SPEC-GATE", "run-phase45", "implement", Some("gate-commit"))
+        .expect("should commit stage");
+
+    // Verify: All events after policy capture have policy binding
+    let events = handle.list_events();
+
+    // Find StageTransition event
+    let stage_events: Vec<_> = events
+        .iter()
+        .filter(|e| matches!(e.event_type, crate::memvid_adapter::EventType::StageTransition))
+        .collect();
+
+    assert!(
+        !stage_events.is_empty(),
+        "Should have at least one StageTransition event"
+    );
+
+    // Verify StageTransition has policy info (phase 4→5 gate requirement)
+    for event in stage_events {
+        let payload = &event.payload;
+        assert!(
+            payload.get("policy_id").is_some(),
+            "StageTransition event MUST have policy_id for phase 4→5 gate"
+        );
+        assert!(
+            payload.get("policy_hash").is_some(),
+            "StageTransition event MUST have policy_hash for phase 4→5 gate"
+        );
+        assert_eq!(
+            payload.get("policy_id").unwrap().as_str().unwrap(),
+            snapshot.policy_id,
+            "StageTransition policy_id should match captured snapshot"
+        );
+        assert_eq!(
+            payload.get("policy_hash").unwrap().as_str().unwrap(),
+            snapshot.hash,
+            "StageTransition policy_hash should match captured snapshot"
+        );
+    }
+}
+
+/// Phase 4→5 gate: Verify policy capture happens before any stage transitions.
+///
+/// This test documents the invariant that policy capture MUST happen before
+/// any implementation work begins (phase 4→5 boundary).
+#[test]
+fn test_phase_4_5_gate_ordering() {
+    use crate::memvid_adapter::policy_capture::capture_and_store_policy;
+    use codex_stage0::Stage0Config;
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("gate_ordering.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "ordering_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("should create capsule");
+
+    // Attempt to commit stage WITHOUT policy capture first
+    // This should still work (graceful degradation) but events won't have policy binding
+    handle
+        .commit_stage("SPEC-ORDER", "run-order", "plan", None)
+        .expect("commit should succeed even without policy");
+
+    // Check events - no policy binding expected
+    let events_before = handle.list_events();
+    let stage_events_before: Vec<_> = events_before
+        .iter()
+        .filter(|e| matches!(e.event_type, crate::memvid_adapter::EventType::StageTransition))
+        .collect();
+
+    // StageTransition without policy capture won't have policy fields
+    if !stage_events_before.is_empty() {
+        let event = stage_events_before[0];
+        let has_policy = event.payload.get("policy_id").is_some();
+        // Note: This documents current behavior - events without prior policy capture
+        // have no policy binding. The phase 4→5 gate should enforce policy capture
+        // happens first in the actual pipeline.
+        assert!(
+            !has_policy,
+            "StageTransition without prior policy capture should not have policy_id"
+        );
+    }
+
+    // Now capture policy (late capture - not recommended but should work)
+    let stage0_config = Stage0Config::default();
+    let _snapshot = capture_and_store_policy(&handle, &stage0_config, "SPEC-ORDER", "run-order")
+        .expect("should capture policy");
+
+    // Subsequent stage commits WILL have policy binding
+    handle
+        .commit_stage("SPEC-ORDER", "run-order", "implement", None)
+        .expect("commit after policy capture");
+
+    let events_after = handle.list_events();
+    let stage_events_after: Vec<_> = events_after
+        .iter()
+        .filter(|e| matches!(e.event_type, crate::memvid_adapter::EventType::StageTransition))
+        .filter(|e| e.stage.as_deref() == Some("implement"))
+        .collect();
+
+    // The implement stage transition should have policy binding
+    assert!(
+        !stage_events_after.is_empty(),
+        "Should have implement StageTransition"
+    );
+    assert!(
+        stage_events_after[0].payload.get("policy_id").is_some(),
+        "StageTransition after policy capture MUST have policy_id"
+    );
+}

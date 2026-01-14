@@ -931,6 +931,14 @@ pub struct SpecAutoState {
     pub stage0_disabled: bool,
     /// Whether to include Stage 0 score breakdown in TASK_BRIEF
     pub stage0_explain: bool,
+
+    // SPEC-KIT-977: Policy snapshot tracking for phase 4→5 gate
+    /// Policy ID captured at run start
+    pub policy_id: Option<String>,
+    /// Policy content hash (SHA256)
+    pub policy_hash: Option<String>,
+    /// Policy URI in capsule (mv2://<workspace>/policy/<id>)
+    pub policy_uri: Option<String>,
 }
 
 impl SpecAutoState {
@@ -1032,6 +1040,10 @@ impl SpecAutoState {
             stage0_skip_reason: None,
             stage0_disabled: false,
             stage0_explain: false,
+            // SPEC-KIT-977: Policy tracking for phase 4→5 gate
+            policy_id: None,
+            policy_hash: None,
+            policy_uri: None,
         }
     }
 
@@ -1120,6 +1132,10 @@ impl SpecAutoState {
             stage0_skip_reason: None,
             stage0_disabled: false,
             stage0_explain: false,
+            // SPEC-KIT-977: Policy tracking for phase 4→5 gate
+            policy_id: None,
+            policy_hash: None,
+            policy_uri: None,
         }
     }
 
