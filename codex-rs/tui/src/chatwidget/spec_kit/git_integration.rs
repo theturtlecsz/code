@@ -2,6 +2,7 @@
 //!
 //! SPEC-KIT-922: Auto-commit stage artifacts to maintain clean tree throughout pipeline.
 //! SPEC-KIT-971: Capsule checkpoint integration after git commits.
+//! SPEC-KIT-977: Policy drift detection at stage boundaries.
 //!
 //! Problem: /speckit.auto generates stage artifacts (plan.md, tasks.md, etc.) that dirty
 //! the git tree, causing guardrail failures at subsequent stages.
@@ -10,6 +11,7 @@
 //! tree throughout the pipeline while preserving full evidence chain.
 
 use super::error::{Result, SpecKitError};
+use crate::memvid_adapter::policy_capture;
 use crate::spec_prompts::SpecStage;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -278,6 +280,35 @@ pub fn create_capsule_checkpoint(
     let handle = CapsuleHandle::open(config).map_err(|e| {
         SpecKitError::from_string(format!("Failed to open capsule: {}", e))
     })?;
+
+    // SPEC-KIT-977: Check for policy drift at stage boundary
+    // If policy hash differs from last captured hash, capture new snapshot before checkpoint
+    let stage0_config = codex_stage0::Stage0Config::load().unwrap_or_default();
+    match policy_capture::check_and_recapture_if_changed(&handle, &stage0_config, spec_id, run_id) {
+        Ok(Some(new_policy)) => {
+            tracing::info!(
+                policy_id = %new_policy.policy_id,
+                hash = %new_policy.hash,
+                stage = %stage.display_name(),
+                "Policy drift detected at stage boundary, recaptured snapshot"
+            );
+        }
+        Ok(None) => {
+            // No drift - policy unchanged, proceed with checkpoint
+            tracing::debug!(
+                stage = %stage.display_name(),
+                "Policy unchanged at stage boundary"
+            );
+        }
+        Err(e) => {
+            // Log warning but continue - checkpoint creation should proceed
+            tracing::warn!(
+                error = %e,
+                stage = %stage.display_name(),
+                "Failed to check policy drift, continuing with checkpoint"
+            );
+        }
+    }
 
     // Create checkpoint at stage boundary
     let checkpoint_id = handle

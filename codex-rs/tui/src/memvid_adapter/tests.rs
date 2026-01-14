@@ -1706,6 +1706,113 @@ fn test_phase_4_5_gate_events_include_policy() {
     }
 }
 
+/// SPEC-KIT-977: Test policy drift detection at stage boundaries.
+///
+/// This test verifies that when policy changes between stages,
+/// the system detects the drift and recaptures the policy.
+#[test]
+fn test_policy_drift_detection_at_stage_boundary() {
+    use crate::memvid_adapter::policy_capture::{capture_and_store_policy, check_and_recapture_if_changed};
+    use codex_stage0::Stage0Config;
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("drift_detection.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "drift_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("should create capsule");
+    let stage0_config = Stage0Config::default();
+
+    // Initial policy capture at run start
+    let initial_snapshot = capture_and_store_policy(&handle, &stage0_config, "SPEC-DRIFT", "run-drift")
+        .expect("should capture initial policy");
+
+    let initial_hash = initial_snapshot.hash.clone();
+
+    // First stage boundary - no drift expected (same config)
+    let result = check_and_recapture_if_changed(&handle, &stage0_config, "SPEC-DRIFT", "run-drift")
+        .expect("should check drift");
+
+    assert!(
+        result.is_none(),
+        "No drift should be detected when config unchanged"
+    );
+
+    // Verify current policy hash is still the initial one
+    let current = handle.current_policy().expect("should have current policy");
+    assert_eq!(
+        current.hash, initial_hash,
+        "Current policy hash should match initial"
+    );
+
+    // Commit a stage transition
+    handle
+        .commit_stage("SPEC-DRIFT", "run-drift", "plan", None)
+        .expect("should commit stage");
+
+    // Verify StageTransition has the initial policy info
+    let events = handle.list_events();
+    let stage_events: Vec<_> = events
+        .iter()
+        .filter(|e| matches!(e.event_type, EventType::StageTransition))
+        .collect();
+
+    assert!(!stage_events.is_empty(), "Should have StageTransition event");
+    let event = stage_events[0];
+    assert_eq!(
+        event.payload.get("policy_hash").unwrap().as_str().unwrap(),
+        initial_hash,
+        "StageTransition should have initial policy hash"
+    );
+}
+
+/// SPEC-KIT-977: Test that check_and_recapture_if_changed handles no prior policy.
+///
+/// When there's no current policy, the function should capture one.
+#[test]
+fn test_policy_drift_check_with_no_prior_policy() {
+    use crate::memvid_adapter::policy_capture::check_and_recapture_if_changed;
+    use codex_stage0::Stage0Config;
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("no_prior.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "no_prior_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("should create capsule");
+    let stage0_config = Stage0Config::default();
+
+    // Verify no current policy
+    assert!(
+        handle.current_policy().is_none(),
+        "Should have no policy before check"
+    );
+
+    // Call check_and_recapture_if_changed - should capture initial policy
+    let result = check_and_recapture_if_changed(&handle, &stage0_config, "SPEC-NOP", "run-nop")
+        .expect("should capture when no prior policy");
+
+    assert!(
+        result.is_some(),
+        "Should return Some when capturing initial policy"
+    );
+
+    // Now should have current policy
+    let current = handle.current_policy();
+    assert!(
+        current.is_some(),
+        "Should have current policy after check"
+    );
+}
+
 /// Phase 4→5 gate: Verify policy capture happens before any stage transitions.
 ///
 /// This test documents the invariant that policy capture MUST happen before

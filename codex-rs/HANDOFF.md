@@ -26,10 +26,19 @@ NON-NEGOTIABLES (read first)
    - Lock file path: <capsule_path>.lock (e.g., workspace.mv2.lock)
 
 ===================================================================
-CURRENT STATE — Session completed 2026-01-14
+CURRENT STATE — Session completed 2026-01-14 (Update 2)
 ===================================================================
 
-COMPLETED THIS SESSION:
+COMPLETED THIS SESSION (Update 2):
+
+3. ✅ SPEC-KIT-977 Policy Drift Detection at Stage Boundaries
+   - `check_and_recapture_if_changed()` function in policy_capture.rs
+   - Compares current policy hash with fresh capture
+   - If drift detected: recaptures, stores dual (FS + capsule), emits event
+   - Wired into `create_capsule_checkpoint()` in git_integration.rs
+   - 2 new drift detection tests passing
+
+COMPLETED THIS SESSION (Update 1):
 
 1. ✅ SPEC-KIT-971 CLI Commands Complete
    - `speckit capsule init` - Create new workspace.mv2
@@ -94,7 +103,9 @@ FILES CHANGED THIS SESSION (2026-01-14)
 | cli/src/speckit_cmd.rs | Added init, events, export commands |
 | tui/src/chatwidget/spec_kit/pipeline_coordinator.rs | Policy capture at run start |
 | tui/src/chatwidget/spec_kit/state.rs | policy_id, policy_hash, policy_uri fields |
-| tui/src/memvid_adapter/tests.rs | Phase 4→5 gate verification tests |
+| tui/src/chatwidget/spec_kit/git_integration.rs | Policy drift check before checkpoint |
+| tui/src/memvid_adapter/policy_capture.rs | check_and_recapture_if_changed function |
+| tui/src/memvid_adapter/tests.rs | Phase 4→5 gate + drift detection tests |
 
 PRIOR SESSION (2026-01-13):
 
@@ -115,15 +126,15 @@ TEST SUMMARY
 | Module | Tests | Status |
 |--------|-------|--------|
 | git_integration | 5 | ✅ All passing |
-| capsule | 11 | ✅ All passing (incl. phase 4→5 gate) |
+| policy (TUI) | 10 | ✅ All passing (incl. drift detection) |
 | stage0 policy | 15 | ✅ All passing |
 | CLI | 7 | ✅ All passing |
 
 Run commands:
 ```bash
 cargo test -p codex-tui --lib "git_integration"
-cargo test -p codex-tui --lib "capsule"
-cargo test -p codex-tui --lib "phase_4_5"
+cargo test -p codex-tui --lib "policy"
+cargo test -p codex-tui --lib "policy_drift"
 cargo test -p codex-stage0 "policy"
 ```
 
