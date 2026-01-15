@@ -201,6 +201,9 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
     // Capsule commands (SPEC-KIT-971)
     registry.register(Box::new(CapsuleDoctorCommand));
 
+    // Reflex commands (SPEC-KIT-978)
+    registry.register(Box::new(SpecKitReflexCommand));
+
     // Search commands
     registry.register(Box::new(SearchCommand));
     registry.register(Box::new(MemorySearchCommand)); // SPEC-KIT-972: Memory search with --explain

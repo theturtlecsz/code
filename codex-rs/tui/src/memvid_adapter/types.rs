@@ -251,12 +251,16 @@ pub struct RunEventEnvelope {
 /// Event types for the baseline event track.
 ///
 /// SPEC-KIT-971 baseline: StageTransition, PolicySnapshotRef
+/// SPEC-KIT-978 adds: RoutingDecision (Implementer mode selection)
 /// SPEC-KIT-975 expands: ToolCall, RetrievalRequest, GateDecision, etc.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EventType {
     // SPEC-KIT-971 baseline
     StageTransition,
     PolicySnapshotRef,
+
+    // SPEC-KIT-978: Model routing decisions (reflex vs cloud)
+    RoutingDecision,
 
     // SPEC-KIT-975 will add:
     // RetrievalRequest,
@@ -277,8 +281,96 @@ impl EventType {
         match self {
             EventType::StageTransition => "StageTransition",
             EventType::PolicySnapshotRef => "PolicySnapshotRef",
+            EventType::RoutingDecision => "RoutingDecision",
         }
     }
+}
+
+// =============================================================================
+// SPEC-KIT-978: Routing Decision Types
+// =============================================================================
+
+/// Routing mode for Implementer role.
+///
+/// SPEC-KIT-978: Implementer can run in two modes:
+/// - Cloud: Standard cloud inference (Claude/GPT)
+/// - Reflex: Local inference via SGLang/vLLM
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RoutingMode {
+    /// Standard cloud inference (default)
+    Cloud,
+    /// Local reflex inference (SPEC-KIT-978)
+    Reflex,
+}
+
+impl RoutingMode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RoutingMode::Cloud => "cloud",
+            RoutingMode::Reflex => "reflex",
+        }
+    }
+}
+
+/// Reason for routing decision fallback.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RoutingFallbackReason {
+    /// Reflex mode is disabled in config
+    ReflexDisabled,
+    /// Reflex server is not healthy
+    ServerUnhealthy,
+    /// Configured model not available
+    ModelNotAvailable,
+    /// Latency threshold exceeded
+    LatencyThresholdExceeded,
+    /// Success rate below threshold
+    SuccessRateBelowThreshold,
+    /// JSON schema compliance below threshold
+    JsonComplianceBelowThreshold,
+    /// Not in Implement stage (reflex only valid for Implement)
+    NotImplementStage,
+}
+
+impl RoutingFallbackReason {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RoutingFallbackReason::ReflexDisabled => "reflex_disabled",
+            RoutingFallbackReason::ServerUnhealthy => "server_unhealthy",
+            RoutingFallbackReason::ModelNotAvailable => "model_not_available",
+            RoutingFallbackReason::LatencyThresholdExceeded => "latency_threshold_exceeded",
+            RoutingFallbackReason::SuccessRateBelowThreshold => "success_rate_below_threshold",
+            RoutingFallbackReason::JsonComplianceBelowThreshold => "json_compliance_below_threshold",
+            RoutingFallbackReason::NotImplementStage => "not_implement_stage",
+        }
+    }
+}
+
+/// Routing decision outcome for capsule event.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoutingDecisionPayload {
+    /// Selected routing mode
+    pub mode: RoutingMode,
+    /// Stage where decision was made
+    pub stage: String,
+    /// Agent/role making the request
+    pub role: String,
+    /// Whether this was a fallback from reflex
+    pub is_fallback: bool,
+    /// Reason for fallback (if applicable)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fallback_reason: Option<RoutingFallbackReason>,
+    /// Reflex endpoint (if reflex mode)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reflex_endpoint: Option<String>,
+    /// Reflex model (if reflex mode)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reflex_model: Option<String>,
+    /// Cloud model (if cloud mode)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cloud_model: Option<String>,
+    /// Health check latency in ms (if reflex attempted)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub health_check_latency_ms: Option<u64>,
 }
 
 // =============================================================================

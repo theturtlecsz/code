@@ -15,6 +15,7 @@ mod msearch; // SPEC-KIT-972: Memory search with --explain
 mod plan;
 mod project; // SPEC-KIT-960: Project scaffolding command
 mod quality;
+mod reflex; // SPEC-KIT-978: Reflex local inference
 pub mod search;
 mod special;
 mod status;
@@ -32,6 +33,7 @@ pub use msearch::*;
 pub use plan::*;
 pub use project::*;
 pub use quality::*;
+pub use reflex::*;
 pub use search::*;
 pub use special::*;
 pub use status::*;

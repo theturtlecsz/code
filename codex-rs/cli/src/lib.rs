@@ -3,6 +3,7 @@ pub mod debug_sandbox;
 mod exit_status;
 pub mod login;
 pub mod proto;
+pub mod reflex_cmd;
 
 use clap::Parser;
 use codex_common::CliConfigOverrides;

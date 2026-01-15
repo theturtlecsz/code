@@ -24,7 +24,7 @@
 use crate::memvid_adapter::lock::{CapsuleLock, LockError, LockMetadata, is_locked, lock_path_for};
 use crate::memvid_adapter::types::{
     BranchId, CheckpointId, CheckpointMetadata, EventType, LogicalUri, ObjectType,
-    PhysicalPointer, RunEventEnvelope, UriIndex,
+    PhysicalPointer, RoutingDecisionPayload, RunEventEnvelope, UriIndex,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -1147,6 +1147,34 @@ impl CapsuleHandle {
                 "policy_id": policy_id,
                 "policy_hash": policy_hash,
             }),
+        )
+    }
+
+    /// Emit a RoutingDecision event (SPEC-KIT-978).
+    ///
+    /// Records every model routing decision (reflex vs cloud) for the
+    /// Implementer role. This enables:
+    /// - Bakeoff analysis (compare reflex vs cloud outcomes)
+    /// - Audit trail for routing decisions
+    /// - Fallback tracking for reliability metrics
+    pub fn emit_routing_decision(
+        &self,
+        spec_id: &str,
+        run_id: &str,
+        payload: &RoutingDecisionPayload,
+    ) -> Result<LogicalUri> {
+        let payload_json = serde_json::to_value(payload).map_err(|e| {
+            CapsuleError::InvalidOperation {
+                reason: format!("Failed to serialize routing decision: {}", e),
+            }
+        })?;
+
+        self.emit_event(
+            spec_id,
+            run_id,
+            Some(&payload.stage),
+            EventType::RoutingDecision,
+            payload_json,
         )
     }
 

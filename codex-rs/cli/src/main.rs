@@ -29,12 +29,14 @@ use std::process;
 use tokio::runtime::{Builder as TokioRuntimeBuilder, Handle as TokioHandle};
 
 mod mcp_cmd;
+mod reflex_cmd;
 mod speckit_cmd;
 mod stage0_cmd;
 
 use crate::local_memory_cmd::LocalMemoryCli;
 use crate::mcp_cmd::McpCli;
 use crate::proto::ProtoCli;
+use crate::reflex_cmd::ReflexCli;
 use crate::speckit_cmd::SpeckitCli;
 use crate::stage0_cmd::Stage0Cli;
 
@@ -129,6 +131,9 @@ enum Subcommand {
 
     /// Stage0 CLI — convergence diagnostics and Stage0 utilities.
     Stage0(Stage0Cli),
+
+    /// Reflex CLI — local inference server management (SPEC-KIT-978).
+    Reflex(ReflexCli),
 }
 
 #[derive(Debug, Parser)]
@@ -375,6 +380,12 @@ async fn cli_main(codex_linux_sandbox_exe: Option<PathBuf>) -> anyhow::Result<()
         }
         Some(Subcommand::Stage0(stage0_cli)) => {
             let exit_code = stage0_cli.run().await;
+            if exit_code != 0 {
+                process::exit(exit_code);
+            }
+        }
+        Some(Subcommand::Reflex(reflex_cli)) => {
+            let exit_code = reflex_cli.run().await;
             if exit_code != 0 {
                 process::exit(exit_code);
             }

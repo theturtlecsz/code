@@ -6,7 +6,7 @@
 // Re-export command handlers for backward compatibility
 pub use super::command_handlers::{
     halt_spec_auto_with_error, handle_guardrail, handle_spec_consensus, handle_spec_review,
-    handle_spec_status,
+    handle_spec_status, handle_speckit_reflex,
 };
 
 // Re-export agent orchestration functions

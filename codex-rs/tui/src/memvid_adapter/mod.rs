@@ -42,6 +42,8 @@ pub use lock::{LockMetadata, is_locked, lock_path_for};
 pub use types::{
     LogicalUri, CheckpointId, CheckpointMetadata, BranchId,
     RunEventEnvelope, EventType, UriIndex,
+    // SPEC-KIT-978: Routing decision types
+    RoutingMode, RoutingFallbackReason, RoutingDecisionPayload,
 };
 pub use policy_capture::{
     capture_and_store_policy, load_policy, list_policies, latest_policy,

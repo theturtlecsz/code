@@ -23,6 +23,7 @@ pub mod librarian;
 pub mod overlay_db;
 pub mod policy;
 pub mod project_intel;
+pub mod reflex_config; // SPEC-KIT-978: Reflex configuration
 pub mod scoring;
 pub mod system_memory;
 pub mod tfidf;
@@ -56,6 +57,7 @@ pub use system_memory::{
     ArtifactType, Stage0PointerInfo, Tier2Status, compute_content_hash, extract_summary_bullets,
     store_stage0_pointer, store_system_pointer,
 };
+pub use reflex_config::{ReflexConfig, ReflexThresholds, load_reflex_config};
 pub use tier2::{
     CausalLinkSuggestion, DivineTruth, Tier2Client, Tier2Response, build_fallback_divine_truth,
     build_tier2_prompt, parse_divine_truth, validate_causal_links,

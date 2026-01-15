@@ -21,9 +21,12 @@ use super::validation_lifecycle::{
     record_validate_lifecycle_event,
 };
 use crate::history_cell::HistoryCellType;
+use crate::memvid_adapter::{CapsuleConfig, CapsuleHandle};
 use crate::spec_prompts::{SpecAgent, SpecStage};
 // P6-SYNC Phase 6: Token metrics UI integration
 use crate::token_metrics_widget::{TokenMetricsWidget, model_context_window};
+// SPEC-KIT-978: Reflex routing
+use super::reflex_router::{decide_implementer_routing, emit_routing_event};
 use codex_core::agent_tool::AGENT_MANAGER;
 use codex_core::config_types::AgentConfig;
 use codex_core::protocol::{AgentInfo, InputItem};
@@ -808,6 +811,77 @@ async fn spawn_regular_stage_agents_parallel(
     Ok(spawn_infos)
 }
 
+/// SPEC-KIT-978: Emit routing decision event for Implementer role
+///
+/// Records the routing decision (reflex vs cloud) to the capsule for
+/// bakeoff analysis and audit trail.
+fn emit_implementer_routing_decision(
+    cwd: &Path,
+    spec_id: &str,
+    run_id: Option<&str>,
+    cloud_model: &str,
+    run_tag: &str,
+) {
+    // Make routing decision
+    let decision = decide_implementer_routing("implement", cloud_model, None);
+
+    tracing::info!(
+        "{} SPEC-KIT-978: Implementer routing decision: mode={}, is_fallback={}",
+        run_tag,
+        decision.mode.as_str(),
+        decision.is_fallback
+    );
+
+    if let Some(reason) = &decision.fallback_reason {
+        tracing::info!(
+            "{} SPEC-KIT-978: Fallback reason: {}",
+            run_tag,
+            reason.as_str()
+        );
+    }
+
+    // Try to emit event to capsule (non-blocking)
+    let run_id_str = run_id.unwrap_or("unknown");
+    let capsule_path = cwd.join(".speckit").join("memvid").join("workspace.mv2");
+    let config = CapsuleConfig {
+        capsule_path,
+        workspace_id: "workspace".to_string(),
+        ..Default::default()
+    };
+
+    match CapsuleHandle::open(config) {
+        Ok(handle) => {
+            if let Err(e) = emit_routing_event(
+                &handle,
+                spec_id,
+                run_id_str,
+                "implement",
+                "Implementer",
+                &decision,
+            ) {
+                tracing::warn!(
+                    "{} SPEC-KIT-978: Failed to emit routing event: {}",
+                    run_tag,
+                    e
+                );
+            } else {
+                tracing::debug!(
+                    "{} SPEC-KIT-978: Routing decision event emitted to capsule",
+                    run_tag
+                );
+            }
+        }
+        Err(e) => {
+            // Capsule may not exist yet or be locked - just log and continue
+            tracing::debug!(
+                "{} SPEC-KIT-978: Could not open capsule for routing event: {}",
+                run_tag,
+                e
+            );
+        }
+    }
+}
+
 /// Spawn regular stage agents natively (SPEC-KIT-900 Session 3)
 /// Routes to appropriate execution pattern based on stage type
 async fn spawn_regular_stage_agents_native(
@@ -866,6 +940,20 @@ async fn spawn_regular_stage_agents_native(
                 run_tag,
                 stage.display_name()
             );
+
+            // SPEC-KIT-978: Emit routing decision event before spawning
+            let cloud_model = agent_configs
+                .first()
+                .map(|c| c.name.as_str())
+                .unwrap_or("claude-3-opus");
+            emit_implementer_routing_decision(
+                cwd,
+                spec_id,
+                run_id.as_deref(),
+                cloud_model,
+                &run_tag,
+            );
+
             spawn_regular_stage_agents_sequential(
                 cwd,
                 spec_id,
