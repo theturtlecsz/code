@@ -24,7 +24,9 @@ use super::validation_lifecycle::{
     record_validate_lifecycle_event,
 };
 use crate::history_cell::HistoryCellType;
-use crate::memvid_adapter::{CapsuleConfig, CapsuleHandle, policy_capture};
+use crate::memvid_adapter::{
+    CapsuleHandle, default_capsule_config, policy_capture,
+};
 use crate::slash_command::{HalMode, SlashCommand};
 use crate::spec_prompts::SpecStage;
 use std::fs;
@@ -181,12 +183,8 @@ pub fn handle_spec_auto(
 
     // SPEC-KIT-977: Capture policy snapshot at run start for phase 4→5 gate
     if let Some(run_id) = &state.run_id {
-        let capsule_path = widget.config.cwd.join(".speckit/workspace.mv2");
-        let capsule_config = CapsuleConfig {
-            capsule_path: capsule_path.clone(),
-            workspace_id: spec_id.clone(),
-            ..Default::default()
-        };
+        // Use canonical capsule config (SPEC-KIT-971/977 alignment)
+        let capsule_config = default_capsule_config(&widget.config.cwd);
 
         // Open capsule and capture policy (non-blocking - continue on failure)
         match CapsuleHandle::open(capsule_config) {

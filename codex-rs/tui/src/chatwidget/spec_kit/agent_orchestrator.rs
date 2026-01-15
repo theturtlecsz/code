@@ -21,7 +21,7 @@ use super::validation_lifecycle::{
     record_validate_lifecycle_event,
 };
 use crate::history_cell::HistoryCellType;
-use crate::memvid_adapter::{CapsuleConfig, CapsuleHandle};
+use crate::memvid_adapter::{CapsuleHandle, default_capsule_config};
 use crate::spec_prompts::{SpecAgent, SpecStage};
 // P6-SYNC Phase 6: Token metrics UI integration
 use crate::token_metrics_widget::{TokenMetricsWidget, model_context_window};
@@ -842,12 +842,8 @@ fn emit_implementer_routing_decision(
 
     // Try to emit event to capsule (non-blocking)
     let run_id_str = run_id.unwrap_or("unknown");
-    let capsule_path = cwd.join(".speckit").join("memvid").join("workspace.mv2");
-    let config = CapsuleConfig {
-        capsule_path,
-        workspace_id: "workspace".to_string(),
-        ..Default::default()
-    };
+    // Use canonical capsule config (SPEC-KIT-971/977 alignment)
+    let config = default_capsule_config(cwd);
 
     match CapsuleHandle::open(config) {
         Ok(handle) => {

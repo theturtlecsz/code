@@ -243,7 +243,10 @@ pub fn get_head_commit_hash(cwd: &Path) -> Result<String> {
 // SPEC-KIT-971: Capsule Checkpoint Integration
 // =============================================================================
 
-use crate::memvid_adapter::{CapsuleConfig, CapsuleHandle, CheckpointId};
+use crate::memvid_adapter::{
+    CapsuleConfig, CapsuleHandle, CheckpointId, default_capsule_config,
+    DEFAULT_WORKSPACE_ID,
+};
 
 /// Create a capsule checkpoint after stage completion.
 ///
@@ -268,13 +271,8 @@ pub fn create_capsule_checkpoint(
     commit_hash: Option<&str>,
     cwd: &Path,
 ) -> Result<CheckpointId> {
-    let capsule_path = cwd.join(".speckit").join("memvid").join("workspace.mv2");
-
-    let config = CapsuleConfig {
-        capsule_path,
-        workspace_id: "workspace".to_string(),
-        ..Default::default()
-    };
+    // Use canonical capsule config (SPEC-KIT-971/977 alignment)
+    let config = default_capsule_config(cwd);
 
     // Open capsule with write lock for checkpoint creation
     let handle = CapsuleHandle::open(config).map_err(|e| {
@@ -419,7 +417,7 @@ mod tests {
         let capsule_path = capsule_dir.join("workspace.mv2");
         let config = CapsuleConfig {
             capsule_path,
-            workspace_id: "workspace".to_string(),
+            workspace_id: DEFAULT_WORKSPACE_ID.to_string(),
             ..Default::default()
         };
 
@@ -470,7 +468,7 @@ mod tests {
         let capsule_path = capsule_dir.join("workspace.mv2");
         let config = CapsuleConfig {
             capsule_path,
-            workspace_id: "workspace".to_string(),
+            workspace_id: DEFAULT_WORKSPACE_ID.to_string(),
             ..Default::default()
         };
 
@@ -509,7 +507,7 @@ mod tests {
         let capsule_path = capsule_dir.join("workspace.mv2");
         let config = CapsuleConfig {
             capsule_path,
-            workspace_id: "workspace".to_string(),
+            workspace_id: DEFAULT_WORKSPACE_ID.to_string(),
             ..Default::default()
         };
 

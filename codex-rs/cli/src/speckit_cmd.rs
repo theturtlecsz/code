@@ -2224,9 +2224,10 @@ fn run_capsule_commit(capsule_path: &PathBuf, args: CapsuleCommitArgs) -> anyhow
         std::process::exit(capsule_exit::USER_ERROR);
     }
 
+    // Use canonical workspace_id for URI consistency (SPEC-KIT-971/977 alignment)
     let config = CapsuleConfig {
         capsule_path: capsule_path.clone(),
-        workspace_id: "cli".to_string(),
+        workspace_id: "default".to_string(),
         ..Default::default()
     };
 

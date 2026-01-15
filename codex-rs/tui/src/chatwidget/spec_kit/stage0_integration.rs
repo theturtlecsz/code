@@ -11,7 +11,10 @@
 //! - SPEC-DOGFOOD-001 S30: Progress callbacks for UX feedback
 //! - SPEC-KIT-971: Backend routing via memory_backend config
 
-use crate::memvid_adapter::{create_unified_memory_client, UnifiedMemoryClient};
+use crate::memvid_adapter::{
+    create_unified_memory_client, default_capsule_path, UnifiedMemoryClient,
+    DEFAULT_WORKSPACE_ID,
+};
 use crate::stage0_adapters::{LlmStubAdapter, NoopTier2Client, Tier2HttpAdapter};
 use crate::vector_state::VECTOR_STATE;
 use codex_stage0::dcc::EnvCtx;
@@ -290,7 +293,8 @@ pub fn run_stage0_for_spec(
     // SPEC-KIT-971: Create unified memory client
     // For memvid backend: does NOT require local-memory daemon upfront
     // Fallback to local-memory only checked if memvid fails
-    let capsule_path = cwd.join(".speckit/memvid/workspace.mv2");
+    // Use canonical capsule config (SPEC-KIT-971/977 alignment)
+    let capsule_path = default_capsule_path(cwd);
 
     // Use tokio runtime to call async create_unified_memory_client
     let rt = match tokio::runtime::Builder::new_current_thread()
@@ -323,7 +327,7 @@ pub fn run_stage0_for_spec(
     let memory_client: UnifiedMemoryClient = match rt.block_on(create_unified_memory_client(
         memory_backend,
         capsule_path,
-        "default".to_string(),
+        DEFAULT_WORKSPACE_ID.to_string(),
         || {
             crate::local_memory_cli::local_memory_daemon_healthy_blocking(
                 Duration::from_millis(500),

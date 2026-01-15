@@ -18,6 +18,24 @@
 //! - Stage boundary commits create checkpoints
 //! - All cross-object references use logical URIs (never raw frame IDs)
 
+use std::path::{Path, PathBuf};
+
+// =============================================================================
+// Canonical Capsule Configuration (SPEC-KIT-971/977 alignment)
+// =============================================================================
+
+/// Canonical relative path for the workspace capsule.
+///
+/// All pipeline, TUI, and CLI operations MUST use this path to ensure
+/// a single capsule location.
+pub const DEFAULT_CAPSULE_RELATIVE_PATH: &str = ".speckit/memvid/workspace.mv2";
+
+/// Canonical workspace ID for minting mv2:// URIs.
+///
+/// All write operations that mint URIs (policy snapshots, events, artifacts)
+/// MUST use this workspace ID to ensure URI consistency.
+pub const DEFAULT_WORKSPACE_ID: &str = "default";
+
 mod adapter;
 mod capsule;
 pub mod eval;
@@ -48,6 +66,27 @@ pub use types::{
 pub use policy_capture::{
     capture_and_store_policy, load_policy, list_policies, latest_policy,
 };
+
+// =============================================================================
+// Capsule Configuration Helpers
+// =============================================================================
+
+/// Get the canonical capsule path for a given working directory.
+pub fn default_capsule_path(cwd: &Path) -> PathBuf {
+    cwd.join(DEFAULT_CAPSULE_RELATIVE_PATH)
+}
+
+/// Get the canonical capsule configuration for a given working directory.
+///
+/// Use this for all capsule operations to ensure consistent paths and
+/// workspace IDs across TUI, CLI, and pipeline.
+pub fn default_capsule_config(cwd: &Path) -> CapsuleConfig {
+    CapsuleConfig {
+        capsule_path: default_capsule_path(cwd),
+        workspace_id: DEFAULT_WORKSPACE_ID.to_string(),
+        ..Default::default()
+    }
+}
 
 #[cfg(test)]
 mod tests;
