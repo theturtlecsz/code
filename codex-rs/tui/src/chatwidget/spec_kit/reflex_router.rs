@@ -204,6 +204,23 @@ pub fn decide_implementer_routing(
         };
     }
 
+    // Rule 4: Check bakeoff thresholds (only if we have enough samples)
+    if let Some(threshold_failure) = check_bakeoff_thresholds(&config) {
+        tracing::info!(
+            "SPEC-KIT-978: Reflex threshold failure: {:?}",
+            threshold_failure
+        );
+
+        return RoutingDecision {
+            mode: RoutingMode::Cloud,
+            is_fallback: true, // This IS a fallback - threshold check failed
+            fallback_reason: Some(threshold_failure),
+            reflex_config: Some(config),
+            health_result: Some(health),
+            cloud_model: Some(cloud_model.to_string()),
+        };
+    }
+
     // All checks passed - use reflex
     RoutingDecision {
         mode: RoutingMode::Reflex,
@@ -213,6 +230,93 @@ pub fn decide_implementer_routing(
         health_result: Some(health),
         cloud_model: None,
     }
+}
+
+/// Check bakeoff thresholds and return fallback reason if any threshold fails.
+///
+/// Returns None if thresholds are met or if there aren't enough samples.
+/// Returns Some(RoutingFallbackReason) if a threshold is violated.
+fn check_bakeoff_thresholds(config: &ReflexConfig) -> Option<RoutingFallbackReason> {
+    use super::reflex_metrics::get_metrics_db;
+
+    // Skip threshold check if minimum samples not configured (default 10)
+    let min_samples = 10u64;
+    let since = Duration::from_secs(24 * 3600); // 24 hours
+
+    let db = match get_metrics_db() {
+        Ok(db) => db,
+        Err(e) => {
+            tracing::debug!(
+                "SPEC-KIT-978: Skipping threshold check - metrics DB not available: {}",
+                e
+            );
+            return None; // Can't check thresholds, proceed with reflex
+        }
+    };
+
+    let stats = match db.compute_bakeoff_stats(since) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::debug!(
+                "SPEC-KIT-978: Skipping threshold check - stats computation failed: {}",
+                e
+            );
+            return None;
+        }
+    };
+
+    let reflex_stats = match &stats.reflex {
+        Some(r) => r,
+        None => {
+            tracing::debug!("SPEC-KIT-978: Skipping threshold check - no reflex samples");
+            return None; // No data to check against
+        }
+    };
+
+    // Check minimum sample count
+    if reflex_stats.total_attempts < min_samples {
+        tracing::debug!(
+            "SPEC-KIT-978: Skipping threshold check - insufficient samples ({} < {})",
+            reflex_stats.total_attempts,
+            min_samples
+        );
+        return None; // Not enough data to make a decision
+    }
+
+    let thresholds = &config.thresholds;
+
+    // Check P95 latency
+    if reflex_stats.p95_latency_ms > thresholds.p95_latency_ms {
+        tracing::warn!(
+            "SPEC-KIT-978: P95 latency {}ms exceeds threshold {}ms",
+            reflex_stats.p95_latency_ms,
+            thresholds.p95_latency_ms
+        );
+        return Some(RoutingFallbackReason::LatencyThresholdExceeded);
+    }
+
+    // Check success rate
+    if reflex_stats.success_rate < thresholds.success_parity_percent as f64 {
+        tracing::warn!(
+            "SPEC-KIT-978: Success rate {:.1}% below threshold {}%",
+            reflex_stats.success_rate,
+            thresholds.success_parity_percent
+        );
+        return Some(RoutingFallbackReason::SuccessRateBelowThreshold);
+    }
+
+    // Check JSON compliance
+    if reflex_stats.json_compliance_rate < thresholds.json_schema_compliance_percent as f64 {
+        tracing::warn!(
+            "SPEC-KIT-978: JSON compliance {:.1}% below threshold {}%",
+            reflex_stats.json_compliance_rate,
+            thresholds.json_schema_compliance_percent
+        );
+        return Some(RoutingFallbackReason::JsonComplianceBelowThreshold);
+    }
+
+    // All thresholds met
+    None
 }
 
 /// Emit a RoutingDecision event to the capsule.
@@ -300,5 +404,79 @@ mod tests {
         assert!(json.contains("\"mode\": \"Cloud\"")); // Note: spaces in pretty-print
         assert!(json.contains("\"is_fallback\": true"));
         assert!(json.contains("\"fallback_reason\": \"ServerUnhealthy\""));
+    }
+
+    #[test]
+    fn test_routing_decision_mode_branching() {
+        // Test that RoutingDecision mode can be matched for branching
+        let cloud_decision = RoutingDecision {
+            mode: RoutingMode::Cloud,
+            is_fallback: false,
+            fallback_reason: Some(RoutingFallbackReason::ReflexDisabled),
+            reflex_config: None,
+            health_result: None,
+            cloud_model: Some("claude-3-opus".to_string()),
+        };
+
+        // Verify cloud mode is detected correctly
+        assert_eq!(cloud_decision.mode, RoutingMode::Cloud);
+        assert!(cloud_decision.cloud_model.is_some());
+
+        // Test reflex decision (simulated - would come from healthy reflex)
+        let reflex_decision = RoutingDecision {
+            mode: RoutingMode::Reflex,
+            is_fallback: false,
+            fallback_reason: None,
+            reflex_config: Some(codex_stage0::ReflexConfig {
+                enabled: true,
+                endpoint: "http://localhost:3009/v1".to_string(),
+                model: "qwen2.5-coder-7b-instruct".to_string(),
+                timeout_ms: 30000,
+                json_schema_required: true,
+                fallback_to_cloud: true,
+                thresholds: codex_stage0::ReflexThresholds::default(),
+            }),
+            health_result: Some(ReflexHealthResult {
+                healthy: true,
+                server_reachable: true,
+                model_available: true,
+                latency_ms: Some(50),
+                error: None,
+            }),
+            cloud_model: None,
+        };
+
+        // Verify reflex mode is detected correctly
+        assert_eq!(reflex_decision.mode, RoutingMode::Reflex);
+        assert!(reflex_decision.reflex_config.is_some());
+        assert!(reflex_decision.health_result.as_ref().unwrap().healthy);
+    }
+
+    #[test]
+    fn test_fallback_reason_variants() {
+        // Ensure all fallback reasons serialize correctly
+        let reasons = vec![
+            RoutingFallbackReason::ReflexDisabled,
+            RoutingFallbackReason::ServerUnhealthy,
+            RoutingFallbackReason::ModelNotAvailable,
+            RoutingFallbackReason::LatencyThresholdExceeded,
+            RoutingFallbackReason::SuccessRateBelowThreshold,
+            RoutingFallbackReason::JsonComplianceBelowThreshold,
+            RoutingFallbackReason::NotImplementStage,
+        ];
+
+        for reason in reasons {
+            let json = serde_json::to_string(&reason).unwrap();
+            assert!(!json.is_empty());
+            // Should be serializable as a string
+            let parsed: RoutingFallbackReason = serde_json::from_str(&json).unwrap();
+            assert_eq!(reason.as_str(), parsed.as_str());
+        }
+    }
+
+    #[test]
+    fn test_routing_mode_string_representation() {
+        assert_eq!(RoutingMode::Cloud.as_str(), "cloud");
+        assert_eq!(RoutingMode::Reflex.as_str(), "reflex");
     }
 }

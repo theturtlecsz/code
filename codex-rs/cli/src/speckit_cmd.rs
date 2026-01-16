@@ -146,6 +146,12 @@ pub enum SpeckitSubcommand {
     /// SPEC-KIT-971: Headless CLI for capsule management.
     /// Provides doctor, stats, checkpoints, commit, and resolve-uri commands.
     Capsule(CapsuleArgs),
+
+    /// Reflex (local inference) management
+    ///
+    /// SPEC-KIT-978: Commands for reflex mode configuration and bakeoff analysis.
+    /// Compare local inference performance against cloud inference.
+    Reflex(ReflexArgs),
 }
 
 /// Arguments for `speckit status` command
@@ -588,6 +594,62 @@ pub struct CapsuleExportArgs {
     pub json: bool,
 }
 
+// =============================================================================
+// SPEC-KIT-978: Reflex (Local Inference) Commands
+// =============================================================================
+
+/// Arguments for `speckit reflex` subcommand
+///
+/// SPEC-KIT-978: Reflex mode management and bakeoff analysis.
+#[derive(Debug, Parser)]
+pub struct ReflexArgs {
+    #[command(subcommand)]
+    pub command: ReflexSubcommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ReflexSubcommand {
+    /// Show bakeoff statistics (reflex vs cloud)
+    ///
+    /// Compares performance metrics between local reflex inference
+    /// and cloud inference for data-driven routing decisions.
+    Bakeoff(ReflexBakeoffArgs),
+
+    /// Check if reflex meets bakeoff thresholds
+    ///
+    /// Validates P95 latency, success rate, and JSON compliance
+    /// against configured thresholds.
+    Check(ReflexCheckArgs),
+}
+
+/// Arguments for `speckit reflex bakeoff`
+#[derive(Debug, Parser)]
+pub struct ReflexBakeoffArgs {
+    /// Duration to analyze (default: 24h, format: 1h, 7d, 30d)
+    #[arg(long = "since", short = 's', default_value = "24h")]
+    pub since: String,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
+/// Arguments for `speckit reflex check`
+#[derive(Debug, Parser)]
+pub struct ReflexCheckArgs {
+    /// Duration to analyze (default: 24h)
+    #[arg(long = "since", short = 's', default_value = "24h")]
+    pub since: String,
+
+    /// Minimum samples required (default: 10)
+    #[arg(long = "min-samples", default_value = "10")]
+    pub min_samples: u64,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
 impl SpeckitCli {
     /// Run the speckit CLI command
     pub async fn run(self) -> anyhow::Result<()> {
@@ -595,9 +657,12 @@ impl SpeckitCli {
             .cwd
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
-        // Handle capsule commands separately (don't need executor)
+        // Handle capsule and reflex commands separately (don't need executor)
         if let SpeckitSubcommand::Capsule(args) = self.command {
             return run_capsule(cwd, args);
+        }
+        if let SpeckitSubcommand::Reflex(args) = self.command {
+            return run_reflex(args);
         }
 
         // Resolve policy from env/config at adapter boundary (not in executor)
@@ -626,6 +691,7 @@ impl SpeckitCli {
             SpeckitSubcommand::Run(args) => run_run(executor, args),
             SpeckitSubcommand::Migrate(args) => run_migrate(executor, args),
             SpeckitSubcommand::Capsule(_) => unreachable!("Capsule handled above"),
+            SpeckitSubcommand::Reflex(_) => unreachable!("Reflex handled above"),
         }
     }
 }
@@ -2714,6 +2780,213 @@ fn run_capsule_export(capsule_path: &PathBuf, args: CapsuleExportArgs) -> anyhow
         println!("  Events: {} → {}", run_events.len(), events_file.display());
         println!("  Checkpoints: {} → {}", run_checkpoints.len(), checkpoints_file.display());
         println!("  Manifest: {}", manifest_file.display());
+    }
+
+    Ok(())
+}
+
+// =============================================================================
+// SPEC-KIT-978: Reflex Commands Implementation
+// =============================================================================
+
+/// Run reflex subcommand
+fn run_reflex(args: ReflexArgs) -> anyhow::Result<()> {
+    match args.command {
+        ReflexSubcommand::Bakeoff(args) => run_reflex_bakeoff(args),
+        ReflexSubcommand::Check(args) => run_reflex_check(args),
+    }
+}
+
+/// Parse duration string (e.g., "1h", "24h", "7d") to Duration
+fn parse_duration_str(s: &str) -> anyhow::Result<std::time::Duration> {
+    let s = s.trim().to_lowercase();
+
+    if s.ends_with('h') {
+        let hours: u64 = s[..s.len() - 1]
+            .parse()
+            .map_err(|_| anyhow::anyhow!("Invalid hours: {}", s))?;
+        Ok(std::time::Duration::from_secs(hours * 3600))
+    } else if s.ends_with('d') {
+        let days: u64 = s[..s.len() - 1]
+            .parse()
+            .map_err(|_| anyhow::anyhow!("Invalid days: {}", s))?;
+        Ok(std::time::Duration::from_secs(days * 86400))
+    } else if s.ends_with('m') {
+        let mins: u64 = s[..s.len() - 1]
+            .parse()
+            .map_err(|_| anyhow::anyhow!("Invalid minutes: {}", s))?;
+        Ok(std::time::Duration::from_secs(mins * 60))
+    } else {
+        // Try parsing as seconds
+        let secs: u64 = s
+            .parse()
+            .map_err(|_| anyhow::anyhow!("Invalid duration format: {}", s))?;
+        Ok(std::time::Duration::from_secs(secs))
+    }
+}
+
+/// Run `speckit reflex bakeoff` command
+///
+/// Shows P95 latency, success rate, and JSON compliance comparing reflex vs cloud.
+fn run_reflex_bakeoff(args: ReflexBakeoffArgs) -> anyhow::Result<()> {
+    use codex_tui::reflex_metrics::ReflexMetricsDb;
+
+    let db = ReflexMetricsDb::init_default()?;
+    let since = parse_duration_str(&args.since)?;
+    let stats = db.compute_bakeoff_stats(since)?;
+
+    if args.json {
+        let json = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "tool_version": tool_version(),
+            "period": {
+                "start": stats.period_start,
+                "end": stats.period_end,
+                "duration": args.since,
+            },
+            "total_attempts": stats.total_attempts,
+            "reflex": stats.reflex.as_ref().map(|r| serde_json::json!({
+                "total_attempts": r.total_attempts,
+                "success_count": r.success_count,
+                "success_rate": r.success_rate,
+                "json_compliant_count": r.json_compliant_count,
+                "json_compliance_rate": r.json_compliance_rate,
+                "latency_ms": {
+                    "avg": r.avg_latency_ms,
+                    "p50": r.p50_latency_ms,
+                    "p95": r.p95_latency_ms,
+                    "p99": r.p99_latency_ms,
+                    "min": r.min_latency_ms,
+                    "max": r.max_latency_ms,
+                },
+            })),
+            "cloud": stats.cloud.as_ref().map(|c| serde_json::json!({
+                "total_attempts": c.total_attempts,
+                "success_count": c.success_count,
+                "success_rate": c.success_rate,
+                "json_compliant_count": c.json_compliant_count,
+                "json_compliance_rate": c.json_compliance_rate,
+                "latency_ms": {
+                    "avg": c.avg_latency_ms,
+                    "p50": c.p50_latency_ms,
+                    "p95": c.p95_latency_ms,
+                    "p99": c.p99_latency_ms,
+                    "min": c.min_latency_ms,
+                    "max": c.max_latency_ms,
+                },
+            })),
+        });
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        println!("Reflex Bakeoff Statistics (since {})", args.since);
+        println!("  Period: {} - {}", stats.period_start, stats.period_end);
+        println!("  Total Attempts: {}", stats.total_attempts);
+        println!();
+
+        // Reflex stats
+        if let Some(ref r) = stats.reflex {
+            println!("  REFLEX (local inference):");
+            println!("    Attempts:        {}", r.total_attempts);
+            println!("    Success Rate:    {:.1}% ({}/{})", r.success_rate, r.success_count, r.total_attempts);
+            println!("    JSON Compliance: {:.1}% ({}/{})", r.json_compliance_rate, r.json_compliant_count, r.total_attempts);
+            println!("    Latency (ms):");
+            println!("      P50:  {}ms", r.p50_latency_ms);
+            println!("      P95:  {}ms", r.p95_latency_ms);
+            println!("      P99:  {}ms", r.p99_latency_ms);
+            println!("      Avg:  {:.1}ms", r.avg_latency_ms);
+            println!("      Min:  {}ms, Max: {}ms", r.min_latency_ms, r.max_latency_ms);
+        } else {
+            println!("  REFLEX: No data");
+        }
+
+        println!();
+
+        // Cloud stats
+        if let Some(ref c) = stats.cloud {
+            println!("  CLOUD (remote inference):");
+            println!("    Attempts:        {}", c.total_attempts);
+            println!("    Success Rate:    {:.1}% ({}/{})", c.success_rate, c.success_count, c.total_attempts);
+            println!("    JSON Compliance: {:.1}% ({}/{})", c.json_compliance_rate, c.json_compliant_count, c.total_attempts);
+            println!("    Latency (ms):");
+            println!("      P50:  {}ms", c.p50_latency_ms);
+            println!("      P95:  {}ms", c.p95_latency_ms);
+            println!("      P99:  {}ms", c.p99_latency_ms);
+            println!("      Avg:  {:.1}ms", c.avg_latency_ms);
+            println!("      Min:  {}ms, Max: {}ms", c.min_latency_ms, c.max_latency_ms);
+        } else {
+            println!("  CLOUD: No data");
+        }
+
+        // Comparison summary
+        if stats.reflex.is_some() && stats.cloud.is_some() {
+            let reflex = stats.reflex.as_ref().unwrap();
+            let cloud = stats.cloud.as_ref().unwrap();
+            println!();
+            println!("  COMPARISON:");
+            let latency_ratio = if cloud.p95_latency_ms > 0 {
+                cloud.p95_latency_ms as f64 / reflex.p95_latency_ms.max(1) as f64
+            } else {
+                0.0
+            };
+            println!("    P95 Latency Ratio: {:.1}x faster (reflex)", latency_ratio);
+            println!("    Success Parity:    {:.1}% (reflex vs cloud)",
+                     reflex.success_rate / cloud.success_rate.max(0.01) * 100.0);
+        }
+    }
+
+    Ok(())
+}
+
+/// Run `speckit reflex check` command
+///
+/// Validates if reflex meets bakeoff thresholds.
+fn run_reflex_check(args: ReflexCheckArgs) -> anyhow::Result<()> {
+    use codex_tui::reflex_metrics::ReflexMetricsDb;
+    use codex_stage0::reflex_config::load_reflex_config;
+
+    let db = ReflexMetricsDb::init_default()?;
+    let since = parse_duration_str(&args.since)?;
+
+    // Load thresholds from config
+    let config = load_reflex_config(None).unwrap_or_default();
+    let thresholds = &config.thresholds;
+
+    let (passes, reason) = db.check_thresholds(
+        since,
+        args.min_samples,
+        thresholds.p95_latency_ms,
+        thresholds.success_parity_percent,
+        thresholds.json_schema_compliance_percent,
+    )?;
+
+    if args.json {
+        let json = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "tool_version": tool_version(),
+            "passes": passes,
+            "reason": reason,
+            "thresholds": {
+                "p95_latency_ms": thresholds.p95_latency_ms,
+                "success_parity_percent": thresholds.success_parity_percent,
+                "json_schema_compliance_percent": thresholds.json_schema_compliance_percent,
+                "min_samples": args.min_samples,
+            },
+            "period": args.since,
+        });
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        if passes {
+            println!("PASS: {}", reason);
+            println!();
+            println!("Thresholds met:");
+            println!("  P95 Latency:      < {}ms", thresholds.p95_latency_ms);
+            println!("  Success Parity:   >= {}%", thresholds.success_parity_percent);
+            println!("  JSON Compliance:  >= {}%", thresholds.json_schema_compliance_percent);
+            println!("  Min Samples:      >= {}", args.min_samples);
+        } else {
+            println!("FAIL: {}", reason);
+            std::process::exit(1);
+        }
     }
 
     Ok(())

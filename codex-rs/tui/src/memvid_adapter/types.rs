@@ -173,6 +173,10 @@ impl fmt::Display for CheckpointId {
 }
 
 /// Metadata for a checkpoint.
+///
+/// ## SPEC-KIT-971: Run Isolation
+/// The `branch_id` field enables filtering checkpoints by branch without
+/// guessing based on run_id. Format: "main" or "run/<RUN_ID>".
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CheckpointMetadata {
     pub checkpoint_id: CheckpointId,
@@ -183,6 +187,9 @@ pub struct CheckpointMetadata {
     pub commit_hash: Option<String>,
     pub timestamp: chrono::DateTime<chrono::Utc>,
     pub is_manual: bool,
+    /// SPEC-KIT-971: Branch this checkpoint was created on (e.g., "main", "run/abc123")
+    #[serde(default)]
+    pub branch_id: Option<String>,
 }
 
 // =============================================================================
@@ -237,6 +244,10 @@ impl fmt::Display for BranchId {
 /// - PolicySnapshotRef
 ///
 /// More event types are added in SPEC-KIT-975.
+///
+/// ## SPEC-KIT-971: Run Isolation
+/// The `branch_id` field enables filtering events by branch without
+/// guessing based on run_id. Format: "main" or "run/<RUN_ID>".
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunEventEnvelope {
     pub uri: LogicalUri,
@@ -246,6 +257,9 @@ pub struct RunEventEnvelope {
     pub run_id: String,
     pub stage: Option<String>,
     pub payload: serde_json::Value,
+    /// SPEC-KIT-971: Branch this event was emitted on (e.g., "main", "run/abc123")
+    #[serde(default)]
+    pub branch_id: Option<String>,
 }
 
 /// Event types for the baseline event track.

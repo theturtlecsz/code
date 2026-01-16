@@ -297,6 +297,7 @@ pub fn handle_guardrail(
 /// - health: Check reflex server health
 /// - status: Show reflex configuration
 /// - models: List available models
+/// - bakeoff: Show reflex vs cloud comparison metrics
 pub fn handle_speckit_reflex(widget: &mut ChatWidget, raw_args: String) {
     use ratatui::text::Line;
 
@@ -307,15 +308,21 @@ pub fn handle_speckit_reflex(widget: &mut ChatWidget, raw_args: String) {
         Some("health") => handle_reflex_health(widget),
         Some("status") => handle_reflex_status(widget),
         Some("models") => handle_reflex_models(widget),
+        Some("bakeoff") => {
+            // Parse optional duration argument (default 24h)
+            let since = args.get(1).map(|s| s.to_string()).unwrap_or_else(|| "24h".to_string());
+            handle_reflex_bakeoff(widget, &since);
+        }
         Some(cmd) => {
             widget.history_push(crate::history_cell::PlainHistoryCell::new(
                 vec![
                     Line::from(format!("Unknown subcommand: {cmd}")),
                     Line::from(""),
                     Line::from("Available subcommands:"),
-                    Line::from("  health - Check reflex server health"),
-                    Line::from("  status - Show reflex configuration"),
-                    Line::from("  models - List available models"),
+                    Line::from("  health  - Check reflex server health"),
+                    Line::from("  status  - Show reflex configuration"),
+                    Line::from("  models  - List available models"),
+                    Line::from("  bakeoff - Show reflex vs cloud metrics"),
                 ],
                 HistoryCellType::Error,
             ));
@@ -326,9 +333,10 @@ pub fn handle_speckit_reflex(widget: &mut ChatWidget, raw_args: String) {
                     Line::from("Usage: /speckit.reflex <subcommand>"),
                     Line::from(""),
                     Line::from("Subcommands:"),
-                    Line::from("  health - Check reflex server health"),
-                    Line::from("  status - Show reflex configuration"),
-                    Line::from("  models - List available models"),
+                    Line::from("  health  - Check reflex server health"),
+                    Line::from("  status  - Show reflex configuration"),
+                    Line::from("  models  - List available models"),
+                    Line::from("  bakeoff - Show reflex vs cloud metrics (24h default)"),
                 ],
                 HistoryCellType::Notice,
             ));
@@ -600,4 +608,153 @@ fn handle_reflex_models(widget: &mut ChatWidget) {
     };
 
     widget.history_push(crate::history_cell::PlainHistoryCell::new(lines, cell_type));
+}
+
+/// Handle /speckit.reflex bakeoff (SPEC-KIT-978)
+fn handle_reflex_bakeoff(widget: &mut ChatWidget, since: &str) {
+    use super::reflex_metrics::ReflexMetricsDb;
+    use ratatui::text::Line;
+
+    // Parse duration
+    let duration = match parse_bakeoff_duration(since) {
+        Ok(d) => d,
+        Err(e) => {
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![
+                    Line::from(format!("Invalid duration: {since}")),
+                    Line::from(e),
+                    Line::from("Use format like: 1h, 24h, 7d"),
+                ],
+                HistoryCellType::Error,
+            ));
+            return;
+        }
+    };
+
+    // Open metrics database
+    let db = match ReflexMetricsDb::init_default() {
+        Ok(db) => db,
+        Err(e) => {
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![
+                    Line::from("Failed to open metrics database"),
+                    Line::from(format!("  Error: {e}")),
+                ],
+                HistoryCellType::Error,
+            ));
+            return;
+        }
+    };
+
+    // Compute stats
+    let stats = match db.compute_bakeoff_stats(duration) {
+        Ok(s) => s,
+        Err(e) => {
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![
+                    Line::from("Failed to compute bakeoff stats"),
+                    Line::from(format!("  Error: {e}")),
+                ],
+                HistoryCellType::Error,
+            ));
+            return;
+        }
+    };
+
+    let mut lines = vec![
+        Line::from(format!("Reflex Bakeoff Statistics (since {})", since)),
+        Line::from(format!("Period: {} - {}", stats.period_start, stats.period_end)),
+        Line::from(format!("Total Attempts: {}", stats.total_attempts)),
+        Line::from(""),
+    ];
+
+    // Reflex stats
+    if let Some(ref r) = stats.reflex {
+        lines.extend([
+            Line::from("REFLEX (local inference):"),
+            Line::from(format!(
+                "  Attempts:        {}",
+                r.total_attempts
+            )),
+            Line::from(format!(
+                "  Success Rate:    {:.1}% ({}/{})",
+                r.success_rate, r.success_count, r.total_attempts
+            )),
+            Line::from(format!("  JSON Compliance: {:.1}%", r.json_compliance_rate)),
+            Line::from(format!(
+                "  P50:  {}ms | P95: {}ms | P99: {}ms",
+                r.p50_latency_ms, r.p95_latency_ms, r.p99_latency_ms
+            )),
+            Line::from(""),
+        ]);
+    } else {
+        lines.push(Line::from("REFLEX: No data"));
+        lines.push(Line::from(""));
+    }
+
+    // Cloud stats
+    if let Some(ref c) = stats.cloud {
+        lines.extend([
+            Line::from("CLOUD (remote inference):"),
+            Line::from(format!(
+                "  Attempts:        {}",
+                c.total_attempts
+            )),
+            Line::from(format!(
+                "  Success Rate:    {:.1}% ({}/{})",
+                c.success_rate, c.success_count, c.total_attempts
+            )),
+            Line::from(format!("  JSON Compliance: {:.1}%", c.json_compliance_rate)),
+            Line::from(format!(
+                "  P50:  {}ms | P95: {}ms | P99: {}ms",
+                c.p50_latency_ms, c.p95_latency_ms, c.p99_latency_ms
+            )),
+        ]);
+    } else {
+        lines.push(Line::from("CLOUD: No data"));
+    }
+
+    // Comparison
+    if stats.reflex.is_some() && stats.cloud.is_some() {
+        let reflex = stats.reflex.as_ref().unwrap();
+        let cloud = stats.cloud.as_ref().unwrap();
+        let latency_ratio = if reflex.p95_latency_ms > 0 {
+            cloud.p95_latency_ms as f64 / reflex.p95_latency_ms as f64
+        } else {
+            0.0
+        };
+        lines.push(Line::from(""));
+        lines.push(Line::from(format!("Reflex is {:.1}x faster (P95)", latency_ratio)));
+    }
+
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+        lines,
+        HistoryCellType::Notice,
+    ));
+}
+
+/// Parse duration string for bakeoff (e.g., "1h", "24h", "7d")
+fn parse_bakeoff_duration(s: &str) -> Result<std::time::Duration, String> {
+    let s = s.trim().to_lowercase();
+
+    if s.ends_with('h') {
+        let hours: u64 = s[..s.len() - 1]
+            .parse()
+            .map_err(|_| format!("Invalid hours: {s}"))?;
+        Ok(std::time::Duration::from_secs(hours * 3600))
+    } else if s.ends_with('d') {
+        let days: u64 = s[..s.len() - 1]
+            .parse()
+            .map_err(|_| format!("Invalid days: {s}"))?;
+        Ok(std::time::Duration::from_secs(days * 86400))
+    } else if s.ends_with('m') {
+        let mins: u64 = s[..s.len() - 1]
+            .parse()
+            .map_err(|_| format!("Invalid minutes: {s}"))?;
+        Ok(std::time::Duration::from_secs(mins * 60))
+    } else {
+        // Try parsing as seconds
+        let secs: u64 = s.parse().map_err(|_| format!("Invalid duration format: {s}"))?;
+        Ok(std::time::Duration::from_secs(secs))
+    }
 }

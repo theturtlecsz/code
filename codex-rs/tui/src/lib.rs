@@ -196,6 +196,10 @@ pub use chatwidget::spec_kit::context::test_mock::MockSpecKitContext;
 // SPEC-945B Week 2 Day 5: Re-export consensus_db for read-path migration tests
 pub use chatwidget::spec_kit::consensus_db::ConsensusDb;
 
+// SPEC-KIT-978: Re-export reflex modules for CLI
+pub use chatwidget::spec_kit::reflex_metrics;
+pub use chatwidget::spec_kit::reflex_client;
+
 // MAINT-3.2 Phase 2: Re-export P2 module testing utilities
 pub use chatwidget::spec_kit::error::{Result as SpecKitResult, SpecKitError};
 pub use chatwidget::spec_kit::schemas::{

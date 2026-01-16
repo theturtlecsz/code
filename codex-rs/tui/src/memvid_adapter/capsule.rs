@@ -882,6 +882,9 @@ impl CapsuleHandle {
             chrono::Utc::now().format("%Y%m%d%H%M%S")
         ));
 
+        // SPEC-KIT-971: Stamp branch_id for run isolation
+        let branch_id = self.current_branch().as_str().to_string();
+
         // Create checkpoint metadata
         let metadata = CheckpointMetadata {
             checkpoint_id: checkpoint_id.clone(),
@@ -892,6 +895,7 @@ impl CapsuleHandle {
             commit_hash: commit_hash.map(|s| s.to_string()),
             timestamp: chrono::Utc::now(),
             is_manual: false,
+            branch_id: Some(branch_id),
         };
 
         // Persist checkpoint to disk (if we have write access)
@@ -946,6 +950,9 @@ impl CapsuleHandle {
             chrono::Utc::now().format("%Y%m%d%H%M%S")
         ));
 
+        // SPEC-KIT-971: Stamp branch_id for run isolation
+        let branch_id = self.current_branch().as_str().to_string();
+
         // Create checkpoint metadata
         let metadata = CheckpointMetadata {
             checkpoint_id: checkpoint_id.clone(),
@@ -956,6 +963,7 @@ impl CapsuleHandle {
             commit_hash: None,
             timestamp: chrono::Utc::now(),
             is_manual: true,
+            branch_id: Some(branch_id),
         };
 
         // Persist checkpoint to disk (if we have write access)
@@ -988,24 +996,65 @@ impl CapsuleHandle {
     ///
     /// ## Parameters
     /// - `branch`: Optional branch filter. If None, returns checkpoints from all branches.
+    ///
+    /// ## SPEC-KIT-971: Branch Isolation
+    /// Uses the `branch_id` field for filtering when available. Falls back to
+    /// heuristic (run_id matching) for backward compatibility with older checkpoints.
     pub fn list_checkpoints_filtered(&self, branch: Option<&BranchId>) -> Vec<CheckpointMetadata> {
         let all = self.checkpoints.read().unwrap();
 
         match branch {
             Some(b) => {
-                // Filter by branch (checkpoints on run branches have run_id matching branch)
                 all.iter()
                     .filter(|cp| {
-                        // Main branch checkpoints have no run_id or spec_id
+                        // SPEC-KIT-971: Use branch_id if available
+                        if let Some(ref cp_branch) = cp.branch_id {
+                            return cp_branch == b.as_str();
+                        }
+
+                        // Fallback: heuristic based on run_id (backward compatibility)
                         if b.is_main() {
                             return cp.run_id.is_none();
                         }
-                        // Run branch checkpoints match branch name
                         if let Some(run_id) = &cp.run_id {
                             let branch_name = format!("run/{}", run_id);
                             return b.as_str() == branch_name;
                         }
                         false
+                    })
+                    .cloned()
+                    .collect()
+            }
+            None => all.clone(),
+        }
+    }
+
+    /// List events with optional branch filter.
+    ///
+    /// ## Parameters
+    /// - `branch`: Optional branch filter. If None, returns events from all branches.
+    ///
+    /// ## SPEC-KIT-971: Branch Isolation
+    /// Uses the `branch_id` field for filtering when available. Falls back to
+    /// heuristic (run_id matching) for backward compatibility with older events.
+    pub fn list_events_filtered(&self, branch: Option<&BranchId>) -> Vec<RunEventEnvelope> {
+        let all = self.events.read().unwrap();
+
+        match branch {
+            Some(b) => {
+                all.iter()
+                    .filter(|ev| {
+                        // SPEC-KIT-971: Use branch_id if available
+                        if let Some(ref ev_branch) = ev.branch_id {
+                            return ev_branch == b.as_str();
+                        }
+
+                        // Fallback: heuristic based on run_id (backward compatibility)
+                        if b.is_main() {
+                            return false; // Events always have run_id
+                        }
+                        let branch_name = format!("run/{}", ev.run_id);
+                        b.as_str() == branch_name
                     })
                     .cloned()
                     .collect()
@@ -1079,6 +1128,9 @@ impl CapsuleHandle {
 
         let uri = LogicalUri::for_event(&self.config.workspace_id, spec_id, run_id, seq);
 
+        // SPEC-KIT-971: Stamp branch_id for run isolation
+        let branch_id = self.current_branch().as_str().to_string();
+
         let event = RunEventEnvelope {
             uri: uri.clone(),
             event_type,
@@ -1087,6 +1139,7 @@ impl CapsuleHandle {
             run_id: run_id.to_string(),
             stage: stage.map(|s| s.to_string()),
             payload,
+            branch_id: Some(branch_id),
         };
 
         // Persist event to disk (if we have write access)

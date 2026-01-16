@@ -1886,3 +1886,182 @@ fn test_phase_4_5_gate_ordering() {
         "StageTransition after policy capture MUST have policy_id"
     );
 }
+
+// =============================================================================
+// SPEC-KIT-971: Branch Isolation Tests
+// =============================================================================
+
+/// SPEC-KIT-971: Checkpoints are stamped with branch_id
+#[test]
+fn test_checkpoint_branch_id_stamped() {
+    let temp_dir = tempfile::tempdir().expect("tempdir");
+    let capsule_path = temp_dir.path().join("test_branch.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path,
+        workspace_id: "test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("open capsule");
+
+    // Default branch is "main"
+    assert_eq!(handle.current_branch().as_str(), "main");
+
+    // Create checkpoint on main branch
+    handle
+        .commit_stage("SPEC-BRANCH", "run-001", "plan", None)
+        .expect("commit_stage");
+
+    let checkpoints = handle.list_checkpoints();
+    assert_eq!(checkpoints.len(), 1);
+    assert_eq!(
+        checkpoints[0].branch_id,
+        Some("main".to_string()),
+        "Checkpoint should have branch_id stamped"
+    );
+}
+
+/// SPEC-KIT-971: Events are stamped with branch_id
+#[test]
+fn test_event_branch_id_stamped() {
+    let temp_dir = tempfile::tempdir().expect("tempdir");
+    let capsule_path = temp_dir.path().join("test_event_branch.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path,
+        workspace_id: "test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("open capsule");
+
+    // Create checkpoint which emits StageTransition event
+    handle
+        .commit_stage("SPEC-BRANCH", "run-002", "plan", None)
+        .expect("commit_stage");
+
+    let events = handle.list_events();
+    assert!(!events.is_empty());
+    assert_eq!(
+        events[0].branch_id,
+        Some("main".to_string()),
+        "Event should have branch_id stamped"
+    );
+}
+
+/// SPEC-KIT-971: Run branch isolation - checkpoints filterable by branch_id
+#[test]
+fn test_run_branch_isolation_checkpoints() {
+    let temp_dir = tempfile::tempdir().expect("tempdir");
+    let capsule_path = temp_dir.path().join("test_run_isolation.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path,
+        workspace_id: "test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("open capsule");
+
+    // Create checkpoint on main
+    handle
+        .commit_stage("SPEC-MAIN", "run-main", "plan", None)
+        .expect("commit on main");
+
+    // Switch to run branch
+    let run_branch = BranchId::for_run("run-abc123");
+    handle.switch_branch(run_branch.clone()).expect("switch branch");
+
+    // Create checkpoint on run branch
+    handle
+        .commit_stage("SPEC-RUN", "run-abc123", "plan", None)
+        .expect("commit on run branch");
+
+    // Filter by main branch
+    let main_checkpoints = handle.list_checkpoints_filtered(Some(&BranchId::main()));
+    assert_eq!(main_checkpoints.len(), 1);
+    assert_eq!(main_checkpoints[0].spec_id, Some("SPEC-MAIN".to_string()));
+
+    // Filter by run branch
+    let run_checkpoints = handle.list_checkpoints_filtered(Some(&run_branch));
+    assert_eq!(run_checkpoints.len(), 1);
+    assert_eq!(run_checkpoints[0].spec_id, Some("SPEC-RUN".to_string()));
+
+    // No filter returns all
+    let all_checkpoints = handle.list_checkpoints_filtered(None);
+    assert_eq!(all_checkpoints.len(), 2);
+}
+
+/// SPEC-KIT-971: Run branch isolation - events filterable by branch_id
+#[test]
+fn test_run_branch_isolation_events() {
+    let temp_dir = tempfile::tempdir().expect("tempdir");
+    let capsule_path = temp_dir.path().join("test_event_isolation.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path,
+        workspace_id: "test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("open capsule");
+
+    // Create event on main (via commit_stage)
+    handle
+        .commit_stage("SPEC-MAIN", "run-main", "plan", None)
+        .expect("commit on main");
+
+    // Switch to run branch
+    let run_branch = BranchId::for_run("run-xyz789");
+    handle.switch_branch(run_branch.clone()).expect("switch branch");
+
+    // Create event on run branch
+    handle
+        .commit_stage("SPEC-RUN", "run-xyz789", "implement", None)
+        .expect("commit on run branch");
+
+    // Filter events by main branch
+    let main_events = handle.list_events_filtered(Some(&BranchId::main()));
+    assert_eq!(main_events.len(), 1);
+    assert_eq!(main_events[0].spec_id, "SPEC-MAIN");
+
+    // Filter events by run branch
+    let run_events = handle.list_events_filtered(Some(&run_branch));
+    assert_eq!(run_events.len(), 1);
+    assert_eq!(run_events[0].spec_id, "SPEC-RUN");
+
+    // No filter returns all
+    let all_events = handle.list_events_filtered(None);
+    assert_eq!(all_events.len(), 2);
+}
+
+/// SPEC-KIT-971: Manual checkpoint also gets branch_id
+#[test]
+fn test_manual_checkpoint_branch_id() {
+    let temp_dir = tempfile::tempdir().expect("tempdir");
+    let capsule_path = temp_dir.path().join("test_manual_branch.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path,
+        workspace_id: "test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("open capsule");
+
+    // Switch to a run branch
+    let run_branch = BranchId::for_run("manual-run");
+    handle.switch_branch(run_branch).expect("switch branch");
+
+    // Create manual checkpoint
+    handle.commit_manual("my-label").expect("commit_manual");
+
+    let checkpoints = handle.list_checkpoints();
+    assert_eq!(checkpoints.len(), 1);
+    assert_eq!(
+        checkpoints[0].branch_id,
+        Some("run/manual-run".to_string()),
+        "Manual checkpoint should have branch_id stamped"
+    );
+}

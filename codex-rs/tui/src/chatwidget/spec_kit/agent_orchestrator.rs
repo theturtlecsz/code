@@ -25,8 +25,11 @@ use crate::memvid_adapter::{CapsuleHandle, default_capsule_config};
 use crate::spec_prompts::{SpecAgent, SpecStage};
 // P6-SYNC Phase 6: Token metrics UI integration
 use crate::token_metrics_widget::{TokenMetricsWidget, model_context_window};
-// SPEC-KIT-978: Reflex routing
-use super::reflex_router::{decide_implementer_routing, emit_routing_event};
+// SPEC-KIT-978: Reflex routing and metrics
+use super::reflex_router::{decide_implementer_routing, emit_routing_event, RoutingDecision};
+use super::reflex_metrics::get_metrics_db;
+use super::reflex_client::{ChatMessage, ReflexClient};
+use crate::memvid_adapter::RoutingMode;
 use codex_core::agent_tool::AGENT_MANAGER;
 use codex_core::config_types::AgentConfig;
 use codex_core::protocol::{AgentInfo, InputItem};
@@ -617,6 +620,189 @@ async fn spawn_regular_stage_agents_sequential(
     Ok(spawn_infos)
 }
 
+/// SPEC-KIT-978: Spawn stage agents using local reflex inference
+///
+/// Uses ReflexClient for OpenAI-compatible local inference (e.g., SGLang, vLLM).
+/// Mirrors `spawn_regular_stage_agents_sequential` but routes through reflex endpoint.
+///
+/// ## Fallback
+/// If this function fails, the caller should fall back to cloud mode using
+/// `spawn_regular_stage_agents_sequential`.
+#[allow(clippy::too_many_arguments)]
+async fn spawn_reflex_stage_agents_sequential(
+    cwd: &Path,
+    spec_id: &str,
+    stage: SpecStage,
+    run_id: Option<String>,
+    _branch_id: Option<String>,
+    expected_agents: &[String],
+    _agent_configs: &[AgentConfig],
+    stage0_context: Option<&str>,
+    routing_decision: &RoutingDecision,
+    run_tag: &str,
+) -> Result<Vec<AgentSpawnInfo>, String> {
+    use std::time::Instant;
+
+    tracing::info!(
+        "{} 🚀 REFLEX: spawn_reflex_stage_agents_sequential (local inference mode)",
+        run_tag
+    );
+    tracing::info!("{}   spec_id: {}", run_tag, spec_id);
+    tracing::info!("{}   stage: {:?}", run_tag, stage);
+    tracing::info!("{}   expected_agents: {:?}", run_tag, expected_agents);
+
+    // Get reflex config from routing decision
+    let reflex_config = routing_decision
+        .reflex_config
+        .as_ref()
+        .ok_or_else(|| "Reflex mode selected but no reflex config available".to_string())?;
+
+    tracing::info!(
+        "{}   reflex endpoint: {}",
+        run_tag,
+        reflex_config.endpoint
+    );
+    tracing::info!("{}   reflex model: {}", run_tag, reflex_config.model);
+
+    // Create reflex client
+    let client = ReflexClient::new(reflex_config)
+        .map_err(|e| format!("Failed to create reflex client: {}", e))?;
+
+    let mut spawn_infos = Vec::new();
+    let mut agent_outputs: Vec<(String, String)> = Vec::new();
+    let batch_id = uuid::Uuid::new_v4().to_string();
+
+    // Spawn agents SEQUENTIALLY using reflex
+    for (idx, agent_name) in expected_agents.iter().enumerate() {
+        tracing::info!(
+            "{} 🔄 REFLEX SEQUENTIAL: Agent {}/{}: {}",
+            run_tag,
+            idx + 1,
+            expected_agents.len(),
+            agent_name
+        );
+
+        // Build prompt for THIS agent with previous agent outputs injected
+        let mut prompt =
+            build_individual_agent_prompt(spec_id, stage, agent_name, cwd, stage0_context).await?;
+
+        // Inject previous agent outputs into prompt (same as regular spawner)
+        for (prev_agent_name, prev_output) in &agent_outputs {
+            let placeholder = format!("${{PREVIOUS_OUTPUTS.{}}}", prev_agent_name);
+
+            let output_to_inject = super::json_extractor::extract_stage_agent_json(prev_output)
+                .map(|result| result.json.to_string())
+                .unwrap_or_else(|_| {
+                    if prev_output.len() > 5000 {
+                        format!(
+                            "{}...[truncated {} chars]",
+                            &prev_output.chars().take(5000).collect::<String>(),
+                            prev_output.len() - 5000
+                        )
+                    } else {
+                        prev_output.to_string()
+                    }
+                });
+
+            tracing::info!(
+                "{}   ✅ Injecting {} output ({} chars) into {} prompt",
+                run_tag,
+                prev_agent_name,
+                output_to_inject.len(),
+                agent_name
+            );
+
+            prompt = prompt.replace(&placeholder, &output_to_inject);
+        }
+
+        // Handle generic ${PREVIOUS_OUTPUTS}
+        if prompt.contains("${PREVIOUS_OUTPUTS}") {
+            let all_outputs = agent_outputs
+                .iter()
+                .map(|(name, output)| {
+                    let clean = super::json_extractor::extract_stage_agent_json(output)
+                        .map(|r| r.json.to_string())
+                        .unwrap_or_else(|_| output.chars().take(5000).collect::<String>());
+                    format!("## {}\n{}", name, clean)
+                })
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            prompt = prompt.replace("${PREVIOUS_OUTPUTS}", &all_outputs);
+        }
+
+        // Build chat messages for reflex
+        let messages = vec![
+            ChatMessage {
+                role: "system".to_string(),
+                content: format!(
+                    "You are an expert {} agent working on SPEC {}. \
+                     Return your analysis as valid JSON.",
+                    agent_name, spec_id
+                ),
+            },
+            ChatMessage {
+                role: "user".to_string(),
+                content: prompt.clone(),
+            },
+        ];
+
+        // Call reflex endpoint
+        let start = Instant::now();
+        let result = client.chat_completion(&messages).await;
+        let elapsed_ms = start.elapsed().as_millis() as u64;
+
+        // Record metrics
+        if let Ok(db) = get_metrics_db() {
+            let (success, json_compliant) = match &result {
+                Ok(r) => (true, r.json_compliant),
+                Err(_) => (false, false),
+            };
+            let _ = db.record_reflex_attempt(spec_id, run_id.as_deref().unwrap_or("unknown"), elapsed_ms, success, json_compliant);
+        }
+
+        let agent_output = match result {
+            Ok(response) => {
+                tracing::info!(
+                    "{} ✅ REFLEX: {} completed in {}ms ({} chars)",
+                    run_tag,
+                    agent_name,
+                    response.latency_ms,
+                    response.content.len()
+                );
+                response.content
+            }
+            Err(e) => {
+                // Propagate error for fallback handling
+                return Err(format!(
+                    "Reflex call failed for agent {}: {}",
+                    agent_name, e
+                ));
+            }
+        };
+
+        // Store output for next agents
+        agent_outputs.push((agent_name.clone(), agent_output.clone()));
+
+        // Generate a pseudo-agent ID for tracking
+        let agent_id = format!("reflex-{}-{}", batch_id, idx);
+
+        spawn_infos.push(AgentSpawnInfo {
+            agent_id,
+            agent_name: agent_name.clone(),
+            model_name: reflex_config.model.clone(),
+            result: Some(agent_output),
+        });
+    }
+
+    tracing::info!(
+        "{} ✅ REFLEX SEQUENTIAL: All {} agents completed via local inference",
+        run_tag,
+        expected_agents.len()
+    );
+
+    Ok(spawn_infos)
+}
+
 /// Spawn regular stage agents in PARALLEL for consensus (no output passing)
 /// Used for stages where independent perspectives are critical (Validate, Audit, Unlock)
 ///
@@ -813,15 +999,18 @@ async fn spawn_regular_stage_agents_parallel(
 
 /// SPEC-KIT-978: Emit routing decision event for Implementer role
 ///
-/// Records the routing decision (reflex vs cloud) to the capsule for
-/// bakeoff analysis and audit trail.
+/// Records the routing decision (reflex vs cloud) to:
+/// 1. Capsule event track (audit trail)
+/// 2. SQLite metrics database (bakeoff analysis)
+///
+/// Returns the routing decision so caller can act on it.
 fn emit_implementer_routing_decision(
     cwd: &Path,
     spec_id: &str,
     run_id: Option<&str>,
     cloud_model: &str,
     run_tag: &str,
-) {
+) -> super::reflex_router::RoutingDecision {
     // Make routing decision
     let decision = decide_implementer_routing("implement", cloud_model, None);
 
@@ -840,8 +1029,46 @@ fn emit_implementer_routing_decision(
         );
     }
 
-    // Try to emit event to capsule (non-blocking)
     let run_id_str = run_id.unwrap_or("unknown");
+
+    // Record bakeoff metric for the routing decision
+    // This captures EVERY routing decision for later analysis
+    if let Ok(db) = get_metrics_db() {
+        let latency_ms = decision
+            .health_result
+            .as_ref()
+            .and_then(|h| h.latency_ms)
+            .unwrap_or(0);
+
+        let success = !decision.is_fallback;
+        let json_compliant = true; // Routing decisions don't involve JSON output yet
+
+        let result = match decision.mode {
+            RoutingMode::Reflex => {
+                db.record_reflex_attempt(spec_id, run_id_str, latency_ms, success, json_compliant)
+            }
+            RoutingMode::Cloud => {
+                db.record_cloud_attempt(spec_id, run_id_str, latency_ms, success, json_compliant)
+            }
+        };
+
+        if let Err(e) = result {
+            tracing::warn!(
+                "{} SPEC-KIT-978: Failed to record bakeoff metric: {}",
+                run_tag,
+                e
+            );
+        } else {
+            tracing::debug!(
+                "{} SPEC-KIT-978: Bakeoff metric recorded: mode={}, latency={}ms",
+                run_tag,
+                decision.mode.as_str(),
+                latency_ms
+            );
+        }
+    }
+
+    // Try to emit event to capsule (non-blocking)
     // Use canonical capsule config (SPEC-KIT-971/977 alignment)
     let config = default_capsule_config(cwd);
 
@@ -876,6 +1103,8 @@ fn emit_implementer_routing_decision(
             );
         }
     }
+
+    decision
 }
 
 /// Spawn regular stage agents natively (SPEC-KIT-900 Session 3)
@@ -937,12 +1166,12 @@ async fn spawn_regular_stage_agents_native(
                 stage.display_name()
             );
 
-            // SPEC-KIT-978: Emit routing decision event before spawning
+            // SPEC-KIT-978: Get routing decision (reflex vs cloud)
             let cloud_model = agent_configs
                 .first()
                 .map(|c| c.name.as_str())
                 .unwrap_or("claude-3-opus");
-            emit_implementer_routing_decision(
+            let routing_decision = emit_implementer_routing_decision(
                 cwd,
                 spec_id,
                 run_id.as_deref(),
@@ -950,17 +1179,68 @@ async fn spawn_regular_stage_agents_native(
                 &run_tag,
             );
 
-            spawn_regular_stage_agents_sequential(
-                cwd,
-                spec_id,
-                stage,
-                run_id,
-                branch_id, // P6-SYNC Phase 4
-                expected_agents,
-                agent_configs,
-                stage0_context.as_deref(), // SPEC-KIT-102
-            )
-            .await
+            // SPEC-KIT-978: Route based on decision mode
+            match routing_decision.mode {
+                RoutingMode::Reflex => {
+                    tracing::info!(
+                        "{} SPEC-KIT-978: Using REFLEX mode for Implement stage",
+                        run_tag
+                    );
+                    // Try reflex first, fall back to cloud on failure
+                    match spawn_reflex_stage_agents_sequential(
+                        cwd,
+                        spec_id,
+                        stage,
+                        run_id.clone(),
+                        branch_id.clone(),
+                        expected_agents,
+                        agent_configs,
+                        stage0_context.as_deref(),
+                        &routing_decision,
+                        &run_tag,
+                    )
+                    .await
+                    {
+                        Ok(infos) => Ok(infos),
+                        Err(e) => {
+                            tracing::warn!(
+                                "{} SPEC-KIT-978: Reflex failed, falling back to cloud: {}",
+                                run_tag,
+                                e
+                            );
+                            // Fallback to cloud
+                            spawn_regular_stage_agents_sequential(
+                                cwd,
+                                spec_id,
+                                stage,
+                                run_id,
+                                branch_id, // P6-SYNC Phase 4
+                                expected_agents,
+                                agent_configs,
+                                stage0_context.as_deref(), // SPEC-KIT-102
+                            )
+                            .await
+                        }
+                    }
+                }
+                RoutingMode::Cloud => {
+                    tracing::info!(
+                        "{} SPEC-KIT-978: Using CLOUD mode for Implement stage",
+                        run_tag
+                    );
+                    spawn_regular_stage_agents_sequential(
+                        cwd,
+                        spec_id,
+                        stage,
+                        run_id,
+                        branch_id, // P6-SYNC Phase 4
+                        expected_agents,
+                        agent_configs,
+                        stage0_context.as_deref(), // SPEC-KIT-102
+                    )
+                    .await
+                }
+            }
         }
 
         // Parallel consensus: Independent validation critical

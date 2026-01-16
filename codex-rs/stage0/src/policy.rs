@@ -166,16 +166,31 @@ impl PolicySnapshot {
     /// - `created_at` (runtime timestamp)
     /// - `hash` (obviously circular)
     ///
-    /// This ensures identical inputs produce identical hashes.
-    fn compute_hash(&self) -> String {
+    /// **Canonicalization for determinism:**
+    /// - `prompts`: Keys are sorted alphabetically (HashMap order is nondeterministic)
+    /// - `source_files`: Sorted alphabetically (filesystem discovery order may vary)
+    ///
+    /// This ensures identical inputs produce identical hashes regardless of:
+    /// - HashMap iteration order
+    /// - Filesystem discovery ordering
+    pub fn compute_hash(&self) -> String {
+        use std::collections::BTreeMap;
+
+        // SPEC-KIT-977-A1: Sort prompts keys for deterministic serialization
+        let sorted_prompts: BTreeMap<&String, &String> = self.prompts.iter().collect();
+
+        // SPEC-KIT-977-A1: Sort source_files for deterministic serialization
+        let mut sorted_sources = self.source_files.clone();
+        sorted_sources.sort();
+
         // Hash only content fields (not runtime identifiers)
         // This ensures deterministic hashing per SPEC-KIT-977-A1
         let hashable = serde_json::json!({
             "schema_version": self.schema_version,
             "model_config": self.model_config,
             "weights": self.weights,
-            "prompts": self.prompts,
-            "source_files": self.source_files,
+            "prompts": sorted_prompts,
+            "source_files": sorted_sources,
         });
 
         let canonical = serde_json::to_string(&hashable).unwrap_or_default();
@@ -704,14 +719,13 @@ mod tests {
         );
     }
 
-    /// SPEC-KIT-977-A1: Source file order affects hash (intentional).
+    /// SPEC-KIT-977-A1: Source file order does NOT affect hash.
     ///
-    /// Different ordering of source_files produces different hash because
-    /// the canonical JSON serialization preserves array order.
-    /// This is intentional - if order matters for policy resolution,
-    /// the hash should reflect that.
+    /// Different ordering of source_files produces the SAME hash because
+    /// the compute_hash function sorts source_files before hashing.
+    /// This ensures filesystem discovery order doesn't affect policy identity.
     #[test]
-    fn test_deterministic_hash_source_file_order_matters() {
+    fn test_deterministic_hash_source_file_order_invariant() {
         let config = Stage0Config::default();
 
         let snapshot1 = PolicySnapshot::capture(
@@ -723,10 +737,64 @@ mod tests {
             vec!["b.toml".to_string(), "a.toml".to_string()],
         );
 
-        // Different order = different hash
+        // SPEC-KIT-977-A1: Different order = SAME hash (sources are sorted)
+        assert_eq!(
+            snapshot1.hash, snapshot2.hash,
+            "Source file order should NOT affect hash (sources are sorted before hashing)"
+        );
+
+        // content_matches should return true
+        assert!(
+            snapshot1.content_matches(&snapshot2),
+            "content_matches should return true for same content in different order"
+        );
+    }
+
+    /// SPEC-KIT-977-A1: Prompts HashMap order does NOT affect hash.
+    ///
+    /// HashMap iteration order is nondeterministic, but the compute_hash
+    /// function converts to BTreeMap before hashing, ensuring determinism.
+    #[test]
+    fn test_deterministic_hash_prompts_order_invariant() {
+        let config = Stage0Config::default();
+        let source_files = vec!["test.toml".to_string()];
+
+        // Create two snapshots with prompts added in different order
+        let mut snapshot1 = PolicySnapshot::capture(&config, source_files.clone());
+        snapshot1.prompts.insert("key_a".to_string(), "value_a".to_string());
+        snapshot1.prompts.insert("key_b".to_string(), "value_b".to_string());
+        snapshot1.hash = snapshot1.compute_hash();
+
+        let mut snapshot2 = PolicySnapshot::capture(&config, source_files);
+        snapshot2.prompts.insert("key_b".to_string(), "value_b".to_string());
+        snapshot2.prompts.insert("key_a".to_string(), "value_a".to_string());
+        snapshot2.hash = snapshot2.compute_hash();
+
+        // SPEC-KIT-977-A1: Different insertion order = SAME hash
+        assert_eq!(
+            snapshot1.hash, snapshot2.hash,
+            "Prompts insertion order should NOT affect hash (keys are sorted before hashing)"
+        );
+    }
+
+    /// SPEC-KIT-977-A1: Changing weights produces different hash.
+    #[test]
+    fn test_deterministic_hash_different_weights_different_hash() {
+        let mut config1 = Stage0Config::default();
+        let mut config2 = Stage0Config::default();
+
+        // Modify weights
+        config1.scoring.weights.usage = 0.5;
+        config2.scoring.weights.usage = 0.9;
+
+        let source_files = vec!["test.toml".to_string()];
+        let snapshot1 = PolicySnapshot::capture(&config1, source_files.clone());
+        let snapshot2 = PolicySnapshot::capture(&config2, source_files);
+
+        // Different weights = different hash
         assert_ne!(
             snapshot1.hash, snapshot2.hash,
-            "Source file order should affect hash"
+            "Different weights should produce different hash"
         );
     }
 }
