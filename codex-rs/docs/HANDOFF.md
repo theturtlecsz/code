@@ -1,139 +1,174 @@
 # HANDOFF.md - SPEC-KIT-978 Reflex Implementation
 
-**Session Date**: 2026-01-15
-**Status**: Slices A & B Complete, Slice C Ready to Start
+**Session Date**: 2026-01-16
+**Status**: Slice C Complete - Live Reflex Routing Implemented
 
 ---
 
 ## What Was Completed This Session
 
-### SPEC-KIT-978 Slice A: Health Check (978-A5) ✅
+### SPEC-KIT-978 Slice C: Live Reflex Routing ✅
 
-**CLI Commands:**
-- `code reflex health` - Check server health + model availability
-- `code reflex status` - Show reflex configuration
-- `code reflex models` - List available models
+**Bakeoff Metrics Infrastructure:**
+- Created `tui/src/chatwidget/spec_kit/reflex_metrics.rs`
+  - SQLite table `reflex_bakeoff_metrics` for persistence
+  - `record_reflex_attempt()` / `record_cloud_attempt()`
+  - `compute_bakeoff_stats()` - P95, success %, JSON compliance %
+  - `check_thresholds()` integration with routing decisions
 
-**TUI Commands:**
-- `/speckit.reflex health`
-- `/speckit.reflex status`
-- `/speckit.reflex models`
+**CLI/TUI Bakeoff Commands:**
+- `code reflex bakeoff` - Show P95/success/compliance comparison
+- `code reflex bakeoff --json` - Machine-readable output
+- `code reflex bakeoff --since 1h` - Time-filtered stats
+- `/speckit.reflex bakeoff` - TUI equivalent
 
-**Files Created:**
-- `cli/src/reflex_cmd.rs` - CLI command implementation
-- `stage0/src/reflex_config.rs` - Shared config module
-- `tui/src/chatwidget/spec_kit/commands/reflex.rs` - TUI command struct
-- `tui/src/chatwidget/spec_kit/reflex_router.rs` - Routing decision logic
+**Live Reflex Routing (Full Integration):**
+- Created `spawn_reflex_stage_agents_sequential()` in agent_orchestrator.rs
+  - Uses `ReflexClient` for OpenAI-compatible local inference
+  - Mirrors sequential agent execution pattern
+  - Records metrics for each model call
+- Modified Implement stage dispatch to branch on `RoutingMode`
+- Added automatic fallback: reflex failure → cloud mode
 
-### SPEC-KIT-978 Slice B: Routing Decision Events ✅
+**Reflex Client:**
+- Created `tui/src/chatwidget/spec_kit/reflex_client.rs`
+  - OpenAI-compatible chat completion client
+  - Non-streaming and streaming support (SSE)
+  - JSON schema enforcement
+  - Timeout handling with configurable duration
 
-**Capsule Event Infrastructure:**
-- Added `EventType::RoutingDecision` to capsule event types
-- Added `RoutingMode` enum (Cloud, Reflex)
-- Added `RoutingFallbackReason` enum (7 reasons)
-- Added `RoutingDecisionPayload` struct
-- Added `emit_routing_decision()` method to CapsuleHandle
+**Threshold Checking:**
+- P95 latency check against `thresholds.p95_latency_ms`
+- Success rate check against `thresholds.success_parity_percent`
+- JSON compliance check against `thresholds.json_schema_compliance_percent`
+- Minimum sample requirement (10 samples) before enforcing thresholds
 
-**Routing Decision Logic:**
-- `decide_implementer_routing()` - Makes routing decision
-- `emit_routing_event()` - Emits to capsule
-- Wired into `agent_orchestrator.rs` Implement stage dispatch
+### Carry-over from Previous Session
 
-**Files Modified:**
-- `tui/src/memvid_adapter/types.rs` - Event types
-- `tui/src/memvid_adapter/capsule.rs` - Emit method
-- `tui/src/memvid_adapter/mod.rs` - Re-exports
-- `tui/src/chatwidget/spec_kit/agent_orchestrator.rs` - Wiring
+**SPEC-KIT-977: Policy Drift Detection ✅**
+- `latest_policy_ref_for_run()` - Derive policy from capsule events
+- `restore_policy_from_events()` - Restore policy state on reopen
+- `check_and_recapture_if_changed()` - Auto-restore before checking
 
-### SPEC-KIT-971/977 Capsule Configuration Alignment ✅
+**SPEC-KIT-977-A1: Deterministic Hash ✅**
+- `compute_hash()` now uses BTreeMap for sorted keys
+- `source_files` sorted before hashing
+- Stable hash regardless of insertion order
 
-**Problem Fixed:**
-- `pipeline_coordinator.rs` used wrong path `.speckit/workspace.mv2` and `workspace_id: spec_id`
-- Multiple files used `workspace_id: "workspace"` instead of `"default"`
-
-**Solution:**
-- Added `DEFAULT_CAPSULE_RELATIVE_PATH = ".speckit/memvid/workspace.mv2"`
-- Added `DEFAULT_WORKSPACE_ID = "default"`
-- Added `default_capsule_path()` and `default_capsule_config()` helpers
-- Updated all write operations to use canonical config
-
-**Files Modified:**
-- `tui/src/memvid_adapter/mod.rs` - Constants and helpers
-- `tui/src/chatwidget/spec_kit/pipeline_coordinator.rs`
-- `tui/src/chatwidget/spec_kit/git_integration.rs`
-- `tui/src/chatwidget/spec_kit/agent_orchestrator.rs`
-- `tui/src/chatwidget/spec_kit/stage0_integration.rs`
-- `cli/src/speckit_cmd.rs`
+**SPEC-KIT-971: Branch Isolation ✅**
+- Added `branch_id: Option<String>` to `CheckpointMetadata`
+- Added `branch_id: Option<String>` to `RunEventEnvelope`
+- `list_checkpoints_filtered()` / `list_events_filtered()` support branch filtering
 
 ---
 
 ## Commits This Session
 
-1. `d2d41232e` - feat(reflex): SPEC-KIT-978 health check + routing decision events
-2. (pending) - feat(capsule): SPEC-KIT-971/977 unified capsule configuration
+1. `a627cf573` - feat(reflex): SPEC-KIT-978 live reflex routing for Implement stage
+
+Previous session commits:
+- `20e9e62d8` - feat(capsule): SPEC-KIT-971/977 unified capsule configuration
+- `d2d41232e` - feat(reflex): SPEC-KIT-978 health check + routing decision events
 
 ---
 
-## Next Session: SPEC-KIT-978 Slice C
+## Current Architecture
 
-### Priority 1: Bakeoff Metrics Collection
+### Reflex Routing Flow
 
-**Objective:** Track P95 latency, success rate, and JSON schema compliance for reflex vs cloud comparison.
+```
+Implement Stage Entry
+    ↓
+emit_implementer_routing_decision()
+    ├── Check: Is stage "implement"?
+    ├── Check: Is reflex enabled in model_policy.toml?
+    ├── Check: Is reflex server healthy? (GET /v1/models)
+    ├── Check: Are bakeoff thresholds met?
+    └── Return: RoutingDecision { mode, is_fallback, reason, config }
+    ↓
+match decision.mode
+    ├── Reflex → spawn_reflex_stage_agents_sequential()
+    │              ├── Use ReflexClient for inference
+    │              ├── Record metrics on each call
+    │              └── On failure → return Err() for fallback
+    └── Cloud  → spawn_regular_stage_agents_sequential()
+    ↓
+If Reflex Err → fallback to Cloud automatically
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `tui/src/chatwidget/spec_kit/reflex_router.rs` | Routing decision logic + health check |
+| `tui/src/chatwidget/spec_kit/reflex_client.rs` | OpenAI-compatible inference client |
+| `tui/src/chatwidget/spec_kit/reflex_metrics.rs` | SQLite bakeoff metrics |
+| `tui/src/chatwidget/spec_kit/agent_orchestrator.rs:632-804` | Reflex spawner |
+| `tui/src/chatwidget/spec_kit/agent_orchestrator.rs:998-1060` | Mode branching |
+| `cli/src/speckit_cmd.rs` | CLI reflex commands |
+| `stage0/src/reflex_config.rs` | Shared config types |
+
+---
+
+## Test Status
+
+**All tests passing:**
+```
+6 reflex_router tests:
+- test_routing_mode_string_representation
+- test_routing_decision_mode_branching
+- test_routing_not_implement_stage
+- test_fallback_reason_variants
+- test_routing_decision_payload_serialization
+- test_routing_reflex_disabled
+```
+
+---
+
+## Next Session Options
+
+### Option 1: E2E Testing with Real Reflex Server
+
+**Objective:** Validate the full routing flow with an actual local inference server.
 
 **Tasks:**
-1. Create `tui/src/chatwidget/spec_kit/reflex_metrics.rs`:
-   - `BakeoffMetrics` struct (latency_samples, success_count, failure_count, json_compliance_count)
-   - `record_reflex_attempt()` - Record latency + outcome
-   - `record_cloud_attempt()` - Record cloud baseline
-   - `compute_bakeoff_stats()` - Calculate P95, success %, compliance %
+1. Set up SGLang or vLLM with Qwen2.5-Coder model
+2. Configure `model_policy.toml` to point to local server
+3. Run `/speckit.auto` on a test SPEC
+4. Verify routing events in capsule
+5. Compare metrics via `code reflex bakeoff`
 
-2. Add SQLite storage for metrics persistence:
-   - Table: `reflex_bakeoff_metrics`
-   - Columns: timestamp, mode, latency_ms, success, json_compliant, spec_id, run_id
+### Option 2: SPEC-KIT-975 Event Types Expansion
 
-3. Wire metrics recording into `emit_implementer_routing_decision()`
+**Objective:** Expand capsule event types for richer audit trail.
 
-### Priority 2: Bakeoff CLI/TUI Commands
+**Event Types to Add (from types.rs comments):**
+- `RetrievalRequest` / `RetrievalResponse`
+- `ToolCall` / `ToolResult`
+- `PatchApply`
+- `GateDecision`
+- `ErrorEvent`
+- `ModelCallEnvelope`
+- `BranchMerged`
+- `CapsuleExported` / `CapsuleImported`
 
-**Tasks:**
-1. Add `code reflex bakeoff` CLI command:
-   - Show P95 latency comparison (reflex vs cloud)
-   - Show success rate comparison
-   - Show JSON compliance rate
-   - `--json` output support
-   - `--since <duration>` filter (default: 24h)
+### Option 3: Streaming Support Activation
 
-2. Add `/speckit.reflex bakeoff` TUI command with same functionality
-
-### Priority 3: Live Reflex Routing (Full Integration)
-
-**Objective:** When reflex is healthy and thresholds met, actually route Implementer inference calls to local server.
+**Objective:** Enable streaming responses for reflex client (already stubbed).
 
 **Tasks:**
-1. Modify `spawn_regular_stage_agents_sequential()` in agent_orchestrator.rs:
-   - Check routing decision mode
-   - If `RoutingMode::Reflex`, configure agent to use reflex endpoint
-   - Pass reflex endpoint/model to agent config
+1. Wire `chat_completion_streaming()` into spawn_reflex_stage_agents_sequential
+2. Add progress indicators for streaming responses
+3. Handle partial failures in streaming mode
 
-2. Add reflex client in `tui/src/chatwidget/spec_kit/reflex_client.rs`:
-   - OpenAI-compatible chat completion client
-   - Timeout handling (fallback to cloud if exceeded)
-   - JSON schema enforcement check
+### Option 4: Reliability Patterns
 
-3. Implement fallback mechanism:
-   - If reflex request fails, emit fallback event
-   - Retry with cloud automatically
-   - Record both attempts in metrics
-
-### Priority 4: Threshold Checking
+**Objective:** Add circuit breaker and rate limiting for production resilience.
 
 **Tasks:**
-1. Add threshold evaluation before routing:
-   - Check `thresholds.p95_latency_ms` against recent metrics
-   - Check `thresholds.success_parity_percent` against recent metrics
-   - Check `thresholds.json_schema_compliance_percent` against recent metrics
-
-2. Add `RoutingFallbackReason::ThresholdsNotMet` variants for each threshold
+1. Implement circuit breaker (open after N failures, half-open retry)
+2. Add rate limiting per endpoint
+3. Track circuit state in metrics
 
 ---
 
@@ -145,7 +180,7 @@
 enabled = true
 endpoint = "http://127.0.0.1:3009/v1"
 model = "qwen2.5-coder-7b-instruct"
-timeout_ms = 1500
+timeout_ms = 30000
 json_schema_required = true
 fallback_to_cloud = true
 
@@ -157,40 +192,21 @@ json_schema_compliance_percent = 100
 
 ---
 
-## Test Status
-
-**All tests passing:**
-- CLI reflex: 3 tests
-- TUI reflex: 4 tests (command + router)
-- Stage0 reflex_config: 2 tests
-- Git integration: 5 tests (capsule checkpoints)
-
----
-
-## Key Files to Reference
-
-| File | Purpose |
-|------|---------|
-| `stage0/src/reflex_config.rs` | Shared config types |
-| `tui/src/chatwidget/spec_kit/reflex_router.rs` | Routing decision logic |
-| `tui/src/memvid_adapter/types.rs` | RoutingDecision event types |
-| `tui/src/chatwidget/spec_kit/agent_orchestrator.rs:818-883` | Routing emit wiring |
-| `cli/src/reflex_cmd.rs` | CLI command reference |
-
----
-
 ## Continuation Prompt
 
 ```
-Continue SPEC-KIT-978 Slice C implementation. Reference docs/HANDOFF.md for context.
+Continue SPEC-KIT development. Reference docs/HANDOFF.md for full context.
 
-Session goals:
-1. Implement bakeoff metrics collection (SQLite storage + recording)
-2. Add `code reflex bakeoff` CLI and `/speckit.reflex bakeoff` TUI commands
-3. Wire live reflex routing when healthy (full integration, not shadow mode)
-4. Add threshold checking before routing decisions
+Completed:
+- SPEC-KIT-978 Slices A, B, C (reflex health, routing events, live routing)
+- SPEC-KIT-977 (policy drift detection, deterministic hash)
+- SPEC-KIT-971 (branch isolation)
 
-Start with metrics infrastructure, then CLI/TUI commands, then live routing integration.
+Choose focus for this session:
+1. E2E Testing - Test reflex routing with actual local inference server
+2. SPEC-KIT-975 - Expand capsule event types for richer audit trail
+3. Streaming - Activate streaming responses for reflex client
+4. Reliability - Add circuit breaker and rate limiting patterns
 
-Key constraint: Reflex routing is ONLY valid for Implement stage. All other stages use cloud.
+Start by reading the current state and confirming which focus area to pursue.
 ```
