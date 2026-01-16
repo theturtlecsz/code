@@ -244,7 +244,7 @@ pub fn get_head_commit_hash(cwd: &Path) -> Result<String> {
 // =============================================================================
 
 use crate::memvid_adapter::{
-    CapsuleConfig, CapsuleHandle, CheckpointId, default_capsule_config,
+    BranchId, CapsuleConfig, CapsuleHandle, CheckpointId, default_capsule_config,
     DEFAULT_WORKSPACE_ID,
 };
 
@@ -277,6 +277,12 @@ pub fn create_capsule_checkpoint(
     // Open capsule with write lock for checkpoint creation
     let handle = CapsuleHandle::open(config).map_err(|e| {
         SpecKitError::from_string(format!("Failed to open capsule: {}", e))
+    })?;
+
+    // SPEC-KIT-971: Switch to run branch before any writes
+    // Invariant: every run writes to run/<RUN_ID> branch
+    handle.switch_branch(BranchId::for_run(run_id)).map_err(|e| {
+        SpecKitError::from_string(format!("Failed to switch capsule branch: {}", e))
     })?;
 
     // SPEC-KIT-977: Check for policy drift at stage boundary
@@ -535,5 +541,110 @@ mod tests {
         let payload = &event.payload;
         assert!(payload.get("stage").is_some());
         assert!(payload.get("checkpoint_id").is_some());
+    }
+
+    /// SPEC-KIT-971: Test that branch_id is correctly stamped on events and checkpoints.
+    ///
+    /// Invariant: Every run writes to run/<RUN_ID> branch.
+    /// - StageTransition events should have envelope.branch_id == "run/<RUN_ID>"
+    /// - Checkpoint metadata should have branch_id == "run/<RUN_ID>"
+    #[test]
+    fn test_branch_stamping_invariant() {
+        use crate::memvid_adapter::EventType;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("tempdir");
+        let cwd = temp_dir.path();
+
+        // Create .speckit/memvid directory
+        let capsule_dir = cwd.join(".speckit").join("memvid");
+        std::fs::create_dir_all(&capsule_dir).expect("create capsule dir");
+
+        let spec_id = "SPEC-BRANCH-TEST";
+        let run_id = "run-branch-001";
+        let expected_branch = format!("run/{}", run_id);
+
+        // Create checkpoint (this internally switches to run branch)
+        let checkpoint_id = create_capsule_checkpoint(
+            spec_id,
+            run_id,
+            SpecStage::Plan,
+            Some("abc1234"),
+            cwd,
+        )
+        .expect("create checkpoint");
+
+        // Open and verify branch stamping
+        let capsule_path = capsule_dir.join("workspace.mv2");
+        let config = CapsuleConfig {
+            capsule_path,
+            workspace_id: DEFAULT_WORKSPACE_ID.to_string(),
+            ..Default::default()
+        };
+
+        let handle = CapsuleHandle::open_read_only(config).expect("open capsule");
+
+        // Verify checkpoint has correct branch_id
+        let checkpoints = handle.list_checkpoints();
+        assert_eq!(checkpoints.len(), 1, "Should have exactly one checkpoint");
+        let cp = &checkpoints[0];
+        assert_eq!(
+            cp.branch_id,
+            Some(expected_branch.clone()),
+            "Checkpoint should have branch_id == run/<RUN_ID>"
+        );
+
+        // Verify StageTransition event has correct branch_id
+        let events = handle.list_events();
+        let stage_events: Vec<_> = events
+            .iter()
+            .filter(|e| matches!(e.event_type, EventType::StageTransition))
+            .collect();
+
+        assert_eq!(stage_events.len(), 1, "Should have exactly one StageTransition event");
+        let event = stage_events[0];
+        assert_eq!(
+            event.branch_id,
+            Some(expected_branch.clone()),
+            "StageTransition event should have branch_id == run/<RUN_ID>"
+        );
+
+        // Verify events can be filtered by branch
+        // Note: There may be multiple events (StageTransition + PolicySnapshotRef from drift check)
+        let run_branch = BranchId::for_run(run_id);
+        let filtered_events = handle.list_events_filtered(Some(&run_branch));
+        assert!(
+            !filtered_events.is_empty(),
+            "Filtering by run branch should return at least one event"
+        );
+        // All filtered events should have the correct branch_id
+        for event in &filtered_events {
+            assert_eq!(
+                event.branch_id,
+                Some(expected_branch.clone()),
+                "All events on run branch should have correct branch_id"
+            );
+        }
+
+        let filtered_checkpoints = handle.list_checkpoints_filtered(Some(&run_branch));
+        assert_eq!(
+            filtered_checkpoints.len(),
+            1,
+            "Filtering by run branch should return the checkpoint"
+        );
+
+        // Verify main branch filtering excludes the run events
+        let main_branch = BranchId::main();
+        let main_events = handle.list_events_filtered(Some(&main_branch));
+        assert!(
+            main_events.is_empty(),
+            "Filtering by main branch should NOT return run events"
+        );
+
+        let main_checkpoints = handle.list_checkpoints_filtered(Some(&main_branch));
+        assert!(
+            main_checkpoints.is_empty(),
+            "Filtering by main branch should NOT return run checkpoints"
+        );
     }
 }

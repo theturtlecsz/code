@@ -32,7 +32,7 @@ use codex_spec_kit::executor::{
     render_review_dashboard, render_status_dashboard, review_warning, status_degraded_warning,
 };
 use codex_tui::memvid_adapter::{
-    CapsuleConfig, CapsuleHandle, CheckpointId, DiagnosticResult,
+    CapsuleConfig, CapsuleError, CapsuleHandle, CheckpointId, DiagnosticResult,
 };
 use std::io::Write;
 use std::path::PathBuf;
@@ -516,6 +516,10 @@ pub struct CapsuleCommitArgs {
     /// Label for the checkpoint (required)
     #[arg(long = "label", short = 'l', value_name = "LABEL")]
     pub label: String,
+
+    /// Force creation even if label already exists on branch
+    #[arg(long = "force", short = 'f')]
+    pub force: bool,
 
     /// Output as JSON instead of text
     #[arg(long = "json", short = 'j')]
@@ -2316,8 +2320,29 @@ fn run_capsule_commit(capsule_path: &PathBuf, args: CapsuleCommitArgs) -> anyhow
         }
     };
 
-    let checkpoint_id = match handle.commit_manual(&args.label) {
+    // SPEC-KIT-971: Use commit_manual_with_options for force flag support
+    let checkpoint_id = match handle.commit_manual_with_options(&args.label, args.force) {
         Ok(id) => id,
+        Err(CapsuleError::DuplicateLabel { label, branch }) => {
+            // DuplicateLabel is a user-correctable error (use --force)
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("Label '{}' already exists on branch '{}'", label, branch),
+                    "error_code": "DUPLICATE_LABEL",
+                    "hint": "Use --force to create duplicate label",
+                    "capsule_path": capsule_path.display().to_string(),
+                    "label": label,
+                    "branch": branch,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Label '{}' already exists on branch '{}'", label, branch);
+                eprintln!("Hint: Use --force to create duplicate label");
+            }
+            std::process::exit(capsule_exit::USER_ERROR);
+        }
         Err(e) => {
             if args.json {
                 let json = serde_json::json!({

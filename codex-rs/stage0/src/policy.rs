@@ -40,6 +40,7 @@ use uuid::Uuid;
 /// - hash (SHA256) of canonical JSON for integrity
 /// - All scoring weights and model configuration
 /// - Source file references for audit trail
+/// - **Governance policy from model_policy.toml** (SPEC-KIT-977 extension)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolicySnapshot {
     /// Schema version for forward compatibility (e.g., "1.0")
@@ -65,6 +66,13 @@ pub struct PolicySnapshot {
 
     /// Source files this policy was derived from
     pub source_files: Vec<String>,
+
+    /// SPEC-KIT-977: Governance policy from model_policy.toml
+    ///
+    /// Contains the authoritative machine-readable governance surface:
+    /// routing, capture mode, budgets, security, gates, SOR.
+    #[serde(default)]
+    pub governance: Option<GovernancePolicy>,
 }
 
 /// Model configuration captured in the snapshot.
@@ -98,6 +106,555 @@ pub struct ModelConfig {
     pub tier2_cache_ttl_hours: u64,
 }
 
+// =============================================================================
+// SPEC-KIT-977: GovernancePolicy from model_policy.toml
+// =============================================================================
+
+/// Complete governance policy parsed from model_policy.toml.
+///
+/// This is the authoritative machine-readable governance surface.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct GovernancePolicy {
+    /// Schema metadata
+    pub meta: GovernanceMeta,
+
+    /// System of record configuration
+    pub system_of_record: SystemOfRecord,
+
+    /// Model routing configuration
+    pub routing: RoutingConfig,
+
+    /// Capture and replay configuration
+    pub capture: CaptureConfig,
+
+    /// Token and cost budgets
+    pub budgets: BudgetConfig,
+
+    /// Scoring weights for Stage0 retrieval
+    pub scoring: ScoringConfig,
+
+    /// Gate criteria for promotions/sunsets
+    pub gates: GateConfig,
+
+    /// Security controls
+    pub security: SecurityConfig,
+}
+
+/// Schema metadata from [meta]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct GovernanceMeta {
+    pub schema_version: String,
+    pub effective_date: String,
+}
+
+/// System of record configuration from [system_of_record]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SystemOfRecord {
+    pub primary: String,
+    pub fallback: String,
+    pub fallback_enabled: bool,
+}
+
+/// Routing configuration from [routing.cloud] and [routing.reflex]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RoutingConfig {
+    pub cloud: CloudRouting,
+    pub reflex: ReflexRouting,
+}
+
+/// Cloud model routing from [routing.cloud]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CloudRouting {
+    pub architect: Vec<String>,
+    pub implementer: Vec<String>,
+    pub judge: Vec<String>,
+    pub default_architect: String,
+    pub default_implementer: String,
+    pub default_judge: String,
+}
+
+/// Reflex (local inference) routing from [routing.reflex]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ReflexRouting {
+    pub enabled: bool,
+    pub endpoint: String,
+    pub model: String,
+    pub timeout_ms: u64,
+    pub json_schema_required: bool,
+    pub fallback_to_cloud: bool,
+    pub thresholds: ReflexThresholds,
+}
+
+/// Bakeoff thresholds from [routing.reflex.thresholds]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ReflexThresholds {
+    pub p95_latency_ms: u64,
+    pub success_parity_percent: u8,
+    pub json_schema_compliance_percent: u8,
+}
+
+/// Capture configuration from [capture]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CaptureConfig {
+    pub mode: String,
+    pub store_embeddings: bool,
+}
+
+/// Budget configuration from [budgets.tokens] and [budgets.cost]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct BudgetConfig {
+    pub tokens: TokenBudgets,
+    pub cost: CostBudgets,
+}
+
+/// Token budgets per stage from [budgets.tokens]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TokenBudgets {
+    pub plan: u32,
+    pub tasks: u32,
+    pub implement: u32,
+    pub validate: u32,
+    pub audit: u32,
+    pub unlock: u32,
+}
+
+/// Cost thresholds from [budgets.cost]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CostBudgets {
+    pub warn_threshold: f64,
+    pub confirm_threshold: f64,
+    pub hard_limit: f64,
+    pub hard_limit_enabled: bool,
+}
+
+/// Scoring configuration from [scoring]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ScoringConfig {
+    pub usage: f32,
+    pub recency: f32,
+    pub priority: f32,
+    pub decay: f32,
+    pub vector_weight: f32,
+    pub lexical_weight: f32,
+}
+
+/// Gate configuration from [gates.*]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct GateConfig {
+    pub reflex_promotion: ReflexPromotionGate,
+    pub local_memory_sunset: LocalMemorySunsetGate,
+}
+
+/// Reflex promotion gate criteria from [gates.reflex_promotion]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ReflexPromotionGate {
+    pub p95_latency_ms: u64,
+    pub success_parity_percent: u8,
+    pub json_schema_compliance_percent: u8,
+    pub golden_query_regression_allowed: bool,
+}
+
+/// Local-memory sunset gate criteria from [gates.local_memory_sunset]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LocalMemorySunsetGate {
+    pub retrieval_p95_parity: bool,
+    pub search_quality_parity: bool,
+    pub stability_days: u32,
+    pub zero_fallback_activations: bool,
+}
+
+/// Security configuration from [security.*]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SecurityConfig {
+    pub redaction: RedactionConfig,
+    pub export: ExportConfig,
+}
+
+/// Redaction patterns from [security.redaction]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RedactionConfig {
+    pub env_var_patterns: Vec<String>,
+    pub file_patterns: Vec<String>,
+}
+
+/// Export controls from [security.export]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ExportConfig {
+    pub require_explicit_action: bool,
+    pub allow_no_export_marking: bool,
+    pub encrypt_at_rest: bool,
+}
+
+impl GovernancePolicy {
+    /// Load governance policy from model_policy.toml.
+    ///
+    /// Searches for model_policy.toml in:
+    /// 1. Current directory (./model_policy.toml)
+    /// 2. Parent directory (../model_policy.toml)
+    /// 3. codex-rs subdirectory (codex-rs/model_policy.toml)
+    /// 4. Explicit path if provided
+    pub fn load(explicit_path: Option<&Path>) -> Result<Self, String> {
+        let path = if let Some(p) = explicit_path {
+            if p.exists() {
+                p.to_path_buf()
+            } else {
+                return Err(format!("Explicit path not found: {}", p.display()));
+            }
+        } else {
+            Self::find_policy_file()?
+        };
+
+        let content = std::fs::read_to_string(&path)
+            .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
+
+        Self::from_toml(&content)
+    }
+
+    /// Find model_policy.toml by searching standard locations.
+    fn find_policy_file() -> Result<PathBuf, String> {
+        let candidates = [
+            PathBuf::from("model_policy.toml"),
+            PathBuf::from("../model_policy.toml"),
+            PathBuf::from("codex-rs/model_policy.toml"),
+        ];
+
+        for path in &candidates {
+            if path.exists() {
+                return Ok(path.clone());
+            }
+        }
+
+        Err("model_policy.toml not found in standard locations".to_string())
+    }
+
+    /// Parse governance policy from TOML string.
+    pub fn from_toml(content: &str) -> Result<Self, String> {
+        // Parse as generic toml::Value first
+        let value: toml::Value = toml::from_str(content)
+            .map_err(|e| format!("TOML parse error: {}", e))?;
+
+        // Extract sections with defaults for missing fields
+        let meta = Self::parse_meta(&value);
+        let system_of_record = Self::parse_system_of_record(&value);
+        let routing = Self::parse_routing(&value);
+        let capture = Self::parse_capture(&value);
+        let budgets = Self::parse_budgets(&value);
+        let scoring = Self::parse_scoring(&value);
+        let gates = Self::parse_gates(&value);
+        let security = Self::parse_security(&value);
+
+        Ok(Self {
+            meta,
+            system_of_record,
+            routing,
+            capture,
+            budgets,
+            scoring,
+            gates,
+            security,
+        })
+    }
+
+    fn parse_meta(value: &toml::Value) -> GovernanceMeta {
+        let meta = value.get("meta");
+        GovernanceMeta {
+            schema_version: meta
+                .and_then(|m| m.get("schema_version"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("1.0")
+                .to_string(),
+            effective_date: meta
+                .and_then(|m| m.get("effective_date"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+        }
+    }
+
+    fn parse_system_of_record(value: &toml::Value) -> SystemOfRecord {
+        let sor = value.get("system_of_record");
+        SystemOfRecord {
+            primary: sor
+                .and_then(|s| s.get("primary"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("memvid")
+                .to_string(),
+            fallback: sor
+                .and_then(|s| s.get("fallback"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("local-memory")
+                .to_string(),
+            fallback_enabled: sor
+                .and_then(|s| s.get("fallback_enabled"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true),
+        }
+    }
+
+    fn parse_routing(value: &toml::Value) -> RoutingConfig {
+        let routing = value.get("routing");
+
+        let cloud = routing.and_then(|r| r.get("cloud"));
+        let reflex = routing.and_then(|r| r.get("reflex"));
+        let thresholds = reflex.and_then(|r| r.get("thresholds"));
+
+        RoutingConfig {
+            cloud: CloudRouting {
+                architect: cloud
+                    .and_then(|c| c.get("architect"))
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .unwrap_or_default(),
+                implementer: cloud
+                    .and_then(|c| c.get("implementer"))
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .unwrap_or_default(),
+                judge: cloud
+                    .and_then(|c| c.get("judge"))
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .unwrap_or_default(),
+                default_architect: cloud
+                    .and_then(|c| c.get("default_architect"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                default_implementer: cloud
+                    .and_then(|c| c.get("default_implementer"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                default_judge: cloud
+                    .and_then(|c| c.get("default_judge"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+            },
+            reflex: ReflexRouting {
+                enabled: reflex
+                    .and_then(|r| r.get("enabled"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false),
+                endpoint: reflex
+                    .and_then(|r| r.get("endpoint"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("http://127.0.0.1:3009/v1")
+                    .to_string(),
+                model: reflex
+                    .and_then(|r| r.get("model"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                timeout_ms: reflex
+                    .and_then(|r| r.get("timeout_ms"))
+                    .and_then(|v| v.as_integer())
+                    .unwrap_or(1500) as u64,
+                json_schema_required: reflex
+                    .and_then(|r| r.get("json_schema_required"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true),
+                fallback_to_cloud: reflex
+                    .and_then(|r| r.get("fallback_to_cloud"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true),
+                thresholds: ReflexThresholds {
+                    p95_latency_ms: thresholds
+                        .and_then(|t| t.get("p95_latency_ms"))
+                        .and_then(|v| v.as_integer())
+                        .unwrap_or(2000) as u64,
+                    success_parity_percent: thresholds
+                        .and_then(|t| t.get("success_parity_percent"))
+                        .and_then(|v| v.as_integer())
+                        .unwrap_or(85) as u8,
+                    json_schema_compliance_percent: thresholds
+                        .and_then(|t| t.get("json_schema_compliance_percent"))
+                        .and_then(|v| v.as_integer())
+                        .unwrap_or(100) as u8,
+                },
+            },
+        }
+    }
+
+    fn parse_capture(value: &toml::Value) -> CaptureConfig {
+        let capture = value.get("capture");
+        CaptureConfig {
+            mode: capture
+                .and_then(|c| c.get("mode"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("prompts_only")
+                .to_string(),
+            store_embeddings: capture
+                .and_then(|c| c.get("store_embeddings"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true),
+        }
+    }
+
+    fn parse_budgets(value: &toml::Value) -> BudgetConfig {
+        let budgets = value.get("budgets");
+        let tokens = budgets.and_then(|b| b.get("tokens"));
+        let cost = budgets.and_then(|b| b.get("cost"));
+
+        BudgetConfig {
+            tokens: TokenBudgets {
+                plan: tokens
+                    .and_then(|t| t.get("plan"))
+                    .and_then(|v| v.as_integer())
+                    .unwrap_or(8000) as u32,
+                tasks: tokens
+                    .and_then(|t| t.get("tasks"))
+                    .and_then(|v| v.as_integer())
+                    .unwrap_or(4000) as u32,
+                implement: tokens
+                    .and_then(|t| t.get("implement"))
+                    .and_then(|v| v.as_integer())
+                    .unwrap_or(6000) as u32,
+                validate: tokens
+                    .and_then(|t| t.get("validate"))
+                    .and_then(|v| v.as_integer())
+                    .unwrap_or(4000) as u32,
+                audit: tokens
+                    .and_then(|t| t.get("audit"))
+                    .and_then(|v| v.as_integer())
+                    .unwrap_or(4000) as u32,
+                unlock: tokens
+                    .and_then(|t| t.get("unlock"))
+                    .and_then(|v| v.as_integer())
+                    .unwrap_or(2000) as u32,
+            },
+            cost: CostBudgets {
+                warn_threshold: cost
+                    .and_then(|c| c.get("warn_threshold"))
+                    .and_then(|v| v.as_float())
+                    .unwrap_or(5.0),
+                confirm_threshold: cost
+                    .and_then(|c| c.get("confirm_threshold"))
+                    .and_then(|v| v.as_float())
+                    .unwrap_or(10.0),
+                hard_limit: cost
+                    .and_then(|c| c.get("hard_limit"))
+                    .and_then(|v| v.as_float())
+                    .unwrap_or(25.0),
+                hard_limit_enabled: cost
+                    .and_then(|c| c.get("hard_limit_enabled"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false),
+            },
+        }
+    }
+
+    fn parse_scoring(value: &toml::Value) -> ScoringConfig {
+        let scoring = value.get("scoring");
+        ScoringConfig {
+            usage: scoring
+                .and_then(|s| s.get("usage"))
+                .and_then(|v| v.as_float())
+                .unwrap_or(0.30) as f32,
+            recency: scoring
+                .and_then(|s| s.get("recency"))
+                .and_then(|v| v.as_float())
+                .unwrap_or(0.30) as f32,
+            priority: scoring
+                .and_then(|s| s.get("priority"))
+                .and_then(|v| v.as_float())
+                .unwrap_or(0.25) as f32,
+            decay: scoring
+                .and_then(|s| s.get("decay"))
+                .and_then(|v| v.as_float())
+                .unwrap_or(0.15) as f32,
+            vector_weight: scoring
+                .and_then(|s| s.get("vector_weight"))
+                .and_then(|v| v.as_float())
+                .unwrap_or(0.6) as f32,
+            lexical_weight: scoring
+                .and_then(|s| s.get("lexical_weight"))
+                .and_then(|v| v.as_float())
+                .unwrap_or(0.4) as f32,
+        }
+    }
+
+    fn parse_gates(value: &toml::Value) -> GateConfig {
+        let gates = value.get("gates");
+        let reflex = gates.and_then(|g| g.get("reflex_promotion"));
+        let lm_sunset = gates.and_then(|g| g.get("local_memory_sunset"));
+
+        GateConfig {
+            reflex_promotion: ReflexPromotionGate {
+                p95_latency_ms: reflex
+                    .and_then(|r| r.get("p95_latency_ms"))
+                    .and_then(|v| v.as_integer())
+                    .unwrap_or(2000) as u64,
+                success_parity_percent: reflex
+                    .and_then(|r| r.get("success_parity_percent"))
+                    .and_then(|v| v.as_integer())
+                    .unwrap_or(85) as u8,
+                json_schema_compliance_percent: reflex
+                    .and_then(|r| r.get("json_schema_compliance_percent"))
+                    .and_then(|v| v.as_integer())
+                    .unwrap_or(100) as u8,
+                golden_query_regression_allowed: reflex
+                    .and_then(|r| r.get("golden_query_regression_allowed"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false),
+            },
+            local_memory_sunset: LocalMemorySunsetGate {
+                retrieval_p95_parity: lm_sunset
+                    .and_then(|l| l.get("retrieval_p95_parity"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true),
+                search_quality_parity: lm_sunset
+                    .and_then(|l| l.get("search_quality_parity"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true),
+                stability_days: lm_sunset
+                    .and_then(|l| l.get("stability_days"))
+                    .and_then(|v| v.as_integer())
+                    .unwrap_or(30) as u32,
+                zero_fallback_activations: lm_sunset
+                    .and_then(|l| l.get("zero_fallback_activations"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true),
+            },
+        }
+    }
+
+    fn parse_security(value: &toml::Value) -> SecurityConfig {
+        let security = value.get("security");
+        let redaction = security.and_then(|s| s.get("redaction"));
+        let export = security.and_then(|s| s.get("export"));
+
+        SecurityConfig {
+            redaction: RedactionConfig {
+                env_var_patterns: redaction
+                    .and_then(|r| r.get("env_var_patterns"))
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .unwrap_or_default(),
+                file_patterns: redaction
+                    .and_then(|r| r.get("file_patterns"))
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .unwrap_or_default(),
+            },
+            export: ExportConfig {
+                require_explicit_action: export
+                    .and_then(|e| e.get("require_explicit_action"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true),
+                allow_no_export_marking: export
+                    .and_then(|e| e.get("allow_no_export_marking"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true),
+                encrypt_at_rest: export
+                    .and_then(|e| e.get("encrypt_at_rest"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false),
+            },
+        }
+    }
+}
+
 /// Summary info for listing policy snapshots.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolicySnapshotInfo {
@@ -122,6 +679,17 @@ impl PolicySnapshot {
     ///
     /// This is the primary capture method called at run start or stage boundaries.
     pub fn capture(config: &Stage0Config, source_files: Vec<String>) -> Self {
+        Self::capture_with_governance(config, source_files, None)
+    }
+
+    /// Create a new PolicySnapshot with explicit governance policy.
+    ///
+    /// SPEC-KIT-977: Extended capture that includes model_policy.toml governance.
+    pub fn capture_with_governance(
+        config: &Stage0Config,
+        source_files: Vec<String>,
+        governance: Option<GovernancePolicy>,
+    ) -> Self {
         let policy_id = Uuid::new_v4().to_string();
         let created_at = Utc::now();
 
@@ -149,6 +717,7 @@ impl PolicySnapshot {
             weights,
             prompts: HashMap::new(), // Populated by caller if needed
             source_files,
+            governance,
         };
 
         // Compute hash of canonical JSON
@@ -169,6 +738,7 @@ impl PolicySnapshot {
     /// **Canonicalization for determinism:**
     /// - `prompts`: Keys are sorted alphabetically (HashMap order is nondeterministic)
     /// - `source_files`: Sorted alphabetically (filesystem discovery order may vary)
+    /// - `governance`: Included as-is (structs have deterministic serialization)
     ///
     /// This ensures identical inputs produce identical hashes regardless of:
     /// - HashMap iteration order
@@ -185,12 +755,14 @@ impl PolicySnapshot {
 
         // Hash only content fields (not runtime identifiers)
         // This ensures deterministic hashing per SPEC-KIT-977-A1
+        // SPEC-KIT-977: Include governance in hash computation
         let hashable = serde_json::json!({
             "schema_version": self.schema_version,
             "model_config": self.model_config,
             "weights": self.weights,
             "prompts": sorted_prompts,
             "source_files": sorted_sources,
+            "governance": self.governance,
         });
 
         let canonical = serde_json::to_string(&hashable).unwrap_or_default();
@@ -395,11 +967,37 @@ impl Default for PolicyStore {
 /// Capture a policy snapshot at run start.
 ///
 /// This is the main entry point called by /speckit.auto Stage0.
+///
+/// SPEC-KIT-977: Now includes governance policy from model_policy.toml.
 pub fn capture_policy_snapshot(config: &Stage0Config) -> PolicySnapshot {
     // Collect source file paths
     let source_files = collect_source_files();
 
-    PolicySnapshot::capture(config, source_files)
+    // SPEC-KIT-977: Load governance policy from model_policy.toml
+    let governance = load_governance_policy();
+
+    PolicySnapshot::capture_with_governance(config, source_files, governance)
+}
+
+/// Load governance policy from model_policy.toml.
+///
+/// SPEC-KIT-977: Searches standard locations for model_policy.toml.
+/// Returns None if file not found or parse error (non-fatal).
+fn load_governance_policy() -> Option<GovernancePolicy> {
+    match GovernancePolicy::load(None) {
+        Ok(policy) => {
+            tracing::debug!(
+                schema_version = %policy.meta.schema_version,
+                effective_date = %policy.meta.effective_date,
+                "Loaded governance policy from model_policy.toml"
+            );
+            Some(policy)
+        }
+        Err(e) => {
+            tracing::debug!("Governance policy not loaded: {}", e);
+            None
+        }
+    }
 }
 
 /// Collect paths of source files that contribute to policy.
@@ -795,6 +1393,270 @@ mod tests {
         assert_ne!(
             snapshot1.hash, snapshot2.hash,
             "Different weights should produce different hash"
+        );
+    }
+
+    // =========================================================================
+    // SPEC-KIT-977: Governance Policy Tests
+    // =========================================================================
+
+    /// SPEC-KIT-977: Parse governance policy from TOML string.
+    #[test]
+    fn test_governance_policy_from_toml() {
+        // Use a simple, minimal TOML to test parsing
+        let toml_content = r##"[meta]
+schema_version = "1.0"
+effective_date = "2026-01-12"
+
+[system_of_record]
+primary = "memvid"
+fallback = "local-memory"
+fallback_enabled = true
+
+[routing.cloud]
+architect = ["claude-sonnet-4"]
+implementer = ["claude-sonnet-4"]
+judge = ["claude-sonnet-4"]
+default_architect = "claude-sonnet-4"
+default_implementer = "claude-sonnet-4"
+default_judge = "claude-sonnet-4"
+
+[routing.reflex]
+enabled = false
+endpoint = "http://127.0.0.1:3009/v1"
+model = "qwen2.5-coder-7b"
+timeout_ms = 1500
+json_schema_required = true
+fallback_to_cloud = true
+
+[routing.reflex.thresholds]
+p95_latency_ms = 2000
+success_parity_percent = 85
+json_schema_compliance_percent = 100
+
+[capture]
+mode = "prompts_only"
+store_embeddings = true
+
+[budgets.tokens]
+plan = 8000
+tasks = 4000
+implement = 6000
+validate = 4000
+audit = 4000
+unlock = 2000
+
+[budgets.cost]
+warn_threshold = 5.0
+confirm_threshold = 10.0
+hard_limit = 25.0
+hard_limit_enabled = false
+
+[scoring]
+usage = 0.30
+recency = 0.30
+priority = 0.25
+decay = 0.15
+vector_weight = 0.6
+lexical_weight = 0.4
+
+[gates.reflex_promotion]
+p95_latency_ms = 2000
+success_parity_percent = 85
+json_schema_compliance_percent = 100
+golden_query_regression_allowed = false
+
+[gates.local_memory_sunset]
+retrieval_p95_parity = true
+search_quality_parity = true
+stability_days = 30
+zero_fallback_activations = true
+
+[security.redaction]
+env_var_patterns = ["*_KEY", "*_SECRET"]
+file_patterns = [".env", "credentials"]
+
+[security.export]
+require_explicit_action = true
+allow_no_export_marking = true
+encrypt_at_rest = false
+"##;
+
+        let policy = GovernancePolicy::from_toml(toml_content).expect("parse toml");
+
+        // Verify meta
+        assert_eq!(policy.meta.schema_version, "1.0");
+        assert_eq!(policy.meta.effective_date, "2026-01-12");
+
+        // Verify system_of_record
+        assert_eq!(policy.system_of_record.primary, "memvid");
+        assert!(policy.system_of_record.fallback_enabled);
+
+        // Verify routing
+        assert_eq!(policy.routing.cloud.architect.len(), 1);
+        assert_eq!(policy.routing.reflex.endpoint, "http://127.0.0.1:3009/v1");
+        assert_eq!(policy.routing.reflex.thresholds.p95_latency_ms, 2000);
+
+        // Verify budgets
+        assert_eq!(policy.budgets.tokens.plan, 8000);
+        assert_eq!(policy.budgets.cost.hard_limit, 25.0);
+
+        // Verify scoring
+        assert_eq!(policy.scoring.usage, 0.30);
+        assert_eq!(policy.scoring.vector_weight, 0.6);
+
+        // Verify gates
+        assert!(!policy.gates.reflex_promotion.golden_query_regression_allowed);
+        assert_eq!(policy.gates.local_memory_sunset.stability_days, 30);
+
+        // Verify security
+        assert_eq!(policy.security.redaction.env_var_patterns.len(), 2);
+        assert!(policy.security.export.require_explicit_action);
+    }
+
+    /// SPEC-KIT-977: Governance policy included in snapshot hash.
+    ///
+    /// Acceptance test: Changing a single routing value changes hash.
+    #[test]
+    fn test_governance_changes_snapshot_hash() {
+        let config = Stage0Config::default();
+        let source_files = vec!["test.toml".to_string()];
+
+        // Create governance with reflex disabled
+        let mut gov1 = GovernancePolicy::default();
+        gov1.routing.reflex.enabled = false;
+        gov1.routing.reflex.thresholds.p95_latency_ms = 2000;
+
+        // Create governance with reflex enabled (only difference)
+        let mut gov2 = GovernancePolicy::default();
+        gov2.routing.reflex.enabled = true;
+        gov2.routing.reflex.thresholds.p95_latency_ms = 2000;
+
+        let snapshot1 = PolicySnapshot::capture_with_governance(
+            &config,
+            source_files.clone(),
+            Some(gov1),
+        );
+        let snapshot2 = PolicySnapshot::capture_with_governance(
+            &config,
+            source_files,
+            Some(gov2),
+        );
+
+        // Different governance = different hash
+        assert_ne!(
+            snapshot1.hash, snapshot2.hash,
+            "Changing routing.reflex.enabled should produce different hash"
+        );
+    }
+
+    /// SPEC-KIT-977: Identical governance produces identical hash.
+    #[test]
+    fn test_governance_identical_produces_same_hash() {
+        let config = Stage0Config::default();
+        let source_files = vec!["test.toml".to_string()];
+
+        let gov1 = GovernancePolicy::default();
+        let gov2 = GovernancePolicy::default();
+
+        let snapshot1 = PolicySnapshot::capture_with_governance(
+            &config,
+            source_files.clone(),
+            Some(gov1),
+        );
+        let snapshot2 = PolicySnapshot::capture_with_governance(
+            &config,
+            source_files,
+            Some(gov2),
+        );
+
+        // Identical governance = identical hash
+        assert_eq!(
+            snapshot1.hash, snapshot2.hash,
+            "Identical governance should produce identical hash"
+        );
+    }
+
+    /// SPEC-KIT-977: Snapshot JSON roundtrip preserves governance.
+    #[test]
+    fn test_governance_json_roundtrip() {
+        let config = Stage0Config::default();
+        let source_files = vec!["test.toml".to_string()];
+
+        let mut gov = GovernancePolicy::default();
+        gov.meta.schema_version = "1.0".to_string();
+        gov.meta.effective_date = "2026-01-12".to_string();
+        gov.routing.reflex.enabled = true;
+        gov.routing.reflex.model = "test-model".to_string();
+        gov.budgets.tokens.plan = 9999;
+
+        let original = PolicySnapshot::capture_with_governance(
+            &config,
+            source_files,
+            Some(gov),
+        );
+
+        // Serialize and deserialize
+        let json = original.to_json().expect("serialize");
+        let restored = PolicySnapshot::from_json(&json).expect("deserialize");
+
+        // Verify governance preserved
+        assert_eq!(original.hash, restored.hash);
+        assert!(restored.verify_hash());
+
+        let gov_restored = restored.governance.expect("governance present");
+        assert_eq!(gov_restored.meta.effective_date, "2026-01-12");
+        assert!(gov_restored.routing.reflex.enabled);
+        assert_eq!(gov_restored.routing.reflex.model, "test-model");
+        assert_eq!(gov_restored.budgets.tokens.plan, 9999);
+    }
+
+    /// SPEC-KIT-977: None governance produces consistent hash.
+    #[test]
+    fn test_no_governance_produces_consistent_hash() {
+        let config = Stage0Config::default();
+        let source_files = vec!["test.toml".to_string()];
+
+        let snapshot1 = PolicySnapshot::capture_with_governance(
+            &config,
+            source_files.clone(),
+            None,
+        );
+        let snapshot2 = PolicySnapshot::capture_with_governance(
+            &config,
+            source_files,
+            None,
+        );
+
+        // No governance should still produce consistent hash
+        assert_eq!(
+            snapshot1.hash, snapshot2.hash,
+            "None governance should produce consistent hash"
+        );
+    }
+
+    /// SPEC-KIT-977: Governance affects hash differently than no governance.
+    #[test]
+    fn test_governance_vs_no_governance_hash_differs() {
+        let config = Stage0Config::default();
+        let source_files = vec!["test.toml".to_string()];
+
+        let snapshot_none = PolicySnapshot::capture_with_governance(
+            &config,
+            source_files.clone(),
+            None,
+        );
+
+        let snapshot_some = PolicySnapshot::capture_with_governance(
+            &config,
+            source_files,
+            Some(GovernancePolicy::default()),
+        );
+
+        // With vs without governance produces different hash
+        assert_ne!(
+            snapshot_none.hash, snapshot_some.hash,
+            "With governance vs without should produce different hash"
         );
     }
 }

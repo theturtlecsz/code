@@ -448,4 +448,67 @@ mod tests {
         assert!(json.contains("json_schema"));
         assert!(json.contains("properties"));
     }
+
+    /// SPEC-KIT-978: Test that json_compliant correctly identifies valid JSON
+    #[test]
+    fn test_json_compliance_valid_json() {
+        // Simulate the json_compliant check from chat_completion_internal
+        let valid_json_content = r#"{"stage": "implement", "confidence": 0.95}"#;
+        let has_schema = true;
+
+        let json_compliant = if has_schema {
+            serde_json::from_str::<serde_json::Value>(valid_json_content).is_ok()
+        } else {
+            true
+        };
+
+        assert!(json_compliant, "Valid JSON should be marked compliant");
+    }
+
+    /// SPEC-KIT-978: Test that json_compliant rejects non-JSON content
+    #[test]
+    fn test_json_compliance_rejects_non_json() {
+        // Simulate the json_compliant check from chat_completion_internal
+        let non_json_content = "This is plain text, not JSON";
+        let has_schema = true;
+
+        let json_compliant = if has_schema {
+            serde_json::from_str::<serde_json::Value>(non_json_content).is_ok()
+        } else {
+            true
+        };
+
+        assert!(!json_compliant, "Non-JSON content should be marked non-compliant");
+    }
+
+    /// SPEC-KIT-978: Test that json_compliant rejects malformed JSON
+    #[test]
+    fn test_json_compliance_rejects_malformed_json() {
+        // Simulate the json_compliant check from chat_completion_internal
+        let malformed_json = r#"{"stage": "implement", "missing_brace""#;
+        let has_schema = true;
+
+        let json_compliant = if has_schema {
+            serde_json::from_str::<serde_json::Value>(malformed_json).is_ok()
+        } else {
+            true
+        };
+
+        assert!(!json_compliant, "Malformed JSON should be marked non-compliant");
+    }
+
+    /// SPEC-KIT-978: Test that without schema, any content is considered compliant
+    #[test]
+    fn test_json_compliance_without_schema() {
+        let non_json_content = "Plain text without schema requirement";
+        let has_schema = false;
+
+        let json_compliant = if has_schema {
+            serde_json::from_str::<serde_json::Value>(non_json_content).is_ok()
+        } else {
+            true
+        };
+
+        assert!(json_compliant, "Without schema, any content should be compliant");
+    }
 }

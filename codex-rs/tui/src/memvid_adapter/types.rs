@@ -214,6 +214,11 @@ impl BranchId {
         BranchId(format!("run/{}", run_id))
     }
 
+    /// Create a BranchId from a string (for deserialization).
+    pub fn from_str(s: &str) -> Self {
+        BranchId(s.to_string())
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -391,16 +396,42 @@ pub struct RoutingDecisionPayload {
 // UriIndex - URI resolution (D70 implementation posture)
 // =============================================================================
 
-/// Index mapping logical URIs to physical pointers.
+/// Index mapping logical URIs to physical pointers with time-travel support.
 ///
 /// Per SPEC-KIT-971 implementation posture:
 /// - Maintain a `uri_index` track that maps `uri → latest_physical_pointer`
 ///   per `(branch_id, checkpoint)`
 /// - Update this index at commit barriers
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// - Support time-travel resolution via `as_of` checkpoint
+///
+/// ## Structure
+/// - `entries`: Branch-scoped current state (BranchId → (URI → Pointer))
+/// - `snapshots`: Historical snapshots keyed by (BranchId, CheckpointId)
+///
+/// ## Time-Travel Resolution
+/// - resolve(uri, branch, None) → current pointer on branch
+/// - resolve(uri, branch, Some(checkpoint)) → pointer at that checkpoint
+#[derive(Debug, Clone, Default)]
 pub struct UriIndex {
-    /// Map from logical URI to physical frame pointer
-    entries: std::collections::HashMap<LogicalUri, PhysicalPointer>,
+    /// Current entries per branch: BranchId → (LogicalUri → PhysicalPointer)
+    entries: std::collections::HashMap<BranchId, std::collections::HashMap<LogicalUri, PhysicalPointer>>,
+
+    /// Historical snapshots: (BranchId, CheckpointId) → (LogicalUri → PhysicalPointer)
+    /// Created at each commit_stage/commit_manual checkpoint.
+    snapshots: std::collections::HashMap<(BranchId, CheckpointId), std::collections::HashMap<LogicalUri, PhysicalPointer>>,
+}
+
+/// Serializable form of UriIndex for persistence.
+///
+/// We serialize snapshots to disk so time-travel works after reopen.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UriIndexSnapshot {
+    /// The checkpoint this snapshot is for
+    pub checkpoint_id: String,
+    /// The branch this snapshot is for
+    pub branch_id: String,
+    /// URI → PhysicalPointer mappings at this checkpoint
+    pub entries: std::collections::HashMap<String, PhysicalPointer>,
 }
 
 impl UriIndex {
@@ -408,29 +439,150 @@ impl UriIndex {
         Self::default()
     }
 
-    /// Register a new URI → physical pointer mapping.
+    /// Register a new URI → physical pointer mapping on the given branch.
+    ///
+    /// This updates the current (live) state for the branch.
+    pub fn insert_on_branch(&mut self, branch: &BranchId, uri: LogicalUri, pointer: PhysicalPointer) {
+        self.entries
+            .entry(branch.clone())
+            .or_default()
+            .insert(uri, pointer);
+    }
+
+    /// Register a new URI → physical pointer mapping (uses main branch).
+    ///
+    /// For backward compatibility with existing code that doesn't specify branch.
     pub fn insert(&mut self, uri: LogicalUri, pointer: PhysicalPointer) {
-        self.entries.insert(uri, pointer);
+        self.insert_on_branch(&BranchId::main(), uri, pointer);
     }
 
-    /// Resolve a logical URI to its physical pointer.
+    /// Resolve a logical URI to its physical pointer on the given branch.
+    ///
+    /// ## Parameters
+    /// - `uri`: The logical URI to resolve
+    /// - `branch`: Branch to look up (defaults to main if None)
+    /// - `as_of`: Checkpoint for time-travel (None = current/latest)
+    ///
+    /// ## Returns
+    /// - If `as_of` is None: returns current pointer on branch
+    /// - If `as_of` is Some: returns pointer at that checkpoint (time-travel)
+    pub fn resolve_on_branch(
+        &self,
+        uri: &LogicalUri,
+        branch: &BranchId,
+        as_of: Option<&CheckpointId>,
+    ) -> Option<&PhysicalPointer> {
+        match as_of {
+            Some(checkpoint_id) => {
+                // Time-travel: look up in snapshot
+                let key = (branch.clone(), checkpoint_id.clone());
+                self.snapshots
+                    .get(&key)
+                    .and_then(|snapshot| snapshot.get(uri))
+            }
+            None => {
+                // Current state: look up in live entries
+                self.entries.get(branch).and_then(|map| map.get(uri))
+            }
+        }
+    }
+
+    /// Resolve a logical URI to its physical pointer (uses main branch, current state).
+    ///
+    /// For backward compatibility with existing code.
     pub fn resolve(&self, uri: &LogicalUri) -> Option<&PhysicalPointer> {
-        self.entries.get(uri)
+        // Check main branch first, then check all branches for backward compat
+        if let Some(ptr) = self.entries.get(&BranchId::main()).and_then(|m| m.get(uri)) {
+            return Some(ptr);
+        }
+        // Fallback: check all branches (for URIs inserted without branch context)
+        for map in self.entries.values() {
+            if let Some(ptr) = map.get(uri) {
+                return Some(ptr);
+            }
+        }
+        None
     }
 
-    /// Check if a URI exists in the index.
+    /// Check if a URI exists in the index (any branch).
     pub fn contains(&self, uri: &LogicalUri) -> bool {
-        self.entries.contains_key(uri)
+        self.entries.values().any(|map| map.contains_key(uri))
     }
 
-    /// Get the number of URIs in the index.
+    /// Get the total number of URIs across all branches.
     pub fn len(&self) -> usize {
-        self.entries.len()
+        self.entries.values().map(|m| m.len()).sum()
     }
 
     /// Check if the index is empty.
     pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
+        self.entries.values().all(|m| m.is_empty())
+    }
+
+    /// Create a snapshot of the current branch state at a checkpoint.
+    ///
+    /// Called by commit_stage/commit_manual to enable time-travel resolution.
+    pub fn snapshot(&mut self, branch: &BranchId, checkpoint_id: &CheckpointId) {
+        if let Some(current) = self.entries.get(branch) {
+            let key = (branch.clone(), checkpoint_id.clone());
+            self.snapshots.insert(key, current.clone());
+        } else {
+            // Empty branch - still create snapshot (empty map)
+            let key = (branch.clone(), checkpoint_id.clone());
+            self.snapshots.insert(key, std::collections::HashMap::new());
+        }
+    }
+
+    /// Check if a snapshot exists for a (branch, checkpoint) pair.
+    pub fn has_snapshot(&self, branch: &BranchId, checkpoint_id: &CheckpointId) -> bool {
+        let key = (branch.clone(), checkpoint_id.clone());
+        self.snapshots.contains_key(&key)
+    }
+
+    /// Export a snapshot for persistence.
+    ///
+    /// Returns a serializable form of the snapshot at the given checkpoint.
+    pub fn export_snapshot(&self, branch: &BranchId, checkpoint_id: &CheckpointId) -> Option<UriIndexSnapshot> {
+        let key = (branch.clone(), checkpoint_id.clone());
+        self.snapshots.get(&key).map(|entries| {
+            UriIndexSnapshot {
+                checkpoint_id: checkpoint_id.as_str().to_string(),
+                branch_id: branch.as_str().to_string(),
+                entries: entries
+                    .iter()
+                    .map(|(uri, ptr)| (uri.as_str().to_string(), ptr.clone()))
+                    .collect(),
+            }
+        })
+    }
+
+    /// Import a snapshot from persistence.
+    ///
+    /// Used during scan_and_rebuild to restore historical snapshots.
+    pub fn import_snapshot(&mut self, snapshot: UriIndexSnapshot) {
+        let branch = BranchId::from_str(&snapshot.branch_id);
+        let checkpoint = CheckpointId::new(snapshot.checkpoint_id);
+        let key = (branch, checkpoint);
+
+        let entries: std::collections::HashMap<LogicalUri, PhysicalPointer> = snapshot
+            .entries
+            .into_iter()
+            .filter_map(|(uri_str, ptr)| {
+                uri_str.parse::<LogicalUri>().ok().map(|uri| (uri, ptr))
+            })
+            .collect();
+
+        self.snapshots.insert(key, entries);
+    }
+
+    /// Get all snapshot keys (for diagnostics/testing).
+    pub fn snapshot_keys(&self) -> Vec<(BranchId, CheckpointId)> {
+        self.snapshots.keys().cloned().collect()
+    }
+
+    /// Get all branch keys (for diagnostics/testing).
+    pub fn branch_keys(&self) -> Vec<BranchId> {
+        self.entries.keys().cloned().collect()
     }
 }
 

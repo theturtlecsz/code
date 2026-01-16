@@ -24,7 +24,7 @@
 use crate::memvid_adapter::lock::{CapsuleLock, LockError, LockMetadata, is_locked, lock_path_for};
 use crate::memvid_adapter::types::{
     BranchId, CheckpointId, CheckpointMetadata, EventType, LogicalUri, ObjectType,
-    PhysicalPointer, RoutingDecisionPayload, RunEventEnvelope, UriIndex,
+    PhysicalPointer, RoutingDecisionPayload, RunEventEnvelope, UriIndex, UriIndexSnapshot,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -69,6 +69,10 @@ pub enum CapsuleError {
 
     #[error("Invalid operation: {reason}")]
     InvalidOperation { reason: String },
+
+    /// SPEC-KIT-971: Duplicate label within branch
+    #[error("Label '{label}' already exists on branch '{branch}'. Use --force to override.")]
+    DuplicateLabel { label: String, branch: String },
 }
 
 pub type Result<T> = std::result::Result<T, CapsuleError>;
@@ -125,6 +129,8 @@ pub enum RecordKind {
     Artifact = 0,
     Checkpoint = 1,
     Event = 2,
+    /// SPEC-KIT-971: URI index snapshot for time-travel resolution
+    UriIndexSnapshot = 3,
 }
 
 impl TryFrom<u8> for RecordKind {
@@ -135,6 +141,7 @@ impl TryFrom<u8> for RecordKind {
             0 => Ok(RecordKind::Artifact),
             1 => Ok(RecordKind::Checkpoint),
             2 => Ok(RecordKind::Event),
+            3 => Ok(RecordKind::UriIndexSnapshot),
             _ => Err(()),
         }
     }
@@ -526,6 +533,12 @@ impl CapsuleHandle {
                                 events.push(event);
                             }
                         }
+                        RecordKind::UriIndexSnapshot => {
+                            // SPEC-KIT-971: Restore URI index snapshot for time-travel
+                            if let Ok(snapshot) = serde_json::from_value::<UriIndexSnapshot>(record.meta.clone()) {
+                                uri_index.import_snapshot(snapshot);
+                            }
+                        }
                     }
 
                     stored_records.push(record);
@@ -787,8 +800,9 @@ impl CapsuleHandle {
         // Write record to disk directly (bypass queue for immediate persistence)
         let pointer = self.write_record(RecordKind::Artifact, &meta_value, &data)?;
 
-        // Update URI index
-        self.uri_index.write().unwrap().insert(uri.clone(), pointer);
+        // Update URI index (branch-aware for SPEC-KIT-971 time-travel)
+        let branch = self.current_branch();
+        self.uri_index.write().unwrap().insert_on_branch(&branch, uri.clone(), pointer);
 
         // Track as current policy
         self.set_current_policy(policy_id, policy_hash, &uri);
@@ -828,6 +842,9 @@ impl CapsuleHandle {
         let writes: Vec<_> = queue.drain(..).collect();
         drop(queue);
 
+        // Get current branch for branch-aware insert (SPEC-KIT-971)
+        let branch = self.current_branch();
+
         for write in writes {
             // Create artifact record metadata
             let art_meta = ArtifactRecordMeta {
@@ -844,8 +861,8 @@ impl CapsuleHandle {
             // Write record to disk
             let pointer = self.write_record(RecordKind::Artifact, &meta_value, &write.data)?;
 
-            // Update URI index
-            self.uri_index.write().unwrap().insert(write.uri, pointer);
+            // Update URI index (branch-aware for SPEC-KIT-971 time-travel)
+            self.uri_index.write().unwrap().insert_on_branch(&branch, write.uri, pointer);
         }
 
         Ok(())
@@ -911,6 +928,25 @@ impl CapsuleHandle {
         // Store checkpoint in memory
         self.checkpoints.write().unwrap().push(metadata);
 
+        // SPEC-KIT-971: Create and persist URI index snapshot for time-travel
+        let branch = self.current_branch();
+        {
+            let mut uri_index = self.uri_index.write().unwrap();
+            uri_index.snapshot(&branch, &checkpoint_id);
+
+            // Persist snapshot to disk for reopen
+            if self.file_handle.lock().unwrap().is_some() {
+                if let Some(snapshot) = uri_index.export_snapshot(&branch, &checkpoint_id) {
+                    let snapshot_value = serde_json::to_value(&snapshot).map_err(|e| {
+                        CapsuleError::InvalidOperation {
+                            reason: format!("Failed to serialize URI index snapshot: {}", e),
+                        }
+                    })?;
+                    self.write_record(RecordKind::UriIndexSnapshot, &snapshot_value, &[])?;
+                }
+            }
+        }
+
         // Emit StageTransition event with policy info (SPEC-KIT-977)
         let policy_info = self.current_policy();
         let event_payload = if let Some(ref policy) = policy_info {
@@ -936,9 +972,34 @@ impl CapsuleHandle {
     /// Create a manual checkpoint.
     ///
     /// Used by `speckit capsule commit --label <LABEL>`
+    ///
+    /// Labels must be unique within the current branch. Use `commit_manual_force`
+    /// to override uniqueness check.
     pub fn commit_manual(&self, label: &str) -> Result<CheckpointId> {
+        self.commit_manual_with_options(label, false)
+    }
+
+    /// Create a manual checkpoint, optionally forcing duplicate labels.
+    ///
+    /// ## Parameters
+    /// - `label`: The checkpoint label
+    /// - `force`: If true, allows creating checkpoints with duplicate labels
+    ///
+    /// ## SPEC-KIT-971 Label Uniqueness
+    /// Labels must be unique within the current branch by default.
+    /// Use `force=true` to override (e.g., via `--force` CLI flag).
+    pub fn commit_manual_with_options(&self, label: &str, force: bool) -> Result<CheckpointId> {
         if !self.is_open() {
             return Err(CapsuleError::NotOpen);
+        }
+
+        // SPEC-KIT-971: Enforce label uniqueness within branch (unless forced)
+        let branch = self.current_branch();
+        if !force && !self.is_label_unique(label, &branch) {
+            return Err(CapsuleError::DuplicateLabel {
+                label: label.to_string(),
+                branch: branch.as_str().to_string(),
+            });
         }
 
         // Flush pending writes
@@ -951,7 +1012,7 @@ impl CapsuleHandle {
         ));
 
         // SPEC-KIT-971: Stamp branch_id for run isolation
-        let branch_id = self.current_branch().as_str().to_string();
+        let branch_id = branch.as_str().to_string();
 
         // Create checkpoint metadata
         let metadata = CheckpointMetadata {
@@ -978,6 +1039,25 @@ impl CapsuleHandle {
 
         // Store checkpoint in memory
         self.checkpoints.write().unwrap().push(metadata);
+
+        // SPEC-KIT-971: Create and persist URI index snapshot for time-travel
+        let branch = self.current_branch();
+        {
+            let mut uri_index = self.uri_index.write().unwrap();
+            uri_index.snapshot(&branch, &checkpoint_id);
+
+            // Persist snapshot to disk for reopen
+            if self.file_handle.lock().unwrap().is_some() {
+                if let Some(snapshot) = uri_index.export_snapshot(&branch, &checkpoint_id) {
+                    let snapshot_value = serde_json::to_value(&snapshot).map_err(|e| {
+                        CapsuleError::InvalidOperation {
+                            reason: format!("Failed to serialize URI index snapshot: {}", e),
+                        }
+                    })?;
+                    self.write_record(RecordKind::UriIndexSnapshot, &snapshot_value, &[])?;
+                }
+            }
+        }
 
         Ok(checkpoint_id)
     }
@@ -1272,9 +1352,22 @@ impl CapsuleHandle {
                 });
             }
 
-            // Verify checkpoint is on the target branch
+            // Verify checkpoint is on the target branch (if checkpoint has branch info)
             let cp = checkpoint.unwrap();
-            if let Some(run_id) = &cp.run_id {
+            if let Some(ref cp_branch_str) = cp.branch_id {
+                let cp_branch = BranchId::from_str(cp_branch_str);
+                if target_branch != &cp_branch {
+                    return Err(CapsuleError::InvalidOperation {
+                        reason: format!(
+                            "Checkpoint {} is on branch {}, not {}",
+                            checkpoint_id.as_str(),
+                            cp_branch.as_str(),
+                            target_branch.as_str()
+                        ),
+                    });
+                }
+            } else if let Some(run_id) = &cp.run_id {
+                // Fallback for older checkpoints without explicit branch_id
                 let cp_branch = BranchId::for_run(run_id);
                 if target_branch != &cp_branch && !target_branch.is_main() {
                     return Err(CapsuleError::InvalidOperation {
@@ -1287,15 +1380,12 @@ impl CapsuleHandle {
                     });
                 }
             }
-
-            // TODO: When memvid crate is added, resolve against checkpoint snapshot
-            // For now, we only have the current URI index
         }
 
-        // Look up in the URI index
+        // SPEC-KIT-971: Time-travel resolution using UriIndex snapshots
         let uri_index = self.uri_index.read().unwrap();
         uri_index
-            .resolve(uri)
+            .resolve_on_branch(uri, target_branch, as_of)
             .cloned()
             .ok_or_else(|| CapsuleError::UriNotFound { uri: uri.clone() })
     }

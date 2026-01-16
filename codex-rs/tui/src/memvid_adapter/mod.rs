@@ -59,7 +59,7 @@ pub use capsule::{
 pub use lock::{LockMetadata, is_locked, lock_path_for};
 pub use types::{
     LogicalUri, CheckpointId, CheckpointMetadata, BranchId,
-    RunEventEnvelope, EventType, UriIndex,
+    RunEventEnvelope, EventType, UriIndex, UriIndexSnapshot,
     // SPEC-KIT-978: Routing decision types
     RoutingMode, RoutingFallbackReason, RoutingDecisionPayload,
 };

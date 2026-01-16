@@ -30,6 +30,40 @@ use super::reflex_router::{decide_implementer_routing, emit_routing_event, Routi
 use super::reflex_metrics::get_metrics_db;
 use super::reflex_client::{ChatMessage, ReflexClient};
 use crate::memvid_adapter::RoutingMode;
+
+/// SPEC-KIT-978: JSON schema for agent output enforcement.
+///
+/// Requires a "stage" field (consistent with json_extractor.rs validation)
+/// while allowing any additional properties for flexibility.
+fn agent_output_schema() -> serde_json::Value {
+    serde_json::json!({
+        "name": "agent_output",
+        "strict": false,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "stage": {
+                    "type": "string",
+                    "description": "The stage this agent output belongs to (e.g., plan, implement, validate)"
+                },
+                "confidence": {
+                    "type": "number",
+                    "description": "Agent's confidence in the output (0.0 to 1.0)"
+                },
+                "decision": {
+                    "type": "string",
+                    "description": "Agent's decision or recommendation"
+                },
+                "reasoning": {
+                    "type": "string",
+                    "description": "Explanation of the agent's reasoning"
+                }
+            },
+            "required": ["stage"],
+            "additionalProperties": true
+        }
+    })
+}
 use codex_core::agent_tool::AGENT_MANAGER;
 use codex_core::config_types::AgentConfig;
 use codex_core::protocol::{AgentInfo, InputItem};
@@ -746,9 +780,10 @@ async fn spawn_reflex_stage_agents_sequential(
             },
         ];
 
-        // Call reflex endpoint
+        // SPEC-KIT-978: Call reflex endpoint with JSON schema enforcement
+        let schema = agent_output_schema();
         let start = Instant::now();
-        let result = client.chat_completion(&messages).await;
+        let result = client.chat_completion_json(&messages, &schema).await;
         let elapsed_ms = start.elapsed().as_millis() as u64;
 
         // Record metrics

@@ -22,11 +22,13 @@ fi
 
 # === V6 Doc Contract: Documentation lint (SPEC-KIT-972) ===
 # Run doc lint if any .md files or docs/ changed
+# NOTE: scripts/doc_lint.py forwards to canonical codex-rs/scripts/doc_lint.py
 DOC_CHANGES=$(git diff --cached --name-only | grep -E "\\.md$|^docs/" || true)
 if [ -n "$DOC_CHANGES" ]; then
     if [[ -f "scripts/doc_lint.py" ]]; then
         echo ""
         echo "Documentation changes detected, running doc lint..."
+        echo "(using canonical: codex-rs/scripts/doc_lint.py)"
         if ! python3 scripts/doc_lint.py --warn-only; then
             echo ""
             echo "⚠️  Doc lint warnings (non-blocking)"

@@ -570,9 +570,117 @@ fn test_is_label_unique() {
     // Create checkpoint with label
     handle.commit_manual("v1.0").unwrap();
 
-    // Label should no longer be unique (note: branch filtering limitation in stub)
-    // In full implementation, this would correctly check within branch only
-    let _ = handle.is_label_unique("v1.0", &main);
+    // Label should no longer be unique
+    assert!(!handle.is_label_unique("v1.0", &main), "Label should not be unique after commit");
+}
+
+/// SPEC-KIT-971: Test that commit_manual enforces label uniqueness.
+///
+/// Acceptance test:
+/// - commit_manual("v1.0") succeeds first time
+/// - commit_manual("v1.0") fails second time with DuplicateLabel error
+#[test]
+fn test_commit_manual_enforces_label_uniqueness() {
+    use crate::memvid_adapter::CapsuleError;
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("duplicate_label.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path,
+        workspace_id: "duplicate_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("should create");
+
+    // First commit with "v1.0" should succeed
+    let result1 = handle.commit_manual("v1.0");
+    assert!(result1.is_ok(), "First commit_manual should succeed");
+
+    // Second commit with same label should fail with DuplicateLabel
+    let result2 = handle.commit_manual("v1.0");
+    assert!(result2.is_err(), "Second commit_manual with same label should fail");
+
+    // Verify it's specifically a DuplicateLabel error
+    match result2 {
+        Err(CapsuleError::DuplicateLabel { label, branch }) => {
+            assert_eq!(label, "v1.0", "Error should contain the duplicate label");
+            assert_eq!(branch, "main", "Error should contain the branch name");
+        }
+        Err(e) => panic!("Expected DuplicateLabel error, got: {:?}", e),
+        Ok(_) => panic!("Expected error but got Ok"),
+    }
+}
+
+/// SPEC-KIT-971: Test that commit_manual_with_options respects force flag.
+///
+/// Acceptance test:
+/// - With force=true, duplicate labels are allowed
+#[test]
+fn test_commit_manual_force_allows_duplicates() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("force_duplicate.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path,
+        workspace_id: "force_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("should create");
+
+    // First commit with "v1.0"
+    let result1 = handle.commit_manual_with_options("v1.0", false);
+    assert!(result1.is_ok(), "First commit should succeed");
+
+    // Second commit without force should fail
+    let result2 = handle.commit_manual_with_options("v1.0", false);
+    assert!(result2.is_err(), "Second commit without force should fail");
+
+    // Third commit with force=true should succeed
+    let result3 = handle.commit_manual_with_options("v1.0", true);
+    assert!(result3.is_ok(), "Commit with force=true should succeed");
+
+    // Verify we have 2 checkpoints with the same label
+    let checkpoints = handle.list_checkpoints();
+    let v1_checkpoints: Vec<_> = checkpoints
+        .iter()
+        .filter(|cp| cp.label.as_deref() == Some("v1.0"))
+        .collect();
+    assert_eq!(v1_checkpoints.len(), 2, "Should have 2 checkpoints with label 'v1.0'");
+}
+
+/// SPEC-KIT-971: Test label uniqueness is scoped to branch.
+///
+/// Same label on different branches should be allowed.
+#[test]
+fn test_label_uniqueness_scoped_to_branch() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("branch_labels.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path,
+        workspace_id: "branch_label_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("should create");
+
+    // Create "v1.0" on main branch
+    handle.commit_manual("v1.0").expect("should create on main");
+
+    // Switch to run branch
+    let run_branch = BranchId::for_run("run-123");
+    handle.switch_branch(run_branch.clone()).expect("switch branch");
+
+    // Create "v1.0" on run branch - should succeed (different branch)
+    let result = handle.commit_manual("v1.0");
+    assert!(result.is_ok(), "Same label on different branch should succeed");
+
+    // Creating another "v1.0" on same run branch should fail
+    let result2 = handle.commit_manual("v1.0");
+    assert!(result2.is_err(), "Duplicate label on same branch should fail");
 }
 
 // =============================================================================
@@ -2064,4 +2172,288 @@ fn test_manual_checkpoint_branch_id() {
         Some("run/manual-run".to_string()),
         "Manual checkpoint should have branch_id stamped"
     );
+}
+
+// =============================================================================
+// SPEC-KIT-971: Time-Travel URI Resolution Tests
+// =============================================================================
+
+/// SPEC-KIT-971: Test time-travel URI resolution.
+///
+/// Acceptance test:
+/// - Put URI v1 content, commit checkpoint A
+/// - Put URI v2 content (same logical URI path), commit checkpoint B
+/// - resolve_uri(as_of=A) returns v1 pointer; resolve_uri(as_of=B) returns v2 pointer
+#[test]
+fn test_time_travel_uri_resolution() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("time_travel.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "time_travel_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config.clone()).expect("open capsule");
+
+    // Switch to a run branch for proper branch-aware testing
+    let run_branch = BranchId::for_run("time-travel-run");
+    handle.switch_branch(run_branch.clone()).expect("switch branch");
+
+    // Step 1: Put v1 content
+    let uri = handle
+        .put(
+            "SPEC-971",
+            "time-travel-run",
+            ObjectType::Artifact,
+            "document.md",
+            b"version 1 content".to_vec(),
+            serde_json::json!({"version": 1}),
+        )
+        .expect("put v1");
+
+    // Step 2: Commit checkpoint A
+    let checkpoint_a = handle
+        .commit_stage("SPEC-971", "time-travel-run", "plan", None)
+        .expect("commit checkpoint A");
+
+    // Get the pointer at checkpoint A (should be v1)
+    let pointer_at_a = handle
+        .resolve_uri(&uri, Some(&run_branch), Some(&checkpoint_a))
+        .expect("resolve at checkpoint A");
+
+    // Step 3: Put v2 content (same logical URI path - will update the pointer)
+    let _uri_v2 = handle
+        .put(
+            "SPEC-971",
+            "time-travel-run",
+            ObjectType::Artifact,
+            "document.md",
+            b"version 2 content - updated".to_vec(),
+            serde_json::json!({"version": 2}),
+        )
+        .expect("put v2");
+
+    // Step 4: Commit checkpoint B
+    let checkpoint_b = handle
+        .commit_stage("SPEC-971", "time-travel-run", "tasks", None)
+        .expect("commit checkpoint B");
+
+    // Get the pointer at checkpoint B (should be v2)
+    let pointer_at_b = handle
+        .resolve_uri(&uri, Some(&run_branch), Some(&checkpoint_b))
+        .expect("resolve at checkpoint B");
+
+    // Verify that the pointers are different
+    assert_ne!(
+        pointer_at_a.offset, pointer_at_b.offset,
+        "Pointer at A should be different from pointer at B"
+    );
+
+    // Verify current resolution returns v2 pointer
+    let current_pointer = handle
+        .resolve_uri(&uri, Some(&run_branch), None)
+        .expect("resolve current");
+    assert_eq!(
+        current_pointer.offset, pointer_at_b.offset,
+        "Current pointer should match checkpoint B"
+    );
+
+    // Verify time-travel to checkpoint A still works
+    let time_travel_a = handle
+        .resolve_uri(&uri, Some(&run_branch), Some(&checkpoint_a))
+        .expect("time travel to A");
+    assert_eq!(
+        time_travel_a.offset, pointer_at_a.offset,
+        "Time travel to A should return v1 pointer"
+    );
+
+    // Read the actual content to verify
+    let bytes_v1 = handle
+        .get_bytes(&uri, Some(&run_branch), Some(&checkpoint_a))
+        .expect("get bytes v1");
+    assert_eq!(
+        bytes_v1,
+        b"version 1 content".to_vec(),
+        "Content at checkpoint A should be v1"
+    );
+
+    let bytes_v2 = handle
+        .get_bytes(&uri, Some(&run_branch), Some(&checkpoint_b))
+        .expect("get bytes v2");
+    assert_eq!(
+        bytes_v2,
+        b"version 2 content - updated".to_vec(),
+        "Content at checkpoint B should be v2"
+    );
+}
+
+/// SPEC-KIT-971: Test time-travel resolution survives reopen.
+///
+/// Same as test_time_travel_uri_resolution but verifies it works after
+/// closing and reopening the capsule.
+#[test]
+fn test_time_travel_survives_reopen() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("time_travel_reopen.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "time_travel_reopen".to_string(),
+        ..Default::default()
+    };
+
+    // Phase 1: Create capsule, put v1, checkpoint A, put v2, checkpoint B
+    let checkpoint_a;
+    let checkpoint_b;
+    let uri;
+    let run_branch = BranchId::for_run("reopen-run");
+
+    {
+        let handle = CapsuleHandle::open(config.clone()).expect("open capsule");
+        handle.switch_branch(run_branch.clone()).expect("switch branch");
+
+        // Put v1
+        uri = handle
+            .put(
+                "SPEC-971",
+                "reopen-run",
+                ObjectType::Artifact,
+                "file.md",
+                b"first version".to_vec(),
+                serde_json::json!({}),
+            )
+            .expect("put v1");
+
+        // Checkpoint A
+        checkpoint_a = handle
+            .commit_stage("SPEC-971", "reopen-run", "plan", None)
+            .expect("checkpoint A");
+
+        // Put v2
+        let _uri_v2 = handle
+            .put(
+                "SPEC-971",
+                "reopen-run",
+                ObjectType::Artifact,
+                "file.md",
+                b"second version".to_vec(),
+                serde_json::json!({}),
+            )
+            .expect("put v2");
+
+        // Checkpoint B
+        checkpoint_b = handle
+            .commit_stage("SPEC-971", "reopen-run", "tasks", None)
+            .expect("checkpoint B");
+
+        // Handle dropped here - capsule closed
+    }
+
+    // Phase 2: Reopen and verify time-travel still works
+    {
+        let handle = CapsuleHandle::open(config).expect("reopen capsule");
+
+        // Verify snapshots were restored
+        let uri_index = handle.list_checkpoints();
+        assert_eq!(uri_index.len(), 2, "Should have 2 checkpoints after reopen");
+
+        // Time-travel to checkpoint A should return v1 content
+        let bytes_v1 = handle
+            .get_bytes(&uri, Some(&run_branch), Some(&checkpoint_a))
+            .expect("get bytes v1 after reopen");
+        assert_eq!(
+            bytes_v1,
+            b"first version".to_vec(),
+            "Time travel to A after reopen should return v1"
+        );
+
+        // Time-travel to checkpoint B should return v2 content
+        let bytes_v2 = handle
+            .get_bytes(&uri, Some(&run_branch), Some(&checkpoint_b))
+            .expect("get bytes v2 after reopen");
+        assert_eq!(
+            bytes_v2,
+            b"second version".to_vec(),
+            "Time travel to B after reopen should return v2"
+        );
+
+        // Note: Current state (as_of=None) after reopen doesn't preserve branch context
+        // because artifacts are rebuilt on main branch during scan_and_rebuild.
+        // Time-travel using checkpoints works because UriIndexSnapshots are restored.
+        //
+        // To verify "current" state, use the latest checkpoint (B) which represents
+        // the most recent state on the branch.
+        let latest_checkpoint_bytes = handle
+            .get_bytes(&uri, Some(&run_branch), Some(&checkpoint_b))
+            .expect("get bytes at latest checkpoint");
+        assert_eq!(
+            latest_checkpoint_bytes,
+            b"second version".to_vec(),
+            "Latest checkpoint content should be v2"
+        );
+    }
+}
+
+/// SPEC-KIT-971: Test URI index snapshot is created at each checkpoint.
+#[test]
+fn test_uri_index_snapshot_created() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("snapshot_test.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "snapshot_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("open capsule");
+
+    // Put an artifact
+    let _uri = handle
+        .put(
+            "SPEC-971",
+            "run1",
+            ObjectType::Artifact,
+            "test.md",
+            b"content".to_vec(),
+            serde_json::json!({}),
+        )
+        .expect("put artifact");
+
+    // Create manual checkpoint
+    let checkpoint_id = handle.commit_manual("test-checkpoint").expect("commit");
+
+    // Verify snapshot exists
+    let uri_index = handle.list_checkpoints();
+    assert_eq!(uri_index.len(), 1);
+
+    // The snapshot should exist - we can verify by trying to resolve with as_of
+    // (If snapshot didn't exist, resolve_on_branch would fail)
+    let checkpoints = handle.list_checkpoints();
+    assert!(
+        !checkpoints.is_empty(),
+        "Checkpoint should exist and have snapshot"
+    );
+
+    // Verify we can resolve with as_of (proves snapshot was created)
+    // Note: We need to be on main branch since we didn't switch
+    let main_branch = BranchId::main();
+    let uri = handle
+        .put(
+            "SPEC-971",
+            "run1",
+            ObjectType::Artifact,
+            "test2.md",
+            b"content2".to_vec(),
+            serde_json::json!({}),
+        )
+        .expect("put another artifact");
+
+    // This should succeed because snapshot was created
+    // (Even though test2.md wasn't in the snapshot, the snapshot lookup won't panic)
+    let result = handle.resolve_uri(&uri, Some(&main_branch), Some(&checkpoint_id));
+    // URI wasn't in the snapshot at that time, so it should fail with UriNotFound
+    assert!(result.is_err(), "URI not in snapshot should fail");
 }

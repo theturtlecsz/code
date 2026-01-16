@@ -63,6 +63,7 @@ pub mod routing;
 pub mod reflex_router; // SPEC-KIT-978: Reflex routing decision (local inference mode)
 pub mod reflex_metrics; // SPEC-KIT-978: Bakeoff metrics collection (reflex vs cloud)
 pub mod reflex_client; // SPEC-KIT-978: OpenAI-compatible client for local inference
+pub mod bakeoff_runner; // SPEC-KIT-978: Bakeoff runner for reflex vs cloud comparison
 pub mod schemas;
 pub mod session_metrics; // P6-SYNC Phase 2: Token usage tracking with sliding window estimation
 pub mod spawn_metrics; // SPEC-933 Component 3: Agent spawn performance tracking

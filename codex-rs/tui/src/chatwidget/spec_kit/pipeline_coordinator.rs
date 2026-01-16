@@ -25,7 +25,7 @@ use super::validation_lifecycle::{
 };
 use crate::history_cell::HistoryCellType;
 use crate::memvid_adapter::{
-    CapsuleHandle, default_capsule_config, policy_capture,
+    BranchId, CapsuleHandle, default_capsule_config, policy_capture,
 };
 use crate::slash_command::{HalMode, SlashCommand};
 use crate::spec_prompts::SpecStage;
@@ -189,6 +189,16 @@ pub fn handle_spec_auto(
         // Open capsule and capture policy (non-blocking - continue on failure)
         match CapsuleHandle::open(capsule_config) {
             Ok(handle) => {
+                // SPEC-KIT-971: Switch to run branch before any writes
+                // Invariant: every run writes to run/<RUN_ID> branch
+                if let Err(e) = handle.switch_branch(BranchId::for_run(run_id)) {
+                    tracing::warn!(
+                        run_id = %run_id,
+                        error = %e,
+                        "Failed to switch capsule branch for run"
+                    );
+                }
+
                 let stage0_cfg = codex_stage0::Stage0Config::load().unwrap_or_default();
                 match policy_capture::capture_and_store_policy(
                     &handle,
