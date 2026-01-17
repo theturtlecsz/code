@@ -13,6 +13,7 @@ mod intel; // SPEC-KIT-2XX: Project Intel for NotebookLM
 mod librarian; // SPEC-KIT-103: Librarian memory quality engine
 mod msearch; // SPEC-KIT-972: Memory search with --explain
 mod plan;
+mod policy; // SPEC-KIT-977: Policy management commands
 mod project; // SPEC-KIT-960: Project scaffolding command
 mod quality;
 mod reflex; // SPEC-KIT-978: Reflex local inference
@@ -31,6 +32,7 @@ pub use intel::*;
 pub use librarian::*;
 pub use msearch::*;
 pub use plan::*;
+pub use policy::*;
 pub use project::*;
 pub use quality::*;
 pub use reflex::*;

@@ -29,8 +29,8 @@ Transform Codex-RS/Spec-Kit into a Memvid-first, auditable workbench with:
               ▼            ▼            ▼
         ┌─────────┐  ┌─────────┐  ┌─────────┐
         │SPEC-972 │  │SPEC-977 │  │SPEC-978 │
-        │(DONE)   │  │PolicySnp│  │Reflex   │
-        │Hybrid   │  │         │  │Stack    │
+        │(DONE)   │  │(85%)    │  │(65%)    │
+        │Hybrid   │  │PolicySnp│  │Reflex   │
         └────┬────┘  └────┬────┘  └────┬────┘
              │            │            │
              └────────────┼────────────┘
@@ -62,9 +62,10 @@ Transform Codex-RS/Spec-Kit into a Memvid-first, auditable workbench with:
 - [x] P95 < 250ms verification
 
 ### Phase 3: Policy & Reflex (IN PROGRESS)
-- [ ] SPEC-KIT-977: PolicySnapshot capture at boundaries
-- [ ] SPEC-KIT-978: Reflex stack integration (SGLang/vLLM)
-- [ ] SPEC-KIT-971 completion: resolve_uri, checkpoint listing
+- [x] SPEC-KIT-971: Branch isolation, time-travel URI resolution, checkpoint labels
+- [x] SPEC-KIT-977: PolicySnapshot capture + capsule storage + drift detection
+- [ ] SPEC-KIT-977: Policy CLI/TUI commands (show, compare, diff)
+- [ ] SPEC-KIT-978: Eval artifact writer + CI gate integration
 
 ### Phase 4: Event & Export
 - [ ] SPEC-KIT-975: Event schema v1
@@ -82,7 +83,7 @@ Transform Codex-RS/Spec-Kit into a Memvid-first, auditable workbench with:
 |------|----------|-------|--------|
 | G1 | 971 URI + checkpoint tests pass | - | PASSED |
 | G2 | 972 eval harness operational | - | PASSED |
-| G3 | 977 PolicySnapshot stored in capsule | - | PENDING |
+| G3 | 977 PolicySnapshot stored in capsule | - | PASSED |
 | G4 | 978 Reflex bakeoff complete | - | PENDING |
 | G5 | 975 Event schema validated | - | PENDING |
 
@@ -110,4 +111,4 @@ Transform Codex-RS/Spec-Kit into a Memvid-first, auditable workbench with:
 
 ---
 
-*Updated: 2026-01-12*
+*Updated: 2026-01-16*

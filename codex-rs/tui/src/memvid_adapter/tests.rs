@@ -2457,3 +2457,197 @@ fn test_uri_index_snapshot_created() {
     // URI wasn't in the snapshot at that time, so it should fail with UriNotFound
     assert!(result.is_err(), "URI not in snapshot should fail");
 }
+
+// =============================================================================
+// SPEC-KIT-971: Merge determinism tests
+// =============================================================================
+
+/// Test that objects created on run branch become resolvable on main after merge.
+///
+/// This is the key acceptance criterion for merge-at-unlock:
+/// "Add a deterministic test proving objects created on run branch
+///  become resolvable on main after merge"
+#[test]
+fn test_merge_determinism_uris_resolvable_on_main_after_merge() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("merge_test.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "merge_test".to_string(),
+        ..Default::default()
+    };
+
+    // Step 1: Create capsule and switch to run branch
+    let handle = CapsuleHandle::open(config.clone()).expect("create capsule");
+    let run_branch = BranchId::for_run("test-run-001");
+    handle.switch_branch(run_branch.clone()).expect("switch to run branch");
+
+    // Step 2: Put artifact on run branch
+    let run_uri = handle
+        .put(
+            "SPEC-MERGE-TEST",
+            "test-run-001",
+            ObjectType::Artifact,
+            "run_artifact.md",
+            b"# Artifact created on run branch".to_vec(),
+            serde_json::json!({"created_on": "run_branch"}),
+        )
+        .expect("put artifact on run branch");
+
+    assert!(run_uri.is_valid(), "Run URI should be valid");
+
+    // Step 3: Create checkpoint on run branch
+    handle
+        .commit_stage("SPEC-MERGE-TEST", "test-run-001", "Plan", None)
+        .expect("create run branch checkpoint");
+
+    // Step 4: Verify URI is NOT resolvable on main (before merge)
+    let main_branch = BranchId::main();
+    let pre_merge_result = handle.resolve_uri(&run_uri, Some(&main_branch), None);
+    assert!(
+        pre_merge_result.is_err(),
+        "URI should NOT be resolvable on main before merge"
+    );
+
+    // Step 5: Perform merge: run branch → main
+    let merge_checkpoint = handle
+        .merge_branch(
+            &run_branch,
+            &main_branch,
+            MergeMode::Curated,
+            Some("SPEC-MERGE-TEST"),
+            Some("test-run-001"),
+        )
+        .expect("merge run branch to main");
+
+    assert!(
+        merge_checkpoint.as_str().contains("merge"),
+        "Merge checkpoint should have 'merge' in ID"
+    );
+
+    // Step 6: Verify URI IS resolvable on main (after merge)
+    let post_merge_result = handle.resolve_uri(&run_uri, Some(&main_branch), None);
+    assert!(
+        post_merge_result.is_ok(),
+        "URI should be resolvable on main AFTER merge: {:?}",
+        post_merge_result.err()
+    );
+
+    // Step 7: Verify BranchMerged event was emitted
+    let events = handle.list_events();
+    let merge_events: Vec<_> = events
+        .iter()
+        .filter(|e| e.event_type == EventType::BranchMerged)
+        .collect();
+
+    assert_eq!(
+        merge_events.len(),
+        1,
+        "Should have exactly one BranchMerged event"
+    );
+
+    let merge_event = merge_events[0];
+    assert_eq!(merge_event.stage, Some("Unlock".to_string()));
+
+    // Verify merge payload contains expected fields
+    let payload: serde_json::Value = merge_event.payload.clone();
+    assert_eq!(
+        payload["from_branch"],
+        "run/test-run-001",
+        "from_branch should match"
+    );
+    assert_eq!(payload["to_branch"], "main", "to_branch should be main");
+    assert_eq!(
+        payload["mode"],
+        "Curated",
+        "mode should be Curated"
+    );
+}
+
+/// Test that merge checkpoint appears in checkpoint list with correct metadata.
+#[test]
+fn test_merge_creates_checkpoint_with_correct_metadata() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("merge_checkpoint_test.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "merge_cp_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("create capsule");
+
+    // Set up run branch with some content
+    let run_branch = BranchId::for_run("run-cp-test");
+    handle.switch_branch(run_branch.clone()).expect("switch branch");
+
+    handle
+        .put(
+            "SPEC-CP-TEST",
+            "run-cp-test",
+            ObjectType::Artifact,
+            "file.md",
+            b"content".to_vec(),
+            serde_json::json!({}),
+        )
+        .expect("put artifact");
+
+    handle
+        .commit_stage("SPEC-CP-TEST", "run-cp-test", "Plan", None)
+        .expect("create run checkpoint");
+
+    // Get initial checkpoint count
+    let initial_count = handle.list_checkpoints().len();
+
+    // Perform merge
+    let merge_checkpoint_id = handle
+        .merge_branch(
+            &run_branch,
+            &BranchId::main(),
+            MergeMode::Full, // Use Full mode to test both modes work
+            Some("SPEC-CP-TEST"),
+            Some("run-cp-test"),
+        )
+        .expect("merge should succeed");
+
+    // Verify new checkpoint was added
+    let checkpoints = handle.list_checkpoints();
+    assert_eq!(
+        checkpoints.len(),
+        initial_count + 1,
+        "Merge should create one new checkpoint"
+    );
+
+    // Find the merge checkpoint and verify its metadata
+    let merge_cp = checkpoints
+        .iter()
+        .find(|cp| cp.checkpoint_id == merge_checkpoint_id)
+        .expect("merge checkpoint should exist");
+
+    assert_eq!(
+        merge_cp.stage,
+        Some("Unlock".to_string()),
+        "Merge checkpoint stage should be Unlock"
+    );
+    assert_eq!(
+        merge_cp.spec_id,
+        Some("SPEC-CP-TEST".to_string()),
+        "Merge checkpoint should have spec_id"
+    );
+    assert_eq!(
+        merge_cp.run_id,
+        Some("run-cp-test".to_string()),
+        "Merge checkpoint should have run_id"
+    );
+    assert_eq!(
+        merge_cp.branch_id,
+        Some("main".to_string()),
+        "Merge checkpoint should be on main branch"
+    );
+    assert!(
+        merge_cp.label.as_ref().unwrap().contains("merge"),
+        "Merge checkpoint label should contain 'merge'"
+    );
+}

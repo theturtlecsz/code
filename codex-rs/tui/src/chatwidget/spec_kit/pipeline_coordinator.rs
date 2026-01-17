@@ -1770,6 +1770,30 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                                 checkpoint_id,
                                 current_stage.display_name()
                             );
+
+                            // SPEC-KIT-971: Merge run branch to main at Unlock completion
+                            // Invariant: Merge modes are curated|full only (never squash/ff)
+                            if current_stage == SpecStage::Unlock {
+                                match super::git_integration::merge_run_branch_to_main(
+                                    &spec_id,
+                                    run_id,
+                                    &widget.config.cwd,
+                                ) {
+                                    Ok(merge_checkpoint_id) => {
+                                        tracing::info!(
+                                            "Merged run branch {} to main (checkpoint: {})",
+                                            run_id,
+                                            merge_checkpoint_id
+                                        );
+                                    }
+                                    Err(err) => {
+                                        tracing::warn!(
+                                            "Branch merge at Unlock failed (non-fatal): {}",
+                                            err
+                                        );
+                                    }
+                                }
+                            }
                         }
                         Err(err) => {
                             tracing::warn!("Capsule checkpoint failed (non-fatal): {}", err);

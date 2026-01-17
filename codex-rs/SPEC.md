@@ -1,7 +1,7 @@
 # SPEC.md - Codex-RS / Spec-Kit Task Tracking
 
 **Version:** V6 Docs Contract
-**Last Updated:** 2026-01-12
+**Last Updated:** 2026-01-16
 
 ---
 
@@ -70,17 +70,18 @@ These invariants MUST NOT be violated:
 
 | Spec | Status | Owner | Next Action |
 |------|--------|-------|-------------|
-| SPEC-KIT-971 | 80% | - | Cross-process lock + wire memory_backend into pipeline + resolve_uri CLI |
-| SPEC-KIT-977 | 30% | - | Wire capture at run start + capsule storage + event binding |
-| SPEC-KIT-978 | 0% | - | Routing mode plumbing + reflex config + bakeoff harness |
+| SPEC-KIT-971 | 95% | - | Final polish: checkpoint listing CLI, branch merge UI |
+| SPEC-KIT-977 | 85% | - | Policy CLI/TUI commands (show, compare, diff) |
+| SPEC-KIT-978 | 65% | - | Eval artifact writer + CI gate + LLMCall capture alignment with 975 |
 
 ### Completed (Recent)
 
 | Spec | Completion Date | Key Deliverables |
 |------|-----------------|------------------|
+| SPEC-KIT-971 (core) | 2026-01-16 | Branch isolation, time-travel URI resolution, checkpoint labels, cross-process lock |
+| SPEC-KIT-977 (core) | 2026-01-16 | GovernancePolicy capture, capsule storage, PolicySnapshotRef binding, drift detection |
+| SPEC-KIT-978 (core) | 2026-01-16 | JSON schema enforcement, bakeoff_runner module, reflex routing decisions |
 | SPEC-KIT-972 | 2026-01-12 | Hybrid retrieval, A/B harness, HybridBackend |
-| SPEC-KIT-971 (core) | 2026-01-11 | Capsule foundation, crash recovery, config switch |
-| SPEC-KIT-977 (partial) | 2026-01-12 | PolicySnapshot struct, filesystem store, capture integration |
 
 ### Blocked
 
@@ -128,7 +129,7 @@ These invariants MUST NOT be violated:
 |-------|---------------|--------|
 | 1->2 | 971 URI contract + checkpoint tests | PASSED |
 | 2->3 | 972 eval harness operational | PASSED |
-| 3->4 | 977 PolicySnapshot stored in capsule | PENDING |
+| 3->4 | 977 PolicySnapshot stored in capsule | PASSED |
 | 4->5 | 978 Reflex bakeoff complete + 975 event baseline | PENDING |
 | 5->6 | 973/976 advanced features | PENDING |
 

@@ -62,6 +62,8 @@ pub use types::{
     RunEventEnvelope, EventType, UriIndex, UriIndexSnapshot,
     // SPEC-KIT-978: Routing decision types
     RoutingMode, RoutingFallbackReason, RoutingDecisionPayload,
+    // SPEC-KIT-971: Branch merge types
+    MergeMode, BranchMergedPayload,
 };
 pub use policy_capture::{
     capture_and_store_policy, load_policy, list_policies, latest_policy,

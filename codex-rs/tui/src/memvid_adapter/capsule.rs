@@ -23,7 +23,7 @@
 
 use crate::memvid_adapter::lock::{CapsuleLock, LockError, LockMetadata, is_locked, lock_path_for};
 use crate::memvid_adapter::types::{
-    BranchId, CheckpointId, CheckpointMetadata, EventType, LogicalUri, ObjectType,
+    BranchId, CheckpointId, CheckpointMetadata, EventType, LogicalUri, MergeMode, ObjectType,
     PhysicalPointer, RoutingDecisionPayload, RunEventEnvelope, UriIndex, UriIndexSnapshot,
 };
 use serde::{Deserialize, Serialize};
@@ -1185,6 +1185,158 @@ impl CapsuleHandle {
     /// Check if a label is unique within a branch.
     pub fn is_label_unique(&self, label: &str, branch: &BranchId) -> bool {
         self.get_checkpoint_by_label_in_branch(label, branch).is_none()
+    }
+
+    // =========================================================================
+    // Branch merge operations (SPEC-KIT-971: Merge at Unlock)
+    // =========================================================================
+
+    /// Merge a run branch into main.
+    ///
+    /// ## SPEC-KIT-971 Invariant
+    /// - Merge modes are `curated` or `full` only (never squash, ff, or rebase)
+    /// - Objects created on run branch become resolvable on main after merge
+    /// - A BranchMerged event is emitted
+    /// - A merge checkpoint is created
+    ///
+    /// ## Parameters
+    /// - `from`: Source branch (e.g., `BranchId::for_run("run123")`)
+    /// - `to`: Target branch (should be `BranchId::main()`)
+    /// - `mode`: Merge mode (`Curated` or `Full`)
+    /// - `spec_id`: Optional spec ID for event metadata
+    /// - `run_id`: Optional run ID for event metadata
+    ///
+    /// ## Returns
+    /// - Checkpoint ID for the merge checkpoint
+    pub fn merge_branch(
+        &self,
+        from: &BranchId,
+        to: &BranchId,
+        mode: MergeMode,
+        spec_id: Option<&str>,
+        run_id: Option<&str>,
+    ) -> Result<CheckpointId> {
+        use crate::memvid_adapter::types::BranchMergedPayload;
+
+        if !self.is_open() {
+            return Err(CapsuleError::NotOpen);
+        }
+
+        // Validate: target must be main
+        if !to.is_main() {
+            return Err(CapsuleError::InvalidOperation {
+                reason: format!("Merge target must be main branch, got: {}", to.as_str()),
+            });
+        }
+
+        // Validate: source must be a run branch
+        if !from.is_run_branch() {
+            return Err(CapsuleError::InvalidOperation {
+                reason: format!("Merge source must be a run branch, got: {}", from.as_str()),
+            });
+        }
+
+        // Count URIs and events on the source branch
+        let uris_merged = {
+            let uri_index = self.uri_index.read().unwrap();
+            uri_index.count_on_branch(from) as u64
+        };
+
+        let events_merged = self.list_events_filtered(Some(from)).len() as u64;
+
+        // Merge URI mappings: copy all entries from `from` branch to `to` branch
+        {
+            let mut uri_index = self.uri_index.write().unwrap();
+            uri_index.merge_branch(from, to);
+        }
+
+        // Merge events: update branch_id to main for events from the source branch
+        {
+            let mut events = self.events.write().unwrap();
+            for event in events.iter_mut() {
+                if event.branch_id.as_deref() == Some(from.as_str()) {
+                    event.branch_id = Some(to.as_str().to_string());
+                }
+            }
+        }
+
+        // Create merge checkpoint
+        let checkpoint_id = CheckpointId::new(format!(
+            "merge_{}",
+            chrono::Utc::now().format("%Y%m%d%H%M%S")
+        ));
+
+        let checkpoint_metadata = CheckpointMetadata {
+            checkpoint_id: checkpoint_id.clone(),
+            label: Some(format!("merge:{}", from.as_str())),
+            stage: Some("Unlock".to_string()),
+            spec_id: spec_id.map(|s| s.to_string()),
+            run_id: run_id.map(|r| r.to_string()),
+            commit_hash: None,
+            timestamp: chrono::Utc::now(),
+            is_manual: false,
+            branch_id: Some(to.as_str().to_string()),
+        };
+
+        // Persist checkpoint to disk
+        if self.file_handle.lock().unwrap().is_some() {
+            let meta_value = serde_json::to_value(&checkpoint_metadata).map_err(|e| {
+                CapsuleError::InvalidOperation {
+                    reason: format!("Failed to serialize checkpoint: {}", e),
+                }
+            })?;
+            self.write_record(RecordKind::Checkpoint, &meta_value, &[])?;
+        }
+
+        // Store checkpoint in memory
+        self.checkpoints.write().unwrap().push(checkpoint_metadata);
+
+        // Create URI index snapshot for the merge checkpoint on main
+        {
+            let mut uri_index = self.uri_index.write().unwrap();
+            uri_index.snapshot(to, &checkpoint_id);
+
+            // Persist snapshot to disk
+            if self.file_handle.lock().unwrap().is_some() {
+                if let Some(snapshot) = uri_index.export_snapshot(to, &checkpoint_id) {
+                    let snapshot_value = serde_json::to_value(&snapshot).map_err(|e| {
+                        CapsuleError::InvalidOperation {
+                            reason: format!("Failed to serialize URI index snapshot: {}", e),
+                        }
+                    })?;
+                    self.write_record(RecordKind::UriIndexSnapshot, &snapshot_value, &[])?;
+                }
+            }
+        }
+
+        // Emit BranchMerged event
+        let payload = BranchMergedPayload {
+            from_branch: from.as_str().to_string(),
+            to_branch: to.as_str().to_string(),
+            mode,
+            merge_checkpoint_id: checkpoint_id.as_str().to_string(),
+            uris_merged,
+            events_merged,
+            spec_id: spec_id.map(|s| s.to_string()),
+            run_id: run_id.map(|r| r.to_string()),
+        };
+
+        let payload_value = serde_json::to_value(&payload).map_err(|e| {
+            CapsuleError::InvalidOperation {
+                reason: format!("Failed to serialize BranchMerged payload: {}", e),
+            }
+        })?;
+
+        // Emit on main branch
+        self.emit_event(
+            spec_id.unwrap_or("unknown"),
+            run_id.unwrap_or("unknown"),
+            Some("Unlock"),
+            EventType::BranchMerged,
+            payload_value,
+        )?;
+
+        Ok(checkpoint_id)
     }
 
     // =========================================================================

@@ -152,6 +152,12 @@ pub enum SpeckitSubcommand {
     /// SPEC-KIT-978: Commands for reflex mode configuration and bakeoff analysis.
     /// Compare local inference performance against cloud inference.
     Reflex(ReflexArgs),
+
+    /// Policy snapshot management
+    ///
+    /// SPEC-KIT-977: Commands for viewing and validating policy snapshots.
+    /// List, show, and validate policy configurations.
+    Policy(PolicyArgs),
 }
 
 /// Arguments for `speckit status` command
@@ -654,6 +660,87 @@ pub struct ReflexCheckArgs {
     pub json: bool,
 }
 
+// =============================================================================
+// SPEC-KIT-977: Policy Commands
+// =============================================================================
+
+/// Arguments for `speckit policy` subcommand
+///
+/// SPEC-KIT-977: Policy snapshot management and validation.
+#[derive(Debug, Parser)]
+pub struct PolicyArgs {
+    #[command(subcommand)]
+    pub command: PolicySubcommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PolicySubcommand {
+    /// List all policy snapshots
+    ///
+    /// Shows policy ID, creation time, and hash for each snapshot.
+    List(PolicyListArgs),
+
+    /// Show details of a specific policy snapshot
+    ///
+    /// Displays full policy configuration including model_config,
+    /// weights, and governance settings.
+    Show(PolicyShowArgs),
+
+    /// Show the current (latest) policy snapshot
+    ///
+    /// Equivalent to `policy show <latest-id>`.
+    Current(PolicyCurrentArgs),
+
+    /// Validate model_policy.toml
+    ///
+    /// Checks that the policy file exists and has valid structure.
+    Validate(PolicyValidateArgs),
+}
+
+/// Arguments for `speckit policy list`
+#[derive(Debug, Parser)]
+pub struct PolicyListArgs {
+    /// Maximum number of policies to show
+    #[arg(long = "limit", short = 'n', default_value = "20")]
+    pub limit: usize,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
+/// Arguments for `speckit policy show`
+#[derive(Debug, Parser)]
+pub struct PolicyShowArgs {
+    /// Policy ID to show
+    #[arg(value_name = "POLICY-ID")]
+    pub policy_id: String,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
+/// Arguments for `speckit policy current`
+#[derive(Debug, Parser)]
+pub struct PolicyCurrentArgs {
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
+/// Arguments for `speckit policy validate`
+#[derive(Debug, Parser)]
+pub struct PolicyValidateArgs {
+    /// Path to model_policy.toml (default: auto-detect)
+    #[arg(long = "path", short = 'p', value_name = "PATH")]
+    pub path: Option<PathBuf>,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
 impl SpeckitCli {
     /// Run the speckit CLI command
     pub async fn run(self) -> anyhow::Result<()> {
@@ -661,12 +748,15 @@ impl SpeckitCli {
             .cwd
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
-        // Handle capsule and reflex commands separately (don't need executor)
+        // Handle capsule, reflex, and policy commands separately (don't need executor)
         if let SpeckitSubcommand::Capsule(args) = self.command {
             return run_capsule(cwd, args);
         }
         if let SpeckitSubcommand::Reflex(args) = self.command {
             return run_reflex(args);
+        }
+        if let SpeckitSubcommand::Policy(args) = self.command {
+            return run_policy(cwd, args);
         }
 
         // Resolve policy from env/config at adapter boundary (not in executor)
@@ -696,6 +786,7 @@ impl SpeckitCli {
             SpeckitSubcommand::Migrate(args) => run_migrate(executor, args),
             SpeckitSubcommand::Capsule(_) => unreachable!("Capsule handled above"),
             SpeckitSubcommand::Reflex(_) => unreachable!("Reflex handled above"),
+            SpeckitSubcommand::Policy(_) => unreachable!("Policy handled above"),
         }
     }
 }
@@ -3010,6 +3101,359 @@ fn run_reflex_check(args: ReflexCheckArgs) -> anyhow::Result<()> {
             println!("  Min Samples:      >= {}", args.min_samples);
         } else {
             println!("FAIL: {}", reason);
+            std::process::exit(1);
+        }
+    }
+
+    Ok(())
+}
+
+// =============================================================================
+// SPEC-KIT-977: Policy Commands Implementation
+// =============================================================================
+
+/// Run policy subcommand
+fn run_policy(cwd: PathBuf, args: PolicyArgs) -> anyhow::Result<()> {
+    match args.command {
+        PolicySubcommand::List(args) => run_policy_list(cwd, args),
+        PolicySubcommand::Show(args) => run_policy_show(cwd, args),
+        PolicySubcommand::Current(args) => run_policy_current(cwd, args),
+        PolicySubcommand::Validate(args) => run_policy_validate(cwd, args),
+    }
+}
+
+/// Run `speckit policy list` command
+fn run_policy_list(_cwd: PathBuf, args: PolicyListArgs) -> anyhow::Result<()> {
+    use codex_stage0::PolicyStore;
+
+    let store = PolicyStore::new();
+    let policies = store.list().unwrap_or_default();
+
+    if policies.is_empty() {
+        if args.json {
+            let json = serde_json::json!({
+                "schema_version": SCHEMA_VERSION,
+                "tool_version": tool_version(),
+                "policies": [],
+                "count": 0,
+            });
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        } else {
+            println!("No policy snapshots found.");
+            println!();
+            println!("Policy snapshots are created when:");
+            println!("  - A /speckit.auto run starts");
+            println!("  - Policy drift is detected at stage boundaries");
+            println!();
+            println!("Location: .speckit/policies/");
+        }
+        return Ok(());
+    }
+
+    let policies: Vec<_> = policies.into_iter().take(args.limit).collect();
+
+    if args.json {
+        let policy_entries: Vec<_> = policies
+            .iter()
+            .map(|p| {
+                serde_json::json!({
+                    "policy_id": p.policy_id,
+                    "created_at": p.created_at.to_rfc3339(),
+                    "hash_short": p.hash_short,
+                    "source_count": p.source_count,
+                })
+            })
+            .collect();
+
+        let json = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "tool_version": tool_version(),
+            "policies": policy_entries,
+            "count": policies.len(),
+        });
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        println!("Policy Snapshots ({} total)", policies.len());
+        println!("{}", "=".repeat(70));
+        println!();
+        println!(
+            "{:<40} {:<20} {:<10}",
+            "POLICY ID", "CREATED", "HASH"
+        );
+        println!("{}", "-".repeat(70));
+
+        for policy in &policies {
+            let created = policy.created_at.format("%Y-%m-%d %H:%M:%S").to_string();
+            println!(
+                "{:<40} {:<20} {:<10}",
+                policy.policy_id, created, policy.hash_short
+            );
+        }
+
+        println!();
+        println!("Use `code speckit policy show <POLICY-ID>` for details");
+    }
+
+    Ok(())
+}
+
+/// Run `speckit policy show` command
+fn run_policy_show(_cwd: PathBuf, args: PolicyShowArgs) -> anyhow::Result<()> {
+    use codex_stage0::PolicyStore;
+
+    let store = PolicyStore::new();
+
+    match store.load(&args.policy_id) {
+        Ok(snapshot) => {
+            if args.json {
+                // Output the full snapshot as JSON
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "policy": snapshot,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                println!("Policy Snapshot: {}", snapshot.policy_id);
+                println!("{}", "=".repeat(60));
+                println!();
+                println!("Created:        {}", snapshot.created_at.format("%Y-%m-%d %H:%M:%S UTC"));
+                println!("Schema Version: {}", snapshot.schema_version);
+                println!("Hash:           {}", snapshot.hash);
+                println!();
+                println!("Source Files:");
+                for file in &snapshot.source_files {
+                    println!("  - {}", file);
+                }
+                println!();
+                println!("Model Config:");
+                println!("  max_tokens:        {}", snapshot.model_config.max_tokens);
+                println!("  top_k:             {}", snapshot.model_config.top_k);
+                println!("  hybrid_enabled:    {}", snapshot.model_config.hybrid_enabled);
+                println!("  tier2_enabled:     {}", snapshot.model_config.tier2_enabled);
+                println!();
+                println!("Scoring Weights:");
+                println!("  usage:             {:.2}", snapshot.weights.usage);
+                println!("  recency:           {:.2}", snapshot.weights.recency);
+                println!("  priority:          {:.2}", snapshot.weights.priority);
+                println!("  decay:             {:.2}", snapshot.weights.decay);
+
+                if let Some(gov) = &snapshot.governance {
+                    println!();
+                    println!("Governance (from model_policy.toml):");
+                    println!("  SOR primary:       {}", gov.system_of_record.primary);
+                    println!("  Capture mode:      {}", gov.capture.mode);
+                    println!("  Reflex enabled:    {}", gov.routing.reflex.enabled);
+                }
+
+                println!();
+                println!("Hash verified:  {}", if snapshot.verify_hash() { "✓" } else { "✗" });
+            }
+        }
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("Policy not found: {}", e),
+                    "policy_id": args.policy_id,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Policy '{}' not found: {}", args.policy_id, e);
+            }
+            std::process::exit(1);
+        }
+    }
+
+    Ok(())
+}
+
+/// Run `speckit policy current` command
+fn run_policy_current(_cwd: PathBuf, args: PolicyCurrentArgs) -> anyhow::Result<()> {
+    use codex_stage0::PolicyStore;
+
+    let store = PolicyStore::new();
+
+    match store.latest() {
+        Ok(Some(snapshot)) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "policy": snapshot,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                println!("Current Policy Snapshot: {}", snapshot.policy_id);
+                println!("{}", "=".repeat(60));
+                println!();
+                println!("Created:        {}", snapshot.created_at.format("%Y-%m-%d %H:%M:%S UTC"));
+                println!("Hash:           {}", snapshot.hash);
+                println!();
+
+                if let Some(gov) = &snapshot.governance {
+                    println!("Governance Summary:");
+                    println!("  SOR primary:       {}", gov.system_of_record.primary);
+                    println!("  Capture mode:      {}", gov.capture.mode);
+                    println!("  Reflex enabled:    {}", gov.routing.reflex.enabled);
+                    if gov.routing.reflex.enabled {
+                        println!("  Reflex endpoint:   {}", gov.routing.reflex.endpoint);
+                        println!("  Reflex model:      {}", gov.routing.reflex.model);
+                    }
+                }
+
+                println!();
+                println!("Use `code speckit policy show {}` for full details", snapshot.policy_id);
+            }
+        }
+        Ok(None) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "policy": null,
+                    "message": "No policy snapshots found",
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                println!("No policy snapshots found.");
+                println!();
+                println!("Run a /speckit.auto pipeline to create a policy snapshot.");
+            }
+        }
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("{}", e),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error loading policy: {}", e);
+            }
+            std::process::exit(1);
+        }
+    }
+
+    Ok(())
+}
+
+/// Run `speckit policy validate` command
+fn run_policy_validate(cwd: PathBuf, args: PolicyValidateArgs) -> anyhow::Result<()> {
+    use codex_stage0::GovernancePolicy;
+
+    // Find model_policy.toml
+    let policy_path = if let Some(path) = args.path {
+        path
+    } else {
+        // Auto-detect in cwd or parent
+        let local = cwd.join("model_policy.toml");
+        if local.exists() {
+            local
+        } else {
+            let parent = cwd.parent().map(|p| p.join("model_policy.toml"));
+            if let Some(p) = parent {
+                if p.exists() {
+                    p
+                } else {
+                    local // Will fail with "not found"
+                }
+            } else {
+                local
+            }
+        }
+    };
+
+    if !policy_path.exists() {
+        if args.json {
+            let json = serde_json::json!({
+                "schema_version": SCHEMA_VERSION,
+                "tool_version": tool_version(),
+                "valid": false,
+                "error": "model_policy.toml not found",
+                "path": policy_path.display().to_string(),
+            });
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        } else {
+            eprintln!("Error: model_policy.toml not found at {}", policy_path.display());
+            eprintln!();
+            eprintln!("Expected locations:");
+            eprintln!("  - ./model_policy.toml");
+            eprintln!("  - ../model_policy.toml");
+        }
+        std::process::exit(1);
+    }
+
+    // Try to load and validate
+    match GovernancePolicy::load(Some(&policy_path)) {
+        Ok(policy) => {
+            // Validate required sections
+            let mut issues = Vec::new();
+
+            if policy.meta.schema_version.is_empty() {
+                issues.push("meta.schema_version is empty");
+            }
+            if policy.system_of_record.primary.is_empty() {
+                issues.push("system_of_record.primary is empty");
+            }
+            if policy.capture.mode.is_empty() {
+                issues.push("capture.mode is empty");
+            }
+
+            let valid = issues.is_empty();
+
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "valid": valid,
+                    "path": policy_path.display().to_string(),
+                    "issues": issues,
+                    "summary": {
+                        "meta": {
+                            "schema_version": policy.meta.schema_version,
+                            "effective_date": policy.meta.effective_date,
+                        },
+                        "system_of_record": policy.system_of_record.primary,
+                        "capture_mode": policy.capture.mode,
+                        "reflex_enabled": policy.routing.reflex.enabled,
+                    },
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                if valid {
+                    println!("✓ model_policy.toml is valid");
+                    println!();
+                    println!("Path:            {}", policy_path.display());
+                    println!("Schema Version:  {}", policy.meta.schema_version);
+                    println!("Effective Date:  {}", policy.meta.effective_date);
+                    println!("SOR Primary:     {}", policy.system_of_record.primary);
+                    println!("Capture Mode:    {}", policy.capture.mode);
+                    println!("Reflex Enabled:  {}", policy.routing.reflex.enabled);
+                } else {
+                    println!("✗ model_policy.toml has issues:");
+                    for issue in &issues {
+                        println!("  - {}", issue);
+                    }
+                    std::process::exit(1);
+                }
+            }
+        }
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "valid": false,
+                    "error": format!("{}", e),
+                    "path": policy_path.display().to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("✗ Failed to parse model_policy.toml: {}", e);
+            }
             std::process::exit(1);
         }
     }

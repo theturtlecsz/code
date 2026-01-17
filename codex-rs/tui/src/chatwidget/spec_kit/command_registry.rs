@@ -204,6 +204,9 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
     // Reflex commands (SPEC-KIT-978)
     registry.register(Box::new(SpecKitReflexCommand));
 
+    // Policy commands (SPEC-KIT-977)
+    registry.register(Box::new(SpecKitPolicyCommand));
+
     // Search commands
     registry.register(Box::new(SearchCommand));
     registry.register(Box::new(MemorySearchCommand)); // SPEC-KIT-972: Memory search with --explain
@@ -333,7 +336,9 @@ mod tests {
         // SPEC-DOGFOOD-001: Added speckit.cancel (1 new)
         // SPEC-KIT-971: Added capsule.doctor (1 new)
         // SPEC-KIT-972: Added memory.search (1 new)
-        assert_eq!(registry.len(), 43, "Registry should have 43 commands");
+        // SPEC-KIT-977: Added speckit.policy (1 new)
+        // SPEC-KIT-978: Added speckit.reflex (already counted above)
+        assert_eq!(registry.len(), 45, "Registry should have 45 commands");
 
         // Verify key commands are registered
         assert!(registry.find("speckit.status").is_some());

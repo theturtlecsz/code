@@ -67,8 +67,8 @@ pub use vector::{
     VectorFilters,
 };
 pub use policy::{
-    ModelConfig, PolicySnapshot, PolicySnapshotInfo, PolicyStore, capture_policy_snapshot,
-    get_policy_for_run,
+    GovernancePolicy, ModelConfig, PolicySnapshot, PolicySnapshotInfo, PolicyStore,
+    capture_policy_snapshot, get_policy_for_run,
 };
 
 use sha2::{Digest, Sha256};

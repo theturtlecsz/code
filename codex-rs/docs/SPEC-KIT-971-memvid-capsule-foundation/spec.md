@@ -1,6 +1,6 @@
 # SPEC-KIT-971 — Memvid Capsule Foundation + Single-Writer Adapter
-**Date:** 2026-01-12 (Updated)
-**Status:** IN PROGRESS (80%)
+**Date:** 2026-01-16 (Updated)
+**Status:** IN PROGRESS (95%)
 **Owner (role):** Platform Eng
 
 ## Summary
@@ -51,15 +51,18 @@ These requirements are non-negotiable and must be enforced mechanically:
 | `/speckit.capsule commit --label <LABEL>` | Create manual checkpoint |
 | `/speckit.capsule resolve-uri <mv2://...>` | Resolve URI to physical location |
 
-### Headless CLI (Must Exist)
+### Headless CLI (Implemented)
 
-| Command | Description |
-|---------|-------------|
-| `code speckit capsule doctor` | Same as TUI, machine-readable output |
-| `code speckit capsule stats [--json]` | Stats with optional JSON output |
-| `code speckit capsule checkpoints [--json]` | List checkpoints, JSON for automation |
-| `code speckit capsule commit --label <LABEL> [--json]` | Create checkpoint, return ID |
-| `code speckit capsule resolve-uri <mv2://...> [--as-of <checkpoint>] [--out <path>]` | Time-travel resolution |
+| Command | Description | Status |
+|---------|-------------|--------|
+| `code speckit capsule init [--force] [--json]` | Initialize new workspace capsule | DONE |
+| `code speckit capsule doctor [--json]` | Health check with actionable recovery steps | DONE |
+| `code speckit capsule stats [--json]` | Stats with optional JSON output | DONE |
+| `code speckit capsule checkpoints [--json]` | List checkpoints, JSON for automation | DONE |
+| `code speckit capsule events [--stage <S>] [--type <T>] [--limit N] [--json]` | List events with filtering | DONE |
+| `code speckit capsule commit --label <LABEL> [--force] [--json]` | Create checkpoint (--force allows duplicate labels) | DONE |
+| `code speckit capsule resolve-uri <URI> [--as-of <checkpoint>] [--out <path>] [--json]` | Time-travel URI resolution | DONE |
+| `code speckit capsule export --spec <ID> --run <ID> [--out <path>] [--json]` | Export run archive | DONE |
 
 ### Output Requirements
 
@@ -80,17 +83,24 @@ On capsule open for writing, create and hold an OS-level exclusive lock:
 
 ### Lockfile Contents (JSON)
 
+Matches `LockMetadata` struct in `tui/src/memvid_adapter/lock.rs`:
+
 ```json
 {
   "pid": 12345,
   "host": "workstation",
   "user": "developer",
-  "started_at": "2026-01-12T10:30:00Z",
-  "run_id": "run_abc123",
+  "started_at": "2026-01-16T10:30:00Z",
+  "schema_version": 1,
   "spec_id": "SPEC-KIT-971",
-  "branch": "run/run_abc123"
+  "run_id": "abc123",
+  "branch": "run/abc123"
 }
 ```
+
+**Notes:**
+- `schema_version` is required (defaults to 1 for forward compatibility)
+- `spec_id`, `run_id`, `branch` are optional (omitted if null)
 
 ### Lock Failure Behavior
 
@@ -150,19 +160,66 @@ If `memvid` open fails:
 
 ## Deliverables
 
+### Core Infrastructure (DONE)
 - [x] New `MemvidMemoryAdapter` implementing existing Stage0 memory traits
-- [x] `speckit capsule doctor` command
-- [x] `speckit capsule stats` command
-- [x] `speckit capsule checkpoints` command
-- [x] `speckit capsule commit --label <LABEL>` command
 - [x] Capsule path conventions: `./.speckit/memvid/workspace.mv2`
-- [x] Checkpoint API: stage boundary commit + manual commit
 - [x] Canonical URI scheme: stable `mv2://...` URIs
-- [x] Event track plumbing: `RunEventEnvelope` with `StageTransition` + `PolicySnapshotRef`
 - [x] Config switch: `memory_backend = memvid | local-memory`
-- [ ] Cross-process single-writer lock (in progress)
-- [ ] Wire `memory_backend` into Stage0 integration
-- [ ] `resolve-uri` CLI command with `--as-of` parameter
+- [x] Cross-process single-writer lock (`LockMetadata` + flock)
+- [x] Wire `memory_backend` into pipeline coordinator
+
+### CLI Commands (DONE)
+- [x] `speckit capsule init` - Initialize workspace capsule
+- [x] `speckit capsule doctor` - Health diagnostics
+- [x] `speckit capsule stats` - Size and index stats
+- [x] `speckit capsule checkpoints` - List checkpoints
+- [x] `speckit capsule events` - List events with filtering
+- [x] `speckit capsule commit --label <LABEL> [--force]` - Manual checkpoint with label uniqueness
+- [x] `speckit capsule resolve-uri <URI> [--as-of <checkpoint>]` - Time-travel resolution
+- [x] `speckit capsule export` - Per-run archive export
+
+### Checkpoint & Branching (DONE)
+- [x] Checkpoint API: stage boundary commit + manual commit
+- [x] Branch isolation: `run/<RUN_ID>` branch per run
+- [x] Time-travel URI resolution: `resolve_uri(uri, branch, as_of=checkpoint)`
+- [x] UriIndexSnapshot: checkpoint-scoped URI index persistence
+- [x] Label uniqueness enforcement with `--force` override
+
+### Event Plumbing (DONE)
+- [x] Event track: `RunEventEnvelope` with `StageTransition` + `PolicySnapshotRef`
+- [x] Routing decision events: `RoutingDecisionPayload` for reflex decisions
+
+---
+
+## Open Gaps
+
+### Merge at Unlock (NOT IMPLEMENTED)
+
+**Status:** Branch switching is implemented; merge semantics are NOT.
+
+The spec declares "Run isolation via branches - Every run writes to `run/<RUN_ID>` branch; **merges at Unlock**" as a non-negotiable, but the merge-at-unlock step is not yet implemented:
+
+- **Implemented:** Branch creation (`BranchId::for_run(run_id)`), branch switching on run start
+- **NOT Implemented:** Merge of `run/<RUN_ID>` → `main` at Unlock stage
+- **NOT Implemented:** `BranchMerged` event emission
+- **NOT Implemented:** Merge mode enforcement (`curated` vs `full`)
+
+**Proposal:** Delegate merge semantics to SPEC-KIT-975 (Replayable Audits), which defines:
+- `BranchMerged` event type and payload
+- Merge mode configuration in `model_policy.toml`
+- UI for selecting curated vs full merge
+
+**Rationale:**
+1. Merge is a replay-critical operation (needs audit trail)
+2. SPEC-KIT-975 already owns event schema design
+3. Keeps 971 focused on capsule foundation; 975 handles audit semantics
+
+**Alternative:** Add merge as a 971 addendum deliverable if 975 is blocked.
+
+### Remaining CLI Polish
+- [ ] `capsule checkpoints --branch <B>` - List checkpoints for specific branch
+- [ ] `capsule branches` - List all branches with metadata
+- [ ] `capsule merge --from <branch> --to main --mode <curated|full>` - Manual branch merge
 
 ---
 

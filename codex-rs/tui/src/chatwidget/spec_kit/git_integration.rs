@@ -333,6 +333,64 @@ pub fn create_capsule_checkpoint(
     Ok(checkpoint_id)
 }
 
+/// SPEC-KIT-971: Merge run branch to main at Unlock completion.
+///
+/// ## Invariant
+/// Merge modes are `curated` or `full` only - never squash, ff, or rebase.
+/// Objects created on run branch become resolvable on main after merge.
+///
+/// ## Parameters
+/// - `spec_id`: Spec identifier (e.g., "SPEC-KIT-971")
+/// - `run_id`: Run identifier for the run branch
+/// - `cwd`: Working directory (for capsule path resolution)
+///
+/// ## Returns
+/// - `Ok(CheckpointId)` with the merge checkpoint ID
+/// - `Err` on capsule errors
+pub fn merge_run_branch_to_main(
+    spec_id: &str,
+    run_id: &str,
+    cwd: &Path,
+) -> Result<CheckpointId> {
+    use crate::memvid_adapter::MergeMode;
+
+    // Use canonical capsule config
+    let config = default_capsule_config(cwd);
+
+    // Open capsule with write lock for merge
+    let handle = CapsuleHandle::open(config).map_err(|e| {
+        SpecKitError::from_string(format!("Failed to open capsule for merge: {}", e))
+    })?;
+
+    // Perform merge: run/<RUN_ID> → main
+    // Using Curated mode by default (per SPEC-KIT-971 invariant)
+    let from_branch = BranchId::for_run(run_id);
+    let to_branch = BranchId::main();
+
+    let merge_checkpoint_id = handle
+        .merge_branch(
+            &from_branch,
+            &to_branch,
+            MergeMode::Curated,
+            Some(spec_id),
+            Some(run_id),
+        )
+        .map_err(|e| {
+            SpecKitError::from_string(format!("Failed to merge run branch to main: {}", e))
+        })?;
+
+    tracing::info!(
+        spec_id = %spec_id,
+        run_id = %run_id,
+        from_branch = %from_branch.as_str(),
+        to_branch = %to_branch.as_str(),
+        merge_checkpoint_id = %merge_checkpoint_id,
+        "Merged run branch to main at Unlock"
+    );
+
+    Ok(merge_checkpoint_id)
+}
+
 /// Format commit message for stage artifact commit
 fn format_stage_commit_message(spec_id: &str, stage: SpecStage) -> String {
     format!(

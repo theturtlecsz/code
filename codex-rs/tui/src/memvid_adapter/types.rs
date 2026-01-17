@@ -281,6 +281,9 @@ pub enum EventType {
     // SPEC-KIT-978: Model routing decisions (reflex vs cloud)
     RoutingDecision,
 
+    // SPEC-KIT-971: Branch merge at Unlock
+    BranchMerged,
+
     // SPEC-KIT-975 will add:
     // RetrievalRequest,
     // RetrievalResponse,
@@ -290,7 +293,6 @@ pub enum EventType {
     // GateDecision,
     // ErrorEvent,
     // ModelCallEnvelope,
-    // BranchMerged,
     // CapsuleExported,
     // CapsuleImported,
 }
@@ -301,6 +303,7 @@ impl EventType {
             EventType::StageTransition => "StageTransition",
             EventType::PolicySnapshotRef => "PolicySnapshotRef",
             EventType::RoutingDecision => "RoutingDecision",
+            EventType::BranchMerged => "BranchMerged",
         }
     }
 }
@@ -584,6 +587,27 @@ impl UriIndex {
     pub fn branch_keys(&self) -> Vec<BranchId> {
         self.entries.keys().cloned().collect()
     }
+
+    /// Count the number of URIs on a specific branch.
+    pub fn count_on_branch(&self, branch: &BranchId) -> usize {
+        self.entries.get(branch).map(|m| m.len()).unwrap_or(0)
+    }
+
+    /// Merge all URI mappings from one branch to another.
+    ///
+    /// Copies all entries from `from` branch to `to` branch.
+    /// Existing entries on `to` branch with the same URI are overwritten.
+    ///
+    /// ## SPEC-KIT-971: Merge at Unlock
+    /// This is used when merging a run branch into main.
+    pub fn merge_branch(&mut self, from: &BranchId, to: &BranchId) {
+        if let Some(source_entries) = self.entries.get(from).cloned() {
+            let target = self.entries.entry(to.clone()).or_default();
+            for (uri, pointer) in source_entries {
+                target.insert(uri, pointer);
+            }
+        }
+    }
 }
 
 /// A physical pointer to data in the capsule (internal, not exposed externally).
@@ -626,6 +650,31 @@ impl Default for MergeMode {
     fn default() -> Self {
         MergeMode::Curated
     }
+}
+
+/// Branch merge event payload for capsule events.
+///
+/// Emitted when a run branch is merged into main at Unlock.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BranchMergedPayload {
+    /// Source branch (e.g., "run/<RUN_ID>")
+    pub from_branch: String,
+    /// Target branch (always "main")
+    pub to_branch: String,
+    /// Merge mode used
+    pub mode: MergeMode,
+    /// Checkpoint ID created for the merge
+    pub merge_checkpoint_id: String,
+    /// Number of URIs merged
+    pub uris_merged: u64,
+    /// Number of events merged
+    pub events_merged: u64,
+    /// Spec ID (if available)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spec_id: Option<String>,
+    /// Run ID (if available)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
 }
 
 #[cfg(test)]

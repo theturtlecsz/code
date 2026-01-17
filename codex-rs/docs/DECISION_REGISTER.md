@@ -1,8 +1,8 @@
 # DECISION_REGISTER.md - Locked Decisions
 
 **Version:** 1.0
-**Last Updated:** 2026-01-12
-**Total Decisions:** D1-D112 (locked)
+**Last Updated:** 2026-01-16
+**Total Decisions:** D1-D112 (D100-D102 locked, D110-D112 active)
 
 ---
 
@@ -73,9 +73,9 @@
 
 | ID | Decision | Status | Spec |
 |----|----------|--------|------|
-| D100 | PolicySnapshot captured at run boundaries | ACTIVE | 977 |
-| D101 | Events linked to policy snapshot version | ACTIVE | 977 |
-| D102 | Policy snapshot stored in capsule | ACTIVE | 977 |
+| D100 | PolicySnapshot captured at run boundaries | LOCKED | 977 |
+| D101 | Events linked to policy snapshot version | LOCKED | 977 |
+| D102 | Policy snapshot stored in capsule | LOCKED | 977 |
 
 ---
 
