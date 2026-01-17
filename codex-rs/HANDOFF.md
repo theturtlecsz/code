@@ -1,8 +1,8 @@
 # HANDOFF.md — Session Continuation
 
 **Created:** 2026-01-11
-**Last Session:** 2026-01-14 (SPEC-KIT-971 CLI + SPEC-KIT-977 Policy Event Binding Complete)
-**Next Session:** SPEC-KIT-978 ReflexBackend trait
+**Last Session:** 2026-01-17 (SPEC-KIT-977 Policy CLI/TUI + SPEC-KIT-971 Merge at Unlock)
+**Next Session:** SPEC-KIT-975 Event Schema + SPEC-KIT-978 Remaining Work
 
 ---
 
@@ -24,100 +24,90 @@ NON-NEGOTIABLES (read first)
    - Hybrid = lex + vec (required, not optional)
    - Merge modes are `curated` or `full` only (never squash/ff/rebase)
    - Lock file path: <capsule_path>.lock (e.g., workspace.mv2.lock)
+   - Reflex is a routing mode: Implementer(mode=reflex), not a new Stage0 role
 
 ===================================================================
-CURRENT STATE — Session completed 2026-01-14 (Update 2)
+CURRENT STATE — Session completed 2026-01-17
 ===================================================================
 
-COMPLETED THIS SESSION (Update 2):
+COMPLETED THIS SESSION:
 
-3. ✅ SPEC-KIT-977 Policy Drift Detection at Stage Boundaries
-   - `check_and_recapture_if_changed()` function in policy_capture.rs
-   - Compares current policy hash with fresh capture
-   - If drift detected: recaptures, stores dual (FS + capsule), emits event
-   - Wired into `create_capsule_checkpoint()` in git_integration.rs
-   - 2 new drift detection tests passing
+1. ✅ SPEC-KIT-977 Policy CLI Commands
+   - `code speckit policy list [--json]` - List all policy snapshots
+   - `code speckit policy show <id> [--json]` - Show policy details
+   - `code speckit policy current [--json]` - Show current active policy
+   - `code speckit policy validate [--path]` - Validate model_policy.toml
+   - Exported GovernancePolicy from stage0 for CLI usage
 
-COMPLETED THIS SESSION (Update 1):
+2. ✅ SPEC-KIT-977 Policy TUI Commands
+   - `/speckit.policy list` - List policy snapshots
+   - `/speckit.policy show <id>` - Show policy details
+   - `/speckit.policy current` - Show current active policy
+   - New policy.rs command file in commands/
 
-1. ✅ SPEC-KIT-971 CLI Commands Complete
-   - `speckit capsule init` - Create new workspace.mv2
-   - `speckit capsule events` - List events with stage/type/spec/run filtering
-   - `speckit capsule export` - Export per-run archive (events.json, checkpoints.json, manifest.json)
-   - All CLI commands support --json output
-
-2. ✅ SPEC-KIT-977 Policy Event Binding (Phase 4→5 Gate)
-   - Policy capture wired at run start in pipeline_coordinator.rs
-   - policy_id, policy_hash, policy_uri fields added to SpecAutoState
-   - All StageTransition events include policy binding after capture
-   - 2 phase 4→5 gate verification tests added
-
-PRIOR SESSION (2026-01-13):
-
-1. ✅ SPEC-KIT-971 Checkpoint Integration with Pipeline Stage Commits
-   - StageCommitResult struct returns commit hash from auto_commit
-   - get_head_commit_hash() function for commit retrieval
-   - create_capsule_checkpoint() function wired after git auto-commit
-   - 5 git_integration tests passing
-   - Checkpoints record spec_id, run_id, stage, commit_hash
-
-2. ✅ SPEC-KIT-977 PolicySnapshot Wiring
-   - Deterministic hash (excludes policy_id, created_at, hash)
-   - content_matches() and content_changed() helpers
-   - put_policy() for global URI: mv2://<workspace>/policy/<policy_id>
-   - CurrentPolicyInfo tracking in CapsuleHandle
-   - StageTransition events include policy_id/hash
-   - 15 policy tests passing
-
-3. ✅ SPEC-KIT-971 CLI (initial)
-   - doctor, stats, checkpoints, commit, resolve-uri commands
-   - JSON-first output with stable schema
-   - 7 CLI tests passing
+3. ✅ SPEC-KIT-971 Merge at Unlock
+   - Added `BranchMerged` event type to EventType enum
+   - Added `BranchMergedPayload` struct
+   - Added `UriIndex::count_on_branch()` and `merge_branch()` helpers
+   - Added `CapsuleHandle::merge_branch(from, to, mode, spec_id, run_id)`
+   - Added `merge_run_branch_to_main()` in git_integration.rs
+   - Wired merge into Unlock stage in pipeline_coordinator.rs
+   - 2 determinism tests: URIs resolve on main after merge
 
 ===================================================================
-TASK FOR NEXT SESSION: SPEC-KIT-978 ReflexBackend trait
+TASK FOR NEXT SESSION: SPEC-KIT-975 + 978 Remaining
 ===================================================================
 
-### SPEC-KIT-978: ReflexBackend Trait
+### Priority 1: SPEC-KIT-975 Event Schema (Unblocks 973, 976)
 
-**Goal:** Create ReflexBackend trait for fast-path model inference.
+**Goal:** Define event schema for replay determinism.
 
 **Key deliverables:**
-1. ReflexBackend trait definition
-2. Local inference implementation (vLLM/Ollama)
-3. Cloud fallback implementation
-4. Latency-based routing
+1. Event schema v1 with all event types
+2. LLMCall event capture aligned with PolicySnapshot.capture.mode
+3. Events query API for time-travel and replay
 
-### Deferred Tasks (Do Not Implement)
+### Priority 2: SPEC-KIT-978 Remaining Work
 
-- Dead code cleanup (9 clippy warnings)
-- SPEC-KIT-973 Time-travel UI
-- SPEC-KIT-976 Logic Mesh
+**Already complete:**
+- [x] JSON schema enforcement in agent_orchestrator.rs
+- [x] Reflex config in model_policy.toml
+- [x] ReflexConfig struct and load_reflex_config()
+- [x] Routing decision module (reflex_router.rs)
+- [x] RoutingDecision capsule events
+- [x] Health check integration
+- [x] ReflexMetricsDb for bakeoff stats
+- [x] `code speckit reflex bakeoff` command
+- [x] `code speckit reflex check` command
+
+**Remaining:**
+- [ ] Bakeoff report writer: JSON/MD to .speckit/eval/reflex-bakeoff-*
+- [ ] CI gate: `code speckit reflex check` fails CI if thresholds not met
+- [ ] TUI slash commands: `/speckit.reflex health|status|models`
+
+### Optional: Documentation Updates
+
+Consider updating specs to 100% status:
+- SPEC-KIT-971: Update to 100% (merge at unlock complete)
+- SPEC-KIT-977: Update to 100% (CLI/TUI complete)
 
 ===================================================================
-FILES CHANGED THIS SESSION (2026-01-14)
+FILES CHANGED THIS SESSION (2026-01-17)
 ===================================================================
 
 | File | Change |
 |------|--------|
-| cli/src/speckit_cmd.rs | Added init, events, export commands |
-| tui/src/chatwidget/spec_kit/pipeline_coordinator.rs | Policy capture at run start |
-| tui/src/chatwidget/spec_kit/state.rs | policy_id, policy_hash, policy_uri fields |
-| tui/src/chatwidget/spec_kit/git_integration.rs | Policy drift check before checkpoint |
-| tui/src/memvid_adapter/policy_capture.rs | check_and_recapture_if_changed function |
-| tui/src/memvid_adapter/tests.rs | Phase 4→5 gate + drift detection tests |
-
-PRIOR SESSION (2026-01-13):
-
-| File | Change |
-|------|--------|
-| tui/src/chatwidget/spec_kit/git_integration.rs | StageCommitResult, create_capsule_checkpoint, 3 tests |
-| tui/src/chatwidget/spec_kit/pipeline_coordinator.rs | Wired checkpoint creation after git commit |
-| tui/src/memvid_adapter/capsule.rs | CurrentPolicyInfo, put_policy, list_events, policy in StageTransition |
-| tui/src/memvid_adapter/mod.rs | Export new types |
-| tui/src/memvid_adapter/policy_capture.rs | Uses put_policy() |
-| stage0/src/policy.rs | Deterministic hash, content_matches, content_changed |
-| cli/src/speckit_cmd.rs | Capsule CLI subcommands |
+| cli/src/speckit_cmd.rs | Added policy list/show/current/validate commands |
+| stage0/src/lib.rs | Exported GovernancePolicy |
+| tui/src/chatwidget/spec_kit/commands/policy.rs | NEW - TUI policy commands |
+| tui/src/chatwidget/spec_kit/commands/mod.rs | Added policy module |
+| tui/src/chatwidget/spec_kit/command_registry.rs | Registered policy command (45 total) |
+| tui/src/chatwidget/spec_kit/git_integration.rs | Added merge_run_branch_to_main() |
+| tui/src/chatwidget/spec_kit/pipeline_coordinator.rs | Wired merge at Unlock |
+| tui/src/memvid_adapter/capsule.rs | Added merge_branch() method |
+| tui/src/memvid_adapter/mod.rs | Exported MergeMode, BranchMergedPayload |
+| tui/src/memvid_adapter/types.rs | Added BranchMerged event, BranchMergedPayload |
+| tui/src/memvid_adapter/tests.rs | 2 merge determinism tests |
 
 ===================================================================
 TEST SUMMARY
@@ -125,81 +115,85 @@ TEST SUMMARY
 
 | Module | Tests | Status |
 |--------|-------|--------|
-| git_integration | 5 | ✅ All passing |
-| policy (TUI) | 10 | ✅ All passing (incl. drift detection) |
-| stage0 policy | 15 | ✅ All passing |
-| CLI | 7 | ✅ All passing |
+| TUI total | 667 | ✅ All passing |
+| merge determinism | 2 | ✅ All passing |
+| policy (TUI) | 2 | ✅ All passing |
+| command_registry | 16 | ✅ All passing |
 
 Run commands:
 ```bash
-cargo test -p codex-tui --lib "git_integration"
+cargo test -p codex-tui --lib
+cargo test -p codex-tui --lib "merge_determinism"
 cargo test -p codex-tui --lib "policy"
-cargo test -p codex-tui --lib "policy_drift"
-cargo test -p codex-stage0 "policy"
+cargo test -p codex-tui --lib "command_registry"
 ```
 
 ===================================================================
 KEY CODE PATTERNS IMPLEMENTED
 ===================================================================
 
-### Checkpoint Integration Flow
+### Merge at Unlock Flow
 
 ```
-auto_commit_stage_artifacts()
-    ├── Stage files (git add)
-    ├── Commit with message
-    ├── Return StageCommitResult { commit_hash, stage }
+Unlock Stage Complete
     │
-    └── Pipeline coordinator:
-        └── create_capsule_checkpoint(spec_id, run_id, stage, commit_hash, cwd)
-            ├── Open CapsuleHandle
-            ├── commit_stage(spec_id, run_id, stage_name, commit_hash)
-            └── Return CheckpointId
+    └── pipeline_coordinator.rs:
+        ├── create_capsule_checkpoint(spec_id, run_id, Unlock, commit_hash)
+        │
+        └── if stage == Unlock:
+            └── merge_run_branch_to_main(spec_id, run_id, cwd)
+                ├── Open CapsuleHandle
+                ├── merge_branch(run/RUN_ID, main, Curated, spec_id, run_id)
+                │   ├── Copy URI mappings from run to main
+                │   ├── Update event branch_ids to main
+                │   ├── Create merge checkpoint
+                │   ├── Create URI index snapshot
+                │   └── Emit BranchMerged event
+                └── Return merge_checkpoint_id
 ```
 
-### PolicySnapshot Hash (Deterministic)
+### BranchMergedPayload Schema
 
-```rust
-// Excluded from hash (runtime values):
-// - policy_id (generated at capture time)
-// - created_at (timestamp)
-// - hash (self-referential)
-
-// Included in hash (content):
-// - policy_name
-// - policy_version
-// - source_files (sorted for determinism)
-// - model_config
-// - scoring_weights
+```json
+{
+  "from_branch": "run/RUN_ID",
+  "to_branch": "main",
+  "mode": "Curated",
+  "merge_checkpoint_id": "merge_20260117...",
+  "uris_merged": 5,
+  "events_merged": 3,
+  "spec_id": "SPEC-XXX",
+  "run_id": "run-xxx"
+}
 ```
 
-### Global Policy URI
+### Policy CLI Commands
 
-```
-mv2://workspace/policy/{policy_id}
-    └── Capsule-scoped, globally referenceable
-    └── Stored via put_policy() at dedicated path
+```bash
+code speckit policy list [--json]      # List snapshots
+code speckit policy show <id> [--json] # Show details
+code speckit policy current [--json]   # Current active
+code speckit policy validate [--path]  # Validate TOML
 ```
 
 ===================================================================
 ARCHITECTURAL NOTES
 ===================================================================
 
-### Event Binding Pattern
+### Merge Mode Invariant
 
-All events should include:
-- event_type: EventType enum
-- spec_id, run_id: Pipeline context
-- stage: Optional stage name
-- policy_id, policy_hash: From CurrentPolicyInfo
-- payload: Event-specific data
+Per SPEC.md and SPEC-KIT-971:
+- Merge modes are `curated` or `full` ONLY
+- Never squash, ff, or rebase
+- Curated = selective artifact inclusion
+- Full = complete artifact preservation
 
-### Phase 4→5 Gate Requirements
+### Event Binding at Merge
 
-1. PolicySnapshot captured at run start ✅
-2. All events tagged with policy_id (partial - StageTransition done)
-3. Policy unchanged verification (content_matches helper exists)
-4. Export includes policy metadata
+BranchMerged events are emitted on main branch after merge:
+- stage = "Unlock"
+- Includes from_branch, to_branch, mode, counts
+- Merge checkpoint has label "merge:run/RUN_ID"
 
 ===================================================================
 QUICK COMMANDS
@@ -213,66 +207,61 @@ QUICK COMMANDS
 cargo test -p codex-tui --lib
 cargo test -p codex-stage0 --lib
 
-# Specific modules
-cargo test -p codex-tui --lib "capsule"
-cargo test -p codex-tui --lib "git_integration"
-cargo test -p codex-stage0 "policy"
+# Policy CLI smoke test
+./target/debug/code speckit policy list
+./target/debug/code speckit policy validate
 
-# CLI smoke test
-./target/debug/code-tui speckit capsule doctor
-./target/debug/code-tui speckit capsule stats
-./target/debug/code-tui speckit capsule checkpoints
+# Reflex CLI
+./target/debug/code speckit reflex bakeoff
+./target/debug/code speckit reflex check
 ```
 
 ===================================================================
 DO NOT INCLUDE (Deferred)
 ===================================================================
 
-- Dead code cleanup (9 clippy warnings) - defer to later session
-- SPEC-KIT-973 Time-travel UI - needs CLI complete first
-- SPEC-KIT-976 Logic Mesh - needs 977 policy wiring complete
+- Dead code cleanup (clippy warnings)
+- SPEC-KIT-973 Time-travel UI (needs 975)
+- SPEC-KIT-976 Logic Mesh (needs 975)
+- SPEC-KIT-979 local-memory sunset (needs 975)
 
 ===================================================================
 OUTPUT EXPECTATION
 ===================================================================
 
-1. Complete remaining CLI commands (init, events, export)
-2. Wire policy capture at pipeline run start
-3. Ensure all events include policy_id after capture
-4. Add phase 4→5 gate verification test
-5. Commit with spec IDs and decision IDs
-6. Update HANDOFF.md with progress
+1. Complete SPEC-KIT-975 Event Schema v1
+2. Add remaining SPEC-KIT-978 work (bakeoff reports, CI gate)
+3. Update spec status to 100% where complete
+4. Commit with spec IDs and decision IDs
+5. Update HANDOFF.md with progress
 ```
 
 ---
 
 ## Progress Tracker
 
-### Completed This Session (2026-01-14)
+### Completed This Session (2026-01-17)
 
 | Task | Status | Tests |
 |------|--------|-------|
-| 971 CLI Commands (init, events, export) | ✅ | CLI tests passing |
-| 977 Policy Event Binding | ✅ | 2 phase 4→5 gate tests |
+| 977 Policy CLI Commands | ✅ | CLI validated |
+| 977 Policy TUI Commands | ✅ | 2 tests passing |
+| 971 Merge at Unlock | ✅ | 2 determinism tests |
 
 ### Completed Specs
 
 | Spec | Status | Key Deliverables |
 |------|--------|------------------|
-| SPEC-KIT-971 (core) | ✅ | Capsule foundation, crash recovery, persistence |
-| SPEC-KIT-971 (A5) | ✅ | Pipeline backend routing |
+| SPEC-KIT-971 (core) | ✅ 95% | Capsule foundation, crash recovery, persistence |
 | SPEC-KIT-971 (lock) | ✅ | Cross-process single-writer lock |
 | SPEC-KIT-971 (checkpoints) | ✅ | Stage boundary checkpoints with git integration |
 | SPEC-KIT-971 (CLI) | ✅ | doctor/stats/checkpoints/commit/resolve-uri/init/events/export |
+| SPEC-KIT-971 (merge) | ✅ | Merge at Unlock with BranchMerged event |
 | SPEC-KIT-972 | ✅ | Hybrid retrieval, eval harness |
-| SPEC-KIT-977 (hash) | ✅ | Deterministic hash, content helpers |
-| SPEC-KIT-977 (wiring) | ✅ | Policy capture at run start, all events bound |
-
-### In Progress
-
-| Spec | Status | Next Step |
-|------|--------|-----------|
-| SPEC-KIT-978 | 🔄 0% | Create ReflexBackend trait |
+| SPEC-KIT-977 (core) | ✅ 85% | PolicySnapshot capture, storage, drift detection |
+| SPEC-KIT-977 (CLI) | ✅ | policy list/show/current/validate |
+| SPEC-KIT-977 (TUI) | ✅ | /speckit.policy commands |
+| SPEC-KIT-978 (core) | 🔄 65% | Reflex routing, bakeoff CLI |
 
 ### Phase Gates
 
@@ -281,80 +270,17 @@ OUTPUT EXPECTATION
 | 1→2 | 971 URI contract + checkpoint tests | ✅ Passed |
 | 2→3 | 972 eval harness + 975 event schema v1 | ✅ Passed |
 | 3→4 | 972 parity gates + export verification | ✅ Passed |
-| 4→5 | 977 PolicySnapshot + event binding | ✅ Passed (2026-01-14) |
+| 4→5 | 977 PolicySnapshot + event binding | ✅ Passed |
 | 5→6 | 978 ReflexBackend + latency routing | ⏳ Pending |
 
 ---
 
-## Architecture Summary
-
-### Checkpoint + Git Integration Flow
+## Commits This Session (2026-01-17)
 
 ```
-Pipeline Stage Complete
-    │
-    ├── auto_commit_stage_artifacts()
-    │   ├── git add <stage files>
-    │   ├── git commit -m "feat(SPEC-ID): complete Stage stage"
-    │   └── Return StageCommitResult { commit_hash, stage }
-    │
-    └── create_capsule_checkpoint()
-        ├── CapsuleHandle::open(config)
-        ├── handle.commit_stage(spec_id, run_id, stage, commit_hash)
-        │   ├── Create CheckpointMetadata
-        │   ├── Emit StageTransition event (with policy_id if set)
-        │   └── Persist to capsule
-        └── Return CheckpointId
-```
-
-### Policy Capture + Binding Flow
-
-```
-Pipeline Run Start
-    │
-    └── capture_and_store_policy(&capsule, &config)
-        ├── PolicySnapshot::capture(files, config)
-        ├── capsule.put_policy(snapshot)  // Global URI
-        └── capsule.set_current_policy(policy_id, hash)
-
-All Subsequent Events
-    │
-    └── event.policy_id = capsule.current_policy.id
-        event.policy_hash = capsule.current_policy.hash
+8d24b401b feat(spec-kit): SPEC-KIT-977 policy CLI/TUI + SPEC-KIT-971 merge at Unlock
 ```
 
 ---
 
-## Key Files Reference
-
-| File | Purpose |
-|------|---------|
-| tui/src/chatwidget/spec_kit/git_integration.rs | Git auto-commit + capsule checkpoint |
-| tui/src/chatwidget/spec_kit/pipeline_coordinator.rs | Pipeline orchestration |
-| tui/src/memvid_adapter/capsule.rs | CapsuleHandle, checkpoints, events |
-| tui/src/memvid_adapter/policy_capture.rs | Policy capture utilities |
-| stage0/src/policy.rs | PolicySnapshot struct, deterministic hash |
-| cli/src/speckit_cmd.rs | CLI subcommands |
-
----
-
-## Commits This Session (2026-01-14)
-
-```
-29d2d26e2 feat(cli,memvid): SPEC-KIT-971 CLI complete + SPEC-KIT-977 policy binding
-```
-
-### Prior Session (2026-01-13)
-
-```
-8b9893ec8 feat(memvid): SPEC-KIT-971 checkpoint integration + SPEC-KIT-977 policy wiring
-27cbdeddc docs(handoff): SPEC-KIT-971 session complete + CLI next steps
-04f2807cc feat(memvid): SPEC-KIT-971 cross-process single-writer lock
-5d00c1f2b test(stage0,memvid): SPEC-KIT-971-A5 acceptance tests pass
-400704922 docs: V6 contract alignment + policy source files + spec updates
-a42f594fd feat(stage0,memvid): SPEC-KIT-971 CLI + SPEC-KIT-977 PolicySnapshot
-```
-
----
-
-*Generated by Claude Code session 2026-01-14*
+*Generated by Claude Code session 2026-01-17*
