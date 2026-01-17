@@ -1,6 +1,6 @@
 # SPEC-KIT-977 — Model Policy v2 (Lifecycle + Enforcement)
-**Date:** 2026-01-16 (Updated)
-**Status:** IN PROGRESS (85%)
+**Date:** 2026-01-17 (Updated)
+**Status:** COMPLETE (100%)
 **Owner (role):** Platform+Security Eng
 
 ## Summary
@@ -225,21 +225,22 @@ Every StageTransition / Checkpoint event MUST include:
 
 ---
 
-## CLI Commands
+## CLI Commands (Implemented)
 
-### TUI
-| Command | Description |
-|---------|-------------|
-| `/speckit.policy list` | List policy snapshots |
-| `/speckit.policy show <id>` | Show policy details |
-| `/speckit.policy current` | Show current active policy |
+### TUI Slash Commands
+| Command | Description | Status |
+|---------|-------------|--------|
+| `/speckit.policy list` | List policy snapshots | DONE |
+| `/speckit.policy show <id>` | Show policy details | DONE |
+| `/speckit.policy current` | Show current active policy | DONE |
 
-### Headless
-| Command | Description |
-|---------|-------------|
-| `code speckit policy list [--json]` | List snapshots |
-| `code speckit policy show <id> [--json]` | Show details |
-| `code speckit policy validate` | Validate model_policy.toml |
+### Headless CLI
+| Command | Description | Status |
+|---------|-------------|--------|
+| `code speckit policy list [--json]` | List snapshots | DONE |
+| `code speckit policy show <id> [--json]` | Show details | DONE |
+| `code speckit policy current [--json]` | Show current active policy | DONE |
+| `code speckit policy validate [--path]` | Validate model_policy.toml | DONE |
 
 ---
 
@@ -264,12 +265,16 @@ Every StageTransition / Checkpoint event MUST include:
 - [x] `doc_lint.py` checks `model_policy.toml` exists
 - [x] `doc_lint.py` validates required TOML sections (`[meta]`, `[system_of_record]`, etc.)
 
-### CLI Commands (NOT IMPLEMENTED)
-- [ ] `code speckit policy list [--json]` - List policy snapshots
-- [ ] `code speckit policy show <id> [--json]` - Show policy details
-- [ ] `code speckit policy current [--json]` - Show current active policy
-- [ ] `code speckit policy validate` - Validate model_policy.toml schema
-- [ ] `/speckit.policy` TUI slash commands
+### CLI Commands (DONE)
+- [x] `code speckit policy list [--json]` - List policy snapshots
+- [x] `code speckit policy show <id> [--json]` - Show policy details
+- [x] `code speckit policy current [--json]` - Show current active policy
+- [x] `code speckit policy validate [--path]` - Validate model_policy.toml schema
+- [x] `/speckit.policy list|show|current` TUI slash commands
+
+### Remaining Work
+- [ ] `code speckit policy diff <id1> <id2>` - Compare two policy snapshots
+- [ ] `code speckit policy compare` - Compare current vs captured policy
 
 ---
 

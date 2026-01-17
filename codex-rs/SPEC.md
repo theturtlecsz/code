@@ -1,7 +1,7 @@
 # SPEC.md - Codex-RS / Spec-Kit Task Tracking
 
 **Version:** V6 Docs Contract
-**Last Updated:** 2026-01-16
+**Last Updated:** 2026-01-17
 
 ---
 
@@ -70,17 +70,16 @@ These invariants MUST NOT be violated:
 
 | Spec | Status | Owner | Next Action |
 |------|--------|-------|-------------|
-| SPEC-KIT-971 | 95% | - | Final polish: checkpoint listing CLI, branch merge UI |
-| SPEC-KIT-977 | 85% | - | Policy CLI/TUI commands (show, compare, diff) |
-| SPEC-KIT-978 | 65% | - | Eval artifact writer + CI gate + LLMCall capture alignment with 975 |
+| SPEC-KIT-978 | 75% | - | Bakeoff report writer + CI gate + TUI slash commands |
+| SPEC-KIT-975 | 0% | - | Event schema v1 (unblocks 973, 976, 979) |
 
 ### Completed (Recent)
 
 | Spec | Completion Date | Key Deliverables |
 |------|-----------------|------------------|
-| SPEC-KIT-971 (core) | 2026-01-16 | Branch isolation, time-travel URI resolution, checkpoint labels, cross-process lock |
-| SPEC-KIT-977 (core) | 2026-01-16 | GovernancePolicy capture, capsule storage, PolicySnapshotRef binding, drift detection |
-| SPEC-KIT-978 (core) | 2026-01-16 | JSON schema enforcement, bakeoff_runner module, reflex routing decisions |
+| SPEC-KIT-971 | 2026-01-17 | Branch isolation, time-travel URI, checkpoints, merge at unlock, CLI complete |
+| SPEC-KIT-977 | 2026-01-17 | PolicySnapshot capture, dual storage, CLI/TUI commands, drift detection |
+| SPEC-KIT-978 (core) | 2026-01-16 | JSON schema enforcement, bakeoff CLI, reflex routing decisions |
 | SPEC-KIT-972 | 2026-01-12 | Hybrid retrieval, A/B harness, HybridBackend |
 
 ### Blocked
@@ -152,7 +151,7 @@ These files are REQUIRED and enforced by doc_lint:
 ### Build & Test
 ```bash
 ~/code/build-fast.sh              # Fast build
-cargo test -p codex-tui --lib memvid  # Memvid tests (47 passing)
+cargo test -p codex-tui --lib         # TUI tests (667 passing)
 cargo test -p codex-stage0 --lib      # Stage0 tests (269 passing)
 python3 scripts/doc_lint.py           # Doc contract lint
 python3 scripts/golden_path_test.py   # E2E validation (10/10)

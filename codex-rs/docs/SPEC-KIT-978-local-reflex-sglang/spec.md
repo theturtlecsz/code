@@ -1,6 +1,6 @@
 # SPEC-KIT-978 — Implementer.Reflex Mode via SGLang + Bakeoff
-**Date:** 2026-01-16 (Updated)
-**Status:** IN PROGRESS (65%)
+**Date:** 2026-01-17 (Updated)
+**Status:** IN PROGRESS (75%)
 **Owner (role):** Infra/LLM Eng
 
 ## Summary
@@ -283,9 +283,10 @@ $ code speckit reflex bakeoff --json
 
 ### Remaining Work
 - [ ] **Bakeoff report writer**: Write JSON/MD reports to `.speckit/eval/reflex-bakeoff-<timestamp>.*`
-- [ ] **CI gate**: `code speckit reflex check` fails CI if thresholds not met
+- [ ] **CI gate**: `code speckit reflex check --exit-code` exits non-zero if thresholds not met
 - [ ] **LLMCall event capture**: Align with `PolicySnapshot.capture.mode` (ties into SPEC-KIT-975)
 - [ ] **TUI slash commands**: `/speckit.reflex health|status|models`
+- [ ] **Wire bakeoff_runner**: Execute trials via `bakeoff_runner.rs` (module exists, not wired)
 
 ---
 

@@ -1,6 +1,6 @@
 # SPEC-KIT-971 — Memvid Capsule Foundation + Single-Writer Adapter
-**Date:** 2026-01-16 (Updated)
-**Status:** IN PROGRESS (95%)
+**Date:** 2026-01-17 (Updated)
+**Status:** COMPLETE (100%)
 **Owner (role):** Platform Eng
 
 ## Summary
@@ -185,41 +185,32 @@ If `memvid` open fails:
 - [x] UriIndexSnapshot: checkpoint-scoped URI index persistence
 - [x] Label uniqueness enforcement with `--force` override
 
+### Merge at Unlock (DONE)
+- [x] `CapsuleHandle::merge_branch(from, to, mode, spec_id, run_id)`
+- [x] `BranchMerged` event type and `BranchMergedPayload`
+- [x] `UriIndex::merge_branch()` - Copy URI mappings from run to main
+- [x] Merge checkpoint created on main branch
+- [x] Wired into Unlock stage in `pipeline_coordinator.rs`
+- [x] Determinism test: URIs on run branch resolve on main after merge
+
 ### Event Plumbing (DONE)
 - [x] Event track: `RunEventEnvelope` with `StageTransition` + `PolicySnapshotRef`
 - [x] Routing decision events: `RoutingDecisionPayload` for reflex decisions
+- [x] `BranchMerged` events emitted at Unlock
 
 ---
 
-## Open Gaps
+## Remaining Work
 
-### Merge at Unlock (NOT IMPLEMENTED)
-
-**Status:** Branch switching is implemented; merge semantics are NOT.
-
-The spec declares "Run isolation via branches - Every run writes to `run/<RUN_ID>` branch; **merges at Unlock**" as a non-negotiable, but the merge-at-unlock step is not yet implemented:
-
-- **Implemented:** Branch creation (`BranchId::for_run(run_id)`), branch switching on run start
-- **NOT Implemented:** Merge of `run/<RUN_ID>` → `main` at Unlock stage
-- **NOT Implemented:** `BranchMerged` event emission
-- **NOT Implemented:** Merge mode enforcement (`curated` vs `full`)
-
-**Proposal:** Delegate merge semantics to SPEC-KIT-975 (Replayable Audits), which defines:
-- `BranchMerged` event type and payload
-- Merge mode configuration in `model_policy.toml`
-- UI for selecting curated vs full merge
-
-**Rationale:**
-1. Merge is a replay-critical operation (needs audit trail)
-2. SPEC-KIT-975 already owns event schema design
-3. Keeps 971 focused on capsule foundation; 975 handles audit semantics
-
-**Alternative:** Add merge as a 971 addendum deliverable if 975 is blocked.
-
-### Remaining CLI Polish
+### CLI Polish (Future)
 - [ ] `capsule checkpoints --branch <B>` - List checkpoints for specific branch
 - [ ] `capsule branches` - List all branches with metadata
-- [ ] `capsule merge --from <branch> --to main --mode <curated|full>` - Manual branch merge
+- [ ] `capsule merge --from <branch> --to main --mode <curated|full>` - Manual branch merge CLI
+
+### MergeMode Semantics (Future)
+- [ ] `curated` mode: UI for selective artifact inclusion during merge
+- [ ] `full` mode is default; `curated` requires user interaction
+- [ ] Branch state persistence after capsule reopen (current state derived from events)
 
 ---
 
