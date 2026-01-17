@@ -1047,6 +1047,413 @@ pub fn get_policy_for_run(
 }
 
 // =============================================================================
+// Policy Diff (SPEC-KIT-977)
+// =============================================================================
+
+/// Represents a difference in a single field between two policy snapshots.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PolicyFieldChange {
+    /// Field path using dot notation (e.g., "routing.reflex.enabled")
+    pub path: String,
+
+    /// Old value (serialized as string for display)
+    pub old_value: String,
+
+    /// New value (serialized as string for display)
+    pub new_value: String,
+
+    /// Category of the change for grouping
+    pub category: ChangeCategory,
+}
+
+/// Category of a policy change for grouping in output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ChangeCategory {
+    /// Governance changes (routing, capture mode, SOR)
+    Governance,
+    /// Model configuration changes
+    ModelConfig,
+    /// Scoring weights changes
+    Weights,
+    /// Source files changes
+    SourceFiles,
+    /// Prompts changes
+    Prompts,
+    /// Schema version
+    Schema,
+}
+
+impl ChangeCategory {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ChangeCategory::Governance => "governance",
+            ChangeCategory::ModelConfig => "model_config",
+            ChangeCategory::Weights => "weights",
+            ChangeCategory::SourceFiles => "source_files",
+            ChangeCategory::Prompts => "prompts",
+            ChangeCategory::Schema => "schema",
+        }
+    }
+}
+
+/// Complete diff result between two policy snapshots.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PolicyDiff {
+    /// Policy ID of the first (older) snapshot
+    pub policy_id_a: String,
+
+    /// Policy ID of the second (newer) snapshot
+    pub policy_id_b: String,
+
+    /// Hash of snapshot A
+    pub hash_a: String,
+
+    /// Hash of snapshot B
+    pub hash_b: String,
+
+    /// Whether the policies are identical (by hash)
+    pub identical: bool,
+
+    /// List of all changes, sorted by path for determinism
+    pub changes: Vec<PolicyFieldChange>,
+}
+
+impl PolicyDiff {
+    /// Compute the diff between two policy snapshots.
+    ///
+    /// Returns a `PolicyDiff` with all field changes, sorted by path
+    /// for deterministic output.
+    pub fn compute(a: &PolicySnapshot, b: &PolicySnapshot) -> Self {
+        let mut changes = Vec::new();
+
+        // Schema version
+        if a.schema_version != b.schema_version {
+            changes.push(PolicyFieldChange {
+                path: "schema_version".to_string(),
+                old_value: a.schema_version.clone(),
+                new_value: b.schema_version.clone(),
+                category: ChangeCategory::Schema,
+            });
+        }
+
+        // Model config changes
+        Self::diff_model_config(&a.model_config, &b.model_config, &mut changes);
+
+        // Weights changes
+        Self::diff_weights(&a.weights, &b.weights, &mut changes);
+
+        // Source files changes (as a single field)
+        let a_sources: Vec<&str> = a.source_files.iter().map(|s| s.as_str()).collect();
+        let b_sources: Vec<&str> = b.source_files.iter().map(|s| s.as_str()).collect();
+        if a_sources != b_sources {
+            changes.push(PolicyFieldChange {
+                path: "source_files".to_string(),
+                old_value: format!("{:?}", a.source_files),
+                new_value: format!("{:?}", b.source_files),
+                category: ChangeCategory::SourceFiles,
+            });
+        }
+
+        // Governance changes (if both have governance)
+        match (&a.governance, &b.governance) {
+            (Some(gov_a), Some(gov_b)) => {
+                Self::diff_governance(gov_a, gov_b, &mut changes);
+            }
+            (None, Some(_)) => {
+                changes.push(PolicyFieldChange {
+                    path: "governance".to_string(),
+                    old_value: "(none)".to_string(),
+                    new_value: "(present)".to_string(),
+                    category: ChangeCategory::Governance,
+                });
+            }
+            (Some(_), None) => {
+                changes.push(PolicyFieldChange {
+                    path: "governance".to_string(),
+                    old_value: "(present)".to_string(),
+                    new_value: "(none)".to_string(),
+                    category: ChangeCategory::Governance,
+                });
+            }
+            (None, None) => {}
+        }
+
+        // Sort by path for deterministic output
+        changes.sort_by(|x, y| x.path.cmp(&y.path));
+
+        PolicyDiff {
+            policy_id_a: a.policy_id.clone(),
+            policy_id_b: b.policy_id.clone(),
+            hash_a: a.hash.clone(),
+            hash_b: b.hash.clone(),
+            identical: a.hash == b.hash,
+            changes,
+        }
+    }
+
+    fn diff_model_config(
+        a: &ModelConfig,
+        b: &ModelConfig,
+        changes: &mut Vec<PolicyFieldChange>,
+    ) {
+        macro_rules! check_field {
+            ($field:ident) => {
+                if a.$field != b.$field {
+                    changes.push(PolicyFieldChange {
+                        path: format!("model_config.{}", stringify!($field)),
+                        old_value: format!("{:?}", a.$field),
+                        new_value: format!("{:?}", b.$field),
+                        category: ChangeCategory::ModelConfig,
+                    });
+                }
+            };
+        }
+
+        check_field!(max_tokens);
+        check_field!(top_k);
+        check_field!(pre_filter_limit);
+        check_field!(diversity_lambda);
+        check_field!(iqo_llm_enabled);
+        check_field!(hybrid_enabled);
+        check_field!(vector_weight);
+        check_field!(tier2_enabled);
+        check_field!(tier2_cache_ttl_hours);
+    }
+
+    fn diff_weights(
+        a: &ScoringWeights,
+        b: &ScoringWeights,
+        changes: &mut Vec<PolicyFieldChange>,
+    ) {
+        macro_rules! check_weight {
+            ($field:ident) => {
+                if (a.$field - b.$field).abs() > f32::EPSILON {
+                    changes.push(PolicyFieldChange {
+                        path: format!("weights.{}", stringify!($field)),
+                        old_value: format!("{:.4}", a.$field),
+                        new_value: format!("{:.4}", b.$field),
+                        category: ChangeCategory::Weights,
+                    });
+                }
+            };
+        }
+
+        check_weight!(usage);
+        check_weight!(recency);
+        check_weight!(priority);
+        check_weight!(decay);
+    }
+
+    fn diff_governance(
+        a: &GovernancePolicy,
+        b: &GovernancePolicy,
+        changes: &mut Vec<PolicyFieldChange>,
+    ) {
+        // System of record
+        if a.system_of_record.primary != b.system_of_record.primary {
+            changes.push(PolicyFieldChange {
+                path: "governance.system_of_record.primary".to_string(),
+                old_value: a.system_of_record.primary.clone(),
+                new_value: b.system_of_record.primary.clone(),
+                category: ChangeCategory::Governance,
+            });
+        }
+        if a.system_of_record.fallback != b.system_of_record.fallback {
+            changes.push(PolicyFieldChange {
+                path: "governance.system_of_record.fallback".to_string(),
+                old_value: a.system_of_record.fallback.clone(),
+                new_value: b.system_of_record.fallback.clone(),
+                category: ChangeCategory::Governance,
+            });
+        }
+        if a.system_of_record.fallback_enabled != b.system_of_record.fallback_enabled {
+            changes.push(PolicyFieldChange {
+                path: "governance.system_of_record.fallback_enabled".to_string(),
+                old_value: a.system_of_record.fallback_enabled.to_string(),
+                new_value: b.system_of_record.fallback_enabled.to_string(),
+                category: ChangeCategory::Governance,
+            });
+        }
+
+        // Routing - Cloud
+        if a.routing.cloud.default_architect != b.routing.cloud.default_architect {
+            changes.push(PolicyFieldChange {
+                path: "governance.routing.cloud.default_architect".to_string(),
+                old_value: a.routing.cloud.default_architect.clone(),
+                new_value: b.routing.cloud.default_architect.clone(),
+                category: ChangeCategory::Governance,
+            });
+        }
+        if a.routing.cloud.default_implementer != b.routing.cloud.default_implementer {
+            changes.push(PolicyFieldChange {
+                path: "governance.routing.cloud.default_implementer".to_string(),
+                old_value: a.routing.cloud.default_implementer.clone(),
+                new_value: b.routing.cloud.default_implementer.clone(),
+                category: ChangeCategory::Governance,
+            });
+        }
+        if a.routing.cloud.default_judge != b.routing.cloud.default_judge {
+            changes.push(PolicyFieldChange {
+                path: "governance.routing.cloud.default_judge".to_string(),
+                old_value: a.routing.cloud.default_judge.clone(),
+                new_value: b.routing.cloud.default_judge.clone(),
+                category: ChangeCategory::Governance,
+            });
+        }
+
+        // Routing - Reflex
+        if a.routing.reflex.enabled != b.routing.reflex.enabled {
+            changes.push(PolicyFieldChange {
+                path: "governance.routing.reflex.enabled".to_string(),
+                old_value: a.routing.reflex.enabled.to_string(),
+                new_value: b.routing.reflex.enabled.to_string(),
+                category: ChangeCategory::Governance,
+            });
+        }
+        if a.routing.reflex.endpoint != b.routing.reflex.endpoint {
+            changes.push(PolicyFieldChange {
+                path: "governance.routing.reflex.endpoint".to_string(),
+                old_value: a.routing.reflex.endpoint.clone(),
+                new_value: b.routing.reflex.endpoint.clone(),
+                category: ChangeCategory::Governance,
+            });
+        }
+        if a.routing.reflex.model != b.routing.reflex.model {
+            changes.push(PolicyFieldChange {
+                path: "governance.routing.reflex.model".to_string(),
+                old_value: a.routing.reflex.model.clone(),
+                new_value: b.routing.reflex.model.clone(),
+                category: ChangeCategory::Governance,
+            });
+        }
+
+        // Capture mode
+        if a.capture.mode != b.capture.mode {
+            changes.push(PolicyFieldChange {
+                path: "governance.capture.mode".to_string(),
+                old_value: a.capture.mode.clone(),
+                new_value: b.capture.mode.clone(),
+                category: ChangeCategory::Governance,
+            });
+        }
+        if a.capture.store_embeddings != b.capture.store_embeddings {
+            changes.push(PolicyFieldChange {
+                path: "governance.capture.store_embeddings".to_string(),
+                old_value: a.capture.store_embeddings.to_string(),
+                new_value: b.capture.store_embeddings.to_string(),
+                category: ChangeCategory::Governance,
+            });
+        }
+
+        // Budgets - Token budgets
+        if a.budgets.tokens.plan != b.budgets.tokens.plan {
+            changes.push(PolicyFieldChange {
+                path: "governance.budgets.tokens.plan".to_string(),
+                old_value: a.budgets.tokens.plan.to_string(),
+                new_value: b.budgets.tokens.plan.to_string(),
+                category: ChangeCategory::Governance,
+            });
+        }
+        if a.budgets.cost.hard_limit_enabled != b.budgets.cost.hard_limit_enabled {
+            changes.push(PolicyFieldChange {
+                path: "governance.budgets.cost.hard_limit_enabled".to_string(),
+                old_value: a.budgets.cost.hard_limit_enabled.to_string(),
+                new_value: b.budgets.cost.hard_limit_enabled.to_string(),
+                category: ChangeCategory::Governance,
+            });
+        }
+
+        // Scoring weights from governance
+        if (a.scoring.usage - b.scoring.usage).abs() > f32::EPSILON {
+            changes.push(PolicyFieldChange {
+                path: "governance.scoring.usage".to_string(),
+                old_value: format!("{:.4}", a.scoring.usage),
+                new_value: format!("{:.4}", b.scoring.usage),
+                category: ChangeCategory::Governance,
+            });
+        }
+        if (a.scoring.vector_weight - b.scoring.vector_weight).abs() > f32::EPSILON {
+            changes.push(PolicyFieldChange {
+                path: "governance.scoring.vector_weight".to_string(),
+                old_value: format!("{:.4}", a.scoring.vector_weight),
+                new_value: format!("{:.4}", b.scoring.vector_weight),
+                category: ChangeCategory::Governance,
+            });
+        }
+    }
+
+    /// Get changes grouped by category.
+    pub fn changes_by_category(&self) -> HashMap<ChangeCategory, Vec<&PolicyFieldChange>> {
+        let mut grouped: HashMap<ChangeCategory, Vec<&PolicyFieldChange>> = HashMap::new();
+        for change in &self.changes {
+            grouped.entry(change.category).or_default().push(change);
+        }
+        grouped
+    }
+
+    /// Get list of changed field paths (sorted for determinism).
+    pub fn changed_keys(&self) -> Vec<&str> {
+        self.changes.iter().map(|c| c.path.as_str()).collect()
+    }
+
+    /// Format as human-readable text.
+    pub fn to_text(&self) -> String {
+        let mut output = String::new();
+
+        output.push_str(&format!("Policy Diff: {} → {}\n", self.policy_id_a, self.policy_id_b));
+        output.push_str(&format!("Hash A: {}\n", self.hash_a));
+        output.push_str(&format!("Hash B: {}\n", self.hash_b));
+        output.push('\n');
+
+        if self.identical {
+            output.push_str("Policies are identical.\n");
+            return output;
+        }
+
+        output.push_str(&format!("{} change(s) detected:\n", self.changes.len()));
+        output.push('\n');
+
+        // Group by category
+        let grouped = self.changes_by_category();
+
+        // Fixed category order for determinism
+        let categories = [
+            ChangeCategory::Governance,
+            ChangeCategory::ModelConfig,
+            ChangeCategory::Weights,
+            ChangeCategory::SourceFiles,
+            ChangeCategory::Prompts,
+            ChangeCategory::Schema,
+        ];
+
+        for category in categories {
+            if let Some(changes) = grouped.get(&category) {
+                output.push_str(&format!("[{}]\n", category.as_str()));
+                for change in changes {
+                    output.push_str(&format!(
+                        "  {} : {} → {}\n",
+                        change.path, change.old_value, change.new_value
+                    ));
+                }
+                output.push('\n');
+            }
+        }
+
+        output.push_str("Changed keys:\n");
+        for key in self.changed_keys() {
+            output.push_str(&format!("  - {}\n", key));
+        }
+
+        output
+    }
+
+    /// Format as JSON (machine-parseable, stable).
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string_pretty(self)
+    }
+}
+
+// =============================================================================
 // Hex encoding helper
 // =============================================================================
 
@@ -1658,5 +2065,177 @@ encrypt_at_rest = false
             snapshot_none.hash, snapshot_some.hash,
             "With governance vs without should produce different hash"
         );
+    }
+
+    // =========================================================================
+    // PolicyDiff Tests
+    // =========================================================================
+
+    /// Identical policies produce empty diff with identical=true.
+    #[test]
+    fn test_policy_diff_identical() {
+        let config = Stage0Config::default();
+        let source_files = vec!["test.toml".to_string()];
+
+        let snapshot1 = PolicySnapshot::capture(&config, source_files.clone());
+        let snapshot2 = PolicySnapshot::capture(&config, source_files);
+
+        let diff = PolicyDiff::compute(&snapshot1, &snapshot2);
+
+        assert!(diff.identical, "Identical content should produce identical=true");
+        assert!(diff.changes.is_empty(), "Identical policies should have no changes");
+    }
+
+    /// Different source files produce changes.
+    #[test]
+    fn test_policy_diff_source_files_changed() {
+        let config = Stage0Config::default();
+
+        let snapshot1 = PolicySnapshot::capture(&config, vec!["file1.toml".to_string()]);
+        let snapshot2 = PolicySnapshot::capture(&config, vec!["file2.toml".to_string()]);
+
+        let diff = PolicyDiff::compute(&snapshot1, &snapshot2);
+
+        assert!(!diff.identical);
+        assert_eq!(diff.changes.len(), 1);
+        assert_eq!(diff.changes[0].path, "source_files");
+        assert_eq!(diff.changes[0].category, ChangeCategory::SourceFiles);
+    }
+
+    /// Different model config produces changes.
+    #[test]
+    fn test_policy_diff_model_config_changed() {
+        let mut config1 = Stage0Config::default();
+        let mut config2 = Stage0Config::default();
+
+        config1.context_compiler.top_k = 10;
+        config2.context_compiler.top_k = 20;
+
+        let source_files = vec!["test.toml".to_string()];
+        let snapshot1 = PolicySnapshot::capture(&config1, source_files.clone());
+        let snapshot2 = PolicySnapshot::capture(&config2, source_files);
+
+        let diff = PolicyDiff::compute(&snapshot1, &snapshot2);
+
+        assert!(!diff.identical);
+        let top_k_change = diff.changes.iter().find(|c| c.path == "model_config.top_k");
+        assert!(top_k_change.is_some(), "Should have model_config.top_k change");
+        assert_eq!(top_k_change.unwrap().category, ChangeCategory::ModelConfig);
+    }
+
+    /// Different weights produce changes.
+    #[test]
+    fn test_policy_diff_weights_changed() {
+        let mut config1 = Stage0Config::default();
+        let mut config2 = Stage0Config::default();
+
+        config1.scoring.weights.usage = 0.5;
+        config2.scoring.weights.usage = 0.9;
+
+        let source_files = vec!["test.toml".to_string()];
+        let snapshot1 = PolicySnapshot::capture(&config1, source_files.clone());
+        let snapshot2 = PolicySnapshot::capture(&config2, source_files);
+
+        let diff = PolicyDiff::compute(&snapshot1, &snapshot2);
+
+        assert!(!diff.identical);
+        let usage_change = diff.changes.iter().find(|c| c.path == "weights.usage");
+        assert!(usage_change.is_some(), "Should have weights.usage change");
+        assert_eq!(usage_change.unwrap().category, ChangeCategory::Weights);
+    }
+
+    /// Governance changes are detected.
+    #[test]
+    fn test_policy_diff_governance_changed() {
+        let config = Stage0Config::default();
+        let source_files = vec!["test.toml".to_string()];
+
+        let mut gov1 = GovernancePolicy::default();
+        gov1.routing.reflex.enabled = false;
+
+        let mut gov2 = GovernancePolicy::default();
+        gov2.routing.reflex.enabled = true;
+
+        let snapshot1 = PolicySnapshot::capture_with_governance(&config, source_files.clone(), Some(gov1));
+        let snapshot2 = PolicySnapshot::capture_with_governance(&config, source_files, Some(gov2));
+
+        let diff = PolicyDiff::compute(&snapshot1, &snapshot2);
+
+        assert!(!diff.identical);
+        let reflex_change = diff.changes.iter().find(|c| c.path == "governance.routing.reflex.enabled");
+        assert!(reflex_change.is_some(), "Should have reflex enabled change");
+        assert_eq!(reflex_change.unwrap().category, ChangeCategory::Governance);
+    }
+
+    /// Diff output is deterministic (same ordering).
+    #[test]
+    fn test_policy_diff_deterministic_ordering() {
+        let mut config1 = Stage0Config::default();
+        let mut config2 = Stage0Config::default();
+
+        // Change multiple fields
+        config1.context_compiler.top_k = 10;
+        config2.context_compiler.top_k = 20;
+        config1.scoring.weights.usage = 0.3;
+        config2.scoring.weights.usage = 0.5;
+
+        let snapshot1 = PolicySnapshot::capture(&config1, vec!["a.toml".to_string()]);
+        let snapshot2 = PolicySnapshot::capture(&config2, vec!["b.toml".to_string()]);
+
+        // Compute diff multiple times
+        let diff1 = PolicyDiff::compute(&snapshot1, &snapshot2);
+        let diff2 = PolicyDiff::compute(&snapshot1, &snapshot2);
+
+        // Same order every time
+        assert_eq!(diff1.changes.len(), diff2.changes.len());
+        for (a, b) in diff1.changes.iter().zip(diff2.changes.iter()) {
+            assert_eq!(a.path, b.path, "Order should be deterministic");
+        }
+
+        // Paths should be sorted
+        let paths: Vec<_> = diff1.changes.iter().map(|c| c.path.as_str()).collect();
+        let mut sorted_paths = paths.clone();
+        sorted_paths.sort();
+        assert_eq!(paths, sorted_paths, "Changes should be sorted by path");
+    }
+
+    /// JSON output is stable and machine-parseable.
+    #[test]
+    fn test_policy_diff_json_stable() {
+        let config = Stage0Config::default();
+
+        let snapshot1 = PolicySnapshot::capture(&config, vec!["file1.toml".to_string()]);
+        let snapshot2 = PolicySnapshot::capture(&config, vec!["file2.toml".to_string()]);
+
+        let diff = PolicyDiff::compute(&snapshot1, &snapshot2);
+        let json = diff.to_json().expect("JSON serialization should succeed");
+
+        // Parse back
+        let parsed: PolicyDiff = serde_json::from_str(&json).expect("JSON should parse back");
+
+        assert_eq!(parsed.policy_id_a, diff.policy_id_a);
+        assert_eq!(parsed.policy_id_b, diff.policy_id_b);
+        assert_eq!(parsed.identical, diff.identical);
+        assert_eq!(parsed.changes.len(), diff.changes.len());
+    }
+
+    /// changed_keys returns sorted list.
+    #[test]
+    fn test_policy_diff_changed_keys() {
+        let mut config1 = Stage0Config::default();
+        let mut config2 = Stage0Config::default();
+
+        config1.context_compiler.top_k = 10;
+        config2.context_compiler.top_k = 20;
+
+        let snapshot1 = PolicySnapshot::capture(&config1, vec!["a.toml".to_string()]);
+        let snapshot2 = PolicySnapshot::capture(&config2, vec!["b.toml".to_string()]);
+
+        let diff = PolicyDiff::compute(&snapshot1, &snapshot2);
+        let keys = diff.changed_keys();
+
+        // Should contain expected keys
+        assert!(keys.contains(&"model_config.top_k"));
+        assert!(keys.contains(&"source_files"));
     }
 }

@@ -84,6 +84,51 @@ impl LogicalUri {
     pub fn is_valid(&self) -> bool {
         self.0.starts_with("mv2://")
     }
+
+    /// Extract the object type from the URI path.
+    ///
+    /// URI format: mv2://{workspace}/{spec}/{run}/{type}/{path}
+    /// Returns None if the URI format is invalid or type is unrecognized.
+    pub fn object_type(&self) -> Option<ObjectType> {
+        let stripped = self.0.strip_prefix("mv2://")?;
+        let parts: Vec<&str> = stripped.split('/').collect();
+
+        // Standard format: workspace/spec/run/type/path
+        if parts.len() >= 4 {
+            return match parts[3] {
+                "artifact" => Some(ObjectType::Artifact),
+                "event" => Some(ObjectType::Event),
+                "checkpoint" => Some(ObjectType::Checkpoint),
+                "policy" => Some(ObjectType::Policy),
+                "card" => Some(ObjectType::Card),
+                "edge" => Some(ObjectType::Edge),
+                _ => None,
+            };
+        }
+
+        // Policy format: workspace/policy/id
+        if parts.len() >= 2 && parts[1] == "policy" {
+            return Some(ObjectType::Policy);
+        }
+
+        None
+    }
+
+    /// Check if this URI represents a curated-eligible artifact.
+    ///
+    /// Curated-eligible: Artifact, Policy, Card, Edge
+    /// Not curated-eligible: Event (handled separately), Checkpoint
+    pub fn is_curated_eligible(&self) -> bool {
+        match self.object_type() {
+            Some(ObjectType::Artifact) => true,
+            Some(ObjectType::Policy) => true,
+            Some(ObjectType::Card) => true,
+            Some(ObjectType::Edge) => true,
+            Some(ObjectType::Event) => false, // Events are filtered separately
+            Some(ObjectType::Checkpoint) => false,
+            None => false,
+        }
+    }
 }
 
 impl fmt::Display for LogicalUri {
@@ -274,15 +319,18 @@ pub struct RunEventEnvelope {
 /// SPEC-KIT-975 expands: ToolCall, RetrievalRequest, GateDecision, etc.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EventType {
-    // SPEC-KIT-971 baseline
+    // SPEC-KIT-971 baseline (curated-eligible)
     StageTransition,
     PolicySnapshotRef,
 
-    // SPEC-KIT-978: Model routing decisions (reflex vs cloud)
+    // SPEC-KIT-978: Model routing decisions (curated-eligible)
     RoutingDecision,
 
-    // SPEC-KIT-971: Branch merge at Unlock
+    // SPEC-KIT-971: Branch merge at Unlock (curated-eligible)
     BranchMerged,
+
+    // Debug/telemetry events (excluded from curated merge)
+    DebugTrace,
 
     // SPEC-KIT-975 will add:
     // RetrievalRequest,
@@ -304,6 +352,27 @@ impl EventType {
             EventType::PolicySnapshotRef => "PolicySnapshotRef",
             EventType::RoutingDecision => "RoutingDecision",
             EventType::BranchMerged => "BranchMerged",
+            EventType::DebugTrace => "DebugTrace",
+        }
+    }
+
+    /// Check if this event type should be included in curated merge.
+    ///
+    /// Curated merge includes only governance-critical events:
+    /// - StageTransition: Stage boundary markers
+    /// - PolicySnapshotRef: Policy version tracking
+    /// - RoutingDecision: Model selection audit trail
+    /// - BranchMerged: Merge provenance
+    ///
+    /// Excluded from curated (debug-only):
+    /// - DebugTrace: Verbose debugging/telemetry
+    pub fn is_curated_eligible(&self) -> bool {
+        match self {
+            EventType::StageTransition => true,
+            EventType::PolicySnapshotRef => true,
+            EventType::RoutingDecision => true,
+            EventType::BranchMerged => true,
+            EventType::DebugTrace => false,
         }
     }
 }
@@ -593,18 +662,95 @@ impl UriIndex {
         self.entries.get(branch).map(|m| m.len()).unwrap_or(0)
     }
 
-    /// Merge all URI mappings from one branch to another.
+    /// Merge URI mappings from one branch to another based on merge mode.
     ///
+    /// ## SPEC-KIT-971: Merge at Unlock
+    ///
+    /// ### Curated Mode
+    /// Copies only curated-eligible entries (Artifact, Policy, Card, Edge).
+    /// Debug/telemetry URIs stay isolated on the run branch.
+    ///
+    /// ### Full Mode
     /// Copies all entries from `from` branch to `to` branch.
     /// Existing entries on `to` branch with the same URI are overwritten.
     ///
-    /// ## SPEC-KIT-971: Merge at Unlock
-    /// This is used when merging a run branch into main.
-    pub fn merge_branch(&mut self, from: &BranchId, to: &BranchId) {
+    /// Returns the number of URIs actually merged.
+    pub fn merge_branch(&mut self, from: &BranchId, to: &BranchId, mode: MergeMode) -> usize {
+        let mut merged_count = 0;
         if let Some(source_entries) = self.entries.get(from).cloned() {
             let target = self.entries.entry(to.clone()).or_default();
             for (uri, pointer) in source_entries {
-                target.insert(uri, pointer);
+                let should_merge = match mode {
+                    MergeMode::Full => true,
+                    MergeMode::Curated => uri.is_curated_eligible(),
+                };
+                if should_merge {
+                    target.insert(uri, pointer);
+                    merged_count += 1;
+                }
+            }
+        }
+        merged_count
+    }
+
+    /// Count URIs that would be merged in curated mode.
+    ///
+    /// Used to calculate accurate merge statistics for BranchMerged event.
+    pub fn count_curated_on_branch(&self, branch: &BranchId) -> usize {
+        self.entries
+            .get(branch)
+            .map(|m| m.keys().filter(|uri| uri.is_curated_eligible()).count())
+            .unwrap_or(0)
+    }
+
+    /// Restore branch entries from the latest snapshot for each branch.
+    ///
+    /// ## SPEC-KIT-971: Branch context preservation after reopen
+    ///
+    /// After `scan_and_rebuild()` imports all snapshots, this method reconstructs
+    /// the "current state" (`entries`) for each branch by finding the latest
+    /// checkpoint snapshot and using it as the branch HEAD.
+    ///
+    /// This ensures that `resolve_uri(branch, as_of=None)` returns the same
+    /// result as `resolve_uri(branch, as_of=<latest checkpoint on branch>)`.
+    ///
+    /// ## Parameters
+    /// - `checkpoints`: List of checkpoint metadata with timestamps for ordering
+    pub fn restore_entries_from_latest_snapshots(&mut self, checkpoints: &[CheckpointMetadata]) {
+        // Group checkpoints by branch and find the latest for each
+        let mut latest_per_branch: std::collections::HashMap<BranchId, &CheckpointMetadata> =
+            std::collections::HashMap::new();
+
+        for cp in checkpoints {
+            // Determine branch from checkpoint metadata
+            let branch = if let Some(ref branch_str) = cp.branch_id {
+                BranchId::from_str(branch_str)
+            } else if let Some(ref run_id) = cp.run_id {
+                // Fallback for older checkpoints without explicit branch_id
+                BranchId::for_run(run_id)
+            } else {
+                BranchId::main()
+            };
+
+            // Check if this checkpoint is newer than any we've seen for this branch
+            match latest_per_branch.get(&branch) {
+                Some(existing) => {
+                    if cp.timestamp > existing.timestamp {
+                        latest_per_branch.insert(branch, cp);
+                    }
+                }
+                None => {
+                    latest_per_branch.insert(branch, cp);
+                }
+            }
+        }
+
+        // For each branch, restore entries from its latest snapshot
+        for (branch, latest_cp) in latest_per_branch {
+            let key = (branch.clone(), latest_cp.checkpoint_id.clone());
+            if let Some(snapshot_entries) = self.snapshots.get(&key) {
+                // Clone the snapshot to populate entries for this branch
+                self.entries.insert(branch, snapshot_entries.clone());
             }
         }
     }

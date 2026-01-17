@@ -554,6 +554,11 @@ impl CapsuleHandle {
             }
         }
 
+        // SPEC-KIT-971: Restore branch entries from latest snapshots
+        // This ensures resolve_uri(branch, as_of=None) works correctly after reopen
+        // by reconstructing the "current state" for each branch from its latest checkpoint.
+        uri_index.restore_entries_from_latest_snapshots(&checkpoints);
+
         // Update handle state
         *self.uri_index.write().unwrap() = uri_index;
         *self.checkpoints.write().unwrap() = checkpoints;
@@ -1122,11 +1127,36 @@ impl CapsuleHandle {
 
         match branch {
             Some(b) => {
+                // If filtering for main, also include events from merged branches
+                // based on BranchMerged events (which track what was merged and how)
+                let merged_branches = if b.is_main() {
+                    self.get_merged_branches_info()
+                } else {
+                    Vec::new()
+                };
+
                 all.iter()
                     .filter(|ev| {
                         // SPEC-KIT-971: Use branch_id if available
                         if let Some(ref ev_branch) = ev.branch_id {
-                            return ev_branch == b.as_str();
+                            if ev_branch == b.as_str() {
+                                return true;
+                            }
+
+                            // For main branch, check if this event is from a merged branch
+                            if b.is_main() {
+                                for (from_branch, mode) in &merged_branches {
+                                    if ev_branch == from_branch.as_str() {
+                                        // In curated mode, only include curated-eligible events
+                                        // In full mode, include all events
+                                        return match mode {
+                                            MergeMode::Full => true,
+                                            MergeMode::Curated => ev.event_type.is_curated_eligible(),
+                                        };
+                                    }
+                                }
+                            }
+                            return false;
                         }
 
                         // Fallback: heuristic based on run_id (backward compatibility)
@@ -1141,6 +1171,28 @@ impl CapsuleHandle {
             }
             None => all.clone(),
         }
+    }
+
+    /// Get list of branches that have been merged to main and their merge modes.
+    ///
+    /// Returns Vec<(from_branch, MergeMode)> based on BranchMerged events.
+    fn get_merged_branches_info(&self) -> Vec<(BranchId, MergeMode)> {
+        let all = self.events.read().unwrap();
+        all.iter()
+            .filter(|ev| ev.event_type == EventType::BranchMerged)
+            .filter(|ev| ev.branch_id.as_deref() == Some("main"))
+            .filter_map(|ev| {
+                // Parse the BranchMerged payload to get from_branch and mode
+                let from_branch = ev.payload.get("from_branch")?.as_str()?;
+                let mode_str = ev.payload.get("mode")?.as_str()?;
+                let mode = match mode_str {
+                    "curated" | "Curated" => MergeMode::Curated,
+                    "full" | "Full" => MergeMode::Full,
+                    _ => return None,
+                };
+                Some((BranchId::from_str(from_branch), mode))
+            })
+            .collect()
     }
 
     /// Get a checkpoint by its ID.
@@ -1236,29 +1288,29 @@ impl CapsuleHandle {
             });
         }
 
-        // Count URIs and events on the source branch
+        // Merge URI mappings based on mode
         let uris_merged = {
-            let uri_index = self.uri_index.read().unwrap();
-            uri_index.count_on_branch(from) as u64
+            let mut uri_index = self.uri_index.write().unwrap();
+            uri_index.merge_branch(from, to, mode) as u64
         };
 
-        let events_merged = self.list_events_filtered(Some(from)).len() as u64;
-
-        // Merge URI mappings: copy all entries from `from` branch to `to` branch
-        {
-            let mut uri_index = self.uri_index.write().unwrap();
-            uri_index.merge_branch(from, to);
-        }
-
-        // Merge events: update branch_id to main for events from the source branch
-        {
-            let mut events = self.events.write().unwrap();
-            for event in events.iter_mut() {
-                if event.branch_id.as_deref() == Some(from.as_str()) {
-                    event.branch_id = Some(to.as_str().to_string());
-                }
-            }
-        }
+        // Count events that would be merged based on mode.
+        // Events themselves keep their original branch_id - the merge is tracked
+        // via the BranchMerged event, and list_events_filtered uses that to
+        // include merged events when filtering for main.
+        // - Curated: Only curated-eligible events (StageTransition, PolicySnapshotRef, etc.)
+        // - Full: All events
+        let events_merged = {
+            let events = self.events.read().unwrap();
+            events
+                .iter()
+                .filter(|ev| ev.branch_id.as_deref() == Some(from.as_str()))
+                .filter(|ev| match mode {
+                    MergeMode::Full => true,
+                    MergeMode::Curated => ev.event_type.is_curated_eligible(),
+                })
+                .count() as u64
+        };
 
         // Create merge checkpoint
         let checkpoint_id = CheckpointId::new(format!(
@@ -1327,13 +1379,14 @@ impl CapsuleHandle {
             }
         })?;
 
-        // Emit on main branch
-        self.emit_event(
+        // Emit on target branch (main) explicitly, not current branch
+        self.emit_event_on_branch(
             spec_id.unwrap_or("unknown"),
             run_id.unwrap_or("unknown"),
             Some("Unlock"),
             EventType::BranchMerged,
             payload_value,
+            Some(to),
         )?;
 
         Ok(checkpoint_id)
@@ -1352,6 +1405,23 @@ impl CapsuleHandle {
         event_type: EventType,
         payload: serde_json::Value,
     ) -> Result<LogicalUri> {
+        // Use current branch by default
+        self.emit_event_on_branch(spec_id, run_id, stage, event_type, payload, None)
+    }
+
+    /// Emit an event to the events track on a specific branch.
+    ///
+    /// ## Parameters
+    /// - `branch`: Target branch. If None, uses current branch.
+    fn emit_event_on_branch(
+        &self,
+        spec_id: &str,
+        run_id: &str,
+        stage: Option<&str>,
+        event_type: EventType,
+        payload: serde_json::Value,
+        branch: Option<&BranchId>,
+    ) -> Result<LogicalUri> {
         let seq = {
             let mut seq = self.event_seq.lock().unwrap();
             *seq += 1;
@@ -1361,7 +1431,9 @@ impl CapsuleHandle {
         let uri = LogicalUri::for_event(&self.config.workspace_id, spec_id, run_id, seq);
 
         // SPEC-KIT-971: Stamp branch_id for run isolation
-        let branch_id = self.current_branch().as_str().to_string();
+        let branch_id = branch
+            .map(|b| b.as_str().to_string())
+            .unwrap_or_else(|| self.current_branch().as_str().to_string());
 
         let event = RunEventEnvelope {
             uri: uri.clone(),
@@ -1460,6 +1532,34 @@ impl CapsuleHandle {
             Some(&payload.stage),
             EventType::RoutingDecision,
             payload_json,
+        )
+    }
+
+    /// Emit a DebugTrace event.
+    ///
+    /// DebugTrace events are debug/telemetry events that are excluded from
+    /// curated merge. They remain on the run branch for audit purposes but
+    /// do not propagate to main branch in curated mode.
+    ///
+    /// Used for verbose debugging, performance tracing, and other non-essential
+    /// observability data that should not clutter the main branch history.
+    pub fn emit_debug_trace(
+        &self,
+        spec_id: &str,
+        run_id: &str,
+        stage: Option<&str>,
+        message: &str,
+        context: serde_json::Value,
+    ) -> Result<LogicalUri> {
+        self.emit_event(
+            spec_id,
+            run_id,
+            stage,
+            EventType::DebugTrace,
+            serde_json::json!({
+                "message": message,
+                "context": context,
+            }),
         )
     }
 

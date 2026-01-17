@@ -13,7 +13,7 @@
 use super::super::super::ChatWidget;
 use super::super::command_registry::SpecKitCommand;
 use crate::history_cell::{HistoryCellType, PlainHistoryCell};
-use codex_stage0::PolicyStore;
+use codex_stage0::{ChangeCategory, PolicyDiff, PolicyStore};
 use ratatui::text::Line;
 
 // =============================================================================
@@ -54,6 +54,16 @@ impl SpecKitCommand for SpecKitPolicyCommand {
                 }
             }
             "current" => execute_current(widget),
+            "diff" => {
+                if parts.len() < 3 {
+                    widget.history_push(PlainHistoryCell::new(
+                        vec![Line::from("Usage: /speckit.policy diff <policy_id_a> <policy_id_b>")],
+                        HistoryCellType::Error,
+                    ));
+                } else {
+                    execute_diff(widget, parts[1], parts[2]);
+                }
+            }
             _ => {
                 let lines = vec![
                     Line::from("📋 Policy Commands (SPEC-KIT-977)"),
@@ -61,11 +71,13 @@ impl SpecKitCommand for SpecKitPolicyCommand {
                     Line::from("/speckit.policy list           # List all policy snapshots"),
                     Line::from("/speckit.policy show <id>      # Show policy details"),
                     Line::from("/speckit.policy current        # Show current active policy"),
+                    Line::from("/speckit.policy diff <a> <b>   # Compare two policies"),
                     Line::from(""),
                     Line::from("Headless CLI:"),
                     Line::from("  code speckit policy list [--json]"),
                     Line::from("  code speckit policy show <id> [--json]"),
                     Line::from("  code speckit policy current [--json]"),
+                    Line::from("  code speckit policy diff <a> <b> [--json]"),
                     Line::from("  code speckit policy validate [--path <path>]"),
                 ];
                 widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));
@@ -301,6 +313,101 @@ fn execute_current(widget: &mut ChatWidget) {
             ));
         }
     }
+}
+
+fn execute_diff(widget: &mut ChatWidget, policy_id_a: &str, policy_id_b: &str) {
+    let store = PolicyStore::new();
+
+    // Load both snapshots
+    let snapshot_a = match store.load(policy_id_a) {
+        Ok(s) => s,
+        Err(e) => {
+            widget.history_push(PlainHistoryCell::new(
+                vec![Line::from(format!("❌ Policy '{}' not found: {}", policy_id_a, e))],
+                HistoryCellType::Error,
+            ));
+            return;
+        }
+    };
+
+    let snapshot_b = match store.load(policy_id_b) {
+        Ok(s) => s,
+        Err(e) => {
+            widget.history_push(PlainHistoryCell::new(
+                vec![Line::from(format!("❌ Policy '{}' not found: {}", policy_id_b, e))],
+                HistoryCellType::Error,
+            ));
+            return;
+        }
+    };
+
+    // Compute diff
+    let diff = PolicyDiff::compute(&snapshot_a, &snapshot_b);
+
+    let mut lines = vec![
+        Line::from(format!("📋 Policy Diff: {} → {}",
+            &diff.policy_id_a[..8.min(diff.policy_id_a.len())],
+            &diff.policy_id_b[..8.min(diff.policy_id_b.len())]
+        )),
+        Line::from(""),
+        Line::from(format!("   Hash A: {}", &diff.hash_a[..16.min(diff.hash_a.len())])),
+        Line::from(format!("   Hash B: {}", &diff.hash_b[..16.min(diff.hash_b.len())])),
+        Line::from(""),
+    ];
+
+    if diff.identical {
+        lines.push(Line::from("   ✓ Policies are identical"));
+    } else {
+        lines.push(Line::from(format!("   {} change(s) detected:", diff.changes.len())));
+        lines.push(Line::from(""));
+
+        // Group by category and display
+        let grouped = diff.changes_by_category();
+
+        // Fixed category order for determinism
+        let categories = [
+            ChangeCategory::Governance,
+            ChangeCategory::ModelConfig,
+            ChangeCategory::Weights,
+            ChangeCategory::SourceFiles,
+            ChangeCategory::Prompts,
+            ChangeCategory::Schema,
+        ];
+
+        for category in categories {
+            if let Some(changes) = grouped.get(&category) {
+                lines.push(Line::from(format!("   [{}]", category.as_str())));
+                for change in changes {
+                    // Truncate long values for display
+                    let old_val = if change.old_value.len() > 20 {
+                        format!("{}...", &change.old_value[..20])
+                    } else {
+                        change.old_value.clone()
+                    };
+                    let new_val = if change.new_value.len() > 20 {
+                        format!("{}...", &change.new_value[..20])
+                    } else {
+                        change.new_value.clone()
+                    };
+                    lines.push(Line::from(format!(
+                        "     {} : {} → {}",
+                        change.path, old_val, new_val
+                    )));
+                }
+                lines.push(Line::from(""));
+            }
+        }
+
+        lines.push(Line::from("Changed keys:"));
+        for key in diff.changed_keys() {
+            lines.push(Line::from(format!("     - {}", key)));
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from("Use CLI `code speckit policy diff <a> <b> --json` for machine-parseable output"));
+
+    widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));
 }
 
 // =============================================================================

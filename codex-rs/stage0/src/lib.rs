@@ -67,7 +67,8 @@ pub use vector::{
     VectorFilters,
 };
 pub use policy::{
-    GovernancePolicy, ModelConfig, PolicySnapshot, PolicySnapshotInfo, PolicyStore,
+    ChangeCategory, GovernancePolicy, ModelConfig, PolicyDiff, PolicyFieldChange,
+    PolicySnapshot, PolicySnapshotInfo, PolicyStore,
     capture_policy_snapshot, get_policy_for_run,
 };
 

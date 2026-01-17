@@ -630,6 +630,13 @@ pub enum ReflexSubcommand {
     /// Validates P95 latency, success rate, and JSON compliance
     /// against configured thresholds.
     Check(ReflexCheckArgs),
+
+    /// Run bakeoff trials against reflex endpoint
+    ///
+    /// Executes N trials through the local reflex endpoint, records metrics,
+    /// and generates report files. Use this to collect fresh data before
+    /// running `check`.
+    RunBakeoff(ReflexRunBakeoffArgs),
 }
 
 /// Arguments for `speckit reflex bakeoff`
@@ -658,6 +665,31 @@ pub struct ReflexCheckArgs {
     /// Output as JSON instead of text
     #[arg(long = "json", short = 'j')]
     pub json: bool,
+
+    /// CI gate mode: fail with exit code 1 if reflex is enabled but thresholds not met
+    ///
+    /// Use this in CI pipelines. When enabled, the command will:
+    /// - Exit 0 if reflex is disabled in policy (no check needed)
+    /// - Exit 0 if reflex is enabled AND thresholds are met
+    /// - Exit 1 if reflex is enabled AND thresholds are NOT met
+    #[arg(long = "ci-gate")]
+    pub ci_gate: bool,
+}
+
+/// Arguments for `speckit reflex run-bakeoff`
+#[derive(Debug, Parser)]
+pub struct ReflexRunBakeoffArgs {
+    /// Number of trials to run (default: 10)
+    #[arg(long = "trials", short = 'n', default_value = "10")]
+    pub trials: u32,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+
+    /// Fail with exit code 1 if thresholds are not met
+    #[arg(long = "fail-on-threshold")]
+    pub fail_on_threshold: bool,
 }
 
 // =============================================================================
@@ -695,6 +727,28 @@ pub enum PolicySubcommand {
     ///
     /// Checks that the policy file exists and has valid structure.
     Validate(PolicyValidateArgs),
+
+    /// Compare two policy snapshots
+    ///
+    /// Shows differences in governance, model_config, weights, and other fields.
+    /// Output is deterministic with stable ordering for reproducibility.
+    Diff(PolicyDiffArgs),
+}
+
+/// Arguments for `speckit policy diff`
+#[derive(Debug, Parser)]
+pub struct PolicyDiffArgs {
+    /// First policy ID (older)
+    #[arg(value_name = "POLICY-ID-A")]
+    pub policy_id_a: String,
+
+    /// Second policy ID (newer)
+    #[arg(value_name = "POLICY-ID-B")]
+    pub policy_id_b: String,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
 }
 
 /// Arguments for `speckit policy list`
@@ -2910,6 +2964,7 @@ fn run_reflex(args: ReflexArgs) -> anyhow::Result<()> {
     match args.command {
         ReflexSubcommand::Bakeoff(args) => run_reflex_bakeoff(args),
         ReflexSubcommand::Check(args) => run_reflex_check(args),
+        ReflexSubcommand::RunBakeoff(args) => run_reflex_run_bakeoff(args),
     }
 }
 
@@ -3059,6 +3114,36 @@ fn run_reflex_bakeoff(args: ReflexBakeoffArgs) -> anyhow::Result<()> {
 fn run_reflex_check(args: ReflexCheckArgs) -> anyhow::Result<()> {
     use codex_tui::reflex_metrics::ReflexMetricsDb;
     use codex_stage0::reflex_config::load_reflex_config;
+    use codex_stage0::GovernancePolicy;
+
+    // CI gate mode: check if reflex is enabled in policy first
+    if args.ci_gate {
+        // Load governance policy to check if reflex is enabled
+        let reflex_enabled = match GovernancePolicy::load(None) {
+            Ok(policy) => policy.routing.reflex.enabled,
+            Err(_) => {
+                // No policy file = reflex not enabled
+                false
+            }
+        };
+
+        if !reflex_enabled {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "ci_gate": true,
+                    "reflex_enabled": false,
+                    "passes": true,
+                    "reason": "Reflex is disabled in policy - no check needed",
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                println!("CI GATE PASS: Reflex is disabled in policy - no check needed");
+            }
+            return Ok(());
+        }
+    }
 
     let db = ReflexMetricsDb::init_default()?;
     let since = parse_duration_str(&args.since)?;
@@ -3079,6 +3164,8 @@ fn run_reflex_check(args: ReflexCheckArgs) -> anyhow::Result<()> {
         let json = serde_json::json!({
             "schema_version": SCHEMA_VERSION,
             "tool_version": tool_version(),
+            "ci_gate": args.ci_gate,
+            "reflex_enabled": true,
             "passes": passes,
             "reason": reason,
             "thresholds": {
@@ -3092,7 +3179,7 @@ fn run_reflex_check(args: ReflexCheckArgs) -> anyhow::Result<()> {
         println!("{}", serde_json::to_string_pretty(&json)?);
     } else {
         if passes {
-            println!("PASS: {}", reason);
+            println!("{}: {}", if args.ci_gate { "CI GATE PASS" } else { "PASS" }, reason);
             println!();
             println!("Thresholds met:");
             println!("  P95 Latency:      < {}ms", thresholds.p95_latency_ms);
@@ -3100,9 +3187,132 @@ fn run_reflex_check(args: ReflexCheckArgs) -> anyhow::Result<()> {
             println!("  JSON Compliance:  >= {}%", thresholds.json_schema_compliance_percent);
             println!("  Min Samples:      >= {}", args.min_samples);
         } else {
-            println!("FAIL: {}", reason);
+            println!("{}: {}", if args.ci_gate { "CI GATE FAIL" } else { "FAIL" }, reason);
             std::process::exit(1);
         }
+    }
+
+    Ok(())
+}
+
+/// Run `speckit reflex run-bakeoff` command
+///
+/// Executes bakeoff trials and writes report files.
+fn run_reflex_run_bakeoff(args: ReflexRunBakeoffArgs) -> anyhow::Result<()> {
+    use codex_stage0::reflex_config::load_reflex_config;
+    use codex_tui::bakeoff_runner::{run_bakeoff, BakeoffConfig};
+
+    // Load reflex config
+    let reflex_config = load_reflex_config(None).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+    if !reflex_config.enabled {
+        if args.json {
+            let json = serde_json::json!({
+                "schema_version": SCHEMA_VERSION,
+                "tool_version": tool_version(),
+                "error": "Reflex is not enabled in configuration",
+                "reflex_enabled": false,
+            });
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        } else {
+            eprintln!("Error: Reflex is not enabled in configuration.");
+            eprintln!();
+            eprintln!("Enable reflex in model_policy.toml:");
+            eprintln!("  [routing.reflex]");
+            eprintln!("  enabled = true");
+            eprintln!("  endpoint = \"http://127.0.0.1:3009/v1\"");
+        }
+        std::process::exit(1);
+    }
+
+    // Configure bakeoff
+    let bakeoff_config = BakeoffConfig {
+        trial_count: args.trials,
+        p95_latency_threshold_ms: reflex_config.thresholds.p95_latency_ms,
+        success_rate_threshold_pct: reflex_config.thresholds.success_parity_percent,
+        json_compliance_threshold_pct: reflex_config.thresholds.json_schema_compliance_percent,
+        min_samples: 5,
+    };
+
+    if !args.json {
+        println!("Running reflex bakeoff...");
+        println!("  Trials:    {}", bakeoff_config.trial_count);
+        println!("  Endpoint:  {}", reflex_config.endpoint);
+        println!("  Model:     {}", reflex_config.model);
+        println!();
+    }
+
+    // Run bakeoff (blocking async call)
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let report = tokio::runtime::Runtime::new()?.block_on(async {
+        run_bakeoff(&cwd, &bakeoff_config, &reflex_config).await
+    })?;
+
+    // Write report files
+    let (json_path, md_path) = report.write_files(&cwd)?;
+
+    if args.json {
+        let json = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "tool_version": tool_version(),
+            "report_id": report.report_id,
+            "passes_thresholds": report.evaluation.passes_thresholds,
+            "trials_run": report.trials.len(),
+            "stats": {
+                "reflex": report.stats.reflex.as_ref().map(|r| serde_json::json!({
+                    "p95_latency_ms": r.p95_latency_ms,
+                    "success_rate": r.success_rate,
+                    "json_compliance_rate": r.json_compliance_rate,
+                })),
+            },
+            "evaluation": {
+                "p95_check": {
+                    "passes": report.evaluation.p95_check.passes,
+                    "actual": report.evaluation.p95_check.actual,
+                    "threshold": report.evaluation.p95_check.threshold,
+                },
+                "success_rate_check": {
+                    "passes": report.evaluation.success_rate_check.passes,
+                    "actual": report.evaluation.success_rate_check.actual,
+                    "threshold": report.evaluation.success_rate_check.threshold,
+                },
+                "json_compliance_check": {
+                    "passes": report.evaluation.json_compliance_check.passes,
+                    "actual": report.evaluation.json_compliance_check.actual,
+                    "threshold": report.evaluation.json_compliance_check.threshold,
+                },
+            },
+            "recommendation": report.evaluation.recommendation,
+            "output_files": {
+                "json": json_path,
+                "markdown": md_path,
+            },
+        });
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        let status_emoji = if report.evaluation.passes_thresholds { "✅" } else { "❌" };
+        println!("{} {}", status_emoji, report.evaluation.recommendation);
+        println!();
+
+        if let Some(ref reflex) = report.stats.reflex {
+            println!("Results ({} trials):", report.trials.len());
+            println!("  P95 Latency:      {}ms (threshold: {}ms)",
+                reflex.p95_latency_ms, bakeoff_config.p95_latency_threshold_ms);
+            println!("  Success Rate:     {:.1}% (threshold: {}%)",
+                reflex.success_rate, bakeoff_config.success_rate_threshold_pct);
+            println!("  JSON Compliance:  {:.1}% (threshold: {}%)",
+                reflex.json_compliance_rate, bakeoff_config.json_compliance_threshold_pct);
+        }
+
+        println!();
+        println!("Report files:");
+        println!("  JSON: {}", json_path);
+        println!("  Markdown: {}", md_path);
+    }
+
+    // Exit with error if thresholds not met and --fail-on-threshold is set
+    if args.fail_on_threshold && !report.evaluation.passes_thresholds {
+        std::process::exit(1);
     }
 
     Ok(())
@@ -3119,6 +3329,7 @@ fn run_policy(cwd: PathBuf, args: PolicyArgs) -> anyhow::Result<()> {
         PolicySubcommand::Show(args) => run_policy_show(cwd, args),
         PolicySubcommand::Current(args) => run_policy_current(cwd, args),
         PolicySubcommand::Validate(args) => run_policy_validate(cwd, args),
+        PolicySubcommand::Diff(args) => run_policy_diff(cwd, args),
     }
 }
 
@@ -3456,6 +3667,88 @@ fn run_policy_validate(cwd: PathBuf, args: PolicyValidateArgs) -> anyhow::Result
             }
             std::process::exit(1);
         }
+    }
+
+    Ok(())
+}
+
+/// Run `speckit policy diff` command
+///
+/// Compares two policy snapshots and shows differences in:
+/// - Governance (routing, capture mode, SOR)
+/// - Model configuration
+/// - Scoring weights
+/// - Source files
+///
+/// Output is deterministic with stable ordering.
+fn run_policy_diff(_cwd: PathBuf, args: PolicyDiffArgs) -> anyhow::Result<()> {
+    use codex_stage0::{PolicyDiff, PolicyStore};
+
+    let store = PolicyStore::new();
+
+    // Load both snapshots
+    let snapshot_a = match store.load(&args.policy_id_a) {
+        Ok(s) => s,
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("Policy A not found: {}", e),
+                    "policy_id_a": args.policy_id_a,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Policy '{}' not found: {}", args.policy_id_a, e);
+            }
+            std::process::exit(1);
+        }
+    };
+
+    let snapshot_b = match store.load(&args.policy_id_b) {
+        Ok(s) => s,
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("Policy B not found: {}", e),
+                    "policy_id_b": args.policy_id_b,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Policy '{}' not found: {}", args.policy_id_b, e);
+            }
+            std::process::exit(1);
+        }
+    };
+
+    // Compute diff
+    let diff = PolicyDiff::compute(&snapshot_a, &snapshot_b);
+
+    if args.json {
+        // JSON output with stable format
+        let json = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "tool_version": tool_version(),
+            "policy_id_a": diff.policy_id_a,
+            "policy_id_b": diff.policy_id_b,
+            "hash_a": diff.hash_a,
+            "hash_b": diff.hash_b,
+            "identical": diff.identical,
+            "change_count": diff.changes.len(),
+            "changes": diff.changes.iter().map(|c| serde_json::json!({
+                "path": c.path,
+                "old_value": c.old_value,
+                "new_value": c.new_value,
+                "category": c.category.as_str(),
+            })).collect::<Vec<_>>(),
+            "changed_keys": diff.changed_keys(),
+        });
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        // Human-readable text output
+        println!("{}", diff.to_text());
     }
 
     Ok(())

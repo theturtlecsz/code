@@ -199,6 +199,7 @@ pub use chatwidget::spec_kit::consensus_db::ConsensusDb;
 // SPEC-KIT-978: Re-export reflex modules for CLI
 pub use chatwidget::spec_kit::reflex_metrics;
 pub use chatwidget::spec_kit::reflex_client;
+pub use chatwidget::spec_kit::bakeoff_runner;
 
 // MAINT-3.2 Phase 2: Re-export P2 module testing utilities
 pub use chatwidget::spec_kit::error::{Result as SpecKitResult, SpecKitError};

@@ -2379,19 +2379,25 @@ fn test_time_travel_survives_reopen() {
             "Time travel to B after reopen should return v2"
         );
 
-        // Note: Current state (as_of=None) after reopen doesn't preserve branch context
-        // because artifacts are rebuilt on main branch during scan_and_rebuild.
-        // Time-travel using checkpoints works because UriIndexSnapshots are restored.
-        //
-        // To verify "current" state, use the latest checkpoint (B) which represents
-        // the most recent state on the branch.
+        // SPEC-KIT-971: Current state (as_of=None) now preserves branch context
+        // After reopen, scan_and_rebuild restores entries from the latest snapshot
+        // for each branch, so resolve_uri(branch, as_of=None) works correctly.
+        let current_state_bytes = handle
+            .get_bytes(&uri, Some(&run_branch), None)
+            .expect("get bytes with as_of=None after reopen");
+        assert_eq!(
+            current_state_bytes,
+            b"second version".to_vec(),
+            "Current state (as_of=None) after reopen should return v2 (latest on branch)"
+        );
+
+        // Verify it matches the explicit latest checkpoint
         let latest_checkpoint_bytes = handle
             .get_bytes(&uri, Some(&run_branch), Some(&checkpoint_b))
             .expect("get bytes at latest checkpoint");
         assert_eq!(
-            latest_checkpoint_bytes,
-            b"second version".to_vec(),
-            "Latest checkpoint content should be v2"
+            current_state_bytes, latest_checkpoint_bytes,
+            "as_of=None should equal as_of=<latest checkpoint>"
         );
     }
 }
@@ -2650,4 +2656,298 @@ fn test_merge_creates_checkpoint_with_correct_metadata() {
         merge_cp.label.as_ref().unwrap().contains("merge"),
         "Merge checkpoint label should contain 'merge'"
     );
+}
+
+/// Test curated merge mode excludes debug events.
+///
+/// SPEC-KIT-971: Curated mode should only merge governance-critical events
+/// (StageTransition, PolicySnapshotRef, RoutingDecision, BranchMerged).
+/// Debug events (DebugTrace) should remain on the run branch.
+#[test]
+fn test_curated_merge_excludes_debug_events() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("curated_merge_test.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "curated_merge_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("open capsule");
+
+    // Create and switch to run branch
+    let run_branch = BranchId::for_run("curated-run-001");
+    handle.switch_branch(run_branch.clone()).expect("switch branch");
+
+    // Create a curated-eligible event via commit_stage (emits StageTransition)
+    handle
+        .commit_stage("SPEC-CURATED", "curated-run-001", "Plan", None)
+        .expect("commit stage creates StageTransition event");
+
+    // Emit debug event (should be excluded in curated mode)
+    handle
+        .emit_debug_trace(
+            "SPEC-CURATED",
+            "curated-run-001",
+            Some("Plan"),
+            "Verbose debug info",
+            serde_json::json!({"debug_data": "should_not_merge"}),
+        )
+        .expect("emit debug trace");
+
+    // Count events on run branch before merge
+    let run_events_before = handle.list_events_filtered(Some(&run_branch));
+    assert_eq!(
+        run_events_before.len(),
+        2,
+        "Run branch should have 2 events before merge (StageTransition + DebugTrace)"
+    );
+
+    // Perform CURATED merge to main
+    let main_branch = BranchId::main();
+    let _merge_cp = handle
+        .merge_branch(
+            &run_branch,
+            &main_branch,
+            MergeMode::Curated,
+            Some("SPEC-CURATED"),
+            Some("curated-run-001"),
+        )
+        .expect("curated merge");
+
+    // Count events on main after merge (should exclude DebugTrace)
+    let main_events = handle.list_events_filtered(Some(&main_branch));
+
+    // Should have: StageTransition (merged) + BranchMerged (from merge operation)
+    // Should NOT have: DebugTrace
+    let stage_transitions: Vec<_> = main_events
+        .iter()
+        .filter(|e| e.event_type == EventType::StageTransition)
+        .collect();
+    let debug_traces: Vec<_> = main_events
+        .iter()
+        .filter(|e| e.event_type == EventType::DebugTrace)
+        .collect();
+    let branch_merged: Vec<_> = main_events
+        .iter()
+        .filter(|e| e.event_type == EventType::BranchMerged)
+        .collect();
+
+    assert_eq!(
+        stage_transitions.len(),
+        1,
+        "StageTransition should be merged to main"
+    );
+    assert_eq!(
+        debug_traces.len(),
+        0,
+        "DebugTrace should NOT be merged in curated mode"
+    );
+    assert_eq!(
+        branch_merged.len(),
+        1,
+        "BranchMerged event should be on main"
+    );
+}
+
+/// Test full merge mode includes all events including debug.
+///
+/// SPEC-KIT-971: Full mode should merge everything for deep audit/incident review.
+#[test]
+fn test_full_merge_includes_debug_events() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("full_merge_test.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "full_merge_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("open capsule");
+
+    // Create and switch to run branch
+    let run_branch = BranchId::for_run("full-run-001");
+    handle.switch_branch(run_branch.clone()).expect("switch branch");
+
+    // Create curated-eligible event via commit_stage
+    handle
+        .commit_stage("SPEC-FULL", "full-run-001", "Plan", None)
+        .expect("commit stage creates StageTransition event");
+
+    // Emit debug event
+    handle
+        .emit_debug_trace(
+            "SPEC-FULL",
+            "full-run-001",
+            Some("Plan"),
+            "Verbose debug info",
+            serde_json::json!({"debug_data": "should_merge_in_full"}),
+        )
+        .expect("emit debug trace");
+
+    // Perform FULL merge to main
+    let main_branch = BranchId::main();
+    let _merge_cp = handle
+        .merge_branch(
+            &run_branch,
+            &main_branch,
+            MergeMode::Full,
+            Some("SPEC-FULL"),
+            Some("full-run-001"),
+        )
+        .expect("full merge");
+
+    // Count events on main after merge (should include all)
+    let main_events = handle.list_events_filtered(Some(&main_branch));
+
+    let stage_transitions: Vec<_> = main_events
+        .iter()
+        .filter(|e| e.event_type == EventType::StageTransition)
+        .collect();
+    let debug_traces: Vec<_> = main_events
+        .iter()
+        .filter(|e| e.event_type == EventType::DebugTrace)
+        .collect();
+
+    assert_eq!(
+        stage_transitions.len(),
+        1,
+        "StageTransition should be merged to main"
+    );
+    assert_eq!(
+        debug_traces.len(),
+        1,
+        "DebugTrace SHOULD be merged in full mode"
+    );
+}
+
+/// Test curated merge persists correctly after reopen.
+///
+/// SPEC-KIT-971: After reopen, merged events should still be on main branch,
+/// and excluded events should still be isolated on run branch.
+#[test]
+fn test_curated_merge_persists_after_reopen() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("curated_reopen_test.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "curated_reopen_test".to_string(),
+        ..Default::default()
+    };
+
+    let run_branch = BranchId::for_run("persist-run-001");
+
+    // Phase 1: Create events and merge
+    {
+        let handle = CapsuleHandle::open(config.clone()).expect("open capsule");
+        handle.switch_branch(run_branch.clone()).expect("switch branch");
+
+        // Create curated-eligible event via commit_stage
+        handle
+            .commit_stage("SPEC-PERSIST", "persist-run-001", "Plan", None)
+            .expect("commit stage creates StageTransition event");
+
+        handle
+            .emit_debug_trace(
+                "SPEC-PERSIST",
+                "persist-run-001",
+                Some("Plan"),
+                "Debug info",
+                serde_json::json!({}),
+            )
+            .expect("emit debug trace");
+
+        // Curated merge
+        let main_branch = BranchId::main();
+        handle
+            .merge_branch(
+                &run_branch,
+                &main_branch,
+                MergeMode::Curated,
+                Some("SPEC-PERSIST"),
+                Some("persist-run-001"),
+            )
+            .expect("curated merge");
+
+        // Handle dropped - capsule closed
+    }
+
+    // Phase 2: Reopen and verify merge semantics persisted
+    {
+        let handle = CapsuleHandle::open(config).expect("reopen capsule");
+
+        let main_branch = BranchId::main();
+        let main_events = handle.list_events_filtered(Some(&main_branch));
+
+        // Count by type
+        let stage_transitions: Vec<_> = main_events
+            .iter()
+            .filter(|e| e.event_type == EventType::StageTransition)
+            .collect();
+        let debug_traces: Vec<_> = main_events
+            .iter()
+            .filter(|e| e.event_type == EventType::DebugTrace)
+            .collect();
+
+        assert_eq!(
+            stage_transitions.len(),
+            1,
+            "StageTransition should persist on main after reopen"
+        );
+        assert_eq!(
+            debug_traces.len(),
+            0,
+            "DebugTrace should NOT be on main after reopen"
+        );
+
+        // The debug trace should still exist on the run branch
+        let run_events = handle.list_events_filtered(Some(&run_branch));
+        let run_debug: Vec<_> = run_events
+            .iter()
+            .filter(|e| e.event_type == EventType::DebugTrace)
+            .collect();
+        assert_eq!(
+            run_debug.len(),
+            1,
+            "DebugTrace should still be on run branch after reopen"
+        );
+    }
+}
+
+/// Test EventType::is_curated_eligible classification.
+#[test]
+fn test_event_type_curated_classification() {
+    // Curated-eligible events
+    assert!(EventType::StageTransition.is_curated_eligible());
+    assert!(EventType::PolicySnapshotRef.is_curated_eligible());
+    assert!(EventType::RoutingDecision.is_curated_eligible());
+    assert!(EventType::BranchMerged.is_curated_eligible());
+
+    // Non-curated events (debug-only)
+    assert!(!EventType::DebugTrace.is_curated_eligible());
+}
+
+/// Test LogicalUri curated classification.
+#[test]
+fn test_uri_curated_classification() {
+    // Curated-eligible URIs
+    let artifact_uri = LogicalUri::new(
+        "ws",
+        "SPEC-001",
+        "run1",
+        ObjectType::Artifact,
+        "file.md",
+    )
+    .unwrap();
+    assert!(artifact_uri.is_curated_eligible(), "Artifacts are curated");
+
+    let policy_uri = LogicalUri::for_policy("ws", "policy-001");
+    assert!(policy_uri.is_curated_eligible(), "Policies are curated");
+
+    // Non-curated URIs
+    let event_uri = LogicalUri::for_event("ws", "SPEC-001", "run1", 1);
+    assert!(!event_uri.is_curated_eligible(), "Events handled separately");
 }
