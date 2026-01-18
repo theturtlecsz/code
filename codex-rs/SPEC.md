@@ -70,13 +70,14 @@ These invariants MUST NOT be violated:
 
 | Spec | Status | Owner | Next Action |
 |------|--------|-------|-------------|
-| SPEC-KIT-978 | 75% | - | Bakeoff report writer + CI gate + TUI slash commands |
-| SPEC-KIT-975 | 0% | - | Event schema v1 (unblocks 973, 976, 979) |
+| (none) | - | - | - |
 
 ### Completed (Recent)
 
 | Spec | Completion Date | Key Deliverables |
 |------|-----------------|------------------|
+| SPEC-KIT-978 | 2026-01-18 | Circuit breaker types, BreakerState/BreakerStateChangedPayload, EventType integration |
+| SPEC-KIT-975 | 2026-01-18 | Replay timeline determinism, offline retrieval exactness, 5 replay tests passing |
 | SPEC-KIT-971 | 2026-01-17 | Branch isolation, time-travel URI, checkpoints, merge at unlock, CLI complete |
 | SPEC-KIT-977 | 2026-01-17 | PolicySnapshot capture, dual storage, CLI/TUI commands, drift detection |
 | SPEC-KIT-978 (core) | 2026-01-16 | JSON schema enforcement, bakeoff CLI, reflex routing decisions |
@@ -86,9 +87,8 @@ These invariants MUST NOT be violated:
 
 | Spec | Blocker | Unblocks |
 |------|---------|----------|
-| SPEC-KIT-975 | Needs 977 PolicySnapshot + events query API | 973 Time-Travel, 976 Logic Mesh |
-| SPEC-KIT-973 | Needs 975 event schema | Time-Travel UI |
-| SPEC-KIT-976 | Needs 975 event schema | Logic Mesh graph |
+| SPEC-KIT-973 | Ready (975 complete) | Time-Travel UI |
+| SPEC-KIT-976 | Ready (975 complete) | Logic Mesh graph |
 
 ---
 

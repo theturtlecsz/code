@@ -32,7 +32,7 @@ use codex_spec_kit::executor::{
     render_review_dashboard, render_status_dashboard, review_warning, status_degraded_warning,
 };
 use codex_tui::memvid_adapter::{
-    CapsuleConfig, CapsuleError, CapsuleHandle, CheckpointId, DiagnosticResult,
+    CapsuleConfig, CapsuleError, CapsuleHandle, CheckpointId, DiagnosticResult, EventType,
 };
 use std::io::Write;
 use std::path::PathBuf;
@@ -158,6 +158,12 @@ pub enum SpeckitSubcommand {
     /// SPEC-KIT-977: Commands for viewing and validating policy snapshots.
     /// List, show, and validate policy configurations.
     Policy(PolicyArgs),
+
+    /// Replay run events from capsule
+    ///
+    /// SPEC-KIT-975: Commands for replaying and verifying run events.
+    /// Display timeline of events, verify determinism, check URI resolution.
+    Replay(ReplayArgs),
 }
 
 /// Arguments for `speckit status` command
@@ -555,13 +561,18 @@ pub struct CapsuleResolveUriArgs {
 /// Arguments for `capsule events`
 ///
 /// SPEC-KIT-971: List events with optional filtering.
+/// SPEC-KIT-975: Adds branch, since-checkpoint, and audit-only filters.
 #[derive(Debug, Parser)]
 pub struct CapsuleEventsArgs {
     /// Filter by stage (e.g., "plan", "implement")
     #[arg(long = "stage", short = 's', value_name = "STAGE")]
     pub stage: Option<String>,
 
-    /// Filter by event type (e.g., "StageTransition", "PolicySnapshotRef")
+    /// Filter by event type (e.g., "StageTransition", "ToolCall", "GateDecision")
+    ///
+    /// Valid types: StageTransition, PolicySnapshotRef, RoutingDecision, BranchMerged,
+    /// DebugTrace, RetrievalRequest, RetrievalResponse, ToolCall, ToolResult,
+    /// PatchApply, GateDecision, ErrorEvent, ModelCallEnvelope, CapsuleExported, CapsuleImported
     #[arg(long = "type", short = 't', value_name = "TYPE")]
     pub event_type: Option<String>,
 
@@ -572,6 +583,22 @@ pub struct CapsuleEventsArgs {
     /// Filter by run ID
     #[arg(long = "run", value_name = "RUN-ID")]
     pub run_id: Option<String>,
+
+    /// Filter by branch ID (e.g., "main", "run/SPEC-KIT-975_20260117_abc12345")
+    #[arg(long = "branch", short = 'b', value_name = "BRANCH")]
+    pub branch: Option<String>,
+
+    /// Only show events since this checkpoint
+    #[arg(long = "since-checkpoint", value_name = "CHECKPOINT-ID")]
+    pub since_checkpoint: Option<String>,
+
+    /// Only show audit-critical events (SPEC-KIT-975)
+    #[arg(long = "audit-only")]
+    pub audit_only: bool,
+
+    /// Only show curated-eligible events (excludes debug/sensitive)
+    #[arg(long = "curated-only")]
+    pub curated_only: bool,
 
     /// Limit number of results
     #[arg(long = "limit", short = 'n', value_name = "N")]
@@ -795,6 +822,80 @@ pub struct PolicyValidateArgs {
     pub json: bool,
 }
 
+// =============================================================================
+// SPEC-KIT-975: Replay Commands
+// =============================================================================
+
+/// Arguments for `speckit replay`
+#[derive(Debug, Parser)]
+pub struct ReplayArgs {
+    #[command(subcommand)]
+    pub command: ReplaySubcommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ReplaySubcommand {
+    /// Display run timeline
+    ///
+    /// Shows all events for a run in chronological order.
+    /// Use --json for machine-readable output.
+    Run(ReplayRunArgs),
+
+    /// Verify run determinism
+    ///
+    /// Checks that retrieval responses resolve in capsule.
+    /// Validates event sequence and checkpoint integrity.
+    Verify(ReplayVerifyArgs),
+}
+
+/// Arguments for `speckit replay run`
+#[derive(Debug, Parser)]
+pub struct ReplayRunArgs {
+    /// Run ID to replay
+    #[arg(long = "run", short = 'r', value_name = "RUN_ID")]
+    pub run_id: String,
+
+    /// Optional branch filter (default: run/<RUN_ID>)
+    #[arg(long = "branch", short = 'b')]
+    pub branch: Option<String>,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+
+    /// Filter to specific event types (comma-separated)
+    #[arg(long = "types", value_name = "TYPES")]
+    pub event_types: Option<String>,
+
+    /// Capsule path override
+    #[arg(long = "capsule", short = 'C', value_name = "PATH")]
+    pub capsule_path: Option<PathBuf>,
+}
+
+/// Arguments for `speckit replay verify`
+#[derive(Debug, Parser)]
+pub struct ReplayVerifyArgs {
+    /// Run ID to verify
+    #[arg(long = "run", short = 'r', value_name = "RUN_ID")]
+    pub run_id: String,
+
+    /// Check retrieval response URIs resolve
+    #[arg(long = "check-retrievals")]
+    pub check_retrievals: bool,
+
+    /// Check event sequence is monotonic
+    #[arg(long = "check-sequence")]
+    pub check_sequence: bool,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+
+    /// Capsule path override
+    #[arg(long = "capsule", short = 'C', value_name = "PATH")]
+    pub capsule_path: Option<PathBuf>,
+}
+
 impl SpeckitCli {
     /// Run the speckit CLI command
     pub async fn run(self) -> anyhow::Result<()> {
@@ -811,6 +912,9 @@ impl SpeckitCli {
         }
         if let SpeckitSubcommand::Policy(args) = self.command {
             return run_policy(cwd, args);
+        }
+        if let SpeckitSubcommand::Replay(args) = self.command {
+            return run_replay(cwd, args);
         }
 
         // Resolve policy from env/config at adapter boundary (not in executor)
@@ -841,6 +945,7 @@ impl SpeckitCli {
             SpeckitSubcommand::Capsule(_) => unreachable!("Capsule handled above"),
             SpeckitSubcommand::Reflex(_) => unreachable!("Reflex handled above"),
             SpeckitSubcommand::Policy(_) => unreachable!("Policy handled above"),
+            SpeckitSubcommand::Replay(_) => unreachable!("Replay handled above"),
         }
     }
 }
@@ -2192,8 +2297,9 @@ const DEFAULT_CAPSULE_PATH: &str = ".speckit/memvid/workspace.mv2";
 /// Exit codes for capsule commands (per SPEC-KIT-971)
 mod capsule_exit {
     pub const SUCCESS: i32 = 0;
-    pub const USER_ERROR: i32 = 1;   // Bad args, invalid URI
-    pub const SYSTEM_ERROR: i32 = 2; // Corrupt capsule, locked, IO error
+    pub const USER_ERROR: i32 = 1;      // Bad args, invalid URI
+    pub const SYSTEM_ERROR: i32 = 2;    // Corrupt capsule, locked, IO error
+    pub const VALIDATION_ERROR: i32 = 3; // Invalid event type, invalid checkpoint ID
 }
 
 /// Run the capsule command
@@ -2711,6 +2817,7 @@ fn run_capsule_init(capsule_path: &PathBuf, args: CapsuleInitArgs) -> anyhow::Re
 /// Run `capsule events` command
 ///
 /// SPEC-KIT-971: List events with optional filtering.
+/// SPEC-KIT-975: Adds branch, since-checkpoint, audit-only, and curated-only filters.
 fn run_capsule_events(capsule_path: &PathBuf, args: CapsuleEventsArgs) -> anyhow::Result<()> {
     let config = CapsuleConfig {
         capsule_path: capsule_path.clone(),
@@ -2736,20 +2843,72 @@ fn run_capsule_events(capsule_path: &PathBuf, args: CapsuleEventsArgs) -> anyhow
         }
     };
 
+    // Validate event type if provided
+    let event_type_filter: Option<EventType> = if let Some(ref type_str) = args.event_type {
+        match EventType::from_str(type_str) {
+            Some(et) => Some(et),
+            None => {
+                let valid_types = EventType::all_variants().join(", ");
+                if args.json {
+                    let json = serde_json::json!({
+                        "schema_version": SCHEMA_VERSION,
+                        "tool_version": tool_version(),
+                        "error": format!("Invalid event type: '{}'. Valid types: {}", type_str, valid_types),
+                        "valid_types": EventType::all_variants(),
+                    });
+                    println!("{}", serde_json::to_string_pretty(&json)?);
+                } else {
+                    eprintln!("Error: Invalid event type: '{}'", type_str);
+                    eprintln!("Valid types: {}", valid_types);
+                }
+                std::process::exit(capsule_exit::VALIDATION_ERROR);
+            }
+        }
+    } else {
+        None
+    };
+
+    // Get since-checkpoint timestamp if provided
+    let since_timestamp = if let Some(ref checkpoint_id) = args.since_checkpoint {
+        let checkpoints = handle.list_checkpoints();
+        checkpoints
+            .iter()
+            .find(|cp| cp.checkpoint_id.as_str() == checkpoint_id)
+            .map(|cp| cp.timestamp)
+    } else {
+        None
+    };
+
     let mut events = handle.list_events();
 
     // Apply filters
     if let Some(ref stage) = args.stage {
         events.retain(|e| e.stage.as_deref() == Some(stage.as_str()));
     }
-    if let Some(ref event_type) = args.event_type {
-        events.retain(|e| format!("{:?}", e.event_type).to_lowercase() == event_type.to_lowercase());
+    if let Some(et) = event_type_filter {
+        events.retain(|e| e.event_type == et);
     }
     if let Some(ref spec_id) = args.spec_id {
         events.retain(|e| &e.spec_id == spec_id);
     }
     if let Some(ref run_id) = args.run_id {
         events.retain(|e| &e.run_id == run_id);
+    }
+    // SPEC-KIT-975: Branch filter
+    if let Some(ref branch) = args.branch {
+        events.retain(|e| e.branch_id.as_deref() == Some(branch.as_str()));
+    }
+    // SPEC-KIT-975: Since checkpoint filter
+    if let Some(since) = since_timestamp {
+        events.retain(|e| e.timestamp > since);
+    }
+    // SPEC-KIT-975: Audit-only filter
+    if args.audit_only {
+        events.retain(|e| e.event_type.is_audit_critical());
+    }
+    // SPEC-KIT-975: Curated-only filter
+    if args.curated_only {
+        events.retain(|e| e.event_type.is_curated_eligible());
     }
 
     // Apply limit
@@ -2763,11 +2922,14 @@ fn run_capsule_events(capsule_path: &PathBuf, args: CapsuleEventsArgs) -> anyhow
             .map(|e| {
                 serde_json::json!({
                     "uri": e.uri.as_str(),
-                    "event_type": format!("{:?}", e.event_type),
+                    "event_type": e.event_type.as_str(),
                     "timestamp": e.timestamp.to_rfc3339(),
                     "spec_id": e.spec_id,
                     "run_id": e.run_id,
                     "stage": e.stage,
+                    "branch_id": e.branch_id,
+                    "is_curated_eligible": e.event_type.is_curated_eligible(),
+                    "is_audit_critical": e.event_type.is_audit_critical(),
                     "payload": e.payload,
                 })
             })
@@ -2784,6 +2946,10 @@ fn run_capsule_events(capsule_path: &PathBuf, args: CapsuleEventsArgs) -> anyhow
                 "event_type": args.event_type,
                 "spec_id": args.spec_id,
                 "run_id": args.run_id,
+                "branch": args.branch,
+                "since_checkpoint": args.since_checkpoint,
+                "audit_only": args.audit_only,
+                "curated_only": args.curated_only,
                 "limit": args.limit,
             },
         });
@@ -3752,4 +3918,311 @@ fn run_policy_diff(_cwd: PathBuf, args: PolicyDiffArgs) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+// =============================================================================
+// SPEC-KIT-975: Replay Command Handlers
+// =============================================================================
+
+/// Run the replay command (SPEC-KIT-975)
+fn run_replay(cwd: PathBuf, args: ReplayArgs) -> anyhow::Result<()> {
+    use codex_tui::memvid_adapter::{
+        BranchId, default_capsule_config, LogicalUri,
+    };
+
+    match args.command {
+        ReplaySubcommand::Run(run_args) => run_replay_run(cwd, run_args),
+        ReplaySubcommand::Verify(verify_args) => run_replay_verify(cwd, verify_args),
+    }
+}
+
+/// Run the `speckit replay run` command
+fn run_replay_run(cwd: PathBuf, args: ReplayRunArgs) -> anyhow::Result<()> {
+    use codex_tui::memvid_adapter::{BranchId, default_capsule_config};
+    use std::collections::HashSet;
+
+    // Get capsule config
+    let config = if let Some(path) = &args.capsule_path {
+        CapsuleConfig {
+            capsule_path: path.clone(),
+            workspace_id: "cli".to_string(),
+            ..Default::default()
+        }
+    } else {
+        default_capsule_config(&cwd)
+    };
+
+    // Open capsule
+    let handle = match CapsuleHandle::open(config) {
+        Ok(h) => h,
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("Failed to open capsule: {}", e),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Failed to open capsule: {}", e);
+            }
+            std::process::exit(1);
+        }
+    };
+
+    // Build branch filter
+    let branch = args.branch
+        .map(|b| BranchId::from_str(&b))
+        .unwrap_or_else(|| BranchId::for_run(&args.run_id));
+
+    // Get events for this run
+    let mut events = handle.list_events_filtered(Some(&branch));
+    events.retain(|e| e.run_id == args.run_id);
+
+    // Filter by event types if specified
+    if let Some(ref types_str) = args.event_types {
+        let type_set: HashSet<&str> = types_str.split(',').map(|s| s.trim()).collect();
+        events.retain(|e| type_set.contains(e.event_type.as_str()));
+    }
+
+    // Sort by timestamp
+    events.sort_by_key(|e| e.timestamp);
+
+    // Get checkpoints for this run
+    let checkpoints = handle.list_checkpoints();
+    let run_checkpoints: Vec<_> = checkpoints
+        .iter()
+        .filter(|c| c.run_id.as_deref() == Some(&args.run_id))
+        .collect();
+
+    if args.json {
+        let timeline: Vec<_> = events.iter().map(|e| {
+            serde_json::json!({
+                "seq": extract_seq_from_uri(&e.uri),
+                "timestamp": e.timestamp.to_rfc3339(),
+                "event_type": e.event_type.as_str(),
+                "stage": e.stage,
+                "payload": e.payload,
+                "uri": e.uri.as_str(),
+            })
+        }).collect();
+
+        let json = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "tool_version": tool_version(),
+            "run_id": args.run_id,
+            "branch": branch.as_str(),
+            "event_count": events.len(),
+            "checkpoint_count": run_checkpoints.len(),
+            "timeline": timeline,
+            "checkpoints": run_checkpoints.iter().map(|c| {
+                serde_json::json!({
+                    "id": c.checkpoint_id.as_str(),
+                    "stage": c.stage,
+                    "timestamp": c.timestamp.to_rfc3339(),
+                })
+            }).collect::<Vec<_>>(),
+        });
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        println!("Run Timeline: {}", args.run_id);
+        println!("Branch: {}", branch.as_str());
+        println!();
+
+        let mut current_stage: Option<String> = None;
+
+        for event in &events {
+            // Print stage header if changed
+            if event.stage != current_stage {
+                if let Some(ref stage) = event.stage {
+                    println!("\n=== Stage: {} ===\n", stage);
+                }
+                current_stage = event.stage.clone();
+            }
+
+            // Print event
+            let type_icon = match event.event_type {
+                EventType::ToolCall => "[TOOL]",
+                EventType::ToolResult => "[RESULT]",
+                EventType::RetrievalRequest => "[QUERY]",
+                EventType::RetrievalResponse => "[HITS]",
+                EventType::PatchApply => "[PATCH]",
+                EventType::ModelCallEnvelope => "[MODEL]",
+                EventType::StageTransition => "[STAGE]",
+                EventType::GateDecision => "[GATE]",
+                _ => "[EVENT]",
+            };
+
+            println!("{} {} {}",
+                event.timestamp.format("%H:%M:%S%.3f"),
+                type_icon,
+                format_event_summary(event),
+            );
+        }
+
+        println!("\nTotal: {} events, {} checkpoints", events.len(), run_checkpoints.len());
+    }
+
+    Ok(())
+}
+
+/// Run the `speckit replay verify` command
+fn run_replay_verify(cwd: PathBuf, args: ReplayVerifyArgs) -> anyhow::Result<()> {
+    use codex_tui::memvid_adapter::{BranchId, default_capsule_config, LogicalUri};
+
+    // Get capsule config
+    let config = if let Some(path) = &args.capsule_path {
+        CapsuleConfig {
+            capsule_path: path.clone(),
+            workspace_id: "cli".to_string(),
+            ..Default::default()
+        }
+    } else {
+        default_capsule_config(&cwd)
+    };
+
+    // Open capsule
+    let handle = match CapsuleHandle::open(config) {
+        Ok(h) => h,
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("Failed to open capsule: {}", e),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Failed to open capsule: {}", e);
+            }
+            std::process::exit(1);
+        }
+    };
+
+    let branch = BranchId::for_run(&args.run_id);
+    let events = handle.list_events_filtered(Some(&branch));
+    let run_events: Vec<_> = events.iter()
+        .filter(|e| e.run_id == args.run_id)
+        .collect();
+
+    #[derive(serde::Serialize)]
+    struct VerificationIssue {
+        check: String,
+        severity: String,
+        message: String,
+        event_uri: Option<String>,
+    }
+
+    let mut issues: Vec<VerificationIssue> = Vec::new();
+
+    // Check 1: Retrieval response URIs resolve
+    if args.check_retrievals {
+        for event in run_events.iter().filter(|e| e.event_type == EventType::RetrievalResponse) {
+            if let Some(uris) = event.payload.get("hit_uris").and_then(|v| v.as_array()) {
+                for uri_val in uris {
+                    if let Some(uri_str) = uri_val.as_str() {
+                        let uri = LogicalUri::parse(uri_str);
+                        if handle.resolve_uri(&uri, None, None).is_err() {
+                            issues.push(VerificationIssue {
+                                check: "retrieval_uri_resolve".to_string(),
+                                severity: "error".to_string(),
+                                message: format!("URI not resolvable: {}", uri_str),
+                                event_uri: Some(event.uri.as_str().to_string()),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Check 2: Event sequence is monotonic
+    if args.check_sequence {
+        let mut last_seq = 0u64;
+        for event in &run_events {
+            let seq = extract_seq_from_uri(&event.uri);
+            if seq <= last_seq && seq != 0 {
+                issues.push(VerificationIssue {
+                    check: "sequence_monotonic".to_string(),
+                    severity: "warning".to_string(),
+                    message: format!("Non-monotonic sequence: {} after {}", seq, last_seq),
+                    event_uri: Some(event.uri.as_str().to_string()),
+                });
+            }
+            last_seq = seq;
+        }
+    }
+
+    let passed = issues.iter().all(|i| i.severity != "error");
+
+    if args.json {
+        let json = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "tool_version": tool_version(),
+            "run_id": args.run_id,
+            "passed": passed,
+            "issue_count": issues.len(),
+            "issues": issues,
+        });
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        if passed {
+            println!("Verification PASSED for run: {}", args.run_id);
+        } else {
+            println!("Verification FAILED for run: {}", args.run_id);
+        }
+        for issue in &issues {
+            println!("  [{}/{}] {}", issue.check, issue.severity, issue.message);
+        }
+    }
+
+    std::process::exit(if passed { 0 } else { 1 });
+}
+
+/// Extract sequence number from event URI
+fn extract_seq_from_uri(uri: &codex_tui::memvid_adapter::LogicalUri) -> u64 {
+    // URIs are like mv2://workspace/SPEC-ID/RUN-ID/event/SEQ
+    uri.as_str()
+        .rsplit('/')
+        .next()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0)
+}
+
+/// Format event summary for human-readable output
+fn format_event_summary(event: &codex_tui::memvid_adapter::RunEventEnvelope) -> String {
+    match event.event_type {
+        EventType::ToolCall => {
+            let tool = event.payload.get("tool_name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
+            format!("Tool: {}", tool)
+        }
+        EventType::RetrievalResponse => {
+            let count = event.payload.get("hit_uris")
+                .and_then(|v| v.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
+            format!("{} hits", count)
+        }
+        EventType::ModelCallEnvelope => {
+            let model = event.payload.get("model")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
+            let mode = event.payload.get("capture_mode")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            format!("{} (capture: {})", model, mode)
+        }
+        EventType::PatchApply => {
+            let path = event.payload.get("file_path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            let ptype = event.payload.get("patch_type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            format!("{}: {}", ptype, path)
+        }
+        _ => event.event_type.as_str().to_string(),
+    }
 }

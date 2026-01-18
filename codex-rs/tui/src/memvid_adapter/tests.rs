@@ -12,7 +12,13 @@
 
 use super::*;
 use crate::memvid_adapter::capsule::{CapsuleConfig, CapsuleHandle, DiagnosticResult};
-use crate::memvid_adapter::types::{BranchId, LogicalUri, MergeMode, ObjectType};
+use crate::memvid_adapter::types::{
+    BranchId, LogicalUri, MergeMode, ObjectType,
+    // SPEC-KIT-975: Event payload types for integration tests
+    EventType, ToolCallPayload, ToolResultPayload, RetrievalRequestPayload,
+    RetrievalResponsePayload, PatchApplyPayload, ModelCallEnvelopePayload,
+    GateDecisionPayload, GateOutcome, RoutingMode, LLMCaptureMode,
+};
 use tempfile::TempDir;
 
 // =============================================================================
@@ -2950,4 +2956,1010 @@ fn test_uri_curated_classification() {
     // Non-curated URIs
     let event_uri = LogicalUri::for_event("ws", "SPEC-001", "run1", 1);
     assert!(!event_uri.is_curated_eligible(), "Events handled separately");
+}
+
+// =============================================================================
+// SPEC-KIT-975: Replayable Audit Event Integration Tests
+// =============================================================================
+
+/// SPEC-KIT-975: Test emitting various audit event types.
+///
+/// This test verifies that all SPEC-KIT-975 event types can be emitted
+/// and retrieved correctly from the capsule.
+#[test]
+fn test_spec_kit_975_event_emission() {
+    use super::{
+        ErrorEventPayload, ErrorSeverity, GateDecisionPayload, GateOutcome, LLMCaptureMode,
+        ModelCallEnvelopePayload, PatchApplyPayload, RetrievalRequestPayload,
+        RetrievalResponsePayload, RoutingMode, ToolCallPayload, ToolResultPayload,
+    };
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("spec_kit_975.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path,
+        workspace_id: "test975".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("open capsule");
+    let spec_id = "SPEC-KIT-975";
+    let run_id = "test-run-001";
+
+    // Switch to run branch
+    let run_branch = BranchId::for_run(run_id);
+    handle.switch_branch(run_branch).expect("switch branch");
+
+    // 1. Emit ToolCall event
+    let tool_call = ToolCallPayload {
+        call_id: "call-001".to_string(),
+        tool_name: "read_file".to_string(),
+        input: serde_json::json!({"path": "/tmp/test.txt"}),
+        stage: Some("Implement".to_string()),
+        role: Some("Implementer".to_string()),
+    };
+    let tool_call_uri = handle
+        .emit_tool_call(spec_id, run_id, &tool_call)
+        .expect("emit tool call");
+    assert!(tool_call_uri.as_str().contains("event"));
+
+    // 2. Emit ToolResult event
+    let tool_result = ToolResultPayload {
+        call_id: "call-001".to_string(),
+        tool_name: "read_file".to_string(),
+        success: true,
+        output: Some(serde_json::json!({"content": "file contents"})),
+        error: None,
+        duration_ms: Some(50),
+    };
+    let _tool_result_uri = handle
+        .emit_tool_result(spec_id, run_id, Some("Implement"), &tool_result)
+        .expect("emit tool result");
+
+    // 3. Emit RetrievalRequest event
+    let retrieval_req = RetrievalRequestPayload {
+        request_id: "req-001".to_string(),
+        query: "How does authentication work?".to_string(),
+        config: serde_json::json!({"top_k": 5}),
+        source: "capsule".to_string(),
+        stage: Some("Stage0".to_string()),
+        role: Some("Architect".to_string()),
+    };
+    let _retrieval_req_uri = handle
+        .emit_retrieval_request(spec_id, run_id, &retrieval_req)
+        .expect("emit retrieval request");
+
+    // 4. Emit RetrievalResponse event
+    let retrieval_resp = RetrievalResponsePayload {
+        request_id: "req-001".to_string(),
+        hit_uris: vec![
+            "mv2://test975/SPEC-KIT-975/test-run-001/artifact/auth.md".to_string(),
+            "mv2://test975/SPEC-KIT-975/test-run-001/artifact/login.md".to_string(),
+        ],
+        fused_scores: Some(vec![0.95, 0.87]),
+        explainability: None,
+        latency_ms: Some(120),
+        error: None,
+    };
+    let _retrieval_resp_uri = handle
+        .emit_retrieval_response(spec_id, run_id, Some("Stage0"), &retrieval_resp)
+        .expect("emit retrieval response");
+
+    // 5. Emit PatchApply event
+    let patch = PatchApplyPayload {
+        patch_id: "patch-001".to_string(),
+        file_path: "src/auth.rs".to_string(),
+        patch_type: "modify".to_string(),
+        diff: Some("--- a/src/auth.rs\n+++ b/src/auth.rs\n@@ -1 +1 @@\n-old\n+new".to_string()),
+        before_hash: Some("abc123".to_string()),
+        after_hash: Some("def456".to_string()),
+        stage: Some("Implement".to_string()),
+        success: true,
+        error: None,
+    };
+    let _patch_uri = handle
+        .emit_patch_apply(spec_id, run_id, &patch)
+        .expect("emit patch apply");
+
+    // 6. Emit GateDecision event
+    let gate_decision = GateDecisionPayload {
+        gate_name: "JudgeApprove".to_string(),
+        outcome: GateOutcome::Pass,
+        stage: "Judge".to_string(),
+        confidence: Some(0.92),
+        reason: Some("All tests passing, code quality acceptable".to_string()),
+        details: None,
+        blocking: true,
+    };
+    let _gate_uri = handle
+        .emit_gate_decision(spec_id, run_id, &gate_decision)
+        .expect("emit gate decision");
+
+    // 7. Emit ErrorEvent
+    let error_event = ErrorEventPayload {
+        error_code: "E001".to_string(),
+        message: "Test error for validation".to_string(),
+        severity: ErrorSeverity::Warning,
+        stage: Some("Implement".to_string()),
+        component: Some("test-runner".to_string()),
+        stack_trace: None,
+        related_uris: None,
+        recoverable: true,
+    };
+    let _error_uri = handle
+        .emit_error_event(spec_id, run_id, &error_event)
+        .expect("emit error event");
+
+    // 8. Emit ModelCallEnvelope event (with Summary capture mode)
+    let model_call = ModelCallEnvelopePayload {
+        call_id: "llm-001".to_string(),
+        model: "claude-3-opus".to_string(),
+        routing_mode: RoutingMode::Cloud,
+        capture_mode: LLMCaptureMode::Summary,
+        stage: Some("Implement".to_string()),
+        role: Some("Implementer".to_string()),
+        prompt_hash: Some("sha256:abc123...".to_string()),
+        response_hash: Some("sha256:def456...".to_string()),
+        prompt_summary: Some("Write a function to...".to_string()),
+        response_summary: Some("Here's the implementation...".to_string()),
+        prompt_tokens: Some(150),
+        response_tokens: Some(300),
+        prompt_full: None, // Not captured in Summary mode
+        response_full: None,
+        latency_ms: Some(2500),
+        success: true,
+        error: None,
+    };
+    let _model_call_uri = handle
+        .emit_model_call_envelope(spec_id, run_id, &model_call)
+        .expect("emit model call envelope");
+
+    // Verify events were stored
+    let all_events = handle.list_events();
+    assert!(all_events.len() >= 8, "Should have at least 8 events");
+
+    // Filter by event type
+    let tool_calls: Vec<_> = all_events
+        .iter()
+        .filter(|e| e.event_type == EventType::ToolCall)
+        .collect();
+    assert_eq!(tool_calls.len(), 1, "Should have 1 ToolCall event");
+
+    let gate_decisions: Vec<_> = all_events
+        .iter()
+        .filter(|e| e.event_type == EventType::GateDecision)
+        .collect();
+    assert_eq!(gate_decisions.len(), 1, "Should have 1 GateDecision event");
+
+    // Verify event ordering (events should be in emission order)
+    let tool_call_event = &tool_calls[0];
+    assert_eq!(tool_call_event.spec_id, spec_id);
+    assert_eq!(tool_call_event.run_id, run_id);
+    assert!(tool_call_event.payload.get("call_id").is_some());
+
+    // Verify audit-critical classification
+    for event in &all_events {
+        if event.event_type == EventType::GateDecision
+            || event.event_type == EventType::ErrorEvent
+        {
+            assert!(
+                event.event_type.is_audit_critical(),
+                "{:?} should be audit-critical",
+                event.event_type
+            );
+        }
+    }
+
+    // Verify curated-eligible classification
+    for event in &all_events {
+        if event.event_type == EventType::ModelCallEnvelope {
+            // ModelCallEnvelope is NOT curated-eligible (may contain sensitive data)
+            assert!(
+                !event.event_type.is_curated_eligible(),
+                "ModelCallEnvelope should NOT be curated-eligible"
+            );
+        } else if event.event_type == EventType::ToolCall {
+            assert!(
+                event.event_type.is_curated_eligible(),
+                "ToolCall should be curated-eligible"
+            );
+        }
+    }
+}
+
+/// SPEC-KIT-975: Test LLM capture modes affect stored content.
+#[test]
+fn test_llm_capture_modes() {
+    use super::{LLMCaptureMode, ModelCallEnvelopePayload, RoutingMode};
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("llm_capture_modes.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path,
+        workspace_id: "test975modes".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("open capsule");
+    let spec_id = "SPEC-KIT-975";
+    let run_id = "capture-modes-test";
+
+    // Test Hash mode: only hashes, no content
+    let hash_mode_call = ModelCallEnvelopePayload {
+        call_id: "llm-hash".to_string(),
+        model: "test-model".to_string(),
+        routing_mode: RoutingMode::Cloud,
+        capture_mode: LLMCaptureMode::Hash,
+        stage: Some("Implement".to_string()),
+        role: None,
+        prompt_hash: Some("sha256:prompt_hash".to_string()),
+        response_hash: Some("sha256:response_hash".to_string()),
+        prompt_summary: None, // Not in hash mode
+        response_summary: None,
+        prompt_tokens: None,
+        response_tokens: None,
+        prompt_full: None,
+        response_full: None,
+        latency_ms: Some(100),
+        success: true,
+        error: None,
+    };
+    handle
+        .emit_model_call_envelope(spec_id, run_id, &hash_mode_call)
+        .expect("emit hash mode call");
+
+    // Test Full mode: includes full content (NOT export-safe)
+    let full_mode_call = ModelCallEnvelopePayload {
+        call_id: "llm-full".to_string(),
+        model: "test-model".to_string(),
+        routing_mode: RoutingMode::Reflex,
+        capture_mode: LLMCaptureMode::Full,
+        stage: Some("Implement".to_string()),
+        role: Some("Implementer".to_string()),
+        prompt_hash: Some("sha256:prompt_hash_full".to_string()),
+        response_hash: Some("sha256:response_hash_full".to_string()),
+        prompt_summary: Some("Summary of prompt...".to_string()),
+        response_summary: Some("Summary of response...".to_string()),
+        prompt_tokens: Some(200),
+        response_tokens: Some(400),
+        prompt_full: Some("Full prompt content here".to_string()),
+        response_full: Some("Full response content here".to_string()),
+        latency_ms: Some(1500),
+        success: true,
+        error: None,
+    };
+    handle
+        .emit_model_call_envelope(spec_id, run_id, &full_mode_call)
+        .expect("emit full mode call");
+
+    // Verify capture modes are stored correctly
+    let events = handle.list_events();
+    let model_calls: Vec<_> = events
+        .iter()
+        .filter(|e| e.event_type == EventType::ModelCallEnvelope)
+        .collect();
+
+    assert_eq!(model_calls.len(), 2);
+
+    // Check hash mode event
+    let hash_event = model_calls
+        .iter()
+        .find(|e| e.payload.get("call_id") == Some(&serde_json::json!("llm-hash")))
+        .expect("find hash mode event");
+    assert_eq!(
+        hash_event.payload.get("capture_mode"),
+        Some(&serde_json::json!("Hash"))
+    );
+    assert!(hash_event.payload.get("prompt_full").is_none());
+
+    // Check full mode event
+    let full_event = model_calls
+        .iter()
+        .find(|e| e.payload.get("call_id") == Some(&serde_json::json!("llm-full")))
+        .expect("find full mode event");
+    assert_eq!(
+        full_event.payload.get("capture_mode"),
+        Some(&serde_json::json!("Full"))
+    );
+    assert!(full_event.payload.get("prompt_full").is_some());
+
+    // Verify export safety
+    assert!(LLMCaptureMode::Hash.is_export_safe());
+    assert!(!LLMCaptureMode::Full.is_export_safe());
+}
+
+// =============================================================================
+// SPEC-KIT-975: Runtime emit wiring integration tests
+// =============================================================================
+
+#[test]
+fn test_runtime_emit_wiring_integration() {
+    // This test verifies that all SPEC-KIT-975 event types can be emitted
+    // and are correctly stored in the capsule for later replay.
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("emit_wiring.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "emit_wiring_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config.clone()).expect("should create capsule");
+
+    let spec_id = "SPEC-KIT-975";
+    let run_id = "test-run-emit-wiring";
+
+    // 1. Emit ToolCall and ToolResult
+    let tool_call = ToolCallPayload {
+        call_id: "tool-001".to_string(),
+        tool_name: "read_file".to_string(),
+        input: serde_json::json!({"path": "test.md"}),
+        stage: Some("Plan".to_string()),
+        role: Some("Architect".to_string()),
+    };
+    handle.emit_tool_call(spec_id, run_id, &tool_call).expect("emit tool call");
+
+    let tool_result = ToolResultPayload {
+        call_id: "tool-001".to_string(),
+        tool_name: "read_file".to_string(),
+        success: true,
+        output: Some(serde_json::json!({"content": "file contents"})),
+        error: None,
+        duration_ms: Some(50),
+    };
+    handle.emit_tool_result(spec_id, run_id, Some("Plan"), &tool_result).expect("emit tool result");
+
+    // 2. Emit RetrievalRequest and RetrievalResponse
+    let retrieval_req = RetrievalRequestPayload {
+        request_id: "req-001".to_string(),
+        query: "spec-kit architecture".to_string(),
+        config: serde_json::json!({"domains": ["spec-kit"], "max_results": 5}),
+        source: "capsule".to_string(),
+        stage: Some("Plan".to_string()),
+        role: None,
+    };
+    handle.emit_retrieval_request(spec_id, run_id, &retrieval_req).expect("emit retrieval request");
+
+    let retrieval_resp = RetrievalResponsePayload {
+        request_id: "req-001".to_string(),
+        hit_uris: vec!["mv2://emit_wiring_test/SPEC-KIT-975/test/artifact/decision.md".to_string()],
+        fused_scores: Some(vec![0.95]),
+        explainability: None,
+        latency_ms: Some(25),
+        error: None,
+    };
+    handle.emit_retrieval_response(spec_id, run_id, Some("Plan"), &retrieval_resp).expect("emit retrieval response");
+
+    // 3. Emit PatchApply
+    let patch_apply = PatchApplyPayload {
+        patch_id: "patch-001".to_string(),
+        file_path: "src/main.rs".to_string(),
+        patch_type: "modify".to_string(),
+        diff: Some("@@ -1,3 +1,4 @@\n+// New line".to_string()),
+        before_hash: Some("sha256:abc123".to_string()),
+        after_hash: Some("sha256:def456".to_string()),
+        stage: Some("Implement".to_string()),
+        success: true,
+        error: None,
+    };
+    handle.emit_patch_apply(spec_id, run_id, &patch_apply).expect("emit patch apply");
+
+    // 4. Emit ModelCallEnvelope (Summary mode)
+    let model_call = ModelCallEnvelopePayload {
+        call_id: "model-001".to_string(),
+        model: "claude-3-opus".to_string(),
+        routing_mode: RoutingMode::Cloud,
+        capture_mode: LLMCaptureMode::Summary,
+        stage: Some("Implement".to_string()),
+        role: Some("Implementer".to_string()),
+        prompt_hash: Some("sha256:prompt123".to_string()),
+        response_hash: Some("sha256:response456".to_string()),
+        prompt_summary: Some("Implement the feature...".to_string()),
+        response_summary: Some("Here is the implementation...".to_string()),
+        prompt_tokens: Some(100),
+        response_tokens: Some(200),
+        prompt_full: None,
+        response_full: None,
+        latency_ms: Some(1500),
+        success: true,
+        error: None,
+    };
+    handle.emit_model_call_envelope(spec_id, run_id, &model_call).expect("emit model call");
+
+    // 5. Emit GateDecision
+    let gate_decision = GateDecisionPayload {
+        gate_name: "JudgeApprove".to_string(),
+        outcome: GateOutcome::Pass,
+        stage: "Judge".to_string(),
+        confidence: Some(0.95),
+        reason: Some("Implementation meets acceptance criteria".to_string()),
+        details: None,
+        blocking: true,
+    };
+    handle.emit_gate_decision(spec_id, run_id, &gate_decision).expect("emit gate decision");
+
+    // Commit the stage to create a checkpoint
+    handle.commit_stage(spec_id, run_id, "Judge", None).expect("commit stage");
+
+    // Verify events are stored correctly
+    let events = handle.list_events();
+
+    // Check each event type is present
+    assert!(
+        events.iter().any(|e| e.event_type == EventType::ToolCall),
+        "Should have ToolCall event"
+    );
+    assert!(
+        events.iter().any(|e| e.event_type == EventType::ToolResult),
+        "Should have ToolResult event"
+    );
+    assert!(
+        events.iter().any(|e| e.event_type == EventType::RetrievalRequest),
+        "Should have RetrievalRequest event"
+    );
+    assert!(
+        events.iter().any(|e| e.event_type == EventType::RetrievalResponse),
+        "Should have RetrievalResponse event"
+    );
+    assert!(
+        events.iter().any(|e| e.event_type == EventType::PatchApply),
+        "Should have PatchApply event"
+    );
+    assert!(
+        events.iter().any(|e| e.event_type == EventType::ModelCallEnvelope),
+        "Should have ModelCallEnvelope event"
+    );
+    assert!(
+        events.iter().any(|e| e.event_type == EventType::GateDecision),
+        "Should have GateDecision event"
+    );
+
+    // Verify event order (sequence numbers should be monotonic)
+    let event_uris: Vec<_> = events.iter()
+        .filter(|e| e.run_id == run_id)
+        .map(|e| e.uri.as_str().to_string())
+        .collect();
+    assert!(event_uris.len() >= 7, "Should have at least 7 events for this run");
+
+    // Verify events are associated with the correct run_id
+    let run_events: Vec<_> = events.iter().filter(|e| e.run_id == run_id).collect();
+    assert!(run_events.len() >= 7, "All events should have correct run_id");
+
+    // Drop and reopen to verify persistence
+    drop(handle);
+    let handle2 = CapsuleHandle::open(config).expect("should reopen");
+
+    // Verify events are still present after reopen
+    let events_after_reopen = handle2.list_events();
+    assert!(
+        events_after_reopen.iter().any(|e| e.event_type == EventType::ToolCall),
+        "ToolCall event should persist after reopen"
+    );
+    assert!(
+        events_after_reopen.iter().any(|e| e.event_type == EventType::RetrievalResponse),
+        "RetrievalResponse event should persist after reopen"
+    );
+}
+
+#[test]
+fn test_emit_wiring_best_effort_never_fails() {
+    // This test verifies that event emission is best-effort:
+    // even if emission "fails", the run should not abort.
+    // Note: In practice, failures are logged but not propagated.
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("best_effort.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "best_effort_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("should create capsule");
+
+    // Emit multiple events in sequence - should all succeed
+    let spec_id = "SPEC-975";
+    let run_id = "best-effort-run";
+
+    // All these should succeed (best-effort)
+    let _ = handle.emit_tool_call(spec_id, run_id, &ToolCallPayload {
+        call_id: "t1".to_string(),
+        tool_name: "test".to_string(),
+        input: serde_json::json!({}),
+        stage: None,
+        role: None,
+    });
+
+    let _ = handle.emit_retrieval_request(spec_id, run_id, &RetrievalRequestPayload {
+        request_id: "r1".to_string(),
+        query: "test".to_string(),
+        config: serde_json::json!({}),
+        source: "test".to_string(),
+        stage: None,
+        role: None,
+    });
+
+    // The important thing is: we didn't panic or abort
+    // In a real integration, the run would continue regardless of emit errors
+    assert!(handle.is_open(), "Capsule should still be open after emit operations");
+}
+
+#[test]
+fn test_retrieval_events_capture_hit_uris() {
+    // This test verifies that RetrievalResponse events correctly capture hit URIs
+    // for later replay verification.
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("retrieval_uris.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "retrieval_uris_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("should create capsule");
+
+    let spec_id = "SPEC-975";
+    let run_id = "retrieval-uri-test";
+
+    // First, ingest some artifacts to get real URIs
+    let artifact1_uri = handle.put(
+        spec_id, run_id, ObjectType::Artifact,
+        "decision1.md", b"Decision 1 content".to_vec(),
+        serde_json::json!({"type": "decision"}),
+    ).expect("put artifact 1");
+
+    let artifact2_uri = handle.put(
+        spec_id, run_id, ObjectType::Artifact,
+        "decision2.md", b"Decision 2 content".to_vec(),
+        serde_json::json!({"type": "decision"}),
+    ).expect("put artifact 2");
+
+    // Emit retrieval response referencing those URIs
+    let retrieval_resp = RetrievalResponsePayload {
+        request_id: "req-uris".to_string(),
+        hit_uris: vec![artifact1_uri.as_str().to_string(), artifact2_uri.as_str().to_string()],
+        fused_scores: Some(vec![0.95, 0.87]),
+        explainability: None,
+        latency_ms: Some(30),
+        error: None,
+    };
+    handle.emit_retrieval_response(spec_id, run_id, None, &retrieval_resp).expect("emit response");
+
+    // Verify the event contains the URIs
+    let events = handle.list_events();
+    let resp_event = events.iter()
+        .find(|e| e.event_type == EventType::RetrievalResponse && e.run_id == run_id)
+        .expect("find retrieval response event");
+
+    let hit_uris = resp_event.payload.get("hit_uris")
+        .and_then(|v| v.as_array())
+        .expect("hit_uris should be array");
+
+    assert_eq!(hit_uris.len(), 2, "Should have 2 hit URIs");
+    assert!(hit_uris.iter().any(|u| u.as_str() == Some(artifact1_uri.as_str())));
+    assert!(hit_uris.iter().any(|u| u.as_str() == Some(artifact2_uri.as_str())));
+
+    // Verify the URIs are valid mv2:// URIs
+    assert!(artifact1_uri.as_str().starts_with("mv2://"), "artifact1 should have mv2:// scheme");
+    assert!(artifact2_uri.as_str().starts_with("mv2://"), "artifact2 should have mv2:// scheme");
+}
+
+#[test]
+fn test_replay_timeline_deterministic() {
+    // This test verifies that event emission order is deterministic and preserved
+    // across capsule reopen - essential for replay reliability.
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("replay_timeline.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "replay_timeline_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config.clone()).expect("should create capsule");
+
+    let spec_id = "SPEC-REPLAY-TIMELINE";
+    let run_id = "timeline-determinism-001";
+
+    // Phase 1: Emit a sequence of events in specific order
+    // Order: RetrievalRequest → RetrievalResponse → ToolCall → ToolResult → PatchApply
+
+    // Event 1: RetrievalRequest
+    let req_payload = RetrievalRequestPayload {
+        request_id: "req-timeline-001".to_string(),
+        query: "architecture decisions".to_string(),
+        config: serde_json::json!({"top_k": 5, "domains": ["spec-kit"]}),
+        source: "capsule".to_string(),
+        stage: Some("Plan".to_string()),
+        role: Some("Architect".to_string()),
+    };
+    handle.emit_retrieval_request(spec_id, run_id, &req_payload).expect("emit retrieval request");
+
+    // Event 2: RetrievalResponse
+    let resp_payload = RetrievalResponsePayload {
+        request_id: "req-timeline-001".to_string(),
+        hit_uris: vec!["mv2://replay_timeline_test/SPEC-REPLAY-TIMELINE/spec/artifact/decision.md".to_string()],
+        fused_scores: Some(vec![0.92]),
+        explainability: None,
+        latency_ms: Some(45),
+        error: None,
+    };
+    handle.emit_retrieval_response(spec_id, run_id, Some("Plan"), &resp_payload).expect("emit retrieval response");
+
+    // Event 3: ToolCall
+    let tool_call = ToolCallPayload {
+        call_id: "tool-timeline-001".to_string(),
+        tool_name: "read_file".to_string(),
+        input: serde_json::json!({"path": "src/lib.rs"}),
+        stage: Some("Implement".to_string()),
+        role: Some("Implementer".to_string()),
+    };
+    handle.emit_tool_call(spec_id, run_id, &tool_call).expect("emit tool call");
+
+    // Event 4: ToolResult
+    let tool_result = ToolResultPayload {
+        call_id: "tool-timeline-001".to_string(),
+        tool_name: "read_file".to_string(),
+        success: true,
+        output: Some(serde_json::json!({"content": "pub mod adapter;"})),
+        error: None,
+        duration_ms: Some(12),
+    };
+    handle.emit_tool_result(spec_id, run_id, Some("Implement"), &tool_result).expect("emit tool result");
+
+    // Event 5: PatchApply
+    let patch_apply = PatchApplyPayload {
+        patch_id: "patch-timeline-001".to_string(),
+        file_path: "src/lib.rs".to_string(),
+        patch_type: "modify".to_string(),
+        diff: Some("@@ -1,1 +1,2 @@\n pub mod adapter;\n+pub mod events;".to_string()),
+        before_hash: Some("sha256:before123".to_string()),
+        after_hash: Some("sha256:after456".to_string()),
+        stage: Some("Implement".to_string()),
+        success: true,
+        error: None,
+    };
+    handle.emit_patch_apply(spec_id, run_id, &patch_apply).expect("emit patch apply");
+
+    // Phase 2: Capture events and verify order
+    let events: Vec<_> = handle.list_events()
+        .into_iter()
+        .filter(|e| e.run_id == run_id && e.spec_id == spec_id)
+        .collect();
+
+    assert!(events.len() >= 5, "Should have at least 5 events, got {}", events.len());
+
+    // Verify timestamps are monotonic (non-decreasing)
+    for i in 0..events.len() - 1 {
+        assert!(
+            events[i].timestamp <= events[i + 1].timestamp,
+            "Event {} timestamp ({}) should be <= event {} timestamp ({})",
+            i, events[i].timestamp, i + 1, events[i + 1].timestamp
+        );
+    }
+
+    // Verify event type sequence matches insertion order
+    let event_types: Vec<_> = events.iter().map(|e| e.event_type).collect();
+    assert_eq!(event_types[0], EventType::RetrievalRequest, "Event 0 should be RetrievalRequest");
+    assert_eq!(event_types[1], EventType::RetrievalResponse, "Event 1 should be RetrievalResponse");
+    assert_eq!(event_types[2], EventType::ToolCall, "Event 2 should be ToolCall");
+    assert_eq!(event_types[3], EventType::ToolResult, "Event 3 should be ToolResult");
+    assert_eq!(event_types[4], EventType::PatchApply, "Event 4 should be PatchApply");
+
+    // Capture URIs for determinism check
+    let original_uris: Vec<_> = events.iter().map(|e| e.uri.as_str().to_string()).collect();
+
+    // Phase 3: Drop handle and reopen to verify persistence
+    drop(handle);
+    let handle2 = CapsuleHandle::open(config).expect("should reopen capsule");
+
+    let events_after_reopen: Vec<_> = handle2.list_events()
+        .into_iter()
+        .filter(|e| e.run_id == run_id && e.spec_id == spec_id)
+        .collect();
+
+    // Verify event count matches
+    assert_eq!(
+        events_after_reopen.len(), events.len(),
+        "Event count should match after reopen: {} vs {}",
+        events_after_reopen.len(), events.len()
+    );
+
+    // Verify determinism: URIs and types should match exactly after reopen
+    for (i, (original, reopened)) in events.iter().zip(events_after_reopen.iter()).enumerate() {
+        assert_eq!(
+            original.uri.as_str(), reopened.uri.as_str(),
+            "Event {} URI should match after reopen: {} vs {}",
+            i, original.uri.as_str(), reopened.uri.as_str()
+        );
+        assert_eq!(
+            original.event_type, reopened.event_type,
+            "Event {} type should match after reopen",
+            i
+        );
+        assert_eq!(
+            original.timestamp, reopened.timestamp,
+            "Event {} timestamp should match after reopen",
+            i
+        );
+    }
+
+    // Verify URIs are immutable (original URIs still valid)
+    for (i, uri) in original_uris.iter().enumerate() {
+        assert!(
+            events_after_reopen.iter().any(|e| e.uri.as_str() == uri),
+            "Original URI {} should be present after reopen: {}",
+            i, uri
+        );
+    }
+}
+
+#[test]
+fn test_replay_offline_retrieval_exact() {
+    // This test verifies that retrieval results are captured with exact precision
+    // for offline replay - hit_uris and fused_scores must match exactly.
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("replay_offline_retrieval.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "replay_offline_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config.clone()).expect("should create capsule");
+
+    let spec_id = "SPEC-REPLAY-OFFLINE";
+    let run_id = "offline-exact-001";
+
+    // Phase 1: Ingest reference artifacts to get real URIs
+    let artifact_uris = vec![
+        handle.put(
+            spec_id, run_id, ObjectType::Artifact,
+            "decision_alpha.md", b"Decision Alpha: Use event sourcing pattern".to_vec(),
+            serde_json::json!({"type": "decision", "priority": "high"}),
+        ).expect("put artifact alpha"),
+        handle.put(
+            spec_id, run_id, ObjectType::Artifact,
+            "decision_beta.md", b"Decision Beta: Capsule-first architecture".to_vec(),
+            serde_json::json!({"type": "decision", "priority": "medium"}),
+        ).expect("put artifact beta"),
+        handle.put(
+            spec_id, run_id, ObjectType::Artifact,
+            "decision_gamma.md", b"Decision Gamma: Best-effort event emission".to_vec(),
+            serde_json::json!({"type": "decision", "priority": "low"}),
+        ).expect("put artifact gamma"),
+    ];
+
+    // Phase 2: Emit retrieval request
+    let req_id = "offline-req-exact-001";
+    let request_payload = RetrievalRequestPayload {
+        request_id: req_id.to_string(),
+        query: "what architectural decisions were made?".to_string(),
+        config: serde_json::json!({
+            "top_k": 3,
+            "filters": {"type": "decision"},
+            "sort_by": "relevance"
+        }),
+        source: "capsule".to_string(),
+        stage: Some("Plan".to_string()),
+        role: None,
+    };
+    handle.emit_retrieval_request(spec_id, run_id, &request_payload).expect("emit retrieval request");
+
+    // Phase 3: Emit retrieval response with exact hit set and scores
+    // These exact values must be preserved for offline replay
+    let exact_scores = vec![0.98, 0.95, 0.87];
+    let response_payload = RetrievalResponsePayload {
+        request_id: req_id.to_string(),
+        hit_uris: artifact_uris.iter().map(|uri| uri.as_str().to_string()).collect(),
+        fused_scores: Some(exact_scores.clone()),
+        explainability: Some(serde_json::json!({
+            "method": "hybrid_fusion",
+            "weights": {"semantic": 0.7, "keyword": 0.3}
+        })),
+        latency_ms: Some(67),
+        error: None,
+    };
+    handle.emit_retrieval_response(spec_id, run_id, Some("Plan"), &response_payload).expect("emit retrieval response");
+
+    // Phase 4: Verify exact match in event payload
+    let events = handle.list_events();
+
+    // Find retrieval response event
+    let resp_event = events.iter()
+        .find(|e| e.event_type == EventType::RetrievalResponse && e.run_id == run_id)
+        .expect("should find retrieval response event");
+
+    // Assertion 1: Response has correct request_id
+    let payload_request_id = resp_event.payload.get("request_id")
+        .and_then(|v| v.as_str())
+        .expect("response should have request_id");
+    assert_eq!(payload_request_id, req_id, "Response should reference correct request");
+
+    // Assertion 2: Hit URIs are exact match in order
+    let hit_uris = resp_event.payload.get("hit_uris")
+        .and_then(|v| v.as_array())
+        .expect("hit_uris should be array");
+
+    assert_eq!(hit_uris.len(), artifact_uris.len(), "Should have exact hit count");
+
+    for (i, artifact_uri) in artifact_uris.iter().enumerate() {
+        let stored_uri = hit_uris[i].as_str().expect("uri should be string");
+        assert_eq!(
+            stored_uri, artifact_uri.as_str(),
+            "Hit {} should match artifact URI exactly: {} vs {}",
+            i, stored_uri, artifact_uri.as_str()
+        );
+    }
+
+    // Assertion 3: Fused scores are exact (no epsilon tolerance for replay)
+    let fused_scores = resp_event.payload.get("fused_scores")
+        .and_then(|v| v.as_array())
+        .expect("fused_scores should be array");
+
+    assert_eq!(fused_scores.len(), exact_scores.len(), "Should have exact score count");
+
+    for (i, expected_score) in exact_scores.iter().enumerate() {
+        let actual_score = fused_scores[i].as_f64().expect("score should be number");
+        assert_eq!(
+            actual_score, *expected_score,
+            "Score {} should match exactly for offline replay: {} vs {}",
+            i, actual_score, expected_score
+        );
+    }
+
+    // Assertion 4: Artifact URIs are valid mv2:// URIs
+    for (i, uri) in artifact_uris.iter().enumerate() {
+        assert!(
+            uri.as_str().starts_with("mv2://"),
+            "Artifact {} should have mv2:// scheme: {}",
+            i, uri.as_str()
+        );
+    }
+
+    // Assertion 5: Verify artifact URIs are valid mv2:// URIs
+    // Note: Full resolve_uri requires commit_stage; here we just verify URI format.
+    // The key offline replay property is that hit_uris in the event payload are
+    // preserved exactly, which is verified in Assertions 2 and 3.
+
+    // Assertion 6: Explainability metadata preserved
+    let explainability = resp_event.payload.get("explainability")
+        .expect("explainability should be present");
+    assert_eq!(
+        explainability.get("method").and_then(|v| v.as_str()),
+        Some("hybrid_fusion"),
+        "Explainability method should be preserved"
+    );
+}
+
+// =============================================================================
+// SPEC-KIT-978: Circuit Breaker Type Tests
+// =============================================================================
+
+#[test]
+fn test_breaker_state_variants() {
+    // Test all BreakerState variants and their string representations.
+    use super::BreakerState;
+
+    assert_eq!(BreakerState::Closed.as_str(), "closed");
+    assert_eq!(BreakerState::Open.as_str(), "open");
+    assert_eq!(BreakerState::HalfOpen.as_str(), "half_open");
+
+    // Test from_str round-trip
+    assert_eq!(BreakerState::from_str("closed"), Some(BreakerState::Closed));
+    assert_eq!(BreakerState::from_str("open"), Some(BreakerState::Open));
+    assert_eq!(BreakerState::from_str("half_open"), Some(BreakerState::HalfOpen));
+    assert_eq!(BreakerState::from_str("invalid"), None);
+}
+
+#[test]
+fn test_breaker_state_changed_payload_serialization() {
+    // Test serialization round-trip for BreakerStateChangedPayload.
+    use super::{BreakerState, BreakerStateChangedPayload};
+
+    let payload = BreakerStateChangedPayload {
+        breaker_id: "reflex_server".to_string(),
+        current_state: BreakerState::Open,
+        previous_state: BreakerState::Closed,
+        reason: "Failure rate exceeded threshold (35% > 30%)".to_string(),
+        stage: Some("Implement".to_string()),
+        component: Some("reflex_router".to_string()),
+        failure_count: Some(7),
+        failure_rate: Some(35.0),
+        retry_after_seconds: Some(30),
+        successful_probes: None,
+        probes_required: None,
+    };
+
+    // Serialize
+    let json = serde_json::to_string(&payload).expect("serialize");
+    assert!(json.contains("reflex_server"));
+    // BreakerState serializes as variant name (e.g., "Open" not "open")
+    assert!(json.contains("Open"), "Should contain Open: {}", json);
+    assert!(json.contains("Closed"), "Should contain Closed: {}", json);
+
+    // Deserialize
+    let parsed: BreakerStateChangedPayload = serde_json::from_str(&json).expect("deserialize");
+    assert_eq!(parsed.breaker_id, "reflex_server");
+    assert_eq!(parsed.current_state, BreakerState::Open);
+    assert_eq!(parsed.previous_state, BreakerState::Closed);
+    assert_eq!(parsed.reason, "Failure rate exceeded threshold (35% > 30%)");
+    assert_eq!(parsed.stage, Some("Implement".to_string()));
+    assert_eq!(parsed.component, Some("reflex_router".to_string()));
+    assert_eq!(parsed.failure_count, Some(7));
+    assert_eq!(parsed.failure_rate, Some(35.0));
+    assert_eq!(parsed.retry_after_seconds, Some(30));
+    assert!(parsed.successful_probes.is_none());
+    assert!(parsed.probes_required.is_none());
+}
+
+#[test]
+fn test_breaker_state_changed_payload_skip_none_fields() {
+    // Test that None fields are skipped in serialization (skip_serializing_if).
+    use super::{BreakerState, BreakerStateChangedPayload};
+
+    let payload = BreakerStateChangedPayload {
+        breaker_id: "minimal_breaker".to_string(),
+        current_state: BreakerState::Closed,
+        previous_state: BreakerState::HalfOpen,
+        reason: "Probes succeeded".to_string(),
+        stage: None,
+        component: None,
+        failure_count: None,
+        failure_rate: None,
+        retry_after_seconds: None,
+        successful_probes: Some(3),
+        probes_required: Some(3),
+    };
+
+    let json = serde_json::to_string(&payload).expect("serialize");
+
+    // These required fields should be present
+    assert!(json.contains("breaker_id"));
+    assert!(json.contains("current_state"));
+    assert!(json.contains("previous_state"));
+    assert!(json.contains("reason"));
+
+    // These None fields should NOT be present (skip_serializing_if)
+    assert!(!json.contains("stage"));
+    assert!(!json.contains("component"));
+    assert!(!json.contains("failure_count"));
+    assert!(!json.contains("failure_rate"));
+    assert!(!json.contains("retry_after_seconds"));
+
+    // These Some fields should be present
+    assert!(json.contains("successful_probes"));
+    assert!(json.contains("probes_required"));
+}
+
+#[test]
+fn test_event_type_breaker_state_changed() {
+    // Test EventType::BreakerStateChanged integration.
+    use super::EventType;
+
+    // Test as_str
+    assert_eq!(EventType::BreakerStateChanged.as_str(), "BreakerStateChanged");
+
+    // Test from_str
+    assert_eq!(EventType::from_str("BreakerStateChanged"), Some(EventType::BreakerStateChanged));
+
+    // Test curated eligibility (circuit breaker events should be curated)
+    assert!(EventType::BreakerStateChanged.is_curated_eligible());
+
+    // Test audit criticality (circuit breaker events are audit-critical)
+    assert!(EventType::BreakerStateChanged.is_audit_critical());
+
+    // Verify in all_variants
+    assert!(EventType::all_variants().contains(&"BreakerStateChanged"));
 }

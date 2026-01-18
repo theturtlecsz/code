@@ -17,7 +17,10 @@
 //! - Explainable scoring
 
 use crate::memvid_adapter::capsule::{CapsuleConfig, CapsuleError, CapsuleHandle};
-use crate::memvid_adapter::types::{BranchId, CheckpointId, LogicalUri, ObjectType};
+use crate::memvid_adapter::types::{
+    BranchId, CheckpointId, LogicalUri, ObjectType,
+    RetrievalRequestPayload, RetrievalResponsePayload,
+};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use codex_stage0::dcc::{LocalMemoryClient, LocalMemorySearchParams, LocalMemorySummary};
@@ -26,7 +29,9 @@ use codex_stage0::vector::{DocumentKind, DocumentMetadata, VectorDocument, Vecto
 use codex_stage0::{TfIdfBackend, VectorBackend};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::RwLock;
+use uuid::Uuid;
 
 // =============================================================================
 // MemvidMemoryAdapter
@@ -46,6 +51,9 @@ use tokio::sync::RwLock;
 /// ## Search (SPEC-KIT-972)
 /// Maintains a TF-IDF search index for lexical retrieval.
 /// Indexed documents are filtered by IQO parameters.
+///
+/// ## Event Emission (SPEC-KIT-975)
+/// When emit context is set, emits RetrievalRequest/Response events.
 pub struct MemvidMemoryAdapter {
     /// The capsule handle (if open)
     capsule: Arc<RwLock<Option<CapsuleHandle>>>,
@@ -68,6 +76,23 @@ pub struct MemvidMemoryAdapter {
     /// Metadata for indexed memories (id -> MemoryMeta)
     /// Tracks domain, tags, importance, timestamps for filtering
     memory_meta: Arc<RwLock<HashMap<String, MemoryMeta>>>,
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // SPEC-KIT-975: Event emission context
+    // ─────────────────────────────────────────────────────────────────────────────
+    /// Emit context for SPEC-KIT-975 event emission (spec_id, run_id, stage)
+    emit_context: Arc<RwLock<Option<EmitContext>>>,
+}
+
+/// Emit context for retrieval event emission (SPEC-KIT-975).
+#[derive(Debug, Clone)]
+pub struct EmitContext {
+    /// SPEC ID
+    pub spec_id: String,
+    /// Run ID
+    pub run_id: String,
+    /// Current stage (optional)
+    pub stage: Option<String>,
 }
 
 /// Metadata for an indexed memory (SPEC-KIT-972)
@@ -102,6 +127,7 @@ impl MemvidMemoryAdapter {
             use_fallback: Arc::new(RwLock::new(false)),
             search_index: Arc::new(TfIdfBackend::new()),
             memory_meta: Arc::new(RwLock::new(HashMap::new())),
+            emit_context: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -109,6 +135,33 @@ impl MemvidMemoryAdapter {
     pub fn with_fallback(mut self, fallback: Arc<dyn LocalMemoryClient>) -> Self {
         self.fallback = Some(fallback);
         self
+    }
+
+    // =========================================================================
+    // SPEC-KIT-975: Emit context management
+    // =========================================================================
+
+    /// Set the emit context for event emission.
+    ///
+    /// When set, search_memories will emit RetrievalRequest/Response events.
+    pub async fn set_emit_context(&self, spec_id: impl Into<String>, run_id: impl Into<String>, stage: Option<String>) {
+        *self.emit_context.write().await = Some(EmitContext {
+            spec_id: spec_id.into(),
+            run_id: run_id.into(),
+            stage,
+        });
+    }
+
+    /// Clear the emit context.
+    pub async fn clear_emit_context(&self) {
+        *self.emit_context.write().await = None;
+    }
+
+    /// Update the stage in the emit context.
+    pub async fn set_emit_stage(&self, stage: impl Into<String>) {
+        if let Some(ref mut ctx) = *self.emit_context.write().await {
+            ctx.stage = Some(stage.into());
+        }
     }
 
     /// Open or create the capsule.
@@ -377,6 +430,9 @@ impl LocalMemoryClient for MemvidMemoryAdapter {
     /// 4. Applies recency bias (optional)
     /// 5. Returns results with explainable scoring
     ///
+    /// ## SPEC-KIT-975: Event Emission
+    /// When emit_context is set, emits RetrievalRequest/Response events.
+    ///
     /// ## Fallback Behavior
     /// - If in fallback mode, delegates to fallback client
     /// - If no search results, tries fallback if available
@@ -384,6 +440,8 @@ impl LocalMemoryClient for MemvidMemoryAdapter {
         &self,
         params: LocalMemorySearchParams,
     ) -> Stage0Result<Vec<LocalMemorySummary>> {
+        let start_time = Instant::now();
+
         // Check fallback mode
         if *self.use_fallback.read().await {
             if let Some(fallback) = &self.fallback {
@@ -404,6 +462,31 @@ impl LocalMemoryClient for MemvidMemoryAdapter {
         if query_text.is_empty() && params.iqo.required_tags.is_empty() {
             // No keywords or required tags - return empty to avoid full scan
             return Ok(Vec::new());
+        }
+
+        // =========================================================================
+        // SPEC-KIT-975: Emit RetrievalRequest (best-effort)
+        // =========================================================================
+        let request_id = Uuid::new_v4().to_string();
+        let emit_ctx = self.emit_context.read().await.clone();
+        if let (Some(ctx), Some(capsule_guard)) = (&emit_ctx, self.capsule.read().await.as_ref()) {
+            let req_payload = RetrievalRequestPayload {
+                request_id: request_id.clone(),
+                query: query_text.clone(),
+                config: serde_json::json!({
+                    "domains": params.iqo.domains,
+                    "max_results": params.max_results,
+                    "required_tags": params.iqo.required_tags,
+                    "max_candidates": params.iqo.max_candidates,
+                }),
+                source: "capsule".to_string(),
+                stage: ctx.stage.clone(),
+                role: None,
+            };
+            // Best-effort: ignore errors
+            if let Err(e) = capsule_guard.emit_retrieval_request(&ctx.spec_id, &ctx.run_id, &req_payload) {
+                tracing::warn!(error = %e, "Failed to emit RetrievalRequest (best-effort)");
+            }
         }
 
         // Build filters for TF-IDF search
@@ -482,6 +565,28 @@ impl LocalMemoryClient for MemvidMemoryAdapter {
             if let Some(fallback) = &self.fallback {
                 tracing::debug!("No memvid results, trying fallback");
                 return fallback.search_memories(params).await;
+            }
+        }
+
+        // =========================================================================
+        // SPEC-KIT-975: Emit RetrievalResponse (best-effort)
+        // =========================================================================
+        let latency_ms = start_time.elapsed().as_millis() as u64;
+        if let (Some(ctx), Some(capsule_guard)) = (&emit_ctx, self.capsule.read().await.as_ref()) {
+            let hit_uris: Vec<String> = results.iter().map(|r| r.id.clone()).collect();
+            let fused_scores: Vec<f64> = results.iter().map(|r| r.similarity_score).collect();
+
+            let resp_payload = RetrievalResponsePayload {
+                request_id: request_id.clone(),
+                hit_uris,
+                fused_scores: Some(fused_scores),
+                explainability: None,
+                latency_ms: Some(latency_ms),
+                error: None,
+            };
+            // Best-effort: ignore errors
+            if let Err(e) = capsule_guard.emit_retrieval_response(&ctx.spec_id, &ctx.run_id, ctx.stage.as_deref(), &resp_payload) {
+                tracing::warn!(error = %e, "Failed to emit RetrievalResponse (best-effort)");
             }
         }
 

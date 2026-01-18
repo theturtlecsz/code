@@ -44,7 +44,7 @@ pub mod policy_capture;
 mod types;
 
 pub use adapter::{
-    MemvidMemoryAdapter, MemoryMeta, UnifiedMemoryClient,
+    MemvidMemoryAdapter, MemoryMeta, UnifiedMemoryClient, EmitContext,
     create_memory_client, create_unified_memory_client,
 };
 pub use eval::{
@@ -64,6 +64,14 @@ pub use types::{
     RoutingMode, RoutingFallbackReason, RoutingDecisionPayload,
     // SPEC-KIT-971: Branch merge types
     MergeMode, BranchMergedPayload,
+    // SPEC-KIT-975: Replayable audit event types
+    LLMCaptureMode, GateOutcome, ErrorSeverity,
+    RetrievalRequestPayload, RetrievalResponsePayload,
+    ToolCallPayload, ToolResultPayload,
+    PatchApplyPayload, GateDecisionPayload, ErrorEventPayload,
+    ModelCallEnvelopePayload, CapsuleExportedPayload, CapsuleImportedPayload,
+    // SPEC-KIT-978: Circuit breaker types
+    BreakerState, BreakerStateChangedPayload,
 };
 pub use policy_capture::{
     capture_and_store_policy, load_policy, list_policies, latest_policy,

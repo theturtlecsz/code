@@ -30,6 +30,7 @@ pub mod consensus_db; // SPEC-KIT-072: SQLite storage for consensus artifacts (r
 pub mod context;
 pub mod cost_tracker; // SPEC-KIT-070: Cost tracking and budget management
 pub mod error;
+pub mod event_emitter; // SPEC-KIT-975: Audit event emitter for runtime wiring
 pub mod evidence;
 pub mod execution_logger; // SPEC-KIT-070: End-to-end execution visibility
 pub mod file_modifier;
@@ -137,6 +138,9 @@ pub use quality_gate_handler::set_native_agent_ids;
 
 // Re-export validation lifecycle functions
 pub use validation_lifecycle::{compute_validate_payload_hash, record_validate_lifecycle_event};
+
+// Re-export event emitter types (SPEC-KIT-975)
+pub use event_emitter::{AuditEventEmitter, RunContext};
 
 // Re-export quality gate functions
 pub use quality::{

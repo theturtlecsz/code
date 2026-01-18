@@ -23,8 +23,11 @@
 
 use crate::memvid_adapter::lock::{CapsuleLock, LockError, LockMetadata, is_locked, lock_path_for};
 use crate::memvid_adapter::types::{
-    BranchId, CheckpointId, CheckpointMetadata, EventType, LogicalUri, MergeMode, ObjectType,
-    PhysicalPointer, RoutingDecisionPayload, RunEventEnvelope, UriIndex, UriIndexSnapshot,
+    BranchId, CapsuleExportedPayload, CapsuleImportedPayload, CheckpointId, CheckpointMetadata,
+    ErrorEventPayload, EventType, GateDecisionPayload, LogicalUri, MergeMode,
+    ModelCallEnvelopePayload, ObjectType, PatchApplyPayload, PhysicalPointer,
+    RetrievalRequestPayload, RetrievalResponsePayload, RoutingDecisionPayload, RunEventEnvelope,
+    ToolCallPayload, ToolResultPayload, UriIndex, UriIndexSnapshot,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -1560,6 +1563,253 @@ impl CapsuleHandle {
                 "message": message,
                 "context": context,
             }),
+        )
+    }
+
+    // =========================================================================
+    // SPEC-KIT-975: Replayable Audit Event Helpers
+    // =========================================================================
+
+    /// Emit a ToolCall event (SPEC-KIT-975).
+    ///
+    /// Records tool invocations for audit trail and replay.
+    pub fn emit_tool_call(
+        &self,
+        spec_id: &str,
+        run_id: &str,
+        payload: &ToolCallPayload,
+    ) -> Result<LogicalUri> {
+        let payload_json = serde_json::to_value(payload).map_err(|e| {
+            CapsuleError::InvalidOperation {
+                reason: format!("Failed to serialize tool call: {}", e),
+            }
+        })?;
+
+        self.emit_event(
+            spec_id,
+            run_id,
+            payload.stage.as_deref(),
+            EventType::ToolCall,
+            payload_json,
+        )
+    }
+
+    /// Emit a ToolResult event (SPEC-KIT-975).
+    ///
+    /// Records tool outputs for audit trail and replay.
+    pub fn emit_tool_result(
+        &self,
+        spec_id: &str,
+        run_id: &str,
+        stage: Option<&str>,
+        payload: &ToolResultPayload,
+    ) -> Result<LogicalUri> {
+        let payload_json = serde_json::to_value(payload).map_err(|e| {
+            CapsuleError::InvalidOperation {
+                reason: format!("Failed to serialize tool result: {}", e),
+            }
+        })?;
+
+        self.emit_event(
+            spec_id,
+            run_id,
+            stage,
+            EventType::ToolResult,
+            payload_json,
+        )
+    }
+
+    /// Emit a RetrievalRequest event (SPEC-KIT-975).
+    ///
+    /// Records retrieval queries for replay verification.
+    pub fn emit_retrieval_request(
+        &self,
+        spec_id: &str,
+        run_id: &str,
+        payload: &RetrievalRequestPayload,
+    ) -> Result<LogicalUri> {
+        let payload_json = serde_json::to_value(payload).map_err(|e| {
+            CapsuleError::InvalidOperation {
+                reason: format!("Failed to serialize retrieval request: {}", e),
+            }
+        })?;
+
+        self.emit_event(
+            spec_id,
+            run_id,
+            payload.stage.as_deref(),
+            EventType::RetrievalRequest,
+            payload_json,
+        )
+    }
+
+    /// Emit a RetrievalResponse event (SPEC-KIT-975).
+    ///
+    /// Records retrieval results for replay verification.
+    pub fn emit_retrieval_response(
+        &self,
+        spec_id: &str,
+        run_id: &str,
+        stage: Option<&str>,
+        payload: &RetrievalResponsePayload,
+    ) -> Result<LogicalUri> {
+        let payload_json = serde_json::to_value(payload).map_err(|e| {
+            CapsuleError::InvalidOperation {
+                reason: format!("Failed to serialize retrieval response: {}", e),
+            }
+        })?;
+
+        self.emit_event(
+            spec_id,
+            run_id,
+            stage,
+            EventType::RetrievalResponse,
+            payload_json,
+        )
+    }
+
+    /// Emit a PatchApply event (SPEC-KIT-975).
+    ///
+    /// Records file modifications for audit trail.
+    pub fn emit_patch_apply(
+        &self,
+        spec_id: &str,
+        run_id: &str,
+        payload: &PatchApplyPayload,
+    ) -> Result<LogicalUri> {
+        let payload_json = serde_json::to_value(payload).map_err(|e| {
+            CapsuleError::InvalidOperation {
+                reason: format!("Failed to serialize patch apply: {}", e),
+            }
+        })?;
+
+        self.emit_event(
+            spec_id,
+            run_id,
+            payload.stage.as_deref(),
+            EventType::PatchApply,
+            payload_json,
+        )
+    }
+
+    /// Emit a GateDecision event (SPEC-KIT-975).
+    ///
+    /// Records governance gate outcomes for compliance audit.
+    pub fn emit_gate_decision(
+        &self,
+        spec_id: &str,
+        run_id: &str,
+        payload: &GateDecisionPayload,
+    ) -> Result<LogicalUri> {
+        let payload_json = serde_json::to_value(payload).map_err(|e| {
+            CapsuleError::InvalidOperation {
+                reason: format!("Failed to serialize gate decision: {}", e),
+            }
+        })?;
+
+        self.emit_event(
+            spec_id,
+            run_id,
+            Some(&payload.stage),
+            EventType::GateDecision,
+            payload_json,
+        )
+    }
+
+    /// Emit an ErrorEvent (SPEC-KIT-975).
+    ///
+    /// Records errors during run execution.
+    pub fn emit_error_event(
+        &self,
+        spec_id: &str,
+        run_id: &str,
+        payload: &ErrorEventPayload,
+    ) -> Result<LogicalUri> {
+        let payload_json = serde_json::to_value(payload).map_err(|e| {
+            CapsuleError::InvalidOperation {
+                reason: format!("Failed to serialize error event: {}", e),
+            }
+        })?;
+
+        self.emit_event(
+            spec_id,
+            run_id,
+            payload.stage.as_deref(),
+            EventType::ErrorEvent,
+            payload_json,
+        )
+    }
+
+    /// Emit a ModelCallEnvelope event (SPEC-KIT-975).
+    ///
+    /// Records LLM request/response based on capture mode.
+    /// Content fields are populated according to LLMCaptureMode.
+    pub fn emit_model_call_envelope(
+        &self,
+        spec_id: &str,
+        run_id: &str,
+        payload: &ModelCallEnvelopePayload,
+    ) -> Result<LogicalUri> {
+        let payload_json = serde_json::to_value(payload).map_err(|e| {
+            CapsuleError::InvalidOperation {
+                reason: format!("Failed to serialize model call envelope: {}", e),
+            }
+        })?;
+
+        self.emit_event(
+            spec_id,
+            run_id,
+            payload.stage.as_deref(),
+            EventType::ModelCallEnvelope,
+            payload_json,
+        )
+    }
+
+    /// Emit a CapsuleExported event (SPEC-KIT-975).
+    ///
+    /// Tracks when a capsule is exported for provenance.
+    pub fn emit_capsule_exported(
+        &self,
+        spec_id: &str,
+        run_id: &str,
+        payload: &CapsuleExportedPayload,
+    ) -> Result<LogicalUri> {
+        let payload_json = serde_json::to_value(payload).map_err(|e| {
+            CapsuleError::InvalidOperation {
+                reason: format!("Failed to serialize capsule exported: {}", e),
+            }
+        })?;
+
+        self.emit_event(
+            spec_id,
+            run_id,
+            None,
+            EventType::CapsuleExported,
+            payload_json,
+        )
+    }
+
+    /// Emit a CapsuleImported event (SPEC-KIT-975).
+    ///
+    /// Tracks when a capsule is imported for provenance.
+    pub fn emit_capsule_imported(
+        &self,
+        spec_id: &str,
+        run_id: &str,
+        payload: &CapsuleImportedPayload,
+    ) -> Result<LogicalUri> {
+        let payload_json = serde_json::to_value(payload).map_err(|e| {
+            CapsuleError::InvalidOperation {
+                reason: format!("Failed to serialize capsule imported: {}", e),
+            }
+        })?;
+
+        self.emit_event(
+            spec_id,
+            run_id,
+            None,
+            EventType::CapsuleImported,
+            payload_json,
         )
     }
 

@@ -298,6 +298,8 @@ pub fn handle_guardrail(
 /// - status: Show reflex configuration
 /// - models: List available models
 /// - bakeoff: Show reflex vs cloud comparison metrics
+/// - e2e [--stub]: Run E2E routing tests
+/// - check [duration]: Validate thresholds (default 24h)
 pub fn handle_speckit_reflex(widget: &mut ChatWidget, raw_args: String) {
     use ratatui::text::Line;
 
@@ -313,6 +315,16 @@ pub fn handle_speckit_reflex(widget: &mut ChatWidget, raw_args: String) {
             let since = args.get(1).map(|s| s.to_string()).unwrap_or_else(|| "24h".to_string());
             handle_reflex_bakeoff(widget, &since);
         }
+        Some("e2e") => {
+            // SPEC-KIT-978: E2E routing tests
+            let stub = args.iter().any(|a| *a == "--stub");
+            handle_reflex_e2e(widget, stub);
+        }
+        Some("check") => {
+            // SPEC-KIT-978: Threshold validation
+            let since = args.get(1).map(|s| s.to_string()).unwrap_or_else(|| "24h".to_string());
+            handle_reflex_check(widget, &since);
+        }
         Some(cmd) => {
             widget.history_push(crate::history_cell::PlainHistoryCell::new(
                 vec![
@@ -323,6 +335,8 @@ pub fn handle_speckit_reflex(widget: &mut ChatWidget, raw_args: String) {
                     Line::from("  status  - Show reflex configuration"),
                     Line::from("  models  - List available models"),
                     Line::from("  bakeoff - Show reflex vs cloud metrics"),
+                    Line::from("  e2e     - Run E2E routing tests"),
+                    Line::from("  check   - Validate thresholds"),
                 ],
                 HistoryCellType::Error,
             ));
@@ -337,6 +351,8 @@ pub fn handle_speckit_reflex(widget: &mut ChatWidget, raw_args: String) {
                     Line::from("  status  - Show reflex configuration"),
                     Line::from("  models  - List available models"),
                     Line::from("  bakeoff - Show reflex vs cloud metrics (24h default)"),
+                    Line::from("  e2e     - Run E2E routing tests (--stub for offline)"),
+                    Line::from("  check   - Validate bakeoff thresholds (default 24h)"),
                 ],
                 HistoryCellType::Notice,
             ));
@@ -757,4 +773,243 @@ fn parse_bakeoff_duration(s: &str) -> Result<std::time::Duration, String> {
         let secs: u64 = s.parse().map_err(|_| format!("Invalid duration format: {s}"))?;
         Ok(std::time::Duration::from_secs(secs))
     }
+}
+
+// =============================================================================
+// SPEC-KIT-978: E2E and Check Commands
+// =============================================================================
+
+/// Handle /speckit.reflex e2e (SPEC-KIT-978)
+///
+/// Runs end-to-end routing tests to verify reflex routing logic.
+/// Use --stub for offline testing without network.
+fn handle_reflex_e2e(widget: &mut ChatWidget, stub: bool) {
+    use super::reflex_router::decide_implementer_routing;
+    use crate::memvid_adapter::{EventType, RoutingDecisionPayload, RoutingMode};
+    use ratatui::text::Line;
+
+    let mode = if stub { "stub" } else { "real" };
+    let mut lines = vec![
+        Line::from("SPEC-KIT-978: E2E Reflex Routing Test"),
+        Line::from("======================================"),
+        Line::from(format!("Mode: {}", mode)),
+        Line::from(""),
+    ];
+
+    let mut passed = 0u32;
+    let mut failed = 0u32;
+
+    // Test 1: Non-Implement stage should always use Cloud
+    let decision_plan = decide_implementer_routing("plan", "claude-3-opus", None);
+    let test1_pass = decision_plan.mode == RoutingMode::Cloud
+        && decision_plan.fallback_reason.as_ref()
+            .map(|r| r.as_str() == "not_implement_stage")
+            .unwrap_or(false);
+    if test1_pass { passed += 1; } else { failed += 1; }
+    lines.push(Line::from(format!(
+        "[{}] Test 1: Non-Implement stage uses Cloud",
+        if test1_pass { "PASS" } else { "FAIL" }
+    )));
+
+    // Test 2: Implement stage with reflex disabled should use Cloud
+    let decision_disabled = decide_implementer_routing("implement", "claude-3-opus", None);
+    let test2_pass = decision_disabled.mode == RoutingMode::Cloud && !decision_disabled.is_fallback;
+    if test2_pass { passed += 1; } else { failed += 1; }
+    lines.push(Line::from(format!(
+        "[{}] Test 2: Reflex disabled uses Cloud",
+        if test2_pass { "PASS" } else { "FAIL" }
+    )));
+
+    // Test 3: Routing decision has cloud_model field
+    let test3_pass = decision_disabled.cloud_model == Some("claude-3-opus".to_string());
+    if test3_pass { passed += 1; } else { failed += 1; }
+    lines.push(Line::from(format!(
+        "[{}] Test 3: Routing decision has cloud_model",
+        if test3_pass { "PASS" } else { "FAIL" }
+    )));
+
+    // Test 4: RoutingDecisionPayload serializes correctly
+    let payload = RoutingDecisionPayload {
+        mode: RoutingMode::Cloud,
+        stage: "implement".to_string(),
+        role: "Implementer".to_string(),
+        is_fallback: false,
+        fallback_reason: None,
+        reflex_endpoint: Some("http://127.0.0.1:3009/v1".to_string()),
+        reflex_model: Some("qwen2.5-coder-7b-instruct".to_string()),
+        cloud_model: Some("claude-3-opus".to_string()),
+        health_check_latency_ms: Some(100),
+    };
+    let serialized = serde_json::to_string(&payload);
+    let test4_pass = serialized.is_ok();
+    if test4_pass { passed += 1; } else { failed += 1; }
+    lines.push(Line::from(format!(
+        "[{}] Test 4: RoutingDecisionPayload serializes",
+        if test4_pass { "PASS" } else { "FAIL" }
+    )));
+
+    // Test 5: EventType classification is correct
+    let test5_pass = EventType::RoutingDecision.is_curated_eligible()
+        && EventType::RoutingDecision.is_audit_critical()
+        && !EventType::ModelCallEnvelope.is_curated_eligible();
+    if test5_pass { passed += 1; } else { failed += 1; }
+    lines.push(Line::from(format!(
+        "[{}] Test 5: EventType classification correct",
+        if test5_pass { "PASS" } else { "FAIL" }
+    )));
+
+    // Summary
+    lines.push(Line::from(""));
+    lines.push(Line::from(format!("Results: {} passed, {} failed", passed, failed)));
+
+    let cell_type = if failed == 0 {
+        lines.push(Line::from("All E2E tests passed!"));
+        HistoryCellType::Notice
+    } else {
+        lines.push(Line::from("Some E2E tests failed."));
+        HistoryCellType::Error
+    };
+
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(lines, cell_type));
+}
+
+/// Handle /speckit.reflex check (SPEC-KIT-978)
+///
+/// Validates that bakeoff metrics meet configured thresholds.
+fn handle_reflex_check(widget: &mut ChatWidget, since: &str) {
+    use codex_stage0::load_reflex_config;
+    use super::reflex_metrics::ReflexMetricsDb;
+    use ratatui::text::Line;
+
+    // Parse duration
+    let duration = match parse_bakeoff_duration(since) {
+        Ok(d) => d,
+        Err(e) => {
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![
+                    Line::from(format!("Invalid duration: {since}")),
+                    Line::from(e),
+                ],
+                HistoryCellType::Error,
+            ));
+            return;
+        }
+    };
+
+    // Load configuration
+    let config = match load_reflex_config(None) {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![
+                    Line::from("✗ Configuration error"),
+                    Line::from(e),
+                ],
+                HistoryCellType::Error,
+            ));
+            return;
+        }
+    };
+
+    // Open metrics database
+    let db = match ReflexMetricsDb::init_default() {
+        Ok(db) => db,
+        Err(e) => {
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![
+                    Line::from("Failed to open metrics database"),
+                    Line::from(format!("  Error: {e}")),
+                ],
+                HistoryCellType::Error,
+            ));
+            return;
+        }
+    };
+
+    // Compute stats
+    let stats = match db.compute_bakeoff_stats(duration) {
+        Ok(s) => s,
+        Err(e) => {
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![
+                    Line::from("Failed to compute bakeoff stats"),
+                    Line::from(format!("  Error: {e}")),
+                ],
+                HistoryCellType::Error,
+            ));
+            return;
+        }
+    };
+
+    // Check thresholds
+    let mut checks: Vec<(String, bool, String)> = Vec::new();
+
+    // Minimum samples check
+    let min_samples = 10;
+    let sample_count = stats.reflex.as_ref().map(|r| r.total_attempts).unwrap_or(0);
+    let samples_ok = sample_count >= min_samples;
+    checks.push((
+        "Minimum Samples".to_string(),
+        samples_ok,
+        format!("{}/{} required", sample_count, min_samples),
+    ));
+
+    if let Some(ref reflex) = stats.reflex {
+        // P95 latency check
+        let p95_ok = reflex.p95_latency_ms <= config.thresholds.p95_latency_ms;
+        checks.push((
+            "P95 Latency".to_string(),
+            p95_ok,
+            format!("{}ms (max {}ms)", reflex.p95_latency_ms, config.thresholds.p95_latency_ms),
+        ));
+
+        // Success parity check
+        let success_ok = reflex.success_rate >= config.thresholds.success_parity_percent as f64;
+        checks.push((
+            "Success Rate".to_string(),
+            success_ok,
+            format!("{:.1}% (min {}%)", reflex.success_rate, config.thresholds.success_parity_percent),
+        ));
+
+        // JSON compliance check
+        let json_ok = reflex.json_compliance_rate >= config.thresholds.json_schema_compliance_percent as f64;
+        checks.push((
+            "JSON Compliance".to_string(),
+            json_ok,
+            format!("{:.1}% (min {}%)", reflex.json_compliance_rate, config.thresholds.json_schema_compliance_percent),
+        ));
+    } else {
+        checks.push((
+            "Reflex Data".to_string(),
+            false,
+            "No reflex data available".to_string(),
+        ));
+    }
+
+    // Build output
+    let all_passed = checks.iter().all(|(_, ok, _)| *ok);
+    let mut lines = vec![
+        Line::from(format!("Threshold Check (since {})", since)),
+        Line::from("=============================="),
+        Line::from(""),
+    ];
+
+    for (name, ok, detail) in &checks {
+        let marker = if *ok { "✓" } else { "✗" };
+        lines.push(Line::from(format!("{} {}: {}", marker, name, detail)));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(format!(
+        "Overall: {}",
+        if all_passed { "PASS" } else { "FAIL" }
+    )));
+
+    let cell_type = if all_passed {
+        HistoryCellType::Notice
+    } else {
+        HistoryCellType::Error
+    };
+
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(lines, cell_type));
 }
