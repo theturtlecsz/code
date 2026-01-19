@@ -1,6 +1,6 @@
 # SPEC-KIT-978 — Implementer.Reflex Mode via SGLang (RTX 5090) + Bakeoff
-**Date:** 2026-01-10  
-**Status:** DRAFT  
+**Date:** 2026-01-18
+**Status:** COMPLETE
 **Owner (role):** Infra/LLM Eng
 
 ## Summary
@@ -54,3 +54,39 @@ Wire a local OpenAI-compatible inference server for sub-second compiler loops us
 - **Single-file contention** → single-writer + lock + writer queue.
 - **Retrieval regressions** → eval harness + A/B parity gates.
 - **Data leakage** → safe export redaction + optional sanitize-on-ingest mode.
+
+---
+
+## Implementation Summary (2026-01-18)
+
+### TUI Commands (`/speckit.reflex <cmd>`)
+
+| Command | Description |
+|---------|-------------|
+| `health` | Check reflex server health |
+| `status` | Display reflex configuration |
+| `models` | List available models |
+| `bakeoff [duration]` | Show reflex vs cloud metrics (default 24h) |
+| `check [duration]` | Validate bakeoff thresholds |
+| `e2e [--stub]` | Run E2E routing tests |
+
+### Headless CLI (`code reflex <cmd>`)
+
+| Command | Args | Exit Codes |
+|---------|------|------------|
+| `health` | `--json`, `--policy`, `--timeout` | 0=Healthy, 1=Unhealthy, 2=Config Error |
+| `models` | `--json`, `--policy` | 0=Success, 1=Failed, 2=Config Error |
+| `status` | `--json`, `--policy` | 0=Success, 2=Config Error |
+| `e2e` | `--stub`, `--endpoint`, `--model`, `--json`, `-v` | 0=Pass, 1=Fail |
+
+### Circuit Breaker Scope
+
+**Implemented (this spec):**
+- `BreakerState` enum: `Closed`, `Open`, `HalfOpen`
+- `BreakerStateChangedPayload` with failure metrics + probe tracking
+- `EventType::BreakerStateChanged` integrated with curated/audit-critical flags
+
+**Follow-on (SPEC-945C deferred):**
+- Runtime state machine transitions
+- 50% failure threshold + 30s cooldown
+- Half-open test probes

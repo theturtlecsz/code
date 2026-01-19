@@ -18,6 +18,8 @@ use crate::memvid_adapter::types::{
     EventType, ToolCallPayload, ToolResultPayload, RetrievalRequestPayload,
     RetrievalResponsePayload, PatchApplyPayload, ModelCallEnvelopePayload,
     GateDecisionPayload, GateOutcome, RoutingMode, LLMCaptureMode,
+    // SPEC-KIT-976: Memory Card and Logic Edge types
+    CardType, EdgeType, MemoryCardV1, LogicEdgeV1, CardFact, FactValueType,
 };
 use tempfile::TempDir;
 
@@ -3091,22 +3093,20 @@ fn test_spec_kit_975_event_emission() {
         .emit_error_event(spec_id, run_id, &error_event)
         .expect("emit error event");
 
-    // 8. Emit ModelCallEnvelope event (with Summary capture mode)
+    // 8. Emit ModelCallEnvelope event (with PromptsOnly capture mode)
     let model_call = ModelCallEnvelopePayload {
         call_id: "llm-001".to_string(),
         model: "claude-3-opus".to_string(),
         routing_mode: RoutingMode::Cloud,
-        capture_mode: LLMCaptureMode::Summary,
+        capture_mode: LLMCaptureMode::PromptsOnly,
         stage: Some("Implement".to_string()),
         role: Some("Implementer".to_string()),
         prompt_hash: Some("sha256:abc123...".to_string()),
         response_hash: Some("sha256:def456...".to_string()),
-        prompt_summary: Some("Write a function to...".to_string()),
-        response_summary: Some("Here's the implementation...".to_string()),
+        prompt: Some("Write a function to...".to_string()),
+        response: None, // Not captured in PromptsOnly mode
         prompt_tokens: Some(150),
         response_tokens: Some(300),
-        prompt_full: None, // Not captured in Summary mode
-        response_full: None,
         latency_ms: Some(2500),
         success: true,
         error: None,
@@ -3168,9 +3168,14 @@ fn test_spec_kit_975_event_emission() {
     }
 }
 
-/// SPEC-KIT-975: Test LLM capture modes affect stored content.
+/// SPEC-KIT-975: Test LLM capture modes match policy vocabulary.
+///
+/// Capture modes: none | prompts_only | full_io
+/// - none: No event emitted
+/// - prompts_only: Prompt stored, response hashed only (export-safe)
+/// - full_io: Full prompt + response (NOT export-safe)
 #[test]
-fn test_llm_capture_modes() {
+fn test_llm_capture_modes_policy_aligned() {
     use super::{LLMCaptureMode, ModelCallEnvelopePayload, RoutingMode};
 
     let temp_dir = TempDir::new().unwrap();
@@ -3186,53 +3191,49 @@ fn test_llm_capture_modes() {
     let spec_id = "SPEC-KIT-975";
     let run_id = "capture-modes-test";
 
-    // Test Hash mode: only hashes, no content
-    let hash_mode_call = ModelCallEnvelopePayload {
-        call_id: "llm-hash".to_string(),
+    // Test PromptsOnly mode: prompt stored, response hashed only
+    let prompts_only_call = ModelCallEnvelopePayload {
+        call_id: "llm-prompts-only".to_string(),
         model: "test-model".to_string(),
         routing_mode: RoutingMode::Cloud,
-        capture_mode: LLMCaptureMode::Hash,
+        capture_mode: LLMCaptureMode::PromptsOnly,
         stage: Some("Implement".to_string()),
         role: None,
         prompt_hash: Some("sha256:prompt_hash".to_string()),
         response_hash: Some("sha256:response_hash".to_string()),
-        prompt_summary: None, // Not in hash mode
-        response_summary: None,
-        prompt_tokens: None,
-        response_tokens: None,
-        prompt_full: None,
-        response_full: None,
+        prompt: Some("Full prompt content".to_string()),
+        response: None, // Response NOT stored in prompts_only
+        prompt_tokens: Some(100),
+        response_tokens: Some(200),
         latency_ms: Some(100),
         success: true,
         error: None,
     };
     handle
-        .emit_model_call_envelope(spec_id, run_id, &hash_mode_call)
-        .expect("emit hash mode call");
+        .emit_model_call_envelope(spec_id, run_id, &prompts_only_call)
+        .expect("emit prompts_only mode call");
 
-    // Test Full mode: includes full content (NOT export-safe)
-    let full_mode_call = ModelCallEnvelopePayload {
-        call_id: "llm-full".to_string(),
+    // Test FullIo mode: both prompt and response stored (NOT export-safe)
+    let full_io_call = ModelCallEnvelopePayload {
+        call_id: "llm-full-io".to_string(),
         model: "test-model".to_string(),
         routing_mode: RoutingMode::Reflex,
-        capture_mode: LLMCaptureMode::Full,
+        capture_mode: LLMCaptureMode::FullIo,
         stage: Some("Implement".to_string()),
         role: Some("Implementer".to_string()),
         prompt_hash: Some("sha256:prompt_hash_full".to_string()),
         response_hash: Some("sha256:response_hash_full".to_string()),
-        prompt_summary: Some("Summary of prompt...".to_string()),
-        response_summary: Some("Summary of response...".to_string()),
+        prompt: Some("Full prompt content here".to_string()),
+        response: Some("Full response content here".to_string()),
         prompt_tokens: Some(200),
         response_tokens: Some(400),
-        prompt_full: Some("Full prompt content here".to_string()),
-        response_full: Some("Full response content here".to_string()),
         latency_ms: Some(1500),
         success: true,
         error: None,
     };
     handle
-        .emit_model_call_envelope(spec_id, run_id, &full_mode_call)
-        .expect("emit full mode call");
+        .emit_model_call_envelope(spec_id, run_id, &full_io_call)
+        .expect("emit full_io mode call");
 
     // Verify capture modes are stored correctly
     let events = handle.list_events();
@@ -3243,31 +3244,45 @@ fn test_llm_capture_modes() {
 
     assert_eq!(model_calls.len(), 2);
 
-    // Check hash mode event
-    let hash_event = model_calls
+    // Check prompts_only mode event
+    let prompts_only_event = model_calls
         .iter()
-        .find(|e| e.payload.get("call_id") == Some(&serde_json::json!("llm-hash")))
-        .expect("find hash mode event");
+        .find(|e| e.payload.get("call_id") == Some(&serde_json::json!("llm-prompts-only")))
+        .expect("find prompts_only mode event");
     assert_eq!(
-        hash_event.payload.get("capture_mode"),
-        Some(&serde_json::json!("Hash"))
+        prompts_only_event.payload.get("capture_mode"),
+        Some(&serde_json::json!("PromptsOnly"))
     );
-    assert!(hash_event.payload.get("prompt_full").is_none());
+    assert!(prompts_only_event.payload.get("prompt").is_some());
+    assert!(prompts_only_event.payload.get("response").is_none());
 
-    // Check full mode event
-    let full_event = model_calls
+    // Check full_io mode event
+    let full_io_event = model_calls
         .iter()
-        .find(|e| e.payload.get("call_id") == Some(&serde_json::json!("llm-full")))
-        .expect("find full mode event");
+        .find(|e| e.payload.get("call_id") == Some(&serde_json::json!("llm-full-io")))
+        .expect("find full_io mode event");
     assert_eq!(
-        full_event.payload.get("capture_mode"),
-        Some(&serde_json::json!("Full"))
+        full_io_event.payload.get("capture_mode"),
+        Some(&serde_json::json!("FullIo"))
     );
-    assert!(full_event.payload.get("prompt_full").is_some());
+    assert!(full_io_event.payload.get("prompt").is_some());
+    assert!(full_io_event.payload.get("response").is_some());
 
     // Verify export safety
-    assert!(LLMCaptureMode::Hash.is_export_safe());
-    assert!(!LLMCaptureMode::Full.is_export_safe());
+    assert!(LLMCaptureMode::None.is_export_safe());
+    assert!(LLMCaptureMode::PromptsOnly.is_export_safe());
+    assert!(!LLMCaptureMode::FullIo.is_export_safe());
+
+    // Verify mode string serialization matches policy vocabulary
+    assert_eq!(LLMCaptureMode::None.as_str(), "none");
+    assert_eq!(LLMCaptureMode::PromptsOnly.as_str(), "prompts_only");
+    assert_eq!(LLMCaptureMode::FullIo.as_str(), "full_io");
+
+    // Verify backward compat parsing
+    assert_eq!(LLMCaptureMode::from_str("off"), Some(LLMCaptureMode::None));
+    assert_eq!(LLMCaptureMode::from_str("hash"), Some(LLMCaptureMode::PromptsOnly));
+    assert_eq!(LLMCaptureMode::from_str("summary"), Some(LLMCaptureMode::PromptsOnly));
+    assert_eq!(LLMCaptureMode::from_str("full"), Some(LLMCaptureMode::FullIo));
 }
 
 // =============================================================================
@@ -3348,22 +3363,20 @@ fn test_runtime_emit_wiring_integration() {
     };
     handle.emit_patch_apply(spec_id, run_id, &patch_apply).expect("emit patch apply");
 
-    // 4. Emit ModelCallEnvelope (Summary mode)
+    // 4. Emit ModelCallEnvelope (PromptsOnly mode)
     let model_call = ModelCallEnvelopePayload {
         call_id: "model-001".to_string(),
         model: "claude-3-opus".to_string(),
         routing_mode: RoutingMode::Cloud,
-        capture_mode: LLMCaptureMode::Summary,
+        capture_mode: LLMCaptureMode::PromptsOnly,
         stage: Some("Implement".to_string()),
         role: Some("Implementer".to_string()),
         prompt_hash: Some("sha256:prompt123".to_string()),
         response_hash: Some("sha256:response456".to_string()),
-        prompt_summary: Some("Implement the feature...".to_string()),
-        response_summary: Some("Here is the implementation...".to_string()),
+        prompt: Some("Implement the feature...".to_string()),
+        response: None, // Not captured in PromptsOnly mode
         prompt_tokens: Some(100),
         response_tokens: Some(200),
-        prompt_full: None,
-        response_full: None,
         latency_ms: Some(1500),
         success: true,
         error: None,
@@ -3962,4 +3975,593 @@ fn test_event_type_breaker_state_changed() {
 
     // Verify in all_variants
     assert!(EventType::all_variants().contains(&"BreakerStateChanged"));
+}
+
+// =============================================================================
+// SPEC-KIT-973: Time-Travel UI Tests
+// =============================================================================
+
+/// SPEC-KIT-973: Label-based checkpoint lookup in branch.
+///
+/// Verifies that the same label can exist on different branches and lookup
+/// returns the correct checkpoint for each branch.
+#[test]
+fn test_checkpoint_label_lookup_in_branch() {
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("label_lookup.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "label_lookup_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("open capsule");
+
+    // Create checkpoint on main with label "v1.0"
+    // First, put some content so the checkpoint has something
+    handle
+        .put(
+            "SPEC-973",
+            "main",
+            ObjectType::Artifact,
+            "main_doc.md",
+            b"Main branch content".to_vec(),
+            serde_json::json!({}),
+        )
+        .expect("put on main");
+
+    let main_cp = handle
+        .commit_manual("v1.0")
+        .expect("commit manual on main with label v1.0");
+
+    // Switch to a run branch
+    let run_branch = BranchId::for_run("test-run");
+    handle.switch_branch(run_branch.clone()).expect("switch to run branch");
+
+    // Create checkpoint on run branch with same label "v1.0"
+    handle
+        .put(
+            "SPEC-973",
+            "test-run",
+            ObjectType::Artifact,
+            "run_doc.md",
+            b"Run branch content".to_vec(),
+            serde_json::json!({}),
+        )
+        .expect("put on run branch");
+
+    // Note: commit_manual allows specifying labels directly
+    let run_cp = handle
+        .commit_manual("v1.0")
+        .expect("commit manual on run branch with label v1.0");
+
+    // Verify lookup returns correct checkpoint per branch
+    let main_lookup = handle.get_checkpoint_by_label_in_branch("v1.0", &BranchId::main());
+    let run_lookup = handle.get_checkpoint_by_label_in_branch("v1.0", &run_branch);
+
+    assert!(main_lookup.is_some(), "Should find checkpoint on main branch");
+    assert!(run_lookup.is_some(), "Should find checkpoint on run branch");
+
+    assert_eq!(
+        main_lookup.unwrap().checkpoint_id,
+        main_cp,
+        "Main branch lookup should return main checkpoint"
+    );
+    assert_eq!(
+        run_lookup.unwrap().checkpoint_id,
+        run_cp,
+        "Run branch lookup should return run checkpoint"
+    );
+}
+
+/// SPEC-KIT-973: As-of resolution returns historical bytes.
+///
+/// Verifies that get_bytes with an as_of checkpoint returns the content
+/// from that point in time, not the latest content.
+#[test]
+fn test_asof_resolution_returns_historical_bytes() {
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("asof_bytes.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "asof_bytes_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("open capsule");
+
+    // Switch to run branch for testing
+    let run_branch = BranchId::for_run("asof-run");
+    handle.switch_branch(run_branch.clone()).expect("switch branch");
+
+    // Put artifact with "version1", commit checkpoint 1
+    let uri = handle
+        .put(
+            "SPEC-973",
+            "asof-run",
+            ObjectType::Artifact,
+            "spec.md",
+            b"version1".to_vec(),
+            serde_json::json!({"version": 1}),
+        )
+        .expect("put version1");
+
+    let cp1 = handle
+        .commit_stage("SPEC-973", "asof-run", "Plan", Some("cp1"))
+        .expect("commit checkpoint 1");
+
+    // Update artifact to "version2", commit checkpoint 2
+    let _uri_v2 = handle
+        .put(
+            "SPEC-973",
+            "asof-run",
+            ObjectType::Artifact,
+            "spec.md",
+            b"version2".to_vec(),
+            serde_json::json!({"version": 2}),
+        )
+        .expect("put version2");
+
+    let cp2 = handle
+        .commit_stage("SPEC-973", "asof-run", "Tasks", Some("cp2"))
+        .expect("commit checkpoint 2");
+
+    // Verify as-of resolution returns correct historical bytes
+    let v1_bytes = handle
+        .get_bytes(&uri, Some(&run_branch), Some(&cp1))
+        .expect("get bytes at cp1");
+    assert_eq!(
+        v1_bytes,
+        b"version1".to_vec(),
+        "As-of cp1 should return version1"
+    );
+
+    let v2_bytes = handle
+        .get_bytes(&uri, Some(&run_branch), Some(&cp2))
+        .expect("get bytes at cp2");
+    assert_eq!(
+        v2_bytes,
+        b"version2".to_vec(),
+        "As-of cp2 should return version2"
+    );
+
+    // Latest (as_of=None) should return version2
+    let latest_bytes = handle
+        .get_bytes(&uri, Some(&run_branch), None)
+        .expect("get bytes latest");
+    assert_eq!(
+        latest_bytes,
+        b"version2".to_vec(),
+        "Latest should return version2"
+    );
+}
+
+/// SPEC-KIT-973: Diff between checkpoints produces expected output.
+///
+/// Verifies that content at two different checkpoints can be retrieved
+/// and compared to show differences.
+#[test]
+fn test_diff_between_checkpoints() {
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("diff_test.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "diff_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("open capsule");
+
+    // Switch to run branch
+    let run_branch = BranchId::for_run("diff-run");
+    handle.switch_branch(run_branch.clone()).expect("switch branch");
+
+    // Create artifact with content A
+    let content_a = "line1\nline2\nline3\n";
+    let uri = handle
+        .put(
+            "SPEC-973",
+            "diff-run",
+            ObjectType::Artifact,
+            "test.txt",
+            content_a.as_bytes().to_vec(),
+            serde_json::json!({}),
+        )
+        .expect("put content A");
+
+    let cp1 = handle
+        .commit_stage("SPEC-973", "diff-run", "Plan", Some("v1"))
+        .expect("commit checkpoint v1");
+
+    // Update to content B
+    let content_b = "line1\nmodified line2\nline3\nline4\n";
+    let _uri_b = handle
+        .put(
+            "SPEC-973",
+            "diff-run",
+            ObjectType::Artifact,
+            "test.txt",
+            content_b.as_bytes().to_vec(),
+            serde_json::json!({}),
+        )
+        .expect("put content B");
+
+    let cp2 = handle
+        .commit_stage("SPEC-973", "diff-run", "Tasks", Some("v2"))
+        .expect("commit checkpoint v2");
+
+    // Get bytes at both checkpoints
+    let bytes_a = handle
+        .get_bytes(&uri, Some(&run_branch), Some(&cp1))
+        .expect("get bytes at v1");
+    let bytes_b = handle
+        .get_bytes(&uri, Some(&run_branch), Some(&cp2))
+        .expect("get bytes at v2");
+
+    // Verify content differs
+    assert_ne!(bytes_a, bytes_b, "Content at different checkpoints should differ");
+
+    // Verify actual content matches expectations
+    assert_eq!(
+        String::from_utf8_lossy(&bytes_a),
+        content_a,
+        "Content at v1 should match content_a"
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&bytes_b),
+        content_b,
+        "Content at v2 should match content_b"
+    );
+
+    // Verify we can identify the specific differences
+    let lines_a: Vec<&str> = content_a.lines().collect();
+    let lines_b: Vec<&str> = content_b.lines().collect();
+
+    // line2 was modified
+    assert_eq!(lines_a[1], "line2");
+    assert_eq!(lines_b[1], "modified line2");
+
+    // line4 was added
+    assert_eq!(lines_a.len(), 3);
+    assert_eq!(lines_b.len(), 4);
+    assert_eq!(lines_b[3], "line4");
+}
+
+// =============================================================================
+// SPEC-KIT-976: Memory Card and Logic Edge Tests
+// =============================================================================
+
+/// SPEC-KIT-976: Memory card round-trip storage test.
+/// Creates a card, stores it, retrieves it, and verifies all fields.
+#[test]
+fn test_memory_card_round_trip() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("card_roundtrip.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "card_test".to_string(),
+        ..Default::default()
+    };
+
+    // Create card with facts
+    let card = MemoryCardV1::new("card-001", CardType::Task, "Implement feature X", "cli")
+        .with_spec_id("SPEC-KIT-976")
+        .with_run_id("run-001")
+        .with_fact(CardFact {
+            key: "status".to_string(),
+            value: serde_json::Value::String("in_progress".to_string()),
+            value_type: FactValueType::String,
+            confidence: Some(1.0),
+            source_uris: Vec::new(),
+        });
+
+    // Store card
+    let handle = CapsuleHandle::open(config.clone()).expect("should create capsule");
+    let data = card.to_bytes().expect("should serialize");
+    let uri = handle
+        .put(
+            "SPEC-KIT-976",
+            "run-001",
+            ObjectType::Card,
+            "card-001",
+            data,
+            serde_json::json!({"card_type": "task"}),
+        )
+        .expect("should put card");
+
+    // Commit
+    handle
+        .commit_stage("SPEC-KIT-976", "run-001", "implement", None)
+        .unwrap();
+
+    // Verify URI is valid card URI
+    assert!(uri.is_valid(), "URI should be valid");
+    assert_eq!(
+        uri.object_type(),
+        Some(ObjectType::Card),
+        "URI should have Card object type"
+    );
+
+    // Get bytes and deserialize
+    let retrieved_bytes = handle.get_bytes(&uri, None, None).expect("should get bytes");
+    let retrieved_card =
+        MemoryCardV1::from_bytes(&retrieved_bytes).expect("should deserialize card");
+
+    // Verify round-trip
+    assert_eq!(retrieved_card.card_id, "card-001");
+    assert_eq!(retrieved_card.card_type, CardType::Task);
+    assert_eq!(retrieved_card.title, "Implement feature X");
+    assert_eq!(retrieved_card.version, 1);
+    assert_eq!(retrieved_card.facts.len(), 1);
+    assert_eq!(retrieved_card.facts[0].key, "status");
+    assert_eq!(
+        retrieved_card.provenance.spec_id,
+        Some("SPEC-KIT-976".to_string())
+    );
+    assert_eq!(
+        retrieved_card.provenance.run_id,
+        Some("run-001".to_string())
+    );
+}
+
+/// SPEC-KIT-976: Logic edge round-trip storage test.
+/// Creates an edge linking two cards, stores it, retrieves it, and verifies all fields.
+#[test]
+fn test_logic_edge_round_trip() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("edge_roundtrip.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "edge_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config.clone()).expect("should create capsule");
+
+    // First, create two cards to link
+    let card1_uri = handle
+        .put(
+            "SPEC-976",
+            "run1",
+            ObjectType::Card,
+            "card-a",
+            b"{}".to_vec(),
+            serde_json::json!({}),
+        )
+        .expect("should put card-a");
+
+    let card2_uri = handle
+        .put(
+            "SPEC-976",
+            "run1",
+            ObjectType::Card,
+            "card-b",
+            b"{}".to_vec(),
+            serde_json::json!({}),
+        )
+        .expect("should put card-b");
+
+    // Create edge with LogicalUri references
+    let edge = LogicEdgeV1::new(
+        "edge-001",
+        EdgeType::DependsOn,
+        card1_uri.clone(), // from_uri is LogicalUri
+        card2_uri.clone(), // to_uri is LogicalUri
+        "cli",
+    )
+    .with_weight(0.95)
+    .with_spec_id("SPEC-976")
+    .with_run_id("run1");
+
+    // Store edge
+    let edge_data = edge.to_bytes().expect("should serialize edge");
+    let edge_uri = handle
+        .put(
+            "SPEC-976",
+            "run1",
+            ObjectType::Edge,
+            "edge-001",
+            edge_data,
+            serde_json::json!({"edge_type": "depends_on"}),
+        )
+        .expect("should put edge");
+
+    // Commit
+    handle
+        .commit_stage("SPEC-976", "run1", "graph", None)
+        .unwrap();
+
+    // Verify edge URI
+    assert!(edge_uri.is_valid(), "Edge URI should be valid");
+    assert_eq!(
+        edge_uri.object_type(),
+        Some(ObjectType::Edge),
+        "URI should have Edge object type"
+    );
+
+    // Get bytes and deserialize
+    let retrieved_bytes = handle
+        .get_bytes(&edge_uri, None, None)
+        .expect("should get edge bytes");
+    let retrieved_edge =
+        LogicEdgeV1::from_bytes(&retrieved_bytes).expect("should deserialize edge");
+
+    // Verify round-trip
+    assert_eq!(retrieved_edge.edge_id, "edge-001");
+    assert_eq!(retrieved_edge.edge_type, EdgeType::DependsOn);
+    assert_eq!(retrieved_edge.from_uri.as_str(), card1_uri.as_str());
+    assert_eq!(retrieved_edge.to_uri.as_str(), card2_uri.as_str());
+    assert_eq!(retrieved_edge.weight, Some(0.95));
+    assert_eq!(retrieved_edge.version, 1);
+    assert_eq!(
+        retrieved_edge.provenance.spec_id,
+        Some("SPEC-976".to_string())
+    );
+}
+
+/// SPEC-KIT-976: Type safety test - edges can only reference LogicalUri.
+/// This test documents that from_uri and to_uri are LogicalUri type, not String.
+#[test]
+fn test_edge_references_logical_uris_only() {
+    // This test enforces that edge from_uri and to_uri are LogicalUri, not String
+    // The type system enforces this at compile time, but we document it here
+
+    let from_uri: LogicalUri = "mv2://test/SPEC/run/card/a".parse().unwrap();
+    let to_uri: LogicalUri = "mv2://test/SPEC/run/card/b".parse().unwrap();
+
+    let edge = LogicEdgeV1::new("e1", EdgeType::References, from_uri.clone(), to_uri.clone(), "test");
+
+    // from_uri and to_uri are LogicalUri type, not String
+    assert!(edge.from_uri.is_valid(), "from_uri should be valid LogicalUri");
+    assert!(edge.to_uri.is_valid(), "to_uri should be valid LogicalUri");
+
+    // Invalid URI should fail to parse
+    let bad_uri: Result<LogicalUri, _> = "not-a-uri".parse();
+    assert!(bad_uri.is_err(), "Invalid URI should fail to parse");
+
+    // This ensures we can't accidentally pass raw strings as URIs
+    // The following would NOT compile (commented out for documentation):
+    // let edge = LogicEdgeV1::new("e1", EdgeType::References, "not-uri", "also-not-uri", "test");
+}
+
+/// SPEC-KIT-976: CardType enum parsing test.
+/// All CardType variants should parse correctly and round-trip.
+#[test]
+fn test_card_type_variants() {
+    // All variants parse correctly
+    for variant_str in CardType::all_variants() {
+        let parsed = CardType::from_str(variant_str);
+        assert!(
+            parsed.is_some(),
+            "CardType::from_str should parse '{}'",
+            variant_str
+        );
+    }
+
+    // Round-trip all variants
+    for ct in &[
+        CardType::Spec,
+        CardType::Decision,
+        CardType::Task,
+        CardType::Risk,
+        CardType::Component,
+        CardType::Person,
+        CardType::Artifact,
+        CardType::Run,
+    ] {
+        let s = ct.as_str();
+        let parsed = CardType::from_str(s);
+        assert_eq!(parsed, Some(*ct), "CardType round-trip failed for {:?}", ct);
+    }
+
+    // Unknown type returns None
+    assert_eq!(
+        CardType::from_str("unknown_type"),
+        None,
+        "Unknown card type should return None"
+    );
+}
+
+/// SPEC-KIT-976: EdgeType enum parsing test.
+/// All EdgeType variants should parse correctly and round-trip.
+#[test]
+fn test_edge_type_variants() {
+    // All variants parse correctly
+    for variant_str in EdgeType::all_variants() {
+        let parsed = EdgeType::from_str(variant_str);
+        assert!(
+            parsed.is_some(),
+            "EdgeType::from_str should parse '{}'",
+            variant_str
+        );
+    }
+
+    // Round-trip all variants
+    for et in &[
+        EdgeType::DependsOn,
+        EdgeType::Blocks,
+        EdgeType::Implements,
+        EdgeType::References,
+        EdgeType::Owns,
+        EdgeType::Risks,
+        EdgeType::RelatedTo,
+    ] {
+        let s = et.as_str();
+        let parsed = EdgeType::from_str(s);
+        assert_eq!(parsed, Some(*et), "EdgeType round-trip failed for {:?}", et);
+    }
+
+    // Unknown type returns None
+    assert_eq!(
+        EdgeType::from_str("unknown_edge"),
+        None,
+        "Unknown edge type should return None"
+    );
+}
+
+/// SPEC-KIT-976: Card persistence test.
+/// Verifies that cards persist across capsule reopen.
+#[test]
+fn test_card_persists_after_reopen() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("card_persist.mv2");
+    let mut stored_uri: Option<LogicalUri> = None;
+
+    // Phase 1: Create and store card
+    {
+        let config = CapsuleConfig {
+            capsule_path: capsule_path.clone(),
+            workspace_id: "persist_test".to_string(),
+            ..Default::default()
+        };
+
+        let handle = CapsuleHandle::open(config).expect("should create capsule");
+
+        let card = MemoryCardV1::new("persist-card", CardType::Decision, "Use Rust", "test");
+        let data = card.to_bytes().expect("should serialize");
+        let uri = handle
+            .put(
+                "SPEC-T",
+                "run1",
+                ObjectType::Card,
+                "persist-card",
+                data,
+                serde_json::json!({}),
+            )
+            .expect("should put card");
+        stored_uri = Some(uri);
+
+        handle
+            .commit_stage("SPEC-T", "run1", "decide", None)
+            .expect("should commit");
+    }
+
+    // Phase 2: Reopen and verify
+    {
+        let config = CapsuleConfig {
+            capsule_path: capsule_path.clone(),
+            workspace_id: "persist_test".to_string(),
+            ..Default::default()
+        };
+
+        let handle = CapsuleHandle::open(config).expect("should reopen capsule");
+
+        let uri = stored_uri.as_ref().expect("should have stored URI");
+        let bytes = handle
+            .get_bytes(uri, None, None)
+            .expect("should get card after reopen");
+        let card = MemoryCardV1::from_bytes(&bytes).expect("should deserialize");
+
+        assert_eq!(card.card_id, "persist-card", "card_id should match");
+        assert_eq!(card.title, "Use Rust", "title should match");
+        assert_eq!(card.card_type, CardType::Decision, "card_type should match");
+    }
 }

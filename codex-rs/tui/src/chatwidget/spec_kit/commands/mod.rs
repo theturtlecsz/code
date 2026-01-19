@@ -18,6 +18,7 @@ mod project; // SPEC-KIT-960: Project scaffolding command
 mod quality;
 mod reflex; // SPEC-KIT-978: Reflex local inference
 pub mod search;
+mod timeline; // SPEC-KIT-973: Time-travel UI commands
 mod special;
 mod status;
 mod templates; // SPEC-KIT-962: Template management commands
@@ -40,4 +41,5 @@ pub use search::*;
 pub use special::*;
 pub use status::*;
 pub use templates::*;
+pub use timeline::*;
 pub use verify::*;

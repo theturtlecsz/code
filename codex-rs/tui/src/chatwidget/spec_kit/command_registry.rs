@@ -215,6 +215,11 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
     registry.register(Box::new(SpecKitInstallTemplatesCommand));
     registry.register(Box::new(SpecKitTemplateStatusCommand));
 
+    // Time-travel commands (SPEC-KIT-973)
+    registry.register(Box::new(TimelineCommand));
+    registry.register(Box::new(AsOfCommand));
+    registry.register(Box::new(DiffCommand));
+
     Mutex::new(registry)
 });
 
@@ -338,7 +343,7 @@ mod tests {
         // SPEC-KIT-972: Added memory.search (1 new)
         // SPEC-KIT-977: Added speckit.policy (1 new)
         // SPEC-KIT-978: Added speckit.reflex (already counted above)
-        assert_eq!(registry.len(), 45, "Registry should have 45 commands");
+        assert_eq!(registry.len(), 48, "Registry should have 48 commands");
 
         // Verify key commands are registered
         assert!(registry.find("speckit.status").is_some());

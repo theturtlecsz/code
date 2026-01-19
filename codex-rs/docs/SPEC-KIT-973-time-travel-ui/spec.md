@@ -1,6 +1,6 @@
 # SPEC-KIT-973 — Time‑Travel UX (Timeline / As‑Of / Diff)
-**Date:** 2026-01-10  
-**Status:** DRAFT  
+**Date:** 2026-01-19
+**Status:** COMPLETE
 **Owner (role):** TUI Eng
 
 ## Summary
@@ -107,3 +107,54 @@ Concrete rules (v1):
 - **Single-file contention** → single-writer + lock + writer queue.
 - **Retrieval regressions** → eval harness + A/B parity gates.
 - **Data leakage** → safe export redaction + optional sanitize-on-ingest mode.
+
+---
+
+## Implementation Summary (2026-01-19)
+
+### TUI Commands
+
+**Timeline** (`/speckit.timeline`):
+- `--branch <BRANCH>` - Filter to specific branch (default: all)
+- `--run <RUN_ID>` - Filter to run branch `run/<RUN_ID>`
+- `--since-checkpoint <CP>` - Show checkpoints after this one
+- `--type <TYPE>` - Filter events by type (StageTransition, ToolCall, etc.)
+
+**As-Of** (`/speckit.asof`):
+- `<checkpoint-id-or-label>` - Set time-travel context
+- `clear` - Clear time-travel context (return to latest)
+
+**Diff** (`/speckit.diff`):
+- `<mv2://...>` - Artifact URI to compare
+- `--from <CP>` - Source checkpoint (ID or label)
+- `--to <CP>` - Target checkpoint (ID or label)
+
+### Tests
+
+Location: `codex-rs/tui/src/memvid_adapter/tests.rs`
+
+- `test_checkpoint_label_lookup_in_branch()` - Verifies label uniqueness per branch
+- `test_asof_resolution_returns_historical_bytes()` - Verifies time-travel returns correct historical content
+- `test_diff_between_checkpoints()` - Verifies content comparison at different checkpoints
+
+### Primitives Used (from SPEC-KIT-971)
+
+| Method | Purpose |
+|--------|---------|
+| `list_checkpoints_filtered(branch)` | List checkpoints with branch filter |
+| `list_events_filtered(branch)` | List events with branch filter |
+| `get_checkpoint_by_label(label)` | Find checkpoint by label |
+| `get_checkpoint_by_label_in_branch(label, branch)` | Label lookup within specific branch |
+| `resolve_uri(uri, branch, as_of)` | Time-travel URI resolution |
+| `get_bytes(uri, branch, as_of)` | Read payload with time-travel |
+
+### Command Registration
+
+Commands registered in `command_registry.rs`:
+- `TimelineCommand` (aliases: `timeline`)
+- `AsOfCommand` (aliases: `asof`)
+- `DiffCommand`
+
+### Note on Branch Commands
+
+The branch UX commands (`/speckit.branch`, `/speckit.branches`) are documented in the Deliverables section but were partially implemented in SPEC-KIT-971 as part of the capsule foundation. The merge functionality is implemented via `CapsuleHandle::merge_branch()` and invoked automatically at Unlock stage.

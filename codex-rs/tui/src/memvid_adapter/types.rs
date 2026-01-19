@@ -982,39 +982,39 @@ pub struct BranchMergedPayload {
 /// LLM capture mode for ModelCallEnvelope events.
 ///
 /// Per D15 (audit.capture_llm_io): Controls what model I/O is captured.
-/// - off: Don't capture model calls at all
-/// - hash: Capture only content hashes (for verification without storing content)
-/// - summary: Capture summary + hash (default, safe for export)
-/// - full: Capture full content (NOT safe for export, may contain sensitive data)
+/// Vocabulary aligns with model_policy.toml [capture] section.
+/// - none: Don't capture model calls at all
+/// - prompts_only: Capture prompts + response hash (no response text, safe for export)
+/// - full_io: Capture full prompt + response (may contain sensitive data)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum LLMCaptureMode {
-    /// Don't capture model calls
-    Off,
-    /// Capture only content hashes
-    Hash,
-    /// Capture summary + hash (default)
+    /// Don't capture model calls at all
+    None,
+    /// Capture prompts + metadata; response hash only (no response text)
     #[default]
-    Summary,
-    /// Capture full content (NOT safe for export)
-    Full,
+    PromptsOnly,
+    /// Capture full prompt + response (may contain sensitive data)
+    FullIo,
 }
 
 impl LLMCaptureMode {
     pub fn as_str(&self) -> &'static str {
         match self {
-            LLMCaptureMode::Off => "off",
-            LLMCaptureMode::Hash => "hash",
-            LLMCaptureMode::Summary => "summary",
-            LLMCaptureMode::Full => "full",
+            LLMCaptureMode::None => "none",
+            LLMCaptureMode::PromptsOnly => "prompts_only",
+            LLMCaptureMode::FullIo => "full_io",
         }
     }
 
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
-            "off" => Some(LLMCaptureMode::Off),
-            "hash" => Some(LLMCaptureMode::Hash),
-            "summary" => Some(LLMCaptureMode::Summary),
-            "full" => Some(LLMCaptureMode::Full),
+            "none" => Some(LLMCaptureMode::None),
+            "prompts_only" => Some(LLMCaptureMode::PromptsOnly),
+            "full_io" => Some(LLMCaptureMode::FullIo),
+            // Backward compat for old serialized values
+            "off" => Some(LLMCaptureMode::None),
+            "hash" | "summary" => Some(LLMCaptureMode::PromptsOnly),
+            "full" => Some(LLMCaptureMode::FullIo),
             _ => None,
         }
     }
@@ -1022,10 +1022,9 @@ impl LLMCaptureMode {
     /// Check if this mode is safe for capsule export.
     pub fn is_export_safe(&self) -> bool {
         match self {
-            LLMCaptureMode::Off => true,
-            LLMCaptureMode::Hash => true,
-            LLMCaptureMode::Summary => true,
-            LLMCaptureMode::Full => false, // May contain sensitive data
+            LLMCaptureMode::None => true,
+            LLMCaptureMode::PromptsOnly => true, // Response text not stored
+            LLMCaptureMode::FullIo => false,     // May contain sensitive data
         }
     }
 }
@@ -1309,7 +1308,10 @@ pub struct ErrorEventPayload {
 /// Model call envelope payload.
 ///
 /// Captures LLM request/response based on capture mode.
-/// Content fields are populated based on LLMCaptureMode.
+/// Content fields are populated based on LLMCaptureMode:
+/// - None: No event emitted
+/// - PromptsOnly: prompt + hashes (no response text)
+/// - FullIo: prompt + response + hashes
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelCallEnvelopePayload {
     /// Unique call ID
@@ -1327,7 +1329,7 @@ pub struct ModelCallEnvelopePayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
 
-    // Hash mode fields
+    // Hash fields (always present for verification)
     /// SHA-256 hash of prompt content
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_hash: Option<String>,
@@ -1335,26 +1337,21 @@ pub struct ModelCallEnvelopePayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response_hash: Option<String>,
 
-    // Summary mode fields (includes hash fields above)
-    /// Prompt summary (first N chars or structured summary)
+    // Prompt content (present in prompts_only and full_io)
+    /// Full prompt content
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub prompt_summary: Option<String>,
-    /// Response summary (first N chars or structured summary)
+    pub prompt: Option<String>,
+
+    // Response content (present in full_io only)
+    /// Full response content (ONLY if capture_mode = FullIo)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub response_summary: Option<String>,
-    /// Token counts
+    pub response: Option<String>,
+
+    // Token counts (always present if available)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_tokens: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response_tokens: Option<u64>,
-
-    // Full mode fields (includes all above)
-    /// Full prompt content (ONLY if capture_mode = Full)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub prompt_full: Option<String>,
-    /// Full response content (ONLY if capture_mode = Full)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub response_full: Option<String>,
 
     // Common metadata
     /// Latency in milliseconds
@@ -1414,6 +1411,380 @@ pub struct CapsuleImportedPayload {
     pub content_hash: Option<String>,
 }
 
+// =============================================================================
+// SPEC-KIT-976: Memory Cards and Logic Mesh Edges
+// =============================================================================
+
+/// Card type enumeration for knowledge graph entities.
+///
+/// SPEC-KIT-976: Each card type represents a class of entity in the project knowledge graph.
+/// Types are extensible but the core set should cover most use cases.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CardType {
+    /// A SPEC entity (e.g., SPEC-KIT-976)
+    Spec,
+    /// A decision record
+    Decision,
+    /// A task/work item
+    Task,
+    /// A risk assessment
+    Risk,
+    /// A code component (module, crate, file)
+    Component,
+    /// A person/stakeholder
+    Person,
+    /// An artifact (file, document)
+    Artifact,
+    /// A run instance
+    Run,
+}
+
+impl CardType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CardType::Spec => "spec",
+            CardType::Decision => "decision",
+            CardType::Task => "task",
+            CardType::Risk => "risk",
+            CardType::Component => "component",
+            CardType::Person => "person",
+            CardType::Artifact => "artifact",
+            CardType::Run => "run",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "spec" => Some(CardType::Spec),
+            "decision" => Some(CardType::Decision),
+            "task" => Some(CardType::Task),
+            "risk" => Some(CardType::Risk),
+            "component" => Some(CardType::Component),
+            "person" => Some(CardType::Person),
+            "artifact" => Some(CardType::Artifact),
+            "run" => Some(CardType::Run),
+            _ => None,
+        }
+    }
+
+    pub fn all_variants() -> &'static [&'static str] {
+        &["spec", "decision", "task", "risk", "component", "person", "artifact", "run"]
+    }
+}
+
+/// Edge type enumeration for relationships in the logic mesh.
+///
+/// SPEC-KIT-976: Edge types define semantic relationships between entities.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EdgeType {
+    /// A depends on B (A cannot proceed without B)
+    DependsOn,
+    /// A blocks B (B cannot proceed until A completes)
+    Blocks,
+    /// A implements B (A is an implementation of B)
+    Implements,
+    /// A references B (A mentions or links to B)
+    References,
+    /// A owns B (A is responsible for B)
+    Owns,
+    /// A risks B (A poses a risk to B)
+    Risks,
+    /// A is related to B (generic relationship)
+    RelatedTo,
+}
+
+impl EdgeType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            EdgeType::DependsOn => "depends_on",
+            EdgeType::Blocks => "blocks",
+            EdgeType::Implements => "implements",
+            EdgeType::References => "references",
+            EdgeType::Owns => "owns",
+            EdgeType::Risks => "risks",
+            EdgeType::RelatedTo => "related_to",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "depends_on" => Some(EdgeType::DependsOn),
+            "blocks" => Some(EdgeType::Blocks),
+            "implements" => Some(EdgeType::Implements),
+            "references" => Some(EdgeType::References),
+            "owns" => Some(EdgeType::Owns),
+            "risks" => Some(EdgeType::Risks),
+            "related_to" => Some(EdgeType::RelatedTo),
+            _ => None,
+        }
+    }
+
+    pub fn all_variants() -> &'static [&'static str] {
+        &["depends_on", "blocks", "implements", "references", "owns", "risks", "related_to"]
+    }
+}
+
+/// Value type for facts in memory cards.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FactValueType {
+    String,
+    Number,
+    Boolean,
+    Date,
+    Uri,
+    Json,
+}
+
+impl FactValueType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            FactValueType::String => "string",
+            FactValueType::Number => "number",
+            FactValueType::Boolean => "boolean",
+            FactValueType::Date => "date",
+            FactValueType::Uri => "uri",
+            FactValueType::Json => "json",
+        }
+    }
+}
+
+/// A single fact entry within a memory card.
+///
+/// Facts are key-value pairs with optional confidence and provenance.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CardFact {
+    /// Fact key (e.g., "status", "owner", "priority")
+    pub key: String,
+    /// Fact value (JSON-serialized)
+    pub value: serde_json::Value,
+    /// Value type for validation/display
+    pub value_type: FactValueType,
+    /// Confidence score (0.0-1.0) for extracted facts
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f64>,
+    /// Source URIs that this fact was extracted from
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_uris: Vec<LogicalUri>,
+}
+
+/// Provenance metadata for memory cards.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CardProvenance {
+    /// When this card was created
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    /// Who/what created this (agent role, user, extractor)
+    pub created_by: String,
+    /// Associated SPEC ID (if applicable)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spec_id: Option<String>,
+    /// Associated run ID (if applicable)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
+    /// Stage where created (if applicable)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stage: Option<String>,
+    /// Git commit hash (if applicable)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commit_hash: Option<String>,
+}
+
+/// Provenance metadata for logic edges.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EdgeProvenance {
+    /// When this edge was created
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    /// Who/what created this (agent role, user, extractor)
+    pub created_by: String,
+    /// Associated SPEC ID (if applicable)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spec_id: Option<String>,
+    /// Associated run ID (if applicable)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
+    /// Stage where created (if applicable)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stage: Option<String>,
+    /// Source URIs that this edge was extracted from
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_uris: Vec<LogicalUri>,
+}
+
+/// Memory Card V1 - A knowledge graph entity stored in the capsule.
+///
+/// SPEC-KIT-976: Cards are normalized entities with structured facts.
+/// Cards are append-only; edits create new card frames that supersede prior facts.
+///
+/// ## Lifecycle
+/// - Cards are created by extraction pipelines or manual entry
+/// - Updates create new versions (same card_id, newer created_at)
+/// - Query returns latest version by default; as-of query for history
+///
+/// ## URI Format
+/// Cards are stored with ObjectType::Card and path = card_id
+/// URI: mv2://{workspace}/{spec}/{run}/card/{card_id}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryCardV1 {
+    /// Stable identifier (UUID or deterministic hash)
+    pub card_id: String,
+    /// Card type classification
+    pub card_type: CardType,
+    /// Human-readable title
+    pub title: String,
+    /// Structured facts about this entity
+    #[serde(default)]
+    pub facts: Vec<CardFact>,
+    /// Creation/source metadata
+    pub provenance: CardProvenance,
+    /// Schema version (always 1 for V1)
+    pub version: u32,
+}
+
+impl MemoryCardV1 {
+    /// Create a new memory card with minimal required fields.
+    pub fn new(
+        card_id: impl Into<String>,
+        card_type: CardType,
+        title: impl Into<String>,
+        created_by: impl Into<String>,
+    ) -> Self {
+        Self {
+            card_id: card_id.into(),
+            card_type,
+            title: title.into(),
+            facts: Vec::new(),
+            provenance: CardProvenance {
+                created_at: chrono::Utc::now(),
+                created_by: created_by.into(),
+                spec_id: None,
+                run_id: None,
+                stage: None,
+                commit_hash: None,
+            },
+            version: 1,
+        }
+    }
+
+    /// Add a fact to this card.
+    pub fn with_fact(mut self, fact: CardFact) -> Self {
+        self.facts.push(fact);
+        self
+    }
+
+    /// Set provenance SPEC ID.
+    pub fn with_spec_id(mut self, spec_id: impl Into<String>) -> Self {
+        self.provenance.spec_id = Some(spec_id.into());
+        self
+    }
+
+    /// Set provenance run ID.
+    pub fn with_run_id(mut self, run_id: impl Into<String>) -> Self {
+        self.provenance.run_id = Some(run_id.into());
+        self
+    }
+
+    /// Serialize to JSON bytes for storage.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, serde_json::Error> {
+        serde_json::to_vec(self)
+    }
+
+    /// Deserialize from JSON bytes.
+    pub fn from_bytes(data: &[u8]) -> Result<Self, serde_json::Error> {
+        serde_json::from_slice(data)
+    }
+}
+
+/// Logic Mesh Edge V1 - A relationship between entities in the knowledge graph.
+///
+/// SPEC-KIT-976: Edges connect cards and/or artifacts via logical URIs.
+///
+/// ## Type Safety
+/// CRITICAL: `from_uri` and `to_uri` are LogicalUri, NOT String.
+/// This ensures all graph references are valid mv2:// URIs.
+///
+/// ## URI Format
+/// Edges are stored with ObjectType::Edge and path = edge_id
+/// URI: mv2://{workspace}/{spec}/{run}/edge/{edge_id}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogicEdgeV1 {
+    /// Stable identifier
+    pub edge_id: String,
+    /// Relationship type
+    pub edge_type: EdgeType,
+    /// Source entity URI (MUST be LogicalUri, NOT String)
+    pub from_uri: LogicalUri,
+    /// Target entity URI (MUST be LogicalUri, NOT String)
+    pub to_uri: LogicalUri,
+    /// Optional weight/confidence (0.0-1.0)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub weight: Option<f64>,
+    /// Creation/source metadata
+    pub provenance: EdgeProvenance,
+    /// Schema version (always 1 for V1)
+    pub version: u32,
+}
+
+impl LogicEdgeV1 {
+    /// Create a new logic edge.
+    ///
+    /// ## Type Safety
+    /// from_uri and to_uri are LogicalUri to enforce mv2:// URI format.
+    pub fn new(
+        edge_id: impl Into<String>,
+        edge_type: EdgeType,
+        from_uri: LogicalUri,
+        to_uri: LogicalUri,
+        created_by: impl Into<String>,
+    ) -> Self {
+        Self {
+            edge_id: edge_id.into(),
+            edge_type,
+            from_uri,
+            to_uri,
+            weight: None,
+            provenance: EdgeProvenance {
+                created_at: chrono::Utc::now(),
+                created_by: created_by.into(),
+                spec_id: None,
+                run_id: None,
+                stage: None,
+                source_uris: Vec::new(),
+            },
+            version: 1,
+        }
+    }
+
+    /// Set optional weight.
+    pub fn with_weight(mut self, weight: f64) -> Self {
+        self.weight = Some(weight);
+        self
+    }
+
+    /// Set provenance SPEC ID.
+    pub fn with_spec_id(mut self, spec_id: impl Into<String>) -> Self {
+        self.provenance.spec_id = Some(spec_id.into());
+        self
+    }
+
+    /// Set provenance run ID.
+    pub fn with_run_id(mut self, run_id: impl Into<String>) -> Self {
+        self.provenance.run_id = Some(run_id.into());
+        self
+    }
+
+    /// Serialize to JSON bytes for storage.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, serde_json::Error> {
+        serde_json::to_vec(self)
+    }
+
+    /// Deserialize from JSON bytes.
+    pub fn from_bytes(data: &[u8]) -> Result<Self, serde_json::Error> {
+        serde_json::from_slice(data)
+    }
+}
+
 #[cfg(test)]
 mod type_tests {
     use super::*;
@@ -1461,7 +1832,7 @@ mod type_tests {
     fn event_type_all_variants_covered() {
         // Ensure all_variants() returns the same set as the enum
         let variants = EventType::all_variants();
-        assert_eq!(variants.len(), 15); // Update if adding new variants
+        assert_eq!(variants.len(), 16); // Update if adding new variants
 
         // Verify each variant can be parsed
         for variant_str in variants {
@@ -1519,32 +1890,39 @@ mod type_tests {
 
     #[test]
     fn llm_capture_mode_export_safety() {
-        // Safe for export
-        assert!(LLMCaptureMode::Off.is_export_safe());
-        assert!(LLMCaptureMode::Hash.is_export_safe());
-        assert!(LLMCaptureMode::Summary.is_export_safe());
+        // Safe for export (response text not stored)
+        assert!(LLMCaptureMode::None.is_export_safe());
+        assert!(LLMCaptureMode::PromptsOnly.is_export_safe());
 
-        // NOT safe for export
-        assert!(!LLMCaptureMode::Full.is_export_safe());
+        // NOT safe for export (may contain sensitive data)
+        assert!(!LLMCaptureMode::FullIo.is_export_safe());
     }
 
     #[test]
-    fn llm_capture_mode_default_is_summary() {
-        assert_eq!(LLMCaptureMode::default(), LLMCaptureMode::Summary);
+    fn llm_capture_mode_default_is_prompts_only() {
+        assert_eq!(LLMCaptureMode::default(), LLMCaptureMode::PromptsOnly);
     }
 
     #[test]
     fn llm_capture_mode_round_trip() {
         for mode in &[
-            LLMCaptureMode::Off,
-            LLMCaptureMode::Hash,
-            LLMCaptureMode::Summary,
-            LLMCaptureMode::Full,
+            LLMCaptureMode::None,
+            LLMCaptureMode::PromptsOnly,
+            LLMCaptureMode::FullIo,
         ] {
             let s = mode.as_str();
             let parsed = LLMCaptureMode::from_str(s);
             assert_eq!(parsed, Some(*mode), "Round-trip failed for {:?}", mode);
         }
+    }
+
+    #[test]
+    fn llm_capture_mode_backward_compat() {
+        // Old values should map to new enum variants
+        assert_eq!(LLMCaptureMode::from_str("off"), Some(LLMCaptureMode::None));
+        assert_eq!(LLMCaptureMode::from_str("hash"), Some(LLMCaptureMode::PromptsOnly));
+        assert_eq!(LLMCaptureMode::from_str("summary"), Some(LLMCaptureMode::PromptsOnly));
+        assert_eq!(LLMCaptureMode::from_str("full"), Some(LLMCaptureMode::FullIo));
     }
 
     #[test]
@@ -1620,17 +1998,15 @@ mod type_tests {
             call_id: "llm-001".to_string(),
             model: "claude-3-opus".to_string(),
             routing_mode: RoutingMode::Cloud,
-            capture_mode: LLMCaptureMode::Summary,
+            capture_mode: LLMCaptureMode::PromptsOnly,
             stage: Some("Implement".to_string()),
             role: Some("Implementer".to_string()),
             prompt_hash: Some("abc123".to_string()),
             response_hash: Some("def456".to_string()),
-            prompt_summary: Some("Write a function...".to_string()),
-            response_summary: Some("Here is the function...".to_string()),
+            prompt: Some("Write a function...".to_string()),
+            response: None, // Not captured in PromptsOnly mode
             prompt_tokens: Some(100),
             response_tokens: Some(200),
-            prompt_full: None, // Not captured in Summary mode
-            response_full: None,
             latency_ms: Some(1500),
             success: true,
             error: None,
@@ -1639,7 +2015,9 @@ mod type_tests {
         let json = serde_json::to_string(&payload).unwrap();
         let parsed: ModelCallEnvelopePayload = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.call_id, "llm-001");
-        assert_eq!(parsed.capture_mode, LLMCaptureMode::Summary);
+        assert_eq!(parsed.capture_mode, LLMCaptureMode::PromptsOnly);
+        assert!(parsed.prompt.is_some());
+        assert!(parsed.response.is_none());
         assert!(parsed.success);
     }
 }

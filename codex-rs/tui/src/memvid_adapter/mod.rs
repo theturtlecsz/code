@@ -72,6 +72,9 @@ pub use types::{
     ModelCallEnvelopePayload, CapsuleExportedPayload, CapsuleImportedPayload,
     // SPEC-KIT-978: Circuit breaker types
     BreakerState, BreakerStateChangedPayload,
+    // SPEC-KIT-976: Memory Card and Logic Edge types
+    ObjectType, CardType, EdgeType, MemoryCardV1, LogicEdgeV1,
+    CardFact, FactValueType, CardProvenance, EdgeProvenance,
 };
 pub use policy_capture::{
     capture_and_store_policy, load_policy, list_policies, latest_policy,

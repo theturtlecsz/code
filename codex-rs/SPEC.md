@@ -1,7 +1,7 @@
 # SPEC.md - Codex-RS / Spec-Kit Task Tracking
 
 **Version:** V6 Docs Contract
-**Last Updated:** 2026-01-17
+**Last Updated:** 2026-01-19
 
 ---
 
@@ -76,6 +76,8 @@ These invariants MUST NOT be violated:
 
 | Spec | Completion Date | Key Deliverables |
 |------|-----------------|------------------|
+| SPEC-KIT-976 | 2026-01-19 | Logic Mesh graph foundation: Card/Edge schemas, CLI commands, 6 tests passing |
+| SPEC-KIT-973 | 2026-01-19 | Time-travel TUI commands (timeline, asof, diff), label lookup, 3 tests passing |
 | SPEC-KIT-978 | 2026-01-18 | Circuit breaker types, BreakerState/BreakerStateChangedPayload, EventType integration |
 | SPEC-KIT-975 | 2026-01-18 | Replay timeline determinism, offline retrieval exactness, 5 replay tests passing |
 | SPEC-KIT-971 | 2026-01-17 | Branch isolation, time-travel URI, checkpoints, merge at unlock, CLI complete |
@@ -87,8 +89,7 @@ These invariants MUST NOT be violated:
 
 | Spec | Blocker | Unblocks |
 |------|---------|----------|
-| SPEC-KIT-973 | Ready (975 complete) | Time-Travel UI |
-| SPEC-KIT-976 | Ready (975 complete) | Logic Mesh graph |
+| (none) | - | - |
 
 ---
 
@@ -129,8 +130,8 @@ These invariants MUST NOT be violated:
 | 1->2 | 971 URI contract + checkpoint tests | PASSED |
 | 2->3 | 972 eval harness operational | PASSED |
 | 3->4 | 977 PolicySnapshot stored in capsule | PASSED |
-| 4->5 | 978 Reflex bakeoff complete + 975 event baseline | PENDING |
-| 5->6 | 973/976 advanced features | PENDING |
+| 4->5 | 978 Reflex bakeoff complete + 975 event baseline | PASSED |
+| 5->6 | 973/976 advanced features | PASSED |
 
 ---
 

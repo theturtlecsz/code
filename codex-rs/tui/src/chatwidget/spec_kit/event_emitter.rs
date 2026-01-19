@@ -287,10 +287,9 @@ impl AuditEventEmitter {
     /// Emit a model call envelope event.
     ///
     /// Content capture is controlled by the capture_mode in RunContext:
-    /// - off: No event emitted
-    /// - hash: SHA-256 hashes only
-    /// - summary: First 200 chars + hashes
-    /// - full: Complete content
+    /// - none: No event emitted
+    /// - prompts_only: Prompt + hashes (no response text)
+    /// - full_io: Full prompt + response
     pub fn emit_model_call_envelope(
         &self,
         model: &str,
@@ -303,9 +302,9 @@ impl AuditEventEmitter {
         prompt_tokens: Option<u64>,
         response_tokens: Option<u64>,
     ) {
-        // Check capture mode - if off, don't emit
-        if self.context.capture_mode == LLMCaptureMode::Off {
-            debug!(model, "Skipping ModelCallEnvelope (capture_mode=off)");
+        // Check capture mode - if none, don't emit
+        if self.context.capture_mode == LLMCaptureMode::None {
+            debug!(model, "Skipping ModelCallEnvelope (capture_mode=none)");
             return;
         }
 
@@ -317,60 +316,37 @@ impl AuditEventEmitter {
 
         // Build payload based on capture mode
         let payload = match self.context.capture_mode {
-            LLMCaptureMode::Off => unreachable!(), // Handled above
-            LLMCaptureMode::Hash => ModelCallEnvelopePayload {
+            LLMCaptureMode::None => unreachable!(), // Handled above
+            LLMCaptureMode::PromptsOnly => ModelCallEnvelopePayload {
                 call_id,
                 model: model.to_string(),
                 routing_mode,
-                capture_mode: LLMCaptureMode::Hash,
+                capture_mode: LLMCaptureMode::PromptsOnly,
                 stage: self.context.current_stage.clone(),
                 role: self.context.current_role.clone(),
                 prompt_hash: Some(prompt_hash),
                 response_hash: Some(response_hash),
-                prompt_summary: None,
-                response_summary: None,
+                prompt: Some(prompt.to_string()),
+                response: None, // Response NOT stored in prompts_only
                 prompt_tokens,
                 response_tokens,
-                prompt_full: None,
-                response_full: None,
                 latency_ms,
                 success,
                 error,
             },
-            LLMCaptureMode::Summary => ModelCallEnvelopePayload {
+            LLMCaptureMode::FullIo => ModelCallEnvelopePayload {
                 call_id,
                 model: model.to_string(),
                 routing_mode,
-                capture_mode: LLMCaptureMode::Summary,
+                capture_mode: LLMCaptureMode::FullIo,
                 stage: self.context.current_stage.clone(),
                 role: self.context.current_role.clone(),
                 prompt_hash: Some(prompt_hash),
                 response_hash: Some(response_hash),
-                prompt_summary: Some(truncate_for_summary(prompt)),
-                response_summary: Some(truncate_for_summary(response)),
+                prompt: Some(prompt.to_string()),
+                response: Some(response.to_string()),
                 prompt_tokens,
                 response_tokens,
-                prompt_full: None,
-                response_full: None,
-                latency_ms,
-                success,
-                error,
-            },
-            LLMCaptureMode::Full => ModelCallEnvelopePayload {
-                call_id,
-                model: model.to_string(),
-                routing_mode,
-                capture_mode: LLMCaptureMode::Full,
-                stage: self.context.current_stage.clone(),
-                role: self.context.current_role.clone(),
-                prompt_hash: Some(prompt_hash),
-                response_hash: Some(response_hash),
-                prompt_summary: Some(truncate_for_summary(prompt)),
-                response_summary: Some(truncate_for_summary(response)),
-                prompt_tokens,
-                response_tokens,
-                prompt_full: Some(prompt.to_string()),
-                response_full: Some(response.to_string()),
                 latency_ms,
                 success,
                 error,
@@ -465,16 +441,6 @@ fn sha256_hash(content: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-/// Truncate content for summary (first 200 chars with ellipsis if needed).
-fn truncate_for_summary(content: &str) -> String {
-    const MAX_LEN: usize = 200;
-    if content.len() <= MAX_LEN {
-        content.to_string()
-    } else {
-        format!("{}...", &content[..MAX_LEN])
-    }
-}
-
 // =============================================================================
 // Tests
 // =============================================================================
@@ -494,34 +460,22 @@ mod tests {
     }
 
     #[test]
-    fn test_truncate_for_summary() {
-        // Short content unchanged
-        assert_eq!(truncate_for_summary("hello"), "hello");
-
-        // Long content truncated
-        let long = "x".repeat(300);
-        let summary = truncate_for_summary(&long);
-        assert_eq!(summary.len(), 203); // 200 chars + "..."
-        assert!(summary.ends_with("..."));
-    }
-
-    #[test]
     fn test_run_context_creation() {
-        let ctx = RunContext::new("SPEC-KIT-975", "run-001", LLMCaptureMode::Summary)
+        let ctx = RunContext::new("SPEC-KIT-975", "run-001", LLMCaptureMode::PromptsOnly)
             .with_policy_hash("abc123");
 
         assert_eq!(ctx.spec_id, "SPEC-KIT-975");
         assert_eq!(ctx.run_id, "run-001");
         assert_eq!(ctx.branch_id.as_str(), "run/run-001");
         assert_eq!(ctx.policy_hash, Some("abc123".to_string()));
-        assert_eq!(ctx.capture_mode, LLMCaptureMode::Summary);
+        assert_eq!(ctx.capture_mode, LLMCaptureMode::PromptsOnly);
     }
 
     #[test]
-    fn test_capture_mode_respects_off() {
-        // When capture_mode is Off, emit_model_call_envelope should short-circuit
+    fn test_capture_mode_respects_none() {
+        // When capture_mode is None, emit_model_call_envelope should short-circuit
         // This is verified by the early return in the function
-        let ctx = RunContext::new("SPEC-KIT-975", "run-001", LLMCaptureMode::Off);
-        assert_eq!(ctx.capture_mode, LLMCaptureMode::Off);
+        let ctx = RunContext::new("SPEC-KIT-975", "run-001", LLMCaptureMode::None);
+        assert_eq!(ctx.capture_mode, LLMCaptureMode::None);
     }
 }

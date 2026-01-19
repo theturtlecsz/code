@@ -33,6 +33,8 @@ use codex_spec_kit::executor::{
 };
 use codex_tui::memvid_adapter::{
     CapsuleConfig, CapsuleError, CapsuleHandle, CheckpointId, DiagnosticResult, EventType,
+    // SPEC-KIT-976: Memory Card and Logic Edge types
+    ObjectType, CardType, EdgeType, MemoryCardV1, LogicEdgeV1, CardFact, FactValueType, LogicalUri,
 };
 use std::io::Write;
 use std::path::PathBuf;
@@ -164,6 +166,12 @@ pub enum SpeckitSubcommand {
     /// SPEC-KIT-975: Commands for replaying and verifying run events.
     /// Display timeline of events, verify determinism, check URI resolution.
     Replay(ReplayArgs),
+
+    /// Graph operations (Logic Mesh)
+    ///
+    /// SPEC-KIT-976: Commands for managing memory cards and logic mesh edges.
+    /// Add cards, edges, and query the knowledge graph.
+    Graph(GraphArgs),
 }
 
 /// Arguments for `speckit status` command
@@ -896,6 +904,148 @@ pub struct ReplayVerifyArgs {
     pub capsule_path: Option<PathBuf>,
 }
 
+// =============================================================================
+// SPEC-KIT-976: Graph (Logic Mesh) Commands
+// =============================================================================
+
+/// Arguments for `speckit graph` command
+#[derive(Debug, Parser)]
+pub struct GraphArgs {
+    /// Capsule path override
+    #[arg(long = "capsule", short = 'C', value_name = "PATH")]
+    pub capsule_path: Option<PathBuf>,
+
+    #[command(subcommand)]
+    pub command: GraphSubcommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum GraphSubcommand {
+    /// Add a memory card to the graph
+    ///
+    /// Creates a new card with the specified type and title.
+    /// Use --fact KEY=VALUE to add facts.
+    AddCard(GraphAddCardArgs),
+
+    /// Add a logic edge to the graph
+    ///
+    /// Creates a relationship between two entities using mv2:// URIs.
+    AddEdge(GraphAddEdgeArgs),
+
+    /// Query the graph
+    ///
+    /// Lookup by URI, list by type, or traverse adjacencies.
+    Query(GraphQueryArgs),
+}
+
+/// Arguments for `graph add-card`
+#[derive(Debug, Parser)]
+pub struct GraphAddCardArgs {
+    /// Card type (spec, decision, task, risk, component, person, artifact, run)
+    #[arg(long = "type", short = 't', value_name = "TYPE")]
+    pub card_type: String,
+
+    /// Card title (human-readable label)
+    #[arg(long = "title", value_name = "TITLE")]
+    pub title: String,
+
+    /// Card ID (auto-generated UUID if not provided)
+    #[arg(long = "id", value_name = "CARD-ID")]
+    pub card_id: Option<String>,
+
+    /// Add a fact: KEY=VALUE (can be repeated)
+    #[arg(long = "fact", short = 'f', value_name = "KEY=VALUE")]
+    pub facts: Vec<String>,
+
+    /// SPEC ID for provenance
+    #[arg(long = "spec", short = 's', value_name = "SPEC-ID")]
+    pub spec_id: Option<String>,
+
+    /// Run ID for provenance
+    #[arg(long = "run", short = 'r', value_name = "RUN-ID")]
+    pub run_id: Option<String>,
+
+    /// Output as JSON
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
+/// Arguments for `graph add-edge`
+#[derive(Debug, Parser)]
+pub struct GraphAddEdgeArgs {
+    /// Edge type (depends_on, blocks, implements, references, owns, risks, related_to)
+    #[arg(long = "type", short = 't', value_name = "TYPE")]
+    pub edge_type: String,
+
+    /// Source URI (mv2://...)
+    #[arg(long = "from", value_name = "URI")]
+    pub from_uri: String,
+
+    /// Target URI (mv2://...)
+    #[arg(long = "to", value_name = "URI")]
+    pub to_uri: String,
+
+    /// Edge ID (auto-generated UUID if not provided)
+    #[arg(long = "id", value_name = "EDGE-ID")]
+    pub edge_id: Option<String>,
+
+    /// Optional weight/confidence (0.0-1.0)
+    #[arg(long = "weight", short = 'w', value_name = "N")]
+    pub weight: Option<f64>,
+
+    /// SPEC ID for provenance
+    #[arg(long = "spec", short = 's', value_name = "SPEC-ID")]
+    pub spec_id: Option<String>,
+
+    /// Run ID for provenance
+    #[arg(long = "run", short = 'r', value_name = "RUN-ID")]
+    pub run_id: Option<String>,
+
+    /// Output as JSON
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
+/// Arguments for `graph query`
+#[derive(Debug, Parser)]
+pub struct GraphQueryArgs {
+    /// Lookup by specific URI (mv2://...)
+    #[arg(long = "uri", value_name = "URI")]
+    pub uri: Option<String>,
+
+    /// List by object type (card, edge)
+    #[arg(long = "type", short = 't', value_name = "TYPE")]
+    pub object_type: Option<String>,
+
+    /// Filter by card type (only with --type card)
+    #[arg(long = "card-type", value_name = "CARD-TYPE")]
+    pub card_type: Option<String>,
+
+    /// Filter by edge type (only with --type edge)
+    #[arg(long = "edge-type", value_name = "EDGE-TYPE")]
+    pub edge_type: Option<String>,
+
+    /// Adjacency query: find edges connected to this URI
+    #[arg(long = "adjacency", short = 'a', value_name = "URI")]
+    pub adjacency: Option<String>,
+
+    /// Traversal depth for adjacency query (default: 1)
+    #[arg(long = "depth", short = 'd', value_name = "N", default_value = "1")]
+    pub depth: u32,
+
+    /// Limit number of results
+    #[arg(long = "limit", short = 'n', value_name = "N")]
+    pub limit: Option<usize>,
+
+    /// Output as JSON
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+
+    /// Capsule path override
+    #[arg(long = "capsule", short = 'C', value_name = "PATH")]
+    pub capsule_path: Option<PathBuf>,
+}
+
 impl SpeckitCli {
     /// Run the speckit CLI command
     pub async fn run(self) -> anyhow::Result<()> {
@@ -915,6 +1065,9 @@ impl SpeckitCli {
         }
         if let SpeckitSubcommand::Replay(args) = self.command {
             return run_replay(cwd, args);
+        }
+        if let SpeckitSubcommand::Graph(args) = self.command {
+            return run_graph(cwd, args);
         }
 
         // Resolve policy from env/config at adapter boundary (not in executor)
@@ -946,6 +1099,7 @@ impl SpeckitCli {
             SpeckitSubcommand::Reflex(_) => unreachable!("Reflex handled above"),
             SpeckitSubcommand::Policy(_) => unreachable!("Policy handled above"),
             SpeckitSubcommand::Replay(_) => unreachable!("Replay handled above"),
+            SpeckitSubcommand::Graph(_) => unreachable!("Graph handled above"),
         }
     }
 }
@@ -4121,14 +4275,15 @@ fn run_replay_verify(cwd: PathBuf, args: ReplayVerifyArgs) -> anyhow::Result<()>
             if let Some(uris) = event.payload.get("hit_uris").and_then(|v| v.as_array()) {
                 for uri_val in uris {
                     if let Some(uri_str) = uri_val.as_str() {
-                        let uri = LogicalUri::parse(uri_str);
-                        if handle.resolve_uri(&uri, None, None).is_err() {
-                            issues.push(VerificationIssue {
-                                check: "retrieval_uri_resolve".to_string(),
-                                severity: "error".to_string(),
-                                message: format!("URI not resolvable: {}", uri_str),
-                                event_uri: Some(event.uri.as_str().to_string()),
-                            });
+                        if let Ok(uri) = uri_str.parse::<LogicalUri>() {
+                            if handle.resolve_uri(&uri, None, None).is_err() {
+                                issues.push(VerificationIssue {
+                                    check: "retrieval_uri_resolve".to_string(),
+                                    severity: "error".to_string(),
+                                    message: format!("URI not resolvable: {}", uri_str),
+                                    event_uri: Some(event.uri.as_str().to_string()),
+                                });
+                            }
                         }
                     }
                 }
@@ -4225,4 +4380,429 @@ fn format_event_summary(event: &codex_tui::memvid_adapter::RunEventEnvelope) -> 
         }
         _ => event.event_type.as_str().to_string(),
     }
+}
+
+// =============================================================================
+// SPEC-KIT-976: Graph (Logic Mesh) Command Handlers
+// =============================================================================
+
+/// Run the graph command
+fn run_graph(cwd: PathBuf, args: GraphArgs) -> anyhow::Result<()> {
+    let capsule_path = args
+        .capsule_path
+        .unwrap_or_else(|| cwd.join(DEFAULT_CAPSULE_PATH));
+
+    match args.command {
+        GraphSubcommand::AddCard(cmd_args) => run_graph_add_card(&capsule_path, cmd_args),
+        GraphSubcommand::AddEdge(cmd_args) => run_graph_add_edge(&capsule_path, cmd_args),
+        GraphSubcommand::Query(cmd_args) => run_graph_query(&cwd, &capsule_path, cmd_args),
+    }
+}
+
+/// Run `graph add-card` command
+fn run_graph_add_card(capsule_path: &PathBuf, args: GraphAddCardArgs) -> anyhow::Result<()> {
+    // Validate card type
+    let card_type = match CardType::from_str(&args.card_type) {
+        Some(ct) => ct,
+        None => {
+            let valid_types = CardType::all_variants().join(", ");
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("Invalid card type: '{}'. Valid types: {}", args.card_type, valid_types),
+                    "valid_types": CardType::all_variants(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Invalid card type: '{}'", args.card_type);
+                eprintln!("Valid types: {}", valid_types);
+            }
+            std::process::exit(2);
+        }
+    };
+
+    // Generate card_id if not provided
+    let card_id = args
+        .card_id
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+    // Parse facts from KEY=VALUE format
+    let facts: Vec<CardFact> = args
+        .facts
+        .iter()
+        .filter_map(|f| {
+            let parts: Vec<&str> = f.splitn(2, '=').collect();
+            if parts.len() == 2 {
+                Some(CardFact {
+                    key: parts[0].to_string(),
+                    value: serde_json::Value::String(parts[1].to_string()),
+                    value_type: FactValueType::String,
+                    confidence: None,
+                    source_uris: Vec::new(),
+                })
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Create card
+    let mut card = MemoryCardV1::new(&card_id, card_type, &args.title, "cli");
+    card.facts = facts;
+    if let Some(spec_id) = &args.spec_id {
+        card = card.with_spec_id(spec_id);
+    }
+    if let Some(run_id) = &args.run_id {
+        card = card.with_run_id(run_id);
+    }
+
+    // Open capsule and store
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "default".to_string(),
+        ..Default::default()
+    };
+
+    let handle = match CapsuleHandle::open(config) {
+        Ok(h) => h,
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("Failed to open capsule: {}", e),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Failed to open capsule: {}", e);
+            }
+            std::process::exit(3);
+        }
+    };
+
+    // Store card using put()
+    let spec_id = args.spec_id.as_deref().unwrap_or("_global");
+    let run_id = args.run_id.as_deref().unwrap_or("_manual");
+    let data = card.to_bytes()?;
+    let metadata = serde_json::json!({
+        "card_type": card_type.as_str(),
+        "title": args.title,
+    });
+
+    let uri = handle.put(spec_id, run_id, ObjectType::Card, &card_id, data, metadata)?;
+
+    // Commit immediately
+    handle.commit_manual(&format!("card:{}", card_id))?;
+
+    // Output result
+    if args.json {
+        let json = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "tool_version": tool_version(),
+            "card_id": card_id,
+            "uri": uri.as_str(),
+            "card_type": card_type.as_str(),
+            "title": args.title,
+            "created": true,
+        });
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        println!("Created card: {}", card_id);
+        println!("  URI: {}", uri.as_str());
+        println!("  Type: {}", card_type.as_str());
+        println!("  Title: {}", args.title);
+    }
+
+    Ok(())
+}
+
+/// Run `graph add-edge` command
+fn run_graph_add_edge(capsule_path: &PathBuf, args: GraphAddEdgeArgs) -> anyhow::Result<()> {
+    // Validate edge type
+    let edge_type = match EdgeType::from_str(&args.edge_type) {
+        Some(et) => et,
+        None => {
+            let valid_types = EdgeType::all_variants().join(", ");
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("Invalid edge type: '{}'. Valid types: {}", args.edge_type, valid_types),
+                    "valid_types": EdgeType::all_variants(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Invalid edge type: '{}'", args.edge_type);
+                eprintln!("Valid types: {}", valid_types);
+            }
+            std::process::exit(2);
+        }
+    };
+
+    // Validate URIs are mv2://
+    let from_uri: LogicalUri = match args.from_uri.parse() {
+        Ok(u) => u,
+        Err(_) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": "from_uri must be a valid mv2:// URI",
+                    "from_uri": args.from_uri,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: from_uri must be a valid mv2:// URI");
+                eprintln!("  Got: {}", args.from_uri);
+            }
+            std::process::exit(2);
+        }
+    };
+
+    let to_uri: LogicalUri = match args.to_uri.parse() {
+        Ok(u) => u,
+        Err(_) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": "to_uri must be a valid mv2:// URI",
+                    "to_uri": args.to_uri,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: to_uri must be a valid mv2:// URI");
+                eprintln!("  Got: {}", args.to_uri);
+            }
+            std::process::exit(2);
+        }
+    };
+
+    // Generate edge_id if not provided
+    let edge_id = args
+        .edge_id
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+    // Create edge
+    let mut edge = LogicEdgeV1::new(&edge_id, edge_type, from_uri.clone(), to_uri.clone(), "cli");
+    if let Some(w) = args.weight {
+        edge = edge.with_weight(w);
+    }
+    if let Some(spec_id) = &args.spec_id {
+        edge = edge.with_spec_id(spec_id);
+    }
+    if let Some(run_id) = &args.run_id {
+        edge = edge.with_run_id(run_id);
+    }
+
+    // Open capsule and store
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "default".to_string(),
+        ..Default::default()
+    };
+
+    let handle = match CapsuleHandle::open(config) {
+        Ok(h) => h,
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("Failed to open capsule: {}", e),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Failed to open capsule: {}", e);
+            }
+            std::process::exit(3);
+        }
+    };
+
+    // Store edge using put()
+    let spec_id = args.spec_id.as_deref().unwrap_or("_global");
+    let run_id = args.run_id.as_deref().unwrap_or("_manual");
+    let data = edge.to_bytes()?;
+    let metadata = serde_json::json!({
+        "edge_type": edge_type.as_str(),
+        "from_uri": from_uri.as_str(),
+        "to_uri": to_uri.as_str(),
+    });
+
+    let edge_uri = handle.put(spec_id, run_id, ObjectType::Edge, &edge_id, data, metadata)?;
+
+    // Commit immediately
+    handle.commit_manual(&format!("edge:{}", edge_id))?;
+
+    // Output result
+    if args.json {
+        let json = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "tool_version": tool_version(),
+            "edge_id": edge_id,
+            "uri": edge_uri.as_str(),
+            "edge_type": edge_type.as_str(),
+            "from_uri": from_uri.as_str(),
+            "to_uri": to_uri.as_str(),
+            "weight": args.weight,
+            "created": true,
+        });
+        println!("{}", serde_json::to_string_pretty(&json)?);
+    } else {
+        println!("Created edge: {}", edge_id);
+        println!("  URI: {}", edge_uri.as_str());
+        println!("  Type: {}", edge_type.as_str());
+        println!("  From: {}", from_uri.as_str());
+        println!("  To: {}", to_uri.as_str());
+        if let Some(w) = args.weight {
+            println!("  Weight: {}", w);
+        }
+    }
+
+    Ok(())
+}
+
+/// Run `graph query` command
+fn run_graph_query(cwd: &PathBuf, capsule_path: &PathBuf, args: GraphQueryArgs) -> anyhow::Result<()> {
+    // Use capsule_path from args if provided, otherwise use the default
+    let actual_capsule_path = args
+        .capsule_path
+        .as_ref()
+        .unwrap_or(capsule_path);
+
+    // Open capsule read-only
+    let config = CapsuleConfig {
+        capsule_path: actual_capsule_path.clone(),
+        workspace_id: "default".to_string(),
+        ..Default::default()
+    };
+
+    let handle = match CapsuleHandle::open_read_only(config) {
+        Ok(h) => h,
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("Failed to open capsule: {}", e),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Failed to open capsule: {}", e);
+            }
+            std::process::exit(3);
+        }
+    };
+
+    // Handle different query modes
+    if let Some(uri_str) = &args.uri {
+        // Lookup by URI
+        let uri: LogicalUri = match uri_str.parse() {
+            Ok(u) => u,
+            Err(_) => {
+                if args.json {
+                    let json = serde_json::json!({
+                        "schema_version": SCHEMA_VERSION,
+                        "tool_version": tool_version(),
+                        "error": "Invalid URI format",
+                        "uri": uri_str,
+                    });
+                    println!("{}", serde_json::to_string_pretty(&json)?);
+                } else {
+                    eprintln!("Error: Invalid URI format: {}", uri_str);
+                }
+                std::process::exit(2);
+            }
+        };
+
+        match handle.get_bytes(&uri, None, None) {
+            Ok(bytes) => {
+                let obj_type = uri.object_type();
+                if args.json {
+                    // Try to parse as JSON for structured output
+                    let payload: serde_json::Value = serde_json::from_slice(&bytes)
+                        .unwrap_or_else(|_| serde_json::Value::String(String::from_utf8_lossy(&bytes).to_string()));
+                    let json = serde_json::json!({
+                        "schema_version": SCHEMA_VERSION,
+                        "tool_version": tool_version(),
+                        "uri": uri.as_str(),
+                        "object_type": obj_type.map(|t| t.as_str()),
+                        "size_bytes": bytes.len(),
+                        "payload": payload,
+                    });
+                    println!("{}", serde_json::to_string_pretty(&json)?);
+                } else {
+                    println!("URI: {}", uri.as_str());
+                    println!("Type: {:?}", obj_type);
+                    println!("Size: {} bytes", bytes.len());
+                    println!("---");
+                    // Try to print as JSON, otherwise as text
+                    if let Ok(parsed) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                        println!("{}", serde_json::to_string_pretty(&parsed)?);
+                    } else {
+                        println!("{}", String::from_utf8_lossy(&bytes));
+                    }
+                }
+            }
+            Err(e) => {
+                if args.json {
+                    let json = serde_json::json!({
+                        "schema_version": SCHEMA_VERSION,
+                        "tool_version": tool_version(),
+                        "error": format!("URI not found: {}", e),
+                        "uri": uri.as_str(),
+                    });
+                    println!("{}", serde_json::to_string_pretty(&json)?);
+                } else {
+                    eprintln!("Error: URI not found: {}", uri.as_str());
+                }
+                std::process::exit(1);
+            }
+        }
+    } else if args.adjacency.is_some() {
+        // Adjacency query - TODO: implement when we have edge index
+        if args.json {
+            let json = serde_json::json!({
+                "schema_version": SCHEMA_VERSION,
+                "tool_version": tool_version(),
+                "error": "Adjacency query not yet implemented",
+            });
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        } else {
+            println!("Adjacency query not yet implemented");
+            println!("Use --uri to lookup specific URIs, or --type to list by type.");
+        }
+    } else if args.object_type.is_some() || args.card_type.is_some() || args.edge_type.is_some() {
+        // Type-based listing - TODO: implement when we have type index
+        if args.json {
+            let json = serde_json::json!({
+                "schema_version": SCHEMA_VERSION,
+                "tool_version": tool_version(),
+                "error": "Type-based listing not yet implemented",
+            });
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        } else {
+            println!("Type-based listing not yet implemented");
+            println!("Use --uri to lookup specific URIs.");
+        }
+    } else {
+        // No query specified
+        if args.json {
+            let json = serde_json::json!({
+                "schema_version": SCHEMA_VERSION,
+                "tool_version": tool_version(),
+                "error": "No query specified. Use --uri, --type, or --adjacency.",
+            });
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        } else {
+            println!("No query specified.");
+            println!("Usage:");
+            println!("  --uri <URI>        Lookup by specific mv2:// URI");
+            println!("  --type card|edge   List by object type");
+            println!("  --adjacency <URI>  Find edges connected to URI");
+        }
+    }
+
+    Ok(())
 }

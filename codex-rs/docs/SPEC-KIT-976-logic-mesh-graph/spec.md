@@ -1,6 +1,6 @@
 # SPEC-KIT-976 — Logic Mesh / Graph v1 (Memvid Memory Cards)
-**Date:** 2026-01-10  
-**Status:** DRAFT  
+**Date:** 2026-01-19
+**Status:** COMPLETE
 **Owner (role):** Platform Data Eng + Librarian/Knowledge Eng
 
 ## Summary
@@ -111,3 +111,55 @@ Expose graph queries to users:
 - **Graph explosion / bloat** → bounded types, depth limits, retention rules, compaction.
 - **Inconsistent IDs** → deterministic ID rules + contract tests + schema versioning.
 - **Policy/privacy** → safe-export redaction applies to cards/edges; do not store secrets as facts by default.
+
+---
+
+## Implementation Summary (2026-01-19)
+
+### Type Definitions
+
+Location: `codex-rs/tui/src/memvid_adapter/types.rs`
+
+**CardType enum:**
+- `Spec`, `Decision`, `Task`, `Risk`, `Component`, `Person`, `Artifact`, `Run`
+
+**EdgeType enum:**
+- `DependsOn`, `Blocks`, `Implements`, `References`, `Owns`, `Risks`, `RelatedTo`
+
+**MemoryCardV1 struct:**
+- `card_id`, `card_type`, `title`, `facts`, `provenance`, `version`
+- Builder methods: `new()`, `with_fact()`, `with_spec_id()`, `with_run_id()`
+- Serialization: `to_bytes()`, `from_bytes()`
+
+**LogicEdgeV1 struct:**
+- `edge_id`, `edge_type`, `from_uri` (LogicalUri), `to_uri` (LogicalUri), `weight`, `provenance`, `version`
+- Type safety: `from_uri` and `to_uri` are `LogicalUri` type, NOT String
+- Builder methods: `new()`, `with_weight()`, `with_spec_id()`, `with_run_id()`
+
+### CLI Commands
+
+Location: `codex-rs/cli/src/speckit_cmd.rs`
+
+| Command | Description |
+|---------|-------------|
+| `code speckit graph add-card --type TYPE --title TITLE [--fact K=V]...` | Create memory card |
+| `code speckit graph add-edge --type TYPE --from URI --to URI [--weight N]` | Create logic edge |
+| `code speckit graph query --uri URI` | Lookup by URI |
+
+### Tests
+
+Location: `codex-rs/tui/src/memvid_adapter/tests.rs`
+
+- `test_memory_card_round_trip` - Card storage and retrieval
+- `test_logic_edge_round_trip` - Edge storage and retrieval
+- `test_edge_references_logical_uris_only` - Type safety enforcement
+- `test_card_type_variants` - CardType parsing
+- `test_edge_type_variants` - EdgeType parsing
+- `test_card_persists_after_reopen` - Persistence across capsule reopen
+
+### Key Design Decisions
+
+1. **Type Safety**: Edge from_uri/to_uri are LogicalUri, not String (compile-time enforcement)
+2. **Storage**: Use existing `CapsuleHandle.put()` with `ObjectType::Card/Edge`
+3. **Schema Versioning**: Both structs have `version: 1` field for future evolution
+4. **Provenance**: All cards/edges capture creation metadata
