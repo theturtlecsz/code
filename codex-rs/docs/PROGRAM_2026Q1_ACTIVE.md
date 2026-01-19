@@ -29,7 +29,7 @@ Transform Codex-RS/Spec-Kit into a Memvid-first, auditable workbench with:
               ▼            ▼            ▼
         ┌─────────┐  ┌─────────┐  ┌─────────┐
         │SPEC-972 │  │SPEC-977 │  │SPEC-978 │
-        │(DONE)   │  │(85%)    │  │(65%)    │
+        │(DONE)   │  │(DONE)   │  │(DONE)   │
         │Hybrid   │  │PolicySnp│  │Reflex   │
         └────┬────┘  └────┬────┘  └────┬────┘
              │            │            │
@@ -37,13 +37,14 @@ Transform Codex-RS/Spec-Kit into a Memvid-first, auditable workbench with:
                           ▼
                     ┌─────────────┐
                     │  SPEC-975   │ Event Schema
-                    │  (WAITING)  │
+                    │  (DONE)     │
                     └──────┬──────┘
                            │
               ┌────────────┴────────────┐
               ▼                         ▼
         ┌─────────┐               ┌─────────┐
         │SPEC-973 │               │SPEC-976 │
+        │(DONE)   │               │(DONE)   │
         │Time-Trvl│               │LogicMesh│
         └─────────┘               └─────────┘
 ```
@@ -61,19 +62,19 @@ Transform Codex-RS/Spec-Kit into a Memvid-first, auditable workbench with:
 - [x] Golden queries and evaluation metrics
 - [x] P95 < 250ms verification
 
-### Phase 3: Policy & Reflex (IN PROGRESS)
+### Phase 3: Policy & Reflex (COMPLETE)
 - [x] SPEC-KIT-971: Branch isolation, time-travel URI resolution, checkpoint labels
 - [x] SPEC-KIT-977: PolicySnapshot capture + capsule storage + drift detection
-- [ ] SPEC-KIT-977: Policy CLI/TUI commands (show, compare, diff)
-- [ ] SPEC-KIT-978: Eval artifact writer + CI gate integration
+- [x] SPEC-KIT-977: Policy CLI/TUI commands (show, compare, diff)
+- [x] SPEC-KIT-978: Eval artifact writer + CI gate integration
 
-### Phase 4: Event & Export
-- [ ] SPEC-KIT-975: Event schema v1
-- [ ] Export verification and replay testing
+### Phase 4: Event & Export (COMPLETE)
+- [x] SPEC-KIT-975: Event schema v1
+- [x] Export verification and replay testing
 
-### Phase 5: Advanced Features
-- [ ] SPEC-KIT-973: Time-Travel UI
-- [ ] SPEC-KIT-976: Logic Mesh
+### Phase 5: Advanced Features (COMPLETE)
+- [x] SPEC-KIT-973: Time-Travel UI
+- [x] SPEC-KIT-976: Logic Mesh
 
 ---
 
@@ -84,8 +85,8 @@ Transform Codex-RS/Spec-Kit into a Memvid-first, auditable workbench with:
 | G1 | 971 URI + checkpoint tests pass | - | PASSED |
 | G2 | 972 eval harness operational | - | PASSED |
 | G3 | 977 PolicySnapshot stored in capsule | - | PASSED |
-| G4 | 978 Reflex bakeoff complete | - | PENDING |
-| G5 | 975 Event schema validated | - | PENDING |
+| G4 | 978 Reflex bakeoff complete | - | PASSED |
+| G5 | 975 Event schema validated | - | PASSED |
 
 ---
 
@@ -96,7 +97,7 @@ Transform Codex-RS/Spec-Kit into a Memvid-first, auditable workbench with:
 | Capsule corruption | Crash recovery + doctor command | MITIGATED |
 | Retrieval latency | P95 benchmarking, caching | MITIGATED |
 | Memory backend incompatibility | Config switch, fallback | MITIGATED |
-| Reflex model quality | A/B harness, bakeoffs | PLANNED |
+| Reflex model quality | A/B harness, bakeoffs | MITIGATED |
 
 ---
 
@@ -105,10 +106,10 @@ Transform Codex-RS/Spec-Kit into a Memvid-first, auditable workbench with:
 | Metric | Target | Current |
 |--------|--------|---------|
 | Memvid test coverage | 30+ tests | 37 tests |
-| Stage0 test coverage | 250+ tests | 260 tests |
+| Stage0 test coverage | 250+ tests | 269 tests |
 | Retrieval P95 latency | < 250ms | < 10ms (synthetic) |
-| Doc lint pass rate | 100% | TBD |
+| Doc lint pass rate | 100% | 100% |
 
 ---
 
-*Updated: 2026-01-16*
+*Updated: 2026-01-19*

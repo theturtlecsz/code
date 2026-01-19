@@ -1,8 +1,8 @@
 # DECISION_REGISTER.md - Locked Decisions
 
-**Version:** 1.0
-**Last Updated:** 2026-01-16
-**Total Decisions:** D1-D112 (D100-D102 locked, D110-D112 active)
+**Version:** 1.1
+**Last Updated:** 2026-01-19
+**Total Decisions:** D1-D112 (all LOCKED)
 
 ---
 
@@ -41,7 +41,7 @@
 
 ---
 
-## Retrieval Decisions (D21-D40)
+## Retrieval Decisions (D21-D30)
 
 | ID | Decision | Status | Spec |
 |----|----------|--------|------|
@@ -58,6 +58,57 @@
 
 ---
 
+## Graph & Time-Travel Decisions (D31-D40)
+
+| ID | Decision | Status | Spec |
+|----|----------|--------|------|
+| D31 | Memory Card schema v1 (card_id, card_type, facts, provenance) | LOCKED | 976 |
+| D33 | Run event capture in events track | LOCKED | 975 |
+| D35 | Passphrase/key UX for exports | LOCKED | 974 |
+| D37 | Multi-modal ingestion behind feature gates | LOCKED | 980 |
+| D39 | Dual-backend runtime flag for A/B comparison | LOCKED | 979 |
+| D40 | Parity gates for migration | LOCKED | 979 |
+
+---
+
+## Export & Security Decisions (D41-D60)
+
+| ID | Decision | Status | Spec |
+|----|----------|--------|------|
+| D43 | Reflex fallback order configurable | LOCKED | 978 |
+| D46 | Export triggers (manual/risk/always modes) | LOCKED | 974 |
+| D49 | Reflex loop compile/parse/patch/apply cycle | LOCKED | 978 |
+| D50 | Bakeoff harness for reflex evaluation | LOCKED | 978 |
+| D51 | Retrieval events captured with explainability | LOCKED | 975 |
+| D52 | Migration tool for local-memory corpus | LOCKED | 979 |
+| D53 | Deprecation plan for local-memory | LOCKED | 979 |
+| D54 | Password/env var for capsule encryption | LOCKED | 974 |
+| D55 | JSON schema enforcement for reflex | LOCKED | 978 |
+
+---
+
+## Advanced Decisions (D61-D80)
+
+| ID | Decision | Status | Spec |
+|----|----------|--------|------|
+| D58 | Graph references use logical URIs only | LOCKED | 976 |
+| D59 | Offline replay never reissues network calls | LOCKED | 975 |
+| D62 | Logic Edge schema v1 (edge_id, edge_type, from/to URIs) | LOCKED | 976 |
+| D63 | EdgeType enum (DependsOn, Blocks, Implements, etc.) | LOCKED | 976 |
+| D64 | CardType enum (Spec, Decision, Task, Risk, etc.) | LOCKED | 976 |
+| D65 | StageTransition event type | LOCKED | 975 |
+| D66 | PolicySnapshotRef event type | LOCKED | 975 |
+| D70 | Safe export scope includes run artifacts | LOCKED | 974 |
+| D71 | Safe export excludes raw LLM I/O by default | LOCKED | 974 |
+| D72 | ToolCall/ToolResult event types | LOCKED | 975 |
+| D75 | Export triggers on high-risk specs | LOCKED | 974 |
+| D76 | Retention/GC for exports | LOCKED | 974 |
+| D77 | Safe export redaction/masking | LOCKED | 974/976 |
+| D78 | Audit logging for exports (CapsuleExported event) | LOCKED | 974/978 |
+| D79 | Import verification via capsule doctor | LOCKED | 974 |
+
+---
+
 ## Evaluation Decisions (D80-D100)
 
 | ID | Decision | Status | Spec |
@@ -66,6 +117,10 @@
 | D90 | b_latency_acceptable(250) for P95 check | LOCKED | 972 |
 | D91 | Precision@k, Recall@k, MRR metrics | LOCKED | 972 |
 | D92 | Golden test memories for evaluation | LOCKED | 972 |
+| D93 | Bakeoff CLI for reflex evaluation | LOCKED | 978 |
+| D94 | Feature flag for local-memory removal | LOCKED | 979 |
+| D95 | Replay report generator (markdown + JSON) | LOCKED | 975 |
+| D97 | Graph-aware retrieval expansion | LOCKED | 976 |
 
 ---
 
@@ -83,9 +138,9 @@
 
 | ID | Decision | Status | Spec |
 |----|----------|--------|------|
-| D110 | SGLang primary, vLLM fallback | ACTIVE | 978 |
-| D111 | Reflex operations captured in A/B harness | ACTIVE | 978 |
-| D112 | Fallback order configurable | ACTIVE | 978 |
+| D110 | SGLang primary, vLLM fallback | LOCKED | 978 |
+| D111 | Reflex operations captured in A/B harness | LOCKED | 978 |
+| D112 | Fallback order configurable | LOCKED | 978 |
 
 ---
 

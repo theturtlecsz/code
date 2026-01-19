@@ -42,7 +42,7 @@ Make capsules shareable and enterprise-safe: encrypted exports, reproducible imp
   - Optional OS keychain integration is a later enhancement (not required in v1).
 - Safe export scope (D77):
   - Include: run artifacts, evidence logs, checkpoints, PolicySnapshotRef, RetrievalRequest/Response, GateDecisions, ErrorEvents, and manifests.
-  - Exclude raw LLM I/O by default unless `audit.capture_llm_io=full` (SPEC-KIT-975).
+  - Exclude raw LLM I/O by default unless `capture.mode = full_io` (SPEC-KIT-975).
   - Apply redaction/masking to rendered views and exported bundle outputs.
 - Audit logging (D78/D80):
   - Every export writes a `CapsuleExported` event into the workspace capsule (who/when/what/safe-mode/encryption/digest).
@@ -58,7 +58,7 @@ Make capsules shareable and enterprise-safe: encrypted exports, reproducible imp
 - `capsule.export.mode=risk` only auto-exports when the configured risk conditions are met; otherwise it remains manual.
 - Safe export redaction:
   - Secrets/PII are masked in rendered exports and replay reports by default.
-  - Raw LLM I/O is excluded unless explicitly enabled via `audit.capture_llm_io=full`.
+  - Raw LLM I/O is excluded unless explicitly enabled via `capture.mode = full_io`.
 - Every export writes a `CapsuleExported` event into the workspace capsule evidence timeline, including: run_id, spec_id, digest, encryption flag, safe flag, included tracks.
 - Every import writes a `CapsuleImported` event into the workspace capsule evidence timeline, including: source digest, mount name, and validation result.
 - Retention:
