@@ -175,6 +175,8 @@ pub(crate) struct App<'a> {
     initial_command_dispatched: bool,
     /// Exit after initial command completes (for CI/CD automation).
     exit_on_complete: bool,
+    /// Tracks automation failure for exit code (SPEC-KIT-920).
+    automation_failed: bool,
 
     // === FORK-SPECIFIC (just-every/code): SPEC-945D Config hot-reload ===
     /// Configuration hot-reload watcher for live config updates.
@@ -473,6 +475,7 @@ impl App<'_> {
             initial_command,
             initial_command_dispatched: false,
             exit_on_complete,
+            automation_failed: false,
 
             // SPEC-945D: Config hot-reload
             config_watcher: config_watcher.clone(),
@@ -1670,6 +1673,16 @@ impl App<'_> {
                     self.commit_anim_running.store(false, Ordering::Release);
                     self.input_running.store(false, Ordering::Release);
                     break 'main;
+                }
+                AppEvent::AutomationSuccess => {
+                    // SPEC-KIT-920: Automation succeeded - exit code will be 0
+                    tracing::info!("SPEC-KIT-920: Automation succeeded");
+                    // automation_failed stays false (already initialized to false)
+                }
+                AppEvent::AutomationFailure => {
+                    // SPEC-KIT-920: Automation failed - exit code will be non-zero
+                    tracing::info!("SPEC-KIT-920: Automation failed");
+                    self.automation_failed = true;
                 }
                 AppEvent::CancelRunningTask => {
                     if let AppState::Chat { widget } = &mut self.app_state {
@@ -3382,6 +3395,11 @@ impl App<'_> {
         }
         if self.alt_screen_active {
             terminal.clear()?;
+        }
+
+        // SPEC-KIT-920: Return error for failed automation (non-zero exit code)
+        if self.exit_on_complete && self.automation_failed {
+            return Err(color_eyre::eyre::eyre!("Automation command failed"));
         }
 
         Ok(())

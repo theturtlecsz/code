@@ -111,6 +111,12 @@ pub(crate) enum AppEvent {
     /// Request to exit the application gracefully.
     ExitRequest,
 
+    /// Automation completed successfully (SPEC-KIT-920: headless automation)
+    AutomationSuccess,
+
+    /// Automation failed or was aborted (SPEC-KIT-920: headless automation)
+    AutomationFailure,
+
     /// Forward an `Op` to the Agent. Using an `AppEvent` for this avoids
     /// bubbling channels through layers of widgets.
     CodexOp(codex_core::protocol::Op),

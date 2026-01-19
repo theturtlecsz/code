@@ -1,11 +1,51 @@
 # HANDOFF.md - SPEC-KIT Session Continuity
 
-**Session Date**: 2026-01-18 (Evening)
-**Status**: SPEC-KIT-975 (95%) + SPEC-KIT-978 (100%)
+**Session Date**: 2026-01-19
+**Status**: SPEC-KIT-975/978/973/976 Complete + Headless Automation MVP
 
 ---
 
-## What Was Completed This Session (2026-01-18 Evening)
+## What Was Completed This Session (2026-01-19)
+
+### Headless Automation MVP (SPEC-KIT-920)
+
+**Objective:** Wire `--exit-on-complete` flag to return proper exit codes.
+
+**Feature:**
+```bash
+# Run commands non-interactively with proper exit codes
+codex-tui --initial-command "/speckit.status SPEC-KIT-900" --exit-on-complete
+echo $?  # 0 on success, non-zero on failure
+```
+
+**Exit Code Behavior:**
+- `0`: Command/pipeline completed successfully
+- Non-zero: Command failed, pipeline halted, or pipeline cancelled
+
+**Implementation:**
+- Added `AutomationSuccess` / `AutomationFailure` events to `AppEvent`
+- Added `automation_failed: bool` field to `App` struct
+- Pipeline success (`NextAction::PipelineComplete`) signals `AutomationSuccess`
+- Pipeline halt (`halt_spec_auto_with_error`) signals `AutomationFailure`
+- Pipeline cancel (`cleanup_spec_auto_with_cancel`) signals `AutomationFailure`
+- Exit path returns `Err(...)` when `automation_failed == true`
+
+**Files Modified:**
+- `tui/src/app_event.rs` - Added event variants
+- `tui/src/app.rs` - Tracking field, event handlers, exit path
+- `tui/src/chatwidget/spec_kit/context.rs` - Added `send_app_event()` trait method
+- `tui/src/chatwidget/mod.rs` - ChatWidget impl of `send_app_event()`
+- `tui/src/chatwidget/spec_kit/pipeline_coordinator.rs` - Success signal
+- `tui/src/chatwidget/spec_kit/command_handlers.rs` - Failure signal (halt)
+- `tui/src/chatwidget/spec_kit/validation_lifecycle.rs` - Failure signal (cancel)
+
+**Tests:**
+- `test_send_app_event_default_noop` - Verifies trait method works in mock
+- All 712 existing tests pass
+
+---
+
+## What Was Completed Previous Session (2026-01-18 Evening)
 
 ### PR 1: SPEC-KIT-975 Runtime Emit Wiring (Complete)
 
@@ -471,6 +511,13 @@ Output: to_text() or to_json()
 
 ```
 Continue SPEC-KIT development. Reference docs/HANDOFF.md for full context.
+
+## Session 2026-01-19 Completed
+
+### Headless Automation MVP (SPEC-KIT-920)
+- `--exit-on-complete` now returns proper exit codes (0=success, non-zero=failure)
+- Pipeline completion signals AutomationSuccess, halt/cancel signals AutomationFailure
+- Test: `codex-tui --initial-command "/speckit.status SPEC-ID" --exit-on-complete; echo $?`
 
 ## Session 2026-01-18 Completed
 

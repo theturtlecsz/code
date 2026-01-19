@@ -144,6 +144,9 @@ pub fn cleanup_spec_auto_with_cancel(widget: &mut ChatWidget, reason: &str) {
         }
     }
 
+    // SPEC-KIT-920: Signal automation failure for exit code
+    widget.app_event_tx.send(crate::app_event::AppEvent::AutomationFailure);
+
     // Clear the spec_auto_state
     widget.spec_auto_state = None;
     // P6-SYNC Phase 6: Clear spec-kit token metrics from status bar

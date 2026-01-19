@@ -16838,6 +16838,11 @@ impl spec_kit::SpecKitContext for ChatWidget<'_> {
         self.bottom_pane
             .show_quality_gate_modal(checkpoint, questions);
     }
+
+    // SPEC-KIT-920: Automation exit code support
+    fn send_app_event(&self, event: crate::app_event::AppEvent) {
+        self.app_event_tx.send(event);
+    }
 }
 // === END FORK-SPECIFIC ===
 

@@ -9,7 +9,7 @@
 
 use super::error::Result;
 use super::state::{EscalatedQuestion, GuardrailOutcome, QualityCheckpoint, SpecAutoState};
-use crate::app_event::BackgroundPlacement;
+use crate::app_event::{AppEvent, BackgroundPlacement};
 // P6-SYNC Phase 6: Token metrics widget for spec-kit status bar
 use crate::history_cell::HistoryCell;
 use crate::slash_command::{HalMode, SlashCommand};
@@ -117,6 +117,14 @@ pub(crate) trait SpecKitContext {
         checkpoint: QualityCheckpoint,
         questions: Vec<EscalatedQuestion>,
     );
+
+    // === SPEC-KIT-920: Automation Support ===
+
+    /// Send an app event (for automation exit code tracking).
+    /// Default implementation is no-op; ChatWidget overrides to send actual events.
+    fn send_app_event(&self, _event: AppEvent) {
+        // No-op by default - only ChatWidget has access to app_event_tx
+    }
 }
 
 // MAINT-3 Phase 2: Mock context for testing (available in test builds)
@@ -342,5 +350,17 @@ pub mod test_mock {
         let outcome = result.unwrap();
         assert!(outcome.success);
         assert!(outcome.summary.contains("Mock"));
+    }
+
+    // SPEC-KIT-920: Automation exit code support
+    #[test]
+    fn test_send_app_event_default_noop() {
+        // The default implementation is a no-op, which allows trait usage
+        // without requiring app_event_tx. ChatWidget overrides this to send
+        // actual events.
+        let ctx = MockSpecKitContext::new();
+        ctx.send_app_event(AppEvent::AutomationSuccess);
+        ctx.send_app_event(AppEvent::AutomationFailure);
+        // No panic = success - the mock just ignores the events
     }
 }

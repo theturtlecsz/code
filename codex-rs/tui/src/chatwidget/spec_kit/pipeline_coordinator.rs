@@ -1113,6 +1113,9 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
                     }
                 }
 
+                // SPEC-KIT-920: Signal automation success for exit code
+                widget.app_event_tx.send(crate::app_event::AppEvent::AutomationSuccess);
+
                 // Successful completion - clear state without cancellation event
                 widget.spec_auto_state = None;
                 // P6-SYNC Phase 6: Clear spec-kit token metrics from status bar
