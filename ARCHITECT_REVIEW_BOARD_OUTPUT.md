@@ -348,7 +348,7 @@ All H0-H7 decisions locked. Phase 2 complete.
 - ARCHITECT_REVIEW_RESEARCH.md
 - Any user-facing documentation
 
-**Status:** Pending implementation
+**Status:** RESOLVED (2026-01-20)
 
 ---
 
@@ -472,11 +472,12 @@ All questions decided. Phase 1 (A1-G3) and Phase 2 (H0-H7) complete.
 
 ## Locked Decisions: D113-D134 (22 new decisions)
 
-## Implementation Tasks (Post-ARB)
-1. Transfer D113-D134 to DECISION_REGISTER.md
-2. Implement enforcement tests (18 tests defined)
-3. Create ACE Frame schema via schemars
-4. Update spec-kit executor for headless maieutic input
+## Implementation Status
+All post-ARB tasks complete:
+- D113-D134 locked in DECISION_REGISTER.md (5c96e0fe4)
+- Enforcement test suite added (PR #10)
+- ACE Frame JSON Schema v1 generated (PR #9)
+- Headless maieutic executor updated (b9415695f)
 ```
 
 ---
