@@ -3716,32 +3716,41 @@ fn test_headless_missing_maieutic_file_exits_3() -> Result<()> {
 }
 
 #[test]
-#[ignore = "Requires interactive mock infrastructure - TODO in test PR"]
+#[ignore = "D133: Requires interactive mock infrastructure - tracked in SPEC-KIT-930"]
 fn test_headless_never_prompts() {
-    // SPEC-KIT-920: Verify that no code path in headless mode can trigger a prompt
+    // D133: Verify that no code path in headless mode can trigger a prompt
     // This test requires mocking interactive code paths
     // Implementation: Add a global prompt counter that panics in test mode if incremented
+    //
+    // Tracked in ARB Pass 2 enforcement suite (Test #11)
+    // See: codex-rs/tui/src/chatwidget/spec_kit/arb_pass2_enforcement.rs
     todo!("test_headless_never_prompts - requires interactive mock infrastructure")
 }
 
 #[test]
-#[ignore = "Requires mock agent infrastructure for approval checkpoints - TODO in test PR"]
+#[ignore = "D133: Requires approval checkpoint mock - tracked in SPEC-KIT-930"]
 fn test_headless_needs_approval_exit_code() {
-    // SPEC-KIT-920: Tier-2/Tier-3 checkpoints should return NEEDS_APPROVAL (11)
+    // D133: Tier-2/Tier-3 checkpoints should return NEEDS_APPROVAL (11)
     // This test requires:
     // 1. Setting up a SPEC that will hit an approval checkpoint
     // 2. Running with --execute and valid maieutic
     // 3. Verifying exit code 11
+    //
+    // Tracked in ARB Pass 2 enforcement suite (Test #12)
+    // See: codex-rs/tui/src/chatwidget/spec_kit/arb_pass2_enforcement.rs
     todo!("test_headless_needs_approval_exit_code - requires mock agent infrastructure")
 }
 
 #[test]
-#[ignore = "Requires parallel TUI/CLI execution comparison - TODO in test PR"]
+#[ignore = "D133: Requires TUI/CLI parity comparison - tracked in SPEC-KIT-930"]
 fn test_shared_executor_same_core_artifacts() {
-    // SPEC-KIT-920: Verify that given identical inputs, CLI and TUI produce identical artifacts
+    // D133: Verify that given identical inputs, CLI and TUI produce identical artifacts
     // This test requires:
     // 1. Mock agent responses
     // 2. Deterministic timestamp injection
     // 3. Artifact hash comparison
+    //
+    // Tracked in ARB Pass 2 enforcement suite (Test #13)
+    // See: codex-rs/tui/src/chatwidget/spec_kit/arb_pass2_enforcement.rs
     todo!("test_shared_executor_same_core_artifacts - requires mock agent infrastructure")
 }

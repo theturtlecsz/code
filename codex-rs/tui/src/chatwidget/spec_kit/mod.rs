@@ -17,6 +17,7 @@ pub mod ace_route_selector; // ACE route selection for complex tasks
 pub mod agent_orchestrator; // Agent orchestration functions (extracted from handler.rs)
 pub mod agent_retry; // SPEC-938: Agent spawn retry logic with exponential backoff
 pub mod analyze_native; // Native consistency checking (zero agents, zero cost)
+pub mod arb_pass2_enforcement; // ARB Pass 2 enforcement test registry (D130-D134)
 pub mod checklist_native; // Native quality scoring (zero agents, zero cost)
 pub mod clarify_handler; // SPEC-KIT-971: Clarify modal event handlers
 pub mod clarify_native; // Native ambiguity detection (zero agents, zero cost)
@@ -32,6 +33,8 @@ pub mod cost_tracker; // SPEC-KIT-070: Cost tracking and budget management
 pub mod error;
 pub mod event_emitter; // SPEC-KIT-975: Audit event emitter for runtime wiring
 pub mod evidence;
+pub mod evidence_archival; // E.3: Evidence archival (>30 days) with injectable clock
+pub mod evidence_integrity; // E.4: SHA256 integrity verification for archives
 pub mod execution_logger; // SPEC-KIT-070: End-to-end execution visibility
 pub mod file_modifier;
 pub mod gate_evaluation; // Gate evaluation (renamed from consensus - PR4)
