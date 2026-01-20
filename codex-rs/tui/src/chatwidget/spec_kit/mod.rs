@@ -16,6 +16,7 @@ pub mod ace_reflector; // ACE Reflector - Deep outcome analysis
 pub mod ace_route_selector; // ACE route selection for complex tasks
 pub mod agent_orchestrator; // Agent orchestration functions (extracted from handler.rs)
 pub mod agent_retry; // SPEC-938: Agent spawn retry logic with exponential backoff
+pub mod arb_pass2_enforcement; // ARB Pass 2 enforcement test registry (D130-D134)
 pub mod analyze_native; // Native consistency checking (zero agents, zero cost)
 pub mod checklist_native; // Native quality scoring (zero agents, zero cost)
 pub mod clarify_handler; // SPEC-KIT-971: Clarify modal event handlers
