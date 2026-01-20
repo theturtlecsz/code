@@ -9,13 +9,13 @@ use codex_git_tooling::{
 
 use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
-use crate::bottom_pane::list_selection_view::{ListSelectionView, SelectionAction, SelectionItem};
 use crate::bottom_pane::UndoRestoreView;
+use crate::bottom_pane::list_selection_view::{ListSelectionView, SelectionAction, SelectionItem};
 use crate::history_cell;
 
 use super::{
     ChatWidget, ConversationSnapshot, GhostSnapshot, GhostSnapshotsDisabledReason, GhostState,
-    UndoSnapshotPreview, MAX_TRACKED_GHOST_COMMITS,
+    MAX_TRACKED_GHOST_COMMITS, UndoSnapshotPreview,
 };
 
 impl ChatWidget<'_> {

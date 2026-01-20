@@ -18,8 +18,8 @@
 
 use crate::memvid_adapter::capsule::{CapsuleConfig, CapsuleError, CapsuleHandle};
 use crate::memvid_adapter::types::{
-    BranchId, CheckpointId, LogicalUri, ObjectType,
-    RetrievalRequestPayload, RetrievalResponsePayload,
+    BranchId, CheckpointId, LogicalUri, ObjectType, RetrievalRequestPayload,
+    RetrievalResponsePayload,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -144,7 +144,12 @@ impl MemvidMemoryAdapter {
     /// Set the emit context for event emission.
     ///
     /// When set, search_memories will emit RetrievalRequest/Response events.
-    pub async fn set_emit_context(&self, spec_id: impl Into<String>, run_id: impl Into<String>, stage: Option<String>) {
+    pub async fn set_emit_context(
+        &self,
+        spec_id: impl Into<String>,
+        run_id: impl Into<String>,
+        stage: Option<String>,
+    ) {
         *self.emit_context.write().await = Some(EmitContext {
             spec_id: spec_id.into(),
             run_id: run_id.into(),
@@ -201,7 +206,8 @@ impl MemvidMemoryAdapter {
         let mut count = 0;
         for (uri, data, metadata) in handle.iter_stored_artifacts() {
             // Extract spec_id from URI if possible (mv2://workspace/spec/run/type/path)
-            let spec_id = uri.as_str()
+            let spec_id = uri
+                .as_str()
                 .strip_prefix("mv2://")
                 .and_then(|s| s.split('/').nth(1))
                 .unwrap_or("unknown");
@@ -223,11 +229,7 @@ impl MemvidMemoryAdapter {
     /// Get a reference to the capsule handle (if open).
     pub async fn capsule(&self) -> Option<tokio::sync::RwLockReadGuard<'_, Option<CapsuleHandle>>> {
         let guard = self.capsule.read().await;
-        if guard.is_some() {
-            Some(guard)
-        } else {
-            None
-        }
+        if guard.is_some() { Some(guard) } else { None }
     }
 
     // =========================================================================
@@ -251,7 +253,14 @@ impl MemvidMemoryAdapter {
     ) -> Result<LogicalUri, CapsuleError> {
         let capsule = self.capsule.read().await;
         let handle = capsule.as_ref().ok_or(CapsuleError::NotOpen)?;
-        let uri = handle.put(spec_id, run_id, ObjectType::Artifact, path, data.clone(), metadata.clone())?;
+        let uri = handle.put(
+            spec_id,
+            run_id,
+            ObjectType::Artifact,
+            path,
+            data.clone(),
+            metadata.clone(),
+        )?;
 
         // SPEC-KIT-972: Index the artifact for search
         self.index_memory(&uri, &data, &metadata, spec_id).await;
@@ -389,7 +398,9 @@ impl MemvidMemoryAdapter {
     }
 
     /// List checkpoints.
-    pub async fn list_checkpoints(&self) -> Result<Vec<crate::memvid_adapter::types::CheckpointMetadata>, CapsuleError> {
+    pub async fn list_checkpoints(
+        &self,
+    ) -> Result<Vec<crate::memvid_adapter::types::CheckpointMetadata>, CapsuleError> {
         let capsule = self.capsule.read().await;
         let handle = capsule.as_ref().ok_or(CapsuleError::NotOpen)?;
         Ok(handle.list_checkpoints())
@@ -484,7 +495,9 @@ impl LocalMemoryClient for MemvidMemoryAdapter {
                 role: None,
             };
             // Best-effort: ignore errors
-            if let Err(e) = capsule_guard.emit_retrieval_request(&ctx.spec_id, &ctx.run_id, &req_payload) {
+            if let Err(e) =
+                capsule_guard.emit_retrieval_request(&ctx.spec_id, &ctx.run_id, &req_payload)
+            {
                 tracing::warn!(error = %e, "Failed to emit RetrievalRequest (best-effort)");
             }
         }
@@ -499,7 +512,10 @@ impl LocalMemoryClient for MemvidMemoryAdapter {
 
         // Run lexical search
         let top_k = (params.max_results * 3).min(100); // Fetch 3x for filtering headroom
-        let search_results = self.search_index.search(&query_text, &filters, top_k).await?;
+        let search_results = self
+            .search_index
+            .search(&query_text, &filters, top_k)
+            .await?;
 
         tracing::debug!(
             "TF-IDF search returned {} raw results",
@@ -533,30 +549,23 @@ impl LocalMemoryClient for MemvidMemoryAdapter {
         }
 
         // Sort by final score descending
-        candidates.sort_by(|a, b| {
-            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
-        });
+        candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Take top N results
         candidates.truncate(params.max_results);
 
-        tracing::debug!(
-            "After filtering: {} candidates",
-            candidates.len()
-        );
+        tracing::debug!("After filtering: {} candidates", candidates.len());
 
         // Convert to LocalMemorySummary
         let results: Vec<LocalMemorySummary> = candidates
             .into_iter()
-            .map(|(id, score, meta)| {
-                LocalMemorySummary {
-                    id,
-                    domain: meta.as_ref().and_then(|m| m.domain.clone()),
-                    tags: meta.as_ref().map(|m| m.tags.clone()).unwrap_or_default(),
-                    created_at: meta.as_ref().and_then(|m| m.created_at),
-                    snippet: meta.as_ref().map(|m| m.snippet.clone()).unwrap_or_default(),
-                    similarity_score: score,
-                }
+            .map(|(id, score, meta)| LocalMemorySummary {
+                id,
+                domain: meta.as_ref().and_then(|m| m.domain.clone()),
+                tags: meta.as_ref().map(|m| m.tags.clone()).unwrap_or_default(),
+                created_at: meta.as_ref().and_then(|m| m.created_at),
+                snippet: meta.as_ref().map(|m| m.snippet.clone()).unwrap_or_default(),
+                similarity_score: score,
             })
             .collect();
 
@@ -585,7 +594,12 @@ impl LocalMemoryClient for MemvidMemoryAdapter {
                 error: None,
             };
             // Best-effort: ignore errors
-            if let Err(e) = capsule_guard.emit_retrieval_response(&ctx.spec_id, &ctx.run_id, ctx.stage.as_deref(), &resp_payload) {
+            if let Err(e) = capsule_guard.emit_retrieval_response(
+                &ctx.spec_id,
+                &ctx.run_id,
+                ctx.stage.as_deref(),
+                &resp_payload,
+            ) {
                 tracing::warn!(error = %e, "Failed to emit RetrievalResponse (best-effort)");
             }
         }
@@ -600,7 +614,11 @@ impl LocalMemoryClient for MemvidMemoryAdapter {
 
 impl MemvidMemoryAdapter {
     /// Check if a memory passes IQO filters.
-    fn passes_iqo_filters(&self, meta: &Option<MemoryMeta>, params: &LocalMemorySearchParams) -> bool {
+    fn passes_iqo_filters(
+        &self,
+        meta: &Option<MemoryMeta>,
+        params: &LocalMemorySearchParams,
+    ) -> bool {
         let Some(meta) = meta else {
             // No metadata = can't filter, include by default
             return true;
@@ -610,9 +628,10 @@ impl MemvidMemoryAdapter {
         if !params.iqo.domains.is_empty() {
             if let Some(ref domain) = meta.domain {
                 // Allow if memory domain matches any IQO domain or starts with "spec:"
-                let matches = params.iqo.domains.iter().any(|d| {
-                    domain == d || domain.starts_with(&format!("spec:{}", d)) || d == "*"
-                });
+                let matches =
+                    params.iqo.domains.iter().any(|d| {
+                        domain == d || domain.starts_with(&format!("spec:{}", d)) || d == "*"
+                    });
                 if !matches && !domain.starts_with("spec:") {
                     return false;
                 }
@@ -621,7 +640,10 @@ impl MemvidMemoryAdapter {
 
         // Check required tags
         if !params.iqo.required_tags.is_empty() {
-            let has_required = params.iqo.required_tags.iter()
+            let has_required = params
+                .iqo
+                .required_tags
+                .iter()
                 .all(|req| meta.tags.contains(req));
             if !has_required {
                 return false;
@@ -630,7 +652,10 @@ impl MemvidMemoryAdapter {
 
         // Check excluded tags
         if !params.iqo.exclude_tags.is_empty() {
-            let has_excluded = params.iqo.exclude_tags.iter()
+            let has_excluded = params
+                .iqo
+                .exclude_tags
+                .iter()
                 .any(|excl| meta.tags.contains(excl));
             if has_excluded {
                 return false;
@@ -664,7 +689,11 @@ impl MemvidMemoryAdapter {
     }
 
     /// Compute tag boost based on optional tag matches.
-    fn compute_tag_boost(&self, meta: &Option<MemoryMeta>, params: &LocalMemorySearchParams) -> f64 {
+    fn compute_tag_boost(
+        &self,
+        meta: &Option<MemoryMeta>,
+        params: &LocalMemorySearchParams,
+    ) -> f64 {
         let Some(meta) = meta else {
             return 0.0;
         };
@@ -674,7 +703,10 @@ impl MemvidMemoryAdapter {
         }
 
         // Count matching optional tags
-        let matches = params.iqo.optional_tags.iter()
+        let matches = params
+            .iqo
+            .optional_tags
+            .iter()
             .filter(|t| meta.tags.contains(t))
             .count();
 
@@ -744,9 +776,8 @@ pub fn create_memvid_adapter(
     fallback: Option<Arc<dyn LocalMemoryClient>>,
 ) -> MemvidMemoryAdapter {
     let config = CapsuleConfig {
-        capsule_path: capsule_path.unwrap_or_else(|| {
-            std::path::PathBuf::from(".speckit/memvid/workspace.mv2")
-        }),
+        capsule_path: capsule_path
+            .unwrap_or_else(|| std::path::PathBuf::from(".speckit/memvid/workspace.mv2")),
         workspace_id: workspace_id.unwrap_or_else(|| "default".to_string()),
         ..Default::default()
     };
@@ -1018,7 +1049,10 @@ mod adapter_tests {
         let checkpoints = adapter.list_checkpoints().await.unwrap();
 
         assert!(!checkpoints.is_empty());
-        assert_eq!(checkpoints[0].checkpoint_id.as_str(), checkpoint_id.as_str());
+        assert_eq!(
+            checkpoints[0].checkpoint_id.as_str(),
+            checkpoint_id.as_str()
+        );
     }
 
     // =========================================================================
@@ -1055,31 +1089,35 @@ mod adapter_tests {
             "Rust error handling pattern using Result and Option types for safe error propagation",
         ).await;
 
-        adapter.add_memory_to_index(
-            MemoryMeta {
-                id: "mem-002".to_string(),
-                domain: Some("spec-kit".to_string()),
-                tags: vec!["type:decision".to_string()],
-                importance: Some(7.0),
-                created_at: Some(Utc::now()),
-                snippet: "Decision to use async/await".to_string(),
-                uri: None,
-            },
-            "Decision to use async/await pattern for all IO operations in the codebase",
-        ).await;
+        adapter
+            .add_memory_to_index(
+                MemoryMeta {
+                    id: "mem-002".to_string(),
+                    domain: Some("spec-kit".to_string()),
+                    tags: vec!["type:decision".to_string()],
+                    importance: Some(7.0),
+                    created_at: Some(Utc::now()),
+                    snippet: "Decision to use async/await".to_string(),
+                    uri: None,
+                },
+                "Decision to use async/await pattern for all IO operations in the codebase",
+            )
+            .await;
 
-        adapter.add_memory_to_index(
-            MemoryMeta {
-                id: "mem-003".to_string(),
-                domain: Some("infrastructure".to_string()),
-                tags: vec!["type:pattern".to_string()],
-                importance: Some(6.0),
-                created_at: Some(Utc::now()),
-                snippet: "Database connection pool pattern".to_string(),
-                uri: None,
-            },
-            "Database connection pool pattern for PostgreSQL with r2d2",
-        ).await;
+        adapter
+            .add_memory_to_index(
+                MemoryMeta {
+                    id: "mem-003".to_string(),
+                    domain: Some("infrastructure".to_string()),
+                    tags: vec!["type:pattern".to_string()],
+                    importance: Some(6.0),
+                    created_at: Some(Utc::now()),
+                    snippet: "Database connection pool pattern".to_string(),
+                    uri: None,
+                },
+                "Database connection pool pattern for PostgreSQL with r2d2",
+            )
+            .await;
 
         assert_eq!(adapter.indexed_memory_count().await, 3);
 
@@ -1095,7 +1133,10 @@ mod adapter_tests {
         let results = adapter.search_memories(params).await.unwrap();
 
         assert!(!results.is_empty(), "Should find at least one result");
-        assert_eq!(results[0].id, "mem-001", "First result should be error handling memory");
+        assert_eq!(
+            results[0].id, "mem-001",
+            "First result should be error handling memory"
+        );
     }
 
     #[tokio::test]
@@ -1113,31 +1154,35 @@ mod adapter_tests {
         adapter.open().await.unwrap();
 
         // Add memories in different domains
-        adapter.add_memory_to_index(
-            MemoryMeta {
-                id: "mem-spec".to_string(),
-                domain: Some("spec-kit".to_string()),
-                tags: vec!["type:pattern".to_string()],
-                importance: Some(8.0),
-                created_at: Some(Utc::now()),
-                snippet: "Pattern in spec-kit".to_string(),
-                uri: None,
-            },
-            "Important pattern for spec-kit workflow",
-        ).await;
+        adapter
+            .add_memory_to_index(
+                MemoryMeta {
+                    id: "mem-spec".to_string(),
+                    domain: Some("spec-kit".to_string()),
+                    tags: vec!["type:pattern".to_string()],
+                    importance: Some(8.0),
+                    created_at: Some(Utc::now()),
+                    snippet: "Pattern in spec-kit".to_string(),
+                    uri: None,
+                },
+                "Important pattern for spec-kit workflow",
+            )
+            .await;
 
-        adapter.add_memory_to_index(
-            MemoryMeta {
-                id: "mem-infra".to_string(),
-                domain: Some("infrastructure".to_string()),
-                tags: vec!["type:pattern".to_string()],
-                importance: Some(8.0),
-                created_at: Some(Utc::now()),
-                snippet: "Pattern in infrastructure".to_string(),
-                uri: None,
-            },
-            "Important pattern for infrastructure deployment",
-        ).await;
+        adapter
+            .add_memory_to_index(
+                MemoryMeta {
+                    id: "mem-infra".to_string(),
+                    domain: Some("infrastructure".to_string()),
+                    tags: vec!["type:pattern".to_string()],
+                    importance: Some(8.0),
+                    created_at: Some(Utc::now()),
+                    snippet: "Pattern in infrastructure".to_string(),
+                    uri: None,
+                },
+                "Important pattern for infrastructure deployment",
+            )
+            .await;
 
         // Search with domain filter
         let params = LocalMemorySearchParams {
@@ -1153,7 +1198,11 @@ mod adapter_tests {
 
         // Should only return spec-kit domain result
         assert!(!results.is_empty());
-        assert!(results.iter().all(|r| r.domain.as_deref() == Some("spec-kit")));
+        assert!(
+            results
+                .iter()
+                .all(|r| r.domain.as_deref() == Some("spec-kit"))
+        );
     }
 
     #[tokio::test]
@@ -1171,31 +1220,35 @@ mod adapter_tests {
         adapter.open().await.unwrap();
 
         // Add memories with different tags
-        adapter.add_memory_to_index(
-            MemoryMeta {
-                id: "mem-bug".to_string(),
-                domain: Some("spec-kit".to_string()),
-                tags: vec!["type:bug-fix".to_string(), "priority:high".to_string()],
-                importance: Some(9.0),
-                created_at: Some(Utc::now()),
-                snippet: "Fixed critical bug".to_string(),
-                uri: None,
-            },
-            "Fixed critical bug in memory retrieval causing crashes",
-        ).await;
+        adapter
+            .add_memory_to_index(
+                MemoryMeta {
+                    id: "mem-bug".to_string(),
+                    domain: Some("spec-kit".to_string()),
+                    tags: vec!["type:bug-fix".to_string(), "priority:high".to_string()],
+                    importance: Some(9.0),
+                    created_at: Some(Utc::now()),
+                    snippet: "Fixed critical bug".to_string(),
+                    uri: None,
+                },
+                "Fixed critical bug in memory retrieval causing crashes",
+            )
+            .await;
 
-        adapter.add_memory_to_index(
-            MemoryMeta {
-                id: "mem-pattern".to_string(),
-                domain: Some("spec-kit".to_string()),
-                tags: vec!["type:pattern".to_string()],
-                importance: Some(7.0),
-                created_at: Some(Utc::now()),
-                snippet: "New pattern".to_string(),
-                uri: None,
-            },
-            "New pattern for memory retrieval",
-        ).await;
+        adapter
+            .add_memory_to_index(
+                MemoryMeta {
+                    id: "mem-pattern".to_string(),
+                    domain: Some("spec-kit".to_string()),
+                    tags: vec!["type:pattern".to_string()],
+                    importance: Some(7.0),
+                    created_at: Some(Utc::now()),
+                    snippet: "New pattern".to_string(),
+                    uri: None,
+                },
+                "New pattern for memory retrieval",
+            )
+            .await;
 
         // Search requiring type:bug-fix tag
         let params = LocalMemorySearchParams {
@@ -1229,31 +1282,35 @@ mod adapter_tests {
         adapter.open().await.unwrap();
 
         // Add memories
-        adapter.add_memory_to_index(
-            MemoryMeta {
-                id: "mem-system".to_string(),
-                domain: Some("spec-kit".to_string()),
-                tags: vec!["system:true".to_string()],
-                importance: Some(5.0),
-                created_at: Some(Utc::now()),
-                snippet: "System memory".to_string(),
-                uri: None,
-            },
-            "System generated memory for internal use",
-        ).await;
+        adapter
+            .add_memory_to_index(
+                MemoryMeta {
+                    id: "mem-system".to_string(),
+                    domain: Some("spec-kit".to_string()),
+                    tags: vec!["system:true".to_string()],
+                    importance: Some(5.0),
+                    created_at: Some(Utc::now()),
+                    snippet: "System memory".to_string(),
+                    uri: None,
+                },
+                "System generated memory for internal use",
+            )
+            .await;
 
-        adapter.add_memory_to_index(
-            MemoryMeta {
-                id: "mem-user".to_string(),
-                domain: Some("spec-kit".to_string()),
-                tags: vec!["type:decision".to_string()],
-                importance: Some(8.0),
-                created_at: Some(Utc::now()),
-                snippet: "User memory".to_string(),
-                uri: None,
-            },
-            "User created memory for decision tracking",
-        ).await;
+        adapter
+            .add_memory_to_index(
+                MemoryMeta {
+                    id: "mem-user".to_string(),
+                    domain: Some("spec-kit".to_string()),
+                    tags: vec!["type:decision".to_string()],
+                    importance: Some(8.0),
+                    created_at: Some(Utc::now()),
+                    snippet: "User memory".to_string(),
+                    uri: None,
+                },
+                "User created memory for decision tracking",
+            )
+            .await;
 
         // Search excluding system:true
         let params = LocalMemorySearchParams {
@@ -1287,18 +1344,20 @@ mod adapter_tests {
         adapter.open().await.unwrap();
 
         // Add a memory
-        adapter.add_memory_to_index(
-            MemoryMeta {
-                id: "mem-001".to_string(),
-                domain: Some("spec-kit".to_string()),
-                tags: vec![],
-                importance: Some(8.0),
-                created_at: Some(Utc::now()),
-                snippet: "Test memory".to_string(),
-                uri: None,
-            },
-            "Test memory content",
-        ).await;
+        adapter
+            .add_memory_to_index(
+                MemoryMeta {
+                    id: "mem-001".to_string(),
+                    domain: Some("spec-kit".to_string()),
+                    tags: vec![],
+                    importance: Some(8.0),
+                    created_at: Some(Utc::now()),
+                    snippet: "Test memory".to_string(),
+                    uri: None,
+                },
+                "Test memory content",
+            )
+            .await;
 
         // Search with empty keywords and no required tags
         let params = LocalMemorySearchParams {
@@ -1371,31 +1430,35 @@ mod adapter_tests {
         adapter.open().await.unwrap();
 
         // Add memories with different relevance
-        adapter.add_memory_to_index(
-            MemoryMeta {
-                id: "mem-high".to_string(),
-                domain: Some("spec-kit".to_string()),
-                tags: vec![],
-                importance: Some(9.0),
-                created_at: Some(Utc::now()),
-                snippet: "Rust Rust Rust".to_string(),
-                uri: None,
-            },
-            "Rust Rust Rust - highly relevant to Rust programming language",
-        ).await;
+        adapter
+            .add_memory_to_index(
+                MemoryMeta {
+                    id: "mem-high".to_string(),
+                    domain: Some("spec-kit".to_string()),
+                    tags: vec![],
+                    importance: Some(9.0),
+                    created_at: Some(Utc::now()),
+                    snippet: "Rust Rust Rust".to_string(),
+                    uri: None,
+                },
+                "Rust Rust Rust - highly relevant to Rust programming language",
+            )
+            .await;
 
-        adapter.add_memory_to_index(
-            MemoryMeta {
-                id: "mem-low".to_string(),
-                domain: Some("spec-kit".to_string()),
-                tags: vec![],
-                importance: Some(5.0),
-                created_at: Some(Utc::now()),
-                snippet: "Python programming".to_string(),
-                uri: None,
-            },
-            "Python programming with occasional Rust interop",
-        ).await;
+        adapter
+            .add_memory_to_index(
+                MemoryMeta {
+                    id: "mem-low".to_string(),
+                    domain: Some("spec-kit".to_string()),
+                    tags: vec![],
+                    importance: Some(5.0),
+                    created_at: Some(Utc::now()),
+                    snippet: "Python programming".to_string(),
+                    uri: None,
+                },
+                "Python programming with occasional Rust interop",
+            )
+            .await;
 
         // Search for "Rust"
         let params = LocalMemorySearchParams {

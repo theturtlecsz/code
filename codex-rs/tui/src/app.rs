@@ -3187,6 +3187,22 @@ impl App<'_> {
                     }
                 }
                 // === END FORK-SPECIFIC: Vision builder events ===
+                // === FORK-SPECIFIC: Maieutic events (D130) ===
+                AppEvent::MaieuticSubmitted {
+                    spec_id,
+                    answers,
+                    duration_ms,
+                } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        spec_kit::on_maieutic_submitted(widget, spec_id, answers, duration_ms);
+                    }
+                }
+                AppEvent::MaieuticCancelled { spec_id } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        spec_kit::on_maieutic_cancelled(widget, &spec_id);
+                    }
+                }
+                // === END FORK-SPECIFIC: Maieutic events ===
                 // === FORK-SPECIFIC: Clarify events (SPEC-KIT-971) ===
                 AppEvent::ClarifySubmitted {
                     spec_id,

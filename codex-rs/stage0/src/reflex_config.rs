@@ -95,8 +95,8 @@ fn parse_model_policy_toml(path: &PathBuf) -> Result<ReflexConfig, String> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
 
-    let toml: toml::Value = toml::from_str(&content)
-        .map_err(|e| format!("Failed to parse TOML: {e}"))?;
+    let toml: toml::Value =
+        toml::from_str(&content).map_err(|e| format!("Failed to parse TOML: {e}"))?;
 
     // Extract routing.reflex section
     let reflex = toml

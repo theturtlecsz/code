@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "policy_id": "0819fa51-8d33-4d8a-95bd-f7d8d5a96aba",
+  "hash": "dd65476c2cb06f5e1280bb96e2714a8aebde11e72978476662f349997f9c5459",
+  "created_at": "2026-01-16T01:54:21.106775954Z",
+  "model_config": {
+    "max_tokens": 8000,
+    "top_k": 15,
+    "pre_filter_limit": 150,
+    "diversity_lambda": 0.7,
+    "iqo_llm_enabled": true,
+    "hybrid_enabled": true,
+    "vector_weight": 0.2,
+    "tier2_enabled": true,
+    "tier2_cache_ttl_hours": 24
+  },
+  "weights": {
+    "usage": 0.3,
+    "recency": 0.3,
+    "priority": 0.25,
+    "decay": 0.15
+  },
+  "prompts": {},
+  "source_files": [
+    "/home/thetu/.config/code/stage0.toml"
+  ]
+}

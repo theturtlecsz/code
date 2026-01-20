@@ -46,7 +46,11 @@ impl LogicalUri {
 
         let uri = format!(
             "mv2://{}/{}/{}/{}/{}",
-            workspace_id, spec_id, run_id, object_type.as_str(), path
+            workspace_id,
+            spec_id,
+            run_id,
+            object_type.as_str(),
+            path
         );
         Some(LogicalUri(uri))
     }
@@ -63,16 +67,14 @@ impl LogicalUri {
     pub fn for_checkpoint(workspace_id: &str, checkpoint_id: &CheckpointId) -> Self {
         LogicalUri(format!(
             "mv2://{}/checkpoint/{}",
-            workspace_id, checkpoint_id.as_str()
+            workspace_id,
+            checkpoint_id.as_str()
         ))
     }
 
     /// Create a URI for a policy snapshot.
     pub fn for_policy(workspace_id: &str, policy_id: &str) -> Self {
-        LogicalUri(format!(
-            "mv2://{}/policy/{}",
-            workspace_id, policy_id
-        ))
+        LogicalUri(format!("mv2://{}/policy/{}", workspace_id, policy_id))
     }
 
     /// Get the raw URI string (for serialization/display only).
@@ -335,7 +337,6 @@ pub enum EventType {
     // =========================================================================
     // SPEC-KIT-975: Replayable Audit Event Types
     // =========================================================================
-
     /// Retrieval request event - captures retrieval queries for replay.
     /// Curated-eligible: Yes (audit trail for retrieval decisions)
     RetrievalRequest,
@@ -582,7 +583,9 @@ impl RoutingFallbackReason {
             RoutingFallbackReason::ModelNotAvailable => "model_not_available",
             RoutingFallbackReason::LatencyThresholdExceeded => "latency_threshold_exceeded",
             RoutingFallbackReason::SuccessRateBelowThreshold => "success_rate_below_threshold",
-            RoutingFallbackReason::JsonComplianceBelowThreshold => "json_compliance_below_threshold",
+            RoutingFallbackReason::JsonComplianceBelowThreshold => {
+                "json_compliance_below_threshold"
+            }
             RoutingFallbackReason::NotImplementStage => "not_implement_stage",
         }
     }
@@ -638,11 +641,15 @@ pub struct RoutingDecisionPayload {
 #[derive(Debug, Clone, Default)]
 pub struct UriIndex {
     /// Current entries per branch: BranchId → (LogicalUri → PhysicalPointer)
-    entries: std::collections::HashMap<BranchId, std::collections::HashMap<LogicalUri, PhysicalPointer>>,
+    entries:
+        std::collections::HashMap<BranchId, std::collections::HashMap<LogicalUri, PhysicalPointer>>,
 
     /// Historical snapshots: (BranchId, CheckpointId) → (LogicalUri → PhysicalPointer)
     /// Created at each commit_stage/commit_manual checkpoint.
-    snapshots: std::collections::HashMap<(BranchId, CheckpointId), std::collections::HashMap<LogicalUri, PhysicalPointer>>,
+    snapshots: std::collections::HashMap<
+        (BranchId, CheckpointId),
+        std::collections::HashMap<LogicalUri, PhysicalPointer>,
+    >,
 }
 
 /// Serializable form of UriIndex for persistence.
@@ -666,7 +673,12 @@ impl UriIndex {
     /// Register a new URI → physical pointer mapping on the given branch.
     ///
     /// This updates the current (live) state for the branch.
-    pub fn insert_on_branch(&mut self, branch: &BranchId, uri: LogicalUri, pointer: PhysicalPointer) {
+    pub fn insert_on_branch(
+        &mut self,
+        branch: &BranchId,
+        uri: LogicalUri,
+        pointer: PhysicalPointer,
+    ) {
         self.entries
             .entry(branch.clone())
             .or_default()
@@ -766,17 +778,19 @@ impl UriIndex {
     /// Export a snapshot for persistence.
     ///
     /// Returns a serializable form of the snapshot at the given checkpoint.
-    pub fn export_snapshot(&self, branch: &BranchId, checkpoint_id: &CheckpointId) -> Option<UriIndexSnapshot> {
+    pub fn export_snapshot(
+        &self,
+        branch: &BranchId,
+        checkpoint_id: &CheckpointId,
+    ) -> Option<UriIndexSnapshot> {
         let key = (branch.clone(), checkpoint_id.clone());
-        self.snapshots.get(&key).map(|entries| {
-            UriIndexSnapshot {
-                checkpoint_id: checkpoint_id.as_str().to_string(),
-                branch_id: branch.as_str().to_string(),
-                entries: entries
-                    .iter()
-                    .map(|(uri, ptr)| (uri.as_str().to_string(), ptr.clone()))
-                    .collect(),
-            }
+        self.snapshots.get(&key).map(|entries| UriIndexSnapshot {
+            checkpoint_id: checkpoint_id.as_str().to_string(),
+            branch_id: branch.as_str().to_string(),
+            entries: entries
+                .iter()
+                .map(|(uri, ptr)| (uri.as_str().to_string(), ptr.clone()))
+                .collect(),
         })
     }
 
@@ -791,9 +805,7 @@ impl UriIndex {
         let entries: std::collections::HashMap<LogicalUri, PhysicalPointer> = snapshot
             .entries
             .into_iter()
-            .filter_map(|(uri_str, ptr)| {
-                uri_str.parse::<LogicalUri>().ok().map(|uri| (uri, ptr))
-            })
+            .filter_map(|(uri_str, ptr)| uri_str.parse::<LogicalUri>().ok().map(|uri| (uri, ptr)))
             .collect();
 
         self.snapshots.insert(key, entries);
@@ -1469,7 +1481,16 @@ impl CardType {
     }
 
     pub fn all_variants() -> &'static [&'static str] {
-        &["spec", "decision", "task", "risk", "component", "person", "artifact", "run"]
+        &[
+            "spec",
+            "decision",
+            "task",
+            "risk",
+            "component",
+            "person",
+            "artifact",
+            "run",
+        ]
     }
 }
 
@@ -1522,7 +1543,15 @@ impl EdgeType {
     }
 
     pub fn all_variants() -> &'static [&'static str] {
-        &["depends_on", "blocks", "implements", "references", "owns", "risks", "related_to"]
+        &[
+            "depends_on",
+            "blocks",
+            "implements",
+            "references",
+            "owns",
+            "risks",
+            "related_to",
+        ]
     }
 }
 
@@ -1920,9 +1949,18 @@ mod type_tests {
     fn llm_capture_mode_backward_compat() {
         // Old values should map to new enum variants
         assert_eq!(LLMCaptureMode::from_str("off"), Some(LLMCaptureMode::None));
-        assert_eq!(LLMCaptureMode::from_str("hash"), Some(LLMCaptureMode::PromptsOnly));
-        assert_eq!(LLMCaptureMode::from_str("summary"), Some(LLMCaptureMode::PromptsOnly));
-        assert_eq!(LLMCaptureMode::from_str("full"), Some(LLMCaptureMode::FullIo));
+        assert_eq!(
+            LLMCaptureMode::from_str("hash"),
+            Some(LLMCaptureMode::PromptsOnly)
+        );
+        assert_eq!(
+            LLMCaptureMode::from_str("summary"),
+            Some(LLMCaptureMode::PromptsOnly)
+        );
+        assert_eq!(
+            LLMCaptureMode::from_str("full"),
+            Some(LLMCaptureMode::FullIo)
+        );
     }
 
     #[test]

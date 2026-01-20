@@ -1,12 +1,12 @@
 use crate::chatwidget::get_limits_duration;
 
 use super::helpers::format_reset_timestamp;
+use crate::compat::protocol::RateLimitSnapshot;
+use crate::compat::protocol::RateLimitWindow;
 use chrono::DateTime;
 use chrono::Duration as ChronoDuration;
 use chrono::Local;
 use codex_core::protocol::CreditsSnapshot as CoreCreditsSnapshot;
-use crate::compat::protocol::RateLimitSnapshot;
-use crate::compat::protocol::RateLimitWindow;
 
 const STATUS_LIMIT_BAR_SEGMENTS: usize = 20;
 const STATUS_LIMIT_BAR_FILLED: &str = "█";
@@ -46,12 +46,10 @@ pub(crate) struct RateLimitWindowDisplay {
 impl RateLimitWindowDisplay {
     fn from_window(window: &RateLimitWindow, captured_at: DateTime<Local>) -> Self {
         // Convert resets_in_seconds to a formatted timestamp
-        let resets_at = window
-            .resets_in_seconds
-            .and_then(|secs| {
-                let reset_time = captured_at + ChronoDuration::seconds(secs as i64);
-                Some(format_reset_timestamp(reset_time, captured_at))
-            });
+        let resets_at = window.resets_in_seconds.and_then(|secs| {
+            let reset_time = captured_at + ChronoDuration::seconds(secs as i64);
+            Some(format_reset_timestamp(reset_time, captured_at))
+        });
 
         Self {
             used_percent: window.used_percent,

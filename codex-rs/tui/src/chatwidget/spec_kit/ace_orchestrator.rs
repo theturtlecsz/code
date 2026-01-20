@@ -259,6 +259,7 @@ pub fn run_ace_cycle_sync(
             // Return dummy result (actual work happens async)
             Ok(AceCycleResult {
                 reflection: super::ace_reflector::ReflectionResult {
+                    schema_version: super::ace_reflector::ACE_FRAME_SCHEMA_VERSION.to_string(),
                     patterns: vec![],
                     successes: vec![],
                     failures: vec![],
@@ -284,9 +285,10 @@ mod tests {
 
     #[test]
     fn test_ace_cycle_result_construction() {
-        use super::super::ace_reflector::{PatternKind, ReflectedPattern};
+        use super::super::ace_reflector::{PatternKind, ReflectedPattern, ACE_FRAME_SCHEMA_VERSION};
 
         let reflection = ReflectionResult {
+            schema_version: ACE_FRAME_SCHEMA_VERSION.to_string(),
             patterns: vec![ReflectedPattern {
                 pattern: "Test".to_string(),
                 rationale: "Because".to_string(),

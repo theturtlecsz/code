@@ -23,8 +23,12 @@ fn main() -> anyhow::Result<()> {
             .splice(0..0, top_cli.config_overrides.raw_overrides);
 
         // ADR-002: tui2 is experimental upstream scaffold, not a replacement for tui
-        eprintln!("\x1b[33m[tui2] Experimental: chat-only mode. spec-kit commands not supported.\x1b[0m");
-        eprintln!("\x1b[33m[tui2] Use 'code' binary for /speckit.auto and golden-path workflows.\x1b[0m\n");
+        eprintln!(
+            "\x1b[33m[tui2] Experimental: chat-only mode. spec-kit commands not supported.\x1b[0m"
+        );
+        eprintln!(
+            "\x1b[33m[tui2] Use 'code' binary for /speckit.auto and golden-path workflows.\x1b[0m\n"
+        );
 
         let exit_info = run_main(inner, codex_linux_sandbox_exe).await?;
         let token_usage = exit_info.token_usage;

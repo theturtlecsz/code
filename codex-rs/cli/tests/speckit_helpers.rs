@@ -178,7 +178,9 @@ impl CliResult {
     /// Assert JSON output has expected schema_version
     pub fn assert_schema_version(&self, expected: u64) -> &Self {
         let json = self.json().expect("Failed to parse JSON");
-        let version = json.get("schema_version").and_then(serde_json::Value::as_u64);
+        let version = json
+            .get("schema_version")
+            .and_then(serde_json::Value::as_u64);
         assert_eq!(
             version,
             Some(expected),

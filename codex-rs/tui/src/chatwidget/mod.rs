@@ -79,11 +79,11 @@ mod agent_status;
 mod agents_terminal;
 mod command_render;
 mod input_helpers;
+mod pro_overlay;
 mod review_handlers;
 mod session_handlers;
 mod submit_helpers;
 mod undo_snapshots;
-mod pro_overlay;
 use pro_overlay::ProState;
 
 #[cfg(test)]
@@ -529,6 +529,9 @@ pub(crate) struct ChatWidget<'a> {
     /// Pending Stage0 operation for async execution (SPEC-DOGFOOD-001 S31)
     /// When Some, poll in on_commit_tick for progress/completion
     stage0_pending: Option<spec_kit::stage0_integration::Stage0PendingOperation>,
+    /// Pending maieutic state for pipeline resumption (D130)
+    /// When Some, maieutic modal is displayed and pipeline pauses until completion
+    pending_maieutic: Option<spec_kit::PendingMaieutic>,
     // === END FORK-SPECIFIC ===
 
     // === FORK-SPECIFIC (just-every/code): Native MCP for local-memory ===
@@ -2013,23 +2016,38 @@ impl ChatWidget<'_> {
                 Ok(progress) => {
                     let status = match progress {
                         Stage0Progress::Starting => "Starting...".to_string(),
-                        Stage0Progress::CheckingLocalMemory => "Checking local-memory...".to_string(),
+                        Stage0Progress::CheckingLocalMemory => {
+                            "Checking local-memory...".to_string()
+                        }
                         Stage0Progress::LoadingConfig => "Loading config...".to_string(),
                         Stage0Progress::CreatingMemoryClient { backend } => {
                             format!("Creating {} memory client...", backend)
                         }
-                        Stage0Progress::CheckingTier2Health => "Checking Tier2 health...".to_string(),
+                        Stage0Progress::CheckingTier2Health => {
+                            "Checking Tier2 health...".to_string()
+                        }
                         Stage0Progress::CompilingContext => "Compiling context...".to_string(),
                         Stage0Progress::QueryingTier2 => "Querying NotebookLM...".to_string(),
                         Stage0Progress::Tier2Complete(ms) => format!("Tier2 complete ({}ms)", ms),
-                        Stage0Progress::Finished { success, tier2_used, duration_ms } => {
-                            format!("Finished: success={}, tier2={}, {}ms", success, tier2_used, duration_ms)
+                        Stage0Progress::Finished {
+                            success,
+                            tier2_used,
+                            duration_ms,
+                        } => {
+                            format!(
+                                "Finished: success={}, tier2={}, {}ms",
+                                success, tier2_used, duration_ms
+                            )
                         }
                     };
 
                     // Update status in state
                     if let Some(ref mut state) = self.spec_auto_state {
-                        if let spec_kit::state::SpecAutoPhase::Stage0Pending { status: ref mut s, .. } = state.phase {
+                        if let spec_kit::state::SpecAutoPhase::Stage0Pending {
+                            status: ref mut s,
+                            ..
+                        } = state.phase
+                        {
                             *s = status;
                         }
                     }
@@ -2070,7 +2088,9 @@ impl ChatWidget<'_> {
             Err(TryRecvError::Empty) => {
                 // Still pending - check for timeout
                 if let Some(ref state) = self.spec_auto_state {
-                    if let spec_kit::state::SpecAutoPhase::Stage0Pending { started_at, .. } = state.phase {
+                    if let spec_kit::state::SpecAutoPhase::Stage0Pending { started_at, .. } =
+                        state.phase
+                    {
                         let elapsed = started_at.elapsed();
                         if elapsed > std::time::Duration::from_secs(300) {
                             // 5 minute timeout
@@ -2508,6 +2528,7 @@ impl ChatWidget<'_> {
             spec_auto_state: None,
             validate_lifecycles: HashMap::new(),
             stage0_pending: None,
+            pending_maieutic: None,
             // FORK-SPECIFIC (just-every/code): Use shared MCP manager from App
             mcp_manager,
             quality_gate_broker,
@@ -2743,6 +2764,7 @@ impl ChatWidget<'_> {
             spec_auto_state: None,
             validate_lifecycles: HashMap::new(),
             stage0_pending: None,
+            pending_maieutic: None,
             mcp_manager,
             quality_gate_broker,
             initial_command: None,
@@ -2955,6 +2977,7 @@ impl ChatWidget<'_> {
             spec_auto_state: None,
             validate_lifecycles: HashMap::new(),
             stage0_pending: None,
+            pending_maieutic: None,
             // FORK-SPECIFIC (just-every/code): Use shared MCP manager from App
             mcp_manager,
             quality_gate_broker,
@@ -4708,6 +4731,15 @@ impl ChatWidget<'_> {
     /// Show vision builder modal for guided constitution creation (P93/SPEC-KIT-105)
     pub(crate) fn show_vision_builder(&mut self) {
         self.bottom_pane.show_vision_builder();
+    }
+
+    /// Show maieutic elicitation modal for pre-flight clarification (D130)
+    pub(crate) fn show_maieutic_modal(
+        &mut self,
+        spec_id: String,
+        questions: Vec<spec_kit::maieutic::MaieuticQuestion>,
+    ) {
+        self.bottom_pane.show_maieutic_modal(spec_id, questions);
     }
 
     // perform_undo_restore, reset_after_conversation_restore moved to undo_snapshots.rs (MAINT-11 Phase 9)
@@ -6521,7 +6553,9 @@ impl ChatWidget<'_> {
                 self.request_redraw();
             }
             // New event variants - no-op in TUI for now
-            EventMsg::UndoStarted(_) | EventMsg::UndoCompleted(_) | EventMsg::ListSkillsResponse(_) => {}
+            EventMsg::UndoStarted(_)
+            | EventMsg::UndoCompleted(_)
+            | EventMsg::ListSkillsResponse(_) => {}
         }
     }
 
@@ -13776,8 +13810,8 @@ mod tests {
     /// if spec_auto_state.is_some() and calls halt_spec_auto_with_error.
     #[tokio::test(flavor = "current_thread")]
     async fn esc_cancels_spec_auto_pipeline() {
-        use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
         use super::spec_kit::pipeline_config::PipelineConfig;
+        use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
         let mut chat = make_widget();
 
@@ -13786,9 +13820,10 @@ mod tests {
             "SPEC-TEST-001".to_string(),
             "Test goal".to_string(),
             SpecStage::Plan,
-            None, // hal_mode
+            None,  // hal_mode
             false, // quality_gates_enabled
             PipelineConfig::defaults(),
+            crate::memvid_adapter::LLMCaptureMode::PromptsOnly, // D131: capture mode
         );
         chat.spec_auto_state = Some(spec_state);
 

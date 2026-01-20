@@ -13,11 +13,11 @@
 use crate::memvid_adapter::adapter::MemoryMeta;
 use chrono::{DateTime, Utc};
 use codex_stage0::dcc::{Iqo, LocalMemoryClient, LocalMemorySearchParams, LocalMemorySummary};
-use codex_stage0::eval::{
-    compute_metrics, compute_suite_metrics, EvalCase, EvalCaseSource, EvalLane, EvalResult,
-    EvalSuiteResult,
-};
 use codex_stage0::errors::Result as Stage0Result;
+use codex_stage0::eval::{
+    EvalCase, EvalCaseSource, EvalLane, EvalResult, EvalSuiteResult, compute_metrics,
+    compute_suite_metrics,
+};
 use codex_stage0::vector::ScoredVector;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -495,55 +495,79 @@ pub fn golden_query_suite() -> Vec<GoldenQuery> {
         // ─────────────────────────────────────────────────────────────────────────
         GoldenQuery::new(
             "error-handling-pattern",
-            vec!["error".to_string(), "handling".to_string(), "pattern".to_string()],
-            vec!["mem-rust-errors-001".to_string(), "mem-thiserror-002".to_string()],
+            vec![
+                "error".to_string(),
+                "handling".to_string(),
+                "pattern".to_string(),
+            ],
+            vec![
+                "mem-rust-errors-001".to_string(),
+                "mem-thiserror-002".to_string(),
+            ],
         )
         .with_description("Basic keyword search for error handling patterns"),
-
         GoldenQuery::new(
             "tfidf-bm25-implementation",
-            vec!["tfidf".to_string(), "bm25".to_string(), "scoring".to_string()],
-            vec!["mem-vector-tfidf-001".to_string(), "mem-bm25-scoring-002".to_string()],
+            vec![
+                "tfidf".to_string(),
+                "bm25".to_string(),
+                "scoring".to_string(),
+            ],
+            vec![
+                "mem-vector-tfidf-001".to_string(),
+                "mem-bm25-scoring-002".to_string(),
+            ],
         )
         .with_description("Search for TF-IDF/BM25 implementation details"),
-
         GoldenQuery::new(
             "stage0-architecture-decision",
-            vec!["stage0".to_string(), "architecture".to_string(), "design".to_string()],
-            vec!["mem-stage0-arch-001".to_string(), "mem-stage0-overlay-002".to_string()],
+            vec![
+                "stage0".to_string(),
+                "architecture".to_string(),
+                "design".to_string(),
+            ],
+            vec![
+                "mem-stage0-arch-001".to_string(),
+                "mem-stage0-overlay-002".to_string(),
+            ],
         )
         .with_description("Architecture decisions for Stage0"),
-
         // ─────────────────────────────────────────────────────────────────────────
         // Domain-filtered queries
         // ─────────────────────────────────────────────────────────────────────────
         GoldenQuery::new(
             "spec-kit-domain-query",
             vec!["integration".to_string(), "tier2".to_string()],
-            vec!["mem-speckit-102-001".to_string(), "mem-tier2-notebook-002".to_string()],
+            vec![
+                "mem-speckit-102-001".to_string(),
+                "mem-tier2-notebook-002".to_string(),
+            ],
         )
         .with_domain("spec-kit")
         .with_description("Query within spec-kit domain"),
-
         GoldenQuery::new(
             "rust-domain-query",
             vec!["error".to_string(), "result".to_string()],
-            vec!["mem-rust-errors-001".to_string(), "mem-thiserror-002".to_string()],
+            vec![
+                "mem-rust-errors-001".to_string(),
+                "mem-thiserror-002".to_string(),
+            ],
         )
         .with_domain("rust")
         .with_description("Query within rust domain"),
-
         // ─────────────────────────────────────────────────────────────────────────
         // Tag-filtered queries
         // ─────────────────────────────────────────────────────────────────────────
         GoldenQuery::new(
             "bug-pattern-required-tag",
             vec!["crash".to_string(), "memory".to_string()],
-            vec!["mem-bug-resize-001".to_string(), "mem-bug-segfault-002".to_string()],
+            vec![
+                "mem-bug-resize-001".to_string(),
+                "mem-bug-segfault-002".to_string(),
+            ],
         )
         .with_required_tags(vec!["type:bug".to_string()])
         .with_description("Bug patterns with required type:bug tag"),
-
         GoldenQuery::new(
             "decision-type-required-tag",
             vec!["architecture".to_string(), "design".to_string()],
@@ -551,75 +575,98 @@ pub fn golden_query_suite() -> Vec<GoldenQuery> {
         )
         .with_required_tags(vec!["type:decision".to_string()])
         .with_description("Architecture decisions with required type:decision tag"),
-
         // ─────────────────────────────────────────────────────────────────────────
         // Optional tag boost queries
         // ─────────────────────────────────────────────────────────────────────────
         GoldenQuery::new(
             "pattern-with-optional-tag-boost",
             vec!["pattern".to_string(), "implementation".to_string()],
-            vec!["mem-vector-tfidf-001".to_string(), "mem-stage0-overlay-002".to_string()],
+            vec![
+                "mem-vector-tfidf-001".to_string(),
+                "mem-stage0-overlay-002".to_string(),
+            ],
         )
-        .with_optional_tags(vec!["type:pattern".to_string(), "type:implementation".to_string()])
+        .with_optional_tags(vec![
+            "type:pattern".to_string(),
+            "type:implementation".to_string(),
+        ])
         .with_description("Patterns with optional tag boosting"),
-
         // ─────────────────────────────────────────────────────────────────────────
         // Multi-keyword precision queries
         // ─────────────────────────────────────────────────────────────────────────
         GoldenQuery::new(
             "notebooklm-tier2-spec",
-            vec!["notebooklm".to_string(), "tier2".to_string(), "synthesis".to_string(), "mcp".to_string()],
-            vec!["mem-speckit-102-001".to_string(), "mem-tier2-notebook-002".to_string()],
+            vec![
+                "notebooklm".to_string(),
+                "tier2".to_string(),
+                "synthesis".to_string(),
+                "mcp".to_string(),
+            ],
+            vec![
+                "mem-speckit-102-001".to_string(),
+                "mem-tier2-notebook-002".to_string(),
+            ],
         )
         .with_description("Precise query for NotebookLM Tier2 integration"),
-
         GoldenQuery::new(
             "resize-crash-segfault",
-            vec!["resize".to_string(), "crash".to_string(), "segfault".to_string()],
-            vec!["mem-bug-resize-001".to_string(), "mem-bug-segfault-002".to_string()],
+            vec![
+                "resize".to_string(),
+                "crash".to_string(),
+                "segfault".to_string(),
+            ],
+            vec![
+                "mem-bug-resize-001".to_string(),
+                "mem-bug-segfault-002".to_string(),
+            ],
         )
         .with_description("Precise query for resize/crash bugs"),
-
         // ─────────────────────────────────────────────────────────────────────────
         // Edge cases
         // ─────────────────────────────────────────────────────────────────────────
         GoldenQuery::new(
             "single-keyword-broad",
             vec!["memory".to_string()],
-            vec!["mem-bug-resize-001".to_string(), "mem-bug-segfault-002".to_string()],
+            vec![
+                "mem-bug-resize-001".to_string(),
+                "mem-bug-segfault-002".to_string(),
+            ],
         )
         .with_description("Single broad keyword (tests ranking)"),
-
         GoldenQuery::new(
             "rare-term-search",
-            vec!["avgdl".to_string()],  // BM25 formula term
+            vec!["avgdl".to_string()], // BM25 formula term
             vec!["mem-bm25-scoring-002".to_string()],
         )
         .with_description("Rare technical term search"),
-
         GoldenQuery::new(
             "spec-id-search",
             vec!["SPEC-KIT-102".to_string()],
             vec!["mem-speckit-102-001".to_string()],
         )
         .with_description("SPEC ID literal search"),
-
         GoldenQuery::new(
             "combined-domain-and-tag",
             vec!["overlay".to_string(), "database".to_string()],
-            vec!["mem-stage0-arch-001".to_string(), "mem-stage0-overlay-002".to_string()],
+            vec![
+                "mem-stage0-arch-001".to_string(),
+                "mem-stage0-overlay-002".to_string(),
+            ],
         )
         .with_domain("spec-kit")
         .with_optional_tags(vec!["type:pattern".to_string()])
         .with_description("Combined domain + optional tag query"),
-
         // ─────────────────────────────────────────────────────────────────────────
         // Negative/Challenging cases
         // ─────────────────────────────────────────────────────────────────────────
         GoldenQuery::new(
             "no-match-expected",
-            vec!["quantum".to_string(), "blockchain".to_string(), "web3".to_string()],
-            vec![],  // No expected matches
+            vec![
+                "quantum".to_string(),
+                "blockchain".to_string(),
+                "web3".to_string(),
+            ],
+            vec![], // No expected matches
         )
         .with_description("Query that should return no results"),
     ]
@@ -801,7 +848,8 @@ pub fn golden_test_memories() -> Vec<(MemoryMeta, String)> {
 /// Load a golden query suite from JSON file.
 pub fn load_golden_queries(path: &Path) -> std::io::Result<Vec<GoldenQuery>> {
     let content = std::fs::read_to_string(path)?;
-    serde_json::from_str(&content).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+    serde_json::from_str(&content)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
 }
 
 /// Save a golden query suite to JSON file.
@@ -935,7 +983,10 @@ pub async fn run_ab_harness_synthetic(
     };
     let adapter_a = MemvidMemoryAdapter::new(config_a);
     adapter_a.open().await.map_err(|e| {
-        codex_stage0::errors::Stage0Error::dcc_with_source("open backend A", std::io::Error::other(e))
+        codex_stage0::errors::Stage0Error::dcc_with_source(
+            "open backend A",
+            std::io::Error::other(e),
+        )
     })?;
 
     // Create and populate backend B
@@ -946,7 +997,10 @@ pub async fn run_ab_harness_synthetic(
     };
     let adapter_b = MemvidMemoryAdapter::new(config_b);
     adapter_b.open().await.map_err(|e| {
-        codex_stage0::errors::Stage0Error::dcc_with_source("open backend B", std::io::Error::other(e))
+        codex_stage0::errors::Stage0Error::dcc_with_source(
+            "open backend B",
+            std::io::Error::other(e),
+        )
     })?;
 
     // Add golden test memories to both backends
@@ -1030,7 +1084,10 @@ mod tests {
     fn test_golden_query_suite_structure() {
         let queries = golden_query_suite();
 
-        assert!(queries.len() >= 10, "Should have at least 10 golden queries");
+        assert!(
+            queries.len() >= 10,
+            "Should have at least 10 golden queries"
+        );
 
         for query in &queries {
             assert!(!query.name.is_empty());
@@ -1198,7 +1255,9 @@ mod tests {
         let report = harness.run().await.unwrap();
 
         // Self-comparison should have equal metrics
-        assert!((report.suite_a.mean_precision - report.suite_b.mean_precision).abs() < f64::EPSILON);
+        assert!(
+            (report.suite_a.mean_precision - report.suite_b.mean_precision).abs() < f64::EPSILON
+        );
         assert!((report.suite_a.mean_recall - report.suite_b.mean_recall).abs() < f64::EPSILON);
 
         // Should pass baseline check (comparing to self)

@@ -960,11 +960,7 @@ fn execute_constitution_import(widget: &mut ChatWidget) {
             codex_stage0::ConstitutionType::NonGoal => "nongoal",
             codex_stage0::ConstitutionType::Exception => "exception",
         };
-        let memory_id = format!(
-            "import-{}-{}",
-            type_str,
-            uuid::Uuid::new_v4()
-        );
+        let memory_id = format!("import-{}-{}", type_str, uuid::Uuid::new_v4());
 
         if let Err(e) = db.upsert_constitution_memory(&memory_id, *entry_type, content) {
             tracing::warn!("Failed to import constitution entry: {}", e);
@@ -986,12 +982,10 @@ fn execute_constitution_import(widget: &mut ChatWidget) {
     // Invalidate Tier 2 cache
     let cache_invalidated = db.invalidate_tier2_by_constitution().unwrap_or(0);
 
-    let mut lines = vec![
-        Line::from(format!(
-            "✅ Imported {} entries from memory/constitution.md",
-            imported
-        )),
-    ];
+    let mut lines = vec![Line::from(format!(
+        "✅ Imported {} entries from memory/constitution.md",
+        imported
+    ))];
 
     if errors > 0 {
         lines.push(Line::from(format!("   ({} errors)", errors)));
@@ -1028,9 +1022,7 @@ fn execute_constitution_import(widget: &mut ChatWidget) {
     }
 
     lines.push(Line::from(""));
-    lines.push(Line::from(
-        "   Run /speckit.constitution view to verify.",
-    ));
+    lines.push(Line::from("   Run /speckit.constitution view to verify."));
 
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
         lines,
@@ -1070,10 +1062,7 @@ fn parse_constitution_markdown(content: &str) -> Vec<(codex_stage0::Constitution
         // Extract bullet points
         if let Some(entry_type) = current_type {
             if line.starts_with('-') || line.starts_with('*') {
-                let content = line
-                    .trim_start_matches('-')
-                    .trim_start_matches('*')
-                    .trim();
+                let content = line.trim_start_matches('-').trim_start_matches('*').trim();
                 if !content.is_empty() && content.len() > 5 {
                     // Ignore very short entries
                     entries.push((entry_type, content.to_string()));

@@ -6,10 +6,10 @@ use super::popup_consts::MAX_POPUP_ROWS;
 use super::scroll_state::ScrollState;
 use super::selection_popup_common::GenericDisplayRow;
 use super::selection_popup_common::render_rows_single_line;
+use crate::compat::skills::SkillMetadata;
 use crate::render::Insets;
 use crate::render::RectExt;
 use codex_common::fuzzy_match::fuzzy_match;
-use crate::compat::skills::SkillMetadata;
 
 use crate::text_formatting::truncate_text;
 

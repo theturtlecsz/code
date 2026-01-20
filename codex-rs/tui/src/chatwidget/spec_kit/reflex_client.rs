@@ -147,9 +147,7 @@ impl ReflexClient {
     /// Create a new reflex client from configuration
     pub fn new(config: &ReflexConfig) -> Result<Self, ReflexError> {
         let timeout = Duration::from_millis(config.timeout_ms);
-        let client = Client::builder()
-            .timeout(timeout)
-            .build()?;
+        let client = Client::builder().timeout(timeout).build()?;
 
         Ok(Self {
             client,
@@ -201,12 +199,7 @@ impl ReflexClient {
 
         let start = Instant::now();
 
-        let response = self
-            .client
-            .post(&url)
-            .json(&request)
-            .send()
-            .await?;
+        let response = self.client.post(&url).json(&request).send().await?;
 
         let latency_ms = start.elapsed().as_millis() as u64;
         let status = response.status();
@@ -254,7 +247,8 @@ impl ReflexClient {
         &self,
         messages: &[ChatMessage],
     ) -> Result<ReflexResult, ReflexError> {
-        self.chat_completion_streaming_internal(messages, None).await
+        self.chat_completion_streaming_internal(messages, None)
+            .await
     }
 
     /// Perform streaming chat completion with JSON schema
@@ -263,7 +257,8 @@ impl ReflexClient {
         messages: &[ChatMessage],
         schema: &serde_json::Value,
     ) -> Result<ReflexResult, ReflexError> {
-        self.chat_completion_streaming_internal(messages, Some(schema)).await
+        self.chat_completion_streaming_internal(messages, Some(schema))
+            .await
     }
 
     /// Internal streaming implementation
@@ -293,12 +288,7 @@ impl ReflexClient {
 
         let start = Instant::now();
 
-        let response = self
-            .client
-            .post(&url)
-            .json(&request)
-            .send()
-            .await?;
+        let response = self.client.post(&url).json(&request).send().await?;
 
         let status = response.status();
 
@@ -379,10 +369,7 @@ impl ReflexClient {
 
     /// Check if the reflex server is healthy
     pub async fn health_check(&self) -> Result<bool, ReflexError> {
-        let url = format!(
-            "{}/models",
-            self.config.endpoint.trim_end_matches('/')
-        );
+        let url = format!("{}/models", self.config.endpoint.trim_end_matches('/'));
 
         let response = self.client.get(&url).send().await?;
         Ok(response.status().is_success())
@@ -478,7 +465,10 @@ mod tests {
             true
         };
 
-        assert!(!json_compliant, "Non-JSON content should be marked non-compliant");
+        assert!(
+            !json_compliant,
+            "Non-JSON content should be marked non-compliant"
+        );
     }
 
     /// SPEC-KIT-978: Test that json_compliant rejects malformed JSON
@@ -494,7 +484,10 @@ mod tests {
             true
         };
 
-        assert!(!json_compliant, "Malformed JSON should be marked non-compliant");
+        assert!(
+            !json_compliant,
+            "Malformed JSON should be marked non-compliant"
+        );
     }
 
     /// SPEC-KIT-978: Test that without schema, any content is considered compliant
@@ -509,6 +502,9 @@ mod tests {
             true
         };
 
-        assert!(json_compliant, "Without schema, any content should be compliant");
+        assert!(
+            json_compliant,
+            "Without schema, any content should be compliant"
+        );
     }
 }

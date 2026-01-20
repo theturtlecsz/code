@@ -26,9 +26,9 @@ use crate::spec_prompts::{SpecAgent, SpecStage};
 // P6-SYNC Phase 6: Token metrics UI integration
 use crate::token_metrics_widget::{TokenMetricsWidget, model_context_window};
 // SPEC-KIT-978: Reflex routing and metrics
-use super::reflex_router::{decide_implementer_routing, emit_routing_event, RoutingDecision};
-use super::reflex_metrics::get_metrics_db;
 use super::reflex_client::{ChatMessage, ReflexClient};
+use super::reflex_metrics::get_metrics_db;
+use super::reflex_router::{RoutingDecision, decide_implementer_routing, emit_routing_event};
 use crate::memvid_adapter::RoutingMode;
 
 /// SPEC-KIT-978: JSON schema for agent output enforcement.
@@ -691,11 +691,7 @@ async fn spawn_reflex_stage_agents_sequential(
         .as_ref()
         .ok_or_else(|| "Reflex mode selected but no reflex config available".to_string())?;
 
-    tracing::info!(
-        "{}   reflex endpoint: {}",
-        run_tag,
-        reflex_config.endpoint
-    );
+    tracing::info!("{}   reflex endpoint: {}", run_tag, reflex_config.endpoint);
     tracing::info!("{}   reflex model: {}", run_tag, reflex_config.model);
 
     // Create reflex client
@@ -792,7 +788,13 @@ async fn spawn_reflex_stage_agents_sequential(
                 Ok(r) => (true, r.json_compliant),
                 Err(_) => (false, false),
             };
-            let _ = db.record_reflex_attempt(spec_id, run_id.as_deref().unwrap_or("unknown"), elapsed_ms, success, json_compliant);
+            let _ = db.record_reflex_attempt(
+                spec_id,
+                run_id.as_deref().unwrap_or("unknown"),
+                elapsed_ms,
+                success,
+                json_compliant,
+            );
         }
 
         let agent_output = match result {

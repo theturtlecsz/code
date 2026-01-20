@@ -1,5 +1,5 @@
-use codex_protocol::custom_prompts::CustomPrompt;
 use crate::compat::PROMPTS_CMD_PREFIX;
+use codex_protocol::custom_prompts::CustomPrompt;
 use lazy_static::lazy_static;
 use regex_lite::Regex;
 use shlex::Shlex;

@@ -142,7 +142,14 @@ impl ReflexMetricsDb {
         success: bool,
         json_compliant: bool,
     ) -> SqlResult<i64> {
-        self.record_attempt("reflex", spec_id, run_id, latency_ms, success, json_compliant)
+        self.record_attempt(
+            "reflex",
+            spec_id,
+            run_id,
+            latency_ms,
+            success,
+            json_compliant,
+        )
     }
 
     /// Record a cloud inference attempt
@@ -154,7 +161,14 @@ impl ReflexMetricsDb {
         success: bool,
         json_compliant: bool,
     ) -> SqlResult<i64> {
-        self.record_attempt("cloud", spec_id, run_id, latency_ms, success, json_compliant)
+        self.record_attempt(
+            "cloud",
+            spec_id,
+            run_id,
+            latency_ms,
+            success,
+            json_compliant,
+        )
     }
 
     /// Record an inference attempt (internal)
@@ -167,7 +181,10 @@ impl ReflexMetricsDb {
         success: bool,
         json_compliant: bool,
     ) -> SqlResult<i64> {
-        let conn = self.conn.lock().map_err(|_| rusqlite::Error::InvalidQuery)?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| rusqlite::Error::InvalidQuery)?;
 
         conn.execute(
             "INSERT INTO reflex_bakeoff_metrics (mode, latency_ms, success, json_compliant, spec_id, run_id)
@@ -193,7 +210,10 @@ impl ReflexMetricsDb {
     /// ## Returns
     /// Statistics comparing reflex vs cloud performance
     pub fn compute_bakeoff_stats(&self, since: Duration) -> SqlResult<BakeoffStats> {
-        let conn = self.conn.lock().map_err(|_| rusqlite::Error::InvalidQuery)?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| rusqlite::Error::InvalidQuery)?;
 
         // Calculate cutoff timestamp
         let seconds = since.as_secs() as i64;
@@ -265,11 +285,11 @@ impl ReflexMetricsDb {
             },
         )?;
 
-        let (total, success_count, json_count, avg_latency, min_latency, max_latency) =
-            match result {
-                Some(v) => v,
-                None => return Ok(None),
-            };
+        let (total, success_count, json_count, avg_latency, min_latency, max_latency) = match result
+        {
+            Some(v) => v,
+            None => return Ok(None),
+        };
 
         // Get percentiles (requires sorting all latencies)
         let (p50, p95, p99) = self.compute_percentiles(conn, mode, cutoff)?;
@@ -341,7 +361,10 @@ impl ReflexMetricsDb {
         spec_id: &str,
         run_id: &str,
     ) -> SqlResult<Vec<BakeoffMetric>> {
-        let conn = self.conn.lock().map_err(|_| rusqlite::Error::InvalidQuery)?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| rusqlite::Error::InvalidQuery)?;
 
         let mut stmt = conn.prepare(
             "SELECT id, timestamp, mode, latency_ms, success, json_compliant, spec_id, run_id
@@ -371,7 +394,10 @@ impl ReflexMetricsDb {
 
     /// Clean up old metrics (older than N days)
     pub fn cleanup_old_metrics(&self, days: i64) -> SqlResult<usize> {
-        let conn = self.conn.lock().map_err(|_| rusqlite::Error::InvalidQuery)?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| rusqlite::Error::InvalidQuery)?;
 
         conn.execute(
             "DELETE FROM reflex_bakeoff_metrics
@@ -518,9 +544,7 @@ mod tests {
         }
 
         // Compute stats
-        let stats = db
-            .compute_bakeoff_stats(Duration::from_secs(3600))
-            .unwrap();
+        let stats = db.compute_bakeoff_stats(Duration::from_secs(3600)).unwrap();
 
         assert_eq!(stats.total_attempts, 16);
 
@@ -551,10 +575,10 @@ mod tests {
         let (passes, reason) = db
             .check_thresholds(
                 Duration::from_secs(3600),
-                10, // min_samples
+                10,   // min_samples
                 2000, // p95_threshold_ms
-                85, // success_threshold_pct
-                100, // json_threshold_pct
+                85,   // success_threshold_pct
+                100,  // json_threshold_pct
             )
             .unwrap();
 

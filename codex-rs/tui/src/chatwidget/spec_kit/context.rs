@@ -329,7 +329,8 @@ pub mod test_mock {
             "test".to_string(),
             SpecStage::Plan,
             None,
-            config, // SPEC-948: pipeline_config
+            config,                                             // SPEC-948: pipeline_config
+            crate::memvid_adapter::LLMCaptureMode::PromptsOnly, // D131: capture mode
         );
         *ctx.spec_auto_state_mut() = Some(state);
 

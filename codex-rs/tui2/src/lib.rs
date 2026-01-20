@@ -28,13 +28,12 @@ use tracing_subscriber::prelude::*;
 
 // Local compatibility stubs for upstream-only features
 use crate::compat::auth::enforce_login_restrictions;
-use codex_protocol::mcp_protocol::AuthMode;
-use crate::compat::oss::{ensure_oss_provider_ready, get_default_model_for_oss_provider};
 use crate::compat::config::resolve_oss_provider;
+use crate::compat::oss::{ensure_oss_provider_ready, get_default_model_for_oss_provider};
+use codex_protocol::mcp_protocol::AuthMode;
 
 mod additional_dirs;
 mod app;
-mod compat;
 mod app_backtrack;
 mod app_event;
 mod app_event_sender;
@@ -45,6 +44,7 @@ mod cli;
 mod clipboard_copy;
 mod clipboard_paste;
 mod color;
+mod compat;
 pub mod custom_terminal;
 mod diff_render;
 mod exec_cell;
@@ -163,16 +163,14 @@ pub async fn run_main(
 
     #[allow(clippy::print_stderr)]
     // NOTE: Fork's load_config_as_toml_with_cli_overrides takes 2 args (no cwd) and is sync
-    let config_toml = match load_config_as_toml_with_cli_overrides(
-        &codex_home,
-        cli_kv_overrides.clone(),
-    ) {
-        Ok(config_toml) => config_toml,
-        Err(err) => {
-            eprintln!("Error loading config.toml: {err}");
-            std::process::exit(1);
-        }
-    };
+    let config_toml =
+        match load_config_as_toml_with_cli_overrides(&codex_home, cli_kv_overrides.clone()) {
+            Ok(config_toml) => config_toml,
+            Err(err) => {
+                eprintln!("Error loading config.toml: {err}");
+                std::process::exit(1);
+            }
+        };
 
     let model_provider_override = if cli.oss {
         let resolved = resolve_oss_provider(
@@ -445,13 +443,7 @@ async fn run_ratatui_app(
         }
     } else if cli.resume_last {
         // NOTE: Fork's list_conversations only takes 3 args
-        match RolloutRecorder::list_conversations(
-            &config.codex_home,
-            1,
-            None,
-        )
-        .await
-        {
+        match RolloutRecorder::list_conversations(&config.codex_home, 1, None).await {
             Ok(page) => page
                 .items
                 .first()

@@ -207,39 +207,42 @@ impl ConsensusDb {
         // Write to NEW schema using async wrapper with retry
         // Use block_in_place to allow blocking in async context, then new runtime for the actual async work
         tokio::task::block_in_place(|| {
-            let runtime = tokio::runtime::Runtime::new().map_err(|_| rusqlite::Error::InvalidQuery)?;
+            let runtime =
+                tokio::runtime::Runtime::new().map_err(|_| rusqlite::Error::InvalidQuery)?;
             runtime.block_on(async {
-            // Wrap async operations with retry logic
-            execute_with_backoff(
-                || async {
-                    use codex_core::db::async_wrapper::{store_agent_output, store_consensus_run};
+                // Wrap async operations with retry logic
+                execute_with_backoff(
+                    || async {
+                        use codex_core::db::async_wrapper::{
+                            store_agent_output, store_consensus_run,
+                        };
 
-                    // 1. Store/update consensus run
-                    let run_id = store_consensus_run(
-                        &pool, &spec_id, &stage, true,  // consensus_ok (artifact exists)
-                        false, // degraded
-                        None,  // synthesis_json (not available at artifact stage)
-                    )
-                    .await
-                    .map_err(|_| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
+                        // 1. Store/update consensus run
+                        let run_id = store_consensus_run(
+                            &pool, &spec_id, &stage, true,  // consensus_ok (artifact exists)
+                            false, // degraded
+                            None,  // synthesis_json (not available at artifact stage)
+                        )
+                        .await
+                        .map_err(|_| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
 
-                    // 2. Store agent output
-                    let output_id = store_agent_output(
-                        &pool,
-                        run_id,
-                        &agent_name,
-                        None, // model_version (not available in old schema)
-                        &content_json,
-                    )
-                    .await
-                    .map_err(|_| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
+                        // 2. Store agent output
+                        let output_id = store_agent_output(
+                            &pool,
+                            run_id,
+                            &agent_name,
+                            None, // model_version (not available in old schema)
+                            &content_json,
+                        )
+                        .await
+                        .map_err(|_| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
 
-                    Ok::<i64, DbError>(output_id)
-                },
-                &retry_config,
-            )
-            .await
-            .map_err(|_| rusqlite::Error::InvalidQuery)
+                        Ok::<i64, DbError>(output_id)
+                    },
+                    &retry_config,
+                )
+                .await
+                .map_err(|_| rusqlite::Error::InvalidQuery)
             })
         })
     }
@@ -484,31 +487,32 @@ impl ConsensusDb {
         // Write to NEW schema using async wrapper with retry
         // Use block_in_place to allow blocking in async context, then new runtime for the actual async work
         tokio::task::block_in_place(|| {
-            let runtime = tokio::runtime::Runtime::new().map_err(|_| rusqlite::Error::InvalidQuery)?;
+            let runtime =
+                tokio::runtime::Runtime::new().map_err(|_| rusqlite::Error::InvalidQuery)?;
             runtime.block_on(async {
-            // Wrap async operations with retry logic
-            execute_with_backoff(
-                || async {
-                    use codex_core::db::async_wrapper::store_consensus_run;
+                // Wrap async operations with retry logic
+                execute_with_backoff(
+                    || async {
+                        use codex_core::db::async_wrapper::store_consensus_run;
 
-                    // Store/update consensus run with synthesis
-                    let run_id = store_consensus_run(
-                        &pool,
-                        &spec_id,
-                        &stage,
-                        true, // consensus_ok (synthesis exists)
-                        degraded,
-                        Some(&synthesis_json),
-                    )
-                    .await
-                    .map_err(|_| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
+                        // Store/update consensus run with synthesis
+                        let run_id = store_consensus_run(
+                            &pool,
+                            &spec_id,
+                            &stage,
+                            true, // consensus_ok (synthesis exists)
+                            degraded,
+                            Some(&synthesis_json),
+                        )
+                        .await
+                        .map_err(|_| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
 
-                    Ok::<i64, DbError>(run_id)
-                },
-                &retry_config,
-            )
-            .await
-            .map_err(|_| rusqlite::Error::InvalidQuery)
+                        Ok::<i64, DbError>(run_id)
+                    },
+                    &retry_config,
+                )
+                .await
+                .map_err(|_| rusqlite::Error::InvalidQuery)
             })
         })
     }
@@ -882,42 +886,45 @@ impl ConsensusDb {
         // Write to NEW schema using async wrapper with retry
         // Use block_in_place to allow blocking in async context, then new runtime for the actual async work
         tokio::task::block_in_place(|| {
-            let runtime = tokio::runtime::Runtime::new().map_err(|_| rusqlite::Error::InvalidQuery)?;
+            let runtime =
+                tokio::runtime::Runtime::new().map_err(|_| rusqlite::Error::InvalidQuery)?;
             runtime.block_on(async {
-            // Wrap async operations with retry logic
-            execute_with_backoff(
-                || async {
-                    use codex_core::db::async_wrapper::{store_agent_output, store_consensus_run};
+                // Wrap async operations with retry logic
+                execute_with_backoff(
+                    || async {
+                        use codex_core::db::async_wrapper::{
+                            store_agent_output, store_consensus_run,
+                        };
 
-                    // 1. Store/update consensus run with string-based stage
-                    let run_id = store_consensus_run(
-                        &pool,
-                        &spec_id,
-                        &stage_name,
-                        true,  // consensus_ok (artifact exists)
-                        false, // degraded
-                        None,  // synthesis_json (not available at artifact stage)
-                    )
-                    .await
-                    .map_err(|_| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
+                        // 1. Store/update consensus run with string-based stage
+                        let run_id = store_consensus_run(
+                            &pool,
+                            &spec_id,
+                            &stage_name,
+                            true,  // consensus_ok (artifact exists)
+                            false, // degraded
+                            None,  // synthesis_json (not available at artifact stage)
+                        )
+                        .await
+                        .map_err(|_| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
 
-                    // 2. Store agent output
-                    let output_id = store_agent_output(
-                        &pool,
-                        run_id,
-                        &agent_name,
-                        None, // model_version (not available for quality gates)
-                        &content_json,
-                    )
-                    .await
-                    .map_err(|_| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
+                        // 2. Store agent output
+                        let output_id = store_agent_output(
+                            &pool,
+                            run_id,
+                            &agent_name,
+                            None, // model_version (not available for quality gates)
+                            &content_json,
+                        )
+                        .await
+                        .map_err(|_| DbError::Sqlite(rusqlite::Error::InvalidQuery))?;
 
-                    Ok::<i64, DbError>(output_id)
-                },
-                &retry_config,
-            )
-            .await
-            .map_err(|_| rusqlite::Error::InvalidQuery)
+                        Ok::<i64, DbError>(output_id)
+                    },
+                    &retry_config,
+                )
+                .await
+                .map_err(|_| rusqlite::Error::InvalidQuery)
             })
         })
     }

@@ -30,6 +30,7 @@ mod file_search_popup;
 pub(crate) mod footer;
 pub mod list_selection_view;
 mod live_ring_widget;
+pub(crate) mod maieutic_modal;
 mod model_selection_view;
 mod paste_burst;
 mod pipeline_configurator_view;
@@ -666,6 +667,19 @@ impl BottomPane<'_> {
     /// Show vision builder modal for guided constitution creation (P93/SPEC-KIT-105)
     pub fn show_vision_builder(&mut self) {
         let modal = vision_builder_modal::VisionBuilderModal::new(self.app_event_tx.clone());
+        self.active_view = Some(Box::new(modal));
+        self.status_view_active = false;
+        self.request_redraw();
+    }
+
+    /// Show maieutic elicitation modal for pre-flight clarification (D130)
+    pub fn show_maieutic_modal(
+        &mut self,
+        spec_id: String,
+        questions: Vec<crate::chatwidget::spec_kit::maieutic::MaieuticQuestion>,
+    ) {
+        let modal =
+            maieutic_modal::MaieuticModal::new(spec_id, questions, self.app_event_tx.clone());
         self.active_view = Some(Box::new(modal));
         self.status_view_active = false;
         self.request_redraw();

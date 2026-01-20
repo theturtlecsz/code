@@ -10,12 +10,19 @@
 //! - `code speckit status --spec <ID> [--stale-hours N] [--json]`
 //! - `code speckit review --spec <ID> --stage <STAGE> [--strict-*] [--json]`
 //!
-//! ## Exit Codes (per REVIEW-CONTRACT.md)
+//! ## Exit Codes (per REVIEW-CONTRACT.md + SPEC-KIT-920)
 //!
+//! Standard codes (0-3):
 //! - 0: Success / proceed
 //! - 1: Soft fail (warnings in strict mode)
 //! - 2: Hard fail (escalation / missing artifacts in strict mode)
 //! - 3: Infrastructure error
+//!
+//! Headless-specific codes (10+, SPEC-KIT-920):
+//! - 10: NEEDS_INPUT - Missing maieutic input in headless+execute mode
+//! - 11: NEEDS_APPROVAL - Tier-2/Tier-3 checkpoint requires human approval
+//! - 12: BLOCKED_SHIP - Ship blocked (capture=none or missing artifacts)
+//! - 13: PROMPT_ATTEMPTED - Headless mode tried to prompt (invariant violation)
 //!
 //! ## JSON Schema Versioning
 //!
@@ -32,12 +39,77 @@ use codex_spec_kit::executor::{
     render_review_dashboard, render_status_dashboard, review_warning, status_degraded_warning,
 };
 use codex_tui::memvid_adapter::{
-    CapsuleConfig, CapsuleError, CapsuleHandle, CheckpointId, DiagnosticResult, EventType,
+    CapsuleConfig,
+    CapsuleError,
+    CapsuleHandle,
+    CardFact,
+    CardType,
+    CheckpointId,
+    DiagnosticResult,
+    EdgeType,
+    EventType,
+    FactValueType,
+    LogicEdgeV1,
+    LogicalUri,
+    MemoryCardV1,
     // SPEC-KIT-976: Memory Card and Logic Edge types
-    ObjectType, CardType, EdgeType, MemoryCardV1, LogicEdgeV1, CardFact, FactValueType, LogicalUri,
+    ObjectType,
 };
 use std::io::Write;
 use std::path::PathBuf;
+
+// =============================================================================
+// HEADLESS EXIT CODES (SPEC-KIT-920)
+// =============================================================================
+
+/// Exit codes for headless/automation commands.
+///
+/// Codes 0-3 are standard (per REVIEW-CONTRACT.md).
+/// Codes 10+ are headless-specific for CI/automation parsing.
+#[allow(dead_code)] // Some codes are for future use (NEEDS_APPROVAL, BLOCKED_SHIP, etc.)
+pub mod headless_exit {
+    /// Success
+    pub const SUCCESS: i32 = 0;
+    /// Soft fail (warnings in strict mode)
+    pub const SOFT_FAIL: i32 = 1;
+    /// Hard fail (escalation / blocking errors)
+    pub const HARD_FAIL: i32 = 2;
+    /// Infrastructure error
+    pub const INFRA_ERROR: i32 = 3;
+
+    // === Headless-specific codes (10+) ===
+
+    /// Missing required maieutic input in headless mode.
+    /// Resolution: Provide --maieutic <path> or --maieutic-answers <json>
+    pub const NEEDS_INPUT: i32 = 10;
+
+    /// Tier-2/Tier-3 checkpoint requires human approval.
+    /// Resolution: Run interactively or pre-approve via policy
+    pub const NEEDS_APPROVAL: i32 = 11;
+
+    /// Ship blocked: capture=none or missing explainability artifacts.
+    /// Resolution: Switch capture mode or complete required stages
+    pub const BLOCKED_SHIP: i32 = 12;
+
+    /// Headless mode attempted to prompt (invariant violation).
+    /// This indicates a bug in headless code paths.
+    pub const PROMPT_ATTEMPTED: i32 = 13;
+
+    /// Convert exit code to semantic reason string for JSON output
+    pub fn exit_reason(code: i32) -> &'static str {
+        match code {
+            SUCCESS => "success",
+            SOFT_FAIL => "soft_fail",
+            HARD_FAIL => "hard_fail",
+            INFRA_ERROR => "infra_error",
+            NEEDS_INPUT => "needs_input",
+            NEEDS_APPROVAL => "needs_approval",
+            BLOCKED_SHIP => "blocked_ship",
+            PROMPT_ATTEMPTED => "prompt_attempted",
+            _ => "unknown",
+        }
+    }
+}
 
 /// Schema version for JSON outputs.
 /// Bump ONLY on breaking changes (removed/renamed fields, semantic changes).
@@ -393,6 +465,7 @@ pub struct UnlockArgs {
 /// Arguments for `speckit run` command
 ///
 /// SPEC-KIT-921 P7-A: Batch stage validation for CI readiness checks.
+/// SPEC-KIT-920: Extended with headless maieutic input support.
 #[derive(Debug, Parser)]
 pub struct RunArgs {
     /// SPEC identifier (e.g., SPEC-KIT-921)
@@ -412,6 +485,36 @@ pub struct RunArgs {
     /// Output as JSON instead of text
     #[arg(long = "json", short = 'j')]
     pub json: bool,
+
+    // === SPEC-KIT-920: Headless maieutic input ===
+
+    /// Path to maieutic spec file (JSON or Markdown with YAML frontmatter)
+    ///
+    /// Required when --execute is used in headless mode.
+    /// If both --maieutic and --maieutic-answers are provided, --maieutic-answers takes precedence.
+    #[arg(long = "maieutic", value_name = "PATH")]
+    pub maieutic_path: Option<PathBuf>,
+
+    /// Inline maieutic answers as JSON
+    ///
+    /// Takes precedence over --maieutic if both are provided.
+    /// Format: {"goal":"...", "constraints":["..."], "acceptance":["..."], "delegation":"B"}
+    #[arg(long = "maieutic-answers", value_name = "JSON")]
+    pub maieutic_answers: Option<String>,
+
+    /// Actually execute stages (not just validate)
+    ///
+    /// When combined with --headless, requires maieutic input via --maieutic or --maieutic-answers.
+    /// Without this flag, the command only validates stage prerequisites (dry-run).
+    #[arg(long = "execute")]
+    pub execute: bool,
+
+    /// Headless mode: error on any prompt attempt
+    ///
+    /// Implied when stdin is not a TTY. Any code path that would prompt the user
+    /// will instead exit with code 13 (PROMPT_ATTEMPTED).
+    #[arg(long = "headless")]
+    pub headless: bool,
 }
 
 /// Arguments for `speckit migrate` command
@@ -1078,9 +1181,13 @@ impl SpeckitCli {
             legacy_voting_env_detected: toggles.legacy_voting_enabled,
         };
 
+        // SPEC-KIT-920: Default headless=false, maieutic_input=None
+        // Run command will set these based on its flags
         let executor = SpeckitExecutor::new(ExecutionContext {
             repo_root: cwd,
             policy_snapshot: Some(policy_snapshot),
+            headless: false,
+            maieutic_input: None,
         });
 
         match self.command {
@@ -2233,8 +2340,90 @@ fn explain_review_exit_code(
 /// Run the run command (batch stage validation)
 ///
 /// SPEC-KIT-921 P7-A: Validate stages from --from to --to.
-/// Returns exit 0 if all stages ready, exit 2 if any blocked, exit 3 for infrastructure errors.
+/// SPEC-KIT-920: Extended with headless maieutic input support.
+///
+/// Returns:
+/// - Exit 0 if all stages ready
+/// - Exit 2 if any blocked
+/// - Exit 3 for infrastructure errors
+/// - Exit 10 (NEEDS_INPUT) if headless+execute without maieutic
+/// - Exit 11 (NEEDS_APPROVAL) if approval checkpoint reached
+/// - Exit 12 (BLOCKED_SHIP) if ship blocked by policy
 fn run_run(executor: SpeckitExecutor, args: RunArgs) -> anyhow::Result<()> {
+    // SPEC-KIT-920: Detect headless mode (explicit flag OR non-TTY stdin)
+    use std::io::IsTerminal;
+    let headless = args.headless || !std::io::stdin().is_terminal();
+
+    // SPEC-KIT-920: Validate headless + execute requires maieutic input
+    if headless && args.execute {
+        let has_maieutic = args.maieutic_answers.is_some() || args.maieutic_path.is_some();
+        if !has_maieutic {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": headless_exit::NEEDS_INPUT,
+                    "exit_reason": headless_exit::exit_reason(headless_exit::NEEDS_INPUT),
+                    "error": "Headless execution requires maieutic input",
+                    "resolution": "Provide --maieutic <path> or --maieutic-answers <json>",
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Headless execution requires maieutic input");
+                eprintln!("  Provide --maieutic <path> or --maieutic-answers <json>");
+            }
+            std::process::exit(headless_exit::NEEDS_INPUT);
+        }
+    }
+
+    // SPEC-KIT-920: Log maieutic source if provided (for diagnostics)
+    if let Some(ref json) = args.maieutic_answers {
+        tracing::info!(
+            headless = headless,
+            source = "inline_json",
+            "Maieutic input provided via --maieutic-answers"
+        );
+        // Parse to validate - actual use would be in execute mode
+        if let Err(e) = serde_json::from_str::<serde_json::Value>(json) {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": headless_exit::INFRA_ERROR,
+                    "exit_reason": headless_exit::exit_reason(headless_exit::INFRA_ERROR),
+                    "error": format!("Invalid maieutic JSON: {}", e),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Invalid maieutic JSON: {}", e);
+            }
+            std::process::exit(headless_exit::INFRA_ERROR);
+        }
+    } else if let Some(ref path) = args.maieutic_path {
+        tracing::info!(
+            headless = headless,
+            source = "file",
+            path = %path.display(),
+            "Maieutic input provided via --maieutic"
+        );
+        // Validate file exists and is readable
+        if !path.exists() {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": headless_exit::INFRA_ERROR,
+                    "exit_reason": headless_exit::exit_reason(headless_exit::INFRA_ERROR),
+                    "error": format!("Maieutic file not found: {}", path.display()),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Maieutic file not found: {}", path.display());
+            }
+            std::process::exit(headless_exit::INFRA_ERROR);
+        }
+    }
+
     // Parse stage names
     let from_stage = parse_stage(&args.from_stage)?;
     let to_stage = parse_stage(&args.to_stage)?;
@@ -2271,6 +2460,8 @@ fn run_run(executor: SpeckitExecutor, args: RunArgs) -> anyhow::Result<()> {
                     "overall_status": outcome.overall_status.as_str(),
                     "stages": stages,
                     "exit_code": outcome.exit_code,
+                    // SPEC-KIT-920: Add semantic exit reason for CI parsing
+                    "exit_reason": headless_exit::exit_reason(outcome.exit_code),
                 });
 
                 // Add legacy detection info if present (blocked until migrated)
@@ -2352,13 +2543,14 @@ fn run_run(executor: SpeckitExecutor, args: RunArgs) -> anyhow::Result<()> {
                     "schema_version": SCHEMA_VERSION,
                     "tool_version": tool_version(),
                     "error": err,
-                    "exit_code": 3,
+                    "exit_code": headless_exit::INFRA_ERROR,
+                    "exit_reason": headless_exit::exit_reason(headless_exit::INFRA_ERROR),
                 });
                 println!("{}", serde_json::to_string_pretty(&json)?);
             } else {
                 eprintln!("Error: {err}");
             }
-            std::process::exit(3);
+            std::process::exit(headless_exit::INFRA_ERROR);
         }
         _ => {
             unreachable!("Run command should return Run or Error outcome")
@@ -2451,8 +2643,8 @@ const DEFAULT_CAPSULE_PATH: &str = ".speckit/memvid/workspace.mv2";
 /// Exit codes for capsule commands (per SPEC-KIT-971)
 mod capsule_exit {
     pub const SUCCESS: i32 = 0;
-    pub const USER_ERROR: i32 = 1;      // Bad args, invalid URI
-    pub const SYSTEM_ERROR: i32 = 2;    // Corrupt capsule, locked, IO error
+    pub const USER_ERROR: i32 = 1; // Bad args, invalid URI
+    pub const SYSTEM_ERROR: i32 = 2; // Corrupt capsule, locked, IO error
     pub const VALIDATION_ERROR: i32 = 3; // Invalid event type, invalid checkpoint ID
 }
 
@@ -2466,7 +2658,9 @@ fn run_capsule(cwd: PathBuf, args: CapsuleArgs) -> anyhow::Result<()> {
         CapsuleSubcommand::Init(cmd_args) => run_capsule_init(&capsule_path, cmd_args),
         CapsuleSubcommand::Doctor(cmd_args) => run_capsule_doctor(&capsule_path, cmd_args),
         CapsuleSubcommand::Stats(cmd_args) => run_capsule_stats(&capsule_path, cmd_args),
-        CapsuleSubcommand::Checkpoints(cmd_args) => run_capsule_checkpoints(&capsule_path, cmd_args),
+        CapsuleSubcommand::Checkpoints(cmd_args) => {
+            run_capsule_checkpoints(&capsule_path, cmd_args)
+        }
         CapsuleSubcommand::Events(cmd_args) => run_capsule_events(&capsule_path, cmd_args),
         CapsuleSubcommand::Commit(cmd_args) => run_capsule_commit(&capsule_path, cmd_args),
         CapsuleSubcommand::ResolveUri(cmd_args) => run_capsule_resolve_uri(&capsule_path, cmd_args),
@@ -2479,8 +2673,12 @@ fn run_capsule_doctor(capsule_path: &PathBuf, args: CapsuleDoctorArgs) -> anyhow
     let diagnostics = CapsuleHandle::doctor(capsule_path);
 
     // Determine overall status
-    let has_errors = diagnostics.iter().any(|d| matches!(d, DiagnosticResult::Error(_, _)));
-    let has_warnings = diagnostics.iter().any(|d| matches!(d, DiagnosticResult::Warning(_, _)));
+    let has_errors = diagnostics
+        .iter()
+        .any(|d| matches!(d, DiagnosticResult::Error(_, _)));
+    let has_warnings = diagnostics
+        .iter()
+        .any(|d| matches!(d, DiagnosticResult::Warning(_, _)));
     let status = if has_errors {
         "error"
     } else if has_warnings {
@@ -2604,7 +2802,10 @@ fn run_capsule_stats(capsule_path: &PathBuf, args: CapsuleStatsArgs) -> anyhow::
 }
 
 /// Run `capsule checkpoints` command
-fn run_capsule_checkpoints(capsule_path: &PathBuf, args: CapsuleCheckpointsArgs) -> anyhow::Result<()> {
+fn run_capsule_checkpoints(
+    capsule_path: &PathBuf,
+    args: CapsuleCheckpointsArgs,
+) -> anyhow::Result<()> {
     let config = CapsuleConfig {
         capsule_path: capsule_path.clone(),
         workspace_id: "cli".to_string(),
@@ -2743,7 +2944,10 @@ fn run_capsule_commit(capsule_path: &PathBuf, args: CapsuleCommitArgs) -> anyhow
                 });
                 println!("{}", serde_json::to_string_pretty(&json)?);
             } else {
-                eprintln!("Error: Label '{}' already exists on branch '{}'", label, branch);
+                eprintln!(
+                    "Error: Label '{}' already exists on branch '{}'",
+                    label, branch
+                );
                 eprintln!("Hint: Use --force to create duplicate label");
             }
             std::process::exit(capsule_exit::USER_ERROR);
@@ -2783,7 +2987,10 @@ fn run_capsule_commit(capsule_path: &PathBuf, args: CapsuleCommitArgs) -> anyhow
 }
 
 /// Run `capsule resolve-uri` command
-fn run_capsule_resolve_uri(capsule_path: &PathBuf, args: CapsuleResolveUriArgs) -> anyhow::Result<()> {
+fn run_capsule_resolve_uri(
+    capsule_path: &PathBuf,
+    args: CapsuleResolveUriArgs,
+) -> anyhow::Result<()> {
     // Validate URI format
     if !args.uri.starts_with("mv2://") {
         if args.json {
@@ -3266,9 +3473,18 @@ fn run_capsule_export(capsule_path: &PathBuf, args: CapsuleExportArgs) -> anyhow
         });
         println!("{}", serde_json::to_string_pretty(&json)?);
     } else {
-        println!("Exported run {} / {} to {}", args.spec_id, args.run_id, export_path.display());
+        println!(
+            "Exported run {} / {} to {}",
+            args.spec_id,
+            args.run_id,
+            export_path.display()
+        );
         println!("  Events: {} → {}", run_events.len(), events_file.display());
-        println!("  Checkpoints: {} → {}", run_checkpoints.len(), checkpoints_file.display());
+        println!(
+            "  Checkpoints: {} → {}",
+            run_checkpoints.len(),
+            checkpoints_file.display()
+        );
         println!("  Manifest: {}", manifest_file.display());
     }
 
@@ -3378,14 +3594,23 @@ fn run_reflex_bakeoff(args: ReflexBakeoffArgs) -> anyhow::Result<()> {
         if let Some(ref r) = stats.reflex {
             println!("  REFLEX (local inference):");
             println!("    Attempts:        {}", r.total_attempts);
-            println!("    Success Rate:    {:.1}% ({}/{})", r.success_rate, r.success_count, r.total_attempts);
-            println!("    JSON Compliance: {:.1}% ({}/{})", r.json_compliance_rate, r.json_compliant_count, r.total_attempts);
+            println!(
+                "    Success Rate:    {:.1}% ({}/{})",
+                r.success_rate, r.success_count, r.total_attempts
+            );
+            println!(
+                "    JSON Compliance: {:.1}% ({}/{})",
+                r.json_compliance_rate, r.json_compliant_count, r.total_attempts
+            );
             println!("    Latency (ms):");
             println!("      P50:  {}ms", r.p50_latency_ms);
             println!("      P95:  {}ms", r.p95_latency_ms);
             println!("      P99:  {}ms", r.p99_latency_ms);
             println!("      Avg:  {:.1}ms", r.avg_latency_ms);
-            println!("      Min:  {}ms, Max: {}ms", r.min_latency_ms, r.max_latency_ms);
+            println!(
+                "      Min:  {}ms, Max: {}ms",
+                r.min_latency_ms, r.max_latency_ms
+            );
         } else {
             println!("  REFLEX: No data");
         }
@@ -3396,14 +3621,23 @@ fn run_reflex_bakeoff(args: ReflexBakeoffArgs) -> anyhow::Result<()> {
         if let Some(ref c) = stats.cloud {
             println!("  CLOUD (remote inference):");
             println!("    Attempts:        {}", c.total_attempts);
-            println!("    Success Rate:    {:.1}% ({}/{})", c.success_rate, c.success_count, c.total_attempts);
-            println!("    JSON Compliance: {:.1}% ({}/{})", c.json_compliance_rate, c.json_compliant_count, c.total_attempts);
+            println!(
+                "    Success Rate:    {:.1}% ({}/{})",
+                c.success_rate, c.success_count, c.total_attempts
+            );
+            println!(
+                "    JSON Compliance: {:.1}% ({}/{})",
+                c.json_compliance_rate, c.json_compliant_count, c.total_attempts
+            );
             println!("    Latency (ms):");
             println!("      P50:  {}ms", c.p50_latency_ms);
             println!("      P95:  {}ms", c.p95_latency_ms);
             println!("      P99:  {}ms", c.p99_latency_ms);
             println!("      Avg:  {:.1}ms", c.avg_latency_ms);
-            println!("      Min:  {}ms, Max: {}ms", c.min_latency_ms, c.max_latency_ms);
+            println!(
+                "      Min:  {}ms, Max: {}ms",
+                c.min_latency_ms, c.max_latency_ms
+            );
         } else {
             println!("  CLOUD: No data");
         }
@@ -3419,9 +3653,14 @@ fn run_reflex_bakeoff(args: ReflexBakeoffArgs) -> anyhow::Result<()> {
             } else {
                 0.0
             };
-            println!("    P95 Latency Ratio: {:.1}x faster (reflex)", latency_ratio);
-            println!("    Success Parity:    {:.1}% (reflex vs cloud)",
-                     reflex.success_rate / cloud.success_rate.max(0.01) * 100.0);
+            println!(
+                "    P95 Latency Ratio: {:.1}x faster (reflex)",
+                latency_ratio
+            );
+            println!(
+                "    Success Parity:    {:.1}% (reflex vs cloud)",
+                reflex.success_rate / cloud.success_rate.max(0.01) * 100.0
+            );
         }
     }
 
@@ -3432,9 +3671,9 @@ fn run_reflex_bakeoff(args: ReflexBakeoffArgs) -> anyhow::Result<()> {
 ///
 /// Validates if reflex meets bakeoff thresholds.
 fn run_reflex_check(args: ReflexCheckArgs) -> anyhow::Result<()> {
-    use codex_tui::reflex_metrics::ReflexMetricsDb;
-    use codex_stage0::reflex_config::load_reflex_config;
     use codex_stage0::GovernancePolicy;
+    use codex_stage0::reflex_config::load_reflex_config;
+    use codex_tui::reflex_metrics::ReflexMetricsDb;
 
     // CI gate mode: check if reflex is enabled in policy first
     if args.ci_gate {
@@ -3499,15 +3738,29 @@ fn run_reflex_check(args: ReflexCheckArgs) -> anyhow::Result<()> {
         println!("{}", serde_json::to_string_pretty(&json)?);
     } else {
         if passes {
-            println!("{}: {}", if args.ci_gate { "CI GATE PASS" } else { "PASS" }, reason);
+            println!(
+                "{}: {}",
+                if args.ci_gate { "CI GATE PASS" } else { "PASS" },
+                reason
+            );
             println!();
             println!("Thresholds met:");
             println!("  P95 Latency:      < {}ms", thresholds.p95_latency_ms);
-            println!("  Success Parity:   >= {}%", thresholds.success_parity_percent);
-            println!("  JSON Compliance:  >= {}%", thresholds.json_schema_compliance_percent);
+            println!(
+                "  Success Parity:   >= {}%",
+                thresholds.success_parity_percent
+            );
+            println!(
+                "  JSON Compliance:  >= {}%",
+                thresholds.json_schema_compliance_percent
+            );
             println!("  Min Samples:      >= {}", args.min_samples);
         } else {
-            println!("{}: {}", if args.ci_gate { "CI GATE FAIL" } else { "FAIL" }, reason);
+            println!(
+                "{}: {}",
+                if args.ci_gate { "CI GATE FAIL" } else { "FAIL" },
+                reason
+            );
             std::process::exit(1);
         }
     }
@@ -3520,7 +3773,7 @@ fn run_reflex_check(args: ReflexCheckArgs) -> anyhow::Result<()> {
 /// Executes bakeoff trials and writes report files.
 fn run_reflex_run_bakeoff(args: ReflexRunBakeoffArgs) -> anyhow::Result<()> {
     use codex_stage0::reflex_config::load_reflex_config;
-    use codex_tui::bakeoff_runner::{run_bakeoff, BakeoffConfig};
+    use codex_tui::bakeoff_runner::{BakeoffConfig, run_bakeoff};
 
     // Load reflex config
     let reflex_config = load_reflex_config(None).map_err(|e| anyhow::anyhow!("{}", e))?;
@@ -3564,9 +3817,8 @@ fn run_reflex_run_bakeoff(args: ReflexRunBakeoffArgs) -> anyhow::Result<()> {
 
     // Run bakeoff (blocking async call)
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let report = tokio::runtime::Runtime::new()?.block_on(async {
-        run_bakeoff(&cwd, &bakeoff_config, &reflex_config).await
-    })?;
+    let report = tokio::runtime::Runtime::new()?
+        .block_on(async { run_bakeoff(&cwd, &bakeoff_config, &reflex_config).await })?;
 
     // Write report files
     let (json_path, md_path) = report.write_files(&cwd)?;
@@ -3610,18 +3862,28 @@ fn run_reflex_run_bakeoff(args: ReflexRunBakeoffArgs) -> anyhow::Result<()> {
         });
         println!("{}", serde_json::to_string_pretty(&json)?);
     } else {
-        let status_emoji = if report.evaluation.passes_thresholds { "✅" } else { "❌" };
+        let status_emoji = if report.evaluation.passes_thresholds {
+            "✅"
+        } else {
+            "❌"
+        };
         println!("{} {}", status_emoji, report.evaluation.recommendation);
         println!();
 
         if let Some(ref reflex) = report.stats.reflex {
             println!("Results ({} trials):", report.trials.len());
-            println!("  P95 Latency:      {}ms (threshold: {}ms)",
-                reflex.p95_latency_ms, bakeoff_config.p95_latency_threshold_ms);
-            println!("  Success Rate:     {:.1}% (threshold: {}%)",
-                reflex.success_rate, bakeoff_config.success_rate_threshold_pct);
-            println!("  JSON Compliance:  {:.1}% (threshold: {}%)",
-                reflex.json_compliance_rate, bakeoff_config.json_compliance_threshold_pct);
+            println!(
+                "  P95 Latency:      {}ms (threshold: {}ms)",
+                reflex.p95_latency_ms, bakeoff_config.p95_latency_threshold_ms
+            );
+            println!(
+                "  Success Rate:     {:.1}% (threshold: {}%)",
+                reflex.success_rate, bakeoff_config.success_rate_threshold_pct
+            );
+            println!(
+                "  JSON Compliance:  {:.1}% (threshold: {}%)",
+                reflex.json_compliance_rate, bakeoff_config.json_compliance_threshold_pct
+            );
         }
 
         println!();
@@ -3707,10 +3969,7 @@ fn run_policy_list(_cwd: PathBuf, args: PolicyListArgs) -> anyhow::Result<()> {
         println!("Policy Snapshots ({} total)", policies.len());
         println!("{}", "=".repeat(70));
         println!();
-        println!(
-            "{:<40} {:<20} {:<10}",
-            "POLICY ID", "CREATED", "HASH"
-        );
+        println!("{:<40} {:<20} {:<10}", "POLICY ID", "CREATED", "HASH");
         println!("{}", "-".repeat(70));
 
         for policy in &policies {
@@ -3748,7 +4007,10 @@ fn run_policy_show(_cwd: PathBuf, args: PolicyShowArgs) -> anyhow::Result<()> {
                 println!("Policy Snapshot: {}", snapshot.policy_id);
                 println!("{}", "=".repeat(60));
                 println!();
-                println!("Created:        {}", snapshot.created_at.format("%Y-%m-%d %H:%M:%S UTC"));
+                println!(
+                    "Created:        {}",
+                    snapshot.created_at.format("%Y-%m-%d %H:%M:%S UTC")
+                );
                 println!("Schema Version: {}", snapshot.schema_version);
                 println!("Hash:           {}", snapshot.hash);
                 println!();
@@ -3760,8 +4022,14 @@ fn run_policy_show(_cwd: PathBuf, args: PolicyShowArgs) -> anyhow::Result<()> {
                 println!("Model Config:");
                 println!("  max_tokens:        {}", snapshot.model_config.max_tokens);
                 println!("  top_k:             {}", snapshot.model_config.top_k);
-                println!("  hybrid_enabled:    {}", snapshot.model_config.hybrid_enabled);
-                println!("  tier2_enabled:     {}", snapshot.model_config.tier2_enabled);
+                println!(
+                    "  hybrid_enabled:    {}",
+                    snapshot.model_config.hybrid_enabled
+                );
+                println!(
+                    "  tier2_enabled:     {}",
+                    snapshot.model_config.tier2_enabled
+                );
                 println!();
                 println!("Scoring Weights:");
                 println!("  usage:             {:.2}", snapshot.weights.usage);
@@ -3778,7 +4046,10 @@ fn run_policy_show(_cwd: PathBuf, args: PolicyShowArgs) -> anyhow::Result<()> {
                 }
 
                 println!();
-                println!("Hash verified:  {}", if snapshot.verify_hash() { "✓" } else { "✗" });
+                println!(
+                    "Hash verified:  {}",
+                    if snapshot.verify_hash() { "✓" } else { "✗" }
+                );
             }
         }
         Err(e) => {
@@ -3819,7 +4090,10 @@ fn run_policy_current(_cwd: PathBuf, args: PolicyCurrentArgs) -> anyhow::Result<
                 println!("Current Policy Snapshot: {}", snapshot.policy_id);
                 println!("{}", "=".repeat(60));
                 println!();
-                println!("Created:        {}", snapshot.created_at.format("%Y-%m-%d %H:%M:%S UTC"));
+                println!(
+                    "Created:        {}",
+                    snapshot.created_at.format("%Y-%m-%d %H:%M:%S UTC")
+                );
                 println!("Hash:           {}", snapshot.hash);
                 println!();
 
@@ -3835,7 +4109,10 @@ fn run_policy_current(_cwd: PathBuf, args: PolicyCurrentArgs) -> anyhow::Result<
                 }
 
                 println!();
-                println!("Use `code speckit policy show {}` for full details", snapshot.policy_id);
+                println!(
+                    "Use `code speckit policy show {}` for full details",
+                    snapshot.policy_id
+                );
             }
         }
         Ok(None) => {
@@ -3908,7 +4185,10 @@ fn run_policy_validate(cwd: PathBuf, args: PolicyValidateArgs) -> anyhow::Result
             });
             println!("{}", serde_json::to_string_pretty(&json)?);
         } else {
-            eprintln!("Error: model_policy.toml not found at {}", policy_path.display());
+            eprintln!(
+                "Error: model_policy.toml not found at {}",
+                policy_path.display()
+            );
             eprintln!();
             eprintln!("Expected locations:");
             eprintln!("  - ./model_policy.toml");
@@ -4080,9 +4360,7 @@ fn run_policy_diff(_cwd: PathBuf, args: PolicyDiffArgs) -> anyhow::Result<()> {
 
 /// Run the replay command (SPEC-KIT-975)
 fn run_replay(cwd: PathBuf, args: ReplayArgs) -> anyhow::Result<()> {
-    use codex_tui::memvid_adapter::{
-        BranchId, default_capsule_config, LogicalUri,
-    };
+    use codex_tui::memvid_adapter::{BranchId, LogicalUri, default_capsule_config};
 
     match args.command {
         ReplaySubcommand::Run(run_args) => run_replay_run(cwd, run_args),
@@ -4125,7 +4403,8 @@ fn run_replay_run(cwd: PathBuf, args: ReplayRunArgs) -> anyhow::Result<()> {
     };
 
     // Build branch filter
-    let branch = args.branch
+    let branch = args
+        .branch
         .map(|b| BranchId::from_str(&b))
         .unwrap_or_else(|| BranchId::for_run(&args.run_id));
 
@@ -4150,16 +4429,19 @@ fn run_replay_run(cwd: PathBuf, args: ReplayRunArgs) -> anyhow::Result<()> {
         .collect();
 
     if args.json {
-        let timeline: Vec<_> = events.iter().map(|e| {
-            serde_json::json!({
-                "seq": extract_seq_from_uri(&e.uri),
-                "timestamp": e.timestamp.to_rfc3339(),
-                "event_type": e.event_type.as_str(),
-                "stage": e.stage,
-                "payload": e.payload,
-                "uri": e.uri.as_str(),
+        let timeline: Vec<_> = events
+            .iter()
+            .map(|e| {
+                serde_json::json!({
+                    "seq": extract_seq_from_uri(&e.uri),
+                    "timestamp": e.timestamp.to_rfc3339(),
+                    "event_type": e.event_type.as_str(),
+                    "stage": e.stage,
+                    "payload": e.payload,
+                    "uri": e.uri.as_str(),
+                })
             })
-        }).collect();
+            .collect();
 
         let json = serde_json::json!({
             "schema_version": SCHEMA_VERSION,
@@ -4207,14 +4489,19 @@ fn run_replay_run(cwd: PathBuf, args: ReplayRunArgs) -> anyhow::Result<()> {
                 _ => "[EVENT]",
             };
 
-            println!("{} {} {}",
+            println!(
+                "{} {} {}",
                 event.timestamp.format("%H:%M:%S%.3f"),
                 type_icon,
                 format_event_summary(event),
             );
         }
 
-        println!("\nTotal: {} events, {} checkpoints", events.len(), run_checkpoints.len());
+        println!(
+            "\nTotal: {} events, {} checkpoints",
+            events.len(),
+            run_checkpoints.len()
+        );
     }
 
     Ok(())
@@ -4222,7 +4509,7 @@ fn run_replay_run(cwd: PathBuf, args: ReplayRunArgs) -> anyhow::Result<()> {
 
 /// Run the `speckit replay verify` command
 fn run_replay_verify(cwd: PathBuf, args: ReplayVerifyArgs) -> anyhow::Result<()> {
-    use codex_tui::memvid_adapter::{BranchId, default_capsule_config, LogicalUri};
+    use codex_tui::memvid_adapter::{BranchId, LogicalUri, default_capsule_config};
 
     // Get capsule config
     let config = if let Some(path) = &args.capsule_path {
@@ -4255,9 +4542,7 @@ fn run_replay_verify(cwd: PathBuf, args: ReplayVerifyArgs) -> anyhow::Result<()>
 
     let branch = BranchId::for_run(&args.run_id);
     let events = handle.list_events_filtered(Some(&branch));
-    let run_events: Vec<_> = events.iter()
-        .filter(|e| e.run_id == args.run_id)
-        .collect();
+    let run_events: Vec<_> = events.iter().filter(|e| e.run_id == args.run_id).collect();
 
     #[derive(serde::Serialize)]
     struct VerificationIssue {
@@ -4271,7 +4556,10 @@ fn run_replay_verify(cwd: PathBuf, args: ReplayVerifyArgs) -> anyhow::Result<()>
 
     // Check 1: Retrieval response URIs resolve
     if args.check_retrievals {
-        for event in run_events.iter().filter(|e| e.event_type == EventType::RetrievalResponse) {
+        for event in run_events
+            .iter()
+            .filter(|e| e.event_type == EventType::RetrievalResponse)
+        {
             if let Some(uris) = event.payload.get("hit_uris").and_then(|v| v.as_array()) {
                 for uri_val in uris {
                     if let Some(uri_str) = uri_val.as_str() {
@@ -4348,32 +4636,44 @@ fn extract_seq_from_uri(uri: &codex_tui::memvid_adapter::LogicalUri) -> u64 {
 fn format_event_summary(event: &codex_tui::memvid_adapter::RunEventEnvelope) -> String {
     match event.event_type {
         EventType::ToolCall => {
-            let tool = event.payload.get("tool_name")
+            let tool = event
+                .payload
+                .get("tool_name")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown");
             format!("Tool: {}", tool)
         }
         EventType::RetrievalResponse => {
-            let count = event.payload.get("hit_uris")
+            let count = event
+                .payload
+                .get("hit_uris")
                 .and_then(|v| v.as_array())
                 .map(|a| a.len())
                 .unwrap_or(0);
             format!("{} hits", count)
         }
         EventType::ModelCallEnvelope => {
-            let model = event.payload.get("model")
+            let model = event
+                .payload
+                .get("model")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown");
-            let mode = event.payload.get("capture_mode")
+            let mode = event
+                .payload
+                .get("capture_mode")
                 .and_then(|v| v.as_str())
                 .unwrap_or("?");
             format!("{} (capture: {})", model, mode)
         }
         EventType::PatchApply => {
-            let path = event.payload.get("file_path")
+            let path = event
+                .payload
+                .get("file_path")
                 .and_then(|v| v.as_str())
                 .unwrap_or("?");
-            let ptype = event.payload.get("patch_type")
+            let ptype = event
+                .payload
+                .get("patch_type")
                 .and_then(|v| v.as_str())
                 .unwrap_or("?");
             format!("{}: {}", ptype, path)
@@ -4664,12 +4964,13 @@ fn run_graph_add_edge(capsule_path: &PathBuf, args: GraphAddEdgeArgs) -> anyhow:
 }
 
 /// Run `graph query` command
-fn run_graph_query(cwd: &PathBuf, capsule_path: &PathBuf, args: GraphQueryArgs) -> anyhow::Result<()> {
+fn run_graph_query(
+    cwd: &PathBuf,
+    capsule_path: &PathBuf,
+    args: GraphQueryArgs,
+) -> anyhow::Result<()> {
     // Use capsule_path from args if provided, otherwise use the default
-    let actual_capsule_path = args
-        .capsule_path
-        .as_ref()
-        .unwrap_or(capsule_path);
+    let actual_capsule_path = args.capsule_path.as_ref().unwrap_or(capsule_path);
 
     // Open capsule read-only
     let config = CapsuleConfig {
@@ -4721,8 +5022,10 @@ fn run_graph_query(cwd: &PathBuf, capsule_path: &PathBuf, args: GraphQueryArgs) 
                 let obj_type = uri.object_type();
                 if args.json {
                     // Try to parse as JSON for structured output
-                    let payload: serde_json::Value = serde_json::from_slice(&bytes)
-                        .unwrap_or_else(|_| serde_json::Value::String(String::from_utf8_lossy(&bytes).to_string()));
+                    let payload: serde_json::Value =
+                        serde_json::from_slice(&bytes).unwrap_or_else(|_| {
+                            serde_json::Value::String(String::from_utf8_lossy(&bytes).to_string())
+                        });
                     let json = serde_json::json!({
                         "schema_version": SCHEMA_VERSION,
                         "tool_version": tool_version(),

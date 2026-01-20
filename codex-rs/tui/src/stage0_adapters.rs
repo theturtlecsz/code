@@ -99,12 +99,8 @@ impl LocalMemoryClient for LocalMemoryCliAdapter {
 
         // Build exclusion set for client-side filtering
         // CONVERGENCE: local-memory CLI doesn't support --exclude-tags, so filter here
-        let exclude_set: std::collections::HashSet<&str> = params
-            .iqo
-            .exclude_tags
-            .iter()
-            .map(|s| s.as_str())
-            .collect();
+        let exclude_set: std::collections::HashSet<&str> =
+            params.iqo.exclude_tags.iter().map(|s| s.as_str()).collect();
 
         Ok(results
             .into_iter()
@@ -373,7 +369,10 @@ impl Tier2HttpAdapter {
             let error_msg = parsed
                 .error
                 .unwrap_or_else(|| "Unknown NotebookLM error".to_string());
-            return Err(Stage0Error::tier2(format!("NotebookLM error: {}", error_msg)));
+            return Err(Stage0Error::tier2(format!(
+                "NotebookLM error: {}",
+                error_msg
+            )));
         }
 
         let answer = parsed
@@ -486,11 +485,7 @@ impl Tier2Client for Tier2HttpAdapter {
 
             // SPEC-TIER2-SOURCES: Step 1 - Upsert CURRENT_SPEC.md source
             // Prepend spec_id as heading for context
-            let spec_source_content = format!(
-                "# SPEC: {}\n\n{}",
-                spec_id,
-                spec_content
-            );
+            let spec_source_content = format!("# SPEC: {}\n\n{}", spec_id, spec_content);
             if let Err(e) = upsert_source_blocking(
                 &client,
                 &base_url,
@@ -514,11 +509,7 @@ impl Tier2Client for Tier2HttpAdapter {
             }
 
             // SPEC-TIER2-SOURCES: Step 2 - Upsert CURRENT_TASK_BRIEF.md source
-            let brief_source_content = format!(
-                "# Task Brief: {}\n\n{}",
-                spec_id,
-                task_brief_md
-            );
+            let brief_source_content = format!("# Task Brief: {}\n\n{}", spec_id, task_brief_md);
             if let Err(e) = upsert_source_blocking(
                 &client,
                 &base_url,
@@ -703,7 +694,9 @@ impl Tier2Client for PrecomputedTier2Client {
         } else if let Some(ref error) = self.error {
             Err(Stage0Error::tier2(error.clone()))
         } else {
-            Err(Stage0Error::tier2("No pre-computed Tier2 response available"))
+            Err(Stage0Error::tier2(
+                "No pre-computed Tier2 response available",
+            ))
         }
     }
 }

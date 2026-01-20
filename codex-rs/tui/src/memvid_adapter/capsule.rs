@@ -226,7 +226,6 @@ pub struct CapsuleHandle {
     // ─────────────────────────────────────────────────────────────────────────────
     // Persistence state (SPEC-KIT-971 minimal persistence)
     // ─────────────────────────────────────────────────────────────────────────────
-
     /// File handle for append-only writes (only present when write_lock is true)
     file_handle: Arc<Mutex<Option<File>>>,
 
@@ -239,7 +238,6 @@ pub struct CapsuleHandle {
     // ─────────────────────────────────────────────────────────────────────────────
     // Policy tracking (SPEC-KIT-977)
     // ─────────────────────────────────────────────────────────────────────────────
-
     /// Current policy snapshot info (policy_id, hash, uri)
     /// Set when policy is captured at run start
     current_policy: Arc<RwLock<Option<CurrentPolicyInfo>>>,
@@ -300,7 +298,12 @@ impl CapsuleOpenOptions {
     }
 
     /// Set context for the lock metadata.
-    pub fn with_context(mut self, spec_id: Option<String>, run_id: Option<String>, branch: Option<String>) -> Self {
+    pub fn with_context(
+        mut self,
+        spec_id: Option<String>,
+        run_id: Option<String>,
+        branch: Option<String>,
+    ) -> Self {
         self.spec_id = spec_id;
         self.run_id = run_id;
         self.branch = branch;
@@ -410,9 +413,7 @@ impl CapsuleHandle {
 
         // Open file handle for append if write access requested
         if options.write_lock {
-            let file = OpenOptions::new()
-                .append(true)
-                .open(&config.capsule_path)?;
+            let file = OpenOptions::new().append(true).open(&config.capsule_path)?;
             *handle.file_handle.lock().unwrap() = Some(file);
         }
 
@@ -509,7 +510,9 @@ impl CapsuleHandle {
                     match record.kind {
                         RecordKind::Artifact => {
                             // Parse artifact metadata
-                            if let Ok(art_meta) = serde_json::from_value::<ArtifactRecordMeta>(record.meta.clone()) {
+                            if let Ok(art_meta) =
+                                serde_json::from_value::<ArtifactRecordMeta>(record.meta.clone())
+                            {
                                 if let Ok(uri) = art_meta.uri.parse::<LogicalUri>() {
                                     let pointer = PhysicalPointer {
                                         frame_id: record.seq,
@@ -522,15 +525,25 @@ impl CapsuleHandle {
                         }
                         RecordKind::Checkpoint => {
                             // Parse checkpoint metadata
-                            if let Ok(cp_meta) = serde_json::from_value::<CheckpointMetadata>(record.meta.clone()) {
+                            if let Ok(cp_meta) =
+                                serde_json::from_value::<CheckpointMetadata>(record.meta.clone())
+                            {
                                 checkpoints.push(cp_meta);
                             }
                         }
                         RecordKind::Event => {
                             // Parse event envelope
-                            if let Ok(event) = serde_json::from_value::<RunEventEnvelope>(record.meta.clone()) {
+                            if let Ok(event) =
+                                serde_json::from_value::<RunEventEnvelope>(record.meta.clone())
+                            {
                                 // Track max event seq for future event numbering
-                                if let Some(seq_num) = event.uri.as_str().split('/').last().and_then(|s| s.parse::<u64>().ok()) {
+                                if let Some(seq_num) = event
+                                    .uri
+                                    .as_str()
+                                    .split('/')
+                                    .last()
+                                    .and_then(|s| s.parse::<u64>().ok())
+                                {
                                     max_event_seq = max_event_seq.max(seq_num);
                                 }
                                 events.push(event);
@@ -538,7 +551,9 @@ impl CapsuleHandle {
                         }
                         RecordKind::UriIndexSnapshot => {
                             // SPEC-KIT-971: Restore URI index snapshot for time-travel
-                            if let Ok(snapshot) = serde_json::from_value::<UriIndexSnapshot>(record.meta.clone()) {
+                            if let Ok(snapshot) =
+                                serde_json::from_value::<UriIndexSnapshot>(record.meta.clone())
+                            {
                                 uri_index.import_snapshot(snapshot);
                             }
                         }
@@ -605,11 +620,10 @@ impl CapsuleHandle {
         // Read metadata JSON
         let mut meta_buf = vec![0u8; meta_len as usize];
         file.read_exact(&mut meta_buf)?;
-        let meta: serde_json::Value = serde_json::from_slice(&meta_buf).map_err(|e| {
-            CapsuleError::Corrupted {
+        let meta: serde_json::Value =
+            serde_json::from_slice(&meta_buf).map_err(|e| CapsuleError::Corrupted {
                 reason: format!("Invalid JSON metadata at pos {}: {}", pos, e),
-            }
-        })?;
+            })?;
 
         // Calculate payload offset and length
         // Record format: [4 bytes len][1 byte kind][4 bytes meta_len][meta_len bytes meta][payload]
@@ -649,10 +663,8 @@ impl CapsuleHandle {
         let file_pos = file.seek(SeekFrom::End(0))?;
 
         // Serialize metadata
-        let meta_bytes = serde_json::to_vec(meta).map_err(|e| {
-            CapsuleError::InvalidOperation {
-                reason: format!("Failed to serialize metadata: {}", e),
-            }
+        let meta_bytes = serde_json::to_vec(meta).map_err(|e| CapsuleError::InvalidOperation {
+            reason: format!("Failed to serialize metadata: {}", e),
         })?;
 
         // Calculate record length (kind + meta_len + meta + payload)
@@ -660,10 +672,10 @@ impl CapsuleHandle {
 
         // Write record
         file.write_all(&(record_len as u32).to_le_bytes())?; // record_len
-        file.write_all(&[kind as u8])?;                       // kind
+        file.write_all(&[kind as u8])?; // kind
         file.write_all(&(meta_bytes.len() as u32).to_le_bytes())?; // meta_len
-        file.write_all(&meta_bytes)?;                         // meta
-        file.write_all(payload)?;                              // payload
+        file.write_all(&meta_bytes)?; // meta
+        file.write_all(payload)?; // payload
         file.flush()?;
 
         // Calculate payload offset
@@ -799,18 +811,20 @@ impl CapsuleHandle {
             object_type: "policy".to_string(),
             metadata,
         };
-        let meta_value = serde_json::to_value(&art_meta).map_err(|e| {
-            CapsuleError::InvalidOperation {
+        let meta_value =
+            serde_json::to_value(&art_meta).map_err(|e| CapsuleError::InvalidOperation {
                 reason: format!("Failed to serialize policy metadata: {}", e),
-            }
-        })?;
+            })?;
 
         // Write record to disk directly (bypass queue for immediate persistence)
         let pointer = self.write_record(RecordKind::Artifact, &meta_value, &data)?;
 
         // Update URI index (branch-aware for SPEC-KIT-971 time-travel)
         let branch = self.current_branch();
-        self.uri_index.write().unwrap().insert_on_branch(&branch, uri.clone(), pointer);
+        self.uri_index
+            .write()
+            .unwrap()
+            .insert_on_branch(&branch, uri.clone(), pointer);
 
         // Track as current policy
         self.set_current_policy(policy_id, policy_hash, &uri);
@@ -860,17 +874,19 @@ impl CapsuleHandle {
                 object_type: "artifact".to_string(), // Could extract from URI
                 metadata: write.metadata,
             };
-            let meta_value = serde_json::to_value(&art_meta).map_err(|e| {
-                CapsuleError::InvalidOperation {
+            let meta_value =
+                serde_json::to_value(&art_meta).map_err(|e| CapsuleError::InvalidOperation {
                     reason: format!("Failed to serialize artifact metadata: {}", e),
-                }
-            })?;
+                })?;
 
             // Write record to disk
             let pointer = self.write_record(RecordKind::Artifact, &meta_value, &write.data)?;
 
             // Update URI index (branch-aware for SPEC-KIT-971 time-travel)
-            self.uri_index.write().unwrap().insert_on_branch(&branch, write.uri, pointer);
+            self.uri_index
+                .write()
+                .unwrap()
+                .insert_on_branch(&branch, write.uri, pointer);
         }
 
         Ok(())
@@ -925,11 +941,10 @@ impl CapsuleHandle {
 
         // Persist checkpoint to disk (if we have write access)
         if self.file_handle.lock().unwrap().is_some() {
-            let meta_value = serde_json::to_value(&metadata).map_err(|e| {
-                CapsuleError::InvalidOperation {
+            let meta_value =
+                serde_json::to_value(&metadata).map_err(|e| CapsuleError::InvalidOperation {
                     reason: format!("Failed to serialize checkpoint: {}", e),
-                }
-            })?;
+                })?;
             self.write_record(RecordKind::Checkpoint, &meta_value, &[])?;
         }
 
@@ -972,7 +987,13 @@ impl CapsuleHandle {
             })
         };
 
-        self.emit_event(spec_id, run_id, Some(stage), EventType::StageTransition, event_payload)?;
+        self.emit_event(
+            spec_id,
+            run_id,
+            Some(stage),
+            EventType::StageTransition,
+            event_payload,
+        )?;
 
         Ok(checkpoint_id)
     }
@@ -1037,11 +1058,10 @@ impl CapsuleHandle {
 
         // Persist checkpoint to disk (if we have write access)
         if self.file_handle.lock().unwrap().is_some() {
-            let meta_value = serde_json::to_value(&metadata).map_err(|e| {
-                CapsuleError::InvalidOperation {
+            let meta_value =
+                serde_json::to_value(&metadata).map_err(|e| CapsuleError::InvalidOperation {
                     reason: format!("Failed to serialize checkpoint: {}", e),
-                }
-            })?;
+                })?;
             self.write_record(RecordKind::Checkpoint, &meta_value, &[])?;
         }
 
@@ -1154,7 +1174,9 @@ impl CapsuleHandle {
                                         // In full mode, include all events
                                         return match mode {
                                             MergeMode::Full => true,
-                                            MergeMode::Curated => ev.event_type.is_curated_eligible(),
+                                            MergeMode::Curated => {
+                                                ev.event_type.is_curated_eligible()
+                                            }
                                         };
                                     }
                                 }
@@ -1239,7 +1261,8 @@ impl CapsuleHandle {
 
     /// Check if a label is unique within a branch.
     pub fn is_label_unique(&self, label: &str, branch: &BranchId) -> bool {
-        self.get_checkpoint_by_label_in_branch(label, branch).is_none()
+        self.get_checkpoint_by_label_in_branch(label, branch)
+            .is_none()
     }
 
     // =========================================================================
@@ -1376,11 +1399,10 @@ impl CapsuleHandle {
             run_id: run_id.map(|r| r.to_string()),
         };
 
-        let payload_value = serde_json::to_value(&payload).map_err(|e| {
-            CapsuleError::InvalidOperation {
+        let payload_value =
+            serde_json::to_value(&payload).map_err(|e| CapsuleError::InvalidOperation {
                 reason: format!("Failed to serialize BranchMerged payload: {}", e),
-            }
-        })?;
+            })?;
 
         // Emit on target branch (main) explicitly, not current branch
         self.emit_event_on_branch(
@@ -1451,11 +1473,10 @@ impl CapsuleHandle {
 
         // Persist event to disk (if we have write access)
         if self.file_handle.lock().unwrap().is_some() {
-            let meta_value = serde_json::to_value(&event).map_err(|e| {
-                CapsuleError::InvalidOperation {
+            let meta_value =
+                serde_json::to_value(&event).map_err(|e| CapsuleError::InvalidOperation {
                     reason: format!("Failed to serialize event: {}", e),
-                }
-            })?;
+                })?;
             self.write_record(RecordKind::Event, &meta_value, &[])?;
         }
 
@@ -1523,11 +1544,10 @@ impl CapsuleHandle {
         run_id: &str,
         payload: &RoutingDecisionPayload,
     ) -> Result<LogicalUri> {
-        let payload_json = serde_json::to_value(payload).map_err(|e| {
-            CapsuleError::InvalidOperation {
+        let payload_json =
+            serde_json::to_value(payload).map_err(|e| CapsuleError::InvalidOperation {
                 reason: format!("Failed to serialize routing decision: {}", e),
-            }
-        })?;
+            })?;
 
         self.emit_event(
             spec_id,
@@ -1579,11 +1599,10 @@ impl CapsuleHandle {
         run_id: &str,
         payload: &ToolCallPayload,
     ) -> Result<LogicalUri> {
-        let payload_json = serde_json::to_value(payload).map_err(|e| {
-            CapsuleError::InvalidOperation {
+        let payload_json =
+            serde_json::to_value(payload).map_err(|e| CapsuleError::InvalidOperation {
                 reason: format!("Failed to serialize tool call: {}", e),
-            }
-        })?;
+            })?;
 
         self.emit_event(
             spec_id,
@@ -1604,19 +1623,12 @@ impl CapsuleHandle {
         stage: Option<&str>,
         payload: &ToolResultPayload,
     ) -> Result<LogicalUri> {
-        let payload_json = serde_json::to_value(payload).map_err(|e| {
-            CapsuleError::InvalidOperation {
+        let payload_json =
+            serde_json::to_value(payload).map_err(|e| CapsuleError::InvalidOperation {
                 reason: format!("Failed to serialize tool result: {}", e),
-            }
-        })?;
+            })?;
 
-        self.emit_event(
-            spec_id,
-            run_id,
-            stage,
-            EventType::ToolResult,
-            payload_json,
-        )
+        self.emit_event(spec_id, run_id, stage, EventType::ToolResult, payload_json)
     }
 
     /// Emit a RetrievalRequest event (SPEC-KIT-975).
@@ -1628,11 +1640,10 @@ impl CapsuleHandle {
         run_id: &str,
         payload: &RetrievalRequestPayload,
     ) -> Result<LogicalUri> {
-        let payload_json = serde_json::to_value(payload).map_err(|e| {
-            CapsuleError::InvalidOperation {
+        let payload_json =
+            serde_json::to_value(payload).map_err(|e| CapsuleError::InvalidOperation {
                 reason: format!("Failed to serialize retrieval request: {}", e),
-            }
-        })?;
+            })?;
 
         self.emit_event(
             spec_id,
@@ -1653,11 +1664,10 @@ impl CapsuleHandle {
         stage: Option<&str>,
         payload: &RetrievalResponsePayload,
     ) -> Result<LogicalUri> {
-        let payload_json = serde_json::to_value(payload).map_err(|e| {
-            CapsuleError::InvalidOperation {
+        let payload_json =
+            serde_json::to_value(payload).map_err(|e| CapsuleError::InvalidOperation {
                 reason: format!("Failed to serialize retrieval response: {}", e),
-            }
-        })?;
+            })?;
 
         self.emit_event(
             spec_id,
@@ -1677,11 +1687,10 @@ impl CapsuleHandle {
         run_id: &str,
         payload: &PatchApplyPayload,
     ) -> Result<LogicalUri> {
-        let payload_json = serde_json::to_value(payload).map_err(|e| {
-            CapsuleError::InvalidOperation {
+        let payload_json =
+            serde_json::to_value(payload).map_err(|e| CapsuleError::InvalidOperation {
                 reason: format!("Failed to serialize patch apply: {}", e),
-            }
-        })?;
+            })?;
 
         self.emit_event(
             spec_id,
@@ -1701,11 +1710,10 @@ impl CapsuleHandle {
         run_id: &str,
         payload: &GateDecisionPayload,
     ) -> Result<LogicalUri> {
-        let payload_json = serde_json::to_value(payload).map_err(|e| {
-            CapsuleError::InvalidOperation {
+        let payload_json =
+            serde_json::to_value(payload).map_err(|e| CapsuleError::InvalidOperation {
                 reason: format!("Failed to serialize gate decision: {}", e),
-            }
-        })?;
+            })?;
 
         self.emit_event(
             spec_id,
@@ -1725,11 +1733,10 @@ impl CapsuleHandle {
         run_id: &str,
         payload: &ErrorEventPayload,
     ) -> Result<LogicalUri> {
-        let payload_json = serde_json::to_value(payload).map_err(|e| {
-            CapsuleError::InvalidOperation {
+        let payload_json =
+            serde_json::to_value(payload).map_err(|e| CapsuleError::InvalidOperation {
                 reason: format!("Failed to serialize error event: {}", e),
-            }
-        })?;
+            })?;
 
         self.emit_event(
             spec_id,
@@ -1750,11 +1757,10 @@ impl CapsuleHandle {
         run_id: &str,
         payload: &ModelCallEnvelopePayload,
     ) -> Result<LogicalUri> {
-        let payload_json = serde_json::to_value(payload).map_err(|e| {
-            CapsuleError::InvalidOperation {
+        let payload_json =
+            serde_json::to_value(payload).map_err(|e| CapsuleError::InvalidOperation {
                 reason: format!("Failed to serialize model call envelope: {}", e),
-            }
-        })?;
+            })?;
 
         self.emit_event(
             spec_id,
@@ -1774,11 +1780,10 @@ impl CapsuleHandle {
         run_id: &str,
         payload: &CapsuleExportedPayload,
     ) -> Result<LogicalUri> {
-        let payload_json = serde_json::to_value(payload).map_err(|e| {
-            CapsuleError::InvalidOperation {
+        let payload_json =
+            serde_json::to_value(payload).map_err(|e| CapsuleError::InvalidOperation {
                 reason: format!("Failed to serialize capsule exported: {}", e),
-            }
-        })?;
+            })?;
 
         self.emit_event(
             spec_id,
@@ -1798,11 +1803,10 @@ impl CapsuleHandle {
         run_id: &str,
         payload: &CapsuleImportedPayload,
     ) -> Result<LogicalUri> {
-        let payload_json = serde_json::to_value(payload).map_err(|e| {
-            CapsuleError::InvalidOperation {
+        let payload_json =
+            serde_json::to_value(payload).map_err(|e| CapsuleError::InvalidOperation {
                 reason: format!("Failed to serialize capsule imported: {}", e),
-            }
-        })?;
+            })?;
 
         self.emit_event(
             spec_id,
@@ -1901,9 +1905,11 @@ impl CapsuleHandle {
         branch: Option<&BranchId>,
         as_of: Option<&CheckpointId>,
     ) -> Result<PhysicalPointer> {
-        let uri: LogicalUri = uri_str.parse().map_err(|_| CapsuleError::InvalidOperation {
-            reason: format!("Invalid URI: {}", uri_str),
-        })?;
+        let uri: LogicalUri = uri_str
+            .parse()
+            .map_err(|_| CapsuleError::InvalidOperation {
+                reason: format!("Invalid URI: {}", uri_str),
+            })?;
         self.resolve_uri(&uri, branch, as_of)
     }
 
@@ -1959,9 +1965,11 @@ impl CapsuleHandle {
         branch: Option<&BranchId>,
         as_of: Option<&CheckpointId>,
     ) -> Result<Vec<u8>> {
-        let uri: LogicalUri = uri_str.parse().map_err(|_| CapsuleError::InvalidOperation {
-            reason: format!("Invalid URI: {}", uri_str),
-        })?;
+        let uri: LogicalUri = uri_str
+            .parse()
+            .map_err(|_| CapsuleError::InvalidOperation {
+                reason: format!("Invalid URI: {}", uri_str),
+            })?;
         self.get_bytes(&uri, branch, as_of)
     }
 
@@ -1980,7 +1988,9 @@ impl CapsuleHandle {
     ///
     /// Returns an iterator over stored artifact records with their metadata
     /// for rebuilding the TF-IDF search index on reopen.
-    pub fn iter_stored_artifacts(&self) -> impl Iterator<Item = (LogicalUri, Vec<u8>, serde_json::Value)> + '_ {
+    pub fn iter_stored_artifacts(
+        &self,
+    ) -> impl Iterator<Item = (LogicalUri, Vec<u8>, serde_json::Value)> + '_ {
         let records = self.stored_records.read().unwrap();
         let path = self.config.capsule_path.clone();
 
@@ -2087,7 +2097,8 @@ impl CapsuleHandle {
                     results.push(DiagnosticResult::Error(
                         "Capsule file too small".to_string(),
                         "File may be corrupted. Restore from backup or recreate:\n  \
-                        rm -f {} && speckit capsule init".to_string(),
+                        rm -f {} && speckit capsule init"
+                            .to_string(),
                     ));
                 } else if &data[0..3] != b"MV2" {
                     results.push(DiagnosticResult::Error(

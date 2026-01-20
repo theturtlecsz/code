@@ -4,6 +4,12 @@ use crate::app_event_sender::AppEventSender;
 use crate::bottom_pane::ApprovalRequest;
 use crate::chatwidget::ChatWidget;
 use crate::clipboard_copy;
+use crate::compat::ConfigExt;
+use crate::compat::ConversationManagerExt;
+use crate::compat::ModelFamilyExt;
+use crate::compat::config::edit::ConfigEditsBuilder;
+use crate::compat::models_manager::ModelsManager;
+use crate::compat::terminal::terminal_info;
 use crate::custom_terminal::Frame;
 use crate::diff_render::DiffSummary;
 use crate::exec_command::strip_bash_lc_and_escape;
@@ -31,18 +37,12 @@ use codex_ansi_escape::ansi_escape_line;
 use codex_core::AuthManager;
 use codex_core::ConversationManager;
 use codex_core::config::Config;
-use crate::compat::models_manager::ModelsManager;
 use codex_core::protocol::EventMsg;
 use codex_core::protocol::FinalOutput;
 use codex_core::protocol::ListSkillsResponseEvent;
 use codex_core::protocol::Op;
 use codex_core::protocol::SkillErrorInfo;
 use codex_core::protocol::TokenUsage;
-use crate::compat::terminal::terminal_info;
-use crate::compat::config::edit::ConfigEditsBuilder;
-use crate::compat::ConfigExt;
-use crate::compat::ConversationManagerExt;
-use crate::compat::ModelFamilyExt;
 use codex_protocol::ConversationId;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
@@ -183,9 +183,10 @@ fn migration_prompt_hidden(config: &Config, migration_config_key: &str) -> bool 
             .notices()
             .hide_gpt_5_1_codex_max_migration_prompt
             .unwrap_or(false),
-        HIDE_GPT5_1_MIGRATION_PROMPT_CONFIG => {
-            config.notices().hide_gpt5_1_migration_prompt.unwrap_or(false)
-        }
+        HIDE_GPT5_1_MIGRATION_PROMPT_CONFIG => config
+            .notices()
+            .hide_gpt5_1_migration_prompt
+            .unwrap_or(false),
         _ => false,
     }
 }
@@ -297,9 +298,7 @@ impl App {
         let app_event_tx = AppEventSender::new(app_event_tx);
 
         // NOTE: Fork's ConversationManager doesn't take SessionSource
-        let conversation_manager = Arc::new(ConversationManager::new(
-            auth_manager.clone(),
-        ));
+        let conversation_manager = Arc::new(ConversationManager::new(auth_manager.clone()));
         let mut model = conversation_manager
             .get_models_manager()
             .get_model(&config.model, &config)

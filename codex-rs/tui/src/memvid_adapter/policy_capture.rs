@@ -135,9 +135,7 @@ pub fn latest_policy_ref_for_run(
     }
 
     // Find the latest event (by timestamp)
-    let latest = policy_events
-        .iter()
-        .max_by_key(|e| e.timestamp)?;
+    let latest = policy_events.iter().max_by_key(|e| e.timestamp)?;
 
     // Extract policy info from payload
     let policy_uri_str = latest.payload.get("policy_uri")?.as_str()?;
@@ -162,11 +160,7 @@ pub fn latest_policy_ref_for_run(
 /// ## Returns
 /// - `true` if policy was restored from events
 /// - `false` if no policy was found or policy was already set
-pub fn restore_policy_from_events(
-    handle: &CapsuleHandle,
-    spec_id: &str,
-    run_id: &str,
-) -> bool {
+pub fn restore_policy_from_events(handle: &CapsuleHandle, spec_id: &str, run_id: &str) -> bool {
     // Skip if policy is already set
     if handle.current_policy().is_some() {
         return false;
@@ -174,11 +168,7 @@ pub fn restore_policy_from_events(
 
     // Try to restore from events
     if let Some(policy_info) = latest_policy_ref_for_run(handle, spec_id, run_id) {
-        handle.set_current_policy(
-            &policy_info.policy_id,
-            &policy_info.hash,
-            &policy_info.uri,
-        );
+        handle.set_current_policy(&policy_info.policy_id, &policy_info.hash, &policy_info.uri);
         tracing::debug!(
             policy_id = %policy_info.policy_id,
             hash = %policy_info.hash,
@@ -285,11 +275,7 @@ pub fn check_and_recapture_if_changed(
     )?;
 
     // Update current policy in handle
-    handle.set_current_policy(
-        &fresh_snapshot.policy_id,
-        &fresh_snapshot.hash,
-        &policy_uri,
-    );
+    handle.set_current_policy(&fresh_snapshot.policy_id, &fresh_snapshot.hash, &policy_uri);
 
     Ok(Some(fresh_snapshot))
 }
@@ -434,7 +420,8 @@ mod tests {
 
         // Call check_and_recapture_if_changed - it should restore from events
         // and return None (no drift) since config hasn't changed
-        let result = check_and_recapture_if_changed(&handle2, &stage0_config, "SPEC-977", "run-drift");
+        let result =
+            check_and_recapture_if_changed(&handle2, &stage0_config, "SPEC-977", "run-drift");
         assert!(result.is_ok());
 
         // Should return None (no recapture needed) because policy was restored
@@ -519,6 +506,9 @@ mod tests {
         assert!(found.is_none(), "Should not find policy for different run");
 
         let found_wrong_spec = latest_policy_ref_for_run(&handle2, "SPEC-OTHER", "run-A");
-        assert!(found_wrong_spec.is_none(), "Should not find policy for different spec");
+        assert!(
+            found_wrong_spec.is_none(),
+            "Should not find policy for different spec"
+        );
     }
 }

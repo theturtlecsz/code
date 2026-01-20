@@ -3,9 +3,10 @@
 //! Covers SpecAutoState, phase management, quality gates, and helper functions.
 
 use codex_tui::{
-    HalMode, PipelineConfig, QualityCheckpoint, QualityGateType, SlashCommand, SpecAutoPhase,
-    SpecAutoState, SpecStage, expected_guardrail_command, get_nested, guardrail_for_stage,
-    require_object, require_string_field, spec_ops_stage_prefix, validate_guardrail_evidence,
+    HalMode, LLMCaptureMode, PipelineConfig, QualityCheckpoint, QualityGateType, SlashCommand,
+    SpecAutoPhase, SpecAutoState, SpecStage, expected_guardrail_command, get_nested,
+    guardrail_for_stage, require_object, require_string_field, spec_ops_stage_prefix,
+    validate_guardrail_evidence,
 };
 use serde_json::json;
 use std::path::PathBuf;
@@ -20,6 +21,7 @@ fn test_spec_auto_state_new() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     assert_eq!(state.spec_id, "SPEC-KIT-001");
@@ -38,6 +40,7 @@ fn test_spec_auto_state_with_quality_gates_disabled() {
         None,
         false,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     assert!(!state.quality_gates_enabled);
@@ -52,6 +55,7 @@ fn test_spec_auto_state_resume_from_tasks() {
         SpecStage::Tasks,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     assert_eq!(state.current_index, 1); // Tasks is index 1
@@ -66,6 +70,7 @@ fn test_spec_auto_state_resume_from_unlock() {
         SpecStage::Unlock,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     assert_eq!(state.current_index, 5); // Unlock is last (index 5)
@@ -80,6 +85,7 @@ fn test_spec_auto_state_with_hal_mode() {
         SpecStage::Plan,
         Some(HalMode::Live),
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     assert_eq!(state.hal_mode, Some(HalMode::Live));
@@ -93,6 +99,7 @@ fn test_spec_auto_state_initial_phase_is_guardrail() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     assert!(matches!(state.phase, SpecAutoPhase::Guardrail));
@@ -106,6 +113,7 @@ fn test_spec_auto_state_stage_sequence() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     assert_eq!(state.stages[0], SpecStage::Plan);
@@ -126,6 +134,7 @@ fn test_current_stage_returns_correct_stage() {
         SpecStage::Implement,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     assert_eq!(state.current_stage(), Some(SpecStage::Implement));
@@ -139,6 +148,7 @@ fn test_current_stage_returns_none_when_out_of_bounds() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     state.current_index = 999; // Out of bounds
@@ -153,6 +163,7 @@ fn test_is_executing_agents_true() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     state.phase = SpecAutoPhase::ExecutingAgents {
@@ -171,6 +182,7 @@ fn test_is_executing_agents_false() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     assert!(!state.is_executing_agents());

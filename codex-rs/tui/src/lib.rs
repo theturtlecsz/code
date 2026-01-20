@@ -140,11 +140,11 @@ pub mod live_wrap;
 mod local_memory_cli;
 mod local_memory_util;
 mod markdown;
+mod markdown_renderer;
+mod markdown_stream;
 /// SPEC-KIT-971: Memvid adapter for Stage0 memory traits.
 /// All Memvid concepts are isolated here; Stage0 core has no Memvid dependency.
 pub mod memvid_adapter;
-mod markdown_renderer;
-mod markdown_stream;
 mod model_router;
 pub mod onboarding;
 mod provider_login;
@@ -197,10 +197,10 @@ pub use chatwidget::spec_kit::context::test_mock::MockSpecKitContext;
 pub use chatwidget::spec_kit::consensus_db::ConsensusDb;
 
 // SPEC-KIT-978: Re-export reflex modules for CLI
-pub use chatwidget::spec_kit::reflex_metrics;
-pub use chatwidget::spec_kit::reflex_client;
-pub use chatwidget::spec_kit::reflex_router;
 pub use chatwidget::spec_kit::bakeoff_runner;
+pub use chatwidget::spec_kit::reflex_client;
+pub use chatwidget::spec_kit::reflex_metrics;
+pub use chatwidget::spec_kit::reflex_router;
 
 // MAINT-3.2 Phase 2: Re-export P2 module testing utilities
 pub use chatwidget::spec_kit::error::{Result as SpecKitResult, SpecKitError};
@@ -224,9 +224,17 @@ pub use chatwidget::spec_kit::spec_id_generator;
 #[cfg(any(test, feature = "test-utils"))]
 pub use chatwidget::spec_kit::{DiffStat, RouteDecision, select_route, should_use_ace};
 
+// ACE Frame schema types - Re-export for schema generation binary
+pub use chatwidget::spec_kit::ace_reflector::{
+    PatternKind, ReflectedPattern, ReflectionResult, ACE_FRAME_SCHEMA_VERSION,
+};
+
 // Re-export supporting types for E2E testing (T87)
 pub use slash_command::{HalMode, SlashCommand};
 pub use spec_prompts::SpecStage;
+
+// D131/D132: Re-export LLMCaptureMode for test files
+pub use memvid_adapter::LLMCaptureMode;
 mod terminal_info;
 // mod text_block; // Orphaned after trait-based HistoryCell migration
 mod text_formatting;

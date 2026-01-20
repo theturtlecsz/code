@@ -4,12 +4,19 @@
 //! and discover new heuristics. This is the intelligence layer that makes ACE
 //! more than just simple +/- scoring.
 
-
 use super::ace_learning::ExecutionFeedback;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+/// Current ACE Frame schema version
+pub const ACE_FRAME_SCHEMA_VERSION: &str = "ace_frame@1.0";
+
+fn default_schema_version() -> String {
+    ACE_FRAME_SCHEMA_VERSION.to_string()
+}
+
 /// Pattern extracted from reflection
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ReflectedPattern {
     /// Short description of the pattern
     pub pattern: String,
@@ -27,7 +34,7 @@ pub struct ReflectedPattern {
     pub scope: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum PatternKind {
     Helpful,
@@ -35,9 +42,13 @@ pub enum PatternKind {
     Neutral,
 }
 
-/// Reflection analysis result
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Reflection analysis result - the ACE Frame
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ReflectionResult {
+    /// Schema version for forward compatibility
+    #[serde(default = "default_schema_version")]
+    pub schema_version: String,
+
     /// Patterns discovered from this execution
     pub patterns: Vec<ReflectedPattern>,
 
@@ -231,6 +242,73 @@ pub fn parse_reflection_response(response: &str) -> Result<ReflectionResult, Str
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// D131: ACE Frame Persistence (Stub)
+// ─────────────────────────────────────────────────────────────────────────────
+
+use crate::memvid_adapter::LLMCaptureMode;
+use std::path::{Path, PathBuf};
+
+/// Persist ACE reflection result based on capture mode (D131)
+///
+/// - `capture=none`: Returns Ok(None), no file written (in-memory only)
+/// - `capture=prompts_only` or `capture=full_io`: Writes to evidence directory
+///
+/// This follows the pattern established in maieutic.rs::persist_maieutic_spec.
+pub fn persist_ace_frame(
+    spec_id: &str,
+    result: &ReflectionResult,
+    capture_mode: LLMCaptureMode,
+    cwd: &Path,
+) -> Result<Option<PathBuf>, String> {
+    match capture_mode {
+        LLMCaptureMode::None => {
+            // D131: capture=none runs in-memory only
+            tracing::info!(
+                spec_id = %spec_id,
+                "ACE frame not persisted (capture_mode=none)"
+            );
+            Ok(None)
+        }
+        LLMCaptureMode::PromptsOnly | LLMCaptureMode::FullIo => {
+            // D131: Persist ACE frame to evidence directory
+            let evidence_dir = super::evidence::evidence_base_for_spec(cwd, spec_id);
+            std::fs::create_dir_all(&evidence_dir).map_err(|e| {
+                format!(
+                    "Failed to create evidence directory {}: {}",
+                    evidence_dir.display(),
+                    e
+                )
+            })?;
+
+            let filename = format!(
+                "ace_milestone_{}.json",
+                chrono::Local::now().format("%Y%m%d_%H%M%S")
+            );
+            let path = evidence_dir.join(&filename);
+
+            // Ensure schema_version is populated before serialization
+            let mut result_with_version = result.clone();
+            if result_with_version.schema_version.is_empty() {
+                result_with_version.schema_version = ACE_FRAME_SCHEMA_VERSION.to_string();
+            }
+
+            let json = serde_json::to_string_pretty(&result_with_version)
+                .map_err(|e| format!("Failed to serialize ACE frame: {}", e))?;
+
+            std::fs::write(&path, &json)
+                .map_err(|e| format!("Failed to write ACE frame to {}: {}", path.display(), e))?;
+
+            tracing::info!(
+                spec_id = %spec_id,
+                path = %path.display(),
+                "ACE milestone frame persisted"
+            );
+            Ok(Some(path))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -325,5 +403,197 @@ Hope this helps!
             "Use tokio::sync::Mutex in async"
         );
         assert_eq!(result.patterns[0].kind, PatternKind::Helpful);
+    }
+
+    /// D131: capture=none should not persist any artifacts
+    #[test]
+    fn test_capture_none_no_persisted_artifacts() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let spec_id = "SPEC-TEST-PRIVATE";
+
+        let reflection = ReflectionResult {
+            schema_version: ACE_FRAME_SCHEMA_VERSION.to_string(),
+            patterns: vec![],
+            successes: vec!["Test".to_string()],
+            failures: vec![],
+            recommendations: vec![],
+            summary: "Test".to_string(),
+        };
+
+        let result = persist_ace_frame(spec_id, &reflection, LLMCaptureMode::None, temp_dir.path());
+
+        assert!(result.is_ok(), "persist_ace_frame should succeed");
+        assert!(
+            result.unwrap().is_none(),
+            "capture=none should not create file"
+        );
+
+        // Verify no ACE files created
+        let evidence_dir = super::super::evidence::evidence_base_for_spec(temp_dir.path(), spec_id);
+        let has_ace = evidence_dir.exists()
+            && std::fs::read_dir(&evidence_dir)
+                .map(|entries| {
+                    entries.filter_map(|e| e.ok()).any(|e| {
+                        e.file_name()
+                            .to_str()
+                            .map(|n| n.starts_with("ace_milestone_"))
+                            .unwrap_or(false)
+                    })
+                })
+                .unwrap_or(false);
+        assert!(
+            !has_ace,
+            "No ACE files should be created when capture_mode=None"
+        );
+    }
+
+    /// D131: capture=prompts_only should persist ACE frames
+    #[test]
+    fn test_ace_frame_persisted_for_prompts_only() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let spec_id = "SPEC-TEST-PERSIST";
+
+        let reflection = ReflectionResult {
+            schema_version: ACE_FRAME_SCHEMA_VERSION.to_string(),
+            patterns: vec![],
+            successes: vec!["Test".to_string()],
+            failures: vec![],
+            recommendations: vec![],
+            summary: "Test".to_string(),
+        };
+
+        let result = persist_ace_frame(
+            spec_id,
+            &reflection,
+            LLMCaptureMode::PromptsOnly,
+            temp_dir.path(),
+        );
+
+        assert!(result.is_ok(), "persist_ace_frame should succeed");
+        let path = result.unwrap();
+        assert!(path.is_some(), "Should return file path");
+        let path = path.unwrap();
+        assert!(path.exists(), "File should exist");
+
+        // Verify filename pattern
+        let filename = path.file_name().unwrap().to_str().unwrap();
+        assert!(
+            filename.starts_with("ace_milestone_") && filename.ends_with(".json"),
+            "Filename should match ace_milestone_*.json pattern"
+        );
+    }
+}
+
+#[cfg(test)]
+mod schema_tests {
+    use super::*;
+    use schemars::schema_for;
+
+    /// Test that schema generation produces stable output matching committed schema
+    #[test]
+    fn test_ace_frame_schema_generation_stable() {
+        let schema = schema_for!(ReflectionResult);
+        let generated = serde_json::to_value(&schema).unwrap();
+
+        let committed_path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../spec-kit/src/config/schemas/ace_frame.schema.v1.json"
+        );
+
+        let committed: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(committed_path).expect("schema file exists"),
+        )
+        .unwrap();
+
+        // Compare definitions and properties (ignoring metadata like $schema, title)
+        assert_eq!(
+            generated.get("definitions"),
+            committed.get("definitions"),
+            "Schema definitions changed. Regenerate with: cargo run --bin ace-schema-gen -p codex-tui"
+        );
+
+        assert_eq!(
+            generated.get("properties"),
+            committed.get("properties"),
+            "Schema properties changed. Regenerate with: cargo run --bin ace-schema-gen -p codex-tui"
+        );
+    }
+
+    /// Test that schema_version field defaults correctly
+    #[test]
+    fn test_schema_version_field_required() {
+        // JSON without schema_version should deserialize with default
+        let json = r#"{
+            "patterns": [],
+            "successes": [],
+            "failures": [],
+            "recommendations": [],
+            "summary": "test"
+        }"#;
+
+        let result: ReflectionResult = serde_json::from_str(json).unwrap();
+        assert_eq!(result.schema_version, ACE_FRAME_SCHEMA_VERSION);
+    }
+
+    /// Test that ACE Frame examples validate against schema
+    #[test]
+    fn test_ace_frame_examples_validate() {
+        let frame = ReflectionResult {
+            schema_version: ACE_FRAME_SCHEMA_VERSION.to_string(),
+            patterns: vec![ReflectedPattern {
+                pattern: "Use tokio::sync::Mutex".to_string(),
+                rationale: "Prevents blocking".to_string(),
+                kind: PatternKind::Helpful,
+                confidence: 0.9,
+                scope: "implement".to_string(),
+            }],
+            successes: vec!["Clear errors".to_string()],
+            failures: vec![],
+            recommendations: vec!["Add tests".to_string()],
+            summary: "Good progress".to_string(),
+        };
+
+        let schema_path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../spec-kit/src/config/schemas/ace_frame.schema.v1.json"
+        );
+        let schema: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(schema_path).unwrap()).unwrap();
+
+        let compiled = jsonschema::JSONSchema::compile(&schema).unwrap();
+        let instance = serde_json::to_value(&frame).unwrap();
+
+        let result = compiled.validate(&instance);
+        assert!(result.is_ok(), "ACE Frame should validate against schema");
+    }
+
+    /// Test backward compatibility - old frames without schema_version should deserialize
+    #[test]
+    fn test_backward_compatibility_no_version() {
+        let old_json = r#"{
+            "patterns": [
+                {
+                    "pattern": "Old pattern",
+                    "rationale": "Old reason",
+                    "kind": "helpful",
+                    "confidence": 0.8,
+                    "scope": "global"
+                }
+            ],
+            "successes": ["old success"],
+            "failures": [],
+            "recommendations": [],
+            "summary": "old summary"
+        }"#;
+
+        let result: Result<ReflectionResult, _> = serde_json::from_str(old_json);
+        assert!(
+            result.is_ok(),
+            "Old ACE frames without schema_version should deserialize"
+        );
+
+        let frame = result.unwrap();
+        assert_eq!(frame.schema_version, ACE_FRAME_SCHEMA_VERSION);
+        assert_eq!(frame.patterns.len(), 1);
     }
 }

@@ -9,7 +9,6 @@
 //!
 //! REBASE-SAFE: New file, 100% isolation, no upstream changes
 
-
 use super::error::{Result, SpecKitError};
 use codex_core::config::Config;
 use codex_core::config_types::{AgentConfig, SubagentCommandConfig};

@@ -1,0 +1,100 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AceFrame",
+  "description": "ACE Frame ace_frame@1.0 - reflection result from spec-kit execution analysis",
+  "type": "object",
+  "required": [
+    "failures",
+    "patterns",
+    "recommendations",
+    "successes",
+    "summary"
+  ],
+  "properties": {
+    "failures": {
+      "description": "Summary of what failed",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "patterns": {
+      "description": "Patterns discovered from this execution",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/ReflectedPattern"
+      }
+    },
+    "recommendations": {
+      "description": "Recommended focus areas for future runs",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "schema_version": {
+      "description": "Schema version for forward compatibility",
+      "default": "ace_frame@1.0",
+      "type": "string"
+    },
+    "successes": {
+      "description": "Summary of what worked",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "summary": {
+      "description": "Overall assessment",
+      "type": "string"
+    }
+  },
+  "definitions": {
+    "PatternKind": {
+      "type": "string",
+      "enum": [
+        "helpful",
+        "harmful",
+        "neutral"
+      ]
+    },
+    "ReflectedPattern": {
+      "description": "Pattern extracted from reflection",
+      "type": "object",
+      "required": [
+        "confidence",
+        "kind",
+        "pattern",
+        "rationale",
+        "scope"
+      ],
+      "properties": {
+        "confidence": {
+          "description": "Confidence in this pattern (0.0-1.0)",
+          "type": "number",
+          "format": "double"
+        },
+        "kind": {
+          "description": "Whether this is a positive or negative pattern",
+          "allOf": [
+            {
+              "$ref": "#/definitions/PatternKind"
+            }
+          ]
+        },
+        "pattern": {
+          "description": "Short description of the pattern",
+          "type": "string"
+        },
+        "rationale": {
+          "description": "Why this pattern matters",
+          "type": "string"
+        },
+        "scope": {
+          "description": "Suggested scope (global, specify, tasks, implement, test)",
+          "type": "string"
+        }
+      }
+    }
+  }
+}

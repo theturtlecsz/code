@@ -49,7 +49,9 @@ impl SpecKitCommand for MemorySearchCommand {
 
         if parsed.keywords.is_empty() {
             widget.history_push(PlainHistoryCell::new(
-                vec![Line::from("Error: Search query cannot be empty. Use /speckit.search --help")],
+                vec![Line::from(
+                    "Error: Search query cannot be empty. Use /speckit.search --help",
+                )],
                 HistoryCellType::Error,
             ));
             widget.request_redraw();
@@ -198,7 +200,10 @@ async fn execute_search(args: &SearchArgs) -> Result<Vec<SearchResult>, String> 
         max_results: args.max_results,
     };
 
-    let hits = adapter.search_memories(params).await.map_err(|e| e.to_string())?;
+    let hits = adapter
+        .search_memories(params)
+        .await
+        .map_err(|e| e.to_string())?;
 
     // Convert to SearchResult with explain fields
     let results: Vec<SearchResult> = hits
@@ -212,7 +217,11 @@ async fn execute_search(args: &SearchArgs) -> Result<Vec<SearchResult>, String> 
                 let estimated_lex = h.similarity_score / 0.6; // Assuming lex dominates
                 let estimated_recency = 0.5; // Default recency
                 let estimated_tag = 0.5; // Default tag boost
-                (Some(estimated_lex.min(1.0)), Some(estimated_recency), Some(estimated_tag))
+                (
+                    Some(estimated_lex.min(1.0)),
+                    Some(estimated_recency),
+                    Some(estimated_tag),
+                )
             } else {
                 (None, None, None)
             };
@@ -265,7 +274,11 @@ fn show_help(widget: &mut ChatWidget) {
     widget.request_redraw();
 }
 
-fn render_results(widget: &mut ChatWidget, args: &SearchArgs, result: Result<Vec<SearchResult>, String>) {
+fn render_results(
+    widget: &mut ChatWidget,
+    args: &SearchArgs,
+    result: Result<Vec<SearchResult>, String>,
+) {
     match result {
         Ok(results) => {
             if results.is_empty() {
@@ -312,7 +325,11 @@ fn render_simple_results(widget: &mut ChatWidget, args: &SearchArgs, results: &[
             r.score,
             truncate(&r.id, 40)
         )));
-        lines.push(Line::from(format!("   Domain: {} | Tags: {}", domain, truncate(&tags, 30))));
+        lines.push(Line::from(format!(
+            "   Domain: {} | Tags: {}",
+            domain,
+            truncate(&tags, 30)
+        )));
         lines.push(Line::from(format!("   {}", truncate(&r.snippet, 70))));
         lines.push(Line::from(""));
     }
@@ -357,18 +374,20 @@ fn render_explain_results(widget: &mut ChatWidget, args: &SearchArgs, results: &
                 tag,
                 tag * 0.2
             )));
-            lines.push(Line::from(format!(
-                "   └─ final_score:   {:.3}",
-                r.score
-            )));
+            lines.push(Line::from(format!("   └─ final_score:   {:.3}", r.score)));
         }
 
         if !r.tags.is_empty() {
             lines.push(Line::from(format!("   Tags: {}", r.tags.join(", "))));
         }
 
-        lines.push(Line::from(format!("   Snippet: {}", truncate(&r.snippet, 60))));
-        lines.push(Line::from("   ───────────────────────────────────────────────────────────────"));
+        lines.push(Line::from(format!(
+            "   Snippet: {}",
+            truncate(&r.snippet, 60)
+        )));
+        lines.push(Line::from(
+            "   ───────────────────────────────────────────────────────────────",
+        ));
     }
 
     widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));

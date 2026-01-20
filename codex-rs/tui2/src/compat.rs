@@ -21,8 +21,8 @@ use codex_core::protocol::SandboxPolicy;
 pub fn convert_reasoning_effort(
     effort: codex_protocol::openai_models::ReasoningEffort,
 ) -> codex_core::config_types::ReasoningEffort {
-    use codex_protocol::openai_models::ReasoningEffort as ProtocolEffort;
     use codex_core::config_types::ReasoningEffort as CoreEffort;
+    use codex_protocol::openai_models::ReasoningEffort as ProtocolEffort;
     match effort {
         ProtocolEffort::High | ProtocolEffort::XHigh => CoreEffort::High,
         ProtocolEffort::Medium => CoreEffort::Medium,
@@ -35,8 +35,8 @@ pub fn convert_reasoning_effort(
 pub fn convert_reasoning_effort_to_protocol(
     effort: codex_core::config_types::ReasoningEffort,
 ) -> codex_protocol::openai_models::ReasoningEffort {
-    use codex_protocol::openai_models::ReasoningEffort as ProtocolEffort;
     use codex_core::config_types::ReasoningEffort as CoreEffort;
+    use codex_protocol::openai_models::ReasoningEffort as ProtocolEffort;
     match effort {
         CoreEffort::High => ProtocolEffort::High,
         CoreEffort::Medium => ProtocolEffort::Medium,
@@ -213,8 +213,7 @@ pub mod auth {
 
 /// Stub config functions
 pub mod config {
-    
-    
+
     use std::path::Path;
 
     /// Stub - returns None since OSS provider resolution is not supported
@@ -310,7 +309,11 @@ pub mod config {
                 self
             }
 
-            pub fn record_model_migration_seen(&mut self, _from_model: &str, _to_model: &str) -> &mut Self {
+            pub fn record_model_migration_seen(
+                &mut self,
+                _from_model: &str,
+                _to_model: &str,
+            ) -> &mut Self {
                 self
             }
 
@@ -336,7 +339,6 @@ pub mod config {
 
 /// Stub protocol types that don't exist locally
 pub mod protocol {
-    
 
     // Re-export from codex_protocol for consistency
     pub use codex_protocol::protocol::RateLimitSnapshot;
@@ -551,7 +553,9 @@ pub mod path_utils {
 
     /// Stub - just returns the path as-is
     /// Returns Result to match expected signature from caller
-    pub fn normalize_for_path_comparison(path: &Path) -> Result<std::path::PathBuf, std::io::Error> {
+    pub fn normalize_for_path_comparison(
+        path: &Path,
+    ) -> Result<std::path::PathBuf, std::io::Error> {
         Ok(path.to_path_buf())
     }
 }

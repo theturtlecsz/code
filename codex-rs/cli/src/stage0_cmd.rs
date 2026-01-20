@@ -300,10 +300,7 @@ async fn check_notebook_mapping(service_url: &str, spec_id: &str) -> CheckResult
             match resp.json::<serde_json::Value>().await {
                 Ok(json) => {
                     // Check if any notebook is configured for codex-rs project
-                    let has_mapping = json
-                        .as_array()
-                        .map(|arr| !arr.is_empty())
-                        .unwrap_or(false);
+                    let has_mapping = json.as_array().map(|arr| !arr.is_empty()).unwrap_or(false);
 
                     if has_mapping {
                         CheckResult::pass(
@@ -357,9 +354,18 @@ fn print_human_results(results: &[CheckResult]) {
 
     println!();
 
-    let pass_count = results.iter().filter(|r| r.status == CheckStatus::Pass).count();
-    let warn_count = results.iter().filter(|r| r.status == CheckStatus::Warn).count();
-    let fail_count = results.iter().filter(|r| r.status == CheckStatus::Fail).count();
+    let pass_count = results
+        .iter()
+        .filter(|r| r.status == CheckStatus::Pass)
+        .count();
+    let warn_count = results
+        .iter()
+        .filter(|r| r.status == CheckStatus::Warn)
+        .count();
+    let fail_count = results
+        .iter()
+        .filter(|r| r.status == CheckStatus::Fail)
+        .count();
 
     if fail_count > 0 {
         println!(
@@ -379,10 +385,7 @@ fn print_human_results(results: &[CheckResult]) {
         );
         println!("Tier2 may be skipped. Stage0 will continue with Tier1 only.");
     } else {
-        println!(
-            "\x1b[32mResult: All {} checks passed\x1b[0m",
-            results.len()
-        );
+        println!("\x1b[32mResult: All {} checks passed\x1b[0m", results.len());
         println!("Stage0 ready for full Tier1 + Tier2 execution.");
     }
 }
@@ -413,5 +416,8 @@ fn print_json_results(results: &[CheckResult]) {
         "tier2_ready": !has_fail && !has_warn,
     });
 
-    println!("{}", serde_json::to_string_pretty(&output).unwrap_or_default());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&output).unwrap_or_default()
+    );
 }

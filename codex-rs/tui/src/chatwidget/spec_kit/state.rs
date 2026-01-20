@@ -2,6 +2,7 @@
 //!
 //! Extracted from chatwidget.rs to isolate spec-kit code from upstream
 
+use crate::memvid_adapter::LLMCaptureMode;
 use crate::slash_command::{HalMode, SlashCommand};
 use crate::spec_prompts::SpecStage;
 use chrono::{DateTime, Utc};
@@ -939,6 +940,18 @@ pub struct SpecAutoState {
     pub policy_hash: Option<String>,
     /// Policy URI in capsule (mv2://<workspace>/policy/<id>)
     pub policy_uri: Option<String>,
+
+    // P93/D130: Maieutic elicitation state
+    /// Whether maieutic elicitation has been completed for this run
+    pub maieutic_completed: bool,
+    /// Maieutic spec captured from elicitation (delegation contract)
+    pub maieutic_spec: Option<super::maieutic::MaieuticSpec>,
+    /// Reason maieutic was skipped (if not completed via modal)
+    pub maieutic_skip_reason: Option<String>,
+
+    // D131: Capture mode for artifact persistence (affects ship eligibility)
+    /// Capture mode from governance policy - determines artifact persistence and ship eligibility
+    pub capture_mode: LLMCaptureMode,
 }
 
 impl SpecAutoState {
@@ -949,8 +962,17 @@ impl SpecAutoState {
         resume_from: SpecStage,
         hal_mode: Option<HalMode>,
         pipeline_config: super::pipeline_config::PipelineConfig,
+        capture_mode: LLMCaptureMode,
     ) -> Self {
-        Self::with_quality_gates(spec_id, goal, resume_from, hal_mode, true, pipeline_config)
+        Self::with_quality_gates(
+            spec_id,
+            goal,
+            resume_from,
+            hal_mode,
+            true,
+            pipeline_config,
+            capture_mode,
+        )
     }
 
     pub fn with_quality_gates(
@@ -960,6 +982,7 @@ impl SpecAutoState {
         hal_mode: Option<HalMode>,
         quality_gates_enabled: bool,
         pipeline_config: super::pipeline_config::PipelineConfig,
+        capture_mode: LLMCaptureMode,
     ) -> Self {
         // SPEC-948 Task 2.2: Include ALL stages (Plan→Unlock) for skip telemetry tracking
         // Stage filtering happens in advance_spec_auto(), not here
@@ -1044,6 +1067,12 @@ impl SpecAutoState {
             policy_id: None,
             policy_hash: None,
             policy_uri: None,
+            // P93/D130: Maieutic elicitation state
+            maieutic_completed: false,
+            maieutic_spec: None,
+            maieutic_skip_reason: None,
+            // D131: Capture mode for artifact persistence and ship eligibility
+            capture_mode,
         }
     }
 
@@ -1136,6 +1165,12 @@ impl SpecAutoState {
             policy_id: None,
             policy_hash: None,
             policy_uri: None,
+            // P93/D130: Maieutic elicitation state
+            maieutic_completed: false,
+            maieutic_spec: None,
+            maieutic_skip_reason: None,
+            // D131: Capture mode (default for planning-only - ship gate never runs)
+            capture_mode: LLMCaptureMode::PromptsOnly,
         }
     }
 

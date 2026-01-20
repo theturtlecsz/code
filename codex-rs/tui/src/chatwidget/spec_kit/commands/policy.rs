@@ -57,7 +57,9 @@ impl SpecKitCommand for SpecKitPolicyCommand {
             "diff" => {
                 if parts.len() < 3 {
                     widget.history_push(PlainHistoryCell::new(
-                        vec![Line::from("Usage: /speckit.policy diff <policy_id_a> <policy_id_b>")],
+                        vec![Line::from(
+                            "Usage: /speckit.policy diff <policy_id_a> <policy_id_b>",
+                        )],
                         HistoryCellType::Error,
                     ));
                 } else {
@@ -122,8 +124,12 @@ fn execute_list(widget: &mut ChatWidget) {
             let mut lines = vec![
                 Line::from("📋 Policy Snapshots"),
                 Line::from(""),
-                Line::from("   Created              | Policy ID                              | Hash"),
-                Line::from("   ---------------------|----------------------------------------|----------"),
+                Line::from(
+                    "   Created              | Policy ID                              | Hash",
+                ),
+                Line::from(
+                    "   ---------------------|----------------------------------------|----------",
+                ),
             ];
 
             // Show most recent first, limit to 15
@@ -176,10 +182,7 @@ fn execute_show(widget: &mut ChatWidget, policy_id: &str) {
                     snapshot.created_at.format("%Y-%m-%d %H:%M:%S UTC")
                 )),
                 Line::from(format!("   Hash:           {}", snapshot.hash)),
-                Line::from(format!(
-                    "   Schema Version: {}",
-                    snapshot.schema_version
-                )),
+                Line::from(format!("   Schema Version: {}", snapshot.schema_version)),
                 Line::from(""),
                 Line::from("Model Config:"),
                 Line::from(format!(
@@ -212,7 +215,10 @@ fn execute_show(widget: &mut ChatWidget, policy_id: &str) {
                     "   priority:         {:.2}",
                     snapshot.weights.priority
                 )),
-                Line::from(format!("   decay:            {:.2}", snapshot.weights.decay)),
+                Line::from(format!(
+                    "   decay:            {:.2}",
+                    snapshot.weights.decay
+                )),
             ];
 
             if let Some(gov) = &snapshot.governance {
@@ -243,7 +249,10 @@ fn execute_show(widget: &mut ChatWidget, policy_id: &str) {
         }
         Err(e) => {
             widget.history_push(PlainHistoryCell::new(
-                vec![Line::from(format!("❌ Policy '{}' not found: {}", policy_id, e))],
+                vec![Line::from(format!(
+                    "❌ Policy '{}' not found: {}",
+                    policy_id, e
+                ))],
                 HistoryCellType::Error,
             ));
         }
@@ -308,7 +317,10 @@ fn execute_current(widget: &mut ChatWidget) {
         }
         Err(e) => {
             widget.history_push(PlainHistoryCell::new(
-                vec![Line::from(format!("❌ Failed to load current policy: {}", e))],
+                vec![Line::from(format!(
+                    "❌ Failed to load current policy: {}",
+                    e
+                ))],
                 HistoryCellType::Error,
             ));
         }
@@ -323,7 +335,10 @@ fn execute_diff(widget: &mut ChatWidget, policy_id_a: &str, policy_id_b: &str) {
         Ok(s) => s,
         Err(e) => {
             widget.history_push(PlainHistoryCell::new(
-                vec![Line::from(format!("❌ Policy '{}' not found: {}", policy_id_a, e))],
+                vec![Line::from(format!(
+                    "❌ Policy '{}' not found: {}",
+                    policy_id_a, e
+                ))],
                 HistoryCellType::Error,
             ));
             return;
@@ -334,7 +349,10 @@ fn execute_diff(widget: &mut ChatWidget, policy_id_a: &str, policy_id_b: &str) {
         Ok(s) => s,
         Err(e) => {
             widget.history_push(PlainHistoryCell::new(
-                vec![Line::from(format!("❌ Policy '{}' not found: {}", policy_id_b, e))],
+                vec![Line::from(format!(
+                    "❌ Policy '{}' not found: {}",
+                    policy_id_b, e
+                ))],
                 HistoryCellType::Error,
             ));
             return;
@@ -345,20 +363,30 @@ fn execute_diff(widget: &mut ChatWidget, policy_id_a: &str, policy_id_b: &str) {
     let diff = PolicyDiff::compute(&snapshot_a, &snapshot_b);
 
     let mut lines = vec![
-        Line::from(format!("📋 Policy Diff: {} → {}",
+        Line::from(format!(
+            "📋 Policy Diff: {} → {}",
             &diff.policy_id_a[..8.min(diff.policy_id_a.len())],
             &diff.policy_id_b[..8.min(diff.policy_id_b.len())]
         )),
         Line::from(""),
-        Line::from(format!("   Hash A: {}", &diff.hash_a[..16.min(diff.hash_a.len())])),
-        Line::from(format!("   Hash B: {}", &diff.hash_b[..16.min(diff.hash_b.len())])),
+        Line::from(format!(
+            "   Hash A: {}",
+            &diff.hash_a[..16.min(diff.hash_a.len())]
+        )),
+        Line::from(format!(
+            "   Hash B: {}",
+            &diff.hash_b[..16.min(diff.hash_b.len())]
+        )),
         Line::from(""),
     ];
 
     if diff.identical {
         lines.push(Line::from("   ✓ Policies are identical"));
     } else {
-        lines.push(Line::from(format!("   {} change(s) detected:", diff.changes.len())));
+        lines.push(Line::from(format!(
+            "   {} change(s) detected:",
+            diff.changes.len()
+        )));
         lines.push(Line::from(""));
 
         // Group by category and display
@@ -405,7 +433,9 @@ fn execute_diff(widget: &mut ChatWidget, policy_id_a: &str, policy_id_b: &str) {
     }
 
     lines.push(Line::from(""));
-    lines.push(Line::from("Use CLI `code speckit policy diff <a> <b> --json` for machine-parseable output"));
+    lines.push(Line::from(
+        "Use CLI `code speckit policy diff <a> <b> --json` for machine-parseable output",
+    ));
 
     widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));
 }

@@ -13,13 +13,29 @@
 use super::*;
 use crate::memvid_adapter::capsule::{CapsuleConfig, CapsuleHandle, DiagnosticResult};
 use crate::memvid_adapter::types::{
-    BranchId, LogicalUri, MergeMode, ObjectType,
-    // SPEC-KIT-975: Event payload types for integration tests
-    EventType, ToolCallPayload, ToolResultPayload, RetrievalRequestPayload,
-    RetrievalResponsePayload, PatchApplyPayload, ModelCallEnvelopePayload,
-    GateDecisionPayload, GateOutcome, RoutingMode, LLMCaptureMode,
+    BranchId,
+    CardFact,
     // SPEC-KIT-976: Memory Card and Logic Edge types
-    CardType, EdgeType, MemoryCardV1, LogicEdgeV1, CardFact, FactValueType,
+    CardType,
+    EdgeType,
+    // SPEC-KIT-975: Event payload types for integration tests
+    EventType,
+    FactValueType,
+    GateDecisionPayload,
+    GateOutcome,
+    LLMCaptureMode,
+    LogicEdgeV1,
+    LogicalUri,
+    MemoryCardV1,
+    MergeMode,
+    ModelCallEnvelopePayload,
+    ObjectType,
+    PatchApplyPayload,
+    RetrievalRequestPayload,
+    RetrievalResponsePayload,
+    RoutingMode,
+    ToolCallPayload,
+    ToolResultPayload,
 };
 use tempfile::TempDir;
 
@@ -56,7 +72,10 @@ fn test_create_open_reopen_lifecycle() {
         .expect("should put artifact");
 
     assert!(uri.is_valid(), "URI should be valid");
-    assert!(uri.as_str().starts_with("mv2://"), "URI should have mv2:// scheme");
+    assert!(
+        uri.as_str().starts_with("mv2://"),
+        "URI should have mv2:// scheme"
+    );
 
     // Step 3: Commit checkpoint
     let _checkpoint_id = handle
@@ -65,7 +84,10 @@ fn test_create_open_reopen_lifecycle() {
 
     // Verify checkpoint exists
     let checkpoints = handle.list_checkpoints();
-    assert!(!checkpoints.is_empty(), "should have at least one checkpoint");
+    assert!(
+        !checkpoints.is_empty(),
+        "should have at least one checkpoint"
+    );
 
     // Step 4: Drop handle (close capsule)
     drop(handle);
@@ -105,7 +127,9 @@ fn test_uri_stability_after_reopen() {
         .expect("should put");
 
     // Commit
-    handle.commit_stage("SPEC-971", "run1", "plan", None).unwrap();
+    handle
+        .commit_stage("SPEC-971", "run1", "plan", None)
+        .unwrap();
     drop(handle);
 
     // Reopen
@@ -124,7 +148,11 @@ fn test_uri_stability_after_reopen() {
         .expect("should put");
 
     // URIs should be the same (logical URI stability)
-    assert_eq!(uri1.as_str(), uri2.as_str(), "logical URIs should be stable");
+    assert_eq!(
+        uri1.as_str(),
+        uri2.as_str(),
+        "logical URIs should be stable"
+    );
 }
 
 #[test]
@@ -159,11 +187,17 @@ fn test_stage_transition_event_on_commit() {
 
     // Verify checkpoint has stage info
     let checkpoints = handle.list_checkpoints();
-    let checkpoint = checkpoints.iter().find(|c| c.checkpoint_id.as_str() == checkpoint_id.as_str());
+    let checkpoint = checkpoints
+        .iter()
+        .find(|c| c.checkpoint_id.as_str() == checkpoint_id.as_str());
     assert!(checkpoint.is_some(), "checkpoint should exist");
 
     let cp = checkpoint.unwrap();
-    assert_eq!(cp.stage.as_deref(), Some("plan"), "stage should be recorded");
+    assert_eq!(
+        cp.stage.as_deref(),
+        Some("plan"),
+        "stage should be recorded"
+    );
     assert!(!cp.is_manual, "should not be manual checkpoint");
 
     // TODO: Verify StageTransition event was emitted (when we can query events)
@@ -252,8 +286,7 @@ async fn test_fallback_when_capsule_corrupt() {
         ..Default::default()
     };
 
-    let adapter = MemvidMemoryAdapter::new(config)
-        .with_fallback(Arc::new(MockFallback));
+    let adapter = MemvidMemoryAdapter::new(config).with_fallback(Arc::new(MockFallback));
 
     // Open should succeed (fallback mode)
     let result = adapter.open().await;
@@ -360,8 +393,11 @@ fn test_crash_leaves_stale_lock() {
         "started_at": chrono::Utc::now().to_rfc3339(),
         "schema_version": 1
     });
-    std::fs::write(&lock_path, serde_json::to_string_pretty(&stale_lock).unwrap())
-        .expect("should create lock");
+    std::fs::write(
+        &lock_path,
+        serde_json::to_string_pretty(&stale_lock).unwrap(),
+    )
+    .expect("should create lock");
 
     // Doctor should detect stale lock (as a warning since it's stale)
     let results = CapsuleHandle::doctor(&capsule_path);
@@ -397,12 +433,16 @@ fn test_run_branch_isolation() {
 
     // Switch to run branch
     let run_branch = BranchId::for_run("run123");
-    handle.switch_branch(run_branch.clone()).expect("should switch");
+    handle
+        .switch_branch(run_branch.clone())
+        .expect("should switch");
     assert!(handle.current_branch().is_run_branch());
     assert_eq!(handle.current_branch().as_str(), "run/run123");
 
     // Switch back to main
-    handle.switch_branch(BranchId::main()).expect("should switch back");
+    handle
+        .switch_branch(BranchId::main())
+        .expect("should switch back");
     assert!(handle.current_branch().is_main());
 }
 
@@ -472,12 +512,18 @@ fn test_checkpoint_by_label() {
     // Find by ID
     let by_id = handle.get_checkpoint(&cp_id);
     assert!(by_id.is_some());
-    assert_eq!(by_id.as_ref().unwrap().label.as_deref(), Some("v1.0-release"));
+    assert_eq!(
+        by_id.as_ref().unwrap().label.as_deref(),
+        Some("v1.0-release")
+    );
 
     // Find by label
     let by_label = handle.get_checkpoint_by_label("v1.0-release");
     assert!(by_label.is_some());
-    assert_eq!(by_label.as_ref().unwrap().checkpoint_id.as_str(), cp_id.as_str());
+    assert_eq!(
+        by_label.as_ref().unwrap().checkpoint_id.as_str(),
+        cp_id.as_str()
+    );
 
     // Non-existent label
     let missing = handle.get_checkpoint_by_label("nonexistent");
@@ -530,15 +576,19 @@ fn test_list_checkpoints_filtered() {
     let handle = CapsuleHandle::open(config).expect("should create");
 
     // Create stage checkpoint (has run_id)
-    handle.put(
-        "SPEC-971",
-        "run1",
-        ObjectType::Artifact,
-        "test.md",
-        b"content".to_vec(),
-        serde_json::json!({}),
-    ).unwrap();
-    handle.commit_stage("SPEC-971", "run1", "plan", None).unwrap();
+    handle
+        .put(
+            "SPEC-971",
+            "run1",
+            ObjectType::Artifact,
+            "test.md",
+            b"content".to_vec(),
+            serde_json::json!({}),
+        )
+        .unwrap();
+    handle
+        .commit_stage("SPEC-971", "run1", "plan", None)
+        .unwrap();
 
     // Create manual checkpoint (no run_id in current impl)
     handle.commit_manual("manual-cp").unwrap();
@@ -579,7 +629,10 @@ fn test_is_label_unique() {
     handle.commit_manual("v1.0").unwrap();
 
     // Label should no longer be unique
-    assert!(!handle.is_label_unique("v1.0", &main), "Label should not be unique after commit");
+    assert!(
+        !handle.is_label_unique("v1.0", &main),
+        "Label should not be unique after commit"
+    );
 }
 
 /// SPEC-KIT-971: Test that commit_manual enforces label uniqueness.
@@ -608,7 +661,10 @@ fn test_commit_manual_enforces_label_uniqueness() {
 
     // Second commit with same label should fail with DuplicateLabel
     let result2 = handle.commit_manual("v1.0");
-    assert!(result2.is_err(), "Second commit_manual with same label should fail");
+    assert!(
+        result2.is_err(),
+        "Second commit_manual with same label should fail"
+    );
 
     // Verify it's specifically a DuplicateLabel error
     match result2 {
@@ -656,7 +712,11 @@ fn test_commit_manual_force_allows_duplicates() {
         .iter()
         .filter(|cp| cp.label.as_deref() == Some("v1.0"))
         .collect();
-    assert_eq!(v1_checkpoints.len(), 2, "Should have 2 checkpoints with label 'v1.0'");
+    assert_eq!(
+        v1_checkpoints.len(),
+        2,
+        "Should have 2 checkpoints with label 'v1.0'"
+    );
 }
 
 /// SPEC-KIT-971: Test label uniqueness is scoped to branch.
@@ -680,15 +740,23 @@ fn test_label_uniqueness_scoped_to_branch() {
 
     // Switch to run branch
     let run_branch = BranchId::for_run("run-123");
-    handle.switch_branch(run_branch.clone()).expect("switch branch");
+    handle
+        .switch_branch(run_branch.clone())
+        .expect("switch branch");
 
     // Create "v1.0" on run branch - should succeed (different branch)
     let result = handle.commit_manual("v1.0");
-    assert!(result.is_ok(), "Same label on different branch should succeed");
+    assert!(
+        result.is_ok(),
+        "Same label on different branch should succeed"
+    );
 
     // Creating another "v1.0" on same run branch should fail
     let result2 = handle.commit_manual("v1.0");
-    assert!(result2.is_err(), "Duplicate label on same branch should fail");
+    assert!(
+        result2.is_err(),
+        "Duplicate label on same branch should fail"
+    );
 }
 
 // =============================================================================
@@ -730,16 +798,20 @@ fn test_resolve_uri_validates_checkpoint() {
     let handle = CapsuleHandle::open(config).expect("should create");
 
     // Put something and commit
-    let uri = handle.put(
-        "SPEC-971",
-        "run1",
-        ObjectType::Artifact,
-        "test.md",
-        b"content".to_vec(),
-        serde_json::json!({}),
-    ).unwrap();
+    let uri = handle
+        .put(
+            "SPEC-971",
+            "run1",
+            ObjectType::Artifact,
+            "test.md",
+            b"content".to_vec(),
+            serde_json::json!({}),
+        )
+        .unwrap();
 
-    let cp_id = handle.commit_stage("SPEC-971", "run1", "plan", None).unwrap();
+    let cp_id = handle
+        .commit_stage("SPEC-971", "run1", "plan", None)
+        .unwrap();
 
     // Resolve with valid checkpoint
     let result = handle.resolve_uri(&uri, None, Some(&cp_id));
@@ -767,14 +839,16 @@ fn test_resolve_uri_at_label() {
     let handle = CapsuleHandle::open(config).expect("should create");
 
     // Put and commit with label
-    let uri = handle.put(
-        "SPEC-971",
-        "run1",
-        ObjectType::Artifact,
-        "test.md",
-        b"content".to_vec(),
-        serde_json::json!({}),
-    ).unwrap();
+    let uri = handle
+        .put(
+            "SPEC-971",
+            "run1",
+            ObjectType::Artifact,
+            "test.md",
+            b"content".to_vec(),
+            serde_json::json!({}),
+        )
+        .unwrap();
     handle.commit_manual("v1.0").unwrap();
 
     // Resolve at label
@@ -800,15 +874,19 @@ fn test_resolve_uri_str() {
     let handle = CapsuleHandle::open(config).expect("should create");
 
     // Put artifact and commit to register in URI index
-    let uri = handle.put(
-        "SPEC-971",
-        "run1",
-        ObjectType::Artifact,
-        "test.md",
-        b"content".to_vec(),
-        serde_json::json!({}),
-    ).unwrap();
-    handle.commit_stage("SPEC-971", "run1", "plan", None).unwrap();
+    let uri = handle
+        .put(
+            "SPEC-971",
+            "run1",
+            ObjectType::Artifact,
+            "test.md",
+            b"content".to_vec(),
+            serde_json::json!({}),
+        )
+        .unwrap();
+    handle
+        .commit_stage("SPEC-971", "run1", "plan", None)
+        .unwrap();
 
     // Resolve by string
     let result = handle.resolve_uri_str(uri.as_str(), None, None);
@@ -841,13 +919,19 @@ fn test_cross_process_lock_acquired_on_open() {
 
     // Lock file should exist
     let lock_path = lock_path_for(&capsule_path);
-    assert!(lock_path.exists(), "Lock file should exist while handle is open");
+    assert!(
+        lock_path.exists(),
+        "Lock file should exist while handle is open"
+    );
 
     // Drop handle - lock should be released
     drop(handle);
 
     // Lock file should be removed
-    assert!(!lock_path.exists(), "Lock file should be removed after handle drop");
+    assert!(
+        !lock_path.exists(),
+        "Lock file should be removed after handle drop"
+    );
 }
 
 #[test]
@@ -873,9 +957,19 @@ fn test_cross_process_lock_blocks_second_writer() {
     match result {
         Err(CapsuleError::LockedByWriter(metadata)) => {
             // Verify metadata contains current process PID
-            assert_eq!(metadata.pid, std::process::id(), "Lock metadata should contain our PID");
-            assert!(!metadata.host.is_empty(), "Lock metadata should contain host");
-            assert!(!metadata.user.is_empty(), "Lock metadata should contain user");
+            assert_eq!(
+                metadata.pid,
+                std::process::id(),
+                "Lock metadata should contain our PID"
+            );
+            assert!(
+                !metadata.host.is_empty(),
+                "Lock metadata should contain host"
+            );
+            assert!(
+                !metadata.user.is_empty(),
+                "Lock metadata should contain user"
+            );
         }
         Err(other) => panic!("Expected LockedByWriter error, got: {:?}", other),
         Ok(_) => panic!("Expected error but got Ok"),
@@ -936,7 +1030,10 @@ fn test_read_only_does_not_acquire_lock() {
 
     // Lock file should NOT exist for read-only access
     let lock_path = lock_path_for(&capsule_path);
-    assert!(!lock_path.exists(), "Read-only open should not create lock file");
+    assert!(
+        !lock_path.exists(),
+        "Read-only open should not create lock file"
+    );
 
     drop(handle);
 }
@@ -957,7 +1054,10 @@ fn test_read_only_succeeds_when_write_locked() {
 
     // Read-only open should succeed even with write lock held
     let reader = CapsuleHandle::open_read_only(config);
-    assert!(reader.is_ok(), "Read-only should succeed when write lock is held");
+    assert!(
+        reader.is_ok(),
+        "Read-only should succeed when write lock is held"
+    );
 }
 
 #[test]
@@ -985,20 +1085,24 @@ fn test_doctor_detects_active_lock_with_metadata() {
     let results = CapsuleHandle::doctor(&capsule_path);
 
     // Find the lock-related result
-    let lock_result = results.iter().find(|r| {
-        match r {
-            DiagnosticResult::Error(msg, _) => msg.contains("locked"),
-            DiagnosticResult::Warning(msg, _) => msg.contains("lock"),
-            _ => false,
-        }
+    let lock_result = results.iter().find(|r| match r {
+        DiagnosticResult::Error(msg, _) => msg.contains("locked"),
+        DiagnosticResult::Warning(msg, _) => msg.contains("lock"),
+        _ => false,
     });
 
     assert!(lock_result.is_some(), "Doctor should detect the lock");
 
     // The error should contain our context
     if let Some(DiagnosticResult::Error(msg, recovery)) = lock_result {
-        assert!(msg.contains("SPEC-999"), "Lock message should contain spec_id");
-        assert!(recovery.contains("ps -p"), "Recovery should include process check");
+        assert!(
+            msg.contains("SPEC-999"),
+            "Lock message should contain spec_id"
+        );
+        assert!(
+            recovery.contains("ps -p"),
+            "Recovery should include process check"
+        );
     }
 }
 
@@ -1025,7 +1129,9 @@ fn test_stale_lock_recovery() {
     let lock_path = lock_path_for(&capsule_path);
     let stale_metadata = LockMetadata {
         pid: 999999999, // Unlikely to be a real PID
-        host: hostname::get().map(|h| h.to_string_lossy().to_string()).unwrap_or_default(),
+        host: hostname::get()
+            .map(|h| h.to_string_lossy().to_string())
+            .unwrap_or_default(),
         user: "old_user".to_string(),
         started_at: Utc::now() - chrono::Duration::hours(2),
         spec_id: Some("OLD-SPEC".to_string()),
@@ -1075,8 +1181,11 @@ fn test_cross_process_lock_actual_subprocess() {
         "spec_id": "REMOTE-SPEC",
         "schema_version": 1
     });
-    std::fs::write(&lock_path, serde_json::to_string_pretty(&lock_json).unwrap())
-        .expect("should create remote lock");
+    std::fs::write(
+        &lock_path,
+        serde_json::to_string_pretty(&lock_json).unwrap(),
+    )
+    .expect("should create remote lock");
 
     let config = CapsuleConfig {
         capsule_path: capsule_path.clone(),
@@ -1085,7 +1194,10 @@ fn test_cross_process_lock_actual_subprocess() {
     };
 
     let result = CapsuleHandle::open(config);
-    assert!(result.is_err(), "Should fail when lock is held by remote process");
+    assert!(
+        result.is_err(),
+        "Should fail when lock is held by remote process"
+    );
 
     match result {
         Err(CapsuleError::LockedByWriter(meta)) => {
@@ -1194,7 +1306,11 @@ sleep 5
             assert_eq!(meta.run_id, Some("subprocess-run".to_string()));
             // PID should be the child's PID (not 0 or our PID)
             assert!(meta.pid > 0, "Lock should have valid PID");
-            assert_ne!(meta.pid, std::process::id(), "Lock should have child's PID, not ours");
+            assert_ne!(
+                meta.pid,
+                std::process::id(),
+                "Lock should have child's PID, not ours"
+            );
         }
         Err(other) => panic!("Expected LockedByWriter error, got: {:?}", other),
         Ok(_) => panic!("Expected error but open succeeded"),
@@ -1219,7 +1335,10 @@ sleep 5
     std::thread::sleep(std::time::Duration::from_millis(100));
 
     let result2 = CapsuleHandle::open(config2);
-    assert!(result2.is_ok(), "Should succeed after subprocess dies (stale lock recovery)");
+    assert!(
+        result2.is_ok(),
+        "Should succeed after subprocess dies (stale lock recovery)"
+    );
 }
 
 // =============================================================================
@@ -1394,9 +1513,12 @@ fn test_persistence_doctor_passes_and_stats_correct() {
 
         // Doctor should pass
         let diagnostics = CapsuleHandle::doctor(&capsule_path);
-        let has_errors = diagnostics
-            .iter()
-            .any(|d| matches!(d, crate::memvid_adapter::capsule::DiagnosticResult::Error(_, _)));
+        let has_errors = diagnostics.iter().any(|d| {
+            matches!(
+                d,
+                crate::memvid_adapter::capsule::DiagnosticResult::Error(_, _)
+            )
+        });
         assert!(!has_errors, "Doctor should pass: {:?}", diagnostics);
 
         // Stats should reflect data
@@ -1541,7 +1663,12 @@ fn test_policy_capture_emits_policy_snapshot_ref_event() {
     let events = handle.list_events();
     let policy_events: Vec<_> = events
         .iter()
-        .filter(|e| matches!(e.event_type, crate::memvid_adapter::EventType::PolicySnapshotRef))
+        .filter(|e| {
+            matches!(
+                e.event_type,
+                crate::memvid_adapter::EventType::PolicySnapshotRef
+            )
+        })
         .collect();
 
     assert_eq!(
@@ -1610,7 +1737,12 @@ fn test_stage_transition_includes_policy_info() {
     let events = handle.list_events();
     let stage_events: Vec<_> = events
         .iter()
-        .filter(|e| matches!(e.event_type, crate::memvid_adapter::EventType::StageTransition))
+        .filter(|e| {
+            matches!(
+                e.event_type,
+                crate::memvid_adapter::EventType::StageTransition
+            )
+        })
         .collect();
 
     assert_eq!(
@@ -1727,7 +1859,10 @@ fn test_current_policy_tracking() {
 
     // Now should have current policy
     let policy_info = handle.current_policy();
-    assert!(policy_info.is_some(), "Should have current policy after capture");
+    assert!(
+        policy_info.is_some(),
+        "Should have current policy after capture"
+    );
 
     let policy = policy_info.unwrap();
     assert_eq!(policy.policy_id, snapshot.policy_id);
@@ -1790,7 +1925,12 @@ fn test_phase_4_5_gate_events_include_policy() {
     // Find StageTransition event
     let stage_events: Vec<_> = events
         .iter()
-        .filter(|e| matches!(e.event_type, crate::memvid_adapter::EventType::StageTransition))
+        .filter(|e| {
+            matches!(
+                e.event_type,
+                crate::memvid_adapter::EventType::StageTransition
+            )
+        })
         .collect();
 
     assert!(
@@ -1828,7 +1968,9 @@ fn test_phase_4_5_gate_events_include_policy() {
 /// the system detects the drift and recaptures the policy.
 #[test]
 fn test_policy_drift_detection_at_stage_boundary() {
-    use crate::memvid_adapter::policy_capture::{capture_and_store_policy, check_and_recapture_if_changed};
+    use crate::memvid_adapter::policy_capture::{
+        capture_and_store_policy, check_and_recapture_if_changed,
+    };
     use codex_stage0::Stage0Config;
 
     let temp_dir = TempDir::new().unwrap();
@@ -1844,8 +1986,9 @@ fn test_policy_drift_detection_at_stage_boundary() {
     let stage0_config = Stage0Config::default();
 
     // Initial policy capture at run start
-    let initial_snapshot = capture_and_store_policy(&handle, &stage0_config, "SPEC-DRIFT", "run-drift")
-        .expect("should capture initial policy");
+    let initial_snapshot =
+        capture_and_store_policy(&handle, &stage0_config, "SPEC-DRIFT", "run-drift")
+            .expect("should capture initial policy");
 
     let initial_hash = initial_snapshot.hash.clone();
 
@@ -1877,7 +2020,10 @@ fn test_policy_drift_detection_at_stage_boundary() {
         .filter(|e| matches!(e.event_type, EventType::StageTransition))
         .collect();
 
-    assert!(!stage_events.is_empty(), "Should have StageTransition event");
+    assert!(
+        !stage_events.is_empty(),
+        "Should have StageTransition event"
+    );
     let event = stage_events[0];
     assert_eq!(
         event.payload.get("policy_hash").unwrap().as_str().unwrap(),
@@ -1923,10 +2069,7 @@ fn test_policy_drift_check_with_no_prior_policy() {
 
     // Now should have current policy
     let current = handle.current_policy();
-    assert!(
-        current.is_some(),
-        "Should have current policy after check"
-    );
+    assert!(current.is_some(), "Should have current policy after check");
 }
 
 /// Phase 4→5 gate: Verify policy capture happens before any stage transitions.
@@ -1959,7 +2102,12 @@ fn test_phase_4_5_gate_ordering() {
     let events_before = handle.list_events();
     let stage_events_before: Vec<_> = events_before
         .iter()
-        .filter(|e| matches!(e.event_type, crate::memvid_adapter::EventType::StageTransition))
+        .filter(|e| {
+            matches!(
+                e.event_type,
+                crate::memvid_adapter::EventType::StageTransition
+            )
+        })
         .collect();
 
     // StageTransition without policy capture won't have policy fields
@@ -1988,7 +2136,12 @@ fn test_phase_4_5_gate_ordering() {
     let events_after = handle.list_events();
     let stage_events_after: Vec<_> = events_after
         .iter()
-        .filter(|e| matches!(e.event_type, crate::memvid_adapter::EventType::StageTransition))
+        .filter(|e| {
+            matches!(
+                e.event_type,
+                crate::memvid_adapter::EventType::StageTransition
+            )
+        })
         .filter(|e| e.stage.as_deref() == Some("implement"))
         .collect();
 
@@ -2087,7 +2240,9 @@ fn test_run_branch_isolation_checkpoints() {
 
     // Switch to run branch
     let run_branch = BranchId::for_run("run-abc123");
-    handle.switch_branch(run_branch.clone()).expect("switch branch");
+    handle
+        .switch_branch(run_branch.clone())
+        .expect("switch branch");
 
     // Create checkpoint on run branch
     handle
@@ -2130,7 +2285,9 @@ fn test_run_branch_isolation_events() {
 
     // Switch to run branch
     let run_branch = BranchId::for_run("run-xyz789");
-    handle.switch_branch(run_branch.clone()).expect("switch branch");
+    handle
+        .switch_branch(run_branch.clone())
+        .expect("switch branch");
 
     // Create event on run branch
     handle
@@ -2207,7 +2364,9 @@ fn test_time_travel_uri_resolution() {
 
     // Switch to a run branch for proper branch-aware testing
     let run_branch = BranchId::for_run("time-travel-run");
-    handle.switch_branch(run_branch.clone()).expect("switch branch");
+    handle
+        .switch_branch(run_branch.clone())
+        .expect("switch branch");
 
     // Step 1: Put v1 content
     let uri = handle
@@ -2320,7 +2479,9 @@ fn test_time_travel_survives_reopen() {
 
     {
         let handle = CapsuleHandle::open(config.clone()).expect("open capsule");
-        handle.switch_branch(run_branch.clone()).expect("switch branch");
+        handle
+            .switch_branch(run_branch.clone())
+            .expect("switch branch");
 
         // Put v1
         uri = handle
@@ -2495,7 +2656,9 @@ fn test_merge_determinism_uris_resolvable_on_main_after_merge() {
     // Step 1: Create capsule and switch to run branch
     let handle = CapsuleHandle::open(config.clone()).expect("create capsule");
     let run_branch = BranchId::for_run("test-run-001");
-    handle.switch_branch(run_branch.clone()).expect("switch to run branch");
+    handle
+        .switch_branch(run_branch.clone())
+        .expect("switch to run branch");
 
     // Step 2: Put artifact on run branch
     let run_uri = handle
@@ -2567,16 +2730,11 @@ fn test_merge_determinism_uris_resolvable_on_main_after_merge() {
     // Verify merge payload contains expected fields
     let payload: serde_json::Value = merge_event.payload.clone();
     assert_eq!(
-        payload["from_branch"],
-        "run/test-run-001",
+        payload["from_branch"], "run/test-run-001",
         "from_branch should match"
     );
     assert_eq!(payload["to_branch"], "main", "to_branch should be main");
-    assert_eq!(
-        payload["mode"],
-        "Curated",
-        "mode should be Curated"
-    );
+    assert_eq!(payload["mode"], "Curated", "mode should be Curated");
 }
 
 /// Test that merge checkpoint appears in checkpoint list with correct metadata.
@@ -2595,7 +2753,9 @@ fn test_merge_creates_checkpoint_with_correct_metadata() {
 
     // Set up run branch with some content
     let run_branch = BranchId::for_run("run-cp-test");
-    handle.switch_branch(run_branch.clone()).expect("switch branch");
+    handle
+        .switch_branch(run_branch.clone())
+        .expect("switch branch");
 
     handle
         .put(
@@ -2686,7 +2846,9 @@ fn test_curated_merge_excludes_debug_events() {
 
     // Create and switch to run branch
     let run_branch = BranchId::for_run("curated-run-001");
-    handle.switch_branch(run_branch.clone()).expect("switch branch");
+    handle
+        .switch_branch(run_branch.clone())
+        .expect("switch branch");
 
     // Create a curated-eligible event via commit_stage (emits StageTransition)
     handle
@@ -2777,7 +2939,9 @@ fn test_full_merge_includes_debug_events() {
 
     // Create and switch to run branch
     let run_branch = BranchId::for_run("full-run-001");
-    handle.switch_branch(run_branch.clone()).expect("switch branch");
+    handle
+        .switch_branch(run_branch.clone())
+        .expect("switch branch");
 
     // Create curated-eligible event via commit_stage
     handle
@@ -2851,7 +3015,9 @@ fn test_curated_merge_persists_after_reopen() {
     // Phase 1: Create events and merge
     {
         let handle = CapsuleHandle::open(config.clone()).expect("open capsule");
-        handle.switch_branch(run_branch.clone()).expect("switch branch");
+        handle
+            .switch_branch(run_branch.clone())
+            .expect("switch branch");
 
         // Create curated-eligible event via commit_stage
         handle
@@ -2942,14 +3108,8 @@ fn test_event_type_curated_classification() {
 #[test]
 fn test_uri_curated_classification() {
     // Curated-eligible URIs
-    let artifact_uri = LogicalUri::new(
-        "ws",
-        "SPEC-001",
-        "run1",
-        ObjectType::Artifact,
-        "file.md",
-    )
-    .unwrap();
+    let artifact_uri =
+        LogicalUri::new("ws", "SPEC-001", "run1", ObjectType::Artifact, "file.md").unwrap();
     assert!(artifact_uri.is_curated_eligible(), "Artifacts are curated");
 
     let policy_uri = LogicalUri::for_policy("ws", "policy-001");
@@ -2957,7 +3117,10 @@ fn test_uri_curated_classification() {
 
     // Non-curated URIs
     let event_uri = LogicalUri::for_event("ws", "SPEC-001", "run1", 1);
-    assert!(!event_uri.is_curated_eligible(), "Events handled separately");
+    assert!(
+        !event_uri.is_curated_eligible(),
+        "Events handled separately"
+    );
 }
 
 // =============================================================================
@@ -3140,8 +3303,7 @@ fn test_spec_kit_975_event_emission() {
 
     // Verify audit-critical classification
     for event in &all_events {
-        if event.event_type == EventType::GateDecision
-            || event.event_type == EventType::ErrorEvent
+        if event.event_type == EventType::GateDecision || event.event_type == EventType::ErrorEvent
         {
             assert!(
                 event.event_type.is_audit_critical(),
@@ -3280,9 +3442,18 @@ fn test_llm_capture_modes_policy_aligned() {
 
     // Verify backward compat parsing
     assert_eq!(LLMCaptureMode::from_str("off"), Some(LLMCaptureMode::None));
-    assert_eq!(LLMCaptureMode::from_str("hash"), Some(LLMCaptureMode::PromptsOnly));
-    assert_eq!(LLMCaptureMode::from_str("summary"), Some(LLMCaptureMode::PromptsOnly));
-    assert_eq!(LLMCaptureMode::from_str("full"), Some(LLMCaptureMode::FullIo));
+    assert_eq!(
+        LLMCaptureMode::from_str("hash"),
+        Some(LLMCaptureMode::PromptsOnly)
+    );
+    assert_eq!(
+        LLMCaptureMode::from_str("summary"),
+        Some(LLMCaptureMode::PromptsOnly)
+    );
+    assert_eq!(
+        LLMCaptureMode::from_str("full"),
+        Some(LLMCaptureMode::FullIo)
+    );
 }
 
 // =============================================================================
@@ -3316,7 +3487,9 @@ fn test_runtime_emit_wiring_integration() {
         stage: Some("Plan".to_string()),
         role: Some("Architect".to_string()),
     };
-    handle.emit_tool_call(spec_id, run_id, &tool_call).expect("emit tool call");
+    handle
+        .emit_tool_call(spec_id, run_id, &tool_call)
+        .expect("emit tool call");
 
     let tool_result = ToolResultPayload {
         call_id: "tool-001".to_string(),
@@ -3326,7 +3499,9 @@ fn test_runtime_emit_wiring_integration() {
         error: None,
         duration_ms: Some(50),
     };
-    handle.emit_tool_result(spec_id, run_id, Some("Plan"), &tool_result).expect("emit tool result");
+    handle
+        .emit_tool_result(spec_id, run_id, Some("Plan"), &tool_result)
+        .expect("emit tool result");
 
     // 2. Emit RetrievalRequest and RetrievalResponse
     let retrieval_req = RetrievalRequestPayload {
@@ -3337,7 +3512,9 @@ fn test_runtime_emit_wiring_integration() {
         stage: Some("Plan".to_string()),
         role: None,
     };
-    handle.emit_retrieval_request(spec_id, run_id, &retrieval_req).expect("emit retrieval request");
+    handle
+        .emit_retrieval_request(spec_id, run_id, &retrieval_req)
+        .expect("emit retrieval request");
 
     let retrieval_resp = RetrievalResponsePayload {
         request_id: "req-001".to_string(),
@@ -3347,7 +3524,9 @@ fn test_runtime_emit_wiring_integration() {
         latency_ms: Some(25),
         error: None,
     };
-    handle.emit_retrieval_response(spec_id, run_id, Some("Plan"), &retrieval_resp).expect("emit retrieval response");
+    handle
+        .emit_retrieval_response(spec_id, run_id, Some("Plan"), &retrieval_resp)
+        .expect("emit retrieval response");
 
     // 3. Emit PatchApply
     let patch_apply = PatchApplyPayload {
@@ -3361,7 +3540,9 @@ fn test_runtime_emit_wiring_integration() {
         success: true,
         error: None,
     };
-    handle.emit_patch_apply(spec_id, run_id, &patch_apply).expect("emit patch apply");
+    handle
+        .emit_patch_apply(spec_id, run_id, &patch_apply)
+        .expect("emit patch apply");
 
     // 4. Emit ModelCallEnvelope (PromptsOnly mode)
     let model_call = ModelCallEnvelopePayload {
@@ -3381,7 +3562,9 @@ fn test_runtime_emit_wiring_integration() {
         success: true,
         error: None,
     };
-    handle.emit_model_call_envelope(spec_id, run_id, &model_call).expect("emit model call");
+    handle
+        .emit_model_call_envelope(spec_id, run_id, &model_call)
+        .expect("emit model call");
 
     // 5. Emit GateDecision
     let gate_decision = GateDecisionPayload {
@@ -3393,10 +3576,14 @@ fn test_runtime_emit_wiring_integration() {
         details: None,
         blocking: true,
     };
-    handle.emit_gate_decision(spec_id, run_id, &gate_decision).expect("emit gate decision");
+    handle
+        .emit_gate_decision(spec_id, run_id, &gate_decision)
+        .expect("emit gate decision");
 
     // Commit the stage to create a checkpoint
-    handle.commit_stage(spec_id, run_id, "Judge", None).expect("commit stage");
+    handle
+        .commit_stage(spec_id, run_id, "Judge", None)
+        .expect("commit stage");
 
     // Verify events are stored correctly
     let events = handle.list_events();
@@ -3411,11 +3598,15 @@ fn test_runtime_emit_wiring_integration() {
         "Should have ToolResult event"
     );
     assert!(
-        events.iter().any(|e| e.event_type == EventType::RetrievalRequest),
+        events
+            .iter()
+            .any(|e| e.event_type == EventType::RetrievalRequest),
         "Should have RetrievalRequest event"
     );
     assert!(
-        events.iter().any(|e| e.event_type == EventType::RetrievalResponse),
+        events
+            .iter()
+            .any(|e| e.event_type == EventType::RetrievalResponse),
         "Should have RetrievalResponse event"
     );
     assert!(
@@ -3423,24 +3614,35 @@ fn test_runtime_emit_wiring_integration() {
         "Should have PatchApply event"
     );
     assert!(
-        events.iter().any(|e| e.event_type == EventType::ModelCallEnvelope),
+        events
+            .iter()
+            .any(|e| e.event_type == EventType::ModelCallEnvelope),
         "Should have ModelCallEnvelope event"
     );
     assert!(
-        events.iter().any(|e| e.event_type == EventType::GateDecision),
+        events
+            .iter()
+            .any(|e| e.event_type == EventType::GateDecision),
         "Should have GateDecision event"
     );
 
     // Verify event order (sequence numbers should be monotonic)
-    let event_uris: Vec<_> = events.iter()
+    let event_uris: Vec<_> = events
+        .iter()
         .filter(|e| e.run_id == run_id)
         .map(|e| e.uri.as_str().to_string())
         .collect();
-    assert!(event_uris.len() >= 7, "Should have at least 7 events for this run");
+    assert!(
+        event_uris.len() >= 7,
+        "Should have at least 7 events for this run"
+    );
 
     // Verify events are associated with the correct run_id
     let run_events: Vec<_> = events.iter().filter(|e| e.run_id == run_id).collect();
-    assert!(run_events.len() >= 7, "All events should have correct run_id");
+    assert!(
+        run_events.len() >= 7,
+        "All events should have correct run_id"
+    );
 
     // Drop and reopen to verify persistence
     drop(handle);
@@ -3449,11 +3651,15 @@ fn test_runtime_emit_wiring_integration() {
     // Verify events are still present after reopen
     let events_after_reopen = handle2.list_events();
     assert!(
-        events_after_reopen.iter().any(|e| e.event_type == EventType::ToolCall),
+        events_after_reopen
+            .iter()
+            .any(|e| e.event_type == EventType::ToolCall),
         "ToolCall event should persist after reopen"
     );
     assert!(
-        events_after_reopen.iter().any(|e| e.event_type == EventType::RetrievalResponse),
+        events_after_reopen
+            .iter()
+            .any(|e| e.event_type == EventType::RetrievalResponse),
         "RetrievalResponse event should persist after reopen"
     );
 }
@@ -3480,26 +3686,37 @@ fn test_emit_wiring_best_effort_never_fails() {
     let run_id = "best-effort-run";
 
     // All these should succeed (best-effort)
-    let _ = handle.emit_tool_call(spec_id, run_id, &ToolCallPayload {
-        call_id: "t1".to_string(),
-        tool_name: "test".to_string(),
-        input: serde_json::json!({}),
-        stage: None,
-        role: None,
-    });
+    let _ = handle.emit_tool_call(
+        spec_id,
+        run_id,
+        &ToolCallPayload {
+            call_id: "t1".to_string(),
+            tool_name: "test".to_string(),
+            input: serde_json::json!({}),
+            stage: None,
+            role: None,
+        },
+    );
 
-    let _ = handle.emit_retrieval_request(spec_id, run_id, &RetrievalRequestPayload {
-        request_id: "r1".to_string(),
-        query: "test".to_string(),
-        config: serde_json::json!({}),
-        source: "test".to_string(),
-        stage: None,
-        role: None,
-    });
+    let _ = handle.emit_retrieval_request(
+        spec_id,
+        run_id,
+        &RetrievalRequestPayload {
+            request_id: "r1".to_string(),
+            query: "test".to_string(),
+            config: serde_json::json!({}),
+            source: "test".to_string(),
+            stage: None,
+            role: None,
+        },
+    );
 
     // The important thing is: we didn't panic or abort
     // In a real integration, the run would continue regardless of emit errors
-    assert!(handle.is_open(), "Capsule should still be open after emit operations");
+    assert!(
+        handle.is_open(),
+        "Capsule should still be open after emit operations"
+    );
 }
 
 #[test]
@@ -3522,46 +3739,78 @@ fn test_retrieval_events_capture_hit_uris() {
     let run_id = "retrieval-uri-test";
 
     // First, ingest some artifacts to get real URIs
-    let artifact1_uri = handle.put(
-        spec_id, run_id, ObjectType::Artifact,
-        "decision1.md", b"Decision 1 content".to_vec(),
-        serde_json::json!({"type": "decision"}),
-    ).expect("put artifact 1");
+    let artifact1_uri = handle
+        .put(
+            spec_id,
+            run_id,
+            ObjectType::Artifact,
+            "decision1.md",
+            b"Decision 1 content".to_vec(),
+            serde_json::json!({"type": "decision"}),
+        )
+        .expect("put artifact 1");
 
-    let artifact2_uri = handle.put(
-        spec_id, run_id, ObjectType::Artifact,
-        "decision2.md", b"Decision 2 content".to_vec(),
-        serde_json::json!({"type": "decision"}),
-    ).expect("put artifact 2");
+    let artifact2_uri = handle
+        .put(
+            spec_id,
+            run_id,
+            ObjectType::Artifact,
+            "decision2.md",
+            b"Decision 2 content".to_vec(),
+            serde_json::json!({"type": "decision"}),
+        )
+        .expect("put artifact 2");
 
     // Emit retrieval response referencing those URIs
     let retrieval_resp = RetrievalResponsePayload {
         request_id: "req-uris".to_string(),
-        hit_uris: vec![artifact1_uri.as_str().to_string(), artifact2_uri.as_str().to_string()],
+        hit_uris: vec![
+            artifact1_uri.as_str().to_string(),
+            artifact2_uri.as_str().to_string(),
+        ],
         fused_scores: Some(vec![0.95, 0.87]),
         explainability: None,
         latency_ms: Some(30),
         error: None,
     };
-    handle.emit_retrieval_response(spec_id, run_id, None, &retrieval_resp).expect("emit response");
+    handle
+        .emit_retrieval_response(spec_id, run_id, None, &retrieval_resp)
+        .expect("emit response");
 
     // Verify the event contains the URIs
     let events = handle.list_events();
-    let resp_event = events.iter()
+    let resp_event = events
+        .iter()
         .find(|e| e.event_type == EventType::RetrievalResponse && e.run_id == run_id)
         .expect("find retrieval response event");
 
-    let hit_uris = resp_event.payload.get("hit_uris")
+    let hit_uris = resp_event
+        .payload
+        .get("hit_uris")
         .and_then(|v| v.as_array())
         .expect("hit_uris should be array");
 
     assert_eq!(hit_uris.len(), 2, "Should have 2 hit URIs");
-    assert!(hit_uris.iter().any(|u| u.as_str() == Some(artifact1_uri.as_str())));
-    assert!(hit_uris.iter().any(|u| u.as_str() == Some(artifact2_uri.as_str())));
+    assert!(
+        hit_uris
+            .iter()
+            .any(|u| u.as_str() == Some(artifact1_uri.as_str()))
+    );
+    assert!(
+        hit_uris
+            .iter()
+            .any(|u| u.as_str() == Some(artifact2_uri.as_str()))
+    );
 
     // Verify the URIs are valid mv2:// URIs
-    assert!(artifact1_uri.as_str().starts_with("mv2://"), "artifact1 should have mv2:// scheme");
-    assert!(artifact2_uri.as_str().starts_with("mv2://"), "artifact2 should have mv2:// scheme");
+    assert!(
+        artifact1_uri.as_str().starts_with("mv2://"),
+        "artifact1 should have mv2:// scheme"
+    );
+    assert!(
+        artifact2_uri.as_str().starts_with("mv2://"),
+        "artifact2 should have mv2:// scheme"
+    );
 }
 
 #[test]
@@ -3595,18 +3844,24 @@ fn test_replay_timeline_deterministic() {
         stage: Some("Plan".to_string()),
         role: Some("Architect".to_string()),
     };
-    handle.emit_retrieval_request(spec_id, run_id, &req_payload).expect("emit retrieval request");
+    handle
+        .emit_retrieval_request(spec_id, run_id, &req_payload)
+        .expect("emit retrieval request");
 
     // Event 2: RetrievalResponse
     let resp_payload = RetrievalResponsePayload {
         request_id: "req-timeline-001".to_string(),
-        hit_uris: vec!["mv2://replay_timeline_test/SPEC-REPLAY-TIMELINE/spec/artifact/decision.md".to_string()],
+        hit_uris: vec![
+            "mv2://replay_timeline_test/SPEC-REPLAY-TIMELINE/spec/artifact/decision.md".to_string(),
+        ],
         fused_scores: Some(vec![0.92]),
         explainability: None,
         latency_ms: Some(45),
         error: None,
     };
-    handle.emit_retrieval_response(spec_id, run_id, Some("Plan"), &resp_payload).expect("emit retrieval response");
+    handle
+        .emit_retrieval_response(spec_id, run_id, Some("Plan"), &resp_payload)
+        .expect("emit retrieval response");
 
     // Event 3: ToolCall
     let tool_call = ToolCallPayload {
@@ -3616,7 +3871,9 @@ fn test_replay_timeline_deterministic() {
         stage: Some("Implement".to_string()),
         role: Some("Implementer".to_string()),
     };
-    handle.emit_tool_call(spec_id, run_id, &tool_call).expect("emit tool call");
+    handle
+        .emit_tool_call(spec_id, run_id, &tool_call)
+        .expect("emit tool call");
 
     // Event 4: ToolResult
     let tool_result = ToolResultPayload {
@@ -3627,7 +3884,9 @@ fn test_replay_timeline_deterministic() {
         error: None,
         duration_ms: Some(12),
     };
-    handle.emit_tool_result(spec_id, run_id, Some("Implement"), &tool_result).expect("emit tool result");
+    handle
+        .emit_tool_result(spec_id, run_id, Some("Implement"), &tool_result)
+        .expect("emit tool result");
 
     // Event 5: PatchApply
     let patch_apply = PatchApplyPayload {
@@ -3641,32 +3900,62 @@ fn test_replay_timeline_deterministic() {
         success: true,
         error: None,
     };
-    handle.emit_patch_apply(spec_id, run_id, &patch_apply).expect("emit patch apply");
+    handle
+        .emit_patch_apply(spec_id, run_id, &patch_apply)
+        .expect("emit patch apply");
 
     // Phase 2: Capture events and verify order
-    let events: Vec<_> = handle.list_events()
+    let events: Vec<_> = handle
+        .list_events()
         .into_iter()
         .filter(|e| e.run_id == run_id && e.spec_id == spec_id)
         .collect();
 
-    assert!(events.len() >= 5, "Should have at least 5 events, got {}", events.len());
+    assert!(
+        events.len() >= 5,
+        "Should have at least 5 events, got {}",
+        events.len()
+    );
 
     // Verify timestamps are monotonic (non-decreasing)
     for i in 0..events.len() - 1 {
         assert!(
             events[i].timestamp <= events[i + 1].timestamp,
             "Event {} timestamp ({}) should be <= event {} timestamp ({})",
-            i, events[i].timestamp, i + 1, events[i + 1].timestamp
+            i,
+            events[i].timestamp,
+            i + 1,
+            events[i + 1].timestamp
         );
     }
 
     // Verify event type sequence matches insertion order
     let event_types: Vec<_> = events.iter().map(|e| e.event_type).collect();
-    assert_eq!(event_types[0], EventType::RetrievalRequest, "Event 0 should be RetrievalRequest");
-    assert_eq!(event_types[1], EventType::RetrievalResponse, "Event 1 should be RetrievalResponse");
-    assert_eq!(event_types[2], EventType::ToolCall, "Event 2 should be ToolCall");
-    assert_eq!(event_types[3], EventType::ToolResult, "Event 3 should be ToolResult");
-    assert_eq!(event_types[4], EventType::PatchApply, "Event 4 should be PatchApply");
+    assert_eq!(
+        event_types[0],
+        EventType::RetrievalRequest,
+        "Event 0 should be RetrievalRequest"
+    );
+    assert_eq!(
+        event_types[1],
+        EventType::RetrievalResponse,
+        "Event 1 should be RetrievalResponse"
+    );
+    assert_eq!(
+        event_types[2],
+        EventType::ToolCall,
+        "Event 2 should be ToolCall"
+    );
+    assert_eq!(
+        event_types[3],
+        EventType::ToolResult,
+        "Event 3 should be ToolResult"
+    );
+    assert_eq!(
+        event_types[4],
+        EventType::PatchApply,
+        "Event 4 should be PatchApply"
+    );
 
     // Capture URIs for determinism check
     let original_uris: Vec<_> = events.iter().map(|e| e.uri.as_str().to_string()).collect();
@@ -3675,24 +3964,30 @@ fn test_replay_timeline_deterministic() {
     drop(handle);
     let handle2 = CapsuleHandle::open(config).expect("should reopen capsule");
 
-    let events_after_reopen: Vec<_> = handle2.list_events()
+    let events_after_reopen: Vec<_> = handle2
+        .list_events()
         .into_iter()
         .filter(|e| e.run_id == run_id && e.spec_id == spec_id)
         .collect();
 
     // Verify event count matches
     assert_eq!(
-        events_after_reopen.len(), events.len(),
+        events_after_reopen.len(),
+        events.len(),
         "Event count should match after reopen: {} vs {}",
-        events_after_reopen.len(), events.len()
+        events_after_reopen.len(),
+        events.len()
     );
 
     // Verify determinism: URIs and types should match exactly after reopen
     for (i, (original, reopened)) in events.iter().zip(events_after_reopen.iter()).enumerate() {
         assert_eq!(
-            original.uri.as_str(), reopened.uri.as_str(),
+            original.uri.as_str(),
+            reopened.uri.as_str(),
             "Event {} URI should match after reopen: {} vs {}",
-            i, original.uri.as_str(), reopened.uri.as_str()
+            i,
+            original.uri.as_str(),
+            reopened.uri.as_str()
         );
         assert_eq!(
             original.event_type, reopened.event_type,
@@ -3711,7 +4006,8 @@ fn test_replay_timeline_deterministic() {
         assert!(
             events_after_reopen.iter().any(|e| e.uri.as_str() == uri),
             "Original URI {} should be present after reopen: {}",
-            i, uri
+            i,
+            uri
         );
     }
 }
@@ -3737,21 +4033,36 @@ fn test_replay_offline_retrieval_exact() {
 
     // Phase 1: Ingest reference artifacts to get real URIs
     let artifact_uris = vec![
-        handle.put(
-            spec_id, run_id, ObjectType::Artifact,
-            "decision_alpha.md", b"Decision Alpha: Use event sourcing pattern".to_vec(),
-            serde_json::json!({"type": "decision", "priority": "high"}),
-        ).expect("put artifact alpha"),
-        handle.put(
-            spec_id, run_id, ObjectType::Artifact,
-            "decision_beta.md", b"Decision Beta: Capsule-first architecture".to_vec(),
-            serde_json::json!({"type": "decision", "priority": "medium"}),
-        ).expect("put artifact beta"),
-        handle.put(
-            spec_id, run_id, ObjectType::Artifact,
-            "decision_gamma.md", b"Decision Gamma: Best-effort event emission".to_vec(),
-            serde_json::json!({"type": "decision", "priority": "low"}),
-        ).expect("put artifact gamma"),
+        handle
+            .put(
+                spec_id,
+                run_id,
+                ObjectType::Artifact,
+                "decision_alpha.md",
+                b"Decision Alpha: Use event sourcing pattern".to_vec(),
+                serde_json::json!({"type": "decision", "priority": "high"}),
+            )
+            .expect("put artifact alpha"),
+        handle
+            .put(
+                spec_id,
+                run_id,
+                ObjectType::Artifact,
+                "decision_beta.md",
+                b"Decision Beta: Capsule-first architecture".to_vec(),
+                serde_json::json!({"type": "decision", "priority": "medium"}),
+            )
+            .expect("put artifact beta"),
+        handle
+            .put(
+                spec_id,
+                run_id,
+                ObjectType::Artifact,
+                "decision_gamma.md",
+                b"Decision Gamma: Best-effort event emission".to_vec(),
+                serde_json::json!({"type": "decision", "priority": "low"}),
+            )
+            .expect("put artifact gamma"),
     ];
 
     // Phase 2: Emit retrieval request
@@ -3768,14 +4079,19 @@ fn test_replay_offline_retrieval_exact() {
         stage: Some("Plan".to_string()),
         role: None,
     };
-    handle.emit_retrieval_request(spec_id, run_id, &request_payload).expect("emit retrieval request");
+    handle
+        .emit_retrieval_request(spec_id, run_id, &request_payload)
+        .expect("emit retrieval request");
 
     // Phase 3: Emit retrieval response with exact hit set and scores
     // These exact values must be preserved for offline replay
     let exact_scores = vec![0.98, 0.95, 0.87];
     let response_payload = RetrievalResponsePayload {
         request_id: req_id.to_string(),
-        hit_uris: artifact_uris.iter().map(|uri| uri.as_str().to_string()).collect(),
+        hit_uris: artifact_uris
+            .iter()
+            .map(|uri| uri.as_str().to_string())
+            .collect(),
         fused_scores: Some(exact_scores.clone()),
         explainability: Some(serde_json::json!({
             "method": "hybrid_fusion",
@@ -3784,44 +4100,67 @@ fn test_replay_offline_retrieval_exact() {
         latency_ms: Some(67),
         error: None,
     };
-    handle.emit_retrieval_response(spec_id, run_id, Some("Plan"), &response_payload).expect("emit retrieval response");
+    handle
+        .emit_retrieval_response(spec_id, run_id, Some("Plan"), &response_payload)
+        .expect("emit retrieval response");
 
     // Phase 4: Verify exact match in event payload
     let events = handle.list_events();
 
     // Find retrieval response event
-    let resp_event = events.iter()
+    let resp_event = events
+        .iter()
         .find(|e| e.event_type == EventType::RetrievalResponse && e.run_id == run_id)
         .expect("should find retrieval response event");
 
     // Assertion 1: Response has correct request_id
-    let payload_request_id = resp_event.payload.get("request_id")
+    let payload_request_id = resp_event
+        .payload
+        .get("request_id")
         .and_then(|v| v.as_str())
         .expect("response should have request_id");
-    assert_eq!(payload_request_id, req_id, "Response should reference correct request");
+    assert_eq!(
+        payload_request_id, req_id,
+        "Response should reference correct request"
+    );
 
     // Assertion 2: Hit URIs are exact match in order
-    let hit_uris = resp_event.payload.get("hit_uris")
+    let hit_uris = resp_event
+        .payload
+        .get("hit_uris")
         .and_then(|v| v.as_array())
         .expect("hit_uris should be array");
 
-    assert_eq!(hit_uris.len(), artifact_uris.len(), "Should have exact hit count");
+    assert_eq!(
+        hit_uris.len(),
+        artifact_uris.len(),
+        "Should have exact hit count"
+    );
 
     for (i, artifact_uri) in artifact_uris.iter().enumerate() {
         let stored_uri = hit_uris[i].as_str().expect("uri should be string");
         assert_eq!(
-            stored_uri, artifact_uri.as_str(),
+            stored_uri,
+            artifact_uri.as_str(),
             "Hit {} should match artifact URI exactly: {} vs {}",
-            i, stored_uri, artifact_uri.as_str()
+            i,
+            stored_uri,
+            artifact_uri.as_str()
         );
     }
 
     // Assertion 3: Fused scores are exact (no epsilon tolerance for replay)
-    let fused_scores = resp_event.payload.get("fused_scores")
+    let fused_scores = resp_event
+        .payload
+        .get("fused_scores")
         .and_then(|v| v.as_array())
         .expect("fused_scores should be array");
 
-    assert_eq!(fused_scores.len(), exact_scores.len(), "Should have exact score count");
+    assert_eq!(
+        fused_scores.len(),
+        exact_scores.len(),
+        "Should have exact score count"
+    );
 
     for (i, expected_score) in exact_scores.iter().enumerate() {
         let actual_score = fused_scores[i].as_f64().expect("score should be number");
@@ -3837,7 +4176,8 @@ fn test_replay_offline_retrieval_exact() {
         assert!(
             uri.as_str().starts_with("mv2://"),
             "Artifact {} should have mv2:// scheme: {}",
-            i, uri.as_str()
+            i,
+            uri.as_str()
         );
     }
 
@@ -3847,7 +4187,9 @@ fn test_replay_offline_retrieval_exact() {
     // preserved exactly, which is verified in Assertions 2 and 3.
 
     // Assertion 6: Explainability metadata preserved
-    let explainability = resp_event.payload.get("explainability")
+    let explainability = resp_event
+        .payload
+        .get("explainability")
         .expect("explainability should be present");
     assert_eq!(
         explainability.get("method").and_then(|v| v.as_str()),
@@ -3872,7 +4214,10 @@ fn test_breaker_state_variants() {
     // Test from_str round-trip
     assert_eq!(BreakerState::from_str("closed"), Some(BreakerState::Closed));
     assert_eq!(BreakerState::from_str("open"), Some(BreakerState::Open));
-    assert_eq!(BreakerState::from_str("half_open"), Some(BreakerState::HalfOpen));
+    assert_eq!(
+        BreakerState::from_str("half_open"),
+        Some(BreakerState::HalfOpen)
+    );
     assert_eq!(BreakerState::from_str("invalid"), None);
 }
 
@@ -3962,10 +4307,16 @@ fn test_event_type_breaker_state_changed() {
     use super::EventType;
 
     // Test as_str
-    assert_eq!(EventType::BreakerStateChanged.as_str(), "BreakerStateChanged");
+    assert_eq!(
+        EventType::BreakerStateChanged.as_str(),
+        "BreakerStateChanged"
+    );
 
     // Test from_str
-    assert_eq!(EventType::from_str("BreakerStateChanged"), Some(EventType::BreakerStateChanged));
+    assert_eq!(
+        EventType::from_str("BreakerStateChanged"),
+        Some(EventType::BreakerStateChanged)
+    );
 
     // Test curated eligibility (circuit breaker events should be curated)
     assert!(EventType::BreakerStateChanged.is_curated_eligible());
@@ -3987,7 +4338,6 @@ fn test_event_type_breaker_state_changed() {
 /// returns the correct checkpoint for each branch.
 #[test]
 fn test_checkpoint_label_lookup_in_branch() {
-
     let temp_dir = TempDir::new().unwrap();
     let capsule_path = temp_dir.path().join("label_lookup.mv2");
 
@@ -4018,7 +4368,9 @@ fn test_checkpoint_label_lookup_in_branch() {
 
     // Switch to a run branch
     let run_branch = BranchId::for_run("test-run");
-    handle.switch_branch(run_branch.clone()).expect("switch to run branch");
+    handle
+        .switch_branch(run_branch.clone())
+        .expect("switch to run branch");
 
     // Create checkpoint on run branch with same label "v1.0"
     handle
@@ -4041,7 +4393,10 @@ fn test_checkpoint_label_lookup_in_branch() {
     let main_lookup = handle.get_checkpoint_by_label_in_branch("v1.0", &BranchId::main());
     let run_lookup = handle.get_checkpoint_by_label_in_branch("v1.0", &run_branch);
 
-    assert!(main_lookup.is_some(), "Should find checkpoint on main branch");
+    assert!(
+        main_lookup.is_some(),
+        "Should find checkpoint on main branch"
+    );
     assert!(run_lookup.is_some(), "Should find checkpoint on run branch");
 
     assert_eq!(
@@ -4062,7 +4417,6 @@ fn test_checkpoint_label_lookup_in_branch() {
 /// from that point in time, not the latest content.
 #[test]
 fn test_asof_resolution_returns_historical_bytes() {
-
     let temp_dir = TempDir::new().unwrap();
     let capsule_path = temp_dir.path().join("asof_bytes.mv2");
 
@@ -4076,7 +4430,9 @@ fn test_asof_resolution_returns_historical_bytes() {
 
     // Switch to run branch for testing
     let run_branch = BranchId::for_run("asof-run");
-    handle.switch_branch(run_branch.clone()).expect("switch branch");
+    handle
+        .switch_branch(run_branch.clone())
+        .expect("switch branch");
 
     // Put artifact with "version1", commit checkpoint 1
     let uri = handle
@@ -4146,7 +4502,6 @@ fn test_asof_resolution_returns_historical_bytes() {
 /// and compared to show differences.
 #[test]
 fn test_diff_between_checkpoints() {
-
     let temp_dir = TempDir::new().unwrap();
     let capsule_path = temp_dir.path().join("diff_test.mv2");
 
@@ -4160,7 +4515,9 @@ fn test_diff_between_checkpoints() {
 
     // Switch to run branch
     let run_branch = BranchId::for_run("diff-run");
-    handle.switch_branch(run_branch.clone()).expect("switch branch");
+    handle
+        .switch_branch(run_branch.clone())
+        .expect("switch branch");
 
     // Create artifact with content A
     let content_a = "line1\nline2\nline3\n";
@@ -4205,7 +4562,10 @@ fn test_diff_between_checkpoints() {
         .expect("get bytes at v2");
 
     // Verify content differs
-    assert_ne!(bytes_a, bytes_b, "Content at different checkpoints should differ");
+    assert_ne!(
+        bytes_a, bytes_b,
+        "Content at different checkpoints should differ"
+    );
 
     // Verify actual content matches expectations
     assert_eq!(
@@ -4290,7 +4650,9 @@ fn test_memory_card_round_trip() {
     );
 
     // Get bytes and deserialize
-    let retrieved_bytes = handle.get_bytes(&uri, None, None).expect("should get bytes");
+    let retrieved_bytes = handle
+        .get_bytes(&uri, None, None)
+        .expect("should get bytes");
     let retrieved_card =
         MemoryCardV1::from_bytes(&retrieved_bytes).expect("should deserialize card");
 
@@ -4417,10 +4779,19 @@ fn test_edge_references_logical_uris_only() {
     let from_uri: LogicalUri = "mv2://test/SPEC/run/card/a".parse().unwrap();
     let to_uri: LogicalUri = "mv2://test/SPEC/run/card/b".parse().unwrap();
 
-    let edge = LogicEdgeV1::new("e1", EdgeType::References, from_uri.clone(), to_uri.clone(), "test");
+    let edge = LogicEdgeV1::new(
+        "e1",
+        EdgeType::References,
+        from_uri.clone(),
+        to_uri.clone(),
+        "test",
+    );
 
     // from_uri and to_uri are LogicalUri type, not String
-    assert!(edge.from_uri.is_valid(), "from_uri should be valid LogicalUri");
+    assert!(
+        edge.from_uri.is_valid(),
+        "from_uri should be valid LogicalUri"
+    );
     assert!(edge.to_uri.is_valid(), "to_uri should be valid LogicalUri");
 
     // Invalid URI should fail to parse

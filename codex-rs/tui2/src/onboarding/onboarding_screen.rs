@@ -12,8 +12,8 @@ use ratatui::style::Color;
 use ratatui::widgets::Clear;
 use ratatui::widgets::WidgetRef;
 
-use codex_protocol::mcp_protocol::AuthMode;
 use codex_protocol::config_types::ForcedLoginMethod;
+use codex_protocol::mcp_protocol::AuthMode;
 
 use crate::LoginStatus;
 use crate::onboarding::auth::AuthModeWidget;

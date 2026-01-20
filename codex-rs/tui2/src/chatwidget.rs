@@ -6,15 +6,28 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::compat::ConfigExt;
+use crate::compat::DEFAULT_PROJECT_DOC_FILENAME;
 use crate::compat::ExecApprovalRequestEventExt;
 use crate::compat::ModelFamilyExt;
 use crate::compat::SandboxPolicyExt;
+use crate::compat::config::ConstraintResult;
 use crate::compat::models_manager::ModelsManager;
-use codex_protocol::mcp_protocol::AuthMode;
+use crate::compat::protocol::DeprecationNoticeEvent;
+use crate::compat::protocol::ExecCommandSource;
+use crate::compat::protocol::ListCustomPromptsResponseEvent;
+use crate::compat::protocol::McpListToolsResponseEvent;
+use crate::compat::protocol::McpStartupCompleteEvent;
+use crate::compat::protocol::McpStartupStatus;
+use crate::compat::protocol::McpStartupUpdateEvent;
+use crate::compat::protocol::TerminalInteractionEvent;
+use crate::compat::protocol::TurnAbortReason;
+use crate::compat::protocol::ViewImageToolCallEvent;
+use crate::compat::skills::SkillMetadata;
 use codex_backend_client::Client as BackendClient;
 use codex_core::config::Config;
 use codex_core::config_types::Notifications;
 use codex_core::model_family::ModelFamily;
+use codex_core::parse_command::ParsedCommand;
 use codex_core::protocol::AgentMessageDeltaEvent;
 use codex_core::protocol::AgentMessageEvent;
 use codex_core::protocol::AgentReasoningDeltaEvent;
@@ -30,6 +43,7 @@ use codex_core::protocol::ExecApprovalRequestEvent;
 use codex_core::protocol::ExecCommandBeginEvent;
 use codex_core::protocol::ExecCommandEndEvent;
 use codex_core::protocol::ExitedReviewModeEvent;
+use codex_core::protocol::InputItem;
 use codex_core::protocol::ListSkillsResponseEvent;
 use codex_core::protocol::McpToolCallBeginEvent;
 use codex_core::protocol::McpToolCallEndEvent;
@@ -43,27 +57,13 @@ use codex_core::protocol::TokenUsageInfo;
 use codex_core::protocol::TurnDiffEvent;
 use codex_core::protocol::UndoCompletedEvent;
 use codex_core::protocol::UndoStartedEvent;
-use codex_protocol::protocol::UserMessageEvent;
 use codex_core::protocol::WebSearchBeginEvent;
-use crate::compat::skills::SkillMetadata;
-use crate::compat::DEFAULT_PROJECT_DOC_FILENAME;
-use crate::compat::config::ConstraintResult;
-use crate::compat::protocol::DeprecationNoticeEvent;
-use crate::compat::protocol::ExecCommandSource;
-use crate::compat::protocol::ListCustomPromptsResponseEvent;
-use crate::compat::protocol::McpListToolsResponseEvent;
-use crate::compat::protocol::McpStartupCompleteEvent;
-use crate::compat::protocol::McpStartupStatus;
-use crate::compat::protocol::McpStartupUpdateEvent;
-use codex_protocol::protocol::RateLimitSnapshot;
-use crate::compat::protocol::TerminalInteractionEvent;
-use crate::compat::protocol::TurnAbortReason;
-use crate::compat::protocol::ViewImageToolCallEvent;
 use codex_protocol::ConversationId;
 use codex_protocol::account::PlanType;
 use codex_protocol::approvals::ElicitationRequestEvent;
-use codex_core::parse_command::ParsedCommand;
-use codex_core::protocol::InputItem;
+use codex_protocol::mcp_protocol::AuthMode;
+use codex_protocol::protocol::RateLimitSnapshot;
+use codex_protocol::protocol::UserMessageEvent;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyEventKind;
@@ -886,7 +886,9 @@ impl ChatWidget {
 
     fn on_web_search_end(&mut self, ev: codex_core::protocol::WebSearchCompleteEvent) {
         self.flush_answer_stream_with_separator();
-        self.add_to_history(history_cell::new_web_search_call(ev.query.unwrap_or_default()));
+        self.add_to_history(history_cell::new_web_search_call(
+            ev.query.unwrap_or_default(),
+        ));
     }
 
     fn on_get_history_entry_response(
@@ -911,7 +913,9 @@ impl ChatWidget {
     }
 
     fn on_deprecation_notice(&mut self, event: DeprecationNoticeEvent) {
-        let DeprecationNoticeEvent { summary, details, .. } = event;
+        let DeprecationNoticeEvent {
+            summary, details, ..
+        } = event;
         self.add_to_history(history_cell::new_deprecation_notice(summary, Some(details)));
         self.request_redraw();
     }
@@ -1741,7 +1745,9 @@ impl ChatWidget {
             }
             // NOTE: RunUserShellCommand doesn't exist in local fork's Op enum
             // self.submit_op(Op::RunUserShellCommand { command: cmd.to_string() });
-            self.add_error_message("User shell commands are not supported in this fork".to_string());
+            self.add_error_message(
+                "User shell commands are not supported in this fork".to_string(),
+            );
             return;
         }
 
@@ -1845,7 +1851,9 @@ impl ChatWidget {
             EventMsg::TokenCount(ev) => {
                 self.set_token_info(ev.info);
                 self.on_rate_limit_snapshot(
-                    ev.rate_limits.as_ref().map(crate::compat::protocol::convert_rate_limit_snapshot)
+                    ev.rate_limits
+                        .as_ref()
+                        .map(crate::compat::protocol::convert_rate_limit_snapshot),
                 );
             }
             // NOTE: Warning doesn't exist in local fork - using Error instead
@@ -2170,7 +2178,9 @@ impl ChatWidget {
                 approval_policy: None,
                 sandbox_policy: None,
                 model: Some(switch_model.clone()),
-                effort: Some(Some(crate::compat::convert_reasoning_effort(default_effort))),
+                effort: Some(Some(crate::compat::convert_reasoning_effort(
+                    default_effort,
+                ))),
                 summary: None,
             }));
             tx.send(AppEvent::UpdateModel(switch_model.clone()));
@@ -2474,7 +2484,9 @@ impl ChatWidget {
         let model_slug = preset.model.to_string();
         let is_current_model = self.model_family.get_model_slug() == preset.model;
         let highlight_choice = if is_current_model {
-            Some(crate::compat::convert_reasoning_effort_to_protocol(self.config.model_reasoning_effort))
+            Some(crate::compat::convert_reasoning_effort_to_protocol(
+                self.config.model_reasoning_effort,
+            ))
         } else {
             default_choice
         };

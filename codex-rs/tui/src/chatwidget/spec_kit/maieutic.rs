@@ -7,7 +7,7 @@
 //! - D130: Maieutic step is mandatory for every run/spec before automation begins (fast path allowed)
 //! - D131: Persistence follows capture mode; `capture=none` runs in-memory only
 //! - D132: Ship milestones hard-fail if required explainability artifacts are missing
-//! - D133: Headless requires pre-supplied input (handled by later PR)
+//! - D133: Headless requires pre-supplied input via --maieutic <path> or --maieutic-answers <json>
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -493,6 +493,138 @@ pub fn has_maieutic_completed(spec_id: &str, run_id: &str, cwd: &std::path::Path
             })
         })
         .unwrap_or(false)
+}
+
+// =============================================================================
+// HEADLESS MAIEUTIC INPUT (SPEC-KIT-920)
+// =============================================================================
+
+/// Source of maieutic input for headless execution
+#[derive(Debug, Clone)]
+pub enum MaieuticSource {
+    /// Loaded from file path (JSON or Markdown)
+    File(PathBuf),
+    /// Inline JSON from CLI flag
+    InlineJson,
+    /// Interactive modal (TUI only)
+    Interactive,
+}
+
+/// Format of maieutic file
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MaieuticFormat {
+    Json,
+    Markdown,
+    Unknown,
+}
+
+/// Detect maieutic file format from path extension and content
+fn detect_maieutic_format(path: &std::path::Path, content: &str) -> MaieuticFormat {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some("json") => MaieuticFormat::Json,
+        Some("md") | Some("markdown") => MaieuticFormat::Markdown,
+        _ => {
+            // Content sniffing: if starts with '{', treat as JSON
+            if content.trim_start().starts_with('{') {
+                MaieuticFormat::Json
+            } else if content.trim_start().starts_with("---") || content.contains("goal:") {
+                MaieuticFormat::Markdown
+            } else {
+                MaieuticFormat::Unknown
+            }
+        }
+    }
+}
+
+/// Load maieutic spec from file (JSON or Markdown)
+///
+/// Supports both formats:
+/// - JSON: Direct MaieuticSpec serialization
+/// - Markdown: YAML frontmatter with maieutic fields
+pub fn load_maieutic_from_file(path: &std::path::Path) -> Result<MaieuticSpec> {
+    let content = std::fs::read_to_string(path).map_err(|e| {
+        SpecKitError::from_string(format!("Failed to read maieutic file '{}': {}", path.display(), e))
+    })?;
+
+    let format = detect_maieutic_format(path, &content);
+    match format {
+        MaieuticFormat::Json => load_maieutic_from_json(&content),
+        MaieuticFormat::Markdown => load_maieutic_from_markdown(&content),
+        MaieuticFormat::Unknown => Err(SpecKitError::from_string(format!(
+            "Unknown maieutic file format for '{}' (expected .json or .md)",
+            path.display()
+        ))),
+    }
+}
+
+/// Load maieutic spec from inline JSON string
+pub fn load_maieutic_from_json(json: &str) -> Result<MaieuticSpec> {
+    serde_json::from_str(json).map_err(|e| {
+        SpecKitError::from_string(format!("Invalid maieutic JSON: {}", e))
+    })
+}
+
+/// Load maieutic spec from Markdown with YAML frontmatter
+///
+/// Supports format:
+/// ```markdown
+/// ---
+/// spec_id: SPEC-TEST-001
+/// run_id: run-123
+/// goal: "Implement feature X"
+/// constraints: ["No API changes"]
+/// acceptance: ["All tests pass"]
+/// risks: []
+/// delegation: "B"
+/// ---
+/// ```
+fn load_maieutic_from_markdown(content: &str) -> Result<MaieuticSpec> {
+    // Extract YAML frontmatter between --- markers
+    let trimmed = content.trim_start();
+    if !trimmed.starts_with("---") {
+        return Err(SpecKitError::from_string(
+            "Maieutic markdown must start with YAML frontmatter (---)"
+        ));
+    }
+
+    let after_first = &trimmed[3..];
+    let end_marker = after_first.find("---").ok_or_else(|| {
+        SpecKitError::from_string("Maieutic markdown missing closing frontmatter marker (---)")
+    })?;
+
+    let yaml_content = &after_first[..end_marker].trim();
+
+    // Parse YAML frontmatter as a simple key-value structure
+    let parsed: MaieuticYamlFrontmatter = serde_yaml::from_str(yaml_content).map_err(|e| {
+        SpecKitError::from_string(format!("Invalid maieutic YAML frontmatter: {}", e))
+    })?;
+
+    // Convert to MaieuticSpec
+    let delegation_bounds = DelegationBounds::from_answer(&parsed.delegation.unwrap_or_default());
+
+    Ok(MaieuticSpec::new(
+        parsed.spec_id.unwrap_or_else(|| "SPEC-HEADLESS".to_string()),
+        parsed.run_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+        parsed.goal.unwrap_or_else(|| "Not specified".to_string()),
+        parsed.constraints.unwrap_or_default(),
+        parsed.acceptance.unwrap_or_else(|| vec!["All tests pass".to_string()]),
+        parsed.risks.unwrap_or_default(),
+        delegation_bounds,
+        ElicitationMode::PreSupplied,
+        0, // duration_ms not applicable for pre-supplied
+    ))
+}
+
+/// YAML frontmatter structure for maieutic markdown files
+#[derive(Debug, Deserialize)]
+struct MaieuticYamlFrontmatter {
+    spec_id: Option<String>,
+    run_id: Option<String>,
+    goal: Option<String>,
+    constraints: Option<Vec<String>>,
+    acceptance: Option<Vec<String>>,
+    risks: Option<Vec<String>>,
+    delegation: Option<String>,
 }
 
 #[cfg(test)]

@@ -5,7 +5,6 @@
 //!
 //! MAINT-2: Extracted from handler.rs (925 LOC) for maintainability
 
-
 use super::super::ChatWidget;
 use super::ace_learning::{ExecutionFeedback, send_learning_feedback_sync};
 use super::ace_orchestrator;
@@ -1221,7 +1220,7 @@ pub(super) fn execute_quality_checkpoint(
                     checkpoint.name()
                 )),
                 ratatui::text::Line::from(
-                    "Multi-agent consensus is forbidden. Use single agent (critic sidecar) only."
+                    "Multi-agent consensus is forbidden. Use single agent (critic sidecar) only.",
                 ),
             ],
             crate::history_cell::HistoryCellType::Error,

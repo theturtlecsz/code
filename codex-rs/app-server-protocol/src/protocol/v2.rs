@@ -528,7 +528,10 @@ impl SandboxPolicy {
                 exclude_tmpdir_env_var,
                 exclude_slash_tmp,
             } => codex_protocol::protocol::SandboxPolicy::WorkspaceWrite {
-                writable_roots: writable_roots.iter().map(|p| p.as_path().to_path_buf()).collect(),
+                writable_roots: writable_roots
+                    .iter()
+                    .map(|p| p.as_path().to_path_buf())
+                    .collect(),
                 network_access: *network_access,
                 exclude_tmpdir_env_var: *exclude_tmpdir_env_var,
                 exclude_slash_tmp: *exclude_slash_tmp,

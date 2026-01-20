@@ -16,9 +16,9 @@
 //! - `full`: Emit complete content (NOT export-safe)
 
 use crate::memvid_adapter::{
-    BranchId, CapsuleHandle, LLMCaptureMode, ModelCallEnvelopePayload,
-    PatchApplyPayload, RetrievalRequestPayload, RetrievalResponsePayload, RoutingMode,
-    ToolCallPayload, ToolResultPayload, GateDecisionPayload, ErrorEventPayload, ErrorSeverity,
+    BranchId, CapsuleHandle, ErrorEventPayload, ErrorSeverity, GateDecisionPayload, LLMCaptureMode,
+    ModelCallEnvelopePayload, PatchApplyPayload, RetrievalRequestPayload, RetrievalResponsePayload,
+    RoutingMode, ToolCallPayload, ToolResultPayload,
 };
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
@@ -131,13 +131,14 @@ impl AuditEventEmitter {
             role: self.context.current_role.clone(),
         };
 
-        match self.capsule.emit_tool_call(
-            &self.context.spec_id,
-            &self.context.run_id,
-            &payload,
-        ) {
+        match self
+            .capsule
+            .emit_tool_call(&self.context.spec_id, &self.context.run_id, &payload)
+        {
             Ok(uri) => debug!(uri = %uri, tool = %tool_name, "Emitted ToolCall event"),
-            Err(e) => warn!(tool = %tool_name, error = %e, "Failed to emit ToolCall event (best-effort)"),
+            Err(e) => {
+                warn!(tool = %tool_name, error = %e, "Failed to emit ToolCall event (best-effort)")
+            }
         }
 
         call_id
@@ -171,7 +172,9 @@ impl AuditEventEmitter {
             &payload,
         ) {
             Ok(uri) => debug!(uri = %uri, tool = %tool_name, success, "Emitted ToolResult event"),
-            Err(e) => warn!(tool = %tool_name, error = %e, "Failed to emit ToolResult event (best-effort)"),
+            Err(e) => {
+                warn!(tool = %tool_name, error = %e, "Failed to emit ToolResult event (best-effort)")
+            }
         }
     }
 
@@ -204,7 +207,9 @@ impl AuditEventEmitter {
             &payload,
         ) {
             Ok(uri) => debug!(uri = %uri, source, "Emitted RetrievalRequest event"),
-            Err(e) => warn!(source, error = %e, "Failed to emit RetrievalRequest event (best-effort)"),
+            Err(e) => {
+                warn!(source, error = %e, "Failed to emit RetrievalRequest event (best-effort)")
+            }
         }
 
         request_id
@@ -237,7 +242,9 @@ impl AuditEventEmitter {
             &payload,
         ) {
             Ok(uri) => debug!(uri = %uri, request_id, "Emitted RetrievalResponse event"),
-            Err(e) => warn!(request_id, error = %e, "Failed to emit RetrievalResponse event (best-effort)"),
+            Err(e) => {
+                warn!(request_id, error = %e, "Failed to emit RetrievalResponse event (best-effort)")
+            }
         }
     }
 
@@ -270,12 +277,13 @@ impl AuditEventEmitter {
             error,
         };
 
-        match self.capsule.emit_patch_apply(
-            &self.context.spec_id,
-            &self.context.run_id,
-            &payload,
-        ) {
-            Ok(uri) => debug!(uri = %uri, file_path, patch_type, success, "Emitted PatchApply event"),
+        match self
+            .capsule
+            .emit_patch_apply(&self.context.spec_id, &self.context.run_id, &payload)
+        {
+            Ok(uri) => {
+                debug!(uri = %uri, file_path, patch_type, success, "Emitted PatchApply event")
+            }
             Err(e) => warn!(file_path, error = %e, "Failed to emit PatchApply event (best-effort)"),
         }
     }
@@ -365,7 +373,9 @@ impl AuditEventEmitter {
                 capture = %self.context.capture_mode.as_str(),
                 "Emitted ModelCallEnvelope event"
             ),
-            Err(e) => warn!(model, error = %e, "Failed to emit ModelCallEnvelope event (best-effort)"),
+            Err(e) => {
+                warn!(model, error = %e, "Failed to emit ModelCallEnvelope event (best-effort)")
+            }
         }
     }
 
@@ -375,13 +385,16 @@ impl AuditEventEmitter {
 
     /// Emit a gate decision event.
     pub fn emit_gate_decision(&self, payload: &GateDecisionPayload) {
-        match self.capsule.emit_gate_decision(
-            &self.context.spec_id,
-            &self.context.run_id,
-            payload,
-        ) {
-            Ok(uri) => debug!(uri = %uri, gate = %payload.gate_name, outcome = %payload.outcome.as_str(), "Emitted GateDecision event"),
-            Err(e) => warn!(gate = %payload.gate_name, error = %e, "Failed to emit GateDecision event (best-effort)"),
+        match self
+            .capsule
+            .emit_gate_decision(&self.context.spec_id, &self.context.run_id, payload)
+        {
+            Ok(uri) => {
+                debug!(uri = %uri, gate = %payload.gate_name, outcome = %payload.outcome.as_str(), "Emitted GateDecision event")
+            }
+            Err(e) => {
+                warn!(gate = %payload.gate_name, error = %e, "Failed to emit GateDecision event (best-effort)")
+            }
         }
     }
 
@@ -405,12 +418,13 @@ impl AuditEventEmitter {
             recoverable,
         };
 
-        match self.capsule.emit_error_event(
-            &self.context.spec_id,
-            &self.context.run_id,
-            &payload,
-        ) {
-            Ok(uri) => debug!(uri = %uri, error_code, severity = %severity.as_str(), "Emitted ErrorEvent"),
+        match self
+            .capsule
+            .emit_error_event(&self.context.spec_id, &self.context.run_id, &payload)
+        {
+            Ok(uri) => {
+                debug!(uri = %uri, error_code, severity = %severity.as_str(), "Emitted ErrorEvent")
+            }
             Err(e) => warn!(error_code, error = %e, "Failed to emit ErrorEvent (best-effort)"),
         }
     }
