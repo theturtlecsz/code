@@ -1,8 +1,8 @@
 # DECISION_REGISTER.md - Locked Decisions
 
-**Version:** 1.1
-**Last Updated:** 2026-01-19
-**Total Decisions:** D1-D112 (all LOCKED)
+**Version:** 1.2
+**Last Updated:** 2026-01-20
+**Total Decisions:** D1-D134 (all LOCKED)
 
 ---
 
@@ -144,11 +144,54 @@
 
 ---
 
+## Parity & Retention Decisions (D113-D121)
+
+| ID | Decision | Status | Source |
+|----|----------|--------|--------|
+| D113 | Tiered parity: Tier 1 (automation-critical) = full parity; Tier 2 (visualization) = TUI-first | LOCKED | A2 |
+| D114 | Events + immutable artifacts are authoritative SOR; projections are rebuildable | LOCKED | B1 |
+| D115 | Lazy snapshots deferred until measured latency exceeds thresholds | LOCKED | B1 |
+| D116 | Hybrid retention: TTL for routine events, milestone protection for ship points | LOCKED | B2 |
+| D117 | Milestone markers: SpecCompleted, ReleaseTagged, MilestoneMarked, Stage 6 completion | LOCKED | B2 |
+| D118 | Default TTL: 90 days; milestone protection: 1 year minimum; configurable via policy | LOCKED | B2 |
+| D119 | Over-capture is always hard-blocked immediately (Tier 1 absolute) | LOCKED | C1 |
+| D120 | Under-capture warned during work, blocked at checkpoint until resolved/acknowledged | LOCKED | C1 |
+| D121 | Capture gap acknowledgments create auditable CaptureGapAcknowledged events | LOCKED | C1 |
+
+---
+
+## Pipeline & Enforcement Decisions (D122-D126)
+
+| ID | Decision | Status | Source |
+|----|----------|--------|--------|
+| D122 | Pipeline architecture remains monolithic; extensibility via internal trait seams only (no dynamic plugins; actor model rejected) | LOCKED | D1 |
+| D123 | Quality gates are blocking-with-override; overrides must emit GateDecision event and are disallowed/discouraged at protected milestones unless explicitly acknowledged | LOCKED | D2 |
+| D124 | Capture mode defaults are policy-derived; default policy template uses `prompts_only` for solo dev; `full_io` is explicit opt-in | LOCKED | C2 |
+| D125 | Enforcement tiers: "policy sovereignty" violations (over-capture, non-logical URIs, SOR violations, merge invariants) are Tier 1 absolute hard-fail | LOCKED | E2 |
+| D126 | Maintenance framework uses tiered triggers; Health Check is the first job family to implement | LOCKED | F1, F2 |
+
+---
+
+## ACE + Maieutics Decisions (D127-D134)
+
+| ID | Decision | Status | Source |
+|----|----------|--------|--------|
+| D127 | Consensus model replaced by ACE Frames (action/control explanations + learning) + Maieutic Specs (pre-execution clarification); multi-model voting deprecated | LOCKED | H0 |
+| D128 | ACE explanation scope is tiered: Tier 1 (mandatory for failures/overrides/policy), Tier 2 (stage/checkpoint/ship boundaries), Tier 3 (selective per `should_reflect`), Tier 4 (on-demand), Tier 5 (event-only for routine) | LOCKED | H1 |
+| D129 | Control model uses tiered autonomy: Tier 0-1 (auto), Tier 2 (checkpoint approval), Tier 3 (explicit approval), Tier 4 (human-only); delegation defined by Maieutic Spec; tier crossing requires explicit escalation | LOCKED | H2 |
+| D130 | Maieutic elicitation step is mandatory for every run/spec before automation begins (fast path allowed; no exceptions) | LOCKED | H3 |
+| D131 | Persistence of Maieutic Spec + ACE frames follows capture mode; `capture=none` persists no explainability artifacts (in-memory guidance still runs) | LOCKED | H4 |
+| D132 | Ship milestones hard-fail if required explainability artifacts are missing; `capture=none` is non-shippable (no override, Tier 1 absolute) | LOCKED | H5 |
+| D133 | A2-aligned parity for ACE/Maieutics: Tier 1 (artifacts, gating, exit codes) = full parity TUI/CLI/headless via shared executor; Tier 2 UX = TUI-first with degraded CLI and non-interactive headless (pre-supplied answers required) | LOCKED | H6 |
+| D134 | ACE Frame schema is a published, versioned JSON Schema generated from Rust structs via schemars; schema version embedded in every ACE Frame; breaking changes = new schema version | LOCKED | H7 |
+
+---
+
 ## Adding New Decisions
 
 New decisions should:
-1. Get the next available ID (D113+)
-2. Reference the implementing SPEC
+1. Get the next available ID (D135+)
+2. Reference the implementing SPEC or ARB source question
 3. Be marked ACTIVE until implementation complete
 4. Be marked LOCKED once implementation merged
 
