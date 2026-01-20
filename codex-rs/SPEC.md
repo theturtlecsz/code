@@ -1,7 +1,7 @@
 # SPEC.md - Codex-RS / Spec-Kit Task Tracking
 
 **Version:** V6 Docs Contract
-**Last Updated:** 2026-01-19
+**Last Updated:** 2026-01-20
 
 ---
 
@@ -11,7 +11,7 @@ When resolving conflicts or ambiguity, documents take precedence in this order:
 
 1. **SPEC.md** (this file) - Task tracking, invariants, current state
 2. **docs/PROGRAM_2026Q1_ACTIVE.md** - Active program DAG and phase gates
-3. **docs/DECISION_REGISTER.md** - Locked decisions D1-D112+
+3. **docs/DECISION_REGISTER.md** - Locked decisions D1-D134
 4. **HANDOFF.md** - Session continuation context
 5. **Individual SPEC-* directories** - Feature specifications
 
@@ -61,6 +61,22 @@ These invariants MUST NOT be violated:
 - **Offline replay is exact for retrieval + events** - Timeline deterministic
 - **LLM I/O depends on capture mode** - Controlled by PolicySnapshot settings
 - **Capture modes** - `none | prompts_only | full_io`
+
+### Explainability Artifacts (D127-D134)
+- **ACE Frames + Maieutic Specs are canonical** - Consensus artifacts deprecated (D127)
+- **Maieutic step is mandatory pre-execution** - Fast path allowed, no skip (D130)
+- **Capture mode controls persistence** - `capture=none` runs in-memory only (D131)
+- **Ship requires persisted artifacts** - `capture=none` cannot ship (D132)
+
+### Headless Behavior (D133)
+- **Headless requires maieutic input** - `--maieutic <path>` or `--maieutic-answers <json>`
+- **Headless never prompts** - Hard assertion; no interactive codepath in headless
+- **Exit codes for blocking states** - NEEDS_INPUT, NEEDS_APPROVAL, BLOCKED_SHIP
+
+### Schema Versioning (D134)
+- **ACE Frame schema is generated** - Via schemars from Rust structs
+- **Schema version embedded** - Every ACE Frame includes `schema_version` field
+- **Breaking changes = new version** - Never mutate released schema
 
 ---
 

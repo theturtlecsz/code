@@ -1,8 +1,8 @@
-# Decision Register v0.12 (Memvid + Model Policy)
+# Decision Register v0.13 (Memvid + Model Policy + ACE/Maieutics)
 
-- **Date:** 2026-01-09
-- **Scope:** Codex-RS / Spec-Kit — Memvid-first workbench + model policy + evaluation + governance.
-- **Status:** Locked decisions D1–D112 (with mapping pending where noted).
+- **Date:** 2026-01-20
+- **Scope:** Codex-RS / Spec-Kit — Memvid-first workbench + model policy + evaluation + governance + explainability.
+- **Status:** Locked decisions D1–D134.
 
 ---
 
@@ -142,3 +142,62 @@
 | D110 | A | Local reflex **backup** model = Qwen3-Coder-30B-A3B (AWQ/GPTQ) | Clarification: Primary always-on reflex remains **GPT-OSS-20B** (see D43). Standardize Qwen3-A3B as the fallback/bakeoff candidate when GPT-OSS underperforms on repo-specific Rust/code. |
 | D111 | B | Local inference server default = Option B (SGLang now; vLLM fallback) | We implement SGLang first for radix/prefix caching + schema decoding; keep vLLM as fallback for stability. (Assumption: mapping) |
 | D112 | B | Reflex promotion gate = Option B (Bakeoff required) | Local reflex routing is enabled only after Rust-Reflex-Bench passes TTFT/TPS + JSON validity + cargo check metrics. (Assumption: mapping) |
+
+---
+
+## ARB Pass 2 Decisions (D113–D134)
+
+> **Source:** [ARCHITECT_REVIEW_BOARD_OUTPUT.md](../ARCHITECT_REVIEW_BOARD_OUTPUT.md) — Sessions 8-10
+> **Locked:** 2026-01-19
+
+### Product & Parity (A1-A2)
+
+| ID | Source | Decision | Notes |
+|---:|:------:|----------|-------|
+| D113 | A2 | Tiered parity: Tier 1 = full parity; Tier 2 = TUI-first | Core automation features (artifacts, gating, exit codes) = full parity TUI/CLI/headless; visualization = TUI-first with CLI fallback |
+
+### Evidence Store (B1-B2)
+
+| ID | Source | Decision | Notes |
+|---:|:------:|----------|-------|
+| D114 | B1 | Events + immutable artifacts are authoritative SOR | Projections are rebuildable; events are truth |
+| D115 | B1 | Lazy snapshots deferred | Until measured latency exceeds thresholds |
+| D116 | B2 | Hybrid retention: TTL + milestone protection | Routine events TTL; ship points protected |
+| D117 | B2 | Milestone markers defined | SpecCompleted, ReleaseTagged, MilestoneMarked, Stage 6 completion |
+| D118 | B2 | Default TTL: 90 days; milestone: 1 year | Configurable via policy |
+
+### Capture Mode (C1-C2)
+
+| ID | Source | Decision | Notes |
+|---:|:------:|----------|-------|
+| D119 | C1 | Over-capture is always hard-blocked | Tier 1 absolute — storing more than policy permits is never acceptable |
+| D120 | C1 | Under-capture warned, blocked at checkpoint | Must be resolved or acknowledged with auditable record |
+| D121 | C1 | Capture gap acknowledgments auditable | Creates `CaptureGapAcknowledged` event |
+| D124 | C2 | Capture mode defaults are policy-derived | Template uses `prompts_only`; `full_io` is explicit opt-in |
+
+### Pipeline & Gates (D1-D2, E1-E2)
+
+| ID | Source | Decision | Notes |
+|---:|:------:|----------|-------|
+| D122 | D1 | Monolith with internal seams | No dynamic plugins; no actor model; 8 fixed stages |
+| D123 | D2 | Blocking-with-override gates | Overrides emit GateDecision event; discouraged at ship |
+| D125 | E2 | Policy sovereignty = Tier 1 absolute | Over-capture, non-logical URIs, SOR violations, merge invariants |
+
+### Maintenance (F1-F2)
+
+| ID | Source | Decision | Notes |
+|---:|:------:|----------|-------|
+| D126 | F1/F2 | Tiered maintenance; Health Check first | Event + scheduled + on-demand triggers; no permanent daemon |
+
+### ACE + Maieutics (H0-H7)
+
+| ID | Source | Decision | Notes |
+|---:|:------:|----------|-------|
+| D127 | H0 | ACE Frames + Maieutic Specs replace consensus | Multi-model voting deprecated; two canonical explainability artifacts |
+| D128 | H1 | ACE explanation scope is tiered | Tier 1 (mandatory): failures/overrides/policy; Tier 2: boundaries; Tier 3: selective; Tier 4: on-demand; Tier 5: event-only |
+| D129 | H2 | Tiered autonomy with delegation | Tier 0-1 (auto), Tier 2 (checkpoint), Tier 3 (explicit), Tier 4 (human-only) |
+| D130 | H3 | Maieutic step always mandatory | Fast path allowed; no exceptions; must complete before automation |
+| D131 | H4 | Explainability follows capture mode | `capture=none` persists no artifacts (in-memory guidance still runs) |
+| D132 | H5 | Ship hard-fail without artifacts | `capture=none` is non-shippable (Tier 1 absolute) |
+| D133 | H6 | A2-aligned multi-surface parity | Tier 1 via shared executor; headless requires `--maieutic`/`--maieutic-answers`; headless never prompts |
+| D134 | H7 | ACE Frame schema generated + versioned | `#[derive(JsonSchema)]` via schemars; `schema_version` embedded; immutable once released |
