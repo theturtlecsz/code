@@ -9,7 +9,7 @@
 ## Program Vision
 
 Transform Codex-RS/Spec-Kit into a Memvid-first, auditable workbench with:
-- Locked decisions (D1-D112+)
+- Locked decisions (D1-D134)
 - V6 docs contract
 - Hybrid retrieval (lexical + semantic)
 - Full replay determinism
@@ -112,4 +112,4 @@ Transform Codex-RS/Spec-Kit into a Memvid-first, auditable workbench with:
 
 ---
 
-*Updated: 2026-01-19*
+*Updated: 2026-01-20*

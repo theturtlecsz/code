@@ -364,8 +364,8 @@ All H0-H7 decisions locked. Phase 2 complete.
 | **Quality** | Q.3 | Escalation paths | - | escalation_tests | ✅ |
 | **Evidence** | E.1 | Artifact lifecycle | #2 | S01-S03 | ✅ |
 | **Evidence** | E.2 | 50MB enforcement | SPEC-909 | limit_tests | ⚠️ Partial |
-| **Evidence** | E.3 | Archival (>30 days) | SPEC-909 | - | ❌ **GAP** |
-| **Evidence** | E.4 | Integrity (SHA256) | - | - | ❌ **GAP** |
+| **Evidence** | E.3 | Archival (>30 days) | SPEC-909 | evidence_archival_tests | ✅ |
+| **Evidence** | E.4 | Integrity (SHA256) | - | evidence_integrity_tests | ✅ |
 | **State** | S.1 | Persistence | #2 | S04-S06 | ✅ |
 | **State** | S.2 | Recovery | - | E02-E05 | ✅ |
 | **State** | S.3 | Concurrency | - | C01-C10 | ✅ |
@@ -375,8 +375,7 @@ All H0-H7 decisions locked. Phase 2 complete.
 | **Cross-cutting** | X.4 | Configuration | - | config_tests | ✅ |
 
 **Priority Actions:**
-1. Add E.3 archival tests (evidence >30 days behavior)
-2. Add E.4 integrity tests (SHA256 verification on restore)
+1. (none - E.3/E.4 gaps closed, tests implemented in evidence_archival_tests.rs and evidence_integrity_tests.rs)
 
 ---
 

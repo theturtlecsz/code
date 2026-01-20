@@ -38,7 +38,7 @@ REPO_ROOT = Path(__file__).parent.parent
 REQUIRED_FILES = {
     "SPEC.md": "Root task tracking and docs contract",
     "docs/PROGRAM_2026Q1_ACTIVE.md": "Active program DAG and phase gates",
-    "docs/DECISION_REGISTER.md": "Locked decisions D1-D112+",
+    "docs/DECISION_REGISTER.md": "Locked decisions D1-D134",
     "docs/MODEL-POLICY.md": "Human-readable model policy rationale",
     "model_policy.toml": "Machine-authoritative model policy config",
 }
