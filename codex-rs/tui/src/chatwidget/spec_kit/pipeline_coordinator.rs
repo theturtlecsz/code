@@ -25,7 +25,7 @@ use super::validation_lifecycle::{
 };
 use crate::history_cell::HistoryCellType;
 use crate::memvid_adapter::{
-    BranchId, CapsuleHandle, default_capsule_config, policy_capture,
+    BranchId, CapsuleHandle, LLMCaptureMode, default_capsule_config, policy_capture,
 };
 use crate::slash_command::{HalMode, SlashCommand};
 use crate::spec_prompts::SpecStage;
@@ -107,7 +107,9 @@ pub fn handle_spec_auto(
     }
 
     // SPEC-948: Load pipeline configuration with 3-tier precedence
-    let pipeline_config = match PipelineConfig::load(&spec_id, cli_overrides) {
+    // Clone cli_overrides before consuming it, as we need it for maieutic resume
+    let cli_overrides_for_load = cli_overrides.clone();
+    let pipeline_config = match PipelineConfig::load(&spec_id, cli_overrides_for_load) {
         Ok(config) => config,
         Err(err) => {
             widget.history_push(crate::history_cell::new_error_event(format!(
@@ -144,6 +146,23 @@ pub fn handle_spec_auto(
     // P92: Now returns bool - Block mode can abort pipeline
     if !run_constitution_readiness_gate(widget) {
         // Gate blocked execution - abort pipeline
+        return;
+    }
+
+    // P93/D130: Mandatory Maieutic Elicitation Gate
+    // Run AFTER constitution gate, BEFORE Stage0 execution
+    // If maieutic needs elicitation, shows modal and returns false (pipeline pauses)
+    // When modal completes, MaieuticSubmitted event resumes via resume_pipeline_after_maieutic()
+    if !run_maieutic_gate(
+        widget,
+        &spec_id,
+        &goal,
+        resume_from,
+        hal_mode,
+        cli_overrides.clone(),
+        stage0_config.clone(),
+    ) {
+        // Modal opened, pipeline paused - will resume via MaieuticSubmitted event
         return;
     }
 
@@ -332,7 +351,9 @@ pub fn handle_spec_auto(
             // S33 FIX: Start commit animation so on_commit_tick polls for Stage0 result
             // Without this, poll_stage0_pending is never called because CommitTick
             // events are only generated during streaming responses.
-            widget.app_event_tx.send(crate::app_event::AppEvent::StartCommitAnimation);
+            widget
+                .app_event_tx
+                .send(crate::app_event::AppEvent::StartCommitAnimation);
 
             // Set phase to Stage0Pending and store state
             state.phase = super::state::SpecAutoPhase::Stage0Pending {
@@ -343,7 +364,9 @@ pub fn handle_spec_auto(
 
             // Show status message
             widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                vec![ratatui::text::Line::from("⚙️  Stage 0: Starting (background)...")],
+                vec![ratatui::text::Line::from(
+                    "⚙️  Stage 0: Starting (background)...",
+                )],
                 crate::history_cell::HistoryCellType::Notice,
             ));
 
@@ -447,7 +470,9 @@ pub fn process_stage0_result(
     spec_id: String,
 ) {
     // S33 FIX: Stop the commit animation that was started for Stage0 polling
-    widget.app_event_tx.send(crate::app_event::AppEvent::StopCommitAnimation);
+    widget
+        .app_event_tx
+        .send(crate::app_event::AppEvent::StopCommitAnimation);
 
     // FILE-BASED TRACE: After Stage0 execution
     {
@@ -486,10 +511,7 @@ pub fn process_stage0_result(
             } else {
                 "Tier2 ✗".to_string()
             };
-            format!(
-                "Stage0 complete: {}ms | {}",
-                result.duration_ms, tier2_info
-            )
+            format!("Stage0 complete: {}ms | {}", result.duration_ms, tier2_info)
         } else if let Some(ref reason) = result.skip_reason {
             format!("Stage0 skipped: {}", reason)
         } else {
@@ -1114,7 +1136,9 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
                 }
 
                 // SPEC-KIT-920: Signal automation success for exit code
-                widget.app_event_tx.send(crate::app_event::AppEvent::AutomationSuccess);
+                widget
+                    .app_event_tx
+                    .send(crate::app_event::AppEvent::AutomationSuccess);
 
                 // Successful completion - clear state without cancellation event
                 widget.spec_auto_state = None;
@@ -2375,10 +2399,7 @@ fn record_stage_skip(spec_id: &str, stage: SpecStage, reason: &str) -> Result<()
     });
 
     // Evidence directory path (dynamic based on spec_id)
-    let evidence_dir = super::evidence::evidence_base_for_spec(
-        std::path::Path::new("."),
-        spec_id,
-    );
+    let evidence_dir = super::evidence::evidence_base_for_spec(std::path::Path::new("."), spec_id);
     fs::create_dir_all(&evidence_dir)
         .map_err(|e| format!("Failed to create evidence directory: {}", e))?;
 
@@ -2496,4 +2517,431 @@ pub fn run_constitution_readiness_gate(widget: &mut ChatWidget) -> bool {
 
     tracing::warn!("Constitution readiness gate: {} warning(s)", warnings.len());
     true
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P93/D130: Maieutic Elicitation Gate
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Pending maieutic state - stored when maieutic modal is shown
+#[derive(Debug, Clone)]
+pub struct PendingMaieutic {
+    pub spec_id: String,
+    pub goal: String,
+    pub resume_from: SpecStage,
+    pub hal_mode: Option<HalMode>,
+    pub cli_overrides: Option<PipelineOverrides>,
+    pub stage0_config: super::stage0_integration::Stage0ExecutionConfig,
+    pub started_at: std::time::Instant,
+    /// Capture mode from Stage0 policy (D131: persistence follows capture mode)
+    pub capture_mode: LLMCaptureMode,
+}
+
+/// Run the mandatory maieutic elicitation gate (D130)
+///
+/// Checks if maieutic elicitation is needed and shows the modal if so.
+/// Returns true if maieutic is complete (continue pipeline), false if modal shown (pause pipeline).
+///
+/// # Arguments
+/// * `widget` - ChatWidget
+/// * `spec_id` - SPEC ID
+/// * `goal` - Goal description
+/// * `resume_from` - Stage to resume from
+/// * `hal_mode` - HAL mode setting
+/// * `cli_overrides` - CLI overrides for pipeline config
+/// * `stage0_config` - Stage 0 execution config
+fn run_maieutic_gate(
+    widget: &mut ChatWidget,
+    spec_id: &str,
+    goal: &str,
+    resume_from: SpecStage,
+    hal_mode: Option<HalMode>,
+    cli_overrides: Option<PipelineOverrides>,
+    stage0_config: super::stage0_integration::Stage0ExecutionConfig,
+) -> bool {
+    // D133: Check for pre-supplied maieutic (headless mode - future PR)
+    // For now, always require interactive elicitation
+
+    // Check if maieutic was already completed (e.g., from previous aborted run)
+    if super::maieutic::has_maieutic_completed(spec_id, "", &widget.config.cwd) {
+        tracing::info!(
+            spec_id = %spec_id,
+            "Maieutic elicitation: Previously completed, skipping"
+        );
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![ratatui::text::Line::from(
+                "⚡ Maieutic: Using previous elicitation",
+            )],
+            HistoryCellType::Notice,
+        ));
+        return true; // Continue pipeline
+    }
+
+    // D131: Load capture mode from governance policy for maieutic persistence
+    let capture_mode = codex_stage0::GovernancePolicy::load(None)
+        .ok()
+        .and_then(|gov| LLMCaptureMode::from_str(&gov.capture.mode))
+        .unwrap_or(LLMCaptureMode::PromptsOnly);
+
+    // Store pending maieutic state for resumption after modal completes
+    widget.pending_maieutic = Some(PendingMaieutic {
+        spec_id: spec_id.to_string(),
+        goal: goal.to_string(),
+        resume_from,
+        hal_mode,
+        cli_overrides,
+        stage0_config,
+        started_at: std::time::Instant::now(),
+        capture_mode,
+    });
+
+    // Show maieutic modal
+    tracing::info!(
+        spec_id = %spec_id,
+        "Maieutic elicitation: Showing modal"
+    );
+
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+        vec![ratatui::text::Line::from(
+            "📋 Maieutic: Pre-flight clarification required",
+        )],
+        HistoryCellType::Notice,
+    ));
+
+    // Get questions and show modal
+    let questions = super::maieutic::default_fast_path_questions();
+    widget.show_maieutic_modal(spec_id.to_string(), questions);
+
+    false // Pause pipeline - will resume via MaieuticSubmitted event
+}
+
+/// Resume pipeline after maieutic elicitation completes
+///
+/// Called when MaieuticSubmitted event fires. Continues the pipeline
+/// from where run_maieutic_gate paused.
+///
+/// # Arguments
+/// * `widget` - ChatWidget
+/// * `maieutic_spec` - Completed maieutic spec from modal
+pub fn resume_pipeline_after_maieutic(
+    widget: &mut ChatWidget,
+    maieutic_spec: super::maieutic::MaieuticSpec,
+) {
+    // Retrieve pending maieutic state
+    let Some(pending) = widget.pending_maieutic.take() else {
+        tracing::error!("resume_pipeline_after_maieutic called with no pending maieutic state");
+        widget.history_push(crate::history_cell::new_error_event(
+            "Internal error: No pending maieutic state".to_string(),
+        ));
+        return;
+    };
+
+    let duration_ms = pending.started_at.elapsed().as_millis() as u64;
+    tracing::info!(
+        spec_id = %pending.spec_id,
+        duration_ms = duration_ms,
+        "Maieutic elicitation: Completed, resuming pipeline"
+    );
+
+    // Persist maieutic spec (D131: persistence follows capture mode)
+    // capture_mode=None runs in-memory only, others persist to evidence
+    match super::maieutic::persist_maieutic_spec(
+        &pending.spec_id,
+        &maieutic_spec,
+        pending.capture_mode,
+        &widget.config.cwd,
+    ) {
+        Ok(Some(path)) => {
+            tracing::info!(
+                spec_id = %pending.spec_id,
+                path = %path.display(),
+                "Maieutic spec persisted"
+            );
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![ratatui::text::Line::from(format!(
+                    "✅ Maieutic: Elicitation complete ({}ms)",
+                    duration_ms
+                ))],
+                HistoryCellType::Notice,
+            ));
+        }
+        Ok(None) => {
+            // capture_mode=None, in-memory only
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![ratatui::text::Line::from(format!(
+                    "✅ Maieutic: Elicitation complete ({}ms, in-memory)",
+                    duration_ms
+                ))],
+                HistoryCellType::Notice,
+            ));
+        }
+        Err(e) => {
+            tracing::warn!(
+                spec_id = %pending.spec_id,
+                error = %e,
+                "Failed to persist maieutic spec - continuing anyway"
+            );
+        }
+    }
+
+    // Continue pipeline with original parameters
+    // Call handle_spec_auto_internal which skips the maieutic gate
+    handle_spec_auto_after_maieutic(
+        widget,
+        pending.spec_id,
+        pending.goal,
+        pending.resume_from,
+        pending.hal_mode,
+        pending.cli_overrides,
+        pending.stage0_config,
+        maieutic_spec,
+    );
+}
+
+/// Cancel pipeline after maieutic elicitation is cancelled
+///
+/// Called when MaieuticCancelled event fires.
+pub fn cancel_pipeline_after_maieutic(widget: &mut ChatWidget, spec_id: &str) {
+    // Clear pending maieutic state
+    widget.pending_maieutic = None;
+
+    tracing::info!(
+        spec_id = %spec_id,
+        "Maieutic elicitation: Cancelled by user"
+    );
+
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+        vec![ratatui::text::Line::from(
+            "❌ Maieutic: Elicitation cancelled - pipeline aborted",
+        )],
+        HistoryCellType::Notice,
+    ));
+}
+
+/// Continue handle_spec_auto after maieutic elicitation completes
+///
+/// This is the continuation of handle_spec_auto after the maieutic gate passes.
+/// It duplicates the logic from handle_spec_auto starting after the maieutic gate.
+fn handle_spec_auto_after_maieutic(
+    widget: &mut ChatWidget,
+    spec_id: String,
+    goal: String,
+    resume_from: SpecStage,
+    hal_mode: Option<HalMode>,
+    cli_overrides: Option<PipelineOverrides>,
+    stage0_config: super::stage0_integration::Stage0ExecutionConfig,
+    maieutic_spec: super::maieutic::MaieuticSpec,
+) {
+    // SPEC-948: Load pipeline configuration with 3-tier precedence
+    let pipeline_config = match PipelineConfig::load(&spec_id, cli_overrides) {
+        Ok(config) => config,
+        Err(err) => {
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Pipeline configuration error: {}",
+                err
+            )));
+            return;
+        }
+    };
+
+    let lifecycle = widget.ensure_validate_lifecycle(&spec_id);
+    let mut state = super::state::SpecAutoState::new(
+        spec_id.clone(),
+        goal,
+        resume_from,
+        hal_mode,
+        pipeline_config,
+    );
+    state.set_validate_lifecycle(lifecycle);
+
+    // Set maieutic as completed
+    state.maieutic_completed = true;
+    state.maieutic_spec = Some(maieutic_spec);
+
+    // SPEC-KIT-102: Set Stage 0 configuration from CLI flags
+    state.stage0_disabled = stage0_config.disabled;
+    state.stage0_explain = stage0_config.explain;
+
+    // Log run start event
+    if let Some(run_id) = &state.run_id {
+        state
+            .execution_logger
+            .log_event(super::execution_logger::ExecutionEvent::RunStart {
+                spec_id: spec_id.clone(),
+                run_id: run_id.clone(),
+                timestamp: super::execution_logger::ExecutionEvent::now(),
+                stages: state
+                    .stages
+                    .iter()
+                    .map(|s| s.display_name().to_string())
+                    .collect(),
+                quality_gates_enabled: state.quality_gates_enabled,
+                hal_mode: hal_mode
+                    .map(|m| format!("{:?}", m))
+                    .unwrap_or_else(|| "mock".to_string()),
+            });
+    }
+
+    // SPEC-KIT-977: Capture policy snapshot at run start for phase 4→5 gate
+    if let Some(run_id) = &state.run_id {
+        let capsule_config = default_capsule_config(&widget.config.cwd);
+
+        match CapsuleHandle::open(capsule_config) {
+            Ok(handle) => {
+                if let Err(e) = handle.switch_branch(BranchId::for_run(run_id)) {
+                    tracing::warn!(
+                        run_id = %run_id,
+                        error = %e,
+                        "Failed to switch capsule branch for run"
+                    );
+                }
+
+                let stage0_cfg = codex_stage0::Stage0Config::load().unwrap_or_default();
+                match policy_capture::capture_and_store_policy(
+                    &handle,
+                    &stage0_cfg,
+                    &spec_id,
+                    run_id,
+                ) {
+                    Ok(snapshot) => {
+                        state.policy_id = Some(snapshot.policy_id.clone());
+                        state.policy_hash = Some(snapshot.hash.clone());
+                        if let Some(info) = handle.current_policy() {
+                            state.policy_uri = Some(info.uri.as_str().to_string());
+                        }
+                        tracing::info!(
+                            policy_id = %snapshot.policy_id,
+                            hash = %snapshot.hash,
+                            "Policy snapshot captured at run start"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Failed to capture policy snapshot - continuing without policy binding");
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to open capsule for policy capture - continuing without policy binding");
+            }
+        }
+    }
+
+    // SPEC-KIT-102: Run Stage 0 context injection before pipeline starts
+    if !stage0_config.disabled {
+        let spec_path = widget.config.cwd.join(format!("docs/{}/spec.md", spec_id));
+        let spec_content = std::fs::read_to_string(&spec_path).unwrap_or_default();
+
+        if !spec_content.is_empty() {
+            if let Some(run_id) = &state.run_id {
+                state.execution_logger.log_event(
+                    super::execution_logger::ExecutionEvent::Stage0Start {
+                        run_id: run_id.clone(),
+                        spec_id: spec_id.clone(),
+                        tier2_enabled: codex_stage0::Stage0Config::load().ok().is_some_and(|cfg| {
+                            let notebook_override = widget
+                                .config
+                                .stage0
+                                .notebook
+                                .clone()
+                                .or(widget.config.stage0.notebook_url.clone())
+                                .or(widget.config.stage0.notebook_id.clone())
+                                .unwrap_or_default();
+                            if !notebook_override.trim().is_empty() {
+                                return true;
+                            }
+                            cfg.tier2.enabled && !cfg.tier2.notebook.trim().is_empty()
+                        }),
+                        explain_enabled: stage0_config.explain,
+                        timestamp: super::execution_logger::ExecutionEvent::now(),
+                    },
+                );
+            }
+
+            // Spawn Stage0 async
+            let pending = super::stage0_integration::spawn_stage0_async(
+                widget.config.clone(),
+                spec_id.clone(),
+                spec_content.clone(),
+                widget.config.cwd.clone(),
+                stage0_config.clone(),
+            );
+
+            widget.stage0_pending = Some(pending);
+            widget
+                .app_event_tx
+                .send(crate::app_event::AppEvent::StartCommitAnimation);
+
+            state.phase = super::state::SpecAutoPhase::Stage0Pending {
+                status: "Starting Stage0...".to_string(),
+                started_at: std::time::Instant::now(),
+            };
+            widget.spec_auto_state = Some(state);
+
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![ratatui::text::Line::from(
+                    "⚙️  Stage 0: Starting (background)...",
+                )],
+                crate::history_cell::HistoryCellType::Notice,
+            ));
+
+            return;
+        } else {
+            let skip_reason = "spec.md is empty or not found";
+            if let Some(run_id) = &state.run_id {
+                state.execution_logger.log_event(
+                    super::execution_logger::ExecutionEvent::Stage0Complete {
+                        run_id: run_id.clone(),
+                        spec_id: spec_id.clone(),
+                        duration_ms: 0,
+                        tier2_used: false,
+                        cache_hit: false,
+                        hybrid_used: false,
+                        memories_used: 0,
+                        task_brief_written: false,
+                        skip_reason: Some(skip_reason.to_string()),
+                        timestamp: super::execution_logger::ExecutionEvent::now(),
+                    },
+                );
+            }
+            state.stage0_skip_reason = Some(skip_reason.to_string());
+
+            widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                vec![ratatui::text::Line::from(format!(
+                    "Stage 0: Skipped ({})",
+                    skip_reason
+                ))],
+                crate::history_cell::HistoryCellType::Notice,
+            ));
+        }
+    } else {
+        let skip_reason = "Stage 0 disabled by flag";
+        if let Some(run_id) = &state.run_id {
+            state.execution_logger.log_event(
+                super::execution_logger::ExecutionEvent::Stage0Complete {
+                    run_id: run_id.clone(),
+                    spec_id: spec_id.clone(),
+                    duration_ms: 0,
+                    tier2_used: false,
+                    cache_hit: false,
+                    hybrid_used: false,
+                    memories_used: 0,
+                    task_brief_written: false,
+                    skip_reason: Some(skip_reason.to_string()),
+                    timestamp: super::execution_logger::ExecutionEvent::now(),
+                },
+            );
+        }
+        state.stage0_skip_reason = Some(skip_reason.to_string());
+
+        widget.history_push(crate::history_cell::PlainHistoryCell::new(
+            vec![ratatui::text::Line::from(format!(
+                "Stage 0: Skipped ({})",
+                skip_reason
+            ))],
+            crate::history_cell::HistoryCellType::Notice,
+        ));
+    }
+
+    widget.spec_auto_state = Some(state);
+    advance_spec_auto(widget);
 }
