@@ -218,6 +218,7 @@ mod tests {
     #[test]
     fn test_should_curate_with_high_confidence() {
         let reflection = ReflectionResult {
+            schema_version: super::super::ace_reflector::ACE_FRAME_SCHEMA_VERSION.to_string(),
             patterns: vec![ReflectedPattern {
                 pattern: "Test pattern".to_string(),
                 rationale: "Because".to_string(),
@@ -237,6 +238,7 @@ mod tests {
     #[test]
     fn test_should_not_curate_with_low_confidence() {
         let reflection = ReflectionResult {
+            schema_version: super::super::ace_reflector::ACE_FRAME_SCHEMA_VERSION.to_string(),
             patterns: vec![ReflectedPattern {
                 pattern: "Low confidence pattern".to_string(),
                 rationale: "Uncertain".to_string(),
@@ -256,6 +258,7 @@ mod tests {
     #[test]
     fn test_curation_prompt_includes_reflection() {
         let reflection = ReflectionResult {
+            schema_version: super::super::ace_reflector::ACE_FRAME_SCHEMA_VERSION.to_string(),
             patterns: vec![ReflectedPattern {
                 pattern: "Use async".to_string(),
                 rationale: "Better perf".to_string(),

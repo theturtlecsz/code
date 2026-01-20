@@ -12,7 +12,7 @@
 
 use super::super::ChatWidget;
 use super::agent_orchestrator::auto_submit_spec_stage_prompt;
-use super::command_handlers::halt_spec_auto_with_error;
+use super::command_handlers::{halt_spec_auto_no_resume, halt_spec_auto_with_error};
 use super::consensus_coordinator::{block_on_sync, persist_cost_summary, run_consensus_with_retry};
 use super::pipeline_config::{PipelineConfig, PipelineOverrides}; // SPEC-948
 use super::quality_gate_handler::{
@@ -166,6 +166,12 @@ pub fn handle_spec_auto(
         return;
     }
 
+    // D131: Load capture mode from governance policy for ship gate validation
+    let capture_mode = codex_stage0::GovernancePolicy::load(None)
+        .ok()
+        .and_then(|gov| LLMCaptureMode::from_str(&gov.capture.mode))
+        .unwrap_or(LLMCaptureMode::PromptsOnly);
+
     let lifecycle = widget.ensure_validate_lifecycle(&spec_id);
     let mut state = super::state::SpecAutoState::new(
         spec_id.clone(),
@@ -173,6 +179,7 @@ pub fn handle_spec_auto(
         resume_from,
         hal_mode,
         pipeline_config, // SPEC-948: Pass pipeline config
+        capture_mode,    // D131: Capture mode for ship gate
     );
     state.set_validate_lifecycle(lifecycle);
 
@@ -957,6 +964,89 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
                         state.phase
                     );
                     return;
+                }
+
+                // D131/D132: Ensure ACE frame exists before ship gate validation
+                // If capture mode allows persistence and no ACE frame exists, create one
+                if stage == SpecStage::Unlock {
+                    let spec_id_for_ace = state.spec_id.clone();
+                    let capture_mode_for_ace = state.capture_mode;
+                    let cwd_for_ace = widget.config.cwd.clone();
+
+                    // Only create ACE frame if capture mode allows persistence
+                    if capture_mode_for_ace != LLMCaptureMode::None {
+                        let run_id_for_check = state.run_id.clone().unwrap_or_default();
+                        if !super::ship_gate::has_ace_milestone_frame(
+                            &spec_id_for_ace,
+                            &run_id_for_check,
+                            &cwd_for_ace,
+                        ) {
+                            // Create pre-ship ACE reflection with routine success
+                            tracing::info!(
+                                spec_id = %spec_id_for_ace,
+                                "Creating pre-ship ACE frame (always required before ship)"
+                            );
+
+                            let pre_ship_reflection = super::ace_reflector::ReflectionResult {
+                                schema_version: super::ace_reflector::ACE_FRAME_SCHEMA_VERSION.to_string(),
+                                patterns: vec![],
+                                successes: vec!["Pipeline completed successfully".to_string()],
+                                failures: vec![],
+                                recommendations: vec![],
+                                summary: "Pre-ship ACE reflection: routine success".to_string(),
+                            };
+
+                            if let Err(e) = super::ace_reflector::persist_ace_frame(
+                                &spec_id_for_ace,
+                                &pre_ship_reflection,
+                                capture_mode_for_ace,
+                                &cwd_for_ace,
+                            ) {
+                                tracing::warn!("Failed to create pre-ship ACE frame: {}", e);
+                            }
+                        }
+                    }
+                }
+
+                // D131/D132: Ship gate validation before Unlock stage
+                // Validates explainability artifacts (Maieutic Spec, ACE frames) are present
+                // capture=none blocks ship with actionable messaging
+                if stage == SpecStage::Unlock {
+                    let spec_id_for_gate = state.spec_id.clone();
+                    let run_id_for_gate = state.run_id.clone().unwrap_or_default();
+                    let capture_mode_for_gate = state.capture_mode;
+                    let cwd = widget.config.cwd.clone();
+
+                    match super::ship_gate::validate_ship_gate(
+                        &spec_id_for_gate,
+                        &run_id_for_gate,
+                        capture_mode_for_gate,
+                        &cwd,
+                    ) {
+                        super::ship_gate::ShipGateResult::Allowed => {
+                            // Ship gate passed, continue to Unlock stage
+                            tracing::info!(
+                                spec_id = %spec_id_for_gate,
+                                "Ship gate: Passed, proceeding to Unlock"
+                            );
+                        }
+                        super::ship_gate::ShipGateResult::BlockedPrivateScratch => {
+                            // Private scratch mode - fail with actionable message
+                            halt_spec_auto_no_resume(
+                                widget,
+                                super::ship_gate::PRIVATE_SCRATCH_MESSAGE.to_string(),
+                            );
+                            return;
+                        }
+                        super::ship_gate::ShipGateResult::BlockedMissingArtifact { artifact } => {
+                            // Missing artifact - fail with resume hint
+                            halt_spec_auto_with_error(
+                                widget,
+                                format!("Ship blocked: missing {}", artifact),
+                            );
+                            return;
+                        }
+                    }
                 }
 
                 // Check if we should run a quality checkpoint before this stage
@@ -2695,6 +2785,7 @@ pub fn resume_pipeline_after_maieutic(
         pending.cli_overrides,
         pending.stage0_config,
         maieutic_spec,
+        pending.capture_mode, // D131: Capture mode for ship gate
     );
 }
 
@@ -2731,6 +2822,7 @@ fn handle_spec_auto_after_maieutic(
     cli_overrides: Option<PipelineOverrides>,
     stage0_config: super::stage0_integration::Stage0ExecutionConfig,
     maieutic_spec: super::maieutic::MaieuticSpec,
+    capture_mode: LLMCaptureMode, // D131: Capture mode for ship gate
 ) {
     // SPEC-948: Load pipeline configuration with 3-tier precedence
     let pipeline_config = match PipelineConfig::load(&spec_id, cli_overrides) {
@@ -2751,6 +2843,7 @@ fn handle_spec_auto_after_maieutic(
         resume_from,
         hal_mode,
         pipeline_config,
+        capture_mode, // D131: Capture mode for ship gate
     );
     state.set_validate_lifecycle(lifecycle);
 
