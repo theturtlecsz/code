@@ -3,6 +3,9 @@
 //! This module documents and indexes the 18 enforcement tests validating
 //! ACE + Maieutics decisions from ARCHITECT_REVIEW_BOARD_OUTPUT.md.
 //!
+//! Also includes E.3/E.4 capability tests for evidence archival and integrity
+//! (gap closure per G2 from ARCHITECT_REVIEW_BOARD_OUTPUT.md).
+//!
 //! Tests remain in their original locations for locality; this module provides:
 //! 1. A single source of truth for test coverage
 //! 2. Decision-to-test mapping
@@ -21,6 +24,10 @@
 //!
 //! # CLI/headless tests (D133)
 //! cargo test -p codex-cli --test speckit -- test_headless
+//!
+//! # E.3/E.4 evidence capability tests
+//! cargo test -p codex-tui --test evidence_archival_tests
+//! cargo test -p codex-tui --test evidence_integrity_tests
 //!
 //! # Or use the convenience script:
 //! ./scripts/test-arb-pass2.sh
@@ -56,6 +63,13 @@
 //! - **D132**: Ship hard-fail without artifacts; `capture=none` non-shippable
 //! - **D133**: Multi-surface parity - headless requires `--maieutic`, never prompts
 //! - **D134**: ACE Frame schema generated + versioned via schemars
+//!
+//! ## Evidence Capability Tests (G2 Gap Closure)
+//!
+//! | Cap | Location | Tests | Description |
+//! |-----|----------|-------|-------------|
+//! | E.3 | evidence_archival_tests.rs | 6 | Archival (>30 days behavior) |
+//! | E.4 | evidence_integrity_tests.rs | 6 | Integrity (SHA256 verification) |
 
 // Allow dead_code: This is a registry module - constants are for documentation and test use.
 #![allow(dead_code)]
@@ -69,15 +83,54 @@ pub const ARB_PASS2_ACTIVE_COUNT: usize = 15;
 /// Ignored tests pending infrastructure work (SPEC-KIT-930)
 pub const ARB_PASS2_IGNORED_COUNT: usize = 3;
 
+// ============================================================================
+// E.3/E.4 Evidence Capability Tests (G2 Gap Closure)
+// ============================================================================
+
+/// E.3 archival tests (evidence >30 days behavior)
+pub const E3_TEST_COUNT: usize = 6;
+
+/// E.4 integrity tests (SHA256 verification)
+pub const E4_TEST_COUNT: usize = 6;
+
+/// Total evidence capability tests
+pub const EVIDENCE_CAPABILITY_TEST_COUNT: usize = E3_TEST_COUNT + E4_TEST_COUNT;
+
+/// Evidence capability test registry
+pub mod evidence_capabilities {
+    /// E.3: Evidence archival (>30 days) tests
+    ///
+    /// Reference: docs/spec-kit/evidence-policy.md §4-6
+    /// Tests use injectable Clock for deterministic time-based testing.
+    pub const E3_ARCHIVAL_TESTS: &[&str] = &[
+        "test_evidence_archival_after_30_days",
+        "test_evidence_exempt_if_in_progress",
+        "test_archive_before_purge_order",
+        "test_archival_creates_tarball",
+        "test_archival_config_customizable",
+        "test_dry_run_mode",
+    ];
+
+    /// E.4: Evidence integrity (SHA256 verification) tests
+    ///
+    /// Reference: docs/spec-kit/evidence-policy.md §9.1-9.2
+    pub const E4_INTEGRITY_TESTS: &[&str] = &[
+        "test_sha256_checksum_calculation",
+        "test_archive_includes_manifest",
+        "test_verify_valid_archive_succeeds",
+        "test_verify_corrupted_archive_fails",
+        "test_restore_rejects_checksum_mismatch",
+        "test_restore_validates_file_count",
+    ];
+}
+
 /// Decision enforcement groups with test names for reference
 pub mod decisions {
     /// D130: Maieutic step always mandatory (fast path allowed)
     ///
     /// Rule: Pipeline cannot proceed until maieutic elicitation completes.
     /// Enforcement: `has_maieutic_completed()` returns false -> gate pauses pipeline.
-    pub const D130_TESTS: &[&str] = &[
-        "maieutic::tests::test_maieutic_required_before_execute",
-    ];
+    pub const D130_TESTS: &[&str] = &["maieutic::tests::test_maieutic_required_before_execute"];
 
     /// D131: capture=none persists no artifacts
     ///
@@ -203,6 +256,39 @@ mod validation_tests {
         assert!(
             !decisions::D134_TESTS.is_empty(),
             "D134 (Schema versioning) must have tests"
+        );
+    }
+
+    /// Validate E.3/E.4 evidence capability test counts
+    #[test]
+    fn test_evidence_capability_counts() {
+        assert_eq!(
+            evidence_capabilities::E3_ARCHIVAL_TESTS.len(),
+            E3_TEST_COUNT,
+            "E.3 test count mismatch"
+        );
+        assert_eq!(
+            evidence_capabilities::E4_INTEGRITY_TESTS.len(),
+            E4_TEST_COUNT,
+            "E.4 test count mismatch"
+        );
+        assert_eq!(
+            E3_TEST_COUNT + E4_TEST_COUNT,
+            EVIDENCE_CAPABILITY_TEST_COUNT,
+            "Total evidence capability test count mismatch"
+        );
+    }
+
+    /// Validate E.3/E.4 test groups are non-empty
+    #[test]
+    fn test_evidence_capabilities_have_tests() {
+        assert!(
+            !evidence_capabilities::E3_ARCHIVAL_TESTS.is_empty(),
+            "E.3 (Archival) must have tests"
+        );
+        assert!(
+            !evidence_capabilities::E4_INTEGRITY_TESTS.is_empty(),
+            "E.4 (Integrity) must have tests"
         );
     }
 }

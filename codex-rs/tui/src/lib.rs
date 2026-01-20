@@ -226,8 +226,12 @@ pub use chatwidget::spec_kit::{DiffStat, RouteDecision, select_route, should_use
 
 // ACE Frame schema types - Re-export for schema generation binary
 pub use chatwidget::spec_kit::ace_reflector::{
-    PatternKind, ReflectedPattern, ReflectionResult, ACE_FRAME_SCHEMA_VERSION,
+    ACE_FRAME_SCHEMA_VERSION, PatternKind, ReflectedPattern, ReflectionResult,
 };
+
+// E.3/E.4: Re-export evidence archival and integrity modules for integration tests
+pub use chatwidget::spec_kit::evidence_archival;
+pub use chatwidget::spec_kit::evidence_integrity;
 
 // Re-export supporting types for E2E testing (T87)
 pub use slash_command::{HalMode, SlashCommand};
