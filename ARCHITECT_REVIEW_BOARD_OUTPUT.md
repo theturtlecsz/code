@@ -189,7 +189,7 @@
 
 ### From A1 (Product Identity)
 - **Reframe documentation**: "Memvid" → "evidence store (backend currently Memvid)"
-- **ACE + Maieutics become core identity** (pending Section H decisions)
+- **ACE + Maieutics become core identity** (H0-H7 decided)
 - **Success metrics**: Spec-to-ship completion rate, automation coverage, explainability coverage, replay confidence, failure quality
 
 ### From A2 (Tiered Parity)
@@ -380,7 +380,7 @@ All H0-H7 decisions locked. Phase 2 complete.
 
 ---
 
-## 7. ACE + Maieutics Enforcement Plan (PARTIAL — H0-H2 DECIDED)
+## 7. ACE + Maieutics Enforcement Plan (COMPLETE — H0-H7 DECIDED)
 
 ### Decided (Session 9)
 
@@ -390,15 +390,15 @@ All H0-H7 decisions locked. Phase 2 complete.
 | **Explanation Triggers** | ✅ DECIDED | Tiered: mandatory for failures/overrides/boundaries; selective for interesting outcomes; on-demand available | H1 |
 | **Control Model** | ✅ DECIDED | Tiered autonomy: auto → checkpoint → explicit → manual; Maieutic Spec is delegation contract | H2 |
 
-### Pending (H3-H7)
+### Decided (Session 10: H3-H7)
 
-| Component | Status | Description |
-|-----------|--------|-------------|
-| ACE Frame Schema | PENDING H7 | Structured JSON with required fields |
-| Maieutic Interview Format | PENDING H3 | Elicitation artifact structure |
-| Gating Rules | PENDING H5 | Do missing outputs block progress |
-| Storage vs Capture Mode | PENDING H4 | What to store when capture=none |
-| Multi-Surface Parity | PENDING H6 | TUI/CLI/headless requirements |
+| Component | Status | Decision | Source |
+|-----------|--------|----------|--------|
+| Maieutic Elicitation | ✅ DECIDED | Always mandatory pre-execution (fast path allowed) | H3 |
+| Explainability vs Capture | ✅ DECIDED | Artifacts follow capture mode; capture=none persists nothing | H4 |
+| Gating Rules | ✅ DECIDED | Ship hard-fail if artifacts missing; no override | H5 |
+| Multi-Surface Parity | ✅ DECIDED | A2-aligned tiered: Tier 1 full parity, Tier 2 TUI-first | H6 |
+| ACE Frame Schema | ✅ DECIDED | Generated JSON Schema from Rust structs via schemars | H7 |
 
 ### Enforcement Rules (From H0-H5)
 
@@ -472,7 +472,7 @@ All questions decided. Phase 1 (A1-G3) and Phase 2 (H0-H7) complete.
 
 ## Locked Decisions: D113-D134 (22 new decisions)
 
-## Next Steps
+## Implementation Tasks (Post-ARB)
 1. Transfer D113-D134 to DECISION_REGISTER.md
 2. Implement enforcement tests (18 tests defined)
 3. Create ACE Frame schema via schemars
