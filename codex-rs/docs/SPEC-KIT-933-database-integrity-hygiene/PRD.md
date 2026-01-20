@@ -34,3 +34,7 @@
 
 _[Document truncated for brevity - full 25KB PRD written to file]_
 
+## Decision IDs
+
+N/A — Implementation SPEC; leverages existing architectural patterns (D113 consensus storage separation implied).
+

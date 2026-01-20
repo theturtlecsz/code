@@ -162,3 +162,7 @@ cargo test -p codex-tui --lib chatwidget::test_harness::tests -- --include-ignor
 
 # Target: 10 passed, 0 ignored
 ```
+
+## Decision IDs
+
+N/A — Implementation SPEC (COMPLETE 2025-11-28); bug fix with no architectural decision locks required.

@@ -29,3 +29,7 @@
 - docs/SPEC-KIT-DEMO/{spec.md,plan.md,tasks.md} present with assumption notes and evidence links.
 - Consensus run produces HAL capture (or degraded log) archived under docs/SPEC-OPS-004-integrated-coder-hooks/evidence/consensus/SPEC-KIT-DEMO/.
 - SPEC.md tracker row restored, lint passes, and evidence/log stored.
+
+## Decision IDs
+
+N/A — Pipeline demo SPEC; no architectural decisions locked.

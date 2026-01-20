@@ -102,3 +102,7 @@ cargo build -p codex-tui --release
 
 - Evidence footprint: Target < 1 MB (this is a validation SPEC, not implementation)
 - Retention: Standard 30-day unlock, 180-day purge
+
+## Decision IDs
+
+N/A — Validation SPEC; validates existing pipeline infrastructure with no new decisions required.
