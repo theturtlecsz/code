@@ -233,6 +233,7 @@ pub use chatwidget::spec_kit::ace_reflector::{
 pub use chatwidget::spec_kit::evidence_archival;
 pub use chatwidget::spec_kit::evidence_integrity;
 
+
 // Re-export supporting types for E2E testing (T87)
 pub use slash_command::{HalMode, SlashCommand};
 pub use spec_prompts::SpecStage;
