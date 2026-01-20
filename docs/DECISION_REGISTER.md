@@ -91,43 +91,37 @@
 | D79 | B | Deletion / purge expectations | Tombstone + encrypted shredding of sensitive frames; true purge via compaction later if required. |
 | D80 | C | Multi-capsule query support (advanced) | Build a meta-index capsule for cross-capsule search; supports mounted read-only capsules + discovery. |
 
-## Addendum: D81–D94 (Answers received, mapping pending)
-
-> **Note:** You replied `81B 82B 83B` and later `84A 85B 86B 87B 88C 89B 90B 91C 92B 93B 94B`, but the exact question text for D81–D94 wasn’t present in the last captured prompt list.
-> I’m tentatively mapping D81–D94 to the most likely “next decisions” (dependency control, policy enforcement strictness, eval gating, embeddings/retrieval ops, and failure behaviors).
-> If any mismatch, reply `D## mismatch` with the intended question text (one line is enough) and I’ll re-slot immediately.
+## Decisions D81–D98 (Locked)
 
 | ID | Choice | Decision | Notes |
 | --- | --- | --- | --- |
 
-| D81 | B | Memvid dependency strategy (pinning/forking) | **Assumption mapping.** Pin Memvid tags + commit SHA + wrap behind adapter crate; keep a “hotfix fork” option. |
-| D82 | B | Policy change enforcement strictness (signed approval) | **Assumption mapping.** Start soft-enforce now (warn + log + require evidence), hard-enforce later after harness is stable. |
-| D83 | B | Evaluation gating schedule (CI vs nightly) | **Assumption mapping.** CI: smoke + golden queries; Nightly: full suite; allow manual override w/ evidence capsule + signed approval. |
+| D81 | B | Memvid dependency strategy (pinning/forking) | Pin Memvid tags + commit SHA + wrap behind adapter crate; keep a “hotfix fork” option. |
+| D82 | B | Policy change enforcement strictness (signed approval) | Start soft-enforce now (warn + log + require evidence), hard-enforce later after harness is stable. |
+| D83 | B | Evaluation gating schedule (CI vs nightly) | CI: smoke + golden queries; Nightly: full suite; allow manual override w/ evidence capsule + signed approval. |
 
-| D84 | A | Embedding compute location for Memvid vector index | **Assumption mapping.** Local embeddings by default (offline-first, no external embedding API dependency). |
-| D85 | B | Default embedding model family | **Assumption mapping.** Use a strong open-weights embedding model (configurable) with a code-friendly default; keep cloud-embedding optional. |
-| D86 | B | Embedding serving method | **Assumption mapping.** Local embedding service (OpenAI-compatible or native SDK) behind a trait; avoid hard-binding to one server. |
-| D87 | B | Chunking strategy for code/docs | **Assumption mapping.** Structure-aware chunking (Rust syntax-aware for code + section-aware for docs) + stable chunk IDs for dedup/replay. |
-| D88 | C | Vector index compression posture | **Assumption mapping.** Enable PQ/other compression automatically above a size threshold to control capsule growth and query latency. |
-| D89 | B | Recency/usage bias in ranking | **Assumption mapping.** Simple recency boost + provenance weighting + “why this result” explain; no learned ranker yet. |
-| D90 | B | Retrieval quality evaluation harness depth | **Assumption mapping.** Golden queries + A/B harness (local-memory vs memvid) + stress tests; deeper eval later. |
-| D91 | C | Policy/eval gating strictness | **Assumption mapping.** Hard-gate on regressions for golden queries + policy tests; override requires evidence + approval. |
-| D92 | B | NotebookLM Tier2 failure behavior | **Assumption mapping.** Always-on, but never blocking: degrade to Tier1/local synthesis + log + evidence. |
-| D93 | B | Local reflex failure behavior | **Assumption mapping.** Auto-fallback to cloud coder after N errors/timeouts; record event in evidence + keep pipeline moving. |
-| D94 | B | Canonical source-of-truth during migration | **Assumption mapping.** Dual-canonical during rollout; after parity gate, capsule becomes canonical and filesystem becomes a derived/export view. |
-| D95 | C | Replay capture scope | **Tentative mapping.** A) minimal replay logs; B) high-risk only; C) always-on full event stream | Always capture retrieval + tool calls + prompts/outputs + gate decisions in capsule (redaction/retention apply). |
-| D96 | B | Branching UX exposure | **Tentative mapping.** A) internal only; B) lightweight “what-if” branches in TUI; C) full DVCS-like branches/merges | Expose branch create/switch + compare; implement as capsule branch pointers/copies; avoid complex merges in v1. |
-| D97 | B | Logic mesh extraction cadence | **Tentative mapping.** A) on-demand; B) stage-boundary; C) continuous streaming | Extract Memory Cards/graph at stage commits (and key ingests) so time-travel checkpoints have deterministic graph state. |
-| D98 | B | Graph + replay surfaces | **Tentative mapping.** A) internal only; B) TUI/CLI commands; C) public API | Add /speckit.timeline, /speckit.diff, /speckit.replay, /speckit.graph as first-class workbench features. |
+| D84 | A | Embedding compute location for Memvid vector index | Local embeddings by default (offline-first, no external embedding API dependency). |
+| D85 | B | Default embedding model family | Use a strong open-weights embedding model (configurable) with a code-friendly default; keep cloud-embedding optional. |
+| D86 | B | Embedding serving method | Local embedding service (OpenAI-compatible or native SDK) behind a trait; avoid hard-binding to one server. |
+| D87 | B | Chunking strategy for code/docs | Structure-aware chunking (Rust syntax-aware for code + section-aware for docs) + stable chunk IDs for dedup/replay. |
+| D88 | C | Vector index compression posture | Enable PQ/other compression automatically above a size threshold to control capsule growth and query latency. |
+| D89 | B | Recency/usage bias in ranking | Simple recency boost + provenance weighting + “why this result” explain; no learned ranker yet. |
+| D90 | B | Retrieval quality evaluation harness depth | Golden queries + A/B harness (local-memory vs memvid) + stress tests; deeper eval later. |
+| D91 | C | Policy/eval gating strictness | Hard-gate on regressions for golden queries + policy tests; override requires evidence + approval. |
+| D92 | B | NotebookLM Tier2 failure behavior | Always-on, but never blocking: degrade to Tier1/local synthesis + log + evidence. |
+| D93 | B | Local reflex failure behavior | Auto-fallback to cloud coder after N errors/timeouts; record event in evidence + keep pipeline moving. |
+| D94 | B | Canonical source-of-truth during migration | Dual-canonical during rollout; after parity gate, capsule becomes canonical and filesystem becomes a derived/export view. |
+| D95 | C | Replay capture scope | Always capture retrieval + tool calls + prompts/outputs + gate decisions in capsule (redaction/retention apply). |
+| D96 | B | Branching UX exposure | Expose branch create/switch + compare; implement as capsule branch pointers/copies; avoid complex merges in v1. |
+| D97 | B | Logic mesh extraction cadence | Extract Memory Cards/graph at stage commits (and key ingests) so time-travel checkpoints have deterministic graph state. |
+| D98 | B | Graph + replay surfaces | Add /speckit.timeline, /speckit.diff, /speckit.replay, /speckit.graph as first-class workbench features. |
 
 ---
 
-## Addendum: D99–D109 (Answers received — mapping proposed)
+## Decisions D99–D112 (Locked)
 
-> Note: If any of these labels don’t match what you intended for that decision number, reply “D### mismatch: <correct question>”.
-
-| Decision | Your choice | Proposed label | What this locks |
-|---|---:|---|---|
+| ID | Choice | Decision | Notes |
+|---:|:------:|----------|-------|
 | D99 | A | Run capsule reproducibility package includes code state | Each exported run capsule captures enough code-state to reproduce offline (git commit + diff + key file snapshots). |
 | D100 | B | Code snapshot granularity = changed-files + diff (not full repo) | Keep exports sane-size: store changed file contents + hashes + diff; don’t embed full repo snapshot by default. |
 | D101 | B | Tool execution capture = raw logs (compressed) + structured summary | Replay can re-run or at least inspect exact build/test outputs; summaries stay fast for UI. |
@@ -140,8 +134,8 @@
 | D108 | A | Replay supports A/B diffs across models and policies | Run deterministic replay comparisons to validate policy/model changes and generate diffs. |
 | D109 | B | Policy rollout strategy = staged/feature-flag rollouts | New policies ship behind flags/canaries; reduces blast radius, supports rollback. |
 | D110 | A | Local reflex **backup** model = Qwen3-Coder-30B-A3B (AWQ/GPTQ) | Clarification: Primary always-on reflex remains **GPT-OSS-20B** (see D43). Standardize Qwen3-A3B as the fallback/bakeoff candidate when GPT-OSS underperforms on repo-specific Rust/code. |
-| D111 | B | Local inference server default = Option B (SGLang now; vLLM fallback) | We implement SGLang first for radix/prefix caching + schema decoding; keep vLLM as fallback for stability. (Assumption: mapping) |
-| D112 | B | Reflex promotion gate = Option B (Bakeoff required) | Local reflex routing is enabled only after Rust-Reflex-Bench passes TTFT/TPS + JSON validity + cargo check metrics. (Assumption: mapping) |
+| D111 | B | Local inference server default = Option B (SGLang now; vLLM fallback) | We implement SGLang first for radix/prefix caching + schema decoding; keep vLLM as fallback for stability. |
+| D112 | B | Reflex promotion gate = Option B (Bakeoff required) | Local reflex routing is enabled only after Rust-Reflex-Bench passes TTFT/TPS + JSON validity + cargo check metrics. |
 
 ---
 
