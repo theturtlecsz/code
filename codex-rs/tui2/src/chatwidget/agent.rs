@@ -40,7 +40,9 @@ pub(crate) fn spawn_agent(
                 app_event_tx_clone.send(AppEvent::CodexEvent(Event {
                     id: "".to_string(),
                     event_seq: 0,
-                    msg: EventMsg::Error(ErrorEvent { message: message.clone() }),
+                    msg: EventMsg::Error(ErrorEvent {
+                        message: message.clone(),
+                    }),
                     order: None,
                 }));
                 app_event_tx_clone.send(AppEvent::ExitRequest);

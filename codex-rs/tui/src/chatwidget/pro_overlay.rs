@@ -398,14 +398,8 @@ impl ChatWidget<'_> {
             .borders(Borders::ALL)
             .title(RLine::from(vec![
                 Span::styled(" Pro activity ", Style::default().fg(colors::text())),
-                Span::styled(
-                    "— Esc close  ",
-                    Style::default().fg(colors::text_dim()),
-                ),
-                Span::styled(
-                    "Ctrl+P overlay  ",
-                    Style::default().fg(colors::text_dim()),
-                ),
+                Span::styled("— Esc close  ", Style::default().fg(colors::text_dim())),
+                Span::styled("Ctrl+P overlay  ", Style::default().fg(colors::text_dim())),
                 Span::styled("↑↓ scroll", Style::default().fg(colors::text_dim())),
             ]))
             .style(Style::default().bg(colors::background()))

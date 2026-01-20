@@ -21,7 +21,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use super::reflex_client::{ChatMessage, ReflexClient, ReflexError};
-use super::reflex_metrics::{get_metrics_db, BakeoffStats, ModeStats};
+use super::reflex_metrics::{BakeoffStats, ModeStats, get_metrics_db};
 
 /// Configuration for bakeoff execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,21 +125,40 @@ impl BakeoffReport {
 
         // Header
         md.push_str("# Reflex Bakeoff Report\n\n");
-        md.push_str(&format!("**Generated:** {}\n", self.timestamp.format("%Y-%m-%d %H:%M:%S UTC")));
+        md.push_str(&format!(
+            "**Generated:** {}\n",
+            self.timestamp.format("%Y-%m-%d %H:%M:%S UTC")
+        ));
         md.push_str(&format!("**Report ID:** {}\n\n", self.report_id));
 
         // Overall result
-        let status_emoji = if self.evaluation.passes_thresholds { "✅" } else { "❌" };
-        md.push_str(&format!("## Result: {} {}\n\n", status_emoji, self.evaluation.recommendation));
+        let status_emoji = if self.evaluation.passes_thresholds {
+            "✅"
+        } else {
+            "❌"
+        };
+        md.push_str(&format!(
+            "## Result: {} {}\n\n",
+            status_emoji, self.evaluation.recommendation
+        ));
 
         // Configuration
         md.push_str("## Configuration\n\n");
         md.push_str("| Parameter | Value |\n");
         md.push_str("|-----------|-------|\n");
         md.push_str(&format!("| Trial Count | {} |\n", self.config.trial_count));
-        md.push_str(&format!("| P95 Latency Threshold | {}ms |\n", self.config.p95_latency_threshold_ms));
-        md.push_str(&format!("| Success Rate Threshold | {}% |\n", self.config.success_rate_threshold_pct));
-        md.push_str(&format!("| JSON Compliance Threshold | {}% |\n", self.config.json_compliance_threshold_pct));
+        md.push_str(&format!(
+            "| P95 Latency Threshold | {}ms |\n",
+            self.config.p95_latency_threshold_ms
+        ));
+        md.push_str(&format!(
+            "| Success Rate Threshold | {}% |\n",
+            self.config.success_rate_threshold_pct
+        ));
+        md.push_str(&format!(
+            "| JSON Compliance Threshold | {}% |\n",
+            self.config.json_compliance_threshold_pct
+        ));
         md.push_str("\n");
 
         // Threshold Checks
@@ -147,9 +166,16 @@ impl BakeoffReport {
         md.push_str("| Check | Status | Actual | Threshold |\n");
         md.push_str("|-------|--------|--------|----------|\n");
 
-        for check in [&self.evaluation.p95_check, &self.evaluation.success_rate_check, &self.evaluation.json_compliance_check] {
+        for check in [
+            &self.evaluation.p95_check,
+            &self.evaluation.success_rate_check,
+            &self.evaluation.json_compliance_check,
+        ] {
             let status = if check.passes { "✅ PASS" } else { "❌ FAIL" };
-            md.push_str(&format!("| {} | {} | {:.1} | {:.1} |\n", check.name, status, check.actual, check.threshold));
+            md.push_str(&format!(
+                "| {} | {} | {:.1} | {:.1} |\n",
+                check.name, status, check.actual, check.threshold
+            ));
         }
         md.push_str("\n");
 
@@ -174,9 +200,18 @@ impl BakeoffReport {
             } else {
                 0.0
             };
-            md.push_str(&format!("- **Latency Improvement:** Reflex is {:.1}x faster (P95)\n", latency_ratio));
-            md.push_str(&format!("- **Success Rate Delta:** {:.1}%\n", reflex.success_rate - cloud.success_rate));
-            md.push_str(&format!("- **JSON Compliance Delta:** {:.1}%\n", reflex.json_compliance_rate - cloud.json_compliance_rate));
+            md.push_str(&format!(
+                "- **Latency Improvement:** Reflex is {:.1}x faster (P95)\n",
+                latency_ratio
+            ));
+            md.push_str(&format!(
+                "- **Success Rate Delta:** {:.1}%\n",
+                reflex.success_rate - cloud.success_rate
+            ));
+            md.push_str(&format!(
+                "- **JSON Compliance Delta:** {:.1}%\n",
+                reflex.json_compliance_rate - cloud.json_compliance_rate
+            ));
             md.push_str("\n");
         }
 
@@ -188,9 +223,15 @@ impl BakeoffReport {
         for trial in &self.trials {
             let success = if trial.success { "✅" } else { "❌" };
             let json = if trial.json_compliant { "✅" } else { "❌" };
-            let error = trial.error.as_ref().map(|e| e.chars().take(30).collect::<String>()).unwrap_or_default();
-            md.push_str(&format!("| {} | {} | {} | {} | {} | {} |\n",
-                trial.trial_id, trial.mode, trial.latency_ms, success, json, error));
+            let error = trial
+                .error
+                .as_ref()
+                .map(|e| e.chars().take(30).collect::<String>())
+                .unwrap_or_default();
+            md.push_str(&format!(
+                "| {} | {} | {} | {} | {} | {} |\n",
+                trial.trial_id, trial.mode, trial.latency_ms, success, json, error
+            ));
         }
 
         md
@@ -204,8 +245,14 @@ fn format_mode_stats(stats: &ModeStats) -> String {
     s.push_str("|--------|-------|\n");
     s.push_str(&format!("| Total Attempts | {} |\n", stats.total_attempts));
     s.push_str(&format!("| Success Rate | {:.1}% |\n", stats.success_rate));
-    s.push_str(&format!("| JSON Compliance | {:.1}% |\n", stats.json_compliance_rate));
-    s.push_str(&format!("| Avg Latency | {:.0}ms |\n", stats.avg_latency_ms));
+    s.push_str(&format!(
+        "| JSON Compliance | {:.1}% |\n",
+        stats.json_compliance_rate
+    ));
+    s.push_str(&format!(
+        "| Avg Latency | {:.0}ms |\n",
+        stats.avg_latency_ms
+    ));
     s.push_str(&format!("| P50 Latency | {}ms |\n", stats.p50_latency_ms));
     s.push_str(&format!("| P95 Latency | {}ms |\n", stats.p95_latency_ms));
     s.push_str(&format!("| P99 Latency | {}ms |\n", stats.p99_latency_ms));
@@ -342,7 +389,10 @@ fn evaluate_bakeoff(stats: &BakeoffStats, config: &BakeoffConfig) -> BakeoffEval
             message: if r.p95_latency_ms <= config.p95_latency_threshold_ms {
                 "P95 latency within threshold".to_string()
             } else {
-                format!("P95 latency {}ms exceeds {}ms threshold", r.p95_latency_ms, config.p95_latency_threshold_ms)
+                format!(
+                    "P95 latency {}ms exceeds {}ms threshold",
+                    r.p95_latency_ms, config.p95_latency_threshold_ms
+                )
             },
         }
     } else {
@@ -365,7 +415,10 @@ fn evaluate_bakeoff(stats: &BakeoffStats, config: &BakeoffConfig) -> BakeoffEval
             message: if r.success_rate >= config.success_rate_threshold_pct as f64 {
                 "Success rate meets threshold".to_string()
             } else {
-                format!("Success rate {:.1}% below {}% threshold", r.success_rate, config.success_rate_threshold_pct)
+                format!(
+                    "Success rate {:.1}% below {}% threshold",
+                    r.success_rate, config.success_rate_threshold_pct
+                )
             },
         }
     } else {
@@ -388,7 +441,10 @@ fn evaluate_bakeoff(stats: &BakeoffStats, config: &BakeoffConfig) -> BakeoffEval
             message: if r.json_compliance_rate >= config.json_compliance_threshold_pct as f64 {
                 "JSON compliance meets threshold".to_string()
             } else {
-                format!("JSON compliance {:.1}% below {}% threshold", r.json_compliance_rate, config.json_compliance_threshold_pct)
+                format!(
+                    "JSON compliance {:.1}% below {}% threshold",
+                    r.json_compliance_rate, config.json_compliance_threshold_pct
+                )
             },
         }
     } else {
@@ -407,10 +463,19 @@ fn evaluate_bakeoff(stats: &BakeoffStats, config: &BakeoffConfig) -> BakeoffEval
         "Reflex is ready for production routing".to_string()
     } else {
         let mut issues = Vec::new();
-        if !p95_check.passes { issues.push("latency"); }
-        if !success_rate_check.passes { issues.push("success rate"); }
-        if !json_compliance_check.passes { issues.push("JSON compliance"); }
-        format!("Reflex needs improvement: {} below threshold", issues.join(", "))
+        if !p95_check.passes {
+            issues.push("latency");
+        }
+        if !success_rate_check.passes {
+            issues.push("success rate");
+        }
+        if !json_compliance_check.passes {
+            issues.push("JSON compliance");
+        }
+        format!(
+            "Reflex needs improvement: {} below threshold",
+            issues.join(", ")
+        )
     };
 
     BakeoffEvaluation {
@@ -455,7 +520,8 @@ pub async fn run_bakeoff(
         for _ in 0..config.trial_count {
             trial_id += 1;
 
-            let trial = run_single_trial(&client, trial_id, prompt_name, prompt_content, &schema).await;
+            let trial =
+                run_single_trial(&client, trial_id, prompt_name, prompt_content, &schema).await;
 
             // Record to metrics database
             let _ = db.record_reflex_attempt(
@@ -525,9 +591,18 @@ fn compute_stats_from_trials(trials: &[TrialResult]) -> BakeoffStats {
             json_compliant_count: json_count,
             json_compliance_rate: (json_count as f64 / total as f64) * 100.0,
             avg_latency_ms: latencies.iter().sum::<u64>() as f64 / latencies.len() as f64,
-            p50_latency_ms: latencies.get(p50_idx.min(latencies.len() - 1)).copied().unwrap_or(0),
-            p95_latency_ms: latencies.get(p95_idx.min(latencies.len() - 1)).copied().unwrap_or(0),
-            p99_latency_ms: latencies.get(p99_idx.min(latencies.len() - 1)).copied().unwrap_or(0),
+            p50_latency_ms: latencies
+                .get(p50_idx.min(latencies.len() - 1))
+                .copied()
+                .unwrap_or(0),
+            p95_latency_ms: latencies
+                .get(p95_idx.min(latencies.len() - 1))
+                .copied()
+                .unwrap_or(0),
+            p99_latency_ms: latencies
+                .get(p99_idx.min(latencies.len() - 1))
+                .copied()
+                .unwrap_or(0),
             min_latency_ms: latencies.first().copied().unwrap_or(0),
             max_latency_ms: latencies.last().copied().unwrap_or(0),
         })

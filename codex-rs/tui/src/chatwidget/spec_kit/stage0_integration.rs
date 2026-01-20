@@ -12,8 +12,7 @@
 //! - SPEC-KIT-971: Backend routing via memory_backend config
 
 use crate::memvid_adapter::{
-    create_unified_memory_client, default_capsule_path, UnifiedMemoryClient,
-    DEFAULT_WORKSPACE_ID,
+    DEFAULT_WORKSPACE_ID, UnifiedMemoryClient, create_unified_memory_client, default_capsule_path,
 };
 use crate::stage0_adapters::{LlmStubAdapter, NoopTier2Client, Tier2HttpAdapter};
 use crate::vector_state::VECTOR_STATE;
@@ -264,9 +263,9 @@ pub fn run_stage0_for_spec(
     // For LocalMemory backend, check daemon health first (traditional behavior)
     if memory_backend == MemoryBackend::LocalMemory {
         send_progress(&progress_tx, Stage0Progress::CheckingLocalMemory);
-        if !crate::local_memory_cli::local_memory_daemon_healthy_blocking(
-            Duration::from_millis(750),
-        ) {
+        if !crate::local_memory_cli::local_memory_daemon_healthy_blocking(Duration::from_millis(
+            750,
+        )) {
             let duration_ms = start.elapsed().as_millis() as u64;
             send_progress(
                 &progress_tx,
@@ -329,9 +328,9 @@ pub fn run_stage0_for_spec(
         capsule_path,
         DEFAULT_WORKSPACE_ID.to_string(),
         || {
-            crate::local_memory_cli::local_memory_daemon_healthy_blocking(
-                Duration::from_millis(500),
-            )
+            crate::local_memory_cli::local_memory_daemon_healthy_blocking(Duration::from_millis(
+                500,
+            ))
         },
     )) {
         Ok(client) => {
@@ -383,48 +382,47 @@ pub fn run_stage0_for_spec(
 
     // CONVERGENCE: Tier2 fail-closed with explicit diagnostics
     // Per MEMO_codex-rs.md Section 1: "emit diagnostics with actionable next steps"
-    let (tier2_opt, tier2_skip_reason) = if stage0_cfg.tier2.enabled
-        && !stage0_cfg.tier2.notebook.trim().is_empty()
-    {
-        // Check NotebookLM service health before creating adapter
-        send_progress(&progress_tx, Stage0Progress::CheckingTier2Health);
-        let base_url = stage0_cfg
-            .tier2
-            .base_url
-            .clone()
-            .unwrap_or_else(|| "http://127.0.0.1:3456".to_string());
+    let (tier2_opt, tier2_skip_reason) =
+        if stage0_cfg.tier2.enabled && !stage0_cfg.tier2.notebook.trim().is_empty() {
+            // Check NotebookLM service health before creating adapter
+            send_progress(&progress_tx, Stage0Progress::CheckingTier2Health);
+            let base_url = stage0_cfg
+                .tier2
+                .base_url
+                .clone()
+                .unwrap_or_else(|| "http://127.0.0.1:3456".to_string());
 
-        match check_tier2_service_health(&base_url) {
-            Ok(()) => (
-                Some(Tier2HttpAdapter::new(
-                    base_url,
-                    stage0_cfg.tier2.notebook.clone(),
-                )),
-                None,
-            ),
-            Err(reason) => {
-                // Tier2 fail-closed: skip with diagnostic
-                tracing::warn!(
-                    "Stage0 Tier2 skipped: {}. Run 'code doctor' for details.",
-                    reason
-                );
-                (None, Some(reason))
+            match check_tier2_service_health(&base_url) {
+                Ok(()) => (
+                    Some(Tier2HttpAdapter::new(
+                        base_url,
+                        stage0_cfg.tier2.notebook.clone(),
+                    )),
+                    None,
+                ),
+                Err(reason) => {
+                    // Tier2 fail-closed: skip with diagnostic
+                    tracing::warn!(
+                        "Stage0 Tier2 skipped: {}. Run 'code doctor' for details.",
+                        reason
+                    );
+                    (None, Some(reason))
+                }
             }
-        }
-    } else {
-        // No notebook configured - emit diagnostic
-        let reason = if stage0_cfg.tier2.enabled {
-            let msg = "No notebook configured".to_string();
-            tracing::info!(
-                "Stage0 Tier2 skipped: {}. Add tier2.notebook to stage0.toml",
-                msg
-            );
-            Some(msg)
         } else {
-            Some("Tier2 disabled".to_string())
+            // No notebook configured - emit diagnostic
+            let reason = if stage0_cfg.tier2.enabled {
+                let msg = "No notebook configured".to_string();
+                tracing::info!(
+                    "Stage0 Tier2 skipped: {}. Add tier2.notebook to stage0.toml",
+                    msg
+                );
+                Some(msg)
+            } else {
+                Some("Tier2 disabled".to_string())
+            };
+            (None, reason)
         };
-        (None, reason)
-    };
 
     // Build environment context
     let env = EnvCtx {
@@ -482,11 +480,7 @@ pub fn run_stage0_for_spec(
             );
 
             // If tier2 was used, clear the skip reason
-            let final_tier2_skip = if tier2_used {
-                None
-            } else {
-                tier2_skip_reason
-            };
+            let final_tier2_skip = if tier2_used { None } else { tier2_skip_reason };
 
             Stage0ExecutionResult {
                 result: Some(result),
@@ -1043,7 +1037,7 @@ mod tests {
     /// 3. Returns a Stage0ExecutionResult even with 0 memories
     #[test]
     fn test_971_a5_memvid_backend_without_local_memory() {
-        use crate::memvid_adapter::{create_unified_memory_client, UnifiedMemoryClient};
+        use crate::memvid_adapter::{UnifiedMemoryClient, create_unified_memory_client};
         use codex_stage0::MemoryBackend;
         use tempfile::TempDir;
 
@@ -1069,7 +1063,10 @@ mod tests {
             .await;
 
             // Should succeed because capsule opens
-            assert!(result.is_ok(), "Memvid client should open without local-memory");
+            assert!(
+                result.is_ok(),
+                "Memvid client should open without local-memory"
+            );
 
             let client = result.unwrap();
 
@@ -1097,7 +1094,10 @@ mod tests {
             };
             let results = client.search_memories(params).await;
             assert!(results.is_ok(), "Search should succeed");
-            assert!(results.unwrap().is_empty(), "No data, empty results expected");
+            assert!(
+                results.unwrap().is_empty(),
+                "No data, empty results expected"
+            );
         });
     }
 
@@ -1107,7 +1107,7 @@ mod tests {
     /// the system falls back to local-memory.
     #[test]
     fn test_971_a5_memvid_fallback_to_local_memory() {
-        use crate::memvid_adapter::{create_unified_memory_client, UnifiedMemoryClient};
+        use crate::memvid_adapter::{UnifiedMemoryClient, create_unified_memory_client};
         use codex_stage0::MemoryBackend;
         use std::path::PathBuf;
 

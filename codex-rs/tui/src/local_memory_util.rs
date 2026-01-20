@@ -74,8 +74,8 @@ mod tests {
     #[test]
     fn test_null_results_array_handled() {
         let json = r#"{"success":true,"data":{"query":"*","result_count":0,"results":null}}"#;
-        let parsed: LocalMemorySearchResponse = serde_json::from_str(json)
-            .expect("should parse JSON with null results");
+        let parsed: LocalMemorySearchResponse =
+            serde_json::from_str(json).expect("should parse JSON with null results");
 
         assert!(parsed.success);
         assert!(parsed.data.is_some());
@@ -86,8 +86,8 @@ mod tests {
     #[test]
     fn test_empty_results_array() {
         let json = r#"{"success":true,"data":{"results":[]}}"#;
-        let parsed: LocalMemorySearchResponse = serde_json::from_str(json)
-            .expect("should parse JSON with empty results");
+        let parsed: LocalMemorySearchResponse =
+            serde_json::from_str(json).expect("should parse JSON with empty results");
 
         assert!(parsed.data.unwrap().results.is_empty());
     }
@@ -96,8 +96,8 @@ mod tests {
     #[test]
     fn test_populated_results_array() {
         let json = r#"{"success":true,"data":{"results":[{"memory":{"content":"test"},"relevance_score":0.95}]}}"#;
-        let parsed: LocalMemorySearchResponse = serde_json::from_str(json)
-            .expect("should parse JSON with results");
+        let parsed: LocalMemorySearchResponse =
+            serde_json::from_str(json).expect("should parse JSON with results");
 
         let results = parsed.data.unwrap().results;
         assert_eq!(results.len(), 1);

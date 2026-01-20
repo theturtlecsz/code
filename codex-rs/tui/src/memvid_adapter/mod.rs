@@ -44,40 +44,62 @@ pub mod policy_capture;
 mod types;
 
 pub use adapter::{
-    MemvidMemoryAdapter, MemoryMeta, UnifiedMemoryClient, EmitContext,
-    create_memory_client, create_unified_memory_client,
-};
-pub use eval::{
-    ABHarness, ABReport, EvalRunResult, GoldenQuery,
-    golden_query_suite, golden_test_memories,
-    run_ab_harness_and_save, run_ab_harness_synthetic,
+    EmitContext, MemoryMeta, MemvidMemoryAdapter, UnifiedMemoryClient, create_memory_client,
+    create_unified_memory_client,
 };
 pub use capsule::{
-    CapsuleHandle, CapsuleConfig, CapsuleError, CapsuleOpenOptions,
-    CapsuleStats, DiagnosticResult, IndexStatus, CurrentPolicyInfo,
+    CapsuleConfig, CapsuleError, CapsuleHandle, CapsuleOpenOptions, CapsuleStats,
+    CurrentPolicyInfo, DiagnosticResult, IndexStatus,
+};
+pub use eval::{
+    ABHarness, ABReport, EvalRunResult, GoldenQuery, golden_query_suite, golden_test_memories,
+    run_ab_harness_and_save, run_ab_harness_synthetic,
 };
 pub use lock::{LockMetadata, is_locked, lock_path_for};
+pub use policy_capture::{capture_and_store_policy, latest_policy, list_policies, load_policy};
 pub use types::{
-    LogicalUri, CheckpointId, CheckpointMetadata, BranchId,
-    RunEventEnvelope, EventType, UriIndex, UriIndexSnapshot,
-    // SPEC-KIT-978: Routing decision types
-    RoutingMode, RoutingFallbackReason, RoutingDecisionPayload,
-    // SPEC-KIT-971: Branch merge types
-    MergeMode, BranchMergedPayload,
-    // SPEC-KIT-975: Replayable audit event types
-    LLMCaptureMode, GateOutcome, ErrorSeverity,
-    RetrievalRequestPayload, RetrievalResponsePayload,
-    ToolCallPayload, ToolResultPayload,
-    PatchApplyPayload, GateDecisionPayload, ErrorEventPayload,
-    ModelCallEnvelopePayload, CapsuleExportedPayload, CapsuleImportedPayload,
+    BranchId,
+    BranchMergedPayload,
     // SPEC-KIT-978: Circuit breaker types
-    BreakerState, BreakerStateChangedPayload,
+    BreakerState,
+    BreakerStateChangedPayload,
+    CapsuleExportedPayload,
+    CapsuleImportedPayload,
+    CardFact,
+    CardProvenance,
+    CardType,
+    CheckpointId,
+    CheckpointMetadata,
+    EdgeProvenance,
+    EdgeType,
+    ErrorEventPayload,
+    ErrorSeverity,
+    EventType,
+    FactValueType,
+    GateDecisionPayload,
+    GateOutcome,
+    // SPEC-KIT-975: Replayable audit event types
+    LLMCaptureMode,
+    LogicEdgeV1,
+    LogicalUri,
+    MemoryCardV1,
+    // SPEC-KIT-971: Branch merge types
+    MergeMode,
+    ModelCallEnvelopePayload,
     // SPEC-KIT-976: Memory Card and Logic Edge types
-    ObjectType, CardType, EdgeType, MemoryCardV1, LogicEdgeV1,
-    CardFact, FactValueType, CardProvenance, EdgeProvenance,
-};
-pub use policy_capture::{
-    capture_and_store_policy, load_policy, list_policies, latest_policy,
+    ObjectType,
+    PatchApplyPayload,
+    RetrievalRequestPayload,
+    RetrievalResponsePayload,
+    RoutingDecisionPayload,
+    RoutingFallbackReason,
+    // SPEC-KIT-978: Routing decision types
+    RoutingMode,
+    RunEventEnvelope,
+    ToolCallPayload,
+    ToolResultPayload,
+    UriIndex,
+    UriIndexSnapshot,
 };
 
 // =============================================================================

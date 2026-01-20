@@ -12,8 +12,8 @@
 #![allow(clippy::redundant_clone, clippy::useless_vec)]
 
 use codex_tui::{
-    HalMode, PipelineConfig, QualityCheckpoint, SpecAutoState, SpecStage, ValidateBeginOutcome,
-    ValidateCompletionReason,
+    HalMode, LLMCaptureMode, PipelineConfig, QualityCheckpoint, SpecAutoState, SpecStage,
+    ValidateBeginOutcome, ValidateCompletionReason,
 };
 use std::collections::HashSet;
 
@@ -29,6 +29,7 @@ fn test_spec_auto_state_initialization() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     assert_eq!(state.spec_id, "SPEC-TEST-001");
@@ -48,6 +49,7 @@ fn test_pipeline_stages_order() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     let expected = vec![
@@ -70,6 +72,7 @@ fn test_resume_from_tasks_stage() {
         SpecStage::Tasks,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     assert_eq!(state.current_index, 1); // Tasks is index 1
@@ -84,6 +87,7 @@ fn test_quality_gates_enabled_by_default() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     assert!(state.quality_gates_enabled);
@@ -98,6 +102,7 @@ fn test_quality_gates_can_be_disabled() {
         None,
         false, // Disable quality gates
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     assert!(!state.quality_gates_enabled);
@@ -115,6 +120,7 @@ fn test_quality_checkpoints_track_completion() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     // Initially no checkpoints completed
@@ -150,6 +156,7 @@ fn test_quality_modifications_tracked() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     // Initially no modifications
@@ -171,6 +178,7 @@ fn test_validate_lifecycle_prevents_duplicates() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     let started = state.begin_validate_run("hash-1");
@@ -199,6 +207,7 @@ fn test_auto_resolutions_tracked() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     // Create a test issue
@@ -234,6 +243,7 @@ fn test_checkpoint_outcomes_recorded() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     // Record checkpoint outcomes
@@ -269,6 +279,7 @@ fn test_current_stage_progression() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     // Start at Plan
@@ -307,6 +318,7 @@ fn test_validate_retry_tracking() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     // SPEC-957: assert_eq!(state.validate_retries, 0); // validate_retries field removed
@@ -376,6 +388,7 @@ fn test_checkpoint_runs_once_per_pipeline() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     // First time: should run PrePlanning
@@ -405,6 +418,7 @@ fn test_pipeline_with_quality_gates_disabled() {
         None,
         false, // Disable
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     // Should still have stages but no quality gate execution
@@ -427,6 +441,7 @@ fn test_escalated_issues_tracked_separately_from_auto_resolved() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     let auto_issue = QualityIssue {
@@ -473,6 +488,7 @@ fn test_pipeline_state_survives_checkpoint_completion() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     let spec_id_before = state.spec_id.clone();
@@ -497,6 +513,7 @@ fn test_multiple_checkpoints_can_complete_in_sequence() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     // Complete checkpoints in order
@@ -538,6 +555,7 @@ fn test_quality_outcomes_accumulate_across_checkpoints() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     // Record outcomes from multiple checkpoints
@@ -577,6 +595,7 @@ fn test_hal_mode_preserved_throughout_pipeline() {
         SpecStage::Plan,
         Some(HalMode::Live),
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     assert_eq!(state.hal_mode, Some(HalMode::Live));
@@ -590,6 +609,7 @@ fn test_pending_prompt_summary_for_next_stage() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     assert!(state.pending_prompt_summary.is_none());
@@ -615,6 +635,7 @@ fn test_simulated_pipeline_flow_with_quality_gates() {
         SpecStage::Plan,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     // Stage 0: Plan
@@ -715,6 +736,7 @@ fn test_validate_duplicate_storm_prevention() {
         SpecStage::Validate,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     // First trigger should start
@@ -763,6 +785,7 @@ fn test_validate_retry_cycle() {
         SpecStage::Implement,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     // Initial validate fails
@@ -804,6 +827,7 @@ fn test_validate_cancel_cleanup() {
         SpecStage::Validate,
         None,
         PipelineConfig::defaults(),
+        LLMCaptureMode::PromptsOnly,
     );
 
     // Start a run

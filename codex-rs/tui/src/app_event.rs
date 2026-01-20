@@ -625,6 +625,18 @@ pub(crate) enum AppEvent {
     /// Vision builder was cancelled by user (P93/SPEC-KIT-105)
     VisionBuilderCancelled,
 
+    /// Maieutic elicitation completed (D130)
+    MaieuticSubmitted {
+        spec_id: String,
+        answers: std::collections::HashMap<String, String>,
+        duration_ms: u64,
+    },
+
+    /// Maieutic elicitation was cancelled by user (D130)
+    MaieuticCancelled {
+        spec_id: String,
+    },
+
     /// Clarification markers resolved (SPEC-KIT-971)
     ClarifySubmitted {
         spec_id: String,

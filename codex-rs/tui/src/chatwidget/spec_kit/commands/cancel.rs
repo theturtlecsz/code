@@ -33,7 +33,9 @@ impl SpecKitCommand for SpecKitCancelCommand {
     fn execute(&self, widget: &mut ChatWidget, _args: String) {
         // DEBUG: Trace cancel command execution (SPEC-DOGFOOD-001 Session 29)
         widget.history_push(crate::history_cell::PlainHistoryCell::new(
-            vec![ratatui::text::Line::from("📍 DEBUG: SpecKitCancelCommand.execute() called")],
+            vec![ratatui::text::Line::from(
+                "📍 DEBUG: SpecKitCancelCommand.execute() called",
+            )],
             crate::history_cell::HistoryCellType::Notice,
         ));
         handle_speckit_cancel(widget);

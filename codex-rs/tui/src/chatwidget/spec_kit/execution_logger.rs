@@ -28,7 +28,10 @@ pub fn generate_run_id(spec_id: &str) -> RunId {
     // SPEC-KIT-971: Run ID no longer has `run_` prefix to avoid redundant
     // `run/run_...` branch names when used with BranchId::for_run()
     format!(
-        "{}_{}_{}", spec_id, timestamp, &uuid::Uuid::new_v4().to_string()[..8]
+        "{}_{}_{}",
+        spec_id,
+        timestamp,
+        &uuid::Uuid::new_v4().to_string()[..8]
     )
 }
 
@@ -745,7 +748,10 @@ mod tests {
         // SPEC-KIT-971: Run ID no longer has run_ prefix
         // Format: SPEC-ID_TIMESTAMP_UUID8
         assert!(run_id.starts_with("SPEC-KIT-900_"));
-        assert!(!run_id.starts_with("run_"), "Run ID should not have run_ prefix");
+        assert!(
+            !run_id.starts_with("run_"),
+            "Run ID should not have run_ prefix"
+        );
         assert!(run_id.len() > 25); // SPEC-ID + _ + timestamp + _ + 8 chars
     }
 

@@ -2085,7 +2085,9 @@ fn specify_json_output_structure() -> Result<()> {
     let json: JsonValue = serde_json::from_slice(&output.stdout)?;
 
     // Verify schema version
-    let schema_version = json.get("schema_version").and_then(serde_json::Value::as_u64);
+    let schema_version = json
+        .get("schema_version")
+        .and_then(serde_json::Value::as_u64);
     assert_eq!(schema_version, Some(1), "Expected schema_version 1");
 
     // Verify required fields
@@ -2129,7 +2131,9 @@ fn specify_existing_dir_reports_already_existed() -> Result<()> {
     let json: JsonValue = serde_json::from_slice(&output.stdout)?;
 
     // Should report already_existed
-    let already_existed = json.get("already_existed").and_then(serde_json::Value::as_bool);
+    let already_existed = json
+        .get("already_existed")
+        .and_then(serde_json::Value::as_bool);
     assert_eq!(
         already_existed,
         Some(true),
@@ -2207,7 +2211,9 @@ fn specify_idempotent_never_overwrites() -> Result<()> {
 
     // Verify JSON reports already_existed and no files created
     let json: JsonValue = serde_json::from_slice(&output2.stdout)?;
-    let already_existed = json.get("already_existed").and_then(serde_json::Value::as_bool);
+    let already_existed = json
+        .get("already_existed")
+        .and_then(serde_json::Value::as_bool);
     assert_eq!(already_existed, Some(true), "Should report already_existed");
 
     let created_files = json.get("created_files").and_then(|v| v.as_array());
@@ -3252,7 +3258,10 @@ fn capsule_doctor_json_returns_valid_schema() -> Result<()> {
     let json: JsonValue = serde_json::from_slice(&output.stdout)?;
 
     // Verify schema
-    assert!(json.get("schema_version").is_some(), "Missing schema_version");
+    assert!(
+        json.get("schema_version").is_some(),
+        "Missing schema_version"
+    );
     assert!(json.get("tool_version").is_some(), "Missing tool_version");
     assert!(json.get("status").is_some(), "Missing status");
     assert!(json.get("diagnostics").is_some(), "Missing diagnostics");
@@ -3294,7 +3303,10 @@ fn capsule_doctor_exits_2_for_missing_capsule() -> Result<()> {
 
     // Status should be "error"
     let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
-    assert_eq!(status, "error", "Expected status 'error' for missing capsule");
+    assert_eq!(
+        status, "error",
+        "Expected status 'error' for missing capsule"
+    );
 
     Ok(())
 }
@@ -3324,11 +3336,17 @@ fn capsule_stats_json_returns_valid_schema() -> Result<()> {
     let json: JsonValue = serde_json::from_slice(&output.stdout)?;
 
     // Verify schema
-    assert!(json.get("schema_version").is_some(), "Missing schema_version");
+    assert!(
+        json.get("schema_version").is_some(),
+        "Missing schema_version"
+    );
     assert!(json.get("tool_version").is_some(), "Missing tool_version");
     assert!(json.get("size_bytes").is_some(), "Missing size_bytes");
     assert!(json.get("uri_count").is_some(), "Missing uri_count");
-    assert!(json.get("checkpoint_count").is_some(), "Missing checkpoint_count");
+    assert!(
+        json.get("checkpoint_count").is_some(),
+        "Missing checkpoint_count"
+    );
 
     Ok(())
 }
@@ -3358,7 +3376,10 @@ fn capsule_checkpoints_json_returns_valid_schema() -> Result<()> {
     let json: JsonValue = serde_json::from_slice(&output.stdout)?;
 
     // Verify schema
-    assert!(json.get("schema_version").is_some(), "Missing schema_version");
+    assert!(
+        json.get("schema_version").is_some(),
+        "Missing schema_version"
+    );
     assert!(json.get("checkpoints").is_some(), "Missing checkpoints");
     assert!(json.get("count").is_some(), "Missing count");
 
@@ -3409,7 +3430,10 @@ fn capsule_commit_creates_checkpoint() -> Result<()> {
     assert!(json.get("checkpoint_id").is_some(), "Missing checkpoint_id");
     assert!(json.get("created").is_some(), "Missing created flag");
 
-    let created = json.get("created").and_then(|v| v.as_bool()).unwrap_or(false);
+    let created = json
+        .get("created")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     assert!(created, "Checkpoint should be created");
 
     let label = json.get("label").and_then(|v| v.as_str()).unwrap_or("");
@@ -3498,8 +3522,226 @@ fn capsule_custom_path_works() -> Result<()> {
     let json: JsonValue = serde_json::from_slice(&output.stdout)?;
 
     // Verify custom path is used
-    let path = json.get("capsule_path").and_then(|v| v.as_str()).unwrap_or("");
+    let path = json
+        .get("capsule_path")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     assert!(path.contains("custom"), "Should use custom path");
 
     Ok(())
+}
+
+// =============================================================================
+// HEADLESS MODE TESTS (SPEC-KIT-920)
+// =============================================================================
+
+/// Create a SPEC directory with PRD.md
+fn setup_spec_with_prd(repo_root: &Path, spec_id: &str) -> std::io::Result<std::path::PathBuf> {
+    let spec_dir = repo_root.join("docs").join(spec_id);
+    fs::create_dir_all(&spec_dir)?;
+    fs::write(
+        spec_dir.join("PRD.md"),
+        "# Test SPEC\n\n## Requirements\n\nTest requirements\n",
+    )?;
+    Ok(spec_dir)
+}
+
+#[test]
+fn test_headless_requires_maieutic_input() -> Result<()> {
+    // SPEC-KIT-920: Headless execution with --execute requires maieutic input
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create a valid SPEC structure
+    setup_spec_with_prd(repo_root.path(), "SPEC-TEST-HEADLESS-001")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            "SPEC-TEST-HEADLESS-001",
+            "--from",
+            "plan",
+            "--to",
+            "implement",
+            "--execute",  // Actual execution, not dry-run
+            "--headless", // Headless mode
+            "--json",
+            // Note: NO --maieutic flag
+        ])
+        .output()?;
+
+    // Should exit with NEEDS_INPUT (10)
+    assert_eq!(
+        output.status.code(),
+        Some(10),
+        "Expected exit 10 (NEEDS_INPUT) without maieutic, got {:?}\nstdout: {}\nstderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // JSON output should explain the issue
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(
+        json.get("exit_reason").and_then(|v| v.as_str()),
+        Some("needs_input"),
+        "exit_reason should be 'needs_input'"
+    );
+    assert!(
+        json.get("resolution").is_some(),
+        "Should include resolution hint"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_headless_validation_without_execute_succeeds() -> Result<()> {
+    // SPEC-KIT-920: Headless mode without --execute (dry-run) doesn't require maieutic
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Create a valid SPEC structure
+    setup_spec_with_prd(repo_root.path(), "SPEC-TEST-HEADLESS-002")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            "SPEC-TEST-HEADLESS-002",
+            "--from",
+            "specify",
+            "--to",
+            "plan",
+            "--headless", // Headless but NO --execute
+            "--json",
+        ])
+        .output()?;
+
+    // Should NOT exit with NEEDS_INPUT - dry-run doesn't require maieutic
+    assert_ne!(
+        output.status.code(),
+        Some(10),
+        "Dry-run should not require maieutic input"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_headless_invalid_maieutic_json_exits_3() -> Result<()> {
+    // SPEC-KIT-920: Invalid maieutic JSON should exit with INFRA_ERROR (3)
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    setup_spec_with_prd(repo_root.path(), "SPEC-TEST-HEADLESS-003")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            "SPEC-TEST-HEADLESS-003",
+            "--from",
+            "plan",
+            "--to",
+            "implement",
+            "--execute",
+            "--headless",
+            "--maieutic-answers",
+            "not valid json",
+            "--json",
+        ])
+        .output()?;
+
+    // Should exit with INFRA_ERROR (3) for invalid JSON
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "Expected exit 3 (INFRA_ERROR) for invalid JSON, got {:?}",
+        output.status.code()
+    );
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(
+        json.get("exit_reason").and_then(|v| v.as_str()),
+        Some("infra_error")
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_headless_missing_maieutic_file_exits_3() -> Result<()> {
+    // SPEC-KIT-920: Missing maieutic file should exit with INFRA_ERROR (3)
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    setup_spec_with_prd(repo_root.path(), "SPEC-TEST-HEADLESS-004")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            "SPEC-TEST-HEADLESS-004",
+            "--from",
+            "plan",
+            "--to",
+            "implement",
+            "--execute",
+            "--headless",
+            "--maieutic",
+            "/nonexistent/path/to/maieutic.json",
+            "--json",
+        ])
+        .output()?;
+
+    // Should exit with INFRA_ERROR (3) for missing file
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "Expected exit 3 (INFRA_ERROR) for missing file, got {:?}",
+        output.status.code()
+    );
+
+    Ok(())
+}
+
+#[test]
+#[ignore = "Requires interactive mock infrastructure - TODO in test PR"]
+fn test_headless_never_prompts() {
+    // SPEC-KIT-920: Verify that no code path in headless mode can trigger a prompt
+    // This test requires mocking interactive code paths
+    // Implementation: Add a global prompt counter that panics in test mode if incremented
+    todo!("test_headless_never_prompts - requires interactive mock infrastructure")
+}
+
+#[test]
+#[ignore = "Requires mock agent infrastructure for approval checkpoints - TODO in test PR"]
+fn test_headless_needs_approval_exit_code() {
+    // SPEC-KIT-920: Tier-2/Tier-3 checkpoints should return NEEDS_APPROVAL (11)
+    // This test requires:
+    // 1. Setting up a SPEC that will hit an approval checkpoint
+    // 2. Running with --execute and valid maieutic
+    // 3. Verifying exit code 11
+    todo!("test_headless_needs_approval_exit_code - requires mock agent infrastructure")
+}
+
+#[test]
+#[ignore = "Requires parallel TUI/CLI execution comparison - TODO in test PR"]
+fn test_shared_executor_same_core_artifacts() {
+    // SPEC-KIT-920: Verify that given identical inputs, CLI and TUI produce identical artifacts
+    // This test requires:
+    // 1. Mock agent responses
+    // 2. Deterministic timestamp injection
+    // 3. Artifact hash comparison
+    todo!("test_shared_executor_same_core_artifacts - requires mock agent infrastructure")
 }

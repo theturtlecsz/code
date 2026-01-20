@@ -262,9 +262,12 @@ pub fn execute_stage_command(
     };
 
     // Create executor with current working directory and resolved policy
+    // TUI is interactive, so headless=false
     let executor = SpeckitExecutor::new(ExecutionContext {
         repo_root: widget.config.cwd.clone(),
         policy_snapshot: Some(policy_snapshot),
+        headless: false,
+        maieutic_input: None,
     });
 
     // Execute validation via shared executor (same path as CLI)

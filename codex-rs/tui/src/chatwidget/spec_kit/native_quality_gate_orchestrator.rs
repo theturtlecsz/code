@@ -131,7 +131,12 @@ pub async fn spawn_quality_gate_agents_native(
                     .and_then(|v| v.get("prompt"))
                     .and_then(|v| v.as_str())
             })
-            .ok_or_else(|| format!("No prompt found for {} or 'critic' in {}", agent_name, gate_key))?;
+            .ok_or_else(|| {
+                format!(
+                    "No prompt found for {} or 'critic' in {}",
+                    agent_name, gate_key
+                )
+            })?;
 
         // Build prompt with SPEC context
         let prompt = build_quality_gate_prompt(spec_id, gate, prompt_template, cwd).await?;

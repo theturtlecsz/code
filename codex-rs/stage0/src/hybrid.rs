@@ -208,7 +208,11 @@ impl HybridBackend {
             .collect();
 
         // Sort by score descending
-        scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Return top_k
         scored.truncate(top_k);
@@ -259,7 +263,11 @@ impl HybridBackend {
             .collect();
 
         // Sort by score descending
-        scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Return top_k
         scored.truncate(top_k);

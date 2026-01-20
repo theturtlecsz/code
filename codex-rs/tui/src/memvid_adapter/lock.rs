@@ -86,7 +86,11 @@ impl LockMetadata {
     }
 
     /// Create lock metadata with context.
-    pub fn with_context(spec_id: Option<String>, run_id: Option<String>, branch: Option<String>) -> Self {
+    pub fn with_context(
+        spec_id: Option<String>,
+        run_id: Option<String>,
+        branch: Option<String>,
+    ) -> Self {
         let mut meta = Self::current();
         meta.spec_id = spec_id;
         meta.run_id = run_id;
@@ -141,16 +145,16 @@ impl LockMetadata {
 fn is_process_running(pid: u32) -> bool {
     // Use kill(pid, 0) to check if process exists
     // Returns 0 if process exists, -1 with ESRCH if not
-    unsafe {
-        libc::kill(pid as i32, 0) == 0
-    }
+    unsafe { libc::kill(pid as i32, 0) == 0 }
 }
 
 #[cfg(windows)]
 fn is_process_running(pid: u32) -> bool {
     use std::ptr::null_mut;
     use windows_sys::Win32::Foundation::{CloseHandle, STILL_ACTIVE};
-    use windows_sys::Win32::System::Threading::{GetExitCodeProcess, OpenProcess, PROCESS_QUERY_INFORMATION};
+    use windows_sys::Win32::System::Threading::{
+        GetExitCodeProcess, OpenProcess, PROCESS_QUERY_INFORMATION,
+    };
 
     unsafe {
         let handle = OpenProcess(PROCESS_QUERY_INFORMATION, 0, pid);
@@ -217,8 +221,9 @@ impl CapsuleLock {
                 }
 
                 // Write metadata to the lock file
-                let json = serde_json::to_string_pretty(&metadata)
-                    .map_err(|e| LockError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+                let json = serde_json::to_string_pretty(&metadata).map_err(|e| {
+                    LockError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
+                })?;
                 file.write_all(json.as_bytes())?;
                 file.sync_all()?;
 

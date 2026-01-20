@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 // Re-export from stage0 for shared access
-pub use codex_stage0::{load_reflex_config, ReflexConfig, ReflexThresholds};
+pub use codex_stage0::{ReflexConfig, ReflexThresholds, load_reflex_config};
 
 /// Exit codes for reflex commands
 pub mod exit_codes {
@@ -218,7 +218,10 @@ async fn run_reflex_health(args: HealthArgs) -> i32 {
                     error: Some(e.clone()),
                     latency_ms: None,
                 };
-                println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&result).unwrap_or_default()
+                );
             } else {
                 eprintln!("Configuration error: {e}");
             }
@@ -243,79 +246,80 @@ async fn run_reflex_health(args: HealthArgs) -> i32 {
     let latency_ms = start.elapsed().as_millis() as u64;
 
     match response {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<ModelsResponse>().await {
-                Ok(models_resp) => {
-                    let available_models: Vec<String> =
-                        models_resp.data.iter().map(|m| m.id.clone()).collect();
-                    let model_available = available_models.contains(&config.model);
-                    let healthy = model_available;
+        Ok(resp) if resp.status().is_success() => match resp.json::<ModelsResponse>().await {
+            Ok(models_resp) => {
+                let available_models: Vec<String> =
+                    models_resp.data.iter().map(|m| m.id.clone()).collect();
+                let model_available = available_models.contains(&config.model);
+                let healthy = model_available;
 
-                    let result = HealthResult {
-                        healthy,
-                        server_reachable: true,
-                        model_available,
-                        endpoint: config.endpoint.clone(),
-                        model: config.model.clone(),
-                        available_models: available_models.clone(),
-                        error: if !model_available {
-                            Some(format!(
-                                "Configured model '{}' not found in available models",
-                                config.model
-                            ))
-                        } else {
-                            None
-                        },
-                        latency_ms: Some(latency_ms),
-                    };
-
-                    if args.json {
-                        println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
-                    } else if healthy {
-                        println!("✓ Reflex server healthy");
-                        println!("  Endpoint: {}", config.endpoint);
-                        println!("  Model: {} (available)", config.model);
-                        println!("  Latency: {}ms", latency_ms);
-                        println!("  Available models: {}", available_models.join(", "));
-                    } else {
-                        println!("✗ Reflex server unhealthy");
-                        println!("  Endpoint: {}", config.endpoint);
-                        println!(
-                            "  Model: {} (NOT FOUND)",
+                let result = HealthResult {
+                    healthy,
+                    server_reachable: true,
+                    model_available,
+                    endpoint: config.endpoint.clone(),
+                    model: config.model.clone(),
+                    available_models: available_models.clone(),
+                    error: if !model_available {
+                        Some(format!(
+                            "Configured model '{}' not found in available models",
                             config.model
-                        );
-                        println!("  Available models: {}", available_models.join(", "));
-                    }
-
-                    if healthy {
-                        exit_codes::HEALTHY
+                        ))
                     } else {
-                        exit_codes::UNHEALTHY
-                    }
+                        None
+                    },
+                    latency_ms: Some(latency_ms),
+                };
+
+                if args.json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&result).unwrap_or_default()
+                    );
+                } else if healthy {
+                    println!("✓ Reflex server healthy");
+                    println!("  Endpoint: {}", config.endpoint);
+                    println!("  Model: {} (available)", config.model);
+                    println!("  Latency: {}ms", latency_ms);
+                    println!("  Available models: {}", available_models.join(", "));
+                } else {
+                    println!("✗ Reflex server unhealthy");
+                    println!("  Endpoint: {}", config.endpoint);
+                    println!("  Model: {} (NOT FOUND)", config.model);
+                    println!("  Available models: {}", available_models.join(", "));
                 }
-                Err(e) => {
-                    let result = HealthResult {
-                        healthy: false,
-                        server_reachable: true,
-                        model_available: false,
-                        endpoint: config.endpoint.clone(),
-                        model: config.model.clone(),
-                        available_models: vec![],
-                        error: Some(format!("Failed to parse /v1/models response: {e}")),
-                        latency_ms: Some(latency_ms),
-                    };
 
-                    if args.json {
-                        println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
-                    } else {
-                        eprintln!("✗ Reflex server returned invalid response");
-                        eprintln!("  Error: {e}");
-                    }
-
+                if healthy {
+                    exit_codes::HEALTHY
+                } else {
                     exit_codes::UNHEALTHY
                 }
             }
-        }
+            Err(e) => {
+                let result = HealthResult {
+                    healthy: false,
+                    server_reachable: true,
+                    model_available: false,
+                    endpoint: config.endpoint.clone(),
+                    model: config.model.clone(),
+                    available_models: vec![],
+                    error: Some(format!("Failed to parse /v1/models response: {e}")),
+                    latency_ms: Some(latency_ms),
+                };
+
+                if args.json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&result).unwrap_or_default()
+                    );
+                } else {
+                    eprintln!("✗ Reflex server returned invalid response");
+                    eprintln!("  Error: {e}");
+                }
+
+                exit_codes::UNHEALTHY
+            }
+        },
         Ok(resp) => {
             let status = resp.status();
             let result = HealthResult {
@@ -330,7 +334,10 @@ async fn run_reflex_health(args: HealthArgs) -> i32 {
             };
 
             if args.json {
-                println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&result).unwrap_or_default()
+                );
             } else {
                 eprintln!("✗ Reflex server returned HTTP {status}");
                 eprintln!("  Endpoint: {}", config.endpoint);
@@ -351,14 +358,19 @@ async fn run_reflex_health(args: HealthArgs) -> i32 {
             };
 
             if args.json {
-                println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&result).unwrap_or_default()
+                );
             } else {
                 eprintln!("✗ Reflex server not reachable");
                 eprintln!("  Endpoint: {}", config.endpoint);
                 eprintln!("  Error: {e}");
                 eprintln!();
                 eprintln!("To start a local inference server, run:");
-                eprintln!("  python -m sglang.launch_server --model-path Qwen/Qwen2.5-Coder-7B-Instruct --port 3009");
+                eprintln!(
+                    "  python -m sglang.launch_server --model-path Qwen/Qwen2.5-Coder-7B-Instruct --port 3009"
+                );
             }
 
             exit_codes::UNHEALTHY
@@ -387,37 +399,35 @@ async fn run_reflex_models(args: ModelsArgs) -> i32 {
         .unwrap_or_default();
 
     match client.get(&models_url).send().await {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<ModelsResponse>().await {
-                Ok(models_resp) => {
-                    if args.json {
-                        println!(
-                            "{}",
-                            serde_json::to_string_pretty(&models_resp.data).unwrap_or_default()
-                        );
-                    } else {
-                        println!("Available models at {}:", config.endpoint);
-                        for model in &models_resp.data {
-                            let marker = if model.id == config.model {
-                                " ← configured"
-                            } else {
-                                ""
-                            };
-                            println!("  - {}{}", model.id, marker);
-                        }
+        Ok(resp) if resp.status().is_success() => match resp.json::<ModelsResponse>().await {
+            Ok(models_resp) => {
+                if args.json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&models_resp.data).unwrap_or_default()
+                    );
+                } else {
+                    println!("Available models at {}:", config.endpoint);
+                    for model in &models_resp.data {
+                        let marker = if model.id == config.model {
+                            " ← configured"
+                        } else {
+                            ""
+                        };
+                        println!("  - {}{}", model.id, marker);
                     }
-                    exit_codes::HEALTHY
                 }
-                Err(e) => {
-                    if args.json {
-                        println!(r#"{{"error": "{}"}}"#, e);
-                    } else {
-                        eprintln!("Failed to parse response: {e}");
-                    }
-                    exit_codes::UNHEALTHY
-                }
+                exit_codes::HEALTHY
             }
-        }
+            Err(e) => {
+                if args.json {
+                    println!(r#"{{"error": "{}"}}"#, e);
+                } else {
+                    eprintln!("Failed to parse response: {e}");
+                }
+                exit_codes::UNHEALTHY
+            }
+        },
         Ok(resp) => {
             let status = resp.status();
             if args.json {
@@ -453,22 +463,48 @@ async fn run_reflex_status(args: StatusArgs) -> i32 {
     };
 
     if args.json {
-        println!("{}", serde_json::to_string_pretty(&config).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&config).unwrap_or_default()
+        );
     } else {
         println!("Reflex Configuration");
         println!("====================");
-        println!("Enabled:            {}", if config.enabled { "yes" } else { "no" });
+        println!(
+            "Enabled:            {}",
+            if config.enabled { "yes" } else { "no" }
+        );
         println!("Endpoint:           {}", config.endpoint);
         println!("Model:              {}", config.model);
         println!("Timeout:            {}ms", config.timeout_ms);
-        println!("JSON Schema:        {}", if config.json_schema_required { "required" } else { "optional" });
-        println!("Fallback to Cloud:  {}", if config.fallback_to_cloud { "yes" } else { "no" });
+        println!(
+            "JSON Schema:        {}",
+            if config.json_schema_required {
+                "required"
+            } else {
+                "optional"
+            }
+        );
+        println!(
+            "Fallback to Cloud:  {}",
+            if config.fallback_to_cloud {
+                "yes"
+            } else {
+                "no"
+            }
+        );
         println!();
         println!("Bakeoff Thresholds");
         println!("------------------");
         println!("P95 Latency:        {}ms", config.thresholds.p95_latency_ms);
-        println!("Success Parity:     {}%", config.thresholds.success_parity_percent);
-        println!("JSON Compliance:    {}%", config.thresholds.json_schema_compliance_percent);
+        println!(
+            "Success Parity:     {}%",
+            config.thresholds.success_parity_percent
+        );
+        println!(
+            "JSON Compliance:    {}%",
+            config.thresholds.json_schema_compliance_percent
+        );
     }
 
     exit_codes::HEALTHY
@@ -481,8 +517,8 @@ async fn run_reflex_status(args: StatusArgs) -> i32 {
 /// 2. Fallback behavior when server unavailable
 /// 3. Event emission verification
 async fn run_reflex_e2e(args: E2eArgs) -> i32 {
-    use codex_tui::reflex_router::decide_implementer_routing;
     use codex_tui::memvid_adapter::RoutingMode;
+    use codex_tui::reflex_router::decide_implementer_routing;
 
     let mut assertions: Vec<E2eAssertion> = Vec::new();
     let mut passed = 0u32;
@@ -699,7 +735,10 @@ async fn run_reflex_e2e(args: E2eArgs) -> i32 {
     };
 
     if args.json {
-        println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
     } else {
         println!();
         println!("Results: {} passed, {} failed", passed, failed);

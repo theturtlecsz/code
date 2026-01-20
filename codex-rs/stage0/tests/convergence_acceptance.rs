@@ -9,10 +9,10 @@
 
 use async_trait::async_trait;
 use codex_stage0::{
+    NoopVectorBackend, Stage0Config, Stage0Engine, Stage0Error,
     dcc::{EnvCtx, Iqo, LocalMemoryClient, LocalMemorySearchParams, LocalMemorySummary},
     guardians::{LlmClient, MemoryKind},
     tier2::{Tier2Client, Tier2Response},
-    NoopVectorBackend, Stage0Config, Stage0Engine, Stage0Error,
 };
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -80,12 +80,8 @@ impl LocalMemoryClient for MockLocalMemoryClient {
         params: LocalMemorySearchParams,
     ) -> codex_stage0::Result<Vec<LocalMemorySummary>> {
         // Filter by exclude_tags if provided
-        let exclude_set: std::collections::HashSet<&str> = params
-            .iqo
-            .exclude_tags
-            .iter()
-            .map(String::as_str)
-            .collect();
+        let exclude_set: std::collections::HashSet<&str> =
+            params.iqo.exclude_tags.iter().map(String::as_str).collect();
 
         let filtered: Vec<LocalMemorySummary> = self
             .memories
@@ -119,11 +115,7 @@ impl LlmClient for MockLlmClient {
         Ok(input.to_string())
     }
 
-    async fn generate_iqo(
-        &self,
-        _spec_content: &str,
-        _env: &EnvCtx,
-    ) -> codex_stage0::Result<Iqo> {
+    async fn generate_iqo(&self, _spec_content: &str, _env: &EnvCtx) -> codex_stage0::Result<Iqo> {
         Ok(Iqo {
             domains: vec!["spec-kit".to_string()],
             keywords: vec!["test".to_string()],
@@ -342,10 +334,7 @@ async fn test_tier2_runs_when_configured() {
 
     // Verify: Result includes Tier2 content
     assert!(result.tier2_used, "Tier2 should be marked as used");
-    assert!(
-        !result.divine_truth.is_fallback(),
-        "Should not be fallback"
-    );
+    assert!(!result.divine_truth.is_fallback(), "Should not be fallback");
     assert!(
         result
             .divine_truth

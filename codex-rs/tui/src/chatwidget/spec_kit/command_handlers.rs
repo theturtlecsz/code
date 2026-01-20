@@ -54,9 +54,12 @@ pub fn handle_spec_status(widget: &mut ChatWidget, raw_args: String) {
     };
 
     // Create executor with current working directory and resolved policy
+    // TUI is interactive, so headless=false
     let executor = SpeckitExecutor::new(ExecutionContext {
         repo_root: widget.config.cwd.clone(),
         policy_snapshot: Some(policy_snapshot),
+        headless: false,
+        maieutic_input: None,
     });
 
     // Execute via shared executor (same path as CLI)
@@ -158,9 +161,12 @@ pub fn handle_spec_review(widget: &mut ChatWidget, raw_args: String) {
     };
 
     // Create executor with current working directory and resolved policy
+    // TUI is interactive, so headless=false
     let executor = SpeckitExecutor::new(ExecutionContext {
         repo_root: widget.config.cwd.clone(),
         policy_snapshot: Some(policy_snapshot),
+        headless: false,
+        maieutic_input: None,
     });
 
     // Execute via shared executor (same path as CLI)
@@ -270,6 +276,44 @@ pub fn halt_spec_auto_with_error(widget: &mut impl SpecKitContext, reason: Strin
     widget.set_spec_auto_metrics(None);
 }
 
+/// Halt /speckit.auto pipeline with error and NO resume hint (D131)
+///
+/// Used for configuration errors like capture=none ship gate, where resuming
+/// would not help - user must change configuration (model_policy.toml).
+///
+/// Unlike `halt_spec_auto_with_error`, this does NOT show a resume hint because
+/// the issue cannot be fixed by resuming - the capture mode configuration must
+/// be changed before the pipeline can ship.
+pub fn halt_spec_auto_no_resume(widget: &mut impl SpecKitContext, reason: String) {
+    // Clean up active validate lifecycle state if present
+    if let Some(state) = widget.spec_auto_state().as_ref()
+        && state.validate_lifecycle.active().is_some()
+    {
+        let _ = state
+            .validate_lifecycle
+            .reset_active(ValidateCompletionReason::Cancelled);
+    }
+
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+        vec![
+            ratatui::text::Line::from("⚠ /speckit.auto halted"),
+            ratatui::text::Line::from(reason),
+            ratatui::text::Line::from(""),
+            ratatui::text::Line::from("Action: Change capture mode in model_policy.toml"),
+            ratatui::text::Line::from("  [capture]"),
+            ratatui::text::Line::from("  mode = \"prompts_only\"  # or \"full_io\""),
+        ],
+        HistoryCellType::Error,
+    ));
+
+    // SPEC-KIT-920: Signal automation failure for exit code
+    widget.send_app_event(crate::app_event::AppEvent::AutomationFailure);
+
+    *widget.spec_auto_state_mut() = None;
+    // P6-SYNC Phase 6: Clear spec-kit token metrics from status bar
+    widget.set_spec_auto_metrics(None);
+}
+
 /// Handle /spec-consensus command (DEPRECATED)
 ///
 /// **DEPRECATED**: Use `/spec-review` instead.
@@ -315,7 +359,10 @@ pub fn handle_speckit_reflex(widget: &mut ChatWidget, raw_args: String) {
         Some("models") => handle_reflex_models(widget),
         Some("bakeoff") => {
             // Parse optional duration argument (default 24h)
-            let since = args.get(1).map(|s| s.to_string()).unwrap_or_else(|| "24h".to_string());
+            let since = args
+                .get(1)
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "24h".to_string());
             handle_reflex_bakeoff(widget, &since);
         }
         Some("e2e") => {
@@ -325,7 +372,10 @@ pub fn handle_speckit_reflex(widget: &mut ChatWidget, raw_args: String) {
         }
         Some("check") => {
             // SPEC-KIT-978: Threshold validation
-            let since = args.get(1).map(|s| s.to_string()).unwrap_or_else(|| "24h".to_string());
+            let since = args
+                .get(1)
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "24h".to_string());
             handle_reflex_check(widget, &since);
         }
         Some(cmd) => {
@@ -375,10 +425,7 @@ fn handle_reflex_health(widget: &mut ChatWidget) {
         Ok(cfg) => cfg,
         Err(e) => {
             widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                vec![
-                    Line::from("✗ Configuration error"),
-                    Line::from(e),
-                ],
+                vec![Line::from("✗ Configuration error"), Line::from(e)],
                 HistoryCellType::Error,
             ));
             return;
@@ -421,36 +468,34 @@ fn handle_reflex_health(widget: &mut ChatWidget) {
     let latency_ms = start.elapsed().as_millis() as u64;
 
     let lines = match result {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<ModelsResponse>() {
-                Ok(models_resp) => {
-                    let available: Vec<String> =
-                        models_resp.data.iter().map(|m| m.id.clone()).collect();
-                    let model_available = available.contains(&config.model);
+        Ok(resp) if resp.status().is_success() => match resp.json::<ModelsResponse>() {
+            Ok(models_resp) => {
+                let available: Vec<String> =
+                    models_resp.data.iter().map(|m| m.id.clone()).collect();
+                let model_available = available.contains(&config.model);
 
-                    if model_available {
-                        vec![
-                            Line::from("✓ Reflex server healthy"),
-                            Line::from(format!("  Endpoint: {}", config.endpoint)),
-                            Line::from(format!("  Model: {} (available)", config.model)),
-                            Line::from(format!("  Latency: {}ms", latency_ms)),
-                            Line::from(format!("  Available models: {}", available.join(", "))),
-                        ]
-                    } else {
-                        vec![
-                            Line::from("✗ Reflex server unhealthy"),
-                            Line::from(format!("  Endpoint: {}", config.endpoint)),
-                            Line::from(format!("  Model: {} (NOT FOUND)", config.model)),
-                            Line::from(format!("  Available models: {}", available.join(", "))),
-                        ]
-                    }
+                if model_available {
+                    vec![
+                        Line::from("✓ Reflex server healthy"),
+                        Line::from(format!("  Endpoint: {}", config.endpoint)),
+                        Line::from(format!("  Model: {} (available)", config.model)),
+                        Line::from(format!("  Latency: {}ms", latency_ms)),
+                        Line::from(format!("  Available models: {}", available.join(", "))),
+                    ]
+                } else {
+                    vec![
+                        Line::from("✗ Reflex server unhealthy"),
+                        Line::from(format!("  Endpoint: {}", config.endpoint)),
+                        Line::from(format!("  Model: {} (NOT FOUND)", config.model)),
+                        Line::from(format!("  Available models: {}", available.join(", "))),
+                    ]
                 }
-                Err(e) => vec![
-                    Line::from("✗ Invalid response from server"),
-                    Line::from(format!("  Error: {e}")),
-                ],
             }
-        }
+            Err(e) => vec![
+                Line::from("✗ Invalid response from server"),
+                Line::from(format!("  Error: {e}")),
+            ],
+        },
         Ok(resp) => {
             let status = resp.status();
             vec![
@@ -464,11 +509,17 @@ fn handle_reflex_health(widget: &mut ChatWidget) {
             Line::from(format!("  Error: {e}")),
             Line::from(""),
             Line::from("To start a local inference server:"),
-            Line::from("  python -m sglang.launch_server --model-path Qwen/Qwen2.5-Coder-7B-Instruct --port 3009"),
+            Line::from(
+                "  python -m sglang.launch_server --model-path Qwen/Qwen2.5-Coder-7B-Instruct --port 3009",
+            ),
         ],
     };
 
-    let cell_type = if lines.first().map(|l| l.to_string().contains('✓')).unwrap_or(false) {
+    let cell_type = if lines
+        .first()
+        .map(|l| l.to_string().contains('✓'))
+        .unwrap_or(false)
+    {
         HistoryCellType::Notice
     } else {
         HistoryCellType::Error
@@ -584,32 +635,30 @@ fn handle_reflex_models(widget: &mut ChatWidget) {
     };
 
     let (lines, cell_type) = match client.get(&models_url).send() {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<ModelsResponse>() {
-                Ok(models_resp) => {
-                    let mut output = vec![Line::from(format!(
-                        "Available models at {}:",
-                        config.endpoint
-                    ))];
-                    for model in &models_resp.data {
-                        let marker = if model.id == config.model {
-                            " ← configured"
-                        } else {
-                            ""
-                        };
-                        output.push(Line::from(format!("  - {}{}", model.id, marker)));
-                    }
-                    (output, HistoryCellType::Notice)
+        Ok(resp) if resp.status().is_success() => match resp.json::<ModelsResponse>() {
+            Ok(models_resp) => {
+                let mut output = vec![Line::from(format!(
+                    "Available models at {}:",
+                    config.endpoint
+                ))];
+                for model in &models_resp.data {
+                    let marker = if model.id == config.model {
+                        " ← configured"
+                    } else {
+                        ""
+                    };
+                    output.push(Line::from(format!("  - {}{}", model.id, marker)));
                 }
-                Err(e) => (
-                    vec![
-                        Line::from("Failed to parse models response"),
-                        Line::from(format!("  Error: {e}")),
-                    ],
-                    HistoryCellType::Error,
-                ),
+                (output, HistoryCellType::Notice)
             }
-        }
+            Err(e) => (
+                vec![
+                    Line::from("Failed to parse models response"),
+                    Line::from(format!("  Error: {e}")),
+                ],
+                HistoryCellType::Error,
+            ),
+        },
         Ok(resp) => (
             vec![
                 Line::from("Failed to fetch models"),
@@ -682,7 +731,10 @@ fn handle_reflex_bakeoff(widget: &mut ChatWidget, since: &str) {
 
     let mut lines = vec![
         Line::from(format!("Reflex Bakeoff Statistics (since {})", since)),
-        Line::from(format!("Period: {} - {}", stats.period_start, stats.period_end)),
+        Line::from(format!(
+            "Period: {} - {}",
+            stats.period_start, stats.period_end
+        )),
         Line::from(format!("Total Attempts: {}", stats.total_attempts)),
         Line::from(""),
     ];
@@ -691,10 +743,7 @@ fn handle_reflex_bakeoff(widget: &mut ChatWidget, since: &str) {
     if let Some(ref r) = stats.reflex {
         lines.extend([
             Line::from("REFLEX (local inference):"),
-            Line::from(format!(
-                "  Attempts:        {}",
-                r.total_attempts
-            )),
+            Line::from(format!("  Attempts:        {}", r.total_attempts)),
             Line::from(format!(
                 "  Success Rate:    {:.1}% ({}/{})",
                 r.success_rate, r.success_count, r.total_attempts
@@ -715,10 +764,7 @@ fn handle_reflex_bakeoff(widget: &mut ChatWidget, since: &str) {
     if let Some(ref c) = stats.cloud {
         lines.extend([
             Line::from("CLOUD (remote inference):"),
-            Line::from(format!(
-                "  Attempts:        {}",
-                c.total_attempts
-            )),
+            Line::from(format!("  Attempts:        {}", c.total_attempts)),
             Line::from(format!(
                 "  Success Rate:    {:.1}% ({}/{})",
                 c.success_rate, c.success_count, c.total_attempts
@@ -743,7 +789,10 @@ fn handle_reflex_bakeoff(widget: &mut ChatWidget, since: &str) {
             0.0
         };
         lines.push(Line::from(""));
-        lines.push(Line::from(format!("Reflex is {:.1}x faster (P95)", latency_ratio)));
+        lines.push(Line::from(format!(
+            "Reflex is {:.1}x faster (P95)",
+            latency_ratio
+        )));
     }
 
     widget.history_push(crate::history_cell::PlainHistoryCell::new(
@@ -773,7 +822,9 @@ fn parse_bakeoff_duration(s: &str) -> Result<std::time::Duration, String> {
         Ok(std::time::Duration::from_secs(mins * 60))
     } else {
         // Try parsing as seconds
-        let secs: u64 = s.parse().map_err(|_| format!("Invalid duration format: {s}"))?;
+        let secs: u64 = s
+            .parse()
+            .map_err(|_| format!("Invalid duration format: {s}"))?;
         Ok(std::time::Duration::from_secs(secs))
     }
 }
@@ -805,10 +856,16 @@ fn handle_reflex_e2e(widget: &mut ChatWidget, stub: bool) {
     // Test 1: Non-Implement stage should always use Cloud
     let decision_plan = decide_implementer_routing("plan", "claude-3-opus", None);
     let test1_pass = decision_plan.mode == RoutingMode::Cloud
-        && decision_plan.fallback_reason.as_ref()
+        && decision_plan
+            .fallback_reason
+            .as_ref()
             .map(|r| r.as_str() == "not_implement_stage")
             .unwrap_or(false);
-    if test1_pass { passed += 1; } else { failed += 1; }
+    if test1_pass {
+        passed += 1;
+    } else {
+        failed += 1;
+    }
     lines.push(Line::from(format!(
         "[{}] Test 1: Non-Implement stage uses Cloud",
         if test1_pass { "PASS" } else { "FAIL" }
@@ -817,7 +874,11 @@ fn handle_reflex_e2e(widget: &mut ChatWidget, stub: bool) {
     // Test 2: Implement stage with reflex disabled should use Cloud
     let decision_disabled = decide_implementer_routing("implement", "claude-3-opus", None);
     let test2_pass = decision_disabled.mode == RoutingMode::Cloud && !decision_disabled.is_fallback;
-    if test2_pass { passed += 1; } else { failed += 1; }
+    if test2_pass {
+        passed += 1;
+    } else {
+        failed += 1;
+    }
     lines.push(Line::from(format!(
         "[{}] Test 2: Reflex disabled uses Cloud",
         if test2_pass { "PASS" } else { "FAIL" }
@@ -825,7 +886,11 @@ fn handle_reflex_e2e(widget: &mut ChatWidget, stub: bool) {
 
     // Test 3: Routing decision has cloud_model field
     let test3_pass = decision_disabled.cloud_model == Some("claude-3-opus".to_string());
-    if test3_pass { passed += 1; } else { failed += 1; }
+    if test3_pass {
+        passed += 1;
+    } else {
+        failed += 1;
+    }
     lines.push(Line::from(format!(
         "[{}] Test 3: Routing decision has cloud_model",
         if test3_pass { "PASS" } else { "FAIL" }
@@ -845,7 +910,11 @@ fn handle_reflex_e2e(widget: &mut ChatWidget, stub: bool) {
     };
     let serialized = serde_json::to_string(&payload);
     let test4_pass = serialized.is_ok();
-    if test4_pass { passed += 1; } else { failed += 1; }
+    if test4_pass {
+        passed += 1;
+    } else {
+        failed += 1;
+    }
     lines.push(Line::from(format!(
         "[{}] Test 4: RoutingDecisionPayload serializes",
         if test4_pass { "PASS" } else { "FAIL" }
@@ -855,7 +924,11 @@ fn handle_reflex_e2e(widget: &mut ChatWidget, stub: bool) {
     let test5_pass = EventType::RoutingDecision.is_curated_eligible()
         && EventType::RoutingDecision.is_audit_critical()
         && !EventType::ModelCallEnvelope.is_curated_eligible();
-    if test5_pass { passed += 1; } else { failed += 1; }
+    if test5_pass {
+        passed += 1;
+    } else {
+        failed += 1;
+    }
     lines.push(Line::from(format!(
         "[{}] Test 5: EventType classification correct",
         if test5_pass { "PASS" } else { "FAIL" }
@@ -863,7 +936,10 @@ fn handle_reflex_e2e(widget: &mut ChatWidget, stub: bool) {
 
     // Summary
     lines.push(Line::from(""));
-    lines.push(Line::from(format!("Results: {} passed, {} failed", passed, failed)));
+    lines.push(Line::from(format!(
+        "Results: {} passed, {} failed",
+        passed, failed
+    )));
 
     let cell_type = if failed == 0 {
         lines.push(Line::from("All E2E tests passed!"));
@@ -880,8 +956,8 @@ fn handle_reflex_e2e(widget: &mut ChatWidget, stub: bool) {
 ///
 /// Validates that bakeoff metrics meet configured thresholds.
 fn handle_reflex_check(widget: &mut ChatWidget, since: &str) {
-    use codex_stage0::load_reflex_config;
     use super::reflex_metrics::ReflexMetricsDb;
+    use codex_stage0::load_reflex_config;
     use ratatui::text::Line;
 
     // Parse duration
@@ -904,10 +980,7 @@ fn handle_reflex_check(widget: &mut ChatWidget, since: &str) {
         Ok(cfg) => cfg,
         Err(e) => {
             widget.history_push(crate::history_cell::PlainHistoryCell::new(
-                vec![
-                    Line::from("✗ Configuration error"),
-                    Line::from(e),
-                ],
+                vec![Line::from("✗ Configuration error"), Line::from(e)],
                 HistoryCellType::Error,
             ));
             return;
@@ -963,7 +1036,10 @@ fn handle_reflex_check(widget: &mut ChatWidget, since: &str) {
         checks.push((
             "P95 Latency".to_string(),
             p95_ok,
-            format!("{}ms (max {}ms)", reflex.p95_latency_ms, config.thresholds.p95_latency_ms),
+            format!(
+                "{}ms (max {}ms)",
+                reflex.p95_latency_ms, config.thresholds.p95_latency_ms
+            ),
         ));
 
         // Success parity check
@@ -971,15 +1047,22 @@ fn handle_reflex_check(widget: &mut ChatWidget, since: &str) {
         checks.push((
             "Success Rate".to_string(),
             success_ok,
-            format!("{:.1}% (min {}%)", reflex.success_rate, config.thresholds.success_parity_percent),
+            format!(
+                "{:.1}% (min {}%)",
+                reflex.success_rate, config.thresholds.success_parity_percent
+            ),
         ));
 
         // JSON compliance check
-        let json_ok = reflex.json_compliance_rate >= config.thresholds.json_schema_compliance_percent as f64;
+        let json_ok =
+            reflex.json_compliance_rate >= config.thresholds.json_schema_compliance_percent as f64;
         checks.push((
             "JSON Compliance".to_string(),
             json_ok,
-            format!("{:.1}% (min {}%)", reflex.json_compliance_rate, config.thresholds.json_schema_compliance_percent),
+            format!(
+                "{:.1}% (min {}%)",
+                reflex.json_compliance_rate, config.thresholds.json_schema_compliance_percent
+            ),
         ));
     } else {
         checks.push((

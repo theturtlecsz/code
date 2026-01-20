@@ -104,10 +104,7 @@ pub fn auto_commit_stage_artifacts(
         commit_hash
     );
 
-    Ok(Some(StageCommitResult {
-        commit_hash,
-        stage,
-    }))
+    Ok(Some(StageCommitResult { commit_hash, stage }))
 }
 
 /// Collect all artifact paths for a given stage
@@ -244,8 +241,8 @@ pub fn get_head_commit_hash(cwd: &Path) -> Result<String> {
 // =============================================================================
 
 use crate::memvid_adapter::{
-    BranchId, CapsuleConfig, CapsuleHandle, CheckpointId, default_capsule_config,
-    DEFAULT_WORKSPACE_ID,
+    BranchId, CapsuleConfig, CapsuleHandle, CheckpointId, DEFAULT_WORKSPACE_ID,
+    default_capsule_config,
 };
 
 /// Create a capsule checkpoint after stage completion.
@@ -275,15 +272,16 @@ pub fn create_capsule_checkpoint(
     let config = default_capsule_config(cwd);
 
     // Open capsule with write lock for checkpoint creation
-    let handle = CapsuleHandle::open(config).map_err(|e| {
-        SpecKitError::from_string(format!("Failed to open capsule: {}", e))
-    })?;
+    let handle = CapsuleHandle::open(config)
+        .map_err(|e| SpecKitError::from_string(format!("Failed to open capsule: {}", e)))?;
 
     // SPEC-KIT-971: Switch to run branch before any writes
     // Invariant: every run writes to run/<RUN_ID> branch
-    handle.switch_branch(BranchId::for_run(run_id)).map_err(|e| {
-        SpecKitError::from_string(format!("Failed to switch capsule branch: {}", e))
-    })?;
+    handle
+        .switch_branch(BranchId::for_run(run_id))
+        .map_err(|e| {
+            SpecKitError::from_string(format!("Failed to switch capsule branch: {}", e))
+        })?;
 
     // SPEC-KIT-977: Check for policy drift at stage boundary
     // If policy hash differs from last captured hash, capture new snapshot before checkpoint
@@ -347,11 +345,7 @@ pub fn create_capsule_checkpoint(
 /// ## Returns
 /// - `Ok(CheckpointId)` with the merge checkpoint ID
 /// - `Err` on capsule errors
-pub fn merge_run_branch_to_main(
-    spec_id: &str,
-    run_id: &str,
-    cwd: &Path,
-) -> Result<CheckpointId> {
+pub fn merge_run_branch_to_main(spec_id: &str, run_id: &str, cwd: &Path) -> Result<CheckpointId> {
     use crate::memvid_adapter::MergeMode;
 
     // Use canonical capsule config
@@ -493,11 +487,7 @@ mod tests {
             !checkpoints.is_empty(),
             "list_checkpoints() should be non-empty after checkpoint creation"
         );
-        assert_eq!(
-            checkpoints.len(),
-            1,
-            "Should have exactly one checkpoint"
-        );
+        assert_eq!(checkpoints.len(), 1, "Should have exactly one checkpoint");
 
         let cp = &checkpoints[0];
         assert_eq!(cp.spec_id, Some("SPEC-TEST-971".to_string()));
@@ -526,7 +516,10 @@ mod tests {
             cwd,
         );
 
-        assert!(result.is_ok(), "create_capsule_checkpoint should succeed without hash");
+        assert!(
+            result.is_ok(),
+            "create_capsule_checkpoint should succeed without hash"
+        );
 
         // Verify checkpoint has no commit_hash
         let capsule_path = capsule_dir.join("workspace.mv2");
@@ -623,14 +616,9 @@ mod tests {
         let expected_branch = format!("run/{}", run_id);
 
         // Create checkpoint (this internally switches to run branch)
-        let checkpoint_id = create_capsule_checkpoint(
-            spec_id,
-            run_id,
-            SpecStage::Plan,
-            Some("abc1234"),
-            cwd,
-        )
-        .expect("create checkpoint");
+        let checkpoint_id =
+            create_capsule_checkpoint(spec_id, run_id, SpecStage::Plan, Some("abc1234"), cwd)
+                .expect("create checkpoint");
 
         // Open and verify branch stamping
         let capsule_path = capsule_dir.join("workspace.mv2");
@@ -659,7 +647,11 @@ mod tests {
             .filter(|e| matches!(e.event_type, EventType::StageTransition))
             .collect();
 
-        assert_eq!(stage_events.len(), 1, "Should have exactly one StageTransition event");
+        assert_eq!(
+            stage_events.len(),
+            1,
+            "Should have exactly one StageTransition event"
+        );
         let event = stage_events[0];
         assert_eq!(
             event.branch_id,

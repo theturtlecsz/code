@@ -330,8 +330,8 @@ impl GovernancePolicy {
     /// Parse governance policy from TOML string.
     pub fn from_toml(content: &str) -> Result<Self, String> {
         // Parse as generic toml::Value first
-        let value: toml::Value = toml::from_str(content)
-            .map_err(|e| format!("TOML parse error: {}", e))?;
+        let value: toml::Value =
+            toml::from_str(content).map_err(|e| format!("TOML parse error: {}", e))?;
 
         // Extract sections with defaults for missing fields
         let meta = Self::parse_meta(&value);
@@ -403,17 +403,29 @@ impl GovernancePolicy {
                 architect: cloud
                     .and_then(|c| c.get("architect"))
                     .and_then(|v| v.as_array())
-                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
                     .unwrap_or_default(),
                 implementer: cloud
                     .and_then(|c| c.get("implementer"))
                     .and_then(|v| v.as_array())
-                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
                     .unwrap_or_default(),
                 judge: cloud
                     .and_then(|c| c.get("judge"))
                     .and_then(|v| v.as_array())
-                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
                     .unwrap_or_default(),
                 default_architect: cloud
                     .and_then(|c| c.get("default_architect"))
@@ -629,12 +641,20 @@ impl GovernancePolicy {
                 env_var_patterns: redaction
                     .and_then(|r| r.get("env_var_patterns"))
                     .and_then(|v| v.as_array())
-                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
                     .unwrap_or_default(),
                 file_patterns: redaction
                     .and_then(|r| r.get("file_patterns"))
                     .and_then(|v| v.as_array())
-                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
                     .unwrap_or_default(),
             },
             export: ExportConfig {
@@ -872,9 +892,9 @@ impl PolicyStore {
         self.ensure_dir()?;
 
         let path = self.snapshot_path(&snapshot.policy_id);
-        let json = snapshot.to_json().map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
-        })?;
+        let json = snapshot
+            .to_json()
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
 
         std::fs::write(&path, json)?;
 
@@ -891,9 +911,8 @@ impl PolicyStore {
     pub fn load(&self, policy_id: &str) -> std::io::Result<PolicySnapshot> {
         let path = self.snapshot_path(policy_id);
         let json = std::fs::read_to_string(&path)?;
-        PolicySnapshot::from_json(&json).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
-        })
+        PolicySnapshot::from_json(&json)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
     }
 
     /// List all policy snapshots.
@@ -1026,10 +1045,7 @@ fn collect_source_files() -> Vec<String> {
 }
 
 /// Get the policy snapshot for a run, loading from store or capturing fresh.
-pub fn get_policy_for_run(
-    run_id: &str,
-    config: &Stage0Config,
-) -> std::io::Result<PolicySnapshot> {
+pub fn get_policy_for_run(run_id: &str, config: &Stage0Config) -> std::io::Result<PolicySnapshot> {
     let store = PolicyStore::new();
 
     // Try to get existing policy for this run
@@ -1191,11 +1207,7 @@ impl PolicyDiff {
         }
     }
 
-    fn diff_model_config(
-        a: &ModelConfig,
-        b: &ModelConfig,
-        changes: &mut Vec<PolicyFieldChange>,
-    ) {
+    fn diff_model_config(a: &ModelConfig, b: &ModelConfig, changes: &mut Vec<PolicyFieldChange>) {
         macro_rules! check_field {
             ($field:ident) => {
                 if a.$field != b.$field {
@@ -1220,11 +1232,7 @@ impl PolicyDiff {
         check_field!(tier2_cache_ttl_hours);
     }
 
-    fn diff_weights(
-        a: &ScoringWeights,
-        b: &ScoringWeights,
-        changes: &mut Vec<PolicyFieldChange>,
-    ) {
+    fn diff_weights(a: &ScoringWeights, b: &ScoringWeights, changes: &mut Vec<PolicyFieldChange>) {
         macro_rules! check_weight {
             ($field:ident) => {
                 if (a.$field - b.$field).abs() > f32::EPSILON {
@@ -1400,7 +1408,10 @@ impl PolicyDiff {
     pub fn to_text(&self) -> String {
         let mut output = String::new();
 
-        output.push_str(&format!("Policy Diff: {} → {}\n", self.policy_id_a, self.policy_id_b));
+        output.push_str(&format!(
+            "Policy Diff: {} → {}\n",
+            self.policy_id_a, self.policy_id_b
+        ));
         output.push_str(&format!("Hash A: {}\n", self.hash_a));
         output.push_str(&format!("Hash B: {}\n", self.hash_b));
         output.push('\n');
@@ -1523,7 +1534,8 @@ mod tests {
     #[test]
     fn test_policy_snapshot_info() {
         let config = Stage0Config::default();
-        let snapshot = PolicySnapshot::capture(&config, vec!["a.toml".to_string(), "b.md".to_string()]);
+        let snapshot =
+            PolicySnapshot::capture(&config, vec!["a.toml".to_string(), "b.md".to_string()]);
         let info = snapshot.info();
 
         assert_eq!(info.policy_id, snapshot.policy_id);
@@ -1703,7 +1715,10 @@ mod tests {
         assert_eq!(original.hash, restored.hash);
 
         // verify_hash should pass
-        assert!(restored.verify_hash(), "verify_hash should pass after JSON roundtrip");
+        assert!(
+            restored.verify_hash(),
+            "verify_hash should pass after JSON roundtrip"
+        );
 
         // content_matches should work across roundtrip
         assert!(original.content_matches(&restored));
@@ -1733,14 +1748,10 @@ mod tests {
     fn test_deterministic_hash_source_file_order_invariant() {
         let config = Stage0Config::default();
 
-        let snapshot1 = PolicySnapshot::capture(
-            &config,
-            vec!["a.toml".to_string(), "b.toml".to_string()],
-        );
-        let snapshot2 = PolicySnapshot::capture(
-            &config,
-            vec!["b.toml".to_string(), "a.toml".to_string()],
-        );
+        let snapshot1 =
+            PolicySnapshot::capture(&config, vec!["a.toml".to_string(), "b.toml".to_string()]);
+        let snapshot2 =
+            PolicySnapshot::capture(&config, vec!["b.toml".to_string(), "a.toml".to_string()]);
 
         // SPEC-KIT-977-A1: Different order = SAME hash (sources are sorted)
         assert_eq!(
@@ -1766,13 +1777,21 @@ mod tests {
 
         // Create two snapshots with prompts added in different order
         let mut snapshot1 = PolicySnapshot::capture(&config, source_files.clone());
-        snapshot1.prompts.insert("key_a".to_string(), "value_a".to_string());
-        snapshot1.prompts.insert("key_b".to_string(), "value_b".to_string());
+        snapshot1
+            .prompts
+            .insert("key_a".to_string(), "value_a".to_string());
+        snapshot1
+            .prompts
+            .insert("key_b".to_string(), "value_b".to_string());
         snapshot1.hash = snapshot1.compute_hash();
 
         let mut snapshot2 = PolicySnapshot::capture(&config, source_files);
-        snapshot2.prompts.insert("key_b".to_string(), "value_b".to_string());
-        snapshot2.prompts.insert("key_a".to_string(), "value_a".to_string());
+        snapshot2
+            .prompts
+            .insert("key_b".to_string(), "value_b".to_string());
+        snapshot2
+            .prompts
+            .insert("key_a".to_string(), "value_a".to_string());
         snapshot2.hash = snapshot2.compute_hash();
 
         // SPEC-KIT-977-A1: Different insertion order = SAME hash
@@ -1913,7 +1932,12 @@ encrypt_at_rest = false
         assert_eq!(policy.scoring.vector_weight, 0.6);
 
         // Verify gates
-        assert!(!policy.gates.reflex_promotion.golden_query_regression_allowed);
+        assert!(
+            !policy
+                .gates
+                .reflex_promotion
+                .golden_query_regression_allowed
+        );
         assert_eq!(policy.gates.local_memory_sunset.stability_days, 30);
 
         // Verify security
@@ -1939,16 +1963,9 @@ encrypt_at_rest = false
         gov2.routing.reflex.enabled = true;
         gov2.routing.reflex.thresholds.p95_latency_ms = 2000;
 
-        let snapshot1 = PolicySnapshot::capture_with_governance(
-            &config,
-            source_files.clone(),
-            Some(gov1),
-        );
-        let snapshot2 = PolicySnapshot::capture_with_governance(
-            &config,
-            source_files,
-            Some(gov2),
-        );
+        let snapshot1 =
+            PolicySnapshot::capture_with_governance(&config, source_files.clone(), Some(gov1));
+        let snapshot2 = PolicySnapshot::capture_with_governance(&config, source_files, Some(gov2));
 
         // Different governance = different hash
         assert_ne!(
@@ -1966,16 +1983,9 @@ encrypt_at_rest = false
         let gov1 = GovernancePolicy::default();
         let gov2 = GovernancePolicy::default();
 
-        let snapshot1 = PolicySnapshot::capture_with_governance(
-            &config,
-            source_files.clone(),
-            Some(gov1),
-        );
-        let snapshot2 = PolicySnapshot::capture_with_governance(
-            &config,
-            source_files,
-            Some(gov2),
-        );
+        let snapshot1 =
+            PolicySnapshot::capture_with_governance(&config, source_files.clone(), Some(gov1));
+        let snapshot2 = PolicySnapshot::capture_with_governance(&config, source_files, Some(gov2));
 
         // Identical governance = identical hash
         assert_eq!(
@@ -1997,11 +2007,7 @@ encrypt_at_rest = false
         gov.routing.reflex.model = "test-model".to_string();
         gov.budgets.tokens.plan = 9999;
 
-        let original = PolicySnapshot::capture_with_governance(
-            &config,
-            source_files,
-            Some(gov),
-        );
+        let original = PolicySnapshot::capture_with_governance(&config, source_files, Some(gov));
 
         // Serialize and deserialize
         let json = original.to_json().expect("serialize");
@@ -2024,16 +2030,9 @@ encrypt_at_rest = false
         let config = Stage0Config::default();
         let source_files = vec!["test.toml".to_string()];
 
-        let snapshot1 = PolicySnapshot::capture_with_governance(
-            &config,
-            source_files.clone(),
-            None,
-        );
-        let snapshot2 = PolicySnapshot::capture_with_governance(
-            &config,
-            source_files,
-            None,
-        );
+        let snapshot1 =
+            PolicySnapshot::capture_with_governance(&config, source_files.clone(), None);
+        let snapshot2 = PolicySnapshot::capture_with_governance(&config, source_files, None);
 
         // No governance should still produce consistent hash
         assert_eq!(
@@ -2048,11 +2047,8 @@ encrypt_at_rest = false
         let config = Stage0Config::default();
         let source_files = vec!["test.toml".to_string()];
 
-        let snapshot_none = PolicySnapshot::capture_with_governance(
-            &config,
-            source_files.clone(),
-            None,
-        );
+        let snapshot_none =
+            PolicySnapshot::capture_with_governance(&config, source_files.clone(), None);
 
         let snapshot_some = PolicySnapshot::capture_with_governance(
             &config,
@@ -2082,8 +2078,14 @@ encrypt_at_rest = false
 
         let diff = PolicyDiff::compute(&snapshot1, &snapshot2);
 
-        assert!(diff.identical, "Identical content should produce identical=true");
-        assert!(diff.changes.is_empty(), "Identical policies should have no changes");
+        assert!(
+            diff.identical,
+            "Identical content should produce identical=true"
+        );
+        assert!(
+            diff.changes.is_empty(),
+            "Identical policies should have no changes"
+        );
     }
 
     /// Different source files produce changes.
@@ -2119,7 +2121,10 @@ encrypt_at_rest = false
 
         assert!(!diff.identical);
         let top_k_change = diff.changes.iter().find(|c| c.path == "model_config.top_k");
-        assert!(top_k_change.is_some(), "Should have model_config.top_k change");
+        assert!(
+            top_k_change.is_some(),
+            "Should have model_config.top_k change"
+        );
         assert_eq!(top_k_change.unwrap().category, ChangeCategory::ModelConfig);
     }
 
@@ -2156,13 +2161,17 @@ encrypt_at_rest = false
         let mut gov2 = GovernancePolicy::default();
         gov2.routing.reflex.enabled = true;
 
-        let snapshot1 = PolicySnapshot::capture_with_governance(&config, source_files.clone(), Some(gov1));
+        let snapshot1 =
+            PolicySnapshot::capture_with_governance(&config, source_files.clone(), Some(gov1));
         let snapshot2 = PolicySnapshot::capture_with_governance(&config, source_files, Some(gov2));
 
         let diff = PolicyDiff::compute(&snapshot1, &snapshot2);
 
         assert!(!diff.identical);
-        let reflex_change = diff.changes.iter().find(|c| c.path == "governance.routing.reflex.enabled");
+        let reflex_change = diff
+            .changes
+            .iter()
+            .find(|c| c.path == "governance.routing.reflex.enabled");
         assert!(reflex_change.is_some(), "Should have reflex enabled change");
         assert_eq!(reflex_change.unwrap().category, ChangeCategory::Governance);
     }

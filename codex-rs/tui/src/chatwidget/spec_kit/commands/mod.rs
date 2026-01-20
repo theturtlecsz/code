@@ -18,10 +18,10 @@ mod project; // SPEC-KIT-960: Project scaffolding command
 mod quality;
 mod reflex; // SPEC-KIT-978: Reflex local inference
 pub mod search;
-mod timeline; // SPEC-KIT-973: Time-travel UI commands
 mod special;
 mod status;
 mod templates; // SPEC-KIT-962: Template management commands
+mod timeline; // SPEC-KIT-973: Time-travel UI commands
 pub mod verify;
 
 // Re-export all commands

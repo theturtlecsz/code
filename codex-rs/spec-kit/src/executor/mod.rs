@@ -64,6 +64,9 @@ pub use status::{
     StageConsensus, StageCue, StageKind, StageSnapshot, TrackerRow,
 };
 
+// SPEC-KIT-920: Headless execution types re-exported for CLI adapter
+// (HeadlessError, MaieuticInput, MaieuticInputSource, ShipBlockReason defined below)
+
 use std::path::{Path, PathBuf};
 
 // =============================================================================
@@ -99,6 +102,69 @@ impl std::fmt::Display for SpecIdError {
 }
 
 impl std::error::Error for SpecIdError {}
+
+// =============================================================================
+// Headless Execution Errors (SPEC-KIT-920)
+// =============================================================================
+
+/// Error types for headless execution mode
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HeadlessError {
+    /// Attempted to prompt in headless mode (invariant violation)
+    PromptAttempted {
+        /// Description of the operation that tried to prompt
+        operation: String,
+    },
+    /// Missing required maieutic input in headless mode
+    MaieuticRequired,
+    /// Approval checkpoint reached in headless mode
+    ApprovalRequired {
+        /// Checkpoint name (e.g., "BeforeUnlock")
+        checkpoint: String,
+        /// Tier level (2 or 3)
+        tier: u8,
+    },
+    /// Ship blocked by policy or missing artifacts
+    ShipBlocked {
+        /// Reason for blocking
+        reason: ShipBlockReason,
+    },
+}
+
+/// Reason for ship being blocked in headless mode
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ShipBlockReason {
+    /// capture=none mode (private scratch, no artifacts)
+    PrivateScratch,
+    /// Missing required artifact
+    MissingArtifact { artifact: String },
+}
+
+impl std::fmt::Display for HeadlessError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HeadlessError::PromptAttempted { operation } => {
+                write!(f, "Headless mode attempted to prompt (operation: {operation})")
+            }
+            HeadlessError::MaieuticRequired => {
+                write!(f, "Headless execution requires maieutic input (--maieutic <path> or --maieutic-answers <json>)")
+            }
+            HeadlessError::ApprovalRequired { checkpoint, tier } => {
+                write!(f, "Tier-{tier} checkpoint '{checkpoint}' requires approval (run interactively or pre-approve)")
+            }
+            HeadlessError::ShipBlocked { reason } => match reason {
+                ShipBlockReason::PrivateScratch => {
+                    write!(f, "Ship blocked: capture=none (switch to prompts_only or full_io)")
+                }
+                ShipBlockReason::MissingArtifact { artifact } => {
+                    write!(f, "Ship blocked: missing required artifact '{artifact}'")
+                }
+            },
+        }
+    }
+}
+
+impl std::error::Error for HeadlessError {}
 
 /// Validate a spec ID for safety and format
 ///
@@ -516,6 +582,49 @@ pub struct ExecutionContext {
     /// If None, defaults are used (all features disabled).
     /// Adapters should use `PolicyToggles::from_env_and_config()` to resolve.
     pub policy_snapshot: Option<PolicySnapshot>,
+
+    // === SPEC-KIT-920: Headless execution support ===
+
+    /// Headless mode flag - if true, any interactive operation is an error.
+    ///
+    /// CLI sets this based on --headless flag or TTY detection.
+    /// When true, the executor will return HeadlessError::PromptAttempted
+    /// instead of triggering any interactive operation.
+    pub headless: bool,
+
+    /// Pre-supplied maieutic spec for headless execution.
+    ///
+    /// Loaded from --maieutic <path> or --maieutic-answers <json>.
+    /// If None in headless mode with execute=true, returns HeadlessError::MaieuticRequired.
+    pub maieutic_input: Option<MaieuticInput>,
+}
+
+/// Pre-supplied maieutic input for headless execution (SPEC-KIT-920)
+#[derive(Debug, Clone)]
+pub struct MaieuticInput {
+    /// The parsed maieutic spec
+    pub spec_id: String,
+    /// Goal/objective of the automation
+    pub goal: String,
+    /// Non-negotiable constraints
+    pub constraints: Vec<String>,
+    /// Acceptance criteria
+    pub acceptance_criteria: Vec<String>,
+    /// Known risks
+    pub risks: Vec<String>,
+    /// Delegation bounds identifier (A/B/C/D or full bounds)
+    pub delegation: String,
+    /// Source of the input (for logging/diagnostics)
+    pub source: MaieuticInputSource,
+}
+
+/// Source of maieutic input for headless execution
+#[derive(Debug, Clone)]
+pub enum MaieuticInputSource {
+    /// Loaded from file path
+    File(std::path::PathBuf),
+    /// Inline JSON from CLI flag
+    InlineJson,
 }
 
 /// Spec-Kit executor — the single entrypoint for all commands

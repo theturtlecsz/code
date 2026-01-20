@@ -40,6 +40,8 @@ pub mod guardrail;
 pub mod handler;
 pub mod isolation_validator; // SPEC-KIT-964 Phase 6: Hermetic isolation validation for multi-agent spawning
 pub mod json_extractor; // SPEC-KIT-927: Industrial-strength JSON extraction from LLM outputs
+pub mod maieutic; // P93/D130: Maieutic elicitation types and questions
+pub mod maieutic_handler; // P93/D130: Maieutic elicitation event handlers
 pub mod native_guardrail; // SPEC-KIT-066, SPEC-KIT-902: Native guardrail validation (replaces bash scripts)
 pub mod native_quality_gate_orchestrator; // SPEC-KIT-900, I-003: Native quality gate orchestration (eliminates LLM plumbing)
 pub mod new_native; // SPEC-KIT-072: Native SPEC creation (eliminates 2 agents, $0.15 → $0)
@@ -57,16 +59,17 @@ pub mod stage_selector;
 pub mod vision_builder_handler; // P93/SPEC-KIT-105: Vision builder modal event handlers // SPEC-947 Phase 3: Stage selector widget (checkbox list) // SPEC-KIT-900 Session 3: ACID-compliant SPEC directory resolution // MAINT-3 Phase 5: Pipeline state machine (extracted from handler.rs) // SPEC-KIT-102: Shadow Notebook Seeder for NotebookLM
 // FORK-SPECIFIC (just-every/code): local_memory_client.rs deleted 2025-10-18
 // Replaced by native MCP integration in consensus.rs
+pub mod bakeoff_runner; // SPEC-KIT-978: Bakeoff runner for reflex vs cloud comparison
 pub mod quality;
 pub mod quality_gate_broker;
 pub mod quality_gate_handler; // MAINT-2: Extracted from handler.rs (925 LOC)
-pub mod routing;
-pub mod reflex_router; // SPEC-KIT-978: Reflex routing decision (local inference mode)
-pub mod reflex_metrics; // SPEC-KIT-978: Bakeoff metrics collection (reflex vs cloud)
 pub mod reflex_client; // SPEC-KIT-978: OpenAI-compatible client for local inference
-pub mod bakeoff_runner; // SPEC-KIT-978: Bakeoff runner for reflex vs cloud comparison
+pub mod reflex_metrics; // SPEC-KIT-978: Bakeoff metrics collection (reflex vs cloud)
+pub mod reflex_router; // SPEC-KIT-978: Reflex routing decision (local inference mode)
+pub mod routing;
 pub mod schemas;
 pub mod session_metrics; // P6-SYNC Phase 2: Token usage tracking with sliding window estimation
+pub mod ship_gate; // D131/D132: Ship gate validation for explainability artifacts
 pub mod spawn_metrics; // SPEC-933 Component 3: Agent spawn performance tracking
 pub mod spec_id_generator; // SPEC-KIT-070: Native SPEC-ID generation (cost optimization)
 pub mod state;
@@ -112,8 +115,8 @@ pub use state::{
 
 // Re-export handler functions
 pub(crate) use handler::{
-    auto_submit_spec_stage_prompt, halt_spec_auto_with_error, handle_guardrail,
-    handle_spec_auto, handle_spec_consensus, handle_spec_status, on_quality_gate_agents_complete,
+    auto_submit_spec_stage_prompt, halt_spec_auto_with_error, handle_guardrail, handle_spec_auto,
+    handle_spec_consensus, handle_spec_status, on_quality_gate_agents_complete,
     on_quality_gate_answers, on_quality_gate_cancelled, on_spec_auto_agents_complete,
     on_spec_auto_task_complete, on_spec_auto_task_started,
 };
@@ -138,6 +141,12 @@ pub use quality_gate_handler::set_native_agent_ids;
 
 // Re-export validation lifecycle functions
 pub use validation_lifecycle::{compute_validate_payload_hash, record_validate_lifecycle_event};
+
+// Re-export maieutic handler functions (D130)
+pub(crate) use maieutic_handler::{on_maieutic_cancelled, on_maieutic_submitted};
+pub(crate) use pipeline_coordinator::{
+    PendingMaieutic, cancel_pipeline_after_maieutic, resume_pipeline_after_maieutic,
+};
 
 // Re-export event emitter types (SPEC-KIT-975)
 pub use event_emitter::{AuditEventEmitter, RunContext};

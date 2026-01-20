@@ -14,7 +14,7 @@
 use crate::memvid_adapter::{
     CapsuleHandle, RoutingDecisionPayload, RoutingFallbackReason, RoutingMode,
 };
-use codex_stage0::{load_reflex_config, ReflexConfig};
+use codex_stage0::{ReflexConfig, load_reflex_config};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -337,16 +337,10 @@ pub fn emit_routing_event(
         role: role.to_string(),
         is_fallback: decision.is_fallback,
         fallback_reason: decision.fallback_reason.clone(),
-        reflex_endpoint: decision
-            .reflex_config
-            .as_ref()
-            .map(|c| c.endpoint.clone()),
+        reflex_endpoint: decision.reflex_config.as_ref().map(|c| c.endpoint.clone()),
         reflex_model: decision.reflex_config.as_ref().map(|c| c.model.clone()),
         cloud_model: decision.cloud_model.clone(),
-        health_check_latency_ms: decision
-            .health_result
-            .as_ref()
-            .and_then(|h| h.latency_ms),
+        health_check_latency_ms: decision.health_result.as_ref().and_then(|h| h.latency_ms),
     };
 
     capsule.emit_routing_decision(spec_id, run_id, &payload)?;

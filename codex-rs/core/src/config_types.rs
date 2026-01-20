@@ -1269,9 +1269,9 @@ impl Default for QualityCheckpointConfig {
         // GR-001: Quality gates are OFF by default (no multi-agent consensus)
         // If enabled, only single-agent "critic sidecar" mode is compliant
         Self {
-            agents: vec![],      // Empty = disabled, no fan-out
-            threshold: 1.0,      // Single agent = unanimous (irrelevant when empty)
-            enabled: false,      // OFF by default (opt-in only)
+            agents: vec![], // Empty = disabled, no fan-out
+            threshold: 1.0, // Single agent = unanimous (irrelevant when empty)
+            enabled: false, // OFF by default (opt-in only)
         }
     }
 }
@@ -1463,8 +1463,8 @@ mod tests {
 
         // GR-001: Empty agents = disabled, single-agent only when explicitly enabled
         assert!(config.agents.is_empty());
-        assert_eq!(config.threshold, 1.0);  // Single agent = unanimous
-        assert!(!config.enabled);           // OFF by default
+        assert_eq!(config.threshold, 1.0); // Single agent = unanimous
+        assert!(!config.enabled); // OFF by default
     }
 
     #[test]

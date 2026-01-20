@@ -1,4 +1,5 @@
 use crate::compat::ConfigExt;
+use crate::compat::format_env_display;
 use crate::diff_render::create_diff_summary;
 use crate::diff_render::display_path_for;
 use crate::exec_cell::CommandOutput;
@@ -24,14 +25,13 @@ use crate::wrapping::RtOptions;
 use crate::wrapping::word_wrap_line;
 use crate::wrapping::word_wrap_lines;
 use base64::Engine;
-use crate::compat::format_env_display;
 use codex_core::config::Config;
+use codex_core::config_types::ReasoningSummaryFormat;
 use codex_core::protocol::FileChange;
 use codex_core::protocol::McpAuthStatus;
 use codex_core::protocol::McpInvocation;
 use codex_core::protocol::SessionConfiguredEvent;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
-use codex_core::config_types::ReasoningSummaryFormat;
 use codex_protocol::plan_tool::PlanItemArg;
 use codex_protocol::plan_tool::StepStatus;
 use codex_protocol::plan_tool::UpdatePlanArgs;
@@ -613,10 +613,7 @@ pub(crate) fn new_session_info(
     event: SessionConfiguredEvent,
     is_first_event: bool,
 ) -> SessionInfoCell {
-    let SessionConfiguredEvent {
-        model,
-        ..
-    } = event;
+    let SessionConfiguredEvent { model, .. } = event;
     // NOTE: Fork's SessionConfiguredEvent doesn't have reasoning_effort
     // Header box rendered as history (so it appears at the very top)
     let header = SessionHeaderHistoryCell::new(
@@ -1255,7 +1252,10 @@ pub(crate) fn new_error_event(message: String) -> PlainHistoryCell {
 pub(crate) fn new_plan_update(update: UpdatePlanArgs) -> PlanUpdateCell {
     // NOTE: Fork's UpdatePlanArgs has name instead of explanation
     let UpdatePlanArgs { name, plan } = update;
-    PlanUpdateCell { explanation: name, plan }
+    PlanUpdateCell {
+        explanation: name,
+        plan,
+    }
 }
 
 #[derive(Debug)]
@@ -1460,13 +1460,13 @@ fn format_mcp_invocation<'a>(invocation: McpInvocation) -> Line<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compat::config_types::McpServerTransportConfig;
     use crate::exec_cell::CommandOutput;
     use crate::exec_cell::ExecCall;
     use crate::exec_cell::ExecCell;
     use codex_core::config::Config;
     use codex_core::config::ConfigBuilder;
     use codex_core::config_types::McpServerConfig;
-    use crate::compat::config_types::McpServerTransportConfig;
     use codex_core::models_manager::manager::ModelsManager;
     use codex_core::protocol::McpAuthStatus;
     use codex_protocol::parse_command::ParsedCommand;

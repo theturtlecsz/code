@@ -289,32 +289,28 @@ fn execute_timeline(widget: &mut ChatWidget, args: &str) {
     // Display events if type filter specified
     if let Some(ref type_filter) = event_type_filter {
         lines.push(Line::from(""));
-        lines.push(Line::from(format!("Events (filtered by: {}):", type_filter)));
+        lines.push(Line::from(format!(
+            "Events (filtered by: {}):",
+            type_filter
+        )));
 
         let events = handle.list_events_filtered(branch.as_ref());
         let filtered_events: Vec<_> = events
             .iter()
-            .filter(|ev| {
-                ev.event_type.as_str().to_lowercase() == type_filter.to_lowercase()
-            })
+            .filter(|ev| ev.event_type.as_str().to_lowercase() == type_filter.to_lowercase())
             .take(20)
             .collect();
 
         if filtered_events.is_empty() {
             lines.push(Line::from("  (none)"));
         } else {
-            lines.push(Line::from(
-                "  # | Type            | Stage    | Run ID",
-            ));
+            lines.push(Line::from("  # | Type            | Stage    | Run ID"));
             lines.push(Line::from(
                 "  --|-----------------|----------|-------------------",
             ));
 
             for (idx, ev) in filtered_events.iter().enumerate() {
-                let stage = ev
-                    .stage
-                    .as_deref()
-                    .unwrap_or("-");
+                let stage = ev.stage.as_deref().unwrap_or("-");
 
                 lines.push(Line::from(format!(
                     "  {:2} | {:15} | {:8} | {}",
@@ -351,7 +347,9 @@ fn execute_asof(widget: &mut ChatWidget, args: &str) {
             Line::from("Time-Travel Context (SPEC-KIT-973)"),
             Line::from(""),
             Line::from("/speckit.asof <checkpoint-id-or-label>  # Set time-travel context"),
-            Line::from("/speckit.asof clear                     # Clear context (return to latest)"),
+            Line::from(
+                "/speckit.asof clear                     # Clear context (return to latest)",
+            ),
             Line::from(""),
             Line::from("When set, URI resolution returns state as of that checkpoint."),
         ];
@@ -501,7 +499,10 @@ fn execute_diff(widget: &mut ChatWidget, args: &str) {
         Some(cp) => cp,
         None => {
             widget.history_push(PlainHistoryCell::new(
-                vec![Line::from(format!("Error: Checkpoint '{}' not found", from_cp))],
+                vec![Line::from(format!(
+                    "Error: Checkpoint '{}' not found",
+                    from_cp
+                ))],
                 HistoryCellType::Error,
             ));
             return;
@@ -512,7 +513,10 @@ fn execute_diff(widget: &mut ChatWidget, args: &str) {
         Some(cp) => cp,
         None => {
             widget.history_push(PlainHistoryCell::new(
-                vec![Line::from(format!("Error: Checkpoint '{}' not found", to_cp))],
+                vec![Line::from(format!(
+                    "Error: Checkpoint '{}' not found",
+                    to_cp
+                ))],
                 HistoryCellType::Error,
             ));
             return;

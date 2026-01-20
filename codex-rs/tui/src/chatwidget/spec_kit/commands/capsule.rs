@@ -55,7 +55,9 @@ impl SpecKitCommand for CapsuleDoctorCommand {
                     Line::from("/speckit.capsule doctor      # Verify capsule health"),
                     Line::from("/speckit.capsule stats       # Show size, frames, dedup ratio"),
                     Line::from("/speckit.capsule checkpoints # List all checkpoints"),
-                    Line::from("/speckit.capsule commit --label <LABEL> # Create manual checkpoint"),
+                    Line::from(
+                        "/speckit.capsule commit --label <LABEL> # Create manual checkpoint",
+                    ),
                 ];
                 widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));
             }
@@ -128,7 +130,9 @@ fn execute_stats(widget: &mut ChatWidget) {
 
     if !capsule_path.exists() {
         widget.history_push(PlainHistoryCell::new(
-            vec![Line::from("❌ Capsule not found. Run `/speckit.capsule doctor` for details.")],
+            vec![Line::from(
+                "❌ Capsule not found. Run `/speckit.capsule doctor` for details.",
+            )],
             HistoryCellType::Error,
         ));
         return;
@@ -190,7 +194,9 @@ fn execute_checkpoints(widget: &mut ChatWidget) {
 
     if !capsule_path.exists() {
         widget.history_push(PlainHistoryCell::new(
-            vec![Line::from("❌ Capsule not found. Run `/speckit.capsule doctor` for details.")],
+            vec![Line::from(
+                "❌ Capsule not found. Run `/speckit.capsule doctor` for details.",
+            )],
             HistoryCellType::Error,
         ));
         return;
@@ -285,7 +291,9 @@ fn execute_commit(widget: &mut ChatWidget, args: &str) {
 
     if !capsule_path.exists() {
         widget.history_push(PlainHistoryCell::new(
-            vec![Line::from("❌ Capsule not found. Run `/speckit.capsule doctor` for details.")],
+            vec![Line::from(
+                "❌ Capsule not found. Run `/speckit.capsule doctor` for details.",
+            )],
             HistoryCellType::Error,
         ));
         return;

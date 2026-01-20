@@ -214,7 +214,20 @@ pub enum Op {
 
 /// Determines the conditions under which the user is consulted to approve
 /// running the command proposed by Codex.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Display, TS, schemars::JsonSchema)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Display,
+    TS,
+    schemars::JsonSchema,
+)]
 #[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum AskForApproval {
@@ -240,7 +253,9 @@ pub enum AskForApproval {
     Never,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash, TS, schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash, TS, schemars::JsonSchema,
+)]
 #[serde(rename_all = "kebab-case")]
 pub enum ApprovedCommandMatchKind {
     Exact,
@@ -248,7 +263,9 @@ pub enum ApprovedCommandMatchKind {
 }
 
 /// Determines execution restrictions for model shell commands.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Display, TS, schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Display, TS, schemars::JsonSchema,
+)]
 #[strum(serialize_all = "kebab-case")]
 #[serde(tag = "mode", rename_all = "kebab-case")]
 pub enum SandboxPolicy {
@@ -643,7 +660,9 @@ pub struct TaskStartedEvent {
     pub model_context_window: Option<u64>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, TS, schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, TS, schemars::JsonSchema,
+)]
 pub struct TokenUsage {
     pub input_tokens: u64,
     pub cached_input_tokens: u64,
@@ -1334,7 +1353,9 @@ pub struct SessionConfiguredEvent {
 }
 
 /// User's decision in response to an ExecApprovalRequest.
-#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, TS, schemars::JsonSchema)]
+#[derive(
+    Debug, Default, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, TS, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ReviewDecision {
     /// User has approved this command and the agent should execute it.
@@ -1396,7 +1417,9 @@ pub enum TurnAbortReason {
 // --- Types ported from upstream for tui2 compatibility ---
 
 /// Whether network access is enabled in the sandbox.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS, schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum NetworkAccess {
     #[default]
@@ -1419,7 +1442,9 @@ pub struct CreditsSnapshot {
 }
 
 /// The source of this Codex session.
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq, TS, schemars::JsonSchema)]
+#[derive(
+    Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq, TS, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionSource {
     Cli,
@@ -1472,7 +1497,9 @@ pub enum ReviewDelivery {
 }
 
 /// Authentication status of an MCP server.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, TS, schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, TS, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum McpAuthStatus {
     #[default]

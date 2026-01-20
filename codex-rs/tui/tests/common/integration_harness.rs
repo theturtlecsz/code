@@ -11,7 +11,7 @@
 // SPEC-957: Allow unused code in test harness - not all helpers used in all test files
 #![allow(dead_code, unused_variables)]
 
-use codex_tui::{HalMode, SpecAutoState, SpecStage};
+use codex_tui::{HalMode, LLMCaptureMode, SpecAutoState, SpecStage};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
@@ -178,6 +178,7 @@ impl StateBuilder {
             self.start_stage,
             self.hal_mode,
             PipelineConfig::defaults(),
+            LLMCaptureMode::PromptsOnly,
         );
         state.quality_gates_enabled = self.quality_gates_enabled;
         state

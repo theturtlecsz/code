@@ -1,10 +1,10 @@
 #![allow(clippy::unwrap_used)]
 
-use codex_core::AuthManager;
 use crate::compat::auth::AuthCredentialsStoreMode;
+use crate::compat::auth::read_openai_api_key_from_env;
+use codex_core::AuthManager;
 use codex_core::auth::CLIENT_ID;
 use codex_core::auth::login_with_api_key;
-use crate::compat::auth::read_openai_api_key_from_env;
 use codex_login::ServerOptions;
 use codex_login::ShutdownHandle;
 use codex_login::run_login_server;
@@ -29,8 +29,8 @@ use ratatui::widgets::Paragraph;
 use ratatui::widgets::WidgetRef;
 use ratatui::widgets::Wrap;
 
-use codex_protocol::mcp_protocol::AuthMode;
 use codex_protocol::config_types::ForcedLoginMethod;
+use codex_protocol::mcp_protocol::AuthMode;
 use std::sync::RwLock;
 
 use crate::LoginStatus;
@@ -525,10 +525,7 @@ impl AuthModeWidget {
             return;
         }
         // NOTE: Fork's login_with_api_key takes 2 args (no credentials store mode)
-        match login_with_api_key(
-            &self.codex_home,
-            &api_key,
-        ) {
+        match login_with_api_key(&self.codex_home, &api_key) {
             Ok(()) => {
                 self.error = None;
                 self.login_status = LoginStatus::AuthMode(AuthMode::ApiKey);

@@ -47,17 +47,21 @@ pub use guardians::{
     GuardedMemory, LlmClient, MemoryDraft, MemoryKind, apply_metadata_guardian,
     apply_template_guardian, apply_template_guardian_passthrough,
 };
+pub use hybrid::{HybridBackend, HybridConfig};
 pub use overlay_db::{
     ConstitutionType, OverlayDb, OverlayMemory, StructureStatus, Tier2CacheEntry,
 };
+pub use policy::{
+    ChangeCategory, GovernancePolicy, ModelConfig, PolicyDiff, PolicyFieldChange, PolicySnapshot,
+    PolicySnapshotInfo, PolicyStore, capture_policy_snapshot, get_policy_for_run,
+};
+pub use reflex_config::{ReflexConfig, ReflexThresholds, load_reflex_config};
 pub use scoring::{ScoringComponents, ScoringInput, calculate_dynamic_score, calculate_score};
-pub use hybrid::{HybridBackend, HybridConfig};
-pub use tfidf::{TfIdfBackend, TfIdfConfig};
 pub use system_memory::{
     ArtifactType, Stage0PointerInfo, Tier2Status, compute_content_hash, extract_summary_bullets,
     store_stage0_pointer, store_system_pointer,
 };
-pub use reflex_config::{ReflexConfig, ReflexThresholds, load_reflex_config};
+pub use tfidf::{TfIdfBackend, TfIdfConfig};
 pub use tier2::{
     CausalLinkSuggestion, DivineTruth, Tier2Client, Tier2Response, build_fallback_divine_truth,
     build_tier2_prompt, parse_divine_truth, validate_causal_links,
@@ -65,11 +69,6 @@ pub use tier2::{
 pub use vector::{
     DocumentKind, DocumentMetadata, IndexStats, ScoredVector, VectorBackend, VectorDocument,
     VectorFilters,
-};
-pub use policy::{
-    ChangeCategory, GovernancePolicy, ModelConfig, PolicyDiff, PolicyFieldChange,
-    PolicySnapshot, PolicySnapshotInfo, PolicyStore,
-    capture_policy_snapshot, get_policy_for_run,
 };
 
 use sha2::{Digest, Sha256};

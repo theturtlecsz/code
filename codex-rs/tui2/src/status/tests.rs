@@ -1,5 +1,7 @@
 use super::new_status_output;
 use super::rate_limit_snapshot_display;
+use crate::compat::protocol::RateLimitSnapshot;
+use crate::compat::protocol::RateLimitWindow;
 use crate::history_cell::HistoryCell;
 use chrono::Duration as ChronoDuration;
 use chrono::TimeZone;
@@ -10,8 +12,6 @@ use codex_core::config::ConfigBuilder;
 use codex_core::models_manager::manager::ModelsManager;
 use codex_core::models_manager::model_family::ModelFamily;
 use codex_core::protocol::CreditsSnapshot;
-use crate::compat::protocol::RateLimitSnapshot;
-use crate::compat::protocol::RateLimitWindow;
 use codex_core::protocol::SandboxPolicy;
 use codex_core::protocol::TokenUsage;
 use codex_protocol::config_types::ReasoningSummary;

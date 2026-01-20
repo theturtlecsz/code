@@ -2715,18 +2715,36 @@ notebook_id = "nb-123"
         let override_from_grandchild = super::resolve_project_override(projects, &grandchild);
 
         // Both should resolve to the root project config
-        assert!(override_from_child.is_some(), "child should inherit parent config");
-        assert!(override_from_grandchild.is_some(), "grandchild should inherit parent config");
+        assert!(
+            override_from_child.is_some(),
+            "child should inherit parent config"
+        );
+        assert!(
+            override_from_grandchild.is_some(),
+            "grandchild should inherit parent config"
+        );
 
         // Verify stage0 config is accessible
         let child_stage0 = override_from_child.unwrap().stage0.as_ref();
         assert!(child_stage0.is_some(), "stage0 config should be present");
-        assert_eq!(child_stage0.unwrap().notebook, Some("test-notebook".to_string()));
-        assert_eq!(child_stage0.unwrap().notebook_id, Some("nb-123".to_string()));
+        assert_eq!(
+            child_stage0.unwrap().notebook,
+            Some("test-notebook".to_string())
+        );
+        assert_eq!(
+            child_stage0.unwrap().notebook_id,
+            Some("nb-123".to_string())
+        );
 
         let grandchild_stage0 = override_from_grandchild.unwrap().stage0.as_ref();
-        assert!(grandchild_stage0.is_some(), "stage0 config should be present for grandchild");
-        assert_eq!(grandchild_stage0.unwrap().notebook, Some("test-notebook".to_string()));
+        assert!(
+            grandchild_stage0.is_some(),
+            "stage0 config should be present for grandchild"
+        );
+        assert_eq!(
+            grandchild_stage0.unwrap().notebook,
+            Some("test-notebook".to_string())
+        );
     }
 
     #[test]
@@ -2756,12 +2774,21 @@ command = ["echo", "before-tool"]
 
         // Subdirectory should resolve to parent's project config with hooks
         let override_cfg = super::resolve_project_override(projects, &child);
-        assert!(override_cfg.is_some(), "subdirectory should inherit parent config");
+        assert!(
+            override_cfg.is_some(),
+            "subdirectory should inherit parent config"
+        );
 
         let project_cfg = override_cfg.unwrap();
-        assert!(!project_cfg.hooks.is_empty(), "hooks config should be present");
+        assert!(
+            !project_cfg.hooks.is_empty(),
+            "hooks config should be present"
+        );
         assert_eq!(project_cfg.hooks.len(), 2, "should have 2 hooks configured");
-        assert_eq!(project_cfg.hooks[0].command, vec!["echo", "session-started"]);
+        assert_eq!(
+            project_cfg.hooks[0].command,
+            vec!["echo", "session-started"]
+        );
         assert_eq!(project_cfg.hooks[1].command, vec!["echo", "before-tool"]);
     }
 
