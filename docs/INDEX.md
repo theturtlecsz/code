@@ -3,7 +3,7 @@
 
 - `PROGRAM_2026Q1_ACTIVE.md` — **pinned active specs + dependency DAG + sequencing gates**
 - `DECISION_REGISTER.md` — locked decisions (D1–D112)
-- `MODEL-POLICY.md` — model policy (roles, routing rules, enforcement)
+- `POLICY.md` — consolidated policy (model, gates, evidence, testing)
 - `MEMVID_FIRST_WORKBENCH.md` — architecture + ADRs for the Memvid-first workbench
 - `GOLDEN_PATH.md` — end-to-end walkthrough (what “good” looks like)
 
@@ -33,12 +33,13 @@
 
 | Document | Purpose | Status |
 |----------|---------|--------|
-| **testing-policy.md** | Test coverage strategy (604 tests, 42-48% coverage) | ✅ Current (2025-10-19) |
-| **evidence-policy.md** | Evidence retention, archival automation | ✅ Current |
+| **POLICY.md** | Consolidated policy (model, gates, evidence, testing) | ✅ Current (2026-01-21) |
+| **OPERATIONS.md** | Consolidated operations (playbook + config reference) | ✅ Current (2026-01-21) |
+| **MODEL-GUIDANCE.md** | Model-specific reasoning and validation tiers | ✅ Reference |
 | **UPSTREAM-SYNC.md** | Quarterly sync process, conflict resolution | ✅ Current |
 | **memory/constitution.md** | Project charter and guardrails | ✅ Current |
 
-**Location**: `/docs/` and `/docs/spec-kit/`
+**Location**: `/docs/`
 
 ---
 
@@ -71,7 +72,7 @@
 | **TESTING_INFRASTRUCTURE.md** | MockMcpManager, fixtures, tarpaulin setup | ✅ Current |
 | **PHASE3_TEST_PLAN.md** | Integration tests (W/E/S/Q/C categories) | ✅ Complete 2025-10-19 |
 | **PHASE4_TEST_PLAN.md** | Edge cases + property-based tests (EC/PB) | ✅ Complete 2025-10-19 |
-| **testing-policy.md** | Coverage goals, module targets, roadmap | ✅ Current (2025-10-19) |
+| **POLICY.md#4-testing-policy** | Coverage goals, module targets, roadmap | ✅ Current (2026-01-21) |
 
 **Test Results**: 604 tests @ 100% pass rate, 42-48% estimated coverage
 
@@ -83,6 +84,7 @@
 
 | Document | Purpose |
 |----------|---------|
+| **OPERATIONS.md** | Agent behavioral guidance + configuration reference |
 | **spec-auto-automation.md** | Spec-kit automation workflows |
 | **spec-auto-full-automation-plan.md** | Full automation implementation |
 | **MIGRATION_GUIDE.md** | Migration patterns and examples |
@@ -129,7 +131,7 @@
 ### By Topic
 
 **Testing**:
-- Start: testing-policy.md
+- Start: POLICY.md#4-testing-policy
 - Infrastructure: TESTING_INFRASTRUCTURE.md
 - Plans: PHASE3_TEST_PLAN.md, PHASE4_TEST_PLAN.md
 
@@ -139,7 +141,7 @@
 - Config: QUALITY_GATES_CONFIGURATION.md
 
 **Evidence**:
-- Policy: evidence-policy.md
+- Policy: POLICY.md#3-evidence-policy
 - Baseline: TESTING_INFRASTRUCTURE.md (fixtures)
 
 **Upstream Sync**:
@@ -212,10 +214,10 @@
 
 **Common Tasks**:
 - Run spec-kit command → See CLAUDE.md section 2
-- Write tests → See testing-policy.md, TESTING_INFRASTRUCTURE.md
-- Handle quality gates → See QUALITY_GATES_DESIGN.md
+- Write tests → See POLICY.md#4-testing-policy, TESTING_INFRASTRUCTURE.md
+- Handle quality gates → See POLICY.md#2-gate-policy
 - Sync upstream → See UPSTREAM-SYNC.md
-- Find evidence → See evidence-policy.md
+- Find evidence → See POLICY.md#3-evidence-policy
 
 **Common Questions**:
 - "How do I...?" → Check CLAUDE.md first

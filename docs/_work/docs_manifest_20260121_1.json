@@ -1,0 +1,37 @@
+{
+  "version": "1.0",
+  "generated": "2026-01-21T21:50:00Z",
+  "session": 1,
+  "phase": "inventory",
+  "status": "complete",
+  "stats": {
+    "total_files": 904,
+    "total_lines": 337089,
+    "duplicate_groups": 266,
+    "duplicate_files": 553,
+    "archive_eligible_files": 615,
+    "archive_eligible_lines": 294657,
+    "canonical_target_count": 9,
+    "protected_files": 1
+  },
+  "deliverables": [
+    {"path": "docs/_work/docs_inventory.json", "type": "inventory", "bytes": 535627},
+    {"path": "docs/_work/docs_inventory.md", "type": "report", "bytes": 23932},
+    {"path": "docs/_work/docs_mapping.json", "type": "mapping", "bytes": 180000},
+    {"path": "docs/_work/docs_mapping.md", "type": "report", "bytes": 15000},
+    {"path": "scripts/docs-archive-pack.sh", "type": "tool", "bytes": 10000},
+    {"path": "archive/ARCHIVE_FORMAT.md", "type": "spec", "bytes": 2000}
+  ],
+  "user_decisions": {
+    "canonical_mapping": "review_first",
+    "first_action": "create_archive_pack_structure",
+    "protected_files": ["SPEC.md"]
+  },
+  "next_actions": [
+    "review_mapping_document",
+    "pack_docs_archive_specs",
+    "delete_docs_archive_specs",
+    "pack_session_continuations",
+    "update_doc_lint"
+  ]
+}

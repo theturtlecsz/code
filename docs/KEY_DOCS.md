@@ -5,6 +5,8 @@ This repo has a small set of canonical documents. If you’re unsure what to rea
 | File | Type | Purpose |
 |---|---|---|
 | [`docs/KEY_DOCS.md`](KEY_DOCS.md) | Map | Canonical doc map (this file) |
+| [`docs/POLICY.md`](POLICY.md) | Policy | Consolidated policy (model, gates, evidence, testing) |
+| [`docs/OPERATIONS.md`](OPERATIONS.md) | Operations | Consolidated operations (playbook + config reference) |
 | [`memory/constitution.md`](../memory/constitution.md) | Charter | Guardrails, principles, governance rules (ACE-compatible bullets) |
 | [`docs/VISION.md`](VISION.md) | Vision | Product identity — Planner (terminal TUI) for Spec‑Kit workflows |
 | [`product-requirements.md`](../product-requirements.md) | PRD | Planner scope and requirements (Spec‑Kit workflows) |
