@@ -385,6 +385,19 @@ pub enum EventType {
     /// Curated-eligible: Yes (critical for observability)
     /// SPEC-KIT-978: Tracks service protection state transitions.
     BreakerStateChanged,
+
+    // =========================================================================
+    // SPEC-KIT-979: Local-Memory Sunset Events
+    // =========================================================================
+    /// Sunset phase resolution at run start.
+    /// Curated-eligible: Yes (audit trail for phase enforcement)
+    /// Records policy_phase, env_phase override, effective_phase, resolution_source.
+    LocalMemorySunsetPhaseResolved,
+
+    /// Fallback activation event for GATE-ST stability tracking.
+    /// Curated-eligible: Yes (critical for 30-day stability gate)
+    /// Emitted when memvid falls back to local-memory.
+    FallbackActivated,
 }
 
 impl EventType {
@@ -408,6 +421,9 @@ impl EventType {
             EventType::CapsuleExported => "CapsuleExported",
             EventType::CapsuleImported => "CapsuleImported",
             EventType::BreakerStateChanged => "BreakerStateChanged",
+            // SPEC-KIT-979 additions
+            EventType::LocalMemorySunsetPhaseResolved => "LocalMemorySunsetPhaseResolved",
+            EventType::FallbackActivated => "FallbackActivated",
         }
     }
 
@@ -432,6 +448,9 @@ impl EventType {
             "CapsuleExported" => Some(EventType::CapsuleExported),
             "CapsuleImported" => Some(EventType::CapsuleImported),
             "BreakerStateChanged" => Some(EventType::BreakerStateChanged),
+            // SPEC-KIT-979 additions
+            "LocalMemorySunsetPhaseResolved" => Some(EventType::LocalMemorySunsetPhaseResolved),
+            "FallbackActivated" => Some(EventType::FallbackActivated),
             _ => None,
         }
     }
@@ -455,6 +474,9 @@ impl EventType {
             "CapsuleExported",
             "CapsuleImported",
             "BreakerStateChanged",
+            // SPEC-KIT-979 additions
+            "LocalMemorySunsetPhaseResolved",
+            "FallbackActivated",
         ]
     }
 
@@ -499,6 +521,9 @@ impl EventType {
             EventType::CapsuleImported => true,
             // SPEC-KIT-978: Circuit breaker state changes are curated (observability)
             EventType::BreakerStateChanged => true,
+            // SPEC-KIT-979: Sunset phase events are curated (audit trail + GATE-ST)
+            EventType::LocalMemorySunsetPhaseResolved => true,
+            EventType::FallbackActivated => true,
         }
     }
 
@@ -526,6 +551,9 @@ impl EventType {
             EventType::ModelCallEnvelope => false,
             // SPEC-KIT-978: Circuit breaker state changes are audit-critical
             EventType::BreakerStateChanged => true,
+            // SPEC-KIT-979: Phase resolution and fallback events are audit-critical
+            EventType::LocalMemorySunsetPhaseResolved => true,
+            EventType::FallbackActivated => true,
         }
     }
 }
@@ -1421,6 +1449,52 @@ pub struct CapsuleImportedPayload {
     /// SHA-256 hash of imported content
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content_hash: Option<String>,
+}
+
+// =============================================================================
+// SPEC-KIT-979: Local-Memory Sunset Payloads
+// =============================================================================
+
+/// Sunset phase resolution payload.
+///
+/// Records how the effective sunset phase was determined at run start.
+/// Used for auditability and debugging phase override behavior.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PhaseResolutionPayload {
+    /// Phase configured in model_policy.toml
+    pub policy_phase: u8,
+    /// Phase from CODE_SUNSET_PHASE env var (if set)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub env_phase: Option<u8>,
+    /// Effective phase used for enforcement
+    pub effective_phase: u8,
+    /// Source of effective phase ("policy" or "env:CODE_SUNSET_PHASE")
+    pub resolution_source: String,
+}
+
+/// Fallback activation payload for GATE-ST tracking.
+///
+/// Emitted when memvid backend fails and falls back to local-memory.
+/// Used to track the 30-day stability requirement (zero fallbacks).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FallbackActivatedPayload {
+    /// Backend that failed (e.g., "memvid")
+    pub from_backend: String,
+    /// Backend activated as fallback (e.g., "local-memory")
+    pub to_backend: String,
+    /// Reason for fallback (error message)
+    pub reason: String,
+    /// Operation that triggered fallback (e.g., "capsule_open", "search")
+    pub operation: String,
+    /// SPEC ID context (if available)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spec_id: Option<String>,
+    /// Run ID context (if available)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
+    /// Checkpoint ID context (if available)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub checkpoint_id: Option<String>,
 }
 
 // =============================================================================

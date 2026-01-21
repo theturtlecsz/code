@@ -41,6 +41,8 @@ mod capsule;
 pub mod eval;
 pub mod lock;
 pub mod policy_capture;
+/// SPEC-KIT-979: Sunset phase resolution and enforcement for local-memory deprecation.
+pub mod sunset_phase;
 mod types;
 
 pub use adapter::{
@@ -57,6 +59,10 @@ pub use eval::{
 };
 pub use lock::{LockMetadata, is_locked, lock_path_for};
 pub use policy_capture::{capture_and_store_policy, latest_policy, list_policies, load_policy};
+pub use sunset_phase::{
+    PhaseEnforcementResult, SunsetPhase, check_phase_enforcement, effective_phase,
+    resolve_sunset_phase, SUNSET_PHASE_ENV_VAR,
+};
 pub use types::{
     BranchId,
     BranchMergedPayload,
@@ -75,6 +81,8 @@ pub use types::{
     ErrorEventPayload,
     ErrorSeverity,
     EventType,
+    // SPEC-KIT-979: Fallback activation payload
+    FallbackActivatedPayload,
     FactValueType,
     GateDecisionPayload,
     GateOutcome,
@@ -89,6 +97,8 @@ pub use types::{
     // SPEC-KIT-976: Memory Card and Logic Edge types
     ObjectType,
     PatchApplyPayload,
+    // SPEC-KIT-979: Phase resolution payload
+    PhaseResolutionPayload,
     RetrievalRequestPayload,
     RetrievalResponsePayload,
     RoutingDecisionPayload,

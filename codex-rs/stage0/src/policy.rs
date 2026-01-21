@@ -261,6 +261,10 @@ pub struct LocalMemorySunsetGate {
     pub search_quality_parity: bool,
     pub stability_days: u32,
     pub zero_fallback_activations: bool,
+    /// SPEC-KIT-979: Current rollout phase (0-3).
+    /// Can be overridden with CODE_SUNSET_PHASE env var.
+    #[serde(default)]
+    pub current_phase: u8,
 }
 
 /// Security configuration from [security.*]
@@ -611,6 +615,11 @@ impl GovernancePolicy {
                     .unwrap_or(false),
             },
             local_memory_sunset: LocalMemorySunsetGate {
+                // SPEC-KIT-979: Current sunset phase (0=active, 1=warning, 2=force-required, 3=removed)
+                current_phase: lm_sunset
+                    .and_then(|l| l.get("current_phase"))
+                    .and_then(|v| v.as_integer())
+                    .unwrap_or(0) as u8,
                 retrieval_p95_parity: lm_sunset
                     .and_then(|l| l.get("retrieval_p95_parity"))
                     .and_then(|v| v.as_bool())

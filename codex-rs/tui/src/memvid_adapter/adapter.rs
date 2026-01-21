@@ -188,11 +188,25 @@ impl MemvidMemoryAdapter {
                 Ok(true)
             }
             Err(e) => {
-                tracing::warn!("Failed to open capsule, activating fallback: {}", e);
                 if self.fallback.is_some() {
+                    // SPEC-KIT-979: Structured fallback event logging for GATE-ST tracking
+                    tracing::warn!(
+                        target: "memvid",
+                        event = "FallbackActivated",
+                        from_backend = "memvid",
+                        to_backend = "local-memory",
+                        reason = %e,
+                        operation = "capsule_open",
+                        "Activating local-memory fallback after capsule open failure"
+                    );
                     *self.use_fallback.write().await = true;
                     Ok(false)
                 } else {
+                    tracing::error!(
+                        target: "memvid",
+                        error = %e,
+                        "Failed to open capsule with no fallback available"
+                    );
                     Err(e)
                 }
             }
@@ -848,32 +862,35 @@ pub async fn create_memory_client(
                     Ok(Arc::new(adapter))
                 }
                 Ok(false) => {
-                    // Capsule failed but fallback activated
-                    tracing::warn!(
-                        target: "memvid",
-                        "Memvid capsule failed, using fallback"
-                    );
+                    // Capsule failed but fallback activated (event logged in open())
                     match fallback {
                         Some(client) => Ok(client),
                         None => Err(CapsuleError::NotOpen),
                     }
                 }
                 Err(e) => {
-                    tracing::error!(
-                        target: "memvid",
-                        error = %e,
-                        "Failed to open memvid capsule"
-                    );
-                    // Try fallback
+                    // SPEC-KIT-979: Structured fallback logging
                     match fallback {
                         Some(client) => {
-                            tracing::info!(
+                            tracing::warn!(
                                 target: "memvid",
-                                "Using fallback after memvid error"
+                                event = "FallbackActivated",
+                                from_backend = "memvid",
+                                to_backend = "local-memory",
+                                reason = %e,
+                                operation = "create_memory_client",
+                                "Using local-memory fallback after memvid error"
                             );
                             Ok(client)
                         }
-                        None => Err(e),
+                        None => {
+                            tracing::error!(
+                                target: "memvid",
+                                error = %e,
+                                "Failed to open memvid capsule with no fallback"
+                            );
+                            Err(e)
+                        }
                     }
                 }
             }
@@ -933,20 +950,25 @@ pub async fn create_unified_memory_client(
                 }
                 Ok(false) | Err(_) => {
                     // Capsule failed - check if local-memory is available as fallback
-                    tracing::warn!(
-                        target: "stage0",
-                        "Memvid capsule failed, checking local-memory fallback"
-                    );
-
                     if check_local_memory_health() {
-                        tracing::info!(
+                        // SPEC-KIT-979: Structured fallback event logging for GATE-ST tracking
+                        tracing::warn!(
                             target: "stage0",
+                            event = "FallbackActivated",
+                            from_backend = "memvid",
+                            to_backend = "local-memory",
+                            reason = "capsule_open_failed",
+                            operation = "create_unified_memory_client",
                             "Using local-memory fallback after memvid failure"
                         );
                         Ok(UnifiedMemoryClient::LocalMemory(
                             crate::stage0_adapters::LocalMemoryCliAdapter::new(),
                         ))
                     } else {
+                        tracing::error!(
+                            target: "stage0",
+                            "Memvid capsule failed and local-memory health check failed"
+                        );
                         Err(CapsuleError::NotOpen)
                     }
                 }

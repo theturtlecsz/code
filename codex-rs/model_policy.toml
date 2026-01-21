@@ -127,6 +127,12 @@ retrieval_p95_parity = true
 search_quality_parity = true
 stability_days = 30
 zero_fallback_activations = true
+# Current rollout phase (0-3). Override with CODE_SUNSET_PHASE env var.
+# Phase 0: No warnings (current default)
+# Phase 1: Deprecation warning on local-memory usage
+# Phase 2: Require --force-deprecated flag for local-memory
+# Phase 3: Hard error (local-memory removed)
+current_phase = 0
 
 # =============================================================================
 # Security

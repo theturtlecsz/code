@@ -99,6 +99,10 @@ use codex_login::AuthMode;
 use codex_login::CodexAuth;
 use codex_ollama::DEFAULT_OSS_MODEL;
 use codex_protocol::config_types::SandboxMode;
+// SPEC-KIT-979: Phase enforcement imports
+use codex_stage0::config::MemoryBackend;
+use codex_stage0::policy::GovernancePolicy;
+use memvid_adapter::{PhaseEnforcementResult, check_phase_enforcement, effective_phase, resolve_sunset_phase};
 use regex_lite::Regex;
 use std::fs::OpenOptions;
 use std::path::PathBuf;
@@ -124,6 +128,8 @@ mod bottom_pane;
 mod chatwidget;
 mod citation_regex;
 mod cli;
+/// SPEC-KIT-979: Headless CLI diagnostics (--eval-ab, --capsule-doctor).
+mod cli_diagnostics;
 mod cli_executor;
 mod colors;
 mod common;
@@ -292,6 +298,83 @@ pub async fn run_main(
     codex_linux_sandbox_exe: Option<PathBuf>,
 ) -> std::io::Result<codex_core::protocol::TokenUsage> {
     cli.finalize_defaults();
+
+    // =========================================================================
+    // SPEC-KIT-979: Handle headless diagnostic commands
+    // =========================================================================
+    // These commands run and exit immediately without starting TUI.
+    let cwd = cli
+        .cwd
+        .clone()
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+
+    if cli.eval_ab {
+        let exit_code = cli_diagnostics::run_eval_ab(&cli, &cwd).await;
+        if exit_code != 0 {
+            return Err(std::io::Error::other(format!(
+                "eval-ab exited with code {}",
+                exit_code
+            )));
+        }
+        return Ok(codex_core::protocol::TokenUsage::default());
+    }
+
+    if cli.capsule_doctor {
+        let exit_code = cli_diagnostics::run_capsule_doctor(&cli, &cwd);
+        if exit_code != 0 {
+            return Err(std::io::Error::other(format!(
+                "capsule-doctor exited with code {}",
+                exit_code
+            )));
+        }
+        return Ok(codex_core::protocol::TokenUsage::default());
+    }
+
+    // =========================================================================
+    // SPEC-KIT-979: Phase enforcement for local-memory sunset
+    // =========================================================================
+    // Load policy, resolve phase, check enforcement before proceeding
+    let policy = GovernancePolicy::load(None).ok();
+    let phase_resolution = resolve_sunset_phase(policy.as_ref());
+    let sunset_phase = effective_phase(&phase_resolution);
+
+    // Log phase resolution for debugging/audit
+    tracing::info!(
+        target: "stage0",
+        event = "PhaseResolved",
+        policy_phase = phase_resolution.policy_phase,
+        env_phase = ?phase_resolution.env_phase,
+        effective_phase = phase_resolution.effective_phase,
+        source = %phase_resolution.resolution_source,
+        "Resolved sunset phase"
+    );
+
+    // Get effective memory backend (default: LocalMemory if not specified)
+    let effective_backend: MemoryBackend = cli
+        .memory_backend
+        .map(Into::into)
+        .unwrap_or(MemoryBackend::LocalMemory);
+
+    // Check phase enforcement
+    let enforcement_result = check_phase_enforcement(
+        effective_backend,
+        sunset_phase,
+        cli.force_deprecated,
+    );
+
+    #[allow(clippy::print_stderr)]
+    match enforcement_result {
+        PhaseEnforcementResult::Allow => {
+            // No action needed
+        }
+        PhaseEnforcementResult::AllowWithWarning(warning) => {
+            eprintln!("{}", warning);
+        }
+        PhaseEnforcementResult::Block(error) => {
+            eprintln!("{}", error);
+            std::process::exit(1);
+        }
+    }
 
     let (sandbox_mode, approval_policy) = if cli.full_auto {
         (

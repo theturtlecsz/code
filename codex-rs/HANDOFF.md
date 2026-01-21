@@ -1,8 +1,8 @@
 # HANDOFF.md — Session Continuation
 
 **Created:** 2026-01-11
-**Last Session:** 2026-01-20 (ARB Pass 2 Complete: D113-D134 Locked + Docs Alignment)
-**Next Session:** SPEC-KIT-979 local-memory sunset + ACE Implementation
+**Last Session:** 2026-01-21 (SPEC-KIT-979 Phase Enforcement COMPLETE)
+**Next Session:** Ready for Phase 1 testing or new SPEC
 
 ---
 
@@ -12,284 +12,213 @@
 ROLE
 You are an implementor working in the Codex-RS / Spec-Kit repo.
 
-NON-NEGOTIABLES (read first)
+TASK: SPEC-KIT-979 Phase Enforcement is COMPLETE - Ready for Phase 1 Testing
+
+NON-NEGOTIABLES
 1) SPEC.md is the primary source of truth.
-2) Doc precedence order is mandatory:
-   SPEC.md → docs/PROGRAM_2026Q1_ACTIVE.md → docs/DECISION_REGISTER.md
-3) Invariants you MUST NOT violate:
-   - Stage0 core has no Memvid dependency (adapter boundary enforced)
-   - Logical mv2:// URIs are immutable; physical IDs are never treated as stable keys
-   - LocalMemoryClient trait is the interface; MemvidMemoryAdapter is the implementation
-   - Single-writer capsule model: cross-process lock + in-process writer queue
-   - Hybrid = lex + vec (required, not optional)
-   - Merge modes are `curated` or `full` only (never squash/ff/rebase)
-   - Lock file path: <capsule_path>.lock (e.g., workspace.mv2.lock)
-   - Reflex is a routing mode: Implementer(mode=reflex), not a new Stage0 role
+2) Stage0 core has no Memvid dependency (adapter boundary enforced)
+3) LocalMemoryClient trait is the interface; MemvidMemoryAdapter is implementation
 
 ===================================================================
-CURRENT STATE — Session completed 2026-01-17
+CURRENT STATE — SPEC-KIT-979 Phase Enforcement COMPLETE
 ===================================================================
 
-COMPLETED THIS SESSION:
+ALL STEPS COMPLETED:
 
-1. ✅ SPEC-KIT-977 Policy CLI Commands
-   - `code speckit policy list [--json]` - List all policy snapshots
-   - `code speckit policy show <id> [--json]` - Show policy details
-   - `code speckit policy current [--json]` - Show current active policy
-   - `code speckit policy validate [--path]` - Validate model_policy.toml
-   - Exported GovernancePolicy from stage0 for CLI usage
+1. ✅ Step 1: Policy Config
+   - Added `current_phase = 0` to model_policy.toml [gates.local_memory_sunset]
+   - Added `pub current_phase: u8` to LocalMemorySunsetGate struct in policy.rs
 
-2. ✅ SPEC-KIT-977 Policy TUI Commands
-   - `/speckit.policy list` - List policy snapshots
-   - `/speckit.policy show <id>` - Show policy details
-   - `/speckit.policy current` - Show current active policy
-   - New policy.rs command file in commands/
+2. ✅ Step 2: Event Types
+   - Added `LocalMemorySunsetPhaseResolved` and `FallbackActivated` to EventType enum
+   - Added `PhaseResolutionPayload` struct
+   - Added `FallbackActivatedPayload` struct
+   - Updated all match arms: as_str, from_str, all_variants, is_curated_eligible, is_audit_critical
 
-3. ✅ SPEC-KIT-971 Merge at Unlock
-   - Added `BranchMerged` event type to EventType enum
-   - Added `BranchMergedPayload` struct
-   - Added `UriIndex::count_on_branch()` and `merge_branch()` helpers
-   - Added `CapsuleHandle::merge_branch(from, to, mode, spec_id, run_id)`
-   - Added `merge_run_branch_to_main()` in git_integration.rs
-   - Wired merge into Unlock stage in pipeline_coordinator.rs
-   - 2 determinism tests: URIs resolve on main after merge
+3. ✅ Step 3: Sunset Phase Module
+   - Created codex-rs/tui/src/memvid_adapter/sunset_phase.rs
+   - `SunsetPhase` enum: Phase0, Phase1, Phase2, Phase3
+   - `SUNSET_PHASE_ENV_VAR` = "CODE_SUNSET_PHASE"
+   - `resolve_sunset_phase(policy) -> PhaseResolutionPayload`
+   - `check_phase_enforcement(backend, phase, force_deprecated) -> PhaseEnforcementResult`
+   - 12 unit tests (all passing)
 
-===================================================================
-TASK FOR NEXT SESSION: SPEC-KIT-975 + 978 Remaining
-===================================================================
+4. ✅ Step 4: Export sunset_phase from mod.rs
+   - Added `pub mod sunset_phase;` to mod.rs
+   - Re-exported: SunsetPhase, resolve_sunset_phase, check_phase_enforcement,
+     PhaseEnforcementResult, effective_phase, SUNSET_PHASE_ENV_VAR
+   - Re-exported: PhaseResolutionPayload, FallbackActivatedPayload from types.rs
 
-### Priority 1: SPEC-KIT-975 Event Schema (Unblocks 973, 976)
+5. ✅ Step 5: Wired enforcement into adapter.rs
+   - Added structured FallbackActivated event logging in open()
+   - Added structured logging in create_memory_client() and create_unified_memory_client()
 
-**Goal:** Define event schema for replay determinism.
+6. ✅ Step 6: Updated lib.rs for phase context
+   - Added imports for GovernancePolicy, MemoryBackend, sunset_phase types
+   - Added From<MemoryBackendArg> for MemoryBackend conversion in cli.rs
+   - Replaced --force-deprecated no-op with full phase enforcement:
+     - Loads GovernancePolicy
+     - Resolves phase with env var override
+     - Logs PhaseResolved event
+     - Checks enforcement based on memory_backend
+     - Prints warning or blocks as appropriate
 
-**Key deliverables:**
-1. Event schema v1 with all event types
-2. LLMCall event capture aligned with PolicySnapshot.capture.mode
-3. Events query API for time-travel and replay
-
-### Priority 2: SPEC-KIT-978 Remaining Work
-
-**Already complete:**
-- [x] JSON schema enforcement in agent_orchestrator.rs
-- [x] Reflex config in model_policy.toml
-- [x] ReflexConfig struct and load_reflex_config()
-- [x] Routing decision module (reflex_router.rs)
-- [x] RoutingDecision capsule events
-- [x] Health check integration
-- [x] ReflexMetricsDb for bakeoff stats
-- [x] `code speckit reflex bakeoff` command
-- [x] `code speckit reflex check` command
-
-**Remaining:**
-- [ ] Bakeoff report writer: JSON/MD to .speckit/eval/reflex-bakeoff-*
-- [ ] CI gate: `code speckit reflex check` fails CI if thresholds not met
-- [ ] TUI slash commands: `/speckit.reflex health|status|models`
-
-### Optional: Documentation Updates
-
-Consider updating specs to 100% status:
-- SPEC-KIT-971: Update to 100% (merge at unlock complete)
-- SPEC-KIT-977: Update to 100% (CLI/TUI complete)
+7. ✅ Step 7: Build & Test
+   - Build: `cargo build -p codex-tui` ✅
+   - Test: `cargo test -p codex-tui --lib -- sunset_phase` - 12/12 passed ✅
+   - Test: `cargo test -p codex-stage0 -- policy` - 32/32 passed ✅
 
 ===================================================================
-FILES CHANGED THIS SESSION (2026-01-17)
+KEY FILES MODIFIED
 ===================================================================
 
 | File | Change |
 |------|--------|
-| cli/src/speckit_cmd.rs | Added policy list/show/current/validate commands |
-| stage0/src/lib.rs | Exported GovernancePolicy |
-| tui/src/chatwidget/spec_kit/commands/policy.rs | NEW - TUI policy commands |
-| tui/src/chatwidget/spec_kit/commands/mod.rs | Added policy module |
-| tui/src/chatwidget/spec_kit/command_registry.rs | Registered policy command (45 total) |
-| tui/src/chatwidget/spec_kit/git_integration.rs | Added merge_run_branch_to_main() |
-| tui/src/chatwidget/spec_kit/pipeline_coordinator.rs | Wired merge at Unlock |
-| tui/src/memvid_adapter/capsule.rs | Added merge_branch() method |
-| tui/src/memvid_adapter/mod.rs | Exported MergeMode, BranchMergedPayload |
-| tui/src/memvid_adapter/types.rs | Added BranchMerged event, BranchMergedPayload |
-| tui/src/memvid_adapter/tests.rs | 2 merge determinism tests |
+| codex-rs/model_policy.toml | Added current_phase = 0 |
+| codex-rs/stage0/src/policy.rs | Added current_phase: u8 to LocalMemorySunsetGate + parsing |
+| codex-rs/tui/src/memvid_adapter/types.rs | Added 2 EventTypes + 2 Payload structs |
+| codex-rs/tui/src/memvid_adapter/sunset_phase.rs | NEW - Phase resolution and enforcement |
+| codex-rs/tui/src/memvid_adapter/mod.rs | Export sunset_phase module and types |
+| codex-rs/tui/src/memvid_adapter/adapter.rs | FallbackActivated structured logging |
+| codex-rs/tui/src/cli.rs | From<MemoryBackendArg> for MemoryBackend |
+| codex-rs/tui/src/lib.rs | Full phase enforcement integration |
 
 ===================================================================
-TEST SUMMARY
+PHASE BEHAVIOR REFERENCE
 ===================================================================
 
-| Module | Tests | Status |
-|--------|-------|--------|
-| TUI total | 667 | ✅ All passing |
-| merge determinism | 2 | ✅ All passing |
-| policy (TUI) | 2 | ✅ All passing |
-| command_registry | 16 | ✅ All passing |
+| Phase | Behavior | --force-deprecated |
+|-------|----------|-------------------|
+| 0 | Allow (no warning) | N/A |
+| 1 | Allow with warning | N/A |
+| 2 | Block unless flag | Required |
+| 3 | Block always | Ignored |
 
-Run commands:
+===================================================================
+TESTING PHASE 1 (OPTIONAL NEXT STEP)
+===================================================================
+
+To test Phase 1 warning behavior:
 ```bash
-cargo test -p codex-tui --lib
-cargo test -p codex-tui --lib "merge_determinism"
-cargo test -p codex-tui --lib "policy"
-cargo test -p codex-tui --lib "command_registry"
+# Set phase 1 via env var
+CODE_SUNSET_PHASE=1 cargo run -p codex-tui --bin code-tui -- --memory-backend local-memory
+
+# Expected: Warning message printed, TUI starts normally
 ```
 
-===================================================================
-KEY CODE PATTERNS IMPLEMENTED
-===================================================================
-
-### Merge at Unlock Flow
-
-```
-Unlock Stage Complete
-    │
-    └── pipeline_coordinator.rs:
-        ├── create_capsule_checkpoint(spec_id, run_id, Unlock, commit_hash)
-        │
-        └── if stage == Unlock:
-            └── merge_run_branch_to_main(spec_id, run_id, cwd)
-                ├── Open CapsuleHandle
-                ├── merge_branch(run/RUN_ID, main, Curated, spec_id, run_id)
-                │   ├── Copy URI mappings from run to main
-                │   ├── Update event branch_ids to main
-                │   ├── Create merge checkpoint
-                │   ├── Create URI index snapshot
-                │   └── Emit BranchMerged event
-                └── Return merge_checkpoint_id
-```
-
-### BranchMergedPayload Schema
-
-```json
-{
-  "from_branch": "run/RUN_ID",
-  "to_branch": "main",
-  "mode": "Curated",
-  "merge_checkpoint_id": "merge_20260117...",
-  "uris_merged": 5,
-  "events_merged": 3,
-  "spec_id": "SPEC-XXX",
-  "run_id": "run-xxx"
-}
-```
-
-### Policy CLI Commands
-
+To test Phase 2 blocking:
 ```bash
-code speckit policy list [--json]      # List snapshots
-code speckit policy show <id> [--json] # Show details
-code speckit policy current [--json]   # Current active
-code speckit policy validate [--path]  # Validate TOML
+# Without --force-deprecated (should block)
+CODE_SUNSET_PHASE=2 cargo run -p codex-tui --bin code-tui -- --memory-backend local-memory
+
+# With --force-deprecated (should allow with warning)
+CODE_SUNSET_PHASE=2 cargo run -p codex-tui --bin code-tui -- --memory-backend local-memory --force-deprecated
 ```
-
-===================================================================
-ARCHITECTURAL NOTES
-===================================================================
-
-### Merge Mode Invariant
-
-Per SPEC.md and SPEC-KIT-971:
-- Merge modes are `curated` or `full` ONLY
-- Never squash, ff, or rebase
-- Curated = selective artifact inclusion
-- Full = complete artifact preservation
-
-### Event Binding at Merge
-
-BranchMerged events are emitted on main branch after merge:
-- stage = "Unlock"
-- Includes from_branch, to_branch, mode, counts
-- Merge checkpoint has label "merge:run/RUN_ID"
-
-===================================================================
-QUICK COMMANDS
-===================================================================
-
-```bash
-# Build
-~/code/build-fast.sh
-
-# Run tests
-cargo test -p codex-tui --lib
-cargo test -p codex-stage0 --lib
-
-# Policy CLI smoke test
-./target/debug/code speckit policy list
-./target/debug/code speckit policy validate
-
-# Reflex CLI
-./target/debug/code speckit reflex bakeoff
-./target/debug/code speckit reflex check
-```
-
-===================================================================
-DO NOT INCLUDE (Deferred)
-===================================================================
-
-- Dead code cleanup (clippy warnings)
-- SPEC-KIT-973 Time-travel UI (needs 975)
-- SPEC-KIT-976 Logic Mesh (needs 975)
-- SPEC-KIT-979 local-memory sunset (needs 975)
 
 ===================================================================
 OUTPUT EXPECTATION
 ===================================================================
 
-1. Complete SPEC-KIT-975 Event Schema v1
-2. Add remaining SPEC-KIT-978 work (bakeoff reports, CI gate)
-3. Update spec status to 100% where complete
-4. Commit with spec IDs and decision IDs
-5. Update HANDOFF.md with progress
+COMPLETED:
+1. ✅ Steps 4-7 (export, wire adapter, wire lib.rs, test)
+2. ✅ All sunset_phase tests passing (12/12)
+3. ✅ All policy tests passing (32/32)
+4. ⏳ Manual verification of phase 1 warning (optional)
+5. ⏳ Commit with SPEC-KIT-979 reference (ready)
 ```
 
 ---
 
 ## Progress Tracker
 
-### Completed This Session (2026-01-20)
+### Completed This Session (2026-01-21)
 
-| Task | Status | Tests |
+| Task | Status | Notes |
 |------|--------|-------|
-| ARB Pass 2 Complete | ✅ | D113-D134 locked |
-| DECISION_REGISTER.md updated | ✅ | D1-D134 now in register |
-| E.3/E.4 capability tests | ✅ | 12 tests (6 archival + 6 integrity) |
-| ARB enforcement tests | ✅ | 18 tests across D130-D134 |
+| SPEC-KIT-979 Phase Enforcement | ✅ Complete | All 7 steps done, tests passing |
 
 ### Completed Specs
 
 | Spec | Status | Key Deliverables |
 |------|--------|------------------|
-| SPEC-KIT-971 (core) | ✅ 100% | Capsule foundation, crash recovery, persistence |
-| SPEC-KIT-971 (lock) | ✅ | Cross-process single-writer lock |
-| SPEC-KIT-971 (checkpoints) | ✅ | Stage boundary checkpoints with git integration |
-| SPEC-KIT-971 (CLI) | ✅ | doctor/stats/checkpoints/commit/resolve-uri/init/events/export |
-| SPEC-KIT-971 (merge) | ✅ | Merge at Unlock with BranchMerged event |
-| SPEC-KIT-972 | ✅ | Hybrid retrieval, eval harness |
-| SPEC-KIT-973 | ✅ | Time-travel TUI commands |
-| SPEC-KIT-975 | ✅ | Replay timeline determinism, event schema |
-| SPEC-KIT-976 | ✅ | Logic Mesh graph foundation |
-| SPEC-KIT-977 (core) | ✅ 100% | PolicySnapshot capture, storage, drift detection |
-| SPEC-KIT-977 (CLI) | ✅ | policy list/show/current/validate |
-| SPEC-KIT-977 (TUI) | ✅ | /speckit.policy commands |
-| SPEC-KIT-978 (core) | ✅ | Reflex routing, bakeoff CLI, circuit breaker |
-| ARB Pass 2 | ✅ | D113-D134 locked, all H0-H7 decided |
-
-### Phase Gates
-
-| Phase | Gate | Status |
-|-------|------|--------|
-| 1→2 | 971 URI contract + checkpoint tests | ✅ Passed |
-| 2→3 | 972 eval harness + 975 event schema v1 | ✅ Passed |
-| 3→4 | 972 parity gates + export verification | ✅ Passed |
-| 4→5 | 977 PolicySnapshot + event binding | ✅ Passed |
-| 5→6 | 978 Reflex bakeoff complete + 975 event baseline | ✅ Passed |
+| SPEC-KIT-971 (full) | ✅ 100% | Capsule foundation, CLI, merge |
+| SPEC-KIT-972 | ✅ 100% | Hybrid retrieval, eval harness |
+| SPEC-KIT-975 | ✅ 100% | Replay timeline determinism |
+| SPEC-KIT-976 | ✅ 100% | Logic Mesh graph |
+| SPEC-KIT-977 (full) | ✅ 100% | PolicySnapshot CLI/TUI |
+| SPEC-KIT-978 (core) | ✅ 100% | Reflex routing, bakeoff |
+| SPEC-KIT-979 (CLI flags) | ✅ 100% | --memory-backend, --eval-ab, --capsule-doctor |
+| SPEC-KIT-979 (enforcement) | ✅ 100% | Phase resolution, lib.rs wiring, tests |
 
 ---
 
-## Commits This Session (2026-01-20)
+## Key Code Created This Session
 
+### sunset_phase.rs Structure
+
+```rust
+// File: codex-rs/tui/src/memvid_adapter/sunset_phase.rs
+
+pub enum SunsetPhase { Phase0, Phase1, Phase2, Phase3 }
+
+pub const SUNSET_PHASE_ENV_VAR: &str = "CODE_SUNSET_PHASE";
+
+pub fn resolve_sunset_phase(policy: Option<&GovernancePolicy>) -> PhaseResolutionPayload;
+
+pub fn effective_phase(resolution: &PhaseResolutionPayload) -> SunsetPhase;
+
+pub enum PhaseEnforcementResult {
+    Allow,
+    AllowWithWarning(String),
+    Block(String),
+}
+
+pub fn check_phase_enforcement(
+    backend: MemoryBackend,
+    phase: SunsetPhase,
+    force_deprecated: bool,
+) -> PhaseEnforcementResult;
 ```
-5ce286598 docs: lock ARB decisions D113–D134 in DECISION_REGISTER
-11b6837db docs: ARB output consistency cleanup (#12)
-71054a8c4 docs: retire ARCHITECT_QUESTIONS decision driver (Pass 2 complete) (#11)
-8e088f449 test: ARB Pass 2 enforcement suite (#10)
-eea2f6302 feat: ACE Frame JSON Schema v1 (generated) (#9)
+
+### EventTypes Added
+
+```rust
+// In types.rs EventType enum
+LocalMemorySunsetPhaseResolved,  // Audit trail for phase resolution
+FallbackActivated,               // GATE-ST stability tracking
+```
+
+### lib.rs Phase Enforcement
+
+```rust
+// Phase enforcement in run_main()
+let policy = GovernancePolicy::load(None).ok();
+let phase_resolution = resolve_sunset_phase(policy.as_ref());
+let sunset_phase = effective_phase(&phase_resolution);
+
+let effective_backend: MemoryBackend = cli
+    .memory_backend
+    .map(Into::into)
+    .unwrap_or(MemoryBackend::LocalMemory);
+
+let enforcement_result = check_phase_enforcement(
+    effective_backend,
+    sunset_phase,
+    cli.force_deprecated,
+);
+
+match enforcement_result {
+    PhaseEnforcementResult::Allow => { /* proceed */ }
+    PhaseEnforcementResult::AllowWithWarning(warning) => {
+        eprintln!("{}", warning);
+    }
+    PhaseEnforcementResult::Block(error) => {
+        eprintln!("{}", error);
+        std::process::exit(1);
+    }
+}
 ```
 
 ---
 
-*Generated by Claude Code session 2026-01-20*
+*Generated by Claude Code session 2026-01-21*

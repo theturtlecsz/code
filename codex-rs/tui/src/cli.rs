@@ -4,7 +4,41 @@ use codex_common::ApprovalModeCliArg;
 use codex_common::CliConfigOverrides;
 use std::path::PathBuf;
 
-#[derive(Parser, Debug)]
+// =============================================================================
+// SPEC-KIT-979: Memory Backend Selection
+// =============================================================================
+
+/// Memory backend selection for local-memory sunset phases.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum MemoryBackendArg {
+    /// Local-memory daemon (default in Phase 0, deprecated in Phase 2+)
+    #[value(name = "local-memory")]
+    LocalMemory,
+    /// Memvid capsule storage (default in Phase 1+)
+    #[value(name = "memvid")]
+    Memvid,
+}
+
+impl std::fmt::Display for MemoryBackendArg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MemoryBackendArg::LocalMemory => write!(f, "local-memory"),
+            MemoryBackendArg::Memvid => write!(f, "memvid"),
+        }
+    }
+}
+
+/// Convert MemoryBackendArg to codex_stage0::config::MemoryBackend for phase enforcement.
+impl From<MemoryBackendArg> for codex_stage0::config::MemoryBackend {
+    fn from(arg: MemoryBackendArg) -> Self {
+        match arg {
+            MemoryBackendArg::LocalMemory => codex_stage0::config::MemoryBackend::LocalMemory,
+            MemoryBackendArg::Memvid => codex_stage0::config::MemoryBackend::Memvid,
+        }
+    }
+}
+
+#[derive(Parser, Debug, Default)]
 #[command(version)]
 pub struct Cli {
     /// Optional user prompt to start the session.
@@ -111,6 +145,38 @@ pub struct Cli {
     /// Exit after initial command completes (for automation).
     #[arg(long = "exit-on-complete", requires = "initial_command")]
     pub exit_on_complete: bool,
+
+    // =========================================================================
+    // SPEC-KIT-979: Local-Memory Sunset Flags
+    // =========================================================================
+
+    /// Memory backend selection: local-memory (Phase 0 default) or memvid.
+    /// Phase 2+: local-memory requires --force-deprecated.
+    #[arg(long = "memory-backend", value_name = "BACKEND")]
+    pub memory_backend: Option<MemoryBackendArg>,
+
+    /// Run A/B evaluation harness comparing local-memory vs memvid.
+    /// Headless mode: runs evaluation and exits with appropriate exit code.
+    #[arg(long = "eval-ab", default_value_t = false)]
+    pub eval_ab: bool,
+
+    /// Run capsule diagnostics (existence, lock status, integrity, version).
+    /// Headless mode: runs diagnostics and exits with appropriate exit code.
+    #[arg(long = "capsule-doctor", default_value_t = false)]
+    pub capsule_doctor: bool,
+
+    /// Force use of deprecated backend (required for local-memory in Phase 2+).
+    /// In Phase 0, this flag is a no-op with an info message.
+    #[arg(long = "force-deprecated", default_value_t = false)]
+    pub force_deprecated: bool,
+
+    /// Output JSON instead of human-readable format for --eval-ab and --capsule-doctor.
+    #[arg(long = "json", default_value_t = false)]
+    pub json_output: bool,
+
+    /// Output directory for --eval-ab reports (default: .speckit/eval/).
+    #[arg(long = "output-dir", value_name = "DIR", requires = "eval_ab")]
+    pub output_dir: Option<PathBuf>,
 }
 
 impl Cli {
