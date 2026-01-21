@@ -35,6 +35,8 @@
 |----------|---------|--------|
 | **POLICY.md** | Consolidated policy (model, gates, evidence, testing) | ✅ Current (2026-01-21) |
 | **OPERATIONS.md** | Consolidated operations (playbook + config reference) | ✅ Current (2026-01-21) |
+| **ARCHITECTURE.md** | System architecture (TUI, async/sync, pipeline) | ✅ Current (2026-01-21) |
+| **CONTRIBUTING.md** | Development workflow, fork management, rebase strategy | ✅ Current (2026-01-21) |
 | **MODEL-GUIDANCE.md** | Model-specific reasoning and validation tiers | ✅ Reference |
 | **UPSTREAM-SYNC.md** | Quarterly sync process, conflict resolution | ✅ Current |
 | **memory/constitution.md** | Project charter and guardrails | ✅ Current |
@@ -49,17 +51,16 @@
 
 | Document | Purpose | Status |
 |----------|---------|--------|
-| **spec-kit/ARCHITECTURE.md** | Spec-kit architecture overview | ✅ Current |
-| **architecture/async-sync-boundaries.md** | Ratatui (sync) + Tokio (async) patterns | ✅ Current |
-| **SPEC_AUTO_FLOW.md** | Pipeline flow (6 stages: Plan→Unlock) | ✅ Current |
-| **IMPLEMENTATION_CONSENSUS.md** | Implementation details | ✅ Current |
-| **FORK_DEVIATIONS.md** | Fork-specific changes vs upstream | ✅ Current |
+| **ARCHITECTURE.md** | Consolidated architecture (TUI, async/sync, pipeline, consensus) | ✅ Current (2026-01-21) |
+| **SPEC_AUTO_FLOW.md** | Pipeline flow (6 stages: Plan→Unlock) | ✅ Reference |
+| **IMPLEMENTATION_CONSENSUS.md** | Implementation details | ✅ Reference |
+| **CONTRIBUTING.md** | Fork workflow, rebase strategy, deviation tracking | ✅ Current (2026-01-21) |
 
-**Design Documents**:
-- **spec-kit/QUALITY_GATES_DESIGN.md** - Quality gate architecture
-- **spec-kit/QUALITY_GATES_SPECIFICATION.md** - Detailed specifications
-- **spec-kit/consensus-runner-design.md** - Consensus automation
-- **spec-kit/model-strategy.md** - Tiered model strategy (Tier 0-4)
+**Design Documents** (in spec-kit/):
+- **QUALITY_GATES_DESIGN.md** - Quality gate architecture
+- **QUALITY_GATES_SPECIFICATION.md** - Detailed specifications
+- **consensus-runner-design.md** - Consensus automation
+- **model-strategy.md** - Tiered model strategy (Tier 0-4)
 
 ---
 
@@ -149,9 +150,10 @@
 - Isolation: FORK_DEVIATIONS.md (80 FORK-SPECIFIC markers)
 
 **Architecture**:
-- Overview: ARCHITECTURE.md
-- Async/Sync: async-sync-boundaries.md
-- Pipeline: SPEC_AUTO_FLOW.md
+- Overview: ARCHITECTURE.md (consolidated)
+- Async/Sync: ARCHITECTURE.md#5-asyncsync-boundaries
+- Pipeline: ARCHITECTURE.md#8-pipeline-components
+- Fork Management: CONTRIBUTING.md#7-fork-deviation-tracking
 
 ### By Audience
 

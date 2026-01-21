@@ -1,0 +1,97 @@
+{
+  "manifest_version": "1.0",
+  "session": 5,
+  "date": "2026-01-21",
+  "phase": "migration",
+  "slice": "architecture",
+  "approach": "triage",
+  "created": {
+    "docs/ARCHITECTURE.md": {
+      "lines": 395,
+      "purpose": "Consolidated architecture (TUI, async/sync, pipeline, consensus)",
+      "sources": [
+        "docs/ARCHITECTURE.md (original)",
+        "docs/TUI.md (Part 1, state machine)",
+        "docs/architecture/async-sync-boundaries.md",
+        "docs/architecture/chatwidget-structure.md",
+        "docs/SPEC-KIT-900-ARCHITECTURE-ANALYSIS.md"
+      ]
+    },
+    "docs/CONTRIBUTING.md": {
+      "lines": 387,
+      "purpose": "Development workflow, fork management, rebase strategy",
+      "sources": [
+        "CONTRIBUTING.md (root)",
+        "docs/TUI.md (Part 3, 5)"
+      ]
+    }
+  },
+  "redirect_stubs": {
+    "docs/TUI.md": {
+      "lines": 24,
+      "points_to": ["ARCHITECTURE.md#4", "CONTRIBUTING.md#7"],
+      "sunset_date": "2026-02-21"
+    },
+    "docs/architecture/async-sync-boundaries.md": {
+      "lines": 22,
+      "points_to": "ARCHITECTURE.md#5-asyncsync-boundaries",
+      "sunset_date": "2026-02-21"
+    },
+    "docs/architecture/chatwidget-structure.md": {
+      "lines": 19,
+      "points_to": "ARCHITECTURE.md#3-chatwidget-module-structure",
+      "sunset_date": "2026-02-21"
+    },
+    "docs/SPEC-KIT-900-ARCHITECTURE-ANALYSIS.md": {
+      "lines": 20,
+      "points_to": "ARCHITECTURE.md#8-pipeline-components",
+      "sunset_date": "2026-02-21"
+    },
+    "CONTRIBUTING.md": {
+      "lines": 20,
+      "points_to": "docs/CONTRIBUTING.md",
+      "sunset_date": "2026-02-21"
+    }
+  },
+  "updated": [
+    "docs/INDEX.md",
+    "docs/KEY_DOCS.md"
+  ],
+  "archived_content": {
+    "TUI.md Part 2": "Implementation planning",
+    "TUI.md Part 4": "Time-sensitive week-by-week tasks",
+    "TUI.md Part 6": "Rollback/fallback plan",
+    "TUI.md Part 7": "Success criteria"
+  },
+  "compression": {
+    "original_lines": 2329,
+    "consolidated_lines": 782,
+    "reduction_percent": 66
+  },
+  "canonical_docs_status": {
+    "completed": [
+      "docs/POLICY.md",
+      "docs/OPERATIONS.md",
+      "docs/ARCHITECTURE.md",
+      "docs/CONTRIBUTING.md"
+    ],
+    "exists_extended": [
+      "docs/INDEX.md",
+      "docs/KEY_DOCS.md"
+    ],
+    "exists_needs_merge": [
+      "docs/GOLDEN_PATH.md"
+    ],
+    "pending": [
+      "docs/DECISIONS.md",
+      "docs/SPEC-KIT-REFERENCE.md"
+    ]
+  },
+  "validation": {
+    "doc_lint_passed": true,
+    "redirect_stubs_verified": true,
+    "index_links_updated": true,
+    "tui_md_removable": true
+  },
+  "total_redirect_stubs": 11
+}
