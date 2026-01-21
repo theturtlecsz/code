@@ -92,6 +92,7 @@ These invariants MUST NOT be violated:
 
 | Spec | Completion Date | Key Deliverables |
 |------|-----------------|------------------|
+| SPEC-KIT-979 | 2026-01-21 | Local-memory sunset phases, CLI flags, nightly parity workflow, import CLI, diagnostics |
 | SPEC-KIT-976 | 2026-01-19 | Logic Mesh graph foundation: Card/Edge schemas, CLI commands, 6 tests passing |
 | SPEC-KIT-973 | 2026-01-19 | Time-travel TUI commands (timeline, asof, diff), label lookup, 3 tests passing |
 | SPEC-KIT-978 | 2026-01-18 | Circuit breaker types, BreakerState/BreakerStateChangedPayload, EventType integration |

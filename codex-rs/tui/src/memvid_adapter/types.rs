@@ -1935,7 +1935,7 @@ mod type_tests {
     fn event_type_all_variants_covered() {
         // Ensure all_variants() returns the same set as the enum
         let variants = EventType::all_variants();
-        assert_eq!(variants.len(), 16); // Update if adding new variants
+        assert_eq!(variants.len(), 18); // SPEC-KIT-979: +2 (LocalMemorySunsetPhaseResolved, FallbackActivated)
 
         // Verify each variant can be parsed
         for variant_str in variants {

@@ -20,20 +20,24 @@ Migrate fully off the local-memory daemon after parity gates pass. This spec def
 
 ## Implementation Status
 
-> **Audit Date:** 2026-01-21 | **Auditor:** SPEC-KIT-979 drift audit
+> **Audit Date:** 2026-01-21 | **Auditor:** Architect reconciliation audit
 
 | Component | Status | Location |
 |-----------|--------|----------|
 | Parity gate definitions | DEFINED | This spec §Parity Gates |
-| Parity gate tests (`test_parity_gate_*`) | NOT STARTED | — |
+| Parity gate tests (`test_parity_gate_*`) | IMPLEMENTED (`#[ignore]`) | `tui/src/memvid_adapter/eval.rs:1595-2078` |
 | ABHarness infrastructure | IMPLEMENTED | `tui/src/memvid_adapter/eval.rs` |
 | Memory backend routing | IMPLEMENTED | `tui/src/chatwidget/spec_kit/stage0_integration.rs` |
-| lm-import (basic: format, dedupe, dry-run) | IMPLEMENTED | `~/.local-memory/scripts/lm-import.sh` |
-| lm-import (--status, --all, --verify, --resume) | NOT STARTED | — |
-| CLI flags (--memory-backend, --eval-ab, etc.) | NOT STARTED | — |
-| Deprecation warning banners | NOT STARTED | — |
-| nightly.yml workflow | IMPLEMENTED | `.github/workflows/nightly-parity.yml` |
+| lm-import (`code local-memory import`) | IMPLEMENTED | `cli/src/local_memory_cmd/import.rs` |
+| lm-import (--status, --all, --verify) | IMPLEMENTED | `cli/src/local_memory_cmd/import.rs:28-69` |
+| CLI flags (--memory-backend, --eval-ab, etc.) | IMPLEMENTED | `tui/src/cli.rs:149-180` |
+| Deprecation warning banners | IMPLEMENTED | `tui/src/memvid_adapter/sunset_phase.rs` |
+| Phase enforcement (0-3) | IMPLEMENTED | `tui/src/memvid_adapter/sunset_phase.rs` |
+| Event types (PhaseResolved, FallbackActivated) | IMPLEMENTED | `tui/src/memvid_adapter/types.rs` |
+| nightly-parity.yml workflow | IMPLEMENTED | `.github/workflows/nightly-parity.yml` |
 | release.yml workflow | NOT STARTED | — |
+
+**Note:** Parity gate tests are `#[ignore]` and run in nightly workflow. They use synthetic mode by default; real dual-backend mode requires infrastructure setup (TODO).
 
 ---
 
@@ -83,10 +87,10 @@ Migrate fully off the local-memory daemon after parity gates pass. This spec def
 | MRR | ≥ 0.95 × baseline | `ABReport.suite_b.mrr` |
 | Golden queries passed | 100% | All `expected_ids` found |
 
-**Test (to be implemented):** `test_parity_gate_retrieval_quality`
+**Test:** `test_parity_gate_retrieval_quality` (implemented, `#[ignore]`, runs nightly)
 ```bash
-# Planned command (test does not exist yet)
-cargo test -p codex-tui -- parity_gate_retrieval_quality --ignored
+# Runs in synthetic mode by default; validates infrastructure
+cargo test -p codex-tui --lib -- parity_gate_retrieval_quality --ignored
 ```
 
 ### Gate 2: Latency Parity (GATE-LP)
@@ -99,10 +103,10 @@ cargo test -p codex-tui -- parity_gate_retrieval_quality --ignored
 | P50 latency | < 100ms | Informational |
 | Max latency | < 1000ms | No outliers |
 
-**Test (to be implemented):** `test_parity_gate_latency`
+**Test:** `test_parity_gate_latency` (implemented, `#[ignore]`, runs nightly)
 ```bash
-# Planned command (test does not exist yet)
-cargo test -p codex-tui -- parity_gate_latency --ignored
+# CI-aware: relaxed threshold in CI environments
+cargo test -p codex-tui --lib -- parity_gate_latency --ignored
 ```
 
 ### Gate 3: Stability (GATE-ST)
@@ -116,7 +120,9 @@ cargo test -p codex-tui -- parity_gate_latency --ignored
 | Crash/recovery cycles | All successful | WAL integrity |
 | Stability days | ≥ 30 | Calendar tracking |
 
-**Test (to be implemented):** `test_parity_gate_stability` (manual + telemetry review)
+**Test:** `test_parity_gate_stability` (implemented, `#[ignore]`, manual + telemetry review)
+
+Supports `STABILITY_REPORT_PATH` env var for external report injection. Validates 30-day duration, zero fallbacks via `FallbackActivated` event counts.
 
 ### Gate 4: Feature Parity (GATE-FP)
 
@@ -133,7 +139,51 @@ cargo test -p codex-tui -- parity_gate_latency --ignored
 | Export | `lm export` | `capsule export` | ✅ |
 | Import | N/A (new) | `lm-import` | ✅ |
 
-**Test (to be implemented):** `test_parity_gate_features`
+**Test:** `test_parity_gate_features` (implemented, `#[ignore]`, runs nightly)
+
+Tests 7 feature scenarios: keywords only, domain filtering, required tags, optional tags, empty keywords with tags, no match, combined filters.
+
+### Parity Test Modes
+
+**Implementation:** `tui/src/memvid_adapter/eval.rs`
+
+| Mode | Description | When Used |
+|------|-------------|-----------|
+| `synthetic` | Self-comparison using synthetic corpus | Default in CI/nightly (infrastructure validation) |
+| `real` | Actual dual-backend comparison | Requires infrastructure setup (TODO) |
+| `fallback` | Track fallback events for GATE-ST | Via `FallbackActivated` capsule events |
+
+**Note:** Tests marked `#[ignore]` run in synthetic mode by default. Real dual-backend mode requires both memvid capsule and local-memory daemon to be healthy.
+
+---
+
+## Phase Configuration
+
+**Implementation:** `tui/src/memvid_adapter/sunset_phase.rs:87-116`
+
+### Configuration Sources (Priority Order)
+
+1. **Environment variable:** `CODE_SUNSET_PHASE` (values: 0-3)
+2. **Policy file:** `model_policy.toml` → `[gates.local_memory_sunset].current_phase`
+3. **Default:** Phase 0
+
+### --force-deprecated Behavior
+
+| Phase | Backend | --force-deprecated | Result |
+|-------|---------|-------------------|--------|
+| 0 | local-memory | N/A | Allow (no warning) |
+| 0 | memvid | N/A | Allow |
+| 1 | local-memory | N/A | Allow with deprecation warning |
+| 1 | memvid | N/A | Allow |
+| 2 | local-memory | `false` | **Block** (requires flag) |
+| 2 | local-memory | `true` | Allow with strong warning |
+| 2 | memvid | N/A | Allow |
+| 3 | local-memory | any | **Block** (permanently removed) |
+| 3 | memvid | N/A | Allow |
+
+**Event Types:**
+- `LocalMemorySunsetPhaseResolved`: Emitted at startup with resolution source
+- `FallbackActivated`: Emitted when fallback to local-memory occurs (GATE-ST tracking)
 
 ---
 
@@ -370,8 +420,6 @@ cargo build -p codex-tui --no-default-features --features local-memory-only
 
 ## CI Gates
 
-> **Note:** The workflow schemas below are **proposed designs**. The actual workflow files do not exist yet. See Implementation Status above.
-
 ### Pre-Merge (All PRs) — Proposed
 
 ```yaml
@@ -382,33 +430,42 @@ cargo build -p codex-tui --no-default-features --features local-memory-only
     cargo test -p codex-stage0 -- dcc
 ```
 
-### Nightly (Parity Validation) — Proposed
+### Nightly (Parity Validation) — IMPLEMENTED
 
-_The following workflow will be created after parity gate tests are implemented:_
+**File:** `.github/workflows/nightly-parity.yml`
+
+Runs daily at 02:00 UTC. Executes `#[ignore]` parity gate tests and creates failure issues on regression.
 
 ```yaml
-# .github/workflows/nightly.yml (does not exist yet)
-- name: Parity Gate Validation
-  run: |
-    cargo test -p codex-tui -- parity_gate --ignored
-
-- name: A/B Harness Report
-  run: |
-    cargo run -p codex-tui -- --eval-ab --output-dir artifacts/eval/
-
-- name: Upload Eval Report
-  uses: actions/upload-artifact@v4
-  with:
-    name: ab-eval-report
-    path: artifacts/eval/
+# Actual workflow (implemented)
+name: Nightly Parity Gates
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+jobs:
+  parity-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run parity gate tests
+        run: |
+          cargo test -p codex-tui --lib -- parity_gate --ignored --nocapture
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-gate-report
+          path: codex-rs/parity_*.{log,json}
+      - name: Create failure issue
+        if: failure()
+        uses: peter-evans/create-issue-from-file@v5
 ```
 
-### Release Gate (Phase Transitions) — Proposed
+### Release Gate (Phase Transitions) — NOT YET IMPLEMENTED
 
-_The following workflow will be created for phase transition gating:_
+_The following workflow is planned for phase transition gating:_
 
 ```yaml
-# .github/workflows/release.yml (does not exist yet)
+# .github/workflows/release.yml (TODO)
 phase_1_gate:
   needs: [parity_tests, stability_check]
   if: |
@@ -430,85 +487,93 @@ phase_2_gate:
 
 ## CLI Reference
 
-> **Note:** The CLI flags below are **planned for implementation**. They do not exist in `cli.rs` yet. See Implementation Status above.
+### Backend Selection — IMPLEMENTED
 
-### Backend Selection — Planned
+**Implementation:** `tui/src/cli.rs:149-180`
 
 ```bash
-# Check current backend (planned)
-codex-tui --show-config | grep memory_backend
-
-# Override backend for session (planned)
+# Override backend for session
 codex-tui --memory-backend memvid
 codex-tui --memory-backend local-memory
 
-# Phase 2+: Force deprecated backend (planned)
+# Phase 2+: Force deprecated backend
 codex-tui --memory-backend local-memory --force-deprecated
 ```
 
-### Migration Commands
+### Migration Commands — IMPLEMENTED
 
-**Currently implemented** (`~/.local-memory/scripts/lm-import.sh`):
+**Implementation:** `cli/src/local_memory_cmd/import.rs`
+
+**Command:** `code local-memory import`
+
 ```bash
-# Import with format auto-detection
-lm-import SOURCE
+# Show import status (default, safe - no writes)
+code local-memory import --status
 
-# Specify format explicitly
-lm-import --format json|obsidian|markdown|backup SOURCE
+# Dry run: preview import plan
+code local-memory import --dry-run
 
-# Set domain for imported memories
-lm-import --domain my-domain SOURCE
+# Execute import (required flag for writes)
+code local-memory import --all
 
-# Set default importance
-lm-import --importance 7 SOURCE
+# Post-import verification
+code local-memory import --verify
 
-# Check for duplicates before import
-lm-import --dedupe SOURCE
+# Filter by domain
+code local-memory import --domain my-domain --all
 
-# Dry run (show what would be imported)
-lm-import --dry-run SOURCE
+# Filter by minimum importance
+code local-memory import --min-importance 7 --all
+
+# Custom capsule/database paths
+code local-memory import --capsule .speckit/memvid/workspace.mv2 --all
+code local-memory import --database ~/.local-memory/memory.db --all
+
+# Custom namespace (default: spec_id="lm-import", auto-generated run_id)
+code local-memory import --spec-id my-import --run-id batch-001 --all
 ```
 
-**Planned extensions** (not yet implemented):
-```bash
-# Check migration status
-lm-import --status
+**Behavior:**
+- Default (no flags): equivalent to `--status`, shows plan without writes
+- Deduplication: skips duplicates by (source_backend, source_id) with SHA256 content hash
+- Conflict detection: same ID, different hash → reported but not auto-resolved
 
-# Migrate all memories
-lm-import --all
+**TODO:** `--resume` (interrupted migration recovery)
 
-# Migrate with verification
-lm-import --all --verify
+### Evaluation Commands — IMPLEMENTED
 
-# Resume interrupted migration
-lm-import --resume
-```
-
-### Evaluation Commands — Planned
+**Implementation:** `tui/src/cli_diagnostics.rs`
 
 ```bash
-# Run A/B evaluation (planned - ABHarness exists but CLI flag not wired)
+# Run A/B evaluation (headless, exits after completion)
 codex-tui --eval-ab --output-dir .speckit/eval/
 
-# Run with custom golden queries (planned)
-codex-tui --eval-ab --golden-queries golden.json
-
-# Run synthetic test (no real data) (planned)
-codex-tui --eval-ab --synthetic
+# JSON output for CI
+codex-tui --eval-ab --json
 ```
 
-### Health & Diagnostics — Planned
+**Behavior:**
+- Runs in synthetic mode (Phase 0): self-comparison using synthetic corpus
+- Produces JSON + Markdown reports
+- Exit codes: 0 (pass), 1 (fail), 2 (config error)
+
+**TODO:** `--golden-queries` (custom query file), `--synthetic` flag (explicit mode selection)
+
+### Health & Diagnostics — PARTIALLY IMPLEMENTED
+
+**Implementation:** `tui/src/cli_diagnostics.rs`
 
 ```bash
-# Capsule health check (planned)
+# Capsule health check (IMPLEMENTED)
 codex-tui --capsule-doctor
 
-# Verify capsule integrity (planned)
-codex-tui --capsule-verify
-
-# Show backend status (planned)
-codex-tui --backend-status
+# JSON output for CI (IMPLEMENTED)
+codex-tui --capsule-doctor --json
 ```
+
+**Checks:** capsule existence, lock status, header integrity, version compatibility
+
+**TODO:** `--capsule-verify` (deep integrity check), `--backend-status` (status display), `--show-config`
 
 ---
 
