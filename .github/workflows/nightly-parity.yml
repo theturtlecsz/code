@@ -1,0 +1,64 @@
+name: Nightly Parity Gates
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # 02:00 UTC daily
+  workflow_dispatch:      # Manual trigger
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  parity-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          cache-workspaces: codex-rs
+
+      - name: Run parity gate tests
+        id: tests
+        working-directory: codex-rs
+        run: |
+          cargo test -p codex-tui --lib -- parity_gate --ignored --nocapture 2>&1 | tee parity_stdout.log
+          grep -E '^\{.*"gate_id":' parity_stdout.log > parity_report.json || true
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-gate-report
+          path: |
+            codex-rs/parity_stdout.log
+            codex-rs/parity_report.json
+          retention-days: 7
+
+      - name: Create issue body file
+        if: failure()
+        run: |
+          cat > /tmp/issue-body.md << 'EOF'
+          ## Parity Gate Failure
+
+          The nightly parity gate check failed.
+
+          **Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          ### Next Steps
+          1. Download artifacts from the run above
+          2. Check `parity_stdout.log` for test output
+          3. Review `parity_report.json` for gate-specific results
+          4. Fix the regression and re-run: `gh workflow run nightly-parity.yml`
+          EOF
+
+      - name: Create failure issue
+        if: failure()
+        uses: peter-evans/create-issue-from-file@v5
+        with:
+          title: "Parity Gate Failure - ${{ github.run_id }}"
+          labels: parity-gates,automated
+          content-filepath: /tmp/issue-body.md

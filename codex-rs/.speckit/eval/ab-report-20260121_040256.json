@@ -1,0 +1,1840 @@
+{
+  "backend_a_name": "local-memory (synthetic)",
+  "backend_b_name": "memvid (synthetic)",
+  "results_a": [
+    {
+      "query_name": "error-handling-pattern",
+      "result": {
+        "case_name": "error-handling-pattern",
+        "precision_at_k": 0.6666666666666666,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-rust-errors-001",
+          "mem-thiserror-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-rust-errors-001",
+          "mem-thiserror-002",
+          "mem-stage0-overlay-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-rust-errors-001",
+          "domain": "rust",
+          "tags": [
+            "type:pattern"
+          ],
+          "snippet": "Rust error handling best practice",
+          "score": 5.207045348756535
+        },
+        {
+          "id": "mem-thiserror-002",
+          "domain": "rust",
+          "tags": [
+            "type:library"
+          ],
+          "snippet": "thiserror derive macro",
+          "score": 2.6347227936605995
+        },
+        {
+          "id": "mem-stage0-overlay-002",
+          "domain": "spec-kit",
+          "tags": [
+            "type:pattern"
+          ],
+          "snippet": "Stage 0 overlay design pattern",
+          "score": 1.721644074588351
+        }
+      ]
+    },
+    {
+      "query_name": "tfidf-bm25-implementation",
+      "result": {
+        "case_name": "tfidf-bm25-implementation",
+        "precision_at_k": 0.6666666666666666,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-vector-tfidf-001",
+          "mem-bm25-scoring-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-vector-tfidf-001",
+          "mem-bm25-scoring-002",
+          "mem-stage0-arch-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-vector-tfidf-001",
+          "domain": "spec-kit",
+          "tags": [
+            "type:implementation"
+          ],
+          "snippet": "TF-IDF vector backend implementation",
+          "score": 3.134746313343243
+        },
+        {
+          "id": "mem-bm25-scoring-002",
+          "domain": "spec-kit",
+          "tags": [
+            "type:algorithm"
+          ],
+          "snippet": "BM25 scoring formula",
+          "score": 3.053860553279552
+        },
+        {
+          "id": "mem-stage0-arch-001",
+          "domain": "spec-kit",
+          "tags": [
+            "type:decision"
+          ],
+          "snippet": "Stage 0 overlay engine architecture",
+          "score": 1.5916517336302918
+        }
+      ]
+    },
+    {
+      "query_name": "stage0-architecture-decision",
+      "result": {
+        "case_name": "stage0-architecture-decision",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-stage0-arch-001",
+          "mem-stage0-overlay-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-stage0-arch-001",
+          "mem-stage0-overlay-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-stage0-arch-001",
+          "domain": "spec-kit",
+          "tags": [
+            "type:decision"
+          ],
+          "snippet": "Stage 0 overlay engine architecture",
+          "score": 3.46480435068418
+        },
+        {
+          "id": "mem-stage0-overlay-002",
+          "domain": "spec-kit",
+          "tags": [
+            "type:pattern"
+          ],
+          "snippet": "Stage 0 overlay design pattern",
+          "score": 1.721644074588351
+        }
+      ]
+    },
+    {
+      "query_name": "spec-kit-domain-query",
+      "result": {
+        "case_name": "spec-kit-domain-query",
+        "precision_at_k": 1.0,
+        "recall_at_k": 0.5,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-speckit-102-001"
+        ],
+        "misses": [
+          "mem-tier2-notebook-002"
+        ],
+        "retrieved": [
+          "mem-speckit-102-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-speckit-102-001",
+          "domain": "spec-kit",
+          "tags": [
+            "spec:SPEC-KIT-102"
+          ],
+          "snippet": "SPEC-KIT-102 NotebookLM integration",
+          "score": 1.9553619534978606
+        }
+      ]
+    },
+    {
+      "query_name": "rust-domain-query",
+      "result": {
+        "case_name": "rust-domain-query",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-rust-errors-001",
+          "mem-thiserror-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-rust-errors-001",
+          "mem-thiserror-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-rust-errors-001",
+          "domain": "rust",
+          "tags": [
+            "type:pattern"
+          ],
+          "snippet": "Rust error handling best practice",
+          "score": 3.6563419633902
+        },
+        {
+          "id": "mem-thiserror-002",
+          "domain": "rust",
+          "tags": [
+            "type:library"
+          ],
+          "snippet": "thiserror derive macro",
+          "score": 2.6347227936605995
+        }
+      ]
+    },
+    {
+      "query_name": "bug-pattern-required-tag",
+      "result": {
+        "case_name": "bug-pattern-required-tag",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-bug-resize-001",
+          "mem-bug-segfault-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-bug-resize-001",
+          "mem-bug-segfault-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-bug-resize-001",
+          "domain": "tui",
+          "tags": [
+            "type:bug"
+          ],
+          "snippet": "Window resize crash bug",
+          "score": 2.4911629586216324
+        },
+        {
+          "id": "mem-bug-segfault-002",
+          "domain": "core",
+          "tags": [
+            "type:bug"
+          ],
+          "snippet": "Segfault in async handler",
+          "score": 1.4496787371268225
+        }
+      ]
+    },
+    {
+      "query_name": "decision-type-required-tag",
+      "result": {
+        "case_name": "decision-type-required-tag",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-stage0-arch-001"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-stage0-arch-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-stage0-arch-001",
+          "domain": "spec-kit",
+          "tags": [
+            "type:decision"
+          ],
+          "snippet": "Stage 0 overlay engine architecture",
+          "score": 3.46480435068418
+        }
+      ]
+    },
+    {
+      "query_name": "pattern-with-optional-tag-boost",
+      "result": {
+        "case_name": "pattern-with-optional-tag-boost",
+        "precision_at_k": 0.6666666666666666,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-vector-tfidf-001",
+          "mem-stage0-overlay-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-vector-tfidf-001",
+          "mem-rust-errors-001",
+          "mem-stage0-overlay-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-vector-tfidf-001",
+          "domain": "spec-kit",
+          "tags": [
+            "type:implementation"
+          ],
+          "snippet": "TF-IDF vector backend implementation",
+          "score": 2.0526037761673024
+        },
+        {
+          "id": "mem-rust-errors-001",
+          "domain": "rust",
+          "tags": [
+            "type:pattern"
+          ],
+          "snippet": "Rust error handling best practice",
+          "score": 1.8507033853663355
+        },
+        {
+          "id": "mem-stage0-overlay-002",
+          "domain": "spec-kit",
+          "tags": [
+            "type:pattern"
+          ],
+          "snippet": "Stage 0 overlay design pattern",
+          "score": 1.721644074588351
+        }
+      ]
+    },
+    {
+      "query_name": "notebooklm-tier2-spec",
+      "result": {
+        "case_name": "notebooklm-tier2-spec",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-tier2-notebook-002",
+          "mem-speckit-102-001"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-tier2-notebook-002",
+          "mem-speckit-102-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-tier2-notebook-002",
+          "domain": "spec-kit",
+          "tags": [
+            "type:integration"
+          ],
+          "snippet": "Tier 2 NotebookLM orchestration",
+          "score": 4.7986501026745625
+        },
+        {
+          "id": "mem-speckit-102-001",
+          "domain": "spec-kit",
+          "tags": [
+            "spec:SPEC-KIT-102"
+          ],
+          "snippet": "SPEC-KIT-102 NotebookLM integration",
+          "score": 3.7756282580630036
+        }
+      ]
+    },
+    {
+      "query_name": "resize-crash-segfault",
+      "result": {
+        "case_name": "resize-crash-segfault",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-bug-resize-001",
+          "mem-bug-segfault-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-bug-resize-001",
+          "mem-bug-segfault-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-bug-resize-001",
+          "domain": "tui",
+          "tags": [
+            "type:bug"
+          ],
+          "snippet": "Window resize crash bug",
+          "score": 3.7158977362567422
+        },
+        {
+          "id": "mem-bug-segfault-002",
+          "domain": "core",
+          "tags": [
+            "type:bug"
+          ],
+          "snippet": "Segfault in async handler",
+          "score": 2.1619832663875096
+        }
+      ]
+    },
+    {
+      "query_name": "single-keyword-broad",
+      "result": {
+        "case_name": "single-keyword-broad",
+        "precision_at_k": 0.4,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-bug-segfault-002",
+          "mem-bug-resize-001"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-bug-segfault-002",
+          "mem-stage0-arch-001",
+          "mem-stage0-overlay-002",
+          "mem-speckit-102-001",
+          "mem-bug-resize-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-bug-segfault-002",
+          "domain": "core",
+          "tags": [
+            "type:bug"
+          ],
+          "snippet": "Segfault in async handler",
+          "score": 1.4496787371268225
+        },
+        {
+          "id": "mem-stage0-arch-001",
+          "domain": "spec-kit",
+          "tags": [
+            "type:decision"
+          ],
+          "snippet": "Stage 0 overlay engine architecture",
+          "score": 1.351265022244632
+        },
+        {
+          "id": "mem-stage0-overlay-002",
+          "domain": "spec-kit",
+          "tags": [
+            "type:pattern"
+          ],
+          "snippet": "Stage 0 overlay design pattern",
+          "score": 1.3221007216018323
+        },
+        {
+          "id": "mem-speckit-102-001",
+          "domain": "spec-kit",
+          "tags": [
+            "spec:SPEC-KIT-102"
+          ],
+          "snippet": "SPEC-KIT-102 NotebookLM integration",
+          "score": 1.3221007216018323
+        },
+        {
+          "id": "mem-bug-resize-001",
+          "domain": "tui",
+          "tags": [
+            "type:bug"
+          ],
+          "snippet": "Window resize crash bug",
+          "score": 1.1364595562741084
+        }
+      ]
+    },
+    {
+      "query_name": "rare-term-search",
+      "result": {
+        "case_name": "rare-term-search",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-bm25-scoring-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-bm25-scoring-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-bm25-scoring-002",
+          "domain": "spec-kit",
+          "tags": [
+            "type:algorithm"
+          ],
+          "snippet": "BM25 scoring formula",
+          "score": 2.0025955310349195
+        }
+      ]
+    },
+    {
+      "query_name": "spec-id-search",
+      "result": {
+        "case_name": "spec-id-search",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-speckit-102-001"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-speckit-102-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-speckit-102-001",
+          "domain": "spec-kit",
+          "tags": [
+            "spec:SPEC-KIT-102"
+          ],
+          "snippet": "SPEC-KIT-102 NotebookLM integration",
+          "score": 5.266085860493581
+        }
+      ]
+    },
+    {
+      "query_name": "combined-domain-and-tag",
+      "result": {
+        "case_name": "combined-domain-and-tag",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-stage0-arch-001",
+          "mem-stage0-overlay-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-stage0-arch-001",
+          "mem-stage0-overlay-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-stage0-arch-001",
+          "domain": "spec-kit",
+          "tags": [
+            "type:decision"
+          ],
+          "snippet": "Stage 0 overlay engine architecture",
+          "score": 3.7581983604076203
+        },
+        {
+          "id": "mem-stage0-overlay-002",
+          "domain": "spec-kit",
+          "tags": [
+            "type:pattern"
+          ],
+          "snippet": "Stage 0 overlay design pattern",
+          "score": 3.2432881491767023
+        }
+      ]
+    },
+    {
+      "query_name": "no-match-expected",
+      "result": {
+        "case_name": "no-match-expected",
+        "precision_at_k": 0.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 0.0,
+        "hits": [],
+        "misses": [],
+        "retrieved": [],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": []
+    }
+  ],
+  "results_b": [
+    {
+      "query_name": "error-handling-pattern",
+      "result": {
+        "case_name": "error-handling-pattern",
+        "precision_at_k": 0.6666666666666666,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-rust-errors-001",
+          "mem-thiserror-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-rust-errors-001",
+          "mem-thiserror-002",
+          "mem-stage0-overlay-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-rust-errors-001",
+          "domain": "rust",
+          "tags": [
+            "type:pattern"
+          ],
+          "snippet": "Rust error handling best practice",
+          "score": 5.207045348756535
+        },
+        {
+          "id": "mem-thiserror-002",
+          "domain": "rust",
+          "tags": [
+            "type:library"
+          ],
+          "snippet": "thiserror derive macro",
+          "score": 2.6347227936605995
+        },
+        {
+          "id": "mem-stage0-overlay-002",
+          "domain": "spec-kit",
+          "tags": [
+            "type:pattern"
+          ],
+          "snippet": "Stage 0 overlay design pattern",
+          "score": 1.721644074588351
+        }
+      ]
+    },
+    {
+      "query_name": "tfidf-bm25-implementation",
+      "result": {
+        "case_name": "tfidf-bm25-implementation",
+        "precision_at_k": 0.6666666666666666,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-vector-tfidf-001",
+          "mem-bm25-scoring-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-vector-tfidf-001",
+          "mem-bm25-scoring-002",
+          "mem-stage0-arch-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-vector-tfidf-001",
+          "domain": "spec-kit",
+          "tags": [
+            "type:implementation"
+          ],
+          "snippet": "TF-IDF vector backend implementation",
+          "score": 3.134746313343243
+        },
+        {
+          "id": "mem-bm25-scoring-002",
+          "domain": "spec-kit",
+          "tags": [
+            "type:algorithm"
+          ],
+          "snippet": "BM25 scoring formula",
+          "score": 3.053860553279552
+        },
+        {
+          "id": "mem-stage0-arch-001",
+          "domain": "spec-kit",
+          "tags": [
+            "type:decision"
+          ],
+          "snippet": "Stage 0 overlay engine architecture",
+          "score": 1.5916517336302918
+        }
+      ]
+    },
+    {
+      "query_name": "stage0-architecture-decision",
+      "result": {
+        "case_name": "stage0-architecture-decision",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-stage0-arch-001",
+          "mem-stage0-overlay-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-stage0-arch-001",
+          "mem-stage0-overlay-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-stage0-arch-001",
+          "domain": "spec-kit",
+          "tags": [
+            "type:decision"
+          ],
+          "snippet": "Stage 0 overlay engine architecture",
+          "score": 3.46480435068418
+        },
+        {
+          "id": "mem-stage0-overlay-002",
+          "domain": "spec-kit",
+          "tags": [
+            "type:pattern"
+          ],
+          "snippet": "Stage 0 overlay design pattern",
+          "score": 1.721644074588351
+        }
+      ]
+    },
+    {
+      "query_name": "spec-kit-domain-query",
+      "result": {
+        "case_name": "spec-kit-domain-query",
+        "precision_at_k": 1.0,
+        "recall_at_k": 0.5,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-speckit-102-001"
+        ],
+        "misses": [
+          "mem-tier2-notebook-002"
+        ],
+        "retrieved": [
+          "mem-speckit-102-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-speckit-102-001",
+          "domain": "spec-kit",
+          "tags": [
+            "spec:SPEC-KIT-102"
+          ],
+          "snippet": "SPEC-KIT-102 NotebookLM integration",
+          "score": 1.9553619534978606
+        }
+      ]
+    },
+    {
+      "query_name": "rust-domain-query",
+      "result": {
+        "case_name": "rust-domain-query",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-rust-errors-001",
+          "mem-thiserror-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-rust-errors-001",
+          "mem-thiserror-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-rust-errors-001",
+          "domain": "rust",
+          "tags": [
+            "type:pattern"
+          ],
+          "snippet": "Rust error handling best practice",
+          "score": 3.6563419633902
+        },
+        {
+          "id": "mem-thiserror-002",
+          "domain": "rust",
+          "tags": [
+            "type:library"
+          ],
+          "snippet": "thiserror derive macro",
+          "score": 2.6347227936605995
+        }
+      ]
+    },
+    {
+      "query_name": "bug-pattern-required-tag",
+      "result": {
+        "case_name": "bug-pattern-required-tag",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-bug-resize-001",
+          "mem-bug-segfault-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-bug-resize-001",
+          "mem-bug-segfault-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-bug-resize-001",
+          "domain": "tui",
+          "tags": [
+            "type:bug"
+          ],
+          "snippet": "Window resize crash bug",
+          "score": 2.4911629586216324
+        },
+        {
+          "id": "mem-bug-segfault-002",
+          "domain": "core",
+          "tags": [
+            "type:bug"
+          ],
+          "snippet": "Segfault in async handler",
+          "score": 1.4496787371268225
+        }
+      ]
+    },
+    {
+      "query_name": "decision-type-required-tag",
+      "result": {
+        "case_name": "decision-type-required-tag",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-stage0-arch-001"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-stage0-arch-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-stage0-arch-001",
+          "domain": "spec-kit",
+          "tags": [
+            "type:decision"
+          ],
+          "snippet": "Stage 0 overlay engine architecture",
+          "score": 3.46480435068418
+        }
+      ]
+    },
+    {
+      "query_name": "pattern-with-optional-tag-boost",
+      "result": {
+        "case_name": "pattern-with-optional-tag-boost",
+        "precision_at_k": 0.6666666666666666,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-vector-tfidf-001",
+          "mem-stage0-overlay-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-vector-tfidf-001",
+          "mem-rust-errors-001",
+          "mem-stage0-overlay-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-vector-tfidf-001",
+          "domain": "spec-kit",
+          "tags": [
+            "type:implementation"
+          ],
+          "snippet": "TF-IDF vector backend implementation",
+          "score": 2.0526037761673024
+        },
+        {
+          "id": "mem-rust-errors-001",
+          "domain": "rust",
+          "tags": [
+            "type:pattern"
+          ],
+          "snippet": "Rust error handling best practice",
+          "score": 1.8507033853663355
+        },
+        {
+          "id": "mem-stage0-overlay-002",
+          "domain": "spec-kit",
+          "tags": [
+            "type:pattern"
+          ],
+          "snippet": "Stage 0 overlay design pattern",
+          "score": 1.721644074588351
+        }
+      ]
+    },
+    {
+      "query_name": "notebooklm-tier2-spec",
+      "result": {
+        "case_name": "notebooklm-tier2-spec",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-tier2-notebook-002",
+          "mem-speckit-102-001"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-tier2-notebook-002",
+          "mem-speckit-102-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-tier2-notebook-002",
+          "domain": "spec-kit",
+          "tags": [
+            "type:integration"
+          ],
+          "snippet": "Tier 2 NotebookLM orchestration",
+          "score": 4.7986501026745625
+        },
+        {
+          "id": "mem-speckit-102-001",
+          "domain": "spec-kit",
+          "tags": [
+            "spec:SPEC-KIT-102"
+          ],
+          "snippet": "SPEC-KIT-102 NotebookLM integration",
+          "score": 3.7756282580630036
+        }
+      ]
+    },
+    {
+      "query_name": "resize-crash-segfault",
+      "result": {
+        "case_name": "resize-crash-segfault",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-bug-resize-001",
+          "mem-bug-segfault-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-bug-resize-001",
+          "mem-bug-segfault-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-bug-resize-001",
+          "domain": "tui",
+          "tags": [
+            "type:bug"
+          ],
+          "snippet": "Window resize crash bug",
+          "score": 3.7158977362567422
+        },
+        {
+          "id": "mem-bug-segfault-002",
+          "domain": "core",
+          "tags": [
+            "type:bug"
+          ],
+          "snippet": "Segfault in async handler",
+          "score": 2.1619832663875096
+        }
+      ]
+    },
+    {
+      "query_name": "single-keyword-broad",
+      "result": {
+        "case_name": "single-keyword-broad",
+        "precision_at_k": 0.4,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-bug-segfault-002",
+          "mem-bug-resize-001"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-bug-segfault-002",
+          "mem-stage0-arch-001",
+          "mem-speckit-102-001",
+          "mem-stage0-overlay-002",
+          "mem-bug-resize-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-bug-segfault-002",
+          "domain": "core",
+          "tags": [
+            "type:bug"
+          ],
+          "snippet": "Segfault in async handler",
+          "score": 1.4496787371268225
+        },
+        {
+          "id": "mem-stage0-arch-001",
+          "domain": "spec-kit",
+          "tags": [
+            "type:decision"
+          ],
+          "snippet": "Stage 0 overlay engine architecture",
+          "score": 1.351265022244632
+        },
+        {
+          "id": "mem-speckit-102-001",
+          "domain": "spec-kit",
+          "tags": [
+            "spec:SPEC-KIT-102"
+          ],
+          "snippet": "SPEC-KIT-102 NotebookLM integration",
+          "score": 1.3221007216018323
+        },
+        {
+          "id": "mem-stage0-overlay-002",
+          "domain": "spec-kit",
+          "tags": [
+            "type:pattern"
+          ],
+          "snippet": "Stage 0 overlay design pattern",
+          "score": 1.3221007216018323
+        },
+        {
+          "id": "mem-bug-resize-001",
+          "domain": "tui",
+          "tags": [
+            "type:bug"
+          ],
+          "snippet": "Window resize crash bug",
+          "score": 1.1364595562741084
+        }
+      ]
+    },
+    {
+      "query_name": "rare-term-search",
+      "result": {
+        "case_name": "rare-term-search",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-bm25-scoring-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-bm25-scoring-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-bm25-scoring-002",
+          "domain": "spec-kit",
+          "tags": [
+            "type:algorithm"
+          ],
+          "snippet": "BM25 scoring formula",
+          "score": 2.0025955310349195
+        }
+      ]
+    },
+    {
+      "query_name": "spec-id-search",
+      "result": {
+        "case_name": "spec-id-search",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-speckit-102-001"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-speckit-102-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-speckit-102-001",
+          "domain": "spec-kit",
+          "tags": [
+            "spec:SPEC-KIT-102"
+          ],
+          "snippet": "SPEC-KIT-102 NotebookLM integration",
+          "score": 5.266085860493581
+        }
+      ]
+    },
+    {
+      "query_name": "combined-domain-and-tag",
+      "result": {
+        "case_name": "combined-domain-and-tag",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-stage0-arch-001",
+          "mem-stage0-overlay-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-stage0-arch-001",
+          "mem-stage0-overlay-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": [
+        {
+          "id": "mem-stage0-arch-001",
+          "domain": "spec-kit",
+          "tags": [
+            "type:decision"
+          ],
+          "snippet": "Stage 0 overlay engine architecture",
+          "score": 3.7581983604076203
+        },
+        {
+          "id": "mem-stage0-overlay-002",
+          "domain": "spec-kit",
+          "tags": [
+            "type:pattern"
+          ],
+          "snippet": "Stage 0 overlay design pattern",
+          "score": 3.2432881491767023
+        }
+      ]
+    },
+    {
+      "query_name": "no-match-expected",
+      "result": {
+        "case_name": "no-match-expected",
+        "precision_at_k": 0.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 0.0,
+        "hits": [],
+        "misses": [],
+        "retrieved": [],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      "latency": 0,
+      "hits": []
+    }
+  ],
+  "suite_a": {
+    "results": [
+      {
+        "case_name": "error-handling-pattern",
+        "precision_at_k": 0.6666666666666666,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-rust-errors-001",
+          "mem-thiserror-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-rust-errors-001",
+          "mem-thiserror-002",
+          "mem-stage0-overlay-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "tfidf-bm25-implementation",
+        "precision_at_k": 0.6666666666666666,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-vector-tfidf-001",
+          "mem-bm25-scoring-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-vector-tfidf-001",
+          "mem-bm25-scoring-002",
+          "mem-stage0-arch-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "stage0-architecture-decision",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-stage0-arch-001",
+          "mem-stage0-overlay-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-stage0-arch-001",
+          "mem-stage0-overlay-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "spec-kit-domain-query",
+        "precision_at_k": 1.0,
+        "recall_at_k": 0.5,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-speckit-102-001"
+        ],
+        "misses": [
+          "mem-tier2-notebook-002"
+        ],
+        "retrieved": [
+          "mem-speckit-102-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "rust-domain-query",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-rust-errors-001",
+          "mem-thiserror-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-rust-errors-001",
+          "mem-thiserror-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "bug-pattern-required-tag",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-bug-resize-001",
+          "mem-bug-segfault-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-bug-resize-001",
+          "mem-bug-segfault-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "decision-type-required-tag",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-stage0-arch-001"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-stage0-arch-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "pattern-with-optional-tag-boost",
+        "precision_at_k": 0.6666666666666666,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-vector-tfidf-001",
+          "mem-stage0-overlay-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-vector-tfidf-001",
+          "mem-rust-errors-001",
+          "mem-stage0-overlay-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "notebooklm-tier2-spec",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-tier2-notebook-002",
+          "mem-speckit-102-001"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-tier2-notebook-002",
+          "mem-speckit-102-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "resize-crash-segfault",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-bug-resize-001",
+          "mem-bug-segfault-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-bug-resize-001",
+          "mem-bug-segfault-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "single-keyword-broad",
+        "precision_at_k": 0.4,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-bug-segfault-002",
+          "mem-bug-resize-001"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-bug-segfault-002",
+          "mem-stage0-arch-001",
+          "mem-stage0-overlay-002",
+          "mem-speckit-102-001",
+          "mem-bug-resize-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "rare-term-search",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-bm25-scoring-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-bm25-scoring-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "spec-id-search",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-speckit-102-001"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-speckit-102-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "combined-domain-and-tag",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-stage0-arch-001",
+          "mem-stage0-overlay-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-stage0-arch-001",
+          "mem-stage0-overlay-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "no-match-expected",
+        "precision_at_k": 0.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 0.0,
+        "hits": [],
+        "misses": [],
+        "retrieved": [],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      }
+    ],
+    "mean_precision": 0.8266666666666667,
+    "mean_recall": 0.9666666666666667,
+    "mrr": 0.9333333333333333,
+    "cases_passed": 13,
+    "total_cases": 15,
+    "top_k": 10,
+    "total_missing_ids": 0
+  },
+  "suite_b": {
+    "results": [
+      {
+        "case_name": "error-handling-pattern",
+        "precision_at_k": 0.6666666666666666,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-rust-errors-001",
+          "mem-thiserror-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-rust-errors-001",
+          "mem-thiserror-002",
+          "mem-stage0-overlay-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "tfidf-bm25-implementation",
+        "precision_at_k": 0.6666666666666666,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-vector-tfidf-001",
+          "mem-bm25-scoring-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-vector-tfidf-001",
+          "mem-bm25-scoring-002",
+          "mem-stage0-arch-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "stage0-architecture-decision",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-stage0-arch-001",
+          "mem-stage0-overlay-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-stage0-arch-001",
+          "mem-stage0-overlay-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "spec-kit-domain-query",
+        "precision_at_k": 1.0,
+        "recall_at_k": 0.5,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-speckit-102-001"
+        ],
+        "misses": [
+          "mem-tier2-notebook-002"
+        ],
+        "retrieved": [
+          "mem-speckit-102-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "rust-domain-query",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-rust-errors-001",
+          "mem-thiserror-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-rust-errors-001",
+          "mem-thiserror-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "bug-pattern-required-tag",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-bug-resize-001",
+          "mem-bug-segfault-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-bug-resize-001",
+          "mem-bug-segfault-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "decision-type-required-tag",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-stage0-arch-001"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-stage0-arch-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "pattern-with-optional-tag-boost",
+        "precision_at_k": 0.6666666666666666,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-vector-tfidf-001",
+          "mem-stage0-overlay-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-vector-tfidf-001",
+          "mem-rust-errors-001",
+          "mem-stage0-overlay-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "notebooklm-tier2-spec",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-tier2-notebook-002",
+          "mem-speckit-102-001"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-tier2-notebook-002",
+          "mem-speckit-102-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "resize-crash-segfault",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-bug-resize-001",
+          "mem-bug-segfault-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-bug-resize-001",
+          "mem-bug-segfault-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "single-keyword-broad",
+        "precision_at_k": 0.4,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-bug-segfault-002",
+          "mem-bug-resize-001"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-bug-segfault-002",
+          "mem-stage0-arch-001",
+          "mem-speckit-102-001",
+          "mem-stage0-overlay-002",
+          "mem-bug-resize-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "rare-term-search",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-bm25-scoring-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-bm25-scoring-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "spec-id-search",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-speckit-102-001"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-speckit-102-001"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "combined-domain-and-tag",
+        "precision_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "hits": [
+          "mem-stage0-arch-001",
+          "mem-stage0-overlay-002"
+        ],
+        "misses": [],
+        "retrieved": [
+          "mem-stage0-arch-001",
+          "mem-stage0-overlay-002"
+        ],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      },
+      {
+        "case_name": "no-match-expected",
+        "precision_at_k": 0.0,
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 0.0,
+        "hits": [],
+        "misses": [],
+        "retrieved": [],
+        "lane": "memory",
+        "source": "builtin",
+        "missing_expected_ids": []
+      }
+    ],
+    "mean_precision": 0.8266666666666667,
+    "mean_recall": 0.9666666666666667,
+    "mrr": 0.9333333333333333,
+    "cases_passed": 13,
+    "total_cases": 15,
+    "top_k": 10,
+    "total_missing_ids": 0
+  },
+  "latencies_a": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "latencies_b": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "generated_at": "2026-01-21T04:02:56.057032769Z",
+  "top_k": 10
+}

@@ -18,6 +18,25 @@ Migrate fully off the local-memory daemon after parity gates pass. This spec def
 
 ---
 
+## Implementation Status
+
+> **Audit Date:** 2026-01-21 | **Auditor:** SPEC-KIT-979 drift audit
+
+| Component | Status | Location |
+|-----------|--------|----------|
+| Parity gate definitions | DEFINED | This spec §Parity Gates |
+| Parity gate tests (`test_parity_gate_*`) | NOT STARTED | — |
+| ABHarness infrastructure | IMPLEMENTED | `tui/src/memvid_adapter/eval.rs` |
+| Memory backend routing | IMPLEMENTED | `tui/src/chatwidget/spec_kit/stage0_integration.rs` |
+| lm-import (basic: format, dedupe, dry-run) | IMPLEMENTED | `~/.local-memory/scripts/lm-import.sh` |
+| lm-import (--status, --all, --verify, --resume) | NOT STARTED | — |
+| CLI flags (--memory-backend, --eval-ab, etc.) | NOT STARTED | — |
+| Deprecation warning banners | NOT STARTED | — |
+| nightly.yml workflow | IMPLEMENTED | `.github/workflows/nightly-parity.yml` |
+| release.yml workflow | NOT STARTED | — |
+
+---
+
 ## Decision IDs
 
 **Implemented by this spec:** D14, D39, D40, D52, D94
@@ -64,8 +83,9 @@ Migrate fully off the local-memory daemon after parity gates pass. This spec def
 | MRR | ≥ 0.95 × baseline | `ABReport.suite_b.mrr` |
 | Golden queries passed | 100% | All `expected_ids` found |
 
-**Test:** `test_parity_gate_retrieval_quality`
+**Test (to be implemented):** `test_parity_gate_retrieval_quality`
 ```bash
+# Planned command (test does not exist yet)
 cargo test -p codex-tui -- parity_gate_retrieval_quality --ignored
 ```
 
@@ -79,8 +99,9 @@ cargo test -p codex-tui -- parity_gate_retrieval_quality --ignored
 | P50 latency | < 100ms | Informational |
 | Max latency | < 1000ms | No outliers |
 
-**Test:** `test_parity_gate_latency`
+**Test (to be implemented):** `test_parity_gate_latency`
 ```bash
+# Planned command (test does not exist yet)
 cargo test -p codex-tui -- parity_gate_latency --ignored
 ```
 
@@ -95,7 +116,7 @@ cargo test -p codex-tui -- parity_gate_latency --ignored
 | Crash/recovery cycles | All successful | WAL integrity |
 | Stability days | ≥ 30 | Calendar tracking |
 
-**Test:** `test_parity_gate_stability` (manual + telemetry review)
+**Test (to be implemented):** `test_parity_gate_stability` (manual + telemetry review)
 
 ### Gate 4: Feature Parity (GATE-FP)
 
@@ -112,7 +133,7 @@ cargo test -p codex-tui -- parity_gate_latency --ignored
 | Export | `lm export` | `capsule export` | ✅ |
 | Import | N/A (new) | `lm-import` | ✅ |
 
-**Test:** `test_parity_gate_features`
+**Test (to be implemented):** `test_parity_gate_features`
 
 ---
 
@@ -176,7 +197,7 @@ codex-tui --memory-backend local-memory
 codex-tui --no-deprecation-warnings
 ```
 
-**Deprecation Warning:**
+**Deprecation Warning (defined message format — not yet implemented):**
 ```
 ⚠️  local-memory backend is deprecated and will be removed in Phase 3.
     Run `lm-import` to migrate your memories to memvid.
@@ -215,7 +236,7 @@ lm-import --status
 lm-import --all --verify
 ```
 
-**Strong Warning:**
+**Strong Warning (defined message format — not yet implemented):**
 ```
 🚨 DEPRECATED: local-memory backend will be removed in 60 days.
    Unmigrated memories: 147
@@ -349,20 +370,24 @@ cargo build -p codex-tui --no-default-features --features local-memory-only
 
 ## CI Gates
 
-### Pre-Merge (All PRs)
+> **Note:** The workflow schemas below are **proposed designs**. The actual workflow files do not exist yet. See Implementation Status above.
+
+### Pre-Merge (All PRs) — Proposed
 
 ```yaml
-# .github/workflows/ci.yml
+# .github/workflows/ci.yml (proposed addition)
 - name: Memory Backend Tests
   run: |
     cargo test -p codex-tui -- memvid_adapter
     cargo test -p codex-stage0 -- dcc
 ```
 
-### Nightly (Parity Validation)
+### Nightly (Parity Validation) — Proposed
+
+_The following workflow will be created after parity gate tests are implemented:_
 
 ```yaml
-# .github/workflows/nightly.yml
+# .github/workflows/nightly.yml (does not exist yet)
 - name: Parity Gate Validation
   run: |
     cargo test -p codex-tui -- parity_gate --ignored
@@ -378,10 +403,12 @@ cargo build -p codex-tui --no-default-features --features local-memory-only
     path: artifacts/eval/
 ```
 
-### Release Gate (Phase Transitions)
+### Release Gate (Phase Transitions) — Proposed
+
+_The following workflow will be created for phase transition gating:_
 
 ```yaml
-# .github/workflows/release.yml
+# .github/workflows/release.yml (does not exist yet)
 phase_1_gate:
   needs: [parity_tests, stability_check]
   if: |
@@ -403,28 +430,49 @@ phase_2_gate:
 
 ## CLI Reference
 
-### Backend Selection
+> **Note:** The CLI flags below are **planned for implementation**. They do not exist in `cli.rs` yet. See Implementation Status above.
+
+### Backend Selection — Planned
 
 ```bash
-# Check current backend
+# Check current backend (planned)
 codex-tui --show-config | grep memory_backend
 
-# Override backend for session
+# Override backend for session (planned)
 codex-tui --memory-backend memvid
 codex-tui --memory-backend local-memory
 
-# Phase 2+: Force deprecated backend
+# Phase 2+: Force deprecated backend (planned)
 codex-tui --memory-backend local-memory --force-deprecated
 ```
 
 ### Migration Commands
 
+**Currently implemented** (`~/.local-memory/scripts/lm-import.sh`):
+```bash
+# Import with format auto-detection
+lm-import SOURCE
+
+# Specify format explicitly
+lm-import --format json|obsidian|markdown|backup SOURCE
+
+# Set domain for imported memories
+lm-import --domain my-domain SOURCE
+
+# Set default importance
+lm-import --importance 7 SOURCE
+
+# Check for duplicates before import
+lm-import --dedupe SOURCE
+
+# Dry run (show what would be imported)
+lm-import --dry-run SOURCE
+```
+
+**Planned extensions** (not yet implemented):
 ```bash
 # Check migration status
 lm-import --status
-
-# Dry run migration
-lm-import --dry-run
 
 # Migrate all memories
 lm-import --all
@@ -432,36 +480,33 @@ lm-import --all
 # Migrate with verification
 lm-import --all --verify
 
-# Migrate specific domain
-lm-import --domain spec-kit
-
 # Resume interrupted migration
 lm-import --resume
 ```
 
-### Evaluation Commands
+### Evaluation Commands — Planned
 
 ```bash
-# Run A/B evaluation
+# Run A/B evaluation (planned - ABHarness exists but CLI flag not wired)
 codex-tui --eval-ab --output-dir .speckit/eval/
 
-# Run with custom golden queries
+# Run with custom golden queries (planned)
 codex-tui --eval-ab --golden-queries golden.json
 
-# Run synthetic test (no real data)
+# Run synthetic test (no real data) (planned)
 codex-tui --eval-ab --synthetic
 ```
 
-### Health & Diagnostics
+### Health & Diagnostics — Planned
 
 ```bash
-# Capsule health check
+# Capsule health check (planned)
 codex-tui --capsule-doctor
 
-# Verify capsule integrity
+# Verify capsule integrity (planned)
 codex-tui --capsule-verify
 
-# Show backend status
+# Show backend status (planned)
 codex-tui --backend-status
 ```
 
@@ -521,21 +566,21 @@ CODE_FORCE_PARITY_GATES=1
 
 See: [MIGRATION.md](./MIGRATION.md) (to be created)
 
-Quick start:
+Quick start (uses planned commands marked with ⚠️):
 ```bash
-# 1. Check current status
+# 1. Check current status (⚠️ --status flag not yet implemented)
 lm-import --status
 
 # 2. Backup local-memory (recommended)
 lm export --all --output backup-$(date +%Y%m%d).json
 
-# 3. Migrate with verification
+# 3. Migrate with verification (⚠️ --all --verify not yet implemented)
 lm-import --all --verify
 
-# 4. Switch backend
+# 4. Switch backend (config change — works today)
 echo 'memory_backend = "memvid"' >> ~/.config/code/stage0.toml
 
-# 5. Verify
+# 5. Verify (⚠️ --backend-status not yet implemented)
 codex-tui --backend-status
 ```
 

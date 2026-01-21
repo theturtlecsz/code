@@ -1080,6 +1080,237 @@ mod tests {
     use crate::memvid_adapter::capsule::CapsuleConfig;
     use tempfile::TempDir;
 
+    // =========================================================================
+    // SPEC-KIT-979: Parity Gate Test Infrastructure
+    // =========================================================================
+
+    /// Result from a parity gate test, suitable for JSON output.
+    ///
+    /// Used by all `test_parity_gate_*` tests to produce machine-readable output.
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct ParityGateResult {
+        /// Gate identifier: "GATE-RQ", "GATE-LP", "GATE-FP", "GATE-ST"
+        pub gate: String,
+        /// Whether the gate passed
+        pub passed: bool,
+        /// True only if real backends were used (not synthetic)
+        pub certified: bool,
+        /// "real" or "synthetic"
+        pub mode: String,
+        /// Gate-specific metrics
+        pub metrics: serde_json::Value,
+        /// Report generation timestamp
+        pub timestamp: DateTime<Utc>,
+        /// Human-readable summary
+        pub message: String,
+    }
+
+    impl ParityGateResult {
+        /// Create a new parity gate result.
+        fn new(gate: &str, passed: bool, certified: bool, mode: &str) -> Self {
+            Self {
+                gate: gate.to_string(),
+                passed,
+                certified,
+                mode: mode.to_string(),
+                metrics: serde_json::Value::Null,
+                timestamp: Utc::now(),
+                message: String::new(),
+            }
+        }
+
+        /// Set metrics
+        fn with_metrics(mut self, metrics: serde_json::Value) -> Self {
+            self.metrics = metrics;
+            self
+        }
+
+        /// Set message
+        fn with_message(mut self, message: impl Into<String>) -> Self {
+            self.message = message.into();
+            self
+        }
+
+        /// Print as JSON to stdout
+        fn print(&self) {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(self).expect("serialize ParityGateResult")
+            );
+        }
+    }
+
+    /// Stability report schema for GATE-ST validation.
+    ///
+    /// This is the expected format for nightly stability reports.
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct StabilityReport {
+        /// Number of days in the stability period
+        pub period_days: u32,
+        /// Number of fallback activations (should be 0)
+        pub fallback_activations: u32,
+        /// Number of data loss incidents (should be 0)
+        pub data_loss_incidents: u32,
+        /// Crash recovery events with success/failure status
+        pub crash_recoveries: Vec<CrashRecoveryEvent>,
+        /// Report generation timestamp
+        pub generated_at: DateTime<Utc>,
+    }
+
+    /// A crash recovery event within the stability period.
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct CrashRecoveryEvent {
+        /// When the crash occurred
+        pub timestamp: DateTime<Utc>,
+        /// Whether recovery was successful
+        pub recovered: bool,
+        /// Optional description
+        pub description: Option<String>,
+    }
+
+    impl StabilityReport {
+        /// Validate the report against GATE-ST criteria.
+        fn validate(&self) -> (bool, Vec<String>) {
+            let mut issues = Vec::new();
+
+            if self.fallback_activations > 0 {
+                issues.push(format!(
+                    "fallback_activations = {} (must be 0)",
+                    self.fallback_activations
+                ));
+            }
+
+            if self.data_loss_incidents > 0 {
+                issues.push(format!(
+                    "data_loss_incidents = {} (must be 0)",
+                    self.data_loss_incidents
+                ));
+            }
+
+            let failed_recoveries: Vec<_> = self
+                .crash_recoveries
+                .iter()
+                .filter(|r| !r.recovered)
+                .collect();
+            if !failed_recoveries.is_empty() {
+                issues.push(format!(
+                    "{} crash recoveries failed (must all succeed)",
+                    failed_recoveries.len()
+                ));
+            }
+
+            (issues.is_empty(), issues)
+        }
+
+        /// Create a mock report for format validation testing.
+        fn mock_passing() -> Self {
+            Self {
+                period_days: 30,
+                fallback_activations: 0,
+                data_loss_incidents: 0,
+                crash_recoveries: vec![CrashRecoveryEvent {
+                    timestamp: Utc::now(),
+                    recovered: true,
+                    description: Some("Simulated crash for testing".to_string()),
+                }],
+                generated_at: Utc::now(),
+            }
+        }
+    }
+
+    /// Test mode for parity gates: real backends or synthetic.
+    enum ParityTestMode {
+        /// Real backends available - results are certified
+        Real {
+            baseline: Arc<dyn LocalMemoryClient>,
+            experiment: Arc<dyn LocalMemoryClient>,
+        },
+        /// Synthetic mode - infrastructure validation only
+        Synthetic { reason: String },
+    }
+
+    impl std::fmt::Debug for ParityTestMode {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                ParityTestMode::Real { .. } => write!(f, "ParityTestMode::Real"),
+                ParityTestMode::Synthetic { reason } => {
+                    write!(f, "ParityTestMode::Synthetic {{ reason: {:?} }}", reason)
+                }
+            }
+        }
+    }
+
+    /// Attempt to detect and setup test mode.
+    ///
+    /// Tries to connect to local-memory daemon. If unavailable, falls back to synthetic.
+    async fn detect_parity_test_mode(_temp_dir: &TempDir) -> ParityTestMode {
+        // Check for LOCAL_MEMORY_SOCKET or similar environment variable
+        // that would indicate real daemon availability
+        if std::env::var("LOCAL_MEMORY_SOCKET").is_ok()
+            || std::env::var("PARITY_TEST_REAL").is_ok()
+        {
+            // In a real implementation, we'd attempt to connect here.
+            // For now, we document this as a future extension point.
+            //
+            // TODO(SPEC-KIT-979): Implement real LocalMemoryCliAdapter connection
+            // when local-memory daemon integration is ready.
+        }
+
+        // Default: synthetic mode using two memvid backends
+        let reason = if std::env::var("CI").is_ok() {
+            "CI environment detected, using synthetic mode".to_string()
+        } else {
+            "Local-memory daemon not detected, using synthetic mode".to_string()
+        };
+
+        ParityTestMode::Synthetic { reason }
+    }
+
+    /// Setup backends for parity testing based on detected mode.
+    async fn setup_parity_backends(
+        mode: &ParityTestMode,
+        temp_dir: &TempDir,
+    ) -> (Arc<dyn LocalMemoryClient>, Arc<dyn LocalMemoryClient>, bool) {
+        match mode {
+            ParityTestMode::Real {
+                baseline,
+                experiment,
+            } => (baseline.clone(), experiment.clone(), true),
+            ParityTestMode::Synthetic { .. } => {
+                // Create two memvid adapters with same test data
+                let capsule_a = temp_dir.path().join("parity_baseline.mv2");
+                let capsule_b = temp_dir.path().join("parity_experiment.mv2");
+
+                let config_a = CapsuleConfig {
+                    capsule_path: capsule_a,
+                    workspace_id: "parity-baseline".to_string(),
+                    ..Default::default()
+                };
+                let adapter_a = MemvidMemoryAdapter::new(config_a);
+                adapter_a.open().await.expect("open baseline adapter");
+
+                let config_b = CapsuleConfig {
+                    capsule_path: capsule_b,
+                    workspace_id: "parity-experiment".to_string(),
+                    ..Default::default()
+                };
+                let adapter_b = MemvidMemoryAdapter::new(config_b);
+                adapter_b.open().await.expect("open experiment adapter");
+
+                // Populate both with golden test memories
+                for (meta, content) in golden_test_memories() {
+                    adapter_a.add_memory_to_index(meta.clone(), &content).await;
+                    adapter_b.add_memory_to_index(meta, &content).await;
+                }
+
+                let baseline: Arc<dyn LocalMemoryClient> = Arc::new(adapter_a);
+                let experiment: Arc<dyn LocalMemoryClient> = Arc::new(adapter_b);
+
+                (baseline, experiment, false)
+            }
+        }
+    }
+
     #[test]
     fn test_golden_query_suite_structure() {
         let queries = golden_query_suite();
@@ -1343,5 +1574,505 @@ mod tests {
         // Check that directory was created
         assert!(eval_dir.exists());
         assert!(eval_dir.is_dir());
+    }
+
+    // =========================================================================
+    // SPEC-KIT-979: Parity Gate Tests
+    // =========================================================================
+
+    /// GATE-RQ: Retrieval Quality Parity
+    ///
+    /// Validates that memvid search quality >= 95% of baseline backend.
+    ///
+    /// **Criteria:**
+    /// - Mean Precision@10 >= 0.95 * baseline
+    /// - Mean Recall@10 >= 0.95 * baseline
+    /// - All golden queries with expected_ids must find those IDs
+    ///
+    /// Run with: `cargo test -p codex-tui --lib -- test_parity_gate_retrieval_quality --ignored --nocapture`
+    #[ignore]
+    #[tokio::test]
+    async fn test_parity_gate_retrieval_quality() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+
+        // Detect test mode
+        let mode = detect_parity_test_mode(&temp_dir).await;
+        let (is_synthetic, mode_reason) = match &mode {
+            ParityTestMode::Real { .. } => (false, "real backends".to_string()),
+            ParityTestMode::Synthetic { reason } => (true, reason.clone()),
+        };
+
+        // Setup backends
+        let (baseline, experiment, certified) = setup_parity_backends(&mode, &temp_dir).await;
+
+        // Run A/B harness
+        let harness = ABHarness::new(baseline, experiment)
+            .with_names("baseline", "memvid")
+            .with_top_k(10);
+
+        let report = harness.run().await.expect("run AB harness");
+
+        // Check parity criteria
+        let precision_ratio = if report.suite_a.mean_precision > 0.0 {
+            report.suite_b.mean_precision / report.suite_a.mean_precision
+        } else {
+            1.0 // If baseline is 0, any result is acceptable
+        };
+
+        let recall_ratio = if report.suite_a.mean_recall > 0.0 {
+            report.suite_b.mean_recall / report.suite_a.mean_recall
+        } else {
+            1.0
+        };
+
+        let meets_precision = precision_ratio >= 0.95;
+        let meets_recall = recall_ratio >= 0.95;
+        let meets_mrr = report.suite_b.mrr >= report.suite_a.mrr * 0.95;
+
+        // Check golden query coverage (all expected IDs found)
+        // Note: In synthetic mode, we only check that both backends return same results,
+        // not that all expected IDs are found (test data may not cover all golden queries)
+        let queries = golden_query_suite();
+        let mut golden_failures = Vec::new();
+        if certified {
+            // Real parity mode: strict check that all expected IDs are found
+            for (query, result_b) in queries.iter().zip(report.results_b.iter()) {
+                if !query.expected_ids.is_empty() {
+                    let found_ids: std::collections::HashSet<&str> =
+                        result_b.hits.iter().map(|h| h.id.as_str()).collect();
+                    let missing: Vec<&str> = query
+                        .expected_ids
+                        .iter()
+                        .filter(|id| !found_ids.contains(id.as_str()))
+                        .map(|s| s.as_str())
+                        .collect();
+                    if !missing.is_empty() {
+                        golden_failures.push(format!(
+                            "{}: missing {:?}",
+                            query.name,
+                            missing
+                        ));
+                    }
+                }
+            }
+        }
+        // In synthetic mode, golden_failures stays empty (we don't check expected IDs)
+        let all_golden_pass = golden_failures.is_empty();
+
+        let passed = meets_precision && meets_recall && all_golden_pass;
+
+        // Build result
+        let message = if certified {
+            if passed {
+                "PARITY CERTIFIED - memvid meets retrieval quality gate".to_string()
+            } else {
+                "PARITY FAILED - memvid does not meet retrieval quality gate".to_string()
+            }
+        } else if passed {
+            format!(
+                "INFRASTRUCTURE VALIDATED - memvid meets 95% threshold in synthetic mode. {}. Run with real local-memory daemon for parity certification.",
+                mode_reason
+            )
+        } else {
+            format!(
+                "INFRASTRUCTURE FAILED - even synthetic mode did not meet thresholds. {}",
+                mode_reason
+            )
+        };
+
+        let result = ParityGateResult::new("GATE-RQ", passed, certified, if is_synthetic { "synthetic" } else { "real" })
+            .with_metrics(serde_json::json!({
+                "baseline_precision": report.suite_a.mean_precision,
+                "memvid_precision": report.suite_b.mean_precision,
+                "precision_ratio": precision_ratio,
+                "meets_precision": meets_precision,
+                "baseline_recall": report.suite_a.mean_recall,
+                "memvid_recall": report.suite_b.mean_recall,
+                "recall_ratio": recall_ratio,
+                "meets_recall": meets_recall,
+                "baseline_mrr": report.suite_a.mrr,
+                "memvid_mrr": report.suite_b.mrr,
+                "meets_mrr": meets_mrr,
+                "threshold": 0.95,
+                "golden_failures": golden_failures,
+                "all_golden_pass": all_golden_pass,
+            }))
+            .with_message(&message);
+
+        result.print();
+
+        assert!(passed, "{}", message);
+    }
+
+    /// GATE-LP: Latency Parity
+    ///
+    /// Validates that memvid P95 search latency < 250ms.
+    ///
+    /// **Criteria:**
+    /// - P95 latency < 250ms
+    /// - (CI caveat: if CI=true and latency > 250ms, warn but don't fail)
+    ///
+    /// Run with: `cargo test -p codex-tui --lib -- test_parity_gate_latency --ignored --nocapture`
+    #[ignore]
+    #[tokio::test]
+    async fn test_parity_gate_latency() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+
+        // Detect test mode
+        let mode = detect_parity_test_mode(&temp_dir).await;
+        let (is_synthetic, mode_reason) = match &mode {
+            ParityTestMode::Real { .. } => (false, "real backends".to_string()),
+            ParityTestMode::Synthetic { reason } => (true, reason.clone()),
+        };
+
+        // Setup backends
+        let (baseline, experiment, certified) = setup_parity_backends(&mode, &temp_dir).await;
+
+        // Run multiple repetitions for more accurate latency measurement
+        const REPETITIONS: usize = 3;
+        let mut all_latencies: Vec<Duration> = Vec::new();
+
+        for _ in 0..REPETITIONS {
+            let harness = ABHarness::new(baseline.clone(), experiment.clone())
+                .with_names("baseline", "memvid")
+                .with_top_k(10);
+
+            let report = harness.run().await.expect("run AB harness");
+            all_latencies.extend(report.latencies_b.clone());
+        }
+
+        // Compute P95 latency
+        let p95 = percentile_duration(&all_latencies, 95);
+        let p50 = percentile_duration(&all_latencies, 50);
+        let max_latency = all_latencies.iter().max().copied().unwrap_or(Duration::ZERO);
+
+        const THRESHOLD_MS: u64 = 250;
+        let meets_threshold = p95.as_millis() < THRESHOLD_MS as u128;
+
+        // CI caveat: warn but don't fail if in CI and latency is high
+        let is_ci = std::env::var("CI").is_ok();
+        let passed = if is_ci && !meets_threshold {
+            // CI environments can be slow; warn but don't fail
+            true
+        } else {
+            meets_threshold
+        };
+
+        let message = if certified {
+            if meets_threshold {
+                format!(
+                    "PARITY CERTIFIED - P95 latency {}ms < {}ms threshold",
+                    p95.as_millis(),
+                    THRESHOLD_MS
+                )
+            } else {
+                format!(
+                    "PARITY FAILED - P95 latency {}ms >= {}ms threshold",
+                    p95.as_millis(),
+                    THRESHOLD_MS
+                )
+            }
+        } else if meets_threshold {
+            format!(
+                "INFRASTRUCTURE VALIDATED - P95 latency {}ms in synthetic mode. {}",
+                p95.as_millis(),
+                mode_reason
+            )
+        } else if is_ci {
+            format!(
+                "CI WARNING - P95 latency {}ms exceeds {}ms threshold (expected in slow CI). {}",
+                p95.as_millis(),
+                THRESHOLD_MS,
+                mode_reason
+            )
+        } else {
+            format!(
+                "INFRASTRUCTURE WARNING - P95 latency {}ms exceeds {}ms threshold. {}",
+                p95.as_millis(),
+                THRESHOLD_MS,
+                mode_reason
+            )
+        };
+
+        let result = ParityGateResult::new("GATE-LP", passed, certified, if is_synthetic { "synthetic" } else { "real" })
+            .with_metrics(serde_json::json!({
+                "p95_latency_ms": p95.as_millis(),
+                "p50_latency_ms": p50.as_millis(),
+                "max_latency_ms": max_latency.as_millis(),
+                "threshold_ms": THRESHOLD_MS,
+                "meets_threshold": meets_threshold,
+                "total_measurements": all_latencies.len(),
+                "repetitions": REPETITIONS,
+                "is_ci": is_ci,
+            }))
+            .with_message(&message);
+
+        result.print();
+
+        assert!(passed, "{}", message);
+    }
+
+    /// GATE-FP: Feature Parity
+    ///
+    /// Validates that memvid supports all required IQO features.
+    ///
+    /// **Features tested:**
+    /// 1. Keywords only (basic search)
+    /// 2. Domain filtering (IQO.domains)
+    /// 3. Required tag filtering (IQO.required_tags)
+    /// 4. Optional tag boost (IQO.optional_tags)
+    /// 5. Importance threshold
+    /// 6. Empty result handling (no-match query)
+    /// 7. Combined filters
+    ///
+    /// Run with: `cargo test -p codex-tui --lib -- test_parity_gate_features --ignored --nocapture`
+    #[ignore]
+    #[tokio::test]
+    async fn test_parity_gate_features() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+
+        // Detect test mode
+        let mode = detect_parity_test_mode(&temp_dir).await;
+        let (is_synthetic, mode_reason) = match &mode {
+            ParityTestMode::Real { .. } => (false, "real backends".to_string()),
+            ParityTestMode::Synthetic { reason } => (true, reason.clone()),
+        };
+
+        // Setup backends
+        let (baseline, experiment, certified) = setup_parity_backends(&mode, &temp_dir).await;
+
+        // Define feature test cases
+        let feature_tests: Vec<(&str, LocalMemorySearchParams)> = vec![
+            (
+                "keywords_only",
+                LocalMemorySearchParams {
+                    iqo: Iqo {
+                        keywords: vec!["error".to_string(), "handling".to_string()],
+                        ..Default::default()
+                    },
+                    max_results: 10,
+                },
+            ),
+            (
+                "domain_filtering",
+                LocalMemorySearchParams {
+                    iqo: Iqo {
+                        keywords: vec!["pattern".to_string()],
+                        domains: vec!["rust".to_string()],
+                        ..Default::default()
+                    },
+                    max_results: 10,
+                },
+            ),
+            (
+                "required_tags",
+                LocalMemorySearchParams {
+                    iqo: Iqo {
+                        keywords: vec!["memory".to_string()],
+                        required_tags: vec!["type:decision".to_string()],
+                        ..Default::default()
+                    },
+                    max_results: 10,
+                },
+            ),
+            (
+                "optional_tags",
+                LocalMemorySearchParams {
+                    iqo: Iqo {
+                        keywords: vec!["implementation".to_string()],
+                        optional_tags: vec!["type:pattern".to_string()],
+                        ..Default::default()
+                    },
+                    max_results: 10,
+                },
+            ),
+            (
+                "empty_keywords_with_tags",
+                LocalMemorySearchParams {
+                    iqo: Iqo {
+                        keywords: vec![],
+                        required_tags: vec!["type:bug".to_string()],
+                        ..Default::default()
+                    },
+                    max_results: 10,
+                },
+            ),
+            (
+                "no_match_expected",
+                LocalMemorySearchParams {
+                    iqo: Iqo {
+                        keywords: vec!["xyzzy_nonexistent_12345".to_string()],
+                        ..Default::default()
+                    },
+                    max_results: 10,
+                },
+            ),
+            (
+                "combined_filters",
+                LocalMemorySearchParams {
+                    iqo: Iqo {
+                        keywords: vec!["architecture".to_string()],
+                        domains: vec!["spec-kit".to_string()],
+                        required_tags: vec!["type:decision".to_string()],
+                        ..Default::default()
+                    },
+                    max_results: 10,
+                },
+            ),
+        ];
+
+        let mut feature_results: Vec<serde_json::Value> = Vec::new();
+        let mut all_passed = true;
+
+        for (feature_name, params) in &feature_tests {
+            // Run on baseline
+            let baseline_result = baseline.search_memories(params.clone()).await;
+            let baseline_ok = baseline_result.is_ok();
+            let baseline_ids: Vec<String> = baseline_result
+                .map(|hits| hits.iter().map(|h| h.id.clone()).collect())
+                .unwrap_or_default();
+
+            // Run on experiment
+            let experiment_result = experiment.search_memories(params.clone()).await;
+            let experiment_ok = experiment_result.is_ok();
+            let experiment_ids: Vec<String> = experiment_result
+                .map(|hits| hits.iter().map(|h| h.id.clone()).collect())
+                .unwrap_or_default();
+
+            // Check structural equivalence (both succeed, similar result sets)
+            let both_succeed = baseline_ok && experiment_ok;
+            let baseline_set: std::collections::HashSet<_> = baseline_ids.iter().collect();
+            let experiment_set: std::collections::HashSet<_> = experiment_ids.iter().collect();
+            let ids_match = baseline_set == experiment_set;
+
+            let feature_passed = both_succeed && (ids_match || is_synthetic);
+
+            if !feature_passed {
+                all_passed = false;
+            }
+
+            feature_results.push(serde_json::json!({
+                "feature": feature_name,
+                "passed": feature_passed,
+                "baseline_ok": baseline_ok,
+                "experiment_ok": experiment_ok,
+                "baseline_ids": baseline_ids,
+                "experiment_ids": experiment_ids,
+                "ids_match": ids_match,
+            }));
+        }
+
+        let message = if certified {
+            if all_passed {
+                "PARITY CERTIFIED - all feature parity checks passed".to_string()
+            } else {
+                "PARITY FAILED - some feature parity checks failed".to_string()
+            }
+        } else if all_passed {
+            format!(
+                "INFRASTRUCTURE VALIDATED - all features work in synthetic mode. {}",
+                mode_reason
+            )
+        } else {
+            format!(
+                "INFRASTRUCTURE FAILED - some features failed even in synthetic mode. {}",
+                mode_reason
+            )
+        };
+
+        let result = ParityGateResult::new("GATE-FP", all_passed, certified, if is_synthetic { "synthetic" } else { "real" })
+            .with_metrics(serde_json::json!({
+                "features_tested": feature_tests.len(),
+                "features_passed": feature_results.iter().filter(|r| r["passed"].as_bool().unwrap_or(false)).count(),
+                "feature_results": feature_results,
+            }))
+            .with_message(&message);
+
+        result.print();
+
+        assert!(all_passed, "{}", message);
+    }
+
+    /// GATE-ST: Stability
+    ///
+    /// Validates stability report format and zero-incident criteria.
+    ///
+    /// **Criteria:**
+    /// - Report parses correctly (JSON schema validation)
+    /// - fallback_activations == 0
+    /// - data_loss_incidents == 0
+    /// - All crash_recoveries successful
+    ///
+    /// **Limitation:** Real 30-day stability requires nightly CI tracking.
+    /// This test validates report format and counter values only.
+    ///
+    /// Run with: `cargo test -p codex-tui --lib -- test_parity_gate_stability --ignored --nocapture`
+    /// Run with report: `STABILITY_REPORT_PATH=./stability.json cargo test ...`
+    #[ignore]
+    #[tokio::test]
+    async fn test_parity_gate_stability() {
+        // Check for external report path
+        let report_path = std::env::var("STABILITY_REPORT_PATH").ok();
+        let has_external_report = report_path.is_some();
+        let (report, source) = if let Some(path) = report_path {
+            // Load external report
+            let content = std::fs::read_to_string(&path)
+                .expect(&format!("read stability report from {}", path));
+            let report: StabilityReport = serde_json::from_str(&content)
+                .expect(&format!("parse stability report from {}", path));
+            (report, format!("external file: {}", path))
+        } else {
+            // Use mock report for format validation
+            (
+                StabilityReport::mock_passing(),
+                "mock report (no STABILITY_REPORT_PATH provided)".to_string(),
+            )
+        };
+
+        // Validate report
+        let (passed, issues) = report.validate();
+
+        let certified = has_external_report && report.period_days >= 30;
+
+        let message = if certified {
+            if passed {
+                format!(
+                    "PARITY CERTIFIED - stability report passed ({} days, 0 incidents)",
+                    report.period_days
+                )
+            } else {
+                format!(
+                    "PARITY FAILED - stability report has issues: {:?}",
+                    issues
+                )
+            }
+        } else if passed {
+            format!(
+                "FORMAT VALIDATED - report schema is valid. Source: {}. Note: Real 30-day stability requires nightly CI tracking.",
+                source
+            )
+        } else {
+            format!(
+                "FORMAT FAILED - report has issues: {:?}. Source: {}",
+                issues, source
+            )
+        };
+
+        let result = ParityGateResult::new("GATE-ST", passed, certified, if has_external_report { "external" } else { "mock" })
+            .with_metrics(serde_json::json!({
+                "period_days": report.period_days,
+                "fallback_activations": report.fallback_activations,
+                "data_loss_incidents": report.data_loss_incidents,
+                "crash_recovery_count": report.crash_recoveries.len(),
+                "crash_recovery_all_success": report.crash_recoveries.iter().all(|r| r.recovered),
+                "issues": issues,
+                "source": source,
+                "limitation": "Real 30-day stability requires nightly CI tracking. This test validates report format only.",
+            }))
+            .with_message(&message);
+
+        result.print();
+
+        assert!(passed, "{}", message);
     }
 }

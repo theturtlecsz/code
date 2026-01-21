@@ -8,6 +8,9 @@ use rusqlite::{Connection, Result as SqlResult, Row};
 use serde::Serialize;
 use serde_yaml::Value as YamlValue;
 
+mod import;
+use import::{ImportArgs, run_import};
+
 #[derive(Debug, Parser)]
 pub struct LocalMemoryCli {
     #[command(subcommand)]
@@ -18,6 +21,9 @@ pub struct LocalMemoryCli {
 enum LocalMemorySubcommand {
     /// Export memories to JSON Lines
     Export(ExportArgs),
+
+    /// Import memories into memvid capsule
+    Import(ImportArgs),
 }
 
 #[derive(Debug, Parser)]
@@ -35,34 +41,36 @@ struct ExportArgs {
     pretty: bool,
 }
 
-#[derive(Debug, Serialize)]
-struct MemoryExportRecord {
-    id: String,
-    content: String,
+/// Record structure for memory export/import operations.
+#[derive(Debug, Clone, Serialize)]
+pub struct MemoryExportRecord {
+    pub id: String,
+    pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    source: Option<String>,
-    importance: i64,
-    tags: Vec<String>,
+    pub source: Option<String>,
+    pub importance: i64,
+    pub tags: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    session_id: Option<String>,
+    pub session_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    domain: Option<String>,
-    created_at: String,
-    updated_at: String,
+    pub domain: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    agent_type: Option<String>,
+    pub agent_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    agent_context: Option<String>,
+    pub agent_context: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    access_scope: Option<String>,
+    pub access_scope: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    slug: Option<String>,
+    pub slug: Option<String>,
 }
 
 impl LocalMemoryCli {
     pub async fn run(self) -> Result<()> {
         match self.cmd {
             LocalMemorySubcommand::Export(args) => run_export(args).await,
+            LocalMemorySubcommand::Import(args) => run_import(args).await,
         }
     }
 }
@@ -116,7 +124,8 @@ async fn run_export(args: ExportArgs) -> Result<()> {
     Ok(())
 }
 
-fn row_to_export(row: &Row<'_>) -> SqlResult<MemoryExportRecord> {
+/// Convert a database row to a MemoryExportRecord.
+pub fn row_to_export(row: &Row<'_>) -> SqlResult<MemoryExportRecord> {
     let tags_raw: String = row.get("tags")?;
     let tags: Vec<String> = serde_json::from_str(&tags_raw).unwrap_or_else(|_| vec![tags_raw]);
 
@@ -137,7 +146,14 @@ fn row_to_export(row: &Row<'_>) -> SqlResult<MemoryExportRecord> {
     })
 }
 
-fn resolve_database_path(explicit: Option<&PathBuf>) -> Result<PathBuf> {
+/// Resolve the local-memory database path.
+///
+/// Resolution order:
+/// 1. Explicit path if provided
+/// 2. `LOCAL_MEMORY_HOME` environment variable
+/// 3. Config file at `~/.local-memory/config.yaml`
+/// 4. Default path `~/.local-memory/unified-memories.db`
+pub fn resolve_database_path(explicit: Option<&PathBuf>) -> Result<PathBuf> {
     if let Some(path) = explicit {
         return Ok(path.clone());
     }
