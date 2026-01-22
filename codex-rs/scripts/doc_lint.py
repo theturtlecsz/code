@@ -33,14 +33,30 @@ from typing import Optional
 # Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 
-REPO_ROOT = Path(__file__).parent.parent
+REPO_ROOT = Path(__file__).parent.parent.parent  # codex-rs/scripts/ -> codex-rs/ -> repo root
 
 REQUIRED_FILES = {
     "SPEC.md": "Root task tracking and docs contract",
-    "docs/PROGRAM_2026Q1_ACTIVE.md": "Active program DAG and phase gates",
-    "docs/DECISION_REGISTER.md": "Locked decisions D1-D134",
-    "docs/MODEL-POLICY.md": "Human-readable model policy rationale",
+    "docs/PROGRAM.md": "Active specs, dependency DAG, sequencing gates",
+    "docs/DECISIONS.md": "Locked decisions register (D1-D134)",
+    "docs/POLICY.md": "Consolidated policy (model, gates, evidence, testing)",
+    "docs/SPEC-KIT.md": "Canonical spec-kit reference (commands, architecture)",
     "model_policy.toml": "Machine-authoritative model policy config",
+}
+
+# Canonical docs (≤9 core + navigation) - Session 12 consolidation
+CANONICAL_DOCS_ROOT = {
+    "docs/KEY_DOCS.md": "Canonical doc map",
+    "docs/INDEX.md": "Documentation index",
+    "docs/POLICY.md": "Consolidated policy",
+    "docs/OPERATIONS.md": "Consolidated operations",
+    "docs/ARCHITECTURE.md": "System architecture",
+    "docs/CONTRIBUTING.md": "Development workflow, fork management",
+    "docs/STAGE0-REFERENCE.md": "Stage 0 engine reference",
+    "docs/DECISIONS.md": "Locked decisions register",
+    "docs/PROGRAM.md": "Active specs and dependency DAG",
+    "docs/SPEC-KIT.md": "Spec-kit reference (CLI, architecture, quality gates)",
+    "docs/VISION.md": "Product identity and vision",
 }
 
 # Patterns that indicate wrong merge terminology
@@ -276,6 +292,44 @@ def check_replay_truth_table(result: LintResult, verbose: bool = False):
         )
 
 
+def check_canonical_docs(result: LintResult, verbose: bool = False):
+    """Check that only canonical docs exist in docs/ root (no sprawl)."""
+    if verbose:
+        print("Checking canonical docs (anti-sprawl)...")
+
+    docs_root = REPO_ROOT / "docs"
+    if not docs_root.exists():
+        result.add_error("docs/", None, "docs/ directory missing")
+        return
+
+    # Get all .md files in docs/ root (not subdirectories)
+    root_md_files = set(f.name for f in docs_root.glob("*.md"))
+    canonical_names = set(Path(p).name for p in CANONICAL_DOCS_ROOT.keys())
+
+    # Check for unexpected files (sprawl)
+    unexpected = root_md_files - canonical_names
+    if unexpected:
+        result.add_warning(
+            "docs/",
+            None,
+            f"Non-canonical docs in root (potential sprawl): {', '.join(sorted(unexpected))}"
+        )
+    elif verbose:
+        print(f"  ✓ No doc sprawl detected ({len(root_md_files)} canonical docs)")
+
+    # Check canonical docs exist
+    missing_canonical = canonical_names - root_md_files
+    for missing in missing_canonical:
+        result.add_error(
+            f"docs/{missing}",
+            None,
+            f"Canonical doc missing: {CANONICAL_DOCS_ROOT.get(f'docs/{missing}', 'unknown')}"
+        )
+
+    if verbose and not missing_canonical:
+        print(f"  ✓ All {len(canonical_names)} canonical docs present")
+
+
 def check_invariants_documented(result: LintResult, verbose: bool = False):
     """Check that key invariants are documented."""
     if verbose:
@@ -364,6 +418,7 @@ def run_all_checks(verbose: bool = False) -> LintResult:
     result = LintResult()
 
     check_required_files(result, verbose)
+    check_canonical_docs(result, verbose)
     check_spec_md_structure(result, verbose)
     check_policy_toml_schema(result, verbose)
     check_merge_terminology(result, verbose)

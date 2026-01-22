@@ -60,8 +60,7 @@
 
 **Design Documents**:
 
-* **SPEC-KIT-QUALITY-GATES.md** - Quality gates architecture, specification, configuration (consolidated)
-* **SPEC-KIT-ARCHITECTURE.md** - Multi-agent architecture, tiered model strategy, consensus workflow, hermetic isolation (consolidated)
+* **SPEC-KIT.md** - Canonical spec-kit reference (commands, execution model, quality gates, architecture)
 
 ***
 
@@ -86,7 +85,7 @@
 
 | Document                              | Purpose                                             |
 | ------------------------------------- | --------------------------------------------------- |
-| **SPEC-KIT-CLI.md**                   | CLI reference (commands, options, CI/CD)            |
+| **SPEC-KIT.md**                       | Canonical spec-kit reference (commands, workflows)  |
 | **OPERATIONS.md**                     | Agent behavioral guidance + configuration reference |
 | **spec-auto-automation.md**           | Spec-kit automation workflows                       |
 | **spec-auto-full-automation-plan.md** | Full automation implementation                      |
@@ -143,9 +142,7 @@
 
 **Quality Gates**:
 
-* Overview: QUALITY\_GATES\_DESIGN.md
-* Details: QUALITY\_GATES\_SPECIFICATION.md
-* Config: QUALITY\_GATES\_CONFIGURATION.md
+* Reference: SPEC-KIT.md (Execution Model, Policies and Capture sections)
 
 **Evidence**:
 
