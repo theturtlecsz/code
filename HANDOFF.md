@@ -1,204 +1,151 @@
-# Session 35 Prompt - GPU Activation & Source Registry
+# Documentation Consolidation Handoff
 
-**Last updated:** 2026-01-04
-**Status:** S35 Active - RTX 5090 INSTALLED ✅
-**Primary SPEC:** SPEC-SOURCE-MGMT + GPU Activation
+**Last updated:** 2026-01-22
+**Status:** Session 6 Complete - Stage0 Slice Done
+**Mission:** Reduce docs sprawl to ≤9 canonical docs under /docs
 
----
+***
 
-## 🎉 MILESTONE: RTX 5090 32GB Installed
+## Session Summary
 
-**Verified:** 2026-01-04
+| Session | Slice        | Canonical Created                | Compression | Status         |
+| ------- | ------------ | -------------------------------- | ----------- | -------------- |
+| 3       | Policy       | POLICY.md                        | 76%         | ✅ Committed    |
+| 4       | Operations   | OPERATIONS.md                    | 32%         | ✅ Committed    |
+| 5       | Architecture | ARCHITECTURE.md, CONTRIBUTING.md | 66%         | ✅ Committed    |
+| **6**   | **Stage0**   | **STAGE0-REFERENCE.md**          | **52%**     | ✅ **COMPLETE** |
 
-```
-NVIDIA GeForce RTX 5090
-├── VRAM: 32607 MiB (32GB)
-├── Driver: 580.105.08
-├── CUDA: 13.0
-└── Status: Idle, ready for workloads
-```
+***
 
-### What This Unlocks
+## Current State
 
-| Blocked Task | Previous State | Now Possible |
-|--------------|---------------|--------------|
-| **vLLM runtime** | Not possible (no GPU) | Default runtime per MODEL-POLICY.md |
-| **fast_local tier** | Ollama CPU (4.67s latency) | 14B planner + 32B coder on GPU |
-| **Stage 0 IQO** | qwen2.5:3b CPU (4.67s) | GPU-accelerated inference (<100ms) |
-| **Embeddings (bge-m3)** | CPU-only | GPU acceleration |
-| **Template Guardian** | CPU batch processing | Real-time GPU inference |
+### Canonical Docs (5 of 9 complete)
 
-### Revised Routing Philosophy (MODEL-POLICY.md v2.0.0)
+| # | Canonical Doc              | Lines   | Status              |
+| - | -------------------------- | ------- | ------------------- |
+| 1 | `docs/POLICY.md`           | \~320   | ✅ Complete          |
+| 2 | `docs/OPERATIONS.md`       | \~818   | ✅ Complete (v1.1.0) |
+| 3 | `docs/ARCHITECTURE.md`     | \~395   | ✅ Complete          |
+| 4 | `docs/CONTRIBUTING.md`     | \~387   | ✅ Complete          |
+| 5 | `docs/STAGE0-REFERENCE.md` | \~1,189 | ✅ Complete          |
+| 6 | `docs/INDEX.md`            | \~231   | ✅ Exists (extended) |
+| 7 | `docs/KEY_DOCS.md`         | \~62    | ✅ Exists (extended) |
+| 8 | `docs/GOLDEN_PATH.md`      | \~230   | 🔄 Exists           |
+| 9 | `docs/DECISIONS.md`        | TBD     | ⏳ Pending           |
 
-**Core Principle**: "Cloud where quality wins, Local where speed wins"
+### Active Redirect Stubs (22 total, all sunset 2026-02-21)
 
-| Lane | Default | Why |
-|------|---------|-----|
-| **Architect/Planner** | Cloud (Sonnet/GPT) | Quality wins for deep reasoning |
-| **Serious Implementer** | Cloud (DeepSeek/Sonnet) | Quality wins for multi-file refactors |
-| **Judge/Auditor** | Cloud (GPT-5.1 High) | Always cloud for governance |
-| **Tutor** | Local (MoE) | Speed wins for interactive coaching |
-| **Reflex Implementer** | Local (MoE) | Speed wins for small patches, tool loops |
-| **Librarian** | Local + Kimi escalation | Speed wins routine, cloud for hard sweeps |
-| **Embeddings** | Local | Always local (infrastructure) |
+**Policy (4):** MODEL-POLICY.md, GATE\_POLICY.md, evidence-policy.md, testing-policy.md
+**Operations (2):** OPERATIONAL-PLAYBOOK.md, config.md
+**Architecture (5):** TUI.md, async-sync-boundaries.md, chatwidget-structure.md, SPEC-KIT-900-ARCHITECTURE-ANALYSIS.md, CONTRIBUTING.md (root)
+**Stage0 (11):** All 11 files in docs/stage0/
 
-### Priority: vLLM Setup Tasks (Simplified)
+***
 
-| Order | Task | Status | Notes |
-|-------|------|--------|-------|
-| 1 | Install vLLM + CUDA dependencies | Pending | `pip install vllm` (Python 3.10+) |
-| 2 | Download Qwen3-Coder-30B-A3B-Instruct (AWQ 4-bit) | Pending | Single model for all local lanes |
-| 3 | Configure vLLM server | Pending | OpenAI-compatible API on localhost:8000 |
-| 4 | Wire TUI to vLLM endpoint | Pending | Update model router for local_reflex tier |
-| 5 | Benchmark local_reflex latency | Pending | Target: <200ms (MoE efficiency) |
+## Session 6 Results
 
-### Model Selection (MODEL-POLICY.md §6 - Single Model Strategy)
+### Files Created/Modified
 
-```
-local_reflex tier (ONE model serves all local lanes):
-├── Qwen3-Coder-30B-A3B-Instruct (MoE)
-│   ├── Total params: 30.5B
-│   ├── Activated params: 3.3B (fast inference)
-│   ├── Context: 262,144 tokens
-│   ├── VRAM: ~12-16GB with AWQ 4-bit
-│   └── Use: Tutor, Reflex Implementer, Librarian
-│
-└── Why single model?
-    ├── No swapping overhead
-    ├── One vLLM server, always warm
-    ├── MoE = high capability, low latency
-    └── Cloud handles quality-sensitive work
-```
+| File                                      | Action              | Lines     |
+| ----------------------------------------- | ------------------- | --------- |
+| `docs/STAGE0-REFERENCE.md`                | Created             | \~1,189   |
+| `docs/OPERATIONS.md`                      | Extended (Part III) | +\~150    |
+| 11 stage0 redirect stubs                  | Created             | \~15 each |
+| `docs/INDEX.md`                           | Updated             | +1 row    |
+| `docs/KEY_DOCS.md`                        | Updated             | +1 row    |
+| `docs/_work/session_report_20260122_6.md` | Created             | \~200     |
 
----
+### Compression Results
 
-## Session 34 Accomplishments
+| Source                 | Original    | Consolidated  | Reduction |
+| ---------------------- | ----------- | ------------- | --------- |
+| Stage0 docs (11 files) | 3,119 lines | \~1,504 lines | 52%       |
 
-| Item | Status | Location |
-|------|--------|----------|
-| CLI delete-source bug | ✅ FIXED & VERIFIED | service-client.ts:627-631 |
-| Upsert title return | ✅ FIXED & VERIFIED | sources.ts:389-418 |
-| Off-by-one delete | ✅ FIXED & VERIFIED | sources.ts:361 |
-| Source registry schema | Designed | `docs/SPEC-SOURCE-MGMT/spec.md` |
-| Source cleanup | Done | 13 → 5 sources |
+***
 
----
+## Next Session Tasks
 
-## Bugs Fixed in notebooklm-client (All Verified)
+1. [ ] Commit Session 6 migration
+2. [ ] Pick next slice: `DECISION_REGISTER.md` → `docs/DECISIONS.md`
+3. [ ] Continue pattern: migrate → redirect stubs → update INDEX
 
-### 1. CLI delete-source "Invalid JSON response" ✅ FIXED
+### Recommended Next Slice: DECISIONS.md
 
-**Fix applied (service-client.ts:627-631):**
-```typescript
-if (body) {
-  const bodyStr = JSON.stringify(body);
-  req.setHeader("Content-Length", Buffer.byteLength(bodyStr).toString());
-  req.write(bodyStr);
-}
-```
+* Rename `DECISION_REGISTER.md` → `docs/DECISIONS.md`
+* Add version header, ToC, change history
+* Update INDEX.md and KEY\_DOCS.md references
 
-**Verified:** `notebooklm delete-source -i 2 --json` returns valid JSON
+***
 
-### 2. Upsert returns NLM-generated title ✅ FIXED + REFINED
+## Infrastructure
 
-**Initial fix (sources.ts:389-418):**
-- Added `listSources()` call after adding source
-- Returns `nlmTitle` field
-
-**Refinement applied (sources.ts:389-435):**
-- Before/after source comparison for reliable title discovery
-- Compares source list before vs after add
-- Finds new sources by title difference
-- Correctly returns NLM-generated title even when unpredictable
-
-**Verified:** Input "S34_FINAL_TEST" → returns "The Final Synthesis of Source Comparison"
-
-**Remaining limitation:** Upsert delete fuzzy matching still fails when NLM titles lack matching words. Registry needed for reliable updates.
-
-### 3. Off-by-one in upsert delete ✅ FIXED
-
-**Fix applied (sources.ts:361):**
-```typescript
-// Removed incorrect -1 offset
-await sourceManager.deleteSource(notebookUrl, existingSource.index, {...})
-```
-
-**Verified:** Delete works correctly with 1-based index
-
----
-
-## Source Registry Implementation (S35)
-
-### Phase 1: Prerequisites ✅ COMPLETE
-
-All bugs fixed and verified. Ready for registry implementation.
-
-### Phase 2: Add better-sqlite3 to notebooklm-client
+### Archive Tool
 
 ```bash
-cd ~/notebooklm-client
-npm install better-sqlite3
-npm install -D @types/better-sqlite3
+scripts/docs-archive-pack.sh create|list|extract|verify <dir>
 ```
 
-### Phase 3: Implement SourceRegistry class
+### Doc Lint
 
-**Location:** `~/notebooklm-client/src/sources/source-registry.ts`
-
-**Schema:** See `~/code/docs/SPEC-SOURCE-MGMT/spec.md`
-
-### Phase 4: Integrate with handleUpsertSource
-
-1. Lookup existing source by (notebook_id, spec_id, source_type)
-2. If found, delete by stored notebooklm_title
-3. After add, update registry with new title
-
----
-
-## Current Source State
-
-```
-Sources in notebook (5 total):
-  1. Divine Truth Tier 2 SPEC Analysis Framework [ready]
-  2. Golden Path Dogfooding Validation: Stage0 Verification Spec [ready]
-  3. Protocol for Active Testing Specifications [ready]
-  4. The Codex TUI Dogfooding Protocol [ready]
-  5. Golden Path Dogfooding Validation: SPEC-DOGFOOD-001 [ready]
+```bash
+python scripts/doc_lint.py
 ```
 
-**Static sources (don't delete):** 1, 3, 4
-**Dynamic sources (managed by registry):** 2, 5
+### Session Reports
 
----
+```
+docs/_work/session_report_20260122_6.md
+docs/_work/docs_manifest_20260121_*.json
+```
+
+***
 
 ## Key Files
 
-| Location | Purpose |
-|----------|---------|
-| `~/code/docs/SPEC-SOURCE-MGMT/spec.md` | Registry architecture spec |
-| `~/notebooklm-client/src/client/service-client.ts` | HTTP client (Content-Length fix) |
-| `~/notebooklm-client/src/service/handlers/sources.ts` | Upsert handler (title return) |
-| `~/notebooklm-client/src/sources/source-deleter.ts` | Delete implementation |
+| File                             | Purpose                     |
+| -------------------------------- | --------------------------- |
+| `docs/INDEX.md`                  | Master navigation hub       |
+| `docs/KEY_DOCS.md`               | Canonical doc map           |
+| `docs/_work/docs_mapping.md`     | Migration mapping decisions |
+| `docs/_work/docs_inventory.json` | Full file inventory         |
+| `scripts/docs-archive-pack.sh`   | Archive tooling             |
 
----
+***
 
-## Commits (S34)
+## Restart Prompt (Session 7)
 
-| Commit | Description |
-|--------|-------------|
-| (pending) | docs: SPEC-SOURCE-MGMT and S34 milestone |
-
----
-
-## Test Results
-
-All fixes verified:
-```bash
-# Delete-source CLI works
-notebooklm delete-source -i 2 --json
-# Returns: {"success": true, "data": {"deletedTitle": "..."}}
-
-# Upsert returns NLM title
-curl -X POST ".../api/sources/upsert" -d '{"name": "...", "content": "..."}'
-# Returns: {"data": {"nlmTitle": "...", "action": "created"}}
 ```
+Continue Documentation Consolidation Session 7 (DECISIONS Slice)
+
+## Context
+- 5 of 9 canonical docs complete (POLICY, OPERATIONS, ARCHITECTURE, CONTRIBUTING, STAGE0-REFERENCE)
+- 22 redirect stubs active (sunset 2026-02-21)
+- Next target: DECISION_REGISTER.md → DECISIONS.md
+
+## Todo
+1. Rename/migrate DECISION_REGISTER.md to docs/DECISIONS.md
+2. Add version header, ToC, change history
+3. Create redirect stub for original
+4. Update INDEX.md and KEY_DOCS.md
+5. Run doc_lint.py validation
+6. Create session report
+
+## Key Files to Read
+- docs/_work/session_report_20260122_6.md (previous session)
+- DECISION_REGISTER.md (source file)
+- docs/INDEX.md (update)
+- docs/KEY_DOCS.md (update)
+
+## Acceptance Criteria
+- DECISIONS.md has version header and ToC
+- Original DECISION_REGISTER.md converted to redirect stub
+- doc_lint.py passes
+```
+
+***
+
+## Notes
+
+* GOLDEN\_PATH.md is for Memvid-first user workflows, NOT stage0 implementation
+* Stage0 docs are technical specs for DCC/Tier2 layer
+* Don't merge stage0 into GOLDEN\_PATH - they serve different purposes
