@@ -1,5 +1,21 @@
 # Documentation Index
 
+## Canonical Docs (Source of Truth)
+
+* `INDEX.md` (this file)
+* `KEY_DOCS.md`
+* `VISION.md`
+* `ARCHITECTURE.md`
+* `POLICY.md`
+* `DECISIONS.md`
+* `PROGRAM.md`
+* `OPERATIONS.md`
+* `STAGE0-REFERENCE.md`
+* `SPEC-KIT.md`
+* `CONTRIBUTING.md`
+
+***
+
 ## 2026-Q1 Active Program (authoritative)
 
 * `PROGRAM.md` — **pinned active specs + dependency DAG + sequencing gates**
