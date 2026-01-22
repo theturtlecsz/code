@@ -43,3 +43,8 @@ jobs:
 
       - name: Docs link check
         run: python3 scripts/check_doc_links.py
+
+      - name: Doc contract lint
+        run: |
+          cd codex-rs
+          python3 scripts/doc_lint.py --verbose

@@ -22,6 +22,7 @@ Checks performed:
 """
 
 import argparse
+import datetime
 import os
 import re
 import sys
@@ -58,6 +59,24 @@ CANONICAL_DOCS_ROOT = {
     "docs/SPEC-KIT.md": "Spec-kit reference (CLI, architecture, quality gates)",
     "docs/VISION.md": "Product identity and vision",
 }
+
+# Migration docs (temporary, must have expiry header)
+# Format: {relative_path: {"expires": "YYYY-MM-DD", "owner": "session/person", "reason": "..."}}
+# When adding a migration doc:
+#   1. Add it here with expiry date
+#   2. Add header to doc: <!-- MIGRATION_TEMP: expires=YYYY-MM-DD owner=... -->
+#   3. When expired, lint fails until doc is archived/promoted/extended
+MIGRATION_ALLOWLIST = {
+    # Example:
+    # "docs/MERGE_BUFFER.md": {
+    #     "expires": "2026-02-15",
+    #     "owner": "Session-13",
+    #     "reason": "Temporary buffer for Stage0 consolidation"
+    # },
+}
+
+# Header pattern for migration docs
+MIGRATION_HEADER_PATTERN = r"<!--\s*MIGRATION_TEMP:\s*expires=(\d{4}-\d{2}-\d{2})"
 
 # Patterns that indicate wrong merge terminology
 WRONG_MERGE_TERMS = [
@@ -293,7 +312,7 @@ def check_replay_truth_table(result: LintResult, verbose: bool = False):
 
 
 def check_canonical_docs(result: LintResult, verbose: bool = False):
-    """Check that only canonical docs exist in docs/ root (no sprawl)."""
+    """Check that only allowlisted docs exist in docs/ root (no sprawl)."""
     if verbose:
         print("Checking canonical docs (anti-sprawl)...")
 
@@ -305,17 +324,19 @@ def check_canonical_docs(result: LintResult, verbose: bool = False):
     # Get all .md files in docs/ root (not subdirectories)
     root_md_files = set(f.name for f in docs_root.glob("*.md"))
     canonical_names = set(Path(p).name for p in CANONICAL_DOCS_ROOT.keys())
+    migration_names = set(Path(p).name for p in MIGRATION_ALLOWLIST.keys())
+    all_allowed = canonical_names | migration_names
 
-    # Check for unexpected files (sprawl)
-    unexpected = root_md_files - canonical_names
+    # Check for unexpected files (sprawl) - ERROR, not warning
+    unexpected = root_md_files - all_allowed
     if unexpected:
-        result.add_warning(
+        result.add_error(
             "docs/",
             None,
-            f"Non-canonical docs in root (potential sprawl): {', '.join(sorted(unexpected))}"
+            f"Non-allowlisted docs in root (sprawl): {', '.join(sorted(unexpected))}"
         )
     elif verbose:
-        print(f"  ✓ No doc sprawl detected ({len(root_md_files)} canonical docs)")
+        print(f"  ✓ No doc sprawl detected ({len(root_md_files)} docs in allowlist)")
 
     # Check canonical docs exist
     missing_canonical = canonical_names - root_md_files
@@ -328,6 +349,106 @@ def check_canonical_docs(result: LintResult, verbose: bool = False):
 
     if verbose and not missing_canonical:
         print(f"  ✓ All {len(canonical_names)} canonical docs present")
+
+
+def check_migration_docs(result: LintResult, verbose: bool = False):
+    """Check migration docs have valid headers and are not expired."""
+    if verbose:
+        print("Checking migration docs...")
+
+    if not MIGRATION_ALLOWLIST:
+        if verbose:
+            print("  ✓ No migration docs configured")
+        return
+
+    today = datetime.date.today()
+
+    for rel_path, meta in MIGRATION_ALLOWLIST.items():
+        full_path = REPO_ROOT / rel_path
+
+        # Check file exists
+        if not full_path.exists():
+            result.add_warning(
+                rel_path,
+                None,
+                "Migration doc in allowlist but missing (can remove from MIGRATION_ALLOWLIST)"
+            )
+            continue
+
+        # Check expiry
+        expires_str = meta.get("expires", "")
+        if expires_str:
+            try:
+                expires = datetime.date.fromisoformat(expires_str)
+                if today > expires:
+                    result.add_error(
+                        rel_path,
+                        None,
+                        f"Migration doc EXPIRED on {expires_str}. Archive or extend expiry."
+                    )
+                elif verbose:
+                    days_left = (expires - today).days
+                    print(f"  ✓ {Path(rel_path).name} expires in {days_left} days")
+            except ValueError:
+                result.add_error(
+                    rel_path,
+                    None,
+                    f"Invalid expiry date format: {expires_str} (use YYYY-MM-DD)"
+                )
+        else:
+            result.add_error(
+                rel_path,
+                None,
+                "Migration doc missing 'expires' in MIGRATION_ALLOWLIST"
+            )
+
+        # Check MIGRATION_TEMP header in file content
+        content = full_path.read_text()
+        if not re.search(MIGRATION_HEADER_PATTERN, content):
+            result.add_warning(
+                rel_path,
+                None,
+                "Migration doc missing MIGRATION_TEMP header (add: <!-- MIGRATION_TEMP: expires=YYYY-MM-DD -->)"
+            )
+
+
+def check_index_canonical_listing(result: LintResult, verbose: bool = False):
+    """Check INDEX.md lists all canonical docs and references Decision Register."""
+    if verbose:
+        print("Checking INDEX.md canonical listing...")
+
+    index_path = REPO_ROOT / "docs" / "INDEX.md"
+    if not index_path.exists():
+        result.add_error("docs/INDEX.md", None, "INDEX.md missing")
+        return
+
+    content = index_path.read_text()
+
+    # Check each canonical doc is linked
+    missing = []
+    for doc_path in CANONICAL_DOCS_ROOT.keys():
+        doc_name = Path(doc_path).name
+        if doc_name not in content:
+            missing.append(doc_name)
+
+    if missing:
+        result.add_error(
+            "docs/INDEX.md",
+            None,
+            f"Canonical docs not listed: {', '.join(missing)}"
+        )
+    elif verbose:
+        print(f"  ✓ All {len(CANONICAL_DOCS_ROOT)} canonical docs referenced in INDEX")
+
+    # Check Decision Register reference
+    if not re.search(r"DECISIONS\.md|decision\s+register", content, re.IGNORECASE):
+        result.add_error(
+            "docs/INDEX.md",
+            None,
+            "Decision Register (DECISIONS.md) not referenced"
+        )
+    elif verbose:
+        print("  ✓ Decision Register referenced")
 
 
 def check_invariants_documented(result: LintResult, verbose: bool = False):
@@ -419,6 +540,8 @@ def run_all_checks(verbose: bool = False) -> LintResult:
 
     check_required_files(result, verbose)
     check_canonical_docs(result, verbose)
+    check_migration_docs(result, verbose)
+    check_index_canonical_listing(result, verbose)
     check_spec_md_structure(result, verbose)
     check_policy_toml_schema(result, verbose)
     check_merge_terminology(result, verbose)
