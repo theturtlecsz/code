@@ -2,8 +2,8 @@
 
 ## 2026-Q1 Active Program (authoritative)
 
-* `PROGRAM_2026Q1_ACTIVE.md` — **pinned active specs + dependency DAG + sequencing gates**
-* `DECISION_REGISTER.md` — locked decisions (D1–D112)
+* `PROGRAM.md` — **pinned active specs + dependency DAG + sequencing gates**
+* `DECISIONS.md` — locked decisions (D1–D134)
 * `POLICY.md` — consolidated policy (model, gates, evidence, testing)
 * `MEMVID_FIRST_WORKBENCH.md` — architecture + ADRs for the Memvid-first workbench
 * `GOLDEN_PATH.md` — end-to-end walkthrough (what “good” looks like)
@@ -58,12 +58,10 @@
 | **IMPLEMENTATION\_CONSENSUS.md** | Implementation details                                           | ✅ Reference            |
 | **CONTRIBUTING.md**              | Fork workflow, rebase strategy, deviation tracking               | ✅ Current (2026-01-21) |
 
-**Design Documents** (in spec-kit/):
+**Design Documents**:
 
-* **QUALITY\_GATES\_DESIGN.md** - Quality gate architecture
-* **QUALITY\_GATES\_SPECIFICATION.md** - Detailed specifications
-* **consensus-runner-design.md** - Consensus automation
-* **model-strategy.md** - Tiered model strategy (Tier 0-4)
+* **SPEC-KIT-QUALITY-GATES.md** - Quality gates architecture, specification, configuration (consolidated)
+* **SPEC-KIT-ARCHITECTURE.md** - Multi-agent architecture, tiered model strategy, consensus workflow, hermetic isolation (consolidated)
 
 ***
 
@@ -88,12 +86,12 @@
 
 | Document                              | Purpose                                             |
 | ------------------------------------- | --------------------------------------------------- |
+| **SPEC-KIT-CLI.md**                   | CLI reference (commands, options, CI/CD)            |
 | **OPERATIONS.md**                     | Agent behavioral guidance + configuration reference |
 | **spec-auto-automation.md**           | Spec-kit automation workflows                       |
 | **spec-auto-full-automation-plan.md** | Full automation implementation                      |
 | **MIGRATION\_GUIDE.md**               | Migration patterns and examples                     |
 | **ensemble-run-checklist.md**         | Multi-agent run checklist                           |
-| **new-spec-command.md**               | Creating new spec commands                          |
 | **COMMAND\_REGISTRY\_DESIGN.md**      | Command registry architecture                       |
 | **telemetry-schema-v2.md**            | Telemetry schema specification                      |
 | **CONFLICT\_RESOLUTION.md**           | Consensus conflict handling                         |
