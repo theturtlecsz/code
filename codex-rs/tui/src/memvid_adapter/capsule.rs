@@ -2591,6 +2591,10 @@ impl CapsuleHandle {
     }
 
     /// Collect events matching the export filter.
+    ///
+    /// ## S974-009: Safe Export Filtering
+    /// When `options.safe_mode` is true, ModelCallEnvelope events with
+    /// `capture_mode == FullIo` are excluded (may contain sensitive data).
     fn collect_export_events(&self, options: &ExportOptions) -> Vec<RunEventEnvelope> {
         let all_events = self.events.read().unwrap();
 
@@ -2615,6 +2619,21 @@ impl CapsuleHandle {
                         return false;
                     }
                 }
+
+                // S974-009: Filter unsafe model I/O in safe_mode
+                if options.safe_mode && ev.event_type == EventType::ModelCallEnvelope {
+                    // Deserialize payload to check capture mode
+                    if let Ok(payload) =
+                        serde_json::from_value::<ModelCallEnvelopePayload>(ev.payload.clone())
+                    {
+                        if !payload.capture_mode.is_export_safe() {
+                            // FullIo capture mode is not safe for export
+                            return false;
+                        }
+                    }
+                    // If deserialization fails, include the event (conservative)
+                }
+
                 true
             })
             .cloned()

@@ -39,6 +39,7 @@ use codex_spec_kit::executor::{
     render_review_dashboard, render_status_dashboard, review_warning, status_degraded_warning,
 };
 use codex_tui::memvid_adapter::{
+    BranchId,
     CapsuleConfig,
     CapsuleError,
     CapsuleHandle,
@@ -48,6 +49,7 @@ use codex_tui::memvid_adapter::{
     DiagnosticResult,
     EdgeType,
     EventType,
+    ExportOptions,
     FactValueType,
     LogicEdgeV1,
     LogicalUri,
@@ -487,7 +489,6 @@ pub struct RunArgs {
     pub json: bool,
 
     // === SPEC-KIT-920: Headless maieutic input ===
-
     /// Path to maieutic spec file (JSON or Markdown with YAML frontmatter)
     ///
     /// Required when --execute is used in headless mode.
@@ -722,7 +723,15 @@ pub struct CapsuleEventsArgs {
 
 /// Arguments for `capsule export`
 ///
-/// SPEC-KIT-971: Export capsule to per-run archive.
+/// S974-010: Export capsule to .mv2/.mv2e file.
+///
+/// ## Defaults (locked decisions)
+/// - Encryption ON (D8) - produces .mv2e
+/// - Safe mode ON (D23) - excludes raw LLM I/O
+/// - Output path per D2: ./docs/specs/<SPEC_ID>/runs/<RUN_ID>/capsule.mv2e
+///
+/// ## Legacy support
+/// Use `--format json-dir` to export to JSON directory (old behavior).
 #[derive(Debug, Parser)]
 pub struct CapsuleExportArgs {
     /// Spec ID to export
@@ -733,11 +742,42 @@ pub struct CapsuleExportArgs {
     #[arg(long = "run", short = 'r', value_name = "RUN-ID")]
     pub run_id: String,
 
-    /// Output directory for the export (default: .speckit/exports/)
+    /// Output path for the export
+    /// Default: ./docs/specs/<SPEC_ID>/runs/<RUN_ID>/capsule.mv2e (per D2)
     #[arg(long = "out", short = 'o', value_name = "PATH")]
     pub out: Option<PathBuf>,
 
-    /// Output as JSON instead of text
+    /// Enable encryption (produces .mv2e instead of .mv2)
+    /// Default: true (per D8)
+    #[arg(long = "encrypt", default_value = "true", action = clap::ArgAction::SetTrue)]
+    pub encrypt: bool,
+
+    /// Disable encryption (produces .mv2 instead of .mv2e)
+    #[arg(long = "no-encrypt", conflicts_with = "encrypt")]
+    pub no_encrypt: bool,
+
+    /// Safe export mode: exclude raw LLM I/O regardless of capture mode
+    /// Default: true (per D23)
+    #[arg(long = "safe", default_value = "true", action = clap::ArgAction::SetTrue)]
+    pub safe: bool,
+
+    /// Unsafe export mode: include raw LLM I/O (full_io capture events)
+    #[arg(long = "unsafe", conflicts_with = "safe")]
+    pub unsafe_export: bool,
+
+    /// Allow interactive passphrase prompt (auto-detect TTY if not specified)
+    #[arg(long = "interactive")]
+    pub interactive: Option<bool>,
+
+    /// Disable interactive prompts (fail if passphrase not in SPECKIT_MEMVID_PASSPHRASE)
+    #[arg(long = "no-interactive", conflicts_with = "interactive")]
+    pub no_interactive: bool,
+
+    /// Export format: mv2 (default) or json-dir (legacy)
+    #[arg(long = "format", short = 'f', value_name = "FORMAT", default_value = "mv2")]
+    pub format: String,
+
+    /// Output as JSON instead of text (for CLI output, not export format)
     #[arg(long = "json", short = 'j')]
     pub json: bool,
 }
@@ -3341,8 +3381,184 @@ fn run_capsule_events(capsule_path: &PathBuf, args: CapsuleEventsArgs) -> anyhow
 
 /// Run `capsule export` command
 ///
-/// SPEC-KIT-971: Export capsule to per-run archive.
+/// S974-010: Export capsule to .mv2/.mv2e file (default) or JSON directory (legacy).
+///
+/// ## Defaults (locked decisions)
+/// - Encryption ON (D8) - produces .mv2e
+/// - Safe mode ON (D23) - excludes raw LLM I/O
+/// - Output path per D2: ./docs/specs/<SPEC_ID>/runs/<RUN_ID>/capsule.mv2e
 fn run_capsule_export(capsule_path: &PathBuf, args: CapsuleExportArgs) -> anyhow::Result<()> {
+    // Dispatch to legacy JSON-dir export if requested
+    if args.format == "json-dir" {
+        return run_capsule_export_legacy_json(capsule_path, &args);
+    }
+
+    // Resolve encryption flag (--no-encrypt takes precedence)
+    let encrypt = !args.no_encrypt;
+
+    // Resolve safe mode flag (--unsafe takes precedence)
+    let safe_mode = !args.unsafe_export;
+
+    // Resolve interactive flag (auto-detect TTY if not specified)
+    let interactive = if args.no_interactive {
+        false
+    } else if let Some(val) = args.interactive {
+        val
+    } else {
+        // Auto-detect: interactive if stdout is a TTY
+        use std::io::IsTerminal;
+        std::io::stdout().is_terminal()
+    };
+
+    // Determine output path per D2: ./docs/specs/<SPEC_ID>/runs/<RUN_ID>/capsule.mv2e
+    let extension = if encrypt { "mv2e" } else { "mv2" };
+    let output_path = args.out.unwrap_or_else(|| {
+        PathBuf::from("docs")
+            .join("specs")
+            .join(&args.spec_id)
+            .join("runs")
+            .join(&args.run_id)
+            .join(format!("capsule.{}", extension))
+    });
+
+    // Ensure parent directory exists
+    if let Some(parent) = output_path.parent() {
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("Failed to create export directory: {e}"),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Failed to create export directory: {e}");
+            }
+            std::process::exit(capsule_exit::SYSTEM_ERROR);
+        }
+    }
+
+    // Open capsule for reading (need write access to emit CapsuleExported event)
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "cli".to_string(),
+        ..Default::default()
+    };
+
+    let handle = match CapsuleHandle::open(config) {
+        Ok(h) => h,
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("{e}"),
+                    "capsule_path": capsule_path.display().to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Failed to open capsule: {e}");
+            }
+            std::process::exit(capsule_exit::SYSTEM_ERROR);
+        }
+    };
+
+    // Build export options
+    let options = ExportOptions {
+        output_path: output_path.clone(),
+        spec_id: Some(args.spec_id.clone()),
+        run_id: Some(args.run_id.clone()),
+        branch: Some(BranchId::for_run(&args.run_id)),
+        safe_mode,
+        encrypt,
+        interactive,
+    };
+
+    // Execute export
+    match handle.export(&options) {
+        Ok(result) => {
+            let size_display = if result.bytes_written < 1024 {
+                format!("{} B", result.bytes_written)
+            } else if result.bytes_written < 1024 * 1024 {
+                format!("{:.1} KB", result.bytes_written as f64 / 1024.0)
+            } else {
+                format!("{:.2} MB", result.bytes_written as f64 / (1024.0 * 1024.0))
+            };
+
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exported": true,
+                    "format": "mv2",
+                    "output_path": result.output_path.display().to_string(),
+                    "spec_id": args.spec_id,
+                    "run_id": args.run_id,
+                    "bytes_written": result.bytes_written,
+                    "artifact_count": result.artifact_count,
+                    "checkpoint_count": result.checkpoint_count,
+                    "event_count": result.event_count,
+                    "content_hash": result.content_hash,
+                    "encrypted": encrypt,
+                    "safe_mode": safe_mode,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                println!(
+                    "Exported run {} / {} to {}",
+                    args.spec_id,
+                    args.run_id,
+                    result.output_path.display()
+                );
+                println!("  Format:      .{} ({})", extension, if encrypt { "encrypted" } else { "unencrypted" });
+                println!("  Safe mode:   {}", if safe_mode { "ON" } else { "OFF (includes raw LLM I/O)" });
+                println!("  Size:        {}", size_display);
+                println!("  Artifacts:   {}", result.artifact_count);
+                println!("  Checkpoints: {}", result.checkpoint_count);
+                println!("  Events:      {}", result.event_count);
+                println!("  Hash:        {}", &result.content_hash[..16]);
+            }
+            Ok(())
+        }
+        Err(CapsuleError::PassphraseRequired) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": "Passphrase required for encrypted export",
+                    "hint": "Set SPECKIT_MEMVID_PASSPHRASE env var or use --interactive",
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Passphrase required for encrypted export");
+                eprintln!("Hint: Set SPECKIT_MEMVID_PASSPHRASE env var or use --interactive");
+            }
+            std::process::exit(capsule_exit::USER_ERROR);
+        }
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("{e}"),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Export failed: {e}");
+            }
+            std::process::exit(capsule_exit::SYSTEM_ERROR);
+        }
+    }
+}
+
+/// Legacy JSON-dir export (--format json-dir)
+///
+/// Exports events and checkpoints as JSON files in a directory.
+/// Preserved for backward compatibility.
+fn run_capsule_export_legacy_json(
+    capsule_path: &PathBuf,
+    args: &CapsuleExportArgs,
+) -> anyhow::Result<()> {
     let config = CapsuleConfig {
         capsule_path: capsule_path.clone(),
         workspace_id: "cli".to_string(),
@@ -3384,8 +3600,8 @@ fn run_capsule_export(capsule_path: &PathBuf, args: CapsuleExportArgs) -> anyhow
         })
         .collect();
 
-    // Determine output path
-    let out_dir = args.out.unwrap_or_else(|| {
+    // Determine output path (legacy default: .speckit/exports/)
+    let out_dir = args.out.clone().unwrap_or_else(|| {
         capsule_path
             .parent()
             .unwrap_or(std::path::Path::new("."))
@@ -3460,6 +3676,7 @@ fn run_capsule_export(capsule_path: &PathBuf, args: CapsuleExportArgs) -> anyhow
             "schema_version": SCHEMA_VERSION,
             "tool_version": tool_version(),
             "exported": true,
+            "format": "json-dir",
             "export_path": export_path.display().to_string(),
             "spec_id": args.spec_id,
             "run_id": args.run_id,
@@ -3474,7 +3691,7 @@ fn run_capsule_export(capsule_path: &PathBuf, args: CapsuleExportArgs) -> anyhow
         println!("{}", serde_json::to_string_pretty(&json)?);
     } else {
         println!(
-            "Exported run {} / {} to {}",
+            "Exported run {} / {} to {} (legacy JSON format)",
             args.spec_id,
             args.run_id,
             export_path.display()

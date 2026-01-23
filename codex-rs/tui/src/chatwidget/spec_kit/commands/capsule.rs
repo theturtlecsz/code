@@ -55,17 +55,18 @@ impl SpecKitCommand for CapsuleDoctorCommand {
             "export" => execute_export(widget, &args),
             _ => {
                 let lines = vec![
-                    Line::from("📦 Capsule Commands (SPEC-KIT-971/974)"),
+                    Line::from("📦 Capsule Commands (SPEC-KIT-971/974/S974-010)"),
                     Line::from(""),
                     Line::from("/speckit.capsule doctor      # Verify capsule health"),
                     Line::from("/speckit.capsule stats       # Show size, frames, dedup ratio"),
                     Line::from("/speckit.capsule checkpoints # List all checkpoints"),
-                    Line::from(
-                        "/speckit.capsule commit --label <LABEL> # Create manual checkpoint",
-                    ),
-                    Line::from(
-                        "/speckit.capsule export --out <PATH> [--run <RUN_ID>] # Export to .mv2",
-                    ),
+                    Line::from("/speckit.capsule commit --label <LABEL> # Create manual checkpoint"),
+                    Line::from(""),
+                    Line::from("Export (S974-010):"),
+                    Line::from("/speckit.capsule export --spec <SPEC_ID> --run <RUN_ID> [options]"),
+                    Line::from("  --out <PATH>    Custom output path"),
+                    Line::from("  --no-encrypt    Produce .mv2 instead of .mv2e"),
+                    Line::from("  --unsafe        Include raw LLM I/O (full_io events)"),
                 ];
                 widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));
             }
@@ -344,33 +345,58 @@ fn execute_commit(widget: &mut ChatWidget, args: &str) {
 
 /// Execute the export subcommand.
 ///
-/// ## SPEC-KIT-974: Single-file .mv2 export MVP
+/// ## S974-010: Export capsule to .mv2/.mv2e file
 ///
 /// Usage:
-/// - `/speckit.capsule export --out <PATH>` - Export entire capsule
-/// - `/speckit.capsule export --out <PATH> --run <RUN_ID>` - Export specific run
-/// - `/speckit.capsule export --out <PATH> --spec <SPEC_ID>` - Export specific spec
+/// - `/speckit.capsule export --spec <SPEC_ID> --run <RUN_ID>` - Export with defaults
+/// - `/speckit.capsule export --spec <SPEC_ID> --run <RUN_ID> --out <PATH>` - Custom output path
+/// - `/speckit.capsule export --spec <SPEC_ID> --run <RUN_ID> --no-encrypt` - Unencrypted export
+/// - `/speckit.capsule export --spec <SPEC_ID> --run <RUN_ID> --unsafe` - Include raw LLM I/O
+///
+/// ## Defaults (locked decisions)
+/// - Encryption ON (D8) - produces .mv2e
+/// - Safe mode ON (D23) - excludes raw LLM I/O
+/// - Output path per D2: ./docs/specs/<SPEC_ID>/runs/<RUN_ID>/capsule.mv2e
 fn execute_export(widget: &mut ChatWidget, args: &str) {
     // Parse arguments
     let parts: Vec<&str> = args.split_whitespace().collect();
 
-    // Parse --out argument (required)
-    let output_path = if let Some(idx) = parts.iter().position(|&p| p == "--out") {
-        parts.get(idx + 1).map(|s| PathBuf::from(*s))
+    // Parse --spec argument (required)
+    let spec_id = if let Some(idx) = parts.iter().position(|&p| p == "--spec") {
+        parts.get(idx + 1).map(|s| s.to_string())
     } else {
         None
     };
 
-    let output_path = match output_path {
-        Some(p) => p,
-        None => {
+    // Parse --run argument (required)
+    let run_id = if let Some(idx) = parts.iter().position(|&p| p == "--run") {
+        parts.get(idx + 1).map(|s| s.to_string())
+    } else {
+        None
+    };
+
+    // Validate required arguments
+    let (spec_id, run_id) = match (spec_id, run_id) {
+        (Some(s), Some(r)) => (s, r),
+        _ => {
             widget.history_push(PlainHistoryCell::new(
                 vec![
-                    Line::from("Usage: /speckit.capsule export --out <PATH> [--run <RUN_ID>] [--spec <SPEC_ID>]"),
+                    Line::from("Usage: /speckit.capsule export --spec <SPEC_ID> --run <RUN_ID> [options]"),
+                    Line::from(""),
+                    Line::from("Required:"),
+                    Line::from("  --spec <SPEC_ID>    Spec ID to export"),
+                    Line::from("  --run <RUN_ID>      Run ID to export"),
+                    Line::from(""),
+                    Line::from("Options:"),
+                    Line::from("  --out <PATH>        Output path (default: ./docs/specs/<SPEC>/runs/<RUN>/capsule.mv2e)"),
+                    Line::from("  --encrypt           Enable encryption (default)"),
+                    Line::from("  --no-encrypt        Disable encryption (produces .mv2)"),
+                    Line::from("  --safe              Safe mode: exclude raw LLM I/O (default)"),
+                    Line::from("  --unsafe            Include raw LLM I/O (full_io events)"),
                     Line::from(""),
                     Line::from("Examples:"),
-                    Line::from("  /speckit.capsule export --out ./export.mv2"),
-                    Line::from("  /speckit.capsule export --out ./run-abc.mv2 --run abc123"),
+                    Line::from("  /speckit.capsule export --spec SPEC-KIT-974 --run run-001"),
+                    Line::from("  /speckit.capsule export --spec SPEC-KIT-974 --run run-001 --no-encrypt"),
                 ],
                 HistoryCellType::Error,
             ));
@@ -378,19 +404,42 @@ fn execute_export(widget: &mut ChatWidget, args: &str) {
         }
     };
 
-    // Parse optional --run argument
-    let run_id = if let Some(idx) = parts.iter().position(|&p| p == "--run") {
-        parts.get(idx + 1).map(|s| s.to_string())
+    // Parse optional --out argument
+    let output_path = if let Some(idx) = parts.iter().position(|&p| p == "--out") {
+        parts.get(idx + 1).map(|s| PathBuf::from(*s))
     } else {
         None
     };
 
-    // Parse optional --spec argument
-    let spec_id = if let Some(idx) = parts.iter().position(|&p| p == "--spec") {
-        parts.get(idx + 1).map(|s| s.to_string())
-    } else {
-        None
-    };
+    // Parse encryption flags (default: encrypt)
+    let no_encrypt = parts.iter().any(|&p| p == "--no-encrypt");
+    let encrypt = !no_encrypt;
+
+    // Parse safe mode flags (default: safe)
+    let unsafe_export = parts.iter().any(|&p| p == "--unsafe");
+    let safe_mode = !unsafe_export;
+
+    // Determine output path per D2: ./docs/specs/<SPEC_ID>/runs/<RUN_ID>/capsule.mv2e
+    let extension = if encrypt { "mv2e" } else { "mv2" };
+    let output_path = output_path.unwrap_or_else(|| {
+        PathBuf::from("docs")
+            .join("specs")
+            .join(&spec_id)
+            .join("runs")
+            .join(&run_id)
+            .join(format!("capsule.{}", extension))
+    });
+
+    // Ensure parent directory exists
+    if let Some(parent) = output_path.parent() {
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            widget.history_push(PlainHistoryCell::new(
+                vec![Line::from(format!("❌ Failed to create export directory: {}", e))],
+                HistoryCellType::Error,
+            ));
+            return;
+        }
+    }
 
     let capsule_path = get_capsule_path();
 
@@ -412,13 +461,16 @@ fn execute_export(widget: &mut ChatWidget, args: &str) {
 
     match CapsuleHandle::open(config) {
         Ok(handle) => {
+            use crate::memvid_adapter::BranchId;
+
             let options = ExportOptions {
                 output_path: output_path.clone(),
-                spec_id,
-                run_id,
-                branch: None,    // Could parse --branch if needed
-                safe_mode: true, // Default to safe mode per D23
-                ..Default::default()
+                spec_id: Some(spec_id.clone()),
+                run_id: Some(run_id.clone()),
+                branch: Some(BranchId::for_run(&run_id)),
+                safe_mode,
+                encrypt,
+                interactive: true, // TUI is always interactive
             };
 
             match handle.export(&options) {
@@ -431,10 +483,15 @@ fn execute_export(widget: &mut ChatWidget, args: &str) {
                         format!("{:.2} MB", result.bytes_written as f64 / (1024.0 * 1024.0))
                     };
 
+                    let encrypt_status = if encrypt { "encrypted (.mv2e)" } else { "unencrypted (.mv2)" };
+                    let safe_status = if safe_mode { "ON" } else { "OFF (includes raw LLM I/O)" };
+
                     let lines = vec![
-                        Line::from("✅ Capsule Exported (SPEC-KIT-974)"),
+                        Line::from("✅ Capsule Exported (S974-010)"),
                         Line::from(""),
                         Line::from(format!("   Output: {}", result.output_path.display())),
+                        Line::from(format!("   Format: {}", encrypt_status)),
+                        Line::from(format!("   Safe mode: {}", safe_status)),
                         Line::from(format!("   Size: {}", size_display)),
                         Line::from(format!("   Artifacts: {}", result.artifact_count)),
                         Line::from(format!("   Checkpoints: {}", result.checkpoint_count)),
@@ -447,10 +504,16 @@ fn execute_export(widget: &mut ChatWidget, args: &str) {
                     widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));
                 }
                 Err(e) => {
-                    widget.history_push(PlainHistoryCell::new(
-                        vec![Line::from(format!("❌ Export failed: {}", e))],
-                        HistoryCellType::Error,
-                    ));
+                    let error_msg = format!("{}", e);
+                    let mut lines = vec![Line::from(format!("❌ Export failed: {}", error_msg))];
+
+                    // Add hint for passphrase errors
+                    if error_msg.contains("assphrase") {
+                        lines.push(Line::from(""));
+                        lines.push(Line::from("Hint: Set SPECKIT_MEMVID_PASSPHRASE env var or use --no-encrypt"));
+                    }
+
+                    widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Error));
                 }
             }
         }
@@ -500,5 +563,123 @@ mod tests {
         assert_eq!(cmd.name(), "speckit.capsule");
         assert!(!cmd.requires_args());
         assert!(!cmd.is_prompt_expanding());
+    }
+
+    // =========================================================================
+    // S974-010: Export argument parsing tests
+    // =========================================================================
+
+    /// Helper to parse export args from a string
+    fn parse_export_args(args: &str) -> (Option<String>, Option<String>, Option<PathBuf>, bool, bool) {
+        let parts: Vec<&str> = args.split_whitespace().collect();
+
+        let spec_id = if let Some(idx) = parts.iter().position(|&p| p == "--spec") {
+            parts.get(idx + 1).map(|s| s.to_string())
+        } else {
+            None
+        };
+
+        let run_id = if let Some(idx) = parts.iter().position(|&p| p == "--run") {
+            parts.get(idx + 1).map(|s| s.to_string())
+        } else {
+            None
+        };
+
+        let output_path = if let Some(idx) = parts.iter().position(|&p| p == "--out") {
+            parts.get(idx + 1).map(|s| PathBuf::from(*s))
+        } else {
+            None
+        };
+
+        let no_encrypt = parts.iter().any(|&p| p == "--no-encrypt");
+        let encrypt = !no_encrypt;
+
+        let unsafe_export = parts.iter().any(|&p| p == "--unsafe");
+        let safe_mode = !unsafe_export;
+
+        (spec_id, run_id, output_path, encrypt, safe_mode)
+    }
+
+    #[test]
+    fn test_export_args_basic() {
+        let (spec_id, run_id, _, encrypt, safe_mode) =
+            parse_export_args("export --spec SPEC-974 --run run-001");
+        assert_eq!(spec_id, Some("SPEC-974".to_string()));
+        assert_eq!(run_id, Some("run-001".to_string()));
+        assert!(encrypt, "default should be encrypted");
+        assert!(safe_mode, "default should be safe mode");
+    }
+
+    #[test]
+    fn test_export_args_with_out_path() {
+        let (_, _, output_path, _, _) =
+            parse_export_args("export --spec SPEC-974 --run run-001 --out /tmp/export.mv2e");
+        assert_eq!(output_path, Some(PathBuf::from("/tmp/export.mv2e")));
+    }
+
+    #[test]
+    fn test_export_args_no_encrypt() {
+        let (_, _, _, encrypt, _) =
+            parse_export_args("export --spec SPEC-974 --run run-001 --no-encrypt");
+        assert!(!encrypt, "--no-encrypt should disable encryption");
+    }
+
+    #[test]
+    fn test_export_args_unsafe() {
+        let (_, _, _, _, safe_mode) =
+            parse_export_args("export --spec SPEC-974 --run run-001 --unsafe");
+        assert!(!safe_mode, "--unsafe should disable safe mode");
+    }
+
+    #[test]
+    fn test_export_args_all_flags() {
+        let (spec_id, run_id, output_path, encrypt, safe_mode) = parse_export_args(
+            "export --spec SPEC-974 --run run-001 --out /tmp/test.mv2 --no-encrypt --unsafe",
+        );
+        assert_eq!(spec_id, Some("SPEC-974".to_string()));
+        assert_eq!(run_id, Some("run-001".to_string()));
+        assert_eq!(output_path, Some(PathBuf::from("/tmp/test.mv2")));
+        assert!(!encrypt);
+        assert!(!safe_mode);
+    }
+
+    #[test]
+    fn test_export_default_output_path_encrypted() {
+        // Test D2 default path: ./docs/specs/<SPEC_ID>/runs/<RUN_ID>/capsule.mv2e
+        let spec_id = "SPEC-974";
+        let run_id = "run-001";
+        let encrypt = true;
+        let extension = if encrypt { "mv2e" } else { "mv2" };
+        let expected_path = PathBuf::from("docs")
+            .join("specs")
+            .join(spec_id)
+            .join("runs")
+            .join(run_id)
+            .join(format!("capsule.{}", extension));
+
+        assert_eq!(
+            expected_path,
+            PathBuf::from("docs/specs/SPEC-974/runs/run-001/capsule.mv2e")
+        );
+    }
+
+    #[test]
+    fn test_export_default_output_path_unencrypted() {
+        // Test D2 default path with --no-encrypt
+        let spec_id = "SPEC-974";
+        let run_id = "run-001";
+        let encrypt = false;
+        let extension = if encrypt { "mv2e" } else { "mv2" };
+        let expected_path = PathBuf::from("docs")
+            .join("specs")
+            .join(spec_id)
+            .join("runs")
+            .join(run_id)
+            .join(format!("capsule.{}", extension));
+
+        assert_eq!(
+            expected_path,
+            PathBuf::from("docs/specs/SPEC-974/runs/run-001/capsule.mv2")
+        );
     }
 }

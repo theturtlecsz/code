@@ -5891,3 +5891,291 @@ fn test_export_event_encrypted_flag() {
         std::env::remove_var("SPECKIT_MEMVID_PASSPHRASE");
     }
 }
+
+// =============================================================================
+// S974-009: Safe Export Filtering Tests
+// =============================================================================
+
+/// S974-009: safe_mode=true export excludes FullIo ModelCallEnvelope events.
+///
+/// ## Test Plan
+/// 1. Create capsule with artifacts and multiple ModelCallEnvelope events
+/// 2. Emit events with different capture modes (PromptsOnly and FullIo)
+/// 3. Export with safe_mode=true (default)
+/// 4. Verify FullIo events are NOT in the exported file
+/// 5. Verify PromptsOnly events ARE in the exported file
+#[test]
+#[serial_test::serial]
+fn test_safe_export_excludes_full_io_model_calls() {
+    use crate::memvid_adapter::capsule::ExportOptions;
+    use crate::memvid_adapter::types::{
+        EventType, LLMCaptureMode, ModelCallEnvelopePayload, RoutingMode,
+    };
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("safe_export_test.mv2");
+    let export_path = temp_dir.path().join("safe_export.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "safe_export_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config.clone()).expect("should create capsule");
+
+    let spec_id = "SPEC-974";
+    let run_id = "safe-export-test";
+
+    // Add artifact to ensure capsule has content
+    handle
+        .put(
+            spec_id,
+            run_id,
+            ObjectType::Artifact,
+            "test.md",
+            b"Test content".to_vec(),
+            serde_json::json!({}),
+        )
+        .expect("should put artifact");
+
+    // Emit PromptsOnly model call (should be included in safe export)
+    let prompts_only_call = ModelCallEnvelopePayload {
+        call_id: "safe-prompts-only".to_string(),
+        model: "test-model".to_string(),
+        routing_mode: RoutingMode::Cloud,
+        capture_mode: LLMCaptureMode::PromptsOnly,
+        stage: Some("Implement".to_string()),
+        role: Some("Implementer".to_string()),
+        prompt_hash: Some("hash1".to_string()),
+        response_hash: Some("hash2".to_string()),
+        prompt: Some("Test prompt".to_string()),
+        response: None, // Not captured in PromptsOnly mode
+        prompt_tokens: Some(50),
+        response_tokens: Some(100),
+        latency_ms: Some(500),
+        success: true,
+        error: None,
+    };
+    handle
+        .emit_model_call_envelope(spec_id, run_id, &prompts_only_call)
+        .expect("emit prompts_only mode call");
+
+    // Emit FullIo model call (should be EXCLUDED from safe export)
+    let full_io_call = ModelCallEnvelopePayload {
+        call_id: "unsafe-full-io".to_string(),
+        model: "test-model".to_string(),
+        routing_mode: RoutingMode::Reflex,
+        capture_mode: LLMCaptureMode::FullIo,
+        stage: Some("Implement".to_string()),
+        role: Some("Implementer".to_string()),
+        prompt_hash: Some("hash3".to_string()),
+        response_hash: Some("hash4".to_string()),
+        prompt: Some("Sensitive prompt".to_string()),
+        response: Some("Sensitive response".to_string()), // FullIo captures response
+        prompt_tokens: Some(100),
+        response_tokens: Some(200),
+        latency_ms: Some(1000),
+        success: true,
+        error: None,
+    };
+    handle
+        .emit_model_call_envelope(spec_id, run_id, &full_io_call)
+        .expect("emit full_io mode call");
+
+    // Commit to create checkpoint
+    handle
+        .commit_stage(spec_id, run_id, "implement", None)
+        .expect("should commit");
+
+    // Verify source capsule has both events
+    let all_events = handle.list_events();
+    let model_call_events: Vec<_> = all_events
+        .iter()
+        .filter(|e| e.event_type == EventType::ModelCallEnvelope)
+        .collect();
+    assert_eq!(
+        model_call_events.len(),
+        2,
+        "Source should have 2 model call events"
+    );
+
+    // Export with safe_mode=true (default)
+    let options = ExportOptions {
+        output_path: export_path.clone(),
+        spec_id: Some(spec_id.to_string()),
+        run_id: Some(run_id.to_string()),
+        safe_mode: true, // This is the default, but being explicit
+        ..Default::default()
+    };
+    let result = handle.export(&options).expect("should export");
+    assert!(export_path.exists(), "Export file should exist");
+    assert!(result.bytes_written > 0, "Export should have content");
+
+    // Reopen exported capsule and verify events
+    let export_config = CapsuleConfig {
+        capsule_path: export_path.clone(),
+        workspace_id: "safe_export_verify".to_string(),
+        ..Default::default()
+    };
+    let export_handle = CapsuleHandle::open_read_only(export_config).expect("should open export");
+
+    let export_events = export_handle.list_events();
+    let export_model_calls: Vec<_> = export_events
+        .iter()
+        .filter(|e| e.event_type == EventType::ModelCallEnvelope)
+        .collect();
+
+    // Should only have PromptsOnly event, not FullIo
+    assert_eq!(
+        export_model_calls.len(),
+        1,
+        "Safe export should only include 1 model call (PromptsOnly)"
+    );
+
+    // Verify the included event is the PromptsOnly one
+    let included_call_id = export_model_calls[0].payload.get("call_id");
+    assert_eq!(
+        included_call_id,
+        Some(&serde_json::json!("safe-prompts-only")),
+        "Included event should be the PromptsOnly call"
+    );
+}
+
+/// S974-009: safe_mode=false export includes both PromptsOnly and FullIo events.
+///
+/// ## Test Plan
+/// 1. Create capsule with ModelCallEnvelope events (PromptsOnly and FullIo)
+/// 2. Export with safe_mode=false
+/// 3. Verify BOTH event types are in the exported file
+#[test]
+#[serial_test::serial]
+fn test_unsafe_export_includes_all_model_calls() {
+    use crate::memvid_adapter::capsule::ExportOptions;
+    use crate::memvid_adapter::types::{
+        EventType, LLMCaptureMode, ModelCallEnvelopePayload, RoutingMode,
+    };
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("unsafe_export_test.mv2");
+    let export_path = temp_dir.path().join("unsafe_export.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "unsafe_export_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config.clone()).expect("should create capsule");
+
+    let spec_id = "SPEC-974";
+    let run_id = "unsafe-export-test";
+
+    // Add artifact
+    handle
+        .put(
+            spec_id,
+            run_id,
+            ObjectType::Artifact,
+            "test.md",
+            b"Test".to_vec(),
+            serde_json::json!({}),
+        )
+        .expect("should put artifact");
+
+    // Emit PromptsOnly model call
+    let prompts_only_call = ModelCallEnvelopePayload {
+        call_id: "prompts-only-001".to_string(),
+        model: "test-model".to_string(),
+        routing_mode: RoutingMode::Cloud,
+        capture_mode: LLMCaptureMode::PromptsOnly,
+        stage: Some("Implement".to_string()),
+        role: Some("Implementer".to_string()),
+        prompt_hash: Some("hash1".to_string()),
+        response_hash: Some("hash2".to_string()),
+        prompt: Some("Test prompt".to_string()),
+        response: None,
+        prompt_tokens: Some(50),
+        response_tokens: Some(100),
+        latency_ms: Some(500),
+        success: true,
+        error: None,
+    };
+    handle
+        .emit_model_call_envelope(spec_id, run_id, &prompts_only_call)
+        .expect("emit prompts_only call");
+
+    // Emit FullIo model call
+    let full_io_call = ModelCallEnvelopePayload {
+        call_id: "full-io-001".to_string(),
+        model: "test-model".to_string(),
+        routing_mode: RoutingMode::Reflex,
+        capture_mode: LLMCaptureMode::FullIo,
+        stage: Some("Implement".to_string()),
+        role: Some("Implementer".to_string()),
+        prompt_hash: Some("hash3".to_string()),
+        response_hash: Some("hash4".to_string()),
+        prompt: Some("Full prompt".to_string()),
+        response: Some("Full response".to_string()),
+        prompt_tokens: Some(100),
+        response_tokens: Some(200),
+        latency_ms: Some(1000),
+        success: true,
+        error: None,
+    };
+    handle
+        .emit_model_call_envelope(spec_id, run_id, &full_io_call)
+        .expect("emit full_io call");
+
+    // Commit
+    handle
+        .commit_stage(spec_id, run_id, "implement", None)
+        .expect("should commit");
+
+    // Export with safe_mode=false
+    let options = ExportOptions {
+        output_path: export_path.clone(),
+        spec_id: Some(spec_id.to_string()),
+        run_id: Some(run_id.to_string()),
+        safe_mode: false, // Disable safe mode
+        ..Default::default()
+    };
+    let result = handle.export(&options).expect("should export");
+    assert!(export_path.exists(), "Export file should exist");
+    assert!(result.bytes_written > 0, "Export should have content");
+
+    // Reopen exported capsule
+    let export_config = CapsuleConfig {
+        capsule_path: export_path.clone(),
+        workspace_id: "unsafe_export_verify".to_string(),
+        ..Default::default()
+    };
+    let export_handle = CapsuleHandle::open_read_only(export_config).expect("should open export");
+
+    let export_events = export_handle.list_events();
+    let export_model_calls: Vec<_> = export_events
+        .iter()
+        .filter(|e| e.event_type == EventType::ModelCallEnvelope)
+        .collect();
+
+    // Should have BOTH model call events
+    assert_eq!(
+        export_model_calls.len(),
+        2,
+        "Unsafe export should include both model calls"
+    );
+
+    // Verify both call IDs are present
+    let call_ids: Vec<_> = export_model_calls
+        .iter()
+        .filter_map(|e| e.payload.get("call_id"))
+        .collect();
+    assert!(
+        call_ids.contains(&&serde_json::json!("prompts-only-001")),
+        "Should include PromptsOnly call"
+    );
+    assert!(
+        call_ids.contains(&&serde_json::json!("full-io-001")),
+        "Should include FullIo call"
+    );
+}
