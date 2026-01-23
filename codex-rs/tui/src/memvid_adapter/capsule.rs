@@ -19,6 +19,8 @@
 //!   0 = Artifact
 //!   1 = Checkpoint
 //!   2 = Event
+//!   3 = UriIndexSnapshot (SPEC-KIT-971: time-travel resolution)
+//!   4 = Manifest (metadata-only; not indexed)
 //! ```
 
 use crate::memvid_adapter::lock::{CapsuleLock, LockError, LockMetadata, is_locked, lock_path_for};
@@ -30,12 +32,16 @@ use crate::memvid_adapter::types::{
     ToolCallPayload, ToolResultPayload, UriIndex, UriIndexSnapshot,
 };
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::VecDeque;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use thiserror::Error;
+
+// S974-003: Encryption imports (secrecy re-exported from age)
+// Note: age uses its own secrecy re-export internally
 
 // =============================================================================
 // CapsuleError
@@ -76,6 +82,20 @@ pub enum CapsuleError {
     /// SPEC-KIT-971: Duplicate label within branch
     #[error("Label '{label}' already exists on branch '{branch}'. Use --force to override.")]
     DuplicateLabel { label: String, branch: String },
+
+    /// S974-003: Passphrase required but not provided in non-interactive context
+    #[error(
+        "Passphrase required for encrypted export/import (set SPECKIT_MEMVID_PASSPHRASE or use interactive mode)"
+    )]
+    PassphraseRequired,
+
+    /// S974-003: Decryption failed due to invalid passphrase
+    #[error("Invalid passphrase for encrypted capsule")]
+    InvalidPassphrase,
+
+    /// S974-003: Age encryption/decryption error
+    #[error("Encryption error: {reason}")]
+    EncryptionError { reason: String },
 }
 
 pub type Result<T> = std::result::Result<T, CapsuleError>;
@@ -134,6 +154,8 @@ pub enum RecordKind {
     Event = 2,
     /// SPEC-KIT-971: URI index snapshot for time-travel resolution
     UriIndexSnapshot = 3,
+    /// SPEC-KIT-974: Export manifest (metadata only, not indexed)
+    Manifest = 4,
 }
 
 impl TryFrom<u8> for RecordKind {
@@ -145,6 +167,7 @@ impl TryFrom<u8> for RecordKind {
             1 => Ok(RecordKind::Checkpoint),
             2 => Ok(RecordKind::Event),
             3 => Ok(RecordKind::UriIndexSnapshot),
+            4 => Ok(RecordKind::Manifest),
             _ => Err(()),
         }
     }
@@ -241,6 +264,13 @@ pub struct CapsuleHandle {
     /// Current policy snapshot info (policy_id, hash, uri)
     /// Set when policy is captured at run start
     current_policy: Arc<RwLock<Option<CurrentPolicyInfo>>>,
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // S974-003: Encrypted capsule support
+    // ─────────────────────────────────────────────────────────────────────────────
+    /// Temp directory for decrypted .mv2e files (cleaned up on drop)
+    /// When Some, this handle was opened from an encrypted file
+    decrypted_temp_dir: Option<tempfile::TempDir>,
 }
 
 /// Current policy info tracked in the capsule handle (SPEC-KIT-977).
@@ -333,6 +363,89 @@ impl CapsuleHandle {
         Self::open_with_options(config, CapsuleOpenOptions::read_only())
     }
 
+    /// S974-003: Open an encrypted capsule (.mv2e) for read-only access.
+    ///
+    /// ## Process
+    /// 1. Read encrypted file
+    /// 2. Decrypt using age passphrase
+    /// 3. Write to temp file
+    /// 4. Open temp file as read-only capsule
+    ///
+    /// ## Security
+    /// - Wrong passphrase returns `CapsuleError::InvalidPassphrase`
+    /// - No partial plaintext written on failure (decryption happens in memory)
+    /// - Temp file is cleaned up when handle is dropped
+    ///
+    /// ## Parameters
+    /// - `path`: Path to the encrypted .mv2e file
+    /// - `passphrase`: The passphrase to decrypt the file
+    pub fn open_encrypted(path: &Path, passphrase: &secrecy::SecretString) -> Result<Self> {
+        use secrecy::ExposeSecret;
+
+        // Read encrypted file
+        let encrypted_data = std::fs::read(path)?;
+
+        // Decrypt using age
+        let decryptor = age::Decryptor::new(&encrypted_data[..]).map_err(|e| {
+            CapsuleError::EncryptionError {
+                reason: format!("Invalid age format: {}", e),
+            }
+        })?;
+
+        // Verify it's a passphrase-encrypted file
+        if !decryptor.is_scrypt() {
+            return Err(CapsuleError::InvalidOperation {
+                reason: "Not a passphrase-encrypted file (recipient key detected)".into(),
+            });
+        }
+
+        // Create passphrase identity for decryption
+        let identity = age::scrypt::Identity::new(secrecy::SecretString::from(
+            passphrase.expose_secret().to_string(),
+        ));
+
+        // Decrypt content (all in memory to avoid partial plaintext on failure)
+        let mut decrypted = vec![];
+        let mut reader = decryptor
+            .decrypt(std::iter::once(&identity as &dyn age::Identity))
+            .map_err(|_| CapsuleError::InvalidPassphrase)?;
+        std::io::Read::read_to_end(&mut reader, &mut decrypted)?;
+
+        // Write decrypted content to temp file
+        let temp_dir = tempfile::tempdir()?;
+        let temp_path = temp_dir.path().join("decrypted.mv2");
+        std::fs::write(&temp_path, &decrypted)?;
+
+        tracing::debug!(
+            encrypted_path = %path.display(),
+            decrypted_size = decrypted.len(),
+            "Decrypted encrypted capsule"
+        );
+
+        // Create config pointing to temp file
+        let config = CapsuleConfig {
+            capsule_path: temp_path,
+            workspace_id: "decrypted".to_string(), // Will be overwritten from manifest
+            ..Default::default()
+        };
+
+        // Open as read-only
+        let mut handle = Self::open_with_options(config, CapsuleOpenOptions::read_only())?;
+
+        // Store temp dir to keep it alive (cleaned up on drop)
+        handle.decrypted_temp_dir = Some(temp_dir);
+
+        Ok(handle)
+    }
+
+    /// S974-003: Open an encrypted capsule with passphrase from environment or prompt.
+    ///
+    /// Convenience wrapper that handles passphrase acquisition.
+    pub fn open_encrypted_interactive(path: &Path, interactive: bool) -> Result<Self> {
+        let passphrase = Self::acquire_passphrase(interactive)?;
+        Self::open_encrypted(path, &passphrase)
+    }
+
     /// Open a capsule with custom options.
     ///
     /// ## SPEC-KIT-971: Cross-process locking
@@ -401,6 +514,7 @@ impl CapsuleHandle {
             record_seq: Arc::new(Mutex::new(0)),
             stored_records: Arc::new(RwLock::new(Vec::new())),
             current_policy: Arc::new(RwLock::new(None)),
+            decrypted_temp_dir: None,
         };
 
         // If this is a new capsule, create it
@@ -557,9 +671,18 @@ impl CapsuleHandle {
                                 uri_index.import_snapshot(snapshot);
                             }
                         }
+                        RecordKind::Manifest => {
+                            // SPEC-KIT-974: Export manifest is metadata-only, skip indexing
+                            // Manifests contain export provenance info but don't need to be
+                            // stored in the in-memory record list.
+                            tracing::debug!("Skipping manifest record at seq {}", seq);
+                        }
                     }
 
-                    stored_records.push(record);
+                    // Store all records except Manifest (which is metadata-only)
+                    if record.kind != RecordKind::Manifest {
+                        stored_records.push(record);
+                    }
                     pos = next_pos;
                     seq += 1;
                 }
@@ -2145,6 +2268,491 @@ impl CapsuleHandle {
             dedup_ratio,
         }
     }
+
+    // =========================================================================
+    // S974-003: Passphrase Acquisition
+    // =========================================================================
+
+    /// Acquire passphrase for encryption/decryption.
+    ///
+    /// ## Passphrase acquisition order (per S974-003 requirements):
+    /// 1. `SPECKIT_MEMVID_PASSPHRASE` environment variable
+    /// 2. Interactive prompt (if `interactive` is true)
+    /// 3. Return `CapsuleError::PassphraseRequired` if neither available
+    ///
+    /// ## Security
+    /// - Passphrase is stored in `secrecy::SecretString` to prevent accidental logging
+    /// - Memory is zeroized on drop
+    fn acquire_passphrase(interactive: bool) -> Result<secrecy::SecretString> {
+        use secrecy::SecretString;
+
+        // 1. Check environment variable first
+        if let Ok(pass) = std::env::var("SPECKIT_MEMVID_PASSPHRASE") {
+            if !pass.is_empty() {
+                return Ok(SecretString::from(pass));
+            }
+        }
+
+        // 2. Interactive prompt if allowed
+        if interactive {
+            match rpassword::prompt_password("Capsule passphrase: ") {
+                Ok(pass) if !pass.is_empty() => return Ok(SecretString::from(pass)),
+                Ok(_) => {
+                    // Empty passphrase entered
+                    return Err(CapsuleError::PassphraseRequired);
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "Failed to read passphrase from terminal");
+                    return Err(CapsuleError::PassphraseRequired);
+                }
+            }
+        }
+
+        // 3. No passphrase available
+        Err(CapsuleError::PassphraseRequired)
+    }
+
+    // =========================================================================
+    // SPEC-KIT-974: Capsule Export (.mv2 and .mv2e)
+    // =========================================================================
+
+    /// Export a subset of the capsule to a single .mv2 or .mv2e file.
+    ///
+    /// ## SPEC-KIT-974 MVP Deliverables
+    /// - Export produces a single file artifact (.mv2 or .mv2e)
+    /// - Includes run artifacts, events, checkpoints, and manifest
+    /// - Emits CapsuleExported event into workspace capsule
+    ///
+    /// ## S974-003: Encryption
+    /// - When `options.encrypt` is true, output is .mv2e (age passphrase encrypted)
+    /// - Passphrase from SPECKIT_MEMVID_PASSPHRASE env var or interactive prompt
+    /// - content_hash is SHA256 of the encrypted file (post-encryption)
+    ///
+    /// ## Parameters
+    /// - `options`: Export configuration (run filter, output path, safe mode, encrypt)
+    ///
+    /// ## Returns
+    /// - `ExportResult` with path, digest, and stats
+    ///
+    /// ## Acceptance Criteria
+    /// - Export produces a single file artifact with no sidecar files
+    /// - Every export writes a `CapsuleExported` event into the workspace capsule
+    pub fn export(&self, options: &ExportOptions) -> Result<ExportResult> {
+        if !self.is_open() {
+            return Err(CapsuleError::NotOpen);
+        }
+
+        // Determine final output path (adjust extension based on encryption)
+        let final_output_path = if options.encrypt {
+            let mut path = options.output_path.clone();
+            path.set_extension("mv2e");
+            path
+        } else {
+            let mut path = options.output_path.clone();
+            // Ensure .mv2 extension for unencrypted
+            if path.extension().map_or(true, |e| e != "mv2") {
+                path.set_extension("mv2");
+            }
+            path
+        };
+
+        // Validate output path
+        if let Some(parent) = final_output_path.parent() {
+            if !parent.exists() {
+                std::fs::create_dir_all(parent)?;
+            }
+        }
+
+        // Collect records to export based on filter
+        let records_to_export = self.collect_export_records(options)?;
+        let checkpoints_to_export = self.collect_export_checkpoints(options);
+        let events_to_export = self.collect_export_events(options);
+
+        // Create export manifest
+        let manifest = ExportManifest {
+            version: "1.0.0".to_string(),
+            exported_at: chrono::Utc::now(),
+            source_capsule_path: self.config.capsule_path.display().to_string(),
+            workspace_id: self.config.workspace_id.clone(),
+            filter: ExportFilter {
+                spec_id: options.spec_id.clone(),
+                run_id: options.run_id.clone(),
+                branch: options.branch.as_ref().map(|b| b.as_str().to_string()),
+            },
+            artifact_count: records_to_export.len() as u64,
+            checkpoint_count: checkpoints_to_export.len() as u64,
+            event_count: events_to_export.len() as u64,
+            safe_mode: options.safe_mode,
+            encrypted: options.encrypt,
+        };
+
+        // Write export file (encryption handled separately)
+        let (bytes_written, content_hash) = if options.encrypt {
+            self.write_encrypted_export(&final_output_path, &manifest, &records_to_export, options)?
+        } else {
+            self.write_export_file(&final_output_path, &manifest, &records_to_export)?
+        };
+
+        // Build result
+        let result = ExportResult {
+            output_path: final_output_path.clone(),
+            bytes_written,
+            content_hash: content_hash.clone(),
+            artifact_count: records_to_export.len() as u64,
+            checkpoint_count: checkpoints_to_export.len() as u64,
+            event_count: events_to_export.len() as u64,
+        };
+
+        // Emit CapsuleExported event (SPEC-KIT-974 requirement)
+        let payload = CapsuleExportedPayload {
+            destination_type: "file".to_string(),
+            destination: Some(final_output_path.display().to_string()),
+            format: if options.encrypt {
+                "mv2e-v1".to_string()
+            } else {
+                "mv2-v1".to_string()
+            },
+            checkpoints_included: checkpoints_to_export
+                .iter()
+                .map(|cp| cp.checkpoint_id.as_str().to_string())
+                .collect(),
+            sanitized: options.safe_mode,
+            encrypted: options.encrypt,
+            exported_at: chrono::Utc::now(),
+            content_hash: Some(content_hash),
+        };
+
+        // Emit event using spec_id/run_id from options or defaults
+        let spec_id = options.spec_id.as_deref().unwrap_or("export");
+        let run_id = options.run_id.as_deref().unwrap_or("manual");
+        self.emit_capsule_exported(spec_id, run_id, &payload)?;
+
+        tracing::info!(
+            output = %final_output_path.display(),
+            artifacts = result.artifact_count,
+            checkpoints = result.checkpoint_count,
+            events = result.event_count,
+            bytes = bytes_written,
+            encrypted = options.encrypt,
+            "Capsule exported successfully"
+        );
+
+        Ok(result)
+    }
+
+    /// S974-003: Write encrypted export file (.mv2e)
+    ///
+    /// Process:
+    /// 1. Write plaintext .mv2 to temp file
+    /// 2. Read temp file contents
+    /// 3. Encrypt with age passphrase
+    /// 4. Write encrypted content to final path
+    /// 5. Compute SHA256 of encrypted bytes
+    /// 6. Clean up temp file
+    fn write_encrypted_export(
+        &self,
+        final_path: &Path,
+        manifest: &ExportManifest,
+        records: &[StoredRecord],
+        options: &ExportOptions,
+    ) -> Result<(u64, String)> {
+        use secrecy::ExposeSecret;
+        use std::io::BufWriter;
+
+        // Acquire passphrase
+        let passphrase = Self::acquire_passphrase(options.interactive)?;
+
+        // Create temp directory for plaintext
+        let temp_dir = tempfile::tempdir()?;
+        let temp_path = temp_dir.path().join("export.mv2");
+
+        // Write plaintext to temp file (reuse existing logic with unencrypted manifest)
+        let plaintext_manifest = ExportManifest {
+            encrypted: false, // Manifest inside encrypted file shows it's the plaintext version
+            ..manifest.clone()
+        };
+        self.write_export_file(&temp_path, &plaintext_manifest, records)?;
+
+        // Read plaintext content
+        let plaintext = std::fs::read(&temp_path)?;
+
+        // Encrypt using age passphrase encryption
+        let encrypted = {
+            let encryptor = age::Encryptor::with_user_passphrase(secrecy::SecretString::from(
+                passphrase.expose_secret().to_string(),
+            ));
+            let mut encrypted = vec![];
+            {
+                let mut writer = encryptor.wrap_output(&mut encrypted).map_err(|e| {
+                    CapsuleError::EncryptionError {
+                        reason: format!("Failed to create encryptor: {}", e),
+                    }
+                })?;
+                writer
+                    .write_all(&plaintext)
+                    .map_err(|e| CapsuleError::EncryptionError {
+                        reason: format!("Failed to write encrypted data: {}", e),
+                    })?;
+                writer.finish().map_err(|e| CapsuleError::EncryptionError {
+                    reason: format!("Failed to finalize encryption: {}", e),
+                })?;
+            }
+            encrypted
+        };
+
+        // Compute SHA256 of encrypted content
+        let mut hasher = Sha256::new();
+        hasher.update(&encrypted);
+        let content_hash = format!("{:x}", hasher.finalize());
+
+        // Write encrypted content to final path
+        let file = File::create(final_path)?;
+        let mut writer = BufWriter::new(file);
+        writer.write_all(&encrypted)?;
+        writer.flush()?;
+
+        let bytes_written = encrypted.len() as u64;
+
+        tracing::debug!(
+            plaintext_size = plaintext.len(),
+            encrypted_size = encrypted.len(),
+            "Encrypted capsule export"
+        );
+
+        // Temp dir auto-cleans on drop
+        Ok((bytes_written, content_hash))
+    }
+
+    /// Collect artifact records matching the export filter.
+    fn collect_export_records(&self, options: &ExportOptions) -> Result<Vec<StoredRecord>> {
+        let all_records = self.stored_records.read().unwrap();
+
+        let filtered: Vec<StoredRecord> = all_records
+            .iter()
+            .filter(|r| {
+                // Only export Artifact records
+                if r.kind != RecordKind::Artifact {
+                    return false;
+                }
+
+                // Parse artifact metadata to check spec/run filter
+                if let Ok(art_meta) = serde_json::from_value::<ArtifactRecordMeta>(r.meta.clone()) {
+                    // Check if URI matches filter criteria
+                    if let Some(ref spec_filter) = options.spec_id {
+                        if !art_meta.uri.contains(spec_filter) {
+                            return false;
+                        }
+                    }
+                    if let Some(ref run_filter) = options.run_id {
+                        if !art_meta.uri.contains(run_filter) {
+                            return false;
+                        }
+                    }
+                    true
+                } else {
+                    false
+                }
+            })
+            .cloned()
+            .collect();
+
+        Ok(filtered)
+    }
+
+    /// Collect checkpoints matching the export filter.
+    fn collect_export_checkpoints(&self, options: &ExportOptions) -> Vec<CheckpointMetadata> {
+        let all_checkpoints = self.checkpoints.read().unwrap();
+
+        all_checkpoints
+            .iter()
+            .filter(|cp| {
+                // Filter by spec_id if specified
+                if let Some(ref spec_filter) = options.spec_id {
+                    if cp.spec_id.as_ref() != Some(spec_filter) {
+                        return false;
+                    }
+                }
+                // Filter by run_id if specified
+                if let Some(ref run_filter) = options.run_id {
+                    if cp.run_id.as_ref() != Some(run_filter) {
+                        return false;
+                    }
+                }
+                // Filter by branch if specified
+                if let Some(ref branch_filter) = options.branch {
+                    if cp.branch_id.as_ref() != Some(&branch_filter.as_str().to_string()) {
+                        return false;
+                    }
+                }
+                true
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// Collect events matching the export filter.
+    fn collect_export_events(&self, options: &ExportOptions) -> Vec<RunEventEnvelope> {
+        let all_events = self.events.read().unwrap();
+
+        all_events
+            .iter()
+            .filter(|ev| {
+                // Filter by spec_id if specified
+                if let Some(ref spec_filter) = options.spec_id {
+                    if &ev.spec_id != spec_filter {
+                        return false;
+                    }
+                }
+                // Filter by run_id if specified
+                if let Some(ref run_filter) = options.run_id {
+                    if &ev.run_id != run_filter {
+                        return false;
+                    }
+                }
+                // Filter by branch if specified
+                if let Some(ref branch_filter) = options.branch {
+                    if ev.branch_id.as_ref() != Some(&branch_filter.as_str().to_string()) {
+                        return false;
+                    }
+                }
+                true
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// Write the export file in MV2 format with manifest.
+    fn write_export_file(
+        &self,
+        path: &Path,
+        manifest: &ExportManifest,
+        records: &[StoredRecord],
+    ) -> Result<(u64, String)> {
+        use sha2::{Digest, Sha256};
+        use std::io::BufWriter;
+
+        let file = File::create(path)?;
+        let mut writer = BufWriter::new(file);
+        let mut hasher = Sha256::new();
+
+        // Write MV2 header
+        writer.write_all(MV2_HEADER)?;
+        hasher.update(MV2_HEADER);
+
+        // Write manifest as first record (RecordKind = 4 for Manifest)
+        let manifest_json =
+            serde_json::to_vec(manifest).map_err(|e| CapsuleError::InvalidOperation {
+                reason: format!("Failed to serialize manifest: {}", e),
+            })?;
+        let manifest_meta = serde_json::json!({
+            "type": "export_manifest",
+            "version": "1.0.0"
+        });
+        let manifest_meta_bytes = serde_json::to_vec(&manifest_meta).unwrap();
+
+        // Manifest record format: [len][kind][meta_len][meta][payload]
+        let manifest_record_len = 1 + 4 + manifest_meta_bytes.len() + manifest_json.len();
+        writer.write_all(&(manifest_record_len as u32).to_le_bytes())?;
+        writer.write_all(&[RecordKind::Manifest as u8])?;
+        writer.write_all(&(manifest_meta_bytes.len() as u32).to_le_bytes())?;
+        writer.write_all(&manifest_meta_bytes)?;
+        writer.write_all(&manifest_json)?;
+
+        // Update hash
+        hasher.update(&(manifest_record_len as u32).to_le_bytes());
+        hasher.update(&[RecordKind::Manifest as u8]);
+        hasher.update(&(manifest_meta_bytes.len() as u32).to_le_bytes());
+        hasher.update(&manifest_meta_bytes);
+        hasher.update(&manifest_json);
+
+        // Copy artifact records from source capsule
+        for record in records {
+            // Read original payload from source
+            let payload = self.read_payload(&PhysicalPointer {
+                frame_id: record.seq,
+                offset: record.payload_offset,
+                length: record.payload_len,
+            })?;
+
+            // Serialize metadata
+            let meta_bytes = serde_json::to_vec(&record.meta).unwrap();
+
+            // Write record
+            let record_len = 1 + 4 + meta_bytes.len() + payload.len();
+            writer.write_all(&(record_len as u32).to_le_bytes())?;
+            writer.write_all(&[record.kind as u8])?;
+            writer.write_all(&(meta_bytes.len() as u32).to_le_bytes())?;
+            writer.write_all(&meta_bytes)?;
+            writer.write_all(&payload)?;
+
+            // Update hash
+            hasher.update(&(record_len as u32).to_le_bytes());
+            hasher.update(&[record.kind as u8]);
+            hasher.update(&(meta_bytes.len() as u32).to_le_bytes());
+            hasher.update(&meta_bytes);
+            hasher.update(&payload);
+        }
+
+        // Write checkpoints as records
+        let checkpoints = self.collect_export_checkpoints(&ExportOptions {
+            output_path: path.to_path_buf(),
+            spec_id: None,
+            run_id: None,
+            branch: None,
+            safe_mode: false,
+            encrypt: false,
+            interactive: false,
+        });
+        for cp in &checkpoints {
+            let cp_meta = serde_json::to_value(cp).unwrap();
+            let cp_meta_bytes = serde_json::to_vec(&cp_meta).unwrap();
+
+            let record_len = 1 + 4 + cp_meta_bytes.len();
+            writer.write_all(&(record_len as u32).to_le_bytes())?;
+            writer.write_all(&[RecordKind::Checkpoint as u8])?;
+            writer.write_all(&(cp_meta_bytes.len() as u32).to_le_bytes())?;
+            writer.write_all(&cp_meta_bytes)?;
+
+            hasher.update(&(record_len as u32).to_le_bytes());
+            hasher.update(&[RecordKind::Checkpoint as u8]);
+            hasher.update(&(cp_meta_bytes.len() as u32).to_le_bytes());
+            hasher.update(&cp_meta_bytes);
+        }
+
+        // Write events as records
+        let events = self.collect_export_events(&ExportOptions {
+            output_path: path.to_path_buf(),
+            spec_id: None,
+            run_id: None,
+            branch: None,
+            safe_mode: false,
+            encrypt: false,
+            interactive: false,
+        });
+        for ev in &events {
+            let ev_meta = serde_json::to_value(ev).unwrap();
+            let ev_meta_bytes = serde_json::to_vec(&ev_meta).unwrap();
+
+            let record_len = 1 + 4 + ev_meta_bytes.len();
+            writer.write_all(&(record_len as u32).to_le_bytes())?;
+            writer.write_all(&[RecordKind::Event as u8])?;
+            writer.write_all(&(ev_meta_bytes.len() as u32).to_le_bytes())?;
+            writer.write_all(&ev_meta_bytes)?;
+
+            hasher.update(&(record_len as u32).to_le_bytes());
+            hasher.update(&[RecordKind::Event as u8]);
+            hasher.update(&(ev_meta_bytes.len() as u32).to_le_bytes());
+            hasher.update(&ev_meta_bytes);
+        }
+
+        writer.flush()?;
+
+        // Get file size and hash
+        let bytes_written = std::fs::metadata(path)?.len();
+        let hash = format!("{:x}", hasher.finalize());
+
+        Ok((bytes_written, hash))
+    }
 }
 
 impl Drop for CapsuleHandle {
@@ -2191,4 +2799,158 @@ pub enum IndexStatus {
     Healthy,
     Rebuilding,
     Missing,
+}
+
+// =============================================================================
+// SPEC-KIT-974: Export Types
+// =============================================================================
+
+/// Options for capsule export.
+///
+/// ## SPEC-KIT-974 MVP
+/// - Export produces a single file artifact (.mv2 or .mv2e) with no sidecar files
+/// - Default: `--no-encrypt` for MVP backward compatibility
+/// - Default: `--safe` mode (exclude raw LLM I/O unless audit.capture_llm_io=full)
+///
+/// ## S974-003: Encryption
+/// - When `encrypt` is true, output is .mv2e (age passphrase encrypted)
+/// - Passphrase acquired from SPECKIT_MEMVID_PASSPHRASE env var or interactive prompt
+#[derive(Debug, Clone)]
+pub struct ExportOptions {
+    /// Output file path (extension will be adjusted: .mv2 or .mv2e based on encrypt flag)
+    pub output_path: PathBuf,
+
+    /// Filter by spec ID (None = all specs)
+    pub spec_id: Option<String>,
+
+    /// Filter by run ID (None = all runs)
+    pub run_id: Option<String>,
+
+    /// Filter by branch (None = all branches)
+    pub branch: Option<BranchId>,
+
+    /// Safe export mode: exclude raw LLM I/O unless explicitly captured
+    /// Default: true (per SPEC-KIT-974 D77)
+    pub safe_mode: bool,
+
+    /// S974-003: Enable encryption (produces .mv2e instead of .mv2)
+    /// Default: false for MVP backward compatibility
+    pub encrypt: bool,
+
+    /// S974-003: Allow interactive passphrase prompt if env var not set
+    /// Default: true (prompts user when SPECKIT_MEMVID_PASSPHRASE not set)
+    pub interactive: bool,
+}
+
+impl Default for ExportOptions {
+    fn default() -> Self {
+        Self {
+            output_path: PathBuf::from("export.mv2"),
+            spec_id: None,
+            run_id: None,
+            branch: None,
+            safe_mode: true,
+            encrypt: false,
+            interactive: true,
+        }
+    }
+}
+
+impl ExportOptions {
+    /// Create export options for a specific run.
+    pub fn for_run(spec_id: &str, run_id: &str, output_path: impl Into<PathBuf>) -> Self {
+        Self {
+            output_path: output_path.into(),
+            spec_id: Some(spec_id.to_string()),
+            run_id: Some(run_id.to_string()),
+            branch: Some(BranchId::for_run(run_id)),
+            safe_mode: true,
+            encrypt: false,
+            interactive: true,
+        }
+    }
+
+    /// Create encrypted export options for a specific run.
+    /// S974-003: Produces .mv2e file with age passphrase encryption.
+    pub fn for_run_encrypted(spec_id: &str, run_id: &str, output_path: impl Into<PathBuf>) -> Self {
+        let mut path: PathBuf = output_path.into();
+        // Ensure .mv2e extension for encrypted exports
+        path.set_extension("mv2e");
+        Self {
+            output_path: path,
+            spec_id: Some(spec_id.to_string()),
+            run_id: Some(run_id.to_string()),
+            branch: Some(BranchId::for_run(run_id)),
+            safe_mode: true,
+            encrypt: true,
+            interactive: true,
+        }
+    }
+}
+
+/// Export manifest stored in the exported .mv2 file.
+///
+/// ## SPEC-KIT-974 Requirement
+/// Include manifest/digest in the exported output.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportManifest {
+    /// Manifest schema version
+    pub version: String,
+
+    /// Export timestamp
+    pub exported_at: chrono::DateTime<chrono::Utc>,
+
+    /// Source capsule path (for provenance)
+    pub source_capsule_path: String,
+
+    /// Workspace ID
+    pub workspace_id: String,
+
+    /// Filter criteria used
+    pub filter: ExportFilter,
+
+    /// Number of artifacts exported
+    pub artifact_count: u64,
+
+    /// Number of checkpoints exported
+    pub checkpoint_count: u64,
+
+    /// Number of events exported
+    pub event_count: u64,
+
+    /// Whether safe export mode was used
+    pub safe_mode: bool,
+
+    /// Whether the export is encrypted
+    pub encrypted: bool,
+}
+
+/// Filter criteria recorded in the export manifest.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportFilter {
+    pub spec_id: Option<String>,
+    pub run_id: Option<String>,
+    pub branch: Option<String>,
+}
+
+/// Result of a capsule export operation.
+#[derive(Debug, Clone)]
+pub struct ExportResult {
+    /// Path to the exported file
+    pub output_path: PathBuf,
+
+    /// Total bytes written
+    pub bytes_written: u64,
+
+    /// SHA-256 hash of the export content
+    pub content_hash: String,
+
+    /// Number of artifacts exported
+    pub artifact_count: u64,
+
+    /// Number of checkpoints exported
+    pub checkpoint_count: u64,
+
+    /// Number of events exported
+    pub event_count: u64,
 }

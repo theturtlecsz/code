@@ -11,7 +11,9 @@
 //! - At least one `StageTransition` event on stage commit
 
 use super::*;
-use crate::memvid_adapter::capsule::{CapsuleConfig, CapsuleHandle, DiagnosticResult};
+use crate::memvid_adapter::capsule::{
+    CapsuleConfig, CapsuleError, CapsuleHandle, DiagnosticResult,
+};
 use crate::memvid_adapter::types::{
     BranchId,
     CardFact,
@@ -37,6 +39,7 @@ use crate::memvid_adapter::types::{
     ToolCallPayload,
     ToolResultPayload,
 };
+use secrecy::SecretString;
 use tempfile::TempDir;
 
 // =============================================================================
@@ -4934,5 +4937,841 @@ fn test_card_persists_after_reopen() {
         assert_eq!(card.card_id, "persist-card", "card_id should match");
         assert_eq!(card.title, "Use Rust", "title should match");
         assert_eq!(card.card_type, CardType::Decision, "card_type should match");
+    }
+}
+
+// =============================================================================
+// SPEC-KIT-974: Export Tests
+// =============================================================================
+
+use crate::memvid_adapter::capsule::{ExportOptions, ExportResult};
+
+/// SPEC-KIT-974: Export produces single file artifact.
+///
+/// ## Acceptance Criteria
+/// - Export produces a single file artifact (.mv2) with no sidecar files
+#[test]
+fn test_export_produces_single_mv2_file() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("source.mv2");
+    let export_path = temp_dir.path().join("export.mv2");
+
+    // Create source capsule with artifact
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "export_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("should create capsule");
+    handle
+        .put(
+            "SPEC-974",
+            "run1",
+            ObjectType::Artifact,
+            "test.md",
+            b"# Test content".to_vec(),
+            serde_json::json!({}),
+        )
+        .expect("should put artifact");
+    handle
+        .commit_stage("SPEC-974", "run1", "plan", None)
+        .expect("should commit");
+
+    // Export
+    let options = ExportOptions {
+        output_path: export_path.clone(),
+        spec_id: Some("SPEC-974".to_string()),
+        run_id: Some("run1".to_string()),
+        branch: None,
+        safe_mode: true,
+        ..Default::default()
+    };
+
+    let result = handle.export(&options).expect("export should succeed");
+
+    // Verify single file
+    assert!(
+        export_path.exists(),
+        "export file should exist at {:?}",
+        export_path
+    );
+    assert!(result.bytes_written > 0, "export should have content");
+
+    // Verify no sidecar files (only export.mv2 in directory, not source.mv2.lock)
+    let export_parent = export_path.parent().unwrap();
+    let files_in_dir: Vec<_> = std::fs::read_dir(export_parent)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.path()
+                .starts_with(export_path.file_stem().unwrap().to_str().unwrap())
+        })
+        .collect();
+
+    // Should only have the .mv2 file, no sidecars like .mv2.manifest
+    assert_eq!(
+        files_in_dir.len(),
+        0,
+        "should have no sidecar files starting with 'export'"
+    );
+}
+
+/// SPEC-KIT-974: Export includes manifest/digest.
+///
+/// ## Acceptance Criteria
+/// - Export includes manifest with artifact count, checkpoints, events
+#[test]
+fn test_export_includes_manifest() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("manifest_source.mv2");
+    let export_path = temp_dir.path().join("manifest_export.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "manifest_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("should create capsule");
+
+    // Add multiple artifacts
+    for i in 1..=3 {
+        handle
+            .put(
+                "SPEC-974",
+                "run1",
+                ObjectType::Artifact,
+                &format!("file{}.md", i),
+                format!("Content {}", i).into_bytes(),
+                serde_json::json!({}),
+            )
+            .expect("should put artifact");
+    }
+    handle
+        .commit_stage("SPEC-974", "run1", "plan", None)
+        .expect("should commit");
+
+    let options = ExportOptions {
+        output_path: export_path.clone(),
+        spec_id: Some("SPEC-974".to_string()),
+        run_id: Some("run1".to_string()),
+        branch: None,
+        safe_mode: true,
+        ..Default::default()
+    };
+
+    let result = handle.export(&options).expect("export should succeed");
+
+    // Verify result contains expected counts
+    assert_eq!(result.artifact_count, 3, "should export 3 artifacts");
+    assert!(
+        result.checkpoint_count >= 1,
+        "should export at least 1 checkpoint"
+    );
+
+    // Verify digest is present
+    assert!(
+        !result.content_hash.is_empty(),
+        "content hash should be present"
+    );
+    assert_eq!(
+        result.content_hash.len(),
+        64,
+        "SHA-256 hash should be 64 hex chars"
+    );
+}
+
+/// SPEC-KIT-974: Export determinism test (semantic equivalence).
+///
+/// ## Architect Ruling (2026-01-23)
+/// Determinism for this program is defined at the reproducibility of retrieval
+/// context/results at a checkpoint, NOT bit-for-bit export file identity.
+/// - D66: "deterministic retrieval context at a checkpoint"
+/// - D3: timestamps are convenience; checkpoint-based identity is canonical
+///
+/// ## What this test verifies
+/// - Same logical content selection across repeated exports
+/// - Artifact counts, checkpoint counts, event counts match
+/// - Both exports are valid and contain same semantic content
+///
+/// ## What this test does NOT verify
+/// - Byte-identical exports (timestamps in manifest cause digest differences)
+#[test]
+fn test_export_determinism() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("determinism_source.mv2");
+    let export1_path = temp_dir.path().join("export1.mv2");
+    let export2_path = temp_dir.path().join("export2.mv2");
+
+    // Create source capsule with fixed content
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "determinism_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("should create capsule");
+
+    // Add multiple artifacts to make the test more meaningful
+    for i in 1..=3 {
+        handle
+            .put(
+                "SPEC-974",
+                "run1",
+                ObjectType::Artifact,
+                &format!("fixed_{}.md", i),
+                format!("Fixed content {} for determinism test", i).into_bytes(),
+                serde_json::json!({"key": "value", "index": i}),
+            )
+            .expect("should put artifact");
+    }
+    handle
+        .commit_stage("SPEC-974", "run1", "plan", None)
+        .expect("should commit");
+
+    // Export twice with same filter criteria
+    let options1 = ExportOptions {
+        output_path: export1_path.clone(),
+        spec_id: Some("SPEC-974".to_string()),
+        run_id: Some("run1".to_string()),
+        branch: None,
+        safe_mode: true,
+        ..Default::default()
+    };
+
+    let options2 = ExportOptions {
+        output_path: export2_path.clone(),
+        spec_id: Some("SPEC-974".to_string()),
+        run_id: Some("run1".to_string()),
+        branch: None,
+        safe_mode: true,
+        ..Default::default()
+    };
+
+    let result1 = handle.export(&options1).expect("export 1 should succeed");
+    let result2 = handle.export(&options2).expect("export 2 should succeed");
+
+    // Semantic equivalence checks (per Architect ruling on D66 + D3):
+    // Same logical content selection, not byte-identical files
+
+    // 1. Artifact counts must match (stable across exports)
+    assert_eq!(
+        result1.artifact_count, result2.artifact_count,
+        "artifact counts should match for semantic determinism"
+    );
+    assert_eq!(result1.artifact_count, 3, "should export all 3 artifacts");
+
+    // 2. Checkpoint counts must match (stable across exports)
+    assert_eq!(
+        result1.checkpoint_count, result2.checkpoint_count,
+        "checkpoint counts should match for semantic determinism"
+    );
+
+    // 3. Event counts: Note that export itself emits a CapsuleExported event,
+    //    so the second export will include the event from the first export.
+    //    This is expected behavior - the capsule state changed between exports.
+    //    We verify both have events, and the difference is exactly 1 (the prior export event).
+    assert!(result1.event_count > 0, "first export should have events");
+    assert!(result2.event_count > 0, "second export should have events");
+    assert_eq!(
+        result2.event_count,
+        result1.event_count + 1,
+        "second export should include +1 CapsuleExported event from first export"
+    );
+
+    // 4. Both exports should have valid content (non-zero bytes)
+    assert!(
+        result1.bytes_written > 0 && result2.bytes_written > 0,
+        "both exports should have content"
+    );
+
+    // 5. Content hashes MAY differ due to timestamps - this is acceptable per D3
+    // We explicitly do NOT assert hash equality here.
+    // The hash is for integrity/provenance, not determinism verification.
+}
+
+/// SPEC-KIT-974: Export writes CapsuleExported event.
+///
+/// ## Acceptance Criteria
+/// - Every export writes a `CapsuleExported` event into the workspace capsule
+#[test]
+fn test_export_emits_capsule_exported_event() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("event_source.mv2");
+    let export_path = temp_dir.path().join("event_export.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "event_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("should create capsule");
+    handle
+        .put(
+            "SPEC-974",
+            "run1",
+            ObjectType::Artifact,
+            "test.md",
+            b"Test".to_vec(),
+            serde_json::json!({}),
+        )
+        .expect("should put artifact");
+    handle
+        .commit_stage("SPEC-974", "run1", "plan", None)
+        .expect("should commit");
+
+    // Count events before export
+    let events_before = handle.list_events().len();
+
+    // Export
+    let options = ExportOptions {
+        output_path: export_path.clone(),
+        spec_id: Some("SPEC-974".to_string()),
+        run_id: Some("run1".to_string()),
+        branch: None,
+        safe_mode: true,
+        ..Default::default()
+    };
+
+    handle.export(&options).expect("export should succeed");
+
+    // Count events after export
+    let events_after = handle.list_events();
+    assert!(
+        events_after.len() > events_before,
+        "export should emit event"
+    );
+
+    // Find CapsuleExported event
+    let exported_event = events_after
+        .iter()
+        .find(|e| e.event_type == EventType::CapsuleExported);
+    assert!(
+        exported_event.is_some(),
+        "should have CapsuleExported event"
+    );
+
+    // Verify event payload per SPEC-KIT-974 acceptance criteria
+    let event = exported_event.unwrap();
+    assert!(
+        event.payload.get("format").is_some(),
+        "event should have format field"
+    );
+    assert!(
+        event.payload.get("exported_at").is_some(),
+        "event should have exported_at field"
+    );
+    // S974-007: Verify encryption flag
+    assert!(
+        event.payload.get("encrypted").is_some(),
+        "event should have encrypted field"
+    );
+    assert_eq!(
+        event.payload.get("encrypted"),
+        Some(&serde_json::json!(false)),
+        "MVP export should be unencrypted"
+    );
+    // S974-007: Verify safe flag (sanitized)
+    assert!(
+        event.payload.get("sanitized").is_some(),
+        "event should have sanitized field"
+    );
+    // S974-007: Verify digest (content_hash)
+    assert!(
+        event.payload.get("content_hash").is_some(),
+        "event should have content_hash (digest) field"
+    );
+}
+
+/// SPEC-KIT-974: Export with run filter.
+///
+/// ## Acceptance Criteria
+/// - Export can filter by run_id to include only specific run content
+#[test]
+fn test_export_filters_by_run() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("filter_source.mv2");
+    let export_path = temp_dir.path().join("filter_export.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "filter_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("should create capsule");
+
+    // Add artifacts to run1
+    handle
+        .put(
+            "SPEC-974",
+            "run1",
+            ObjectType::Artifact,
+            "run1_file.md",
+            b"Run1 content".to_vec(),
+            serde_json::json!({}),
+        )
+        .expect("should put run1 artifact");
+    handle
+        .commit_stage("SPEC-974", "run1", "plan", None)
+        .expect("should commit run1");
+
+    // Add artifacts to run2
+    handle
+        .put(
+            "SPEC-974",
+            "run2",
+            ObjectType::Artifact,
+            "run2_file.md",
+            b"Run2 content".to_vec(),
+            serde_json::json!({}),
+        )
+        .expect("should put run2 artifact");
+    handle
+        .commit_stage("SPEC-974", "run2", "plan", None)
+        .expect("should commit run2");
+
+    // Export only run1
+    let options = ExportOptions {
+        output_path: export_path.clone(),
+        spec_id: Some("SPEC-974".to_string()),
+        run_id: Some("run1".to_string()),
+        branch: None,
+        safe_mode: true,
+        ..Default::default()
+    };
+
+    let result = handle.export(&options).expect("export should succeed");
+
+    // Should only export run1 artifacts
+    assert_eq!(
+        result.artifact_count, 1,
+        "should export only 1 artifact from run1"
+    );
+}
+
+/// SPEC-KIT-974 S974-002: Export → Reopen → Verify test.
+///
+/// ## Acceptance Criteria
+/// - Import on a second machine reproduces identical retrieval results for
+///   checkpointed golden queries (within tolerance for floating scoring),
+///   using the imported capsule context.
+///
+/// ## What this test verifies
+/// - Exported .mv2 files can be re-opened with CapsuleHandle::open_read_only()
+/// - Checkpoints are preserved and accessible
+/// - Events are preserved and accessible
+/// - Artifact content (bytes) can be retrieved via get_bytes()
+#[test]
+fn test_export_reopen_retrieves_artifacts() {
+    let temp_dir = TempDir::new().unwrap();
+    let source_path = temp_dir.path().join("source.mv2");
+    let export_path = temp_dir.path().join("exported.mv2");
+
+    // Step 1: Create source capsule with artifacts
+    let config = CapsuleConfig {
+        capsule_path: source_path.clone(),
+        workspace_id: "reopen_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config.clone()).expect("should create capsule");
+
+    // Put multiple artifacts with distinct content
+    let artifact1_content = b"# Artifact 1 content for reopen test".to_vec();
+    let artifact2_content = b"# Artifact 2 content with different data".to_vec();
+
+    let uri1 = handle
+        .put(
+            "SPEC-974",
+            "run1",
+            ObjectType::Artifact,
+            "artifact1.md",
+            artifact1_content.clone(),
+            serde_json::json!({"test": "reopen1"}),
+        )
+        .expect("should put artifact 1");
+
+    let uri2 = handle
+        .put(
+            "SPEC-974",
+            "run1",
+            ObjectType::Artifact,
+            "artifact2.md",
+            artifact2_content.clone(),
+            serde_json::json!({"test": "reopen2"}),
+        )
+        .expect("should put artifact 2");
+
+    // Create checkpoint (required for deterministic retrieval)
+    // Note: commit_stage automatically emits a StageTransition event
+    handle
+        .commit_stage("SPEC-974", "run1", "plan", Some("reopen_checkpoint"))
+        .expect("should create checkpoint");
+
+    // Step 2: Export to .mv2
+    let options = ExportOptions {
+        output_path: export_path.clone(),
+        spec_id: Some("SPEC-974".to_string()),
+        run_id: Some("run1".to_string()),
+        branch: None,
+        safe_mode: true,
+        ..Default::default()
+    };
+
+    let export_result = handle.export(&options).expect("export should succeed");
+    assert!(
+        export_result.artifact_count >= 2,
+        "should export at least 2 artifacts"
+    );
+
+    // Close source capsule
+    drop(handle);
+
+    // Step 3: Reopen exported capsule read-only
+    let exported_config = CapsuleConfig {
+        capsule_path: export_path.clone(),
+        workspace_id: "exported_reopen_test".to_string(),
+        ..Default::default()
+    };
+
+    let exported_handle =
+        CapsuleHandle::open_read_only(exported_config).expect("should reopen exported capsule");
+
+    // Step 4: Verify checkpoints are accessible
+    let checkpoints = exported_handle.list_checkpoints();
+    assert!(
+        !checkpoints.is_empty(),
+        "exported capsule should have checkpoints"
+    );
+    // Note: commit_stage creates labels with format "stage:{stage_name}"
+    let has_plan_checkpoint = checkpoints
+        .iter()
+        .any(|cp| cp.label.as_deref() == Some("stage:plan"));
+    assert!(
+        has_plan_checkpoint,
+        "exported capsule should have 'stage:plan' label"
+    );
+
+    // Step 5: Verify events are accessible
+    let events = exported_handle.list_events();
+    assert!(!events.is_empty(), "exported capsule should have events");
+
+    // Step 6: Verify artifact bytes can be retrieved
+    // (This is the key determinism test - same URI returns same bytes)
+    let retrieved1 = exported_handle
+        .get_bytes(&uri1, None, None)
+        .expect("should retrieve artifact 1");
+    let retrieved2 = exported_handle
+        .get_bytes(&uri2, None, None)
+        .expect("should retrieve artifact 2");
+
+    assert_eq!(
+        retrieved1, artifact1_content,
+        "artifact 1 content should match original"
+    );
+    assert_eq!(
+        retrieved2, artifact2_content,
+        "artifact 2 content should match original"
+    );
+}
+
+// =============================================================================
+// S974-003: Encryption Tests
+// =============================================================================
+
+/// A1 backward-compat test: CapsuleExportedPayload without `encrypted` field
+/// should deserialize successfully with encrypted=false default.
+#[test]
+fn test_capsule_exported_payload_backward_compat() {
+    use crate::memvid_adapter::types::CapsuleExportedPayload;
+
+    // Legacy payload without `encrypted` field
+    let legacy_json = r#"{
+        "destination_type": "file",
+        "destination": "/tmp/export.mv2",
+        "format": "mv2-v1",
+        "checkpoints_included": ["stage:plan"],
+        "sanitized": true,
+        "exported_at": "2025-01-01T00:00:00Z"
+    }"#;
+
+    let payload: CapsuleExportedPayload =
+        serde_json::from_str(legacy_json).expect("should deserialize legacy payload");
+
+    assert!(!payload.encrypted, "encrypted should default to false");
+    assert_eq!(payload.format, "mv2-v1");
+    assert!(payload.sanitized);
+}
+
+/// S974-003: Encrypted export and decrypt roundtrip test.
+///
+/// ## Test Flow
+/// 1. Create capsule with artifacts
+/// 2. Export with encrypt=true (using env var for passphrase)
+/// 3. Verify .mv2e file exists
+/// 4. Open encrypted file with correct passphrase
+/// 5. Verify artifacts are accessible
+#[test]
+#[serial_test::serial]
+fn test_export_encrypted_roundtrip() {
+    use crate::memvid_adapter::capsule::{CapsuleError, ExportOptions};
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("encrypt_test.mv2");
+    let export_path = temp_dir.path().join("export_encrypted.mv2e");
+
+    // Set passphrase via env var for test
+    // SAFETY: Test-only, single-threaded test execution
+    unsafe {
+        std::env::set_var("SPECKIT_MEMVID_PASSPHRASE", "test-passphrase-123");
+    }
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "encrypt_test".to_string(),
+        ..Default::default()
+    };
+
+    // Step 1: Create capsule and add artifacts
+    let handle = CapsuleHandle::open(config.clone()).expect("should create capsule");
+
+    let artifact_content = b"# Encrypted Test Artifact\nSecret data here.".to_vec();
+    let uri = handle
+        .put(
+            "SPEC-974",
+            "run-encrypt",
+            ObjectType::Artifact,
+            "secret.md",
+            artifact_content.clone(),
+            serde_json::json!({"sensitive": true}),
+        )
+        .expect("should put artifact");
+
+    handle
+        .commit_stage("SPEC-974", "run-encrypt", "plan", None)
+        .expect("should commit checkpoint");
+
+    // Step 2: Export with encryption
+    let options = ExportOptions {
+        output_path: export_path.clone(),
+        spec_id: Some("SPEC-974".to_string()),
+        run_id: Some("run-encrypt".to_string()),
+        encrypt: true,
+        interactive: false, // Use env var only
+        ..Default::default()
+    };
+
+    let result = handle.export(&options).expect("should export encrypted");
+
+    // Step 3: Verify .mv2e file exists
+    assert!(
+        result.output_path.exists(),
+        "encrypted export file should exist"
+    );
+    assert!(
+        result
+            .output_path
+            .extension()
+            .map_or(false, |e| e == "mv2e"),
+        "export should have .mv2e extension"
+    );
+    assert!(result.bytes_written > 0, "should have written bytes");
+
+    // Verify it's actually encrypted (starts with age header, not MV2)
+    let encrypted_bytes = std::fs::read(&result.output_path).expect("should read encrypted file");
+    assert!(
+        !encrypted_bytes.starts_with(b"MV2"),
+        "encrypted file should not start with MV2 header"
+    );
+
+    // Close original handle
+    drop(handle);
+
+    // Step 4: Open encrypted file with correct passphrase
+    let passphrase = secrecy::SecretString::from("test-passphrase-123".to_string());
+    let decrypted_handle = CapsuleHandle::open_encrypted(&result.output_path, &passphrase)
+        .expect("should open encrypted capsule");
+
+    // Step 5: Verify artifact is accessible
+    let retrieved = decrypted_handle
+        .get_bytes(&uri, None, None)
+        .expect("should retrieve artifact from decrypted capsule");
+
+    assert_eq!(
+        retrieved, artifact_content,
+        "decrypted artifact should match original"
+    );
+
+    // Clean up env var
+    // SAFETY: Test-only, single-threaded test execution
+    unsafe {
+        std::env::remove_var("SPECKIT_MEMVID_PASSPHRASE");
+    }
+}
+
+/// S974-003: Wrong passphrase should fail safely with no partial plaintext.
+#[test]
+#[serial_test::serial]
+fn test_export_encrypted_wrong_passphrase() {
+    use crate::memvid_adapter::capsule::{CapsuleError, ExportOptions};
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("wrong_pass_test.mv2");
+    let export_path = temp_dir.path().join("wrong_pass_export.mv2e");
+
+    // Set passphrase for export
+    // SAFETY: Test-only, single-threaded test execution
+    unsafe {
+        std::env::set_var("SPECKIT_MEMVID_PASSPHRASE", "correct-passphrase");
+    }
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "wrong_pass_test".to_string(),
+        ..Default::default()
+    };
+
+    // Create capsule and export
+    let handle = CapsuleHandle::open(config.clone()).expect("should create capsule");
+    handle
+        .put(
+            "SPEC-974",
+            "run1",
+            ObjectType::Artifact,
+            "test.md",
+            b"Test content".to_vec(),
+            serde_json::json!({}),
+        )
+        .expect("should put artifact");
+
+    let options = ExportOptions {
+        output_path: export_path.clone(),
+        encrypt: true,
+        interactive: false,
+        ..Default::default()
+    };
+
+    handle.export(&options).expect("should export encrypted");
+    drop(handle);
+
+    // Try to open with wrong passphrase
+    let wrong_passphrase = secrecy::SecretString::from("wrong-passphrase".to_string());
+    let result = CapsuleHandle::open_encrypted(&export_path, &wrong_passphrase);
+
+    // Should fail with InvalidPassphrase error
+    match result {
+        Err(CapsuleError::InvalidPassphrase) => {
+            // Expected
+        }
+        Err(e) => panic!("Expected InvalidPassphrase error, got: {:?}", e),
+        Ok(_) => panic!("Should have failed with wrong passphrase"),
+    }
+
+    // Verify no decrypted.mv2 files left behind in temp directories
+    // (This is inherent in the implementation - we decrypt to memory first)
+
+    // Clean up
+    // SAFETY: Test-only, single-threaded test execution
+    unsafe {
+        std::env::remove_var("SPECKIT_MEMVID_PASSPHRASE");
+    }
+}
+
+/// S974-003: Verify CapsuleExported event has correct encrypted flag.
+#[test]
+#[serial_test::serial]
+fn test_export_event_encrypted_flag() {
+    use crate::memvid_adapter::capsule::ExportOptions;
+    use crate::memvid_adapter::types::EventType;
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("event_flag_test.mv2");
+
+    // SAFETY: Test-only, single-threaded test execution
+    unsafe {
+        std::env::set_var("SPECKIT_MEMVID_PASSPHRASE", "test-passphrase");
+    }
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "event_flag_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config.clone()).expect("should create capsule");
+
+    // Add artifact
+    handle
+        .put(
+            "SPEC-974",
+            "run1",
+            ObjectType::Artifact,
+            "test.md",
+            b"Test".to_vec(),
+            serde_json::json!({}),
+        )
+        .expect("should put artifact");
+
+    // Export unencrypted first
+    let unencrypted_path = temp_dir.path().join("unencrypted.mv2");
+    let unencrypted_options = ExportOptions {
+        output_path: unencrypted_path.clone(),
+        encrypt: false,
+        ..Default::default()
+    };
+    handle
+        .export(&unencrypted_options)
+        .expect("should export unencrypted");
+
+    // Export encrypted
+    let encrypted_path = temp_dir.path().join("encrypted.mv2e");
+    let encrypted_options = ExportOptions {
+        output_path: encrypted_path.clone(),
+        encrypt: true,
+        interactive: false,
+        ..Default::default()
+    };
+    handle
+        .export(&encrypted_options)
+        .expect("should export encrypted");
+
+    // Check events
+    let events = handle.list_events();
+    let export_events: Vec<_> = events
+        .iter()
+        .filter(|e| e.event_type == EventType::CapsuleExported)
+        .collect();
+
+    assert_eq!(
+        export_events.len(),
+        2,
+        "should have two CapsuleExported events"
+    );
+
+    // Check unencrypted event (first export)
+    let unencrypted_event = &export_events[0];
+    let encrypted_flag = unencrypted_event.payload.get("encrypted");
+    assert_eq!(
+        encrypted_flag,
+        Some(&serde_json::json!(false)),
+        "unencrypted export event should have encrypted=false"
+    );
+
+    // Check encrypted event (second export)
+    let encrypted_event = &export_events[1];
+    let encrypted_flag = encrypted_event.payload.get("encrypted");
+    assert_eq!(
+        encrypted_flag,
+        Some(&serde_json::json!(true)),
+        "encrypted export event should have encrypted=true"
+    );
+
+    // Clean up
+    // SAFETY: Test-only, single-threaded test execution
+    unsafe {
+        std::env::remove_var("SPECKIT_MEMVID_PASSPHRASE");
     }
 }

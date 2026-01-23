@@ -36,6 +36,8 @@ dev-faults = ["codex-spec-kit/dev-faults"]
 workspace = true
 
 [dependencies]
+# S974-003: age passphrase encryption (XChaCha20-Poly1305 internally)
+age = { version = "0.11", default-features = false }
 anyhow = "1"
 async-trait = { workspace = true }
 base64 = "0.22.1"
@@ -82,11 +84,15 @@ ratatui = { version = "0.29.0", features = [
 ratatui-image = "8.0.0"
 regex-lite = "0.1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "blocking"] }
+# S974-003: Secure passphrase input
+rpassword = "7.3"
 rusqlite = { workspace = true }
 r2d2 = "0.8"
 r2d2_sqlite = "0.31"
 dirs = "5.0"
 schemars = { workspace = true }
+# S974-003: Secret string handling for passphrases
+secrecy = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 serde_yaml = { workspace = true }

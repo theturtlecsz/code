@@ -1407,6 +1407,9 @@ pub struct ModelCallEnvelopePayload {
 /// Capsule export event payload.
 ///
 /// Tracks when a capsule is exported for provenance.
+///
+/// ## SPEC-KIT-974 Acceptance Criteria
+/// Event includes: run_id, spec_id (in envelope), digest, encryption flag, safe flag, included tracks.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CapsuleExportedPayload {
     /// Export destination type (e.g., "file", "remote")
@@ -1414,15 +1417,19 @@ pub struct CapsuleExportedPayload {
     /// Export destination (path or URL, may be redacted)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub destination: Option<String>,
-    /// Export format (e.g., "capsule-v1", "tar.gz")
+    /// Export format (e.g., "mv2-v1", "mv2e-v1")
     pub format: String,
-    /// Checkpoints included in export
+    /// Checkpoints included in export (included tracks)
     pub checkpoints_included: Vec<String>,
-    /// Whether export was sanitized (secrets redacted)
+    /// Whether export was sanitized (secrets redacted) - safe flag
     pub sanitized: bool,
+    /// Whether the export is encrypted (.mv2e) - encryption flag
+    /// S974-003: Default false for backward compatibility with pre-encryption payloads
+    #[serde(default)]
+    pub encrypted: bool,
     /// Export timestamp
     pub exported_at: chrono::DateTime<chrono::Utc>,
-    /// SHA-256 hash of exported content
+    /// SHA-256 hash of exported content - digest
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content_hash: Option<String>,
 }
