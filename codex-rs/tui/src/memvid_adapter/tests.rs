@@ -5352,6 +5352,122 @@ fn test_export_filters_by_run() {
     );
 }
 
+/// S974-008: Regression test for export checkpoint/event filtering.
+///
+/// ## Bug Description
+/// write_export_file() was creating new ExportOptions with all filters set to None,
+/// causing run-scoped exports to include ALL checkpoints/events instead of only
+/// the filtered run's data.
+///
+/// ## What this test verifies
+/// - Export with run_id filter produces correct checkpoint_count and event_count
+/// - Reopened exported capsule contains only the filtered run's checkpoints
+/// - Checkpoints from other runs are NOT included in the export
+#[test]
+fn test_export_filters_checkpoints_and_events_by_run() {
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("checkpoint_filter_source.mv2");
+    let export_path = temp_dir.path().join("checkpoint_filter_export.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "checkpoint_filter_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("should create capsule");
+
+    // Add artifact and commit stage for run1 (creates checkpoint)
+    handle
+        .put(
+            "SPEC-974",
+            "run1",
+            ObjectType::Artifact,
+            "run1_artifact.md",
+            b"Run1 artifact content".to_vec(),
+            serde_json::json!({}),
+        )
+        .expect("should put run1 artifact");
+    handle
+        .commit_stage("SPEC-974", "run1", "plan", None)
+        .expect("should commit run1 plan stage");
+    handle
+        .commit_stage("SPEC-974", "run1", "implement", None)
+        .expect("should commit run1 implement stage");
+
+    // Add artifact and commit stage for run2 (creates checkpoint)
+    handle
+        .put(
+            "SPEC-974",
+            "run2",
+            ObjectType::Artifact,
+            "run2_artifact.md",
+            b"Run2 artifact content".to_vec(),
+            serde_json::json!({}),
+        )
+        .expect("should put run2 artifact");
+    handle
+        .commit_stage("SPEC-974", "run2", "plan", None)
+        .expect("should commit run2 plan stage");
+    handle
+        .commit_stage("SPEC-974", "run2", "implement", None)
+        .expect("should commit run2 implement stage");
+
+    // Export only run1
+    let options = ExportOptions {
+        output_path: export_path.clone(),
+        spec_id: Some("SPEC-974".to_string()),
+        run_id: Some("run1".to_string()),
+        branch: None,
+        safe_mode: true,
+        ..Default::default()
+    };
+
+    let result = handle.export(&options).expect("export should succeed");
+
+    // S974-008: Verify checkpoint count matches only run1's checkpoints
+    // run1 has 2 stage commits (plan, implement), so should have 2 checkpoints
+    assert_eq!(
+        result.checkpoint_count, 2,
+        "should export only 2 checkpoints from run1 (plan + implement stages)"
+    );
+
+    // Verify artifact count is correct
+    assert_eq!(
+        result.artifact_count, 1,
+        "should export only 1 artifact from run1"
+    );
+
+    // Reopen exported capsule and verify checkpoints are filtered
+    drop(handle);
+
+    let export_config = CapsuleConfig {
+        capsule_path: export_path.clone(),
+        workspace_id: "checkpoint_filter_test_export".to_string(),
+        ..Default::default()
+    };
+
+    let exported_handle =
+        CapsuleHandle::open_read_only(export_config).expect("should open exported capsule");
+
+    // List checkpoints - should only have run1's checkpoints
+    let checkpoints = exported_handle.list_checkpoints();
+    assert_eq!(
+        checkpoints.len(),
+        2,
+        "exported capsule should contain exactly 2 checkpoints (run1 only)"
+    );
+
+    // Verify all checkpoints belong to run1
+    for cp in &checkpoints {
+        assert!(
+            cp.run_id.as_deref() == Some("run1"),
+            "all checkpoints should be from run1, found run_id: {:?}",
+            cp.run_id
+        );
+    }
+}
+
 /// SPEC-KIT-974 S974-002: Export → Reopen → Verify test.
 ///
 /// ## Acceptance Criteria

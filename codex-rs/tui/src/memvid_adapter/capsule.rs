@@ -2390,7 +2390,7 @@ impl CapsuleHandle {
         let (bytes_written, content_hash) = if options.encrypt {
             self.write_encrypted_export(&final_output_path, &manifest, &records_to_export, options)?
         } else {
-            self.write_export_file(&final_output_path, &manifest, &records_to_export)?
+            self.write_export_file(&final_output_path, &manifest, &records_to_export, options)?
         };
 
         // Build result
@@ -2471,7 +2471,7 @@ impl CapsuleHandle {
             encrypted: false, // Manifest inside encrypted file shows it's the plaintext version
             ..manifest.clone()
         };
-        self.write_export_file(&temp_path, &plaintext_manifest, records)?;
+        self.write_export_file(&temp_path, &plaintext_manifest, records, options)?;
 
         // Read plaintext content
         let plaintext = std::fs::read(&temp_path)?;
@@ -2627,6 +2627,7 @@ impl CapsuleHandle {
         path: &Path,
         manifest: &ExportManifest,
         records: &[StoredRecord],
+        options: &ExportOptions,
     ) -> Result<(u64, String)> {
         use sha2::{Digest, Sha256};
         use std::io::BufWriter;
@@ -2693,16 +2694,8 @@ impl CapsuleHandle {
             hasher.update(&payload);
         }
 
-        // Write checkpoints as records
-        let checkpoints = self.collect_export_checkpoints(&ExportOptions {
-            output_path: path.to_path_buf(),
-            spec_id: None,
-            run_id: None,
-            branch: None,
-            safe_mode: false,
-            encrypt: false,
-            interactive: false,
-        });
+        // Write checkpoints as records (S974-008: use passed options for filtering)
+        let checkpoints = self.collect_export_checkpoints(options);
         for cp in &checkpoints {
             let cp_meta = serde_json::to_value(cp).unwrap();
             let cp_meta_bytes = serde_json::to_vec(&cp_meta).unwrap();
@@ -2719,16 +2712,8 @@ impl CapsuleHandle {
             hasher.update(&cp_meta_bytes);
         }
 
-        // Write events as records
-        let events = self.collect_export_events(&ExportOptions {
-            output_path: path.to_path_buf(),
-            spec_id: None,
-            run_id: None,
-            branch: None,
-            safe_mode: false,
-            encrypt: false,
-            interactive: false,
-        });
+        // Write events as records (S974-008: use passed options for filtering)
+        let events = self.collect_export_events(options);
         for ev in &events {
             let ev_meta = serde_json::to_value(ev).unwrap();
             let ev_meta_bytes = serde_json::to_vec(&ev_meta).unwrap();
