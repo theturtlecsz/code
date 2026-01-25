@@ -191,3 +191,7 @@ pub(crate) use quality_gate_broker::{
 };
 
 // Re-export file modification functions
+
+// WP-D: Enforcement tests for deep validation and projection provenance
+#[cfg(test)]
+mod tests;
