@@ -51,14 +51,20 @@ use codex_tui::memvid_adapter::{
     EventType,
     ExportOptions,
     FactValueType,
+    // SK974-1: GC types
+    GcConfig,
+    // SK974-1: Import types
+    ImportOptions,
     LogicEdgeV1,
     LogicalUri,
     MemoryCardV1,
     // SPEC-KIT-976: Memory Card and Logic Edge types
     ObjectType,
 };
+// WP-A: Projection rebuild types
+use codex_tui::{RebuildRequest, rebuild_projections};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // =============================================================================
 // HEADLESS EXIT CODES (SPEC-KIT-920)
@@ -134,6 +140,129 @@ fn tool_version() -> String {
         base_version.to_string()
     } else {
         format!("{base_version}+{git_sha}")
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 2: Intake Presence Check (Headless Parity)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// JSON output for NEEDS_INPUT exit code
+#[derive(Debug, serde::Serialize)]
+struct NeedsInputOutput {
+    schema_version: u32,
+    tool_version: String,
+    exit_code: i32,
+    exit_reason: &'static str,
+    error: String,
+    resolution: String,
+    missing_fields: Vec<String>,
+    expected_schema: String,
+    question_set_id: String,
+}
+
+/// Check if intake is present in capsule for the given spec
+///
+/// Returns Ok(true) if intake found, Ok(false) if missing, Err on infrastructure failure.
+fn check_intake_presence(cwd: &Path, spec_id: &str) -> Result<bool, String> {
+    use codex_tui::memvid_adapter::{
+        default_capsule_config, CapsuleHandle, EventType, IntakeCompletedPayload, IntakeKind,
+    };
+
+    let capsule_config = default_capsule_config(cwd);
+    let capsule =
+        CapsuleHandle::open(capsule_config).map_err(|e| format!("Failed to open capsule: {}", e))?;
+
+    let events = capsule.list_events();
+    let intake_found = events.iter().any(|ev| {
+        if ev.event_type != EventType::IntakeCompleted {
+            return false;
+        }
+        if let Ok(payload) = serde_json::from_value::<IntakeCompletedPayload>(ev.payload.clone()) {
+            if payload.kind == IntakeKind::Spec {
+                if let Some(ref ev_spec_id) = payload.spec_id {
+                    return ev_spec_id == spec_id;
+                }
+            }
+        }
+        false
+    });
+
+    Ok(intake_found)
+}
+
+/// Handle missing intake in headless mode - exit 10 with JSON
+fn exit_needs_intake(cwd: &Path, spec_id: &str, json_output: bool) -> ! {
+    let output = NeedsInputOutput {
+        schema_version: SCHEMA_VERSION,
+        tool_version: tool_version(),
+        exit_code: headless_exit::NEEDS_INPUT,
+        exit_reason: headless_exit::exit_reason(headless_exit::NEEDS_INPUT),
+        error: format!("Intake not found for spec {}", spec_id),
+        resolution: "Run TUI to complete intake backfill, or provide --intake-answers <path>"
+            .to_string(),
+        missing_fields: vec!["intake_answers".to_string()],
+        expected_schema: "intake_answers@1.0".to_string(),
+        question_set_id: "spec_intake_baseline_v1".to_string(),
+    };
+
+    if json_output {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&output).unwrap_or_else(|_| "{}".to_string())
+        );
+    } else {
+        eprintln!("Error: Intake not found for spec {}", spec_id);
+        eprintln!(
+            "Resolution: Run TUI to complete intake backfill, or provide --intake-answers <path>"
+        );
+        eprintln!("Working directory: {}", cwd.display());
+    }
+    std::process::exit(headless_exit::NEEDS_INPUT);
+}
+
+/// Check intake presence before execution, exit 10 if missing in headless mode
+/// Exits 3 INFRA_ERROR if capsule is unavailable (no "continue anyway" behavior)
+fn check_intake_for_execution(cwd: &Path, spec_id: &str, headless: bool, json_output: bool) {
+    if !headless {
+        return; // TUI mode handles intake interactively
+    }
+
+    match check_intake_presence(cwd, spec_id) {
+        Ok(true) => {
+            // Intake found, continue
+        }
+        Ok(false) => {
+            // Intake missing in headless mode - exit 10 NEEDS_INPUT
+            exit_needs_intake(cwd, spec_id, json_output);
+        }
+        Err(e) => {
+            // Capsule error in headless mode - exit 3 INFRA_ERROR (hard fail, no continue)
+            let exit_code = headless_exit::INFRA_ERROR;
+            if json_output {
+                let output = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": exit_code,
+                    "exit_reason": headless_exit::exit_reason(exit_code),
+                    "error": format!("Capsule unavailable: {}", e),
+                    "spec_id": spec_id,
+                    "hint": "Run: code speckit capsule doctor",
+                });
+                // Safe to use println here since we're about to exit
+                #[allow(clippy::print_stdout)]
+                {
+                    println!("{}", serde_json::to_string_pretty(&output).unwrap_or_default());
+                }
+            } else {
+                #[allow(clippy::print_stderr)]
+                {
+                    eprintln!("Error: Capsule unavailable: {}", e);
+                    eprintln!("Hint: Run: code speckit capsule doctor");
+                }
+            }
+            std::process::exit(exit_code);
+        }
     }
 }
 
@@ -246,6 +375,31 @@ pub enum SpeckitSubcommand {
     /// SPEC-KIT-976: Commands for managing memory cards and logic mesh edges.
     /// Add cards, edges, and query the knowledge graph.
     Graph(GraphArgs),
+
+    /// Create a new SPEC from intake answers (headless)
+    ///
+    /// Headless equivalent of /speckit.new command. Requires intake answers
+    /// via --answers (file path) or --answers-json (inline JSON).
+    ///
+    /// Input must be a full IntakeAnswers object with schema_version,
+    /// question_set_id, deep flag, and answers map.
+    New(NewArgs),
+
+    /// Create a new project with intake (headless)
+    ///
+    /// Headless equivalent of /speckit.projectnew command. Creates project
+    /// scaffold, applies vision, persists project intake, and optionally
+    /// creates a bootstrap spec.
+    ///
+    /// Requires wrapper answers via --answers or --answers-json with
+    /// projectnew_answers@1.0 schema (vision + project + optional bootstrap_spec).
+    Projectnew(ProjectNewArgs),
+
+    /// Filesystem projection operations
+    ///
+    /// WP-A: "Filesystem Is Projection" commands. Rebuild docs/ and memory/
+    /// artifacts from capsule (SoR) and OverlayDb (vision).
+    Projections(ProjectionsArgs),
 }
 
 /// Arguments for `speckit status` command
@@ -596,6 +750,18 @@ pub enum CapsuleSubcommand {
     ///
     /// SPEC-KIT-971: Exports events and artifacts for a specific run.
     Export(CapsuleExportArgs),
+
+    /// Import a capsule from file
+    ///
+    /// SPEC-KIT-974: Imports .mv2 or .mv2e capsule and emits CapsuleImported event.
+    /// Runs doctor verification before mounting (D70, D104).
+    Import(CapsuleImportArgs),
+
+    /// Garbage collect expired exports
+    ///
+    /// SPEC-KIT-974: Removes exports older than retention_days unless pinned.
+    /// Default: 30 days retention, preserve pinned exports.
+    Gc(CapsuleGcArgs),
 }
 
 /// Arguments for `capsule init`
@@ -774,10 +940,69 @@ pub struct CapsuleExportArgs {
     pub no_interactive: bool,
 
     /// Export format: mv2 (default) or json-dir (legacy)
-    #[arg(long = "format", short = 'f', value_name = "FORMAT", default_value = "mv2")]
+    #[arg(
+        long = "format",
+        short = 'f',
+        value_name = "FORMAT",
+        default_value = "mv2"
+    )]
     pub format: String,
 
     /// Output as JSON instead of text (for CLI output, not export format)
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
+/// Arguments for `capsule import`
+///
+/// SPEC-KIT-974: Import a .mv2 or .mv2e capsule file.
+/// Runs doctor verification before mounting (D70, D104).
+#[derive(Debug, Parser)]
+pub struct CapsuleImportArgs {
+    /// Path to .mv2 or .mv2e capsule file
+    #[arg(value_name = "PATH")]
+    pub path: PathBuf,
+
+    /// Mount name for imported capsule (default: filename without extension)
+    #[arg(long = "mount-as", value_name = "NAME")]
+    pub mount_as: Option<String>,
+
+    /// Require verification to pass (fail if doctor errors)
+    #[arg(long = "require-verified")]
+    pub require_verified: bool,
+
+    /// Allow interactive passphrase prompt (auto-detect TTY if not specified)
+    #[arg(long = "interactive")]
+    pub interactive: Option<bool>,
+
+    /// Disable interactive prompts (fail if passphrase not in SPECKIT_MEMVID_PASSPHRASE)
+    #[arg(long = "no-interactive", conflicts_with = "interactive")]
+    pub no_interactive: bool,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
+/// Arguments for `capsule gc`
+///
+/// SPEC-KIT-974: Garbage collect expired export files.
+/// Default: 30 days retention, preserve pinned exports (D20, D116).
+#[derive(Debug, Parser)]
+pub struct CapsuleGcArgs {
+    /// Retention period in days (default: 30)
+    #[arg(long = "retention-days", default_value = "30", value_name = "N")]
+    pub retention_days: u32,
+
+    /// Preview deletions without executing
+    #[arg(long = "dry-run")]
+    pub dry_run: bool,
+
+    /// Also delete pinned exports (overrides milestone protection)
+    #[arg(long = "no-keep-pinned")]
+    pub no_keep_pinned: bool,
+
+    /// Output as JSON instead of text
     #[arg(long = "json", short = 'j')]
     pub json: bool,
 }
@@ -1189,6 +1414,160 @@ pub struct GraphQueryArgs {
     pub capsule_path: Option<PathBuf>,
 }
 
+// =============================================================================
+// HEADLESS INTAKE COMMANDS (CLI parity with TUI /speckit.new and /speckit.projectnew)
+// =============================================================================
+
+/// Arguments for `speckit new` command
+///
+/// Creates a new SPEC from pre-validated intake answers.
+/// Input must be a full IntakeAnswers object (intake_answers@1.0 schema).
+#[derive(Debug, Parser)]
+pub struct NewArgs {
+    /// Feature description (required)
+    #[arg(long = "desc", short = 'd', required = true, value_name = "DESCRIPTION")]
+    pub description: String,
+
+    /// Enable deep intake questions
+    #[arg(long = "deep")]
+    pub deep: bool,
+
+    /// Path to intake answers JSON file (intake_answers@1.0 schema)
+    #[arg(long = "answers", value_name = "PATH", conflicts_with = "answers_json")]
+    pub answers_path: Option<PathBuf>,
+
+    /// Inline intake answers as JSON string (intake_answers@1.0 schema)
+    #[arg(long = "answers-json", value_name = "JSON", conflicts_with = "answers_path")]
+    pub answers_json: Option<String>,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+
+    /// Headless mode (no prompts, exit 10 on missing input)
+    #[arg(long = "headless")]
+    pub headless: bool,
+}
+
+/// Schema version for projectnew wrapper answers
+pub const PROJECTNEW_ANSWERS_SCHEMA_VERSION: &str = "projectnew_answers@1.0";
+
+/// Wrapper schema for projectnew answers containing vision, project intake, and optional bootstrap spec
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ProjectNewAnswers {
+    /// Schema version (must be "projectnew_answers@1.0")
+    pub schema_version: String,
+    /// Vision answers (Users, Problem, Goals, NonGoals, Principles, Guardrails)
+    pub vision: std::collections::HashMap<String, String>,
+    /// Project intake answers (project_intake_answers@1.0 schema)
+    pub project: serde_json::Value,
+    /// Optional bootstrap spec section
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bootstrap_spec: Option<BootstrapSpecSection>,
+}
+
+/// Bootstrap spec section within projectnew answers
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BootstrapSpecSection {
+    /// Description for the bootstrap spec
+    pub description: String,
+    /// Spec intake answers (intake_answers@1.0 schema)
+    pub spec: serde_json::Value,
+}
+
+/// Arguments for `speckit projectnew` command
+///
+/// Creates a new project scaffold with vision, project intake, and optional bootstrap spec.
+/// Input must be a ProjectNewAnswers object (projectnew_answers@1.0 schema).
+#[derive(Debug, Parser)]
+pub struct ProjectNewArgs {
+    /// Project type (rust, python, typescript, go, generic)
+    #[arg(value_name = "TYPE")]
+    pub project_type: String,
+
+    /// Project name (becomes directory name)
+    #[arg(value_name = "NAME")]
+    pub project_name: String,
+
+    /// Enable deep intake questions
+    #[arg(long = "deep")]
+    pub deep: bool,
+
+    /// Description for bootstrap spec (overrides wrapper if provided)
+    #[arg(long = "bootstrap", value_name = "DESCRIPTION")]
+    pub bootstrap_desc: Option<String>,
+
+    /// Skip bootstrap spec creation
+    #[arg(long = "no-bootstrap-spec")]
+    pub no_bootstrap_spec: bool,
+
+    /// Path to wrapper answers JSON file (projectnew_answers@1.0 schema)
+    #[arg(long = "answers", value_name = "PATH", conflicts_with = "answers_json")]
+    pub answers_path: Option<PathBuf>,
+
+    /// Inline wrapper answers as JSON string (projectnew_answers@1.0 schema)
+    #[arg(long = "answers-json", value_name = "JSON", conflicts_with = "answers_path")]
+    pub answers_json: Option<String>,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+
+    /// Headless mode (no prompts, exit 10 on missing input)
+    #[arg(long = "headless")]
+    pub headless: bool,
+}
+
+// =============================================================================
+// WP-A: Projections Commands
+// =============================================================================
+
+/// Arguments for `speckit projections` command
+///
+/// WP-A: "Filesystem Is Projection" rebuild command.
+/// Regenerates docs/ and memory/ artifacts from capsule (SoR) and OverlayDb.
+#[derive(Debug, Parser)]
+pub struct ProjectionsArgs {
+    #[command(subcommand)]
+    pub command: ProjectionsSubcommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ProjectionsSubcommand {
+    /// Rebuild filesystem projections from capsule/OverlayDb
+    ///
+    /// Regenerates docs/<SPEC>/spec.md, PRD.md, INTAKE.md from capsule
+    /// IntakeCompleted events. Optionally rebuilds memory/NL_VISION.md
+    /// from OverlayDb constitution memories.
+    ///
+    /// This command is read-only on capsule (never writes new events).
+    Rebuild(ProjectionsRebuildArgs),
+}
+
+/// Arguments for `speckit projections rebuild`
+#[derive(Debug, Parser)]
+pub struct ProjectionsRebuildArgs {
+    /// Rebuild only this SPEC-ID (default: all specs from latest intakes)
+    #[arg(long = "spec", value_name = "SPEC-ID")]
+    pub spec_id: Option<String>,
+
+    /// Rebuild only this project (default: all projects from latest intakes)
+    #[arg(long = "project", value_name = "PROJECT-ID")]
+    pub project_id: Option<String>,
+
+    /// Skip vision rebuild from OverlayDb
+    #[arg(long = "no-vision")]
+    pub no_vision: bool,
+
+    /// Dry-run: list files without writing
+    #[arg(long = "dry-run")]
+    pub dry_run: bool,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
 impl SpeckitCli {
     /// Run the speckit CLI command
     pub async fn run(self) -> anyhow::Result<()> {
@@ -1211,6 +1590,19 @@ impl SpeckitCli {
         }
         if let SpeckitSubcommand::Graph(args) = self.command {
             return run_graph(cwd, args);
+        }
+
+        // Handle headless intake commands (don't need executor)
+        if let SpeckitSubcommand::New(args) = self.command {
+            return run_new(cwd, args);
+        }
+        if let SpeckitSubcommand::Projectnew(args) = self.command {
+            return run_projectnew(cwd, args);
+        }
+
+        // Handle projections commands (don't need executor)
+        if let SpeckitSubcommand::Projections(args) = self.command {
+            return run_projections(cwd, args);
         }
 
         // Resolve policy from env/config at adapter boundary (not in executor)
@@ -1247,6 +1639,9 @@ impl SpeckitCli {
             SpeckitSubcommand::Policy(_) => unreachable!("Policy handled above"),
             SpeckitSubcommand::Replay(_) => unreachable!("Replay handled above"),
             SpeckitSubcommand::Graph(_) => unreachable!("Graph handled above"),
+            SpeckitSubcommand::New(_) => unreachable!("New handled above"),
+            SpeckitSubcommand::Projectnew(_) => unreachable!("Projectnew handled above"),
+            SpeckitSubcommand::Projections(_) => unreachable!("Projections handled above"),
         }
     }
 }
@@ -2705,6 +3100,8 @@ fn run_capsule(cwd: PathBuf, args: CapsuleArgs) -> anyhow::Result<()> {
         CapsuleSubcommand::Commit(cmd_args) => run_capsule_commit(&capsule_path, cmd_args),
         CapsuleSubcommand::ResolveUri(cmd_args) => run_capsule_resolve_uri(&capsule_path, cmd_args),
         CapsuleSubcommand::Export(cmd_args) => run_capsule_export(&capsule_path, cmd_args),
+        CapsuleSubcommand::Import(cmd_args) => run_capsule_import(&capsule_path, cmd_args),
+        CapsuleSubcommand::Gc(cmd_args) => run_capsule_gc(&capsule_path, cmd_args),
     }
 }
 
@@ -3510,8 +3907,19 @@ fn run_capsule_export(capsule_path: &PathBuf, args: CapsuleExportArgs) -> anyhow
                     args.run_id,
                     result.output_path.display()
                 );
-                println!("  Format:      .{} ({})", extension, if encrypt { "encrypted" } else { "unencrypted" });
-                println!("  Safe mode:   {}", if safe_mode { "ON" } else { "OFF (includes raw LLM I/O)" });
+                println!(
+                    "  Format:      .{} ({})",
+                    extension,
+                    if encrypt { "encrypted" } else { "unencrypted" }
+                );
+                println!(
+                    "  Safe mode:   {}",
+                    if safe_mode {
+                        "ON"
+                    } else {
+                        "OFF (includes raw LLM I/O)"
+                    }
+                );
                 println!("  Size:        {}", size_display);
                 println!("  Artifacts:   {}", result.artifact_count);
                 println!("  Checkpoints: {}", result.checkpoint_count);
@@ -3706,6 +4114,321 @@ fn run_capsule_export_legacy_json(
     }
 
     Ok(())
+}
+
+// =============================================================================
+// SPEC-KIT-974: Import/GC Commands Implementation
+// =============================================================================
+
+/// Run `capsule import` command
+///
+/// SPEC-KIT-974: Import a .mv2 or .mv2e capsule file.
+/// Runs doctor verification before mounting (D70, D104).
+fn run_capsule_import(capsule_path: &PathBuf, args: CapsuleImportArgs) -> anyhow::Result<()> {
+    // Validate source exists early
+    if !args.path.exists() {
+        if args.json {
+            let json = serde_json::json!({
+                "schema_version": SCHEMA_VERSION,
+                "tool_version": tool_version(),
+                "error": "Source file not found",
+                "source_path": args.path.display().to_string(),
+            });
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        } else {
+            eprintln!("Error: Source file not found: {}", args.path.display());
+        }
+        std::process::exit(capsule_exit::USER_ERROR);
+    }
+
+    // Determine interactive mode (TTY auto-detect if not specified)
+    let interactive = if args.no_interactive {
+        false
+    } else if let Some(val) = args.interactive {
+        val
+    } else {
+        use std::io::IsTerminal;
+        std::io::stdout().is_terminal()
+    };
+
+    // Open workspace capsule for write (to emit CapsuleImported event)
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "cli".to_string(),
+        ..Default::default()
+    };
+
+    let handle = match CapsuleHandle::open(config) {
+        Ok(h) => h,
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("Failed to open workspace capsule: {e}"),
+                    "capsule_path": capsule_path.display().to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Failed to open workspace capsule: {e}");
+            }
+            std::process::exit(capsule_exit::SYSTEM_ERROR);
+        }
+    };
+
+    // Build import options
+    let options = ImportOptions::for_file(&args.path).with_interactive(interactive);
+
+    let options = if let Some(ref name) = args.mount_as {
+        options.with_mount_name(name)
+    } else {
+        options
+    };
+
+    let options = if args.require_verified {
+        options.require_verified()
+    } else {
+        options
+    };
+
+    // Perform import
+    match handle.import(&options) {
+        Ok(result) => {
+            // Format diagnostics for output
+            let diag_json: Vec<_> = result
+                .doctor_results
+                .iter()
+                .map(|d| match d {
+                    DiagnosticResult::Ok(msg) => serde_json::json!({
+                        "level": "ok",
+                        "message": msg,
+                    }),
+                    DiagnosticResult::Warning(msg, hint) => serde_json::json!({
+                        "level": "warning",
+                        "message": msg,
+                        "hint": hint,
+                    }),
+                    DiagnosticResult::Error(msg, hint) => serde_json::json!({
+                        "level": "error",
+                        "message": msg,
+                        "hint": hint,
+                    }),
+                })
+                .collect();
+
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "imported": true,
+                    "source_path": result.source_path.display().to_string(),
+                    "mount_name": result.mount_name,
+                    "content_hash": result.content_hash,
+                    "artifact_count": result.artifact_count,
+                    "checkpoint_count": result.checkpoint_count,
+                    "event_count": result.event_count,
+                    "verification_passed": result.verification_passed,
+                    "diagnostics": diag_json,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                println!("Capsule Import: {}", result.source_path.display());
+                println!("  Mount name: {}", result.mount_name);
+                println!("  Content hash: {}", result.content_hash);
+                println!("  Artifacts: {}", result.artifact_count);
+                println!("  Checkpoints: {}", result.checkpoint_count);
+                println!("  Events: {}", result.event_count);
+                println!(
+                    "  Verification: {}",
+                    if result.verification_passed {
+                        "PASSED"
+                    } else {
+                        "WARNINGS"
+                    }
+                );
+                if !result.doctor_results.is_empty() {
+                    println!("\nDiagnostics:");
+                    for diag in &result.doctor_results {
+                        match diag {
+                            DiagnosticResult::Ok(msg) => println!("  ✓ {msg}"),
+                            DiagnosticResult::Warning(msg, hint) => {
+                                println!("  ⚠ {msg}");
+                                println!("    → {hint}");
+                            }
+                            DiagnosticResult::Error(msg, hint) => {
+                                println!("  ✗ {msg}");
+                                println!("    → {hint}");
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }
+        Err(CapsuleError::InvalidOperation { reason })
+            if reason.contains("verification failed") =>
+        {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": reason,
+                    "source_path": args.path.display().to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: {reason}");
+            }
+            std::process::exit(capsule_exit::VALIDATION_ERROR);
+        }
+        Err(CapsuleError::PassphraseRequired) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": "Passphrase required for encrypted capsule",
+                    "hint": "Set SPECKIT_MEMVID_PASSPHRASE env var or use --interactive",
+                    "source_path": args.path.display().to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Passphrase required for encrypted capsule");
+                eprintln!("Hint: Set SPECKIT_MEMVID_PASSPHRASE env var or use --interactive");
+            }
+            std::process::exit(capsule_exit::USER_ERROR);
+        }
+        Err(CapsuleError::InvalidPassphrase) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": "Invalid passphrase",
+                    "source_path": args.path.display().to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Invalid passphrase");
+            }
+            std::process::exit(capsule_exit::USER_ERROR);
+        }
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("{e}"),
+                    "source_path": args.path.display().to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Import failed: {e}");
+            }
+            std::process::exit(capsule_exit::SYSTEM_ERROR);
+        }
+    }
+}
+
+/// Run `capsule gc` command
+///
+/// SPEC-KIT-974: Garbage collect expired export files.
+fn run_capsule_gc(capsule_path: &PathBuf, args: CapsuleGcArgs) -> anyhow::Result<()> {
+    // Open workspace capsule read-only (GC operates on export files, not capsule itself)
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "cli".to_string(),
+        ..Default::default()
+    };
+
+    let handle = match CapsuleHandle::open_read_only(config) {
+        Ok(h) => h,
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("Failed to open capsule: {e}"),
+                    "capsule_path": capsule_path.display().to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: Failed to open capsule: {e}");
+            }
+            std::process::exit(capsule_exit::SYSTEM_ERROR);
+        }
+    };
+
+    // Build GC config from args
+    let gc_config = GcConfig {
+        retention_days: args.retention_days,
+        keep_pinned: !args.no_keep_pinned,
+        clean_temp_files: true,
+        dry_run: args.dry_run,
+    };
+
+    // Perform GC
+    match handle.gc(&gc_config) {
+        Ok(result) => {
+            // Format deleted paths for JSON
+            let deleted_paths: Vec<_> = result
+                .deleted_paths
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect();
+
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "dry_run": result.dry_run,
+                    "exports_deleted": result.exports_deleted,
+                    "exports_preserved": result.exports_preserved,
+                    "exports_skipped": result.exports_skipped,
+                    "temp_files_deleted": result.temp_files_deleted,
+                    "bytes_freed": result.bytes_freed,
+                    "deleted_paths": deleted_paths,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                if result.dry_run {
+                    println!("Capsule GC (dry run):");
+                } else {
+                    println!("Capsule GC:");
+                }
+                println!("  Retention: {} days", args.retention_days);
+                println!("  Keep pinned: {}", !args.no_keep_pinned);
+                println!();
+                println!("  Exports deleted: {}", result.exports_deleted);
+                println!("  Exports preserved (pinned): {}", result.exports_preserved);
+                println!(
+                    "  Exports skipped (not expired): {}",
+                    result.exports_skipped
+                );
+                println!("  Temp files deleted: {}", result.temp_files_deleted);
+                println!("  Bytes freed: {} KB", result.bytes_freed / 1024);
+                if !deleted_paths.is_empty() {
+                    println!("\nDeleted paths:");
+                    for path in &deleted_paths {
+                        println!("  {}", path);
+                    }
+                }
+            }
+            Ok(())
+        }
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "error": format!("{e}"),
+                    "capsule_path": capsule_path.display().to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: GC failed: {e}");
+            }
+            std::process::exit(capsule_exit::SYSTEM_ERROR);
+        }
+    }
 }
 
 // =============================================================================
@@ -5321,6 +6044,941 @@ fn run_graph_query(
             println!("  --uri <URI>        Lookup by specific mv2:// URI");
             println!("  --type card|edge   List by object type");
             println!("  --adjacency <URI>  Find edges connected to URI");
+        }
+    }
+
+    Ok(())
+}
+
+// =============================================================================
+// HEADLESS INTAKE HANDLERS (run_new, run_projectnew)
+// =============================================================================
+
+/// Helper to load answers from file path or inline JSON
+fn load_answers(
+    answers_path: &Option<PathBuf>,
+    answers_json: &Option<String>,
+) -> Result<String, String> {
+    match (answers_path, answers_json) {
+        (Some(path), None) => {
+            std::fs::read_to_string(path)
+                .map_err(|e| format!("Failed to read answers file '{}': {}", path.display(), e))
+        }
+        (None, Some(json)) => Ok(json.clone()),
+        (None, None) => Err("Missing required answers. Provide --answers <path> or --answers-json <json>.".to_string()),
+        (Some(_), Some(_)) => unreachable!("clap conflicts_with prevents this"),
+    }
+}
+
+/// Run `speckit new` command - create a new SPEC from intake answers
+fn run_new(cwd: PathBuf, args: NewArgs) -> anyhow::Result<()> {
+    use codex_tui::{
+        IntakeAnswers, SPEC_INTAKE_ANSWERS_SCHEMA_VERSION,
+        build_design_brief, build_spec_intake_answers, capitalize_words,
+        create_spec_filesystem_projections, persist_spec_intake_to_capsule,
+        validate_spec_answers, spec_id_generator::generate_next_spec_id,
+        capture_grounding_for_spec_intake,
+    };
+    use std::collections::HashMap;
+
+    // Step 1: Load and parse answers
+    let answers_json = match load_answers(&args.answers_path, &args.answers_json) {
+        Ok(json) => json,
+        Err(e) => {
+            let exit_code = headless_exit::NEEDS_INPUT;
+            if args.json {
+                let output = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": exit_code,
+                    "exit_reason": headless_exit::exit_reason(exit_code),
+                    "error": e,
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                eprintln!("Error: {}", e);
+            }
+            std::process::exit(exit_code);
+        }
+    };
+
+    // Step 2: Parse and validate IntakeAnswers
+    let intake: IntakeAnswers = match serde_json::from_str(&answers_json) {
+        Ok(i) => i,
+        Err(e) => {
+            let exit_code = headless_exit::NEEDS_INPUT;
+            if args.json {
+                let output = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": exit_code,
+                    "exit_reason": headless_exit::exit_reason(exit_code),
+                    "error": format!("Failed to parse answers JSON: {}", e),
+                    "expected_schema_version": SPEC_INTAKE_ANSWERS_SCHEMA_VERSION,
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                eprintln!("Error: Failed to parse answers JSON: {}", e);
+            }
+            std::process::exit(exit_code);
+        }
+    };
+
+    // Step 3: Validate schema version
+    if intake.schema_version != SPEC_INTAKE_ANSWERS_SCHEMA_VERSION {
+        let exit_code = headless_exit::NEEDS_INPUT;
+        if args.json {
+            let output = serde_json::json!({
+                "schema_version": SCHEMA_VERSION,
+                "tool_version": tool_version(),
+                "exit_code": exit_code,
+                "exit_reason": headless_exit::exit_reason(exit_code),
+                "error": format!("Schema version mismatch: got '{}', expected '{}'",
+                    intake.schema_version, SPEC_INTAKE_ANSWERS_SCHEMA_VERSION),
+                "expected_schema_version": SPEC_INTAKE_ANSWERS_SCHEMA_VERSION,
+            });
+            println!("{}", serde_json::to_string_pretty(&output)?);
+        } else {
+            eprintln!("Error: Schema version mismatch: got '{}', expected '{}'",
+                intake.schema_version, SPEC_INTAKE_ANSWERS_SCHEMA_VERSION);
+        }
+        std::process::exit(exit_code);
+    }
+
+    // Step 4: Validate deep flag matches question_set_id
+    let expected_question_set = if args.deep {
+        "spec_intake_deep_v1"
+    } else {
+        "spec_intake_baseline_v1"
+    };
+    if intake.question_set_id != expected_question_set {
+        let exit_code = headless_exit::NEEDS_INPUT;
+        if args.json {
+            let output = serde_json::json!({
+                "schema_version": SCHEMA_VERSION,
+                "tool_version": tool_version(),
+                "exit_code": exit_code,
+                "exit_reason": headless_exit::exit_reason(exit_code),
+                "error": format!("Question set mismatch: --deep={} but question_set_id='{}' (expected '{}')",
+                    args.deep, intake.question_set_id, expected_question_set),
+                "expected_question_set_id": expected_question_set,
+            });
+            println!("{}", serde_json::to_string_pretty(&output)?);
+        } else {
+            eprintln!("Error: Question set mismatch: --deep={} but question_set_id='{}' (expected '{}')",
+                args.deep, intake.question_set_id, expected_question_set);
+        }
+        std::process::exit(exit_code);
+    }
+
+    // Step 5: Convert BTreeMap to HashMap for validation
+    let answers: HashMap<String, String> = intake.answers.iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+
+    // Step 6: Validate answers content (includes baseline + deep validation when --deep)
+    let validation = validate_spec_answers(&answers, args.deep);
+    if !validation.valid {
+        let exit_code = headless_exit::NEEDS_INPUT;
+        if args.json {
+            let output = serde_json::json!({
+                "schema_version": SCHEMA_VERSION,
+                "tool_version": tool_version(),
+                "exit_code": exit_code,
+                "exit_reason": headless_exit::exit_reason(exit_code),
+                "validation_errors": validation.errors,
+                "validation_warnings": validation.warnings,
+            });
+            println!("{}", serde_json::to_string_pretty(&output)?);
+        } else {
+            eprintln!("Validation failed:");
+            for error in &validation.errors {
+                eprintln!("  - {}", error);
+            }
+        }
+        std::process::exit(exit_code);
+    }
+
+    // Step 7: Generate spec_id
+    let spec_id = match generate_next_spec_id(&cwd) {
+        Ok(id) => id,
+        Err(e) => {
+            let exit_code = headless_exit::INFRA_ERROR;
+            if args.json {
+                let output = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": exit_code,
+                    "exit_reason": headless_exit::exit_reason(exit_code),
+                    "error": format!("Failed to generate SPEC-ID: {}", e),
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                eprintln!("Error: Failed to generate SPEC-ID: {}", e);
+            }
+            std::process::exit(exit_code);
+        }
+    };
+
+    let intake_id = uuid::Uuid::new_v4().to_string();
+    let created_via = "headless_cli";
+
+    // Step 7.5: Deep grounding capture (if deep mode) - WP-B parity with TUI
+    let grounding_uris = if args.deep {
+        match capture_grounding_for_spec_intake(&cwd, &spec_id, &intake_id) {
+            Ok(result) => {
+                if !args.json {
+                    eprintln!("Deep grounding captured: {} artifacts", result.grounding_uris.len());
+                }
+                result.grounding_uris
+            }
+            Err(e) => {
+                // Deep requires grounding; failure blocks completion (SoR integrity)
+                let exit_code = headless_exit::HARD_FAIL;
+                if args.json {
+                    let output = serde_json::json!({
+                        "schema_version": SCHEMA_VERSION,
+                        "tool_version": tool_version(),
+                        "exit_code": exit_code,
+                        "exit_reason": headless_exit::exit_reason(exit_code),
+                        "error": format!("Deep grounding failed: {}", e),
+                    });
+                    println!("{}", serde_json::to_string_pretty(&output)?);
+                } else {
+                    eprintln!("Error: Deep grounding failed: {}", e);
+                }
+                std::process::exit(exit_code);
+            }
+        }
+    } else {
+        Vec::new()
+    };
+
+    // Step 8: Build structs
+    let grounding_uris_for_json = grounding_uris.clone(); // For JSON output
+    let intake_answers = build_spec_intake_answers(&answers, args.deep, validation.warnings);
+    let design_brief = match build_design_brief(
+        &answers, &spec_id, &intake_id, &args.description, args.deep, created_via, grounding_uris
+    ) {
+        Ok(b) => b,
+        Err(e) => {
+            let exit_code = headless_exit::HARD_FAIL;
+            if args.json {
+                let output = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": exit_code,
+                    "exit_reason": headless_exit::exit_reason(exit_code),
+                    "error": format!("Failed to build design brief: {}", e),
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                eprintln!("Error: Failed to build design brief: {}", e);
+            }
+            std::process::exit(exit_code);
+        }
+    };
+
+    // Step 9: Persist to capsule (SoR)
+    let capsule_result = match persist_spec_intake_to_capsule(
+        &cwd, &spec_id, &intake_id, &intake_answers, &design_brief, args.deep, created_via
+    ) {
+        Ok(r) => r,
+        Err(e) => {
+            let exit_code = headless_exit::INFRA_ERROR;
+            if args.json {
+                let output = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": exit_code,
+                    "exit_reason": headless_exit::exit_reason(exit_code),
+                    "error": format!("Capsule persistence failed: {}", e),
+                    "hint": "Run: code speckit capsule doctor",
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                eprintln!("Error: Capsule persistence failed: {}", e);
+                eprintln!("Hint: Run: code speckit capsule doctor");
+            }
+            std::process::exit(exit_code);
+        }
+    };
+
+    // Step 10: Create filesystem projections (warn on failure, don't exit)
+    let dir_name = match create_spec_filesystem_projections(
+        &cwd, &spec_id, &args.description, &design_brief, &capsule_result
+    ) {
+        Ok(d) => d,
+        Err(e) => {
+            // Capsule is SoR, filesystem failure is a warning
+            eprintln!("Warning: Filesystem projection failed (capsule SoR persisted): {}", e);
+            format!("{}-slug", spec_id) // Fallback name
+        }
+    };
+
+    // Step 11: Output result
+    let feature_name = capitalize_words(&args.description);
+    if args.json {
+        let output = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "tool_version": tool_version(),
+            "exit_code": headless_exit::SUCCESS,
+            "exit_reason": headless_exit::exit_reason(headless_exit::SUCCESS),
+            "spec_id": spec_id,
+            "feature_name": feature_name,
+            "intake_id": intake_id,
+            "directory": format!("docs/{}", dir_name),
+            "deep": args.deep,
+            "grounding_result": if args.deep {
+                serde_json::json!({
+                    "artifact_count": grounding_uris_for_json.len(),
+                    "uris": grounding_uris_for_json,
+                })
+            } else {
+                serde_json::Value::Null
+            },
+            "capsule": {
+                "answers_uri": capsule_result.answers_uri,
+                "answers_sha256": capsule_result.answers_sha256,
+                "brief_uri": capsule_result.brief_uri,
+                "brief_sha256": capsule_result.brief_sha256,
+                "checkpoint_label": capsule_result.checkpoint_label,
+                "ace_intake_frame_uri": capsule_result.ace_intake_frame_uri,
+                "ace_intake_frame_sha256": capsule_result.ace_intake_frame_sha256,
+                "ace_intake_frame_schema_version": "ace_intake_frame@1.0",
+            },
+        });
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        println!("Created {}: {}", spec_id, feature_name);
+        println!("  Directory: docs/{}/", dir_name);
+        println!("  Files: spec.md, PRD.md, INTAKE.md");
+        println!("  Intake ID: {}", intake_id);
+        println!("  Answers URI: {}", capsule_result.answers_uri);
+        println!("  Brief URI: {}", capsule_result.brief_uri);
+        if let Some(ref frame_uri) = capsule_result.ace_intake_frame_uri {
+            println!("  ACE Intake Frame URI: {}", frame_uri);
+        }
+        println!();
+        println!("Next steps:");
+        println!("  code speckit run --spec {} --from plan --to plan --execute", spec_id);
+    }
+
+    Ok(())
+}
+
+/// Run `speckit projectnew` command - create a new project with intake
+fn run_projectnew(cwd: PathBuf, args: ProjectNewArgs) -> anyhow::Result<()> {
+    use codex_tui::{
+        ProjectType, create_project,
+        build_design_brief, build_spec_intake_answers,
+        create_spec_filesystem_projections, persist_spec_intake_to_capsule,
+        validate_spec_answers, spec_id_generator::generate_next_spec_id,
+        build_project_brief, build_project_intake_answers,
+        create_project_filesystem_projection, persist_project_intake_to_capsule,
+        persist_vision_to_overlay, validate_project_answers,
+        capture_grounding_for_project_intake, capture_grounding_for_spec_intake,
+    };
+    use std::collections::HashMap;
+
+    // Step 1: Parse project type
+    let project_type = match ProjectType::from_str(&args.project_type) {
+        Some(t) => t,
+        None => {
+            let exit_code = headless_exit::HARD_FAIL;
+            if args.json {
+                let output = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": exit_code,
+                    "exit_reason": headless_exit::exit_reason(exit_code),
+                    "error": format!("Unknown project type '{}'. Valid: {}", args.project_type, ProjectType::valid_types()),
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                eprintln!("Error: Unknown project type '{}'. Valid: {}", args.project_type, ProjectType::valid_types());
+            }
+            std::process::exit(exit_code);
+        }
+    };
+
+    // Step 2: Scaffold project
+    let project_result = match create_project(project_type, &args.project_name, &cwd) {
+        Ok(r) => r,
+        Err(e) => {
+            let exit_code = headless_exit::INFRA_ERROR;
+            if args.json {
+                let output = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": exit_code,
+                    "exit_reason": headless_exit::exit_reason(exit_code),
+                    "error": format!("Project scaffold failed: {}", e),
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                eprintln!("Error: Project scaffold failed: {}", e);
+            }
+            std::process::exit(exit_code);
+        }
+    };
+
+    let project_dir = project_result.directory.clone();
+    let project_id = project_result.project_name.clone();
+
+    // Step 3: Load and parse wrapper answers
+    let wrapper_json = match load_answers(&args.answers_path, &args.answers_json) {
+        Ok(json) => json,
+        Err(e) => {
+            let exit_code = headless_exit::NEEDS_INPUT;
+            if args.json {
+                let output = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": exit_code,
+                    "exit_reason": headless_exit::exit_reason(exit_code),
+                    "error": e,
+                    "project_dir": project_dir.display().to_string(),
+                    "note": "Project scaffold created, but intake answers missing.",
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                eprintln!("Error: {}", e);
+                eprintln!("Note: Project scaffold created at {}", project_dir.display());
+            }
+            std::process::exit(exit_code);
+        }
+    };
+
+    let wrapper: ProjectNewAnswers = match serde_json::from_str(&wrapper_json) {
+        Ok(w) => w,
+        Err(e) => {
+            let exit_code = headless_exit::NEEDS_INPUT;
+            if args.json {
+                let output = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": exit_code,
+                    "exit_reason": headless_exit::exit_reason(exit_code),
+                    "error": format!("Failed to parse wrapper answers: {}", e),
+                    "expected_schema_version": PROJECTNEW_ANSWERS_SCHEMA_VERSION,
+                    "project_dir": project_dir.display().to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                eprintln!("Error: Failed to parse wrapper answers: {}", e);
+            }
+            std::process::exit(exit_code);
+        }
+    };
+
+    // Step 4: Validate wrapper schema version
+    if wrapper.schema_version != PROJECTNEW_ANSWERS_SCHEMA_VERSION {
+        let exit_code = headless_exit::NEEDS_INPUT;
+        if args.json {
+            let output = serde_json::json!({
+                "schema_version": SCHEMA_VERSION,
+                "tool_version": tool_version(),
+                "exit_code": exit_code,
+                "exit_reason": headless_exit::exit_reason(exit_code),
+                "error": format!("Wrapper schema version mismatch: got '{}', expected '{}'",
+                    wrapper.schema_version, PROJECTNEW_ANSWERS_SCHEMA_VERSION),
+                "expected_schema_version": PROJECTNEW_ANSWERS_SCHEMA_VERSION,
+            });
+            println!("{}", serde_json::to_string_pretty(&output)?);
+        } else {
+            eprintln!("Error: Wrapper schema version mismatch: got '{}', expected '{}'",
+                wrapper.schema_version, PROJECTNEW_ANSWERS_SCHEMA_VERSION);
+        }
+        std::process::exit(exit_code);
+    }
+
+    // Step 4.5: Persist vision to OverlayDb (MANDATORY)
+    let vision_result = match persist_vision_to_overlay(&project_dir, &wrapper.vision) {
+        Ok(r) => r,
+        Err(e) => {
+            let exit_code = headless_exit::INFRA_ERROR;
+            if args.json {
+                let output = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": exit_code,
+                    "exit_reason": headless_exit::exit_reason(exit_code),
+                    "error": format!("Vision persistence failed: {}", e),
+                    "project_dir": project_dir.display().to_string(),
+                    "vision_result": {
+                        "error": e.to_string(),
+                    },
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                eprintln!("Error: Vision persistence failed: {}", e);
+            }
+            std::process::exit(exit_code);
+        }
+    };
+
+    // Step 5: Process project intake
+    let project_intake: HashMap<String, String> = match serde_json::from_value(wrapper.project.clone()) {
+        Ok(answers) => answers,
+        Err(e) => {
+            let exit_code = headless_exit::NEEDS_INPUT;
+            if args.json {
+                let output = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": exit_code,
+                    "exit_reason": headless_exit::exit_reason(exit_code),
+                    "error": format!("Failed to parse project intake answers: {}", e),
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                eprintln!("Error: Failed to parse project intake answers: {}", e);
+            }
+            std::process::exit(exit_code);
+        }
+    };
+
+    // Step 5b: Validate project intake answers
+    let project_validation = validate_project_answers(&project_intake, args.deep);
+    if !project_validation.valid {
+        let exit_code = headless_exit::NEEDS_INPUT;
+        if args.json {
+            let output = serde_json::json!({
+                "schema_version": SCHEMA_VERSION,
+                "tool_version": tool_version(),
+                "exit_code": exit_code,
+                "exit_reason": headless_exit::exit_reason(exit_code),
+                "error": "Project intake validation failed",
+                "validation_errors": project_validation.errors,
+                "resolution": "Fix validation errors and retry",
+            });
+            println!("{}", serde_json::to_string_pretty(&output)?);
+        } else {
+            eprintln!("Project intake validation failed:");
+            for error in &project_validation.errors {
+                eprintln!("  - {}", error);
+            }
+        }
+        std::process::exit(exit_code);
+    }
+
+    let project_intake_id = uuid::Uuid::new_v4().to_string();
+    let created_via = "headless_cli";
+
+    // Step 5.5: Deep grounding capture (if deep mode) - WP-B parity with TUI
+    let project_grounding_uris = if args.deep {
+        match capture_grounding_for_project_intake(&project_dir, &project_id) {
+            Ok(result) => {
+                if !args.json {
+                    eprintln!("Deep grounding captured: {} artifacts", result.grounding_uris.len());
+                }
+                result.grounding_uris
+            }
+            Err(e) => {
+                // Deep requires grounding; failure blocks completion (SoR integrity)
+                let exit_code = headless_exit::HARD_FAIL;
+                if args.json {
+                    let output = serde_json::json!({
+                        "schema_version": SCHEMA_VERSION,
+                        "tool_version": tool_version(),
+                        "exit_code": exit_code,
+                        "exit_reason": headless_exit::exit_reason(exit_code),
+                        "error": format!("Deep grounding failed: {}", e),
+                        "project_dir": project_dir.display().to_string(),
+                    });
+                    println!("{}", serde_json::to_string_pretty(&output)?);
+                } else {
+                    eprintln!("Error: Deep grounding failed: {}", e);
+                }
+                std::process::exit(exit_code);
+            }
+        }
+    } else {
+        Vec::new()
+    };
+
+    let project_grounding_uris_for_json = project_grounding_uris.clone(); // For JSON output
+    let project_intake_answers = build_project_intake_answers(&project_intake, args.deep);
+    let project_brief = build_project_brief(&project_intake, &project_id, &project_intake_id, args.deep, created_via, project_grounding_uris);
+
+    // Step 6: Persist project intake to capsule
+    let project_capsule_result = match persist_project_intake_to_capsule(
+        &project_dir, &project_id, &project_intake_id,
+        &project_intake_answers, &project_brief, args.deep, created_via
+    ) {
+        Ok(r) => r,
+        Err(e) => {
+            let exit_code = headless_exit::INFRA_ERROR;
+            if args.json {
+                let output = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": exit_code,
+                    "exit_reason": headless_exit::exit_reason(exit_code),
+                    "error": format!("Project intake capsule persistence failed: {}", e),
+                    "project_dir": project_dir.display().to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                eprintln!("Error: Project intake capsule persistence failed: {}", e);
+            }
+            std::process::exit(exit_code);
+        }
+    };
+
+    // Step 7: Create project filesystem projection
+    if let Err(e) = create_project_filesystem_projection(
+        &project_dir, &project_id, &project_brief, &project_capsule_result, args.deep
+    ) {
+        eprintln!("Warning: Failed to create PROJECT_BRIEF.md: {}", e);
+    }
+
+    // Step 8: Bootstrap spec (unless --no-bootstrap-spec)
+    let bootstrap_result = if !args.no_bootstrap_spec {
+        // Determine bootstrap description
+        let bootstrap_desc = args.bootstrap_desc
+            .or_else(|| wrapper.bootstrap_spec.as_ref().map(|b| b.description.clone()))
+            .unwrap_or_else(|| "Initial setup".to_string());
+
+        // Get bootstrap spec answers
+        let spec_answers: HashMap<String, String> = if let Some(ref bootstrap) = wrapper.bootstrap_spec {
+            match serde_json::from_value(bootstrap.spec.clone()) {
+                Ok(a) => a,
+                Err(e) => {
+                    eprintln!("Warning: Failed to parse bootstrap spec answers: {}. Skipping bootstrap.", e);
+                    return output_projectnew_success(args.json, &project_id, &project_dir, &vision_result, &project_capsule_result, None, project_grounding_uris_for_json.clone());
+                }
+            }
+        } else {
+            eprintln!("Warning: --no-bootstrap-spec not set but no bootstrap_spec in wrapper. Skipping bootstrap.");
+            return output_projectnew_success(args.json, &project_id, &project_dir, &vision_result, &project_capsule_result, None, project_grounding_uris_for_json.clone());
+        };
+
+        // Validate spec answers (includes baseline + deep validation when --deep)
+        let validation = validate_spec_answers(&spec_answers, args.deep);
+        if !validation.valid {
+            eprintln!("Warning: Bootstrap spec validation failed. Skipping bootstrap.");
+            for error in &validation.errors {
+                eprintln!("  - {}", error);
+            }
+            return output_projectnew_success(args.json, &project_id, &project_dir, &vision_result, &project_capsule_result, None, project_grounding_uris_for_json.clone());
+        }
+
+        // Generate spec_id (in project directory)
+        let spec_id = match generate_next_spec_id(&project_dir) {
+            Ok(id) => id,
+            Err(e) => {
+                eprintln!("Warning: Failed to generate SPEC-ID: {}. Skipping bootstrap.", e);
+                return output_projectnew_success(args.json, &project_id, &project_dir, &vision_result, &project_capsule_result, None, project_grounding_uris_for_json.clone());
+            }
+        };
+
+        let spec_intake_id = uuid::Uuid::new_v4().to_string();
+
+        // Deep grounding capture for bootstrap spec (if deep mode) - WP-B parity with TUI
+        let bootstrap_grounding_uris = if args.deep {
+            match capture_grounding_for_spec_intake(&project_dir, &spec_id, &spec_intake_id) {
+                Ok(result) => {
+                    if !args.json {
+                        eprintln!("Deep grounding captured for bootstrap spec: {} artifacts", result.grounding_uris.len());
+                    }
+                    result.grounding_uris
+                }
+                Err(e) => {
+                    // Bootstrap grounding failure skips bootstrap (project already created)
+                    eprintln!("Warning: Bootstrap spec deep grounding failed: {}. Skipping bootstrap.", e);
+                    return output_projectnew_success(args.json, &project_id, &project_dir, &vision_result, &project_capsule_result, None, project_grounding_uris_for_json);
+                }
+            }
+        } else {
+            Vec::new()
+        };
+
+        // Build spec structs
+        let spec_intake_answers = build_spec_intake_answers(&spec_answers, args.deep, validation.warnings);
+        let design_brief = match build_design_brief(
+            &spec_answers, &spec_id, &spec_intake_id, &bootstrap_desc, args.deep, created_via, bootstrap_grounding_uris
+        ) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("Warning: Failed to build bootstrap design brief: {}. Skipping bootstrap.", e);
+                return output_projectnew_success(args.json, &project_id, &project_dir, &vision_result, &project_capsule_result, None, project_grounding_uris_for_json.clone());
+            }
+        };
+
+        // Persist bootstrap spec to capsule
+        let spec_capsule_result = match persist_spec_intake_to_capsule(
+            &project_dir, &spec_id, &spec_intake_id, &spec_intake_answers, &design_brief, args.deep, created_via
+        ) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("Warning: Bootstrap spec capsule persistence failed: {}. Skipping bootstrap.", e);
+                return output_projectnew_success(args.json, &project_id, &project_dir, &vision_result, &project_capsule_result, None, project_grounding_uris_for_json.clone());
+            }
+        };
+
+        // Create spec filesystem projections
+        let dir_name = match create_spec_filesystem_projections(
+            &project_dir, &spec_id, &bootstrap_desc, &design_brief, &spec_capsule_result
+        ) {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!("Warning: Bootstrap spec filesystem projection failed: {}. Capsule SoR persisted.", e);
+                format!("{}-bootstrap", spec_id)
+            }
+        };
+
+        Some(BootstrapResult {
+            spec_id,
+            intake_id: spec_intake_id,
+            directory: dir_name,
+            capsule_result: spec_capsule_result,
+        })
+    } else {
+        None
+    };
+
+    output_projectnew_success(args.json, &project_id, &project_dir, &vision_result, &project_capsule_result, bootstrap_result.as_ref(), project_grounding_uris_for_json)
+}
+
+/// Bootstrap spec result for output
+struct BootstrapResult {
+    spec_id: String,
+    intake_id: String,
+    directory: String,
+    capsule_result: codex_tui::CapsulePersistenceResult,
+}
+
+/// Output projectnew success result
+fn output_projectnew_success(
+    json_output: bool,
+    project_id: &str,
+    project_dir: &std::path::Path,
+    vision_result: &codex_tui::VisionPersistenceResult,
+    project_capsule: &codex_tui::ProjectCapsulePersistenceResult,
+    bootstrap: Option<&BootstrapResult>,
+    grounding_uris: Vec<String>,
+) -> anyhow::Result<()> {
+    if json_output {
+        let mut output = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "tool_version": tool_version(),
+            "exit_code": headless_exit::SUCCESS,
+            "exit_reason": headless_exit::exit_reason(headless_exit::SUCCESS),
+            "project_id": project_id,
+            "project_dir": project_dir.display().to_string(),
+            "vision_result": {
+                "constitution_version": vision_result.constitution_version,
+                "content_hash": vision_result.content_hash,
+                "counts": {
+                    "goals": vision_result.goals_count,
+                    "non_goals": vision_result.non_goals_count,
+                    "principles": vision_result.principles_count,
+                    "guardrails": vision_result.guardrails_count,
+                },
+                "cache_invalidated": vision_result.cache_invalidated,
+                "projections": {
+                    "nl_vision": vision_result.projections.nl_vision_path.as_ref()
+                        .map(|p| p.display().to_string()),
+                },
+            },
+            "project_capsule": {
+                "answers_uri": project_capsule.answers_uri,
+                "answers_sha256": project_capsule.answers_sha256,
+                "brief_uri": project_capsule.brief_uri,
+                "brief_sha256": project_capsule.brief_sha256,
+                "checkpoint_label": project_capsule.checkpoint_label,
+                "ace_intake_frame_uri": project_capsule.ace_intake_frame_uri,
+                "ace_intake_frame_sha256": project_capsule.ace_intake_frame_sha256,
+                "ace_intake_frame_schema_version": "ace_intake_frame@1.0",
+            },
+        });
+
+        // Add grounding result (WP-B)
+        if !grounding_uris.is_empty() {
+            output["grounding_result"] = serde_json::json!({
+                "artifact_count": grounding_uris.len(),
+                "uris": grounding_uris,
+            });
+        }
+
+        // Add deep artifacts if present
+        if let Some(ref deep) = project_capsule.deep_artifacts {
+            output["project_capsule"]["deep_artifacts"] = serde_json::json!({
+                "architecture_sketch_uri": deep.architecture_sketch_uri,
+                "architecture_sketch_sha256": deep.architecture_sketch_sha256,
+                "threat_model_uri": deep.threat_model_uri,
+                "threat_model_sha256": deep.threat_model_sha256,
+                "ops_baseline_uri": deep.ops_baseline_uri,
+                "ops_baseline_sha256": deep.ops_baseline_sha256,
+            });
+        }
+
+        if let Some(b) = bootstrap {
+            output["bootstrap_spec"] = serde_json::json!({
+                "spec_id": b.spec_id,
+                "intake_id": b.intake_id,
+                "directory": format!("docs/{}", b.directory),
+                "capsule": {
+                    "answers_uri": b.capsule_result.answers_uri,
+                    "answers_sha256": b.capsule_result.answers_sha256,
+                    "brief_uri": b.capsule_result.brief_uri,
+                    "brief_sha256": b.capsule_result.brief_sha256,
+                    "checkpoint_label": b.capsule_result.checkpoint_label,
+                    "ace_intake_frame_uri": b.capsule_result.ace_intake_frame_uri,
+                    "ace_intake_frame_sha256": b.capsule_result.ace_intake_frame_sha256,
+                    "ace_intake_frame_schema_version": "ace_intake_frame@1.0",
+                },
+            });
+        }
+
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        println!("Project created: {}", project_id);
+        println!("  Directory: {}", project_dir.display());
+        println!("  Vision: constitution v{}, hash {}",
+            vision_result.constitution_version,
+            &vision_result.content_hash[..8.min(vision_result.content_hash.len())]);
+        println!("  Project Intake ID: {}", project_capsule.checkpoint_label.split(':').last().unwrap_or("unknown"));
+        println!("  Brief URI: {}", project_capsule.brief_uri);
+
+        // Show deep artifacts if present
+        if let Some(ref deep) = project_capsule.deep_artifacts {
+            println!("  Deep Artifacts:");
+            println!("    Architecture: {}", deep.architecture_sketch_uri);
+            println!("    Threat Model: {}", deep.threat_model_uri);
+            if let Some(ref ops_uri) = deep.ops_baseline_uri {
+                println!("    Ops Baseline: {}", ops_uri);
+            }
+        }
+
+        if let Some(b) = bootstrap {
+            println!();
+            println!("Bootstrap spec created: {}", b.spec_id);
+            println!("  Directory: docs/{}/", b.directory);
+            println!("  Intake ID: {}", b.intake_id);
+            println!("  Brief URI: {}", b.capsule_result.brief_uri);
+        }
+
+        println!();
+        println!("Next steps:");
+        if bootstrap.is_some() {
+            let b = bootstrap.unwrap();
+            println!("  cd {}", project_dir.display());
+            println!("  code speckit run --spec {} --from plan --to plan --execute", b.spec_id);
+        } else {
+            println!("  cd {}", project_dir.display());
+            println!("  code speckit new --desc \"<feature>\" --answers <path>");
+        }
+    }
+
+    Ok(())
+}
+
+// =============================================================================
+// WP-A: PROJECTIONS COMMANDS
+// =============================================================================
+
+/// Run projections commands (rebuild filesystem projections from SoR)
+fn run_projections(cwd: PathBuf, args: ProjectionsArgs) -> anyhow::Result<()> {
+    match args.command {
+        ProjectionsSubcommand::Rebuild(rebuild_args) => run_projections_rebuild(cwd, rebuild_args),
+    }
+}
+
+/// Run `speckit projections rebuild` command
+fn run_projections_rebuild(cwd: PathBuf, args: ProjectionsRebuildArgs) -> anyhow::Result<()> {
+    // Build rebuild request
+    let mut request = RebuildRequest::new();
+    if let Some(spec_id) = args.spec_id {
+        request = request.with_spec(spec_id);
+    }
+    if let Some(project_id) = args.project_id {
+        request = request.with_project(project_id);
+    }
+    if args.no_vision {
+        request = request.no_vision();
+    }
+    if args.dry_run {
+        request = request.dry_run();
+    }
+
+    // Execute rebuild
+    let result = match rebuild_projections(&cwd, request) {
+        Ok(r) => r,
+        Err(e) => {
+            let exit_code = headless_exit::HARD_FAIL;
+            if args.json {
+                let output = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": exit_code,
+                    "exit_reason": headless_exit::exit_reason(exit_code),
+                    "error": e.to_string(),
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                eprintln!("Error: {}", e);
+            }
+            std::process::exit(exit_code);
+        }
+    };
+
+    // Output result
+    if args.json {
+        let output = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "tool_version": tool_version(),
+            "exit_code": headless_exit::SUCCESS,
+            "exit_reason": headless_exit::exit_reason(headless_exit::SUCCESS),
+            "dry_run": result.dry_run,
+            "files_written": result.files_written.iter().map(|p| p.display().to_string()).collect::<Vec<_>>(),
+            "source_uris": result.source_uris,
+            "spec_intakes": result.spec_intakes,
+            "project_intakes": result.project_intakes,
+            "vision_rebuilt": result.vision_rebuilt,
+            "vision_details": result.vision_details,
+        });
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        if result.dry_run {
+            println!("Dry-run: Would write {} files:", result.files_written.len());
+        } else {
+            println!("Rebuilt {} files:", result.files_written.len());
+        }
+        for file in &result.files_written {
+            println!("  {}", file.display());
+        }
+
+        if !result.spec_intakes.is_empty() {
+            println!();
+            println!("Spec intakes processed:");
+            for spec in &result.spec_intakes {
+                println!("  {} (intake: {}, deep: {})", spec.spec_id, &spec.intake_id[..8], spec.deep);
+            }
+        }
+
+        if !result.project_intakes.is_empty() {
+            println!();
+            println!("Project intakes processed:");
+            for project in &result.project_intakes {
+                println!("  {} (intake: {}, deep: {})", project.project_id, &project.intake_id[..8], project.deep);
+            }
+        }
+
+        if result.vision_rebuilt {
+            println!();
+            println!("Vision rebuilt from OverlayDb:");
+            if let Some(ref details) = result.vision_details {
+                println!("  Goals: {}", details.goals_count);
+                println!("  Non-goals: {}", details.non_goals_count);
+                println!("  Principles: {}", details.principles_count);
+                println!("  Guardrails: {}", details.guardrails_count);
+                if let Some(ref note) = details.limitation_note {
+                    println!("  Note: {}", note);
+                }
+            }
         }
     }
 

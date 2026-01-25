@@ -102,7 +102,9 @@ use codex_protocol::config_types::SandboxMode;
 // SPEC-KIT-979: Phase enforcement imports
 use codex_stage0::config::MemoryBackend;
 use codex_stage0::policy::GovernancePolicy;
-use memvid_adapter::{PhaseEnforcementResult, check_phase_enforcement, effective_phase, resolve_sunset_phase};
+use memvid_adapter::{
+    PhaseEnforcementResult, check_phase_enforcement, effective_phase, resolve_sunset_phase,
+};
 use regex_lite::Regex;
 use std::fs::OpenOptions;
 use std::path::PathBuf;
@@ -226,6 +228,49 @@ pub use chatwidget::spec_kit::gate_evaluation::run_spec_consensus;
 // FORK-SPECIFIC (just-every/code): SPEC-KIT-070 - Re-export native SPEC-ID generation
 pub use chatwidget::spec_kit::spec_id_generator;
 
+// CLI Headless Intake Support: Re-export intake types and core functions
+pub use chatwidget::spec_kit::intake::{
+    AcceptanceCriterion, AceIntakeFrame, DeepDesignSections, DesignBrief, IntakeAnswers,
+    ProjectBrief, ProjectDeepSections,
+    ACE_INTAKE_FRAME_SCHEMA_VERSION, DESIGN_BRIEF_SCHEMA_VERSION, PROJECT_BRIEF_SCHEMA_VERSION,
+    PROJECT_INTAKE_ANSWERS_SCHEMA_VERSION, SPEC_INTAKE_ANSWERS_SCHEMA_VERSION,
+    build_ace_intake_frame_from_project, build_ace_intake_frame_from_spec,
+    parse_acceptance_criteria, sha256_hex, split_semicolon_list, validate_integration_points,
+};
+
+pub use chatwidget::spec_kit::intake_core::{
+    CapsulePersistenceResult, ProjectCapsulePersistenceResult, ValidationResult,
+    // Spec intake functions
+    build_design_brief, build_spec_intake_answers, create_spec_filesystem_projections,
+    persist_spec_intake_to_capsule, update_spec_tracker, validate_spec_answers,
+    write_intake_md_only,
+    // Project intake functions
+    build_project_brief, build_project_intake_answers, create_project_filesystem_projection,
+    persist_project_intake_to_capsule, validate_project_answers,
+    // Helpers
+    capitalize_words, format_list,
+};
+
+pub use chatwidget::spec_kit::project_native::{
+    ProjectCreationResult, ProjectType, create_project,
+};
+
+// CLI Headless Vision Support: Re-export vision persistence for headless CLI
+pub use chatwidget::spec_kit::vision_core::{
+    VisionPersistenceResult, VisionProjections, persist_vision_to_overlay,
+};
+
+// WP-A: Projection rebuild support for headless CLI
+pub use chatwidget::spec_kit::rebuild_projections::{
+    ProjectIntakeInfo, RebuildRequest, RebuildResult, SpecIntakeInfo, VisionRebuildDetails,
+    rebuild_projections,
+};
+
+// WP-B: Deep grounding capture for headless CLI
+pub use chatwidget::spec_kit::grounding::{
+    GroundingCaptureResult, capture_grounding_for_spec_intake, capture_grounding_for_project_intake,
+};
+
 // FORK-SPECIFIC: ACE integration - Re-export for testing
 #[cfg(any(test, feature = "test-utils"))]
 pub use chatwidget::spec_kit::{DiffStat, RouteDecision, select_route, should_use_ace};
@@ -238,7 +283,6 @@ pub use chatwidget::spec_kit::ace_reflector::{
 // E.3/E.4: Re-export evidence archival and integrity modules for integration tests
 pub use chatwidget::spec_kit::evidence_archival;
 pub use chatwidget::spec_kit::evidence_integrity;
-
 
 // Re-export supporting types for E2E testing (T87)
 pub use slash_command::{HalMode, SlashCommand};
@@ -356,11 +400,8 @@ pub async fn run_main(
         .unwrap_or(MemoryBackend::LocalMemory);
 
     // Check phase enforcement
-    let enforcement_result = check_phase_enforcement(
-        effective_backend,
-        sunset_phase,
-        cli.force_deprecated,
-    );
+    let enforcement_result =
+        check_phase_enforcement(effective_backend, sunset_phase, cli.force_deprecated);
 
     #[allow(clippy::print_stderr)]
     match enforcement_result {
