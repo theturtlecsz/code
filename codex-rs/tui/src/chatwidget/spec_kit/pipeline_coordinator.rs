@@ -149,6 +149,22 @@ pub fn handle_spec_auto(
         return;
     }
 
+    // Phase 2: Intake Presence Gate
+    // Check for IntakeCompleted event in capsule; if missing, show backfill modal
+    // Run AFTER constitution gate, BEFORE maieutic gate
+    if !run_intake_presence_gate(
+        widget,
+        &spec_id,
+        &goal,
+        resume_from,
+        hal_mode,
+        cli_overrides.clone(),
+        stage0_config.clone(),
+    ) {
+        // Backfill modal opened, pipeline paused - will resume via SpecIntakeSubmitted event
+        return;
+    }
+
     // P93/D130: Mandatory Maieutic Elicitation Gate
     // Run AFTER constitution gate, BEFORE Stage0 execution
     // If maieutic needs elicitation, shows modal and returns false (pipeline pauses)
@@ -988,7 +1004,8 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
                             );
 
                             let pre_ship_reflection = super::ace_reflector::ReflectionResult {
-                                schema_version: super::ace_reflector::ACE_FRAME_SCHEMA_VERSION.to_string(),
+                                schema_version: super::ace_reflector::ACE_FRAME_SCHEMA_VERSION
+                                    .to_string(),
                                 patterns: vec![],
                                 successes: vec!["Pipeline completed successfully".to_string()],
                                 failures: vec![],
@@ -2607,6 +2624,246 @@ pub fn run_constitution_readiness_gate(widget: &mut ChatWidget) -> bool {
 
     tracing::warn!("Constitution readiness gate: {} warning(s)", warnings.len());
     true
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 2: Intake Presence Gate
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Pending intake backfill state - stored when backfill modal is shown
+#[derive(Debug, Clone)]
+pub struct PendingIntakeBackfill {
+    pub spec_id: String,
+    pub goal: String,
+    pub resume_from: SpecStage,
+    pub hal_mode: Option<HalMode>,
+    pub cli_overrides: Option<PipelineOverrides>,
+    pub stage0_config: super::stage0_integration::Stage0ExecutionConfig,
+    pub started_at: std::time::Instant,
+}
+
+/// Check for IntakeCompleted event in capsule for this spec (Phase 2)
+///
+/// Returns true if intake is present (continue pipeline), false if backfill needed (pause).
+///
+/// ## Capsule Query Pattern
+/// 1. Open capsule with default_capsule_config
+/// 2. list_events() and filter for EventType::IntakeCompleted
+/// 3. Check if any event has kind=Spec and spec_id matches
+/// 4. Verify brief_uri resolves via capsule.get_bytes()
+fn run_intake_presence_gate(
+    widget: &mut ChatWidget,
+    spec_id: &str,
+    goal: &str,
+    resume_from: SpecStage,
+    hal_mode: Option<HalMode>,
+    cli_overrides: Option<PipelineOverrides>,
+    stage0_config: super::stage0_integration::Stage0ExecutionConfig,
+) -> bool {
+    use crate::memvid_adapter::{
+        default_capsule_config, CapsuleHandle, EventType, IntakeCompletedPayload, IntakeKind,
+    };
+
+    // Open capsule - STRICT: capsule is SoR, fail if unavailable
+    let capsule_config = default_capsule_config(&widget.config.cwd);
+    let capsule = match CapsuleHandle::open(capsule_config) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::error!(
+                spec_id = %spec_id,
+                error = %e,
+                "IntakePresenceGate: Failed to open capsule - halting pipeline (capsule is SoR)"
+            );
+            // Halt pipeline with visible error - capsule SoR enforcement
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Pipeline halted: Capsule unavailable\n\n  Error: {}\n\n  \
+                 The capsule is the System of Record for intake artifacts.\n  \
+                 Fix the capsule issue and retry: /speckit.auto {}",
+                e, spec_id
+            )));
+            widget.request_redraw();
+            // Clear any pending pipeline state
+            widget.spec_auto_state = None;
+            return false;
+        }
+    };
+
+    // Query for IntakeCompleted events (most recent first)
+    let events = capsule.list_events();
+    let intake_event = events.iter().rev().find(|ev| {
+        if ev.event_type != EventType::IntakeCompleted {
+            return false;
+        }
+        // Parse payload
+        if let Ok(payload) = serde_json::from_value::<IntakeCompletedPayload>(ev.payload.clone()) {
+            if payload.kind == IntakeKind::Spec {
+                if let Some(ref ev_spec_id) = payload.spec_id {
+                    return ev_spec_id == spec_id;
+                }
+            }
+        }
+        false
+    });
+
+    if let Some(event) = intake_event {
+        // Parse payload to get brief_uri
+        if let Ok(payload) =
+            serde_json::from_value::<IntakeCompletedPayload>(event.payload.clone())
+        {
+            // Verify brief_uri resolves
+            let uri = match payload.brief_uri.parse::<crate::memvid_adapter::LogicalUri>() {
+                Ok(u) => u,
+                Err(_) => {
+                    tracing::warn!(
+                        spec_id = %spec_id,
+                        brief_uri = %payload.brief_uri,
+                        "IntakePresenceGate: Invalid brief_uri format, triggering backfill"
+                    );
+                    return trigger_intake_backfill(
+                        widget,
+                        spec_id,
+                        goal,
+                        resume_from,
+                        hal_mode,
+                        cli_overrides,
+                        stage0_config,
+                    );
+                }
+            };
+
+            match capsule.get_bytes(&uri, None, None) {
+                Ok(_) => {
+                    // Intake exists and brief is accessible
+                    tracing::info!(
+                        spec_id = %spec_id,
+                        intake_id = %payload.intake_id,
+                        "IntakePresenceGate: Intake found, continuing"
+                    );
+                    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+                        vec![ratatui::text::Line::from(format!(
+                            "Intake: Found ({})",
+                            &payload.intake_id[..8.min(payload.intake_id.len())]
+                        ))],
+                        HistoryCellType::Notice,
+                    ));
+                    return true; // Continue pipeline
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        spec_id = %spec_id,
+                        error = %e,
+                        "IntakePresenceGate: Brief URI unresolvable, triggering backfill"
+                    );
+                }
+            }
+        }
+    }
+
+    // No valid intake found - trigger backfill
+    tracing::info!(
+        spec_id = %spec_id,
+        "IntakePresenceGate: No intake found, triggering backfill"
+    );
+    trigger_intake_backfill(
+        widget,
+        spec_id,
+        goal,
+        resume_from,
+        hal_mode,
+        cli_overrides,
+        stage0_config,
+    )
+}
+
+/// Trigger intake backfill modal (returns false to pause pipeline)
+fn trigger_intake_backfill(
+    widget: &mut ChatWidget,
+    spec_id: &str,
+    goal: &str,
+    resume_from: SpecStage,
+    hal_mode: Option<HalMode>,
+    cli_overrides: Option<PipelineOverrides>,
+    stage0_config: super::stage0_integration::Stage0ExecutionConfig,
+) -> bool {
+    // Store pending state for resumption
+    widget.pending_intake_backfill = Some(PendingIntakeBackfill {
+        spec_id: spec_id.to_string(),
+        goal: goal.to_string(),
+        resume_from,
+        hal_mode,
+        cli_overrides,
+        stage0_config,
+        started_at: std::time::Instant::now(),
+    });
+
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+        vec![ratatui::text::Line::from(
+            "Intake: Required (backfill mode)",
+        )],
+        HistoryCellType::Notice,
+    ));
+
+    // Show backfill modal with existing spec_id
+    widget.show_spec_intake_modal_backfill(spec_id.to_string());
+
+    false // Pause pipeline
+}
+
+/// Resume pipeline after intake backfill completes
+///
+/// Called when SpecIntakeSubmitted event fires with existing_spec_id set.
+/// This function continues the pipeline by calling the maieutic gate.
+/// If maieutic passes (already completed), it re-invokes handle_spec_auto
+/// to continue the pipeline from there.
+pub fn resume_pipeline_after_intake_backfill(widget: &mut ChatWidget) {
+    let Some(pending) = widget.pending_intake_backfill.take() else {
+        // Not a backfill from pipeline gate - just a normal intake
+        return;
+    };
+
+    let duration_ms = pending.started_at.elapsed().as_millis() as u64;
+    tracing::info!(
+        spec_id = %pending.spec_id,
+        duration_ms = duration_ms,
+        "IntakePresenceGate: Backfill completed, resuming pipeline"
+    );
+
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+        vec![ratatui::text::Line::from(format!(
+            "Intake backfill complete ({}ms), continuing pipeline",
+            duration_ms
+        ))],
+        HistoryCellType::Notice,
+    ));
+
+    // Re-invoke handle_spec_auto - it will skip constitution and intake gates
+    // (constitution already passed, intake now present in capsule)
+    // and continue with maieutic and the rest of the pipeline
+    handle_spec_auto(
+        widget,
+        pending.spec_id,
+        pending.goal,
+        pending.resume_from,
+        pending.hal_mode,
+        pending.cli_overrides,
+        pending.stage0_config,
+    );
+}
+
+/// Cancel pipeline after intake backfill is cancelled
+pub fn cancel_pipeline_after_intake_backfill(widget: &mut ChatWidget, spec_id: &str) {
+    widget.pending_intake_backfill = None;
+    tracing::info!(
+        spec_id = %spec_id,
+        "IntakePresenceGate: Backfill cancelled by user"
+    );
+    widget.history_push(crate::history_cell::PlainHistoryCell::new(
+        vec![ratatui::text::Line::from(format!(
+            "Pipeline cancelled - intake backfill declined for {}",
+            spec_id
+        ))],
+        HistoryCellType::Notice,
+    ));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

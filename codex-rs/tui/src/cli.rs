@@ -149,7 +149,6 @@ pub struct Cli {
     // =========================================================================
     // SPEC-KIT-979: Local-Memory Sunset Flags
     // =========================================================================
-
     /// Memory backend selection: local-memory (Phase 0 default) or memvid.
     /// Phase 2+: local-memory requires --force-deprecated.
     #[arg(long = "memory-backend", value_name = "BACKEND")]

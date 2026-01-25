@@ -158,6 +158,7 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
     registry.register(Box::new(SpecKitStatusCommand));
     registry.register(Box::new(SpecKitConfigureCommand)); // SPEC-947 Phase 4
     registry.register(Box::new(SpecKitProjectCommand)); // SPEC-KIT-960
+    registry.register(Box::new(SpecKitProjectNewCommand)); // /speckit.projectnew - full project setup
     registry.register(Box::new(VerifyCommand));
     registry.register(Box::new(SpecReviewCommand)); // PR9: canonical command
     registry.register(Box::new(SpecConsensusCommand)); // PR9: deprecated alias
@@ -200,6 +201,9 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
 
     // Capsule commands (SPEC-KIT-971)
     registry.register(Box::new(CapsuleDoctorCommand));
+
+    // Projections commands (WP-A)
+    registry.register(Box::new(ProjectionsCommand));
 
     // Reflex commands (SPEC-KIT-978)
     registry.register(Box::new(SpecKitReflexCommand));

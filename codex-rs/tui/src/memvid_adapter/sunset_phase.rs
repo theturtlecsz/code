@@ -234,22 +234,19 @@ mod tests {
 
     #[test]
     fn test_phase_0_allows_local_memory() {
-        let result = check_phase_enforcement(
-            MemoryBackend::LocalMemory,
-            SunsetPhase::Phase0,
-            false,
-        );
+        let result =
+            check_phase_enforcement(MemoryBackend::LocalMemory, SunsetPhase::Phase0, false);
         assert_eq!(result, PhaseEnforcementResult::Allow);
     }
 
     #[test]
     fn test_phase_1_warns_local_memory() {
-        let result = check_phase_enforcement(
-            MemoryBackend::LocalMemory,
-            SunsetPhase::Phase1,
-            false,
-        );
-        assert!(matches!(result, PhaseEnforcementResult::AllowWithWarning(_)));
+        let result =
+            check_phase_enforcement(MemoryBackend::LocalMemory, SunsetPhase::Phase1, false);
+        assert!(matches!(
+            result,
+            PhaseEnforcementResult::AllowWithWarning(_)
+        ));
         if let PhaseEnforcementResult::AllowWithWarning(msg) = result {
             assert!(msg.contains("deprecated"));
             assert!(msg.contains("lm-import"));
@@ -258,11 +255,8 @@ mod tests {
 
     #[test]
     fn test_phase_2_blocks_without_force() {
-        let result = check_phase_enforcement(
-            MemoryBackend::LocalMemory,
-            SunsetPhase::Phase2,
-            false,
-        );
+        let result =
+            check_phase_enforcement(MemoryBackend::LocalMemory, SunsetPhase::Phase2, false);
         assert!(matches!(result, PhaseEnforcementResult::Block(_)));
         if let PhaseEnforcementResult::Block(msg) = result {
             assert!(msg.contains("--force-deprecated"));
@@ -271,12 +265,11 @@ mod tests {
 
     #[test]
     fn test_phase_2_allows_with_force() {
-        let result = check_phase_enforcement(
-            MemoryBackend::LocalMemory,
-            SunsetPhase::Phase2,
-            true,
-        );
-        assert!(matches!(result, PhaseEnforcementResult::AllowWithWarning(_)));
+        let result = check_phase_enforcement(MemoryBackend::LocalMemory, SunsetPhase::Phase2, true);
+        assert!(matches!(
+            result,
+            PhaseEnforcementResult::AllowWithWarning(_)
+        ));
         if let PhaseEnforcementResult::AllowWithWarning(msg) = result {
             assert!(msg.contains("--force-deprecated active"));
         }
@@ -285,19 +278,13 @@ mod tests {
     #[test]
     fn test_phase_3_always_blocks() {
         // Without force
-        let result1 = check_phase_enforcement(
-            MemoryBackend::LocalMemory,
-            SunsetPhase::Phase3,
-            false,
-        );
+        let result1 =
+            check_phase_enforcement(MemoryBackend::LocalMemory, SunsetPhase::Phase3, false);
         assert!(matches!(result1, PhaseEnforcementResult::Block(_)));
 
         // With force (still blocks)
-        let result2 = check_phase_enforcement(
-            MemoryBackend::LocalMemory,
-            SunsetPhase::Phase3,
-            true,
-        );
+        let result2 =
+            check_phase_enforcement(MemoryBackend::LocalMemory, SunsetPhase::Phase3, true);
         assert!(matches!(result2, PhaseEnforcementResult::Block(_)));
     }
 
@@ -306,11 +293,7 @@ mod tests {
         for phase_num in 0..=3 {
             let phase = SunsetPhase::from_u8(phase_num);
             for force in [false, true] {
-                let result = check_phase_enforcement(
-                    MemoryBackend::Memvid,
-                    phase,
-                    force,
-                );
+                let result = check_phase_enforcement(MemoryBackend::Memvid, phase, force);
                 assert_eq!(
                     result,
                     PhaseEnforcementResult::Allow,

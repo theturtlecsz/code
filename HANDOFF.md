@@ -1,151 +1,198 @@
-# Documentation Consolidation Handoff
+# Session Handoff: Prompt Pack Implementation (WP-A through WP-D)
 
-**Last updated:** 2026-01-22
-**Status:** Session 6 Complete - Stage0 Slice Done
-**Mission:** Reduce docs sprawl to ≤9 canonical docs under /docs
-
-***
-
-## Session Summary
-
-| Session | Slice        | Canonical Created                | Compression | Status         |
-| ------- | ------------ | -------------------------------- | ----------- | -------------- |
-| 3       | Policy       | POLICY.md                        | 76%         | ✅ Committed    |
-| 4       | Operations   | OPERATIONS.md                    | 32%         | ✅ Committed    |
-| 5       | Architecture | ARCHITECTURE.md, CONTRIBUTING.md | 66%         | ✅ Committed    |
-| **6**   | **Stage0**   | **STAGE0-REFERENCE.md**          | **52%**     | ✅ **COMPLETE** |
+**Generated:** 2026-01-25
+**Session:** Prompt Pack - 4 Work Packages
+**Status:** WP-A Complete, WP-B/C/D Pending
 
 ***
 
-## Current State
+## Restart Prompt
 
-### Canonical Docs (5 of 9 complete)
-
-| # | Canonical Doc              | Lines   | Status              |
-| - | -------------------------- | ------- | ------------------- |
-| 1 | `docs/POLICY.md`           | \~320   | ✅ Complete          |
-| 2 | `docs/OPERATIONS.md`       | \~818   | ✅ Complete (v1.1.0) |
-| 3 | `docs/ARCHITECTURE.md`     | \~395   | ✅ Complete          |
-| 4 | `docs/CONTRIBUTING.md`     | \~387   | ✅ Complete          |
-| 5 | `docs/STAGE0-REFERENCE.md` | \~1,189 | ✅ Complete          |
-| 6 | `docs/INDEX.md`            | \~231   | ✅ Exists (extended) |
-| 7 | `docs/KEY_DOCS.md`         | \~62    | ✅ Exists (extended) |
-| 8 | `docs/GOLDEN_PATH.md`      | \~230   | 🔄 Exists           |
-| 9 | `docs/DECISIONS.md`        | TBD     | ⏳ Pending           |
-
-### Active Redirect Stubs (22 total, all sunset 2026-02-21)
-
-**Policy (4):** MODEL-POLICY.md, GATE\_POLICY.md, evidence-policy.md, testing-policy.md
-**Operations (2):** OPERATIONAL-PLAYBOOK.md, config.md
-**Architecture (5):** TUI.md, async-sync-boundaries.md, chatwidget-structure.md, SPEC-KIT-900-ARCHITECTURE-ANALYSIS.md, CONTRIBUTING.md (root)
-**Stage0 (11):** All 11 files in docs/stage0/
+Copy everything below the `---` to start a new session:
 
 ***
 
-## Session 6 Results
+Continue implementing the Prompt Pack (4 Work Packages). **WP-A is complete and committed to working tree.** Continue with WP-B.
 
-### Files Created/Modified
+## Session Context
 
-| File                                      | Action              | Lines     |
-| ----------------------------------------- | ------------------- | --------- |
-| `docs/STAGE0-REFERENCE.md`                | Created             | \~1,189   |
-| `docs/OPERATIONS.md`                      | Extended (Part III) | +\~150    |
-| 11 stage0 redirect stubs                  | Created             | \~15 each |
-| `docs/INDEX.md`                           | Updated             | +1 row    |
-| `docs/KEY_DOCS.md`                        | Updated             | +1 row    |
-| `docs/_work/session_report_20260122_6.md` | Created             | \~200     |
+You are implementing a prompt pack with 4 work packages for the spec-kit system. The full plan is at `/home/thetu/.claude/plans/lazy-launching-trinket.md`.
 
-### Compression Results
+**User preference:** Separate PRs per work package.
 
-| Source                 | Original    | Consolidated  | Reduction |
-| ---------------------- | ----------- | ------------- | --------- |
-| Stage0 docs (11 files) | 3,119 lines | \~1,504 lines | 52%       |
+## Completed: WP-A ("Filesystem Is Projection" Rebuild Command)
 
-***
+All files created/modified and build verified (35s build, no errors):
 
-## Next Session Tasks
+**New Files:**
 
-1. [ ] Commit Session 6 migration
-2. [ ] Pick next slice: `DECISION_REGISTER.md` → `docs/DECISIONS.md`
-3. [ ] Continue pattern: migrate → redirect stubs → update INDEX
+* `codex-rs/tui/src/chatwidget/spec_kit/rebuild_projections.rs` - Shared core (`RebuildRequest`, `RebuildResult`, `rebuild_projections()`)
+* `codex-rs/tui/src/chatwidget/spec_kit/commands/projections.rs` - TUI `/speckit.projections rebuild` command
 
-### Recommended Next Slice: DECISIONS.md
+**Modified Files:**
 
-* Rename `DECISION_REGISTER.md` → `docs/DECISIONS.md`
-* Add version header, ToC, change history
-* Update INDEX.md and KEY\_DOCS.md references
+* `codex-rs/cli/src/speckit_cmd.rs` - Added `Projections(ProjectionsArgs)` subcommand with `rebuild`
+* `codex-rs/tui/src/chatwidget/spec_kit/error.rs` - Added `RebuildError(String)` variant
+* `codex-rs/tui/src/chatwidget/spec_kit/mod.rs` - Added `pub mod rebuild_projections;`
+* `codex-rs/tui/src/chatwidget/spec_kit/commands/mod.rs` - Added `mod projections;` and `pub use projections::*;`
+* `codex-rs/tui/src/chatwidget/spec_kit/command_registry.rs` - Added `registry.register(Box::new(ProjectionsCommand));`
+* `codex-rs/tui/src/lib.rs` - Added exports for rebuild types
 
-***
-
-## Infrastructure
-
-### Archive Tool
+**CLI verified working:**
 
 ```bash
-scripts/docs-archive-pack.sh create|list|extract|verify <dir>
+code speckit projections rebuild --help  # Shows full help
+code speckit projections rebuild --dry-run --no-vision --json  # Returns proper JSON exit code 2 (no capsule)
 ```
 
-### Doc Lint
+***
+
+## Next: WP-B (Headless Deep Parity for Grounding)
+
+**Goal:** Make `code speckit new --deep` and `code speckit projectnew --deep` populate `grounding_uris[]` like TUI does.
+
+**Key Finding:** CLI currently passes `Vec::new()` for grounding\_uris. Comments in code state "grounding capture is TUI-only".
+
+### Implementation Steps
+
+**1. Export grounding functions from lib.rs:**
+
+```rust
+// Add to codex-rs/tui/src/lib.rs after vision exports (~line 267)
+pub use chatwidget::spec_kit::grounding::{
+    GroundingCaptureResult, capture_grounding_for_spec_intake, capture_grounding_for_project_intake,
+};
+```
+
+**2. Modify `run_new()` in speckit\_cmd.rs (\~line 6160):**
+
+Current code:
+
+```rust
+let design_brief = build_design_brief(..., Vec::new());  // Empty grounding
+```
+
+Change to:
+
+```rust
+// Step 7.5: Deep grounding capture (if deep mode)
+let grounding_uris = if args.deep {
+    match capture_grounding_for_spec_intake(&cwd, &spec_id, &intake_id) {
+        Ok(result) => {
+            if !args.json {
+                eprintln!("Deep grounding captured: {} artifacts", result.grounding_uris.len());
+            }
+            result.grounding_uris
+        }
+        Err(e) => {
+            // Deep requires grounding; failure blocks completion
+            let exit_code = headless_exit::HARD_FAIL;
+            if args.json {
+                println!("{}", serde_json::to_string_pretty(&serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": exit_code,
+                    "error": format!("Deep grounding failed: {}", e),
+                }))?);
+            } else {
+                eprintln!("Error: Deep grounding failed: {}", e);
+            }
+            std::process::exit(exit_code);
+        }
+    }
+} else {
+    Vec::new()
+};
+
+let design_brief = build_design_brief(..., grounding_uris);
+```
+
+**3. Modify `run_projectnew()` (\~line 6464):**
+Same pattern with `capture_grounding_for_project_intake(&cwd, &project_id)`.
+
+**4. Add import at top of speckit\_cmd.rs:**
+
+```rust
+use codex_tui::{capture_grounding_for_spec_intake, capture_grounding_for_project_intake};
+```
+
+**5. Extend JSON output:**
+Add `grounding_result` field to success JSON output.
+
+### Key Files for WP-B
+
+| File                                                | Purpose                           |
+| --------------------------------------------------- | --------------------------------- |
+| `codex-rs/tui/src/chatwidget/spec_kit/grounding.rs` | Grounding capture functions       |
+| `codex-rs/cli/src/speckit_cmd.rs:6010-6264`         | `run_new()` implementation        |
+| `codex-rs/cli/src/speckit_cmd.rs:6267-6588`         | `run_projectnew()` implementation |
+| `codex-rs/tui/src/lib.rs`                           | Exports                           |
+
+### Acceptance Criteria (WP-B)
+
+* `code speckit new --deep --answers answers.json` produces non-empty `grounding_uris[]` in `DesignBrief`
+* `code speckit projectnew --deep --answers answers.json` produces non-empty `grounding_uris[]` in `ProjectBrief`
+* Capsule contains grounding artifacts under same namespaces as TUI
+* JSON output includes `grounding_result` summary
+* Deep grounding failure is exit code 2 (HARD\_FAIL)
+
+***
+
+## Remaining: WP-C and WP-D
+
+### WP-C: Documentation Alignment
+
+**Files:**
+
+* `docs/spec-kit/COMMANDS.md` - Document all spec-kit commands (create)
+* `docs/OPERATIONAL-PLAYBOOK.md` - Add capsule SoR section (update)
+* `docs/spec-kit/CAPSULE-NAMESPACES.md` - Document URI schemes (create)
+
+**Content:** Commands reference table, capsule SoR contract, enforcement gates with exit codes.
+
+### WP-D: Enforcement Tests
+
+**Files to create:**
+
+* `codex-rs/tui/src/chatwidget/spec_kit/tests/deep_validation_tests.rs`
+* `codex-rs/tui/src/chatwidget/spec_kit/tests/projection_tests.rs`
+
+**Tests:** Deep validation hard-fails, projection provenance, schema stability.
+
+***
+
+## Key Patterns Reference
+
+**Capsule API:**
+
+```rust
+let capsule = CapsuleHandle::open(config)?;
+let events = capsule.list_events();
+let intake_events: Vec<_> = events.iter()
+    .filter(|e| e.event_type == EventType::IntakeCompleted)
+    .collect();
+let payload: IntakeCompletedPayload = serde_json::from_value(event.payload.clone())?;
+let brief_bytes = capsule.get_bytes_str(&payload.brief_uri, None, None)?;
+```
+
+**Grounding functions:**
+
+```rust
+// Returns GroundingCaptureResult { grounding_uris, artifact_hashes, harvest, project_intel }
+capture_grounding_for_spec_intake(cwd, spec_id, intake_id)
+capture_grounding_for_project_intake(cwd, project_id)
+```
+
+**Build commands:**
 
 ```bash
-python scripts/doc_lint.py
-```
-
-### Session Reports
-
-```
-docs/_work/session_report_20260122_6.md
-docs/_work/docs_manifest_20260121_*.json
+~/code/build-fast.sh              # Fast build (~35s)
+cargo check -p codex-tui          # Check TUI only
+cargo check -p codex-cli          # Check CLI only
 ```
 
 ***
 
-## Key Files
+## Plan File Location
 
-| File                             | Purpose                     |
-| -------------------------------- | --------------------------- |
-| `docs/INDEX.md`                  | Master navigation hub       |
-| `docs/KEY_DOCS.md`               | Canonical doc map           |
-| `docs/_work/docs_mapping.md`     | Migration mapping decisions |
-| `docs/_work/docs_inventory.json` | Full file inventory         |
-| `scripts/docs-archive-pack.sh`   | Archive tooling             |
-
-***
-
-## Restart Prompt (Session 7)
-
-```
-Continue Documentation Consolidation Session 7 (DECISIONS Slice)
-
-## Context
-- 5 of 9 canonical docs complete (POLICY, OPERATIONS, ARCHITECTURE, CONTRIBUTING, STAGE0-REFERENCE)
-- 22 redirect stubs active (sunset 2026-02-21)
-- Next target: DECISION_REGISTER.md → DECISIONS.md
-
-## Todo
-1. Rename/migrate DECISION_REGISTER.md to docs/DECISIONS.md
-2. Add version header, ToC, change history
-3. Create redirect stub for original
-4. Update INDEX.md and KEY_DOCS.md
-5. Run doc_lint.py validation
-6. Create session report
-
-## Key Files to Read
-- docs/_work/session_report_20260122_6.md (previous session)
-- DECISION_REGISTER.md (source file)
-- docs/INDEX.md (update)
-- docs/KEY_DOCS.md (update)
-
-## Acceptance Criteria
-- DECISIONS.md has version header and ToC
-- Original DECISION_REGISTER.md converted to redirect stub
-- doc_lint.py passes
-```
-
-***
-
-## Notes
-
-* GOLDEN\_PATH.md is for Memvid-first user workflows, NOT stage0 implementation
-* Stage0 docs are technical specs for DCC/Tier2 layer
-* Don't merge stage0 into GOLDEN\_PATH - they serve different purposes
+Full implementation plan: `/home/thetu/.claude/plans/lazy-launching-trinket.md`

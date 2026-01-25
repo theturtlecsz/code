@@ -18,7 +18,8 @@ use super::super::super::ChatWidget;
 use super::super::command_registry::SpecKitCommand;
 use crate::history_cell::{HistoryCellType, PlainHistoryCell};
 use crate::memvid_adapter::{
-    CapsuleConfig, CapsuleHandle, CapsuleStats, DiagnosticResult, ExportOptions, IndexStatus,
+    CapsuleConfig, CapsuleHandle, CapsuleStats, DiagnosticResult, ExportOptions, GcConfig,
+    ImportOptions, IndexStatus,
 };
 use ratatui::text::Line;
 use std::path::PathBuf;
@@ -53,20 +54,35 @@ impl SpecKitCommand for CapsuleDoctorCommand {
             "checkpoints" => execute_checkpoints(widget),
             "commit" => execute_commit(widget, &args),
             "export" => execute_export(widget, &args),
+            "import" => execute_import(widget, &args),
+            "gc" => execute_gc(widget, &args),
             _ => {
                 let lines = vec![
-                    Line::from("📦 Capsule Commands (SPEC-KIT-971/974/S974-010)"),
+                    Line::from("📦 Capsule Commands (SPEC-KIT-971/974/SK974-1/SK974-3)"),
                     Line::from(""),
                     Line::from("/speckit.capsule doctor      # Verify capsule health"),
                     Line::from("/speckit.capsule stats       # Show size, frames, dedup ratio"),
                     Line::from("/speckit.capsule checkpoints # List all checkpoints"),
-                    Line::from("/speckit.capsule commit --label <LABEL> # Create manual checkpoint"),
+                    Line::from(
+                        "/speckit.capsule commit --label <LABEL> # Create manual checkpoint",
+                    ),
                     Line::from(""),
                     Line::from("Export (S974-010):"),
                     Line::from("/speckit.capsule export --spec <SPEC_ID> --run <RUN_ID> [options]"),
                     Line::from("  --out <PATH>    Custom output path"),
                     Line::from("  --no-encrypt    Produce .mv2 instead of .mv2e"),
                     Line::from("  --unsafe        Include raw LLM I/O (full_io events)"),
+                    Line::from(""),
+                    Line::from("Import (SK974-1, D103/D104):"),
+                    Line::from("/speckit.capsule import <PATH> [options]"),
+                    Line::from("  --mount-as <NAME>     Mount name (default: filename)"),
+                    Line::from("  --require-verified    Fail on unverified capsules"),
+                    Line::from(""),
+                    Line::from("Garbage Collection (SK974-3, D20/D116):"),
+                    Line::from("/speckit.capsule gc [options]"),
+                    Line::from("  --retention-days <N>  Days to retain exports (default: 30)"),
+                    Line::from("  --dry-run             Preview what would be deleted"),
+                    Line::from("  --no-keep-pinned      Also delete pinned exports"),
                 ];
                 widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));
             }
@@ -434,7 +450,10 @@ fn execute_export(widget: &mut ChatWidget, args: &str) {
     if let Some(parent) = output_path.parent() {
         if let Err(e) = std::fs::create_dir_all(parent) {
             widget.history_push(PlainHistoryCell::new(
-                vec![Line::from(format!("❌ Failed to create export directory: {}", e))],
+                vec![Line::from(format!(
+                    "❌ Failed to create export directory: {}",
+                    e
+                ))],
                 HistoryCellType::Error,
             ));
             return;
@@ -483,8 +502,16 @@ fn execute_export(widget: &mut ChatWidget, args: &str) {
                         format!("{:.2} MB", result.bytes_written as f64 / (1024.0 * 1024.0))
                     };
 
-                    let encrypt_status = if encrypt { "encrypted (.mv2e)" } else { "unencrypted (.mv2)" };
-                    let safe_status = if safe_mode { "ON" } else { "OFF (includes raw LLM I/O)" };
+                    let encrypt_status = if encrypt {
+                        "encrypted (.mv2e)"
+                    } else {
+                        "unencrypted (.mv2)"
+                    };
+                    let safe_status = if safe_mode {
+                        "ON"
+                    } else {
+                        "OFF (includes raw LLM I/O)"
+                    };
 
                     let lines = vec![
                         Line::from("✅ Capsule Exported (S974-010)"),
@@ -510,7 +537,9 @@ fn execute_export(widget: &mut ChatWidget, args: &str) {
                     // Add hint for passphrase errors
                     if error_msg.contains("assphrase") {
                         lines.push(Line::from(""));
-                        lines.push(Line::from("Hint: Set SPECKIT_MEMVID_PASSPHRASE env var or use --no-encrypt"));
+                        lines.push(Line::from(
+                            "Hint: Set SPECKIT_MEMVID_PASSPHRASE env var or use --no-encrypt",
+                        ));
                     }
 
                     widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Error));
@@ -520,6 +549,343 @@ fn execute_export(widget: &mut ChatWidget, args: &str) {
         Err(e) => {
             widget.history_push(PlainHistoryCell::new(
                 vec![Line::from(format!("❌ Failed to open capsule: {}", e))],
+                HistoryCellType::Error,
+            ));
+        }
+    }
+}
+
+/// Execute the import subcommand.
+///
+/// ## SK974-1: Import capsule with read-only mount + doctor verification
+///
+/// Usage:
+/// - `/speckit.capsule import <PATH>` - Import with defaults
+/// - `/speckit.capsule import <PATH> --mount-as <NAME>` - Custom mount name
+/// - `/speckit.capsule import <PATH> --require-verified` - Fail on unverified
+///
+/// ## Decisions honored
+/// - D103: Imported capsules read-only
+/// - D104: Auto-register mounted capsules (CapsuleImported event)
+fn execute_import(widget: &mut ChatWidget, args: &str) {
+    // Parse arguments - first positional arg is the path
+    let parts: Vec<&str> = args.split_whitespace().collect();
+
+    // Find the path (first arg after "import")
+    let source_path = parts.get(1).map(|s| PathBuf::from(*s));
+
+    let source_path = match source_path {
+        Some(p) => p,
+        None => {
+            widget.history_push(PlainHistoryCell::new(
+                vec![
+                    Line::from("Usage: /speckit.capsule import <PATH> [options]"),
+                    Line::from(""),
+                    Line::from("Arguments:"),
+                    Line::from("  <PATH>              Path to capsule file (.mv2 or .mv2e)"),
+                    Line::from(""),
+                    Line::from("Options:"),
+                    Line::from(
+                        "  --mount-as <NAME>   Mount name (default: filename without extension)",
+                    ),
+                    Line::from("  --require-verified  Fail if capsule doesn't pass verification"),
+                    Line::from(""),
+                    Line::from("Examples:"),
+                    Line::from("  /speckit.capsule import ./exports/audit-2026-01.mv2"),
+                    Line::from("  /speckit.capsule import ./customer.mv2e --mount-as customer-jan"),
+                    Line::from(""),
+                    Line::from("Decision IDs: D103 (read-only), D104 (auto-register)"),
+                ],
+                HistoryCellType::Error,
+            ));
+            return;
+        }
+    };
+
+    // Parse --mount-as argument
+    let mount_as = if let Some(idx) = parts.iter().position(|&p| p == "--mount-as") {
+        parts.get(idx + 1).map(|s| s.to_string())
+    } else {
+        None
+    };
+
+    // Parse --require-verified flag
+    let require_verified = parts.iter().any(|&p| p == "--require-verified");
+
+    // Check source exists
+    if !source_path.exists() {
+        widget.history_push(PlainHistoryCell::new(
+            vec![Line::from(format!(
+                "❌ Source capsule not found: {}",
+                source_path.display()
+            ))],
+            HistoryCellType::Error,
+        ));
+        return;
+    }
+
+    // Open workspace capsule to record import event
+    let capsule_path = get_capsule_path();
+
+    if !capsule_path.exists() {
+        widget.history_push(PlainHistoryCell::new(
+            vec![Line::from(
+                "❌ Workspace capsule not found. Run `/speckit.capsule doctor` for details.",
+            )],
+            HistoryCellType::Error,
+        ));
+        return;
+    }
+
+    let config = CapsuleConfig {
+        capsule_path,
+        workspace_id: "default".to_string(),
+        ..Default::default()
+    };
+
+    match CapsuleHandle::open(config) {
+        Ok(handle) => {
+            let options = ImportOptions {
+                source_path: source_path.clone(),
+                mount_as,
+                interactive: true, // TUI is always interactive
+                require_verified,
+            };
+
+            match handle.import(&options) {
+                Ok(result) => {
+                    let verification_status = if result.verification_passed {
+                        "✅ PASSED"
+                    } else {
+                        "⚠️ WARNINGS"
+                    };
+
+                    let is_encrypted = source_path
+                        .extension()
+                        .map(|e| e == "mv2e")
+                        .unwrap_or(false);
+                    let format_str = if is_encrypted {
+                        "encrypted (.mv2e)"
+                    } else {
+                        "unencrypted (.mv2)"
+                    };
+
+                    let mut lines = vec![
+                        Line::from("✅ Capsule Imported (SK974-1, D103/D104)"),
+                        Line::from(""),
+                        Line::from(format!("   Source: {}", result.source_path.display())),
+                        Line::from(format!("   Mount name: {}", result.mount_name)),
+                        Line::from(format!("   Format: {}", format_str)),
+                        Line::from(format!("   Access: read-only (D103)")),
+                        Line::from(""),
+                        Line::from(format!("   Artifacts: {}", result.artifact_count)),
+                        Line::from(format!("   Checkpoints: {}", result.checkpoint_count)),
+                        Line::from(format!("   Events: {}", result.event_count)),
+                        Line::from(""),
+                        Line::from(format!("   Verification: {}", verification_status)),
+                        Line::from(format!("   Hash: {}", &result.content_hash[..16])),
+                        Line::from(""),
+                        Line::from("   CapsuleImported event recorded in workspace (D104)."),
+                    ];
+
+                    // Show doctor results if there were warnings
+                    if !result.verification_passed {
+                        lines.push(Line::from(""));
+                        lines.push(Line::from("   Doctor Results:"));
+                        for dr in &result.doctor_results {
+                            match dr {
+                                crate::memvid_adapter::DiagnosticResult::Warning(msg, remedy) => {
+                                    lines.push(Line::from(format!("   ⚠ {}", msg)));
+                                    lines.push(Line::from(format!("     → {}", remedy)));
+                                }
+                                crate::memvid_adapter::DiagnosticResult::Error(msg, remedy) => {
+                                    lines.push(Line::from(format!("   ✗ {}", msg)));
+                                    lines.push(Line::from(format!("     → {}", remedy)));
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+
+                    widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));
+                }
+                Err(e) => {
+                    let error_msg = format!("{}", e);
+                    let mut lines = vec![Line::from(format!("❌ Import failed: {}", error_msg))];
+
+                    // Add hints for common errors
+                    if error_msg.contains("assphrase") {
+                        lines.push(Line::from(""));
+                        lines.push(Line::from(
+                            "Hint: Set SPECKIT_MEMVID_PASSPHRASE env var for encrypted capsules",
+                        ));
+                    } else if error_msg.contains("verification failed") {
+                        lines.push(Line::from(""));
+                        lines.push(Line::from(
+                            "Hint: Remove --require-verified to import with warnings",
+                        ));
+                    }
+
+                    widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Error));
+                }
+            }
+        }
+        Err(e) => {
+            widget.history_push(PlainHistoryCell::new(
+                vec![Line::from(format!(
+                    "❌ Failed to open workspace capsule: {}",
+                    e
+                ))],
+                HistoryCellType::Error,
+            ));
+        }
+    }
+}
+
+/// Execute the gc subcommand.
+///
+/// ## SK974-3: Garbage collection with retention policy
+///
+/// Usage:
+/// - `/speckit.capsule gc` - Run GC with defaults (30 days, keep pinned)
+/// - `/speckit.capsule gc --dry-run` - Preview what would be deleted
+/// - `/speckit.capsule gc --retention-days 7` - Delete exports older than 7 days
+/// - `/speckit.capsule gc --no-keep-pinned` - Also delete pinned exports
+///
+/// ## Decisions honored
+/// - D20: Capsule growth management (retention/compaction)
+/// - D116: Hybrid retention (TTL + milestone protection)
+fn execute_gc(widget: &mut ChatWidget, args: &str) {
+    let parts: Vec<&str> = args.split_whitespace().collect();
+
+    // Parse --retention-days argument
+    let retention_days = if let Some(idx) = parts.iter().position(|&p| p == "--retention-days") {
+        parts
+            .get(idx + 1)
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(30)
+    } else {
+        30 // Default per D20
+    };
+
+    // Parse --dry-run flag
+    let dry_run = parts.iter().any(|&p| p == "--dry-run");
+
+    // Parse --no-keep-pinned flag
+    let keep_pinned = !parts.iter().any(|&p| p == "--no-keep-pinned");
+
+    // Open workspace capsule
+    let capsule_path = get_capsule_path();
+
+    if !capsule_path.exists() {
+        widget.history_push(PlainHistoryCell::new(
+            vec![Line::from(
+                "❌ Workspace capsule not found. Run `/speckit.capsule doctor` for details.",
+            )],
+            HistoryCellType::Error,
+        ));
+        return;
+    }
+
+    let config = CapsuleConfig {
+        capsule_path,
+        workspace_id: "default".to_string(),
+        ..Default::default()
+    };
+
+    match CapsuleHandle::open(config) {
+        Ok(handle) => {
+            let gc_config = GcConfig {
+                retention_days,
+                keep_pinned,
+                clean_temp_files: true,
+                dry_run,
+            };
+
+            match handle.gc(&gc_config) {
+                Ok(result) => {
+                    let mode_str = if result.dry_run {
+                        "DRY RUN"
+                    } else {
+                        "COMPLETED"
+                    };
+
+                    let bytes_str = if result.bytes_freed >= 1_000_000 {
+                        format!("{:.2} MB", result.bytes_freed as f64 / 1_000_000.0)
+                    } else if result.bytes_freed >= 1000 {
+                        format!("{:.2} KB", result.bytes_freed as f64 / 1000.0)
+                    } else {
+                        format!("{} bytes", result.bytes_freed)
+                    };
+
+                    let mut lines = vec![
+                        Line::from(format!("🗑️ Capsule GC {} (SK974-3, D20/D116)", mode_str)),
+                        Line::from(""),
+                        Line::from(format!("   Retention: {} days", retention_days)),
+                        Line::from(format!(
+                            "   Keep pinned: {}",
+                            if keep_pinned { "yes" } else { "no" }
+                        )),
+                        Line::from(""),
+                        Line::from(format!("   Exports deleted: {}", result.exports_deleted)),
+                        Line::from(format!(
+                            "   Exports preserved: {}",
+                            result.exports_preserved
+                        )),
+                        Line::from(format!("   Exports skipped: {}", result.exports_skipped)),
+                        Line::from(format!(
+                            "   Temp files cleaned: {}",
+                            result.temp_files_deleted
+                        )),
+                        Line::from(format!("   Space freed: {}", bytes_str)),
+                    ];
+
+                    if result.dry_run {
+                        lines.push(Line::from(""));
+                        lines.push(Line::from(
+                            "   ⚠ This was a dry run. No files were actually deleted.",
+                        ));
+                        lines.push(Line::from(
+                            "   Run without --dry-run to actually delete files.",
+                        ));
+                    } else if result.exports_deleted > 0 {
+                        lines.push(Line::from(""));
+                        lines.push(Line::from(
+                            "   ✅ Audit trail event recorded for deletions.",
+                        ));
+                    }
+
+                    // Show deleted paths if dry-run and there are some
+                    if result.dry_run && !result.deleted_paths.is_empty() {
+                        lines.push(Line::from(""));
+                        lines.push(Line::from("   Would delete:"));
+                        for path in result.deleted_paths.iter().take(10) {
+                            lines.push(Line::from(format!("   • {}", path.display())));
+                        }
+                        if result.deleted_paths.len() > 10 {
+                            lines.push(Line::from(format!(
+                                "   ... and {} more",
+                                result.deleted_paths.len() - 10
+                            )));
+                        }
+                    }
+
+                    widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));
+                }
+                Err(e) => {
+                    widget.history_push(PlainHistoryCell::new(
+                        vec![Line::from(format!("❌ GC failed: {}", e))],
+                        HistoryCellType::Error,
+                    ));
+                }
+            }
+        }
+        Err(e) => {
+            widget.history_push(PlainHistoryCell::new(
+                vec![Line::from(format!(
+                    "❌ Failed to open workspace capsule: {}",
+                    e
+                ))],
                 HistoryCellType::Error,
             ));
         }
@@ -570,7 +936,9 @@ mod tests {
     // =========================================================================
 
     /// Helper to parse export args from a string
-    fn parse_export_args(args: &str) -> (Option<String>, Option<String>, Option<PathBuf>, bool, bool) {
+    fn parse_export_args(
+        args: &str,
+    ) -> (Option<String>, Option<String>, Option<PathBuf>, bool, bool) {
         let parts: Vec<&str> = args.split_whitespace().collect();
 
         let spec_id = if let Some(idx) = parts.iter().position(|&p| p == "--spec") {
@@ -681,5 +1049,177 @@ mod tests {
             expected_path,
             PathBuf::from("docs/specs/SPEC-974/runs/run-001/capsule.mv2")
         );
+    }
+
+    // =========================================================================
+    // SK974-1: Import argument parsing tests
+    // =========================================================================
+
+    /// Helper to parse import args from a string
+    fn parse_import_args(args: &str) -> (Option<PathBuf>, Option<String>, bool) {
+        let parts: Vec<&str> = args.split_whitespace().collect();
+
+        // First positional arg after "import" is the path
+        let source_path = parts.get(1).map(|s| PathBuf::from(*s));
+
+        let mount_as = if let Some(idx) = parts.iter().position(|&p| p == "--mount-as") {
+            parts.get(idx + 1).map(|s| s.to_string())
+        } else {
+            None
+        };
+
+        let require_verified = parts.iter().any(|&p| p == "--require-verified");
+
+        (source_path, mount_as, require_verified)
+    }
+
+    #[test]
+    fn test_import_args_basic() {
+        let (source_path, mount_as, require_verified) =
+            parse_import_args("import ./exports/capsule.mv2");
+        assert_eq!(source_path, Some(PathBuf::from("./exports/capsule.mv2")));
+        assert_eq!(mount_as, None);
+        assert!(!require_verified, "default should not require verification");
+    }
+
+    #[test]
+    fn test_import_args_with_mount_name() {
+        let (source_path, mount_as, _) =
+            parse_import_args("import ./audit.mv2e --mount-as customer-jan");
+        assert_eq!(source_path, Some(PathBuf::from("./audit.mv2e")));
+        assert_eq!(mount_as, Some("customer-jan".to_string()));
+    }
+
+    #[test]
+    fn test_import_args_require_verified() {
+        let (source_path, _, require_verified) =
+            parse_import_args("import ./audit.mv2 --require-verified");
+        assert_eq!(source_path, Some(PathBuf::from("./audit.mv2")));
+        assert!(require_verified, "--require-verified should enable flag");
+    }
+
+    #[test]
+    fn test_import_args_all_flags() {
+        let (source_path, mount_as, require_verified) =
+            parse_import_args("import ./data.mv2e --mount-as data-2026 --require-verified");
+        assert_eq!(source_path, Some(PathBuf::from("./data.mv2e")));
+        assert_eq!(mount_as, Some("data-2026".to_string()));
+        assert!(require_verified);
+    }
+
+    #[test]
+    fn test_import_options_defaults() {
+        let options = ImportOptions::default();
+        assert!(options.source_path.as_os_str().is_empty());
+        assert!(options.mount_as.is_none());
+        assert!(options.interactive, "interactive should default to true");
+        assert!(
+            !options.require_verified,
+            "require_verified should default to false"
+        );
+    }
+
+    #[test]
+    fn test_import_options_for_file() {
+        let options = ImportOptions::for_file("/tmp/test.mv2");
+        assert_eq!(options.source_path, PathBuf::from("/tmp/test.mv2"));
+        assert!(options.mount_as.is_none());
+    }
+
+    #[test]
+    fn test_import_options_builder() {
+        let options = ImportOptions::for_file("/tmp/test.mv2e")
+            .with_mount_name("my-mount")
+            .require_verified();
+        assert_eq!(options.source_path, PathBuf::from("/tmp/test.mv2e"));
+        assert_eq!(options.mount_as, Some("my-mount".to_string()));
+        assert!(options.require_verified);
+    }
+
+    // =========================================================================
+    // SK974-3: GC argument parsing tests
+    // =========================================================================
+
+    /// Helper to parse gc args from a string
+    fn parse_gc_args(args: &str) -> (u32, bool, bool) {
+        let parts: Vec<&str> = args.split_whitespace().collect();
+
+        let retention_days = if let Some(idx) = parts.iter().position(|&p| p == "--retention-days")
+        {
+            parts
+                .get(idx + 1)
+                .and_then(|s| s.parse::<u32>().ok())
+                .unwrap_or(30)
+        } else {
+            30
+        };
+
+        let dry_run = parts.iter().any(|&p| p == "--dry-run");
+        let keep_pinned = !parts.iter().any(|&p| p == "--no-keep-pinned");
+
+        (retention_days, dry_run, keep_pinned)
+    }
+
+    #[test]
+    fn test_gc_args_defaults() {
+        let (retention_days, dry_run, keep_pinned) = parse_gc_args("gc");
+        assert_eq!(retention_days, 30, "default retention should be 30 days");
+        assert!(!dry_run, "default should not be dry run");
+        assert!(keep_pinned, "default should keep pinned exports");
+    }
+
+    #[test]
+    fn test_gc_args_retention_days() {
+        let (retention_days, _, _) = parse_gc_args("gc --retention-days 7");
+        assert_eq!(retention_days, 7);
+    }
+
+    #[test]
+    fn test_gc_args_dry_run() {
+        let (_, dry_run, _) = parse_gc_args("gc --dry-run");
+        assert!(dry_run);
+    }
+
+    #[test]
+    fn test_gc_args_no_keep_pinned() {
+        let (_, _, keep_pinned) = parse_gc_args("gc --no-keep-pinned");
+        assert!(
+            !keep_pinned,
+            "--no-keep-pinned should disable milestone protection"
+        );
+    }
+
+    #[test]
+    fn test_gc_args_all_flags() {
+        let (retention_days, dry_run, keep_pinned) =
+            parse_gc_args("gc --retention-days 14 --dry-run --no-keep-pinned");
+        assert_eq!(retention_days, 14);
+        assert!(dry_run);
+        assert!(!keep_pinned);
+    }
+
+    #[test]
+    fn test_gc_config_defaults() {
+        let config = GcConfig::default();
+        assert_eq!(config.retention_days, 30, "D20: 30 days default");
+        assert!(
+            config.keep_pinned,
+            "D116: milestone protection enabled by default"
+        );
+        assert!(config.clean_temp_files);
+        assert!(!config.dry_run);
+    }
+
+    #[test]
+    fn test_gc_config_dry_run() {
+        let config = GcConfig::dry_run();
+        assert!(config.dry_run);
+        assert_eq!(config.retention_days, 30);
+    }
+
+    #[test]
+    fn test_gc_config_builder() {
+        let config = GcConfig::default().with_retention_days(7);
+        assert_eq!(config.retention_days, 7);
     }
 }

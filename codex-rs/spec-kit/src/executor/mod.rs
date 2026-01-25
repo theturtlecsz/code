@@ -144,17 +144,29 @@ impl std::fmt::Display for HeadlessError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             HeadlessError::PromptAttempted { operation } => {
-                write!(f, "Headless mode attempted to prompt (operation: {operation})")
+                write!(
+                    f,
+                    "Headless mode attempted to prompt (operation: {operation})"
+                )
             }
             HeadlessError::MaieuticRequired => {
-                write!(f, "Headless execution requires maieutic input (--maieutic <path> or --maieutic-answers <json>)")
+                write!(
+                    f,
+                    "Headless execution requires maieutic input (--maieutic <path> or --maieutic-answers <json>)"
+                )
             }
             HeadlessError::ApprovalRequired { checkpoint, tier } => {
-                write!(f, "Tier-{tier} checkpoint '{checkpoint}' requires approval (run interactively or pre-approve)")
+                write!(
+                    f,
+                    "Tier-{tier} checkpoint '{checkpoint}' requires approval (run interactively or pre-approve)"
+                )
             }
             HeadlessError::ShipBlocked { reason } => match reason {
                 ShipBlockReason::PrivateScratch => {
-                    write!(f, "Ship blocked: capture=none (switch to prompts_only or full_io)")
+                    write!(
+                        f,
+                        "Ship blocked: capture=none (switch to prompts_only or full_io)"
+                    )
                 }
                 ShipBlockReason::MissingArtifact { artifact } => {
                     write!(f, "Ship blocked: missing required artifact '{artifact}'")
@@ -584,7 +596,6 @@ pub struct ExecutionContext {
     pub policy_snapshot: Option<PolicySnapshot>,
 
     // === SPEC-KIT-920: Headless execution support ===
-
     /// Headless mode flag - if true, any interactive operation is an error.
     ///
     /// CLI sets this based on --headless flag or TTY detection.

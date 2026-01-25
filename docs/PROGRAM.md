@@ -31,38 +31,38 @@ This document pins the **only** work considered "ACTIVE" for the 2026-Q1 program
 
 ### Foundation + Parallel Starts (Days 0-14)
 
-| Spec                                                             | Description                                   | Status      |
-| ---------------------------------------------------------------- | --------------------------------------------- | ----------- |
-| [SPEC-KIT-971](./SPEC-KIT-971-memvid-capsule-foundation/spec.md) | Memvid Capsule Foundation                     | In Progress |
-| [SPEC-KIT-977](./SPEC-KIT-977-model-policy-v2/spec.md)           | Model Policy v2 (Governance + PolicySnapshot) | In Progress |
-| [SPEC-KIT-978](./SPEC-KIT-978-local-reflex-sglang/spec.md)       | Local Reflex (SGLang + Reflex Model Stack)    | In Progress |
+| Spec                                                             | Description                                   | Status    |
+| ---------------------------------------------------------------- | --------------------------------------------- | --------- |
+| [SPEC-KIT-971](./SPEC-KIT-971-memvid-capsule-foundation/spec.md) | Memvid Capsule Foundation                     | Completed |
+| [SPEC-KIT-977](./SPEC-KIT-977-model-policy-v2/spec.md)           | Model Policy v2 (Governance + PolicySnapshot) | Completed |
+| [SPEC-KIT-978](./SPEC-KIT-978-local-reflex-sglang/spec.md)       | Local Reflex (SGLang + Reflex Model Stack)    | Completed |
 
 ### Core Substrate (Days 14-30)
 
-| Spec                                                         | Description                                        | Status  |
-| ------------------------------------------------------------ | -------------------------------------------------- | ------- |
-| [SPEC-KIT-972](./SPEC-KIT-972-hybrid-retrieval-eval/spec.md) | Hybrid Retrieval + Evaluation Harness              | Pending |
-| [SPEC-KIT-975](./SPEC-KIT-975-replayable-audits/spec.md)     | Replayable Audits v1 (Event Track + Replay Engine) | Pending |
+| Spec                                                         | Description                                        | Status    |
+| ------------------------------------------------------------ | -------------------------------------------------- | --------- |
+| [SPEC-KIT-972](./SPEC-KIT-972-hybrid-retrieval-eval/spec.md) | Hybrid Retrieval + Evaluation Harness              | Completed |
+| [SPEC-KIT-975](./SPEC-KIT-975-replayable-audits/spec.md)     | Replayable Audits v1 (Event Track + Replay Engine) | Completed |
 
 ### Product UX (Days 30-60)
 
-| Spec                                                                    | Description                              | Status  |
-| ----------------------------------------------------------------------- | ---------------------------------------- | ------- |
-| [SPEC-KIT-973](./SPEC-KIT-973-time-travel-ui/spec.md)                   | Time-Travel UI + Branching               | Pending |
-| [SPEC-KIT-974](./SPEC-KIT-974-capsule-export-import-encryption/spec.md) | Export/Import + Encryption + Safe Export | Pending |
+| Spec                                                                    | Description                              | Status      |
+| ----------------------------------------------------------------------- | ---------------------------------------- | ----------- |
+| [SPEC-KIT-973](./SPEC-KIT-973-time-travel-ui/spec.md)                   | Time-Travel UI + Branching               | Completed   |
+| [SPEC-KIT-974](./SPEC-KIT-974-capsule-export-import-encryption/spec.md) | Export/Import + Encryption + Safe Export | In Progress |
 
 ### Higher-Level Intelligence (Days 45-75)
 
-| Spec                                                    | Description                                              | Status  |
-| ------------------------------------------------------- | -------------------------------------------------------- | ------- |
-| [SPEC-KIT-976](./SPEC-KIT-976-logic-mesh-graph/spec.md) | Logic Mesh / Graph v1 (Cards + Edges + Librarian Rebase) | Pending |
+| Spec                                                    | Description                                              | Status    |
+| ------------------------------------------------------- | -------------------------------------------------------- | --------- |
+| [SPEC-KIT-976](./SPEC-KIT-976-logic-mesh-graph/spec.md) | Logic Mesh / Graph v1 (Cards + Edges + Librarian Rebase) | Completed |
 
 ### Migration + Stretch (Days 60-90)
 
-| Spec                                                        | Description                                                | Status  |
-| ----------------------------------------------------------- | ---------------------------------------------------------- | ------- |
-| [SPEC-KIT-979](./SPEC-KIT-979-local-memory-sunset/spec.md)  | Local-Memory Sunset (Parity gates → remove daemon)         | Pending |
-| [SPEC-KIT-980](./SPEC-KIT-980-multimodal-ingestion/spec.md) | Multi-Modal Ingestion (PDF/DOCX first; CLIP/Whisper gated) | Pending |
+| Spec                                                        | Description                                                | Status    |
+| ----------------------------------------------------------- | ---------------------------------------------------------- | --------- |
+| [SPEC-KIT-979](./SPEC-KIT-979-local-memory-sunset/spec.md)  | Local-Memory Sunset (Parity gates → remove daemon)         | Completed |
+| [SPEC-KIT-980](./SPEC-KIT-980-multimodal-ingestion/spec.md) | Multi-Modal Ingestion (PDF/DOCX first; CLIP/Whisper gated) | Pending   |
 
 ***
 
@@ -129,6 +129,7 @@ When in doubt: treat as ARCHIVE until `SPEC.md` or this file says otherwise.
 
 | Version | Date       | Changes                                                              |
 | ------- | ---------- | -------------------------------------------------------------------- |
+| v1.0.1  | 2026-01-23 | DOC-001: Reconcile status markers with SPEC.md (9 specs → Completed) |
 | v1.0.0  | 2026-01-22 | Initial canonical version (migrated from PROGRAM\_2026Q1\_ACTIVE.md) |
 
 ***

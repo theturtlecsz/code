@@ -532,6 +532,12 @@ pub(crate) struct ChatWidget<'a> {
     /// Pending maieutic state for pipeline resumption (D130)
     /// When Some, maieutic modal is displayed and pipeline pauses until completion
     pending_maieutic: Option<spec_kit::PendingMaieutic>,
+    /// Pending intake backfill state for pipeline resumption (Phase 2)
+    /// When Some, intake backfill modal is displayed and pipeline pauses until completion
+    pending_intake_backfill: Option<spec_kit::PendingIntakeBackfill>,
+    /// Pending projectnew state for multi-phase project setup flow
+    /// When Some, orchestrates: vision -> project intake -> bootstrap spec
+    pub(crate) pending_projectnew: Option<spec_kit::PendingProjectNew>,
     // === END FORK-SPECIFIC ===
 
     // === FORK-SPECIFIC (just-every/code): Native MCP for local-memory ===
@@ -2529,6 +2535,8 @@ impl ChatWidget<'_> {
             validate_lifecycles: HashMap::new(),
             stage0_pending: None,
             pending_maieutic: None,
+            pending_intake_backfill: None,
+            pending_projectnew: None,
             // FORK-SPECIFIC (just-every/code): Use shared MCP manager from App
             mcp_manager,
             quality_gate_broker,
@@ -2765,6 +2773,8 @@ impl ChatWidget<'_> {
             validate_lifecycles: HashMap::new(),
             stage0_pending: None,
             pending_maieutic: None,
+            pending_intake_backfill: None,
+            pending_projectnew: None,
             mcp_manager,
             quality_gate_broker,
             initial_command: None,
@@ -2978,6 +2988,8 @@ impl ChatWidget<'_> {
             validate_lifecycles: HashMap::new(),
             stage0_pending: None,
             pending_maieutic: None,
+            pending_intake_backfill: None,
+            pending_projectnew: None,
             // FORK-SPECIFIC (just-every/code): Use shared MCP manager from App
             mcp_manager,
             quality_gate_broker,
@@ -4740,6 +4752,21 @@ impl ChatWidget<'_> {
         questions: Vec<spec_kit::maieutic::MaieuticQuestion>,
     ) {
         self.bottom_pane.show_maieutic_modal(spec_id, questions);
+    }
+
+    /// Show spec intake modal for Architect-in-a-box (Phase 1)
+    pub(crate) fn show_spec_intake_modal(&mut self, description: String, deep: bool) {
+        self.bottom_pane.show_spec_intake_modal(description, deep);
+    }
+
+    /// Show spec intake modal for backfill (Phase 2: IntakePresenceGate)
+    pub(crate) fn show_spec_intake_modal_backfill(&mut self, spec_id: String) {
+        self.bottom_pane.show_spec_intake_modal_backfill(spec_id);
+    }
+
+    /// Show project intake modal for /speckit.projectnew flow
+    pub(crate) fn show_project_intake_modal(&mut self, project_id: String, deep: bool) {
+        self.bottom_pane.show_project_intake_modal(project_id, deep);
     }
 
     // perform_undo_restore, reset_after_conversation_restore moved to undo_snapshots.rs (MAINT-11 Phase 9)

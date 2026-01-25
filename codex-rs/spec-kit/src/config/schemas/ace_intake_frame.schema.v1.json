@@ -1,0 +1,108 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AceIntakeFrame",
+  "description": "ACE Intake Frame ace_intake_frame@1.0 - decision explainability for spec-kit intake",
+  "type": "object",
+  "required": [
+    "answers_uri",
+    "brief_uri",
+    "constraints",
+    "intake_id",
+    "intake_kind",
+    "integration_points",
+    "non_goals",
+    "open_questions",
+    "outcome",
+    "problem",
+    "risks",
+    "scope",
+    "users"
+  ],
+  "properties": {
+    "answers_uri": {
+      "description": "URI to intake answers artifact in capsule",
+      "type": "string"
+    },
+    "brief_uri": {
+      "description": "URI to design/project brief artifact in capsule",
+      "type": "string"
+    },
+    "constraints": {
+      "description": "Technical/business constraints",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "grounding_uris": {
+      "description": "URIs to grounding artifacts (deep mode only, empty otherwise)",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "intake_id": {
+      "description": "Unique intake identifier (UUID)",
+      "type": "string"
+    },
+    "intake_kind": {
+      "description": "Intake kind: \"spec\" or \"project\"",
+      "type": "string"
+    },
+    "integration_points": {
+      "description": "Integration points with other systems",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "non_goals": {
+      "description": "Explicit non-goals",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "open_questions": {
+      "description": "Open questions to resolve",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "outcome": {
+      "description": "Desired outcome",
+      "type": "string"
+    },
+    "problem": {
+      "description": "Problem statement being addressed",
+      "type": "string"
+    },
+    "risks": {
+      "description": "Identified risks",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "schema_version": {
+      "description": "Schema version (defaults to ace_intake_frame@1.0)",
+      "default": "ace_intake_frame@1.0",
+      "type": "string"
+    },
+    "scope": {
+      "description": "What's in scope",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "users": {
+      "description": "Target users/audience",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

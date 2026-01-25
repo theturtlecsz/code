@@ -26,7 +26,8 @@
 use crate::memvid_adapter::lock::{CapsuleLock, LockError, LockMetadata, is_locked, lock_path_for};
 use crate::memvid_adapter::types::{
     BranchId, CapsuleExportedPayload, CapsuleImportedPayload, CheckpointId, CheckpointMetadata,
-    ErrorEventPayload, EventType, GateDecisionPayload, LogicalUri, MergeMode,
+    ErrorEventPayload, EventType, GateDecisionPayload, IntakeCompletedPayload, LogicalUri,
+    MergeMode,
     ModelCallEnvelopePayload, ObjectType, PatchApplyPayload, PhysicalPointer,
     RetrievalRequestPayload, RetrievalResponsePayload, RoutingDecisionPayload, RunEventEnvelope,
     ToolCallPayload, ToolResultPayload, UriIndex, UriIndexSnapshot,
@@ -96,6 +97,20 @@ pub enum CapsuleError {
     /// S974-003: Age encryption/decryption error
     #[error("Encryption error: {reason}")]
     EncryptionError { reason: String },
+
+    /// S974-mount: Invalid mount name (path traversal or invalid characters)
+    #[error("Invalid mount name '{name}': {reason}")]
+    InvalidMountName { name: String, reason: String },
+
+    /// S974-mount: Mount already exists with different content
+    #[error(
+        "Mount '{name}' already exists with different content. Use --mount-as <different_name> or unmount first."
+    )]
+    MountHashConflict { name: String },
+
+    /// S974-mount: Registry corruption or parse error
+    #[error("Mounts registry error: {reason}")]
+    MountsRegistryError { reason: String },
 }
 
 pub type Result<T> = std::result::Result<T, CapsuleError>;
@@ -1654,6 +1669,24 @@ impl CapsuleHandle {
         )
     }
 
+    /// Emit an IntakeCompleted event.
+    ///
+    /// Records completion of the "Architect-in-a-box" intake flow, including
+    /// the capsule URIs and hashes for raw answers + normalized brief.
+    pub fn emit_intake_completed(
+        &self,
+        spec_id: &str,
+        run_id: &str,
+        payload: &IntakeCompletedPayload,
+    ) -> Result<LogicalUri> {
+        let payload_json =
+            serde_json::to_value(payload).map_err(|e| CapsuleError::InvalidOperation {
+                reason: format!("Failed to serialize IntakeCompleted payload: {}", e),
+            })?;
+
+        self.emit_event(spec_id, run_id, None, EventType::IntakeCompleted, payload_json)
+    }
+
     /// Emit a RoutingDecision event (SPEC-KIT-978).
     ///
     /// Records every model routing decision (reflex vs cloud) for the
@@ -2213,7 +2246,10 @@ impl CapsuleHandle {
             results.push(DiagnosticResult::Ok("No lock held".to_string()));
         }
 
-        // Check readability
+        // SPEC-KIT-974: Detect encrypted capsules (.mv2e)
+        let is_encrypted = path.extension().map(|e| e == "mv2e").unwrap_or(false);
+
+        // Check readability and header
         match std::fs::read(path) {
             Ok(data) => {
                 if data.len() < 5 {
@@ -2223,6 +2259,62 @@ impl CapsuleHandle {
                         rm -f {} && speckit capsule init"
                             .to_string(),
                     ));
+                } else if is_encrypted {
+                    // P0-3: For encrypted capsules, check age header and try to verify with env var
+                    // Age encrypted files start with "age-encryption.org" header
+                    let has_age_header = data.starts_with(b"age-encryption.org");
+
+                    if !has_age_header {
+                        results.push(DiagnosticResult::Error(
+                            "Invalid encrypted capsule header".to_string(),
+                            "File has .mv2e extension but doesn't have valid age encryption header.".to_string(),
+                        ));
+                    } else {
+                        results.push(DiagnosticResult::Ok(
+                            "Encrypted capsule header valid (age)".to_string(),
+                        ));
+
+                        // Try to verify decrypted content if passphrase available via env var
+                        // (no interactive prompt in doctor - use env var only)
+                        if let Ok(pass) = std::env::var("SPECKIT_MEMVID_PASSPHRASE") {
+                            if !pass.is_empty() {
+                                let passphrase = secrecy::SecretString::from(pass);
+                                match Self::open_encrypted(path, &passphrase) {
+                                    Ok(_handle) => {
+                                        results.push(DiagnosticResult::Ok(
+                                            "Decryption verified (passphrase correct)".to_string(),
+                                        ));
+                                    }
+                                    Err(CapsuleError::InvalidPassphrase) => {
+                                        results.push(DiagnosticResult::Error(
+                                            "Decryption failed - wrong passphrase".to_string(),
+                                            "Check SPECKIT_MEMVID_PASSPHRASE value.".to_string(),
+                                        ));
+                                    }
+                                    Err(e) => {
+                                        results.push(DiagnosticResult::Warning(
+                                            format!("Decryption verification failed: {}", e),
+                                            "Capsule may be corrupted or passphrase incorrect."
+                                                .to_string(),
+                                        ));
+                                    }
+                                }
+                            } else {
+                                results.push(DiagnosticResult::Warning(
+                                    "Encrypted capsule - cannot fully verify without passphrase"
+                                        .to_string(),
+                                    "Set SPECKIT_MEMVID_PASSPHRASE to verify decryption."
+                                        .to_string(),
+                                ));
+                            }
+                        } else {
+                            results.push(DiagnosticResult::Warning(
+                                "Encrypted capsule - cannot fully verify without passphrase"
+                                    .to_string(),
+                                "Set SPECKIT_MEMVID_PASSPHRASE to verify decryption.".to_string(),
+                            ));
+                        }
+                    }
                 } else if &data[0..3] != b"MV2" {
                     results.push(DiagnosticResult::Error(
                         "Invalid capsule header".to_string(),
@@ -2438,6 +2530,678 @@ impl CapsuleHandle {
         );
 
         Ok(result)
+    }
+
+    // =========================================================================
+    // Mount Persistence Helpers (SPEC-KIT-974)
+    // =========================================================================
+
+    /// Validate mount name for security and filesystem safety.
+    ///
+    /// ## S974-mount: Security requirements
+    /// - No path traversal: `/`, `\`, `..` are forbidden
+    /// - Only alphanumeric, underscore, hyphen allowed
+    /// - Non-empty, reasonable length (1-64 chars)
+    fn validate_mount_name(name: &str) -> Result<()> {
+        // Check for empty
+        if name.is_empty() {
+            return Err(CapsuleError::InvalidMountName {
+                name: name.to_string(),
+                reason: "Mount name cannot be empty".to_string(),
+            });
+        }
+
+        // Check length
+        if name.len() > 64 {
+            return Err(CapsuleError::InvalidMountName {
+                name: name.to_string(),
+                reason: "Mount name exceeds 64 characters".to_string(),
+            });
+        }
+
+        // Check for path traversal patterns
+        if name.contains('/') || name.contains('\\') || name.contains("..") {
+            return Err(CapsuleError::InvalidMountName {
+                name: name.to_string(),
+                reason: "Path traversal characters not allowed (/, \\, ..)".to_string(),
+            });
+        }
+
+        // Validate character set: ^[a-zA-Z0-9_-]+$
+        let valid = name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+        if !valid {
+            return Err(CapsuleError::InvalidMountName {
+                name: name.to_string(),
+                reason: "Only alphanumeric, underscore, and hyphen allowed".to_string(),
+            });
+        }
+
+        Ok(())
+    }
+
+    /// Get the canonical mounts directory path.
+    ///
+    /// Returns `./.speckit/memvid/mounts/` relative to the capsule's parent directory.
+    fn mounts_dir(&self) -> PathBuf {
+        self.config
+            .capsule_path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("mounts")
+    }
+
+    /// Get the registry file path.
+    ///
+    /// Returns `./.speckit/memvid/mounts.json`
+    fn mounts_registry_path(&self) -> PathBuf {
+        self.config
+            .capsule_path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("mounts.json")
+    }
+
+    /// Load the mounts registry, creating an empty one if it doesn't exist.
+    fn load_mounts_registry(&self) -> Result<MountsRegistry> {
+        let registry_path = self.mounts_registry_path();
+
+        if !registry_path.exists() {
+            return Ok(MountsRegistry::new());
+        }
+
+        let content = std::fs::read_to_string(&registry_path)?;
+        serde_json::from_str(&content).map_err(|e| CapsuleError::MountsRegistryError {
+            reason: format!("Failed to parse mounts.json: {}", e),
+        })
+    }
+
+    /// Save the mounts registry atomically (temp file + rename).
+    fn save_mounts_registry(&self, registry: &MountsRegistry) -> Result<()> {
+        let registry_path = self.mounts_registry_path();
+        let parent = registry_path.parent().unwrap_or_else(|| Path::new("."));
+
+        // Ensure parent directory exists
+        if !parent.exists() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        // Serialize to JSON
+        let content = serde_json::to_string_pretty(registry).map_err(|e| {
+            CapsuleError::MountsRegistryError {
+                reason: format!("Failed to serialize mounts.json: {}", e),
+            }
+        })?;
+
+        // Atomic write: temp file + rename
+        let temp_path = registry_path.with_extension("json.tmp");
+        std::fs::write(&temp_path, content)?;
+        std::fs::rename(&temp_path, &registry_path)?;
+
+        Ok(())
+    }
+
+    /// Copy a file atomically to the mounts directory.
+    ///
+    /// Uses temp file + rename pattern to ensure no partial writes.
+    fn copy_to_mounts_atomic(&self, source: &Path, mount_name: &str) -> Result<PathBuf> {
+        let mounts_dir = self.mounts_dir();
+
+        // Ensure mounts directory exists
+        if !mounts_dir.exists() {
+            std::fs::create_dir_all(&mounts_dir)?;
+        }
+
+        // Determine extension from source
+        let extension = source
+            .extension()
+            .map(|e| e.to_string_lossy().to_string())
+            .unwrap_or_else(|| "mv2".to_string());
+
+        let dest_path = mounts_dir.join(format!("{}.{}", mount_name, extension));
+        let temp_path = mounts_dir.join(format!("{}.{}.tmp", mount_name, extension));
+
+        // Copy to temp file
+        std::fs::copy(source, &temp_path)?;
+
+        // Atomic rename
+        std::fs::rename(&temp_path, &dest_path)?;
+
+        Ok(dest_path)
+    }
+
+    /// Check if mount already exists and whether it's the same content.
+    ///
+    /// Returns:
+    /// - `Ok(None)` if mount doesn't exist (proceed with copy)
+    /// - `Ok(Some(entry))` if mount exists with matching hash (skip copy, reuse)
+    /// - `Err(MountHashConflict)` if mount exists with different hash
+    fn check_mount_idempotency(
+        &self,
+        mount_name: &str,
+        content_hash: &str,
+    ) -> Result<Option<MountEntry>> {
+        let registry = self.load_mounts_registry()?;
+
+        match registry.mounts.get(mount_name) {
+            Some(existing) => {
+                if existing.content_hash == content_hash {
+                    // Same content - idempotent success
+                    tracing::info!(
+                        mount_name = %mount_name,
+                        "Mount already exists with matching content hash"
+                    );
+                    Ok(Some(existing.clone()))
+                } else {
+                    // Different content - conflict
+                    Err(CapsuleError::MountHashConflict {
+                        name: mount_name.to_string(),
+                    })
+                }
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Internal helper to gather stats from source capsule.
+    fn gather_source_stats_internal(
+        &self,
+        options: &ImportOptions,
+        is_encrypted: bool,
+    ) -> Result<(u64, u64, u64, Vec<String>)> {
+        if is_encrypted {
+            let passphrase = Self::acquire_passphrase(options.interactive)?;
+            let source_handle = Self::open_encrypted(&options.source_path, &passphrase)?;
+            let stats = source_handle.stats();
+            let checkpoints = source_handle.list_checkpoints();
+            let checkpoint_ids: Vec<String> = checkpoints
+                .iter()
+                .map(|cp| cp.checkpoint_id.to_string())
+                .collect();
+            Ok((
+                stats.uri_count as u64,
+                stats.checkpoint_count as u64,
+                stats.event_count as u64,
+                checkpoint_ids,
+            ))
+        } else {
+            let source_config = CapsuleConfig {
+                capsule_path: options.source_path.clone(),
+                workspace_id: "imported".to_string(),
+                ..Default::default()
+            };
+            match Self::open_read_only(source_config) {
+                Ok(source_handle) => {
+                    let stats = source_handle.stats();
+                    let checkpoints = source_handle.list_checkpoints();
+                    let checkpoint_ids: Vec<String> = checkpoints
+                        .iter()
+                        .map(|cp| cp.checkpoint_id.to_string())
+                        .collect();
+                    Ok((
+                        stats.uri_count as u64,
+                        stats.checkpoint_count as u64,
+                        stats.event_count as u64,
+                        checkpoint_ids,
+                    ))
+                }
+                Err(_) => Ok((0, 0, 0, Vec::new())),
+            }
+        }
+    }
+
+    /// SPEC-KIT-974 (SK974-1): Import an external capsule as a read-only mount.
+    ///
+    /// ## Decision IDs
+    /// - D103: Imported capsules read-only (attach without mutating workspace memory)
+    /// - D104: Auto-register mounted capsules (immediately discoverable)
+    /// - D70: Import verification (doctor checks)
+    ///
+    /// ## Process (S974-mount)
+    /// 1. Validate source path exists
+    /// 2. Determine + validate mount name (security check)
+    /// 3. Run doctor verification
+    /// 4. Compute content hash for provenance
+    /// 5. Check idempotency (skip if already mounted with same hash)
+    /// 6. Open source capsule read-only to gather stats
+    /// 7. Atomic copy to mounts directory
+    /// 8. Update mounts registry atomically
+    /// 9. Emit CapsuleImported event
+    /// 10. Rollback on failure
+    ///
+    /// ## Acceptance Criteria
+    /// - Import on a second machine reproduces identical retrieval results
+    /// - `speckit capsule import` MUST run doctor checks before mounting
+    /// - Warn on unsigned/unverified capsules; hard-fail if `--require-verified`
+    /// - Every import writes a `CapsuleImported` event with provenance metadata
+    /// - Mount file persisted at `.speckit/memvid/mounts/<NAME>.mv2{e}`
+    /// - Registry at `.speckit/memvid/mounts.json` with atomic writes
+    pub fn import(&self, options: &ImportOptions) -> Result<ImportResult> {
+        if !self.is_open() {
+            return Err(CapsuleError::NotOpen);
+        }
+
+        // === 1. Validate source exists ===
+        if !options.source_path.exists() {
+            return Err(CapsuleError::NotFound {
+                path: options.source_path.clone(),
+            });
+        }
+
+        // === 2. Determine and validate mount name ===
+        let mount_name = options.mount_as.clone().unwrap_or_else(|| {
+            options
+                .source_path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| "imported".to_string())
+        });
+
+        // S974-mount: Validate mount name (security)
+        Self::validate_mount_name(&mount_name)?;
+
+        // === 3. Run doctor verification first (D70, D104) ===
+        let doctor_results = Self::doctor(&options.source_path);
+        let has_errors = doctor_results
+            .iter()
+            .any(|r| matches!(r, DiagnosticResult::Error(_, _)));
+        let verification_passed = !has_errors;
+
+        // If require_verified and verification failed, abort before any writes
+        if options.require_verified && !verification_passed {
+            return Err(CapsuleError::InvalidOperation {
+                reason: "Capsule verification failed and --require-verified was set".to_string(),
+            });
+        }
+
+        // === 4. Compute content hash for provenance tracking ===
+        let content_hash = Self::compute_file_hash(&options.source_path)?;
+
+        // === 5. Check idempotency before any writes ===
+        if let Some(existing) = self.check_mount_idempotency(&mount_name, &content_hash)? {
+            // Already mounted with same content - return success without duplicate writes
+            tracing::info!(
+                mount_name = %mount_name,
+                content_hash = %content_hash,
+                "Capsule already mounted (idempotent success)"
+            );
+
+            // Still need to gather stats for the result
+            let is_encrypted = options
+                .source_path
+                .extension()
+                .map(|e| e == "mv2e")
+                .unwrap_or(false);
+            let (artifact_count, checkpoint_count, event_count, _) =
+                self.gather_source_stats_internal(options, is_encrypted)?;
+
+            return Ok(ImportResult {
+                source_path: options.source_path.clone(),
+                mount_name,
+                content_hash,
+                artifact_count,
+                checkpoint_count,
+                event_count,
+                doctor_results,
+                verification_passed: existing.verification_passed,
+                mounted_path: Some(PathBuf::from(&existing.mounted_path)),
+            });
+        }
+
+        // === 6. Open source capsule read-only to gather stats (D103) ===
+        let is_encrypted = options
+            .source_path
+            .extension()
+            .map(|e| e == "mv2e")
+            .unwrap_or(false);
+
+        let (artifact_count, checkpoint_count, event_count, checkpoints_imported) =
+            self.gather_source_stats_internal(options, is_encrypted)?;
+
+        // === 7. S974-mount: Atomic copy to mounts directory ===
+        let mounted_path = self.copy_to_mounts_atomic(&options.source_path, &mount_name)?;
+
+        // === 8. S974-mount: Update registry atomically ===
+        let mut registry = self.load_mounts_registry()?;
+        let mount_entry = MountEntry {
+            mounted_path: mounted_path.display().to_string(),
+            source_path: options.source_path.display().to_string(),
+            content_hash: content_hash.clone(),
+            format: if is_encrypted {
+                "mv2e-v1".to_string()
+            } else {
+                "mv2-v1".to_string()
+            },
+            imported_at: chrono::Utc::now(),
+            verification_passed,
+        };
+        registry.mounts.insert(mount_name.clone(), mount_entry);
+
+        // Save registry atomically; rollback mount file on failure
+        if let Err(e) = self.save_mounts_registry(&registry) {
+            // Rollback: remove the mounted file
+            let _ = std::fs::remove_file(&mounted_path);
+            return Err(e);
+        }
+
+        // === 9. Emit CapsuleImported event (D104: auto-register) ===
+        let payload = CapsuleImportedPayload {
+            source_type: "file".to_string(),
+            source: Some(options.source_path.display().to_string()),
+            format: if is_encrypted {
+                "mv2e-v1".to_string()
+            } else {
+                "mv2-v1".to_string()
+            },
+            original_capsule_id: None, // Could be extracted from manifest if present
+            checkpoints_imported,
+            imported_at: chrono::Utc::now(),
+            content_hash: Some(content_hash.clone()),
+        };
+
+        // === 10. Rollback on event emission failure ===
+        if let Err(e) = self.emit_capsule_imported("import", &mount_name, &payload) {
+            // Rollback: remove mounted file and restore registry
+            let _ = std::fs::remove_file(&mounted_path);
+            let mut rollback_registry = self.load_mounts_registry().unwrap_or_default();
+            rollback_registry.mounts.remove(&mount_name);
+            let _ = self.save_mounts_registry(&rollback_registry);
+            return Err(e);
+        }
+
+        tracing::info!(
+            source = %options.source_path.display(),
+            mount_name = %mount_name,
+            mounted_path = %mounted_path.display(),
+            artifacts = artifact_count,
+            checkpoints = checkpoint_count,
+            events = event_count,
+            verified = verification_passed,
+            encrypted = is_encrypted,
+            "Capsule imported and mounted successfully"
+        );
+
+        Ok(ImportResult {
+            source_path: options.source_path.clone(),
+            mount_name,
+            content_hash,
+            artifact_count,
+            checkpoint_count,
+            event_count,
+            doctor_results,
+            verification_passed,
+            mounted_path: Some(mounted_path),
+        })
+    }
+
+    /// Compute SHA-256 hash of a file.
+    fn compute_file_hash(path: &Path) -> Result<String> {
+        let mut file = File::open(path)?;
+        let mut hasher = Sha256::new();
+        let mut buffer = [0u8; 8192];
+        loop {
+            let bytes_read = file.read(&mut buffer)?;
+            if bytes_read == 0 {
+                break;
+            }
+            hasher.update(&buffer[..bytes_read]);
+        }
+        Ok(format!("{:x}", hasher.finalize()))
+    }
+
+    /// SPEC-KIT-974 (SK974-3): Garbage collect expired exports and temp files.
+    ///
+    /// ## Decision IDs
+    /// - D20: Capsule growth management (retention/compaction)
+    /// - D116: Hybrid retention (TTL + milestone protection)
+    ///
+    /// ## Process
+    /// 1. Scan export directories for .mv2 and .mv2e files
+    /// 2. Evaluate each against retention policy
+    /// 3. Skip pinned/milestone exports (D116)
+    /// 4. Delete expired exports
+    /// 5. Clean up orphaned temp files
+    /// 6. Record audit trail event for deletions
+    ///
+    /// ## Acceptance Criteria
+    /// - `speckit capsule gc` deletes expired exports older than retention_days unless pinned
+    /// - Leaves an audit trail event for deletions
+    pub fn gc(&self, config: &GcConfig) -> Result<GcResult> {
+        if !self.is_open() {
+            return Err(CapsuleError::NotOpen);
+        }
+
+        let mut result = GcResult {
+            exports_deleted: 0,
+            temp_files_deleted: 0,
+            bytes_freed: 0,
+            exports_preserved: 0,
+            exports_skipped: 0,
+            dry_run: config.dry_run,
+            deleted_paths: Vec::new(),
+        };
+
+        // Get workspace root (parent of .speckit)
+        let workspace_root = self
+            .config
+            .capsule_path
+            .parent()
+            .and_then(|p| p.parent())
+            .and_then(|p| p.parent())
+            .unwrap_or(Path::new("."));
+
+        // Standard export location: docs/specs/*/runs/*/*.mv2{e}
+        let exports_dir = workspace_root.join("docs").join("specs");
+        let temp_dir = workspace_root.join(".speckit").join("tmp");
+
+        let now = std::time::SystemTime::now();
+
+        // Collect export candidates
+        let candidates = Self::collect_export_candidates(&exports_dir, now);
+
+        // Evaluate each candidate
+        for candidate in candidates {
+            if candidate.is_pinned && config.keep_pinned {
+                // D116: Milestone protection
+                result.exports_preserved += 1;
+                continue;
+            }
+
+            if candidate.age_days < config.retention_days as u64 {
+                // Not yet expired
+                result.exports_skipped += 1;
+                continue;
+            }
+
+            // Candidate is expired and not protected
+            if config.dry_run {
+                result.exports_deleted += 1;
+                result.bytes_freed += candidate.size_bytes;
+                result.deleted_paths.push(candidate.path);
+            } else {
+                // Actually delete
+                match std::fs::remove_file(&candidate.path) {
+                    Ok(_) => {
+                        result.exports_deleted += 1;
+                        result.bytes_freed += candidate.size_bytes;
+                        result.deleted_paths.push(candidate.path);
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            path = %candidate.path.display(),
+                            error = %e,
+                            "Failed to delete expired export"
+                        );
+                    }
+                }
+            }
+        }
+
+        // Clean temp files if configured
+        if config.clean_temp_files && temp_dir.exists() {
+            result.temp_files_deleted = Self::clean_temp_dir(&temp_dir, config.dry_run)?;
+        }
+
+        // Record audit trail event for deletions (if not dry run and there were deletions)
+        if !config.dry_run && result.exports_deleted > 0 {
+            self.emit_gc_audit_event(&result)?;
+        }
+
+        tracing::info!(
+            exports_deleted = result.exports_deleted,
+            temp_files_deleted = result.temp_files_deleted,
+            bytes_freed = result.bytes_freed,
+            exports_preserved = result.exports_preserved,
+            dry_run = config.dry_run,
+            "Garbage collection completed"
+        );
+
+        Ok(result)
+    }
+
+    /// Collect export file candidates from the given directory.
+    fn collect_export_candidates(
+        exports_dir: &Path,
+        now: std::time::SystemTime,
+    ) -> Vec<ExportCandidate> {
+        let mut candidates = Vec::new();
+
+        if !exports_dir.exists() {
+            return candidates;
+        }
+
+        // Walk: docs/specs/<SPEC_ID>/runs/<RUN_ID>/*.mv2{e}
+        if let Ok(spec_entries) = std::fs::read_dir(exports_dir) {
+            for spec_entry in spec_entries.flatten() {
+                let spec_path = spec_entry.path();
+                if !spec_path.is_dir() {
+                    continue;
+                }
+
+                let spec_id = spec_path
+                    .file_name()
+                    .map(|s| s.to_string_lossy().to_string());
+
+                let runs_path = spec_path.join("runs");
+                if !runs_path.exists() {
+                    continue;
+                }
+
+                if let Ok(run_entries) = std::fs::read_dir(&runs_path) {
+                    for run_entry in run_entries.flatten() {
+                        let run_path = run_entry.path();
+                        if !run_path.is_dir() {
+                            continue;
+                        }
+
+                        let run_id = run_path
+                            .file_name()
+                            .map(|s| s.to_string_lossy().to_string());
+
+                        // Find .mv2 and .mv2e files in run directory
+                        if let Ok(file_entries) = std::fs::read_dir(&run_path) {
+                            for file_entry in file_entries.flatten() {
+                                let file_path = file_entry.path();
+                                if let Some(ext) = file_path.extension() {
+                                    if ext == "mv2" || ext == "mv2e" {
+                                        if let Ok(candidate) = Self::create_export_candidate(
+                                            &file_path,
+                                            now,
+                                            spec_id.clone(),
+                                            run_id.clone(),
+                                        ) {
+                                            candidates.push(candidate);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        candidates
+    }
+
+    /// Create an export candidate from a file path.
+    fn create_export_candidate(
+        path: &Path,
+        now: std::time::SystemTime,
+        spec_id: Option<String>,
+        run_id: Option<String>,
+    ) -> Result<ExportCandidate> {
+        let metadata = std::fs::metadata(path)?;
+        let modified_at = metadata.modified()?;
+        let size_bytes = metadata.len();
+
+        let age_secs = now
+            .duration_since(modified_at)
+            .unwrap_or(std::time::Duration::ZERO)
+            .as_secs();
+        let age_days = age_secs / 86400;
+
+        // Check if pinned (look for .pin marker file or manifest)
+        let pin_marker = path.with_extension("pin");
+        let is_pinned = pin_marker.exists();
+
+        Ok(ExportCandidate {
+            path: path.to_path_buf(),
+            size_bytes,
+            modified_at,
+            age_days,
+            is_pinned,
+            spec_id,
+            run_id,
+        })
+    }
+
+    /// Clean orphaned temp files.
+    fn clean_temp_dir(temp_dir: &Path, dry_run: bool) -> Result<u64> {
+        let mut count = 0;
+
+        if let Ok(entries) = std::fs::read_dir(temp_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                // Only clean temp files older than 1 day
+                if let Ok(metadata) = std::fs::metadata(&path) {
+                    if let Ok(modified) = metadata.modified() {
+                        let age = std::time::SystemTime::now()
+                            .duration_since(modified)
+                            .unwrap_or(std::time::Duration::ZERO);
+                        if age.as_secs() > 86400 {
+                            if dry_run {
+                                count += 1;
+                            } else if std::fs::remove_file(&path).is_ok() {
+                                count += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(count)
+    }
+
+    /// Emit an audit trail event for gc deletions.
+    fn emit_gc_audit_event(&self, result: &GcResult) -> Result<()> {
+        // Create a simple gate decision event for the gc operation
+        let payload = serde_json::json!({
+            "gate_name": "CapsuleGC",
+            "outcome": "pass",
+            "exports_deleted": result.exports_deleted,
+            "temp_files_deleted": result.temp_files_deleted,
+            "bytes_freed": result.bytes_freed,
+            "deleted_paths": result.deleted_paths.iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>(),
+        });
+
+        self.emit_event("gc", "cleanup", None, EventType::GateDecision, payload)?;
+
+        Ok(())
     }
 
     /// S974-003: Write encrypted export file (.mv2e)
@@ -2957,4 +3721,274 @@ pub struct ExportResult {
 
     /// Number of events exported
     pub event_count: u64,
+}
+
+// =============================================================================
+// ImportOptions and ImportResult (SPEC-KIT-974/SK974-1)
+// =============================================================================
+
+/// Options for capsule import.
+///
+/// ## SPEC-KIT-974 Requirements (D103, D104)
+/// - D103: Imported capsules are read-only (no mutation of imported capsule)
+/// - D104: Auto-register mounted capsules (immediately discoverable)
+///
+/// ## Import Process
+/// 1. Open source capsule read-only
+/// 2. Run doctor verification
+/// 3. Record CapsuleImported event in workspace capsule
+/// 4. Return import metadata
+#[derive(Debug, Clone)]
+pub struct ImportOptions {
+    /// Path to the source capsule file (.mv2 or .mv2e)
+    pub source_path: PathBuf,
+
+    /// Mount name for the imported capsule (default: derived from source filename)
+    pub mount_as: Option<String>,
+
+    /// Allow interactive passphrase prompt for .mv2e files
+    /// Default: true (prompts user when SPECKIT_MEMVID_PASSPHRASE not set)
+    pub interactive: bool,
+
+    /// D70: Hard-fail on unverified/unsigned capsules
+    /// Default: false (warn only)
+    pub require_verified: bool,
+}
+
+impl Default for ImportOptions {
+    fn default() -> Self {
+        Self {
+            source_path: PathBuf::new(),
+            mount_as: None,
+            interactive: true,
+            require_verified: false,
+        }
+    }
+}
+
+impl ImportOptions {
+    /// Create import options for a specific file.
+    pub fn for_file(source_path: impl Into<PathBuf>) -> Self {
+        Self {
+            source_path: source_path.into(),
+            ..Default::default()
+        }
+    }
+
+    /// Set the mount name.
+    pub fn with_mount_name(mut self, name: impl Into<String>) -> Self {
+        self.mount_as = Some(name.into());
+        self
+    }
+
+    /// Set require verified flag.
+    pub fn require_verified(mut self) -> Self {
+        self.require_verified = true;
+        self
+    }
+
+    /// Set interactive mode for passphrase prompting.
+    pub fn with_interactive(mut self, interactive: bool) -> Self {
+        self.interactive = interactive;
+        self
+    }
+}
+
+/// Result of a capsule import operation.
+#[derive(Debug, Clone)]
+pub struct ImportResult {
+    /// Path to the source file that was imported
+    pub source_path: PathBuf,
+
+    /// Mount name used for the imported capsule
+    pub mount_name: String,
+
+    /// SHA-256 hash of the imported content
+    pub content_hash: String,
+
+    /// Number of artifacts in the imported capsule
+    pub artifact_count: u64,
+
+    /// Number of checkpoints in the imported capsule
+    pub checkpoint_count: u64,
+
+    /// Number of events in the imported capsule
+    pub event_count: u64,
+
+    /// Doctor verification results
+    pub doctor_results: Vec<DiagnosticResult>,
+
+    /// Whether the capsule passed verification
+    pub verification_passed: bool,
+
+    /// Path to the mounted capsule file (S974-mount)
+    pub mounted_path: Option<PathBuf>,
+}
+
+// =============================================================================
+// MountsRegistry (SPEC-KIT-974 Mount Persistence)
+// =============================================================================
+
+/// Registry of mounted capsules.
+///
+/// Stored at `./.speckit/memvid/mounts.json` with atomic writes.
+/// Schema is versioned for forward compatibility.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MountsRegistry {
+    /// Schema version for forward compatibility
+    pub schema_version: u32,
+
+    /// Map of mount_name -> MountEntry
+    pub mounts: std::collections::HashMap<String, MountEntry>,
+}
+
+impl Default for MountsRegistry {
+    fn default() -> Self {
+        Self {
+            schema_version: Self::CURRENT_VERSION,
+            mounts: std::collections::HashMap::new(),
+        }
+    }
+}
+
+impl MountsRegistry {
+    /// Current schema version
+    pub const CURRENT_VERSION: u32 = 1;
+
+    /// Create a new empty registry
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+/// Individual mount entry in the registry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MountEntry {
+    /// Path to the mounted capsule (relative to workspace)
+    pub mounted_path: String,
+
+    /// Original source path (for provenance)
+    pub source_path: String,
+
+    /// SHA-256 content hash
+    pub content_hash: String,
+
+    /// Format identifier (mv2-v1 or mv2e-v1)
+    pub format: String,
+
+    /// Import timestamp
+    pub imported_at: chrono::DateTime<chrono::Utc>,
+
+    /// Whether doctor verification passed
+    pub verification_passed: bool,
+}
+
+// =============================================================================
+// GcConfig and GcResult (SPEC-KIT-974/SK974-3)
+// =============================================================================
+
+/// Configuration for capsule garbage collection.
+///
+/// ## SPEC-KIT-974 Requirements (D20, D116)
+/// - D20: Capsule growth management (retention/compaction)
+/// - D116: Hybrid retention (TTL + milestone protection)
+///
+/// ## Retention Rules
+/// - Exports older than `retention_days` are deleted
+/// - Pinned exports (milestone-marked) are preserved
+/// - Audit trail events recorded for all deletions
+#[derive(Debug, Clone)]
+pub struct GcConfig {
+    /// Number of days to retain unpinned exports
+    /// Default: 30 (per spec)
+    pub retention_days: u32,
+
+    /// Preserve pinned/milestone exports regardless of age
+    /// Default: true
+    pub keep_pinned: bool,
+
+    /// Also clean up orphaned temp files
+    /// Default: true
+    pub clean_temp_files: bool,
+
+    /// Dry-run mode: report what would be deleted without deleting
+    /// Default: false
+    pub dry_run: bool,
+}
+
+impl Default for GcConfig {
+    fn default() -> Self {
+        Self {
+            retention_days: 30, // D20: 30 days default
+            keep_pinned: true,  // D116: milestone protection
+            clean_temp_files: true,
+            dry_run: false,
+        }
+    }
+}
+
+impl GcConfig {
+    /// Create a dry-run config for preview.
+    pub fn dry_run() -> Self {
+        Self {
+            dry_run: true,
+            ..Default::default()
+        }
+    }
+
+    /// Set retention days.
+    pub fn with_retention_days(mut self, days: u32) -> Self {
+        self.retention_days = days;
+        self
+    }
+}
+
+/// Result of a garbage collection operation.
+#[derive(Debug, Clone)]
+pub struct GcResult {
+    /// Number of export files deleted
+    pub exports_deleted: u64,
+
+    /// Number of temp files deleted
+    pub temp_files_deleted: u64,
+
+    /// Total bytes freed
+    pub bytes_freed: u64,
+
+    /// Number of exports preserved (pinned/milestone)
+    pub exports_preserved: u64,
+
+    /// Number of exports skipped (not yet expired)
+    pub exports_skipped: u64,
+
+    /// Was this a dry run?
+    pub dry_run: bool,
+
+    /// Paths of deleted files (for audit trail)
+    pub deleted_paths: Vec<PathBuf>,
+}
+
+/// An export file candidate for gc evaluation.
+#[derive(Debug, Clone)]
+pub struct ExportCandidate {
+    /// Path to the export file
+    pub path: PathBuf,
+
+    /// File size in bytes
+    pub size_bytes: u64,
+
+    /// File modification time
+    pub modified_at: std::time::SystemTime,
+
+    /// Age in days
+    pub age_days: u64,
+
+    /// Whether this export is pinned (milestone-marked)
+    pub is_pinned: bool,
+
+    /// Associated spec ID (if determinable)
+    pub spec_id: Option<String>,
+
+    /// Associated run ID (if determinable)
+    pub run_id: Option<String>,
 }

@@ -285,7 +285,9 @@ mod tests {
 
     #[test]
     fn test_ace_cycle_result_construction() {
-        use super::super::ace_reflector::{PatternKind, ReflectedPattern, ACE_FRAME_SCHEMA_VERSION};
+        use super::super::ace_reflector::{
+            ACE_FRAME_SCHEMA_VERSION, PatternKind, ReflectedPattern,
+        };
 
         let reflection = ReflectionResult {
             schema_version: ACE_FRAME_SCHEMA_VERSION.to_string(),

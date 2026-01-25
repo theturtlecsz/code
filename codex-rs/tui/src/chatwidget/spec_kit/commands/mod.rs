@@ -15,6 +15,8 @@ mod msearch; // SPEC-KIT-972: Memory search with --explain
 mod plan;
 mod policy; // SPEC-KIT-977: Policy management commands
 mod project; // SPEC-KIT-960: Project scaffolding command
+mod projections; // WP-A: Filesystem projections rebuild
+pub mod projectnew; // /speckit.projectnew - full project setup with vision + intake
 mod quality;
 mod reflex; // SPEC-KIT-978: Reflex local inference
 pub mod search;
@@ -35,6 +37,8 @@ pub use msearch::*;
 pub use plan::*;
 pub use policy::*;
 pub use project::*;
+pub use projections::*;
+pub use projectnew::*;
 pub use quality::*;
 pub use reflex::*;
 pub use search::*;

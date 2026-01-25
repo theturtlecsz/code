@@ -3187,6 +3187,48 @@ impl App<'_> {
                     }
                 }
                 // === END FORK-SPECIFIC: Vision builder events ===
+                // === FORK-SPECIFIC: Spec intake events (Architect-in-a-box Phase 1/2) ===
+                AppEvent::SpecIntakeSubmitted {
+                    description,
+                    deep,
+                    answers,
+                    existing_spec_id,
+                } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        spec_kit::on_spec_intake_submitted(
+                            widget,
+                            description,
+                            deep,
+                            answers,
+                            existing_spec_id,
+                        );
+                    }
+                }
+                AppEvent::SpecIntakeCancelled {
+                    description,
+                    existing_spec_id,
+                } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        spec_kit::on_spec_intake_cancelled(widget, description, existing_spec_id);
+                    }
+                }
+                // === END FORK-SPECIFIC: Spec intake events ===
+                // === FORK-SPECIFIC: Project intake events (/speckit.projectnew) ===
+                AppEvent::ProjectIntakeSubmitted {
+                    project_id,
+                    deep,
+                    answers,
+                } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        spec_kit::on_project_intake_submitted(widget, project_id, deep, answers);
+                    }
+                }
+                AppEvent::ProjectIntakeCancelled { project_id } => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        spec_kit::on_project_intake_cancelled(widget, project_id);
+                    }
+                }
+                // === END FORK-SPECIFIC: Project intake events ===
                 // === FORK-SPECIFIC: Maieutic events (D130) ===
                 AppEvent::MaieuticSubmitted {
                     spec_id,

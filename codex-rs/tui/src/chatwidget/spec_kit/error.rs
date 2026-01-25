@@ -137,6 +137,14 @@ pub enum SpecKitError {
     #[error("Unknown stage: {stage}")]
     UnknownStage { stage: String },
 
+    // === Vision Persistence Errors ===
+    #[error("Vision persistence failed: {0}")]
+    VisionPersistence(String),
+
+    // === Rebuild Errors (WP-A) ===
+    #[error("Projection rebuild failed: {0}")]
+    RebuildError(String),
+
     // === Generic Wrapper ===
     #[error("{0}")]
     Other(String),
@@ -316,6 +324,32 @@ impl RetryClassifiable for SpecKitError {
                     field: "pipeline".to_string(),
                     reason: self.to_string(),
                 })
+            }
+
+            // Vision persistence errors: may be retryable if DB-related
+            SpecKitError::VisionPersistence(msg) => {
+                let msg_lower = msg.to_lowercase();
+                if msg_lower.contains("lock") || msg_lower.contains("busy") {
+                    ErrorClass::Retryable(RetryableError::DatabaseLocked)
+                } else {
+                    ErrorClass::Permanent(PermanentError::InvalidInput {
+                        field: "vision".to_string(),
+                        reason: msg.clone(),
+                    })
+                }
+            }
+
+            // Rebuild errors: typically permanent (capsule not found, URI unresolvable)
+            SpecKitError::RebuildError(msg) => {
+                let msg_lower = msg.to_lowercase();
+                if msg_lower.contains("capsule not found") {
+                    ErrorClass::Permanent(PermanentError::ResourceNotFound(msg.clone()))
+                } else {
+                    ErrorClass::Permanent(PermanentError::InvalidInput {
+                        field: "rebuild".to_string(),
+                        reason: msg.clone(),
+                    })
+                }
             }
 
             // Generic errors: parse message for clues

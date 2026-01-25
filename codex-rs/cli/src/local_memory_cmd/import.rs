@@ -192,7 +192,10 @@ fn determine_mode(args: &ImportArgs) -> ImportMode {
 async fn run_status(args: ImportArgs) -> Result<()> {
     let db_path = resolve_database_path(args.database.as_ref())?;
     let capsule_path = resolve_capsule_path(args.capsule.as_ref())?;
-    let spec_id = args.spec_id.clone().unwrap_or_else(|| "lm-import".to_string());
+    let spec_id = args
+        .spec_id
+        .clone()
+        .unwrap_or_else(|| "lm-import".to_string());
 
     // Collect memories from source
     let all_memories = collect_memories(&db_path)?;
@@ -209,24 +212,37 @@ async fn run_status(args: ImportArgs) -> Result<()> {
         println!("  Filtered: {}", filtered.len());
     }
     println!();
-    println!("Destination: {} (spec: {})", capsule_path.display(), spec_id);
+    println!(
+        "Destination: {} (spec: {})",
+        capsule_path.display(),
+        spec_id
+    );
     println!("  Existing memories (this source): {}", existing.len());
     println!();
     println!("Import plan:");
     println!("  New:        {}", classification.new.len());
-    println!("  Duplicates: {} (will skip)", classification.duplicates.len());
+    println!(
+        "  Duplicates: {} (will skip)",
+        classification.duplicates.len()
+    );
     println!("  Conflicts:  {}", classification.conflicts.len());
     println!();
 
     if classification.new.is_empty() {
         println!("Nothing new to import.");
     } else {
-        println!("Run with --all to import {} new memories.", classification.new.len());
+        println!(
+            "Run with --all to import {} new memories.",
+            classification.new.len()
+        );
     }
 
     if !classification.conflicts.is_empty() {
         println!();
-        println!("WARNING: {} conflicts detected (same ID, different content).", classification.conflicts.len());
+        println!(
+            "WARNING: {} conflicts detected (same ID, different content).",
+            classification.conflicts.len()
+        );
         println!("Run with --dry-run to see details.");
     }
 
@@ -247,8 +263,11 @@ async fn run_dry_run(args: ImportArgs) -> Result<()> {
     let existing = scan_existing_imports(&capsule_path)?;
     let classification = classify_imports(&filtered, &existing);
 
-    println!("DRY RUN: Would import {} memories (skipping {} duplicates)",
-        classification.new.len(), classification.duplicates.len());
+    println!(
+        "DRY RUN: Would import {} memories (skipping {} duplicates)",
+        classification.new.len(),
+        classification.duplicates.len()
+    );
     println!();
 
     // Show new memories
@@ -257,8 +276,13 @@ async fn run_dry_run(args: ImportArgs) -> Result<()> {
         for (i, mem) in classification.new.iter().enumerate().take(20) {
             let domain = mem.domain.as_deref().unwrap_or("none");
             let snippet: String = mem.content.chars().take(60).collect();
-            println!("{}. {} [importance={}, domain={}]",
-                i + 1, mem.id, mem.importance, domain);
+            println!(
+                "{}. {} [importance={}, domain={}]",
+                i + 1,
+                mem.id,
+                mem.importance,
+                domain
+            );
             println!("   \"{}...\"", snippet.replace('\n', " "));
         }
         if classification.new.len() > 20 {
@@ -274,7 +298,10 @@ async fn run_dry_run(args: ImportArgs) -> Result<()> {
             println!("- {}: already exists (hash match)", mem.id);
         }
         if classification.duplicates.len() > 5 {
-            println!("... and {} more duplicates", classification.duplicates.len() - 5);
+            println!(
+                "... and {} more duplicates",
+                classification.duplicates.len() - 5
+            );
         }
         println!();
     }
@@ -283,10 +310,12 @@ async fn run_dry_run(args: ImportArgs) -> Result<()> {
     if !classification.conflicts.is_empty() {
         println!("CONFLICT (same ID, different hash):");
         for conflict in &classification.conflicts {
-            println!("- {}: existing hash={}, new hash={}",
+            println!(
+                "- {}: existing hash={}, new hash={}",
                 conflict.memory.id,
                 &conflict.existing_hash[..8],
-                &conflict.new_hash[..8]);
+                &conflict.new_hash[..8]
+            );
         }
         println!();
     }
@@ -303,7 +332,10 @@ async fn run_dry_run(args: ImportArgs) -> Result<()> {
 async fn run_all(args: ImportArgs) -> Result<()> {
     let db_path = resolve_database_path(args.database.as_ref())?;
     let capsule_path = resolve_capsule_path(args.capsule.as_ref())?;
-    let spec_id = args.spec_id.clone().unwrap_or_else(|| "lm-import".to_string());
+    let spec_id = args
+        .spec_id
+        .clone()
+        .unwrap_or_else(|| "lm-import".to_string());
     let run_id = args.run_id.clone().unwrap_or_else(generate_run_id);
 
     println!("Source: {}", db_path.display());
@@ -327,7 +359,9 @@ async fn run_all(args: ImportArgs) -> Result<()> {
     let batch_id = generate_batch_id();
 
     // Transform to artifacts
-    let artifacts: Vec<ImportArtifact> = classification.new.iter()
+    let artifacts: Vec<ImportArtifact> = classification
+        .new
+        .iter()
         .map(|m| transform_to_artifact(m, &batch_id))
         .collect();
 
@@ -338,13 +372,18 @@ async fn run_all(args: ImportArgs) -> Result<()> {
     println!();
     println!("Summary:");
     println!("  Imported:   {}", imported);
-    println!("  Skipped:    {} (duplicates)", classification.duplicates.len());
+    println!(
+        "  Skipped:    {} (duplicates)",
+        classification.duplicates.len()
+    );
     println!("  Conflicts:  {}", classification.conflicts.len());
 
     if !classification.conflicts.is_empty() {
         println!();
-        println!("WARNING: {} conflicts detected (same ID, different hash - not imported).",
-            classification.conflicts.len());
+        println!(
+            "WARNING: {} conflicts detected (same ID, different hash - not imported).",
+            classification.conflicts.len()
+        );
         println!("Re-run with --dry-run to see details.");
         println!("Future: use --upsert to update existing, or --allow-conflicts to import as new.");
     } else {
@@ -402,8 +441,12 @@ async fn run_verify(args: ImportArgs) -> Result<()> {
                 checks_done += 1;
             }
             Some(existing_hash) => {
-                println!("  {}: MISMATCH (expected {}, got {})",
-                    mem.id, &source_hash[..8], &existing_hash[..8]);
+                println!(
+                    "  {}: MISMATCH (expected {}, got {})",
+                    mem.id,
+                    &source_hash[..8],
+                    &existing_hash[..8]
+                );
                 checks_done += 1;
             }
             None => {
@@ -450,13 +493,16 @@ fn resolve_capsule_path(explicit: Option<&PathBuf>) -> Result<PathBuf> {
 /// Collect all memories from the local-memory database.
 fn collect_memories(db_path: &PathBuf) -> Result<Vec<MemoryExportRecord>> {
     let conn = Connection::open(db_path).with_context(|| {
-        format!("failed to open local-memory database at {}", db_path.display())
+        format!(
+            "failed to open local-memory database at {}",
+            db_path.display()
+        )
     })?;
 
     let mut stmt = conn.prepare(
         "SELECT id, content, source, importance, tags, session_id, domain, \
          created_at, updated_at, agent_type, agent_context, access_scope, slug \
-         FROM memories ORDER BY created_at"
+         FROM memories ORDER BY created_at",
     )?;
 
     let records = stmt.query_map([], row_to_export)?;
@@ -469,7 +515,8 @@ fn collect_memories(db_path: &PathBuf) -> Result<Vec<MemoryExportRecord>> {
 
 /// Filter memories by domain and importance.
 fn filter_memories(memories: &[MemoryExportRecord], args: &ImportArgs) -> Vec<MemoryExportRecord> {
-    memories.iter()
+    memories
+        .iter()
         .filter(|m| {
             // Domain filter
             if !args.domains.is_empty() {
@@ -612,8 +659,10 @@ fn write_to_capsule(
         let data = serde_json::to_vec(artifact)?;
 
         // Create metadata for the record
-        let uri = format!("mv2://default/{}/{}/artifact/memory/{}.json",
-            spec_id, run_id, artifact.source_id);
+        let uri = format!(
+            "mv2://default/{}/{}/artifact/memory/{}.json",
+            spec_id, run_id, artifact.source_id
+        );
         let record_meta = serde_json::json!({
             "uri": uri,
             "object_type": "memory",
@@ -687,7 +736,11 @@ fn generate_run_id() -> String {
 fn generate_batch_id() -> String {
     let now = Utc::now();
     let timestamp = now.format("%Y%m%dT%H%M%S").to_string();
-    let hash = compute_hash(&format!("batch-{}{:?}", timestamp, std::time::Instant::now()));
+    let hash = compute_hash(&format!(
+        "batch-{}{:?}",
+        timestamp,
+        std::time::Instant::now()
+    ));
     format!("{}-{}", timestamp, &hash[..8])
 }
 
@@ -720,7 +773,10 @@ mod tests {
     fn test_compute_hash() {
         let hash = compute_hash("hello world");
         assert_eq!(hash.len(), 64); // SHA256 produces 64 hex chars
-        assert_eq!(hash, "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9");
+        assert_eq!(
+            hash,
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+        );
     }
 
     #[test]

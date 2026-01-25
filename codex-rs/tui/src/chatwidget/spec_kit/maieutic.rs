@@ -543,7 +543,11 @@ fn detect_maieutic_format(path: &std::path::Path, content: &str) -> MaieuticForm
 /// - Markdown: YAML frontmatter with maieutic fields
 pub fn load_maieutic_from_file(path: &std::path::Path) -> Result<MaieuticSpec> {
     let content = std::fs::read_to_string(path).map_err(|e| {
-        SpecKitError::from_string(format!("Failed to read maieutic file '{}': {}", path.display(), e))
+        SpecKitError::from_string(format!(
+            "Failed to read maieutic file '{}': {}",
+            path.display(),
+            e
+        ))
     })?;
 
     let format = detect_maieutic_format(path, &content);
@@ -559,9 +563,8 @@ pub fn load_maieutic_from_file(path: &std::path::Path) -> Result<MaieuticSpec> {
 
 /// Load maieutic spec from inline JSON string
 pub fn load_maieutic_from_json(json: &str) -> Result<MaieuticSpec> {
-    serde_json::from_str(json).map_err(|e| {
-        SpecKitError::from_string(format!("Invalid maieutic JSON: {}", e))
-    })
+    serde_json::from_str(json)
+        .map_err(|e| SpecKitError::from_string(format!("Invalid maieutic JSON: {}", e)))
 }
 
 /// Load maieutic spec from Markdown with YAML frontmatter
@@ -583,7 +586,7 @@ fn load_maieutic_from_markdown(content: &str) -> Result<MaieuticSpec> {
     let trimmed = content.trim_start();
     if !trimmed.starts_with("---") {
         return Err(SpecKitError::from_string(
-            "Maieutic markdown must start with YAML frontmatter (---)"
+            "Maieutic markdown must start with YAML frontmatter (---)",
         ));
     }
 
@@ -603,11 +606,17 @@ fn load_maieutic_from_markdown(content: &str) -> Result<MaieuticSpec> {
     let delegation_bounds = DelegationBounds::from_answer(&parsed.delegation.unwrap_or_default());
 
     Ok(MaieuticSpec::new(
-        parsed.spec_id.unwrap_or_else(|| "SPEC-HEADLESS".to_string()),
-        parsed.run_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+        parsed
+            .spec_id
+            .unwrap_or_else(|| "SPEC-HEADLESS".to_string()),
+        parsed
+            .run_id
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
         parsed.goal.unwrap_or_else(|| "Not specified".to_string()),
         parsed.constraints.unwrap_or_default(),
-        parsed.acceptance.unwrap_or_else(|| vec!["All tests pass".to_string()]),
+        parsed
+            .acceptance
+            .unwrap_or_else(|| vec!["All tests pass".to_string()]),
         parsed.risks.unwrap_or_default(),
         delegation_bounds,
         ElicitationMode::PreSupplied,

@@ -625,6 +625,34 @@ pub(crate) enum AppEvent {
     /// Vision builder was cancelled by user (P93/SPEC-KIT-105)
     VisionBuilderCancelled,
 
+    /// Spec intake submitted (Architect-in-a-box)
+    SpecIntakeSubmitted {
+        description: String,
+        deep: bool,
+        answers: std::collections::HashMap<String, String>,
+        /// If Some, this is a backfill for existing spec (don't generate new ID)
+        existing_spec_id: Option<String>,
+    },
+
+    /// Spec intake cancelled (Architect-in-a-box)
+    SpecIntakeCancelled {
+        description: String,
+        /// If Some, this was a backfill that was cancelled
+        existing_spec_id: Option<String>,
+    },
+
+    /// Project intake submitted (/speckit.projectnew flow)
+    ProjectIntakeSubmitted {
+        project_id: String,
+        deep: bool,
+        answers: std::collections::HashMap<String, String>,
+    },
+
+    /// Project intake cancelled (/speckit.projectnew flow)
+    ProjectIntakeCancelled {
+        project_id: String,
+    },
+
     /// Maieutic elicitation completed (D130)
     MaieuticSubmitted {
         spec_id: String,

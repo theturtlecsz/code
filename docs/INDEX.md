@@ -21,7 +21,7 @@
 * `PROGRAM.md` — **pinned active specs + dependency DAG + sequencing gates**
 * `DECISIONS.md` — locked decisions (D1–D134)
 * `POLICY.md` — consolidated policy (model, gates, evidence, testing)
-* `MEMVID_FIRST_WORKBENCH.md` — architecture + ADRs for the Memvid-first workbench
+* `ARCHITECTURE.md` — architecture + ADRs for the Memvid-first workbench
 * `GOLDEN_PATH.md` — end-to-end walkthrough (what “good” looks like)
 
 **Last Updated**: 2026-01-10

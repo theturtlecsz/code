@@ -1246,8 +1246,7 @@ mod tests {
     async fn detect_parity_test_mode(_temp_dir: &TempDir) -> ParityTestMode {
         // Check for LOCAL_MEMORY_SOCKET or similar environment variable
         // that would indicate real daemon availability
-        if std::env::var("LOCAL_MEMORY_SOCKET").is_ok()
-            || std::env::var("PARITY_TEST_REAL").is_ok()
+        if std::env::var("LOCAL_MEMORY_SOCKET").is_ok() || std::env::var("PARITY_TEST_REAL").is_ok()
         {
             // In a real implementation, we'd attempt to connect here.
             // For now, we document this as a future extension point.
@@ -1647,11 +1646,7 @@ mod tests {
                         .map(|s| s.as_str())
                         .collect();
                     if !missing.is_empty() {
-                        golden_failures.push(format!(
-                            "{}: missing {:?}",
-                            query.name,
-                            missing
-                        ));
+                        golden_failures.push(format!("{}: missing {:?}", query.name, missing));
                     }
                 }
             }
@@ -1680,24 +1675,29 @@ mod tests {
             )
         };
 
-        let result = ParityGateResult::new("GATE-RQ", passed, certified, if is_synthetic { "synthetic" } else { "real" })
-            .with_metrics(serde_json::json!({
-                "baseline_precision": report.suite_a.mean_precision,
-                "memvid_precision": report.suite_b.mean_precision,
-                "precision_ratio": precision_ratio,
-                "meets_precision": meets_precision,
-                "baseline_recall": report.suite_a.mean_recall,
-                "memvid_recall": report.suite_b.mean_recall,
-                "recall_ratio": recall_ratio,
-                "meets_recall": meets_recall,
-                "baseline_mrr": report.suite_a.mrr,
-                "memvid_mrr": report.suite_b.mrr,
-                "meets_mrr": meets_mrr,
-                "threshold": 0.95,
-                "golden_failures": golden_failures,
-                "all_golden_pass": all_golden_pass,
-            }))
-            .with_message(&message);
+        let result = ParityGateResult::new(
+            "GATE-RQ",
+            passed,
+            certified,
+            if is_synthetic { "synthetic" } else { "real" },
+        )
+        .with_metrics(serde_json::json!({
+            "baseline_precision": report.suite_a.mean_precision,
+            "memvid_precision": report.suite_b.mean_precision,
+            "precision_ratio": precision_ratio,
+            "meets_precision": meets_precision,
+            "baseline_recall": report.suite_a.mean_recall,
+            "memvid_recall": report.suite_b.mean_recall,
+            "recall_ratio": recall_ratio,
+            "meets_recall": meets_recall,
+            "baseline_mrr": report.suite_a.mrr,
+            "memvid_mrr": report.suite_b.mrr,
+            "meets_mrr": meets_mrr,
+            "threshold": 0.95,
+            "golden_failures": golden_failures,
+            "all_golden_pass": all_golden_pass,
+        }))
+        .with_message(&message);
 
         result.print();
 
@@ -1744,7 +1744,11 @@ mod tests {
         // Compute P95 latency
         let p95 = percentile_duration(&all_latencies, 95);
         let p50 = percentile_duration(&all_latencies, 50);
-        let max_latency = all_latencies.iter().max().copied().unwrap_or(Duration::ZERO);
+        let max_latency = all_latencies
+            .iter()
+            .max()
+            .copied()
+            .unwrap_or(Duration::ZERO);
 
         const THRESHOLD_MS: u64 = 250;
         let meets_threshold = p95.as_millis() < THRESHOLD_MS as u128;
@@ -1794,18 +1798,23 @@ mod tests {
             )
         };
 
-        let result = ParityGateResult::new("GATE-LP", passed, certified, if is_synthetic { "synthetic" } else { "real" })
-            .with_metrics(serde_json::json!({
-                "p95_latency_ms": p95.as_millis(),
-                "p50_latency_ms": p50.as_millis(),
-                "max_latency_ms": max_latency.as_millis(),
-                "threshold_ms": THRESHOLD_MS,
-                "meets_threshold": meets_threshold,
-                "total_measurements": all_latencies.len(),
-                "repetitions": REPETITIONS,
-                "is_ci": is_ci,
-            }))
-            .with_message(&message);
+        let result = ParityGateResult::new(
+            "GATE-LP",
+            passed,
+            certified,
+            if is_synthetic { "synthetic" } else { "real" },
+        )
+        .with_metrics(serde_json::json!({
+            "p95_latency_ms": p95.as_millis(),
+            "p50_latency_ms": p50.as_millis(),
+            "max_latency_ms": max_latency.as_millis(),
+            "threshold_ms": THRESHOLD_MS,
+            "meets_threshold": meets_threshold,
+            "total_measurements": all_latencies.len(),
+            "repetitions": REPETITIONS,
+            "is_ci": is_ci,
+        }))
+        .with_message(&message);
 
         result.print();
 
@@ -2041,10 +2050,7 @@ mod tests {
                     report.period_days
                 )
             } else {
-                format!(
-                    "PARITY FAILED - stability report has issues: {:?}",
-                    issues
-                )
+                format!("PARITY FAILED - stability report has issues: {:?}", issues)
             }
         } else if passed {
             format!(

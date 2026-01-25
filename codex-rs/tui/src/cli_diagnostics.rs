@@ -171,9 +171,7 @@ pub async fn run_eval_ab(cli: &Cli, cwd: &Path) -> i32 {
         .clone()
         .unwrap_or_else(|| cwd.join(".speckit").join("eval"));
 
-    eprintln!(
-        "info: Running A/B evaluation with synthetic data (Phase 0 mode)."
-    );
+    eprintln!("info: Running A/B evaluation with synthetic data (Phase 0 mode).");
     eprintln!("      Output directory: {}", output_dir.display());
     eprintln!();
 

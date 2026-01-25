@@ -50,8 +50,28 @@ pub use adapter::{
     create_unified_memory_client,
 };
 pub use capsule::{
-    CapsuleConfig, CapsuleError, CapsuleHandle, CapsuleOpenOptions, CapsuleStats,
-    CurrentPolicyInfo, DiagnosticResult, IndexStatus,
+    CapsuleConfig,
+    CapsuleError,
+    CapsuleHandle,
+    CapsuleOpenOptions,
+    CapsuleStats,
+    CurrentPolicyInfo,
+    DiagnosticResult,
+    ExportCandidate,
+    ExportFilter,
+    ExportManifest,
+    ExportOptions,
+    ExportResult,
+    // SK974-3: GC types
+    GcConfig,
+    GcResult,
+    // SK974-1: Import types
+    ImportOptions,
+    ImportResult,
+    IndexStatus,
+    // SK974-mount: Mount persistence types
+    MountEntry,
+    MountsRegistry,
 };
 pub use eval::{
     ABHarness, ABReport, EvalRunResult, GoldenQuery, golden_query_suite, golden_test_memories,
@@ -60,8 +80,8 @@ pub use eval::{
 pub use lock::{LockMetadata, is_locked, lock_path_for};
 pub use policy_capture::{capture_and_store_policy, latest_policy, list_policies, load_policy};
 pub use sunset_phase::{
-    PhaseEnforcementResult, SunsetPhase, check_phase_enforcement, effective_phase,
-    resolve_sunset_phase, SUNSET_PHASE_ENV_VAR,
+    PhaseEnforcementResult, SUNSET_PHASE_ENV_VAR, SunsetPhase, check_phase_enforcement,
+    effective_phase, resolve_sunset_phase,
 };
 pub use types::{
     BranchId,
@@ -81,11 +101,13 @@ pub use types::{
     ErrorEventPayload,
     ErrorSeverity,
     EventType,
+    FactValueType,
     // SPEC-KIT-979: Fallback activation payload
     FallbackActivatedPayload,
-    FactValueType,
     GateDecisionPayload,
     GateOutcome,
+    IntakeCompletedPayload,
+    IntakeKind,
     // SPEC-KIT-975: Replayable audit event types
     LLMCaptureMode,
     LogicEdgeV1,

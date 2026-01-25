@@ -31,11 +31,12 @@ Make capsules shareable and enterprise-safe: encrypted exports, reproducible imp
 ## Deliverables
 
 * Export command:
-  * `speckit capsule export --run <RUN_ID> --out <PATH> [--encrypt|--no-encrypt] [--safe|--unsafe]`
+  * `speckit capsule export --spec <SPEC_ID> --run <RUN_ID> [--out <PATH>] [--encrypt|--no-encrypt] [--safe|--unsafe]`
   * Default: `--encrypt --safe` for per-run exports (`.mv2e`).
 * Import command:
   * `speckit capsule import <PATH> [--mount-as <NAME>]`
   * Imports are read-only mounts by default (no mutation of imported capsule).
+  * **Mount persistence (Architect decision):** the imported capsule file is copied into the workspace mount store at `./.speckit/memvid/mounts/<NAME>.mv2{e}` and registered in `./.speckit/memvid/mounts.json` using atomic writes (no partial mounts).
 * Export triggers (D16):
   * Config: `capsule.export.mode = manual | risk | always` (default: `risk`).
   * `risk` means auto-export is performed only when: (a) Spec classification is high-risk, (b) Judge requests export, or (c) an Unlock gate requires an audit handoff.

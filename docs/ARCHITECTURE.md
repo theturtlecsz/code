@@ -6,34 +6,46 @@
 >
 > **Supersedes**: `docs/TUI.md` (partial), `docs/architecture/*.md`, `docs/SPEC-KIT-900-ARCHITECTURE-ANALYSIS.md`
 
----
+***
 
 ## Table of Contents
 
-**Part I: System Overview**
-- [1. High-Level Architecture](#1-high-level-architecture)
-- [2. Key Boundaries](#2-key-boundaries)
-
-**Part II: TUI Surface Architecture**
-- [3. Chatwidget Module Structure](#3-chatwidget-module-structure)
-- [4. State Machine Design](#4-state-machine-design)
-
-**Part III: Concurrency Model**
-- [5. Async/Sync Boundaries](#5-asyncsync-boundaries)
-- [6. Blocking Bridge Pattern](#6-blocking-bridge-pattern)
-- [7. Performance Characteristics](#7-performance-characteristics)
-
-**Part IV: Spec-Kit Pipeline Architecture**
-- [8. Pipeline Components](#8-pipeline-components)
-- [9. Command Flow](#9-command-flow)
-- [10. Consensus System](#10-consensus-system)
-
-**Appendices**
-- [A. Developer Guidelines](#a-developer-guidelines)
-- [B. Related Documentation](#b-related-documentation)
-- [C. Change History](#c-change-history)
-
----
+* [Part I: System Overview](#part-i-system-overview)
+  * [1. High-Level Architecture](#1-high-level-architecture)
+    * [Component Summary](#component-summary)
+  * [2. Key Boundaries](#2-key-boundaries)
+* [Part II: TUI Surface Architecture](#part-ii-tui-surface-architecture)
+  * [3. Chatwidget Module Structure](#3-chatwidget-module-structure)
+    * [Module Extraction Progress (MAINT-11)](#module-extraction-progress-maint-11)
+  * [4. State Machine Design](#4-state-machine-design)
+    * [SpecAutoPhase Enum](#specautophase-enum)
+    * [SpecAutoState Struct](#specautostate-struct)
+    * [State Transitions](#state-transitions)
+* [Part III: Concurrency Model](#part-iii-concurrency-model)
+  * [5. Async/Sync Boundaries](#5-asyncsync-boundaries)
+    * [Why block\_on() is Acceptable](#why-block_on-is-acceptable)
+    * [Core Conflict Resolution](#core-conflict-resolution)
+  * [6. Blocking Bridge Pattern](#6-blocking-bridge-pattern)
+    * [Blocking Hotspots](#blocking-hotspots)
+  * [7. Performance Characteristics](#7-performance-characteristics)
+    * [MCP Synthesis Calls](#mcp-synthesis-calls)
+    * [Mitigations](#mitigations)
+    * [Thread Safety](#thread-safety)
+* [Part IV: Spec-Kit Pipeline Architecture](#part-iv-spec-kit-pipeline-architecture)
+  * [8. Pipeline Components](#8-pipeline-components)
+  * [9. Command Flow](#9-command-flow)
+    * [`/speckit.auto SPEC-ID` Execution](#speckitauto-spec-id-execution)
+  * [10. Synthesis System](#10-synthesis-system)
+    * [Agent Roster by Tier](#agent-roster-by-tier)
+    * [Synthesis Quorum](#synthesis-quorum)
+    * [Synthesis Metadata](#synthesis-metadata)
+* [Appendices](#appendices)
+  * [A. Developer Guidelines](#a-developer-guidelines)
+    * [When to Use block\_on()](#when-to-use-block_on)
+    * [Code Pattern](#code-pattern)
+    * [Performance Profiling](#performance-profiling)
+  * [B. Related Documentation](#b-related-documentation)
+  * [C. Change History](#c-change-history)
 
 # Part I: System Overview
 
@@ -52,29 +64,29 @@ User input (TUI)
 
 ### Component Summary
 
-| Component | Concurrency Model | Purpose |
-|-----------|-------------------|---------|
-| **Ratatui** | Synchronous | Terminal I/O (crossterm), render loop |
-| **Tokio** | Asynchronous | HTTP/MCP, agent coordination |
-| **Codex Core** | Asynchronous | Model API calls (SSE streaming), conversation state |
-| **Spec-Kit** | Hybrid | Orchestration (sync), MCP calls (async), evidence (sync) |
+| Component      | Concurrency Model | Purpose                                                  |
+| -------------- | ----------------- | -------------------------------------------------------- |
+| **Ratatui**    | Synchronous       | Terminal I/O (crossterm), render loop                    |
+| **Tokio**      | Asynchronous      | HTTP/MCP, agent coordination                             |
+| **Codex Core** | Asynchronous      | Model API calls (SSE streaming), conversation state      |
+| **Spec-Kit**   | Hybrid            | Orchestration (sync), MCP calls (async), evidence (sync) |
 
 ## 2. Key Boundaries
 
-| Boundary | Location | Description |
-|----------|----------|-------------|
-| UX + Orchestration | `codex-rs/tui/src/chatwidget/spec_kit/` | User-facing commands and pipeline coordination |
-| Shared Library | `codex-rs/spec-kit/` | Config, retry logic, shared types |
-| Templates | `./templates/` (project-local) | Prompt templates with embedded fallbacks |
-| Evidence Store | `docs/SPEC-OPS-004-.../evidence/` | Telemetry, artifacts, consensus data |
+| Boundary           | Location                                | Description                                                                                |
+| ------------------ | --------------------------------------- | ------------------------------------------------------------------------------------------ |
+| UX + Orchestration | `codex-rs/tui/src/chatwidget/spec_kit/` | User-facing commands and pipeline coordination                                             |
+| Shared Library     | `codex-rs/spec-kit/`                    | Config, retry logic, shared types                                                          |
+| Templates          | `./templates/` (project-local)          | Prompt templates with embedded fallbacks                                                   |
+| Evidence Store     | `docs/SPEC-OPS-004-.../evidence/`       | Telemetry, artifacts, synthesis data. **Note**: Capsule is the SOR; filesystem is derived. |
 
----
+***
 
 # Part II: TUI Surface Architecture
 
 ## 3. Chatwidget Module Structure
 
-The TUI chatwidget is the core rendering component (~20K LOC).
+The TUI chatwidget is the core rendering component (\~20K LOC).
 
 ```
 chatwidget/ (Core TUI)
@@ -97,11 +109,11 @@ chatwidget/ (Core TUI)
 
 ### Module Extraction Progress (MAINT-11)
 
-| Metric | Status | Target |
-|--------|--------|--------|
-| mod.rs LOC | 19,792 | <15,000 |
-| Extracted modules | 6 | ~10 |
-| Cumulative reduction | -3,621 | -8,413 |
+| Metric               | Status | Target  |
+| -------------------- | ------ | ------- |
+| mod.rs LOC           | 19,792 | <15,000 |
+| Extracted modules    | 6      | \~10    |
+| Cumulative reduction | -3,621 | -8,413  |
 
 ## 4. State Machine Design
 
@@ -142,7 +154,7 @@ CheckingConsensus(conflict) → Halt
 Guardrail(fail) → Halt
 ```
 
----
+***
 
 # Part III: Concurrency Model
 
@@ -152,12 +164,13 @@ Guardrail(fail) → Halt
 
 **Solution**: `Handle::block_on()` bridges async operations into sync TUI event loop.
 
-### Why block_on() is Acceptable
+### Why block\_on() is Acceptable
 
 Spec-kit workflows are:
-- **Infrequent**: User-initiated `/speckit.*` commands
-- **Not time-critical**: 10-60 min pipelines, 8ms blocking is negligible
-- **User-visible**: Progress shown, not background work
+
+* **Infrequent**: User-initiated `/speckit.*` commands
+* **Not time-critical**: 10-60 min pipelines, 8ms blocking is negligible
+* **User-visible**: Progress shown, not background work
 
 ### Core Conflict Resolution
 
@@ -189,31 +202,32 @@ let consensus_result = match tokio::runtime::Handle::try_current() {
 ```
 
 **Why this is safe**:
-- Called from TUI event loop (single-threaded)
-- No risk of deadlock (not inside another async fn)
-- User initiated (not background task)
-- Progress shown in TUI
+
+* Called from TUI event loop (single-threaded)
+* No risk of deadlock (not inside another async fn)
+* User initiated (not background task)
+* Progress shown in TUI
 
 ### Blocking Hotspots
 
-| Location | Operation | Typical | Worst Case | Frequency |
-|----------|-----------|---------|------------|-----------|
-| `handler.rs:429` | Consensus check (plan) | 8.7ms | 700ms (cold) | Per stage (6x/pipeline) |
-| `handler.rs:722` | Consensus check (implement) | 8.7ms | 700ms (cold) | Per stage |
-| `evidence.rs` | File lock acquisition | <1ms | Unbounded (HDD) | Per artifact (20x/pipeline) |
+| Location         | Operation                   | Typical | Worst Case      | Frequency                   |
+| ---------------- | --------------------------- | ------- | --------------- | --------------------------- |
+| `handler.rs:429` | Synthesis check (plan)      | 8.7ms   | 700ms (cold)    | Per stage (6x/pipeline)     |
+| `handler.rs:722` | Synthesis check (implement) | 8.7ms   | 700ms (cold)    | Per stage                   |
+| `evidence.rs`    | File lock acquisition       | <1ms    | Unbounded (HDD) | Per artifact (20x/pipeline) |
 
-**Total pipeline blocking**: ~50ms typical, ~4s worst-case (6 stages x 700ms cold-start)
+**Total pipeline blocking**: \~50ms typical, \~4s worst-case (6 stages x 700ms cold-start)
 
 ## 7. Performance Characteristics
 
-### MCP Consensus Calls
+### MCP Synthesis Calls
 
-| Metric | Value |
-|--------|-------|
-| Subprocess baseline | 46ms |
-| Native MCP | 8.7ms |
-| Improvement | **5.3x faster** |
-| Cold-start penalty | 500-700ms (first call only) |
+| Metric              | Value                       |
+| ------------------- | --------------------------- |
+| Subprocess baseline | 46ms                        |
+| Native MCP          | 8.7ms                       |
+| Improvement         | **5.3x faster**             |
+| Cold-start penalty  | 500-700ms (first call only) |
 
 ### Mitigations
 
@@ -223,13 +237,13 @@ let consensus_result = match tokio::runtime::Handle::try_current() {
 
 ### Thread Safety
 
-| Component | Mechanism |
-|-----------|-----------|
-| TUI event loop | Single-threaded (no race conditions) |
+| Component       | Mechanism                                       |
+| --------------- | ----------------------------------------------- |
+| TUI event loop  | Single-threaded (no race conditions)            |
 | MCP connections | `Arc<Mutex<Option<Arc<McpConnectionManager>>>>` |
-| Evidence writes | `fs2::FileExt` exclusive locks (per-SPEC) |
+| Evidence writes | `fs2::FileExt` exclusive locks (per-SPEC)       |
 
----
+***
 
 # Part IV: Spec-Kit Pipeline Architecture
 
@@ -252,7 +266,7 @@ let consensus_result = match tokio::runtime::Handle::try_current() {
 │  - files exist                                              │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │              SQLite Consensus Database                │  │
+│  │              SQLite Synthesis Database                │  │
 │  │  - agent_executions (spawn tracking)                  │  │
 │  │  - consensus_artifacts (agent outputs)                │  │
 │  │  - consensus_synthesis (final outputs)                │  │
@@ -302,50 +316,53 @@ USER INPUT: /speckit.auto SPEC-KIT-900
 OUTPUT: plan.md, tasks.md, implement.md, etc.
 ```
 
-## 10. Consensus System
+## 10. Synthesis System
 
 ### Agent Roster by Tier
 
-| Tier | Agents | Use Case |
-|------|--------|----------|
+| Tier   | Agents               | Use Case                    |
+| ------ | -------------------- | --------------------------- |
 | Tier 2 | gemini, claude, code | Quality gates, basic stages |
-| Tier 3 | + gpt_codex | Implementation stages |
-| Tier 4 | Dynamic 3-5 agents | Complex consensus |
+| Tier 3 | + gpt\_codex         | Implementation stages       |
+| Tier 4 | Dynamic 3-5 agents   | Complex synthesis           |
 
-### Consensus Validation
+### Synthesis Quorum
 
-| Condition | Result |
-|-----------|--------|
-| 3/3 agents agree | Consensus OK, advance |
-| 2/3 agents agree | Degraded consensus, advance with warning |
-| Conflict detected | Halt, require resolution |
-| Agent timeout | Retry (AR-2), then continue with remaining |
+| Condition           | Result                                     |
+| ------------------- | ------------------------------------------ |
+| 3/3 agents complete | Synthesis OK, advance                      |
+| 2/3 agents complete | Degraded quorum, advance with warning      |
+| Conflict detected   | Halt, require resolution                   |
+| Agent timeout       | Retry (AR-2), then continue with remaining |
 
-### Consensus Metadata
+### Synthesis Metadata
 
 Stored automatically in local-memory:
-- `agent`, `version`, `content` per agent
-- `consensus_ok`, `degraded`, `missing_agents`, `conflicts[]` in synthesis
 
----
+* `agent`, `version`, `content` per agent
+* `consensus_ok`, `degraded`, `missing_agents`, `conflicts[]` in synthesis
+
+***
 
 # Appendices
 
 ## A. Developer Guidelines
 
-### When to Use block_on()
+### When to Use block\_on()
 
 **Good Use Cases**:
-- User-initiated commands (`/speckit.*`)
-- Infrequent operations (<10/min)
-- Operations that must complete before proceeding
-- Operations with visible progress
+
+* User-initiated commands (`/speckit.*`)
+* Infrequent operations (<10/min)
+* Operations that must complete before proceeding
+* Operations with visible progress
 
 **Bad Use Cases**:
-- Tight loops (event poll, render loop)
-- Background tasks (use `tokio::spawn` instead)
-- Nested async functions (deadlock risk)
-- Time-critical operations (<10ms target)
+
+* Tight loops (event poll, render loop)
+* Background tasks (use `tokio::spawn` instead)
+* Nested async functions (deadlock risk)
+* Time-critical operations (<10ms target)
 
 ### Code Pattern
 
@@ -379,17 +396,17 @@ cargo flamegraph --bin code
 
 ## B. Related Documentation
 
-- **OPERATIONS.md** - How to run, troubleshoot, validate
-- **CONTRIBUTING.md** - Fork workflow, rebase strategy
-- **POLICY.md** - Model policy, gate policy, evidence policy
-- **CLAUDE.md** - Build commands, project structure
+* **OPERATIONS.md** - How to run, troubleshoot, validate
+* **CONTRIBUTING.md** - Fork workflow, rebase strategy
+* **POLICY.md** - Model policy, gate policy, evidence policy
+* **CLAUDE.md** - Build commands, project structure
 
 ## C. Change History
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0.0 | 2026-01-21 | Consolidated from ARCHITECTURE.md, TUI.md (arch sections), async-sync-boundaries.md, chatwidget-structure.md, SPEC-KIT-900-ARCHITECTURE-ANALYSIS.md |
+| Version | Date       | Changes                                                                                                                                             |
+| ------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.0.0   | 2026-01-21 | Consolidated from ARCHITECTURE.md, TUI.md (arch sections), async-sync-boundaries.md, chatwidget-structure.md, SPEC-KIT-900-ARCHITECTURE-ANALYSIS.md |
 
----
+***
 
-_Last Updated: 2026-01-21_
+*Last Updated: 2026-01-21*

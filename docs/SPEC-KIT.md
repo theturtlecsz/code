@@ -24,7 +24,7 @@
 * [Execution Model](#execution-model)
   * [6-Stage Pipeline](#6-stage-pipeline)
   * [Quality Gate Checkpoints](#quality-gate-checkpoints)
-  * [Multi-Agent Consensus](#multi-agent-consensus)
+  * [Multi-Agent Synthesis](#multi-agent-synthesis)
   * [Tiered Model Strategy](#tiered-model-strategy)
 * [Policies and Capture](#policies-and-capture)
   * [Resolution Logic](#resolution-logic)
@@ -45,23 +45,23 @@
 
 ### Product Promise
 
-Spec-kit provides multi-agent consensus-driven development automation for feature specifications. It transforms natural language feature descriptions into validated, implemented code through a 6-stage pipeline.
+Spec-kit provides single-owner multi-agent development automation for feature specifications. It transforms natural language feature descriptions into validated, implemented code through a 6-stage pipeline.
 
 **Key Value**:
 
 * Autonomous automation (\~55% auto-resolution)
-* Multi-agent consensus (3-5 agents)
+* Multi-agent coordination (3-5 agents)
 * Quality gates at 3 checkpoints
 * Full pipeline: \~$2.70, \~60 min
 
 ### Invariants
 
-| Principle                   | Description                                                       |
-| --------------------------- | ----------------------------------------------------------------- |
-| **Agents for reasoning**    | Strategic decisions use agents; pattern matching uses native Rust |
-| **Consensus before commit** | No code changes without multi-agent agreement                     |
-| **Hermetic isolation**      | Agents operate in controlled, reproducible environments           |
-| **Evidence-driven**         | All decisions logged with metadata for audit                      |
+| Principle                       | Description                                                       |
+| ------------------------------- | ----------------------------------------------------------------- |
+| **Agents for reasoning**        | Strategic decisions use agents; pattern matching uses native Rust |
+| **Quality gates before commit** | No code changes without passing constitution checks and gates     |
+| **Hermetic isolation**          | Agents operate in controlled, reproducible environments           |
+| **Evidence-driven**             | All decisions logged with metadata for audit                      |
 
 ### Surfaces
 
@@ -101,7 +101,7 @@ code speckit run --spec SPEC-KIT-065 --from plan --to audit --json
 | Command            | Description                  | Agents               | Time     |
 | ------------------ | ---------------------------- | -------------------- | -------- |
 | `/speckit.new`     | Create SPEC from description | gemini, claude, code | \~13 min |
-| `/speckit.specify` | Generate PRD with consensus  | gemini, claude, code | 8-12 min |
+| `/speckit.specify` | Generate PRD with synthesis  | gemini, claude, code | 8-12 min |
 
 #### Quality (3)
 
@@ -113,14 +113,14 @@ code speckit run --spec SPEC-KIT-065 --from plan --to audit --json
 
 #### Stages (6)
 
-| Command              | Description               | Template              | Time      |
-| -------------------- | ------------------------- | --------------------- | --------- |
-| `/speckit.plan`      | Create work breakdown     | plan-template.md      | 8-12 min  |
-| `/speckit.tasks`     | Generate task list        | tasks-template.md     | 8-12 min  |
-| `/speckit.implement` | Write code with consensus | implement-template.md | 15-20 min |
-| `/speckit.validate`  | Run test strategy         | validate-template.md  | 10-12 min |
-| `/speckit.audit`     | Compliance review         | audit-template.md     | 10-12 min |
-| `/speckit.unlock`    | Final approval for merge  | unlock-template.md    | 10-12 min |
+| Command              | Description                | Template              | Time      |
+| -------------------- | -------------------------- | --------------------- | --------- |
+| `/speckit.plan`      | Create work breakdown      | plan-template.md      | 8-12 min  |
+| `/speckit.tasks`     | Generate task list         | tasks-template.md     | 8-12 min  |
+| `/speckit.implement` | Write code with validation | implement-template.md | 15-20 min |
+| `/speckit.validate`  | Run test strategy          | validate-template.md  | 10-12 min |
+| `/speckit.audit`     | Compliance review          | audit-template.md     | 10-12 min |
+| `/speckit.unlock`    | Final approval for merge   | unlock-template.md    | 10-12 min |
 
 #### Automation (2)
 
@@ -146,7 +146,7 @@ code speckit run --spec SPEC-KIT-065 --from plan --to audit --json
 | Command                | Description                                      |
 | ---------------------- | ------------------------------------------------ |
 | `/speckit.project`     | Scaffold new project (rust/python/go/typescript) |
-| `/spec-consensus`      | Check multi-agent consensus                      |
+| `/spec-consensus`      | Check stage synthesis status                     |
 | `/spec-evidence-stats` | Summarize evidence sizes                         |
 
 ### Workflows
@@ -226,24 +226,33 @@ code speckit run --spec SPEC-KIT-065 --from plan --to audit --json
 
 **QG3/QG4 (Analyze)**: Checks consistency between artifacts, identifies coverage gaps
 
-### Multi-Agent Consensus
+### Multi-Agent Synthesis
 
-**5-Step Process**:
+**GR-001 Single-Owner Model**:
 
-1. **Spawn**: Agents execute in parallel
-2. **Store**: Each agent writes to local-memory with `spec:SPEC-ID`, `stage:NAME`
-3. **Fetch**: Retrieve via MCP (8.7ms avg)
-4. **Validate**: Check participation, extract consensus, detect conflicts
-5. **Advance**: Move to next stage or retry (max 3x)
+Spec-Kit follows the GR-001 policy: single-owner stages with quality gates, not multi-agent voting.
 
-**Classification**:
+| Component          | Description                                              |
+| ------------------ | -------------------------------------------------------- |
+| **Single Owner**   | Each stage has one authoritative agent                   |
+| **Quality Gates**  | Constitution checks, compiler, tests                     |
+| **Critic Sidecar** | Optional non-authoritative feedback (risk triggers only) |
+| **Synthesis**      | Agent outputs are synthesized, not voted on              |
 
-| Status           | Condition                        | Action               |
-| ---------------- | -------------------------------- | -------------------- |
-| **OK**           | All agents present, no conflicts | Advance              |
-| **Degraded**     | 2/3 agents, no conflicts         | Advance with warning |
-| **Conflict**     | Non-empty conflicts array        | Retry or escalate    |
-| **No consensus** | <50% participation               | Retry                |
+**Pipeline Flow**:
+
+```
+Stage 0 -> Single Architect -> Single Implementer -> Single Judge
+               (optional critic sidecar if triggered)
+```
+
+**Synthesis Quorum** (for multi-agent stages):
+
+| Status       | Condition                               | Action               |
+| ------------ | --------------------------------------- | -------------------- |
+| **OK**       | Stage owner confident, gates pass       | Advance              |
+| **Degraded** | 2/3 agents completed (Tier 2)           | Advance with warning |
+| **Blocked**  | Gate failure or owner < 0.75 confidence | Escalate             |
 
 ### Tiered Model Strategy
 
@@ -286,7 +295,7 @@ code speckit run --spec SPEC-KIT-065 --from plan --to audit --json
 
 * Unanimous (3/3) → Auto-apply
 * Majority (2/3) → GPT-5 validate → Auto-apply or escalate
-* No consensus → Escalate
+* No quorum → Escalate
 
 **Expected**: \~55% auto-apply, \~45% escalate
 
@@ -294,7 +303,7 @@ code speckit run --spec SPEC-KIT-065 --from plan --to audit --json
 
 | Trigger                   | Action                                                                                           |
 | ------------------------- | ------------------------------------------------------------------------------------------------ |
-| Consensus degraded        | Rerun with `gemini-2.5-pro` (thinking budget 0.6), reissue arbiter with `gpt-5 --reasoning high` |
+| Synthesis quorum degraded | Rerun with `gemini-2.5-pro` (thinking budget 0.6), reissue arbiter with `gpt-5 --reasoning high` |
 | Thinking budget exhausted | Promote `gemini-2.5-flash` to Pro                                                                |
 | Guardrail parsing failure | Retry with `gpt-5-codex`, escalate to `gpt-5`                                                    |
 | Agent unavailability      | Continue with 2/3 agents (minimum 2 required)                                                    |
@@ -320,7 +329,7 @@ NOT checked:     ~/.config/code/templates/       (breaks hermeticity)
 
 ```
 docs/SPEC-KIT-*/evidence/
-├── consensus/
+├── synthesis/
 │   └── {stage}_{timestamp}_verdict.json
 └── commands/
     └── {stage}_{timestamp}_telemetry.json

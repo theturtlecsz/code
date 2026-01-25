@@ -71,10 +71,9 @@ impl SpecKitCommand for SpecKitAutoCommand {
     }
 }
 
-/// Command: /speckit.new (and /new-spec)
-/// Create new SPEC from description with interactive Q&A - FULLY NATIVE (zero agents, $0)
-/// SPEC-KIT-970: Now shows modal with 3 required questions before generating PRD
-/// SPEC-KIT-971: Questions customized based on detected project type
+/// Command: /speckit.new (and /new-spec, /spec.new)
+/// Create new SPEC from description with mandatory intake Q&A - FULLY NATIVE (zero agents, $0)
+/// Phase 1: Architect-in-a-box - enforces spec intake + capsule SoR before any filesystem projection
 pub struct SpecKitNewCommand;
 
 impl SpecKitCommand for SpecKitNewCommand {
@@ -83,55 +82,50 @@ impl SpecKitCommand for SpecKitNewCommand {
     }
 
     fn aliases(&self) -> &[&'static str] {
-        &["new-spec"]
+        &["new-spec", "spec.new"]
     }
 
     fn description(&self) -> &'static str {
-        "create new SPEC with project-aware Q&A (INSTANT, zero agents, $0)"
+        "create new SPEC with mandatory intake (INSTANT, zero agents, $0) [--deep for full architecture]"
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
         use super::super::pipeline_coordinator::run_constitution_readiness_gate;
-        use super::super::project_detector::{detect_project_type, get_project_questions};
 
         // P91/SPEC-KIT-105: Run constitution readiness gate (warn-only)
         run_constitution_readiness_gate(widget);
 
-        // SPEC-KIT-971: Detect project type and customize questions
-        let project_type = detect_project_type(&widget.config.cwd);
-        let project_questions = get_project_questions(project_type);
+        // Parse --deep flag
+        let (description, deep) = parse_deep_flag(&args);
 
-        // Convert project_detector questions to prd_builder_modal format
-        let modal_questions: Vec<crate::bottom_pane::prd_builder_modal::PrdQuestion> =
-            project_questions
-                .into_iter()
-                .map(|q| crate::bottom_pane::prd_builder_modal::PrdQuestion {
-                    category: q.category,
-                    question: q.question,
-                    options: q
-                        .options
-                        .into_iter()
-                        .map(|o| crate::bottom_pane::prd_builder_modal::PrdOption {
-                            label: o.label,
-                            text: o.text,
-                            is_custom: o.is_custom,
-                        })
-                        .collect(),
-                })
-                .collect();
+        if description.trim().is_empty() {
+            widget.history_push(crate::history_cell::new_error_event(
+                "Usage: /speckit.new <description> [--deep]".to_string(),
+            ));
+            widget.request_redraw();
+            return;
+        }
 
-        let project_display = format!("{} {}", project_type.icon(), project_type.display_name());
-
-        // SPEC-KIT-970: Show interactive PRD builder modal with project-aware questions
-        widget.show_prd_builder_with_context(
-            args.trim().to_string(),
-            project_display,
-            modal_questions,
-        );
+        // Phase 1: Show SpecIntakeModal (mandatory intake before spec creation)
+        widget.show_spec_intake_modal(description, deep);
     }
 
     fn requires_args(&self) -> bool {
         true
+    }
+}
+
+/// Parse --deep flag from args, returning (description, deep)
+fn parse_deep_flag(args: &str) -> (String, bool) {
+    let args = args.trim();
+    if args.ends_with("--deep") {
+        (args.trim_end_matches("--deep").trim().to_string(), true)
+    } else if args.starts_with("--deep") {
+        (args.trim_start_matches("--deep").trim().to_string(), true)
+    } else if args.contains(" --deep ") {
+        (args.replace(" --deep ", " ").trim().to_string(), true)
+    } else {
+        (args.to_string(), false)
     }
 }
 

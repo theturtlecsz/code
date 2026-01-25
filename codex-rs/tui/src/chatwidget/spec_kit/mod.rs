@@ -39,12 +39,17 @@ pub mod execution_logger; // SPEC-KIT-070: End-to-end execution visibility
 pub mod file_modifier;
 pub mod gate_evaluation; // Gate evaluation (renamed from consensus - PR4)
 pub mod git_integration; // SPEC-KIT-922: Auto-commit stage artifacts
+pub mod grounding; // Phase 3B: Deep grounding (Architect Harvest + Project Intel)
 pub mod guardrail;
 pub mod handler;
 pub mod isolation_validator; // SPEC-KIT-964 Phase 6: Hermetic isolation validation for multi-agent spawning
 pub mod json_extractor; // SPEC-KIT-927: Industrial-strength JSON extraction from LLM outputs
+pub mod intake; // Architect-in-a-box intake schemas + helpers
+pub mod intake_core; // UI-independent intake validation and persistence (CLI reuse)
 pub mod maieutic; // P93/D130: Maieutic elicitation types and questions
 pub mod maieutic_handler; // P93/D130: Maieutic elicitation event handlers
+pub mod spec_intake_handler; // Architect-in-a-box spec intake handlers (Phase 1)
+pub mod project_intake_handler; // /speckit.projectnew project intake handlers
 pub mod native_guardrail; // SPEC-KIT-066, SPEC-KIT-902: Native guardrail validation (replaces bash scripts)
 pub mod native_quality_gate_orchestrator; // SPEC-KIT-900, I-003: Native quality gate orchestration (eliminates LLM plumbing)
 pub mod new_native; // SPEC-KIT-072: Native SPEC creation (eliminates 2 agents, $0.15 → $0)
@@ -60,6 +65,8 @@ pub mod stage0_seeding;
 pub mod stage_details; // SPEC-947 Phase 3: Stage details widget (right pane)
 pub mod stage_selector;
 pub mod vision_builder_handler; // P93/SPEC-KIT-105: Vision builder modal event handlers // SPEC-947 Phase 3: Stage selector widget (checkbox list) // SPEC-KIT-900 Session 3: ACID-compliant SPEC directory resolution // MAINT-3 Phase 5: Pipeline state machine (extracted from handler.rs) // SPEC-KIT-102: Shadow Notebook Seeder for NotebookLM
+pub mod vision_core; // CLI headless vision persistence (extracted from vision_builder_handler)
+pub mod rebuild_projections; // WP-A: Projection rebuild from capsule/OverlayDb SoR
 // FORK-SPECIFIC (just-every/code): local_memory_client.rs deleted 2025-10-18
 // Replaced by native MCP integration in consensus.rs
 pub mod bakeoff_runner; // SPEC-KIT-978: Bakeoff runner for reflex vs cloud comparison
@@ -147,9 +154,21 @@ pub use validation_lifecycle::{compute_validate_payload_hash, record_validate_li
 
 // Re-export maieutic handler functions (D130)
 pub(crate) use maieutic_handler::{on_maieutic_cancelled, on_maieutic_submitted};
+
+// Re-export spec intake handler functions (Architect-in-a-box, Phase 1)
+pub(crate) use spec_intake_handler::{on_spec_intake_cancelled, on_spec_intake_submitted};
+
+// Re-export project intake handler functions
+pub(crate) use project_intake_handler::{on_project_intake_cancelled, on_project_intake_submitted};
+
 pub(crate) use pipeline_coordinator::{
-    PendingMaieutic, cancel_pipeline_after_maieutic, resume_pipeline_after_maieutic,
+    PendingIntakeBackfill, PendingMaieutic, cancel_pipeline_after_intake_backfill,
+    cancel_pipeline_after_maieutic, resume_pipeline_after_intake_backfill,
+    resume_pipeline_after_maieutic,
 };
+
+// Re-export projectnew state types
+pub(crate) use commands::projectnew::{PendingProjectNew, ProjectNewPhase};
 
 // Re-export event emitter types (SPEC-KIT-975)
 pub use event_emitter::{AuditEventEmitter, RunContext};

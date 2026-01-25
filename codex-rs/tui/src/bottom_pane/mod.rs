@@ -40,6 +40,8 @@ mod quality_gate_modal;
 mod scroll_state;
 mod selection_popup_common;
 pub(crate) mod vision_builder_modal;
+pub(crate) mod spec_intake_modal;
+pub(crate) mod project_intake_modal;
 pub(crate) use custom_prompt_view::CustomPromptView;
 pub(crate) use list_selection_view::SelectionAction;
 pub mod agents_settings_view;
@@ -667,6 +669,41 @@ impl BottomPane<'_> {
     /// Show vision builder modal for guided constitution creation (P93/SPEC-KIT-105)
     pub fn show_vision_builder(&mut self) {
         let modal = vision_builder_modal::VisionBuilderModal::new(self.app_event_tx.clone());
+        self.active_view = Some(Box::new(modal));
+        self.status_view_active = false;
+        self.request_redraw();
+    }
+
+    /// Show spec intake modal for Architect-in-a-box (Phase 1)
+    pub fn show_spec_intake_modal(&mut self, description: String, deep: bool) {
+        let modal = spec_intake_modal::SpecIntakeModal::new(
+            description,
+            deep,
+            self.app_event_tx.clone(),
+        );
+        self.active_view = Some(Box::new(modal));
+        self.status_view_active = false;
+        self.request_redraw();
+    }
+
+    /// Show spec intake modal for backfill (Phase 2: IntakePresenceGate)
+    pub fn show_spec_intake_modal_backfill(&mut self, spec_id: String) {
+        let modal = spec_intake_modal::SpecIntakeModal::new_backfill(
+            spec_id,
+            self.app_event_tx.clone(),
+        );
+        self.active_view = Some(Box::new(modal));
+        self.status_view_active = false;
+        self.request_redraw();
+    }
+
+    /// Show project intake modal for /speckit.projectnew flow
+    pub fn show_project_intake_modal(&mut self, project_id: String, deep: bool) {
+        let modal = project_intake_modal::ProjectIntakeModal::new(
+            project_id,
+            deep,
+            self.app_event_tx.clone(),
+        );
         self.active_view = Some(Box::new(modal));
         self.status_view_active = false;
         self.request_redraw();

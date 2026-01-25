@@ -325,6 +325,9 @@ pub enum EventType {
     StageTransition,
     PolicySnapshotRef,
 
+    // SPEC-KIT-XXX: Intake front door (curated-eligible)
+    IntakeCompleted,
+
     // SPEC-KIT-978: Model routing decisions (curated-eligible)
     RoutingDecision,
 
@@ -406,6 +409,7 @@ impl EventType {
             // SPEC-KIT-971 baseline
             EventType::StageTransition => "StageTransition",
             EventType::PolicySnapshotRef => "PolicySnapshotRef",
+            EventType::IntakeCompleted => "IntakeCompleted",
             EventType::RoutingDecision => "RoutingDecision",
             EventType::BranchMerged => "BranchMerged",
             EventType::DebugTrace => "DebugTrace",
@@ -434,6 +438,7 @@ impl EventType {
         match s {
             "StageTransition" => Some(EventType::StageTransition),
             "PolicySnapshotRef" => Some(EventType::PolicySnapshotRef),
+            "IntakeCompleted" => Some(EventType::IntakeCompleted),
             "RoutingDecision" => Some(EventType::RoutingDecision),
             "BranchMerged" => Some(EventType::BranchMerged),
             "DebugTrace" => Some(EventType::DebugTrace),
@@ -460,6 +465,7 @@ impl EventType {
         &[
             "StageTransition",
             "PolicySnapshotRef",
+            "IntakeCompleted",
             "RoutingDecision",
             "BranchMerged",
             "DebugTrace",
@@ -502,6 +508,7 @@ impl EventType {
             // SPEC-KIT-971 baseline (curated)
             EventType::StageTransition => true,
             EventType::PolicySnapshotRef => true,
+            EventType::IntakeCompleted => true,
             EventType::RoutingDecision => true,
             EventType::BranchMerged => true,
             // Debug/telemetry (not curated)
@@ -554,6 +561,8 @@ impl EventType {
             // SPEC-KIT-979: Phase resolution and fallback events are audit-critical
             EventType::LocalMemorySunsetPhaseResolved => true,
             EventType::FallbackActivated => true,
+            // Architect-in-a-box: Intake completion is audit-critical
+            EventType::IntakeCompleted => true,
         }
     }
 }
@@ -1013,6 +1022,52 @@ pub struct BranchMergedPayload {
     /// Run ID (if available)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub run_id: Option<String>,
+}
+
+// =============================================================================
+// SPEC-KIT-XXX: Intake Events (Architect-in-a-box)
+// =============================================================================
+
+/// Intake kind for `IntakeCompleted` events.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum IntakeKind {
+    Project,
+    Spec,
+}
+
+/// IntakeCompleted event payload.
+///
+/// Emitted when a project or spec intake is completed and persisted to capsule.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IntakeCompletedPayload {
+    pub kind: IntakeKind,
+    pub deep: bool,
+    pub intake_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spec_id: Option<String>,
+    pub answers_uri: String,
+    pub answers_sha256: String,
+    pub brief_uri: String,
+    pub brief_sha256: String,
+    pub answers_schema_version: String,
+    pub brief_schema_version: String,
+    pub created_via: String,
+
+    // =========================================================================
+    // ACE Intake Frame (ace_intake_frame@1.0) - optional, additive extension
+    // =========================================================================
+    /// ACE intake frame URI (optional, additive in v1.1)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ace_intake_frame_uri: Option<String>,
+    /// ACE intake frame SHA256 (optional, additive in v1.1)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ace_intake_frame_sha256: Option<String>,
+    /// ACE intake frame schema version (optional, additive in v1.1)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ace_intake_frame_schema_version: Option<String>,
 }
 
 // =============================================================================
