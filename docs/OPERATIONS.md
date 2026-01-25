@@ -23,6 +23,7 @@
       * [Tasks (`docs/SPEC-<id>-<slug>/tasks.md` + SPEC.md)](#tasks-docsspec-id-slugtasksmd--specmd)
     * [Multi-Agent Expectations](#multi-agent-expectations)
     * [Config Isolation (SPEC-KIT-964)](#config-isolation-spec-kit-964)
+    * [Capsule as System of Record](#capsule-as-system-of-record)
     * [Reference Documents](#reference-documents)
   * [2. Runbook: CI & Gating](#2-runbook-ci--gating)
     * [Pre-Commit Validation](#pre-commit-validation)
@@ -244,6 +245,32 @@ This project uses hermetic agent isolation:
   * MCP queries scoped by `project:theturtlecsz/code`
 
 This ensures reproducible behavior regardless of user's global configuration.
+
+### Capsule as System of Record
+
+The capsule is the authoritative source of truth for all spec-kit artifacts. Filesystem projections (`docs/`, `memory/`) are rebuildable views.
+
+**Contract:**
+
+* All intake answers, briefs, and events are persisted to capsule first
+* Filesystem projections are created from capsule URIs
+* `code speckit projections rebuild` regenerates filesystem from capsule
+
+**Enforcement Gates:**
+
+| Gate            | Condition                                      | Exit Code         |
+| --------------- | ---------------------------------------------- | ----------------- |
+| Intake presence | IntakeCompleted event required before maieutic | 10 (NEEDS\_INPUT) |
+| Deep validation | security\_posture, release\_rollout required   | 2 (HARD\_FAIL)    |
+| Infra failures  | Capsule I/O, network errors                    | 3 (INFRA\_ERROR)  |
+
+**Rebuild Command:**
+
+```bash
+code speckit projections rebuild --spec SPEC-KIT-042
+```
+
+See: `docs/spec-kit/CAPSULE-NAMESPACES.md` for URI format and `docs/spec-kit/COMMANDS.md` for full command reference.
 
 ### Reference Documents
 
