@@ -549,8 +549,85 @@ pub fn process_stage0_result(
     // Process result - collect UI messages to push after state updates
     let mut ui_messages: Vec<Box<dyn crate::history_cell::HistoryCell>> = Vec::new();
 
+    // Extract run_id early for persist_or_strip (before stage0_result borrow)
+    let run_id_for_persist = widget
+        .spec_auto_state
+        .as_ref()
+        .and_then(|s| s.run_id.clone());
+
     // Process result and update state
-    if let Some(ref stage0_result) = result.result {
+    if let Some(ref original_result) = result.result {
+        // Clone to mutable for persist-or-strip
+        let mut stage0_result = original_result.clone();
+
+        // Persist Product Knowledge pack or strip lane if persistence fails
+        if let Some(ref run_id) = run_id_for_persist {
+            super::stage0_integration::persist_or_strip_product_knowledge(
+                &spec_id,
+                run_id,
+                &widget.config.cwd,
+                &mut stage0_result,
+            );
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────────
+        // Phase 2 ADR-003: Emit pre-check retrieval events (best-effort, non-blocking)
+        // ─────────────────────────────────────────────────────────────────────────────
+        if let (Some(run_id), Some(trace)) = (&run_id_for_persist, &result.precheck_trace) {
+            use crate::memvid_adapter::{
+                BranchId, CapsuleHandle, RetrievalRequestPayload, RetrievalResponsePayload,
+                default_capsule_config,
+            };
+            use uuid::Uuid;
+
+            if let Ok(handle) = CapsuleHandle::open(default_capsule_config(&widget.config.cwd)) {
+                if handle.switch_branch(BranchId::for_run(run_id)).is_ok() {
+                    let request_id = Uuid::new_v4().to_string();
+
+                    let req_payload = RetrievalRequestPayload {
+                        request_id: request_id.clone(),
+                        query: trace.query.clone(),
+                        config: serde_json::json!({
+                            "domain": &trace.domain,
+                            "limit": trace.limit,
+                            "min_importance": trace.min_importance,
+                            "threshold": trace.threshold,
+                            "decision": if trace.hit { "hit" } else { "miss" },
+                        }),
+                        source: format!("precheck:{}", trace.domain),
+                        stage: Some("Stage0".to_string()),
+                        role: None,
+                    };
+
+                    let resp_payload = RetrievalResponsePayload {
+                        request_id,
+                        hit_uris: trace.hit_uris.clone(),
+                        fused_scores: Some(trace.fused_scores.clone()),
+                        explainability: Some(serde_json::json!({"max_relevance": trace.max_relevance})),
+                        latency_ms: trace.latency_ms,
+                        error: trace.error.clone(),
+                    };
+
+                    if let Err(e) = handle.emit_retrieval_request(&spec_id, run_id, &req_payload) {
+                        tracing::warn!(
+                            target: "stage0",
+                            error = %e,
+                            "Failed to emit precheck RetrievalRequest (best-effort)"
+                        );
+                    }
+                    if let Err(e) =
+                        handle.emit_retrieval_response(&spec_id, run_id, Some("Stage0"), &resp_payload)
+                    {
+                        tracing::warn!(
+                            target: "stage0",
+                            error = %e,
+                            "Failed to emit precheck RetrievalResponse (best-effort)"
+                        );
+                    }
+                }
+            }
+        }
+
         // S33: Trace evidence writing
         {
             use std::io::Write;
@@ -569,7 +646,7 @@ pub fn process_stage0_result(
             }
         }
 
-        // Write TASK_BRIEF.md to evidence directory
+        // Write TASK_BRIEF.md to evidence directory (uses potentially stripped task_brief_md)
         let task_brief_path = super::stage0_integration::write_task_brief_to_evidence(
             &spec_id,
             &widget.config.cwd,
@@ -831,8 +908,79 @@ pub fn handle_spec_plan(widget: &mut ChatWidget, spec_id: String) {
             None, // No progress for resume
         );
 
-        if let Some(ref stage0_result) = result.result {
-            // Write TASK_BRIEF.md to evidence directory
+        if let Some(ref original_result) = result.result {
+            // Clone to mutable for persist-or-strip
+            let mut stage0_result = original_result.clone();
+
+            // Persist Product Knowledge pack or strip lane if persistence fails
+            if let Some(ref run_id) = state.run_id {
+                super::stage0_integration::persist_or_strip_product_knowledge(
+                    &spec_id,
+                    run_id,
+                    &widget.config.cwd,
+                    &mut stage0_result,
+                );
+            }
+
+            // ─────────────────────────────────────────────────────────────────────────────
+            // Phase 2 ADR-003: Emit pre-check retrieval events (best-effort, non-blocking)
+            // ─────────────────────────────────────────────────────────────────────────────
+            if let (Some(run_id), Some(trace)) = (&state.run_id, &result.precheck_trace) {
+                use crate::memvid_adapter::{
+                    BranchId, CapsuleHandle, RetrievalRequestPayload, RetrievalResponsePayload,
+                    default_capsule_config,
+                };
+                use uuid::Uuid;
+
+                if let Ok(handle) = CapsuleHandle::open(default_capsule_config(&widget.config.cwd)) {
+                    if handle.switch_branch(BranchId::for_run(run_id)).is_ok() {
+                        let request_id = Uuid::new_v4().to_string();
+
+                        let req_payload = RetrievalRequestPayload {
+                            request_id: request_id.clone(),
+                            query: trace.query.clone(),
+                            config: serde_json::json!({
+                                "domain": &trace.domain,
+                                "limit": trace.limit,
+                                "min_importance": trace.min_importance,
+                                "threshold": trace.threshold,
+                                "decision": if trace.hit { "hit" } else { "miss" },
+                            }),
+                            source: format!("precheck:{}", trace.domain),
+                            stage: Some("Stage0".to_string()),
+                            role: None,
+                        };
+
+                        let resp_payload = RetrievalResponsePayload {
+                            request_id,
+                            hit_uris: trace.hit_uris.clone(),
+                            fused_scores: Some(trace.fused_scores.clone()),
+                            explainability: Some(serde_json::json!({"max_relevance": trace.max_relevance})),
+                            latency_ms: trace.latency_ms,
+                            error: trace.error.clone(),
+                        };
+
+                        if let Err(e) = handle.emit_retrieval_request(&spec_id, run_id, &req_payload) {
+                            tracing::warn!(
+                                target: "stage0",
+                                error = %e,
+                                "Failed to emit precheck RetrievalRequest (best-effort)"
+                            );
+                        }
+                        if let Err(e) =
+                            handle.emit_retrieval_response(&spec_id, run_id, Some("Stage0"), &resp_payload)
+                        {
+                            tracing::warn!(
+                                target: "stage0",
+                                error = %e,
+                                "Failed to emit precheck RetrievalResponse (best-effort)"
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Write TASK_BRIEF.md to evidence directory (uses potentially stripped task_brief_md)
             let task_brief_path = super::stage0_integration::write_task_brief_to_evidence(
                 &spec_id,
                 &widget.config.cwd,

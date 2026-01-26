@@ -181,6 +181,39 @@ pub struct Stage0ExecutionResult {
     pub precheck_candidates_found: usize,
     /// Number of insights curated after Tier2 (if curation enabled)
     pub curated_insights_count: usize,
+    /// Pre-check trace for capsule event emission (Phase 2 ADR-003)
+    pub precheck_trace: Option<PrecheckTrace>,
+}
+
+/// Trace data for pre-check retrieval (for capsule event emission).
+///
+/// Phase 2 ADR-003: Captures pre-check parameters and results for auditing
+/// and replay verification. Emitted as correlated RetrievalRequest/Response
+/// events to the capsule.
+#[derive(Debug, Clone)]
+pub struct PrecheckTrace {
+    /// Domain queried (e.g., "codex-product")
+    pub domain: String,
+    /// Query text used
+    pub query: String,
+    /// Limit parameter
+    pub limit: usize,
+    /// Minimum importance filter
+    pub min_importance: u8,
+    /// Threshold for hit decision
+    pub threshold: f64,
+    /// Whether pre-check hit (skipped Tier2)
+    pub hit: bool,
+    /// Maximum relevance score found
+    pub max_relevance: f64,
+    /// Hit URIs as lm://<domain>/<id>
+    pub hit_uris: Vec<String>,
+    /// Relevance scores from search results
+    pub fused_scores: Vec<f64>,
+    /// Latency in milliseconds
+    pub latency_ms: Option<u64>,
+    /// Error message if search failed
+    pub error: Option<String>,
 }
 
 /// Configuration for Stage 0 execution
@@ -236,6 +269,7 @@ pub fn run_stage0_for_spec(
             precheck_hit: false,
             precheck_candidates_found: 0,
             curated_insights_count: 0,
+            precheck_trace: None,
         };
     }
 
@@ -257,6 +291,7 @@ pub fn run_stage0_for_spec(
                 precheck_hit: false,
                 precheck_candidates_found: 0,
                 curated_insights_count: 0,
+                precheck_trace: None,
             };
         }
     };
@@ -303,6 +338,7 @@ pub fn run_stage0_for_spec(
                 precheck_hit: false,
                 precheck_candidates_found: 0,
                 curated_insights_count: 0,
+                precheck_trace: None,
             };
         }
     }
@@ -340,6 +376,7 @@ pub fn run_stage0_for_spec(
                 precheck_hit: false,
                 precheck_candidates_found: 0,
                 curated_insights_count: 0,
+                precheck_trace: None,
             };
         }
     };
@@ -386,6 +423,7 @@ pub fn run_stage0_for_spec(
                 precheck_hit: false,
                 precheck_candidates_found: 0,
                 curated_insights_count: 0,
+                precheck_trace: None,
             };
         }
     };
@@ -406,8 +444,10 @@ pub fn run_stage0_for_spec(
 
     // ─────────────────────────────────────────────────────────────────────────────
     // ADR-003 Prompt F: Pre-check against codex-product before Tier2
+    // Phase 2: Capture trace for capsule event emission
     // ─────────────────────────────────────────────────────────────────────────────
     let (mut precheck_hit, mut precheck_candidates_found) = (false, 0_usize);
+    let mut precheck_trace: Option<PrecheckTrace> = None;
 
     let precheck_skip_tier2 = if stage0_cfg.context_compiler.product_knowledge.enabled
         && stage0_cfg.context_compiler.product_knowledge.precheck_enabled
@@ -415,16 +455,20 @@ pub fn run_stage0_for_spec(
     {
         // Extract query from spec content (first 500 chars as search query)
         let query: String = spec_content.chars().take(500).collect();
+        let domain = stage0_cfg.context_compiler.product_knowledge.domain.clone();
+        let precheck_start = std::time::Instant::now();
 
         // Search codex-product domain
         match crate::local_memory_cli::search_blocking(
             &query,
             10, // Check top 10 matches
             &[],
-            Some(&stage0_cfg.context_compiler.product_knowledge.domain),
+            Some(&domain),
             1000, // Short snippets for pre-check
         ) {
             Ok(results) => {
+                let latency_ms = precheck_start.elapsed().as_millis() as u64;
+
                 // Convert to LocalMemorySummary format for precheck function
                 let summaries: Vec<codex_stage0::LocalMemorySummary> = results
                     .iter()
@@ -455,6 +499,29 @@ pub fn run_stage0_for_spec(
                 precheck_hit = precheck_result.hit;
                 precheck_candidates_found = precheck_result.candidates.len();
 
+                // Phase 2: Build trace for capsule event emission
+                precheck_trace = Some(PrecheckTrace {
+                    domain: domain.clone(),
+                    query: query.clone(),
+                    limit: 10,
+                    min_importance: stage0_cfg.context_compiler.product_knowledge.min_importance,
+                    threshold: stage0_cfg.context_compiler.product_knowledge.precheck_threshold,
+                    hit: precheck_result.hit,
+                    max_relevance: precheck_result.max_relevance,
+                    hit_uris: results
+                        .iter()
+                        .filter_map(|r| {
+                            r.memory.id.as_ref().map(|id| format!("lm://{}/{}", domain, id))
+                        })
+                        .collect(),
+                    fused_scores: results
+                        .iter()
+                        .map(|r| r.relevance_score.unwrap_or(0.0))
+                        .collect(),
+                    latency_ms: Some(latency_ms),
+                    error: None,
+                });
+
                 if precheck_result.hit {
                     tracing::info!(
                         "Pre-check HIT for {}: {} candidates with max_relevance={:.3}, skipping Tier2",
@@ -475,6 +542,23 @@ pub fn run_stage0_for_spec(
                 }
             }
             Err(e) => {
+                let latency_ms = precheck_start.elapsed().as_millis() as u64;
+
+                // Phase 2: Build error trace for capsule event emission
+                precheck_trace = Some(PrecheckTrace {
+                    domain: domain.clone(),
+                    query: query.clone(),
+                    limit: 10,
+                    min_importance: stage0_cfg.context_compiler.product_knowledge.min_importance,
+                    threshold: stage0_cfg.context_compiler.product_knowledge.precheck_threshold,
+                    hit: false,
+                    max_relevance: 0.0,
+                    hit_uris: vec![],
+                    fused_scores: vec![],
+                    latency_ms: Some(latency_ms),
+                    error: Some(e.to_string()),
+                });
+
                 // Pre-check failed - proceed to Tier2 (fail-closed behavior)
                 tracing::warn!("Pre-check search failed (proceeding to Tier2): {}", e);
                 false
@@ -641,6 +725,7 @@ pub fn run_stage0_for_spec(
                 precheck_hit,
                 precheck_candidates_found,
                 curated_insights_count: curated_count,
+                precheck_trace,
             }
         }
         Err(e) => {
@@ -667,6 +752,7 @@ pub fn run_stage0_for_spec(
                 precheck_hit,
                 precheck_candidates_found,
                 curated_insights_count: 0,
+                precheck_trace,
             }
         }
     }
@@ -1228,6 +1314,166 @@ pub fn write_product_knowledge_to_capsule(
     Ok(uri)
 }
 
+/// Strip the Product Knowledge section from task_brief_md.
+///
+/// Header is: "## Product Knowledge (codex-product)"
+/// Removes from header until next "## " heading or EOF.
+///
+/// This is used when capsule snapshotting fails to ensure downstream prompts
+/// don't reference Product Knowledge that isn't durably stored.
+pub fn strip_product_knowledge_lane(task_brief: &str) -> String {
+    const HEADER: &str = "## Product Knowledge (codex-product)";
+
+    let Some(start) = task_brief.find(HEADER) else {
+        return task_brief.to_string();
+    };
+
+    // Find the end: next "## " or EOF
+    let after_header = start + HEADER.len();
+    let end = task_brief[after_header..]
+        .find("\n## ")
+        .map(|pos| after_header + pos + 1) // +1 to keep the newline before next ##
+        .unwrap_or(task_brief.len());
+
+    let mut result = String::with_capacity(task_brief.len());
+    result.push_str(&task_brief[..start]);
+    result.push_str(&task_brief[end..]);
+    result
+}
+
+/// Persist Product Knowledge evidence pack to capsule, or strip the lane if persistence fails.
+///
+/// This ensures determinism: if we can't guarantee the evidence pack is durably stored,
+/// we don't include the Product Knowledge lane in downstream prompts.
+///
+/// # Arguments
+/// * `spec_id` - SPEC identifier
+/// * `run_id` - Pipeline run identifier
+/// * `cwd` - Working directory (for capsule path resolution)
+/// * `stage0_result` - Mutable reference to Stage0Result (may be modified)
+///
+/// # Behavior
+/// - If `product_knowledge_pack` is None: no-op
+/// - If Some: attempts to persist to capsule with durability (commit_stage flush)
+/// - On any capsule failure: strips the Product Knowledge section from task_brief_md
+///   and sets product_knowledge_pack to None
+pub fn persist_or_strip_product_knowledge(
+    spec_id: &str,
+    run_id: &str,
+    cwd: &Path,
+    stage0_result: &mut codex_stage0::Stage0Result,
+) {
+    use crate::memvid_adapter::{
+        BranchId, CapsuleHandle, RetrievalRequestPayload, RetrievalResponsePayload,
+        default_capsule_config,
+    };
+    use uuid::Uuid;
+
+    // Early return if no pack
+    let Some(pack) = stage0_result.product_knowledge_pack.take() else {
+        return;
+    };
+
+    // Attempt capsule write + flush
+    let write_result = (|| -> Result<(), String> {
+        let config = default_capsule_config(cwd);
+        let handle = CapsuleHandle::open(config)
+            .map_err(|e| format!("Failed to open capsule: {}", e))?;
+
+        handle
+            .switch_branch(BranchId::for_run(run_id))
+            .map_err(|e| format!("Failed to switch branch: {}", e))?;
+
+        write_product_knowledge_to_capsule(spec_id, run_id, &pack, &handle)?;
+
+        // ─────────────────────────────────────────────────────────────────────────────
+        // Phase 2 ADR-003: Emit correlated retrieval events for Product Knowledge lane
+        // Best-effort: failures logged but never block pipeline
+        // ─────────────────────────────────────────────────────────────────────────────
+        let request_id = Uuid::new_v4().to_string();
+
+        let req_payload = RetrievalRequestPayload {
+            request_id: request_id.clone(),
+            query: pack
+                .queries
+                .first()
+                .map(|q| q.query.clone())
+                .unwrap_or_default(),
+            config: serde_json::json!({
+                "domain": &pack.domain,
+                "schema_version": &pack.schema_version,
+                "artifact_path": "product_knowledge/evidence_pack.json",
+                "item_count": pack.items.len(),
+            }),
+            source: format!("product-knowledge:{}", pack.domain),
+            stage: Some("Stage0".to_string()),
+            role: None,
+        };
+
+        let resp_payload = RetrievalResponsePayload {
+            request_id,
+            hit_uris: pack
+                .items
+                .iter()
+                .map(|item| format!("lm://{}/{}", pack.domain, item.lm_id))
+                .collect(),
+            fused_scores: None, // Pack doesn't contain scores
+            explainability: None,
+            latency_ms: None, // Not tracked for persist
+            error: None,
+        };
+
+        if let Err(e) = handle.emit_retrieval_request(spec_id, run_id, &req_payload) {
+            tracing::warn!(
+                target: "stage0",
+                error = %e,
+                "Failed to emit lane RetrievalRequest (best-effort)"
+            );
+        }
+        if let Err(e) = handle.emit_retrieval_response(spec_id, run_id, Some("Stage0"), &resp_payload)
+        {
+            tracing::warn!(
+                target: "stage0",
+                error = %e,
+                "Failed to emit lane RetrievalResponse (best-effort)"
+            );
+        }
+
+        // CRITICAL: flush writes to ensure durability
+        handle
+            .commit_stage(spec_id, run_id, "Stage0", None)
+            .map_err(|e| format!("Failed to commit Stage0 checkpoint: {}", e))?;
+
+        Ok(())
+    })();
+
+    match write_result {
+        Ok(()) => {
+            // Success: restore the pack
+            stage0_result.product_knowledge_pack = Some(pack);
+            tracing::info!(
+                target: "stage0",
+                spec_id = spec_id,
+                run_id = run_id,
+                "Product Knowledge evidence pack persisted to capsule"
+            );
+        }
+        Err(e) => {
+            // Failure: strip the lane from task_brief_md
+            tracing::warn!(
+                target: "stage0",
+                spec_id = spec_id,
+                run_id = run_id,
+                error = %e,
+                "Failed to persist Product Knowledge pack, stripping lane from task brief"
+            );
+            stage0_result.task_brief_md =
+                strip_product_knowledge_lane(&stage0_result.task_brief_md);
+            // product_knowledge_pack is already None from take()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1244,6 +1490,61 @@ mod tests {
         // Test with non-existent path
         let branch = get_git_branch(std::path::Path::new("/nonexistent"));
         assert_eq!(branch, "main");
+    }
+
+    // =========================================================================
+    // Product Knowledge Lane Strip Tests
+    // =========================================================================
+
+    #[test]
+    fn test_strip_product_knowledge_lane_with_following_section() {
+        let input = r#"## Spec Summary
+Some content here.
+
+## Product Knowledge (codex-product)
+
+### [lm-001]
+- **Type:** decision
+Content here...
+
+## Documentation Context
+More content.
+"#;
+        let output = strip_product_knowledge_lane(input);
+        assert!(output.contains("## Spec Summary"));
+        assert!(!output.contains("## Product Knowledge"));
+        assert!(!output.contains("### [lm-001]"));
+        assert!(output.contains("## Documentation Context"));
+    }
+
+    #[test]
+    fn test_strip_product_knowledge_lane_at_end() {
+        let input = r#"## Spec Summary
+Some content here.
+
+## Product Knowledge (codex-product)
+
+### [lm-001]
+Final content.
+"#;
+        let output = strip_product_knowledge_lane(input);
+        assert!(output.contains("## Spec Summary"));
+        assert!(!output.contains("## Product Knowledge"));
+        // Should end cleanly at Spec Summary content
+        assert!(output.trim().ends_with("Some content here."));
+    }
+
+    #[test]
+    fn test_strip_product_knowledge_lane_not_present() {
+        let input = r#"## Spec Summary
+Some content here.
+
+## Documentation Context
+More content.
+"#;
+        let output = strip_product_knowledge_lane(input);
+        // Should be unchanged
+        assert_eq!(output, input);
     }
 
     // =========================================================================
@@ -1397,5 +1698,128 @@ mod tests {
             // Should fail because no fallback available
             assert!(result.is_err(), "Should fail when no fallback available");
         });
+    }
+
+    // =========================================================================
+    // Phase 2 ADR-003: PrecheckTrace Tests
+    // =========================================================================
+
+    #[test]
+    fn test_precheck_trace_uri_formatting() {
+        let trace = PrecheckTrace {
+            domain: "codex-product".to_string(),
+            query: "test query".to_string(),
+            limit: 10,
+            min_importance: 8,
+            threshold: 0.75,
+            hit: true,
+            max_relevance: 0.85,
+            hit_uris: vec![
+                "lm://codex-product/abc123".to_string(),
+                "lm://codex-product/def456".to_string(),
+            ],
+            fused_scores: vec![0.85, 0.72],
+            latency_ms: Some(50),
+            error: None,
+        };
+
+        // Verify URI format
+        assert!(trace.hit_uris[0].starts_with("lm://"));
+        assert!(trace.hit_uris[0].contains(&trace.domain));
+        assert!(trace.hit_uris[0].ends_with("abc123"));
+
+        // Verify all URIs follow the pattern
+        for uri in &trace.hit_uris {
+            assert!(uri.starts_with("lm://codex-product/"));
+        }
+    }
+
+    #[test]
+    fn test_precheck_trace_hit_decision() {
+        // Hit case: max_relevance >= threshold
+        let hit_trace = PrecheckTrace {
+            domain: "codex-product".to_string(),
+            query: "query".to_string(),
+            limit: 10,
+            min_importance: 8,
+            threshold: 0.75,
+            hit: true,
+            max_relevance: 0.85,
+            hit_uris: vec!["lm://codex-product/id1".to_string()],
+            fused_scores: vec![0.85],
+            latency_ms: Some(25),
+            error: None,
+        };
+
+        assert!(hit_trace.hit);
+        assert!(hit_trace.max_relevance >= hit_trace.threshold);
+        assert!(hit_trace.error.is_none());
+
+        // Miss case: max_relevance < threshold
+        let miss_trace = PrecheckTrace {
+            domain: "codex-product".to_string(),
+            query: "query".to_string(),
+            limit: 10,
+            min_importance: 8,
+            threshold: 0.75,
+            hit: false,
+            max_relevance: 0.50,
+            hit_uris: vec!["lm://codex-product/id2".to_string()],
+            fused_scores: vec![0.50],
+            latency_ms: Some(30),
+            error: None,
+        };
+
+        assert!(!miss_trace.hit);
+        assert!(miss_trace.max_relevance < miss_trace.threshold);
+        assert!(miss_trace.error.is_none());
+    }
+
+    #[test]
+    fn test_precheck_trace_error_capture() {
+        let error_trace = PrecheckTrace {
+            domain: "codex-product".to_string(),
+            query: "query".to_string(),
+            limit: 10,
+            min_importance: 8,
+            threshold: 0.75,
+            hit: false, // Error always results in miss
+            max_relevance: 0.0,
+            hit_uris: vec![], // No URIs on error
+            fused_scores: vec![],
+            latency_ms: Some(5), // Still captured even on error
+            error: Some("Connection refused".to_string()),
+        };
+
+        assert!(!error_trace.hit);
+        assert!(error_trace.error.is_some());
+        assert!(error_trace.hit_uris.is_empty());
+        assert!(error_trace.fused_scores.is_empty());
+        assert!(error_trace.latency_ms.is_some()); // Latency should still be captured
+    }
+
+    #[test]
+    fn test_precheck_trace_clone() {
+        let original = PrecheckTrace {
+            domain: "codex-product".to_string(),
+            query: "test".to_string(),
+            limit: 10,
+            min_importance: 8,
+            threshold: 0.75,
+            hit: true,
+            max_relevance: 0.90,
+            hit_uris: vec!["lm://codex-product/id".to_string()],
+            fused_scores: vec![0.90],
+            latency_ms: Some(100),
+            error: None,
+        };
+
+        let cloned = original.clone();
+
+        assert_eq!(original.domain, cloned.domain);
+        assert_eq!(original.query, cloned.query);
+        assert_eq!(original.hit, cloned.hit);
+        assert_eq!(original.hit_uris, cloned.hit_uris);
+        assert_eq!(original.fused_scores, cloned.fused_scores);
     }
 }
