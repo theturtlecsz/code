@@ -34,7 +34,7 @@ echo "=== Local Memory Template Validation ==="
 echo ""
 
 # Check 1: Mandatory header in repo templates
-echo "[1/4] Checking repo templates for mandatory header..."
+echo "[1/5] Checking repo templates for mandatory header..."
 for template in "${REPO_TEMPLATES[@]}"; do
     if [[ -f "$template" ]]; then
         if ! grep -q "## Local Memory Integration (MANDATORY)" "$template"; then
@@ -48,7 +48,7 @@ for template in "${REPO_TEMPLATES[@]}"; do
 done
 
 # Check 2: Mandatory header in export templates
-echo "[2/4] Checking export templates for mandatory header..."
+echo "[2/5] Checking export templates for mandatory header..."
 for template in "${EXPORT_TEMPLATES[@]}"; do
     if [[ -f "$template" ]]; then
         if ! grep -q "## Local Memory Integration (MANDATORY)" "$template"; then
@@ -62,7 +62,7 @@ for template in "${EXPORT_TEMPLATES[@]}"; do
 done
 
 # Check 3: CLI+REST policy statement
-echo "[3/4] Checking for CLI+REST policy statement..."
+echo "[3/5] Checking for CLI+REST policy statement..."
 for template in "${REPO_TEMPLATES[@]}"; do
     if [[ -f "$template" ]]; then
         if ! grep -q "CLI + REST only" "$template"; then
@@ -74,7 +74,7 @@ for template in "${REPO_TEMPLATES[@]}"; do
 done
 
 # Check 4: No MCP mentions for local-memory
-echo "[4/4] Checking for prohibited MCP mentions..."
+echo "[4/5] Checking for prohibited MCP mentions..."
 for template in "${REPO_TEMPLATES[@]}"; do
     if [[ -f "$template" ]]; then
         # Check for MCP in context of local-memory (allowing "No MCP" which is correct)

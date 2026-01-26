@@ -210,8 +210,6 @@ fn create_instruction_files(
 
 **Policy**: CLI + REST only. No MCP.
 
-**Product Knowledge Domain**: For cross-project product knowledge queries, use domain `codex-product` explicitly.
-
 ### Golden Path vs Manual
 
 | Mode | When | Memory Handling |
