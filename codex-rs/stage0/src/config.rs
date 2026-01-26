@@ -323,6 +323,16 @@ pub struct ContextCompilerConfig {
     /// Number of code units to include in TASK_BRIEF
     #[serde(default = "default_code_top_k")]
     pub code_top_k: usize,
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // ADR-003: Product Knowledge lane configuration
+    // ─────────────────────────────────────────────────────────────────────────────
+    /// Product Knowledge lane settings
+    ///
+    /// Controls retrieval of curated product knowledge from local-memory
+    /// domain `codex-product` for inclusion in TASK_BRIEF.
+    #[serde(default)]
+    pub product_knowledge: ProductKnowledgeConfig,
 }
 
 fn default_max_tokens() -> usize {
@@ -381,6 +391,7 @@ impl Default for ContextCompilerConfig {
             vector_top_k: default_vector_top_k(),
             code_lane_enabled: default_code_lane_enabled(),
             code_top_k: default_code_top_k(),
+            product_knowledge: ProductKnowledgeConfig::default(),
         }
     }
 }
@@ -478,6 +489,130 @@ impl Default for VectorIndexConfig {
         Self {
             max_memories_to_index: default_vector_max_memories(),
             max_code_units_to_index: default_vector_max_code_units(),
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADR-003: Product Knowledge Lane Configuration
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Product Knowledge lane configuration (ADR-003)
+///
+/// Controls how Stage0 retrieves curated product knowledge from local-memory
+/// domain `codex-product` and includes it in the TASK_BRIEF.
+///
+/// Feature is OFF by default. When enabled:
+/// - Queries local-memory domain `codex-product` for curated insights
+/// - Filters by importance >= 8 and canonical type tags
+/// - Injects bounded markdown lane into TASK_BRIEF
+/// - Snapshots used inputs to capsule for deterministic replay
+#[derive(Debug, Deserialize, Clone)]
+pub struct ProductKnowledgeConfig {
+    /// Enable product knowledge lane (default: OFF)
+    ///
+    /// When enabled, Stage0 will query local-memory for curated product
+    /// knowledge and include it in TASK_BRIEF context.
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Domain to query (default: "codex-product")
+    ///
+    /// Must be the curated product knowledge domain, not the spec-kit domain.
+    #[serde(default = "default_pk_domain")]
+    pub domain: String,
+
+    /// Maximum items to retrieve before filtering (default: 10)
+    #[serde(default = "default_pk_max_items")]
+    pub max_items: usize,
+
+    /// Maximum characters per item content (default: 3000)
+    #[serde(default = "default_pk_max_chars_per_item")]
+    pub max_chars_per_item: usize,
+
+    /// Maximum total characters for lane (default: 10000)
+    #[serde(default = "default_pk_max_total_chars")]
+    pub max_total_chars: usize,
+
+    /// Minimum importance threshold (default: 8)
+    ///
+    /// Only include memories with importance >= this value.
+    /// Per ADR-003, product knowledge must be importance >= 8.
+    #[serde(default = "default_pk_min_importance")]
+    pub min_importance: u8,
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Prompt F: Pre-check + Curation settings
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// Enable pre-check against codex-product before Tier2 calls (default: true when enabled)
+    ///
+    /// When enabled, Stage0 searches codex-product for existing insights before
+    /// calling NotebookLM. If a strong match is found (relevance >= threshold),
+    /// the cached insight is reused and Tier2 is skipped.
+    #[serde(default = "default_pk_precheck_enabled")]
+    pub precheck_enabled: bool,
+
+    /// Relevance threshold for pre-check hits (default: 0.85)
+    ///
+    /// If max(relevance_score) >= threshold, the pre-check returns a hit
+    /// and Tier2 is skipped. Lower values = more aggressive caching.
+    #[serde(default = "default_pk_precheck_threshold")]
+    pub precheck_threshold: f64,
+
+    /// Enable post-curation of Tier2 outputs into codex-product (default: true when enabled)
+    ///
+    /// When enabled, Stage0 distills actionable insights from Tier2 outputs
+    /// and stores them in codex-product for future reuse. Runs in background
+    /// thread, never blocks pipeline.
+    #[serde(default = "default_pk_curation_enabled")]
+    pub curation_enabled: bool,
+}
+
+fn default_pk_domain() -> String {
+    "codex-product".to_string()
+}
+
+fn default_pk_max_items() -> usize {
+    10
+}
+
+fn default_pk_max_chars_per_item() -> usize {
+    3000
+}
+
+fn default_pk_max_total_chars() -> usize {
+    10000
+}
+
+fn default_pk_min_importance() -> u8 {
+    8
+}
+
+fn default_pk_precheck_enabled() -> bool {
+    true // ON by default when product_knowledge.enabled is true
+}
+
+fn default_pk_precheck_threshold() -> f64 {
+    0.85 // Recommended threshold per ADR-003 Prompt F
+}
+
+fn default_pk_curation_enabled() -> bool {
+    true // ON by default when product_knowledge.enabled is true
+}
+
+impl Default for ProductKnowledgeConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false, // OFF by default
+            domain: default_pk_domain(),
+            max_items: default_pk_max_items(),
+            max_chars_per_item: default_pk_max_chars_per_item(),
+            max_total_chars: default_pk_max_total_chars(),
+            min_importance: default_pk_min_importance(),
+            precheck_enabled: default_pk_precheck_enabled(),
+            precheck_threshold: default_pk_precheck_threshold(),
+            curation_enabled: default_pk_curation_enabled(),
         }
     }
 }

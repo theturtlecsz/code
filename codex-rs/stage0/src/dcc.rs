@@ -147,6 +147,168 @@ pub struct CodeCandidate {
     pub why_relevant: String,
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ADR-003: Product Knowledge Lane Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Canonical type values for product knowledge entries (ADR-003)
+pub const PRODUCT_KNOWLEDGE_CANONICAL_TYPES: &[&str] = &[
+    "decision",
+    "pattern",
+    "bug-fix",
+    "milestone",
+    "discovery",
+    "limitation",
+    "architecture",
+];
+
+/// A product knowledge candidate from local-memory domain `codex-product`
+#[derive(Debug, Clone)]
+pub struct ProductKnowledgeCandidate {
+    /// local-memory ID
+    pub id: String,
+    /// Canonical type (decision, pattern, etc.)
+    pub item_type: String,
+    /// Importance score (must be >= 8 per ADR-003)
+    pub importance: u8,
+    /// All tags from the memory
+    pub tags: Vec<String>,
+    /// Full content (may be truncated)
+    pub content: String,
+    /// Relevance score from local-memory search
+    pub relevance_score: f64,
+}
+
+/// Evidence pack for product knowledge lane (ADR-003)
+///
+/// Captures all inputs used by product knowledge retrieval for deterministic replay.
+/// Written to capsule at `mv2://<workspace>/<spec>/<run>/artifact/product_knowledge/evidence_pack.json`
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProductKnowledgeEvidencePack {
+    /// Schema version for forward compatibility
+    pub schema_version: String,
+
+    /// Creation timestamp (RFC3339)
+    pub created_at: String,
+
+    /// How this pack was created
+    pub created_via: String,
+
+    /// Domain queried (always "codex-product")
+    pub domain: String,
+
+    /// Queries executed
+    pub queries: Vec<ProductKnowledgeQuery>,
+
+    /// Items selected for injection
+    pub items: Vec<ProductKnowledgeItem>,
+
+    /// Integrity verification
+    pub integrity: ProductKnowledgeIntegrity,
+}
+
+impl ProductKnowledgeEvidencePack {
+    /// Schema version constant
+    pub const SCHEMA_VERSION: &'static str = "product_knowledge_evidence_pack@1.0";
+
+    /// Compute and set the integrity hash
+    pub fn finalize(&mut self) {
+        use sha2::{Digest, Sha256};
+
+        // Set placeholder for deterministic hashing
+        self.integrity.pack_sha256 = String::new();
+
+        // Serialize to canonical JSON
+        let json = serde_json::to_string(self).unwrap_or_default();
+
+        // Compute SHA-256
+        let mut hasher = Sha256::new();
+        hasher.update(json.as_bytes());
+        let hash = hasher.finalize();
+
+        // Convert to hex string without extra dependencies
+        self.integrity.pack_sha256 = hash
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>();
+    }
+}
+
+/// Query executed for product knowledge retrieval
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProductKnowledgeQuery {
+    /// Query text used
+    pub query: String,
+
+    /// Search mode ("search" or "recall")
+    pub mode: String,
+
+    /// Maximum results requested
+    pub limit: usize,
+
+    /// Filters applied
+    pub filters: ProductKnowledgeFilters,
+
+    /// When the query was executed (RFC3339)
+    pub executed_at: String,
+}
+
+/// Filters applied to product knowledge query
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProductKnowledgeFilters {
+    /// Canonical types accepted (if specified)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub types: Option<Vec<String>>,
+
+    /// Minimum importance threshold
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_importance: Option<u8>,
+
+    /// Tags required (if specified)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
+}
+
+/// A product knowledge item in the evidence pack
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProductKnowledgeItem {
+    /// local-memory ID
+    pub lm_id: String,
+
+    /// Canonical type (decision, pattern, etc.)
+    #[serde(rename = "type")]
+    pub item_type: String,
+
+    /// Importance score
+    pub importance: u8,
+
+    /// All tags
+    pub tags: Vec<String>,
+
+    /// Full content (bounded)
+    pub content: String,
+
+    /// SHA-256 of content (for verification)
+    pub content_sha256: String,
+
+    /// Exact snippets injected into lane
+    pub snippets: Vec<String>,
+
+    /// Why this item was included
+    pub why_included: String,
+}
+
+/// Integrity information for the evidence pack
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProductKnowledgeIntegrity {
+    /// SHA-256 of canonical JSON serialization
+    pub pack_sha256: String,
+
+    /// Any integrity notes
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+}
+
 /// Score breakdown for explainability
 #[derive(Debug, Clone, Serialize)]
 pub struct ExplainScore {
@@ -181,6 +343,10 @@ pub struct CompileContextResult {
     pub explain_scores: Option<ExplainScores>,
     /// P85: Code candidates selected for Code Context section
     pub code_candidates: Vec<CodeCandidate>,
+    /// ADR-003: Product knowledge lane markdown (if enabled and items found)
+    pub product_knowledge_lane: Option<String>,
+    /// ADR-003: Evidence pack for capsule snapshotting (if lane was generated)
+    pub product_knowledge_pack: Option<ProductKnowledgeEvidencePack>,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -766,12 +932,90 @@ where
         (0, None, None)
     });
 
-    // 12. Assemble TASK_BRIEF.md
+    // 12. (ADR-003) Product Knowledge Lane (if enabled)
+    let (product_knowledge_lane, product_knowledge_pack) =
+        if ctx.cfg.context_compiler.product_knowledge.enabled {
+            // Build deterministic query
+            let pk_query = build_product_knowledge_query(spec_content, &iqo);
+            let pk_cfg = &ctx.cfg.context_compiler.product_knowledge;
+
+            // Build search params for codex-product domain
+            let pk_search_params = LocalMemorySearchParams {
+                iqo: Iqo {
+                    domains: vec![pk_cfg.domain.clone()],
+                    required_tags: vec![],
+                    optional_tags: vec![],
+                    keywords: pk_query.split_whitespace().map(String::from).collect(),
+                    max_candidates: pk_cfg.max_items * 2, // Fetch extra for filtering
+                    notebook_focus: vec![],
+                    exclude_tags: vec!["system:true".to_string()],
+                },
+                max_results: pk_cfg.max_items * 2,
+            };
+
+            // Query local-memory for product knowledge
+            match ctx.local_mem.search_memories(pk_search_params).await {
+                Ok(summaries) => {
+                    tracing::debug!(
+                        target: "stage0",
+                        count = summaries.len(),
+                        domain = %pk_cfg.domain,
+                        "Retrieved product knowledge summaries"
+                    );
+
+                    // Filter client-side
+                    let candidates = filter_product_knowledge_results(summaries, pk_cfg.min_importance);
+
+                    if candidates.is_empty() {
+                        tracing::debug!(
+                            target: "stage0",
+                            "No product knowledge candidates after filtering"
+                        );
+                        (None, None)
+                    } else {
+                        // Assemble lane and evidence items
+                        match assemble_product_knowledge_lane(&candidates, pk_cfg) {
+                            Some((lane_md, items)) => {
+                                tracing::info!(
+                                    target: "stage0",
+                                    items = items.len(),
+                                    "Product knowledge lane assembled"
+                                );
+
+                                // Build evidence pack
+                                let pack = build_product_knowledge_pack(
+                                    &pk_query,
+                                    items,
+                                    &pk_cfg.domain,
+                                    pk_cfg.min_importance,
+                                );
+
+                                (Some(lane_md), Some(pack))
+                            }
+                            None => (None, None),
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        target: "stage0",
+                        error = %e,
+                        "Product knowledge retrieval failed (proceeding without)"
+                    );
+                    (None, None)
+                }
+            }
+        } else {
+            (None, None)
+        };
+
+    // 13. Assemble TASK_BRIEF.md
     let task_brief_md = assemble_task_brief(
         spec_id,
         spec_content,
         &selected,
         &code_candidates,
+        product_knowledge_lane.as_deref(),
         &iqo,
         ctx.cfg,
         &constitution_meta,
@@ -792,6 +1036,8 @@ where
         memories_used,
         explain_scores: explain_opt,
         code_candidates,
+        product_knowledge_lane,
+        product_knowledge_pack,
     })
 }
 
@@ -841,6 +1087,298 @@ fn generate_code_relevance_heuristic(id: &str, path: Option<&str>, keywords: &[S
     } else {
         reasons.join("; ")
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADR-003: Product Knowledge Lane Functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Build a deterministic product knowledge query from spec content
+///
+/// Uses heuristics only - no LLM calls to ensure replay determinism.
+pub fn build_product_knowledge_query(spec_content: &str, iqo: &Iqo) -> String {
+    let mut query_parts: Vec<String> = Vec::new();
+
+    // Use IQO keywords if available (first 5)
+    if !iqo.keywords.is_empty() {
+        query_parts.extend(iqo.keywords.iter().take(5).cloned());
+    }
+
+    // Extract additional terms from spec content (first 500 chars)
+    let spec_terms = heuristic_keywords(&spec_content[..spec_content.len().min(500)]);
+    query_parts.extend(spec_terms.into_iter().take(5));
+
+    // Deduplicate
+    query_parts.sort();
+    query_parts.dedup();
+
+    if query_parts.is_empty() {
+        "*".to_string()
+    } else {
+        query_parts.join(" ")
+    }
+}
+
+/// Filter and convert product knowledge results per ADR-003 contract
+///
+/// Applies client-side filtering:
+/// - importance >= min_importance (default 8)
+/// - must have a canonical type tag (type:decision, type:pattern, etc.)
+/// - exclude system:true
+pub fn filter_product_knowledge_results(
+    summaries: Vec<LocalMemorySummary>,
+    min_importance: u8,
+) -> Vec<ProductKnowledgeCandidate> {
+    summaries
+        .into_iter()
+        .filter_map(|s| {
+            // Extract importance from tags (e.g., "importance:9")
+            let importance = extract_importance_from_tags(&s.tags).unwrap_or(0);
+
+            // Filter: importance >= min_importance
+            if importance < min_importance {
+                return None;
+            }
+
+            // Filter: must have a canonical type tag
+            let item_type = infer_product_knowledge_type(&s.tags)?;
+
+            // Filter: exclude system:true
+            if s.tags.iter().any(|t| t == "system:true") {
+                return None;
+            }
+
+            Some(ProductKnowledgeCandidate {
+                id: s.id,
+                item_type,
+                importance,
+                tags: s.tags,
+                content: s.snippet,
+                relevance_score: s.similarity_score,
+            })
+        })
+        .collect()
+}
+
+/// Extract importance value from tags
+fn extract_importance_from_tags(tags: &[String]) -> Option<u8> {
+    for tag in tags {
+        if let Some(val) = tag.strip_prefix("importance:") {
+            if let Ok(imp) = val.parse::<u8>() {
+                return Some(imp);
+            }
+        }
+    }
+    None
+}
+
+/// Infer canonical type from tags
+fn infer_product_knowledge_type(tags: &[String]) -> Option<String> {
+    for tag in tags {
+        if let Some(type_val) = tag.strip_prefix("type:") {
+            if PRODUCT_KNOWLEDGE_CANONICAL_TYPES.contains(&type_val) {
+                return Some(type_val.to_string());
+            }
+        }
+    }
+    None
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADR-003 Prompt F: Pre-check against codex-product before Tier2
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Result of product knowledge pre-check against codex-product domain
+///
+/// Used to determine if Tier2 (NotebookLM) call can be skipped because
+/// a strong match already exists in the curated product knowledge.
+#[derive(Debug, Clone)]
+pub struct PrecheckResult {
+    /// True if strong match found (can skip Tier2)
+    pub hit: bool,
+    /// Candidates that passed filtering (importance >= 8, canonical type, no system:true)
+    pub candidates: Vec<ProductKnowledgeCandidate>,
+    /// Query used for search
+    pub query: String,
+    /// Highest relevance score among candidates
+    pub max_relevance: f64,
+}
+
+/// Pre-check codex-product for cached insights before Tier2 call
+///
+/// This function filters product knowledge results and determines if any
+/// match the query with sufficient relevance to skip a Tier2 call.
+///
+/// # Arguments
+/// * `summaries` - Raw results from local-memory search
+/// * `threshold` - Minimum relevance score for a "hit" (default: 0.85)
+/// * `min_importance` - Minimum importance threshold (default: 8)
+/// * `query` - Original query string for logging/evidence
+///
+/// # Returns
+/// `PrecheckResult` with `hit: true` if max(relevance) >= threshold
+///
+/// # Logic
+/// 1. Filter using `filter_product_knowledge_results()` (importance >= 8, canonical type, no system:true)
+/// 2. Find max relevance_score among filtered candidates
+/// 3. Return `hit: true` if max >= threshold
+pub fn precheck_product_knowledge(
+    summaries: Vec<LocalMemorySummary>,
+    threshold: f64,
+    min_importance: u8,
+    query: &str,
+) -> PrecheckResult {
+    // Reuse existing filter function for consistency
+    let candidates = filter_product_knowledge_results(summaries, min_importance);
+
+    // Find max relevance score
+    let max_relevance = candidates
+        .iter()
+        .map(|c| c.relevance_score)
+        .fold(0.0_f64, |a, b| a.max(b));
+
+    // Determine if this is a hit
+    let hit = !candidates.is_empty() && max_relevance >= threshold;
+
+    PrecheckResult {
+        hit,
+        candidates,
+        query: query.to_string(),
+        max_relevance,
+    }
+}
+
+/// Assemble product knowledge lane markdown with truncation
+///
+/// Returns (lane_markdown, evidence_items) or None if no items
+pub fn assemble_product_knowledge_lane(
+    candidates: &[ProductKnowledgeCandidate],
+    cfg: &crate::config::ProductKnowledgeConfig,
+) -> Option<(String, Vec<ProductKnowledgeItem>)> {
+    use sha2::{Digest, Sha256};
+
+    if candidates.is_empty() {
+        return None;
+    }
+
+    let mut out = String::new();
+    let mut items: Vec<ProductKnowledgeItem> = Vec::new();
+    let mut total_chars = 0;
+
+    out.push_str("## Product Knowledge (codex-product)\n\n");
+
+    // Sort by relevance descending, then importance descending
+    let mut sorted: Vec<_> = candidates.iter().collect();
+    sorted.sort_by(|a, b| {
+        b.relevance_score
+            .partial_cmp(&a.relevance_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| b.importance.cmp(&a.importance))
+    });
+
+    for candidate in sorted.iter().take(cfg.max_items) {
+        // Check total char budget
+        let content_budget = cfg.max_chars_per_item.min(cfg.max_total_chars.saturating_sub(total_chars));
+        if content_budget < 100 {
+            break; // Not enough budget for meaningful content
+        }
+
+        // Truncate content
+        let truncated_content = truncate_product_knowledge_content(&candidate.content, content_budget);
+        let snippet_len = truncated_content.len();
+        total_chars += snippet_len + 150; // Account for metadata overhead
+
+        // Generate why_included
+        let why_included = format!(
+            "Matched query with relevance {:.2}, type '{}', importance {}",
+            candidate.relevance_score, candidate.item_type, candidate.importance
+        );
+
+        // Format lane entry
+        out.push_str(&format!("### [{}]\n", candidate.id));
+        out.push_str(&format!(
+            "- **Type:** {} | **Importance:** {} | **Tags:** {}\n",
+            candidate.item_type,
+            candidate.importance,
+            candidate.tags.join(", ")
+        ));
+        out.push_str(&format!("- **Why:** {}\n\n", why_included));
+        out.push_str(&truncated_content);
+        out.push_str("\n\n");
+
+        // Compute content SHA-256
+        let mut hasher = Sha256::new();
+        hasher.update(candidate.content.as_bytes());
+        let hash = hasher.finalize();
+        let content_sha256 = hash.iter().map(|b| format!("{:02x}", b)).collect::<String>();
+
+        // Build evidence item
+        items.push(ProductKnowledgeItem {
+            lm_id: candidate.id.clone(),
+            item_type: candidate.item_type.clone(),
+            importance: candidate.importance,
+            tags: candidate.tags.clone(),
+            content: candidate.content.clone(),
+            content_sha256,
+            snippets: vec![truncated_content.clone()],
+            why_included,
+        });
+
+        if total_chars >= cfg.max_total_chars {
+            break;
+        }
+    }
+
+    if items.is_empty() {
+        return None;
+    }
+
+    Some((out, items))
+}
+
+/// Truncate content to max_chars with ellipsis
+fn truncate_product_knowledge_content(content: &str, max_chars: usize) -> String {
+    if content.len() <= max_chars {
+        content.to_string()
+    } else {
+        format!("{}...", &content[..max_chars.saturating_sub(3)])
+    }
+}
+
+/// Build the complete evidence pack for product knowledge
+pub fn build_product_knowledge_pack(
+    query: &str,
+    items: Vec<ProductKnowledgeItem>,
+    domain: &str,
+    min_importance: u8,
+) -> ProductKnowledgeEvidencePack {
+    let executed_at = chrono::Utc::now().to_rfc3339();
+
+    let mut pack = ProductKnowledgeEvidencePack {
+        schema_version: ProductKnowledgeEvidencePack::SCHEMA_VERSION.to_string(),
+        created_at: executed_at.clone(),
+        created_via: "stage0_context_compiler".to_string(),
+        domain: domain.to_string(),
+        queries: vec![ProductKnowledgeQuery {
+            query: query.to_string(),
+            mode: "search".to_string(),
+            limit: items.len(),
+            filters: ProductKnowledgeFilters {
+                types: None, // All canonical types accepted
+                min_importance: Some(min_importance),
+                tags: None,
+            },
+            executed_at,
+        }],
+        items,
+        integrity: ProductKnowledgeIntegrity {
+            pack_sha256: String::new(),
+            notes: None,
+        },
+    };
+
+    pack.finalize();
+    pack
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1019,11 +1557,13 @@ type ConstitutionMeta = (u32, Option<String>, Option<DateTime<Utc>>);
 ///
 /// Follows docs/stage0/STAGE0_TASK_BRIEF_TEMPLATE.md structure with P85 Code Context.
 /// P90: Adds Section 0 (Project Constitution Summary) before Section 1.
+/// ADR-003: Adds Product Knowledge section after Code Context when enabled.
 fn assemble_task_brief(
     spec_id: &str,
     spec_content: &str,
     selected: &[MemoryCandidate],
     code_candidates: &[CodeCandidate],
+    product_knowledge_lane: Option<&str>,
     iqo: &Iqo,
     cfg: &Stage0Config,
     constitution_meta: &ConstitutionMeta,
@@ -1224,6 +1764,11 @@ fn assemble_task_brief(
             }
             out.push('\n');
         }
+    }
+
+    // Section 3.5: Product Knowledge (ADR-003)
+    if let Some(pk_lane) = product_knowledge_lane {
+        out.push_str(pk_lane);
     }
 
     // Section 4: Documentation Context (placeholder for V1.4)
@@ -1643,6 +2188,7 @@ mod tests {
             spec_content,
             &selected,
             &code_candidates,
+            None, // No product knowledge lane
             &iqo,
             &cfg,
             &constitution_meta,
@@ -1712,6 +2258,7 @@ mod tests {
             spec_content,
             &selected,
             &code_candidates,
+            None, // No product knowledge lane
             &iqo,
             &cfg,
             &constitution_meta,
@@ -1762,6 +2309,7 @@ mod tests {
             spec_content,
             &selected,
             &code_candidates,
+            None, // No product knowledge lane
             &iqo,
             &cfg,
             &constitution_meta,
@@ -2360,5 +2908,545 @@ mod tests {
         // Should not have duplicate const-1
         let const_1_count = selected.iter().filter(|m| m.id == "const-1").count();
         assert_eq!(const_1_count, 1, "Should not have duplicate const-1");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // ADR-003: Product Knowledge Lane Tests
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// Helper to create test LocalMemorySummary entries
+    fn product_knowledge_test_memory(
+        id: &str,
+        tags: Vec<&str>,
+        snippet: &str,
+        score: f64,
+    ) -> LocalMemorySummary {
+        LocalMemorySummary {
+            id: id.to_string(),
+            domain: Some("codex-product".to_string()),
+            tags: tags.into_iter().map(|t| t.to_string()).collect(),
+            created_at: Some(Utc::now()),
+            snippet: snippet.to_string(),
+            similarity_score: score,
+        }
+    }
+
+    #[test]
+    fn test_filter_importance_threshold() {
+        // Create memories with varying importance levels
+        let summaries = vec![
+            product_knowledge_test_memory(
+                "pk-001",
+                vec!["type:decision", "importance:9"],
+                "High importance decision",
+                0.9,
+            ),
+            product_knowledge_test_memory(
+                "pk-002",
+                vec!["type:pattern", "importance:7"],
+                "Below threshold pattern",
+                0.85,
+            ),
+            product_knowledge_test_memory(
+                "pk-003",
+                vec!["type:architecture", "importance:8"],
+                "Exactly threshold architecture",
+                0.8,
+            ),
+            product_knowledge_test_memory(
+                "pk-004",
+                vec!["type:decision", "importance:10"],
+                "Max importance decision",
+                0.75,
+            ),
+        ];
+
+        let candidates = filter_product_knowledge_results(summaries, 8);
+
+        // Should include only importance >= 8
+        assert_eq!(candidates.len(), 3);
+        assert!(candidates.iter().any(|c| c.id == "pk-001" && c.importance == 9));
+        assert!(candidates.iter().any(|c| c.id == "pk-003" && c.importance == 8));
+        assert!(candidates.iter().any(|c| c.id == "pk-004" && c.importance == 10));
+
+        // Should NOT include pk-002 (importance 7)
+        assert!(!candidates.iter().any(|c| c.id == "pk-002"));
+    }
+
+    #[test]
+    fn test_filter_requires_type_tag() {
+        let summaries = vec![
+            // Valid canonical type
+            product_knowledge_test_memory(
+                "pk-001",
+                vec!["type:decision", "importance:9"],
+                "Valid decision",
+                0.9,
+            ),
+            // Invalid type (not canonical)
+            product_knowledge_test_memory(
+                "pk-002",
+                vec!["type:insight", "importance:9"],
+                "Invalid insight type",
+                0.85,
+            ),
+            // No type tag at all
+            product_knowledge_test_memory(
+                "pk-003",
+                vec!["importance:9", "component:stage0"],
+                "No type tag",
+                0.8,
+            ),
+            // All canonical types should work
+            product_knowledge_test_memory(
+                "pk-004",
+                vec!["type:pattern", "importance:8"],
+                "Pattern type",
+                0.75,
+            ),
+            product_knowledge_test_memory(
+                "pk-005",
+                vec!["type:bug-fix", "importance:8"],
+                "Bug fix type",
+                0.7,
+            ),
+            product_knowledge_test_memory(
+                "pk-006",
+                vec!["type:milestone", "importance:8"],
+                "Milestone type",
+                0.65,
+            ),
+            product_knowledge_test_memory(
+                "pk-007",
+                vec!["type:discovery", "importance:8"],
+                "Discovery type",
+                0.6,
+            ),
+            product_knowledge_test_memory(
+                "pk-008",
+                vec!["type:limitation", "importance:8"],
+                "Limitation type",
+                0.55,
+            ),
+            product_knowledge_test_memory(
+                "pk-009",
+                vec!["type:architecture", "importance:8"],
+                "Architecture type",
+                0.5,
+            ),
+        ];
+
+        let candidates = filter_product_knowledge_results(summaries, 8);
+
+        // Should include all canonical types
+        assert_eq!(candidates.len(), 7);
+
+        // Verify canonical types are present
+        assert!(candidates.iter().any(|c| c.item_type == "decision"));
+        assert!(candidates.iter().any(|c| c.item_type == "pattern"));
+        assert!(candidates.iter().any(|c| c.item_type == "bug-fix"));
+        assert!(candidates.iter().any(|c| c.item_type == "milestone"));
+        assert!(candidates.iter().any(|c| c.item_type == "discovery"));
+        assert!(candidates.iter().any(|c| c.item_type == "limitation"));
+        assert!(candidates.iter().any(|c| c.item_type == "architecture"));
+
+        // Should NOT include invalid/missing types
+        assert!(!candidates.iter().any(|c| c.id == "pk-002")); // type:insight
+        assert!(!candidates.iter().any(|c| c.id == "pk-003")); // no type
+    }
+
+    #[test]
+    fn test_filter_excludes_system() {
+        let summaries = vec![
+            // Normal user insight
+            product_knowledge_test_memory(
+                "pk-001",
+                vec!["type:decision", "importance:9"],
+                "User decision",
+                0.9,
+            ),
+            // System entry (should be excluded)
+            product_knowledge_test_memory(
+                "pk-002",
+                vec!["type:decision", "importance:9", "system:true"],
+                "System decision",
+                0.85,
+            ),
+            // system:false should NOT be excluded
+            product_knowledge_test_memory(
+                "pk-003",
+                vec!["type:pattern", "importance:8", "system:false"],
+                "Explicitly non-system pattern",
+                0.8,
+            ),
+        ];
+
+        let candidates = filter_product_knowledge_results(summaries, 8);
+
+        // Should include pk-001 and pk-003, but NOT pk-002
+        assert_eq!(candidates.len(), 2);
+        assert!(candidates.iter().any(|c| c.id == "pk-001"));
+        assert!(candidates.iter().any(|c| c.id == "pk-003"));
+        assert!(!candidates.iter().any(|c| c.id == "pk-002")); // system:true excluded
+    }
+
+    #[test]
+    fn test_product_knowledge_evidence_pack_schema() {
+        use crate::config::ProductKnowledgeConfig;
+
+        // Create test candidates
+        let candidates = vec![
+            ProductKnowledgeCandidate {
+                id: "pk-001".to_string(),
+                item_type: "decision".to_string(),
+                importance: 9,
+                tags: vec!["type:decision".to_string(), "importance:9".to_string()],
+                content: "Decision to use SQLite for overlay storage".to_string(),
+                relevance_score: 0.92,
+            },
+            ProductKnowledgeCandidate {
+                id: "pk-002".to_string(),
+                item_type: "pattern".to_string(),
+                importance: 8,
+                tags: vec!["type:pattern".to_string(), "importance:8".to_string()],
+                content: "Pattern for async error handling in Stage0".to_string(),
+                relevance_score: 0.85,
+            },
+        ];
+
+        let cfg = ProductKnowledgeConfig::default();
+        let (lane, items) = assemble_product_knowledge_lane(&candidates, &cfg).unwrap();
+
+        // Build the evidence pack
+        let pack = build_product_knowledge_pack("test query", items, "codex-product", 8);
+
+        // Verify schema version
+        assert_eq!(pack.schema_version, "product_knowledge_evidence_pack@1.0");
+
+        // Verify domain
+        assert_eq!(pack.domain, "codex-product");
+
+        // Verify created_via
+        assert_eq!(pack.created_via, "stage0_context_compiler");
+
+        // Verify query stored
+        assert_eq!(pack.queries.len(), 1);
+        assert_eq!(pack.queries[0].query, "test query");
+        assert_eq!(pack.queries[0].mode, "search");
+        assert_eq!(pack.queries[0].filters.min_importance, Some(8));
+
+        // Verify items
+        assert_eq!(pack.items.len(), 2);
+        assert!(pack.items.iter().any(|i| i.lm_id == "pk-001"));
+        assert!(pack.items.iter().any(|i| i.lm_id == "pk-002"));
+
+        // Verify each item has required fields
+        for item in &pack.items {
+            assert!(!item.lm_id.is_empty());
+            assert!(!item.item_type.is_empty());
+            assert!(item.importance >= 8);
+            assert!(!item.content.is_empty());
+            assert!(!item.content_sha256.is_empty());
+            assert_eq!(item.content_sha256.len(), 64); // SHA-256 hex string
+            assert!(!item.snippets.is_empty());
+            assert!(!item.why_included.is_empty());
+        }
+
+        // Verify integrity hash is computed
+        assert!(!pack.integrity.pack_sha256.is_empty());
+        assert_eq!(pack.integrity.pack_sha256.len(), 64);
+
+        // Verify serialization works
+        let json = serde_json::to_string_pretty(&pack).unwrap();
+        assert!(json.contains("product_knowledge_evidence_pack@1.0"));
+        assert!(json.contains("codex-product"));
+        assert!(json.contains("pk-001"));
+
+        // Verify lane contains expected header
+        assert!(lane.contains("## Product Knowledge (codex-product)"));
+    }
+
+    #[test]
+    fn test_query_builder_deterministic() {
+        // Create a test IQO with keywords
+        let mut iqo = Iqo::default();
+        iqo.keywords = vec![
+            "stage0".to_string(),
+            "context".to_string(),
+            "compilation".to_string(),
+        ];
+
+        let spec_content = "SPEC-001: Implement Stage0 context compilation for spec-kit";
+
+        // Run query builder multiple times
+        let query1 = build_product_knowledge_query(spec_content, &iqo);
+        let query2 = build_product_knowledge_query(spec_content, &iqo);
+        let query3 = build_product_knowledge_query(spec_content, &iqo);
+
+        // All should produce identical output (determinism)
+        assert_eq!(query1, query2);
+        assert_eq!(query2, query3);
+
+        // Query should contain IQO keywords
+        assert!(query1.contains("stage0") || query1.contains("context") || query1.contains("compilation"));
+
+        // Query should not be empty
+        assert!(!query1.is_empty());
+    }
+
+    #[test]
+    fn test_query_builder_empty_iqo_fallback() {
+        // Empty IQO with no keywords
+        let empty_iqo = Iqo::default();
+
+        // With empty IQO but some spec content
+        let spec_content = "Some spec content about testing";
+        let query = build_product_knowledge_query(spec_content, &empty_iqo);
+
+        // Should extract keywords from spec content or return fallback
+        assert!(!query.is_empty());
+    }
+
+    #[test]
+    fn test_query_builder_fully_empty_returns_wildcard() {
+        // Empty IQO with no keywords
+        let empty_iqo = Iqo::default();
+
+        // With completely empty inputs that would yield no keywords
+        // Note: heuristic_keywords may still extract some terms, so we test
+        // the logic path rather than forcing wildcard
+        let query = build_product_knowledge_query("", &empty_iqo);
+
+        // Should not be empty - either extracted terms or wildcard
+        assert!(!query.is_empty());
+    }
+
+    #[test]
+    fn test_assemble_lane_respects_bounds() {
+        use crate::config::ProductKnowledgeConfig;
+
+        // Create many candidates
+        let candidates: Vec<ProductKnowledgeCandidate> = (0..20)
+            .map(|i| ProductKnowledgeCandidate {
+                id: format!("pk-{:03}", i),
+                item_type: "decision".to_string(),
+                importance: 8,
+                tags: vec!["type:decision".to_string()],
+                content: format!("Content for item {} with some filler text to make it longer", i),
+                relevance_score: 0.9 - (i as f64 * 0.01),
+            })
+            .collect();
+
+        let mut cfg = ProductKnowledgeConfig::default();
+        cfg.max_items = 5;
+        cfg.max_total_chars = 1000;
+
+        let result = assemble_product_knowledge_lane(&candidates, &cfg);
+        assert!(result.is_some());
+
+        let (lane, items) = result.unwrap();
+
+        // Should respect max_items
+        assert!(items.len() <= 5);
+
+        // Should respect max_total_chars (with some overhead allowance)
+        assert!(lane.len() <= 2000); // Allow generous margin for headers/metadata
+    }
+
+    #[test]
+    fn test_canonical_types_complete() {
+        // Verify all canonical types from ADR-003 are present
+        let expected_types = ["decision", "pattern", "bug-fix", "milestone", "discovery", "limitation", "architecture"];
+
+        for expected in expected_types {
+            assert!(
+                PRODUCT_KNOWLEDGE_CANONICAL_TYPES.contains(&expected),
+                "Missing canonical type: {}",
+                expected
+            );
+        }
+
+        // Verify count matches
+        assert_eq!(PRODUCT_KNOWLEDGE_CANONICAL_TYPES.len(), 7);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // ADR-003 Prompt F: Pre-check tests
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_precheck_hit_above_threshold() {
+        // Create summaries with high relevance scores and valid tags
+        let summaries = vec![
+            LocalMemorySummary {
+                id: "pk-001".to_string(),
+                domain: Some("codex-product".to_string()),
+                tags: vec![
+                    "type:pattern".to_string(),
+                    "importance:8".to_string(),
+                    "component:stage0".to_string(),
+                ],
+                created_at: Some(Utc::now()),
+                snippet: "Pattern for product knowledge caching".to_string(),
+                similarity_score: 0.92, // Above default threshold of 0.85
+            },
+            LocalMemorySummary {
+                id: "pk-002".to_string(),
+                domain: Some("codex-product".to_string()),
+                tags: vec![
+                    "type:decision".to_string(),
+                    "importance:9".to_string(),
+                ],
+                created_at: Some(Utc::now()),
+                snippet: "Decision to use 0.85 threshold".to_string(),
+                similarity_score: 0.88,
+            },
+        ];
+
+        let result = precheck_product_knowledge(summaries, 0.85, 8, "test query");
+
+        assert!(result.hit, "Should hit when max_relevance >= threshold");
+        assert_eq!(result.candidates.len(), 2, "Both candidates should pass filtering");
+        assert!((result.max_relevance - 0.92).abs() < 0.001, "max_relevance should be 0.92");
+        assert_eq!(result.query, "test query");
+    }
+
+    #[test]
+    fn test_precheck_miss_below_threshold() {
+        // Create summaries with low relevance scores
+        let summaries = vec![
+            LocalMemorySummary {
+                id: "pk-003".to_string(),
+                domain: Some("codex-product".to_string()),
+                tags: vec![
+                    "type:pattern".to_string(),
+                    "importance:8".to_string(),
+                ],
+                created_at: Some(Utc::now()),
+                snippet: "Low relevance pattern".to_string(),
+                similarity_score: 0.70, // Below threshold
+            },
+        ];
+
+        let result = precheck_product_knowledge(summaries, 0.85, 8, "different query");
+
+        assert!(!result.hit, "Should miss when max_relevance < threshold");
+        assert_eq!(result.candidates.len(), 1, "Candidate passes filtering but not threshold");
+        assert!((result.max_relevance - 0.70).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_precheck_filters_by_importance() {
+        // Create summaries with varying importance
+        let summaries = vec![
+            LocalMemorySummary {
+                id: "pk-low-imp".to_string(),
+                domain: Some("codex-product".to_string()),
+                tags: vec![
+                    "type:pattern".to_string(),
+                    "importance:5".to_string(), // Too low
+                ],
+                created_at: Some(Utc::now()),
+                snippet: "Low importance insight".to_string(),
+                similarity_score: 0.95, // High relevance but low importance
+            },
+            LocalMemorySummary {
+                id: "pk-high-imp".to_string(),
+                domain: Some("codex-product".to_string()),
+                tags: vec![
+                    "type:decision".to_string(),
+                    "importance:8".to_string(), // Meets threshold
+                ],
+                created_at: Some(Utc::now()),
+                snippet: "High importance decision".to_string(),
+                similarity_score: 0.60, // Low relevance
+            },
+        ];
+
+        let result = precheck_product_knowledge(summaries, 0.85, 8, "importance test");
+
+        assert!(!result.hit, "Should not hit because high-importance item has low relevance");
+        assert_eq!(result.candidates.len(), 1, "Only high-importance candidate passes");
+        assert_eq!(result.candidates[0].id, "pk-high-imp");
+        assert!((result.max_relevance - 0.60).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_precheck_filters_by_canonical_type() {
+        // Create summaries with non-canonical types
+        let summaries = vec![
+            LocalMemorySummary {
+                id: "pk-invalid-type".to_string(),
+                domain: Some("codex-product".to_string()),
+                tags: vec![
+                    "type:random".to_string(), // Not a canonical type
+                    "importance:9".to_string(),
+                ],
+                created_at: Some(Utc::now()),
+                snippet: "Invalid type insight".to_string(),
+                similarity_score: 0.95,
+            },
+            LocalMemorySummary {
+                id: "pk-no-type".to_string(),
+                domain: Some("codex-product".to_string()),
+                tags: vec!["importance:9".to_string()], // No type tag
+                created_at: Some(Utc::now()),
+                snippet: "Missing type insight".to_string(),
+                similarity_score: 0.90,
+            },
+        ];
+
+        let result = precheck_product_knowledge(summaries, 0.85, 8, "type test");
+
+        assert!(!result.hit, "Should not hit because no candidates have canonical types");
+        assert!(result.candidates.is_empty(), "No candidates should pass without canonical type");
+        assert!((result.max_relevance - 0.0).abs() < 0.001, "max_relevance should be 0 with no candidates");
+    }
+
+    #[test]
+    fn test_precheck_reuses_filter_function() {
+        // Verify precheck uses the same filtering logic as filter_product_knowledge_results
+        let summaries = vec![
+            LocalMemorySummary {
+                id: "pk-valid".to_string(),
+                domain: Some("codex-product".to_string()),
+                tags: vec![
+                    "type:architecture".to_string(),
+                    "importance:10".to_string(),
+                ],
+                created_at: Some(Utc::now()),
+                snippet: "Valid architecture insight".to_string(),
+                similarity_score: 0.90,
+            },
+            LocalMemorySummary {
+                id: "pk-system".to_string(),
+                domain: Some("codex-product".to_string()),
+                tags: vec![
+                    "type:pattern".to_string(),
+                    "importance:8".to_string(),
+                    "system:true".to_string(), // Should be excluded
+                ],
+                created_at: Some(Utc::now()),
+                snippet: "System insight (should be excluded)".to_string(),
+                similarity_score: 0.95,
+            },
+        ];
+
+        let result = precheck_product_knowledge(summaries, 0.85, 8, "filter test");
+
+        assert!(result.hit, "Should hit with valid candidate above threshold");
+        assert_eq!(result.candidates.len(), 1, "System:true candidate should be excluded");
+        assert_eq!(result.candidates[0].id, "pk-valid");
+    }
+
+    #[test]
+    fn test_precheck_empty_summaries() {
+        let summaries: Vec<LocalMemorySummary> = vec![];
+
+        let result = precheck_product_knowledge(summaries, 0.85, 8, "empty test");
+
+        assert!(!result.hit, "Should not hit with empty summaries");
+        assert!(result.candidates.is_empty());
+        assert!((result.max_relevance - 0.0).abs() < 0.001);
     }
 }

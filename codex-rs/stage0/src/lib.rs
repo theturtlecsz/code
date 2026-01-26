@@ -34,6 +34,12 @@ pub use config::{GateMode, MemoryBackend, Stage0Config, VectorIndexConfig};
 pub use dcc::{
     CompileContextResult, DccContext, EnvCtx, ExplainScore, ExplainScores, Iqo, LocalMemoryClient,
     LocalMemorySearchParams, LocalMemorySummary, MemoryCandidate, NoopVectorBackend,
+    // ADR-003: Product Knowledge types
+    ProductKnowledgeCandidate, ProductKnowledgeEvidencePack, ProductKnowledgeFilters,
+    ProductKnowledgeIntegrity, ProductKnowledgeItem, ProductKnowledgeQuery,
+    PRODUCT_KNOWLEDGE_CANONICAL_TYPES,
+    // ADR-003 Prompt F: Pre-check types
+    PrecheckResult, precheck_product_knowledge,
 };
 pub use errors::{ErrorCategory, Result, Stage0Error};
 pub use eval::{
@@ -125,6 +131,16 @@ pub struct Stage0Result {
     /// Extracted from Divine Truth Section 2 "Aligned with:" line.
     /// Empty if no alignment analysis available (fallback mode).
     pub constitution_aligned_ids: Vec<String>,
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // ADR-003: Product Knowledge Evidence Pack
+    // ─────────────────────────────────────────────────────────────────────────────
+    /// ADR-003: Product knowledge evidence pack for capsule snapshotting
+    ///
+    /// When product knowledge is used, this contains the evidence pack that
+    /// should be written to capsule for deterministic replay. The caller is
+    /// responsible for writing this to capsule.
+    pub product_knowledge_pack: Option<crate::dcc::ProductKnowledgeEvidencePack>,
 }
 
 impl Stage0Result {
@@ -732,6 +748,7 @@ impl Stage0Engine {
             explain_scores: dcc_result.explain_scores,
             constitution_conflicts,
             constitution_aligned_ids,
+            product_knowledge_pack: dcc_result.product_knowledge_pack,
         })
     }
 }
@@ -1354,6 +1371,7 @@ mod tests {
                 explain_scores: None,
                 constitution_conflicts: None,
                 constitution_aligned_ids: vec![],
+                product_knowledge_pack: None,
             };
 
             let combined = result.combined_context_md();
@@ -1376,6 +1394,7 @@ mod tests {
                 explain_scores: None,
                 constitution_conflicts: None,
                 constitution_aligned_ids: vec![],
+                product_knowledge_pack: None,
             };
             assert!(with_memories.has_context());
 
@@ -1393,6 +1412,7 @@ mod tests {
                 explain_scores: None,
                 constitution_conflicts: None,
                 constitution_aligned_ids: vec![],
+                product_knowledge_pack: None,
             };
             assert!(with_divine_truth.has_context());
 
@@ -1407,6 +1427,7 @@ mod tests {
                 explain_scores: None,
                 constitution_conflicts: None,
                 constitution_aligned_ids: vec![],
+                product_knowledge_pack: None,
             };
             assert!(!empty.has_context());
         }

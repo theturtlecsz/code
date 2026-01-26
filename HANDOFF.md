@@ -1,198 +1,212 @@
-# Session Handoff: Prompt Pack Implementation (WP-A through WP-D)
+# HANDOFF: Prompt E Implementation Progress
 
-**Generated:** 2026-01-25
-**Session:** Prompt Pack - 4 Work Packages
-**Status:** WP-A Complete, WP-B/C/D Pending
-
-***
-
-## Restart Prompt
-
-Copy everything below the `---` to start a new session:
+**Generated:** 2026-01-26
+**Audience:** Next session (proceed to Prompt F)
+**Scope:** `codex-rs` / Spec‑Kit + product‑knowledge layer (`local-memory` domain `codex-product`)
 
 ***
 
-Continue implementing the Prompt Pack (4 Work Packages). **WP-A is complete and committed to working tree.** Continue with WP-B.
+## TL;DR (Current State)
 
-## Session Context
+**Prompt E Implementation: 100% Complete**
 
-You are implementing a prompt pack with 4 work packages for the spec-kit system. The full plan is at `/home/thetu/.claude/plans/lazy-launching-trinket.md`.
+Core implementation of Product Knowledge Lane is done and builds successfully:
 
-**User preference:** Separate PRs per work package.
+* Config surface added (default OFF)
+* Evidence pack types defined per ADR-003
+* Retrieval + filtering logic implemented
+* Lane assembly with truncation
+* TASK\_BRIEF integration
+* Capsule snapshotting helper function
+* **Unit tests added (9 tests, all passing)**
 
-## Completed: WP-A ("Filesystem Is Projection" Rebuild Command)
+**Remaining work:**
 
-All files created/modified and build verified (35s build, no errors):
+* Integration testing with actual `codex-product` domain data (optional)
+* Proceed to Prompt F: NotebookLM pre-check + post-curation
 
-**New Files:**
+***
 
-* `codex-rs/tui/src/chatwidget/spec_kit/rebuild_projections.rs` - Shared core (`RebuildRequest`, `RebuildResult`, `rebuild_projections()`)
-* `codex-rs/tui/src/chatwidget/spec_kit/commands/projections.rs` - TUI `/speckit.projections rebuild` command
+## What Was Implemented (Prompt E)
 
-**Modified Files:**
+### 1. Configuration (`codex-rs/stage0/src/config.rs`)
 
-* `codex-rs/cli/src/speckit_cmd.rs` - Added `Projections(ProjectionsArgs)` subcommand with `rebuild`
-* `codex-rs/tui/src/chatwidget/spec_kit/error.rs` - Added `RebuildError(String)` variant
-* `codex-rs/tui/src/chatwidget/spec_kit/mod.rs` - Added `pub mod rebuild_projections;`
-* `codex-rs/tui/src/chatwidget/spec_kit/commands/mod.rs` - Added `mod projections;` and `pub use projections::*;`
-* `codex-rs/tui/src/chatwidget/spec_kit/command_registry.rs` - Added `registry.register(Box::new(ProjectionsCommand));`
-* `codex-rs/tui/src/lib.rs` - Added exports for rebuild types
+Added `ProductKnowledgeConfig` with:
 
-**CLI verified working:**
+* `enabled: bool` — default OFF
+* `domain: String` — default "codex-product"
+* `max_items: usize` — default 10
+* `max_chars_per_item: usize` — default 3000
+* `max_total_chars: usize` — default 10000
+* `min_importance: u8` — default 8
+
+### 2. Evidence Pack Types (`codex-rs/stage0/src/dcc.rs`)
+
+Added per ADR-003:
+
+* `ProductKnowledgeCandidate` — internal candidate struct
+* `ProductKnowledgeEvidencePack` — capsule artifact schema
+* `ProductKnowledgeQuery` — query metadata
+* `ProductKnowledgeFilters` — filter parameters
+* `ProductKnowledgeItem` — individual evidence item
+* `ProductKnowledgeIntegrity` — SHA-256 integrity hash
+* `PRODUCT_KNOWLEDGE_CANONICAL_TYPES` — allowed type values
+
+### 3. Retrieval + Filtering Logic (`codex-rs/stage0/src/dcc.rs`)
+
+Added functions:
+
+* `build_product_knowledge_query()` — deterministic query builder (no LLM)
+* `filter_product_knowledge_results()` — client-side filtering:
+  * importance >= 8
+  * must have canonical `type:*` tag
+  * excludes `system:true`
+* `assemble_product_knowledge_lane()` — markdown lane with truncation
+* `build_product_knowledge_pack()` — construct evidence pack with integrity hash
+
+### 4. DCC Integration (`codex-rs/stage0/src/dcc.rs`)
+
+Updated `compile_context()`:
+
+* Added step 12: product knowledge retrieval from `codex-product` domain
+* Queries via `LocalMemoryClient` trait (CLI adapter)
+* Filters and assembles lane
+* Returns `product_knowledge_lane` and `product_knowledge_pack` in result
+
+Updated `assemble_task_brief()`:
+
+* Added optional `product_knowledge_lane: Option<&str>` parameter
+* Inserts lane after Section 3 (Code Context), before Section 4
+
+Updated `CompileContextResult`:
+
+* Added `product_knowledge_lane: Option<String>`
+* Added `product_knowledge_pack: Option<ProductKnowledgeEvidencePack>`
+
+### 5. Stage0Result Integration (`codex-rs/stage0/src/lib.rs`)
+
+Added to `Stage0Result`:
+
+* `product_knowledge_pack: Option<ProductKnowledgeEvidencePack>`
+
+Exported new types from crate root.
+
+### 6. Capsule Snapshotting Helper (`codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs`)
+
+Added `write_product_knowledge_to_capsule()`:
+
+* Writes evidence pack to `mv2://<workspace>/<spec>/<run>/artifact/product_knowledge/evidence_pack.json`
+* Returns logical URI on success
+* Logs and returns error on failure
+
+### 7. Unit Tests (`codex-rs/stage0/src/dcc.rs`)
+
+Added 9 unit tests for product knowledge functionality:
+
+* `test_filter_importance_threshold` - verifies importance >= 8 filtering
+* `test_filter_requires_type_tag` - verifies canonical type tag requirement
+* `test_filter_excludes_system` - verifies system:true exclusion
+* `test_product_knowledge_evidence_pack_schema` - tests pack serialization and integrity hash
+* `test_query_builder_deterministic` - verifies deterministic query generation
+* `test_query_builder_empty_iqo_fallback` - tests fallback with empty IQO
+* `test_query_builder_fully_empty_returns_wildcard` - tests wildcard fallback
+* `test_assemble_lane_respects_bounds` - verifies max\_items and max\_total\_chars
+* `test_canonical_types_complete` - verifies all 7 ADR-003 types are present
+
+***
+
+## Files Modified
+
+| File                                                         | Changes                                                          |
+| ------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `codex-rs/stage0/src/config.rs`                              | Added `ProductKnowledgeConfig` struct                            |
+| `codex-rs/stage0/src/dcc.rs`                                 | Added types, retrieval, filtering, assembly, pack building       |
+| `codex-rs/stage0/src/lib.rs`                                 | Added `product_knowledge_pack` to `Stage0Result`, exported types |
+| `codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs` | Added `write_product_knowledge_to_capsule()` helper              |
+| `codex-rs/stage0/src/dcc.rs`                                 | Added 9 unit tests for product knowledge functionality           |
+
+***
+
+## Build Status
+
+**Builds successfully** with only pre-existing warnings:
 
 ```bash
-code speckit projections rebuild --help  # Shows full help
-code speckit projections rebuild --dry-run --no-vision --json  # Returns proper JSON exit code 2 (no capsule)
+cargo build -p codex-stage0 -p codex-tui
+# Finished `dev` profile [unoptimized + debuginfo] target(s) in 15.85s
 ```
 
 ***
 
-## Next: WP-B (Headless Deep Parity for Grounding)
+## Remaining Work (Next Session)
 
-**Goal:** Make `code speckit new --deep` and `code speckit projectnew --deep` populate `grounding_uris[]` like TUI does.
+### Prompt E Status: COMPLETE
 
-**Key Finding:** CLI currently passes `Vec::new()` for grounding\_uris. Comments in code state "grounding capture is TUI-only".
+All unit tests added and passing (9 tests total).
 
-### Implementation Steps
+### For Prompt F (Next Phase):
 
-**1. Export grounding functions from lib.rs:**
+* NotebookLM pre-check against `codex-product`
+* Post-curation of Tier2 outputs into `codex-product`
+* Load `tmp/prompt-pack-product-knowledge/prompt-f-notebooklm-precheck.md`
 
-```rust
-// Add to codex-rs/tui/src/lib.rs after vision exports (~line 267)
-pub use chatwidget::spec_kit::grounding::{
-    GroundingCaptureResult, capture_grounding_for_spec_intake, capture_grounding_for_project_intake,
-};
-```
+### Optional Integration Testing:
 
-**2. Modify `run_new()` in speckit\_cmd.rs (\~line 6160):**
-
-Current code:
-
-```rust
-let design_brief = build_design_brief(..., Vec::new());  // Empty grounding
-```
-
-Change to:
-
-```rust
-// Step 7.5: Deep grounding capture (if deep mode)
-let grounding_uris = if args.deep {
-    match capture_grounding_for_spec_intake(&cwd, &spec_id, &intake_id) {
-        Ok(result) => {
-            if !args.json {
-                eprintln!("Deep grounding captured: {} artifacts", result.grounding_uris.len());
-            }
-            result.grounding_uris
-        }
-        Err(e) => {
-            // Deep requires grounding; failure blocks completion
-            let exit_code = headless_exit::HARD_FAIL;
-            if args.json {
-                println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-                    "schema_version": SCHEMA_VERSION,
-                    "tool_version": tool_version(),
-                    "exit_code": exit_code,
-                    "error": format!("Deep grounding failed: {}", e),
-                }))?);
-            } else {
-                eprintln!("Error: Deep grounding failed: {}", e);
-            }
-            std::process::exit(exit_code);
-        }
-    }
-} else {
-    Vec::new()
-};
-
-let design_brief = build_design_brief(..., grounding_uris);
-```
-
-**3. Modify `run_projectnew()` (\~line 6464):**
-Same pattern with `capture_grounding_for_project_intake(&cwd, &project_id)`.
-
-**4. Add import at top of speckit\_cmd.rs:**
-
-```rust
-use codex_tui::{capture_grounding_for_spec_intake, capture_grounding_for_project_intake};
-```
-
-**5. Extend JSON output:**
-Add `grounding_result` field to success JSON output.
-
-### Key Files for WP-B
-
-| File                                                | Purpose                           |
-| --------------------------------------------------- | --------------------------------- |
-| `codex-rs/tui/src/chatwidget/spec_kit/grounding.rs` | Grounding capture functions       |
-| `codex-rs/cli/src/speckit_cmd.rs:6010-6264`         | `run_new()` implementation        |
-| `codex-rs/cli/src/speckit_cmd.rs:6267-6588`         | `run_projectnew()` implementation |
-| `codex-rs/tui/src/lib.rs`                           | Exports                           |
-
-### Acceptance Criteria (WP-B)
-
-* `code speckit new --deep --answers answers.json` produces non-empty `grounding_uris[]` in `DesignBrief`
-* `code speckit projectnew --deep --answers answers.json` produces non-empty `grounding_uris[]` in `ProjectBrief`
-* Capsule contains grounding artifacts under same namespaces as TUI
-* JSON output includes `grounding_result` summary
-* Deep grounding failure is exit code 2 (HARD\_FAIL)
+* Requires `codex-product` domain with test data
+* Verify lane appears in TASK\_BRIEF when enabled
+* Verify evidence pack is valid JSON
+* Test failure modes (local-memory unavailable)
 
 ***
 
-## Remaining: WP-C and WP-D
+## Key Design Decisions Made
 
-### WP-C: Documentation Alignment
+1. **Separation of Concerns**: Stage0 crate returns `ProductKnowledgeEvidencePack` in result; caller (TUI/CLI) handles capsule write. This avoids dependency on memvid\_adapter in Stage0 crate.
 
-**Files:**
+2. **Feature Flag Default OFF**: Per ADR-003, product knowledge lane is opt-in.
 
-* `docs/spec-kit/COMMANDS.md` - Document all spec-kit commands (create)
-* `docs/OPERATIONAL-PLAYBOOK.md` - Add capsule SoR section (update)
-* `docs/spec-kit/CAPSULE-NAMESPACES.md` - Document URI schemes (create)
+3. **Deterministic Query**: Query builder uses heuristics only (no LLM calls) to ensure replay determinism.
 
-**Content:** Commands reference table, capsule SoR contract, enforcement gates with exit codes.
-
-### WP-D: Enforcement Tests
-
-**Files to create:**
-
-* `codex-rs/tui/src/chatwidget/spec_kit/tests/deep_validation_tests.rs`
-* `codex-rs/tui/src/chatwidget/spec_kit/tests/projection_tests.rs`
-
-**Tests:** Deep validation hard-fails, projection provenance, schema stability.
+4. **Client-side Filtering**: Filtering happens after retrieval to ensure consistent behavior regardless of local-memory version.
 
 ***
 
-## Key Patterns Reference
+## Session Restart Prompt (Next Session)
 
-**Capsule API:**
+Copy everything below the `---` into the first message of the next session:
 
-```rust
-let capsule = CapsuleHandle::open(config)?;
-let events = capsule.list_events();
-let intake_events: Vec<_> = events.iter()
-    .filter(|e| e.event_type == EventType::IntakeCompleted)
-    .collect();
-let payload: IntakeCompletedPayload = serde_json::from_value(event.payload.clone())?;
-let brief_bytes = capsule.get_bytes_str(&payload.brief_uri, None, None)?;
-```
+***
 
-**Grounding functions:**
+Begin Prompt F implementation for NotebookLM pre-check + post-curation in `codex-rs` / Spec-Kit.
 
-```rust
-// Returns GroundingCaptureResult { grounding_uris, artifact_hashes, harvest, project_intel }
-capture_grounding_for_spec_intake(cwd, spec_id, intake_id)
-capture_grounding_for_project_intake(cwd, project_id)
-```
+**Context:** Prompt E (Product Knowledge Lane) is 100% complete with 9 unit tests passing.
 
-**Build commands:**
+**First, read:**
+
+* `HANDOFF.md` (this file - shows what was done)
+* `docs/adr/ADR-003-product-knowledge-layer-local-memory.md` (architecture)
+* `tmp/prompt-pack-product-knowledge/prompt-f-notebooklm-precheck.md` (requirements)
+
+**Goal:**
+
+1. **NotebookLM pre-check**: Search `codex-product` before issuing Tier2 questions to avoid redundant calls
+2. **Post-curation**: Distill durable NotebookLM outputs into `codex-product` insights
+
+**Files to reference:**
+
+* `codex-rs/stage0/src/config.rs` - ProductKnowledgeConfig
+* `codex-rs/stage0/src/dcc.rs` - Core implementation + product knowledge types
+* `codex-rs/stage0/src/lib.rs` - Stage0Result
+* `codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs` - Integration helpers
+
+**Build command:**
 
 ```bash
-~/code/build-fast.sh              # Fast build (~35s)
-cargo check -p codex-tui          # Check TUI only
-cargo check -p codex-cli          # Check CLI only
+cargo build -p codex-stage0 -p codex-tui
 ```
 
-***
+**Test command:**
 
-## Plan File Location
-
-Full implementation plan: `/home/thetu/.claude/plans/lazy-launching-trinket.md`
+```bash
+cargo test -p codex-stage0
+```

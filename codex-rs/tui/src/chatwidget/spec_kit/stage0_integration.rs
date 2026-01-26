@@ -172,6 +172,15 @@ pub struct Stage0ExecutionResult {
     pub hybrid_retrieval_used: bool,
     /// CONVERGENCE: Tier2 skip reason (for diagnostics and pointer memory)
     pub tier2_skip_reason: Option<String>,
+    // ─────────────────────────────────────────────────────────────────────────────
+    // ADR-003 Prompt F: Pre-check + Curation telemetry
+    // ─────────────────────────────────────────────────────────────────────────────
+    /// Whether pre-check against codex-product hit (skipped Tier2)
+    pub precheck_hit: bool,
+    /// Number of pre-check candidates found
+    pub precheck_candidates_found: usize,
+    /// Number of insights curated after Tier2 (if curation enabled)
+    pub curated_insights_count: usize,
 }
 
 /// Configuration for Stage 0 execution
@@ -224,6 +233,9 @@ pub fn run_stage0_for_spec(
             cache_hit: false,
             hybrid_retrieval_used: false,
             tier2_skip_reason: Some("Stage0 disabled".to_string()),
+            precheck_hit: false,
+            precheck_candidates_found: 0,
+            curated_insights_count: 0,
         };
     }
 
@@ -242,6 +254,9 @@ pub fn run_stage0_for_spec(
                 cache_hit: false,
                 hybrid_retrieval_used: false,
                 tier2_skip_reason: Some("config load failed".to_string()),
+                precheck_hit: false,
+                precheck_candidates_found: 0,
+                curated_insights_count: 0,
             };
         }
     };
@@ -285,6 +300,9 @@ pub fn run_stage0_for_spec(
                 cache_hit: false,
                 hybrid_retrieval_used: false,
                 tier2_skip_reason: Some("local-memory unavailable".to_string()),
+                precheck_hit: false,
+                precheck_candidates_found: 0,
+                curated_insights_count: 0,
             };
         }
     }
@@ -319,6 +337,9 @@ pub fn run_stage0_for_spec(
                 cache_hit: false,
                 hybrid_retrieval_used: false,
                 tier2_skip_reason: Some("runtime creation failed".to_string()),
+                precheck_hit: false,
+                precheck_candidates_found: 0,
+                curated_insights_count: 0,
             };
         }
     };
@@ -362,6 +383,9 @@ pub fn run_stage0_for_spec(
                 cache_hit: false,
                 hybrid_retrieval_used: false,
                 tier2_skip_reason: Some("memory client creation failed".to_string()),
+                precheck_hit: false,
+                precheck_candidates_found: 0,
+                curated_insights_count: 0,
             };
         }
     };
@@ -380,10 +404,93 @@ pub fn run_stage0_for_spec(
     // Create LLM adapter (no MCP dependencies).
     let llm = LlmStubAdapter::new();
 
+    // ─────────────────────────────────────────────────────────────────────────────
+    // ADR-003 Prompt F: Pre-check against codex-product before Tier2
+    // ─────────────────────────────────────────────────────────────────────────────
+    let (mut precheck_hit, mut precheck_candidates_found) = (false, 0_usize);
+
+    let precheck_skip_tier2 = if stage0_cfg.context_compiler.product_knowledge.enabled
+        && stage0_cfg.context_compiler.product_knowledge.precheck_enabled
+        && memory_backend == MemoryBackend::LocalMemory
+    {
+        // Extract query from spec content (first 500 chars as search query)
+        let query: String = spec_content.chars().take(500).collect();
+
+        // Search codex-product domain
+        match crate::local_memory_cli::search_blocking(
+            &query,
+            10, // Check top 10 matches
+            &[],
+            Some(&stage0_cfg.context_compiler.product_knowledge.domain),
+            1000, // Short snippets for pre-check
+        ) {
+            Ok(results) => {
+                // Convert to LocalMemorySummary format for precheck function
+                let summaries: Vec<codex_stage0::LocalMemorySummary> = results
+                    .iter()
+                    .filter_map(|r| {
+                        Some(codex_stage0::LocalMemorySummary {
+                            id: r.memory.id.clone()?,
+                            domain: r.memory.domain.clone(),
+                            tags: r.memory.tags.clone().unwrap_or_default(),
+                            created_at: r.memory.created_at.clone(),
+                            snippet: if r.memory.content.len() > 200 {
+                                format!("{}...", &r.memory.content[..200])
+                            } else {
+                                r.memory.content.clone()
+                            },
+                            similarity_score: r.relevance_score.unwrap_or(0.0),
+                        })
+                    })
+                    .collect();
+
+                // Run pre-check filtering and threshold check
+                let precheck_result = codex_stage0::precheck_product_knowledge(
+                    summaries,
+                    stage0_cfg.context_compiler.product_knowledge.precheck_threshold,
+                    stage0_cfg.context_compiler.product_knowledge.min_importance,
+                    &query,
+                );
+
+                precheck_hit = precheck_result.hit;
+                precheck_candidates_found = precheck_result.candidates.len();
+
+                if precheck_result.hit {
+                    tracing::info!(
+                        "Pre-check HIT for {}: {} candidates with max_relevance={:.3}, skipping Tier2",
+                        spec_id,
+                        precheck_result.candidates.len(),
+                        precheck_result.max_relevance
+                    );
+                    true // Skip Tier2
+                } else {
+                    tracing::debug!(
+                        "Pre-check MISS for {}: {} candidates, max_relevance={:.3} < threshold {:.2}",
+                        spec_id,
+                        precheck_result.candidates.len(),
+                        precheck_result.max_relevance,
+                        stage0_cfg.context_compiler.product_knowledge.precheck_threshold
+                    );
+                    false // Proceed to Tier2
+                }
+            }
+            Err(e) => {
+                // Pre-check failed - proceed to Tier2 (fail-closed behavior)
+                tracing::warn!("Pre-check search failed (proceeding to Tier2): {}", e);
+                false
+            }
+        }
+    } else {
+        false
+    };
+
     // CONVERGENCE: Tier2 fail-closed with explicit diagnostics
     // Per MEMO_codex-rs.md Section 1: "emit diagnostics with actionable next steps"
     let (tier2_opt, tier2_skip_reason) =
-        if stage0_cfg.tier2.enabled && !stage0_cfg.tier2.notebook.trim().is_empty() {
+        if precheck_skip_tier2 {
+            // Pre-check hit - skip Tier2 entirely
+            (None, Some("pre-check hit (cached insight found)".to_string()))
+        } else if stage0_cfg.tier2.enabled && !stage0_cfg.tier2.notebook.trim().is_empty() {
             // Check NotebookLM service health before creating adapter
             send_progress(&progress_tx, Stage0Progress::CheckingTier2Health);
             let base_url = stage0_cfg
@@ -438,6 +545,10 @@ pub fn run_stage0_for_spec(
         send_progress(&progress_tx, Stage0Progress::CompilingContext);
     }
 
+    // ADR-003 Prompt F: Save curation settings before moving stage0_cfg
+    let curation_enabled = stage0_cfg.context_compiler.product_knowledge.enabled
+        && stage0_cfg.context_compiler.product_knowledge.curation_enabled;
+
     // Run Stage 0 engine
     // Note: Stage0Engine contains rusqlite::Connection which is not Send,
     // so we need to run everything in a dedicated single-threaded runtime
@@ -482,6 +593,43 @@ pub fn run_stage0_for_spec(
             // If tier2 was used, clear the skip reason
             let final_tier2_skip = if tier2_used { None } else { tier2_skip_reason };
 
+            // ADR-003 Prompt F: Post-curation (background thread, non-blocking)
+            // Curate Tier2 output into codex-product if enabled and tier2 was used
+            let curated_count = if tier2_used && !cache_hit && curation_enabled {
+                let divine_truth_raw = result.divine_truth.raw_markdown.clone();
+                let spec_id_clone = spec_id.to_string();
+                // Extract component from spec_id (e.g., "SPEC-KIT-102" -> "spec-kit")
+                let component = spec_id
+                    .split('-')
+                    .take(2)
+                    .collect::<Vec<_>>()
+                    .join("-")
+                    .to_lowercase();
+
+                // Spawn background curation (never blocks pipeline)
+                std::thread::spawn(move || {
+                    let adapter = crate::stage0_adapters::ProductKnowledgeCurationAdapter::new();
+                    match adapter.curate_tier2_output(&spec_id_clone, &component, &divine_truth_raw)
+                    {
+                        Ok(ids) => {
+                            if !ids.is_empty() {
+                                tracing::info!(
+                                    "Curated {} insights from {} into codex-product",
+                                    ids.len(),
+                                    spec_id_clone
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Post-curation failed for {}: {}", spec_id_clone, e);
+                        }
+                    }
+                });
+                0 // Actual count will be determined async, but we report 0 for this run
+            } else {
+                0
+            };
+
             Stage0ExecutionResult {
                 result: Some(result),
                 skip_reason: None,
@@ -490,6 +638,9 @@ pub fn run_stage0_for_spec(
                 cache_hit,
                 hybrid_retrieval_used: hybrid_used,
                 tier2_skip_reason: final_tier2_skip,
+                precheck_hit,
+                precheck_candidates_found,
+                curated_insights_count: curated_count,
             }
         }
         Err(e) => {
@@ -513,6 +664,9 @@ pub fn run_stage0_for_spec(
                 cache_hit: false,
                 hybrid_retrieval_used: false,
                 tier2_skip_reason: tier2_skip_reason.or(Some("Stage0 error".to_string())),
+                precheck_hit,
+                precheck_candidates_found,
+                curated_insights_count: 0,
             }
         }
     }
@@ -1005,6 +1159,73 @@ fn get_git_commit_sha() -> Option<String> {
                 None
             }
         })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADR-003: Product Knowledge Capsule Snapshotting
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Write product knowledge evidence pack to capsule
+///
+/// ADR-003: When product knowledge is used, the evidence pack must be written
+/// to capsule for deterministic replay. Call this after Stage0 completes when
+/// capsule access is available.
+///
+/// # Arguments
+/// * `spec_id` - SPEC identifier
+/// * `run_id` - Run identifier
+/// * `pack` - The ProductKnowledgeEvidencePack to write
+/// * `capsule` - CapsuleHandle for writing
+///
+/// # Returns
+/// The logical URI of the written artifact, or an error message if writing fails.
+///
+/// # Example
+/// ```ignore
+/// if let Some(pack) = &stage0_result.product_knowledge_pack {
+///     if let Err(e) = write_product_knowledge_to_capsule(spec_id, run_id, pack, &capsule) {
+///         tracing::warn!("Failed to write product knowledge evidence pack: {}", e);
+///     }
+/// }
+/// ```
+pub fn write_product_knowledge_to_capsule(
+    spec_id: &str,
+    run_id: &str,
+    pack: &codex_stage0::ProductKnowledgeEvidencePack,
+    capsule: &crate::memvid_adapter::CapsuleHandle,
+) -> Result<crate::memvid_adapter::LogicalUri, String> {
+    use crate::memvid_adapter::ObjectType;
+
+    // Serialize the evidence pack
+    let pack_json = serde_json::to_vec_pretty(pack)
+        .map_err(|e| format!("Failed to serialize evidence pack: {}", e))?;
+
+    // Write to capsule at the ADR-003 path
+    let uri = capsule
+        .put(
+            spec_id,
+            run_id,
+            ObjectType::Artifact,
+            "product_knowledge/evidence_pack.json",
+            pack_json,
+            serde_json::json!({
+                "schema": codex_stage0::ProductKnowledgeEvidencePack::SCHEMA_VERSION,
+                "item_count": pack.items.len(),
+                "domain": &pack.domain,
+            }),
+        )
+        .map_err(|e| format!("Failed to write evidence pack to capsule: {}", e))?;
+
+    tracing::info!(
+        target: "stage0",
+        uri = %uri,
+        spec_id = spec_id,
+        run_id = run_id,
+        items = pack.items.len(),
+        "Written ProductKnowledgeEvidencePack to capsule"
+    );
+
+    Ok(uri)
 }
 
 #[cfg(test)]

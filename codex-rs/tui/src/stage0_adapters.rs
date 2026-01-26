@@ -1183,6 +1183,211 @@ pub fn create_relationships_client() -> Option<RelationshipsRestAdapter> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ADR-003 Prompt F: ProductKnowledgeCurationAdapter
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Adapter for curating Tier2 outputs into codex-product domain
+///
+/// Used for post-curation: after a successful Tier2 call, distill actionable
+/// insights from the Divine Truth and store them in codex-product for future reuse.
+///
+/// **IMPORTANT**: This runs in a background thread and never blocks the pipeline.
+/// Failures are logged but do not affect the core flow.
+pub struct ProductKnowledgeCurationAdapter {
+    domain: String,
+}
+
+impl ProductKnowledgeCurationAdapter {
+    /// Create a new curation adapter targeting codex-product domain
+    pub fn new() -> Self {
+        Self {
+            domain: "codex-product".to_string(),
+        }
+    }
+
+    /// Curate Tier2 output into codex-product insight(s)
+    ///
+    /// Extracts actionable insights from Divine Truth and stores them with:
+    /// - importance: 8 (minimum for product knowledge)
+    /// - type: inferred from content (pattern, decision, architecture, etc.)
+    /// - tags: component, area:product-knowledge
+    ///
+    /// Returns memory IDs of created insights, or empty vec if nothing curated.
+    pub fn curate_tier2_output(
+        &self,
+        spec_id: &str,
+        component: &str,
+        divine_truth: &str,
+    ) -> std::result::Result<Vec<String>, String> {
+        // Extract actionable insights from Divine Truth
+        let insights = Self::extract_insights(divine_truth);
+
+        if insights.is_empty() {
+            tracing::debug!("No insights extracted from Divine Truth for {}", spec_id);
+            return Ok(vec![]);
+        }
+
+        let mut created_ids = Vec::new();
+
+        for insight in insights {
+            // Format content using WHAT/WHY/EVIDENCE/OUTCOME template
+            let content = Self::format_insight_content(&insight);
+
+            // Determine canonical type from insight
+            let memory_type = Self::infer_type(&insight);
+
+            // Build tags
+            let tags = vec![
+                format!("component:{}", component),
+                "area:product-knowledge".to_string(),
+                format!("spec:{}", spec_id),
+                format!("type:{}", memory_type),
+            ];
+
+            // Store using CLI remember
+            match local_memory_cli::remember_blocking(&content, &memory_type, 8, &tags, &self.domain)
+            {
+                Ok(id) => {
+                    tracing::info!("Curated insight {} (type: {}) from {}", id, memory_type, spec_id);
+                    created_ids.push(id);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to curate insight for {}: {}", spec_id, e);
+                    // Continue with other insights
+                }
+            }
+        }
+
+        Ok(created_ids)
+    }
+
+    /// Extract actionable insights from Divine Truth markdown
+    fn extract_insights(divine_truth: &str) -> Vec<InsightCandidate> {
+        let mut insights = Vec::new();
+
+        // Look for Executive Summary bullet points
+        if let Some(summary_section) = Self::extract_section(divine_truth, "Executive Summary") {
+            for line in summary_section.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with('-') || trimmed.starts_with('*') {
+                    let text = trimmed.trim_start_matches(['-', '*', ' ']);
+                    if text.len() >= 50 {
+                        // Only substantial insights
+                        insights.push(InsightCandidate {
+                            what: text.to_string(),
+                            source_section: "Executive Summary".to_string(),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Look for Architectural Guardrails
+        if let Some(guardrails_section) =
+            Self::extract_section(divine_truth, "Architectural Guardrails")
+        {
+            for line in guardrails_section.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with('-') || trimmed.starts_with('*') {
+                    let text = trimmed.trim_start_matches(['-', '*', ' ']);
+                    if text.len() >= 30 && !text.contains("See task brief") {
+                        insights.push(InsightCandidate {
+                            what: text.to_string(),
+                            source_section: "Architectural Guardrails".to_string(),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Limit to top 3 insights per run to avoid over-curation
+        insights.truncate(3);
+        insights
+    }
+
+    /// Extract a section from Divine Truth markdown by heading
+    fn extract_section(divine_truth: &str, section_name: &str) -> Option<String> {
+        let lines: Vec<&str> = divine_truth.lines().collect();
+        let mut in_section = false;
+        let mut content = Vec::new();
+
+        for line in lines {
+            if line.contains(section_name) && (line.starts_with('#') || line.starts_with("##")) {
+                in_section = true;
+                continue;
+            }
+
+            if in_section {
+                if line.starts_with('#') {
+                    // Next section starts
+                    break;
+                }
+                content.push(line);
+            }
+        }
+
+        if content.is_empty() {
+            None
+        } else {
+            Some(content.join("\n"))
+        }
+    }
+
+    /// Format insight using WHAT/WHY/EVIDENCE/OUTCOME template
+    fn format_insight_content(insight: &InsightCandidate) -> String {
+        format!(
+            "**WHAT**: {}\n\n**WHY**: Extracted from Tier2 synthesis ({})\n\n**EVIDENCE**: Divine Truth analysis\n\n**OUTCOME**: Curated for future reuse",
+            insight.what,
+            insight.source_section
+        )
+    }
+
+    /// Infer canonical type from insight content
+    fn infer_type(insight: &InsightCandidate) -> String {
+        let text = insight.what.to_lowercase();
+
+        if text.contains("decision") || text.contains("chose") || text.contains("selected") {
+            "decision".to_string()
+        } else if text.contains("pattern")
+            || text.contains("approach")
+            || text.contains("structure")
+        {
+            "pattern".to_string()
+        } else if text.contains("architecture")
+            || text.contains("design")
+            || text.contains("system")
+        {
+            "architecture".to_string()
+        } else if text.contains("limitation")
+            || text.contains("constraint")
+            || text.contains("cannot")
+        {
+            "limitation".to_string()
+        } else if text.contains("discovery")
+            || text.contains("found")
+            || text.contains("learned")
+        {
+            "discovery".to_string()
+        } else {
+            // Default to pattern for general insights
+            "pattern".to_string()
+        }
+    }
+}
+
+impl Default for ProductKnowledgeCurationAdapter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Candidate insight extracted from Divine Truth
+struct InsightCandidate {
+    what: String,
+    source_section: String,
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Tests
 // ─────────────────────────────────────────────────────────────────────────────
 

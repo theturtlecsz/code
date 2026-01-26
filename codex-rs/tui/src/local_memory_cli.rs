@@ -138,3 +138,93 @@ pub(crate) async fn search(
 
     parse_search_stdout(&output.stdout)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADR-003 Prompt F: Remember function for post-curation
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Response from local-memory remember command
+#[derive(Debug, serde::Deserialize)]
+struct RememberResponse {
+    success: bool,
+    data: Option<RememberData>,
+    error: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct RememberData {
+    id: String,
+}
+
+/// Store a memory in local-memory using CLI (blocking version)
+///
+/// # Arguments
+/// * `content` - Memory content to store
+/// * `memory_type` - Canonical type (decision, pattern, bug-fix, milestone, discovery, limitation, architecture)
+/// * `importance` - Importance score (should be >= 8 for product knowledge)
+/// * `tags` - Additional tags to apply
+/// * `domain` - Target domain (e.g., "codex-product")
+///
+/// # Returns
+/// * `Ok(memory_id)` - ID of the created memory
+/// * `Err(error_message)` - Error description
+///
+/// # Example
+/// ```ignore
+/// let id = remember_blocking(
+///     "Cache invalidation uses timestamp-based TTL with 24h default",
+///     "pattern",
+///     8,
+///     &["component:tier2-cache".to_string()],
+///     "codex-product",
+/// )?;
+/// ```
+pub(crate) fn remember_blocking(
+    content: &str,
+    memory_type: &str,
+    importance: u8,
+    tags: &[String],
+    domain: &str,
+) -> Result<String, String> {
+    let mut cmd = Command::new(local_memory_bin());
+    cmd.arg("remember")
+        .arg(content)
+        .arg("--type")
+        .arg(memory_type)
+        .arg("--importance")
+        .arg(importance.to_string())
+        .arg("--domain")
+        .arg(domain)
+        .arg("--json");
+
+    // Add custom tags
+    if !tags.is_empty() {
+        cmd.arg("--tags").arg(tags.join(","));
+    }
+
+    let output = cmd
+        .output()
+        .map_err(|e| format!("failed to execute local-memory remember: {e}"))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "local-memory remember failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    // Parse JSON response
+    let response: RememberResponse = serde_json::from_slice(&output.stdout)
+        .map_err(|e| format!("local-memory remember JSON parse failed: {e}"))?;
+
+    if response.success {
+        response
+            .data
+            .map(|d| d.id)
+            .ok_or_else(|| "local-memory remember returned no ID".to_string())
+    } else {
+        Err(response
+            .error
+            .unwrap_or_else(|| "local-memory remember failed".to_string()))
+    }
+}

@@ -206,9 +206,11 @@ fn create_instruction_files(
 **Created**: {date}
 **Type**: {type_name}
 
-## Local Memory Integration
+## Local Memory Integration (MANDATORY)
 
 **Policy**: CLI + REST only. No MCP.
+
+**Product Knowledge Domain**: For cross-project product knowledge queries, use domain `codex-product` explicitly.
 
 ### Golden Path vs Manual
 
